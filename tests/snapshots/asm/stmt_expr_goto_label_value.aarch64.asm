@@ -52,28 +52,10 @@ Disassembly of section .text:
                	b.hs	<addr>
                	ldr	x1, [x3, x0, lsl #3]
                	cbz	x1, <addr>
-               	lsl	x3, x0, #6
-               	sub	x0, x1, #0x1
-               	mvn	x1, x1
-               	and	x0, x0, x1
-               	lsr	x1, x0, #1
-               	and	x1, x1, #0x5555555555555555
-               	sub	x0, x0, x1
-               	and	x1, x0, #0x3333333333333333
-               	lsr	x0, x0, #2
-               	and	x0, x0, #0x3333333333333333
-               	add	x0, x1, x0
-               	lsr	x1, x0, #4
+               	lsl	x0, x0, #6
+               	rbit	x1, x1
+               	clz	x1, x1
                	add	x0, x0, x1
-               	and	x0, x0, #0xf0f0f0f0f0f0f0f
-               	lsr	x1, x0, #8
-               	add	x0, x0, x1
-               	lsr	x1, x0, #16
-               	add	x0, x0, x1
-               	lsr	x1, x0, #32
-               	add	x0, x0, x1
-               	and	x0, x0, #0x7f
-               	add	x0, x3, x0
                	cmp	x0, #0x64
                	b.hi	<addr>
                	mov	x2, x0
@@ -101,28 +83,10 @@ Disassembly of section .text:
                	b.hs	<addr>
                	ldr	x1, [x2, x0, lsl #3]
                	cbz	x1, <addr>
-               	lsl	x2, x0, #6
-               	sub	x0, x1, #0x1
-               	mvn	x1, x1
-               	and	x0, x0, x1
-               	lsr	x1, x0, #1
-               	and	x1, x1, #0x5555555555555555
-               	sub	x0, x0, x1
-               	and	x1, x0, #0x3333333333333333
-               	lsr	x0, x0, #2
-               	and	x0, x0, #0x3333333333333333
-               	add	x0, x1, x0
-               	lsr	x1, x0, #4
+               	lsl	x0, x0, #6
+               	rbit	x1, x1
+               	clz	x1, x1
                	add	x0, x0, x1
-               	and	x0, x0, #0xf0f0f0f0f0f0f0f
-               	lsr	x1, x0, #8
-               	add	x0, x0, x1
-               	lsr	x1, x0, #16
-               	add	x0, x0, x1
-               	lsr	x1, x0, #32
-               	add	x0, x0, x1
-               	and	x0, x0, #0x7f
-               	add	x0, x2, x0
                	cmp	x0, #0x64
                	b.ls	<addr>
                	mov	x0, #0x0                // =0

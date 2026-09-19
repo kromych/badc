@@ -4087,7 +4087,9 @@ pub(crate) struct Abi {
     /// FP/SIMD access raises a synchronous exception. The variadic callee
     /// prologue skips the FP half of the register save area and
     /// `va_start` marks the FP area exhausted, so `va_arg` walks the
-    /// general area then the overflow stack. Floating-point argument
+    /// general area then the overflow stack; the x86_64 zero fill keeps to
+    /// integer stores and the aarch64 population count to the
+    /// general-register sequence. Floating-point argument
     /// codegen is unaffected: such environments pass no FP varargs.
     /// Per-run (from [`NativeOptions::no_fp_regs`]), not a `Target::abi`
     /// row property.

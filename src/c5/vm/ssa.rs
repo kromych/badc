@@ -1259,6 +1259,10 @@ fn run_inst<H: Host>(
             frame.regs[v as usize] = eval::eval_bswap(frame.regs[*value as usize], *width);
             return Ok(());
         }
+        Inst::BitCount { op, value, width } => {
+            frame.regs[v as usize] = eval::eval_bit_count(*op, frame.regs[*value as usize], *width);
+            return Ok(());
+        }
         Inst::Fma {
             a,
             b,
@@ -3190,9 +3194,9 @@ fn run_intrinsic(
             frame.regs[v as usize] = load_from_memory(mem, record + 8, LoadKind::I64)?;
             Ok(())
         }
-        // The integer bit-count builtins are lowered to a portable
-        // shift / mask sequence in the walker; they never reach the VM
-        // as an `Inst::Intrinsic`.
+        // The walker lowers the bit-count and byte-swap builtins to
+        // `Inst::BitCount` / `Inst::Bswap`; they never reach the VM as an
+        // `Inst::Intrinsic`.
         Intrinsic::Clz
         | Intrinsic::Ctz
         | Intrinsic::Popcount

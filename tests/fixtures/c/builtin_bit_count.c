@@ -1,6 +1,6 @@
 // GCC bit-count builtins __builtin_clz / ctz / popcount and their
 // 64-bit ll forms. These are compiler builtins (no header), lowered to
-// a portable shift / mask sequence. Values at zero are undefined in GCC
+// each target's count instructions. Values at zero are undefined in GCC
 // and not exercised here. Results asserted against hand-computed values
 // so the fixture needs no formatted output (it runs on the interpreter,
 // which does not implement the printf width/hex conversions).

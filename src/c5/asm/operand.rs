@@ -601,9 +601,12 @@ pub(crate) fn asm_operand_form(func: &FunctionSsa, arg: u32) -> alloc::string::S
                 | Inst::StoreIndexed { .. }
                 | Inst::SegStore { .. },
             ) => "a stored value",
-            Some(Inst::Binop { .. } | Inst::BinopI { .. } | Inst::Bswap { .. }) => {
-                "an arithmetic result"
-            }
+            Some(
+                Inst::Binop { .. }
+                | Inst::BinopI { .. }
+                | Inst::Bswap { .. }
+                | Inst::BitCount { .. },
+            ) => "an arithmetic result",
             Some(Inst::Fneg(_) | Inst::Fma { .. } | Inst::MulAdd { .. } | Inst::FpCast { .. }) => {
                 "a floating-point result"
             }

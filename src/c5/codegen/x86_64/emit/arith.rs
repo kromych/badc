@@ -234,6 +234,45 @@ pub(super) fn emit_bswap(
     Ok(())
 }
 
+/// `Inst::BitCount` over the low `width` bytes, the 32-bit forms for 4:
+/// `popcnt`; `bsf`, then `cmovz` of the bit width where ZF marks a zero
+/// operand, whose destination the SDM leaves undefined; `bsr`, `cmovz` of
+/// `2 * bits - 1`, then `xor bits - 1`, which takes index `i` to `bits - 1 - i`.
+pub(super) fn emit_bit_count(
+    code: &mut Vec<u8>,
+    dst: Place,
+    op: BitCountOp,
+    value: u32,
+    width: u8,
+    alloc: &Allocation,
+    frame: Frame,
+) -> Emit {
+    let src_place = place_of(alloc, value);
+    let Some(rd) = int_or_spill_dst(dst) else {
+        return fail("BitCount: dst not int reg / spill");
+    };
+    let Some(rn) = materialize_int(code, src_place, rd, frame) else {
+        return fail("BitCount: value not int reg / spill");
+    };
+    let bits = i32::from(width) * 8;
+    match op {
+        BitCountOp::Popcount => emit_rr(code, Mnem::Popcnt, width, rd, rn),
+        BitCountOp::Ctz => {
+            emit_mov_r_imm64(code, SCRATCH_R11, i64::from(bits));
+            emit_rr(code, Mnem::Bsf, width, rd, rn);
+            emit_rr(code, Mnem::Cmovz, 4, rd, SCRATCH_R11);
+        }
+        BitCountOp::Clz => {
+            emit_mov_r_imm64(code, SCRATCH_R11, i64::from(2 * bits - 1));
+            emit_rr(code, Mnem::Bsr, width, rd, rn);
+            emit_rr(code, Mnem::Cmovz, 4, rd, SCRATCH_R11);
+            emit_ri(code, Mnem::Xor, 4, rd, bits - 1);
+        }
+    }
+    spill_dst_to_slot(code, dst, rd, frame);
+    Ok(())
+}
+
 /// `Inst::Fma`: `dst = (neg_product ? -(a*b) : a*b) + (neg_addend ? -c : c)`
 /// with one rounding (C99 6.5p8 / FP_CONTRACT), on the FMA3 baseline. The
 /// `231` form computes `dst = a*b OP dst`, so `c` is staged into `dst` and

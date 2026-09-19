@@ -248,6 +248,16 @@ pub(crate) enum Inst {
     /// the byte-reversal instruction (`bswap` / `rev`); the 16-bit form
     /// needs one extra instruction to zero the upper bits.
     Bswap { value: ValueId, width: u8 },
+    /// Count the bits of the low `width` bytes of `value` that `op` names
+    /// (`__builtin_clz` / `ctz` / `popcount`, GCC's builtins; C99 has no
+    /// operator). `width` is 4 or 8; operand bits above `width * 8` do not
+    /// affect the result. A leading or trailing count of 0 is `width * 8`,
+    /// so the result is in `0..=width * 8`, zero-extended to 64 bits.
+    BitCount {
+        op: BitCountOp,
+        value: ValueId,
+        width: u8,
+    },
     /// Register-to-register copy of `value`, with `is_fp` naming the
     /// bank the copy runs in (the operand's own bank, which the
     /// instruction cannot otherwise be asked for). Emitted by the
@@ -546,6 +556,7 @@ impl Inst {
                 | Inst::FpCast { .. }
                 | Inst::Extend { .. }
                 | Inst::Bswap { .. }
+                | Inst::BitCount { .. }
                 | Inst::Copy { .. }
         )
     }
@@ -576,6 +587,7 @@ impl Inst {
             Inst::MulAdd { .. } => "MulAdd",
             Inst::Extend { .. } => "Extend",
             Inst::Bswap { .. } => "Bswap",
+            Inst::BitCount { .. } => "BitCount",
             Inst::Copy { .. } => "Copy",
             Inst::FpCast { .. } => "FpCast",
             Inst::Call { .. } => "Call",
@@ -651,7 +663,7 @@ impl Inst {
                 f(*c);
             }
             Inst::Extend { value, .. } => f(*value),
-            Inst::Bswap { value, .. } => f(*value),
+            Inst::Bswap { value, .. } | Inst::BitCount { value, .. } => f(*value),
             Inst::Copy { value, .. } => f(*value),
             Inst::FpCast { value, .. } => f(*value),
             Inst::Call { args, .. }
@@ -754,7 +766,7 @@ impl Inst {
                 f(c);
             }
             Inst::Extend { value, .. } => f(value),
-            Inst::Bswap { value, .. } => f(value),
+            Inst::Bswap { value, .. } | Inst::BitCount { value, .. } => f(value),
             Inst::Copy { value, .. } => f(value),
             Inst::FpCast { value, .. } => f(value),
             Inst::Call { args, .. }
@@ -1066,6 +1078,15 @@ pub(crate) fn remainder_op(op: BinOp) -> Option<BinOp> {
         BinOp::Divu => Some(BinOp::Modu),
         _ => None,
     }
+}
+
+/// The bits [`Inst::BitCount`] counts: the zeros above the highest set
+/// bit, the zeros below the lowest set bit, or the set bits.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) enum BitCountOp {
+    Clz,
+    Ctz,
+    Popcount,
 }
 
 /// Operator for an atomic read-modify-write (C11 7.17.7.2-7.17.7.5).
@@ -2020,6 +2041,7 @@ impl crate::c5::layout::DataOffsets for Inst {
             | Inst::MulAdd { .. }
             | Inst::Extend { .. }
             | Inst::Bswap { .. }
+            | Inst::BitCount { .. }
             | Inst::Copy { .. }
             | Inst::FpCast { .. }
             | Inst::Call { .. }

@@ -795,8 +795,8 @@ pub(crate) fn bank_capacity(target: Target, fixed: FixedRegs) -> BankCapacity {
 /// A scratch the target's ABI marks callee-saved (Win64 xmm6..xmm15, or
 /// the AAPCS64 d8..d15 tail taken under `-ffixed-`) then joins the
 /// prologue's save list, so a foreign caller holding a live value there
-/// across a call into this code does not see it corrupted. A zero fill
-/// writes no scratch that owes a save ([`zero_fill_fp_register`]).
+/// across a call into this code does not see it corrupted. A zero fill or a
+/// population count writes no scratch that owes a save ([`free_fp_register`]).
 pub(crate) fn fp_scratch_demand(func: &FunctionSsa) -> [bool; FP_SCRATCH_COUNT] {
     // Tail-call forwarders jmp out with no epilogue, so a saved register
     // could never be restored; they touch no FP scratch either.
@@ -828,9 +828,9 @@ pub(crate) fn fp_scratch_shortfall(
         )
 }
 
-/// The FP register an x86_64 zero fill may write without a save: the scratch if volatile or
-/// already saved, else a volatile bank register holding no value of the function.
-pub(crate) fn zero_fill_fp_register(
+/// An FP register one instruction's lowering may write without a save: the scratch if
+/// volatile or already saved, else a volatile bank register holding no value of the function.
+pub(crate) fn free_fp_register(
     func: &FunctionSsa,
     alloc: &Allocation,
     target: Target,
@@ -1078,6 +1078,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             | Inst::LocalAddr(_)
             | Inst::Extend { .. }
             | Inst::Bswap { .. }
+            | Inst::BitCount { .. }
             | Inst::Copy { .. }
             | Inst::FpCast { .. }
             | Inst::Fneg(_)
@@ -1255,6 +1256,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             Inst::FpCast { kind, .. } => {
                 !(is_x86 && matches!(kind, FpCastKind::UFpToInt | FpCastKind::UIntToFp))
             }
+            Inst::BitCount { .. } => !is_x86,
             Inst::Binop { op, .. } | Inst::BinopI { op, .. } => {
                 if is_x86 {
                     matches!(op, BinOp::Fadd | BinOp::Fsub | BinOp::Fmul | BinOp::Fdiv)
@@ -2588,7 +2590,7 @@ fn result_kind(inst: &Inst) -> ResultKind {
         Fma { .. } => ResultKind::Fp,
         MulAdd { .. } => ResultKind::Int,
         Extend { .. } => ResultKind::Int,
-        Bswap { .. } => ResultKind::Int,
+        Bswap { .. } | BitCount { .. } => ResultKind::Int,
         FpCast { kind, .. } => match kind {
             FpCastKind::FpToInt | FpCastKind::UFpToInt => ResultKind::Int,
             FpCastKind::IntToFp
@@ -4294,10 +4296,7 @@ int main(void) { return 0; }
                     .expect("produce_ssa_funcs");
             let f = funcs.iter().find(|f| f.name == name).expect(name);
             let alloc = super::allocate(f, target, fixed);
-            (
-                zero_fill_fp_register(f, &alloc, target, fixed),
-                alloc.fp_used,
-            )
+            (free_fp_register(f, &alloc, target, fixed), alloc.fp_used)
         };
         let scratch_fixed = FixedRegs {
             gpr: 0,

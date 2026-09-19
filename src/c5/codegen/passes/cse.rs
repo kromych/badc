@@ -40,7 +40,8 @@ use crate::c5::codegen::ssa::reg_alloc::{
     produces_value,
 };
 use crate::c5::ir::{
-    BinOp, BlockId, FpCastKind, FunctionSsa, Inst, LoadKind, NO_VALUE, Terminator, ValueId,
+    BinOp, BitCountOp, BlockId, FpCastKind, FunctionSsa, Inst, LoadKind, NO_VALUE, Terminator,
+    ValueId,
 };
 use alloc::vec::Vec;
 use hashbrown::HashMap;
@@ -68,6 +69,7 @@ enum Key {
     BinopI(BinOp, ValueId, i64, bool),
     Extend(ValueId, LoadKind, bool),
     Bswap(ValueId, u8, bool),
+    BitCount(BitCountOp, ValueId, u8, bool),
     Fneg(ValueId, bool),
     FpCast(FpCastKind, ValueId, bool),
     Fma(ValueId, ValueId, ValueId, bool, bool, bool),
@@ -138,7 +140,7 @@ fn remat_cost(inst: &Inst) -> u32 {
             BinOp::Fadd | BinOp::Fsub | BinOp::Fmul => 3,
             _ => 1,
         },
-        Inst::Fma { .. } | Inst::MulAdd { .. } | Inst::FpCast { .. } => 3,
+        Inst::Fma { .. } | Inst::MulAdd { .. } | Inst::FpCast { .. } | Inst::BitCount { .. } => 3,
         _ => 1,
     }
 }
@@ -573,6 +575,7 @@ fn key_of(inst: &Inst, vn: &[ValueId], is_f32: bool, sym: u32) -> Option<Key> {
         Inst::BinopI { op, lhs, rhs_imm } => Some(Key::BinopI(*op, r(*lhs), *rhs_imm, is_f32)),
         Inst::Extend { value, kind } => Some(Key::Extend(r(*value), *kind, is_f32)),
         Inst::Bswap { value, width } => Some(Key::Bswap(r(*value), *width, is_f32)),
+        Inst::BitCount { op, value, width } => Some(Key::BitCount(*op, r(*value), *width, is_f32)),
         Inst::Fneg(v) => Some(Key::Fneg(r(*v), is_f32)),
         Inst::FpCast { kind, value } => Some(Key::FpCast(*kind, r(*value), is_f32)),
         Inst::Fma {

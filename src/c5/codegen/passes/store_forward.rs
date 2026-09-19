@@ -474,6 +474,7 @@ fn run_one(func: &mut FunctionSsa) {
                 | Inst::MulAdd { .. }
                 | Inst::Extend { .. }
                 | Inst::Bswap { .. }
+                | Inst::BitCount { .. }
                 | Inst::Copy { .. }
                 | Inst::FpCast { .. }
                 | Inst::ParamRef { .. }
@@ -837,6 +838,7 @@ pub(crate) fn fold_const_loads(func: &mut FunctionSsa) -> bool {
                 | Inst::MulAdd { .. }
                 | Inst::Extend { .. }
                 | Inst::Bswap { .. }
+                | Inst::BitCount { .. }
                 | Inst::Copy { .. }
                 | Inst::FpCast { .. }
                 | Inst::ParamRef { .. }

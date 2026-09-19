@@ -671,6 +671,53 @@ pub(crate) fn enc_clz(rd: Reg, rn: Reg) -> u32 {
     0xDAC0_1000 | ((rn.0 as u32) << 5) | (rd.0 as u32)
 }
 
+/// `CLZ <Wd>, <Wn>` -- count leading zero bits of the low word; 32 for a
+/// zero source. The 32-bit write zero-extends into `Xd`.
+pub(crate) fn enc_clz32(rd: Reg, rn: Reg) -> u32 {
+    0x5AC0_1000 | ((rn.0 as u32) << 5) | (rd.0 as u32)
+}
+
+/// `RBIT <Xd>, <Xn>` -- reverse the bit order.
+pub(crate) fn enc_rbit64(rd: Reg, rn: Reg) -> u32 {
+    0xDAC0_0000 | ((rn.0 as u32) << 5) | (rd.0 as u32)
+}
+
+/// `RBIT <Wd>, <Wn>` -- reverse the bit order of the low word; the 32-bit
+/// write zero-extends into `Xd`.
+pub(crate) fn enc_rbit32(rd: Reg, rn: Reg) -> u32 {
+    0x5AC0_0000 | ((rn.0 as u32) << 5) | (rd.0 as u32)
+}
+
+/// `CNT <Vd>.8B, <Vn>.8B` -- the set bits of each of the low eight bytes.
+pub(crate) fn enc_cnt_8b(vd: u8, vn: u8) -> u32 {
+    debug_assert!(vd < 32 && vn < 32);
+    0x0E20_5800 | ((vn as u32) << 5) | (vd as u32)
+}
+
+/// `ADDV <Bd>, <Vn>.8B` -- the sum of the low eight bytes, written to byte 0
+/// with the rest of `Vd` cleared.
+pub(crate) fn enc_addv_8b(vd: u8, vn: u8) -> u32 {
+    debug_assert!(vd < 32 && vn < 32);
+    0x0E31_B800 | ((vn as u32) << 5) | (vd as u32)
+}
+
+/// `ADD` / `SUB <Xd>, <Xn>, <Xm>, LSR #<shift>`, or the `W` forms when
+/// `!is64`.
+pub(crate) fn enc_addsub_lsr(sub: bool, rd: Reg, rn: Reg, rm: Reg, shift: u32, is64: bool) -> u32 {
+    ((is64 as u32) << 31)
+        | ((sub as u32) << 30)
+        | 0x0B40_0000
+        | ((rm.0 as u32) << 16)
+        | ((shift & 0x3f) << 10)
+        | ((rn.0 as u32) << 5)
+        | (rd.0 as u32)
+}
+
+/// `MUL <Wd>, <Wn>, <Wm>` -- `MADD Wd, Wn, Wm, WZR`.
+pub(crate) fn enc_mul32(rd: Reg, rn: Reg, rm: Reg) -> u32 {
+    enc_rrr(0x1B00_7C00, rd, rn, rm)
+}
+
 /// `ROR <Xd>, <Xs>, #<shift>` -- bit-rotate-right by constant. Encoded
 /// as the EXTR alias `EXTR Xd, Xs, Xs, #shift`.
 pub(crate) fn enc_ror_imm(rd: Reg, rn: Reg, shift: u8) -> u32 {
@@ -864,6 +911,13 @@ pub(crate) fn enc_fcmp_d(dn: u8, dm: u8) -> u32 {
 pub(crate) fn enc_fmov_w_to_s(sd: u8, wn: Reg) -> u32 {
     debug_assert!(sd < 32);
     0x1E27_0000 | ((wn.0 as u32) << 5) | (sd as u32)
+}
+
+/// `FMOV <Wd>, <Sn>` -- copy the low 32 bits of `Sn` into `Wd`; the 32-bit
+/// write zero-extends into `Xd`.
+pub(crate) fn enc_fmov_s_to_w(rd: Reg, sn: u8) -> u32 {
+    debug_assert!(sn < 32);
+    0x1E26_0000 | ((sn as u32) << 5) | (rd.0 as u32)
 }
 
 /// `INS <Vd>.<T>[index], <Wn>` -- insert the low `esize` bytes of a
@@ -2531,6 +2585,25 @@ mod tests {
         assert_eq!(enc_rev64(Reg::X0, Reg(1)), 0xDAC0_0C20);
         assert_eq!(enc_rev32(Reg(2), Reg(3)), 0x5AC0_0862);
         assert_eq!(enc_lsr32_imm(Reg::X0, Reg::X0, 16), 0x5310_7C00);
+    }
+
+    #[test]
+    fn bit_count_forms() {
+        // The words `clang --target=aarch64-linux-gnu` assembles.
+        assert_eq!(enc_clz32(Reg(1), Reg(2)), 0x5AC0_1041);
+        assert_eq!(enc_clz(Reg(1), Reg(2)), 0xDAC0_1041);
+        assert_eq!(enc_rbit32(Reg(1), Reg(2)), 0x5AC0_0041);
+        assert_eq!(enc_rbit64(Reg(1), Reg(2)), 0xDAC0_0041);
+        assert_eq!(enc_cnt_8b(16, 17), 0x0E20_5A30);
+        assert_eq!(enc_addv_8b(16, 17), 0x0E31_BA30);
+        assert_eq!(enc_fmov_s_to_w(Reg(1), 16), 0x1E26_0201);
+        assert_eq!(enc_fmov_w_to_s(16, Reg(1)), 0x1E27_0030);
+        let (r1, r2, r3) = (Reg(1), Reg(2), Reg(3));
+        assert_eq!(enc_addsub_lsr(false, r1, r2, r3, 4, true), 0x8B43_1041);
+        assert_eq!(enc_addsub_lsr(false, r1, r2, r3, 4, false), 0x0B43_1041);
+        assert_eq!(enc_addsub_lsr(true, r1, r2, r3, 1, true), 0xCB43_0441);
+        assert_eq!(enc_addsub_lsr(true, r1, r2, r3, 1, false), 0x4B43_0441);
+        assert_eq!(enc_mul32(r1, r2, r3), 0x1B03_7C41);
     }
 
     #[test]

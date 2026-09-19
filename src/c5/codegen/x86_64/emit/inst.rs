@@ -452,6 +452,9 @@ pub(super) fn emit_inst(
         } => emit_mul_add(code, dst, v, *a, *b, *c, *neg_product, alloc, frame),
         Inst::Extend { value, kind } => emit_extend(code, dst, v, *value, *kind, alloc, frame),
         Inst::Bswap { value, width } => emit_bswap(code, dst, *value, *width, alloc, frame),
+        Inst::BitCount { op, value, width } => {
+            emit_bit_count(code, dst, *op, *value, *width, alloc, frame)
+        }
         Inst::Copy { value, is_fp } => emit_copy(code, dst, *value, *is_fp, alloc, frame),
         Inst::FpCast { kind, value } => emit_fp_cast(code, dst, v, *kind, *value, alloc, frame),
         Inst::TlsAddr(offset) => emit_tls_addr(

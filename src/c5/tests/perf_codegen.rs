@@ -2268,3 +2268,371 @@ return v0 * v1 + v2 * v3 + v4 * v5 + v6 * v7 + v8 * v9 + v10 * v11;\n}\n";
     });
     m.finish();
 }
+
+/// One function per count and width.
+const COUNTS: &str = "int clz32(unsigned x) { return __builtin_clz(x); }\n\
+int clz64(unsigned long long x) { return __builtin_clzll(x); }\n\
+int ctz32(unsigned x) { return __builtin_ctz(x); }\n\
+int ctz64(unsigned long long x) { return __builtin_ctzll(x); }\n\
+int pop32(unsigned x) { return __builtin_popcount(x); }\n\
+int pop64(unsigned long long x) { return __builtin_popcountll(x); }\n";
+
+/// `clz Wd, Wn`, or `clz Xd, Xn` when `is64`.
+fn a64_clz(w: u32, is64: bool) -> bool {
+    w & 0xFFFF_FC00 == if is64 { 0xDAC0_1000 } else { 0x5AC0_1000 }
+}
+
+/// `rbit Wd, Wn`, or `rbit Xd, Xn` when `is64`.
+fn a64_rbit(w: u32, is64: bool) -> bool {
+    w & 0xFFFF_FC00 == if is64 { 0xDAC0_0000 } else { 0x5AC0_0000 }
+}
+
+/// A SIMD&FP data-processing instruction, or a load / store of a SIMD&FP
+/// register.
+fn a64_touches_simd_fp(w: u32) -> bool {
+    (w >> 25) & 7 == 7 || ((w >> 25) & 5 == 4 && w & (1 << 26) != 0)
+}
+
+/// The walker lowers every bit-count builtin to one `Inst::BitCount` of the
+/// builtin's width, with clrsb, ffs and parity built on the clz, ctz and
+/// popcount of it.
+#[test]
+fn bit_count_builtins_lower_to_one_instruction() {
+    use crate::c5::ir::{BitCountOp, Inst};
+    const SRC: &str = "int a(unsigned x) { return __builtin_clz(x); }\n\
+int b(unsigned long long x) { return __builtin_clzll(x); }\n\
+int c(unsigned x) { return __builtin_ctz(x); }\n\
+int d(unsigned long long x) { return __builtin_ctzll(x); }\n\
+int e(unsigned x) { return __builtin_popcount(x); }\n\
+int f(unsigned long long x) { return __builtin_popcountll(x); }\n\
+int g(int x) { return __builtin_clrsb(x); }\n\
+int h(long long x) { return __builtin_clrsbll(x); }\n\
+int i(int x) { return __builtin_ffs(x); }\n\
+int j(long long x) { return __builtin_ffsll(x); }\n\
+int k(unsigned x) { return __builtin_parity(x); }\n\
+int l(unsigned long long x) { return __builtin_parityll(x); }\n";
+    let target = Target::LinuxX64;
+    let program = crate::Compiler::with_options(
+        SRC.to_string(),
+        target,
+        crate::CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .expect("compile");
+    let funcs = crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+        .expect("produce_ssa_funcs");
+    let mut m = Misses::default();
+    for (name, want) in [
+        ("a", (BitCountOp::Clz, 4)),
+        ("b", (BitCountOp::Clz, 8)),
+        ("c", (BitCountOp::Ctz, 4)),
+        ("d", (BitCountOp::Ctz, 8)),
+        ("e", (BitCountOp::Popcount, 4)),
+        ("f", (BitCountOp::Popcount, 8)),
+        ("g", (BitCountOp::Clz, 4)),
+        ("h", (BitCountOp::Clz, 8)),
+        ("i", (BitCountOp::Ctz, 4)),
+        ("j", (BitCountOp::Ctz, 8)),
+        ("k", (BitCountOp::Popcount, 4)),
+        ("l", (BitCountOp::Popcount, 8)),
+    ] {
+        let f = funcs.iter().find(|f| f.name == name).expect(name);
+        let counts: Vec<_> = f
+            .insts
+            .iter()
+            .filter_map(|i| match *i {
+                Inst::BitCount { op, width, .. } => Some((op, width)),
+                _ => None,
+            })
+            .collect();
+        m.expect(counts == [want] && f.insts.len() < 16, || {
+            format!("{name}: {counts:?} in {:?}", f.insts)
+        });
+    }
+    m.finish();
+}
+
+/// AArch64 counts with `clz`, `rbit` + `clz` and `cnt` + `addv` through a
+/// SIMD register, in the `W` forms for the 32-bit builtins: a zero operand
+/// gives the register width with no further instruction.
+#[test]
+fn a64_bit_counts_take_the_count_instructions() {
+    let mut m = Misses::default();
+    for (name, is64) in [("clz32", false), ("clz64", true)] {
+        let ws = a64(COUNTS, name);
+        m.expect(ws.len() == 2 && a64_clz(ws[0], is64), || {
+            format!("{name}: not one clz: {ws:08x?}")
+        });
+    }
+    for (name, is64) in [("ctz32", false), ("ctz64", true)] {
+        let ws = a64(COUNTS, name);
+        m.expect(
+            ws.len() == 3 && a64_rbit(ws[0], is64) && a64_clz(ws[1], is64),
+            || format!("{name}: not rbit + clz: {ws:08x?}"),
+        );
+    }
+    // `fmov s|d, w|x`; `cnt v.8b`; `addv b, v.8b`; `fmov w, s`.
+    for (name, stage) in [("pop32", 0x1E27_0000), ("pop64", 0x9E67_0000)] {
+        let ws = a64(COUNTS, name);
+        let classes = [stage, 0x0E20_5800, 0x0E31_B800, 0x1E26_0000];
+        m.expect(
+            ws.len() == 5 && ws.iter().zip(classes).all(|(&w, c)| w & 0xFFFF_FC00 == c),
+            || format!("{name}: not fmov + cnt + addv + fmov: {ws:08x?}"),
+        );
+    }
+    m.finish();
+}
+
+/// x86-64 counts with `bsr` / `bsf` and `popcnt` at the builtin's operand
+/// size, never `lzcnt` / `tzcnt`: a zero operand sets ZF, and `cmovz` then
+/// takes `2 * bits - 1` into the `xor bits - 1` for clz, `bits` for ctz.
+#[test]
+fn x64_bit_counts_take_the_base_instructions() {
+    let obj = object_at(COUNTS, Target::LinuxX64, true);
+    let mut m = Misses::default();
+    for (name, wide, scan, zero, flip) in [
+        ("clz32", false, 0x0FBD, 63, Some(31)),
+        ("clz64", true, 0x0FBD, 127, Some(63)),
+        ("ctz32", false, 0x0FBC, 32, None),
+        ("ctz64", true, 0x0FBC, 64, None),
+    ] {
+        let bytes = function_bytes(&obj, name);
+        let insns = x64_insns(&bytes);
+        // `bsr` / `bsf` without the F3 prefix that makes `lzcnt` / `tzcnt`.
+        let found = insns
+            .iter()
+            .find(|i| i.op == scan && bytes[i.at] != 0xF3 && i.rex_w() == wide);
+        let ok = found.is_some_and(|s| {
+            let dst = s.regs().0;
+            let seeded = |r: u8| {
+                insns.iter().any(|i| {
+                    (0xB8..=0xBF).contains(&i.op)
+                        && (i.op as u8 & 7) | ((i.rex & 1) << 3) == r
+                        && i.imm == zero
+                })
+            };
+            let cmov = insns
+                .iter()
+                .find(|i| i.op == 0x0F44 && i.reg_form() && i.regs().0 == dst);
+            let xor = |k: i64| {
+                insns.iter().any(|i| {
+                    matches!(i.op, 0x81 | 0x83)
+                        && i.modrm.is_some_and(|m| (m >> 3) & 7 == 6)
+                        && i.regs().1 == dst
+                        && i.imm == k
+                })
+            };
+            cmov.is_some_and(|c| seeded(c.regs().1)) && flip.is_none_or(xor)
+        });
+        m.expect(ok && insns.len() <= 5, || {
+            format!("{name}: not the zero-guarded scan: {insns:x?}")
+        });
+    }
+    for (name, wide) in [("pop32", false), ("pop64", true)] {
+        let bytes = function_bytes(&obj, name);
+        let insns = x64_insns(&bytes);
+        m.expect(
+            insns.len() == 2
+                && insns[0].op == 0x0FB8
+                && bytes[insns[0].at] == 0xF3
+                && insns[0].rex_w() == wide,
+            || format!("{name}: not one popcnt: {insns:x?}"),
+        );
+    }
+    m.finish();
+}
+
+/// `-mgeneral-regs-only` keeps the AArch64 population count off the SIMD
+/// registers: the general-register reduction, at both widths. `-mno-sse`
+/// leaves x86-64 its `popcnt`, a general-register instruction.
+#[test]
+fn popcount_without_fp_registers_uses_none() {
+    use crate::{CompileOptions, Compiler, NativeOptions, OutputKind, emit_native_with_options};
+    let obj = |target: Target| {
+        let program = Compiler::with_options(
+            COUNTS.to_string(),
+            target,
+            CompileOptions::default()
+                .with_no_entry_point(true)
+                .with_optimize(true),
+        )
+        .compile()
+        .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            no_fp_regs: true,
+            ..NativeOptions::new().with_optimize()
+        };
+        emit_native_with_options(&program, target, opts).expect("emit")
+    };
+    let mut m = Misses::default();
+    let a = obj(Target::LinuxAarch64);
+    // `mul` of either width, then `lsr` by the top byte's position.
+    for (name, is64) in [("pop32", false), ("pop64", true)] {
+        let ws = function_words(&a, name);
+        let mul = if is64 { 0x9B00_7C00 } else { 0x1B00_7C00 };
+        let top = if is64 { 0xD378_FC00 } else { 0x5318_7C00 };
+        m.expect(
+            !ws.iter().any(|&w| a64_touches_simd_fp(w))
+                && ws.iter().any(|&w| w & 0xFFE0_FC00 == mul)
+                && ws.iter().any(|&w| w & 0xFFFF_FC00 == top),
+            || format!("{name}: not the general-register count: {ws:08x?}"),
+        );
+    }
+    let x = obj(Target::LinuxX64);
+    for name in ["pop32", "pop64"] {
+        let insns = x64_insns(&function_bytes(&x, name));
+        m.expect(insns.iter().any(|i| i.op == 0x0FB8), || {
+            format!("{name}: no popcnt: {insns:x?}")
+        });
+    }
+    m.finish();
+}
+
+/// A count reads its operand at its width: the conversion of a wider value
+/// to the 32-bit operand leaves no mask, while a mask inside the width, a
+/// mask feeding the 64-bit count, and the zero extension of a 32-bit
+/// parameter into it all stay.
+#[test]
+fn a_count_reads_its_operand_at_its_width() {
+    const SRC: &str = "int word(unsigned long long x) { return __builtin_popcount(x); }\n\
+int low16(unsigned x) { return __builtin_popcount(x & 0xffff); }\n\
+int low32(unsigned long long x) { return __builtin_popcountll(x & 0xffffffff); }\n\
+int wide(unsigned x) { return __builtin_popcountll(x); }\n";
+    let mut m = Misses::default();
+    for target in [Target::LinuxAarch64, Target::LinuxX64] {
+        for (name, mask) in [
+            ("word", None),
+            ("low16", Some(0xffff_i64)),
+            ("low32", Some(0xffff_ffff)),
+            ("wide", Some(0xffff_ffff)),
+        ] {
+            let (body, insts) = super::codegen::optimized_function_full_pool(SRC, name, target);
+            let text = |head: &str| {
+                insts
+                    .iter()
+                    .find(|(_, i)| i.starts_with(head))
+                    .map(|(id, i)| (*id, i.clone()))
+            };
+            let (Some((param, _)), Some((_, count))) = (text("ParamRef(0"), text("BitCount"))
+            else {
+                m.expect(false, || format!("{target:?} {name}: no count: {body}"));
+                continue;
+            };
+            let operand = match mask {
+                None => param,
+                Some(k) => text(&format!("BinopI {{ op=and, lhs=v{param}, rhs_imm={k} }}"))
+                    .map_or(u32::MAX, |(id, _)| id),
+            };
+            m.expect(count.contains(&format!("value=v{operand},")), || {
+                format!("{target:?} {name}: the operand's mask: {body}")
+            });
+        }
+    }
+    m.finish();
+}
+
+/// The count's range is `0..=bits`: a comparison with the width stays, one
+/// past it folds, and an inlined count of a constant folds to the width at
+/// 0 and to the width's set bits at all-ones.
+#[test]
+fn a_count_ranges_over_zero_to_the_width() {
+    const SRC: &str = "int full(unsigned x) { return __builtin_clz(x) == 32; }\n\
+int never(unsigned long long x) { return __builtin_ctzll(x) > 64; }\n\
+static int clz(unsigned x) { return __builtin_clz(x); }\n\
+static int ctz(unsigned x) { return __builtin_ctz(x); }\n\
+static int clzll(unsigned long long x) { return __builtin_clzll(x); }\n\
+static int ctzll(unsigned long long x) { return __builtin_ctzll(x); }\n\
+static int pop(unsigned x) { return __builtin_popcount(x); }\n\
+static int popll(unsigned long long x) { return __builtin_popcountll(x); }\n\
+long zeros(void) {\n\
+    return clz(0) | ctz(0) << 8 | clzll(0) << 16 | (long)ctzll(0) << 24\n\
+        | (long)pop(~0u) << 32 | (long)popll(~0ull) << 40;\n}\n";
+    let mut m = Misses::default();
+    // The instruction the function returns.
+    let returned = |body: &str, insts: &[(u32, String)]| {
+        let v = body
+            .split("terminator Return(v")
+            .nth(1)?
+            .split(')')
+            .next()?
+            .parse::<u32>()
+            .ok()?;
+        insts
+            .iter()
+            .find(|(id, _)| *id == v)
+            .map(|(_, i)| i.clone())
+    };
+    for target in [Target::LinuxAarch64, Target::LinuxX64] {
+        let (body, insts) = super::codegen::optimized_function_full_pool(SRC, "full", target);
+        m.expect(
+            returned(&body, &insts).is_some_and(|i| i.starts_with("BinopI { op=eq, ")),
+            || format!("{target:?} full: `clz == 32` folded: {body}"),
+        );
+        let (body, insts) = super::codegen::optimized_function_full_pool(SRC, "never", target);
+        m.expect(
+            returned(&body, &insts).is_some_and(|i| i == "Imm(0)"),
+            || format!("{target:?} never: `ctzll > 64` kept: {body}"),
+        );
+        let (body, insts) = super::codegen::optimized_function_full_pool(SRC, "zeros", target);
+        m.expect(
+            insts.iter().any(|(_, i)| i == "Imm(70507261075488)")
+                && !insts.iter().any(|(_, i)| i.starts_with("BitCount")),
+            || format!("{target:?} zeros: not the folded widths: {body}"),
+        );
+    }
+    m.finish();
+}
+
+/// A count between a comparison and its branch: AArch64's count instructions
+/// leave the flags alone, so the comparison still feeds the branch; x86-64's
+/// write them, so the comparison is materialized ahead of the count.
+#[test]
+fn a_count_keeps_the_flags_only_on_aarch64() {
+    const SRC: &str = "long pick(long a, long b, unsigned x) {\n\
+    int less = a < b;\n\
+    int n = __builtin_clz(x);\n\
+    if (less) return n;\n\
+    return n + 7;\n}\n";
+    let mut m = Misses::default();
+    let ws = a64(SRC, "pick");
+    let cmp = ws.iter().position(|&w| w & 0xFF20_001F == 0xEB00_001F);
+    let bcc = ws.iter().position(|&w| w & 0xFF00_0010 == 0x5400_0000);
+    let clz = ws.iter().position(|&w| a64_clz(w, false));
+    m.expect(
+        matches!((cmp, clz, bcc), (Some(c), Some(z), Some(b)) if c < z && z < b)
+            && !ws.iter().any(|&w| w & 0x7FE0_0C00 == 0x1A80_0400),
+        || format!("aarch64: the comparison does not feed the branch: {ws:08x?}"),
+    );
+    let bytes = function_bytes(&object_at(SRC, Target::LinuxX64, true), "pick");
+    let insns = x64_insns(&bytes);
+    let scan = insns.iter().position(|i| i.op == 0x0FBD);
+    let jcc = insns.iter().position(|i| i.is_jcc());
+    let setcc = insns.iter().position(|i| (0x0F90..=0x0F9F).contains(&i.op));
+    m.expect(
+        matches!((setcc, scan, jcc), (Some(s), Some(z), Some(j)) if s < z && z < j),
+        || format!("x86-64: the flags cross the scan: {insns:x?}"),
+    );
+    m.finish();
+}
+
+/// Counts of one value keep their operators: the builder's cache and the
+/// value numbering key the operator, so a leading, trailing and set-bit
+/// count of one operand stay three instructions.
+#[test]
+fn counts_of_one_value_do_not_merge() {
+    const SRC: &str = "int trio(unsigned x) {\n\
+    return __builtin_clz(x) * 1000000 + __builtin_ctz(x) * 1000 + __builtin_popcount(x);\n}\n";
+    let mut m = Misses::default();
+    for target in [Target::LinuxAarch64, Target::LinuxX64] {
+        let (body, insts) = super::codegen::optimized_function_full_pool(SRC, "trio", target);
+        let counts = insts
+            .iter()
+            .filter(|(_, i)| i.starts_with("BitCount"))
+            .count();
+        m.expect(counts == 3, || {
+            format!("{target:?} trio: {counts} counts: {body}")
+        });
+    }
+    m.finish();
+}

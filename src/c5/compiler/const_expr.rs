@@ -791,8 +791,8 @@ impl Compiler {
             Intrinsic::Popcountll => ConstVal::int((arg as u64).count_ones() as i64),
             Intrinsic::Parity => ConstVal::int(((arg as u32).count_ones() & 1) as i64),
             Intrinsic::Parityll => ConstVal::int(((arg as u64).count_ones() & 1) as i64),
-            // clrsb counts the sign bits below the top one over a sign-extended
-            // operand: `clz(x ^ (x >>s w-1)) - 1`, matching `lower_clrsb`.
+            // clrsb counts the bits below the sign bit that repeat it:
+            // `clz(x ^ (x >>s w-1)) - 1`.
             Intrinsic::Clrsb => {
                 let x = arg as i32;
                 ConstVal::int(((x ^ (x >> 31)) as u32).leading_zeros() as i64 - 1)

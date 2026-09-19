@@ -3495,17 +3495,25 @@ fn sysexits_codes() {
 
 #[test]
 fn builtin_bit_count() {
-    // GCC __builtin_clz / ctz / popcount (+ ll forms), lowered to a
-    // portable shift / mask sequence; results match hand-computed
-    // values on every lane including the interpreter.
+    // GCC __builtin_clz / ctz / popcount (+ ll forms), lowered to
+    // `Inst::BitCount`; results match hand-computed values on every lane
+    // including the interpreter.
     assert_eq!(run_fixture("builtin_bit_count.c"), 0);
+}
+
+#[test]
+fn builtin_bit_count_edges() {
+    // Every bit-count builtin at both widths over run-time operands at the
+    // edges -- 0, 1, the powers of two, all-ones, the sign bit -- against
+    // bit-by-bit references; clz / ctz of 0 are the width.
+    assert_eq!(run_fixture("builtin_bit_count_edges.c"), 0);
 }
 
 #[test]
 fn builtin_ffs() {
     // GCC / POSIX __builtin_ffs / ffsl / ffsll: one plus the index of the
     // least-significant set bit, 0 for a zero argument (the zero case is
-    // defined, unlike ctz). Lowered as `(ctz(x) + 1) * (x != 0)`.
+    // defined, unlike ctz). Built on the trailing count.
     assert_eq!(run_fixture("builtin_ffs.c"), 0);
 }
 

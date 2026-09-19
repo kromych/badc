@@ -83,6 +83,7 @@ fn ext32(func: &FunctionSsa, v: ValueId) -> Ext32 {
             4 => ZERO,
             _ => NONE,
         },
+        Inst::BitCount { .. } => BOTH,
         Inst::Binop { op, .. } if compare_sign(*op).is_some() => BOTH,
         Inst::BinopI { op, rhs_imm, .. } => match op {
             _ if compare_sign(*op).is_some() => BOTH,

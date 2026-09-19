@@ -24,7 +24,7 @@
 #![allow(dead_code, clippy::too_many_arguments)]
 
 use super::super::ir::{
-    BinOp, BlockId, FunctionSsa, IndexExt, Inst, LoadKind, StoreKind, Terminator,
+    BinOp, BitCountOp, BlockId, FunctionSsa, IndexExt, Inst, LoadKind, StoreKind, Terminator,
 };
 use super::Target;
 use super::encode::{

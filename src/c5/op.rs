@@ -98,11 +98,8 @@ pub enum Intrinsic {
     /// bits of a 32-bit / 64-bit unsigned value. `__builtin_ctz` /
     /// `__builtin_ctzll` count trailing zeros; `__builtin_popcount` /
     /// `__builtin_popcountll` count set bits. The result is `int`. The
-    /// value at zero is undefined for clz / ctz (GCC); the walker's
-    /// branchless lowering returns the bit width there. Lowered in the
-    /// walker to a portable shift / mask / add sequence rather than a
-    /// dedicated instruction, so the behavior is identical across the
-    /// interpreter and every target.
+    /// value at zero is undefined for clz / ctz (GCC); here it is the bit
+    /// width. Lowered in the walker to `Inst::BitCount`.
     Clz = 21,
     Ctz = 22,
     Popcount = 23,
@@ -111,8 +108,7 @@ pub enum Intrinsic {
     Popcountll = 26,
     /// `__builtin_bswap16` / `bswap32` / `bswap64` -- reverse the byte
     /// order of a 16- / 32- / 64-bit value. The result type matches the
-    /// operand width. Lowered in the walker to a portable shift / mask /
-    /// or sequence rather than a dedicated instruction.
+    /// operand width. Lowered in the walker to `Inst::Bswap`.
     Bswap16 = 27,
     Bswap32 = 28,
     Bswap64 = 29,
@@ -175,7 +171,7 @@ pub enum Intrinsic {
     /// `__builtin_clrsb(x)` / `__builtin_clrsbll(x)` -- count leading
     /// redundant sign bits of a 32-bit / 64-bit signed value: the number
     /// of bits after the sign bit that equal it. The result is `int`.
-    /// Lowered in the walker as `clz(x ^ (x >> (w-1))) - 1`.
+    /// Lowered in the walker as `clz((x ^ (x << 1)) | 1)`.
     Clrsb = 46,
     Clrsbll = 47,
     /// `__builtin_parity(x)` / `__builtin_parityll(x)` -- 1 when the value
@@ -205,8 +201,8 @@ pub enum Intrinsic {
     /// `__builtin_ffs(x)` / `__builtin_ffsll(x)` -- one plus the index of
     /// the least-significant set bit, or 0 when `x` is 0 (POSIX `ffs`, GCC
     /// builtin). The result is `int`. Lowered in the walker as
-    /// `(ctz(x) + 1) * (x != 0)`, reusing the portable ctz sequence; the
-    /// `(x != 0)` factor forces the zero case (ctz(0) is the bit width).
+    /// `(ctz(x) + 1) & ((ctz(x) >> log2(w)) - 1)`: ctz is the bit width `w`
+    /// only for 0, and the mask clears that case.
     Ffs = 56,
     Ffsll = 57,
     /// 128-bit atomic read-modify-write via the AArch64 `ldaxp`/`stlxp`
@@ -420,7 +416,7 @@ impl Intrinsic {
     }
 
     /// Byte-swap builtins: one integer argument, a result of the same
-    /// width, lowered in the walker to a portable shift / mask sequence.
+    /// width, lowered in the walker to `Inst::Bswap`.
     pub fn is_bswap(self) -> bool {
         matches!(
             self,
@@ -429,8 +425,8 @@ impl Intrinsic {
     }
 
     /// Integer bit-count builtins: one integer argument, an `int`
-    /// result, lowered in the walker to a portable shift / mask
-    /// sequence. The `ll` forms operate on 64 bits, the rest on 32.
+    /// result, lowered in the walker on `Inst::BitCount`. The `ll` forms
+    /// operate on 64 bits, the rest on 32.
     pub fn is_int_bit_unary(self) -> bool {
         matches!(
             self,

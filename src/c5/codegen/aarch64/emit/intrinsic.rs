@@ -121,9 +121,9 @@ pub(super) fn emit_intrinsic(
         // A `register T v asm("sp")` read; `add` reads register 31 as sp.
         I::StackPointer => emit_frame_register(code, dst, frame, Reg(31), "StackPointer"),
         I::ReturnAddress => emit_return_address(code, args, dst, alloc, frame, scratch),
-        // The integer bit-count and byte-swap builtins are lowered to a
-        // portable shift / mask sequence in the walker; they never reach
-        // codegen as an `Inst::Intrinsic`.
+        // The walker lowers the bit-count and byte-swap builtins to
+        // `Inst::BitCount` / `Inst::Bswap`; they never reach codegen as an
+        // `Inst::Intrinsic`.
         I::Clz
         | I::Ctz
         | I::Popcount

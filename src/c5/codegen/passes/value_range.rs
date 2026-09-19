@@ -932,6 +932,10 @@ fn eval(inst: &Inst, params: &[Range], mut range_of: impl FnMut(ValueId) -> Rang
             },
             _ => UNIVERSE,
         },
+        Inst::BitCount { width, .. } => Range {
+            lo: 0,
+            hi: 8 * i128::from(*width),
+        },
         Inst::BinopI { op, lhs, rhs_imm } => match op {
             _ if comparison(*op).is_some() => Range { lo: 0, hi: 1 },
             // A mask by a non-negative immediate bounds the result by

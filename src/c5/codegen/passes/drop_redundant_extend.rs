@@ -196,9 +196,9 @@ fn compute_high_observed_through(func: &FunctionSsa, collapsing: &[bool]) -> Vec
                 _ if cmp32 => {}
                 _ => observe(&mut hi, &mut work, *lhs),
             },
-            // The 2- and 4-byte reversals read only the low bytes they
-            // reverse; the 8-byte form reads the full register.
-            Inst::Bswap { value, width } => {
+            // The 2- and 4-byte reversals and counts read only the low
+            // bytes they operate on; the 8-byte forms read the full register.
+            Inst::Bswap { value, width } | Inst::BitCount { value, width, .. } => {
                 if *width == 8 {
                     observe(&mut hi, &mut work, *value);
                 }

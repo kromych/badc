@@ -42,7 +42,8 @@ mod tests;
 use alloc::vec::Vec;
 
 use super::super::ir::{
-    AsmSeg, BinOp, FpCastKind, FunctionSsa, IndexExt, Inst, LoadKind, StoreKind, Terminator,
+    AsmSeg, BinOp, BitCountOp, FpCastKind, FunctionSsa, IndexExt, Inst, LoadKind, StoreKind,
+    Terminator,
 };
 use super::GotFixup;
 use super::Target;
@@ -347,7 +348,7 @@ struct FnCtx<'a> {
     frame: Frame,
     abi: super::Abi,
     target: Target,
-    /// The FP register a zero fill may write (`reg_alloc::zero_fill_fp_register`).
+    /// The FP register a zero fill may write (`reg_alloc::free_fp_register`).
     zero_fill_fp: Option<u8>,
     imports: &'a super::ResolvedImports,
     variadic_targets: &'a alloc::collections::BTreeSet<usize>,

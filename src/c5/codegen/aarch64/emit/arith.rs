@@ -146,6 +146,90 @@ pub(super) fn emit_bswap(
     Ok(())
 }
 
+/// `Inst::BitCount` over the low `width` bytes, in the `W` forms for 4:
+/// `clz`; `rbit` + `clz` for the trailing count; `cnt` + `addv` through
+/// [`Frame::count_fp`] for the set bits, or the general-register reduction
+/// when there is none.
+pub(super) fn emit_bit_count(
+    code: &mut Vec<u8>,
+    dst: Place,
+    op: BitCountOp,
+    value: u32,
+    width: u8,
+    alloc: &Allocation,
+    frame: Frame,
+    scratch: &ScratchPool,
+) -> Emit {
+    use super::encode::{enc_clz, enc_clz32, enc_rbit32, enc_rbit64};
+    let src_place = place_of(alloc, value);
+    let Some(rn) = materialize_int(code, src_place, scratch.primary, frame) else {
+        return fail("BitCount: value not int reg / spill");
+    };
+    let Some(rd) = int_or_spill_scratch(dst, scratch) else {
+        return fail("BitCount: dst not int reg / spill");
+    };
+    let is64 = width == 8;
+    type Enc = fn(Reg, Reg) -> u32;
+    let (clz, rbit): (Enc, Enc) = if is64 {
+        (enc_clz, enc_rbit64)
+    } else {
+        (enc_clz32, enc_rbit32)
+    };
+    match op {
+        BitCountOp::Clz => emit(code, clz(rd, rn)),
+        BitCountOp::Ctz => {
+            emit(code, rbit(rd, rn));
+            emit(code, clz(rd, rd));
+        }
+        BitCountOp::Popcount => match frame.count_fp {
+            Some(v) => {
+                let stage = if is64 {
+                    enc_fmov_x_to_d(v, rn)
+                } else {
+                    enc_fmov_w_to_s(v, rn)
+                };
+                emit(code, stage);
+                emit(code, super::encode::enc_cnt_8b(v, v));
+                emit(code, super::encode::enc_addv_8b(v, v));
+                emit(code, super::encode::enc_fmov_s_to_w(rd, v));
+            }
+            None => emit_popcount_gpr(code, rd, rn, scratch.secondary, is64),
+        },
+    }
+    store_spilled_int(code, frame, dst, rd);
+    Ok(())
+}
+
+/// Set bits of `rn` into `rd` in the general registers: pair, nibble and
+/// byte counts (Hacker's Delight 5-1), summed into the top byte by a
+/// multiply. `t` is distinct from both; `rd` may be `rn`.
+fn emit_popcount_gpr(code: &mut Vec<u8>, rd: Reg, rn: Reg, t: Reg, is64: bool) {
+    use super::encode::{
+        LogicalOp, enc_addsub_lsr, enc_logical_imm, enc_lsr_imm, enc_lsr32_imm, enc_mul32,
+    };
+    let imm = |op, rd, rn, pattern: u64| {
+        let value = if is64 { pattern } else { pattern & 0xFFFF_FFFF };
+        enc_logical_imm(op, is64, rd, rn, value).expect("a repeating pattern is a bitmask")
+    };
+    let and = LogicalOp::And;
+    emit(code, imm(and, t, rn, 0xAAAA_AAAA_AAAA_AAAA));
+    emit(code, enc_addsub_lsr(true, rd, rn, t, 1, is64));
+    emit(code, imm(and, t, rd, 0xCCCC_CCCC_CCCC_CCCC));
+    emit(code, imm(and, rd, rd, 0x3333_3333_3333_3333));
+    emit(code, enc_addsub_lsr(false, rd, rd, t, 2, is64));
+    emit(code, enc_addsub_lsr(false, rd, rd, rd, 4, is64));
+    emit(code, imm(and, rd, rd, 0x0F0F_0F0F_0F0F_0F0F));
+    // `mov t, #0x0101...`: `orr` from the zero register.
+    emit(code, imm(LogicalOp::Orr, t, Reg(31), 0x0101_0101_0101_0101));
+    if is64 {
+        emit(code, enc_mul(rd, rd, t));
+        emit(code, enc_lsr_imm(rd, rd, 56));
+    } else {
+        emit(code, enc_mul32(rd, rd, t));
+        emit(code, enc_lsr32_imm(rd, rd, 24));
+    }
+}
+
 /// `Inst::MulAdd`: one `madd` / `msub`, which reads all three sources
 /// before writing, so `rd` may alias any of them. A spilled operand
 /// reloads into the two scratches or, when all three spilled, `rd`; a

@@ -351,7 +351,7 @@ pub(super) fn emit_intrinsic(
         | I::Bswap16
         | I::Bswap32
         | I::Bswap64 => {
-            // Lowered to a portable shift / mask sequence in the walker.
+            // Lowered to `Inst::BitCount` / `Inst::Bswap` in the walker.
             fail("intrinsic: bit builtin reached codegen")
         }
         I::AtomicLoad

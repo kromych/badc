@@ -37,6 +37,10 @@ pub(crate) struct Frame {
     /// The FP scratch d-registers, outside the allocator's banks; see
     /// `RegBanks::fp_scratch`.
     pub fp_scratch: [u8; super::ssa::reg_alloc::FP_SCRATCH_COUNT],
+    /// The d-register a population count runs `cnt` in: none without a
+    /// count, under `-mgeneral-regs-only`, or when every candidate would
+    /// owe a save (`reg_alloc::free_fp_register`).
+    pub count_fp: Option<u8>,
     /// The regions `frame_bytes` and `va_save_bytes` sum.
     pub parts: super::ssa::emit_common::FrameStack,
     /// The ABI the function was lowered against; the home map reads its
@@ -132,6 +136,7 @@ pub(crate) fn compute_frame(
         }),
         fixed_regs: abi.fixed_regs,
         fp_scratch: alloc.fp_scratch,
+        count_fp: count_fp_register(func, alloc, abi, target),
         parts: super::ssa::emit_common::FrameStack {
             record: 0,
             locals: declared_locals_bytes,
@@ -658,6 +663,27 @@ fn writes_x19(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi) -> bool {
                 _ => false,
             }
         })
+}
+
+/// [`Frame::count_fp`].
+fn count_fp_register(
+    func: &FunctionSsa,
+    alloc: &Allocation,
+    abi: super::Abi,
+    target: Target,
+) -> Option<u8> {
+    let counts = func.insts.iter().any(|i| {
+        matches!(
+            i,
+            Inst::BitCount {
+                op: BitCountOp::Popcount,
+                ..
+            }
+        )
+    });
+    (counts && !abi.no_fp_regs)
+        .then(|| super::ssa::reg_alloc::free_fp_register(func, alloc, target, abi.fixed_regs))
+        .flatten()
 }
 
 /// The emitter's scratch registers: x16 (IP0) and x17 (IP1), which

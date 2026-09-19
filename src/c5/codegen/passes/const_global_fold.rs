@@ -639,6 +639,7 @@ fn walk_block(
             | Inst::MulAdd { .. }
             | Inst::Extend { .. }
             | Inst::Bswap { .. }
+            | Inst::BitCount { .. }
             | Inst::FpCast { .. }
             | Inst::ParamRef { .. }
             | Inst::Phi { .. } => {}

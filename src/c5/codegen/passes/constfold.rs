@@ -198,9 +198,9 @@ fn forward_identities(func: &mut FunctionSsa) -> bool {
 const SELECT_EVAL_BUDGET: u32 = 96;
 
 /// Evaluate `v` with `pivot` bound to `bind`, over the same integer
-/// `Extend` / `Bswap` / `BinopI` / `Binop` set [`fold_round`] folds. Any other
-/// def, and any operand the shared resolver cannot pin to an integer
-/// immediate, makes the value unknown.
+/// `Extend` / `Bswap` / `BitCount` / `BinopI` / `Binop` set [`fold_round`]
+/// folds. Any other def, and any operand the shared resolver cannot pin to
+/// an integer immediate, makes the value unknown.
 fn eval_with(
     func: &FunctionSsa,
     v: ValueId,
@@ -224,6 +224,11 @@ fn eval_with(
             kind,
         )),
         Inst::Bswap { value, width } => Some(eval::eval_bswap(
+            eval_with(func, value, pivot, bind, budget)?,
+            width,
+        )),
+        Inst::BitCount { op, value, width } => Some(eval::eval_bit_count(
+            op,
             eval_with(func, value, pivot, bind, budget)?,
             width,
         )),
@@ -332,7 +337,11 @@ pub(crate) fn fold_selects(func: &mut FunctionSsa) -> bool {
             }
             if !matches!(
                 func.insts[u as usize],
-                Inst::Extend { .. } | Inst::Bswap { .. } | Inst::BinopI { .. } | Inst::Binop { .. }
+                Inst::Extend { .. }
+                    | Inst::Bswap { .. }
+                    | Inst::BitCount { .. }
+                    | Inst::BinopI { .. }
+                    | Inst::Binop { .. }
             ) {
                 continue;
             }
@@ -714,9 +723,9 @@ fn count_uses(func: &FunctionSsa) -> Vec<u32> {
     counts
 }
 
-/// Whether an `And` by `mask` leaves every bit a `width`-byte reversal
-/// reads (the low `width * 8`) unchanged.
-fn bswap_low_mask_transparent(mask: i64, width: u8) -> bool {
+/// Whether an `And` by `mask` leaves every bit a `width`-byte reversal or
+/// count reads (the low `width * 8`) unchanged.
+fn low_mask_transparent(mask: i64, width: u8) -> bool {
     match width {
         2 => mask & 0xffff == 0xffff,
         4 => mask & 0xffff_ffff == 0xffff_ffff,
@@ -764,7 +773,22 @@ fn fold_round(func: &mut FunctionSsa) -> bool {
                         op: BinOp::And,
                         lhs,
                         rhs_imm,
-                    }) if bswap_low_mask_transparent(*rhs_imm, *width) => Some(Inst::Bswap {
+                    }) if low_mask_transparent(*rhs_imm, *width) => Some(Inst::Bswap {
+                        value: *lhs,
+                        width: *width,
+                    }),
+                    _ => None,
+                },
+            },
+            Inst::BitCount { op, value, width } => match imm_of(func, *value) {
+                Some(k) => Some(Inst::Imm(eval::eval_bit_count(*op, k, *width))),
+                None => match func.insts.get(*value as usize) {
+                    Some(Inst::BinopI {
+                        op: BinOp::And,
+                        lhs,
+                        rhs_imm,
+                    }) if low_mask_transparent(*rhs_imm, *width) => Some(Inst::BitCount {
+                        op: *op,
                         value: *lhs,
                         width: *width,
                     }),

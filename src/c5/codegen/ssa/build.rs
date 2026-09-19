@@ -32,8 +32,8 @@
 use alloc::vec::Vec;
 
 use super::super::ir::{
-    AsmSeg, AtomicRmwOp, BinOp, Block, BlockId, FpCastKind, FunctionSsa, Inst, LoadKind, MemOrder,
-    NO_VALUE, StoreKind, Terminator, ValueId, quotient_op,
+    AsmSeg, AtomicRmwOp, BinOp, BitCountOp, Block, BlockId, FpCastKind, FunctionSsa, Inst,
+    LoadKind, MemOrder, NO_VALUE, StoreKind, Terminator, ValueId, quotient_op,
 };
 
 /// Cached `(off, kind, value)` for a previously-pushed
@@ -97,6 +97,11 @@ enum PureKey {
         kind: LoadKind,
     },
     Bswap {
+        value: ValueId,
+        width: u8,
+    },
+    BitCount {
+        op: BitCountOp,
         value: ValueId,
         width: u8,
     },
@@ -1181,6 +1186,21 @@ impl SsaBuilder {
             return cached;
         }
         let id = self.push(Inst::Bswap { value, width });
+        self.pure_cache.insert(key, id);
+        id
+    }
+
+    /// `Inst::BitCount` -- the `op` count over the low `width` bytes of
+    /// `value`. A constant operand folds. CSE-eligible.
+    pub(crate) fn bit_count(&mut self, op: BitCountOp, value: ValueId, width: u8) -> ValueId {
+        if let Some(k) = self.peek_imm(value) {
+            return self.imm(crate::c5::vm::eval::eval_bit_count(op, k, width));
+        }
+        let key = PureKey::BitCount { op, value, width };
+        if let Some(cached) = self.lookup_pure(key) {
+            return cached;
+        }
+        let id = self.push(Inst::BitCount { op, value, width });
         self.pure_cache.insert(key, id);
         id
     }

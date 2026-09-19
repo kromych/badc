@@ -368,13 +368,15 @@ name. TODO: hold the bound version and the declared interface in step.
   - checked arithmetic -- `__builtin_add_overflow` / `sub` / `mul`;
   - memory -- `__builtin_memcpy` / `memmove` / `memset`.
 
-  The bit-count builtins lower to a portable shift / mask sequence in the
-  SSA walker rather than to `lzcnt` / `tzcnt` / `popcnt` / `rbit`, so the
-  interpreter and every target agree bit for bit. A consequence of that
-  lowering: `__builtin_clz(0)` and `__builtin_ctz(0)` return the operand
-  width instead of being undefined. The byte-swap builtins are an IR
-  operation every backend and the interpreter implement, and select
-  `bswap` on x86_64 and `rev` on aarch64.
+  The bit counts are an IR operation every backend and the interpreter
+  implement, and `__builtin_clz(0)` and `__builtin_ctz(0)` return the
+  operand width on all of them instead of being undefined. aarch64 selects
+  `clz`, `rbit` + `clz` and `cnt` + `addv` (a general-register sequence
+  under `-mgeneral-regs-only`); x86_64 selects `popcnt`, and `bsr` / `bsf`
+  with a `cmovz` for the zero operand rather than `lzcnt` / `tzcnt`, which
+  a processor without LZCNT / BMI1 executes as `bsr` / `bsf`. `clrsb`,
+  `ffs` and `parity` are built on them. The byte-swap builtins are an IR
+  operation too, and select `bswap` on x86_64 and `rev` on aarch64.
   `__builtin_unreachable` lowers to a trap, so reaching one aborts.
   `__builtin_has_attribute` is accepted and always folds to 0.
   The remaining string, allocation and absolute-value `__builtin_`

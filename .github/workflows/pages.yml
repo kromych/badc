@@ -59,6 +59,9 @@ jobs:
           cp README.md _src/README.md
           cp LICENSE _src/LICENSE
           cp -R doc _src/doc
+          # /performance/ is where the measurement pages land; one stub today.
+          mkdir -p _src/performance
+          mv _src/doc/performance.md _src/performance/index.md
           find demos -name '*.md' -not -path '*/.cache/*' | while read -r f
           do
             mkdir -p "_src/$(dirname "$f")"

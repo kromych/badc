@@ -1,4 +1,4 @@
-# `badc`
+# `badc` ([performance](https://badc.dev/performance/))
 
 [![CI](https://github.com/kromych/badc/actions/workflows/ci.yml/badge.svg)](https://github.com/kromych/badc/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/kromych/badc?sort=semver&display_name=tag)](https://github.com/kromych/badc/releases/latest)

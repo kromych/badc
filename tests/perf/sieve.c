@@ -3,6 +3,14 @@
 // add-by-step inner cursor, and an integer accumulator over a large
 // working set. Pick N so wall-clock is in the 50-500 ms range on the
 // slowest compiler under test.
+//
+// The shape is chosen for the code generator, not for the memory it
+// uses. An implementation meant for use would take the bound and the
+// storage from its caller rather than fixing a 30 MB array of `char`
+// in .bss, and hold a bit per odd number -- 1.9 MB here, a sixteenth
+// of what this writes. The byte array and the dense loops over it are
+// what make the store, the strided address and the accumulator
+// measurable.
 
 #include <stdio.h>
 #include <time.h>

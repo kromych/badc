@@ -12,9 +12,9 @@ fn ent_pc=0 n_params=0 variadic=false locals=16
   block 1  start_pc=0
     v47  Imm(0)                                           -> x6
     v48  Extend { value=v44, kind=I32 }                   -> x6
-    v49  Binop { op=add, lhs=v1, rhs=v48 }                -> x7
-    v50  Imm(0)                                           -> x7
-    v51  StoreIndexed { base=v1, index=v48, scale=1, value=v3, kind=I8 } -> -
+    v49  Binop { op=add, lhs=v1, rhs=v44 }                -> x6
+    v50  Imm(0)                                           -> x6
+    v51  StoreIndexed { base=v1, index=v44, scale=1, value=v3, kind=I8 } -> -
     v52  Extend { value=v44, kind=I32 }                   -> x6
     v53  BinopI { op=add, lhs=v44, rhs_imm=1 }            -> x0
     v54  BinopI { op=shl, lhs=v53, rhs_imm=32 }           -> x6

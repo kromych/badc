@@ -307,7 +307,6 @@ Disassembly of section .text:
                	cbz	x1, <addr>
                	cmp	w2, #0x7
                	cset	x0, eq
-               	sxtw	x0, w0
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	add	sp, sp, #0xc0
@@ -381,7 +380,7 @@ Disassembly of section .text:
                	cmp	w0, w2
                	b.lt	<addr>
                	sxtw	x0, w1
-               	sub	x2, x29, #0x20
+               	sub	x1, x29, #0x20
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	add	sp, sp, #0xc0

@@ -33,16 +33,14 @@ Disassembly of section .text:
 
 <join_masked>:
                	xorl	%eax, %eax
-               	movl	%edi, %ecx
-               	cmpl	$0x80, %ecx
+               	cmpl	$0x80, %edi
                	jae	<addr>
                	movq	%rdi, %rax
                	andq	$0xff, %rax
                	xorq	$0x2a, %rax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	setne	%al
                	movzbq	%al, %rax
-               	movslq	%eax, %rax
                	retq
 
 <loop_masked>:
@@ -67,7 +65,6 @@ Disassembly of section .text:
                	jl	<addr>
                	movq	%r12, %rax
                	xorq	$0x2a, %rax
-               	movslq	%eax, %rax
                	popq	%rbx
                	popq	%r12
                	popq	%r13
@@ -84,7 +81,7 @@ Disassembly of section .text:
                	incq	%rax
                	cmpl	%edi, %eax
                	jl	<addr>
-               	movslq	%ecx, %rax
+               	movq	%rcx, %rax
                	retq
 
 <count_s8>:
@@ -93,8 +90,7 @@ Disassembly of section .text:
                	cmpl	%edi, %eax
                	jge	<addr>
                	addq	$0x3, %rcx
-               	movq	%rcx, %rdx
-               	movsbq	%dl, %rcx
+               	movsbq	%cl, %rcx
                	incq	%rax
                	cmpl	%edi, %eax
                	jl	<addr>
@@ -108,7 +104,6 @@ Disassembly of section .text:
                	movq	%rdi, %rax
                	andq	$0xffff, %rax           # imm = 0xFFFF
                	incq	%rax
-               	movslq	%eax, %rax
                	retq
 
 <join_unmasked>:
@@ -119,7 +114,6 @@ Disassembly of section .text:
                	movq	%rax, %rsi
                	movq	%rsi, %rax
                	andq	$0xff, %rax
-               	movslq	%eax, %rax
                	retq
 
 <join_byte_as_signed>:

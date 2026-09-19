@@ -36,9 +36,7 @@ Disassembly of section .text:
                	retq
 
 <add2>:
-               	movl	%edi, %eax
-               	movl	%esi, %ecx
-               	addq	%rcx, %rax
+               	leaq	(%rdi,%rsi), %rax
                	movl	%eax, %eax
                	retq
 

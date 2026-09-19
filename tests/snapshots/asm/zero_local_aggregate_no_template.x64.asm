@@ -117,8 +117,7 @@ Disassembly of section .text:
                	movups	%xmm14, 0x1f0(%rcx)
                	cmpl	$0x200, %eax            # imm = 0x200
                	jge	<addr>
-               	movslq	%eax, %rdx
-               	movsbq	(%rcx,%rdx), %rdx
+               	movsbq	(%rcx,%rax), %rdx
                	testq	%rdx, %rdx
                	jne	<addr>
                	incq	%rax

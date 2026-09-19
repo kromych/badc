@@ -145,8 +145,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v120 Store { addr=v73, disp=0, value=v119, kind=I32 } -> -
     v121 Extend { value=v119, kind=I32 }                  -> x6
     v122 Extend { value=v121, kind=I32 }                  -> x7
-    v123 Imm(0)                                           -> x8
-    v124 Extend { value=v122, kind=I32 }                  -> x7
+    v123 Imm(0)                                           -> x7
+    v124 Extend { value=v121, kind=I32 }                  -> x7
     v125 BinopI { op=mul, lhs=v121, rhs_imm=10 }          -> x6
     v126 BinopI { op=shl, lhs=v125, rhs_imm=32 }          -> x7
     v127 Extend { value=v125, kind=I32 }                  -> x7
@@ -157,8 +157,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v132 Store { addr=v73, disp=0, value=v131, kind=I32 } -> -
     v133 Extend { value=v131, kind=I32 }                  -> x2
     v134 Extend { value=v133, kind=I32 }                  -> x7
-    v135 Imm(0)                                           -> x8
-    v136 Extend { value=v134, kind=I32 }                  -> x7
+    v135 Imm(0)                                           -> x7
+    v136 Extend { value=v133, kind=I32 }                  -> x7
     v137 BinopI { op=mul, lhs=v133, rhs_imm=100 }         -> x2
     v138 BinopI { op=shl, lhs=v137, rhs_imm=32 }          -> x7
     v139 Extend { value=v137, kind=I32 }                  -> x7
@@ -204,8 +204,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v171 Store { addr=v73, disp=0, value=v170, kind=I32 } -> -
     v172 Extend { value=v170, kind=I32 }                  -> x6
     v173 Extend { value=v172, kind=I32 }                  -> x7
-    v174 Imm(0)                                           -> x8
-    v175 Extend { value=v173, kind=I32 }                  -> x7
+    v174 Imm(0)                                           -> x7
+    v175 Extend { value=v172, kind=I32 }                  -> x7
     v176 ImmData(16)                                      -> x7
     v177 Extend { value=v170, kind=I32 }                  -> x2
     v178 BinopI { op=add, lhs=v177, rhs_imm=1 }           -> x2

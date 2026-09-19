@@ -70,7 +70,6 @@ Disassembly of section .text:
                	sub	x0, x29, #0x18
                	ldrsw	x0, [x0, #0x10]
                	add	x0, x20, x0
-               	mov	w0, w0
                	cmp	w0, #0x6
                	b.eq	<addr>
                	mov	x0, #0x2                // =2

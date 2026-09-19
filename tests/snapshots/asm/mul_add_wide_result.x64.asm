@@ -26,10 +26,7 @@ Disassembly of section .text:
                	int3
 
 <macc>:
-               	movl	%edi, %eax
-               	movl	%esi, %esi
-               	addq	%rsi, %rax
-               	movl	%eax, %eax
+               	leaq	(%rdi,%rsi), %rax
                	movslq	%eax, %rax
                	imulq	%rdx, %rax
                	addq	%rcx, %rax

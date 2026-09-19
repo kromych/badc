@@ -33,11 +33,11 @@ Disassembly of section .text:
                	cbnz	x1, <addr>
                	mov	x17, #0x0               // =0
                	orr	x20, x0, x17
-               	sxtw	x1, w20
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
+               	mov	x1, x20
                	bl	<addr>
-               	sxtw	x0, w20
+               	mov	x0, x20
                	ldp	x29, x30, [sp, #0x20]
                	ldr	x20, [sp], #0x30
                	ret

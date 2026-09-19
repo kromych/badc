@@ -89,7 +89,6 @@ Disassembly of section .text:
                	ret
                	cbnz	w21, <addr>
                	mov	x0, #0x0                // =0
-               	sxtw	x0, w0
                	ldp	x29, x30, [sp, #0x90]
                	ldr	x24, [sp, #0x20]
                	ldp	x22, x23, [sp, #0x10]

@@ -105,8 +105,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v89  Phi { incoming=[b5:v85, b7:v87], kind=I64 }      -> x0
     v90  Imm(0)                                           -> x1
     v91  BinopI { op=shl, lhs=v89, rhs_imm=32 }           -> x1
-    v92  Extend { value=v89, kind=I32 }                   -> x0
-    terminator Return(v92)   (exit_acc=v92)
+    v92  Extend { value=v89, kind=I32 }                   -> x1
+    terminator Return(v89)   (exit_acc=v89)
   block 7  start_pc=0
     v87  Imm(1)                                           -> x0
     v88  Imm(0)                                           -> x1

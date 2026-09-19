@@ -122,8 +122,8 @@ Disassembly of section .text:
                	retq
 
 <use_pick>:
-               	movslq	%edx, %rax
-               	testq	%rax, %rax
+               	movslq	%edx, %rdx
+               	testq	%rdx, %rdx
                	je	<addr>
                	movq	0x10(%rdi), %rax
                	retq

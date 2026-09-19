@@ -20,9 +20,6 @@ Disassembly of section .text:
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	and	x0, x2, #0xf
-               	cmp	w0, #0x0
-               	cset	x0, ne
-               	sxtw	x0, w0
                	cbz	x0, <addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x80
@@ -31,9 +28,6 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	and	x0, x0, #0xf
-               	cmp	w0, #0x0
-               	cset	x0, ne
-               	sxtw	x0, w0
                	cbz	x0, <addr>
                	mov	x0, #0x2                // =2
                	add	sp, sp, #0x80
@@ -42,9 +36,6 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	and	x0, x0, #0xf
-               	cmp	w0, #0x0
-               	cset	x0, ne
-               	sxtw	x0, w0
                	cbz	x0, <addr>
                	mov	x0, #0x3                // =3
                	add	sp, sp, #0x80
@@ -53,9 +44,6 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	and	x0, x0, #0xf
-               	cmp	w0, #0x0
-               	cset	x0, ne
-               	sxtw	x0, w0
                	cbz	x0, <addr>
                	mov	x0, #0x4                // =4
                	add	sp, sp, #0x80
@@ -64,9 +52,6 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	and	x0, x0, #0xf
-               	cmp	w0, #0x0
-               	cset	x0, ne
-               	sxtw	x0, w0
                	cbz	x0, <addr>
                	mov	x0, #0x5                // =5
                	add	sp, sp, #0x80
@@ -74,9 +59,6 @@ Disassembly of section .text:
                	ret
                	sub	x0, x29, #0x80
                	and	x1, x0, #0x7
-               	cmp	w1, #0x0
-               	cset	x1, ne
-               	sxtw	x1, w1
                	cbz	x1, <addr>
                	mov	x0, #0x6                // =6
                	add	sp, sp, #0x80

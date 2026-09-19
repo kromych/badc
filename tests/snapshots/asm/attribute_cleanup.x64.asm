@@ -207,15 +207,15 @@ Disassembly of section .text:
                	movl	%eax, (%rcx)
                	xorl	%eax, %eax
                	movl	%eax, -0x8(%rbp)
-               	movslq	(%rcx), %rdx
-               	leaq	<rip>, %rcx
-               	movl	%eax, (%rcx)
+               	movslq	(%rcx), %rcx
+               	leaq	<rip>, %rdx
+               	movl	%eax, (%rdx)
                	movl	$0x2bc, %esi            # imm = 0x2BC
-               	movslq	(%r12), %rcx
-               	leaq	0x1(%rcx), %rdi
+               	movslq	(%r12), %rdx
+               	leaq	0x1(%rdx), %rdi
                	movl	%edi, (%r12)
-               	movl	%esi, (%rbx,%rcx,4)
-               	cmpl	$0x1, %edx
+               	movl	%esi, (%rbx,%rdx,4)
+               	cmpl	$0x1, %ecx
                	je	<addr>
                	movl	$0x2, %eax
                	popq	%rbx

@@ -28,37 +28,34 @@ Disassembly of section .text:
 <main>:
                	leaq	<rip>, %rax
                	leaq	0x10(%rax), %rcx
-               	movq	%rcx, %rdi
-               	subq	%rax, %rdi
-               	cmpq	$0x10, %rdi
+               	movq	%rcx, %rsi
+               	subq	%rax, %rsi
+               	cmpq	$0x10, %rsi
                	je	<addr>
                	movl	$0x1, %eax
                	retq
                	leaq	0x8(%rax), %rdx
-               	movq	%rdx, %rsi
-               	subq	%rax, %rsi
-               	cmpq	$0x8, %rsi
+               	movq	%rdx, %rdi
+               	subq	%rax, %rdi
+               	cmpq	$0x8, %rdi
                	je	<addr>
                	movl	$0x2, %eax
                	retq
-               	cmpq	$0x10, %rdi
+               	cmpl	$0x10, %esi
                	je	<addr>
                	movl	$0x3, %eax
                	retq
-               	movslq	(%rcx), %rdi
-               	cmpl	$0x4, %edi
+               	movslq	(%rcx), %rsi
+               	cmpl	$0x4, %esi
                	jne	<addr>
                	movslq	0x4(%rcx), %rcx
                	cmpl	$0x5, %ecx
                	je	<addr>
                	movl	$0x4, %eax
                	retq
-               	movq	%rsi, %rcx
-               	sarq	$0x3f, %rcx
-               	shrq	$0x3d, %rcx
-               	addq	%rsi, %rcx
-               	sarq	$0x3, %rcx
-               	cmpq	$0x1, %rcx
+               	movq	%rdi, %rcx
+               	shrq	$0x3, %rcx
+               	cmpl	$0x1, %ecx
                	je	<addr>
                	movl	$0x5, %eax
                	retq

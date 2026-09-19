@@ -65,16 +65,16 @@ Disassembly of section .text:
                	b.ls	<addr>
                	mov	x6, x5
                	mov	x7, x5
-               	cmp	x4, #0x64
+               	cmp	w4, #0x64
                	b.hs	<addr>
-               	cmp	x5, #0xc8
+               	cmp	w5, #0xc8
                	b.hs	<addr>
                	add	x7, x7, #0x1
                	add	x6, x6, x4
                	sub	x3, x29, #0x10
                	add	x0, x4, #0x1
                	mov	x4, #0x64               // =100
-               	cmp	x0, #0x64
+               	cmp	w0, #0x64
                	b.hs	<addr>
                	lsr	x2, x0, #6
                	ldr	x1, [x3, x2, lsl #3]
@@ -116,7 +116,7 @@ Disassembly of section .text:
                	b.hi	<addr>
                	mov	x4, x0
                	add	x5, x5, #0x1
-               	cmp	x4, #0x64
+               	cmp	w4, #0x64
                	b.lo	<addr>
                	cmp	x7, #0x5
                	b.eq	<addr>
@@ -166,7 +166,7 @@ Disassembly of section .text:
                	add	x0, x1, x0
                	cmp	x0, #0x64
                	b.ls	<addr>
-               	cmp	x4, #0x64
+               	cmp	w4, #0x64
                	b.eq	<addr>
                	mov	x0, #0xb                // =11
                	add	sp, sp, #0x10

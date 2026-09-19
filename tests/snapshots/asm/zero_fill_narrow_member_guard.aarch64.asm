@@ -45,7 +45,7 @@ Disassembly of section .text:
                	b	<addr>
                	mov	x0, x1
                	cbnz	w0, <addr>
-               	sxtw	x0, w6
+               	mov	x0, x6
                	ret
 
 <main>:

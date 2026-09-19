@@ -21,7 +21,6 @@ Disassembly of section .text:
                	cmp	w1, #0x2
                	b.eq	<addr>
                	mov	x0, #-0x1               // =-1
-               	sxtw	x0, w0
                	ret
                	add	x0, x0, #0x1
                	b	<addr>

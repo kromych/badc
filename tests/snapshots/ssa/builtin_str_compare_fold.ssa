@@ -70,10 +70,10 @@ fn ent_pc=4 n_params=0 variadic=false locals=1
     v60  LocalAddr(-1)                                    -> x0
     v61  Imm(0)                                           -> x0
     v62  Load { addr=v59, disp=0, kind=I8 }               -> x0
-    v63  BinopI { op=and, lhs=v62, rhs_imm=4294967295 }   -> x0
-    v64  BinopI { op=sub, lhs=v63, rhs_imm=97 }           -> x0
-    v65  BinopI { op=and, lhs=v64, rhs_imm=4294967295 }   -> x0
-    v66  BinopI { op=add, lhs=v65, rhs_imm=3 }            -> x0
+    v63  BinopI { op=and, lhs=v62, rhs_imm=4294967295 }   -> x1
+    v64  BinopI { op=sub, lhs=v62, rhs_imm=97 }           -> x0
+    v65  BinopI { op=and, lhs=v64, rhs_imm=4294967295 }   -> x1
+    v66  BinopI { op=add, lhs=v64, rhs_imm=3 }            -> x0
     v67  BinopI { op=and, lhs=v66, rhs_imm=4294967295 }   -> x2
     v68  CallExt { binding_idx=8, args=[v58, v59, v67], fp_arg_mask=0x0 } -> x0
     v69  BinopI { op=ne, lhs=v68, rhs_imm=0 }             -> x1

@@ -46,10 +46,8 @@ Disassembly of section .text:
                	bl	<addr>
                	cmp	w21, #0x2
                	b.le	<addr>
-               	sxtw	x0, w20
-               	cbz	x0, <addr>
+               	cbz	x20, <addr>
                	mov	x0, #0x0                // =0
-               	sxtw	x0, w0
                	ldp	x29, x30, [sp, #0x20]
                	ldr	x22, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x30

@@ -44,14 +44,14 @@ Disassembly of section .text:
                	lsl	x3, x3, #47
                	asr	x3, x3, #47
                	mov	x17, #0xfde8            // =65000
-               	cmp	x3, x17
+               	cmp	w3, w17
                	b.ne	<addr>
                	and	x1, x1, #0xffff
                	asr	x1, x1, #1
                	and	x1, x1, #0x3ff
                	lsl	x1, x1, #54
                	asr	x1, x1, #54
-               	cmp	x1, #0x1f4
+               	cmp	w1, #0x1f4
                	b.ne	<addr>
                	ldrb	w1, [x0]
                	and	x1, x1, #0xfffffffffffffff8

@@ -88,15 +88,13 @@ Disassembly of section .text:
                	retq
 
 <count_down>:
-               	movslq	%edi, %rdi
-               	testq	%rdi, %rdi
+               	testl	%edi, %edi
                	je	<addr>
                	movslq	(%rsi), %rax
                	addq	%rdi, %rax
                	movl	%eax, (%rsi)
-               	leaq	-0x1(%rdi), %rax
-               	movslq	%eax, %rdi
-               	testq	%rdi, %rdi
+               	decq	%rdi
+               	testl	%edi, %edi
                	jne	<addr>
                	retq
 

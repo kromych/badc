@@ -158,7 +158,6 @@ Disassembly of section .text:
                	movl	$0x1e, %eax
                	testl	%eax, %eax
                	je	<addr>
-               	movslq	%eax, %rax
                	retq
                	movq	%rcx, %rax
                	retq

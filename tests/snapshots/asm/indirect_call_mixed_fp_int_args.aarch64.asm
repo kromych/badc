@@ -16,19 +16,19 @@ Disassembly of section .text:
 <main>:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	d0, [x1]
-               	add	x1, x0, #0x2
+               	ldrsw	x1, [x0]
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldr	d0, [x0]
+               	add	x2, x1, #0x2
                	mov	x7, #0x3fd0000000000000 // =4598175219545276416
                	mov	x8, #0x3fc00000         // =1069547520
                	mov	x9, #0x4024000000000000 // =4621819117588971520
                	fmov	d17, x9
                	fmul	d1, d0, d17
                	fcvtzs	x10, d1
-               	add	x3, x0, x10
-               	add	x4, x3, x1
+               	add	x3, x1, x10
+               	add	x4, x3, x2
                	mov	x11, #0x4059000000000000 // =4636737291354636288
                	fmov	d16, x7
                	fmov	d17, x11
@@ -41,12 +41,12 @@ Disassembly of section .text:
                	fmul	s3, s16, s17
                	fcvtzs	x14, s3
                	add	x6, x5, x14
-               	add	x2, x6, #0x7
-               	cmp	w2, #0x40
+               	add	x0, x6, #0x7
+               	cmp	w0, #0x40
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ret
-               	cmp	w2, w2
+               	cmp	w0, w0
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ret

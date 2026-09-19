@@ -145,11 +145,9 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	xorl	%ebx, %ebx
-               	movslq	%ebx, %rax
-               	testq	%rax, %rax
+               	testq	%rbx, %rbx
                	je	<addr>
                	movl	$0xb, %eax
-               	movslq	%eax, %rax
                	popq	%rbx
                	leave
                	retq

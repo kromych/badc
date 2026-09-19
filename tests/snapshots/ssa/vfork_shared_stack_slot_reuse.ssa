@@ -95,32 +95,32 @@ fn ent_pc=7 n_params=20 variadic=false locals=0
     v89  Extend { value=v87, kind=I32 }                   -> x1
     v90  BinopI { op=and, lhs=v87, rhs_imm=127 }          -> x0
     v91  BinopI { op=shl, lhs=v90, rhs_imm=32 }           -> x1
-    v92  Extend { value=v90, kind=I32 }                   -> x0
-    terminator Return(v92)   (exit_acc=v92)
+    v92  Extend { value=v90, kind=I32 }                   -> x1
+    terminator Return(v90)   (exit_acc=v90)
 ; --- SSA dump (ok=true) ent_pc=8 ---
 ; name=main
 fn ent_pc=8 n_params=0 variadic=false locals=1
-  spill_count=136 gpr_used=[3, 12, 13, 14, 15] fp_used=[]
+  spill_count=126 gpr_used=[3, 12, 13, 14, 15] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(0)                                           -> x0
     v2   Imm(0)                                           -> x1
     terminator Jmp(b2)   (exit_acc=v1)
   block 1  start_pc=0
-    v6   ImmData(48)                                      -> x6
+    v6   ImmData(48)                                      -> x2
     v7   Extend { value=v3, kind=I32 }                    -> x1
-    v8   BinopI { op=shl, lhs=v7, rhs_imm=2 }             -> x2
-    v9   Binop { op=add, lhs=v6, rhs=v8 }                 -> x2
-    v10  BinopI { op=add, lhs=v7, rhs_imm=1 }             -> x2
-    v11  BinopI { op=shl, lhs=v10, rhs_imm=32 }           -> x7
-    v12  Extend { value=v10, kind=I32 }                   -> x7
-    v13  StoreIndexed { base=v6, index=v7, scale=4, value=v10, kind=I32 } -> -
-    v14  Extend { value=v3, kind=I32 }                    -> x1
+    v8   BinopI { op=shl, lhs=v3, rhs_imm=2 }             -> x1
+    v9   Binop { op=add, lhs=v6, rhs=v8 }                 -> x1
+    v10  BinopI { op=add, lhs=v3, rhs_imm=1 }             -> x1
+    v11  BinopI { op=shl, lhs=v10, rhs_imm=32 }           -> x6
+    v12  Extend { value=v10, kind=I32 }                   -> x6
+    v13  StoreIndexed { base=v6, index=v3, scale=4, value=v10, kind=I32 } -> -
+    v14  Extend { value=v3, kind=I32 }                    -> x2
     v15  BinopI { op=add, lhs=v3, rhs_imm=1 }             -> x0
-    v16  Imm(0)                                           -> x1
-    terminator Jmp(b2)   (exit_acc=v15)
+    v16  Imm(0)                                           -> x0
+    terminator Jmp(b2)   (exit_acc=v10)
   block 2  start_pc=0
-    v3   Phi { incoming=[b0:v1, b1:v15], kind=I64 }       -> x0
+    v3   Phi { incoming=[b0:v1, b1:v10], kind=I64 }       -> x0
     v4   Extend { value=v3, kind=I32 }                    -> x1
     v5   BinopI { op=lt, lhs=v3, rhs_imm=64 }             -> x1
     terminator Bnz { cond=v5, target=b1, fall=b3 }   (exit_acc=v5)
@@ -131,8 +131,8 @@ fn ent_pc=8 n_params=0 variadic=false locals=1
     v20  BinopI { op=mul, lhs=v19, rhs_imm=3 }            -> x12
     v21  BinopI { op=shl, lhs=v20, rhs_imm=32 }           -> x1
     v22  Extend { value=v20, kind=I32 }                   -> x1
-    v23  BinopI { op=shl, lhs=v20, rhs_imm=32 }           -> x2
-    v24  Extend { value=v22, kind=I32 }                   -> x1
+    v23  BinopI { op=shl, lhs=v20, rhs_imm=32 }           -> x1
+    v24  Extend { value=v20, kind=I32 }                   -> x1
     v25  Imm(0)                                           -> x1
     v26  Imm(4)                                           -> x1
     v27  BinopI { op=add, lhs=v17, rhs_imm=4 }            -> x1
@@ -170,7 +170,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=1
     v59  BinopI { op=mul, lhs=v58, rhs_imm=3 }            -> x1
     v60  BinopI { op=shl, lhs=v59, rhs_imm=32 }           -> x2
     v61  Extend { value=v59, kind=I32 }                   -> x2
-    v62  BinopI { op=add, lhs=v59, rhs_imm=4 }            -> [spill 0]
+    v62  BinopI { op=add, lhs=v59, rhs_imm=4 }            -> [spill 8]
     v63  BinopI { op=shl, lhs=v62, rhs_imm=32 }           -> x1
     v64  Extend { value=v62, kind=I32 }                   -> x1
     v65  Imm(0)                                           -> x1
@@ -180,7 +180,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=1
     v69  BinopI { op=mul, lhs=v68, rhs_imm=3 }            -> x1
     v70  BinopI { op=shl, lhs=v69, rhs_imm=32 }           -> x2
     v71  Extend { value=v69, kind=I32 }                   -> x2
-    v72  BinopI { op=add, lhs=v69, rhs_imm=5 }            -> [spill 1]
+    v72  BinopI { op=add, lhs=v69, rhs_imm=5 }            -> [spill 9]
     v73  BinopI { op=shl, lhs=v72, rhs_imm=32 }           -> x1
     v74  Extend { value=v72, kind=I32 }                   -> x1
     v75  Imm(0)                                           -> x1
@@ -190,7 +190,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=1
     v79  BinopI { op=mul, lhs=v78, rhs_imm=3 }            -> x1
     v80  BinopI { op=shl, lhs=v79, rhs_imm=32 }           -> x2
     v81  Extend { value=v79, kind=I32 }                   -> x2
-    v82  BinopI { op=add, lhs=v79, rhs_imm=6 }            -> [spill 2]
+    v82  BinopI { op=add, lhs=v79, rhs_imm=6 }            -> [spill 10]
     v83  BinopI { op=shl, lhs=v82, rhs_imm=32 }           -> x1
     v84  Extend { value=v82, kind=I32 }                   -> x1
     v85  Imm(0)                                           -> x1
@@ -200,7 +200,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=1
     v89  BinopI { op=mul, lhs=v88, rhs_imm=3 }            -> x1
     v90  BinopI { op=shl, lhs=v89, rhs_imm=32 }           -> x2
     v91  Extend { value=v89, kind=I32 }                   -> x2
-    v92  BinopI { op=add, lhs=v89, rhs_imm=7 }            -> [spill 3]
+    v92  BinopI { op=add, lhs=v89, rhs_imm=7 }            -> [spill 11]
     v93  BinopI { op=shl, lhs=v92, rhs_imm=32 }           -> x1
     v94  Extend { value=v92, kind=I32 }                   -> x1
     v95  Imm(0)                                           -> x1
@@ -210,7 +210,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=1
     v99  BinopI { op=mul, lhs=v98, rhs_imm=3 }            -> x1
     v100 BinopI { op=shl, lhs=v99, rhs_imm=32 }           -> x2
     v101 Extend { value=v99, kind=I32 }                   -> x2
-    v102 BinopI { op=add, lhs=v99, rhs_imm=8 }            -> [spill 4]
+    v102 BinopI { op=add, lhs=v99, rhs_imm=8 }            -> [spill 12]
     v103 BinopI { op=shl, lhs=v102, rhs_imm=32 }          -> x1
     v104 Extend { value=v102, kind=I32 }                  -> x1
     v105 Imm(0)                                           -> x1
@@ -220,7 +220,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=1
     v109 BinopI { op=mul, lhs=v108, rhs_imm=3 }           -> x1
     v110 BinopI { op=shl, lhs=v109, rhs_imm=32 }          -> x2
     v111 Extend { value=v109, kind=I32 }                  -> x2
-    v112 BinopI { op=add, lhs=v109, rhs_imm=9 }           -> [spill 5]
+    v112 BinopI { op=add, lhs=v109, rhs_imm=9 }           -> [spill 13]
     v113 BinopI { op=shl, lhs=v112, rhs_imm=32 }          -> x1
     v114 Extend { value=v112, kind=I32 }                  -> x1
     v115 Imm(0)                                           -> x1
@@ -230,7 +230,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=1
     v119 BinopI { op=mul, lhs=v118, rhs_imm=3 }           -> x1
     v120 BinopI { op=shl, lhs=v119, rhs_imm=32 }          -> x2
     v121 Extend { value=v119, kind=I32 }                  -> x2
-    v122 BinopI { op=add, lhs=v119, rhs_imm=10 }          -> [spill 6]
+    v122 BinopI { op=add, lhs=v119, rhs_imm=10 }          -> [spill 14]
     v123 BinopI { op=shl, lhs=v122, rhs_imm=32 }          -> x1
     v124 Extend { value=v122, kind=I32 }                  -> x1
     v125 Imm(0)                                           -> x1
@@ -240,7 +240,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=1
     v129 BinopI { op=mul, lhs=v128, rhs_imm=3 }           -> x0
     v130 BinopI { op=shl, lhs=v129, rhs_imm=32 }          -> x1
     v131 Extend { value=v129, kind=I32 }                  -> x1
-    v132 BinopI { op=add, lhs=v129, rhs_imm=11 }          -> [spill 7]
+    v132 BinopI { op=add, lhs=v129, rhs_imm=11 }          -> [spill 15]
     v133 BinopI { op=shl, lhs=v132, rhs_imm=32 }          -> x0
     v134 Extend { value=v132, kind=I32 }                  -> x0
     v135 Imm(0)                                           -> x0
@@ -271,8 +271,8 @@ fn ent_pc=8 n_params=0 variadic=false locals=1
     v154 BinopI { op=mul, lhs=v153, rhs_imm=3 }           -> x0
     v155 BinopI { op=shl, lhs=v154, rhs_imm=32 }          -> x1
     v156 Extend { value=v154, kind=I32 }                  -> x1
-    v157 BinopI { op=shl, lhs=v154, rhs_imm=32 }          -> x2
-    v158 Extend { value=v156, kind=I32 }                  -> x1
+    v157 BinopI { op=shl, lhs=v154, rhs_imm=32 }          -> x1
+    v158 Extend { value=v154, kind=I32 }                  -> x1
     v159 Binop { op=ne, lhs=v20, rhs=v154 }               -> x0
     terminator Bz { cond=v159, target=b44, fall=b7 }   (exit_acc=v159)
   block 7  start_pc=0
@@ -538,12 +538,12 @@ fn ent_pc=8 n_params=0 variadic=false locals=1
     terminator Jmp(b30)   (exit_acc=v654)
   block 30  start_pc=0
     v657 Phi { incoming=[b33:v638, b29:v654], kind=I64 }  -> x3
-    v658 Extend { value=v657, kind=I32 }                  -> x6
-    terminator Bz { cond=v658, target=b32, fall=b31 }   (exit_acc=v658)
+    v658 Extend { value=v657, kind=I32 }                  -> x0
+    terminator Bz { cond=v657, target=b32, fall=b31 }   (exit_acc=v657)
   block 31  start_pc=0
     v659 ImmData(22)                                      -> x7
     v660 Extend { value=v657, kind=I32 }                  -> x0
-    v661 CallExt { binding_idx=0, args=[v659, v658], fp_arg_mask=0x0 } -> x0
+    v661 CallExt { binding_idx=0, args=[v659, v657], fp_arg_mask=0x0 } -> x0
     v662 Imm(1)                                           -> x0
     terminator Return(v662)   (exit_acc=v662)
   block 32  start_pc=0
@@ -585,7 +585,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=1
     v166 Extend { value=v164, kind=I32 }                  -> x2
     v167 BinopI { op=add, lhs=v164, rhs_imm=1 }           -> x1
     v168 BinopI { op=shl, lhs=v167, rhs_imm=32 }          -> x2
-    v169 Extend { value=v167, kind=I32 }                  -> [spill 24]
+    v169 Extend { value=v167, kind=I32 }                  -> x2
     v170 Imm(0)                                           -> x2
     v171 Imm(68)                                          -> x2
     v172 BinopI { op=add, lhs=v160, rhs_imm=68 }          -> x2
@@ -595,7 +595,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=1
     v176 Extend { value=v174, kind=I32 }                  -> x6
     v177 BinopI { op=add, lhs=v174, rhs_imm=2 }           -> x2
     v178 BinopI { op=shl, lhs=v177, rhs_imm=32 }          -> x6
-    v179 Extend { value=v177, kind=I32 }                  -> [spill 25]
+    v179 Extend { value=v177, kind=I32 }                  -> x6
     v180 Imm(0)                                           -> x6
     v181 Imm(72)                                          -> x6
     v182 BinopI { op=add, lhs=v160, rhs_imm=72 }          -> x6
@@ -605,7 +605,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=1
     v186 Extend { value=v184, kind=I32 }                  -> x7
     v187 BinopI { op=add, lhs=v184, rhs_imm=3 }           -> x6
     v188 BinopI { op=shl, lhs=v187, rhs_imm=32 }          -> x7
-    v189 Extend { value=v187, kind=I32 }                  -> [spill 26]
+    v189 Extend { value=v187, kind=I32 }                  -> x7
     v190 Imm(0)                                           -> x7
     v191 Imm(76)                                          -> x7
     v192 BinopI { op=add, lhs=v160, rhs_imm=76 }          -> x7
@@ -615,7 +615,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=1
     v196 Extend { value=v194, kind=I32 }                  -> x8
     v197 BinopI { op=add, lhs=v194, rhs_imm=4 }           -> x7
     v198 BinopI { op=shl, lhs=v197, rhs_imm=32 }          -> x8
-    v199 Extend { value=v197, kind=I32 }                  -> [spill 27]
+    v199 Extend { value=v197, kind=I32 }                  -> x8
     v200 Imm(0)                                           -> x8
     v201 Imm(80)                                          -> x8
     v202 BinopI { op=add, lhs=v160, rhs_imm=80 }          -> x8
@@ -625,7 +625,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=1
     v206 Extend { value=v204, kind=I32 }                  -> x9
     v207 BinopI { op=add, lhs=v204, rhs_imm=5 }           -> x8
     v208 BinopI { op=shl, lhs=v207, rhs_imm=32 }          -> x9
-    v209 Extend { value=v207, kind=I32 }                  -> [spill 28]
+    v209 Extend { value=v207, kind=I32 }                  -> x9
     v210 Imm(0)                                           -> x9
     v211 Imm(84)                                          -> x9
     v212 BinopI { op=add, lhs=v160, rhs_imm=84 }          -> x9
@@ -635,7 +635,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=1
     v216 Extend { value=v214, kind=I32 }                  -> x3
     v217 BinopI { op=add, lhs=v214, rhs_imm=6 }           -> x9
     v218 BinopI { op=shl, lhs=v217, rhs_imm=32 }          -> x3
-    v219 Extend { value=v217, kind=I32 }                  -> [spill 29]
+    v219 Extend { value=v217, kind=I32 }                  -> x3
     v220 Imm(0)                                           -> x3
     v221 Imm(88)                                          -> x3
     v222 BinopI { op=add, lhs=v160, rhs_imm=88 }          -> x3
@@ -645,7 +645,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=1
     v226 Extend { value=v224, kind=I32 }                  -> x12
     v227 BinopI { op=add, lhs=v224, rhs_imm=7 }           -> x3
     v228 BinopI { op=shl, lhs=v227, rhs_imm=32 }          -> x12
-    v229 Extend { value=v227, kind=I32 }                  -> [spill 30]
+    v229 Extend { value=v227, kind=I32 }                  -> x12
     v230 Imm(0)                                           -> x12
     v231 Imm(92)                                          -> x12
     v232 BinopI { op=add, lhs=v160, rhs_imm=92 }          -> x12
@@ -655,7 +655,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=1
     v236 Extend { value=v234, kind=I32 }                  -> x13
     v237 BinopI { op=add, lhs=v234, rhs_imm=8 }           -> x12
     v238 BinopI { op=shl, lhs=v237, rhs_imm=32 }          -> x13
-    v239 Extend { value=v237, kind=I32 }                  -> [spill 31]
+    v239 Extend { value=v237, kind=I32 }                  -> x13
     v240 Imm(0)                                           -> x13
     v241 Imm(96)                                          -> x13
     v242 BinopI { op=add, lhs=v160, rhs_imm=96 }          -> x13
@@ -665,7 +665,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=1
     v246 Extend { value=v244, kind=I32 }                  -> x14
     v247 BinopI { op=add, lhs=v244, rhs_imm=9 }           -> x13
     v248 BinopI { op=shl, lhs=v247, rhs_imm=32 }          -> x14
-    v249 Extend { value=v247, kind=I32 }                  -> [spill 32]
+    v249 Extend { value=v247, kind=I32 }                  -> x14
     v250 Imm(0)                                           -> x14
     v251 Imm(100)                                         -> x14
     v252 BinopI { op=add, lhs=v160, rhs_imm=100 }         -> x14
@@ -675,134 +675,134 @@ fn ent_pc=8 n_params=0 variadic=false locals=1
     v256 Extend { value=v254, kind=I32 }                  -> x15
     v257 BinopI { op=add, lhs=v254, rhs_imm=10 }          -> x14
     v258 BinopI { op=shl, lhs=v257, rhs_imm=32 }          -> x15
-    v259 Extend { value=v257, kind=I32 }                  -> [spill 33]
+    v259 Extend { value=v257, kind=I32 }                  -> x15
     v260 Imm(0)                                           -> x15
     v261 Imm(104)                                         -> x15
     v262 BinopI { op=add, lhs=v160, rhs_imm=104 }         -> x15
     v263 Load { addr=v160, disp=104, kind=I32 }           -> x15
     v264 BinopI { op=mul, lhs=v263, rhs_imm=5 }           -> x15
-    v265 BinopI { op=shl, lhs=v264, rhs_imm=32 }          -> [spill 52]
-    v266 Extend { value=v264, kind=I32 }                  -> [spill 53]
+    v265 BinopI { op=shl, lhs=v264, rhs_imm=32 }          -> [spill 32]
+    v266 Extend { value=v264, kind=I32 }                  -> [spill 33]
     v267 BinopI { op=add, lhs=v264, rhs_imm=11 }          -> x15
-    v268 BinopI { op=shl, lhs=v267, rhs_imm=32 }          -> [spill 54]
-    v269 Extend { value=v267, kind=I32 }                  -> [spill 34]
-    v270 Imm(0)                                           -> [spill 55]
-    v271 Imm(108)                                         -> [spill 56]
-    v272 BinopI { op=add, lhs=v160, rhs_imm=108 }         -> [spill 57]
-    v273 Load { addr=v160, disp=108, kind=I32 }           -> [spill 35]
-    v274 BinopI { op=mul, lhs=v273, rhs_imm=5 }           -> [spill 8]
-    v275 BinopI { op=shl, lhs=v274, rhs_imm=32 }          -> [spill 58]
-    v276 Extend { value=v274, kind=I32 }                  -> [spill 59]
-    v277 BinopI { op=add, lhs=v274, rhs_imm=12 }          -> [spill 9]
-    v278 BinopI { op=shl, lhs=v277, rhs_imm=32 }          -> [spill 60]
-    v279 Extend { value=v277, kind=I32 }                  -> [spill 36]
-    v280 Imm(0)                                           -> [spill 61]
-    v281 Imm(112)                                         -> [spill 62]
-    v282 BinopI { op=add, lhs=v160, rhs_imm=112 }         -> [spill 63]
-    v283 Load { addr=v160, disp=112, kind=I32 }           -> [spill 37]
-    v284 BinopI { op=mul, lhs=v283, rhs_imm=5 }           -> [spill 10]
-    v285 BinopI { op=shl, lhs=v284, rhs_imm=32 }          -> [spill 64]
-    v286 Extend { value=v284, kind=I32 }                  -> [spill 65]
-    v287 BinopI { op=add, lhs=v284, rhs_imm=13 }          -> [spill 11]
-    v288 BinopI { op=shl, lhs=v287, rhs_imm=32 }          -> [spill 66]
-    v289 Extend { value=v287, kind=I32 }                  -> [spill 38]
-    v290 Imm(0)                                           -> [spill 67]
-    v291 Imm(116)                                         -> [spill 68]
-    v292 BinopI { op=add, lhs=v160, rhs_imm=116 }         -> [spill 69]
-    v293 Load { addr=v160, disp=116, kind=I32 }           -> [spill 39]
-    v294 BinopI { op=mul, lhs=v293, rhs_imm=5 }           -> [spill 12]
-    v295 BinopI { op=shl, lhs=v294, rhs_imm=32 }          -> [spill 70]
-    v296 Extend { value=v294, kind=I32 }                  -> [spill 71]
-    v297 BinopI { op=add, lhs=v294, rhs_imm=14 }          -> [spill 13]
-    v298 BinopI { op=shl, lhs=v297, rhs_imm=32 }          -> [spill 72]
-    v299 Extend { value=v297, kind=I32 }                  -> [spill 40]
-    v300 Imm(0)                                           -> [spill 73]
-    v301 Imm(120)                                         -> [spill 74]
-    v302 BinopI { op=add, lhs=v160, rhs_imm=120 }         -> [spill 75]
-    v303 Load { addr=v160, disp=120, kind=I32 }           -> [spill 41]
-    v304 BinopI { op=mul, lhs=v303, rhs_imm=5 }           -> [spill 14]
-    v305 BinopI { op=shl, lhs=v304, rhs_imm=32 }          -> [spill 76]
-    v306 Extend { value=v304, kind=I32 }                  -> [spill 77]
-    v307 BinopI { op=add, lhs=v304, rhs_imm=15 }          -> [spill 15]
-    v308 BinopI { op=shl, lhs=v307, rhs_imm=32 }          -> [spill 78]
-    v309 Extend { value=v307, kind=I32 }                  -> [spill 42]
-    v310 Imm(0)                                           -> [spill 79]
-    v311 Imm(124)                                         -> [spill 80]
-    v312 BinopI { op=add, lhs=v160, rhs_imm=124 }         -> [spill 81]
-    v313 Load { addr=v160, disp=124, kind=I32 }           -> [spill 43]
-    v314 BinopI { op=mul, lhs=v313, rhs_imm=5 }           -> [spill 16]
-    v315 BinopI { op=shl, lhs=v314, rhs_imm=32 }          -> [spill 82]
-    v316 Extend { value=v314, kind=I32 }                  -> [spill 83]
-    v317 BinopI { op=add, lhs=v314, rhs_imm=16 }          -> [spill 17]
-    v318 BinopI { op=shl, lhs=v317, rhs_imm=32 }          -> [spill 84]
-    v319 Extend { value=v317, kind=I32 }                  -> [spill 44]
-    v320 Imm(0)                                           -> [spill 85]
-    v321 Imm(128)                                         -> [spill 86]
-    v322 BinopI { op=add, lhs=v160, rhs_imm=128 }         -> [spill 87]
-    v323 Load { addr=v160, disp=128, kind=I32 }           -> [spill 45]
-    v324 BinopI { op=mul, lhs=v323, rhs_imm=5 }           -> [spill 18]
-    v325 BinopI { op=shl, lhs=v324, rhs_imm=32 }          -> [spill 88]
-    v326 Extend { value=v324, kind=I32 }                  -> [spill 89]
-    v327 BinopI { op=add, lhs=v324, rhs_imm=17 }          -> [spill 19]
-    v328 BinopI { op=shl, lhs=v327, rhs_imm=32 }          -> [spill 90]
-    v329 Extend { value=v327, kind=I32 }                  -> [spill 46]
-    v330 Imm(0)                                           -> [spill 91]
-    v331 Imm(132)                                         -> [spill 92]
-    v332 BinopI { op=add, lhs=v160, rhs_imm=132 }         -> [spill 93]
-    v333 Load { addr=v160, disp=132, kind=I32 }           -> [spill 47]
-    v334 BinopI { op=mul, lhs=v333, rhs_imm=5 }           -> [spill 20]
-    v335 BinopI { op=shl, lhs=v334, rhs_imm=32 }          -> [spill 94]
-    v336 Extend { value=v334, kind=I32 }                  -> [spill 95]
-    v337 BinopI { op=add, lhs=v334, rhs_imm=18 }          -> [spill 21]
-    v338 BinopI { op=shl, lhs=v337, rhs_imm=32 }          -> [spill 96]
-    v339 Extend { value=v337, kind=I32 }                  -> [spill 48]
-    v340 Imm(0)                                           -> [spill 97]
-    v341 Imm(136)                                         -> [spill 98]
-    v342 BinopI { op=add, lhs=v160, rhs_imm=136 }         -> [spill 99]
-    v343 Load { addr=v160, disp=136, kind=I32 }           -> [spill 49]
-    v344 BinopI { op=mul, lhs=v343, rhs_imm=5 }           -> [spill 22]
-    v345 BinopI { op=shl, lhs=v344, rhs_imm=32 }          -> [spill 100]
-    v346 Extend { value=v344, kind=I32 }                  -> [spill 101]
-    v347 BinopI { op=add, lhs=v344, rhs_imm=19 }          -> [spill 23]
-    v348 BinopI { op=shl, lhs=v347, rhs_imm=32 }          -> [spill 102]
-    v349 Extend { value=v347, kind=I32 }                  -> [spill 50]
-    v350 Imm(0)                                           -> [spill 103]
-    v351 Imm(140)                                         -> [spill 104]
-    v352 BinopI { op=add, lhs=v160, rhs_imm=140 }         -> [spill 105]
+    v268 BinopI { op=shl, lhs=v267, rhs_imm=32 }          -> [spill 34]
+    v269 Extend { value=v267, kind=I32 }                  -> [spill 35]
+    v270 Imm(0)                                           -> [spill 36]
+    v271 Imm(108)                                         -> [spill 37]
+    v272 BinopI { op=add, lhs=v160, rhs_imm=108 }         -> [spill 38]
+    v273 Load { addr=v160, disp=108, kind=I32 }           -> [spill 24]
+    v274 BinopI { op=mul, lhs=v273, rhs_imm=5 }           -> [spill 16]
+    v275 BinopI { op=shl, lhs=v274, rhs_imm=32 }          -> [spill 39]
+    v276 Extend { value=v274, kind=I32 }                  -> [spill 40]
+    v277 BinopI { op=add, lhs=v274, rhs_imm=12 }          -> [spill 0]
+    v278 BinopI { op=shl, lhs=v277, rhs_imm=32 }          -> [spill 41]
+    v279 Extend { value=v277, kind=I32 }                  -> [spill 42]
+    v280 Imm(0)                                           -> [spill 43]
+    v281 Imm(112)                                         -> [spill 44]
+    v282 BinopI { op=add, lhs=v160, rhs_imm=112 }         -> [spill 45]
+    v283 Load { addr=v160, disp=112, kind=I32 }           -> [spill 25]
+    v284 BinopI { op=mul, lhs=v283, rhs_imm=5 }           -> [spill 17]
+    v285 BinopI { op=shl, lhs=v284, rhs_imm=32 }          -> [spill 46]
+    v286 Extend { value=v284, kind=I32 }                  -> [spill 47]
+    v287 BinopI { op=add, lhs=v284, rhs_imm=13 }          -> [spill 1]
+    v288 BinopI { op=shl, lhs=v287, rhs_imm=32 }          -> [spill 48]
+    v289 Extend { value=v287, kind=I32 }                  -> [spill 49]
+    v290 Imm(0)                                           -> [spill 50]
+    v291 Imm(116)                                         -> [spill 51]
+    v292 BinopI { op=add, lhs=v160, rhs_imm=116 }         -> [spill 52]
+    v293 Load { addr=v160, disp=116, kind=I32 }           -> [spill 26]
+    v294 BinopI { op=mul, lhs=v293, rhs_imm=5 }           -> [spill 18]
+    v295 BinopI { op=shl, lhs=v294, rhs_imm=32 }          -> [spill 53]
+    v296 Extend { value=v294, kind=I32 }                  -> [spill 54]
+    v297 BinopI { op=add, lhs=v294, rhs_imm=14 }          -> [spill 2]
+    v298 BinopI { op=shl, lhs=v297, rhs_imm=32 }          -> [spill 55]
+    v299 Extend { value=v297, kind=I32 }                  -> [spill 56]
+    v300 Imm(0)                                           -> [spill 57]
+    v301 Imm(120)                                         -> [spill 58]
+    v302 BinopI { op=add, lhs=v160, rhs_imm=120 }         -> [spill 59]
+    v303 Load { addr=v160, disp=120, kind=I32 }           -> [spill 27]
+    v304 BinopI { op=mul, lhs=v303, rhs_imm=5 }           -> [spill 19]
+    v305 BinopI { op=shl, lhs=v304, rhs_imm=32 }          -> [spill 60]
+    v306 Extend { value=v304, kind=I32 }                  -> [spill 61]
+    v307 BinopI { op=add, lhs=v304, rhs_imm=15 }          -> [spill 3]
+    v308 BinopI { op=shl, lhs=v307, rhs_imm=32 }          -> [spill 62]
+    v309 Extend { value=v307, kind=I32 }                  -> [spill 63]
+    v310 Imm(0)                                           -> [spill 64]
+    v311 Imm(124)                                         -> [spill 65]
+    v312 BinopI { op=add, lhs=v160, rhs_imm=124 }         -> [spill 66]
+    v313 Load { addr=v160, disp=124, kind=I32 }           -> [spill 28]
+    v314 BinopI { op=mul, lhs=v313, rhs_imm=5 }           -> [spill 20]
+    v315 BinopI { op=shl, lhs=v314, rhs_imm=32 }          -> [spill 67]
+    v316 Extend { value=v314, kind=I32 }                  -> [spill 68]
+    v317 BinopI { op=add, lhs=v314, rhs_imm=16 }          -> [spill 4]
+    v318 BinopI { op=shl, lhs=v317, rhs_imm=32 }          -> [spill 69]
+    v319 Extend { value=v317, kind=I32 }                  -> [spill 70]
+    v320 Imm(0)                                           -> [spill 71]
+    v321 Imm(128)                                         -> [spill 72]
+    v322 BinopI { op=add, lhs=v160, rhs_imm=128 }         -> [spill 73]
+    v323 Load { addr=v160, disp=128, kind=I32 }           -> [spill 29]
+    v324 BinopI { op=mul, lhs=v323, rhs_imm=5 }           -> [spill 21]
+    v325 BinopI { op=shl, lhs=v324, rhs_imm=32 }          -> [spill 74]
+    v326 Extend { value=v324, kind=I32 }                  -> [spill 75]
+    v327 BinopI { op=add, lhs=v324, rhs_imm=17 }          -> [spill 5]
+    v328 BinopI { op=shl, lhs=v327, rhs_imm=32 }          -> [spill 76]
+    v329 Extend { value=v327, kind=I32 }                  -> [spill 77]
+    v330 Imm(0)                                           -> [spill 78]
+    v331 Imm(132)                                         -> [spill 79]
+    v332 BinopI { op=add, lhs=v160, rhs_imm=132 }         -> [spill 80]
+    v333 Load { addr=v160, disp=132, kind=I32 }           -> [spill 30]
+    v334 BinopI { op=mul, lhs=v333, rhs_imm=5 }           -> [spill 22]
+    v335 BinopI { op=shl, lhs=v334, rhs_imm=32 }          -> [spill 81]
+    v336 Extend { value=v334, kind=I32 }                  -> [spill 82]
+    v337 BinopI { op=add, lhs=v334, rhs_imm=18 }          -> [spill 6]
+    v338 BinopI { op=shl, lhs=v337, rhs_imm=32 }          -> [spill 83]
+    v339 Extend { value=v337, kind=I32 }                  -> [spill 84]
+    v340 Imm(0)                                           -> [spill 85]
+    v341 Imm(136)                                         -> [spill 86]
+    v342 BinopI { op=add, lhs=v160, rhs_imm=136 }         -> [spill 87]
+    v343 Load { addr=v160, disp=136, kind=I32 }           -> [spill 31]
+    v344 BinopI { op=mul, lhs=v343, rhs_imm=5 }           -> [spill 23]
+    v345 BinopI { op=shl, lhs=v344, rhs_imm=32 }          -> [spill 88]
+    v346 Extend { value=v344, kind=I32 }                  -> [spill 89]
+    v347 BinopI { op=add, lhs=v344, rhs_imm=19 }          -> [spill 7]
+    v348 BinopI { op=shl, lhs=v347, rhs_imm=32 }          -> [spill 90]
+    v349 Extend { value=v347, kind=I32 }                  -> [spill 91]
+    v350 Imm(0)                                           -> [spill 92]
+    v351 Imm(140)                                         -> [spill 93]
+    v352 BinopI { op=add, lhs=v160, rhs_imm=140 }         -> [spill 94]
     v353 Load { addr=v160, disp=140, kind=I32 }           -> x0
     v354 BinopI { op=mul, lhs=v353, rhs_imm=5 }           -> x0
-    v355 BinopI { op=shl, lhs=v354, rhs_imm=32 }          -> [spill 106]
-    v356 Extend { value=v354, kind=I32 }                  -> [spill 107]
+    v355 BinopI { op=shl, lhs=v354, rhs_imm=32 }          -> [spill 95]
+    v356 Extend { value=v354, kind=I32 }                  -> [spill 96]
     v357 BinopI { op=add, lhs=v354, rhs_imm=20 }          -> x0
-    v358 BinopI { op=shl, lhs=v357, rhs_imm=32 }          -> [spill 108]
-    v359 Extend { value=v357, kind=I32 }                  -> [spill 51]
-    v360 Imm(0)                                           -> [spill 109]
-    v361 Imm(0)                                           -> [spill 110]
-    v362 Imm(0)                                           -> [spill 111]
-    v363 Imm(0)                                           -> [spill 112]
-    v364 Imm(0)                                           -> [spill 113]
-    v365 Imm(0)                                           -> [spill 114]
-    v366 Imm(0)                                           -> [spill 115]
-    v367 Imm(0)                                           -> [spill 116]
-    v368 Imm(0)                                           -> [spill 117]
-    v369 Imm(0)                                           -> [spill 118]
-    v370 Imm(0)                                           -> [spill 119]
-    v371 Imm(0)                                           -> [spill 120]
-    v372 Imm(0)                                           -> [spill 121]
-    v373 Imm(0)                                           -> [spill 122]
-    v374 Imm(0)                                           -> [spill 123]
-    v375 Imm(0)                                           -> [spill 124]
-    v376 Imm(0)                                           -> [spill 125]
-    v377 Imm(0)                                           -> [spill 126]
-    v378 Imm(0)                                           -> [spill 127]
-    v379 Imm(0)                                           -> [spill 128]
-    v380 Imm(0)                                           -> [spill 129]
-    v381 Extend { value=v169, kind=I32 }                  -> [spill 130]
-    v382 Extend { value=v179, kind=I32 }                  -> [spill 131]
-    v383 Extend { value=v189, kind=I32 }                  -> [spill 132]
-    v384 Extend { value=v199, kind=I32 }                  -> [spill 133]
-    v385 Extend { value=v209, kind=I32 }                  -> [spill 134]
-    v386 Extend { value=v219, kind=I32 }                  -> [spill 135]
+    v358 BinopI { op=shl, lhs=v357, rhs_imm=32 }          -> [spill 97]
+    v359 Extend { value=v357, kind=I32 }                  -> [spill 98]
+    v360 Imm(0)                                           -> [spill 99]
+    v361 Imm(0)                                           -> [spill 100]
+    v362 Imm(0)                                           -> [spill 101]
+    v363 Imm(0)                                           -> [spill 102]
+    v364 Imm(0)                                           -> [spill 103]
+    v365 Imm(0)                                           -> [spill 104]
+    v366 Imm(0)                                           -> [spill 105]
+    v367 Imm(0)                                           -> [spill 106]
+    v368 Imm(0)                                           -> [spill 107]
+    v369 Imm(0)                                           -> [spill 108]
+    v370 Imm(0)                                           -> [spill 109]
+    v371 Imm(0)                                           -> [spill 110]
+    v372 Imm(0)                                           -> [spill 111]
+    v373 Imm(0)                                           -> [spill 112]
+    v374 Imm(0)                                           -> [spill 113]
+    v375 Imm(0)                                           -> [spill 114]
+    v376 Imm(0)                                           -> [spill 115]
+    v377 Imm(0)                                           -> [spill 116]
+    v378 Imm(0)                                           -> [spill 117]
+    v379 Imm(0)                                           -> [spill 118]
+    v380 Imm(0)                                           -> [spill 119]
+    v381 Extend { value=v167, kind=I32 }                  -> [spill 120]
+    v382 Extend { value=v177, kind=I32 }                  -> [spill 121]
+    v383 Extend { value=v187, kind=I32 }                  -> [spill 122]
+    v384 Extend { value=v197, kind=I32 }                  -> [spill 123]
+    v385 Extend { value=v207, kind=I32 }                  -> [spill 124]
+    v386 Extend { value=v217, kind=I32 }                  -> [spill 125]
     v387 Binop { op=add, lhs=v167, rhs=v177 }             -> x1
     v388 Extend { value=v387, kind=I32 }                  -> x2
     v389 Binop { op=add, lhs=v387, rhs=v187 }             -> x1
@@ -813,51 +813,51 @@ fn ent_pc=8 n_params=0 variadic=false locals=1
     v394 Extend { value=v393, kind=I32 }                  -> x2
     v395 Binop { op=add, lhs=v393, rhs=v217 }             -> x1
     v396 Extend { value=v395, kind=I32 }                  -> x2
-    v397 Extend { value=v229, kind=I32 }                  -> x2
+    v397 Extend { value=v227, kind=I32 }                  -> x2
     v398 Binop { op=add, lhs=v395, rhs=v227 }             -> x1
     v399 Extend { value=v398, kind=I32 }                  -> x2
-    v400 Extend { value=v239, kind=I32 }                  -> x2
+    v400 Extend { value=v237, kind=I32 }                  -> x2
     v401 Binop { op=add, lhs=v398, rhs=v237 }             -> x1
     v402 Extend { value=v401, kind=I32 }                  -> x2
-    v403 Extend { value=v249, kind=I32 }                  -> x2
+    v403 Extend { value=v247, kind=I32 }                  -> x2
     v404 Binop { op=add, lhs=v401, rhs=v247 }             -> x1
     v405 Extend { value=v404, kind=I32 }                  -> x2
-    v406 Extend { value=v259, kind=I32 }                  -> x2
+    v406 Extend { value=v257, kind=I32 }                  -> x2
     v407 Binop { op=add, lhs=v404, rhs=v257 }             -> x1
     v408 Extend { value=v407, kind=I32 }                  -> x2
-    v409 Extend { value=v269, kind=I32 }                  -> x2
+    v409 Extend { value=v267, kind=I32 }                  -> x2
     v410 Binop { op=add, lhs=v407, rhs=v267 }             -> x1
     v411 Extend { value=v410, kind=I32 }                  -> x2
-    v412 Extend { value=v279, kind=I32 }                  -> x2
+    v412 Extend { value=v277, kind=I32 }                  -> x2
     v413 Binop { op=add, lhs=v410, rhs=v277 }             -> x1
     v414 Extend { value=v413, kind=I32 }                  -> x2
-    v415 Extend { value=v289, kind=I32 }                  -> x2
+    v415 Extend { value=v287, kind=I32 }                  -> x2
     v416 Binop { op=add, lhs=v413, rhs=v287 }             -> x1
     v417 Extend { value=v416, kind=I32 }                  -> x2
-    v418 Extend { value=v299, kind=I32 }                  -> x2
+    v418 Extend { value=v297, kind=I32 }                  -> x2
     v419 Binop { op=add, lhs=v416, rhs=v297 }             -> x1
     v420 Extend { value=v419, kind=I32 }                  -> x2
-    v421 Extend { value=v309, kind=I32 }                  -> x2
+    v421 Extend { value=v307, kind=I32 }                  -> x2
     v422 Binop { op=add, lhs=v419, rhs=v307 }             -> x1
     v423 Extend { value=v422, kind=I32 }                  -> x2
-    v424 Extend { value=v319, kind=I32 }                  -> x2
+    v424 Extend { value=v317, kind=I32 }                  -> x2
     v425 Binop { op=add, lhs=v422, rhs=v317 }             -> x1
     v426 Extend { value=v425, kind=I32 }                  -> x2
-    v427 Extend { value=v329, kind=I32 }                  -> x2
+    v427 Extend { value=v327, kind=I32 }                  -> x2
     v428 Binop { op=add, lhs=v425, rhs=v327 }             -> x1
     v429 Extend { value=v428, kind=I32 }                  -> x2
-    v430 Extend { value=v339, kind=I32 }                  -> x2
+    v430 Extend { value=v337, kind=I32 }                  -> x2
     v431 Binop { op=add, lhs=v428, rhs=v337 }             -> x1
     v432 Extend { value=v431, kind=I32 }                  -> x2
-    v433 Extend { value=v349, kind=I32 }                  -> x2
+    v433 Extend { value=v347, kind=I32 }                  -> x2
     v434 Binop { op=add, lhs=v431, rhs=v347 }             -> x1
     v435 Extend { value=v434, kind=I32 }                  -> x2
-    v436 Extend { value=v359, kind=I32 }                  -> x2
+    v436 Extend { value=v357, kind=I32 }                  -> x2
     v437 Binop { op=add, lhs=v434, rhs=v357 }             -> x0
     v438 Extend { value=v437, kind=I32 }                  -> x1
-    v439 BinopI { op=and, lhs=v437, rhs_imm=127 }         -> x0
-    v440 Extend { value=v439, kind=I32 }                  -> x7
-    v441 CallExt { binding_idx=206, args=[v440], fp_arg_mask=0x0 } -> x0
+    v439 BinopI { op=and, lhs=v437, rhs_imm=127 }         -> x7
+    v440 Extend { value=v439, kind=I32 }                  -> x0
+    v441 CallExt { binding_idx=206, args=[v439], fp_arg_mask=0x0 } -> x0
     terminator Unreachable
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit

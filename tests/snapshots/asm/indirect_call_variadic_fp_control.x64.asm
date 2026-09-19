@@ -59,12 +59,8 @@ Disassembly of section .text:
                	movslq	-0xd0(%rbp), %rcx
                	cmpl	%ecx, %eax
                	jge	<addr>
-               	movslq	%eax, %rcx
-               	movq	%rcx, %rdx
-               	shrq	$0x3f, %rdx
-               	addq	%rdx, %rcx
+               	movq	%rax, %rcx
                	andq	$0x1, %rcx
-               	subq	%rdx, %rcx
                	testq	%rcx, %rcx
                	jne	<addr>
                	leaq	-0x18(%rbp), %rcx

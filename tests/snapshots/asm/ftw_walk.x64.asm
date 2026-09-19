@@ -125,7 +125,6 @@ Disassembly of section .text:
                	cmpl	$0x4, %eax
                	jl	<addr>
                	xorl	%eax, %eax
-               	movslq	%eax, %rax
                	leave
                	retq
                	movl	$0x3, %eax

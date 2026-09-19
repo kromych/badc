@@ -76,7 +76,7 @@ Disassembly of section .text:
                	movq	%r10, %rax
                	movslq	(%rax), %rdx
                	leaq	<rip>, %rdi
-               	movslq	%ebx, %rsi
+               	movq	%rbx, %rsi
                	movb	$0x0, %al
                	callq	<addr>
                	incq	%rbx

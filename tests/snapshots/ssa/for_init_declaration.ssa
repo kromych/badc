@@ -49,7 +49,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=0
     terminator Bnz { cond=v71, target=b1, fall=b3 }   (exit_acc=v71)
   block 3  start_pc=0
     v77  Extend { value=v68, kind=I32 }                   -> x2
-    v78  Extend { value=v77, kind=I32 }                   -> x2
+    v78  Extend { value=v68, kind=I32 }                   -> x2
     v79  BinopI { op=ne, lhs=v68, rhs_imm=7 }             -> x0
     terminator Bz { cond=v79, target=b8, fall=b4 }   (exit_acc=v79)
   block 4  start_pc=0

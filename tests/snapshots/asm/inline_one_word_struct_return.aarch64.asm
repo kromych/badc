@@ -20,8 +20,7 @@ Disassembly of section .text:
                	cmp	w0, #0x5
                	b.ge	<addr>
                	add	x1, x0, #0x1
-               	sxtw	x4, w1
-               	mul	x4, x4, x3
+               	mul	x4, x1, x3
                	add	x2, x2, x4
                	mov	x0, x1
                	cmp	w0, #0x5
@@ -29,7 +28,6 @@ Disassembly of section .text:
                	cmp	x2, #0x96
                	b.ne	<addr>
                	mov	x0, #0x0                // =0
-               	sxtw	x0, w0
                	ret
                	mov	x0, #0x1                // =1
                	b	<addr>

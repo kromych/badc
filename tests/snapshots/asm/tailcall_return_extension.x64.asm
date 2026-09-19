@@ -98,7 +98,6 @@ Disassembly of section .text:
                	movb	%al, 0x3(%rdi)
                	xorl	%esi, %esi
                	callq	<addr>
-               	movl	%eax, %eax
                	movl	$0xfebf1000, %r11d      # imm = 0xFEBF1000
                	cmpl	%r11d, %eax
                	je	<addr>
@@ -119,7 +118,6 @@ Disassembly of section .text:
                	movb	%bl, 0x3(%rdi)
                	xorl	%esi, %esi
                	callq	<addr>
-               	movl	%eax, %eax
                	cmpl	$0x7fbf1000, %eax       # imm = 0x7FBF1000
                	je	<addr>
                	movl	$0x3, %eax

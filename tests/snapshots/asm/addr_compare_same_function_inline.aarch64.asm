@@ -30,7 +30,6 @@ Disassembly of section .text:
                	cmp	w0, #0x1
                	b.ne	<addr>
                	mov	x0, #0x0                // =0
-               	sxtw	x0, w0
                	ret
                	mov	x0, #0x3                // =3
                	b	<addr>

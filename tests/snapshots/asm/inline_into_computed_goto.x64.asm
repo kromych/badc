@@ -106,7 +106,6 @@ Disassembly of section .text:
                	cmpq	$0x384, %rax            # imm = 0x384
                	jne	<addr>
                	xorl	%eax, %eax
-               	movslq	%eax, %rax
                	leave
                	retq
                	movl	$0x1, %eax

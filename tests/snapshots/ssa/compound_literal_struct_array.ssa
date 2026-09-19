@@ -1100,7 +1100,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=10
   block 81  start_pc=0
     v1135 Extend { value=v1132, kind=I32 }                 -> x2
     v1136 Extend { value=v1131, kind=I32 }                 -> x2
-    v1137 BinopI { op=shl, lhs=v1136, rhs_imm=3 }          -> x2
+    v1137 BinopI { op=shl, lhs=v1131, rhs_imm=3 }          -> x2
     v1138 Binop { op=add, lhs=v903, rhs=v1137 }            -> x2
     v1139 Load { addr=v1138, disp=0, kind=I32 }            -> x6
     v1140 BinopI { op=mul, lhs=v1139, rhs_imm=10 }         -> x6
@@ -1122,7 +1122,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=10
     terminator Bnz { cond=v1134, target=b81, fall=b83 }   (exit_acc=v1134)
   block 83  start_pc=0
     v1150 Extend { value=v1132, kind=I32 }                 -> x0
-    v1151 Extend { value=v1150, kind=I32 }                 -> x0
+    v1151 Extend { value=v1132, kind=I32 }                 -> x0
     v1152 Imm(90)                                          -> x0
     v1153 Imm(386547056640)                                -> x0
     v1154 BinopI { op=ne, lhs=v1132, rhs_imm=90 }          -> x0
@@ -1305,7 +1305,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=10
   block 86  start_pc=0
     v1159 Extend { value=v1156, kind=I32 }                 -> x2
     v1160 Extend { value=v1155, kind=I32 }                 -> x2
-    v1161 BinopI { op=shl, lhs=v1160, rhs_imm=3 }          -> x2
+    v1161 BinopI { op=shl, lhs=v1155, rhs_imm=3 }          -> x2
     v1162 Binop { op=add, lhs=v1121, rhs=v1161 }           -> x2
     v1163 Load { addr=v1162, disp=0, kind=I32 }            -> x6
     v1164 BinopI { op=mul, lhs=v1163, rhs_imm=10 }         -> x6
@@ -1327,7 +1327,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=10
     terminator Bnz { cond=v1158, target=b86, fall=b88 }   (exit_acc=v1158)
   block 88  start_pc=0
     v1174 Extend { value=v1156, kind=I32 }                 -> x0
-    v1175 Extend { value=v1174, kind=I32 }                 -> x0
+    v1175 Extend { value=v1156, kind=I32 }                 -> x0
     v1176 Imm(46)                                          -> x0
     v1177 Imm(197568495616)                                -> x0
     v1178 Imm(102)                                         -> x0

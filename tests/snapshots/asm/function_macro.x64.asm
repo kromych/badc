@@ -192,7 +192,6 @@ Disassembly of section .text:
                	movl	$0x1f, %eax
                	testl	%eax, %eax
                	je	<addr>
-               	movslq	%eax, %rax
                	popq	%rbp
                	retq
                	leaq	<rip>, %rax

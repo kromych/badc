@@ -30,13 +30,11 @@ Disassembly of section .text:
                	bl	<addr>
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	w0, w0
                	mov	x17, #0x1               // =1
                	movk	x17, #0x4, lsl #16
                	cmp	w0, w17
                	b.ne	<addr>
-               	mov	w0, w1
-               	cmp	w0, #0x2
+               	cmp	w1, #0x2
                	b.ne	<addr>
                	cbnz	x2, <addr>
                	cmp	x3, #0x7
@@ -73,7 +71,6 @@ Disassembly of section .text:
                	and	x0, x0, #0x2
                	cbz	x0, <addr>
                	mov	x0, #0x1                // =1
-               	sxtw	x0, w0
                	b	<addr>
                	add	x0, x1, #0x8
                	ldr	x0, [x0]

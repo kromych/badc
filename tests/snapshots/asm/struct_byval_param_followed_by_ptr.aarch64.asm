@@ -29,16 +29,12 @@ Disassembly of section .text:
                	cbz	w20, <addr>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	sxtw	x2, w20
-               	ldursw	x3, [x29, #-0x8]
-               	ldrsw	x0, [x0]
-               	mov	x16, x1
-               	mov	x1, x2
-               	mov	x2, x3
-               	mov	x3, x0
-               	mov	x0, x16
+               	ldursw	x2, [x29, #-0x8]
+               	ldrsw	x3, [x0]
+               	mov	x0, x1
+               	mov	x1, x20
                	bl	<addr>
-               	sxtw	x0, w20
+               	mov	x0, x20
                	ldp	x29, x30, [sp, #0x20]
                	ldr	x20, [sp], #0x30
                	ret

@@ -35,88 +35,84 @@ Disassembly of section .text:
 <partition>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	pushq	%r12
+               	subq	$0x8, %rsp
                	pushq	%rbx
-               	movslq	%edx, %rbx
-               	movslq	(%rdi,%rbx,4), %r8
+               	movslq	%esi, %rsi
+               	movslq	%edx, %r9
+               	movslq	(%rdi,%r9,4), %rdx
                	leaq	-0x1(%rsi), %rax
-               	cmpl	%ebx, %esi
+               	cmpl	%r9d, %esi
                	jge	<addr>
-               	movslq	%esi, %rcx
-               	movslq	(%rdi,%rcx,4), %rdx
-               	cmpl	%r8d, %edx
+               	movslq	(%rdi,%rsi,4), %rcx
+               	cmpl	%edx, %ecx
                	jg	<addr>
                	incq	%rax
-               	movslq	%eax, %rdx
-               	movslq	(%rdi,%rdx,4), %r9
-               	movslq	(%rdi,%rcx,4), %r12
-               	movl	%r12d, (%rdi,%rdx,4)
-               	movl	%r9d, (%rdi,%rcx,4)
+               	movslq	%eax, %rcx
+               	movslq	(%rdi,%rcx,4), %r8
+               	movslq	(%rdi,%rsi,4), %rbx
+               	movl	%ebx, (%rdi,%rcx,4)
+               	movl	%r8d, (%rdi,%rsi,4)
                	incq	%rsi
-               	cmpl	%ebx, %esi
+               	cmpl	%r9d, %esi
                	jl	<addr>
                	leaq	0x1(%rax), %rdx
                	movslq	%edx, %rcx
                	movslq	(%rdi,%rcx,4), %rsi
-               	movslq	(%rdi,%rbx,4), %r8
+               	movslq	(%rdi,%r9,4), %r8
                	movl	%r8d, (%rdi,%rcx,4)
-               	movl	%esi, (%rdi,%rbx,4)
+               	movl	%esi, (%rdi,%r9,4)
                	movq	%rcx, %rax
                	popq	%rbx
-               	popq	%r12
-               	popq	%rbp
+               	leave
                	retq
 
 <quicksort>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	pushq	%r14
+               	subq	$0x8, %rsp
                	pushq	%r13
                	pushq	%r12
                	pushq	%rbx
                	movq	%rdi, %rbx
-               	movslq	%edx, %r14
-               	movslq	%esi, %r12
-               	cmpl	%r14d, %r12d
+               	movslq	%edx, %r12
+               	movslq	%esi, %r8
+               	cmpl	%r12d, %r8d
                	jge	<addr>
-               	movslq	%r14d, %r9
-               	movslq	(%rbx,%r9,4), %rdi
-               	leaq	-0x1(%r12), %rax
-               	movq	%r12, %rsi
-               	cmpl	%r9d, %esi
+               	movslq	(%rbx,%r12,4), %rdx
+               	leaq	-0x1(%r8), %rax
+               	movq	%r8, %rsi
+               	cmpl	%r12d, %esi
                	jge	<addr>
-               	movslq	%esi, %rcx
-               	movslq	(%rbx,%rcx,4), %rdx
-               	cmpl	%edi, %edx
+               	movslq	(%rbx,%rsi,4), %rcx
+               	cmpl	%edx, %ecx
                	jg	<addr>
                	incq	%rax
-               	movslq	%eax, %rdx
-               	movslq	(%rbx,%rdx,4), %r8
-               	movslq	(%rbx,%rcx,4), %r13
-               	movl	%r13d, (%rbx,%rdx,4)
-               	movl	%r8d, (%rbx,%rcx,4)
+               	movslq	%eax, %rcx
+               	movslq	(%rbx,%rcx,4), %rdi
+               	movslq	(%rbx,%rsi,4), %r9
+               	movl	%r9d, (%rbx,%rcx,4)
+               	movl	%edi, (%rbx,%rsi,4)
                	incq	%rsi
-               	cmpl	%r9d, %esi
+               	cmpl	%r12d, %esi
                	jl	<addr>
                	leaq	0x1(%rax), %r13
                	movslq	%r13d, %rcx
                	movslq	(%rbx,%rcx,4), %rdx
-               	movslq	(%rbx,%r9,4), %rsi
+               	movslq	(%rbx,%r12,4), %rsi
                	movl	%esi, (%rbx,%rcx,4)
-               	movl	%edx, (%rbx,%r9,4)
+               	movl	%edx, (%rbx,%r12,4)
                	leaq	-0x1(%r13), %rdx
                	movq	%rbx, %rdi
-               	movq	%r12, %rsi
+               	movq	%r8, %rsi
                	callq	<addr>
                	leaq	0x1(%r13), %rsi
                	movq	%rbx, %rdi
-               	movq	%r14, %rdx
+               	movq	%r12, %rdx
                	callq	<addr>
                	popq	%rbx
                	popq	%r12
                	popq	%r13
-               	popq	%r14
-               	popq	%rbp
+               	leave
                	retq
 
 <main>:

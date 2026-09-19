@@ -71,25 +71,19 @@ Disassembly of section .text:
                	ret
 
 <wrapped_int>:
-               	mov	w1, w1
-               	mov	w2, w2
-               	add	x1, x1, x2
-               	ldrsw	x0, [x0, w1, sxtw #2]
+               	mov	x3, x0
+               	add	x0, x1, x2
+               	ldrsw	x0, [x3, w0, sxtw #2]
                	ret
 
 <wrapped_unsigned>:
-               	mov	w1, w1
-               	mov	w2, w2
                	add	x1, x1, x2
                	ldr	x0, [x0, w1, uxtw #3]
                	ret
 
 <index_and_value>:
                	mov	x3, x0
-               	mov	w0, w1
-               	mov	w1, w2
-               	add	x0, x0, x1
-               	mov	w0, w0
+               	add	x0, x1, x2
                	sxtw	x0, w0
                	ldrsw	x1, [x3, x0, lsl #2]
                	add	x0, x1, x0
@@ -119,24 +113,15 @@ Disassembly of section .text:
 
 <sum_from>:
                	mov	x4, x0
-               	mov	x6, x3
-               	mov	x5, x1
-               	mov	x1, #0x0                // =0
-               	mov	w0, w2
-               	mov	w2, w0
-               	mov	w3, w6
+               	mov	x0, #0x0                // =0
                	cmp	w2, w3
                	b.hs	<addr>
-               	mov	w3, w5
-               	add	x3, x3, x2
-               	ldrb	w3, [x4, w3, uxtw]
-               	add	x1, x1, x3
-               	add	x0, x2, #0x1
-               	mov	w2, w0
-               	mov	w3, w6
+               	add	x5, x1, x2
+               	ldrb	w5, [x4, w5, uxtw]
+               	add	x0, x0, x5
+               	add	x2, x2, #0x1
                	cmp	w2, w3
                	b.lo	<addr>
-               	mov	x0, x1
                	ret
 
 <main>:

@@ -37,8 +37,7 @@ Disassembly of section .text:
                	ldur	x22, [x29, #-0x48]
                	mov	x1, #0x0                // =0
                	sub	x0, x29, #0x10
-               	mov	w2, w21
-               	str	w2, [x0]
+               	str	w21, [x0]
                	str	w1, [x0, #0x4]
                	str	x22, [x0, #0x8]
                	bl	<addr>
@@ -49,7 +48,6 @@ Disassembly of section .text:
                	cmp	x0, x22
                	b.ne	<addr>
                	mov	x0, #0x0                // =0
-               	sxtw	x0, w0
                	cbz	x0, <addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp, #0x70]

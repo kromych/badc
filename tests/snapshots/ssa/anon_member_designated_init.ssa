@@ -60,8 +60,8 @@ fn ent_pc=2 n_params=0 variadic=false locals=17
     terminator Jmp(b4)   (exit_acc=v149)
   block 4  start_pc=0
     v151 Phi { incoming=[b3:v149, b19:v150], kind=I64 }   -> x0
-    v152 Extend { value=v151, kind=I32 }                  -> x0
-    terminator Bz { cond=v152, target=b6, fall=b5 }   (exit_acc=v152)
+    v152 Extend { value=v151, kind=I32 }                  -> x1
+    terminator Bz { cond=v151, target=b6, fall=b5 }   (exit_acc=v151)
   block 5  start_pc=0
     v27  Imm(1)                                           -> x0
     terminator Return(v27)   (exit_acc=v27)

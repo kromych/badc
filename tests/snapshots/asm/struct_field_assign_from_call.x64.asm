@@ -43,11 +43,11 @@ Disassembly of section .text:
                	testl	%ecx, %ecx
                	je	<addr>
                	leaq	<rip>, %rdi
-               	movslq	%ecx, %rsi
                	movq	0x8(%rax), %rdx
-               	movq	0x18(%rax), %rcx
+               	movq	0x18(%rax), %rsi
                	movslq	0x14(%rax), %r8
                	movslq	0x24(%rax), %r9
+               	xchgq	%rcx, %rsi
                	movb	$0x0, %al
                	callq	<addr>
                	movl	$0x1, %eax

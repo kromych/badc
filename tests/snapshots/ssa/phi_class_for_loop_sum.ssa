@@ -60,8 +60,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
   block 3  start_pc=0
     v14  Extend { value=v4, kind=I32 }                    -> x0
     v15  Extend { value=v14, kind=I32 }                   -> x1
-    v16  BinopI { op=shl, lhs=v14, rhs_imm=32 }           -> x2
-    v17  Extend { value=v15, kind=I32 }                   -> x1
+    v16  BinopI { op=shl, lhs=v14, rhs_imm=32 }           -> x1
+    v17  Extend { value=v14, kind=I32 }                   -> x1
     terminator Return(v14)   (exit_acc=v14)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit

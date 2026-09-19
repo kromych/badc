@@ -32,7 +32,6 @@ Disassembly of section .text:
                	movl	$0xff0000, %eax         # imm = 0xFF0000
                	movl	%eax, -0x10(%rbp)
                	movslq	-0x10(%rbp), %rax
-               	movl	%eax, %eax
                	leaq	-0x1(%rax), %rcx
                	movq	%rax, %rdx
                	xorq	$-0x1, %rdx
@@ -71,7 +70,6 @@ Disassembly of section .text:
                	xorl	%ecx, %ecx
                	movl	%ecx, -0x8(%rbp)
                	movslq	-0x8(%rbp), %rax
-               	movl	%eax, %eax
                	leaq	-0x1(%rax), %rdx
                	movq	%rax, %rsi
                	xorq	$-0x1, %rsi

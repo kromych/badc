@@ -20,27 +20,25 @@ Disassembly of section .text:
                	str	xzr, [sp]
                	sub	sp, sp, #0x1, lsl #12   // =0x1000
                	str	xzr, [sp]
-               	sub	x2, x29, #0x2, lsl #12  // =0x2000
-               	add	x1, x2, #0x2, lsl #12   // =0x2000
-               	mov	x0, x2
-               	cmp	x0, x1
+               	sub	x1, x29, #0x2, lsl #12  // =0x2000
+               	add	x2, x1, #0x2, lsl #12   // =0x2000
+               	mov	x0, x1
+               	cmp	x0, x2
                	b.hs	<addr>
                	mov	x3, #0x0                // =0
                	str	x3, [x0]
                	add	x0, x0, #0x8
-               	cmp	x0, x1
+               	cmp	x0, x2
                	b.lo	<addr>
                	mov	x0, #0x0                // =0
-               	mov	x3, #0x2000             // =8192
-               	mov	w1, w0
-               	cmp	w1, w3
+               	mov	x2, #0x2000             // =8192
+               	cmp	w0, w2
                	b.hs	<addr>
-               	add	x4, x2, x1
-               	mov	x5, #0xaa               // =170
-               	strb	w5, [x4]
-               	add	x0, x1, #0x1
-               	mov	w1, w0
-               	cmp	w1, w3
+               	add	x3, x1, x0
+               	mov	x4, #0xaa               // =170
+               	strb	w4, [x3]
+               	add	x0, x0, #0x1
+               	cmp	w0, w2
                	b.lo	<addr>
                	add	sp, sp, #0x2, lsl #12   // =0x2000
                	ldp	x29, x30, [sp], #0x10
@@ -291,7 +289,7 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, #0x2
                	b.lt	<addr>
-               	sxtw	x0, w1
+               	mov	x0, x1
                	ret
 
 <addressed_int>:

@@ -37,12 +37,12 @@ Disassembly of section .text:
                	strb	w2, [x0]
                	mov	x0, #0x1000             // =4096
                	mov	x2, #0xfffff            // =1048575
-               	cmp	x0, x2
+               	cmp	w0, w2
                	b.ge	<addr>
                	mov	x3, #0x3                // =3
                	strb	w3, [x1, x0]
                	add	x0, x0, #0x1, lsl #12   // =0x1000
-               	cmp	x0, x2
+               	cmp	w0, w2
                	b.lt	<addr>
                	ldrb	w0, [x1]
                	mov	x17, #0xfffff           // =1048575
@@ -52,7 +52,6 @@ Disassembly of section .text:
                	cmp	w0, #0x3
                	b.ne	<addr>
                	mov	x0, #0x2a               // =42
-               	sxtw	x0, w0
                	sub	sp, x29, #0x10
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10

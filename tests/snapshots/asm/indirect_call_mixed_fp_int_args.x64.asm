@@ -29,70 +29,61 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x8, %rsp
-               	pushq	%r13
-               	pushq	%r12
                	pushq	%rbx
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	leaq	<rip>, %rcx
                	movsd	(%rcx,%riz), %xmm0
                	leaq	0x2(%rax), %rcx
-               	movabsq	$0x3fd0000000000000, %rdi # imm = 0x3FD0000000000000
-               	movl	$0x3fc00000, %ebx       # imm = 0x3FC00000
-               	movabsq	$0x4024000000000000, %r8 # imm = 0x4024000000000000
-               	movq	%r8, %xmm15
+               	movabsq	$0x3fd0000000000000, %rsi # imm = 0x3FD0000000000000
+               	movl	$0x3fc00000, %edi       # imm = 0x3FC00000
+               	movabsq	$0x4024000000000000, %rdx # imm = 0x4024000000000000
+               	movq	%rdx, %xmm15
                	movapd	%xmm0, %xmm1
                	mulsd	%xmm15, %xmm1
-               	cvttsd2si	%xmm1, %r9
-               	leaq	(%rax,%r9), %rdx
-               	leaq	(%rdx,%rcx), %rsi
-               	movabsq	$0x4059000000000000, %r12 # imm = 0x4059000000000000
-               	movq	%r12, %xmm15
-               	movq	%rdi, %xmm2
-               	mulsd	%xmm15, %xmm2
-               	cvttsd2si	%xmm2, %r12
-               	addq	%r12, %rsi
-               	movl	$0x40000000, %r12d      # imm = 0x40000000
-               	movq	%r12, %xmm15
-               	movq	%rbx, %xmm2
-               	mulss	%xmm15, %xmm2
-               	cvttss2si	%xmm2, %rbx
-               	addq	%rbx, %rsi
-               	addq	$0x7, %rsi
-               	cmpl	$0x40, %esi
+               	cvttsd2si	%xmm1, %rdx
+               	addq	%rax, %rdx
+               	addq	%rcx, %rdx
+               	movabsq	$0x4059000000000000, %r8 # imm = 0x4059000000000000
+               	movq	%r8, %xmm15
+               	movq	%rsi, %xmm1
+               	mulsd	%xmm15, %xmm1
+               	cvttsd2si	%xmm1, %r8
+               	addq	%r8, %rdx
+               	movl	$0x40000000, %r8d       # imm = 0x40000000
+               	movq	%r8, %xmm15
+               	movq	%rdi, %xmm1
+               	mulss	%xmm15, %xmm1
+               	cvttss2si	%xmm1, %r9
+               	addq	%r9, %rdx
+               	addq	$0x7, %rdx
+               	cmpl	$0x40, %edx
                	je	<addr>
                	movl	$0x1, %eax
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
                	leave
                	retq
-               	movl	$0x3fc00000, %r13d      # imm = 0x3FC00000
-               	leaq	(%rdx,%rcx), %rax
+               	movabsq	$0x4024000000000000, %rbx # imm = 0x4024000000000000
+               	movq	%rbx, %xmm15
+               	mulsd	%xmm15, %xmm0
+               	cvttsd2si	%xmm0, %rbx
+               	addq	%rbx, %rax
+               	addq	%rcx, %rax
                	movabsq	$0x4059000000000000, %rcx # imm = 0x4059000000000000
                	movq	%rcx, %xmm15
-               	movq	%rdi, %xmm0
+               	movq	%rsi, %xmm0
                	mulsd	%xmm15, %xmm0
                	cvttsd2si	%xmm0, %rcx
                	addq	%rcx, %rax
-               	movl	$0x40000000, %ecx       # imm = 0x40000000
-               	movq	%rcx, %xmm15
-               	movq	%r13, %xmm0
-               	mulss	%xmm15, %xmm0
-               	cvttss2si	%xmm0, %rcx
-               	addq	%rcx, %rax
+               	addq	%r9, %rax
                	addq	$0x7, %rax
-               	cmpl	%eax, %esi
+               	cmpl	%eax, %edx
                	je	<addr>
                	movl	$0x2, %eax
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
                	leave
                	retq
                	xorl	%eax, %eax
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
                	leave
                	retq

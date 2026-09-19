@@ -39,22 +39,16 @@ Disassembly of section .text:
                	ret
 
 <uadd_nz>:
-               	mov	w0, w0
-               	mov	w1, w1
                	add	x0, x0, x1
-               	mov	w0, w0
-               	cbz	x0, <addr>
+               	cbz	w0, <addr>
                	mov	x0, #0x1                // =1
                	ret
                	mov	x0, #0x0                // =0
                	ret
 
 <umul_z>:
-               	mov	w0, w0
-               	mov	w1, w1
                	mul	x0, x0, x1
-               	mov	w0, w0
-               	cbnz	x0, <addr>
+               	cbnz	w0, <addr>
                	mov	x0, #0x1                // =1
                	ret
                	mov	x0, #0x0                // =0

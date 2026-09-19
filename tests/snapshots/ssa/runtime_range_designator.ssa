@@ -97,9 +97,9 @@ fn ent_pc=1 n_params=1 variadic=false locals=9
   block 3  start_pc=0
     v92  LocalAddr(-9)                                    -> x1
     v93  Extend { value=v86, kind=I32 }                   -> x2
-    v94  BinopI { op=shl, lhs=v93, rhs_imm=2 }            -> x6
-    v95  Binop { op=add, lhs=v92, rhs=v94 }               -> x6
-    v96  LoadIndexed { base=v92, index=v93, scale=4, kind=I32 } -> x1
+    v94  BinopI { op=shl, lhs=v86, rhs_imm=2 }            -> x2
+    v95  Binop { op=add, lhs=v92, rhs=v94 }               -> x2
+    v96  LoadIndexed { base=v92, index=v86, scale=4, kind=I32 } -> x1
     v97  Imm(0)                                           -> x2
     v98  BinopI { op=ne, lhs=v96, rhs_imm=11 }            -> x1
     terminator Bnz { cond=v98, target=b7, fall=b4 }   (exit_acc=v98)
@@ -718,7 +718,7 @@ fn ent_pc=5 n_params=1 variadic=false locals=9
     v0   AllocaInit(0)                                    -> -
     v1   Imm(19)                                          -> x0
     v2   Imm(0)                                           -> x0
-    v3   ImmData(16)                                      -> x7
+    v3   ImmData(16)                                      -> x6
     v4   Imm(0)                                           -> x0
     v5   Store { addr=v3, disp=0, value=v4, kind=I32 }    -> -
     v6   LocalAddr(-9)                                    -> x0
@@ -810,9 +810,9 @@ fn ent_pc=5 n_params=1 variadic=false locals=9
   block 3  start_pc=0
     v93  LocalAddr(-9)                                    -> x1
     v94  Extend { value=v87, kind=I32 }                   -> x2
-    v95  BinopI { op=shl, lhs=v94, rhs_imm=2 }            -> x6
-    v96  Binop { op=add, lhs=v93, rhs=v95 }               -> x6
-    v97  LoadIndexed { base=v93, index=v94, scale=4, kind=U32 } -> x1
+    v95  BinopI { op=shl, lhs=v87, rhs_imm=2 }            -> x2
+    v96  Binop { op=add, lhs=v93, rhs=v95 }               -> x2
+    v97  LoadIndexed { base=v93, index=v87, scale=4, kind=U32 } -> x1
     v98  Imm(0)                                           -> x2
     v99  Imm(19)                                          -> x2
     v100 BinopI { op=ne, lhs=v97, rhs_imm=19 }            -> x1

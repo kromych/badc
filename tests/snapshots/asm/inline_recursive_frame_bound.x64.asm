@@ -34,22 +34,20 @@ Disassembly of section .text:
 <rec>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x108, %rsp            # imm = 0x108
-               	pushq	%r15
+               	subq	$0x100, %rsp            # imm = 0x100
                	pushq	%r14
                	pushq	%r13
                	pushq	%r12
                	pushq	%rbx
-               	movq	%rdi, %r15
-               	movslq	%esi, %r14
+               	movq	%rdi, %r14
+               	movslq	%esi, %r13
                	xorl	%ebx, %ebx
                	cmpl	$0x40, %ebx
                	jge	<addr>
-               	leaq	-0x100(%rbp), %r13
-               	movslq	%ebx, %r12
-               	leaq	(%r14,%r12), %rdi
+               	leaq	-0x100(%rbp), %r12
+               	leaq	(%r13,%rbx), %rdi
                	callq	<addr>
-               	movl	%eax, (%r13,%r12,4)
+               	movl	%eax, (%r12,%rbx,4)
                	incq	%rbx
                	cmpl	$0x40, %ebx
                	jl	<addr>
@@ -58,25 +56,23 @@ Disassembly of section .text:
                	cmpl	$0x40, %eax
                	jge	<addr>
                	leaq	-0x100(%rbp), %rcx
-               	movslq	%eax, %rdx
-               	movslq	(%rcx,%rdx,4), %rcx
+               	movslq	(%rcx,%rax,4), %rcx
                	addq	%rcx, %rbx
                	incq	%rax
                	cmpl	$0x40, %eax
                	jl	<addr>
-               	movl	%ebx, (%r15)
-               	testl	%r14d, %r14d
+               	movl	%ebx, (%r14)
+               	testl	%r13d, %r13d
                	jg	<addr>
                	movslq	%ebx, %rax
                	popq	%rbx
                	popq	%r12
                	popq	%r13
                	popq	%r14
-               	popq	%r15
                	leave
                	retq
-               	leaq	-0x1(%r14), %rsi
-               	movq	%r15, %rdi
+               	leaq	-0x1(%r13), %rsi
+               	movq	%r14, %rdi
                	callq	<addr>
                	addq	%rbx, %rax
                	movslq	%eax, %rax
@@ -84,7 +80,6 @@ Disassembly of section .text:
                	popq	%r12
                	popq	%r13
                	popq	%r14
-               	popq	%r15
                	leave
                	retq
 

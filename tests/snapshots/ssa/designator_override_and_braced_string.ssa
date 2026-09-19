@@ -55,8 +55,8 @@ fn ent_pc=0 n_params=1 variadic=false locals=4
     v41  Phi { incoming=[b4:v37, b6:v39], kind=I64 }      -> x0
     v42  Imm(0)                                           -> x1
     v43  BinopI { op=shl, lhs=v41, rhs_imm=32 }           -> x1
-    v44  Extend { value=v41, kind=I32 }                   -> x0
-    terminator Return(v44)   (exit_acc=v44)
+    v44  Extend { value=v41, kind=I32 }                   -> x1
+    terminator Return(v41)   (exit_acc=v41)
   block 6  start_pc=0
     v39  Imm(1)                                           -> x0
     v40  Imm(0)                                           -> x1

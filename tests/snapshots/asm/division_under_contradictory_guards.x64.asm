@@ -39,8 +39,7 @@ Disassembly of section .text:
                	retq
 
 <urem_dead>:
-               	movl	%esi, %eax
-               	cmpl	$0x5, %eax
+               	cmpl	$0x5, %esi
                	movl	$0x7, %eax
                	retq
 

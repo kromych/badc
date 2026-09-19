@@ -19,7 +19,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=4
   block 1  start_pc=0
     v24  Extend { value=v21, kind=I32 }                   -> x2
     v25  Extend { value=v20, kind=I32 }                   -> x2
-    v26  BinopI { op=shl, lhs=v25, rhs_imm=2 }            -> x2
+    v26  BinopI { op=shl, lhs=v20, rhs_imm=2 }            -> x2
     v27  Binop { op=add, lhs=v1, rhs=v26 }                -> x8
     v28  Load { addr=v27, disp=0, kind=I32 }              -> x8
     v29  Binop { op=add, lhs=v4, rhs=v26 }                -> x2
@@ -39,7 +39,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=4
     terminator Bnz { cond=v23, target=b1, fall=b3 }   (exit_acc=v23)
   block 3  start_pc=0
     v37  Extend { value=v21, kind=I32 }                   -> x0
-    v38  Extend { value=v37, kind=I32 }                   -> x0
+    v38  Extend { value=v21, kind=I32 }                   -> x0
     v39  BinopI { op=eq, lhs=v21, rhs_imm=70 }            -> x0
     terminator Bz { cond=v39, target=b6, fall=b4 }   (exit_acc=v39)
   block 4  start_pc=0
@@ -50,8 +50,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=4
     v16  Phi { incoming=[b4:v12, b6:v14], kind=I64 }      -> x0
     v17  Imm(0)                                           -> x1
     v18  BinopI { op=shl, lhs=v16, rhs_imm=32 }           -> x1
-    v19  Extend { value=v16, kind=I32 }                   -> x0
-    terminator Return(v19)   (exit_acc=v19)
+    v19  Extend { value=v16, kind=I32 }                   -> x1
+    terminator Return(v16)   (exit_acc=v16)
   block 6  start_pc=0
     v14  Imm(1)                                           -> x0
     v15  Imm(0)                                           -> x1

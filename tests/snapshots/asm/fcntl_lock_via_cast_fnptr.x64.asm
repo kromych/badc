@@ -117,7 +117,6 @@ Disassembly of section .text:
                	testl	%r12d, %r12d
                	jne	<addr>
                	xorl	%eax, %eax
-               	movslq	%eax, %rax
                	popq	%rbx
                	popq	%r12
                	popq	%r13

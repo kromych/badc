@@ -33,31 +33,26 @@ Disassembly of section .text:
                	andq	$-0x8, %rax
                	orq	$0x6, %rax
                	movl	%eax, -0x8(%rbp)
-               	movl	%eax, %ecx
-               	movq	%rcx, %rdx
-               	andq	$0x7, %rdx
-               	cmpl	$0x6, %edx
+               	movq	%rax, %rcx
+               	andq	$0x7, %rcx
+               	cmpl	$0x6, %ecx
                	je	<addr>
                	movl	$0x1, %eax
                	leave
                	retq
-               	movq	%rcx, %rax
                	andq	$-0x8, %rax
                	orq	$0x4, %rax
                	movl	%eax, -0x8(%rbp)
-               	movl	%eax, %ecx
-               	movq	%rcx, %rdx
-               	andq	$0x7, %rdx
-               	cmpl	$0x4, %edx
+               	movq	%rax, %rcx
+               	andq	$0x7, %rcx
+               	cmpl	$0x4, %ecx
                	je	<addr>
                	movl	$0x2, %eax
                	leave
                	retq
-               	movq	%rcx, %rax
                	andq	$-0x8, %rax
                	orq	$0x2, %rax
                	movl	%eax, -0x8(%rbp)
-               	movl	%eax, %eax
                	andq	$0x7, %rax
                	cmpl	$0x2, %eax
                	je	<addr>
@@ -68,7 +63,6 @@ Disassembly of section .text:
                	andq	$-0x8, %rax
                	orq	$0x5, %rax
                	movl	%eax, -0x8(%rbp)
-               	movl	%eax, %eax
                	andq	$0x7, %rax
                	cmpl	$0x5, %eax
                	je	<addr>

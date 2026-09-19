@@ -23,7 +23,6 @@ Disassembly of section .text:
                	mov	x17, #-0x1              // =-1
                	cmp	w0, w17
                	cset	x0, ne
-               	sxtw	x0, w0
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
@@ -38,7 +37,6 @@ Disassembly of section .text:
                	mov	x17, #-0x1              // =-1
                	cmp	w0, w17
                	cset	x0, eq
-               	sxtw	x0, w0
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
@@ -66,7 +64,6 @@ Disassembly of section .text:
                	mov	x17, #-0x1              // =-1
                	cmp	w0, w17
                	cset	x0, ne
-               	sxtw	x0, w0
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret

@@ -30,7 +30,6 @@ Disassembly of section .text:
                	cmpl	$0x2c, %eax
                	jne	<addr>
                	xorl	%eax, %eax
-               	movslq	%eax, %rax
                	retq
                	movl	$0x1, %eax
                	jmp	<addr>

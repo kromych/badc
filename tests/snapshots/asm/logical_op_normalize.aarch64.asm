@@ -18,13 +18,11 @@ Disassembly of section .text:
                	mov	x0, #0x1                // =1
                	cbnz	x1, <addr>
                	mov	x0, #0x0                // =0
-               	sxtw	x0, w0
                	ret
 
 <or_rr>:
                	cmp	x1, #0x0
                	cset	x0, ne
-               	sxtw	x0, w0
                	ret
 
 <and_ll>:
@@ -34,7 +32,6 @@ Disassembly of section .text:
 <and_rr>:
                	cmp	w1, #0x0
                	cset	x0, ne
-               	sxtw	x0, w0
                	ret
 
 <main>:
@@ -120,7 +117,7 @@ Disassembly of section .text:
                	mov	x1, #0x0                // =0
                	cbnz	x1, <addr>
                	mov	x0, #0x0                // =0
-               	cmp	x0, #0x1
+               	cmp	w0, #0x1
                	b.eq	<addr>
                	mov	x0, #0x8                // =8
                	ldp	x29, x30, [sp, #0x20]

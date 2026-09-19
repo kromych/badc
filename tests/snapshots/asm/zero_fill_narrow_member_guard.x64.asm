@@ -60,7 +60,7 @@ Disassembly of section .text:
                	movq	%rcx, %rax
                	testl	%eax, %eax
                	jne	<addr>
-               	movslq	%r8d, %rax
+               	movq	%r8, %rax
                	retq
 
 <main>:

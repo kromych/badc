@@ -51,7 +51,7 @@ Disassembly of section .text:
                	addq	%rbx, %rsi
                	andq	$0x1, %rsi
                	subq	%rbx, %rsi
-               	testq	%rsi, %rsi
+               	testl	%esi, %esi
                	je	<addr>
                	cmpl	$0x32, %edx
                	jle	<addr>
@@ -74,7 +74,7 @@ Disassembly of section .text:
                	addq	%r9, %rsi
                	andq	$0x1, %rsi
                	subq	%r9, %rsi
-               	testq	%rsi, %rsi
+               	testl	%esi, %esi
                	je	<addr>
                	cmpl	$0x32, %edx
                	jle	<addr>
@@ -102,7 +102,6 @@ Disassembly of section .text:
                	cmpl	%edi, %r8d
                	jne	<addr>
                	xorl	%eax, %eax
-               	movslq	%eax, %rax
                	popq	%rbx
                	leave
                	retq

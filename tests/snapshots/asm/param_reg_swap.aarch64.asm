@@ -14,17 +14,17 @@ Disassembly of section .text:
                	brk	#0x1
 
 <core>:
-               	mov	x10, x0
+               	mov	x7, x0
                	add	x0, x3, #0x0
                	ldr	w0, [x0]
-               	ldr	w5, [x3, #0x4]
-               	ldr	w7, [x3, #0x8]
+               	ldr	w4, [x3, #0x4]
+               	ldr	w5, [x3, #0x8]
                	ldr	w3, [x3, #0xc]
+               	eor	x0, x0, x4
                	eor	x0, x0, x5
-               	eor	x0, x0, x7
                	eor	x0, x0, x3
                	and	x0, x0, #0xff
-               	strb	w0, [x10]
+               	strb	w0, [x7]
                	ret
 
 <main>:
@@ -67,10 +67,8 @@ Disassembly of section .text:
                	strb	w2, [x1, #0xf]
                	cmp	w0, #0x20
                	b.ge	<addr>
-               	sub	x2, x29, #0x20
-               	sxtw	x1, w0
-               	and	x3, x1, #0xff
-               	strb	w3, [x2, x1]
+               	sub	x1, x29, #0x20
+               	strb	w0, [x1, x0]
                	add	x0, x0, #0x1
                	cmp	w0, #0x20
                	b.lt	<addr>

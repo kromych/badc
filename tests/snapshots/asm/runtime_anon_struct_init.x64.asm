@@ -148,7 +148,6 @@ Disassembly of section .text:
                	cmpq	%rbx, %rax
                	jne	<addr>
                	xorl	%eax, %eax
-               	movslq	%eax, %rax
                	testq	%rax, %rax
                	je	<addr>
                	popq	%rbx
@@ -189,7 +188,6 @@ Disassembly of section .text:
                	cmpl	$0x5, %eax
                	jne	<addr>
                	xorl	%eax, %eax
-               	movslq	%eax, %rax
                	testq	%rax, %rax
                	je	<addr>
                	popq	%rbx

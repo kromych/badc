@@ -163,16 +163,68 @@ fn is_load_key(k: Key) -> bool {
     (5..=7).contains(&k.0)
 }
 
-/// Canonical id per value: the first instruction computing the same
-/// pure expression. Address chains re-materialised per block
-/// (`LocalAddr` + constant offset, the same field read twice) collapse
-/// onto one identity, which is what lets a branch fact recorded for one
-/// read reach the other.
-fn value_numbers(insts: &[Inst]) -> Vec<ValueId> {
+/// The operand reading of a comparison. A comparison `narrow` marked
+/// reads the low word of each operand, sign-extended under a signed or
+/// equality operator and zero-extended under an unsigned one; after
+/// `drop_redundant_extend` its operand can be a value whose register
+/// holds other bits above bit 31, so what the comparison bounds is the
+/// extension and not the value.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Width {
+    Full,
+    Sext32,
+    Zext32,
+}
+
+fn width_of(func: &FunctionSsa, cmp: ValueId, op: BinOp) -> Width {
+    if !super::narrow::is_cmp32(&func.cmp32, cmp) {
+        Width::Full
+    } else if comparison(op) == Some(true) {
+        Width::Zext32
+    } else {
+        Width::Sext32
+    }
+}
+
+/// Opcode field of a comparison's key: a 32-bit comparison is a
+/// different function of its operands than the 64-bit one.
+fn cmp_code(op: BinOp, narrow: bool) -> u32 {
+    binop_code(op) | if narrow { 1 << 16 } else { 0 }
+}
+
+/// Canonical id per value, and the first instruction of each key: the
+/// first instruction computing the same pure expression. Address chains
+/// re-materialised per block (`LocalAddr` + constant offset, the same
+/// field read twice) collapse onto one identity, which is what lets a
+/// branch fact recorded for one read reach the other.
+struct Numbering {
+    canon: Vec<ValueId>,
+    first: BTreeMap<Key, ValueId>,
+}
+
+impl Numbering {
+    fn of(&self, v: ValueId) -> ValueId {
+        self.canon.get(v as usize).copied().unwrap_or(v)
+    }
+
+    /// The canonical id of `Extend { v, I32 }` (signed) or
+    /// `v & 0xffff_ffff`, when the function computes it.
+    fn extension_of(&self, v: ValueId, signed: bool) -> Option<ValueId> {
+        let key = match signed {
+            true => (8, self.of(v), load_kind_code(LoadKind::I32), 0),
+            false => (9, self.of(v), cmp_code(BinOp::And, false), 0xffff_ffff),
+        };
+        self.first.get(&key).copied()
+    }
+}
+
+fn value_numbers(func: &FunctionSsa) -> Numbering {
+    let insts = func.insts.as_slice();
     let mut canon: Vec<ValueId> = (0..insts.len() as ValueId).collect();
     let mut table: BTreeMap<Key, ValueId> = BTreeMap::new();
     for i in 0..insts.len() {
         let c = |v: ValueId| canon.get(v as usize).copied().unwrap_or(v);
+        let narrow = super::narrow::is_cmp32(&func.cmp32, i as ValueId);
         // Address-materialisation immediates (`ImmData`, `ImmCode`,
         // `ImmExtCode`, `TlsAddr`) stay on their own ids: their operand
         // is a placeholder a per-instruction fixup resolves, so equal
@@ -185,10 +237,10 @@ fn value_numbers(insts: &[Inst]) -> Vec<ValueId> {
                 (8, c(*value), load_kind_code(*kind), 0)
             }
             Inst::BinopI { op, lhs, rhs_imm } if is_pure_int(*op) => {
-                (9, c(*lhs), binop_code(*op), *rhs_imm)
+                (9, c(*lhs), cmp_code(*op, narrow), *rhs_imm)
             }
             Inst::Binop { op, lhs, rhs } if is_pure_int(*op) => {
-                (10, c(*lhs), c(*rhs), binop_code(*op).into())
+                (10, c(*lhs), c(*rhs), cmp_code(*op, narrow).into())
             }
             _ => continue,
         };
@@ -199,23 +251,27 @@ fn value_numbers(insts: &[Inst]) -> Vec<ValueId> {
             }
         }
     }
-    canon
+    Numbering {
+        canon,
+        first: table,
+    }
 }
 
 /// Key for a value read as an operand. A load keys on its own id: the
 /// value is whatever memory held when the load ran, which no expression
 /// over the current memory state describes once something has written
 /// in between.
-fn key_of(insts: &[Inst], canon: &[ValueId], v: ValueId) -> Key {
+fn key_of(func: &FunctionSsa, canon: &[ValueId], v: ValueId) -> Key {
     let c = |x: ValueId| canon.get(x as usize).copied().unwrap_or(x);
-    match insts.get(v as usize) {
+    let narrow = super::narrow::is_cmp32(&func.cmp32, v);
+    match func.insts.get(v as usize) {
         Some(Inst::Imm(k)) => (1, 0, 0, *k),
         Some(Inst::Extend { value, kind }) => (2, c(*value), load_kind_code(*kind), 0),
         Some(Inst::BinopI { op, lhs, rhs_imm }) if is_pure_int(*op) => {
-            (3, c(*lhs), binop_code(*op), *rhs_imm)
+            (3, c(*lhs), cmp_code(*op, narrow), *rhs_imm)
         }
         Some(Inst::Binop { op, lhs, rhs }) if is_pure_int(*op) => {
-            (4, c(*lhs), c(*rhs), binop_code(*op).into())
+            (4, c(*lhs), c(*rhs), cmp_code(*op, narrow).into())
         }
         _ => opaque_key(c(v)),
     }
@@ -437,10 +493,10 @@ fn negate(op: BinOp) -> Option<BinOp> {
 }
 
 /// Key of the expression `lhs op imm`, as [`key_of`] gives it for an
-/// instruction computing that comparison.
-fn cmp_key(canon: &[ValueId], lhs: ValueId, op: BinOp, imm: i64) -> Key {
+/// instruction computing that comparison at the same width.
+fn cmp_key(canon: &[ValueId], lhs: ValueId, op: BinOp, imm: i64, narrow: bool) -> Key {
     let c = canon.get(lhs as usize).copied().unwrap_or(lhs);
-    (3, c, binop_code(op), imm)
+    (3, c, cmp_code(op, narrow), imm)
 }
 
 /// Bounds an extension's result takes from the width it reads.
@@ -609,20 +665,23 @@ fn decide(op: BinOp, a: Range, b: Range) -> Option<bool> {
     })
 }
 
-/// The range `x` takes when `op(x, k)` has the given truth value.
-/// Narrowing an inequality is exact; a disequality only moves an
-/// endpoint, which is what an enumerated state excluded by a loop
-/// condition needs.
-fn implied(op: BinOp, k: i128, holds: bool, current: Range) -> Option<Range> {
+/// The range `x` takes when `op(x, k)` has the given truth value for
+/// some `k` in `k`. Narrowing an inequality is exact; a disequality only
+/// moves an endpoint, which is what an enumerated state excluded by a
+/// loop condition needs, and only against a single `k`.
+fn implied(op: BinOp, k: Range, holds: bool, current: Range) -> Option<Range> {
     let unsigned = comparison(op)?;
-    if unsigned && !(current.non_negative() && k >= 0) {
+    if unsigned && !(current.non_negative() && k.non_negative()) {
         // An unsigned bound below a non-negative k still pins the sign
         // bit clear, so it is the signed interval [0, k) whatever the
         // current range says.
-        if k >= 0 {
+        if k.non_negative() {
             return match (op, holds) {
-                (BinOp::Ult, true) | (BinOp::Uge, false) => Some(Range { lo: 0, hi: k - 1 }),
-                (BinOp::Ule, true) | (BinOp::Ugt, false) => Some(Range { lo: 0, hi: k }),
+                (BinOp::Ult, true) | (BinOp::Uge, false) => Some(Range {
+                    lo: 0,
+                    hi: k.hi - 1,
+                }),
+                (BinOp::Ule, true) | (BinOp::Ugt, false) => Some(Range { lo: 0, hi: k.hi }),
                 _ => None,
             };
         }
@@ -630,16 +689,34 @@ fn implied(op: BinOp, k: i128, holds: bool, current: Range) -> Option<Range> {
     }
     let (lo, hi) = (current.lo, current.hi);
     Some(match (op, holds) {
-        (BinOp::Eq, true) | (BinOp::Ne, false) => Range { lo: k, hi: k },
-        (BinOp::Eq, false) | (BinOp::Ne, true) => Range {
-            lo: if lo == k { lo + 1 } else { lo },
-            hi: if hi == k { hi - 1 } else { hi },
+        (BinOp::Eq, true) | (BinOp::Ne, false) => k,
+        (BinOp::Eq, false) | (BinOp::Ne, true) if k.lo == k.hi => Range {
+            lo: if lo == k.lo { lo + 1 } else { lo },
+            hi: if hi == k.lo { hi - 1 } else { hi },
         },
-        (BinOp::Lt | BinOp::Ult, true) | (BinOp::Ge | BinOp::Uge, false) => Range { lo, hi: k - 1 },
-        (BinOp::Lt | BinOp::Ult, false) | (BinOp::Ge | BinOp::Uge, true) => Range { lo: k, hi },
-        (BinOp::Le | BinOp::Ule, true) | (BinOp::Gt | BinOp::Ugt, false) => Range { lo, hi: k },
-        _ => Range { lo: k + 1, hi },
+        (BinOp::Eq | BinOp::Ne, _) => return None,
+        (BinOp::Lt | BinOp::Ult, true) | (BinOp::Ge | BinOp::Uge, false) => {
+            Range { lo, hi: k.hi - 1 }
+        }
+        (BinOp::Lt | BinOp::Ult, false) | (BinOp::Ge | BinOp::Uge, true) => Range { lo: k.lo, hi },
+        (BinOp::Le | BinOp::Ule, true) | (BinOp::Gt | BinOp::Ugt, false) => Range { lo, hi: k.hi },
+        _ => Range { lo: k.lo + 1, hi },
     })
+}
+
+/// `b op' a` for the comparison `a op b`.
+fn swapped(op: BinOp) -> BinOp {
+    match op {
+        BinOp::Lt => BinOp::Gt,
+        BinOp::Gt => BinOp::Lt,
+        BinOp::Le => BinOp::Ge,
+        BinOp::Ge => BinOp::Le,
+        BinOp::Ult => BinOp::Ugt,
+        BinOp::Ugt => BinOp::Ult,
+        BinOp::Ule => BinOp::Uge,
+        BinOp::Uge => BinOp::Ule,
+        other => other,
+    }
 }
 
 /// Interval addition / subtraction on the 64-bit register reading.
@@ -946,15 +1023,286 @@ pub(crate) fn arg_range(insts: &[Inst], v: ValueId) -> Range {
     }
 }
 
-/// Changes a value takes at their exact size before it is widened.
-const EXACT_STEPS: u8 = 2;
+/// A comparison a branch settled, as a bound on one of its operands.
+#[derive(Clone, Copy)]
+struct Bound {
+    op: BinOp,
+    /// The other operand's range.
+    k: Range,
+    holds: bool,
+    width: Width,
+}
 
-/// Bounds a value's definition carries wherever it is live, a phi taking
-/// the hull of what reaches it: the table grows from empty until every
-/// entry contains what its rule produces from the table. A sweep in reverse
+impl Bound {
+    /// `r` met with what the bound says about a value of range `r`. A
+    /// 32-bit comparison bounds the value only where the value equals
+    /// the extension the comparison read, which `r` has to show.
+    fn narrow(self, r: Range) -> Range {
+        let reads_value = match self.width {
+            Width::Full => true,
+            Width::Sext32 => r.fits(LoadKind::I32),
+            Width::Zext32 => r.high_word_clear(),
+        };
+        match implied(self.op, self.k, self.holds, r) {
+            Some(b) if reads_value => r.meet(b),
+            _ => r,
+        }
+    }
+}
+
+/// The range a comparison reads for an operand of range `r`.
+fn read_at(width: Width, r: Range) -> Range {
+    let word = match width {
+        Width::Full => return r,
+        Width::Sext32 => extend_range(LoadKind::I32),
+        Width::Zext32 => extend_range(LoadKind::U32),
+    }
+    .unwrap_or(UNIVERSE);
+    if word.contains(r) { r } else { word }
+}
+
+/// What the branch on `cond` says about values on the edge where `cond`
+/// is non-zero (`holds`) or zero: `emit(canonical value, bound)`. The
+/// other operand enters with the range its own shape gives, so a bound
+/// depends on nothing the range iteration moves.
+fn edge_bounds(
+    func: &FunctionSsa,
+    numbers: &Numbering,
+    params: &[Range],
+    cond: ValueId,
+    holds: bool,
+    mut emit: impl FnMut(ValueId, Bound),
+) {
+    let zero_test = Bound {
+        op: BinOp::Ne,
+        k: Range::exact(0),
+        holds,
+        width: Width::Full,
+    };
+    emit(numbers.of(cond), zero_test);
+    let shape = |v: ValueId| match func.insts.get(v as usize) {
+        Some(inst) => eval(inst, params, |_| UNIVERSE),
+        None => UNIVERSE,
+    };
+    let (op, lhs, rhs) = match func.insts.get(cond as usize) {
+        Some(Inst::BinopI { op, lhs, rhs_imm }) if comparison(*op).is_some() => {
+            (*op, *lhs, Err(*rhs_imm))
+        }
+        Some(Inst::Binop { op, lhs, rhs }) if comparison(*op).is_some() => (*op, *lhs, Ok(*rhs)),
+        _ => return,
+    };
+    let width = width_of(func, cond, op);
+    let mut side = |v: ValueId, op: BinOp, other: Range| {
+        let bound = Bound {
+            op,
+            k: read_at(width, other),
+            holds,
+            width,
+        };
+        emit(numbers.of(v), bound);
+        let full = Bound {
+            width: Width::Full,
+            ..bound
+        };
+        // The extension the comparison read, where the function computes
+        // it, and the value under an extension the comparison reads whole.
+        match (width, func.insts.get(v as usize)) {
+            (Width::Full, Some(Inst::Extend { value, kind })) if *kind == LoadKind::I32 => {
+                let under = Bound {
+                    width: Width::Sext32,
+                    ..bound
+                };
+                emit(numbers.of(*value), under);
+            }
+            (Width::Full, _) => {}
+            (w, _) => {
+                if let Some(e) = numbers.extension_of(v, w == Width::Sext32) {
+                    emit(e, full);
+                }
+            }
+        }
+    };
+    match rhs {
+        Err(imm) => side(lhs, op, Range::exact(imm)),
+        Ok(rhs) => {
+            side(lhs, op, shape(rhs));
+            side(rhs, swapped(op), shape(lhs));
+        }
+    }
+}
+
+/// The branch bounds in force per block, for the range of a value as a
+/// reader in that block sees it.
+struct Guards {
+    /// Per canonical value: `(block the bound holds from, bound)`. The
+    /// bound holds in every block that one dominates.
+    on: hashbrown::HashMap<ValueId, Vec<(BlockId, Bound)>>,
+    /// Dominator-tree entry / exit stamps; `u32::MAX` off the tree.
+    tin: Vec<u32>,
+    tout: Vec<u32>,
+}
+
+/// Bounds kept per value; the ones past it are not applied.
+const MAX_GUARDS: usize = 16;
+
+/// `(cond, holds)` of the conditional edge `pred -> succ`.
+fn edge_condition(func: &FunctionSsa, pred: BlockId, succ: BlockId) -> Option<(ValueId, bool)> {
+    match func.blocks.get(pred as usize)?.terminator {
+        Terminator::Bz {
+            cond,
+            target,
+            fall_through,
+        } if target != fall_through => Some((cond, target != succ)),
+        Terminator::Bnz {
+            cond,
+            target,
+            fall_through,
+        } if target != fall_through => Some((cond, target == succ)),
+        _ => None,
+    }
+}
+
+/// The predecessor over whose edge alone `b` is entered. The entry block
+/// is entered at the function's start as well.
+fn sole_pred(preds: &[Vec<BlockId>], b: BlockId) -> Option<BlockId> {
+    match preds.get(b as usize).map(Vec::as_slice) {
+        Some(&[p]) if b != 0 => Some(p),
+        _ => None,
+    }
+}
+
+impl Guards {
+    fn new(func: &FunctionSsa, numbers: &Numbering, params: &[Range]) -> Self {
+        let n = func.blocks.len();
+        let idom = crate::c5::codegen::ssa::mem2reg::dominators(func);
+        let preds = crate::c5::codegen::ssa::mem2reg::predecessors(func);
+        let mut children: Vec<Vec<BlockId>> = alloc::vec![Vec::new(); n];
+        for (b, &d) in idom.iter().enumerate().take(n).skip(1) {
+            if d != BlockId::MAX && (d as usize) != b {
+                children[d as usize].push(b as BlockId);
+            }
+        }
+        let (mut tin, mut tout) = (alloc::vec![u32::MAX; n], alloc::vec![0u32; n]);
+        let mut clock = 0u32;
+        let mut stack: Vec<(BlockId, bool)> = Vec::new();
+        if n > 0 {
+            stack.push((0, false));
+        }
+        while let Some((b, done)) = stack.pop() {
+            if done {
+                tout[b as usize] = clock;
+                continue;
+            }
+            tin[b as usize] = clock;
+            clock += 1;
+            stack.push((b, true));
+            stack.extend(children[b as usize].iter().map(|&c| (c, false)));
+        }
+        let mut on: hashbrown::HashMap<ValueId, Vec<(BlockId, Bound)>> = Default::default();
+        for b in 0..n as BlockId {
+            let Some(p) = sole_pred(&preds, b) else {
+                continue;
+            };
+            if tin[b as usize] == u32::MAX {
+                continue;
+            }
+            let Some((cond, holds)) = edge_condition(func, p, b) else {
+                continue;
+            };
+            edge_bounds(func, numbers, params, cond, holds, |v, bound| {
+                let list = on.entry(v).or_default();
+                if list.len() < MAX_GUARDS {
+                    list.push((b, bound));
+                }
+            });
+        }
+        Guards { on, tin, tout }
+    }
+
+    /// `r`, the range of canonical value `c`, as a reader in block `b`
+    /// sees it.
+    fn narrow(&self, b: BlockId, c: ValueId, mut r: Range) -> Range {
+        let Some(list) = self.on.get(&c) else {
+            return r;
+        };
+        let (Some(&at), Some(&until)) = (self.tin.get(b as usize), self.tout.get(b as usize))
+        else {
+            return r;
+        };
+        for &(from, bound) in list {
+            if self.tin[from as usize] <= at && until <= self.tout[from as usize] {
+                r = bound.narrow(r);
+            }
+        }
+        r
+    }
+}
+
+/// Value ranges of a function: per definition, and per reader position.
+pub(crate) struct Ranges {
+    def: Vec<Range>,
+    numbers: Numbering,
+    guards: Guards,
+}
+
+impl Ranges {
+    pub(crate) fn compute(func: &FunctionSsa, params: &[Range]) -> Self {
+        let numbers = value_numbers(func);
+        let guards = Guards::new(func, &numbers, params);
+        let def = settle(func, params, &numbers, &guards);
+        Ranges {
+            def,
+            numbers,
+            guards,
+        }
+    }
+
+    /// Bounds `v`'s definition carries wherever it is live.
+    pub(crate) fn def(&self, v: ValueId) -> Range {
+        self.def.get(v as usize).copied().unwrap_or(UNIVERSE)
+    }
+
+    /// Bounds on `v` where an instruction of block `b` reads it: its
+    /// definition's, met with the branch bounds in force in `b`.
+    pub(crate) fn at(&self, b: BlockId, v: ValueId) -> Range {
+        self.guards.narrow(b, self.numbers.of(v), self.def(v))
+    }
+
+    pub(crate) fn into_def(self) -> Vec<Range> {
+        self.def
+    }
+}
+
+/// Changes a phi takes at their exact size before it is widened.
+const EXACT_STEPS: u8 = 2;
+/// Changes any other value takes before it is widened. Its changes follow
+/// those of the phis it depends on; widening it earlier would step over
+/// the branch bound its rule applies.
+const EXACT_STEPS_OFF_PHI: u8 = 48;
+
+/// Bounds a value's definition carries wherever it is live: see
+/// [`Ranges::def`].
+pub(crate) fn def_ranges(func: &FunctionSsa, params: &[Range]) -> Vec<Range> {
+    Ranges::compute(func, params).into_def()
+}
+
+/// The definition ranges: a phi takes the hull of what reaches it over
+/// each edge, every other value what its rule produces from its operands
+/// as its block reads them. The table grows from empty until every entry
+/// contains what its rule produces from the table. A sweep in reverse
 /// postorder visits each value, then each change queues its readers; the
 /// widening bounds the changes per value, so the work is linear in edges.
-pub(crate) fn def_ranges(func: &FunctionSsa, params: &[Range]) -> Vec<Range> {
+///
+/// An operand is read with the branch bounds in force in the reading
+/// block. They hold for the value the operand has there: its definition
+/// dominates the branch, the branch's edge is the only way into the
+/// blocks it dominates, and re-executing the definition leaves them.
+fn settle(
+    func: &FunctionSsa,
+    params: &[Range],
+    numbers: &Numbering,
+    guards: &Guards,
+) -> Vec<Range> {
     use alloc::collections::BinaryHeap;
     use core::cmp::Reverse;
     let n = func.insts.len();
@@ -963,6 +1311,21 @@ pub(crate) fn def_ranges(func: &FunctionSsa, params: &[Range]) -> Vec<Range> {
     for (i, &v) in order.iter().enumerate() {
         pos[v as usize] = i as u32;
     }
+    let mut block_of = alloc::vec![BlockId::MAX; n];
+    for (b, blk) in func.blocks.iter().enumerate() {
+        for v in blk.inst_range.clone() {
+            if let Some(slot) = block_of.get_mut(v as usize) {
+                *slot = b as BlockId;
+            }
+        }
+    }
+    let cx = Rules {
+        func,
+        params,
+        numbers,
+        guards,
+        block_of: &block_of,
+    };
     let (starts, readers) = reader_table(func);
     let mut cur: Vec<Option<Range>> = alloc::vec![None; n];
     let mut steps = alloc::vec![0u8; n];
@@ -972,7 +1335,7 @@ pub(crate) fn def_ranges(func: &FunctionSsa, params: &[Range]) -> Vec<Range> {
     while let Some(p) = sweep.next().or_else(|| queue.pop().map(|Reverse(p)| p)) {
         let v = order[p as usize] as usize;
         queued[v] = false;
-        let Some(next) = def_rule(func, params, &cur, v) else {
+        let Some(next) = cx.rule(&cur, v) else {
             continue;
         };
         let grown = match cur[v] {
@@ -980,7 +1343,11 @@ pub(crate) fn def_ranges(func: &FunctionSsa, params: &[Range]) -> Vec<Range> {
             Some(old) if old.contains(next) => continue,
             Some(old) => {
                 steps[v] = steps[v].saturating_add(1);
-                match steps[v] > EXACT_STEPS {
+                let exact = match func.insts[v] {
+                    Inst::Phi { .. } => EXACT_STEPS,
+                    _ => EXACT_STEPS_OFF_PHI,
+                };
+                match steps[v] > exact {
                     true => old.widen(next),
                     false => old.hull(next),
                 }
@@ -1000,33 +1367,68 @@ pub(crate) fn def_ranges(func: &FunctionSsa, params: &[Range]) -> Vec<Range> {
     cur.into_iter().map(|r| r.unwrap_or(UNIVERSE)).collect()
 }
 
-/// What `v`'s definition produces from `cur`; `None` until it reads an entry.
-fn def_rule(
-    func: &FunctionSsa,
-    params: &[Range],
-    cur: &[Option<Range>],
-    v: usize,
-) -> Option<Range> {
-    let bounds = |o: ValueId| cur.get(o as usize).copied().flatten();
-    match &func.insts[v] {
-        // A floating phi merges no integers.
-        Inst::Phi {
-            kind: LoadKind::F32 | LoadKind::F64,
-            ..
-        } => Some(UNIVERSE),
-        Inst::Phi { incoming, .. } => incoming
-            .iter()
-            .filter_map(|&(_, s)| bounds(s))
-            .reduce(Range::hull),
-        inst => {
-            let mut unreached = false;
-            let r = eval(inst, params, |o| {
-                bounds(o).unwrap_or_else(|| {
-                    unreached = true;
-                    UNIVERSE
+/// What [`settle`]'s rules read besides the table.
+struct Rules<'a> {
+    func: &'a FunctionSsa,
+    params: &'a [Range],
+    numbers: &'a Numbering,
+    guards: &'a Guards,
+    block_of: &'a [BlockId],
+}
+
+impl Rules<'_> {
+    /// What `v`'s definition produces from `cur`; `None` until it reads an
+    /// entry, and while a branch bound excludes every value of one.
+    fn rule(&self, cur: &[Option<Range>], v: usize) -> Option<Range> {
+        let b = self.block_of[v];
+        let seen = |at: BlockId, o: ValueId| -> Option<Range> {
+            let r = cur.get(o as usize).copied().flatten()?;
+            let r = self.guards.narrow(at, self.numbers.of(o), r);
+            (r.lo <= r.hi).then_some(r)
+        };
+        match &self.func.insts[v] {
+            // A floating phi merges no integers.
+            Inst::Phi {
+                kind: LoadKind::F32 | LoadKind::F64,
+                ..
+            } => Some(UNIVERSE),
+            // An incoming value is read at the end of its predecessor,
+            // under that block's bounds and the edge's own condition.
+            Inst::Phi { incoming, .. } => incoming
+                .iter()
+                .filter_map(|&(pred, s)| {
+                    let mut r = seen(pred, s)?;
+                    if let Some((cond, holds)) = edge_condition(self.func, pred, b) {
+                        let c = self.numbers.of(s);
+                        edge_bounds(
+                            self.func,
+                            self.numbers,
+                            self.params,
+                            cond,
+                            holds,
+                            |on, bound| {
+                                if on == c {
+                                    r = bound.narrow(r);
+                                }
+                            },
+                        );
+                    }
+                    (r.lo <= r.hi).then_some(r)
                 })
-            });
-            (!unreached).then_some(r)
+                .reduce(Range::hull),
+            inst => {
+                let mut unreached = false;
+                let r = eval(inst, self.params, |o| {
+                    seen(b, o).unwrap_or_else(|| {
+                        unreached = true;
+                        UNIVERSE
+                    })
+                });
+                // A branch that read an earlier instance of this
+                // expression bounds this one too.
+                let r = self.guards.narrow(b, self.numbers.of(v as ValueId), r);
+                (!unreached && r.lo <= r.hi).then_some(r)
+            }
         }
     }
 }
@@ -1121,15 +1523,15 @@ fn peel(insts: &[Inst], def: &[Range], op: BinOp, lhs: ValueId, k: i64) -> Optio
 /// are applied.
 #[derive(Clone, Copy)]
 struct Tables<'a> {
-    canon: &'a [ValueId],
+    numbers: &'a Numbering,
     def: &'a [Range],
     load_epoch: &'a [u64],
+    params: &'a [Range],
 }
 
 /// Facts the edge from `pred` into its single successor carries: the
 /// branch condition's own value, and the range its comparison implies
-/// for the compared expression and for what that expression was built
-/// from.
+/// for the compared expressions and for what they were built from.
 fn apply_edge(
     func: &FunctionSsa,
     tables: &Tables<'_>,
@@ -1139,10 +1541,12 @@ fn apply_edge(
     holds: bool,
 ) {
     let Tables {
-        canon,
+        numbers,
         def,
         load_epoch,
+        params,
     } = *tables;
+    let canon = numbers.canon.as_slice();
     let cond = match func.blocks[pred as usize].terminator {
         Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => cond,
         _ => return,
@@ -1150,28 +1554,24 @@ fn apply_edge(
     let insts = func.insts.as_slice();
     // The branch tests the condition against zero, so the taken edge
     // says only that it is not zero -- `if (x & 4)` reaches its body
-    // with the value 4, not 1.
-    let key = key_of(insts, canon, cond);
-    let current = held(facts, def, key, cond);
-    let cond_range = if holds {
-        implied(BinOp::Ne, 0, true, current)
-    } else {
-        Some(Range { lo: 0, hi: 0 })
-    };
-    if let Some(r) = cond_range {
-        facts.narrow(key, r);
-    }
-    // A condition that is itself a comparison narrows what it
-    // compares. Any other condition is the zero test the branch
-    // performs, so it narrows as `cond != 0` and peels from there --
-    // the shape a branch-cond fold leaves after rewriting
-    // `Bz(x != 0)` to `Bz(x)`.
+    // with the value 4, not 1. A comparison bounds both of its operands,
+    // at the width it reads them.
+    edge_bounds(func, numbers, params, cond, holds, |c, bound| {
+        let key = key_of(func, canon, c);
+        let r = bound.narrow(held(facts, def, key, c));
+        facts.set(key, r);
+    });
+    // A condition that is itself a comparison against one value settles
+    // that comparison and bounds what its operand was built from. Any
+    // other condition is the zero test the branch performs, so it peels
+    // as `cond != 0` -- the shape a branch-cond fold leaves after
+    // rewriting `Bz(x != 0)` to `Bz(x)`.
     let (op, lhs, rhs_range) = match insts.get(cond as usize) {
         Some(Inst::BinopI { op, lhs, rhs_imm }) if comparison(*op).is_some() => {
             (*op, *lhs, Range::exact(*rhs_imm))
         }
         Some(Inst::Binop { op, lhs, rhs }) if comparison(*op).is_some() => {
-            let r = held(facts, def, key_of(insts, canon, *rhs), *rhs);
+            let r = held(facts, def, key_of(func, canon, *rhs), *rhs);
             if r.lo != r.hi {
                 return;
             }
@@ -1183,6 +1583,7 @@ fn apply_edge(
     let Ok(mut k) = i64::try_from(rhs_range.lo) else {
         return;
     };
+    let narrow = width_of(func, cond, op) != Width::Full;
     let mut lhs = lhs;
     // Walk down the expression the comparison was built from, recording
     // the bound each rewriting implies. The chain is finite (each step
@@ -1195,11 +1596,15 @@ fn apply_edge(
         // with no bound on either side of it.
         for (op, v) in [(Some(op), holds), (negate(op), !holds)] {
             if let Some(op) = op.filter(|op| comparison(*op).is_some()) {
-                facts.narrow(cmp_key(canon, lhs, op, k), Range::exact(v as i64));
+                facts.narrow(cmp_key(canon, lhs, op, k, narrow), Range::exact(v as i64));
             }
         }
-        let key = key_of(insts, canon, lhs);
-        if let Some(r) = implied(op, k as i128, holds, held(facts, def, key, lhs)) {
+        // The steps below rewrite a comparison of the whole register.
+        if narrow {
+            break;
+        }
+        let key = key_of(func, canon, lhs);
+        if let Some(r) = implied(op, Range::exact(k), holds, held(facts, def, key, lhs)) {
             facts.narrow(key, r);
             // The compared value is what memory held when the load ran,
             // so the bound describes a later load of the same expression
@@ -1236,8 +1641,9 @@ pub(crate) fn run_one(func: &mut FunctionSsa, params: &[Range]) -> bool {
     }
     let idom = crate::c5::codegen::ssa::mem2reg::dominators(func);
     let preds = crate::c5::codegen::ssa::mem2reg::predecessors(func);
-    let canon = value_numbers(func.insts.as_slice());
-    let def = def_ranges(func, params);
+    let ranges = Ranges::compute(func, params);
+    let (numbers, def) = (ranges.numbers, ranges.def);
+    let canon = numbers.canon.as_slice();
     // Dominator-tree children, so the walk visits each block once with
     // its dominators' facts in scope.
     let mut children: Vec<Vec<BlockId>> = alloc::vec![Vec::new(); n];
@@ -1285,7 +1691,7 @@ pub(crate) fn run_one(func: &mut FunctionSsa, params: &[Range]) -> bool {
         // condition; with more than one predecessor the paths disagree,
         // and a joined-over path may have written the memory a load
         // fact describes.
-        if let [p] = preds[b as usize][..] {
+        if let Some(p) = sole_pred(&preds, b) {
             let holds = match func.blocks[p as usize].terminator {
                 Terminator::Bz {
                     target,
@@ -1301,9 +1707,10 @@ pub(crate) fn run_one(func: &mut FunctionSsa, params: &[Range]) -> bool {
             };
             if let Some(holds) = holds {
                 let tables = Tables {
-                    canon: &canon,
+                    numbers: &numbers,
                     def: &def,
                     load_epoch: &load_epoch,
+                    params,
                 };
                 apply_edge(func, &tables, &mut facts, epoch, p, holds);
             }
@@ -1321,9 +1728,8 @@ pub(crate) fn run_one(func: &mut FunctionSsa, params: &[Range]) -> bool {
                 // record the reading afterwards, so the store's own
                 // invalidation does not drop what it just established.
                 let established = {
-                    let insts = func.insts.as_slice();
-                    stored_facts(&canon, inst, |v| {
-                        held(&facts, &def, key_of(insts, &canon, v), v)
+                    stored_facts(canon, inst, |v| {
+                        held(&facts, &def, key_of(func, canon, v), v)
                     })
                 };
                 facts.wipe_loads();
@@ -1333,9 +1739,9 @@ pub(crate) fn run_one(func: &mut FunctionSsa, params: &[Range]) -> bool {
                 }
             }
             let insts = func.insts.as_slice();
-            let at = |v: ValueId| held(&facts, &def, key_of(insts, &canon, v), v);
-            let key = key_of(insts, &canon, pc);
-            let ekey = load_expr_key(insts, &canon, pc);
+            let at = |v: ValueId| held(&facts, &def, key_of(func, canon, v), v);
+            let key = key_of(func, canon, pc);
+            let ekey = load_expr_key(insts, canon, pc);
             let mut r = eval(inst, params, at).meet(held(&facts, &def, key, pc));
             // At the load itself the positional fact is current, so the
             // value it produces meets it, and the value read here is
@@ -1344,9 +1750,16 @@ pub(crate) fn run_one(func: &mut FunctionSsa, params: &[Range]) -> bool {
                 r = r.meet(facts.get(ek));
                 load_epoch[pc as usize] = epoch;
             }
+            // A comparison reads its operands at its own width.
             let decided = match inst {
-                Inst::BinopI { op, lhs, rhs_imm } => decide(*op, at(*lhs), Range::exact(*rhs_imm)),
-                Inst::Binop { op, lhs, rhs } => decide(*op, at(*lhs), at(*rhs)),
+                Inst::BinopI { op, lhs, rhs_imm } => {
+                    let w = width_of(func, pc, *op);
+                    decide(*op, read_at(w, at(*lhs)), Range::exact(*rhs_imm))
+                }
+                Inst::Binop { op, lhs, rhs } => {
+                    let w = width_of(func, pc, *op);
+                    decide(*op, read_at(w, at(*lhs)), read_at(w, at(*rhs)))
+                }
                 _ => None,
             };
             if let Inst::BinopI { op, lhs, .. } | Inst::Binop { op, lhs, .. } = inst
@@ -1398,8 +1811,7 @@ pub(crate) fn run_one(func: &mut FunctionSsa, params: &[Range]) -> bool {
             func.blocks[b as usize].terminator
             && cond != crate::c5::ir::NO_VALUE
         {
-            let insts = func.insts.as_slice();
-            let r = held(&facts, &def, key_of(insts, &canon, cond), cond);
+            let r = held(&facts, &def, key_of(func, canon, cond), cond);
             if let Some(nz) = decide(BinOp::Ne, r, Range::exact(0)) {
                 branch_folds.push((b as BlockId, nz));
             }
@@ -2166,6 +2578,312 @@ mod tests {
         }
     }
 
+    const INT: Range = Range {
+        lo: i32::MIN as i128,
+        hi: i32::MAX as i128,
+    };
+
+    /// A counted loop, the counter read through its renormalization:
+    ///
+    /// b0: v0 = init; v1 = bound                         -> b1
+    /// b1: v2 = phi(b0: v0, b2: v6); v3 = sext32(v2);
+    ///     v4 = v3 `cmp` v1                               Bnz v4 -> b2 else b3
+    /// b2: v5 = sext32(v2); v6 = v5 + `step`              -> b1
+    /// b3: return
+    ///
+    /// With `raw` the comparison reads `v2` itself and is marked 32-bit,
+    /// the shape `drop_redundant_extend` leaves.
+    fn counted(init: Inst, bound: Inst, cmp: BinOp, step: Inst, raw: bool) -> FunctionSsa {
+        let ext = Inst::Extend {
+            value: 2,
+            kind: LoadKind::I32,
+        };
+        let insts = vec![
+            init,
+            bound,
+            Inst::Phi {
+                incoming: vec![(0, 0), (2, 6)],
+                kind: LoadKind::I64,
+            },
+            ext.clone(),
+            Inst::Binop {
+                op: cmp,
+                lhs: if raw { 2 } else { 3 },
+                rhs: 1,
+            },
+            ext,
+            step,
+        ];
+        let block = |range: core::ops::Range<u32>, terminator| Block {
+            start_pc: 0,
+            inst_range: range,
+            terminator,
+            exit_acc: crate::c5::ir::NO_VALUE,
+        };
+        let mut cmp32 = vec![false; insts.len()];
+        cmp32[4] = raw;
+        FunctionSsa {
+            n_params: 2,
+            inst_src: vec![(0, 0); insts.len()],
+            f32_values: vec![false; insts.len()],
+            cmp32,
+            insts,
+            blocks: vec![
+                block(0..2, Terminator::Jmp(1)),
+                block(
+                    2..5,
+                    Terminator::Bnz {
+                        cond: 4,
+                        target: 2,
+                        fall_through: 3,
+                    },
+                ),
+                block(5..7, Terminator::Jmp(1)),
+                block(7..7, Terminator::Return(crate::c5::ir::NO_VALUE)),
+            ],
+            ..FunctionSsa::default()
+        }
+    }
+
+    fn step_by(k: i64) -> Inst {
+        Inst::BinopI {
+            op: BinOp::Add,
+            lhs: 5,
+            rhs_imm: k,
+        }
+    }
+
+    fn int_param(idx: u32) -> Inst {
+        Inst::ParamRef {
+            idx,
+            kind: LoadKind::I32,
+        }
+    }
+
+    /// `for (i = 0; i < 1000; i++)`: the bound reaches the increment
+    /// through the guard, so the counter settles and its extension in
+    /// the body is the identity. The same holds against an `int` bound:
+    /// `i < n` leaves room for `i + 1`.
+    #[test]
+    fn a_guarded_counter_settles_inside_its_bound() {
+        for raw in [false, true] {
+            let f = counted(Inst::Imm(0), Inst::Imm(1000), BinOp::Lt, step_by(1), raw);
+            let r = Ranges::compute(&f, &[]);
+            assert!(
+                Range { lo: 0, hi: 0x7fff }.contains(r.def(2)),
+                "raw={raw}: {:?}",
+                (r.def(2).lo, r.def(2).hi)
+            );
+            assert!(r.at(2, 2).hi == 999 && r.at(2, 2).lo == 0, "raw={raw}");
+            assert!(r.at(3, 2).lo >= 1000, "raw={raw}: the exit edge");
+            let f = counted(Inst::Imm(0), int_param(0), BinOp::Lt, step_by(1), raw);
+            let r = Ranges::compute(&f, &[]);
+            assert!(INT.contains(r.def(2)) && r.def(2).lo == 0, "raw={raw}");
+            assert!(r.at(2, 2).hi == INT.hi - 1, "raw={raw}");
+        }
+    }
+
+    /// A decreasing counter under `i >= 0` stays inside `int`.
+    #[test]
+    fn a_guarded_decreasing_counter_settles() {
+        let f = counted(Inst::Imm(999), Inst::Imm(0), BinOp::Ge, step_by(-1), false);
+        let r = Ranges::compute(&f, &[]);
+        assert!(INT.contains(r.def(2)) && r.def(2).hi == 999);
+        assert!(r.at(2, 2).lo == 0 && r.def(6).lo == -1);
+    }
+
+    /// Bounds that do not keep `i + step` inside `int`: a disequality,
+    /// `i <= n` against an `int` (n can be INT_MAX), a step that is not
+    /// a constant, and a guard that bounds the other side (`i > 0` with
+    /// an increment). The counter's extension is then not the identity.
+    #[test]
+    fn a_counter_that_can_leave_int_is_not_bounded() {
+        let var_step = Inst::Binop {
+            op: BinOp::Add,
+            lhs: 5,
+            rhs: 1,
+        };
+        let cases = [
+            (Inst::Imm(0), Inst::Imm(1000), BinOp::Ne, step_by(1)),
+            (Inst::Imm(0), int_param(0), BinOp::Le, step_by(1)),
+            (Inst::Imm(0), int_param(0), BinOp::Lt, var_step),
+            (int_param(1), Inst::Imm(0), BinOp::Gt, step_by(1)),
+            (int_param(1), Inst::Imm(0), BinOp::Lt, step_by(-1)),
+        ];
+        for (init, bound, cmp, step) in cases {
+            for raw in [false, true] {
+                let f = counted(init.clone(), bound.clone(), cmp, step.clone(), raw);
+                let r = Ranges::compute(&f, &[]);
+                assert!(!r.def(2).fits(LoadKind::I32), "{cmp:?} {step:?} raw={raw}");
+                assert!(
+                    !r.at(2, 2).fits(LoadKind::I32),
+                    "{cmp:?} {step:?} raw={raw}"
+                );
+            }
+        }
+    }
+
+    /// A 32-bit comparison of a value whose upper half is unknown bounds
+    /// the extension it read, not the value: with the counter entering
+    /// from a 64-bit load, `v2` stays unbounded in the body and its
+    /// extension there is below the bound.
+    #[test]
+    fn a_narrow_comparison_bounds_the_extension_it_read() {
+        let wide = Inst::Load {
+            addr: 1,
+            disp: 0,
+            kind: LoadKind::I64,
+            volatile: false,
+            align: 0,
+        };
+        let f = counted(wide.clone(), Inst::Imm(1000), BinOp::Lt, step_by(1), true);
+        let r = Ranges::compute(&f, &[]);
+        assert!(r.at(2, 2).is_universe(), "the value itself");
+        assert!(r.def(5).hi == 999 && r.def(5).lo == INT.lo, "its extension");
+        assert!(r.def(3) == INT, "the instance ahead of the branch");
+        // Read at 64 bits the same comparison bounds the value.
+        let mut f = counted(wide, Inst::Imm(1000), BinOp::Lt, step_by(1), true);
+        f.cmp32 = Vec::new();
+        assert!(Ranges::compute(&f, &[]).at(2, 2).hi == 999);
+    }
+
+    /// A bound holds in the blocks its edge dominates: not at the join
+    /// behind the guarded block, and not for another value.
+    ///
+    /// b0: v0 = p0; v1 = p1; v2 = v0 < 100   Bnz v2 -> b1 else b2
+    /// b1: v3 = v0 + 1; v4 = v1 + 1         -> b2
+    /// b2: v5 = v0 + 1                      return
+    #[test]
+    fn a_bound_ends_with_the_blocks_its_edge_dominates() {
+        let add1 = |lhs| Inst::BinopI {
+            op: BinOp::Add,
+            lhs,
+            rhs_imm: 1,
+        };
+        let insts = vec![
+            int_param(0),
+            int_param(1),
+            Inst::BinopI {
+                op: BinOp::Lt,
+                lhs: 0,
+                rhs_imm: 100,
+            },
+            add1(0),
+            add1(1),
+            add1(0),
+        ];
+        let block = |range: core::ops::Range<u32>, terminator| Block {
+            start_pc: 0,
+            inst_range: range,
+            terminator,
+            exit_acc: crate::c5::ir::NO_VALUE,
+        };
+        let f = FunctionSsa {
+            n_params: 2,
+            inst_src: vec![(0, 0); 6],
+            f32_values: vec![false; 6],
+            insts,
+            blocks: vec![
+                block(
+                    0..3,
+                    Terminator::Bnz {
+                        cond: 2,
+                        target: 1,
+                        fall_through: 2,
+                    },
+                ),
+                block(3..5, Terminator::Jmp(2)),
+                block(5..6, Terminator::Return(crate::c5::ir::NO_VALUE)),
+            ],
+            ..FunctionSsa::default()
+        };
+        let r = Ranges::compute(&f, &[]);
+        assert!(r.def(3).hi == 100, "under the guard");
+        assert!(r.def(4).hi == INT.hi + 1, "the guard is on the other value");
+        // `v5` has the expression of `v3` and is read outside the guard:
+        // the two share no range.
+        assert!(r.def(5).hi == INT.hi + 1, "behind the join");
+        assert!(r.at(2, 0) == INT && r.at(1, 0).hi == 99);
+    }
+
+    /// Two back edges, both from blocks under the loop guard. With the
+    /// second increment a constant the counter settles; with a parameter
+    /// it can leave `int`.
+    ///
+    /// b0: v0 = 0; v1 = p0; v2 = p1                        -> b1
+    /// b1: v3 = phi(b0: v0, b2: v6, b3: v7); v4 = sext32(v3)
+    ///     v5 = v4 < 1000                                  Bnz v5 -> b2 else b4
+    /// b2: v6 = v4 + 1                                     Bnz v1 -> b1 else b3
+    /// b3: v7 = v4 + step                                  -> b1
+    #[test]
+    fn a_second_back_edge_is_read_under_its_own_bounds() {
+        let build = |step: Inst| {
+            let insts = vec![
+                Inst::Imm(0),
+                int_param(0),
+                int_param(1),
+                Inst::Phi {
+                    incoming: vec![(0, 0), (2, 6), (3, 7)],
+                    kind: LoadKind::I64,
+                },
+                Inst::Extend {
+                    value: 3,
+                    kind: LoadKind::I32,
+                },
+                Inst::BinopI {
+                    op: BinOp::Lt,
+                    lhs: 4,
+                    rhs_imm: 1000,
+                },
+                Inst::BinopI {
+                    op: BinOp::Add,
+                    lhs: 4,
+                    rhs_imm: 1,
+                },
+                step,
+            ];
+            let block = |range: core::ops::Range<u32>, terminator| Block {
+                start_pc: 0,
+                inst_range: range,
+                terminator,
+                exit_acc: crate::c5::ir::NO_VALUE,
+            };
+            let branch = |cond, target, fall_through| Terminator::Bnz {
+                cond,
+                target,
+                fall_through,
+            };
+            FunctionSsa {
+                n_params: 2,
+                inst_src: vec![(0, 0); 8],
+                f32_values: vec![false; 8],
+                insts,
+                blocks: vec![
+                    block(0..3, Terminator::Jmp(1)),
+                    block(3..6, branch(5, 2, 4)),
+                    block(6..7, branch(1, 1, 3)),
+                    block(7..8, Terminator::Jmp(1)),
+                    block(8..8, Terminator::Return(crate::c5::ir::NO_VALUE)),
+                ],
+                ..FunctionSsa::default()
+            }
+        };
+        let f = build(Inst::BinopI {
+            op: BinOp::Add,
+            lhs: 4,
+            rhs_imm: 2,
+        });
+        let r = Ranges::compute(&f, &[]);
+        assert!(r.def(3).lo == 0 && r.def(3).fits(LoadKind::I32));
+        assert!(r.def(7).hi == 1001);
+        let f = build(Inst::Binop {
+            op: BinOp::Add,
+            lhs: 4,
+            rhs: 2,
+        });
+        assert!(!Ranges::compute(&f, &[]).def(3).fits(LoadKind::I32));
+    }
+
     /// The bounds a definition carries must not depend on the order the
     /// iteration reached it: a phi whose incoming values are all
     /// unbounded stays unbounded, and its consumers decide nothing.
@@ -2518,5 +3236,61 @@ mod tests {
             assert!(divmod(op, a, empty).is_universe(), "{op:?}");
             assert!(divmod(op, empty, Range::exact(3)).is_universe(), "{op:?}");
         }
+    }
+
+    /// A conditional back edge into the entry block bounds nothing there:
+    /// the entry is also entered at the function's start.
+    ///
+    /// b0: v0 = param; v1 = v0 < 5          Bnz v1 -> b1 else b2
+    /// b1: v2 = 1                           return v2
+    /// b2:                                  Bz v1 -> b0 else b3
+    /// b3: return
+    #[test]
+    fn a_back_edge_into_the_entry_bounds_nothing_there() {
+        let insts = vec![
+            Inst::ParamRef {
+                idx: 0,
+                kind: LoadKind::I64,
+            },
+            Inst::BinopI {
+                op: BinOp::Lt,
+                lhs: 0,
+                rhs_imm: 5,
+            },
+            Inst::Imm(1),
+        ];
+        let block = |range: core::ops::Range<u32>, terminator| Block {
+            start_pc: 0,
+            inst_range: range,
+            terminator,
+            exit_acc: crate::c5::ir::NO_VALUE,
+        };
+        let mut f = fresh(insts, 1);
+        f.blocks = vec![
+            block(
+                0..2,
+                Terminator::Bnz {
+                    cond: 1,
+                    target: 1,
+                    fall_through: 2,
+                },
+            ),
+            block(2..3, Terminator::Return(2)),
+            block(
+                3..3,
+                Terminator::Bz {
+                    cond: 1,
+                    target: 0,
+                    fall_through: 3,
+                },
+            ),
+            block(3..3, Terminator::Return(crate::c5::ir::NO_VALUE)),
+        ];
+        assert!(Ranges::compute(&f, &[]).at(0, 0).is_universe());
+        // b2 is entered with `v1 == 0`, so its branch folds; b0's stays.
+        run_one(&mut f, &[]);
+        assert!(matches!(f.insts[1], Inst::BinopI { op: BinOp::Lt, .. }));
+        assert!(matches!(f.blocks[0].terminator, Terminator::Bnz { .. }));
+        assert!(matches!(f.blocks[2].terminator, Terminator::Jmp(0)));
     }
 }

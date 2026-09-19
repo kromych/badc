@@ -34,10 +34,10 @@ Disassembly of section .text:
                	retq
 
 <g_generate>:
-               	movslq	0x8(%rdi), %rax
-               	addq	$0x64, %rax
-               	movl	%eax, (%rsi)
                	movslq	%edx, %rax
+               	movslq	0x8(%rdi), %rcx
+               	addq	$0x64, %rcx
+               	movl	%ecx, (%rsi)
                	retq
 
 <driver>:

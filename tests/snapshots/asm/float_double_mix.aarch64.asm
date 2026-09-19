@@ -44,7 +44,7 @@ Disassembly of section .text:
                	b.le	<addr>
                	mov	x1, #0x1                // =1
                	cbz	x1, <addr>
-               	sxtw	x0, w1
+               	mov	x0, x1
                	ret
                	mov	x1, #0xa0000000         // =2684354560
                	movk	x1, #0x9999, lsl #32
@@ -63,8 +63,8 @@ Disassembly of section .text:
                	fcmp	d0, d17
                	b.le	<addr>
                	mov	x1, #0x2                // =2
-               	cbz	x1, <addr>
-               	sxtw	x0, w1
+               	cbz	w1, <addr>
+               	mov	x0, x1
                	ret
                	mov	x1, #0xf62e             // =63022
                	movk	x1, #0x3746, lsl #16
@@ -87,8 +87,7 @@ Disassembly of section .text:
                	fcmp	s0, s17
                	b.le	<addr>
                	mov	x0, #0x3                // =3
-               	cbz	x0, <addr>
-               	sxtw	x0, w0
+               	cbz	w0, <addr>
                	ret
                	mov	x0, #0x3ff0000000000000 // =4607182418800017408
                	mov	x1, #0x4008000000000000 // =4613937818241073152
@@ -110,8 +109,7 @@ Disassembly of section .text:
                	fcmp	s0, s17
                	b.le	<addr>
                	mov	x0, #0x5                // =5
-               	cbz	x0, <addr>
-               	sxtw	x0, w0
+               	cbz	w0, <addr>
                	ret
                	mov	x0, #0x0                // =0
                	ret

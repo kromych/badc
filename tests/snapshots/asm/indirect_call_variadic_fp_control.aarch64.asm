@@ -53,11 +53,7 @@ Disassembly of section .text:
                	ldrsw	x2, [x29, #0x10]
                	cmp	w0, w2
                	b.ge	<addr>
-               	sxtw	x2, w0
-               	lsr	x3, x2, #63
-               	add	x2, x2, x3
-               	and	x2, x2, #0x1
-               	sub	x2, x2, x3
+               	and	x2, x0, #0x1
                	cbnz	x2, <addr>
                	mov	x17, x1
                	str	x9, [sp, #-0x10]!

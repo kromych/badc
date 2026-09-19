@@ -52,7 +52,7 @@ Disassembly of section .text:
                	cmpl	$0x10, %eax
                	jge	<addr>
                	leaq	-0x80(%rbp), %rcx
-               	movslq	%eax, %rdx
+               	movq	%rax, %rdx
                	shlq	$0x3, %rdx
                	addq	%rdx, %rcx
                	movq	$-0x1, %rdx

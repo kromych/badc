@@ -56,7 +56,6 @@ Disassembly of section .text:
                	cmpl	$0x19a, %eax            # imm = 0x19A
                	jne	<addr>
                	xorl	%eax, %eax
-               	movslq	%eax, %rax
                	popq	%rbx
                	popq	%r12
                	leave

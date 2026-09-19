@@ -77,7 +77,7 @@ Disassembly of section .text:
                	ldrsw	x2, [x0]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	sxtw	x1, w20
+               	mov	x1, x20
                	bl	<addr>
                	add	x20, x20, #0x1
                	ldrsw	x0, [x29, #0x18]

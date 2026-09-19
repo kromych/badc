@@ -55,16 +55,15 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx
                	cmpl	$0x3, %eax
                	jge	<addr>
-               	leaq	0x4(%rcx), %rdi
-               	movslq	%eax, %rdx
-               	movq	%rdx, %rsi
-               	shlq	$0x3, %rsi
-               	addq	%rsi, %rdi
-               	movslq	(%rdi), %rdi
-               	cmpl	$0x7, %edi
+               	leaq	0x4(%rcx), %rsi
+               	movq	%rax, %rdx
+               	shlq	$0x3, %rdx
+               	addq	%rdx, %rsi
+               	movslq	(%rsi), %rsi
+               	cmpl	$0x7, %esi
                	jne	<addr>
-               	leaq	0x4(%rcx), %rdi
-               	leaq	(%rdi,%rsi), %rdx
+               	leaq	0x4(%rcx), %rsi
+               	addq	%rsi, %rdx
                	movslq	0x4(%rdx), %rdx
                	cmpl	$0x8, %edx
                	jne	<addr>

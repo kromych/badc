@@ -71,7 +71,6 @@ Disassembly of section .text:
                	cmpq	$0xc0d, %rax            # imm = 0xC0D
                	jne	<addr>
                	xorl	%eax, %eax
-               	movslq	%eax, %rax
                	leave
                	retq
                	movl	$0x1, %eax

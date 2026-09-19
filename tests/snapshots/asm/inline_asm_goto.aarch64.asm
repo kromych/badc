@@ -119,7 +119,7 @@ Disassembly of section .text:
                	cmp	w0, #0xa
                	b.le	<addr>
                	mov	x1, #0x9                // =9
-               	sxtw	x0, w1
+               	mov	x0, x1
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
@@ -142,7 +142,7 @@ Disassembly of section .text:
                	b	<addr>
                	b	<addr>
                	mov	x0, #0x1                // =1
-               	cmp	x0, #0x2
+               	cmp	w0, #0x2
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x10
@@ -155,7 +155,7 @@ Disassembly of section .text:
                	b	<addr>
                	b	<addr>
                	mov	x0, #0x1                // =1
-               	cmp	x0, #0x1
+               	cmp	w0, #0x1
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	add	sp, sp, #0x10
@@ -170,7 +170,7 @@ Disassembly of section .text:
                	b	<addr>
                	b	<addr>
                	mov	x0, #0xa                // =10
-               	cmp	x0, #0xa
+               	cmp	w0, #0xa
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	add	sp, sp, #0x10
@@ -185,7 +185,7 @@ Disassembly of section .text:
                	b	<addr>
                	b	<addr>
                	mov	x0, #0xa                // =10
-               	cmp	x0, #0x14
+               	cmp	w0, #0x14
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	add	sp, sp, #0x10
@@ -229,7 +229,7 @@ Disassembly of section .text:
                	b	<addr>
                	b	<addr>
                	mov	x0, #0x1                // =1
-               	cmp	x0, #0x1
+               	cmp	w0, #0x1
                	b.ne	<addr>
                	mov	x16, #0x2               // =2
                	str	x16, [sp]
@@ -239,7 +239,7 @@ Disassembly of section .text:
                	b	<addr>
                	b	<addr>
                	mov	x0, #0x1                // =1
-               	cmp	x0, #0x2
+               	cmp	w0, #0x2
                	b.eq	<addr>
                	mov	x0, #0x7                // =7
                	add	sp, sp, #0x10

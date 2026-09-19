@@ -50,7 +50,7 @@ Disassembly of section .text:
                	movl	$0x1, %ecx
                	testq	%rcx, %rcx
                	je	<addr>
-               	movslq	%ecx, %rax
+               	movq	%rcx, %rax
                	retq
                	movabsq	$0x3fb99999a0000000, %rcx # imm = 0x3FB99999A0000000
                	movq	%rcx, %xmm15
@@ -67,9 +67,9 @@ Disassembly of section .text:
                	ucomisd	%xmm15, %xmm0
                	jbe	<addr>
                	movl	$0x2, %ecx
-               	testq	%rcx, %rcx
+               	testl	%ecx, %ecx
                	je	<addr>
-               	movslq	%ecx, %rax
+               	movq	%rcx, %rax
                	retq
                	movabsq	$0x3fbf9add3746f62e, %rcx # imm = 0x3FBF9ADD3746F62E
                	movq	%rcx, %xmm14
@@ -90,9 +90,8 @@ Disassembly of section .text:
                	ucomiss	%xmm15, %xmm0
                	jbe	<addr>
                	movl	$0x3, %eax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	je	<addr>
-               	movslq	%eax, %rax
                	retq
                	movabsq	$0x3ff0000000000000, %rax # imm = 0x3FF0000000000000
                	movabsq	$0x4008000000000000, %rcx # imm = 0x4008000000000000
@@ -114,9 +113,8 @@ Disassembly of section .text:
                	ucomiss	%xmm15, %xmm0
                	jbe	<addr>
                	movl	$0x5, %eax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	je	<addr>
-               	movslq	%eax, %rax
                	retq
                	xorl	%eax, %eax
                	retq

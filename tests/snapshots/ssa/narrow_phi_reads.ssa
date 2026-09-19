@@ -28,7 +28,7 @@ fn ent_pc=1 n_params=1 variadic=false locals=0
     v4   Imm(0)                                           -> x1
     v5   Imm(0)                                           -> x1
     v6   BinopI { op=and, lhs=v1, rhs_imm=4294967295 }    -> x1
-    v7   BinopI { op=ult, lhs=v6, rhs_imm=128 }           -> x1
+    v7   BinopI { op=ult, lhs=v1, rhs_imm=128 }           -> x1
     terminator Bz { cond=v7, target=b3, fall=b1 }   (exit_acc=v7)
   block 1  start_pc=0
     v8   Imm(0)                                           -> x0
@@ -41,8 +41,8 @@ fn ent_pc=1 n_params=1 variadic=false locals=0
     v13  BinopI { op=xor, lhs=v11, rhs_imm=42 }           -> x0
     v14  BinopI { op=ne, lhs=v13, rhs_imm=0 }             -> x0
     v15  BinopI { op=shl, lhs=v14, rhs_imm=32 }           -> x1
-    v16  Extend { value=v14, kind=I32 }                   -> x0
-    terminator Return(v16)   (exit_acc=v16)
+    v16  Extend { value=v14, kind=I32 }                   -> x1
+    terminator Return(v14)   (exit_acc=v14)
   block 3  start_pc=0
     terminator Jmp(b2)
 ; --- SSA dump (ok=true) ent_pc=2 ---
@@ -81,8 +81,8 @@ fn ent_pc=2 n_params=1 variadic=false locals=0
     v22  BinopI { op=and, lhs=v7, rhs_imm=255 }           -> x0
     v23  BinopI { op=xor, lhs=v7, rhs_imm=42 }            -> x0
     v24  BinopI { op=shl, lhs=v23, rhs_imm=32 }           -> x1
-    v25  Extend { value=v23, kind=I32 }                   -> x0
-    terminator Return(v25)   (exit_acc=v25)
+    v25  Extend { value=v23, kind=I32 }                   -> x1
+    terminator Return(v23)   (exit_acc=v23)
 ; --- SSA dump (ok=true) ent_pc=3 ---
 ; name=count_u8
 fn ent_pc=3 n_params=1 variadic=false locals=0
@@ -117,7 +117,7 @@ fn ent_pc=3 n_params=1 variadic=false locals=0
     v20  BinopI { op=and, lhs=v7, rhs_imm=255 }           -> x0
     v21  BinopI { op=shl, lhs=v7, rhs_imm=32 }            -> x0
     v22  Extend { value=v7, kind=I32 }                    -> x0
-    terminator Return(v22)   (exit_acc=v22)
+    terminator Return(v7)   (exit_acc=v7)
 ; --- SSA dump (ok=true) ent_pc=4 ---
 ; name=count_s8
 fn ent_pc=4 n_params=1 variadic=false locals=0
@@ -135,8 +135,8 @@ fn ent_pc=4 n_params=1 variadic=false locals=0
     v12  BinopI { op=add, lhs=v7, rhs_imm=3 }             -> x1
     v13  BinopI { op=shl, lhs=v12, rhs_imm=32 }           -> x2
     v14  Extend { value=v12, kind=I32 }                   -> x2
-    v15  BinopI { op=shl, lhs=v12, rhs_imm=56 }           -> x1
-    v16  Extend { value=v14, kind=I8 }                    -> x1
+    v15  BinopI { op=shl, lhs=v12, rhs_imm=56 }           -> x2
+    v16  Extend { value=v12, kind=I8 }                    -> x1
     v17  Imm(0)                                           -> x2
     v18  Extend { value=v6, kind=I32 }                    -> x2
     v19  BinopI { op=add, lhs=v6, rhs_imm=1 }             -> x0
@@ -177,10 +177,10 @@ fn ent_pc=5 n_params=1 variadic=false locals=0
     v11  BinopI { op=and, lhs=v10, rhs_imm=65535 }        -> x1
     v12  BinopI { op=add, lhs=v10, rhs_imm=1 }            -> x0
     v13  BinopI { op=shl, lhs=v12, rhs_imm=32 }           -> x1
-    v14  Extend { value=v12, kind=I32 }                   -> x0
-    v15  BinopI { op=shl, lhs=v14, rhs_imm=32 }           -> x1
-    v16  Extend { value=v14, kind=I32 }                   -> x1
-    terminator Return(v14)   (exit_acc=v14)
+    v14  Extend { value=v12, kind=I32 }                   -> x1
+    v15  BinopI { op=shl, lhs=v12, rhs_imm=32 }           -> x1
+    v16  Extend { value=v12, kind=I32 }                   -> x1
+    terminator Return(v12)   (exit_acc=v12)
   block 3  start_pc=0
     terminator Jmp(b2)
 ; --- SSA dump (ok=true) ent_pc=6 ---
@@ -209,8 +209,8 @@ fn ent_pc=6 n_params=2 variadic=false locals=0
     v14  Imm(0)                                           -> x1
     v15  BinopI { op=and, lhs=v13, rhs_imm=255 }          -> x1
     v16  BinopI { op=shl, lhs=v13, rhs_imm=32 }           -> x1
-    v17  Extend { value=v13, kind=I32 }                   -> x0
-    terminator Return(v17)   (exit_acc=v17)
+    v17  Extend { value=v13, kind=I32 }                   -> x1
+    terminator Return(v13)   (exit_acc=v13)
   block 3  start_pc=0
     terminator Jmp(b2)
 ; --- SSA dump (ok=true) ent_pc=7 ---

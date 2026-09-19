@@ -55,7 +55,7 @@ Disassembly of section .text:
                	leaq	(%rax), %r12
                	testq	%rbx, %rbx
                	jne	<addr>
-               	cmpq	$0x1, %r12
+               	cmpl	$0x1, %r12d
                	je	<addr>
                	movl	$0x1, %eax
                	popq	%rbx
@@ -105,7 +105,7 @@ Disassembly of section .text:
                	decq	%rcx
                	cmpq	$-0x1, %rax
                	jne	<addr>
-               	cmpq	$-0x1, %rcx
+               	cmpl	$-0x1, %ecx
                	je	<addr>
                	movl	$0x3, %eax
                	popq	%rbx

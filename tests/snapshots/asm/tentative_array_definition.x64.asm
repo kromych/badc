@@ -60,10 +60,10 @@ Disassembly of section .text:
                	movsbq	(%rsi,%rdx), %r9
                	testq	%r9, %r9
                	jne	<addr>
-               	movslq	%eax, %rsi
-               	testq	%rsi, %rsi
+               	testq	%rax, %rax
                	je	<addr>
                	leaq	<rip>, %rdi
+               	movq	%rax, %rsi
                	movb	$0x0, %al
                	callq	<addr>
                	movl	$0x1, %eax

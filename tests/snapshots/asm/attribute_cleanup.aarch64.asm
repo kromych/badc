@@ -218,16 +218,16 @@ Disassembly of section .text:
                	add	x2, x2, <lo12>
                	str	w1, [x2]
                	stur	w0, [x29, #-0x8]
-               	ldrsw	x2, [x2]
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	str	w0, [x1]
+               	ldrsw	x1, [x2]
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
+               	str	w0, [x2]
                	mov	x5, #0x2bc              // =700
-               	ldrsw	x1, [x21]
-               	add	x6, x1, #0x1
+               	ldrsw	x2, [x21]
+               	add	x6, x2, #0x1
                	str	w6, [x21]
-               	str	w5, [x20, x1, lsl #2]
-               	cmp	w2, #0x1
+               	str	w5, [x20, x2, lsl #2]
+               	cmp	w1, #0x1
                	b.eq	<addr>
                	mov	x0, x3
                	ldp	x29, x30, [sp, #0x30]

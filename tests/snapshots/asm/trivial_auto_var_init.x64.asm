@@ -32,26 +32,24 @@ Disassembly of section .text:
                	movq	$0x0, (%rsp)
                	subq	$0x1000, %rsp           # imm = 0x1000
                	movq	$0x0, (%rsp)
-               	leaq	-0x2000(%rbp), %rdx
-               	leaq	0x2000(%rdx), %rcx
-               	movq	%rdx, %rax
-               	cmpq	%rcx, %rax
+               	leaq	-0x2000(%rbp), %rcx
+               	leaq	0x2000(%rcx), %rdx
+               	movq	%rcx, %rax
+               	cmpq	%rdx, %rax
                	jae	<addr>
                	xorl	%esi, %esi
                	movq	%rsi, (%rax)
                	addq	$0x8, %rax
-               	cmpq	%rcx, %rax
+               	cmpq	%rdx, %rax
                	jb	<addr>
                	xorl	%eax, %eax
-               	movl	%eax, %ecx
-               	cmpl	$0x2000, %ecx           # imm = 0x2000
+               	cmpl	$0x2000, %eax           # imm = 0x2000
                	jae	<addr>
-               	leaq	(%rdx,%rcx), %rsi
-               	movl	$0xaa, %edi
-               	movb	%dil, (%rsi)
-               	leaq	0x1(%rcx), %rax
-               	movl	%eax, %ecx
-               	cmpl	$0x2000, %ecx           # imm = 0x2000
+               	leaq	(%rcx,%rax), %rdx
+               	movl	$0xaa, %esi
+               	movb	%sil, (%rdx)
+               	incq	%rax
+               	cmpl	$0x2000, %eax           # imm = 0x2000
                	jb	<addr>
                	leave
                	retq
@@ -298,7 +296,7 @@ Disassembly of section .text:
                	incq	%rax
                	cmpl	$0x2, %eax
                	jl	<addr>
-               	movslq	%ecx, %rax
+               	movq	%rcx, %rax
                	retq
 
 <addressed_int>:

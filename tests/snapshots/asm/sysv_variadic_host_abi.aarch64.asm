@@ -54,11 +54,7 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	cmp	w0, #0xa
                	b.ge	<addr>
-               	sxtw	x3, w0
-               	lsr	x4, x3, #63
-               	add	x3, x3, x4
-               	and	x3, x3, #0x1
-               	sub	x3, x3, x4
+               	and	x3, x0, #0x1
                	cbnz	x3, <addr>
                	mov	x17, x2
                	str	x9, [sp, #-0x10]!

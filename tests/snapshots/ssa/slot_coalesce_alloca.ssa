@@ -158,19 +158,19 @@ fn ent_pc=1 n_params=0 variadic=false locals=25
     v152 Imm(0)                                           -> x1
     terminator Jmp(b2)   (exit_acc=v152)
   block 1  start_pc=0
-    v270 LocalAddr(-24)                                   -> x7
-    v271 Extend { value=v267, kind=I32 }                  -> x6
-    v272 BinopI { op=shl, lhs=v271, rhs_imm=3 }           -> x8
+    v270 LocalAddr(-24)                                   -> x6
+    v271 Extend { value=v267, kind=I32 }                  -> x7
+    v272 BinopI { op=shl, lhs=v267, rhs_imm=3 }           -> x7
     v273 Binop { op=add, lhs=v270, rhs=v272 }             -> x7
-    v274 BinopI { op=add, lhs=v271, rhs_imm=1 }           -> x6
-    v275 Extend { value=v274, kind=I32 }                  -> x6
-    v276 BinopI { op=mul, lhs=v275, rhs_imm=116 }         -> x6
+    v274 BinopI { op=add, lhs=v267, rhs_imm=1 }           -> x6
+    v275 Extend { value=v274, kind=I32 }                  -> x8
+    v276 BinopI { op=mul, lhs=v274, rhs_imm=116 }         -> x8
     v277 Store { addr=v273, disp=0, value=v276, kind=I64, volatile } -> -
-    v278 Extend { value=v267, kind=I32 }                  -> x6
+    v278 Extend { value=v267, kind=I32 }                  -> x7
     v279 BinopI { op=add, lhs=v267, rhs_imm=1 }           -> x0
-    terminator Jmp(b2)   (exit_acc=v279)
+    terminator Jmp(b2)   (exit_acc=v274)
   block 2  start_pc=0
-    v267 Phi { incoming=[b0:v152, b1:v279], kind=I64 }    -> x0
+    v267 Phi { incoming=[b0:v152, b1:v274], kind=I64 }    -> x0
     v268 Extend { value=v267, kind=I32 }                  -> x6
     v269 BinopI { op=lt, lhs=v267, rhs_imm=24 }           -> x6
     terminator Bnz { cond=v269, target=b1, fall=b3 }   (exit_acc=v269)
@@ -180,7 +180,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=25
   block 4  start_pc=0
     v285 LocalAddr(-24)                                   -> x6
     v286 Extend { value=v281, kind=I32 }                  -> x7
-    v287 BinopI { op=shl, lhs=v286, rhs_imm=3 }           -> x7
+    v287 BinopI { op=shl, lhs=v281, rhs_imm=3 }           -> x7
     v288 Binop { op=add, lhs=v285, rhs=v287 }             -> x6
     v289 Load { addr=v288, disp=0, kind=I64, volatile }   -> x6
     v290 Binop { op=add, lhs=v282, rhs=v289 }             -> x1

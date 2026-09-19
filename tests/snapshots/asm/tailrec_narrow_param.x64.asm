@@ -26,17 +26,16 @@ Disassembly of section .text:
                	int3
 
 <sum_to>:
-               	movsbq	%dil, %rdi
-               	xorl	%eax, %eax
-               	testq	%rdi, %rdi
+               	movsbq	%dil, %rax
+               	xorl	%ecx, %ecx
+               	testl	%eax, %eax
                	jle	<addr>
-               	leaq	-0x1(%rdi), %rcx
-               	movsbq	%cl, %rcx
-               	addq	%rdi, %rax
-               	movq	%rcx, %rdi
-               	testq	%rdi, %rdi
+               	leaq	-0x1(%rax), %rdi
+               	addq	%rax, %rcx
+               	movq	%rdi, %rax
+               	testl	%eax, %eax
                	jg	<addr>
-               	addq	$0x0, %rax
+               	leaq	(%rcx), %rax
                	retq
 
 <main>:
@@ -47,7 +46,6 @@ Disassembly of section .text:
                	cmpq	$0x13ba, %rax           # imm = 0x13BA
                	jne	<addr>
                	xorl	%eax, %eax
-               	movslq	%eax, %rax
                	popq	%rbp
                	retq
                	movl	$0x1, %eax

@@ -120,7 +120,6 @@ Disassembly of section .text:
                	cmpl	$0x21, %eax
                	jne	<addr>
                	xorl	%eax, %eax
-               	movslq	%eax, %rax
                	leaq	-0x10(%rbp), %rsp
                	leave
                	retq

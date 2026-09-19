@@ -52,14 +52,14 @@ Disassembly of section .text:
                	andq	$0x1ffff, %rdx          # imm = 0x1FFFF
                	shlq	$0x2f, %rdx
                	sarq	$0x2f, %rdx
-               	cmpq	$0xfde8, %rdx           # imm = 0xFDE8
+               	cmpl	$0xfde8, %edx           # imm = 0xFDE8
                	jne	<addr>
                	andq	$0xffff, %rcx           # imm = 0xFFFF
                	sarq	%rcx
                	andq	$0x3ff, %rcx            # imm = 0x3FF
                	shlq	$0x36, %rcx
                	sarq	$0x36, %rcx
-               	cmpq	$0x1f4, %rcx            # imm = 0x1F4
+               	cmpl	$0x1f4, %ecx            # imm = 0x1F4
                	jne	<addr>
                	movzbq	(%rax), %rcx
                	andq	$-0x8, %rcx
@@ -76,14 +76,14 @@ Disassembly of section .text:
                	andq	$0x7, %rdx
                	shlq	$0x3d, %rdx
                	sarq	$0x3d, %rdx
-               	cmpq	$0x3, %rdx
+               	cmpl	$0x3, %edx
                	jne	<addr>
                	andq	$0xffff, %rcx           # imm = 0xFFFF
                	sarq	$0x3, %rcx
                	andq	$0x7f, %rcx
                	shlq	$0x39, %rcx
                	sarq	$0x39, %rcx
-               	cmpq	$0x3c, %rcx
+               	cmpl	$0x3c, %ecx
                	jne	<addr>
                	leaq	0x1(%rax), %rcx
                	movzwq	(%rcx), %rdx

@@ -107,7 +107,7 @@ Disassembly of section .text:
                	stp	xzr, xzr, [x17]
                	cmp	w0, #0x200
                	b.ge	<addr>
-               	ldrb	w2, [x1, w0, sxtw]
+               	ldrb	w2, [x1, x0]
                	cbnz	x2, <addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x200

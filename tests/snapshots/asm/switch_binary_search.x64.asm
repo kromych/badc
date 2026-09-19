@@ -68,21 +68,21 @@ Disassembly of section .text:
                	retq
 
 <classify_unsigned>:
-               	movl	%edi, %eax
-               	cmpl	$0x7fffffff, %eax       # imm = 0x7FFFFFFF
+               	cmpl	$0x7fffffff, %edi       # imm = 0x7FFFFFFF
                	jb	<addr>
                	movl	$0x80000000, %r11d      # imm = 0x80000000
-               	movq	%rax, %rcx
-               	cmpl	%r11d, %eax
+               	movq	%rdi, %rax
+               	cmpl	%r11d, %edi
                	jb	<addr>
                	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	movq	%rax, %rcx
-               	cmpl	%r11d, %eax
+               	movq	%rdi, %rax
+               	cmpl	%r11d, %edi
                	jb	<addr>
                	movl	$0x5, %eax
                	retq
                	movl	$0x80000000, %r11d      # imm = 0x80000000
-               	cmpl	%r11d, %eax
+               	movq	%rdi, %rax
+               	cmpl	%r11d, %edi
                	je	<addr>
                	xorl	%eax, %eax
                	retq
@@ -90,13 +90,13 @@ Disassembly of section .text:
                	retq
                	movl	$0x3, %eax
                	retq
-               	cmpl	$0x5, %eax
+               	cmpl	$0x5, %edi
                	jb	<addr>
-               	cmpl	$0x5, %eax
+               	cmpl	$0x5, %edi
                	jne	<addr>
                	movl	$0x2, %eax
                	retq
-               	testq	%rax, %rax
+               	testl	%edi, %edi
                	jne	<addr>
                	movl	$0x1, %eax
                	retq

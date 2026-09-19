@@ -51,7 +51,7 @@ Disassembly of section .text:
                	cmp	w1, #0x1
                	b.lo	<addr>
                	mov	x1, #0x14               // =20
-               	cmp	x1, #0x14
+               	cmp	w1, #0x14
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ret
@@ -64,40 +64,39 @@ Disassembly of section .text:
                	cmp	w1, #0x1
                	b.lo	<addr>
                	mov	x1, #0x14               // =20
-               	cmp	x1, #0xa
+               	cmp	w1, #0xa
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	ret
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	str	x0, [x1]
-               	ldr	x2, [x1]
-               	mov	x1, #0x0                // =0
+               	ldr	x1, [x1]
+               	mov	x2, #0x0                // =0
                	mov	x17, #0x1092            // =4242
-               	cmp	x2, x17
+               	cmp	x1, x17
                	b.ne	<addr>
-               	mov	x2, x0
-               	sxtw	x2, w2
-               	cbz	x2, <addr>
+               	mov	x1, x0
+               	cbz	x1, <addr>
                	mov	x0, #0x5                // =5
                	ret
-               	adrp	x2, <page>
-               	add	x2, x2, <lo12>
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
                	mov	x3, #0x1092             // =4242
-               	str	x3, [x2]
-               	ldr	x2, [x2]
+               	str	x3, [x1]
+               	ldr	x1, [x1]
                	mov	x17, #0x1092            // =4242
-               	cmp	x2, x17
+               	cmp	x1, x17
                	b.ne	<addr>
                	cmp	w0, #0x1
                	b.eq	<addr>
                	mov	x0, #0x6                // =6
                	ret
-               	mov	x0, x1
+               	mov	x0, x2
                	ret
-               	mov	x0, x1
+               	mov	x0, x2
                	b	<addr>
-               	mov	x2, x1
+               	mov	x1, x2
                	b	<addr>
                	mov	x1, #0xa                // =10
                	b	<addr>

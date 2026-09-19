@@ -24,9 +24,9 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	cmp	w0, #0xc
                	b.ge	<addr>
-               	ldrsb	x4, [x2, w0, sxtw]
-               	ldrsb	x3, [x1, w0, sxtw]
-               	cmp	w4, w3
+               	ldrsb	x3, [x2, x0]
+               	ldrsb	x4, [x1, x0]
+               	cmp	w3, w4
                	b.ne	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0xc
@@ -49,9 +49,9 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	cmp	w0, #0xc
                	b.ge	<addr>
-               	ldrsb	x4, [x2, w0, sxtw]
-               	ldrsb	x3, [x1, w0, sxtw]
-               	cmp	w4, w3
+               	ldrsb	x3, [x2, x0]
+               	ldrsb	x4, [x1, x0]
+               	cmp	w3, w4
                	b.ne	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0xc

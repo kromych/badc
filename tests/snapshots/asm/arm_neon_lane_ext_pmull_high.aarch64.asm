@@ -273,37 +273,35 @@ Disassembly of section .text:
                	ldr	d2, [sp, #0x1d8]
                	pmull	v0.1q, v1.1d, v2.1d
                	str	q0, [x0]
-               	mov	x4, #0xcdef             // =52719
-               	movk	x4, #0x89ab, lsl #16
-               	movk	x4, #0x4567, lsl #32
-               	movk	x4, #0x123, lsl #48
+               	mov	x3, #0xcdef             // =52719
+               	movk	x3, #0x89ab, lsl #16
+               	movk	x3, #0x4567, lsl #32
+               	movk	x3, #0x123, lsl #48
                	mov	x5, #0xff00             // =65280
                	movk	x5, #0xddee, lsl #16
                	movk	x5, #0xbbcc, lsl #32
                	movk	x5, #0x99aa, lsl #48
-               	sub	x2, x29, #0x100
-               	sub	x3, x29, #0xf0
+               	sub	x1, x29, #0x100
+               	sub	x2, x29, #0xf0
                	mov	x0, #0x0                // =0
+               	str	x0, [x1]
                	str	x0, [x2]
-               	str	x0, [x3]
                	cmp	w0, #0x40
                	b.ge	<addr>
-               	sxtw	x1, w0
-               	lsr	x6, x5, x1
-               	and	x6, x6, #0x1
-               	cbz	x6, <addr>
+               	lsr	x4, x5, x0
+               	and	x4, x4, #0x1
+               	cbz	x4, <addr>
+               	ldr	x4, [x1]
+               	lsl	x6, x3, x0
+               	eor	x4, x4, x6
+               	str	x4, [x1]
+               	cbz	x0, <addr>
                	ldr	x6, [x2]
-               	lsl	x7, x4, x1
-               	eor	x6, x6, x7
-               	str	x6, [x2]
-               	cbz	x1, <addr>
-               	ldr	x1, [x3]
-               	mov	x6, #0x40               // =64
-               	sub	x6, x6, x0
-               	sxtw	x6, w6
-               	lsr	x6, x4, x6
-               	eor	x1, x1, x6
-               	str	x1, [x3]
+               	mov	x4, #0x40               // =64
+               	sub	x4, x4, x0
+               	lsr	x4, x3, x4
+               	eor	x4, x6, x4
+               	str	x4, [x2]
                	add	x0, x0, #0x1
                	cmp	w0, #0x40
                	b.lt	<addr>

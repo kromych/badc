@@ -19,29 +19,27 @@ Disassembly of section .text:
                	ldr	w1, [x1]
                	mov	x17, #0xa               // =10
                	mul	x1, x1, x17
-               	mov	w1, w1
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	ldr	w2, [x2]
                	add	x1, x1, x2
-               	mov	w2, w1
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	x1, [x1]
-               	ldrsw	x3, [x1]
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
+               	ldr	x2, [x2]
+               	ldrsw	x3, [x2]
                	add	x3, x3, #0x1
-               	str	w3, [x1]
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	x1, [x1]
-               	ldrsw	x3, [x1, #0x4]
+               	str	w3, [x2]
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
+               	ldr	x2, [x2]
+               	ldrsw	x3, [x2, #0x4]
                	add	x3, x3, #0xa
-               	str	w3, [x1, #0x4]
+               	str	w3, [x2, #0x4]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	x0, [x0]
                	ldrsw	x0, [x0]
-               	add	x0, x2, x0
+               	add	x0, x1, x0
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	ldr	x1, [x2]

@@ -377,9 +377,9 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
     v371 Imm(16711680)                                    -> x0
     v372 StoreLocal { off=-2, value=v371, kind=I32, volatile } -> -
     v373 LoadLocal { off=-2, kind=I32, volatile }         -> x0
-    v374 BinopI { op=and, lhs=v373, rhs_imm=4294967295 }  -> x0
-    v375 BinopI { op=sub, lhs=v374, rhs_imm=1 }           -> x1
-    v376 BinopI { op=xor, lhs=v374, rhs_imm=-1 }          -> x2
+    v374 BinopI { op=and, lhs=v373, rhs_imm=4294967295 }  -> x1
+    v375 BinopI { op=sub, lhs=v373, rhs_imm=1 }           -> x1
+    v376 BinopI { op=xor, lhs=v373, rhs_imm=-1 }          -> x2
     v377 Binop { op=and, lhs=v375, rhs=v376 }             -> x1
     v378 BinopI { op=and, lhs=v377, rhs_imm=4294967295 }  -> x1
     v379 BinopI { op=shru, lhs=v378, rhs_imm=1 }          -> x2
@@ -398,7 +398,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
     v392 Binop { op=add, lhs=v390, rhs=v391 }             -> x1
     v393 BinopI { op=and, lhs=v392, rhs_imm=127 }         -> x1
     v394 BinopI { op=add, lhs=v393, rhs_imm=1 }           -> x1
-    v395 BinopI { op=ne, lhs=v374, rhs_imm=0 }            -> x0
+    v395 BinopI { op=ne, lhs=v373, rhs_imm=0 }            -> x0
     v396 Binop { op=mul, lhs=v394, rhs=v395 }             -> x0
     v397 Imm(17)                                          -> x1
     v398 Extend { value=v396, kind=I32 }                  -> x1
@@ -414,9 +414,9 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
     v417 Imm(0)                                           -> x1
     v418 StoreLocal { off=-1, value=v417, kind=I32, volatile } -> -
     v419 LoadLocal { off=-1, kind=I32, volatile }         -> x0
-    v420 BinopI { op=and, lhs=v419, rhs_imm=4294967295 }  -> x0
-    v421 BinopI { op=sub, lhs=v420, rhs_imm=1 }           -> x2
-    v422 BinopI { op=xor, lhs=v420, rhs_imm=-1 }          -> x6
+    v420 BinopI { op=and, lhs=v419, rhs_imm=4294967295 }  -> x2
+    v421 BinopI { op=sub, lhs=v419, rhs_imm=1 }           -> x2
+    v422 BinopI { op=xor, lhs=v419, rhs_imm=-1 }          -> x6
     v423 Binop { op=and, lhs=v421, rhs=v422 }             -> x2
     v424 BinopI { op=and, lhs=v423, rhs_imm=4294967295 }  -> x2
     v425 BinopI { op=shru, lhs=v424, rhs_imm=1 }          -> x6
@@ -435,7 +435,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
     v438 Binop { op=add, lhs=v436, rhs=v437 }             -> x2
     v439 BinopI { op=and, lhs=v438, rhs_imm=127 }         -> x2
     v440 BinopI { op=add, lhs=v439, rhs_imm=1 }           -> x2
-    v441 BinopI { op=ne, lhs=v420, rhs_imm=0 }            -> x0
+    v441 BinopI { op=ne, lhs=v419, rhs_imm=0 }            -> x0
     v442 Binop { op=mul, lhs=v440, rhs=v441 }             -> x0
     v443 Extend { value=v442, kind=I32 }                  -> x2
     v444 Imm(0)                                           -> x2

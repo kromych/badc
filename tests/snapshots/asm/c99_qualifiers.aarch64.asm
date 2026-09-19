@@ -22,12 +22,12 @@ Disassembly of section .text:
                	sub	x2, x29, #0x8
                	mov	x1, #0x0                // =0
                	mov	x0, x1
-               	cmp	x1, #0x1
+               	cmp	w1, #0x1
                	b.hs	<addr>
                	ldrsw	x1, [x2]
                	add	x0, x0, x1
                	mov	x1, #0x1                // =1
-               	cmp	x1, #0x1
+               	cmp	w1, #0x1
                	b.lo	<addr>
                	cmp	w0, #0x7
                	b.eq	<addr>

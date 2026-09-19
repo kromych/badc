@@ -157,7 +157,6 @@ Disassembly of section .text:
                	cbnz	w0, <addr>
                	mov	x0, #0x1f               // =31
                	cbz	w0, <addr>
-               	sxtw	x0, w0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>

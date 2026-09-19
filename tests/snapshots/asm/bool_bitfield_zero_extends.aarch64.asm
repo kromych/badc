@@ -35,7 +35,6 @@ Disassembly of section .text:
                	and	x1, x1, #0xfffffffffffffbff
                	orr	x1, x1, #0x400
                	str	w1, [x0]
-               	mov	w1, w1
                	and	x1, x1, #0xfffffffffffff7ff
                	orr	x1, x1, #0x800
                	str	w1, [x0]
@@ -87,7 +86,7 @@ Disassembly of section .text:
                	lsl	x0, x0, #63
                	asr	x0, x0, #63
                	mov	x17, #-0x1              // =-1
-               	cmp	x0, x17
+               	cmp	w0, w17
                	b.eq	<addr>
                	mov	x0, #0x6                // =6
                	add	sp, sp, #0x10

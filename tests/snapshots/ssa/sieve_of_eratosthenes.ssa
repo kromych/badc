@@ -61,8 +61,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
   block 8  start_pc=0
     v44  ImmData(16)                                      -> x6
     v45  Extend { value=v40, kind=I32 }                   -> x6
-    v46  Binop { op=add, lhs=v19, rhs=v45 }               -> x7
-    v47  LoadIndexed { base=v19, index=v45, scale=1, kind=I8 } -> x6
+    v46  Binop { op=add, lhs=v19, rhs=v40 }               -> x6
+    v47  LoadIndexed { base=v19, index=v40, scale=1, kind=I8 } -> x6
     v48  BinopI { op=eq, lhs=v47, rhs_imm=0 }             -> x7
     terminator Bnz { cond=v47, target=b10, fall=b9 }   (exit_acc=v48)
   block 9  start_pc=0
@@ -96,8 +96,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v62  Phi { incoming=[b14:v58, b16:v60], kind=I64 }    -> x0
     v63  Imm(0)                                           -> x1
     v64  BinopI { op=shl, lhs=v62, rhs_imm=32 }           -> x1
-    v65  Extend { value=v62, kind=I32 }                   -> x0
-    terminator Return(v65)   (exit_acc=v65)
+    v65  Extend { value=v62, kind=I32 }                   -> x1
+    terminator Return(v62)   (exit_acc=v62)
   block 16  start_pc=0
     v60  Imm(1)                                           -> x0
     v61  Imm(0)                                           -> x1

@@ -40,7 +40,6 @@ Disassembly of section .text:
                	addq	%r8, %rax
                	movsbq	%dl, %rcx
                	addq	%rcx, %rax
-               	movslq	%eax, %rax
                	retq
 
 <two_pages>:

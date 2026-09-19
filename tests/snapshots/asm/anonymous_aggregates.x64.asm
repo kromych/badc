@@ -66,7 +66,6 @@ Disassembly of section .text:
                	movl	$0x9, %ecx
                	movl	%ecx, 0x8(%rax)
                	movslq	0x4(%rax), %rax
-               	movl	%eax, %eax
                	cmpl	$0x56781234, %eax       # imm = 0x56781234
                	je	<addr>
                	movl	$0x22, %eax

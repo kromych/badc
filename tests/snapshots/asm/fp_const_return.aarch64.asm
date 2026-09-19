@@ -19,7 +19,7 @@ Disassembly of section .text:
                	cmp	w0, #0x0
                	b.le	<addr>
                	sub	x1, x0, #0x1
-               	ldr	x1, [x2, w1, sxtw #3]
+               	ldr	x1, [x2, x1, lsl #3]
                	cbnz	x1, <addr>
                	sub	x0, x0, #0x1
                	cmp	w0, #0x0
@@ -29,7 +29,7 @@ Disassembly of section .text:
                	fmov	d0, x0
                	ret
                	sub	x0, x0, #0x1
-               	ldr	x0, [x2, w0, sxtw #3]
+               	ldr	x0, [x2, x0, lsl #3]
                	scvtf	d0, x0
                	ret
 
@@ -56,8 +56,7 @@ Disassembly of section .text:
                	fmov	d0, x17
                	cmp	w0, #0x2
                	b.ge	<addr>
-               	sxtw	x2, w0
-               	lsl	x2, x2, #3
+               	lsl	x2, x0, #3
                	add	x2, x1, x2
                	ldr	d0, [x2]
                	add	x0, x0, #0x1
@@ -77,8 +76,7 @@ Disassembly of section .text:
                	fmov	d0, x17
                	cmp	w0, #0x2
                	b.ge	<addr>
-               	sxtw	x2, w0
-               	lsl	x2, x2, #3
+               	lsl	x2, x0, #3
                	add	x2, x1, x2
                	ldr	d0, [x2]
                	add	x0, x0, #0x1
@@ -99,8 +97,7 @@ Disassembly of section .text:
                	fmov	d0, x17
                	cmp	w0, #0x2
                	b.ge	<addr>
-               	sxtw	x2, w0
-               	lsl	x2, x2, #3
+               	lsl	x2, x0, #3
                	add	x2, x1, x2
                	ldr	d0, [x2]
                	add	x0, x0, #0x1
@@ -121,8 +118,7 @@ Disassembly of section .text:
                	fmov	d0, x17
                	cmp	w0, #0x2
                	b.ge	<addr>
-               	sxtw	x2, w0
-               	lsl	x2, x2, #3
+               	lsl	x2, x0, #3
                	add	x2, x1, x2
                	ldr	d0, [x2]
                	add	x0, x0, #0x1
@@ -145,8 +141,7 @@ Disassembly of section .text:
                	fmov	d0, x17
                	cmp	w0, #0x2
                	b.ge	<addr>
-               	sxtw	x2, w0
-               	lsl	x2, x2, #3
+               	lsl	x2, x0, #3
                	add	x2, x1, x2
                	ldr	d0, [x2]
                	add	x0, x0, #0x1

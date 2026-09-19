@@ -91,7 +91,6 @@ Disassembly of section .text:
                	cmpq	%rsi, %rdx
                	je	<addr>
                	movl	$0x1, %eax
-               	movslq	%eax, %rax
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0xa, %eax
@@ -123,7 +122,6 @@ Disassembly of section .text:
                	cmpq	%rdi, %rsi
                	je	<addr>
                	movl	$0x1, %eax
-               	movslq	%eax, %rax
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0xc, %eax
@@ -157,7 +155,6 @@ Disassembly of section .text:
                	cmpq	%rdi, %rsi
                	je	<addr>
                	movl	$0x1, %eax
-               	movslq	%eax, %rax
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0xe, %eax
@@ -250,7 +247,6 @@ Disassembly of section .text:
                	cmpq	%rsi, %rdx
                	je	<addr>
                	movl	$0x1, %eax
-               	movslq	%eax, %rax
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x14, %eax
@@ -280,7 +276,6 @@ Disassembly of section .text:
                	cmpq	%rsi, %rcx
                	je	<addr>
                	movl	$0x2, %eax
-               	movslq	%eax, %rax
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x16, %eax
@@ -303,7 +298,6 @@ Disassembly of section .text:
                	cmpq	%rax, %rdx
                	je	<addr>
                	movl	$0x1, %eax
-               	movslq	%eax, %rax
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x18, %eax
@@ -326,7 +320,6 @@ Disassembly of section .text:
                	cmpq	%rdi, %rdx
                	je	<addr>
                	movl	$0x1, %eax
-               	movslq	%eax, %rax
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x1a, %eax
@@ -351,7 +344,6 @@ Disassembly of section .text:
                	cmpq	%rdi, %rsi
                	je	<addr>
                	movl	$0x1, %eax
-               	movslq	%eax, %rax
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x1c, %eax

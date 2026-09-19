@@ -60,7 +60,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x38, %rsp
+               	subq	$0x18, %rsp
                	pushq	%r15
                	pushq	%r14
                	pushq	%r13
@@ -137,7 +137,7 @@ Disassembly of section .text:
                	movabsq	$0x4000000000000000, %rax # imm = 0x4000000000000000
                	movq	%rax, %xmm0
                	callq	<addr>
-               	movsd	%xmm0, 0x58(%rsp)
+               	movsd	%xmm0, 0x38(%rsp)
                	movl	$0x3, %edi
                	callq	<addr>
                	movq	%rax, %r12
@@ -147,7 +147,7 @@ Disassembly of section .text:
                	xorps	%xmm1, %xmm1
                	cvtsi2sd	%rbx, %xmm1
                	movabsq	$0x4000000000000000, %rax # imm = 0x4000000000000000
-               	movsd	0x58(%rsp), %xmm14
+               	movsd	0x38(%rsp), %xmm14
                	movq	%rax, %xmm15
                	movapd	%xmm1, %xmm2
                	vfmadd231sd	%xmm15, %xmm14, %xmm2 # xmm2 = (xmm14 * xmm15) + xmm2

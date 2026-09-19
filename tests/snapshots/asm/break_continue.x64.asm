@@ -32,12 +32,8 @@ Disassembly of section .text:
                	jge	<addr>
                	cmpl	$0x5, %eax
                	je	<addr>
-               	movslq	%eax, %rdx
-               	movq	%rdx, %rsi
-               	shrq	$0x3f, %rsi
-               	addq	%rsi, %rdx
+               	movq	%rax, %rdx
                	andq	$0x1, %rdx
-               	subq	%rsi, %rdx
                	testq	%rdx, %rdx
                	je	<addr>
                	addq	%rax, %rcx

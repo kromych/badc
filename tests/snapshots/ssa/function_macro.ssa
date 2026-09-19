@@ -261,10 +261,10 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     v23  BinopI { op=ne, lhs=v20, rhs_imm=0 }             -> x1
     terminator Bz { cond=v20, target=b12, fall=b11 }   (low word)   (exit_acc=v23)
   block 11  start_pc=0
-    v8   Extend { value=v20, kind=I32 }                   -> x0
-    v9   BinopI { op=shl, lhs=v8, rhs_imm=32 }            -> x1
-    v10  Extend { value=v8, kind=I32 }                    -> x1
-    terminator Return(v8)   (exit_acc=v8)
+    v8   Extend { value=v20, kind=I32 }                   -> x1
+    v9   BinopI { op=shl, lhs=v20, rhs_imm=32 }           -> x1
+    v10  Extend { value=v20, kind=I32 }                   -> x1
+    terminator Return(v20)   (exit_acc=v20)
   block 12  start_pc=0
     v11  ImmData(96)                                      -> x0
     v12  ImmData(101)                                     -> x1

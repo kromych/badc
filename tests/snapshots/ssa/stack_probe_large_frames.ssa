@@ -41,8 +41,8 @@ fn ent_pc=0 n_params=2 variadic=false locals=0
     v35  Extend { value=v21, kind=I8 }                    -> x1
     v36  Binop { op=add, lhs=v30, rhs=v35 }               -> x0
     v37  BinopI { op=shl, lhs=v36, rhs_imm=32 }           -> x1
-    v38  Extend { value=v36, kind=I32 }                   -> x0
-    terminator Return(v38)   (exit_acc=v38)
+    v38  Extend { value=v36, kind=I32 }                   -> x1
+    terminator Return(v36)   (exit_acc=v36)
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=two_pages
 fn ent_pc=1 n_params=0 variadic=false locals=0

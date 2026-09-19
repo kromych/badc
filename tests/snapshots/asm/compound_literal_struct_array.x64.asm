@@ -535,7 +535,7 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	cmpl	$0x2, %eax
                	jge	<addr>
-               	movslq	%eax, %rdx
+               	movq	%rax, %rdx
                	shlq	$0x3, %rdx
                	addq	%rdi, %rdx
                	movslq	(%rdx), %rsi
@@ -567,7 +567,7 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	cmpl	$0x3, %eax
                	jge	<addr>
-               	movslq	%eax, %rdx
+               	movq	%rax, %rdx
                	shlq	$0x3, %rdx
                	addq	%rdi, %rdx
                	movslq	(%rdx), %rsi

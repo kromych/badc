@@ -93,13 +93,13 @@ fn ent_pc=7 n_params=0 variadic=false locals=1
     v78  Extend { value=v77, kind=I32 }                   -> x1
     v79  BinopI { op=or, lhs=v77, rhs_imm=0 }             -> x3
     v80  Imm(0)                                           -> x0
-    v81  Extend { value=v79, kind=I32 }                   -> x6
+    v81  Extend { value=v79, kind=I32 }                   -> x0
     v82  ImmData(12)                                      -> x7
-    v83  CallExt { binding_idx=0, args=[v82, v81], fp_arg_mask=0x0 } -> x0
+    v83  CallExt { binding_idx=0, args=[v82, v79], fp_arg_mask=0x0 } -> x0
     v84  Extend { value=v79, kind=I32 }                   -> x0
-    v85  BinopI { op=shl, lhs=v84, rhs_imm=32 }           -> x1
-    v86  Extend { value=v84, kind=I32 }                   -> x1
-    terminator Return(v84)   (exit_acc=v84)
+    v85  BinopI { op=shl, lhs=v79, rhs_imm=32 }           -> x0
+    v86  Extend { value=v79, kind=I32 }                   -> x0
+    terminator Return(v79)   (exit_acc=v79)
   block 6  start_pc=0
     v76  Imm(1)                                           -> x0
     terminator Jmp(b5)   (exit_acc=v76)

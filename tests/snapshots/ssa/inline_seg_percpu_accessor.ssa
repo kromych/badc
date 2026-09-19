@@ -65,8 +65,8 @@ fn ent_pc=10 n_params=0 variadic=false locals=1
     v43  Imm(16)                                          -> x1
     v44  BinopI { op=add, lhs=v41, rhs_imm=16 }           -> x0
     v45  SegLoad { addr=v44, kind=U32, seg=Gs }           -> x0
-    v46  BinopI { op=and, lhs=v45, rhs_imm=4294967295 }   -> x0
-    v47  BinopI { op=ne, lhs=v46, rhs_imm=3723427584 }    -> x0
+    v46  BinopI { op=and, lhs=v45, rhs_imm=4294967295 }   -> x1
+    v47  BinopI { op=ne, lhs=v45, rhs_imm=3723427584 }    -> x0
     terminator Bz { cond=v47, target=b10, fall=b9 }   (exit_acc=v47)
   block 9  start_pc=0
     v48  Imm(5)                                           -> x0

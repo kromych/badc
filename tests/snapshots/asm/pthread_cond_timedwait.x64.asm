@@ -94,7 +94,6 @@ Disassembly of section .text:
                	testl	%ebx, %ebx
                	je	<addr>
                	xorl	%eax, %eax
-               	movslq	%eax, %rax
                	popq	%rbx
                	leave
                	retq

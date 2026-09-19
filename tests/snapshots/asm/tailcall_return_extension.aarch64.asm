@@ -78,7 +78,6 @@ Disassembly of section .text:
                	strb	w3, [x0, #0x2]
                	strb	w2, [x0, #0x3]
                	bl	<addr>
-               	mov	w0, w0
                	mov	x17, #0x1000            // =4096
                	movk	x17, #0xfebf, lsl #16
                	cmp	w0, w17
@@ -102,7 +101,6 @@ Disassembly of section .text:
                	strb	w20, [x0, #0x3]
                	mov	x1, #0x0                // =0
                	bl	<addr>
-               	mov	w0, w0
                	mov	x17, #0x1000            // =4096
                	movk	x17, #0x7fbf, lsl #16
                	cmp	w0, w17

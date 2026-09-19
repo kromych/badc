@@ -38,7 +38,6 @@ Disassembly of section .text:
                	cmp	w0, #0x2
                	b.eq	<addr>
                	mov	x0, #0x190              // =400
-               	sxtw	x0, w0
                	ret
                	mov	x0, #0x12c              // =300
                	b	<addr>

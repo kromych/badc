@@ -14,7 +14,6 @@ Disassembly of section .text:
                	brk	#0x1
 
 <u32>:
-               	mov	w0, w0
                	mov	x17, #0xfffffffe        // =4294967294
                	cmp	w0, w17
                	b.lo	<addr>

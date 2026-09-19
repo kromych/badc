@@ -19,9 +19,6 @@ Disassembly of section .text:
                	add	x0, x0, #0x0, lsl #12   // =0x0
                	add	x0, x0, #0x20
                	and	x2, x0, #0xf
-               	cmp	w2, #0x0
-               	cset	x2, ne
-               	sxtw	x2, w2
                	cbz	x2, <addr>
                	add	x0, x1, #0x1
                	sxtw	x0, w0

@@ -13,8 +13,8 @@ fn ent_pc=6 n_params=0 variadic=false locals=0
     v7   Imm(0)                                           -> x2
     v8   Imm(0)                                           -> x2
     v9   Binop { op=ule, lhs=v2, rhs=v5 }                 -> x2
-    v10  Extend { value=v9, kind=I32 }                    -> x2
-    terminator Bz { cond=v10, target=b2, fall=b1 }   (exit_acc=v10)
+    v10  Extend { value=v9, kind=I32 }                    -> x6
+    terminator Bz { cond=v9, target=b2, fall=b1 }   (exit_acc=v9)
   block 1  start_pc=0
     v11  Imm(1)                                           -> x0
     terminator Return(v11)   (exit_acc=v11)
@@ -32,8 +32,8 @@ fn ent_pc=6 n_params=0 variadic=false locals=0
     v18  Imm(0)                                           -> x2
     v19  Imm(0)                                           -> x2
     v20  Binop { op=ult, lhs=v2, rhs=v5 }                 -> x2
-    v21  Extend { value=v20, kind=I32 }                   -> x2
-    terminator Bz { cond=v21, target=b6, fall=b5 }   (exit_acc=v21)
+    v21  Extend { value=v20, kind=I32 }                   -> x6
+    terminator Bz { cond=v20, target=b6, fall=b5 }   (exit_acc=v20)
   block 5  start_pc=0
     v22  Imm(3)                                           -> x0
     terminator Return(v22)   (exit_acc=v22)

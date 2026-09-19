@@ -65,27 +65,18 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	and	x0, x0, #0x3f
-               	cmp	w0, #0x0
-               	cset	x0, ne
-               	sxtw	x0, w0
                	cbz	x0, <addr>
                	mov	x0, #0x11               // =17
                	ret
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	and	x0, x0, #0x3f
-               	cmp	w0, #0x0
-               	cset	x0, ne
-               	sxtw	x0, w0
                	cbz	x0, <addr>
                	mov	x0, #0x12               // =18
                	ret
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	and	x0, x0, #0x3f
-               	cmp	w0, #0x0
-               	cset	x0, ne
-               	sxtw	x0, w0
                	cbz	x0, <addr>
                	mov	x0, #0x13               // =19
                	ret
@@ -93,9 +84,6 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	add	x0, x0, #0x40
                	and	x0, x0, #0x3f
-               	cmp	w0, #0x0
-               	cset	x0, ne
-               	sxtw	x0, w0
                	cbz	x0, <addr>
                	mov	x0, #0x14               // =20
                	ret
@@ -103,9 +91,6 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	add	x0, x0, #0x0
                	and	x0, x0, #0x3f
-               	cmp	w0, #0x0
-               	cset	x0, ne
-               	sxtw	x0, w0
                	cbz	x0, <addr>
                	mov	x0, #0x15               // =21
                	ret
@@ -113,9 +98,6 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	add	x0, x0, #0x0
                	and	x0, x0, #0x3f
-               	cmp	w0, #0x0
-               	cset	x0, ne
-               	sxtw	x0, w0
                	cbz	x0, <addr>
                	mov	x0, #0x16               // =22
                	ret
@@ -123,49 +105,31 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	add	x0, x0, #0x40
                	and	x0, x0, #0x3f
-               	cmp	w0, #0x0
-               	cset	x0, ne
-               	sxtw	x0, w0
                	cbnz	x0, <addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	add	x0, x0, #0x40
                	and	x0, x0, #0x3f
-               	cmp	w0, #0x0
-               	cset	x0, ne
-               	sxtw	x0, w0
                	cbnz	x0, <addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	add	x0, x0, #0x80
                	and	x0, x0, #0x3f
-               	cmp	w0, #0x0
-               	cset	x0, ne
-               	sxtw	x0, w0
                	cbnz	x0, <addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	add	x0, x0, #0x80
                	and	x0, x0, #0x3f
-               	cmp	w0, #0x0
-               	cset	x0, ne
-               	sxtw	x0, w0
                	cbnz	x0, <addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	add	x0, x0, #0xc0
                	and	x0, x0, #0x3f
-               	cmp	w0, #0x0
-               	cset	x0, ne
-               	sxtw	x0, w0
                	cbnz	x0, <addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	add	x0, x0, #0xc0
                	and	x0, x0, #0x3f
-               	cmp	w0, #0x0
-               	cset	x0, ne
-               	sxtw	x0, w0
                	cbnz	x0, <addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>

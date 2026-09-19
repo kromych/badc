@@ -19,15 +19,14 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	cmp	w0, #0x4
                	b.ge	<addr>
-               	add	x4, x1, #0x20
-               	sxtw	x2, w0
-               	lsl	x3, x2, #3
-               	add	x4, x4, x3
-               	ldrsw	x4, [x4]
-               	cmp	w4, #0x9
+               	add	x3, x1, #0x20
+               	lsl	x2, x0, #3
+               	add	x3, x3, x2
+               	ldrsw	x3, [x3]
+               	cmp	w3, #0x9
                	b.ne	<addr>
-               	add	x4, x1, #0x20
-               	add	x2, x4, x3
+               	add	x3, x1, #0x20
+               	add	x2, x3, x2
                	ldrsw	x2, [x2, #0x4]
                	cmp	w2, #0xa
                	b.ne	<addr>
@@ -39,12 +38,11 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	cmp	w0, #0x4
                	b.ge	<addr>
-               	sxtw	x2, w0
-               	lsl	x3, x2, #3
-               	add	x4, x1, x3
-               	ldrsw	x4, [x4]
-               	cbnz	x4, <addr>
-               	add	x2, x1, x3
+               	lsl	x2, x0, #3
+               	add	x3, x1, x2
+               	ldrsw	x3, [x3]
+               	cbnz	x3, <addr>
+               	add	x2, x1, x2
                	ldrsw	x2, [x2, #0x4]
                	cbnz	x2, <addr>
                	add	x0, x0, #0x1

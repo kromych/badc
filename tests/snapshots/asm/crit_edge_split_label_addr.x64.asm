@@ -72,7 +72,6 @@ Disassembly of section .text:
                	testl	%ecx, %ecx
                	setne	%cl
                	movzbq	%cl, %rcx
-               	movslq	%ecx, %rcx
                	testq	%rcx, %rcx
                	je	<addr>
                	jmp	<addr>
@@ -81,7 +80,6 @@ Disassembly of section .text:
                	testl	%eax, %eax
                	setne	%al
                	movzbq	%al, %rax
-               	movslq	%eax, %rax
                	testq	%rax, %rax
                	je	<addr>
                	jmp	<addr>

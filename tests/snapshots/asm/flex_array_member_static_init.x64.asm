@@ -44,7 +44,6 @@ Disassembly of section .text:
                	cmpl	$-0x1, %esi
                	je	<addr>
                	leaq	0xa(%rdx), %rax
-               	movslq	%eax, %rax
                	retq
                	movl	$0x1, %edx
                	movsbq	0x1(%rax), %rsi
@@ -94,7 +93,6 @@ Disassembly of section .text:
                	cmpl	$0x68, %edi
                	je	<addr>
                	leaq	0x1e(%rcx), %rax
-               	movslq	%eax, %rax
                	retq
                	movl	$0x1, %ecx
                	leaq	<rip>, %rdi

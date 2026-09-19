@@ -21,7 +21,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     terminator Bnz { cond=v36, target=b1, fall=b3 }   (exit_acc=v36)
   block 3  start_pc=0
     v39  Extend { value=v31, kind=I32 }                   -> x1
-    v40  Extend { value=v39, kind=I32 }                   -> x1
+    v40  Extend { value=v31, kind=I32 }                   -> x1
     v41  BinopI { op=ne, lhs=v31, rhs_imm=0 }             -> x1
     v42  Imm(1)                                           -> x1
     v43  Imm(0)                                           -> x1
@@ -44,7 +44,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     terminator Bnz { cond=v49, target=b5, fall=b7 }   (exit_acc=v49)
   block 7  start_pc=0
     v52  Extend { value=v44, kind=I32 }                   -> x1
-    v53  Extend { value=v52, kind=I32 }                   -> x1
+    v53  Extend { value=v44, kind=I32 }                   -> x1
     v54  BinopI { op=ne, lhs=v44, rhs_imm=1 }             -> x0
     v55  BinopI { op=ne, lhs=v54, rhs_imm=0 }             -> x1
     v56  Imm(0)                                           -> x1
@@ -70,7 +70,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     terminator Bnz { cond=v65, target=b9, fall=b11 }   (exit_acc=v65)
   block 11  start_pc=0
     v68  Extend { value=v60, kind=I32 }                   -> x1
-    v69  Extend { value=v68, kind=I32 }                   -> x1
+    v69  Extend { value=v60, kind=I32 }                   -> x1
     v70  BinopI { op=ne, lhs=v60, rhs_imm=2 }             -> x0
     v71  Imm(0)                                           -> x1
     v72  Imm(0)                                           -> x1
@@ -115,7 +115,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     terminator Bnz { cond=v77, target=b14, fall=b16 }   (exit_acc=v77)
   block 16  start_pc=0
     v80  Extend { value=v74, kind=I32 }                   -> x1
-    v81  Extend { value=v80, kind=I32 }                   -> x1
+    v81  Extend { value=v74, kind=I32 }                   -> x1
     v82  BinopI { op=add, lhs=v74, rhs_imm=39 }           -> x0
     v83  BinopI { op=shl, lhs=v82, rhs_imm=32 }           -> x1
     v84  Extend { value=v82, kind=I32 }                   -> x1

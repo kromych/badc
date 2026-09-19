@@ -30,7 +30,6 @@ Disassembly of section .text:
                	testl	%eax, %eax
                	jle	<addr>
                	leaq	-0x1(%rax), %rcx
-               	movslq	%ecx, %rcx
                	movq	(%rdi,%rcx,8), %rcx
                	testq	%rcx, %rcx
                	jne	<addr>
@@ -44,7 +43,6 @@ Disassembly of section .text:
                	movapd	%xmm14, %xmm0
                	retq
                	decq	%rax
-               	movslq	%eax, %rax
                	movq	(%rdi,%rax,8), %rax
                	xorps	%xmm0, %xmm0
                	cvtsi2sd	%rax, %xmm0
@@ -73,7 +71,7 @@ Disassembly of section .text:
                	movq	%r11, %xmm0
                	cmpl	$0x2, %eax
                	jge	<addr>
-               	movslq	%eax, %rdx
+               	movq	%rax, %rdx
                	shlq	$0x3, %rdx
                	addq	%rcx, %rdx
                	movsd	(%rdx,%riz), %xmm0
@@ -94,7 +92,7 @@ Disassembly of section .text:
                	movq	%r11, %xmm0
                	cmpl	$0x2, %eax
                	jge	<addr>
-               	movslq	%eax, %rdx
+               	movq	%rax, %rdx
                	shlq	$0x3, %rdx
                	addq	%rcx, %rdx
                	movsd	(%rdx,%riz), %xmm0
@@ -116,7 +114,7 @@ Disassembly of section .text:
                	movq	%r11, %xmm0
                	cmpl	$0x2, %eax
                	jge	<addr>
-               	movslq	%eax, %rdx
+               	movq	%rax, %rdx
                	shlq	$0x3, %rdx
                	addq	%rcx, %rdx
                	movsd	(%rdx,%riz), %xmm0
@@ -138,7 +136,7 @@ Disassembly of section .text:
                	movq	%r11, %xmm0
                	cmpl	$0x2, %eax
                	jge	<addr>
-               	movslq	%eax, %rdx
+               	movq	%rax, %rdx
                	shlq	$0x3, %rdx
                	addq	%rcx, %rdx
                	movsd	(%rdx,%riz), %xmm0
@@ -162,7 +160,7 @@ Disassembly of section .text:
                	movq	%r11, %xmm0
                	cmpl	$0x2, %eax
                	jge	<addr>
-               	movslq	%eax, %rdx
+               	movq	%rax, %rdx
                	shlq	$0x3, %rdx
                	addq	%rcx, %rdx
                	movsd	(%rdx,%riz), %xmm0

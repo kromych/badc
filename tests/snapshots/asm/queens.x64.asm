@@ -50,20 +50,19 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	cmpl	%r13d, %eax
                	jge	<addr>
-               	movslq	%eax, %rdx
-               	movq	%r13, %rsi
-               	subq	%rdx, %rsi
-               	movslq	(%rbx,%rdx,4), %rcx
+               	movq	%r13, %rdx
+               	subq	%rax, %rdx
+               	movslq	(%rbx,%rax,4), %rcx
                	movq	%rcx, %r10
                	movq	%r12, %rcx
                	subq	%r10, %rcx
                	testl	%ecx, %ecx
                	jge	<addr>
                	imulq	$-0x1, %rcx, %rcx
-               	movslq	(%rbx,%rdx,4), %rdx
-               	cmpl	%r12d, %edx
+               	movslq	(%rbx,%rax,4), %rsi
+               	cmpl	%r12d, %esi
                	je	<addr>
-               	cmpl	%ecx, %esi
+               	cmpl	%ecx, %edx
                	je	<addr>
                	incq	%rax
                	cmpl	%r13d, %eax

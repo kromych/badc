@@ -384,8 +384,7 @@ Disassembly of section .text:
                	movq	%r10, %rcx
                	movq	(%rcx), %rsi
                	leaq	0x1(%rax), %rcx
-               	movslq	%ecx, %rdi
-               	imulq	%rdi, %rsi
+               	imulq	%rcx, %rsi
                	addq	%rsi, %rdx
                	movq	%rcx, %rax
                	movslq	-0xd0(%rbp), %rcx

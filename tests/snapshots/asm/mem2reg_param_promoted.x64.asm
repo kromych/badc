@@ -32,15 +32,13 @@ Disassembly of section .text:
                	pushq	%rbx
                	movslq	%edi, %rbx
                	xorl	%r12d, %r12d
-               	cmpq	$0x2, %rbx
+               	cmpl	$0x2, %ebx
                	jl	<addr>
                	leaq	-0x1(%rbx), %rdi
                	callq	<addr>
-               	movq	%rax, %rcx
-               	leaq	-0x2(%rbx), %rax
-               	movslq	%eax, %rbx
-               	addq	%rcx, %r12
-               	cmpq	$0x2, %rbx
+               	subq	$0x2, %rbx
+               	addq	%rax, %r12
+               	cmpl	$0x2, %ebx
                	jge	<addr>
                	leaq	(%r12,%rbx), %rax
                	popq	%rbx

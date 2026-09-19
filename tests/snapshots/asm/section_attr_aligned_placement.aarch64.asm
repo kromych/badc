@@ -23,63 +23,42 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	and	x1, x0, #0xfff
-               	cmp	w1, #0x0
-               	cset	x1, ne
-               	sxtw	x1, w1
                	cbz	x1, <addr>
                	mov	x0, #0x1                // =1
                	ret
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	and	x1, x1, #0x3f
-               	cmp	w1, #0x0
-               	cset	x1, ne
-               	sxtw	x1, w1
                	cbz	x1, <addr>
                	mov	x0, #0x2                // =2
                	ret
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	and	x1, x1, #0x3f
-               	cmp	w1, #0x0
-               	cset	x1, ne
-               	sxtw	x1, w1
                	cbz	x1, <addr>
                	mov	x0, #0x3                // =3
                	ret
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	and	x1, x1, #0xf
-               	cmp	w1, #0x0
-               	cset	x1, ne
-               	sxtw	x1, w1
                	cbz	x1, <addr>
                	mov	x0, #0x4                // =4
                	ret
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	and	x1, x1, #0xfff
-               	cmp	w1, #0x0
-               	cset	x1, ne
-               	sxtw	x1, w1
                	cbz	x1, <addr>
                	mov	x0, #0x5                // =5
                	ret
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	and	x1, x1, #0x1f
-               	cmp	w1, #0x0
-               	cset	x1, ne
-               	sxtw	x1, w1
                	cbz	x1, <addr>
                	mov	x0, #0x6                // =6
                	ret
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	and	x1, x1, #0x7f
-               	cmp	w1, #0x0
-               	cset	x1, ne
-               	sxtw	x1, w1
                	cbz	x1, <addr>
                	mov	x0, #0x7                // =7
                	ret

@@ -23,12 +23,12 @@ fn ent_pc=2 n_params=0 variadic=false locals=32
     v17  Imm(0)                                           -> x1
     terminator Jmp(b2)   (exit_acc=v16)
   block 1  start_pc=0
-    v22  LocalAddr(-32)                                   -> x2
-    v23  Extend { value=v19, kind=I32 }                   -> x1
-    v24  BinopI { op=shl, lhs=v23, rhs_imm=2 }            -> x6
-    v25  Binop { op=add, lhs=v22, rhs=v24 }               -> x2
-    v26  FpCast { kind=IntToFp, value=v23 }               -> d0 [f32]
-    v27  Imm(1048576000)                                  -> x1 [f32]
+    v22  LocalAddr(-32)                                   -> x1
+    v23  Extend { value=v19, kind=I32 }                   -> x2
+    v24  BinopI { op=shl, lhs=v19, rhs_imm=2 }            -> x2
+    v25  Binop { op=add, lhs=v22, rhs=v24 }               -> x1
+    v26  FpCast { kind=IntToFp, value=v19 }               -> d0 [f32]
+    v27  Imm(1048576000)                                  -> x2 [f32]
     v28  Binop { op=fmul, lhs=v26, rhs=v27 }              -> d0 [f32]
     v29  Store { addr=v25, disp=0, value=v28, kind=F32 }  -> -
     v30  Extend { value=v19, kind=I32 }                   -> x1

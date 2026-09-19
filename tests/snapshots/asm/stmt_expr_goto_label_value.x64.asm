@@ -90,16 +90,16 @@ Disassembly of section .text:
                	jbe	<addr>
                	movq	%r8, %r9
                	movq	%r8, %rbx
-               	cmpq	$0x64, %rdi
+               	cmpl	$0x64, %edi
                	jae	<addr>
-               	cmpq	$0xc8, %r8
+               	cmpl	$0xc8, %r8d
                	jae	<addr>
                	incq	%rbx
                	addq	%rdi, %r9
                	leaq	-0x10(%rbp), %rsi
                	leaq	0x1(%rdi), %rax
                	movl	$0x64, %edi
-               	cmpq	$0x64, %rax
+               	cmpl	$0x64, %eax
                	jae	<addr>
                	movq	%rax, %rdx
                	shrq	$0x6, %rdx
@@ -160,7 +160,7 @@ Disassembly of section .text:
                	ja	<addr>
                	movq	%rax, %rdi
                	incq	%r8
-               	cmpq	$0x64, %rdi
+               	cmpl	$0x64, %edi
                	jb	<addr>
                	cmpq	$0x5, %rbx
                	je	<addr>
@@ -225,7 +225,7 @@ Disassembly of section .text:
                	addq	%rcx, %rax
                	cmpq	$0x64, %rax
                	jbe	<addr>
-               	cmpq	$0x64, %rdi
+               	cmpl	$0x64, %edi
                	je	<addr>
                	movl	$0xb, %eax
                	popq	%rbx

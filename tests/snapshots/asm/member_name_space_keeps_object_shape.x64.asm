@@ -26,65 +26,64 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	xorl	%edi, %edi
+               	xorl	%esi, %esi
                	leaq	<rip>, %rcx
-               	movq	%rdi, %rax
+               	movq	%rsi, %rax
                	cmpl	$0x2, %eax
                	jge	<addr>
-               	movslq	%eax, %rdx
-               	imulq	$0x30, %rdx, %rsi
-               	leaq	(%rcx,%rsi), %r8
-               	addq	$0x0, %r8
-               	leaq	(%r8), %r9
-               	leaq	0x1(%rdi), %r8
-               	movl	%edi, (%r9)
-               	leaq	(%rcx,%rsi), %rdi
-               	leaq	(%rdi), %r9
-               	leaq	0x1(%r8), %rdi
-               	movl	%r8d, 0x4(%r9)
-               	leaq	(%rcx,%rsi), %r8
-               	leaq	(%r8), %r9
-               	leaq	0x1(%rdi), %r8
-               	movl	%edi, 0x8(%r9)
-               	leaq	(%rcx,%rsi), %rdi
-               	leaq	(%rdi), %r9
-               	leaq	0x1(%r8), %rdi
-               	movl	%r8d, 0xc(%r9)
-               	leaq	(%rcx,%rsi), %r8
-               	addq	$0x10, %r8
-               	leaq	(%r8), %r9
-               	leaq	0x1(%rdi), %r8
-               	movl	%edi, (%r9)
-               	leaq	(%rcx,%rsi), %rdi
-               	leaq	0x10(%rdi), %r9
-               	leaq	0x1(%r8), %rdi
-               	movl	%r8d, 0x4(%r9)
-               	addq	%rcx, %rsi
-               	addq	$0x10, %rsi
-               	leaq	0x1(%rdi), %r8
-               	movl	%edi, 0x8(%rsi)
-               	imulq	$0x30, %rdx, %rsi
-               	leaq	(%rcx,%rsi), %rdi
-               	leaq	0x10(%rdi), %r9
-               	leaq	0x1(%r8), %rdi
-               	movl	%r8d, 0xc(%r9)
-               	leaq	(%rcx,%rsi), %r8
-               	addq	$0x20, %r8
-               	leaq	(%r8), %r9
-               	leaq	0x1(%rdi), %r8
-               	movl	%edi, (%r9)
-               	leaq	(%rcx,%rsi), %rdi
-               	leaq	0x20(%rdi), %r9
-               	leaq	0x1(%r8), %rdi
-               	movl	%r8d, 0x4(%r9)
-               	leaq	(%rcx,%rsi), %r8
-               	leaq	0x20(%r8), %r9
-               	leaq	0x1(%rdi), %r8
-               	movl	%edi, 0x8(%r9)
-               	leaq	(%rcx,%rsi), %rdx
+               	imulq	$0x30, %rax, %rdx
+               	leaq	(%rcx,%rdx), %rdi
+               	addq	$0x0, %rdi
+               	leaq	(%rdi), %r8
+               	leaq	0x1(%rsi), %rdi
+               	movl	%esi, (%r8)
+               	leaq	(%rcx,%rdx), %rsi
+               	leaq	(%rsi), %r8
+               	leaq	0x1(%rdi), %rsi
+               	movl	%edi, 0x4(%r8)
+               	leaq	(%rcx,%rdx), %rdi
+               	leaq	(%rdi), %r8
+               	leaq	0x1(%rsi), %rdi
+               	movl	%esi, 0x8(%r8)
+               	leaq	(%rcx,%rdx), %rsi
+               	leaq	(%rsi), %r8
+               	leaq	0x1(%rdi), %rsi
+               	movl	%edi, 0xc(%r8)
+               	leaq	(%rcx,%rdx), %rdi
+               	addq	$0x10, %rdi
+               	leaq	(%rdi), %r8
+               	leaq	0x1(%rsi), %rdi
+               	movl	%esi, (%r8)
+               	leaq	(%rcx,%rdx), %rsi
+               	leaq	0x10(%rsi), %r8
+               	leaq	0x1(%rdi), %rsi
+               	movl	%edi, 0x4(%r8)
+               	leaq	(%rcx,%rdx), %rdi
+               	leaq	0x10(%rdi), %r8
+               	leaq	0x1(%rsi), %rdi
+               	movl	%esi, 0x8(%r8)
+               	addq	%rcx, %rdx
+               	addq	$0x10, %rdx
+               	leaq	0x1(%rdi), %rsi
+               	movl	%edi, 0xc(%rdx)
+               	imulq	$0x30, %rax, %rdx
+               	leaq	(%rcx,%rdx), %rdi
+               	addq	$0x20, %rdi
+               	leaq	(%rdi), %r8
+               	leaq	0x1(%rsi), %rdi
+               	movl	%esi, (%r8)
+               	leaq	(%rcx,%rdx), %rsi
+               	leaq	0x20(%rsi), %r8
+               	leaq	0x1(%rdi), %rsi
+               	movl	%edi, 0x4(%r8)
+               	leaq	(%rcx,%rdx), %rdi
+               	leaq	0x20(%rdi), %r8
+               	leaq	0x1(%rsi), %rdi
+               	movl	%esi, 0x8(%r8)
+               	addq	%rcx, %rdx
                	addq	$0x20, %rdx
-               	leaq	0x1(%r8), %rdi
-               	movl	%r8d, 0xc(%rdx)
+               	leaq	0x1(%rdi), %rsi
+               	movl	%edi, 0xc(%rdx)
                	incq	%rax
                	cmpl	$0x2, %eax
                	jl	<addr>

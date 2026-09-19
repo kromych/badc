@@ -40,7 +40,6 @@ Disassembly of section .text:
                	shrq	%rdx
                	testq	%rdx, %rdx
                	jne	<addr>
-               	movl	%eax, %eax
                	andq	$0xffff, %rax           # imm = 0xFFFF
                	cmpl	$0x5, %eax
                	je	<addr>
@@ -60,7 +59,6 @@ Disassembly of section .text:
                	shrq	%rcx
                	testq	%rcx, %rcx
                	jne	<addr>
-               	movl	%eax, %eax
                	andq	$0xffff, %rax           # imm = 0xFFFF
                	cmpl	$0x12, %eax
                	je	<addr>
@@ -80,7 +78,6 @@ Disassembly of section .text:
                	shrq	%rdx
                	testq	%rdx, %rdx
                	jne	<addr>
-               	movl	%eax, %eax
                	cmpl	$0x5, %eax
                	je	<addr>
                	movl	$0x3, %eax

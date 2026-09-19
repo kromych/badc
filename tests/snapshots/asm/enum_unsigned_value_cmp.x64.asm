@@ -36,12 +36,7 @@ Disassembly of section .text:
                	movslq	-0x10(%rbp), %rax
                	movl	$0x80000000, %r11d      # imm = 0x80000000
                	xorq	%r11, %rax
-               	movl	%eax, %eax
                	testl	%eax, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x1, %eax
                	leave
@@ -49,14 +44,12 @@ Disassembly of section .text:
                	movslq	-0x10(%rbp), %rax
                	movl	$0x80000000, %r11d      # imm = 0x80000000
                	xorq	%r11, %rax
-               	movl	%eax, %eax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	je	<addr>
                	movl	$0x2, %eax
                	leave
                	retq
                	movslq	-0x8(%rbp), %rax
-               	movl	%eax, %eax
                	movl	$0x80000000, %r11d      # imm = 0x80000000
                	cmpl	%r11d, %eax
                	jae	<addr>
@@ -64,7 +57,6 @@ Disassembly of section .text:
                	leave
                	retq
                	movslq	-0x8(%rbp), %rax
-               	movl	%eax, %eax
                	movl	$0x80000000, %r11d      # imm = 0x80000000
                	cmpl	%r11d, %eax
                	ja	<addr>
@@ -72,7 +64,6 @@ Disassembly of section .text:
                	leave
                	retq
                	movslq	-0x10(%rbp), %rax
-               	movl	%eax, %eax
                	movl	$0x80000000, %r11d      # imm = 0x80000000
                	cmpl	%r11d, %eax
                	jae	<addr>
@@ -80,7 +71,6 @@ Disassembly of section .text:
                	leave
                	retq
                	movslq	-0x10(%rbp), %rax
-               	movl	%eax, %eax
                	movl	$0x80000000, %r11d      # imm = 0x80000000
                	cmpl	%r11d, %eax
                	jbe	<addr>
@@ -96,7 +86,6 @@ Disassembly of section .text:
                	leave
                	retq
                	movslq	-0x10(%rbp), %rax
-               	movl	%eax, %eax
                	movl	$0x80000000, %r11d      # imm = 0x80000000
                	cmpl	%r11d, %eax
                	je	<addr>

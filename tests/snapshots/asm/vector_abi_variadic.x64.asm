@@ -292,7 +292,6 @@ Disassembly of section .text:
                	movzbq	(%rcx), %rdx
                	movzbq	0x7(%rcx), %rcx
                	addq	%rdx, %rcx
-               	movslq	%ecx, %rcx
                	xorps	%xmm2, %xmm2
                	cvtsi2sd	%rcx, %xmm2
                	addsd	%xmm2, %xmm1

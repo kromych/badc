@@ -22,9 +22,8 @@ Disassembly of section .text:
                	cmp	w0, #0x100
                	b.ge	<addr>
                	sub	x3, x29, #0x400
-               	sxtw	x4, w0
-               	lsl	x5, x4, #2
-               	add	x2, x3, x5
+               	lsl	x4, x0, #2
+               	add	x2, x3, x4
                	strh	w1, [x2]
                	strh	w1, [x2, #0x2]
                	add	x0, x0, #0x1
@@ -47,22 +46,21 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x0                // =0
-               	mov	x7, #0xc                // =12
-               	mov	x8, #0x64               // =100
+               	mov	x6, #0xc                // =12
+               	mov	x7, #0x64               // =100
                	cmp	w0, #0xa
                	b.ge	<addr>
-               	sub	x4, x29, #0x78
-               	sxtw	x2, w0
-               	mul	x5, x2, x7
-               	add	x3, x4, x5
-               	add	x9, x3, #0x0
-               	mul	x1, x2, x8
-               	add	x6, x1, #0x0
-               	str	w6, [x9]
-               	add	x6, x1, #0x1
-               	str	w6, [x3, #0x4]
+               	sub	x3, x29, #0x78
+               	mul	x4, x0, x6
+               	add	x2, x3, x4
+               	add	x8, x2, #0x0
+               	mul	x1, x0, x7
+               	add	x5, x1, #0x0
+               	str	w5, [x8]
+               	add	x5, x1, #0x1
+               	str	w5, [x2, #0x4]
                	add	x1, x1, #0x2
-               	str	w1, [x3, #0x8]
+               	str	w1, [x2, #0x8]
                	add	x0, x0, #0x1
                	cmp	w0, #0xa
                	b.lt	<addr>
@@ -79,29 +77,24 @@ Disassembly of section .text:
                	add	sp, sp, #0x400
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x1, #0x0                // =0
-               	cmp	w1, #0x8
+               	mov	x0, #0x0                // =0
+               	cmp	w0, #0x8
                	b.ge	<addr>
-               	sub	x4, x29, #0x20
-               	sxtw	x2, w1
-               	lsl	x5, x2, #2
-               	add	x3, x4, x5
-               	add	x7, x3, #0x0
-               	add	x0, x2, #0x41
-               	add	x6, x0, #0x0
-               	and	x6, x6, #0xff
-               	strb	w6, [x7]
-               	add	x6, x0, #0x1
-               	and	x6, x6, #0xff
-               	strb	w6, [x3, #0x1]
-               	add	x6, x0, #0x2
-               	and	x6, x6, #0xff
-               	strb	w6, [x3, #0x2]
-               	add	x0, x0, #0x3
-               	and	x0, x0, #0xff
-               	strb	w0, [x3, #0x3]
-               	add	x1, x1, #0x1
-               	cmp	w1, #0x8
+               	sub	x3, x29, #0x20
+               	lsl	x4, x0, #2
+               	add	x2, x3, x4
+               	add	x6, x2, #0x0
+               	add	x1, x0, #0x41
+               	add	x5, x1, #0x0
+               	strb	w5, [x6]
+               	add	x5, x1, #0x1
+               	strb	w5, [x2, #0x1]
+               	add	x5, x1, #0x2
+               	strb	w5, [x2, #0x2]
+               	add	x1, x1, #0x3
+               	strb	w1, [x2, #0x3]
+               	add	x0, x0, #0x1
+               	cmp	w0, #0x8
                	b.lt	<addr>
                	sub	x0, x29, #0x20
                	add	x0, x0, #0xc

@@ -22,9 +22,6 @@ Disassembly of section .text:
                	and	sp, x16, #0xffffffffffffffe0
                	add	x0, sp, #0x10
                	and	x1, x0, #0xf
-               	cmp	w1, #0x0
-               	cset	x1, ne
-               	sxtw	x1, w1
                	cbz	x1, <addr>
                	mov	x0, #0x4                // =4
                	sub	sp, x29, #0x50
@@ -33,9 +30,6 @@ Disassembly of section .text:
                	ret
                	mov	x1, sp
                	and	x2, x1, #0x1f
-               	cmp	w2, #0x0
-               	cset	x2, ne
-               	sxtw	x2, w2
                	cbz	x2, <addr>
                	mov	x0, #0x5                // =5
                	sub	sp, x29, #0x50
@@ -86,9 +80,6 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	and	x1, x0, #0xf
-               	cmp	w1, #0x0
-               	cset	x1, ne
-               	sxtw	x1, w1
                	cbz	x1, <addr>
                	mov	x0, #0x9                // =9
                	ldp	x29, x30, [sp], #0x10
@@ -96,9 +87,6 @@ Disassembly of section .text:
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	and	x1, x1, #0x1f
-               	cmp	w1, #0x0
-               	cset	x1, ne
-               	sxtw	x1, w1
                	cbz	x1, <addr>
                	mov	x0, #0xa                // =10
                	ldp	x29, x30, [sp], #0x10
@@ -142,14 +130,9 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	and	x0, x0, #0xf
-               	cmp	w0, #0x0
-               	cset	x0, ne
-               	sxtw	x0, w0
                	cbz	x0, <addr>
                	mov	x0, #0x1                // =1
-               	sxtw	x1, w0
-               	cbz	x1, <addr>
-               	mov	x0, x1
+               	cbz	x0, <addr>
                	ldp	x29, x30, [sp], #0x10
                	ret
                	bl	<addr>
@@ -159,9 +142,6 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	and	x0, x0, #0x3f
-               	cmp	w0, #0x0
-               	cset	x0, ne
-               	sxtw	x0, w0
                	cbz	x0, <addr>
                	mov	x0, #0x2                // =2
                	b	<addr>

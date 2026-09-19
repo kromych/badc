@@ -48,11 +48,11 @@ Disassembly of section .text:
                	jne	<addr>
                	movq	%rax, %rbx
                	orq	$0x0, %rbx
-               	movslq	%ebx, %rsi
                	leaq	<rip>, %rdi
+               	movq	%rbx, %rsi
                	movb	$0x0, %al
                	callq	<addr>
-               	movslq	%ebx, %rax
+               	movq	%rbx, %rax
                	popq	%rbx
                	leave
                	retq

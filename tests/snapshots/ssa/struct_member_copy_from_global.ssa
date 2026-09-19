@@ -69,10 +69,10 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v63  Imm(0)                                           -> x1
     v64  BinopI { op=add, lhs=v54, rhs_imm=0 }            -> x0
     v65  BinopI { op=shl, lhs=v64, rhs_imm=32 }           -> x1
-    v66  Extend { value=v64, kind=I32 }                   -> x0
-    v67  BinopI { op=shl, lhs=v66, rhs_imm=32 }           -> x1
-    v68  Extend { value=v66, kind=I32 }                   -> x1
-    terminator Return(v66)   (exit_acc=v66)
+    v66  Extend { value=v64, kind=I32 }                   -> x1
+    v67  BinopI { op=shl, lhs=v64, rhs_imm=32 }           -> x1
+    v68  Extend { value=v64, kind=I32 }                   -> x1
+    terminator Return(v64)   (exit_acc=v64)
   block 3  start_pc=0
     v42  Imm(-100)                                        -> x0
     terminator Jmp(b2)   (exit_acc=v42)

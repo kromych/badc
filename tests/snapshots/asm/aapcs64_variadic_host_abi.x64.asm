@@ -542,7 +542,7 @@ Disassembly of section .text:
                	cmpq	$0x28f, %rax            # imm = 0x28F
                	je	<addr>
                	orq	$0x40, %rbx
-               	movslq	%ebx, %rax
+               	movq	%rbx, %rax
                	popq	%rbx
                	popq	%r12
                	popq	%r13

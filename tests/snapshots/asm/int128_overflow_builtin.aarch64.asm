@@ -25,7 +25,7 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x1, #0x38               // =56
                	cbz	x1, <addr>
-               	sxtw	x0, w1
+               	mov	x0, x1
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
@@ -40,7 +40,7 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x2, #0x3e               // =62
                	cbz	x2, <addr>
-               	sxtw	x0, w2
+               	mov	x0, x2
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
@@ -53,7 +53,7 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x2, #0x44               // =68
                	cbz	x2, <addr>
-               	sxtw	x0, w2
+               	mov	x0, x2
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
@@ -66,7 +66,7 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x2, #0x47               // =71
                	cbz	x2, <addr>
-               	sxtw	x0, w2
+               	mov	x0, x2
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
@@ -79,7 +79,6 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x4a               // =74
                	cbz	x0, <addr>
-               	sxtw	x0, w0
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
@@ -88,14 +87,14 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x17, #-0x1              // =-1
-               	cmp	x2, x17
+               	cmp	w2, w17
                	b.eq	<addr>
                	mov	x0, #0x4b               // =75
                	b	<addr>
                	mov	x0, x1
                	b	<addr>
                	mov	x17, #-0x1              // =-1
-               	cmp	x3, x17
+               	cmp	w3, w17
                	b.eq	<addr>
                	mov	x2, #0x48               // =72
                	b	<addr>
@@ -104,7 +103,7 @@ Disassembly of section .text:
                	mov	x2, x1
                	b	<addr>
                	mov	x17, #-0x1              // =-1
-               	cmp	x3, x17
+               	cmp	w3, w17
                	b.eq	<addr>
                	mov	x2, #0x3f               // =63
                	b	<addr>

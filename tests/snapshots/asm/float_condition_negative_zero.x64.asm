@@ -28,61 +28,59 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	xorl	%edx, %edx
-               	movq	%rdx, %xmm0
+               	xorl	%ecx, %ecx
+               	movq	%rcx, %xmm0
                	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
                	movq	%r10, %xmm15
                	xorpd	%xmm15, %xmm0
-               	movq	%rdx, %xmm15
+               	movq	%rcx, %xmm15
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>
                	je	<addr>
-               	movl	$0x1, %ecx
-               	movq	%rdx, %xmm14
+               	movl	$0x1, %esi
+               	movq	%rcx, %xmm14
                	ucomisd	%xmm0, %xmm14
                	jp	<addr>
                	je	<addr>
-               	orq	$0x2, %rcx
-               	movq	%rdx, %rax
-               	movq	%rdx, %xmm15
+               	orq	$0x2, %rsi
+               	movq	%rcx, %rax
+               	movq	%rcx, %xmm15
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>
                	je	<addr>
                	incq	%rax
                	cmpl	$0x2, %eax
                	jg	<addr>
-               	movq	%rdx, %xmm15
+               	movq	%rcx, %xmm15
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>
                	jne	<addr>
                	testl	%eax, %eax
                	je	<addr>
-               	orq	$0x4, %rcx
+               	orq	$0x4, %rsi
                	xorl	%eax, %eax
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>
                	je	<addr>
-               	orq	$0x8, %rcx
+               	orq	$0x8, %rsi
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>
                	je	<addr>
-               	movl	$0x1, %edx
-               	movslq	%edx, %rdx
-               	testq	%rdx, %rdx
+               	movl	$0x1, %ecx
+               	testq	%rcx, %rcx
                	je	<addr>
-               	orq	$0x10, %rcx
+               	orq	$0x10, %rsi
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>
                	je	<addr>
-               	orq	$0x20, %rcx
+               	orq	$0x20, %rsi
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>
                	jne	<addr>
-               	movslq	%ecx, %rsi
                	testq	%rsi, %rsi
                	je	<addr>
                	leaq	<rip>, %rdi
@@ -97,9 +95,9 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	popq	%rbp
                	retq
-               	orq	$0x40, %rcx
+               	orq	$0x40, %rsi
                	jmp	<addr>
-               	movq	%rax, %rdx
+               	movq	%rax, %rcx
                	jmp	<addr>
-               	movq	%rdx, %rcx
+               	movq	%rcx, %rsi
                	jmp	<addr>

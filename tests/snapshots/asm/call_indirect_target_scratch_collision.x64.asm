@@ -60,7 +60,6 @@ Disassembly of section .text:
                	cmpl	$0x10040, %eax          # imm = 0x10040
                	jne	<addr>
                	xorl	%eax, %eax
-               	movslq	%eax, %rax
                	popq	%rbx
                	leave
                	retq

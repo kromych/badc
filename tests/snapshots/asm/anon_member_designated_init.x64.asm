@@ -70,7 +70,6 @@ Disassembly of section .text:
                	cmpq	%r13, %rax
                	jne	<addr>
                	xorl	%eax, %eax
-               	movslq	%eax, %rax
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x1, %eax

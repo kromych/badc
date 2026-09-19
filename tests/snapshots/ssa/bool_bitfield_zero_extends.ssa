@@ -33,8 +33,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=1
     v27  Imm(-9223372036854775808)                        -> x2
     v28  Imm(-1)                                          -> x2
     v29  LocalAddr(-1)                                    -> x2
-    v30  BinopI { op=and, lhs=v25, rhs_imm=4294967295 }   -> x1
-    v31  BinopI { op=and, lhs=v30, rhs_imm=-2049 }        -> x1
+    v30  BinopI { op=and, lhs=v25, rhs_imm=4294967295 }   -> x2
+    v31  BinopI { op=and, lhs=v25, rhs_imm=-2049 }        -> x1
     v32  Imm(2048)                                        -> x2
     v33  BinopI { op=or, lhs=v31, rhs_imm=2048 }          -> x1
     v34  Store { addr=v1, disp=0, value=v33, kind=I32 }   -> -

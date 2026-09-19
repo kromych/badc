@@ -420,9 +420,9 @@ fn ent_pc=5 n_params=0 variadic=false locals=0
   block 14  start_pc=0
     v111 Phi { incoming=[b15:v91, b13:v108], kind=I64 }   -> x3
     v112 Extend { value=v111, kind=I32 }                  -> x0
-    v113 BinopI { op=shl, lhs=v112, rhs_imm=32 }          -> x1
-    v114 Extend { value=v112, kind=I32 }                  -> x1
-    terminator Return(v112)   (exit_acc=v112)
+    v113 BinopI { op=shl, lhs=v111, rhs_imm=32 }          -> x0
+    v114 Extend { value=v111, kind=I32 }                  -> x0
+    terminator Return(v111)   (exit_acc=v111)
   block 15  start_pc=0
     terminator Jmp(b14)
   block 16  start_pc=0

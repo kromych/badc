@@ -13,7 +13,7 @@ fn ent_pc=1 n_params=1 variadic=false locals=0
     v5   Imm(0)                                           -> x0
     v6   BinopI { op=shl, lhs=v1, rhs_imm=32 }            -> x0
     v7   Extend { value=v1, kind=I32 }                    -> x0
-    terminator Return(v7)   (exit_acc=v7)
+    terminator Return(v1)   (exit_acc=v1)
   block 2  start_pc=0
     v8   Imm(0)                                           -> x0
     v9   BinopI { op=sub, lhs=v1, rhs_imm=1 }             -> x7

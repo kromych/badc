@@ -38,9 +38,8 @@ Disassembly of section .text:
                	callq	<addr>
                	popq	%rbp
                	retq
-               	movslq	%eax, %rcx
-               	movsbq	(%rsi,%rcx), %rdx
-               	movb	%dl, (%rdi,%rcx)
+               	movsbq	(%rsi,%rax), %rcx
+               	movb	%cl, (%rdi,%rax)
                	incq	%rax
                	cmpl	$0x9, %eax
                	jge	<addr>
@@ -59,9 +58,8 @@ Disassembly of section .text:
                	callq	<addr>
                	popq	%rbp
                	retq
-               	movslq	%eax, %rcx
-               	movsbq	(%rsi,%rcx), %rdx
-               	movb	%dl, (%rdi,%rcx)
+               	movsbq	(%rsi,%rax), %rcx
+               	movb	%cl, (%rdi,%rax)
                	incq	%rax
                	cmpl	$0x7, %eax
                	jge	<addr>
@@ -141,11 +139,9 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	cmpl	$0xa, %eax
                	jge	<addr>
-               	movslq	%eax, %rcx
-               	leaq	0x2(%rcx), %rdx
-               	movslq	%edx, %rdx
-               	movsbq	(%rbx,%rcx), %rcx
-               	movb	%cl, (%rbx,%rdx)
+               	leaq	0x2(%rax), %rcx
+               	movsbq	(%rbx,%rax), %rdx
+               	movb	%dl, (%rbx,%rcx)
                	incq	%rax
                	cmpl	$0xa, %eax
                	jl	<addr>

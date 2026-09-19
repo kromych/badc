@@ -34,18 +34,17 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	cmp	w0, w22
                	b.ge	<addr>
-               	sxtw	x2, w0
-               	sub	x3, x22, x2
-               	ldrsw	x1, [x20, x2, lsl #2]
+               	sub	x2, x22, x0
+               	ldrsw	x1, [x20, x0, lsl #2]
                	sub	x1, x21, x1
                	cmp	w1, #0x0
                	b.ge	<addr>
                	mov	x17, #-0x1              // =-1
                	mul	x1, x1, x17
-               	ldrsw	x2, [x20, x2, lsl #2]
-               	cmp	w2, w21
+               	ldrsw	x3, [x20, x0, lsl #2]
+               	cmp	w3, w21
                	b.eq	<addr>
-               	cmp	w3, w1
+               	cmp	w2, w1
                	b.eq	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, w22

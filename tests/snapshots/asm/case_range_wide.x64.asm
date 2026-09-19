@@ -26,33 +26,32 @@ Disassembly of section .text:
                	int3
 
 <classify_u>:
-               	movl	%edi, %eax
-               	cmpl	$0x100000, %eax         # imm = 0x100000
+               	cmpl	$0x100000, %edi         # imm = 0x100000
                	jae	<addr>
-               	cmpl	$0x7, %eax
+               	cmpl	$0x7, %edi
                	jae	<addr>
                	movl	$0xf0000000, %r11d      # imm = 0xF0000000
-               	movq	%rax, %rcx
-               	cmpl	%r11d, %eax
+               	movq	%rdi, %rax
+               	cmpl	%r11d, %edi
                	jae	<addr>
-               	cmpl	$0x5, %eax
+               	cmpl	$0x5, %edi
                	jb	<addr>
-               	cmpl	$0x5, %eax
+               	cmpl	$0x5, %edi
                	je	<addr>
                	xorl	%eax, %eax
                	retq
                	movl	$0x2, %eax
                	retq
-               	testq	%rax, %rax
+               	testl	%edi, %edi
                	jne	<addr>
                	movl	$0x64, %eax
                	retq
                	movl	$0x3, %eax
                	retq
-               	cmpl	$0x9, %eax
+               	cmpl	$0x9, %edi
                	jbe	<addr>
                	jmp	<addr>
-               	cmpl	$0x1fffff, %eax         # imm = 0x1FFFFF
+               	cmpl	$0x1fffff, %edi         # imm = 0x1FFFFF
                	ja	<addr>
                	movl	$0x1, %eax
                	retq

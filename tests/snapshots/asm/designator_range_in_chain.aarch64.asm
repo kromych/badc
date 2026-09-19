@@ -41,15 +41,14 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	cmp	w0, #0x3
                	b.ge	<addr>
-               	add	x4, x1, #0x4
-               	sxtw	x2, w0
-               	lsl	x3, x2, #3
-               	add	x4, x4, x3
-               	ldrsw	x4, [x4]
-               	cmp	w4, #0x7
+               	add	x3, x1, #0x4
+               	lsl	x2, x0, #3
+               	add	x3, x3, x2
+               	ldrsw	x3, [x3]
+               	cmp	w3, #0x7
                	b.ne	<addr>
-               	add	x4, x1, #0x4
-               	add	x2, x4, x3
+               	add	x3, x1, #0x4
+               	add	x2, x3, x2
                	ldrsw	x2, [x2, #0x4]
                	cmp	w2, #0x8
                	b.ne	<addr>

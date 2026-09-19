@@ -153,7 +153,7 @@ fn ent_pc=16 n_params=0 variadic=false locals=0
   block 22  start_pc=0
     v104 Phi { incoming=[b26:v94, b21:v102], kind=I64 }   -> x3
     v105 Extend { value=v104, kind=I32 }                  -> x0
-    terminator Bz { cond=v105, target=b25, fall=b23 }   (exit_acc=v105)
+    terminator Bz { cond=v104, target=b25, fall=b23 }   (exit_acc=v104)
   block 23  start_pc=0
     v106 Imm(11)                                          -> x0
     v107 Imm(0)                                           -> x1
@@ -162,8 +162,8 @@ fn ent_pc=16 n_params=0 variadic=false locals=0
     v110 Phi { incoming=[b23:v106, b25:v108], kind=I64 }  -> x0
     v111 Imm(0)                                           -> x1
     v112 BinopI { op=shl, lhs=v110, rhs_imm=32 }          -> x1
-    v113 Extend { value=v110, kind=I32 }                  -> x0
-    terminator Return(v113)   (exit_acc=v113)
+    v113 Extend { value=v110, kind=I32 }                  -> x1
+    terminator Return(v110)   (exit_acc=v110)
   block 25  start_pc=0
     v108 Imm(0)                                           -> x0
     v109 Imm(0)                                           -> x1

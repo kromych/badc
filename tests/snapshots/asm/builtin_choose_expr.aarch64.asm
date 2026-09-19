@@ -40,8 +40,7 @@ Disassembly of section .text:
                	cmp	w0, #0x10
                	b.ge	<addr>
                	sub	x1, x29, #0x80
-               	sxtw	x2, w0
-               	lsl	x2, x2, #3
+               	lsl	x2, x0, #3
                	add	x1, x1, x2
                	mov	x2, #-0x1               // =-1
                	str	x2, [x1]

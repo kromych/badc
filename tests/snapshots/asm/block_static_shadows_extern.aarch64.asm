@@ -21,7 +21,7 @@ Disassembly of section .text:
                	cmp	w0, w3
                	b.ge	<addr>
                	lsl	x1, x1, #4
-               	ldrb	w4, [x2, w0, sxtw]
+               	ldrb	w4, [x2, x0]
                	add	x1, x1, x4
                	add	x0, x0, #0x1
                	cmp	w0, w3

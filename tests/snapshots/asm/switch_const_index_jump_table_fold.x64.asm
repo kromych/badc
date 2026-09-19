@@ -38,7 +38,7 @@ Disassembly of section .text:
                	movq	(%r11,%rax,8), %r10
                	jmpq	*%r10
                	movl	$0x14, %eax
-               	cmpq	$0x19, %rax
+               	cmpl	$0x19, %eax
                	je	<addr>
                	movl	$0x2, %eax
                	leave
@@ -52,7 +52,7 @@ Disassembly of section .text:
                	movq	(%r11,%rax,8), %r10
                	jmpq	*%r10
                	movl	$0x14, %eax
-               	cmpq	$0x14, %rax
+               	cmpl	$0x14, %eax
                	je	<addr>
                	movl	$0x3, %eax
                	leave
@@ -66,7 +66,7 @@ Disassembly of section .text:
                	movq	(%r11,%rax,8), %r10
                	jmpq	*%r10
                	movl	$0x14, %eax
-               	cmpq	$0x1b, %rax
+               	cmpl	$0x1b, %eax
                	je	<addr>
                	movl	$0x4, %eax
                	leave
@@ -80,7 +80,7 @@ Disassembly of section .text:
                	movq	(%r11,%rax,8), %r10
                	jmpq	*%r10
                	movl	$0x14, %eax
-               	cmpq	$-0x2, %rax
+               	cmpl	$-0x2, %eax
                	je	<addr>
                	movl	$0x5, %eax
                	leave

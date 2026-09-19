@@ -59,7 +59,6 @@ Disassembly of section .text:
                	ret
 
 <classify_unsigned>:
-               	mov	w0, w0
                	mov	x17, #0x7fffffff        // =2147483647
                	cmp	w0, w17
                	b.lo	<addr>
@@ -86,7 +85,7 @@ Disassembly of section .text:
                	b.ne	<addr>
                	mov	x0, #0x2                // =2
                	ret
-               	cbnz	x0, <addr>
+               	cbnz	w0, <addr>
                	mov	x0, #0x1                // =1
                	ret
 

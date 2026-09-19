@@ -33,7 +33,7 @@ Disassembly of section .text:
                	add	x3, x3, x8
                	and	x3, x3, #0x1
                	sub	x3, x3, x8
-               	cbz	x3, <addr>
+               	cbz	w3, <addr>
                	cmp	w2, #0x32
                	b.le	<addr>
                	lsl	x3, x2, #1
@@ -52,7 +52,7 @@ Disassembly of section .text:
                	add	x3, x3, x7
                	and	x3, x3, #0x1
                	sub	x3, x3, x7
-               	cbz	x3, <addr>
+               	cbz	w3, <addr>
                	cmp	w2, #0x32
                	b.le	<addr>
                	lsl	x3, x2, #1
@@ -78,7 +78,6 @@ Disassembly of section .text:
                	cmp	w5, w4
                	b.ne	<addr>
                	mov	x0, #0x0                // =0
-               	sxtw	x0, w0
                	ret
                	mov	x0, #0x1                // =1
                	b	<addr>

@@ -219,7 +219,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=2
     v62  Load { addr=v59, disp=0, kind=I64 }              -> x0
     v63  CallIndirect { target=v62, args=[v61], callee_variadic=false, fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v64  Extend { value=v63, kind=I32 }                   -> x1
-    v65  Extend { value=v64, kind=I32 }                   -> x1
+    v65  Extend { value=v63, kind=I32 }                   -> x1
     v66  BinopI { op=ne, lhs=v63, rhs_imm=4 }             -> x0
     terminator Bz { cond=v66, target=b5, fall=b4 }   (exit_acc=v66)
   block 4  start_pc=0
@@ -231,7 +231,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=2
     v72  Imm(4)                                           -> x7
     v73  CallIndirect { target=v70, args=[v72], callee_variadic=false, fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v74  Extend { value=v73, kind=I32 }                   -> x1
-    v75  Extend { value=v74, kind=I32 }                   -> x1
+    v75  Extend { value=v73, kind=I32 }                   -> x1
     v76  BinopI { op=ne, lhs=v73, rhs_imm=5 }             -> x0
     terminator Bz { cond=v76, target=b7, fall=b6 }   (exit_acc=v76)
   block 6  start_pc=0
@@ -243,7 +243,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=2
     v80  Imm(5)                                           -> x7
     v81  CallIndirect { target=v78, args=[v80], callee_variadic=false, fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v82  Extend { value=v81, kind=I32 }                   -> x1
-    v83  Extend { value=v82, kind=I32 }                   -> x1
+    v83  Extend { value=v81, kind=I32 }                   -> x1
     v84  BinopI { op=ne, lhs=v81, rhs_imm=6 }             -> x0
     terminator Bz { cond=v84, target=b9, fall=b8 }   (exit_acc=v84)
   block 8  start_pc=0

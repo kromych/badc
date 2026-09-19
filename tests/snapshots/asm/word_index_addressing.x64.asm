@@ -96,27 +96,19 @@ Disassembly of section .text:
                	retq
 
 <wrapped_int>:
-               	movl	%esi, %eax
-               	movl	%edx, %ecx
-               	addq	%rcx, %rax
-               	movl	%eax, %eax
+               	leaq	(%rsi,%rdx), %rax
                	movslq	%eax, %rax
                	movslq	(%rdi,%rax,4), %rax
                	retq
 
 <wrapped_unsigned>:
-               	movl	%esi, %eax
-               	movl	%edx, %ecx
-               	addq	%rcx, %rax
+               	leaq	(%rsi,%rdx), %rax
                	movl	%eax, %eax
                	movq	(%rdi,%rax,8), %rax
                	retq
 
 <index_and_value>:
-               	movl	%esi, %eax
-               	movl	%edx, %ecx
-               	addq	%rcx, %rax
-               	movl	%eax, %eax
+               	leaq	(%rsi,%rdx), %rax
                	movslq	%eax, %rax
                	movslq	(%rdi,%rax,4), %rcx
                	addq	%rcx, %rax
@@ -146,25 +138,16 @@ Disassembly of section .text:
                	retq
 
 <sum_from>:
-               	movq	%rsi, %r8
-               	movq	%rcx, %r9
-               	xorl	%ecx, %ecx
-               	movl	%edx, %eax
-               	movl	%eax, %edx
-               	movl	%r9d, %esi
-               	cmpl	%esi, %edx
+               	xorl	%eax, %eax
+               	cmpl	%ecx, %edx
                	jae	<addr>
-               	movl	%r8d, %esi
-               	addq	%rdx, %rsi
-               	movl	%esi, %esi
-               	movzbq	(%rdi,%rsi), %rsi
-               	addq	%rsi, %rcx
-               	leaq	0x1(%rdx), %rax
-               	movl	%eax, %edx
-               	movl	%r9d, %esi
-               	cmpl	%esi, %edx
+               	leaq	(%rsi,%rdx), %r8
+               	movl	%r8d, %r8d
+               	movzbq	(%rdi,%r8), %r8
+               	addq	%r8, %rax
+               	incq	%rdx
+               	cmpl	%ecx, %edx
                	jb	<addr>
-               	movq	%rcx, %rax
                	retq
 
 <main>:

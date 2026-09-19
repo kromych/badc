@@ -181,8 +181,7 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	cmpl	%esi, %eax
                	jge	<addr>
-               	movslq	%eax, %rdx
-               	movsbq	(%rdi,%rdx), %rdx
+               	movsbq	(%rdi,%rax), %rdx
                	testq	%rdx, %rdx
                	jne	<addr>
                	incq	%rcx

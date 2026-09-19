@@ -41,12 +41,12 @@ Disassembly of section .text:
                	testl	%ebx, %ebx
                	je	<addr>
                	leaq	<rip>, %rdi
-               	movslq	%ebx, %rsi
                	movslq	-0x8(%rbp), %rdx
                	movslq	(%rax), %rcx
+               	movq	%rbx, %rsi
                	movb	$0x0, %al
                	callq	<addr>
-               	movslq	%ebx, %rax
+               	movq	%rbx, %rax
                	popq	%rbx
                	leave
                	retq

@@ -33,11 +33,11 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
   block 1  start_pc=0
     v29  ImmData(32)                                      -> x1
     v30  Extend { value=v26, kind=I32 }                   -> x1
-    v31  BinopI { op=shl, lhs=v30, rhs_imm=4 }            -> x2
-    v32  Binop { op=add, lhs=v24, rhs=v31 }               -> x2
-    v33  BinopI { op=mul, lhs=v30, rhs_imm=10 }           -> x1
+    v31  BinopI { op=shl, lhs=v26, rhs_imm=4 }            -> x1
+    v32  Binop { op=add, lhs=v24, rhs=v31 }               -> x1
+    v33  BinopI { op=mul, lhs=v26, rhs_imm=10 }           -> x2
     v34  BinopI { op=shl, lhs=v33, rhs_imm=32 }           -> x9
-    v35  Extend { value=v33, kind=I32 }                   -> x1
+    v35  Extend { value=v33, kind=I32 }                   -> x2
     v36  Imm(0)                                           -> x9
     v37  Imm(0)                                           -> x9
     v38  Imm(0)                                           -> x9
@@ -48,7 +48,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v43  Imm(0)                                           -> x9
     v44  Imm(0)                                           -> x9
     v45  Store { addr=v32, disp=0, value=v35, kind=I64 }  -> -
-    v46  Imm(0)                                           -> x1
+    v46  Imm(0)                                           -> x2
     v47  Store { addr=v32, disp=8, value=v9, kind=I64 }   -> -
     v48  Extend { value=v26, kind=I32 }                   -> x1
     v49  BinopI { op=add, lhs=v26, rhs_imm=1 }            -> x0
@@ -166,8 +166,8 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v152 Phi { incoming=[b4:v148, b6:v150], kind=I64 }    -> x0
     v153 Imm(0)                                           -> x1
     v154 BinopI { op=shl, lhs=v152, rhs_imm=32 }          -> x1
-    v155 Extend { value=v152, kind=I32 }                  -> x0
-    terminator Return(v155)   (exit_acc=v155)
+    v155 Extend { value=v152, kind=I32 }                  -> x1
+    terminator Return(v152)   (exit_acc=v152)
   block 6  start_pc=0
     v150 Imm(1)                                           -> x0
     v151 Imm(0)                                           -> x1

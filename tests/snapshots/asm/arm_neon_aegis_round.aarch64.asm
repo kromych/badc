@@ -103,7 +103,7 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	cmp	w0, #0x10
                	b.ge	<addr>
-               	ldrb	w4, [x3, w0, sxtw]
+               	ldrb	w4, [x3, x0]
                	and	x5, x0, #0xc
                	add	x1, x0, #0x2
                	and	x1, x1, #0x3
@@ -182,9 +182,8 @@ Disassembly of section .text:
                	mov	x0, x3
                	cmp	w0, #0x10
                	b.ge	<addr>
-               	sxtw	x1, w0
-               	ldrb	w4, [x2, x1]
-               	cmp	w1, #0x5
+               	ldrb	w4, [x2, x0]
+               	cmp	w0, #0x5
                	b.ne	<addr>
                	mov	x1, x3
                	eor	x1, x4, x1
@@ -272,18 +271,18 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	cmp	w0, #0x10
                	b.ge	<addr>
-               	ldrb	w4, [x20, w0, sxtw]
-               	ldrb	w3, [x1, w0, sxtw]
-               	cmp	w3, #0x10
+               	ldrb	w3, [x20, x0]
+               	ldrb	w2, [x1, x0]
+               	cmp	w2, #0x10
                	b.ge	<addr>
-               	ldrb	w2, [x1, w0, sxtw]
+               	ldrb	w2, [x1, x0]
                	ldrb	w2, [x21, x2]
-               	cmp	x4, x2
+               	cmp	w3, w2
                	b.eq	<addr>
                	b	<addr>
-               	sub	x3, x29, #0xc8
-               	ldrb	w2, [x3, w0, sxtw]
-               	cmp	x4, x2
+               	sub	x2, x29, #0xc8
+               	ldrb	w2, [x2, x0]
+               	cmp	w3, w2
                	b.ne	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x10
@@ -294,11 +293,11 @@ Disassembly of section .text:
                	add	x2, x2, <lo12>
                	cmp	w0, #0x10
                	b.ge	<addr>
-               	ldrb	w4, [x2, w0, sxtw]
-               	sxtb	x4, w4
-               	cmp	w4, w1
+               	ldrb	w3, [x2, x0]
+               	sxtb	x3, w3
+               	cmp	w3, w1
                	b.ge	<addr>
-               	ldrb	w1, [x2, w0, sxtw]
+               	ldrb	w1, [x2, x0]
                	sxtb	x1, w1
                	add	x0, x0, #0x1
                	cmp	w0, #0x10
@@ -582,18 +581,18 @@ Disassembly of section .text:
                	and	x2, x0, #0x3
                	sub	x3, x29, #0xc8
                	add	x4, x1, x2
-               	ldrb	w4, [x3, w4, sxtw]
+               	ldrb	w4, [x3, x4]
                	lsl	x5, x4, #1
                	and	x4, x4, #0x80
                	cbz	x4, <addr>
                	mov	x4, #0x1b               // =27
                	eor	x4, x5, x4
-               	and	x12, x4, #0xff
-               	add	x4, x2, #0x1
-               	and	x9, x4, #0x3
-               	add	x5, x1, x9
-               	ldrb	w7, [x3, w5, sxtw]
-               	lsl	x11, x7, #1
+               	and	x11, x4, #0xff
+               	add	x5, x2, #0x1
+               	and	x9, x5, #0x3
+               	add	x4, x1, x9
+               	ldrb	w7, [x3, x4]
+               	lsl	x10, x7, #1
                	and	x7, x7, #0x80
                	cbz	x7, <addr>
                	mov	x7, #0x1b               // =27
@@ -602,22 +601,22 @@ Disassembly of section .text:
                	b	<addr>
                	mov	x4, x6
                	b	<addr>
-               	eor	x7, x11, x7
+               	eor	x7, x10, x7
                	and	x7, x7, #0xff
-               	eor	x7, x12, x7
-               	ldrb	w4, [x3, w5, sxtw]
+               	eor	x7, x11, x7
+               	ldrb	w4, [x3, x4]
                	eor	x5, x7, x4
                	add	x4, x2, #0x2
                	and	x4, x4, #0x3
                	add	x4, x1, x4
-               	ldrb	w4, [x3, w4, sxtw]
+               	ldrb	w4, [x3, x4]
                	eor	x4, x5, x4
                	add	x2, x2, #0x3
                	and	x2, x2, #0x3
                	add	x1, x1, x2
-               	ldrb	w1, [x3, w1, sxtw]
+               	ldrb	w1, [x3, x1]
                	eor	x1, x4, x1
-               	strb	w1, [x8, w0, sxtw]
+               	strb	w1, [x8, x0]
                	add	x0, x0, #0x1
                	cmp	w0, #0x10
                	b.lt	<addr>

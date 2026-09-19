@@ -33,7 +33,6 @@ Disassembly of section .text:
                	movl	%eax, -0x8(%rbp)
                	leaq	-0x8(%rbp), %rax
                	movl	(%rax), %ecx
-               	movl	%ecx, %ecx
                	xorq	$0x64, %rcx
                	testl	%ecx, %ecx
                	je	<addr>
@@ -44,7 +43,6 @@ Disassembly of section .text:
                	movq	%rcx, %r10
                	xchgl	%r10d, (%rax)
                	movl	(%rax), %ecx
-               	movl	%ecx, %ecx
                	xorq	$0xfa, %rcx
                	testl	%ecx, %ecx
                	je	<addr>
@@ -61,7 +59,6 @@ Disassembly of section .text:
                	movq	%rax, %r10
                	popq	%rax
                	movq	%r10, %rdx
-               	movl	%edx, %edx
                	xorq	$0xfa, %rdx
                	testl	%edx, %edx
                	je	<addr>
@@ -86,7 +83,6 @@ Disassembly of section .text:
                	movq	%rax, %r10
                	popq	%rax
                	movq	%r10, %rdx
-               	movl	%edx, %edx
                	xorq	$0xff, %rdx
                	testl	%edx, %edx
                	je	<addr>
@@ -115,7 +111,6 @@ Disassembly of section .text:
                	popq	%rcx
                	popq	%rax
                	movq	%r10, %rdx
-               	movl	%edx, %edx
                	xorq	$0xcd, %rdx
                	testl	%edx, %edx
                	je	<addr>
@@ -144,7 +139,6 @@ Disassembly of section .text:
                	popq	%rcx
                	popq	%rax
                	movq	%r10, %rax
-               	movl	%eax, %eax
                	xorq	$0xfcd, %rax            # imm = 0xFCD
                	testl	%eax, %eax
                	je	<addr>
@@ -174,7 +168,6 @@ Disassembly of section .text:
                	popq	%rcx
                	popq	%rax
                	movq	%r10, %rdx
-               	movl	%edx, %edx
                	xorq	$0xcd, %rdx
                	testl	%edx, %edx
                	je	<addr>
@@ -193,7 +186,6 @@ Disassembly of section .text:
                	movq	%rdi, %r10
                	xchgl	%r10d, (%r11)
                	movq	%r10, %rdx
-               	movl	%edx, %edx
                	cmpl	$0xc2, %edx
                	je	<addr>
                	movl	$0xd, %eax

@@ -28,44 +28,43 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	xorl	%ecx, %ecx
-               	movq	%rcx, %xmm15
-               	movq	%rcx, %xmm0
+               	xorl	%eax, %eax
+               	movq	%rax, %xmm15
+               	movq	%rax, %xmm0
                	divsd	%xmm15, %xmm0
-               	movq	%rcx, %xmm15
+               	movq	%rax, %xmm15
                	ucomisd	%xmm0, %xmm15
                	jbe	<addr>
-               	movl	$0x1, %eax
-               	movq	%rcx, %xmm15
+               	movl	$0x1, %esi
+               	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
                	jbe	<addr>
-               	orq	$0x2, %rax
-               	movq	%rcx, %xmm15
+               	orq	$0x2, %rsi
+               	movq	%rax, %xmm15
                	ucomisd	%xmm0, %xmm15
                	jb	<addr>
-               	orq	$0x4, %rax
-               	movq	%rcx, %xmm15
+               	orq	$0x4, %rsi
+               	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
                	jb	<addr>
-               	orq	$0x8, %rax
-               	movq	%rcx, %xmm15
+               	orq	$0x8, %rsi
+               	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>
                	jne	<addr>
-               	orq	$0x10, %rax
-               	movq	%rcx, %xmm15
+               	orq	$0x10, %rsi
+               	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>
                	jne	<addr>
-               	orq	$0x20, %rax
+               	orq	$0x20, %rsi
                	ucomisd	%xmm0, %xmm0
                	jbe	<addr>
-               	orq	$0x40, %rax
+               	orq	$0x40, %rsi
                	ucomisd	%xmm0, %xmm0
                	jp	<addr>
                	jne	<addr>
-               	orq	$0x80, %rax
-               	movslq	%eax, %rsi
+               	orq	$0x80, %rsi
                	testq	%rsi, %rsi
                	je	<addr>
                	leaq	<rip>, %rdi
@@ -80,5 +79,5 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	popq	%rbp
                	retq
-               	movq	%rcx, %rax
+               	movq	%rax, %rsi
                	jmp	<addr>

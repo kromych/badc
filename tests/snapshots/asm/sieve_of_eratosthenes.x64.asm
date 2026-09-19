@@ -57,8 +57,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rdx
                	cmpl	$0x186a0, %eax          # imm = 0x186A0
                	jge	<addr>
-               	movslq	%eax, %rsi
-               	movsbq	(%rdx,%rsi), %rsi
+               	movsbq	(%rdx,%rax), %rsi
                	testq	%rsi, %rsi
                	jne	<addr>
                	incq	%rcx
@@ -68,7 +67,6 @@ Disassembly of section .text:
                	cmpl	$0x2578, %ecx           # imm = 0x2578
                	jne	<addr>
                	xorl	%eax, %eax
-               	movslq	%eax, %rax
                	retq
                	movl	$0x1, %eax
                	jmp	<addr>

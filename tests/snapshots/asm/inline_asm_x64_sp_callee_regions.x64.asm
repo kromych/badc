@@ -43,12 +43,11 @@ Disassembly of section .text:
                	setne	%al
                	movzbq	%al, %rax
                	addq	$0x14, %rax
-               	cmpq	$0xb, %rcx
+               	cmpl	$0xb, %ecx
                	jne	<addr>
-               	cmpq	$0x15, %rax
+               	cmpl	$0x15, %eax
                	jne	<addr>
                	xorl	%eax, %eax
-               	movslq	%eax, %rax
                	leave
                	retq
                	movl	$0x1, %eax

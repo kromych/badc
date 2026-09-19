@@ -29,14 +29,12 @@ Disassembly of section .text:
                	movzbq	0x1(%rdi), %rax
                	movzbq	0x2000(%rdi), %rcx
                	addq	%rcx, %rax
-               	movslq	%eax, %rax
                	retq
 
 <half_from_big>:
                	movzbq	0x3(%rdi), %rax
                	movzwq	0x9c40(%rdi), %rcx
                	addq	%rcx, %rax
-               	movslq	%eax, %rax
                	retq
 
 <word_from_big>:

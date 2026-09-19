@@ -66,11 +66,9 @@ Disassembly of section .text:
                	callq	<addr>
                	cmpl	$0x2, %r12d
                	jle	<addr>
-               	movslq	%ebx, %rax
-               	testq	%rax, %rax
+               	testq	%rbx, %rbx
                	je	<addr>
                	xorl	%eax, %eax
-               	movslq	%eax, %rax
                	popq	%rbx
                	popq	%r12
                	popq	%r13

@@ -612,7 +612,7 @@ Disassembly of section .text:
                	cmp	x0, #0x28f
                	b.eq	<addr>
                	orr	x20, x20, #0x40
-               	sxtw	x0, w20
+               	mov	x0, x20
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x20, [sp], #0x20
                	ret

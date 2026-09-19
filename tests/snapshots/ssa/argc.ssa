@@ -4,14 +4,14 @@ fn ent_pc=0 n_params=2 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(0, kind=I32)                            -> x7
-    v2   Imm(0)                                           -> x0
+    v1   ParamRef(0, kind=I32)                            -> x0
+    v2   Imm(0)                                           -> x1
     v3   ParamRef(1, kind=I64)                            -> x6
-    v4   Imm(0)                                           -> x0
-    v5   Imm(0)                                           -> x0
-    v6   BinopI { op=shl, lhs=v1, rhs_imm=32 }            -> x0
-    v7   Extend { value=v1, kind=I32 }                    -> x0
-    terminator Return(v7)   (exit_acc=v7)
+    v4   Imm(0)                                           -> x1
+    v5   Imm(0)                                           -> x1
+    v6   BinopI { op=shl, lhs=v1, rhs_imm=32 }            -> x1
+    v7   Extend { value=v1, kind=I32 }                    -> x1
+    terminator Return(v1)   (exit_acc=v1)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

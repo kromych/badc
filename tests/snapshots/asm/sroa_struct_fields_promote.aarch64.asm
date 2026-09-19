@@ -20,21 +20,21 @@ Disassembly of section .text:
                	lsl	x3, x0, #1
                	add	x4, x2, x3
                	add	x2, x0, #0x7
-               	sxth	x2, w2
-               	and	x3, x0, #0xff
+               	sxth	x3, w2
+               	and	x2, x0, #0xff
                	mov	x17, #0x7a              // =122
-               	eor	x3, x3, x17
-               	add	x6, x1, x1
+               	eor	x2, x2, x17
+               	add	x5, x1, x1
                	lsl	x0, x1, #1
                	add	x4, x4, x0
-               	add	x0, x2, x1
-               	sxth	x0, w0
-               	and	x1, x1, #0xff
-               	eor	x1, x3, x1
-               	sxtw	x3, w6
-               	add	x3, x3, x4
-               	add	x0, x3, x0
-               	add	x0, x0, x1
+               	add	x0, x3, x1
+               	sxth	x3, w0
+               	and	x0, x1, #0xff
+               	eor	x0, x2, x0
+               	sxtw	x1, w5
+               	add	x1, x1, x4
+               	add	x1, x1, x3
+               	add	x0, x1, x0
                	ret
 
 <main>:

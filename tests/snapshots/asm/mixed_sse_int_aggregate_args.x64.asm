@@ -36,7 +36,6 @@ Disassembly of section .text:
                	cmpq	$0x7, %rax
                	je	<addr>
                	movl	$0x1, %eax
-               	movslq	%eax, %rax
                	retq
                	cmpq	$0x4, %rdi
                	je	<addr>
@@ -94,7 +93,6 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	movl	$0x3, %eax
-               	movslq	%eax, %rax
                	retq
                	movabsq	$0x3ff4000000000000, %rax # imm = 0x3FF4000000000000
                	movq	%rdi, %xmm14

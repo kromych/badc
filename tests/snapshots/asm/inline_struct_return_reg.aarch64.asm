@@ -34,8 +34,8 @@ Disassembly of section .text:
                	cmp	w0, #0x4
                	b.ge	<addr>
                	sub	x2, x29, #0x40
-               	ldr	x3, [x1, w0, sxtw #3]
-               	str	x3, [x2, w0, sxtw #3]
+               	ldr	x3, [x1, x0, lsl #3]
+               	str	x3, [x2, x0, lsl #3]
                	add	x0, x0, #0x1
                	cmp	w0, #0x4
                	b.lt	<addr>
@@ -54,7 +54,6 @@ Disassembly of section .text:
                	cmp	x0, x17
                	b.ne	<addr>
                	mov	x0, #0x0                // =0
-               	sxtw	x0, w0
                	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
                	ret

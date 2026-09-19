@@ -121,7 +121,7 @@ fn ent_pc=9 n_params=3 variadic=false locals=0
     v8   Imm(0)                                           -> x0
     v9   Imm(0)                                           -> x0
     v10  Extend { value=v5, kind=I32 }                    -> x0
-    terminator Bz { cond=v10, target=b3, fall=b1 }   (exit_acc=v10)
+    terminator Bz { cond=v5, target=b3, fall=b1 }   (exit_acc=v5)
   block 1  start_pc=0
     v11  BinopI { op=add, lhs=v1, rhs_imm=16 }            -> x0
     v12  Load { addr=v1, disp=16, kind=I64 }              -> x0

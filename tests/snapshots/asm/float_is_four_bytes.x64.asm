@@ -194,7 +194,7 @@ Disassembly of section .text:
                	movb	$0x0, %al
                	callq	<addr>
                	movl	$0x10, %ebx
-               	movslq	%ebx, %rax
+               	movq	%rbx, %rax
                	popq	%rbx
                	leave
                	retq

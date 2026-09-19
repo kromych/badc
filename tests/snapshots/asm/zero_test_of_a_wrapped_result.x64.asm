@@ -56,11 +56,8 @@ Disassembly of section .text:
                	retq
 
 <uadd_nz>:
-               	movl	%edi, %eax
-               	movl	%esi, %ecx
-               	addq	%rcx, %rax
-               	movl	%eax, %eax
-               	testq	%rax, %rax
+               	leaq	(%rdi,%rsi), %rax
+               	testl	%eax, %eax
                	je	<addr>
                	movl	$0x1, %eax
                	retq
@@ -68,11 +65,9 @@ Disassembly of section .text:
                	retq
 
 <umul_z>:
-               	movl	%edi, %eax
-               	movl	%esi, %ecx
-               	imulq	%rcx, %rax
-               	movl	%eax, %eax
-               	testq	%rax, %rax
+               	movq	%rdi, %rax
+               	imulq	%rsi, %rax
+               	testl	%eax, %eax
                	jne	<addr>
                	movl	$0x1, %eax
                	retq

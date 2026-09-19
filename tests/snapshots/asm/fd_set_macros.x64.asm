@@ -34,16 +34,14 @@ Disassembly of section .text:
                	movq	%rdx, %rax
                	cmpl	$0x80, %eax
                	jge	<addr>
-               	movslq	%eax, %rsi
-               	movb	%dl, (%rcx,%rsi)
+               	movb	%dl, (%rcx,%rax)
                	incq	%rax
                	cmpl	$0x80, %eax
                	jl	<addr>
                	xorl	%eax, %eax
                	cmpl	$0x80, %eax
                	jge	<addr>
-               	movslq	%eax, %rdx
-               	movsbq	(%rcx,%rdx), %rdx
+               	movsbq	(%rcx,%rax), %rdx
                	testq	%rdx, %rdx
                	jne	<addr>
                	incq	%rax
@@ -166,8 +164,7 @@ Disassembly of section .text:
                	movq	%rdx, %rax
                	cmpl	$0x80, %eax
                	jge	<addr>
-               	movslq	%eax, %rsi
-               	movb	%dl, (%rcx,%rsi)
+               	movb	%dl, (%rcx,%rax)
                	incq	%rax
                	cmpl	$0x80, %eax
                	jl	<addr>

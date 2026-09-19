@@ -45,7 +45,6 @@ Disassembly of section .text:
                	cmpl	%eax, %esi
                	jne	<addr>
                	xorl	%eax, %eax
-               	movslq	%eax, %rax
                	popq	%rbx
                	leave
                	retq

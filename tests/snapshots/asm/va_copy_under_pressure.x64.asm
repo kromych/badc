@@ -161,7 +161,6 @@ Disassembly of section .text:
                	cmpq	$0x160, %rax            # imm = 0x160
                	jne	<addr>
                	xorl	%eax, %eax
-               	movslq	%eax, %rax
                	popq	%rbp
                	retq
                	movl	$0x1, %eax

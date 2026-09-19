@@ -20,7 +20,7 @@ Disassembly of section .text:
                	sxtw	x20, w0
                	cmp	w20, #0x2
                	b.ge	<addr>
-               	sxtw	x0, w20
+               	mov	x0, x20
                	ldp	x29, x30, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x20
                	ret

@@ -22,14 +22,14 @@ Disassembly of section .text:
                	mov	x0, x2
                	cmp	w0, #0x80
                	b.ge	<addr>
-               	strb	w2, [x1, w0, sxtw]
+               	strb	w2, [x1, x0]
                	add	x0, x0, #0x1
                	cmp	w0, #0x80
                	b.lt	<addr>
                	mov	x0, #0x0                // =0
                	cmp	w0, #0x80
                	b.ge	<addr>
-               	ldrb	w2, [x1, w0, sxtw]
+               	ldrb	w2, [x1, x0]
                	cbnz	x2, <addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x80
@@ -149,7 +149,7 @@ Disassembly of section .text:
                	mov	x0, x2
                	cmp	w0, #0x80
                	b.ge	<addr>
-               	strb	w2, [x1, w0, sxtw]
+               	strb	w2, [x1, x0]
                	add	x0, x0, #0x1
                	cmp	w0, #0x80
                	b.lt	<addr>

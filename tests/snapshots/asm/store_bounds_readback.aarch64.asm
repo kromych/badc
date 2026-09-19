@@ -42,7 +42,6 @@ Disassembly of section .text:
                	cset	x0, le
                	lsl	x0, x0, #1
                	add	x0, x1, x0
-               	sxtw	x0, w0
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
@@ -89,15 +88,15 @@ Disassembly of section .text:
                	cmp	w0, #0x3
                	b.eq	<addr>
                	orr	x20, x20, #0x4
-               	ldrsw	x1, [x21]
-               	and	x1, x1, #0x1ff
+               	ldrsw	x0, [x21]
+               	and	x0, x0, #0x1ff
                	mov	x17, #0xc8              // =200
-               	mul	x1, x1, x17
-               	sxth	x0, w1
-               	cmp	w0, #0x0
+               	mul	x0, x0, x17
+               	sxth	x1, w0
+               	cmp	w1, #0x0
                	cset	x2, lt
                	mov	x17, #-0x63c0           // =-25536
-               	cmp	w0, w17
+               	cmp	w1, w17
                	cset	x0, eq
                	lsl	x0, x0, #1
                	add	x0, x2, x0
@@ -110,15 +109,14 @@ Disassembly of section .text:
                	mov	x17, #-0x1              // =-1
                	mul	x0, x0, x17
                	sub	x0, x0, #0x1
-               	mov	w1, w0
                	mov	x17, #0x7fffffff        // =2147483647
-               	cmp	w1, w17
-               	cset	x2, hi
+               	cmp	w0, w17
+               	cset	x1, hi
                	mov	x17, #0xffffffff        // =4294967295
-               	cmp	w1, w17
+               	cmp	w0, w17
                	cset	x0, eq
                	lsl	x0, x0, #1
-               	add	x0, x2, x0
+               	add	x0, x1, x0
                	cmp	w0, #0x3
                	b.eq	<addr>
                	orr	x20, x20, #0x10
@@ -167,7 +165,7 @@ Disassembly of section .text:
                	cmp	x0, #0x3
                	b.eq	<addr>
                	orr	x20, x20, #0x80
-               	sxtw	x0, w20
+               	mov	x0, x20
                	ldp	x29, x30, [sp, #0x50]
                	ldr	x22, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x60

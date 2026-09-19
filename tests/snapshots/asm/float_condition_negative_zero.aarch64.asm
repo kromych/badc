@@ -48,7 +48,6 @@ Disassembly of section .text:
                	fcmp	d0, d17
                	b.eq	<addr>
                	mov	x2, #0x1                // =1
-               	sxtw	x2, w2
                	cbz	x2, <addr>
                	orr	x1, x1, #0x10
                	fmov	d17, x0
@@ -58,12 +57,9 @@ Disassembly of section .text:
                	fmov	d17, x0
                	fcmp	d0, d17
                	b.ne	<addr>
-               	sxtw	x0, w1
-               	cbz	x0, <addr>
-               	adrp	x2, <page>
-               	add	x2, x2, <lo12>
-               	mov	x1, x0
-               	mov	x0, x2
+               	cbz	x1, <addr>
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
                	bl	<addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp], #0x10

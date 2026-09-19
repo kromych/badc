@@ -85,8 +85,8 @@ fn ent_pc=5 n_params=0 variadic=false locals=12
     v67  Phi { incoming=[b6:v63, b8:v65], kind=I64 }      -> x0
     v68  Imm(0)                                           -> x1
     v69  BinopI { op=shl, lhs=v67, rhs_imm=32 }           -> x1
-    v70  Extend { value=v67, kind=I32 }                   -> x0
-    terminator Return(v70)   (exit_acc=v70)
+    v70  Extend { value=v67, kind=I32 }                   -> x1
+    terminator Return(v67)   (exit_acc=v67)
   block 8  start_pc=0
     v65  Imm(1)                                           -> x0
     v66  Imm(0)                                           -> x1

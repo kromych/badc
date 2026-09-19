@@ -18,8 +18,8 @@ fn ent_pc=4 n_params=0 variadic=false locals=1
     v14  Extend { value=v11, kind=I32 }                   -> x2
     v15  Imm(0)                                           -> x2
     v16  Extend { value=v10, kind=I32 }                   -> x2
-    v17  Binop { op=add, lhs=v2, rhs=v16 }                -> x6
-    v18  LoadIndexed { base=v2, index=v16, scale=1, kind=U8 } -> x2
+    v17  Binop { op=add, lhs=v2, rhs=v10 }                -> x2
+    v18  LoadIndexed { base=v2, index=v10, scale=1, kind=U8 } -> x2
     v19  Binop { op=add, lhs=v11, rhs=v18 }               -> x1
     v20  Imm(0)                                           -> x2
     v21  Extend { value=v19, kind=I32 }                   -> x2
@@ -45,8 +45,8 @@ fn ent_pc=4 n_params=0 variadic=false locals=1
     v31  Phi { incoming=[b4:v27, b6:v29], kind=I64 }      -> x0
     v32  Imm(0)                                           -> x1
     v33  BinopI { op=shl, lhs=v31, rhs_imm=32 }           -> x1
-    v34  Extend { value=v31, kind=I32 }                   -> x0
-    terminator Return(v34)   (exit_acc=v34)
+    v34  Extend { value=v31, kind=I32 }                   -> x1
+    terminator Return(v31)   (exit_acc=v31)
   block 6  start_pc=0
     v29  Imm(1)                                           -> x0
     v30  Imm(0)                                           -> x1

@@ -38,7 +38,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=10
     v20  Imm(0)                                           -> x1
     v21  LocalAddr(-2)                                    -> x7
     v22  BinopI { op=and, lhs=v5, rhs_imm=4294967295 }    -> x1
-    v23  Store { addr=v21, disp=0, value=v22, kind=I32 }  -> -
+    v23  Store { addr=v21, disp=0, value=v5, kind=I32 }   -> -
     v24  Imm(0)                                           -> x1
     v25  Store { addr=v21, disp=4, value=v11, kind=I32 }  -> -
     v26  Imm(0)                                           -> x0
@@ -59,8 +59,8 @@ fn ent_pc=2 n_params=0 variadic=false locals=10
     terminator Jmp(b3)   (exit_acc=v142)
   block 3  start_pc=0
     v144 Phi { incoming=[b2:v142, b16:v143], kind=I64 }   -> x0
-    v145 Extend { value=v144, kind=I32 }                  -> x0
-    terminator Bz { cond=v145, target=b5, fall=b4 }   (exit_acc=v145)
+    v145 Extend { value=v144, kind=I32 }                  -> x1
+    terminator Bz { cond=v144, target=b5, fall=b4 }   (exit_acc=v144)
   block 4  start_pc=0
     v32  Imm(1)                                           -> x0
     terminator Return(v32)   (exit_acc=v32)

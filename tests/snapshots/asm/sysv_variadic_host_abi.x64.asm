@@ -60,12 +60,8 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	cmpl	$0xa, %eax
                	jge	<addr>
-               	movslq	%eax, %rdx
-               	movq	%rdx, %rsi
-               	shrq	$0x3f, %rsi
-               	addq	%rsi, %rdx
+               	movq	%rax, %rdx
                	andq	$0x1, %rdx
-               	subq	%rsi, %rdx
                	testq	%rdx, %rdx
                	jne	<addr>
                	leaq	-0x18(%rbp), %rdx

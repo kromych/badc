@@ -40,10 +40,8 @@ Disassembly of section .text:
                	fcmp	s0, s17
                	b.eq	<addr>
                	mov	x0, #0x0                // =0
-               	sxtw	x0, w0
                	cbz	x0, <addr>
                	mov	x0, #0x7                // =7
-               	sxtw	x0, w0
                	ret
                	mov	x0, #0x0                // =0
                	b	<addr>

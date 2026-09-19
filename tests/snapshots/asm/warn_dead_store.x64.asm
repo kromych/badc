@@ -39,7 +39,6 @@ Disassembly of section .text:
                	testq	%rdi, %rdi
                	je	<addr>
                	movl	$0x2, %eax
-               	movslq	%eax, %rax
                	retq
 
 <address_escapes_silences>:

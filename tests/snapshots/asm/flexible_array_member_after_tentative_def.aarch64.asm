@@ -216,35 +216,32 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x8                // =8
                	ret
-               	add	x1, x2, #0x40
-               	cmp	x4, x1
+               	add	x5, x2, #0x40
+               	cmp	x4, x5
                	mov	x0, #0x0                // =0
                	b.hs	<addr>
-               	add	x5, x4, #0x30
-               	cmp	x2, x5
-               	cset	x5, lo
-               	sxtw	x5, w5
-               	cbnz	x5, <addr>
-               	add	x5, x3, #0x38
-               	cmp	x4, x5
+               	add	x1, x4, #0x30
+               	cmp	x2, x1
+               	cset	x1, lo
+               	cbnz	x1, <addr>
+               	add	x6, x3, #0x38
+               	cmp	x4, x6
                	b.hs	<addr>
-               	add	x4, x4, #0x30
-               	cmp	x3, x4
-               	cset	x4, lo
-               	sxtw	x4, w4
-               	cbnz	x4, <addr>
-               	cmp	x2, x5
-               	b.hs	<addr>
+               	add	x1, x4, #0x30
                	cmp	x3, x1
                	cset	x1, lo
-               	sxtw	x1, w1
+               	cbnz	x1, <addr>
+               	cmp	x2, x6
+               	b.hs	<addr>
+               	cmp	x3, x5
+               	cset	x1, lo
                	cbz	x1, <addr>
                	mov	x0, #0x9                // =9
                	ret
                	ret
                	mov	x1, x0
                	b	<addr>
-               	mov	x4, x0
+               	mov	x1, x0
                	b	<addr>
-               	mov	x5, x0
+               	mov	x1, x0
                	b	<addr>

@@ -97,7 +97,6 @@ Disassembly of section .text:
                	cmp	w1, #0x7
                	b.eq	<addr>
                	mov	x0, #-0x1               // =-1
-               	sxtw	x0, w0
                	ret
                	add	x0, x0, #0x80
                	b	<addr>
@@ -138,8 +137,7 @@ Disassembly of section .text:
                	sub	x21, x20, #0x2
                	mov	x0, x20
                	bl	<addr>
-               	sxtw	x1, w21
-               	cmp	x0, x1
+               	cmp	x0, x21
                	b.eq	<addr>
                	b	<addr>
                	sub	x21, x20, #0x3

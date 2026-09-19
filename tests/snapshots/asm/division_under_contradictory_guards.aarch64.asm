@@ -27,8 +27,7 @@ Disassembly of section .text:
                	ret
 
 <urem_dead>:
-               	mov	w0, w1
-               	cmp	w0, #0x5
+               	cmp	w1, #0x5
                	mov	x0, #0x7                // =7
                	ret
 

@@ -38,31 +38,27 @@ Disassembly of section .text:
                	subs	x17, x17, #0x1
                	b.ne	<addr>
                	mov	sp, x1
-               	and	x2, x0, #0xff
-               	strb	w2, [x1]
-               	sub	x2, x5, #0x1
-               	add	x3, x0, #0x1
-               	and	x8, x3, #0xff
-               	strb	w8, [x1, x2]
+               	strb	w0, [x1]
+               	sub	x3, x5, #0x1
+               	add	x2, x0, #0x1
+               	strb	w2, [x1, x3]
                	cbnz	w0, <addr>
                	mov	x4, x1
                	b	<addr>
                	cmp	x1, x4
                	b.ne	<addr>
                	ldrb	w8, [x1]
-               	ldrb	w1, [x1, x2]
+               	ldrb	w1, [x1, x3]
                	add	x1, x8, x1
-               	sxtw	x1, w1
                	add	x6, x6, x1
                	mov	sp, x7
-               	mov	x0, x3
+               	mov	x0, x2
                	cmp	w0, #0x40
                	b.lt	<addr>
                	mov	x17, #0x1000            // =4096
                	cmp	x6, x17
                	b.ne	<addr>
                	mov	x0, #0x2a               // =42
-               	sxtw	x0, w0
                	sub	sp, x29, #0x10
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10

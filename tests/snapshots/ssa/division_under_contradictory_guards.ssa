@@ -65,7 +65,7 @@ fn ent_pc=3 n_params=2 variadic=false locals=0
     v3   ParamRef(1, kind=I64)                            -> x6
     v4   Imm(0)                                           -> x0
     v5   BinopI { op=and, lhs=v3, rhs_imm=4294967295 }    -> x0
-    v6   BinopI { op=ugt, lhs=v5, rhs_imm=5 }             -> x0
+    v6   BinopI { op=ugt, lhs=v3, rhs_imm=5 }             -> x0
     terminator Bz { cond=v6, target=b2, fall=b1 }   (exit_acc=v6)
   block 1  start_pc=0
     v7   BinopI { op=and, lhs=v3, rhs_imm=4294967295 }    -> x0

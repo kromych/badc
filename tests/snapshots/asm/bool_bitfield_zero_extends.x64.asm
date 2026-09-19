@@ -46,7 +46,6 @@ Disassembly of section .text:
                	andq	$-0x401, %rcx           # imm = 0xFBFF
                	orq	$0x400, %rcx            # imm = 0x400
                	movl	%ecx, (%rax)
-               	movl	%ecx, %ecx
                	andq	$-0x801, %rcx           # imm = 0xF7FF
                	orq	$0x800, %rcx            # imm = 0x800
                	movl	%ecx, (%rax)
@@ -100,7 +99,7 @@ Disassembly of section .text:
                	andq	$0x1, %rax
                	shlq	$0x3f, %rax
                	sarq	$0x3f, %rax
-               	cmpq	$-0x1, %rax
+               	cmpl	$-0x1, %eax
                	je	<addr>
                	movl	$0x6, %eax
                	leave

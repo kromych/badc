@@ -61,9 +61,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi
                	leaq	-0x8(%rbp), %rsi
                	movsbq	(%rsi), %rax
-               	movl	%eax, %eax
                	subq	$0x61, %rax
-               	movl	%eax, %eax
                	addq	$0x3, %rax
                	movl	%eax, %edx
                	xorl	%eax, %eax

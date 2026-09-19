@@ -168,35 +168,34 @@ Disassembly of section .text:
                	movzbq	0xb(%rdx), %rdi
                	xorq	%rdi, %rsi
                	movb	%sil, 0xb(%rcx)
-               	leaq	-0x10(%rbp), %rcx
-               	movzbq	0xc(%rax), %rsi
+               	leaq	-0x10(%rbp), %rsi
+               	movzbq	0xc(%rax), %rcx
                	movzbq	0xc(%rdx), %rdi
-               	xorq	%rdi, %rsi
-               	movb	%sil, 0xc(%rcx)
+               	xorq	%rdi, %rcx
+               	movb	%cl, 0xc(%rsi)
                	movzbq	0xd(%rax), %rax
-               	movzbq	0xd(%rdx), %rdx
-               	xorq	%rdx, %rax
-               	movb	%al, 0xd(%rcx)
-               	leaq	-0x30(%rbp), %rdx
-               	movzbq	0xe(%rdx), %rax
-               	leaq	-0x20(%rbp), %rsi
-               	movzbq	0xe(%rsi), %rdi
-               	xorq	%rdi, %rax
-               	movb	%al, 0xe(%rcx)
-               	leaq	-0x10(%rbp), %rdi
-               	movzbq	0xf(%rdx), %rax
-               	movzbq	0xf(%rsi), %rcx
+               	movzbq	0xd(%rdx), %rcx
                	xorq	%rcx, %rax
-               	movb	%al, 0xf(%rdi)
+               	movb	%al, 0xd(%rsi)
+               	leaq	-0x30(%rbp), %rcx
+               	movzbq	0xe(%rcx), %rax
+               	leaq	-0x20(%rbp), %rdx
+               	movzbq	0xe(%rdx), %rdi
+               	xorq	%rdi, %rax
+               	movb	%al, 0xe(%rsi)
+               	leaq	-0x10(%rbp), %rsi
+               	movzbq	0xf(%rcx), %rax
+               	movzbq	0xf(%rdx), %rdi
+               	xorq	%rdi, %rax
+               	movb	%al, 0xf(%rsi)
                	xorl	%eax, %eax
                	cmpl	$0x10, %eax
                	jge	<addr>
-               	movslq	%eax, %rcx
-               	movzbq	(%rdi,%rcx), %r8
-               	movzbq	(%rdx,%rcx), %r9
-               	movzbq	(%rsi,%rcx), %rcx
-               	xorq	%r9, %rcx
-               	cmpl	%ecx, %r8d
+               	movzbq	(%rsi,%rax), %r8
+               	movzbq	(%rcx,%rax), %rdi
+               	movzbq	(%rdx,%rax), %r9
+               	xorq	%r9, %rdi
+               	cmpl	%edi, %r8d
                	jne	<addr>
                	incq	%rax
                	cmpl	$0x10, %eax

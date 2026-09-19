@@ -516,29 +516,25 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	mov	x2, x0
-               	mov	x0, #0x0                // =0
-               	stur	w0, [x29, #-0x8]
-               	sub	x0, x29, #0x8
-               	mov	w1, w2
-               	lsr	x3, x1, #0
-               	and	x3, x3, #0xff
+               	mov	x1, #0x0                // =0
+               	stur	w1, [x29, #-0x8]
+               	sub	x1, x29, #0x8
+               	lsr	x2, x0, #0
+               	and	x2, x2, #0xff
                	mov	x17, #0x0               // =0
-               	orr	x3, x3, x17
-               	str	w3, [x0]
-               	add	x1, x1, #0x1
-               	mov	w1, w1
-               	ldr	w2, [x0]
+               	orr	x2, x2, x17
+               	str	w2, [x1]
+               	add	x0, x0, #0x1
+               	ldr	w2, [x1]
                	and	w2, w2, #0xffff00ff
-               	lsl	x1, x1, #8
-               	mov	w1, w1
-               	and	x1, x1, #0xff00
-               	orr	x1, x2, x1
-               	str	w1, [x0]
-               	ldr	w1, [x0]
-               	and	w1, w1, #0xfffeffff
-               	orr	x1, x1, #0x10000
-               	str	w1, [x0]
+               	lsl	x0, x0, #8
+               	and	x0, x0, #0xff00
+               	orr	x0, x2, x0
+               	str	w0, [x1]
+               	ldr	w0, [x1]
+               	and	w0, w0, #0xfffeffff
+               	orr	x0, x0, #0x10000
+               	str	w0, [x1]
                	ldur	w0, [x29, #-0x8]
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
@@ -1024,7 +1020,6 @@ Disassembly of section .text:
                	mov	w0, w20
                	and	x2, x20, #0xff
                	add	x1, x0, #0x1
-               	mov	w1, w1
                	lsl	x1, x1, #8
                	and	x1, x1, #0xff00
                	orr	x1, x2, x1

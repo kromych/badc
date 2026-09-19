@@ -34,8 +34,7 @@ Disassembly of section .text:
                	movswq	%r8w, %r8
                	movq	%r8, %rax
                	subq	%rsi, %rax
-               	movq	%rax, %rcx
-               	movswq	%cx, %rsi
+               	movswq	%ax, %rsi
                	movq	%r9, %rax
                	andq	$0xff, %rax
                	addq	$0x3, %rax
@@ -84,11 +83,11 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movslq	(%rax), %rdi
                	movq	$-0x7, %rax
-               	movl	$0x186a0, %edx          # imm = 0x186A0
-               	movl	$0xb2d05e00, %esi       # imm = 0xB2D05E00
+               	movl	$0x186a0, %ecx          # imm = 0x186A0
+               	movl	$0xb2d05e00, %edx       # imm = 0xB2D05E00
                	movq	%rax, -0x10(%rbp)
-               	movq	%rdx, -0x18(%rbp)
-               	movq	%rsi, -0x8(%rbp)
+               	movq	%rcx, -0x18(%rbp)
+               	movq	%rdx, -0x8(%rbp)
                	leaq	0x9(%rdi), %rsi
                	leaq	-0x18(%rbp), %rcx
                	movq	(%rcx), %rdx

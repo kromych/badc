@@ -49,11 +49,11 @@ Disassembly of section .text:
                	mov	x6, #0x7                // =7
                	mov	x2, #0x100000           // =1048576
                	mov	x0, #0x0                // =0
-               	cmp	x0, x2
+               	cmp	w0, w2
                	b.ge	<addr>
                	strb	w6, [x1, x0]
                	add	x0, x0, #0x1, lsl #12   // =0x1000
-               	cmp	x0, x2
+               	cmp	w0, w2
                	b.lt	<addr>
                	mov	x17, #0xfffff           // =1048575
                	add	x0, x1, x17

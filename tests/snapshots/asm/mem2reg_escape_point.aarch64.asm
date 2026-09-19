@@ -29,20 +29,20 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x20
-               	mov	x0, #0xa                // =10
-               	stur	w0, [x29, #-0x10]
+               	mov	x1, #0xa                // =10
+               	stur	w1, [x29, #-0x10]
                	sub	x4, x29, #0x10
-               	mov	x1, #0xf                // =15
-               	str	w1, [x4]
-               	ldursw	x1, [x29, #-0x10]
-               	sub	x1, x1, #0xa
-               	cmp	w1, #0x5
+               	mov	x0, #0xf                // =15
+               	str	w0, [x4]
+               	ldursw	x0, [x29, #-0x10]
+               	sub	x0, x0, #0xa
+               	cmp	w0, #0x5
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	stur	w0, [x29, #-0x10]
+               	stur	w1, [x29, #-0x10]
                	mov	x0, #0x0                // =0
                	mov	x2, x0
                	mov	x1, x0

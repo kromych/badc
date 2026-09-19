@@ -67,8 +67,6 @@ Disassembly of section .text:
                	ret
 
 <add2>:
-               	mov	w0, w0
-               	mov	w1, w1
                	add	x0, x0, x1
                	mov	w0, w0
                	ret

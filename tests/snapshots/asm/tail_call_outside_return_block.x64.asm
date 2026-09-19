@@ -40,11 +40,9 @@ Disassembly of section .text:
                	decq	%r8
                	popq	%rbp
                	jmp	<addr>
-               	movl	%edi, %eax
-               	cmpl	$0x40001, %eax          # imm = 0x40001
+               	cmpl	$0x40001, %edi          # imm = 0x40001
                	jne	<addr>
-               	movl	%esi, %eax
-               	cmpl	$0x2, %eax
+               	cmpl	$0x2, %esi
                	jne	<addr>
                	testq	%rdx, %rdx
                	jne	<addr>
@@ -85,7 +83,6 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x1, %eax
-               	movslq	%eax, %rax
                	jmp	<addr>
                	leaq	0x8(%rcx), %rax
                	movq	(%rax), %rax

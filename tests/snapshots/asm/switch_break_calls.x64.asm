@@ -50,7 +50,6 @@ Disassembly of section .text:
                	cmpl	$0x2, %edi
                	je	<addr>
                	movl	$0x190, %eax            # imm = 0x190
-               	movslq	%eax, %rax
                	retq
                	movl	$0x12c, %eax            # imm = 0x12C
                	jmp	<addr>

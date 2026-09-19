@@ -19,7 +19,7 @@ Disassembly of section .text:
                	mov	x0, sp
                	cbnz	x0, <addr>
                	mov	x0, #0x0                // =0
-               	cmp	x0, #0x2a
+               	cmp	w0, #0x2a
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp], #0x10

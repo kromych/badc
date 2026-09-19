@@ -35,7 +35,6 @@ Disassembly of section .text:
                	cmpl	$-0x1, %eax
                	setne	%al
                	movzbq	%al, %rax
-               	movslq	%eax, %rax
                	leave
                	retq
 
@@ -49,7 +48,6 @@ Disassembly of section .text:
                	cmpl	$-0x1, %eax
                	sete	%al
                	movzbq	%al, %rax
-               	movslq	%eax, %rax
                	leave
                	retq
 
@@ -75,7 +73,6 @@ Disassembly of section .text:
                	cmpl	$-0x1, %eax
                	setne	%al
                	movzbq	%al, %rax
-               	movslq	%eax, %rax
                	leave
                	retq
 

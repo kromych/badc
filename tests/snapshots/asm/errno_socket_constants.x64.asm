@@ -49,28 +49,25 @@ Disassembly of section .text:
                	movq	0x38(%rcx), %rdx
                	movq	%rdx, 0x38(%rax)
                	popq	%rdx
-               	xorl	%r8d, %r8d
-               	cmpl	$0x10, %r8d
+               	xorl	%edx, %edx
+               	cmpl	$0x10, %edx
                	jge	<addr>
                	leaq	-0x40(%rbp), %rcx
-               	movslq	%r8d, %rdx
                	movslq	(%rcx,%rdx,4), %rax
                	testl	%eax, %eax
                	jle	<addr>
-               	leaq	0x1(%r8), %rax
+               	leaq	0x1(%rdx), %rax
                	cmpl	$0x10, %eax
                	jge	<addr>
-               	movslq	(%rcx,%rdx,4), %r9
-               	leaq	-0x40(%rbp), %rsi
-               	movslq	%eax, %rdi
-               	movslq	(%rsi,%rdi,4), %rsi
-               	cmpl	%esi, %r9d
+               	movslq	(%rcx,%rdx,4), %rsi
+               	movslq	(%rcx,%rax,4), %rdi
+               	cmpl	%edi, %esi
                	je	<addr>
                	incq	%rax
                	cmpl	$0x10, %eax
                	jl	<addr>
-               	incq	%r8
-               	cmpl	$0x10, %r8d
+               	incq	%rdx
+               	cmpl	$0x10, %edx
                	jl	<addr>
                	xorl	%eax, %eax
                	leave

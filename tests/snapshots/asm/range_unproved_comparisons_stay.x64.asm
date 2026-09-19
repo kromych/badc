@@ -46,24 +46,21 @@ Disassembly of section .text:
                	testq	%rcx, %rcx
                	jne	<addr>
                	movl	$0x1, %ecx
-               	movslq	%ecx, %rcx
                	testq	%rcx, %rcx
                	je	<addr>
-               	movslq	%ecx, %rax
+               	movq	%rcx, %rax
                	leave
                	retq
-               	movq	(%rdx), %rcx
-               	movq	%rcx, %r8
-               	xorq	$0x2, %r8
-               	movl	%r8d, %r8d
-               	testq	%r8, %r8
+               	movq	(%rdx), %r8
+               	movq	%r8, %rcx
+               	xorq	$0x2, %rcx
+               	testl	%ecx, %ecx
                	je	<addr>
-               	cmpq	$0x2, %rcx
+               	cmpq	$0x2, %r8
                	ja	<addr>
                	movl	$0x2, %eax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	je	<addr>
-               	movslq	%eax, %rax
                	leave
                	retq
                	movl	$0x5, %eax
@@ -79,9 +76,9 @@ Disassembly of section .text:
                	cmpq	$0x64, %rcx
                	jge	<addr>
                	movl	$0x3, %ecx
-               	testq	%rcx, %rcx
+               	testl	%ecx, %ecx
                	je	<addr>
-               	movslq	%ecx, %rax
+               	movq	%rcx, %rax
                	leave
                	retq
                	movq	(%rdx), %rcx
@@ -91,9 +88,9 @@ Disassembly of section .text:
                	cmpq	$-0x11, %rcx
                	jbe	<addr>
                	movl	$0x4, %ecx
-               	testq	%rcx, %rcx
+               	testl	%ecx, %ecx
                	je	<addr>
-               	movslq	%ecx, %rax
+               	movq	%rcx, %rax
                	leave
                	retq
                	movq	(%rdx), %rcx
@@ -102,9 +99,8 @@ Disassembly of section .text:
                	shlq	$0x37, %rcx
                	testq	%rcx, %rcx
                	jl	<addr>
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	je	<addr>
-               	movslq	%eax, %rax
                	leave
                	retq
                	xorl	%eax, %eax

@@ -52,7 +52,7 @@ Disassembly of section .text:
                	bl	<addr>
                	sub	x0, x29, #0xc0
                	bl	<addr>
-               	sxtw	x0, w20
+               	mov	x0, x20
                	ldp	x29, x30, [sp, #0xe0]
                	ldr	x22, [sp, #0x10]
                	ldp	x20, x21, [sp], #0xf0

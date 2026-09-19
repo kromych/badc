@@ -451,8 +451,8 @@ fn ent_pc=17 n_params=2 variadic=false locals=0
   block 1  start_pc=0
     v13  Imm(0)                                           -> x2
     v14  Extend { value=v8, kind=I32 }                    -> x2
-    v15  Binop { op=add, lhs=v1, rhs=v14 }                -> x8
-    v16  LoadIndexed { base=v1, index=v14, scale=1, kind=I8 } -> x2
+    v15  Binop { op=add, lhs=v1, rhs=v8 }                 -> x2
+    v16  LoadIndexed { base=v1, index=v8, scale=1, kind=I8 } -> x2
     v17  BinopI { op=eq, lhs=v16, rhs_imm=0 }             -> x8
     terminator Bnz { cond=v16, target=b3, fall=b2 }   (exit_acc=v17)
   block 2  start_pc=0

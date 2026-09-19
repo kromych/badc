@@ -83,7 +83,6 @@ Disassembly of section .text:
                	movq	(%rax), %rax
                	addq	$0x10, %rax
                	movl	%gs:(%rax), %eax
-               	movl	%eax, %eax
                	movl	$0xddeeff00, %r11d      # imm = 0xDDEEFF00
                	cmpl	%r11d, %eax
                	je	<addr>

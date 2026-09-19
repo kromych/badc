@@ -23,15 +23,13 @@ Disassembly of section .text:
 <join_masked>:
                	mov	x1, x0
                	mov	x0, #0x0                // =0
-               	mov	w2, w1
-               	cmp	w2, #0x80
+               	cmp	w1, #0x80
                	b.hs	<addr>
                	and	x0, x1, #0xff
                	mov	x17, #0x2a              // =42
                	eor	x0, x0, x17
-               	cmp	x0, #0x0
+               	cmp	w0, #0x0
                	cset	x0, ne
-               	sxtw	x0, w0
                	ret
 
 <loop_masked>:
@@ -53,7 +51,6 @@ Disassembly of section .text:
                	b.lt	<addr>
                	mov	x17, #0x2a              // =42
                	eor	x0, x21, x17
-               	sxtw	x0, w0
                	ldp	x29, x30, [sp, #0x20]
                	ldr	x22, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x30
@@ -70,7 +67,7 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, w2
                	b.lt	<addr>
-               	sxtw	x0, w1
+               	mov	x0, x1
                	ret
 
 <count_s8>:
@@ -80,8 +77,7 @@ Disassembly of section .text:
                	cmp	w0, w2
                	b.ge	<addr>
                	add	x1, x1, #0x3
-               	mov	x3, x1
-               	sxtb	x1, w3
+               	sxtb	x1, w1
                	add	x0, x0, #0x1
                	cmp	w0, w2
                	b.lt	<addr>
@@ -95,7 +91,6 @@ Disassembly of section .text:
                	b.le	<addr>
                	and	x0, x1, #0xffff
                	add	x0, x0, #0x1
-               	sxtw	x0, w0
                	ret
 
 <join_unmasked>:
@@ -105,7 +100,6 @@ Disassembly of section .text:
                	b.le	<addr>
                	mov	x1, x2
                	and	x0, x1, #0xff
-               	sxtw	x0, w0
                	ret
 
 <join_byte_as_signed>:

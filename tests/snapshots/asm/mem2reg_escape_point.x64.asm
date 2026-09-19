@@ -40,19 +40,19 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
-               	movl	$0xa, %eax
-               	movl	%eax, -0x10(%rbp)
+               	movl	$0xa, %ecx
+               	movl	%ecx, -0x10(%rbp)
                	leaq	-0x10(%rbp), %rdi
-               	movl	$0xf, %ecx
-               	movl	%ecx, (%rdi)
-               	movslq	-0x10(%rbp), %rcx
-               	subq	$0xa, %rcx
-               	cmpl	$0x5, %ecx
+               	movl	$0xf, %eax
+               	movl	%eax, (%rdi)
+               	movslq	-0x10(%rbp), %rax
+               	subq	$0xa, %rax
+               	cmpl	$0x5, %eax
                	je	<addr>
                	movl	$0x1, %eax
                	leave
                	retq
-               	movl	%eax, -0x10(%rbp)
+               	movl	%ecx, -0x10(%rbp)
                	xorl	%eax, %eax
                	movq	%rax, %rdx
                	movq	%rax, %rcx

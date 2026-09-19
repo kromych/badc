@@ -36,11 +36,10 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	cmpl	$0x2328, %eax           # imm = 0x2328
                	jge	<addr>
-               	leaq	-0x2330(%rbp), %rsi
-               	movslq	%eax, %rcx
-               	movq	%rcx, %rdx
-               	andq	$0x7f, %rdx
-               	movb	%dl, (%rsi,%rcx)
+               	leaq	-0x2330(%rbp), %rdx
+               	movq	%rax, %rcx
+               	andq	$0x7f, %rcx
+               	movb	%cl, (%rdx,%rax)
                	incq	%rax
                	cmpl	$0x2328, %eax           # imm = 0x2328
                	jl	<addr>

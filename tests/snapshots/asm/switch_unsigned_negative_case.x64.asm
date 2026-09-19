@@ -26,19 +26,19 @@ Disassembly of section .text:
                	int3
 
 <u32>:
-               	movl	%edi, %eax
                	movl	$0xfffffffe, %r11d      # imm = 0xFFFFFFFE
-               	movq	%rax, %rcx
-               	cmpl	%r11d, %eax
+               	movq	%rdi, %rax
+               	cmpl	%r11d, %edi
                	jb	<addr>
                	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	cmpl	%r11d, %eax
+               	movq	%rdi, %rax
+               	cmpl	%r11d, %edi
                	jb	<addr>
                	movl	$0x64, %eax
                	retq
                	movl	$0xc8, %eax
                	retq
-               	cmpl	$0x5, %eax
+               	cmpl	$0x5, %edi
                	je	<addr>
                	movl	$0x3e7, %eax            # imm = 0x3E7
                	retq

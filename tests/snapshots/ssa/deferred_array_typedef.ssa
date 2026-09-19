@@ -88,7 +88,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
   block 1  start_pc=0
     v92  Extend { value=v89, kind=I32 }                   -> x2
     v93  Extend { value=v88, kind=I32 }                   -> x2
-    v94  BinopI { op=shl, lhs=v93, rhs_imm=4 }            -> x2
+    v94  BinopI { op=shl, lhs=v88, rhs_imm=4 }            -> x2
     v95  Binop { op=add, lhs=v77, rhs=v94 }               -> x2
     v96  BinopI { op=add, lhs=v95, rhs_imm=12 }           -> x7
     v97  Load { addr=v95, disp=12, kind=I32 }             -> x2
@@ -105,7 +105,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     terminator Bnz { cond=v91, target=b1, fall=b3 }   (exit_acc=v91)
   block 3  start_pc=0
     v102 Extend { value=v89, kind=I32 }                   -> x0
-    v103 Extend { value=v102, kind=I32 }                  -> x0
+    v103 Extend { value=v89, kind=I32 }                   -> x0
     v104 BinopI { op=ne, lhs=v89, rhs_imm=24 }            -> x0
     terminator Bz { cond=v104, target=b5, fall=b4 }   (exit_acc=v104)
   block 4  start_pc=0

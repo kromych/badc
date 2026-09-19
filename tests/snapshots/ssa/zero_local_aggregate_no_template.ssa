@@ -132,8 +132,8 @@ fn ent_pc=9 n_params=0 variadic=false locals=64
   block 1  start_pc=0
     v114 LocalAddr(-64)                                   -> x2
     v115 Extend { value=v109, kind=I32 }                  -> x2
-    v116 Binop { op=add, lhs=v91, rhs=v115 }              -> x6
-    v117 LoadIndexed { base=v91, index=v115, scale=1, kind=I8 } -> x2
+    v116 Binop { op=add, lhs=v91, rhs=v109 }              -> x2
+    v117 LoadIndexed { base=v91, index=v109, scale=1, kind=I8 } -> x2
     terminator Bnz { cond=v117, target=b14, fall=b2 }   (exit_acc=v117)
   block 2  start_pc=0
     v112 Extend { value=v109, kind=I32 }                  -> x2

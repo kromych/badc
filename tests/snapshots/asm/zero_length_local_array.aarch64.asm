@@ -22,8 +22,8 @@ Disassembly of section .text:
                	ldrsw	x0, [x2]
                	cbz	x0, <addr>
                	mov	x1, #0x4                // =4
-               	sxtw	x0, w1
-               	cbz	x0, <addr>
+               	cbz	x1, <addr>
+               	mov	x0, x1
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret

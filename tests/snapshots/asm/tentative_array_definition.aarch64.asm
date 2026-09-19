@@ -45,18 +45,14 @@ Disassembly of section .text:
                	ldrb	w6, [x5, w0, sxtw]
                	ldrsb	x2, [x4, w0, sxtw]
                	eor	x2, x6, x2
-               	mov	w2, w2
-               	cbz	x2, <addr>
+               	cbz	w2, <addr>
                	orr	x1, x1, #0x8
                	add	x0, x0, #0x1
                	ldrsb	x6, [x3, w0, sxtw]
                	cbnz	x6, <addr>
-               	sxtw	x0, w1
-               	cbz	x0, <addr>
-               	adrp	x2, <page>
-               	add	x2, x2, <lo12>
-               	mov	x1, x0
-               	mov	x0, x2
+               	cbz	x1, <addr>
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
                	bl	<addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp], #0x10

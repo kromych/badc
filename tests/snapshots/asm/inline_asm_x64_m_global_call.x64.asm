@@ -41,8 +41,8 @@ Disassembly of section .text:
                	movl	%eax, -0x8(%rbp)
                	movslq	-0x8(%rbp), %rcx
                	leaq	<rip>, %rax
-               	leaq	-<rip>, %rsi       # <addr>
-               	movq	%rsi, 0x8(%rax)
+               	leaq	-<rip>, %rdx       # <addr>
+               	movq	%rdx, 0x8(%rax)
                	callq	*<rip>
                	movl	%eax, -0x8(%rbp)
                	movslq	-0x8(%rbp), %rax

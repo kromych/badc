@@ -30,14 +30,12 @@ Disassembly of section .text:
                	testq	%rdi, %rdi
                	jne	<addr>
                	xorl	%eax, %eax
-               	movslq	%eax, %rax
                	retq
 
 <or_rr>:
                	testq	%rsi, %rsi
                	setne	%al
                	movzbq	%al, %rax
-               	movslq	%eax, %rax
                	retq
 
 <and_ll>:
@@ -48,7 +46,6 @@ Disassembly of section .text:
                	testl	%esi, %esi
                	setne	%al
                	movzbq	%al, %rax
-               	movslq	%eax, %rax
                	retq
 
 <main>:
@@ -145,7 +142,7 @@ Disassembly of section .text:
                	testq	%rcx, %rcx
                	jne	<addr>
                	xorl	%eax, %eax
-               	cmpq	$0x1, %rax
+               	cmpl	$0x1, %eax
                	je	<addr>
                	movl	$0x8, %eax
                	popq	%rbx

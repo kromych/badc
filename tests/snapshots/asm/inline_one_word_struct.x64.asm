@@ -45,8 +45,7 @@ Disassembly of section .text:
                	movq	%rax, %rdx
                	cmpl	$0x5, %eax
                	jge	<addr>
-               	movslq	%eax, %rsi
-               	movq	(%rcx,%rsi,8), %rsi
+               	movq	(%rcx,%rax,8), %rsi
                	addq	%rsi, %rdx
                	incq	%rax
                	cmpl	$0x5, %eax
@@ -54,7 +53,6 @@ Disassembly of section .text:
                	cmpq	$0x5dc, %rdx            # imm = 0x5DC
                	jne	<addr>
                	xorl	%eax, %eax
-               	movslq	%eax, %rax
                	leave
                	retq
                	movl	$0x1, %eax

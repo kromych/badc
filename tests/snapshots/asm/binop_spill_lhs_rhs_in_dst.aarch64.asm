@@ -48,7 +48,7 @@ Disassembly of section .text:
                	mov	x0, x1
                	cmp	w0, #0x4
                	b.gt	<addr>
-               	ldrsw	x3, [x2, w0, sxtw #2]
+               	ldrsw	x3, [x2, x0, lsl #2]
                	add	x1, x1, x3
                	add	x0, x0, #0x1
                	cmp	w0, #0x4

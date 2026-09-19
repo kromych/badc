@@ -31,21 +31,21 @@ Disassembly of section .text:
                	subq	$0x10, %rsp
                	jmp	<addr>
                	movl	$0x3, %eax
-               	cmpq	$0x4, %rax
+               	cmpl	$0x4, %eax
                	je	<addr>
                	movl	$0x1, %eax
                	leave
                	retq
                	nop
                	movl	$0x5, %eax
-               	cmpq	$0x5, %rax
+               	cmpl	$0x5, %eax
                	je	<addr>
                	movl	$0x2, %eax
                	leave
                	retq
                	jmp	<addr>
                	movl	$0x8, %eax
-               	cmpq	$0x9, %rax
+               	cmpl	$0x9, %eax
                	je	<addr>
                	movl	$0x3, %eax
                	leave

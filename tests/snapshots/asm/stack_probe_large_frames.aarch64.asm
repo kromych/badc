@@ -28,7 +28,6 @@ Disassembly of section .text:
                	add	x1, x4, x1
                	ldrb	w0, [x0, x2]
                	add	x0, x1, x0
-               	sxtw	x0, w0
                	ret
 
 <two_pages>:

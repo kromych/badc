@@ -31,7 +31,6 @@ Disassembly of section .text:
                	jl	<addr>
                	cmpl	$0x2, %edi
                	je	<addr>
-               	movslq	%eax, %rax
                	retq
                	movq	$-0x1, %rax
                	jmp	<addr>

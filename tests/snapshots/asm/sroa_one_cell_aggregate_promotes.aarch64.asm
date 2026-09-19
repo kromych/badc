@@ -28,8 +28,7 @@ Disassembly of section .text:
                	b.lo	<addr>
                	mov	x0, x4
                	b	<addr>
-               	mov	w0, w2
-               	add	x1, x5, x0
+               	add	x1, x1, x2
                	mov	x0, #0x2                // =2
                	cbnz	w0, <addr>
                	add	x0, x2, #0x7
@@ -40,7 +39,6 @@ Disassembly of section .text:
                	lsl	x4, x0, #1
                	add	x1, x4, x1
                	add	x1, x1, #0x3
-               	sxtw	x1, w1
                	add	x0, x1, x0
                	lsl	x0, x0, #1
                	add	x4, x3, x0
@@ -72,8 +70,7 @@ Disassembly of section .text:
                	b.lo	<addr>
                	mov	x0, x4
                	b	<addr>
-               	mov	w0, w2
-               	add	x1, x5, x0
+               	add	x1, x1, x2
                	mov	x0, #0x2                // =2
                	cbnz	w0, <addr>
                	cmp	x3, #0xd
@@ -88,9 +85,8 @@ Disassembly of section .text:
                	lsl	x3, x0, #1
                	add	x1, x3, x1
                	add	x1, x1, #0x3
-               	sxtw	x1, w1
                	add	x0, x1, x0
-               	cmp	x0, #0x83
+               	cmp	w0, #0x83
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ret

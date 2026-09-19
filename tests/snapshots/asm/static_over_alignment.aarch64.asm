@@ -61,7 +61,7 @@ Disassembly of section .text:
                	and	x0, x0, #0x7f
                	cbz	x0, <addr>
                	mov	x0, #0x0                // =0
-               	cmp	x0, #0x7
+               	cmp	w0, #0x7
                	b.eq	<addr>
                	mov	x0, #0x7                // =7
                	ret
@@ -70,5 +70,4 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	x0, [x0]
-               	sxtw	x0, w0
                	b	<addr>

@@ -32,19 +32,19 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x1, %eax
                	retq
-               	leaq	<rip>, %rax
-               	movslq	(%rax), %rcx
-               	leaq	0x1(%rcx), %rsi
-               	movl	%esi, (%rax)
-               	cmpl	$0x11d7, %ecx           # imm = 0x11D7
+               	leaq	<rip>, %rcx
+               	movslq	(%rcx), %rax
+               	leaq	0x1(%rax), %rsi
+               	movl	%esi, (%rcx)
+               	cmpl	$0x11d7, %eax           # imm = 0x11D7
                	je	<addr>
                	movl	$0x2, %eax
                	retq
-               	leaq	<rip>, %rax
-               	movslq	(%rax), %rcx
-               	leaq	0x1(%rcx), %rsi
-               	movl	%esi, (%rax)
-               	cmpl	$0x11d8, %ecx           # imm = 0x11D8
+               	leaq	<rip>, %rcx
+               	movslq	(%rcx), %rax
+               	leaq	0x1(%rax), %rsi
+               	movl	%esi, (%rcx)
+               	cmpl	$0x11d8, %eax           # imm = 0x11D8
                	je	<addr>
                	movl	$0x3, %eax
                	retq

@@ -46,7 +46,7 @@ Disassembly of section .text:
                	add	x2, x2, <lo12>
                	cmp	w0, w4
                	b.ge	<addr>
-               	ldrb	w3, [x2, w0, sxtw]
+               	ldrb	w3, [x2, x0]
                	cbnz	x3, <addr>
                	add	x1, x1, #0x1
                	add	x0, x0, #0x1
@@ -56,7 +56,6 @@ Disassembly of section .text:
                	cmp	w1, w17
                	b.ne	<addr>
                	mov	x0, #0x0                // =0
-               	sxtw	x0, w0
                	ret
                	mov	x0, #0x1                // =1
                	b	<addr>

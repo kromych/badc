@@ -44,7 +44,6 @@ Disassembly of section .text:
                	testl	%edi, %edi
                	jle	<addr>
                	movl	$0x1, %eax
-               	movslq	%eax, %rax
                	retq
                	movq	$-0x1, %rax
                	jmp	<addr>

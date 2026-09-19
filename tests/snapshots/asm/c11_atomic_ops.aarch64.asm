@@ -21,7 +21,6 @@ Disassembly of section .text:
                	stur	w3, [x29, #-0x8]
                	sub	x0, x29, #0x8
                	ldar	w1, [x0]
-               	mov	w1, w1
                	mov	x17, #0x64              // =100
                	eor	x1, x1, x17
                	cbz	w1, <addr>
@@ -32,7 +31,6 @@ Disassembly of section .text:
                	mov	x1, #0xfa               // =250
                	stlr	w1, [x0]
                	ldar	w1, [x0]
-               	mov	w1, w1
                	mov	x17, #0xfa              // =250
                	eor	x1, x1, x17
                	cbz	w1, <addr>
@@ -52,7 +50,6 @@ Disassembly of section .text:
                	ldp	x11, x12, [sp, #0x10]
                	ldp	x9, x10, [sp], #0x20
                	mov	x2, x16
-               	mov	w2, w2
                	mov	x17, #0xfa              // =250
                	eor	x2, x2, x17
                	cbz	w2, <addr>
@@ -79,7 +76,6 @@ Disassembly of section .text:
                	ldp	x11, x12, [sp, #0x10]
                	ldp	x9, x10, [sp], #0x20
                	mov	x2, x16
-               	mov	w2, w2
                	eor	x2, x2, #0xff
                	cbz	w2, <addr>
                	mov	x0, x1
@@ -106,7 +102,6 @@ Disassembly of section .text:
                	ldp	x11, x12, [sp, #0x10]
                	ldp	x9, x10, [sp], #0x20
                	mov	x2, x16
-               	mov	w2, w2
                	mov	x17, #0xcd              // =205
                	eor	x2, x2, x17
                	cbz	w2, <addr>
@@ -134,7 +129,6 @@ Disassembly of section .text:
                	ldp	x11, x12, [sp, #0x10]
                	ldp	x9, x10, [sp], #0x20
                	mov	x2, x16
-               	mov	w2, w2
                	mov	x17, #0xfcd             // =4045
                	eor	x2, x2, x17
                	cbz	w2, <addr>
@@ -162,7 +156,6 @@ Disassembly of section .text:
                	ldp	x11, x12, [sp, #0x10]
                	ldp	x9, x10, [sp], #0x20
                	mov	x2, x16
-               	mov	w2, w2
                	mov	x17, #0xcd              // =205
                	eor	x2, x2, x17
                	cbz	w2, <addr>
@@ -189,7 +182,6 @@ Disassembly of section .text:
                	ldp	x11, x12, [sp, #0x10]
                	ldp	x9, x10, [sp], #0x20
                	mov	x2, x16
-               	mov	w2, w2
                	cmp	w2, #0xc2
                	b.eq	<addr>
                	mov	x0, #0xd                // =13

@@ -36,7 +36,7 @@ Disassembly of section .text:
                	cbnz	x3, <addr>
                	cbnz	x1, <addr>
                	mov	x1, #0x1                // =1
-               	cmp	x1, #0x1
+               	cmp	w1, #0x1
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ret
@@ -54,7 +54,7 @@ Disassembly of section .text:
                	cmp	x1, #0x64
                	b.ls	<addr>
                	mov	x1, #0x2                // =2
-               	cmp	x1, #0x2
+               	cmp	w1, #0x2
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ret
@@ -76,7 +76,7 @@ Disassembly of section .text:
                	cmp	x1, #0x64
                	b.ls	<addr>
                	mov	x1, #0x2                // =2
-               	cmp	x1, #0x2
+               	cmp	w1, #0x2
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	ret
@@ -93,7 +93,7 @@ Disassembly of section .text:
                	cmp	x1, #0x64
                	b.ls	<addr>
                	mov	x0, #0x2                // =2
-               	cmp	x0, #0x2
+               	cmp	w0, #0x2
                	b.eq	<addr>
                	mov	x0, #0x5                // =5
                	ret

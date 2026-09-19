@@ -46,7 +46,6 @@ Disassembly of section .text:
                	cmp	w0, #0x19a
                	b.ne	<addr>
                	mov	x0, #0x0                // =0
-               	sxtw	x0, w0
                	ldp	x29, x30, [sp, #0x20]
                	ldp	x20, x21, [sp], #0x30
                	ret

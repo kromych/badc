@@ -21,7 +21,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v15  Load { addr=v14, disp=0, kind=I32 }              -> x0
     v16  BinopI { op=add, lhs=v15, rhs_imm=2 }            -> x0
     v17  Extend { value=v16, kind=I32 }                   -> x1
-    v18  Extend { value=v17, kind=I32 }                   -> x1
+    v18  Extend { value=v16, kind=I32 }                   -> x1
     v19  BinopI { op=ne, lhs=v16, rhs_imm=3 }             -> x0
     terminator Bz { cond=v19, target=b2, fall=b1 }   (exit_acc=v19)
   block 1  start_pc=0

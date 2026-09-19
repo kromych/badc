@@ -31,8 +31,7 @@ Disassembly of section .text:
                	movq	%rdx, %rax
                	cmpl	$0x5, %eax
                	jge	<addr>
-               	movslq	%eax, %rcx
-               	movsbq	(%rsi,%rcx), %rdi
+               	movsbq	(%rsi,%rax), %rdi
                	cmpl	$0x2, %eax
                	jl	<addr>
                	cmpl	$0x3, %eax
@@ -51,8 +50,6 @@ Disassembly of section .text:
                	jl	<addr>
                	movl	$0x62, %ecx
                	jmp	<addr>
-               	testl	%eax, %eax
-               	jne	<addr>
                	movl	$0x61, %ecx
                	cmpl	%ecx, %edi
                	jne	<addr>

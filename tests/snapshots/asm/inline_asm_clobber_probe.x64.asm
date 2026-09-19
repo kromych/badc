@@ -40,7 +40,6 @@ Disassembly of section .text:
                	cmpl	$0x1234, %eax           # imm = 0x1234
                	jne	<addr>
                	movl	$0x2a, %eax
-               	movslq	%eax, %rax
                	popq	%rbx
                	leave
                	retq

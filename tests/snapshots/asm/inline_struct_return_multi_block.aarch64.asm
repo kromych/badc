@@ -14,14 +14,11 @@ Disassembly of section .text:
                	brk	#0x1
 
 <reg_slot>:
-               	mov	x2, x0
-               	mov	w0, w1
-               	cbnz	x0, <addr>
+               	cbnz	w1, <addr>
                	mov	x0, #-0x1               // =-1
-               	sxtw	x0, w0
                	ret
-               	and	x0, x0, #0x3
-               	ldrsw	x0, [x2, x0, lsl #2]
+               	and	x1, x1, #0x3
+               	ldrsw	x0, [x0, x1, lsl #2]
                	b	<addr>
 
 <main>:
@@ -68,7 +65,6 @@ Disassembly of section .text:
                	ldr	x7, [x0, #0x10]
                	cbnz	x1, <addr>
                	mov	x0, #-0x1               // =-1
-               	sxtw	x0, w0
                	cmp	w0, #0x0
                	b.ge	<addr>
                	mov	x0, #-0x1               // =-1
@@ -85,7 +81,6 @@ Disassembly of section .text:
                	ldrsw	x0, [x0]
                	cbz	x0, <addr>
                	mov	x0, #0x7                // =7
-               	sxtw	x0, w0
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret

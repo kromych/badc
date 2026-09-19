@@ -69,26 +69,24 @@ Disassembly of section .text:
                	movl	%edx, 0x1c(%rax)
                	movl	$0x50, %eax
                	movl	%eax, 0x1c(%rcx)
-               	leaq	-0x40(%rbp), %r9
+               	leaq	-0x40(%rbp), %r8
                	leaq	-0x20(%rbp), %rdx
                	xorl	%ecx, %ecx
                	movq	%rcx, %rax
                	cmpl	$0x8, %eax
                	jge	<addr>
-               	movslq	%eax, %rsi
-               	movq	%rsi, %rdi
-               	shlq	$0x2, %rdi
-               	leaq	(%r9,%rdi), %r8
-               	movslq	(%r8), %rbx
-               	addq	$0x3, %rbx
-               	leaq	(%rdx,%rdi), %r12
-               	movslq	(%r12), %r12
+               	movq	%rax, %rsi
+               	shlq	$0x2, %rsi
+               	leaq	(%r8,%rsi), %rdi
+               	movslq	(%rdi), %r9
+               	addq	$0x3, %r9
+               	leaq	(%rdx,%rsi), %rbx
+               	movslq	(%rbx), %r12
                	subq	$0x3, %r12
-               	movl	%r12d, (%r8)
-               	movl	%ebx, (%rdx,%rsi,4)
-               	movslq	(%r8), %rsi
-               	addq	%rdx, %rdi
+               	movl	%r12d, (%rdi)
+               	movl	%r9d, (%rdx,%rax,4)
                	movslq	(%rdi), %rdi
+               	movslq	(%rbx), %rsi
                	imulq	%rdi, %rsi
                	addq	%rsi, %rcx
                	incq	%rax
@@ -97,7 +95,6 @@ Disassembly of section .text:
                	cmpl	$0xb7c, %ecx            # imm = 0xB7C
                	jne	<addr>
                	xorl	%eax, %eax
-               	movslq	%eax, %rax
                	popq	%rbx
                	popq	%r12
                	leave

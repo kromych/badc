@@ -64,23 +64,21 @@ Disassembly of section .text:
                	movq	%rcx, %rax
                	cmpl	$0x18, %eax
                	jge	<addr>
-               	leaq	-0xc0(%rbp), %rdi
-               	movslq	%eax, %rsi
-               	movq	%rsi, %r8
-               	shlq	$0x3, %r8
-               	addq	%r8, %rdi
-               	incq	%rsi
-               	movslq	%esi, %rsi
-               	imulq	$0x74, %rsi, %rsi
-               	movq	%rsi, (%rdi)
-               	incq	%rax
+               	leaq	-0xc0(%rbp), %rsi
+               	movq	%rax, %rdi
+               	shlq	$0x3, %rdi
+               	addq	%rsi, %rdi
+               	leaq	0x1(%rax), %rsi
+               	imulq	$0x74, %rsi, %r8
+               	movq	%r8, (%rdi)
+               	movq	%rsi, %rax
                	cmpl	$0x18, %eax
                	jl	<addr>
                	xorl	%eax, %eax
                	cmpl	$0x18, %eax
                	jge	<addr>
                	leaq	-0xc0(%rbp), %rsi
-               	movslq	%eax, %rdi
+               	movq	%rax, %rdi
                	shlq	$0x3, %rdi
                	addq	%rdi, %rsi
                	movq	(%rsi), %rsi

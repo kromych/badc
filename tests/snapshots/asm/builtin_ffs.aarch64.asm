@@ -20,7 +20,6 @@ Disassembly of section .text:
                	mov	x0, #0xff0000           // =16711680
                	stur	w0, [x29, #-0x10]
                	ldursw	x0, [x29, #-0x10]
-               	mov	w0, w0
                	sub	x1, x0, #0x1
                	mvn	x2, x0
                	and	x1, x1, x2
@@ -53,7 +52,6 @@ Disassembly of section .text:
                	mov	x1, #0x0                // =0
                	stur	w1, [x29, #-0x8]
                	ldursw	x0, [x29, #-0x8]
-               	mov	w0, w0
                	sub	x2, x0, #0x1
                	mvn	x3, x0
                	and	x2, x2, x3

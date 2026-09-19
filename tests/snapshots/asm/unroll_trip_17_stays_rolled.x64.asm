@@ -29,20 +29,20 @@ Disassembly of section .text:
                	xorl	%ecx, %ecx
                	leaq	<rip>, %rdx
                	movq	%rcx, %rax
-               	cmpq	$0x11, %rax
+               	cmpl	$0x11, %eax
                	jge	<addr>
                	movq	%rax, (%rdx,%rax,8)
                	incq	%rax
-               	cmpq	$0x11, %rax
+               	cmpl	$0x11, %eax
                	jl	<addr>
                	xorl	%eax, %eax
                	leaq	<rip>, %rdx
-               	cmpq	$0x11, %rax
+               	cmpl	$0x11, %eax
                	jge	<addr>
                	movq	(%rdx,%rax,8), %rsi
                	addq	%rsi, %rcx
                	incq	%rax
-               	cmpq	$0x11, %rax
+               	cmpl	$0x11, %eax
                	jl	<addr>
                	cmpq	$0x88, %rcx
                	sete	%dl
@@ -50,11 +50,10 @@ Disassembly of section .text:
                	xorl	%ecx, %ecx
                	testq	%rdx, %rdx
                	je	<addr>
-               	cmpq	$0x11, %rax
+               	cmpl	$0x11, %eax
                	sete	%cl
                	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
+               	testl	%ecx, %ecx
                	sete	%al
                	movzbq	%al, %rax
-               	movslq	%eax, %rax
                	retq

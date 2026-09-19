@@ -50,9 +50,9 @@ Disassembly of section .text:
                	cbz	x1, <addr>
                	mov	x0, #0x6                // =6
                	ret
-               	ldr	x0, [x0]
-               	add	x1, x0, #0x4
-               	cmp	w1, #0x1
+               	ldr	x1, [x0]
+               	add	x0, x1, #0x4
+               	cmp	w0, #0x1
                	b.eq	<addr>
                	mov	x0, #0x8                // =8
                	ret

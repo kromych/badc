@@ -76,25 +76,24 @@ Disassembly of section .text:
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x0, x29, #0x50
-               	ldr	w1, [x0]
-               	and	x1, x1, #0xfffffffffffffff8
+               	sub	x1, x29, #0x50
+               	ldr	w0, [x1]
+               	and	x0, x0, #0xfffffffffffffff8
                	mov	x17, #0x5               // =5
-               	orr	x1, x1, x17
-               	str	w1, [x0]
-               	mov	w1, w1
-               	and	x1, x1, #0xffffffffffffff07
+               	orr	x0, x0, x17
+               	str	w0, [x1]
+               	and	x0, x0, #0xffffffffffffff07
                	mov	x17, #0xa8              // =168
-               	orr	x1, x1, x17
-               	str	w1, [x0]
-               	mov	w0, w1
-               	and	x2, x0, #0x7
-               	cmp	w2, #0x5
+               	orr	x0, x0, x17
+               	str	w0, [x1]
+               	and	x1, x0, #0x7
+               	cmp	w1, #0x5
                	b.eq	<addr>
                	mov	x0, #0x28               // =40
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	mov	w0, w0
                	asr	x0, x0, #3
                	and	x0, x0, #0x1f
                	cmp	w0, #0x15

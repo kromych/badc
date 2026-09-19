@@ -39,36 +39,34 @@ Disassembly of section .text:
                	movzbq	(%rax), %rcx
                	movzbq	0x1(%rax), %rdx
                	movzbq	0x2(%rax), %rsi
-               	movzbq	0x3(%rax), %rax
-               	xorq	%rbx, %rcx
-               	movl	%ecx, %ecx
-               	testq	%rcx, %rcx
+               	movzbq	0x3(%rax), %rdi
+               	movq	%rcx, %rax
+               	xorq	%rbx, %rax
+               	testl	%eax, %eax
                	je	<addr>
-               	leaq	<rip>, %rcx
-               	movslq	(%rcx), %rdi
-               	incq	%rdi
-               	movl	%edi, (%rcx)
-               	movq	%rdx, %rcx
-               	xorq	%r12, %rcx
-               	movl	%ecx, %ecx
-               	testq	%rcx, %rcx
+               	leaq	<rip>, %rax
+               	movslq	(%rax), %rcx
+               	incq	%rcx
+               	movl	%ecx, (%rax)
+               	movq	%rdx, %rax
+               	xorq	%r12, %rax
+               	testl	%eax, %eax
                	je	<addr>
-               	leaq	<rip>, %rcx
-               	movslq	(%rcx), %rdx
-               	incq	%rdx
-               	movl	%edx, (%rcx)
-               	movq	%rsi, %rcx
-               	xorq	%r8, %rcx
-               	movl	%ecx, %ecx
-               	testq	%rcx, %rcx
+               	leaq	<rip>, %rax
+               	movslq	(%rax), %rcx
+               	incq	%rcx
+               	movl	%ecx, (%rax)
+               	movq	%rsi, %rax
+               	xorq	%r8, %rax
+               	testl	%eax, %eax
                	je	<addr>
-               	leaq	<rip>, %rcx
-               	movslq	(%rcx), %rdx
-               	incq	%rdx
-               	movl	%edx, (%rcx)
+               	leaq	<rip>, %rax
+               	movslq	(%rax), %rcx
+               	incq	%rcx
+               	movl	%ecx, (%rax)
+               	movq	%rdi, %rax
                	xorq	%r9, %rax
-               	movl	%eax, %eax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	je	<addr>
                	leaq	<rip>, %rax
                	movslq	(%rax), %rcx

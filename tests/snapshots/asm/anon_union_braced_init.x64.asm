@@ -49,8 +49,7 @@ Disassembly of section .text:
                	movq	-0x48(%rbp), %r13
                	xorl	%eax, %eax
                	leaq	-0x10(%rbp), %rdi
-               	movl	%r12d, %ecx
-               	movl	%ecx, (%rdi)
+               	movl	%r12d, (%rdi)
                	movl	%eax, 0x4(%rdi)
                	movq	%r13, 0x8(%rdi)
                	callq	<addr>
@@ -61,7 +60,6 @@ Disassembly of section .text:
                	cmpq	%r13, %rax
                	jne	<addr>
                	xorl	%eax, %eax
-               	movslq	%eax, %rax
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x1, %eax

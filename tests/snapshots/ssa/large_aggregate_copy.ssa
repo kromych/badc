@@ -20,13 +20,13 @@ fn ent_pc=0 n_params=0 variadic=false locals=1126
     v14  Imm(0)                                           -> x1
     terminator Jmp(b2)   (exit_acc=v13)
   block 1  start_pc=0
-    v18  LocalAddr(-1126)                                 -> x6
+    v18  LocalAddr(-1126)                                 -> x2
     v19  Extend { value=v15, kind=I32 }                   -> x1
-    v20  Binop { op=add, lhs=v18, rhs=v19 }               -> x2
-    v21  BinopI { op=and, lhs=v19, rhs_imm=127 }          -> x2
-    v22  BinopI { op=shl, lhs=v21, rhs_imm=56 }           -> x7
-    v23  Extend { value=v21, kind=I8 }                    -> x7
-    v24  StoreIndexed { base=v18, index=v19, scale=1, value=v21, kind=I8 } -> -
+    v20  Binop { op=add, lhs=v18, rhs=v15 }               -> x1
+    v21  BinopI { op=and, lhs=v15, rhs_imm=127 }          -> x1
+    v22  BinopI { op=shl, lhs=v21, rhs_imm=56 }           -> x6
+    v23  Extend { value=v21, kind=I8 }                    -> x6
+    v24  StoreIndexed { base=v18, index=v15, scale=1, value=v21, kind=I8 } -> -
     v25  Extend { value=v15, kind=I32 }                   -> x1
     v26  BinopI { op=add, lhs=v15, rhs_imm=1 }            -> x0
     v27  Imm(0)                                           -> x1

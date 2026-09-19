@@ -35,7 +35,6 @@ Disassembly of section .text:
                	cbz	w1, <addr>
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
-               	sxtw	x1, w1
                	ldr	x3, [x0, #0x8]
                	ldr	x4, [x0, #0x18]
                	ldrsw	x5, [x0, #0x14]

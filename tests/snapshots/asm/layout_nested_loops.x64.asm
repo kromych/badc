@@ -42,7 +42,7 @@ Disassembly of section .text:
                	addq	%r8, %rdi
                	leaq	(%rdi,%rdi,2), %rdi
                	subq	%rdi, %rsi
-               	testq	%rsi, %rsi
+               	testl	%esi, %esi
                	je	<addr>
                	cmpl	$0x4, %eax
                	je	<addr>

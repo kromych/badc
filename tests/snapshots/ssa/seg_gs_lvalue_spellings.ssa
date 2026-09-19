@@ -117,7 +117,7 @@ fn ent_pc=8 n_params=3 variadic=false locals=0
     v9   BinopI { op=shl, lhs=v3, rhs_imm=2 }             -> x0
     v10  Binop { op=add, lhs=v1, rhs=v9 }                 -> x0
     v11  BinopI { op=and, lhs=v5, rhs_imm=4294967295 }    -> x1
-    v12  SegStore { addr=v10, value=v11, kind=I32, seg=Gs } -> -
+    v12  SegStore { addr=v10, value=v5, kind=I32, seg=Gs } -> -
     terminator Return
 ; --- SSA dump (ok=true) ent_pc=9 ---
 ; name=rd_index_const
@@ -185,7 +185,7 @@ fn ent_pc=12 n_params=1 variadic=false locals=0
 ; --- SSA dump (ok=true) ent_pc=14 ---
 ; name=main
 fn ent_pc=14 n_params=0 variadic=false locals=1
-  spill_count=0 gpr_used=[3] fp_used=[]
+  spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(40)                                          -> x0
@@ -230,7 +230,7 @@ fn ent_pc=14 n_params=0 variadic=false locals=1
     v30  Imm(3)                                           -> x0
     terminator Return(v30)   (exit_acc=v30)
   block 6  start_pc=0
-    v31  Imm(0)                                           -> x2
+    v31  Imm(0)                                           -> x6
     v32  Imm(0)                                           -> x0
     v33  Imm(8)                                           -> x0
     v34  Imm(0)                                           -> x0
@@ -254,28 +254,28 @@ fn ent_pc=14 n_params=0 variadic=false locals=1
     v52  SegStore { addr=v50, value=v51, kind=I32, seg=Gs } -> -
     v53  Imm(0)                                           -> x1
     v54  Imm(28)                                          -> x1
-    v55  SegLoad { addr=v54, kind=U32, seg=Gs }           -> x6
-    v56  BinopI { op=and, lhs=v55, rhs_imm=7 }            -> x6
-    v57  BinopI { op=or, lhs=v56, rhs_imm=5 }             -> x6
+    v55  SegLoad { addr=v54, kind=U32, seg=Gs }           -> x2
+    v56  BinopI { op=and, lhs=v55, rhs_imm=7 }            -> x2
+    v57  BinopI { op=or, lhs=v56, rhs_imm=5 }             -> x2
     v58  BinopI { op=and, lhs=v57, rhs_imm=7 }            -> x7
     v59  SegLoad { addr=v54, kind=U32, seg=Gs }           -> x7
     v60  BinopI { op=and, lhs=v59, rhs_imm=-8 }           -> x7
-    v61  Binop { op=or, lhs=v60, rhs=v57 }                -> x6
+    v61  Binop { op=or, lhs=v60, rhs=v57 }                -> x2
     v62  SegStore { addr=v54, value=v61, kind=I32, seg=Gs } -> -
     v63  Imm(0)                                           -> x1
     v64  Imm(2)                                           -> x1
     v65  Imm(8)                                           -> x1
     v66  Imm(16)                                          -> x1
-    v67  SegLoad { addr=v50, kind=U32, seg=Gs }           -> x1
-    v68  BinopI { op=and, lhs=v67, rhs_imm=4294967295 }   -> x8
+    v67  SegLoad { addr=v50, kind=U32, seg=Gs }           -> x2
+    v68  BinopI { op=and, lhs=v67, rhs_imm=4294967295 }   -> x1
     v69  Imm(0)                                           -> x1
     v70  Imm(0)                                           -> x1
     v71  Imm(16)                                          -> x1
-    v72  SegLoad { addr=v50, kind=U32, seg=Gs }           -> x0
-    v73  BinopI { op=and, lhs=v72, rhs_imm=4294967295 }   -> x9
+    v72  SegLoad { addr=v50, kind=U32, seg=Gs }           -> x8
+    v73  BinopI { op=and, lhs=v72, rhs_imm=4294967295 }   -> x0
     v74  Imm(0)                                           -> x0
     v75  Imm(0)                                           -> x0
-    v76  SegLoad { addr=v31, kind=I64, seg=Gs }           -> x3
+    v76  SegLoad { addr=v31, kind=I64, seg=Gs }           -> x9
     v77  Imm(0)                                           -> x0
     v78  Imm(0)                                           -> x0
     v79  ImmData(64)                                      -> x0
@@ -296,16 +296,16 @@ fn ent_pc=14 n_params=0 variadic=false locals=1
     v90  Imm(0)                                           -> x0
     v91  Imm(0)                                           -> x0
     v92  Imm(0)                                           -> x0
-    v93  BinopI { op=and, lhs=v68, rhs_imm=4294967295 }   -> x0
-    v94  BinopI { op=xor, lhs=v68, rhs_imm=9 }            -> x0
+    v93  BinopI { op=and, lhs=v67, rhs_imm=4294967295 }   -> x0
+    v94  BinopI { op=xor, lhs=v67, rhs_imm=9 }            -> x0
     v95  BinopI { op=and, lhs=v94, rhs_imm=4294967295 }   -> x1
     v96  BinopI { op=ne, lhs=v94, rhs_imm=0 }             -> x1
     v97  Imm(1)                                           -> x1
     v98  Imm(0)                                           -> x1
     terminator Bnz { cond=v94, target=b11, fall=b9 }   (low word)   (exit_acc=v96)
   block 9  start_pc=0
-    v100 BinopI { op=and, lhs=v73, rhs_imm=4294967295 }   -> x0
-    v101 BinopI { op=xor, lhs=v73, rhs_imm=9 }            -> x0
+    v100 BinopI { op=and, lhs=v72, rhs_imm=4294967295 }   -> x0
+    v101 BinopI { op=xor, lhs=v72, rhs_imm=9 }            -> x0
     v102 BinopI { op=and, lhs=v101, rhs_imm=4294967295 }  -> x1
     v103 BinopI { op=ne, lhs=v101, rhs_imm=0 }            -> x1
     v104 BinopI { op=ne, lhs=v103, rhs_imm=0 }            -> x1

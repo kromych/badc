@@ -78,7 +78,7 @@ Disassembly of section .text:
                	movq	%rcx, %rax
                	subq	%r10, %rax
                	decq	%rax
-               	cmpq	$0x17, %rax
+               	cmpl	$0x17, %eax
                	je	<addr>
                	movl	$0xc, %eax
                	leave
@@ -136,7 +136,7 @@ Disassembly of section .text:
                	movq	%rcx, %rax
                	subq	%r10, %rax
                	decq	%rax
-               	cmpq	$0x35, %rax
+               	cmpl	$0x35, %eax
                	je	<addr>
                	movl	$0xd, %eax
                	leave

@@ -102,7 +102,6 @@ Disassembly of section .text:
                	jp	<addr>
                	jne	<addr>
                	xorl	%eax, %eax
-               	movslq	%eax, %rax
                	leave
                	retq
                	movl	$0x1, %eax

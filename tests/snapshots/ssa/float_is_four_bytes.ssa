@@ -236,9 +236,9 @@ fn ent_pc=7 n_params=0 variadic=false locals=2
   block 24  start_pc=0
     v190 Phi { incoming=[b25:v174, b23:v188], kind=I64 }  -> x3
     v191 Extend { value=v190, kind=I32 }                  -> x0
-    v192 BinopI { op=shl, lhs=v191, rhs_imm=32 }          -> x1
-    v193 Extend { value=v191, kind=I32 }                  -> x1
-    terminator Return(v191)   (exit_acc=v191)
+    v192 BinopI { op=shl, lhs=v190, rhs_imm=32 }          -> x0
+    v193 Extend { value=v190, kind=I32 }                  -> x0
+    terminator Return(v190)   (exit_acc=v190)
   block 25  start_pc=0
     terminator Jmp(b24)
   block 26  start_pc=0

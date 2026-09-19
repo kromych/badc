@@ -60,13 +60,11 @@ Disassembly of section .text:
                	and	x1, x2, #0x1
                	cmp	w1, #0x0
                	cset	x1, ne
-               	sxtw	x1, w1
                	cbz	x1, <addr>
                	b	<addr>
                	and	x0, x2, #0x2
                	cmp	w0, #0x0
                	cset	x0, ne
-               	sxtw	x0, w0
                	cbz	x0, <addr>
                	b	<addr>
                	mov	x1, x0

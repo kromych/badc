@@ -50,7 +50,6 @@ Disassembly of section .text:
                	cmpl	$0x2, %eax
                	jne	<addr>
                	xorl	%eax, %eax
-               	movslq	%eax, %rax
                	popq	%rbx
                	leave
                	retq

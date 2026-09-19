@@ -28,8 +28,8 @@ Disassembly of section .text:
                	bl	<addr>
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldrb	w3, [x1, w0, sxtw]
-               	strb	w3, [x2, w0, sxtw]
+               	ldrb	w3, [x1, x0]
+               	strb	w3, [x2, x0]
                	add	x0, x0, #0x1
                	cmp	w0, #0x9
                	b.ge	<addr>
@@ -50,8 +50,8 @@ Disassembly of section .text:
                	bl	<addr>
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldrb	w3, [x1, w0, sxtw]
-               	strb	w3, [x2, w0, sxtw]
+               	ldrb	w3, [x1, x0]
+               	strb	w3, [x2, x0]
                	add	x0, x0, #0x1
                	cmp	w0, #0x7
                	b.ge	<addr>
@@ -124,10 +124,9 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	cmp	w0, #0xa
                	b.ge	<addr>
-               	sxtw	x1, w0
-               	add	x2, x1, #0x2
-               	ldrb	w1, [x20, x1]
-               	strb	w1, [x20, w2, sxtw]
+               	add	x1, x0, #0x2
+               	ldrb	w2, [x20, x0]
+               	strb	w2, [x20, x1]
                	add	x0, x0, #0x1
                	cmp	w0, #0xa
                	b.lt	<addr>

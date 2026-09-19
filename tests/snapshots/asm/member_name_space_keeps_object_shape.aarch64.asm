@@ -14,66 +14,65 @@ Disassembly of section .text:
                	brk	#0x1
 
 <main>:
-               	mov	x4, #0x0                // =0
-               	mov	x7, #0x30               // =48
+               	mov	x3, #0x0                // =0
+               	mov	x6, #0x30               // =48
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	mov	x0, x4
+               	mov	x0, x3
                	cmp	w0, #0x2
                	b.ge	<addr>
-               	sxtw	x2, w0
-               	mul	x3, x2, x7
-               	add	x5, x1, x3
-               	add	x5, x5, #0x0
-               	add	x6, x5, #0x0
-               	add	x5, x4, #0x1
-               	str	w4, [x6]
-               	add	x4, x1, x3
-               	add	x6, x4, #0x0
-               	add	x4, x5, #0x1
-               	str	w5, [x6, #0x4]
-               	add	x5, x1, x3
-               	add	x6, x5, #0x0
-               	add	x5, x4, #0x1
-               	str	w4, [x6, #0x8]
-               	add	x4, x1, x3
-               	add	x6, x4, #0x0
-               	add	x4, x5, #0x1
-               	str	w5, [x6, #0xc]
-               	add	x5, x1, x3
-               	add	x5, x5, #0x10
-               	add	x6, x5, #0x0
-               	add	x5, x4, #0x1
-               	str	w4, [x6]
-               	add	x4, x1, x3
-               	add	x6, x4, #0x10
-               	add	x4, x5, #0x1
-               	str	w5, [x6, #0x4]
-               	add	x5, x1, x3
-               	add	x6, x5, #0x10
-               	add	x5, x4, #0x1
-               	str	w4, [x6, #0x8]
-               	add	x4, x1, x3
-               	add	x6, x4, #0x10
-               	add	x4, x5, #0x1
-               	str	w5, [x6, #0xc]
-               	add	x5, x1, x3
-               	add	x5, x5, #0x20
-               	add	x6, x5, #0x0
-               	add	x5, x4, #0x1
-               	str	w4, [x6]
-               	add	x4, x1, x3
-               	add	x6, x4, #0x20
-               	add	x4, x5, #0x1
-               	str	w5, [x6, #0x4]
-               	add	x5, x1, x3
-               	add	x6, x5, #0x20
-               	add	x5, x4, #0x1
-               	str	w4, [x6, #0x8]
-               	add	x2, x1, x3
+               	mul	x2, x0, x6
+               	add	x4, x1, x2
+               	add	x4, x4, #0x0
+               	add	x5, x4, #0x0
+               	add	x4, x3, #0x1
+               	str	w3, [x5]
+               	add	x3, x1, x2
+               	add	x5, x3, #0x0
+               	add	x3, x4, #0x1
+               	str	w4, [x5, #0x4]
+               	add	x4, x1, x2
+               	add	x5, x4, #0x0
+               	add	x4, x3, #0x1
+               	str	w3, [x5, #0x8]
+               	add	x3, x1, x2
+               	add	x5, x3, #0x0
+               	add	x3, x4, #0x1
+               	str	w4, [x5, #0xc]
+               	add	x4, x1, x2
+               	add	x4, x4, #0x10
+               	add	x5, x4, #0x0
+               	add	x4, x3, #0x1
+               	str	w3, [x5]
+               	add	x3, x1, x2
+               	add	x5, x3, #0x10
+               	add	x3, x4, #0x1
+               	str	w4, [x5, #0x4]
+               	add	x4, x1, x2
+               	add	x5, x4, #0x10
+               	add	x4, x3, #0x1
+               	str	w3, [x5, #0x8]
+               	add	x3, x1, x2
+               	add	x5, x3, #0x10
+               	add	x3, x4, #0x1
+               	str	w4, [x5, #0xc]
+               	add	x4, x1, x2
+               	add	x4, x4, #0x20
+               	add	x5, x4, #0x0
+               	add	x4, x3, #0x1
+               	str	w3, [x5]
+               	add	x3, x1, x2
+               	add	x5, x3, #0x20
+               	add	x3, x4, #0x1
+               	str	w4, [x5, #0x4]
+               	add	x4, x1, x2
+               	add	x5, x4, #0x20
+               	add	x4, x3, #0x1
+               	str	w3, [x5, #0x8]
+               	add	x2, x1, x2
                	add	x2, x2, #0x20
-               	add	x4, x5, #0x1
-               	str	w5, [x2, #0xc]
+               	add	x3, x4, #0x1
+               	str	w4, [x2, #0xc]
                	add	x0, x0, #0x1
                	cmp	w0, #0x2
                	b.lt	<addr>

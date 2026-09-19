@@ -20,15 +20,14 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	cmp	w0, #0x40
                	b.ge	<addr>
-               	sub	x2, x29, #0x100
-               	sxtw	x1, w0
-               	lsl	x3, x1, #2
-               	add	x2, x2, x3
-               	scvtf	s0, x1
-               	mov	x1, #0x3e800000         // =1048576000
-               	fmov	s17, w1
+               	sub	x1, x29, #0x100
+               	lsl	x2, x0, #2
+               	add	x1, x1, x2
+               	scvtf	s0, x0
+               	mov	x2, #0x3e800000         // =1048576000
+               	fmov	s17, w2
                	fmul	s0, s0, s17
-               	str	s0, [x2]
+               	str	s0, [x1]
                	add	x0, x0, #0x1
                	cmp	w0, #0x40
                	b.lt	<addr>

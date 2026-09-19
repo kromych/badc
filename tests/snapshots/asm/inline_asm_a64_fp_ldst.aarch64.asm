@@ -48,7 +48,6 @@ Disassembly of section .text:
                	fcmp	d0, d17
                	b.ne	<addr>
                	mov	x0, #0x2a               // =42
-               	sxtw	x0, w0
                	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
                	ret

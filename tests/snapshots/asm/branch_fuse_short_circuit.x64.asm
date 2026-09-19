@@ -46,7 +46,7 @@ Disassembly of section .text:
                	testq	%rcx, %rcx
                	jne	<addr>
                	movl	$0x1, %ecx
-               	cmpq	$0x1, %rcx
+               	cmpl	$0x1, %ecx
                	je	<addr>
                	movl	$0x1, %eax
                	retq
@@ -60,7 +60,7 @@ Disassembly of section .text:
                	cmpq	$0x64, %rcx
                	jbe	<addr>
                	movl	$0x2, %ecx
-               	cmpq	$0x2, %rcx
+               	cmpl	$0x2, %ecx
                	je	<addr>
                	movl	$0x2, %eax
                	retq
@@ -77,7 +77,7 @@ Disassembly of section .text:
                	cmpq	$0x64, %rcx
                	jbe	<addr>
                	movl	$0x2, %ecx
-               	cmpq	$0x2, %rcx
+               	cmpl	$0x2, %ecx
                	je	<addr>
                	movl	$0x4, %eax
                	retq
@@ -92,7 +92,7 @@ Disassembly of section .text:
                	cmpq	$0x64, %rcx
                	jbe	<addr>
                	movl	$0x2, %eax
-               	cmpq	$0x2, %rax
+               	cmpl	$0x2, %eax
                	je	<addr>
                	movl	$0x5, %eax
                	retq

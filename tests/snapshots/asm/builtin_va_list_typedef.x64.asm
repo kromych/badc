@@ -256,7 +256,6 @@ Disassembly of section .text:
                	cmpl	$0x7, %edx
                	sete	%al
                	movzbq	%al, %rax
-               	movslq	%eax, %rax
                	leave
                	retq
                	movq	%rax, %rcx
@@ -314,7 +313,7 @@ Disassembly of section .text:
                	cmpl	%edx, %eax
                	jl	<addr>
                	movslq	%ecx, %rax
-               	leaq	-0x18(%rbp), %rdx
+               	leaq	-0x18(%rbp), %rcx
                	leave
                	retq
 

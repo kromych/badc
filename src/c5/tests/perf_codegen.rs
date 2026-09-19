@@ -342,6 +342,11 @@ fn a64_is_sxtw(w: u32) -> bool {
     w & 0xFFFF_FC00 == 0x9340_7C00
 }
 
+/// `sxtw`, or an access that sign-extends its index word.
+fn a64_extends_word(w: u32) -> bool {
+    a64_is_sxtw(w) || a64_reg_offset(w).is_some_and(|(option, _)| option == A64_SXTW)
+}
+
 /// The shapes a test misses, so one run reports both targets.
 #[derive(Default)]
 struct Misses(Vec<String>);
@@ -472,7 +477,6 @@ fn counted_loop_is_entered_through_its_guard() {
 /// Under `n >= 2` the decrement `n - 2` stays inside `int`, so only the
 /// parameter's entry extension remains.
 #[test]
-#[ignore = "TODO: the range of a value is not narrowed by the branch guarding its block"]
 fn guarded_decrement_is_not_renormalized() {
     let mut m = Misses::default();
     let ws = a64(FIB, "fib");
@@ -486,7 +490,6 @@ fn guarded_decrement_is_not_renormalized() {
 
 /// `i` stays in `[0, 1000]`, so no use of it needs a sign extension.
 #[test]
-#[ignore = "TODO: an induction variable is not bounded by its loop guard"]
 fn bounded_counter_is_not_renormalized() {
     let mut m = Misses::default();
     let ws = a64(SUM1000, "sum1000");
@@ -500,10 +503,189 @@ fn bounded_counter_is_not_renormalized() {
     m.finish();
 }
 
+/// Whether an instruction in the span of a backward branch satisfies `pred`.
+fn a64_in_loop(ws: &[u32], pred: impl Fn(u32) -> bool) -> bool {
+    ws.iter().enumerate().any(|(i, &w)| {
+        matches!(a64_branch(w, i), Some((t, _)) if t >= 0 && t as usize <= i
+            && ws[t as usize..=i].iter().any(|&x| pred(x)))
+    })
+}
+
+fn x64_in_loop(insns: &[X64Insn], pred: impl Fn(&X64Insn) -> bool) -> bool {
+    insns
+        .iter()
+        .filter(|b| (b.is_jmp() || b.is_jcc()) && b.target() <= b.at)
+        .any(|b| {
+            insns
+                .iter()
+                .any(|i| i.at >= b.target() && i.at <= b.at && pred(i))
+        })
+}
+
+/// `mov wd, wm`, the zero extension of a low word.
+fn a64_is_mask(w: u32) -> bool {
+    w & 0xFFE0_FFE0 == 0x2A00_03E0
+}
+
+/// `movl r32, r32`.
+fn x64_is_mask(i: &X64Insn) -> bool {
+    matches!(i.op, 0x89 | 0x8B) && !i.rex_w() && i.reg_form()
+}
+
+/// Arithmetic wraps, so a counter keeps its extension wherever its bound
+/// does not keep the step inside `int`: a disequality, `i <= n` (n can be
+/// INT_MAX), a step that is not a constant, a bound on the side the step
+/// moves away from, and a second back edge whose step is not a constant.
+/// On aarch64 the subscript's access may perform it.
+#[test]
+fn counter_that_can_leave_int_keeps_its_extension() {
+    const SRCS: [&str; 6] = [
+        "long f(const int *a, int n) { long s = 0; for (int i = 0; i != n; i++) s += a[i]; return s; }",
+        "long f(const int *a, int n) { long s = 0; for (int i = 0; i <= n; i++) s += a[i]; return s; }",
+        "long f(const int *a, int n, int k) { long s = 0; for (int i = 0; i < n; i += k) s += a[i]; return s; }",
+        "long f(const int *a, int n) { long s = 0; for (int i = n; i > 0; i++) s += a[i]; return s; }",
+        "long f(const int *a, int n) { long s = 0; for (int i = n; i < 0; i--) s += a[i]; return s; }",
+        "long f(const int *a, int n, int k) { long s = 0; int i = 0;\n\
+         while (i < n) { if (a[i] & 1) { i += 1; continue; } s += a[i]; i += k; } return s; }",
+    ];
+    let mut m = Misses::default();
+    for src in SRCS {
+        let ws = a64(src, "f");
+        m.expect(a64_in_loop(&ws, a64_extends_word), || {
+            format!("aarch64: no sxtw in the loop of `{src}`: {ws:08x?}")
+        });
+        let insns = x64(src, "f");
+        m.expect(x64_in_loop(&insns, X64Insn::is_movsxd_rr), || {
+            format!("x86-64: no movslq in the loop of `{src}`: {insns:x?}")
+        });
+    }
+    m.finish();
+}
+
+/// The bounded twins: the guard keeps the step inside the type, so the
+/// loop holds no extension. `i < n` leaves room for `i + 1` whatever `n`
+/// is; the decreasing counter ends at -1; an unsigned counter below an
+/// unsigned bound cannot reach 2^32.
+#[test]
+fn bounded_counters_hold_no_extension_in_their_loops() {
+    const SRCS: [&str; 4] = [
+        "long f(const int *a, int n) { long s = 0; for (int i = 0; i < n; i++) s += a[i]; return s; }",
+        "long f(const int *a) { long s = 0; for (int i = 999; i >= 0; i--) s += a[i]; return s; }",
+        "long f(const int *a, unsigned n) { long s = 0; for (unsigned i = 0; i < n; i++) s += a[i]; return s; }",
+        "long f(const int *a, int n) { long s = 0; int i = 0;\n\
+         while (i < n) { if (a[i] & 1) { i += 1; continue; } s += a[i]; i += 1; } return s; }",
+    ];
+    let mut m = Misses::default();
+    for src in SRCS {
+        let ws = a64(src, "f");
+        m.expect(
+            !a64_in_loop(&ws, |w| a64_is_sxtw(w) || a64_is_mask(w)),
+            || format!("aarch64: an extension in the loop of `{src}`: {ws:08x?}"),
+        );
+        let insns = x64(src, "f");
+        m.expect(
+            !x64_in_loop(&insns, |i| i.is_movsxd_rr() || x64_is_mask(i)),
+            || format!("x86-64: an extension in the loop of `{src}`: {insns:x?}"),
+        );
+    }
+    m.finish();
+}
+
+/// A guard on another value, and a guard whose block has ended, say
+/// nothing about `i + 1`: the sum is renormalized behind the branch for
+/// its 64-bit read. Under a guard on `i` itself it is not, and the one
+/// extension is the parameter's, ahead of the branch.
+#[test]
+fn unguarded_increment_keeps_its_renormalization() {
+    const SRCS: [(&str, bool); 3] = [
+        (
+            "long f(int i, int j) { long s = 0; if (j < 100) s += (long)(i + 1); return s; }",
+            true,
+        ),
+        (
+            "long f(int i) { long s = 0; if (i < 100) s = 1; s += (long)(i + 1); return s; }",
+            true,
+        ),
+        (
+            "long f(int i) { long s = 0; if (i < 100) s += (long)(i + 1); return s; }",
+            false,
+        ),
+    ];
+    let mut m = Misses::default();
+    for (src, renormalized) in SRCS {
+        let ws = a64(src, "f");
+        let branch = ws
+            .iter()
+            .enumerate()
+            .position(|(i, &w)| matches!(a64_branch(w, i), Some((_, false))))
+            .expect("a conditional branch");
+        m.expect(
+            ws[branch..].iter().any(|&w| a64_is_sxtw(w)) == renormalized,
+            || format!("aarch64 `{src}`: {ws:08x?}"),
+        );
+        let insns = x64(src, "f");
+        let branch = insns.iter().position(X64Insn::is_jcc).expect("a jcc");
+        m.expect(
+            insns[branch..].iter().any(X64Insn::is_movsxd_rr) == renormalized,
+            || format!("x86-64 `{src}`: {insns:x?}"),
+        );
+    }
+    m.finish();
+}
+
+/// An unsigned renormalization read above bit 31 stays: a conversion to
+/// `unsigned long`, a right shift, a division, a 64-bit comparison, an
+/// 8-byte store and a call argument.
+#[test]
+fn unsigned_renormalization_read_at_64_bits_is_kept() {
+    const SRCS: [&str; 6] = [
+        "unsigned long f(unsigned long a, unsigned long b) { return (unsigned)(a + b); }",
+        "unsigned long f(unsigned long a, unsigned long b) { return (unsigned)(a + b) >> 4; }",
+        "unsigned long f(unsigned long a, unsigned long b) { return (unsigned)(a + b) / 3u; }",
+        "int f(unsigned long a, unsigned long b, long c) { return (long)(unsigned)(a + b) < c; }",
+        "void f(unsigned long a, unsigned long b, unsigned long *p) { *p = (unsigned)(a + b); }",
+        "extern unsigned long sink(unsigned long);\n\
+         unsigned long f(unsigned long a, unsigned long b) { return sink((unsigned)(a + b)); }",
+    ];
+    let mut m = Misses::default();
+    for src in SRCS {
+        let ws = a64(src, "f");
+        m.expect(ws.iter().any(|&w| a64_is_mask(w)), || {
+            format!("aarch64: no mask in `{src}`: {ws:08x?}")
+        });
+        let insns = x64(src, "f");
+        m.expect(insns.iter().any(x64_is_mask), || {
+            format!("x86-64: no mask in `{src}`: {insns:x?}")
+        });
+    }
+    m.finish();
+}
+
+/// `a + b` wraps to zero for a = b = INT_MIN. Its zero test reads the low
+/// word; a test of the whole register sees the carry above it.
+#[test]
+fn zero_test_of_a_wrapped_sum_reads_the_low_word() {
+    const SRC: &str = "int f(int a, int b) { if ((a + b) != 0) return 1; return 0; }";
+    let mut m = Misses::default();
+    let ws = a64(SRC, "f");
+    // `cbz xN` / `cbnz xN`.
+    m.expect(!ws.iter().any(|&w| w & 0xFE00_0000 == 0xB400_0000), || {
+        format!("aarch64: a 64-bit zero test: {ws:08x?}")
+    });
+    let insns = x64(SRC, "f");
+    // `test r64, r64`.
+    m.expect(
+        !insns
+            .iter()
+            .any(|i| i.op == 0x85 && i.rex_w() && i.reg_form()),
+        || format!("x86-64: a 64-bit zero test: {insns:x?}"),
+    );
+    m.finish();
+}
+
 /// `n % 10` lies in `(-10, 10)`: the promoted `digit` needs no extension
 /// past the one of `n` at the loop head and the one of the `int` result.
 #[test]
-#[ignore = "TODO: a remainder by a constant is re-extended when read through a promoted local"]
 fn remainder_by_a_constant_is_not_renormalized() {
     let mut m = Misses::default();
     let ws = a64(DIGITS, "digits");
@@ -518,7 +700,6 @@ fn remainder_by_a_constant_is_not_renormalized() {
 /// Of the two masks in `s * K + C`, only the second one's result is read
 /// above bit 31; the parameter's entry conversion is one more.
 #[test]
-#[ignore = "TODO: an unsigned renormalization is kept where its high half is unread"]
 fn unsigned_chain_masks_once_per_iteration() {
     let mut m = Misses::default();
     // `mov wd, wm`.

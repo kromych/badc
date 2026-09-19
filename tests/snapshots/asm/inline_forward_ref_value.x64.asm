@@ -26,8 +26,8 @@ Disassembly of section .text:
                	int3
 
 <compute>:
-               	leaq	0x1(%rdi), %rcx
-               	movslq	%ecx, %rdx
+               	leaq	0x1(%rdi), %rsi
+               	movslq	%esi, %rcx
                	testq	%rdi, %rdi
                	je	<addr>
                	leaq	0x64(%rdi), %rax
@@ -37,10 +37,10 @@ Disassembly of section .text:
                	retq
                	shlq	%rax
                	leaq	<rip>, %rdi
-               	leaq	0x1(%rax), %rsi
-               	movl	%esi, (%rdi)
+               	leaq	0x1(%rax), %rdx
+               	movl	%edx, (%rdi)
+               	addq	%rsi, %rax
                	addq	%rcx, %rax
-               	addq	%rdx, %rax
                	retq
                	movq	$-0x2, %rax
                	retq

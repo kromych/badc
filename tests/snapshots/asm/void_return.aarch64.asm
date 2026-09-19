@@ -75,14 +75,12 @@ Disassembly of section .text:
                	ret
 
 <count_down>:
-               	sxtw	x0, w0
-               	cbz	x0, <addr>
+               	cbz	w0, <addr>
                	ldrsw	x2, [x1]
                	add	x2, x2, x0
                	str	w2, [x1]
                	sub	x0, x0, #0x1
-               	sxtw	x0, w0
-               	cbnz	x0, <addr>
+               	cbnz	w0, <addr>
                	ret
 
 <main>:

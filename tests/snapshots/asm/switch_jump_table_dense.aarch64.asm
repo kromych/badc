@@ -22,17 +22,13 @@ Disassembly of section .text:
                	cmp	w1, #0xf
                	b.ge	<addr>
                	sub	x2, x1, #0x2
-               	sxtw	x0, w1
-               	sub	x0, x0, #0x3
-               	cmp	x0, #0x11
-               	b.hs	<addr>
+               	sub	x0, x1, #0x3
                	adrp	x17, <page>
                	add	x17, x17, <lo12>
                	ldr	x17, [x17, x0, lsl #3]
                	br	x17
                	mov	x0, #0x1                // =1
-               	sxtw	x2, w2
-               	cmp	x0, x2
+               	cmp	w0, w2
                	b.eq	<addr>
                	b	<addr>
                	mov	x0, #0x2                // =2

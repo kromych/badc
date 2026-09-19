@@ -26,57 +26,51 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	leaq	<rip>, %rax
-               	movq	%rax, %rcx
-               	andq	$0xffff, %rcx           # imm = 0xFFFF
-               	movslq	%ecx, %rcx
-               	testq	%rcx, %rcx
+               	leaq	<rip>, %rcx
+               	movq	%rcx, %rax
+               	andq	$0xffff, %rax           # imm = 0xFFFF
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x1, %eax
                	retq
-               	leaq	<rip>, %rcx
-               	andq	$0xffff, %rcx           # imm = 0xFFFF
-               	movslq	%ecx, %rcx
-               	testq	%rcx, %rcx
+               	leaq	<rip>, %rax
+               	andq	$0xffff, %rax           # imm = 0xFFFF
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x2, %eax
                	retq
-               	leaq	<rip>, %rcx
-               	andq	$0xffff, %rcx           # imm = 0xFFFF
-               	movslq	%ecx, %rcx
-               	testq	%rcx, %rcx
+               	leaq	<rip>, %rax
+               	andq	$0xffff, %rax           # imm = 0xFFFF
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x3, %eax
                	retq
-               	leaq	<rip>, %rcx
-               	andq	$0xffff, %rcx           # imm = 0xFFFF
-               	movslq	%ecx, %rcx
-               	testq	%rcx, %rcx
+               	leaq	<rip>, %rax
+               	andq	$0xffff, %rax           # imm = 0xFFFF
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x4, %eax
                	retq
-               	leaq	<rip>, %rcx
-               	andq	$0xffff, %rcx           # imm = 0xFFFF
-               	movslq	%ecx, %rcx
-               	testq	%rcx, %rcx
+               	leaq	<rip>, %rax
+               	andq	$0xffff, %rax           # imm = 0xFFFF
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x5, %eax
                	retq
-               	leaq	<rip>, %rcx
-               	addq	$0x10000, %rcx          # imm = 0x10000
-               	andq	$0xffff, %rcx           # imm = 0xFFFF
-               	movslq	%ecx, %rcx
-               	testq	%rcx, %rcx
+               	leaq	<rip>, %rax
+               	addq	$0x10000, %rax          # imm = 0x10000
+               	andq	$0xffff, %rax           # imm = 0xFFFF
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x6, %eax
                	retq
-               	leaq	0x1(%rax), %rcx
-               	andq	$0xffff, %rcx           # imm = 0xFFFF
-               	testq	%rcx, %rcx
+               	leaq	0x1(%rcx), %rax
+               	andq	$0xffff, %rax           # imm = 0xFFFF
+               	testq	%rax, %rax
                	jne	<addr>
                	movl	$0x14, %eax
                	retq
-               	addq	$0x8000, %rax           # imm = 0x8000
+               	leaq	0x8000(%rcx), %rax
                	andq	$0xffff, %rax           # imm = 0xFFFF
                	testq	%rax, %rax
                	jne	<addr>

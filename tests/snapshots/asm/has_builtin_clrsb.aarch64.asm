@@ -53,7 +53,7 @@ Disassembly of section .text:
                	mov	x1, #0x20               // =32
                	sub	x0, x1, x0
                	sub	x0, x0, #0x1
-               	cmp	x0, #0x17
+               	cmp	w0, #0x17
                	b.eq	<addr>
                	mov	x0, #0xc                // =12
                	add	sp, sp, #0x10
@@ -94,7 +94,7 @@ Disassembly of section .text:
                	mov	x1, #0x40               // =64
                	sub	x0, x1, x0
                	sub	x0, x0, #0x1
-               	cmp	x0, #0x35
+               	cmp	w0, #0x35
                	b.eq	<addr>
                	mov	x0, #0xd                // =13
                	add	sp, sp, #0x10

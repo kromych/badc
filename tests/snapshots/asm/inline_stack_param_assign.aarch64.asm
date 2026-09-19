@@ -24,8 +24,7 @@ Disassembly of section .text:
                	mov	x9, x2
                	sturb	w6, [x29, #-0x20]
                	sub	x0, x4, x1
-               	mov	x1, x0
-               	sxth	x4, w1
+               	sxth	x4, w0
                	and	x0, x5, #0xff
                	add	x0, x0, #0x3
                	and	x1, x0, #0xff

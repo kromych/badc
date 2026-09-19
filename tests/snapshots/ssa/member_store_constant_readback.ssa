@@ -226,9 +226,9 @@ fn ent_pc=9 n_params=0 variadic=false locals=0
     v142 Imm(0)                                           -> x0
     v143 Imm(0)                                           -> x0
     v144 Extend { value=v128, kind=I32 }                  -> x0
-    v145 BinopI { op=shl, lhs=v144, rhs_imm=32 }          -> x1
-    v146 Extend { value=v144, kind=I32 }                  -> x1
-    terminator Return(v144)   (exit_acc=v144)
+    v145 BinopI { op=shl, lhs=v128, rhs_imm=32 }          -> x0
+    v146 Extend { value=v128, kind=I32 }                  -> x0
+    terminator Return(v128)   (exit_acc=v128)
   block 7  start_pc=0
     terminator Jmp(b6)
   block 8  start_pc=0

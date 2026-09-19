@@ -69,11 +69,11 @@ Disassembly of section .text:
                	movq	%rcx, %rsp
                	movl	$0x7, %edx
                	xorl	%eax, %eax
-               	cmpq	$0x100000, %rax         # imm = 0x100000
+               	cmpl	$0x100000, %eax         # imm = 0x100000
                	jge	<addr>
                	movb	%dl, (%rcx,%rax)
                	addq	$0x1000, %rax           # imm = 0x1000
-               	cmpq	$0x100000, %rax         # imm = 0x100000
+               	cmpl	$0x100000, %eax         # imm = 0x100000
                	jl	<addr>
                	leaq	0xfffff(%rcx), %rax
                	movl	$0x8, %esi

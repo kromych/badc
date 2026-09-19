@@ -40,7 +40,6 @@ Disassembly of section .text:
                	cmpq	$-0x4728dfba, %rcx      # imm = 0xB8D72046
                	jne	<addr>
                	xorl	%eax, %eax
-               	movslq	%eax, %rax
                	retq
                	movl	$0x1, %eax
                	jmp	<addr>

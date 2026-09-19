@@ -32,14 +32,12 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	cmpl	$0x8, %eax
                	jge	<addr>
-               	leaq	-0x80(%rbp), %rdx
-               	movslq	%eax, %rcx
-               	movq	%rcx, %rsi
-               	shlq	$0x4, %rsi
-               	addq	%rsi, %rdx
-               	imulq	$0xa, %rcx, %rcx
+               	leaq	-0x80(%rbp), %rcx
+               	movq	%rax, %rdx
+               	shlq	$0x4, %rdx
+               	addq	%rcx, %rdx
+               	imulq	$0xa, %rax, %rcx
                	movl	$0x1, %esi
-               	movl	%ecx, %ecx
                	movl	%ecx, (%rdx)
                	movq	%rsi, 0x8(%rdx)
                	incq	%rax
@@ -92,7 +90,6 @@ Disassembly of section .text:
                	cmpq	$0x16785, %rax          # imm = 0x16785
                	jne	<addr>
                	xorl	%eax, %eax
-               	movslq	%eax, %rax
                	leave
                	retq
                	movl	$0x1, %eax

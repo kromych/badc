@@ -23,10 +23,12 @@ Disassembly of section .text:
                	ret
 
 <g_generate>:
-               	ldrsw	x0, [x0, #0x8]
-               	add	x0, x0, #0x64
-               	str	w0, [x1]
+               	mov	x3, x0
                	sxtw	x0, w2
+               	mov	x4, x1
+               	ldrsw	x1, [x3, #0x8]
+               	add	x1, x1, #0x64
+               	str	w1, [x4]
                	ret
 
 <driver>:

@@ -33,7 +33,6 @@ Disassembly of section .text:
                	cmp	w3, #0xff
                	b.eq	<addr>
                	add	x0, x2, #0xa
-               	sxtw	x0, w0
                	ret
                	mov	x3, #0x1                // =1
                	ldrb	w4, [x0, #0x1]
@@ -92,7 +91,6 @@ Disassembly of section .text:
                	cmp	w1, #0x68
                	b.eq	<addr>
                	add	x0, x2, #0x1e
-               	sxtw	x0, w0
                	ret
                	adrp	x1, <page>
                	add	x1, x1, <lo12>

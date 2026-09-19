@@ -151,7 +151,6 @@ Disassembly of section .text:
                	cmpq	%r11, %rax
                	jne	<addr>
                	xorl	%eax, %eax
-               	movslq	%eax, %rax
                	popq	%rbx
                	popq	%r12
                	popq	%rbp

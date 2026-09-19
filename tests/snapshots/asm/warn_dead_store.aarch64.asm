@@ -26,7 +26,6 @@ Disassembly of section .text:
                	mov	x0, #0x1                // =1
                	cbz	x1, <addr>
                	mov	x0, #0x2                // =2
-               	sxtw	x0, w0
                	ret
 
 <address_escapes_silences>:

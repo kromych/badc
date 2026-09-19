@@ -204,8 +204,8 @@ fn ent_pc=3 n_params=1 variadic=true locals=3
     v33  BinopI { op=and, lhs=v23, rhs_imm=255 }          -> x6
     v34  Binop { op=add, lhs=v21, rhs=v23 }               -> x1
     v35  BinopI { op=shl, lhs=v34, rhs_imm=32 }           -> x2
-    v36  Extend { value=v34, kind=I32 }                   -> x1
-    v37  FpCast { kind=IntToFp, value=v36 }               -> d2
+    v36  Extend { value=v34, kind=I32 }                   -> x2
+    v37  FpCast { kind=IntToFp, value=v34 }               -> d2
     v38  Binop { op=fadd, lhs=v15, rhs=v37 }              -> d1
     v39  Binop { op=fadd, lhs=v8, rhs=v38 }               -> d0
     v40  Imm(0)                                           -> x1

@@ -152,10 +152,10 @@ fn ent_pc=3 n_params=1 variadic=false locals=0
     terminator Jmp(b5)   (exit_acc=v46)
   block 5  start_pc=0
     v7   Phi { incoming=[b7:v43, b4:v46], kind=I64 }      -> x0
-    v8   Extend { value=v7, kind=I32 }                    -> x0
-    v9   BinopI { op=shl, lhs=v8, rhs_imm=32 }            -> x1
-    v10  Extend { value=v8, kind=I32 }                    -> x1
-    terminator Return(v8)   (exit_acc=v8)
+    v8   Extend { value=v7, kind=I32 }                    -> x1
+    v9   BinopI { op=shl, lhs=v7, rhs_imm=32 }            -> x1
+    v10  Extend { value=v7, kind=I32 }                    -> x1
+    terminator Return(v7)   (exit_acc=v7)
   block 6  start_pc=0
     terminator Jmp(b7)
   block 7  start_pc=0
@@ -275,7 +275,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     v29  Extend { value=v3, kind=I32 }                    -> x0
     v30  Call { target_pc=0, args=[v3], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v31  Extend { value=v26, kind=I32 }                   -> x1
-    v32  Binop { op=ne, lhs=v30, rhs=v31 }                -> x0
+    v32  Binop { op=ne, lhs=v30, rhs=v26 }                -> x0
     terminator Bz { cond=v32, target=b6, fall=b32 }   (exit_acc=v32)
   block 5  start_pc=0
     v21  Extend { value=v3, kind=I32 }                    -> x0

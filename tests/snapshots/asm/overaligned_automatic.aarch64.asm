@@ -31,7 +31,7 @@ Disassembly of section .text:
                	add	x2, sp, #0x80
                	and	x7, x2, #0x1f
                	orr	x6, x6, x7
-               	cbz	x6, <addr>
+               	cbz	w6, <addr>
                	mov	x0, #0x1                // =1
                	sub	sp, x29, #0xa0
                	add	sp, sp, #0xa0

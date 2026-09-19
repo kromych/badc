@@ -159,7 +159,7 @@ Disassembly of section .text:
                	cmpl	$0xa, %eax
                	je	<addr>
                	orq	$0x80, %rbx
-               	movslq	%ebx, %rax
+               	movq	%rbx, %rax
                	popq	%rbx
                	popq	%r12
                	leave

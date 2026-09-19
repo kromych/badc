@@ -18,7 +18,6 @@ Disassembly of section .text:
                	add	x17, x0, #0x2, lsl #12  // =0x2000
                	ldrb	w0, [x17]
                	add	x0, x0, x1
-               	sxtw	x0, w0
                	ret
 
 <half_from_big>:
@@ -27,7 +26,6 @@ Disassembly of section .text:
                	add	x17, x17, #0xc40
                	ldrh	w0, [x17]
                	add	x0, x1, x0
-               	sxtw	x0, w0
                	ret
 
 <word_from_big>:

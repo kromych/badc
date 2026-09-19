@@ -556,9 +556,9 @@ fn ent_pc=8 n_params=0 variadic=false locals=2
   block 14  start_pc=0
     v504 Phi { incoming=[b15:v437, b13:v501], kind=I64 }  -> x3
     v505 Extend { value=v504, kind=I32 }                  -> x0
-    v506 BinopI { op=shl, lhs=v505, rhs_imm=32 }          -> x1
-    v507 Extend { value=v505, kind=I32 }                  -> x1
-    terminator Return(v505)   (exit_acc=v505)
+    v506 BinopI { op=shl, lhs=v504, rhs_imm=32 }          -> x0
+    v507 Extend { value=v504, kind=I32 }                  -> x0
+    terminator Return(v504)   (exit_acc=v504)
   block 15  start_pc=0
     terminator Jmp(b14)
   block 16  start_pc=0

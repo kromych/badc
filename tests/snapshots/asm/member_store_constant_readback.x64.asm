@@ -96,7 +96,7 @@ Disassembly of section .text:
                	cmpl	$0x6, %eax
                	je	<addr>
                	orq	$0x40, %rbx
-               	movslq	%ebx, %rax
+               	movq	%rbx, %rax
                	popq	%rbx
                	leave
                	retq

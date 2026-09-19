@@ -363,25 +363,24 @@ Disassembly of section .text:
                	popq	%r14
                	leave
                	retq
-               	leaq	-0x10(%rbp), %rax
-               	leaq	<rip>, %rcx
+               	leaq	-0x10(%rbp), %rcx
+               	leaq	<rip>, %rax
                	pushq	%rdx
-               	movq	(%rcx), %rdx
-               	movq	%rdx, (%rax)
-               	movq	0x8(%rcx), %rdx
-               	movq	%rdx, 0x8(%rax)
+               	movq	(%rax), %rdx
+               	movq	%rdx, (%rcx)
+               	movq	0x8(%rax), %rdx
+               	movq	%rdx, 0x8(%rcx)
                	popq	%rdx
-               	movq	%r13, %rcx
-               	xorq	%r14, %rcx
+               	movq	%r13, %rax
+               	xorq	%r14, %rax
                	movq	%rbx, %rdx
                	xorq	%r12, %rdx
-               	orq	%rdx, %rcx
-               	testq	%rcx, %rcx
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	incq	%rcx
-               	movslq	%ecx, %rcx
-               	movslq	(%rax,%rcx,4), %rax
+               	orq	%rdx, %rax
+               	testq	%rax, %rax
+               	setne	%al
+               	movzbq	%al, %rax
+               	incq	%rax
+               	movslq	(%rcx,%rax,4), %rax
                	cmpl	$0x1e, %eax
                	je	<addr>
                	movl	$0xb, %eax

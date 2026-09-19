@@ -69,7 +69,7 @@ Disassembly of section .text:
                	ldrsw	x3, [x0]
                	cmp	w3, #0x2
                	cset	x3, eq
-               	cmp	x3, #0x1
+               	cmp	w3, #0x1
                	b.ne	<addr>
                	ldrsw	x3, [x0]
                	cmp	w3, #0x2
@@ -85,7 +85,7 @@ Disassembly of section .text:
                	ldrsw	x0, [x0]
                	cmp	w0, #0x1
                	cset	x0, eq
-               	cmp	x0, #0x1
+               	cmp	w0, #0x1
                	b.eq	<addr>
                	mov	x0, #0x17               // =23
                	ret

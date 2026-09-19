@@ -146,7 +146,7 @@ Disassembly of section .text:
                	cmp	w0, #0xa
                	b.eq	<addr>
                	orr	x20, x20, #0x80
-               	sxtw	x0, w20
+               	mov	x0, x20
                	ldp	x29, x30, [sp, #0x20]
                	ldp	x20, x21, [sp], #0x30
                	ret

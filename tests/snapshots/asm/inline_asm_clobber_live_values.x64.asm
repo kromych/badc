@@ -247,7 +247,7 @@ Disassembly of section .text:
                	xorq	%r15, %r15
                	xorl	%ebx, %ebx
                	movq	%rbx, %r12
-               	cmpq	$0xa, %rbx
+               	cmpl	$0xa, %ebx
                	jge	<addr>
                	movq	%rbx, %rax
                	imulq	%rbx, %rax
@@ -262,7 +262,7 @@ Disassembly of section .text:
                	xorq	%r10, %r10
                	xorq	%r11, %r11
                	incq	%rbx
-               	cmpq	$0xa, %rbx
+               	cmpl	$0xa, %ebx
                	jl	<addr>
                	cmpq	$0x11d, %r12            # imm = 0x11D
                	je	<addr>
@@ -297,7 +297,7 @@ Disassembly of section .text:
                	xorq	%r9, %r9
                	xorq	%r10, %r10
                	xorq	%r11, %r11
-               	cmpq	$0x17, %r12
+               	cmpl	$0x17, %r12d
                	jne	<addr>
                	movl	$0x17, %r12d
                	movl	$0x1, %ebx
@@ -322,7 +322,7 @@ Disassembly of section .text:
                	xorq	%r9, %r9
                	xorq	%r10, %r10
                	xorq	%r11, %r11
-               	cmpq	$0x18, %r12
+               	cmpl	$0x18, %r12d
                	je	<addr>
                	movl	$0x4, %eax
                	popq	%rbx

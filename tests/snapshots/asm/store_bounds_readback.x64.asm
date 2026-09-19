@@ -55,7 +55,6 @@ Disassembly of section .text:
                	movzbq	%al, %rax
                	shlq	%rax
                	addq	%rcx, %rax
-               	movslq	%eax, %rax
                	leave
                	retq
 
@@ -102,14 +101,14 @@ Disassembly of section .text:
                	cmpl	$0x3, %eax
                	je	<addr>
                	orq	$0x4, %rbx
-               	movslq	(%r12), %rcx
-               	andq	$0x1ff, %rcx            # imm = 0x1FF
-               	imulq	$0xc8, %rcx, %rcx
-               	movswq	%cx, %rax
-               	testl	%eax, %eax
+               	movslq	(%r12), %rax
+               	andq	$0x1ff, %rax            # imm = 0x1FF
+               	imulq	$0xc8, %rax, %rax
+               	movswq	%ax, %rcx
+               	testl	%ecx, %ecx
                	setl	%dl
                	movzbq	%dl, %rdx
-               	cmpl	$0xffff9c40, %eax       # imm = 0xFFFF9C40
+               	cmpl	$0xffff9c40, %ecx       # imm = 0xFFFF9C40
                	sete	%al
                	movzbq	%al, %rax
                	shlq	%rax
@@ -122,17 +121,15 @@ Disassembly of section .text:
                	andq	$0x7, %rax
                	imulq	$-0x1, %rax, %rax
                	decq	%rax
-               	movl	%eax, %ecx
-               	cmpl	$0x7fffffff, %ecx       # imm = 0x7FFFFFFF
-               	seta	%dl
-               	movzbq	%dl, %rdx
+               	cmpl	$0x7fffffff, %eax       # imm = 0x7FFFFFFF
+               	seta	%cl
+               	movzbq	%cl, %rcx
                	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	movq	%rcx, %rax
-               	cmpl	%r11d, %ecx
+               	cmpl	%r11d, %eax
                	sete	%al
                	movzbq	%al, %rax
                	shlq	%rax
-               	addq	%rdx, %rax
+               	addq	%rcx, %rax
                	cmpl	$0x3, %eax
                	je	<addr>
                	orq	$0x10, %rbx
@@ -182,7 +179,7 @@ Disassembly of section .text:
                	cmpq	$0x3, %rax
                	je	<addr>
                	orq	$0x80, %rbx
-               	movslq	%ebx, %rax
+               	movq	%rbx, %rax
                	popq	%rbx
                	popq	%r12
                	popq	%r13

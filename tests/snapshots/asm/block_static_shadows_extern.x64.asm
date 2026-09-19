@@ -31,8 +31,7 @@ Disassembly of section .text:
                	cmpl	%esi, %eax
                	jge	<addr>
                	shlq	$0x4, %rcx
-               	movslq	%eax, %rdx
-               	movzbq	(%rdi,%rdx), %rdx
+               	movzbq	(%rdi,%rax), %rdx
                	addq	%rdx, %rcx
                	incq	%rax
                	cmpl	%esi, %eax

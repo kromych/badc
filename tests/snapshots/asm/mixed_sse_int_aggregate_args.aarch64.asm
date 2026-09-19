@@ -23,7 +23,6 @@ Disassembly of section .text:
                	cmp	x1, #0x7
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
-               	sxtw	x0, w0
                	ret
                	cmp	x0, #0x4
                	b.eq	<addr>
@@ -75,7 +74,6 @@ Disassembly of section .text:
                	fcmp	d16, d17
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
-               	sxtw	x0, w0
                	ret
                	fmov	d16, x4
                	fmov	d17, x4

@@ -328,7 +328,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=1
     v183 Extend { value=v182, kind=I32 }                  -> x1
     v184 Binop { op=add, lhs=v176, rhs=v182 }             -> x0
     v185 Extend { value=v184, kind=I32 }                  -> x1
-    v186 Extend { value=v185, kind=I32 }                  -> x1
+    v186 Extend { value=v184, kind=I32 }                  -> x1
     v187 BinopI { op=ne, lhs=v184, rhs_imm=306 }          -> x0
     terminator Bz { cond=v187, target=b32, fall=b31 }   (exit_acc=v187)
   block 31  start_pc=0

@@ -308,19 +308,19 @@ Disassembly of section .text:
                	ldp	x22, x23, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x40
                	ret
-               	sub	x1, x29, #0x10
-               	adrp	x2, <page>
-               	add	x2, x2, <lo12>
+               	sub	x2, x29, #0x10
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
                	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x2]
-               	str	x10, [x1]
-               	ldr	x10, [x2, #0x8]
-               	str	x10, [x1, #0x8]
+               	ldr	x10, [x1]
+               	str	x10, [x2]
+               	ldr	x10, [x1, #0x8]
+               	str	x10, [x2, #0x8]
                	ldr	x10, [sp], #0x10
                	cmp	x8, #0x0
-               	cset	x2, ne
-               	add	x2, x2, #0x1
-               	ldrsw	x1, [x1, w2, sxtw #2]
+               	cset	x1, ne
+               	add	x1, x1, #0x1
+               	ldrsw	x1, [x2, x1, lsl #2]
                	cmp	w1, #0x1e
                	b.eq	<addr>
                	mov	x0, #0xb                // =11

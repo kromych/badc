@@ -124,16 +124,15 @@ Disassembly of section .text:
                	mov	x20, x0
                	cmp	w0, #0x2
                	b.ge	<addr>
-               	sxtw	x2, w0
-               	lsl	x3, x2, #4
-               	add	x1, x23, x3
+               	lsl	x2, x0, #4
+               	add	x1, x23, x2
                	ldr	w1, [x1]
                	eor	x1, x1, #0x1
                	cbnz	w1, <addr>
-               	sub	x4, x29, #0x20
-               	add	x1, x4, x3
-               	ldr	x5, [x1, #0x8]
-               	cmp	x5, x21
+               	sub	x3, x29, #0x20
+               	add	x1, x3, x2
+               	ldr	x4, [x1, #0x8]
+               	cmp	x4, x21
                	b.ne	<addr>
                	orr	x20, x20, #0x1
                	b	<addr>
@@ -161,7 +160,6 @@ Disassembly of section .text:
                	cmp	w20, #0x3
                	b.ne	<addr>
                	mov	x0, #0x0                // =0
-               	sxtw	x0, w0
                	ldp	x29, x30, [sp, #0x70]
                	ldr	x24, [sp, #0x20]
                	ldp	x22, x23, [sp, #0x10]

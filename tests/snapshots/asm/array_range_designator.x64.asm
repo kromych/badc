@@ -36,31 +36,26 @@ Disassembly of section .text:
 <check_struct>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x8, %rsp
-               	pushq	%r13
                	pushq	%r12
                	pushq	%rbx
                	xorl	%ebx, %ebx
                	cmpl	$0x2, %ebx
                	jge	<addr>
                	leaq	<rip>, %rax
-               	movslq	%ebx, %r12
-               	imulq	$0x18, %r12, %r13
-               	addq	%r13, %rax
+               	imulq	$0x18, %rbx, %r12
+               	addq	%r12, %rax
                	movq	(%rax), %rax
                	callq	*%rax
                	cmpl	$0xb, %eax
                	jne	<addr>
                	leaq	<rip>, %rax
-               	addq	%r13, %rax
+               	addq	%r12, %rax
                	movq	0x8(%rax), %rax
                	callq	*%rax
                	cmpl	$0x16, %eax
                	jne	<addr>
                	leaq	<rip>, %rax
-               	movslq	%ebx, %rcx
-               	imulq	$0x18, %rcx, %rcx
-               	addq	%rcx, %rax
+               	addq	%r12, %rax
                	movslq	0x10(%rax), %rax
                	cmpl	$0x7, %eax
                	jne	<addr>
@@ -82,27 +77,22 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	popq	%rbx
                	popq	%r12
-               	popq	%r13
-               	leave
+               	popq	%rbp
                	retq
                	movl	$0x17, %eax
                	popq	%rbx
                	popq	%r12
-               	popq	%r13
-               	leave
+               	popq	%rbp
                	retq
                	movl	$0x16, %eax
                	popq	%rbx
                	popq	%r12
-               	popq	%r13
-               	leave
+               	popq	%rbp
                	retq
                	leaq	0x14(%rbx), %rax
-               	movslq	%eax, %rax
                	popq	%rbx
                	popq	%r12
-               	popq	%r13
-               	leave
+               	popq	%rbp
                	retq
 
 <check_const>:
@@ -158,10 +148,8 @@ Disassembly of section .text:
                	cmpl	$0x16, %eax
                	jne	<addr>
                	xorl	%eax, %eax
-               	movslq	%eax, %rcx
-               	testq	%rcx, %rcx
+               	testq	%rax, %rax
                	je	<addr>
-               	movq	%rcx, %rax
                	popq	%rbp
                	retq
                	xorl	%edi, %edi

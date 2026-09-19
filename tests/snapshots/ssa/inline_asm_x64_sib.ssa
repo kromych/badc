@@ -11,13 +11,13 @@ fn ent_pc=0 n_params=0 variadic=false locals=2
   block 1  start_pc=0
     v7   ImmData(16)                                      -> x1
     v8   Extend { value=v4, kind=I32 }                    -> x1
-    v9   BinopI { op=shl, lhs=v8, rhs_imm=3 }             -> x6
-    v10  Binop { op=add, lhs=v2, rhs=v9 }                 -> x6
-    v11  Imm(4096)                                        -> x6
-    v12  BinopI { op=add, lhs=v8, rhs_imm=4096 }          -> x6
-    v13  BinopI { op=shl, lhs=v12, rhs_imm=32 }           -> x7
+    v9   BinopI { op=shl, lhs=v4, rhs_imm=3 }             -> x1
+    v10  Binop { op=add, lhs=v2, rhs=v9 }                 -> x1
+    v11  Imm(4096)                                        -> x1
+    v12  BinopI { op=add, lhs=v4, rhs_imm=4096 }          -> x1
+    v13  BinopI { op=shl, lhs=v12, rhs_imm=32 }           -> x6
     v14  Extend { value=v12, kind=I32 }                   -> x6
-    v15  StoreIndexed { base=v2, index=v8, scale=8, value=v14, kind=I64 } -> -
+    v15  StoreIndexed { base=v2, index=v4, scale=8, value=v12, kind=I64 } -> -
     v16  Extend { value=v4, kind=I32 }                    -> x1
     v17  BinopI { op=add, lhs=v4, rhs_imm=1 }             -> x0
     v18  Imm(0)                                           -> x1

@@ -34,18 +34,16 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
+               	leaq	<rip>, %rcx
+               	xorl	%eax, %eax
                	leaq	<rip>, %rdx
-               	xorl	%ecx, %ecx
-               	leaq	<rip>, %rsi
-               	movl	%ecx, %eax
                	cmpl	$0x18, %eax
                	jae	<addr>
+               	movzbq	(%rcx,%rax), %rsi
                	movzbq	(%rdx,%rax), %rdi
-               	movzbq	(%rsi,%rax), %r8
-               	cmpl	%r8d, %edi
+               	cmpl	%edi, %esi
                	jne	<addr>
-               	leaq	0x1(%rax), %rcx
-               	movl	%ecx, %eax
+               	incq	%rax
                	cmpl	$0x18, %eax
                	jb	<addr>
                	leaq	-0x10(%rbp), %rax

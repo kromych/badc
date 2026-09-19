@@ -23,9 +23,10 @@ Disassembly of section .text:
                	ret
 
 <my_generate>:
-               	ldrsw	x0, [x0, #0x8]
-               	str	w0, [x1]
+               	mov	x3, x0
                	sxtw	x0, w2
+               	ldrsw	x2, [x3, #0x8]
+               	str	w2, [x1]
                	ret
 
 <main>:

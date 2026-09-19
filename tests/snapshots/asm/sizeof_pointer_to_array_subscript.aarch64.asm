@@ -14,404 +14,394 @@ Disassembly of section .text:
                	brk	#0x1
 
 <main>:
-               	adrp	x3, <page>
-               	add	x3, x3, <lo12>
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	adrp	x4, <page>
-               	add	x4, x4, <lo12>
-               	adrp	x5, <page>
-               	add	x5, x5, <lo12>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	adrp	x3, <page>
+               	add	x3, x3, <lo12>
+               	adrp	x5, <page>
+               	add	x5, x5, <lo12>
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
-               	add	x6, x3, #0x8
-               	sub	x3, x6, x3
-               	cmp	x3, #0x8
+               	adrp	x4, <page>
+               	add	x4, x4, <lo12>
+               	add	x6, x1, #0x8
+               	sub	x1, x6, x1
+               	cmp	x1, #0x8
                	b.eq	<addr>
                	mov	x0, #0xb                // =11
                	ret
-               	add	x3, x0, #0x10
-               	sub	x3, x3, x0
-               	cmp	x3, #0x10
+               	add	x1, x0, #0x10
+               	sub	x1, x1, x0
+               	cmp	x1, #0x10
                	b.eq	<addr>
                	mov	x0, #0xc                // =12
                	ret
-               	add	x3, x4, #0x20
-               	sub	x3, x3, x4
-               	cmp	x3, #0x20
+               	add	x1, x3, #0x20
+               	sub	x1, x1, x3
+               	cmp	x1, #0x20
                	b.eq	<addr>
                	mov	x0, #0xd                // =13
                	ret
-               	add	x3, x5, #0x40
-               	sub	x3, x3, x5
-               	cmp	x3, #0x40
+               	add	x1, x5, #0x40
+               	sub	x1, x1, x5
+               	cmp	x1, #0x40
                	b.eq	<addr>
                	mov	x0, #0xe                // =14
                	ret
-               	add	x3, x1, #0x3c
-               	sub	x3, x3, x1
-               	cmp	x3, #0x3c
+               	add	x1, x2, #0x3c
+               	sub	x1, x1, x2
+               	cmp	x1, #0x3c
                	b.eq	<addr>
                	mov	x0, #0xf                // =15
                	ret
-               	add	x3, x1, #0x14
-               	sub	x3, x3, x1
-               	cmp	x3, #0x14
+               	add	x1, x2, #0x14
+               	sub	x1, x1, x2
+               	cmp	x1, #0x14
                	b.eq	<addr>
                	mov	x0, #0x10               // =16
                	ret
-               	add	x3, x2, #0x18
-               	sub	x3, x3, x2
-               	cmp	x3, #0x18
+               	add	x1, x4, #0x18
+               	sub	x1, x1, x4
+               	cmp	x1, #0x18
                	b.eq	<addr>
                	mov	x0, #0x11               // =17
                	ret
-               	add	x3, x2, #0xc
-               	sub	x3, x3, x2
-               	cmp	x3, #0xc
+               	add	x1, x4, #0xc
+               	sub	x1, x1, x4
+               	cmp	x1, #0xc
                	b.eq	<addr>
                	mov	x0, #0x12               // =18
                	ret
-               	add	x3, x2, #0x4
-               	sub	x3, x3, x2
-               	cmp	x3, #0x4
+               	add	x1, x4, #0x4
+               	sub	x1, x1, x4
+               	cmp	x1, #0x4
                	b.eq	<addr>
                	mov	x0, #0x13               // =19
                	ret
-               	add	x3, x0, #0x0
-               	mov	x4, #0x3e8              // =1000
-               	strh	w4, [x3]
-               	mov	x3, #0x3e9              // =1001
-               	strh	w3, [x0, #0x2]
-               	mov	x3, #0x3ea              // =1002
-               	strh	w3, [x0, #0x4]
-               	mov	x3, #0x3eb              // =1003
-               	strh	w3, [x0, #0x6]
-               	mov	x3, #0x3ec              // =1004
-               	strh	w3, [x0, #0x8]
-               	mov	x3, #0x3ed              // =1005
-               	strh	w3, [x0, #0xa]
-               	mov	x3, #0x3ee              // =1006
-               	strh	w3, [x0, #0xc]
-               	mov	x3, #0x3ef              // =1007
-               	strh	w3, [x0, #0xe]
-               	add	x0, x1, #0x0
-               	add	x3, x0, #0x0
-               	mov	x4, #0x0                // =0
-               	str	w4, [x3]
-               	mov	x3, #0x1                // =1
-               	str	w3, [x0, #0x4]
-               	mov	x3, #0x2                // =2
-               	str	w3, [x0, #0x8]
-               	mov	x3, #0x3                // =3
-               	str	w3, [x0, #0xc]
-               	mov	x12, #0x4               // =4
-               	str	w12, [x0, #0x10]
-               	add	x0, x1, #0x14
-               	add	x3, x0, #0x0
-               	mov	x4, #0x64               // =100
-               	str	w4, [x3]
-               	mov	x3, #0x65               // =101
-               	str	w3, [x0, #0x4]
-               	mov	x3, #0x66               // =102
-               	str	w3, [x0, #0x8]
-               	mov	x3, #0x67               // =103
-               	str	w3, [x0, #0xc]
-               	mov	x3, #0x68               // =104
-               	str	w3, [x0, #0x10]
-               	add	x0, x1, #0x28
-               	add	x3, x0, #0x0
-               	mov	x4, #0xc8               // =200
-               	str	w4, [x3]
-               	mov	x3, #0xc9               // =201
-               	str	w3, [x0, #0x4]
-               	mov	x3, #0xca               // =202
-               	str	w3, [x0, #0x8]
-               	mov	x3, #0xcb               // =203
-               	str	w3, [x0, #0xc]
-               	mov	x3, #0xcc               // =204
-               	str	w3, [x0, #0x10]
-               	mov	x8, #0x0                // =0
-               	mov	x9, #0x14               // =20
-               	mov	x10, #0x64              // =100
-               	mov	x3, x8
-               	cmp	w3, #0x3
+               	add	x1, x0, #0x0
+               	mov	x3, #0x3e8              // =1000
+               	strh	w3, [x1]
+               	mov	x1, #0x3e9              // =1001
+               	strh	w1, [x0, #0x2]
+               	mov	x1, #0x3ea              // =1002
+               	strh	w1, [x0, #0x4]
+               	mov	x1, #0x3eb              // =1003
+               	strh	w1, [x0, #0x6]
+               	mov	x1, #0x3ec              // =1004
+               	strh	w1, [x0, #0x8]
+               	mov	x1, #0x3ed              // =1005
+               	strh	w1, [x0, #0xa]
+               	mov	x1, #0x3ee              // =1006
+               	strh	w1, [x0, #0xc]
+               	mov	x1, #0x3ef              // =1007
+               	strh	w1, [x0, #0xe]
+               	add	x0, x2, #0x0
+               	add	x1, x0, #0x0
+               	mov	x3, #0x0                // =0
+               	str	w3, [x1]
+               	mov	x1, #0x1                // =1
+               	str	w1, [x0, #0x4]
+               	mov	x1, #0x2                // =2
+               	str	w1, [x0, #0x8]
+               	mov	x1, #0x3                // =3
+               	str	w1, [x0, #0xc]
+               	mov	x11, #0x4               // =4
+               	str	w11, [x0, #0x10]
+               	add	x0, x2, #0x14
+               	add	x1, x0, #0x0
+               	mov	x3, #0x64               // =100
+               	str	w3, [x1]
+               	mov	x1, #0x65               // =101
+               	str	w1, [x0, #0x4]
+               	mov	x1, #0x66               // =102
+               	str	w1, [x0, #0x8]
+               	mov	x1, #0x67               // =103
+               	str	w1, [x0, #0xc]
+               	mov	x1, #0x68               // =104
+               	str	w1, [x0, #0x10]
+               	add	x0, x2, #0x28
+               	add	x1, x0, #0x0
+               	mov	x3, #0xc8               // =200
+               	str	w3, [x1]
+               	mov	x1, #0xc9               // =201
+               	str	w1, [x0, #0x4]
+               	mov	x1, #0xca               // =202
+               	str	w1, [x0, #0x8]
+               	mov	x1, #0xcb               // =203
+               	str	w1, [x0, #0xc]
+               	mov	x1, #0xcc               // =204
+               	str	w1, [x0, #0x10]
+               	mov	x7, #0x0                // =0
+               	mov	x8, #0x14               // =20
+               	mov	x9, #0x64               // =100
+               	mov	x0, x7
+               	cmp	w0, #0x3
                	b.ge	<addr>
-               	sxtw	x4, w3
-               	mul	x6, x4, x9
-               	add	x5, x1, x6
-               	add	x0, x5, #0x0
-               	ldrsw	x11, [x0]
-               	mul	x0, x4, x10
-               	add	x7, x0, #0x0
-               	cmp	w11, w7
-               	b.ne	<addr>
-               	mov	x13, #0x1               // =1
-               	ldrsw	x11, [x5, #0x4]
-               	add	x7, x0, #0x1
-               	cmp	w11, w7
-               	b.ne	<addr>
-               	mov	x13, #0x2               // =2
-               	ldrsw	x11, [x5, #0x8]
-               	add	x7, x0, #0x2
-               	cmp	w11, w7
-               	b.ne	<addr>
-               	mov	x13, #0x3               // =3
-               	ldrsw	x11, [x5, #0xc]
-               	add	x7, x0, #0x3
-               	cmp	w11, w7
-               	b.ne	<addr>
-               	ldrsw	x5, [x5, #0x10]
-               	add	x0, x0, #0x4
-               	cmp	w5, w0
-               	b.ne	<addr>
-               	add	x3, x3, #0x1
-               	cmp	w3, #0x3
-               	b.lt	<addr>
-               	mov	x8, #0x0                // =0
-               	mov	x9, #0x14               // =20
-               	mov	x10, #0x64              // =100
-               	mov	x3, x8
-               	cmp	w3, #0x3
-               	b.ge	<addr>
-               	sxtw	x4, w3
-               	mul	x6, x4, x9
-               	add	x5, x1, x6
-               	add	x0, x5, #0x0
-               	ldrsw	x11, [x0]
-               	mul	x0, x4, x10
-               	add	x7, x0, #0x0
-               	cmp	w11, w7
+               	mul	x5, x0, x8
+               	add	x3, x2, x5
+               	add	x1, x3, #0x0
+               	ldrsw	x10, [x1]
+               	mul	x1, x0, x9
+               	add	x6, x1, #0x0
+               	cmp	w10, w6
                	b.ne	<addr>
                	mov	x12, #0x1               // =1
-               	ldrsw	x11, [x5, #0x4]
-               	add	x7, x0, #0x1
-               	cmp	w11, w7
+               	ldrsw	x10, [x3, #0x4]
+               	add	x6, x1, #0x1
+               	cmp	w10, w6
                	b.ne	<addr>
                	mov	x12, #0x2               // =2
-               	ldrsw	x11, [x5, #0x8]
-               	add	x7, x0, #0x2
-               	cmp	w11, w7
+               	ldrsw	x10, [x3, #0x8]
+               	add	x6, x1, #0x2
+               	cmp	w10, w6
                	b.ne	<addr>
                	mov	x12, #0x3               // =3
-               	ldrsw	x11, [x5, #0xc]
-               	add	x7, x0, #0x3
-               	cmp	w11, w7
+               	ldrsw	x10, [x3, #0xc]
+               	add	x6, x1, #0x3
+               	cmp	w10, w6
                	b.ne	<addr>
-               	mov	x7, #0x4                // =4
-               	ldrsw	x5, [x5, #0x10]
-               	add	x0, x0, #0x4
-               	cmp	w5, w0
+               	ldrsw	x3, [x3, #0x10]
+               	add	x1, x1, #0x4
+               	cmp	w3, w1
                	b.ne	<addr>
-               	add	x3, x3, #0x1
-               	cmp	w3, #0x3
+               	add	x0, x0, #0x1
+               	cmp	w0, #0x3
+               	b.lt	<addr>
+               	mov	x7, #0x0                // =0
+               	mov	x8, #0x14               // =20
+               	mov	x9, #0x64               // =100
+               	mov	x0, x7
+               	cmp	w0, #0x3
+               	b.ge	<addr>
+               	mul	x5, x0, x8
+               	add	x3, x2, x5
+               	add	x1, x3, #0x0
+               	ldrsw	x10, [x1]
+               	mul	x1, x0, x9
+               	add	x6, x1, #0x0
+               	cmp	w10, w6
+               	b.ne	<addr>
+               	mov	x12, #0x1               // =1
+               	ldrsw	x10, [x3, #0x4]
+               	add	x6, x1, #0x1
+               	cmp	w10, w6
+               	b.ne	<addr>
+               	mov	x12, #0x2               // =2
+               	ldrsw	x10, [x3, #0x8]
+               	add	x6, x1, #0x2
+               	cmp	w10, w6
+               	b.ne	<addr>
+               	mov	x12, #0x3               // =3
+               	ldrsw	x10, [x3, #0xc]
+               	add	x6, x1, #0x3
+               	cmp	w10, w6
+               	b.ne	<addr>
+               	ldrsw	x3, [x3, #0x10]
+               	add	x1, x1, #0x4
+               	cmp	w3, w1
+               	b.ne	<addr>
+               	add	x0, x0, #0x1
+               	cmp	w0, #0x3
                	b.lt	<addr>
                	mov	x1, #0x0                // =0
-               	mov	x8, #0xc                // =12
+               	mov	x7, #0xc                // =12
                	cmp	w1, #0x2
                	b.ge	<addr>
-               	sxtw	x3, w1
-               	mul	x0, x3, x8
-               	add	x5, x2, x0
-               	add	x6, x5, #0x0
-               	add	x9, x6, #0x0
-               	add	x4, x0, #0x0
-               	add	x7, x4, #0x0
-               	and	x7, x7, #0xff
-               	strb	w7, [x9]
-               	add	x7, x4, #0x1
-               	and	x7, x7, #0xff
-               	strb	w7, [x6, #0x1]
-               	add	x7, x4, #0x2
-               	and	x7, x7, #0xff
-               	strb	w7, [x6, #0x2]
-               	add	x4, x4, #0x3
-               	and	x4, x4, #0xff
-               	strb	w4, [x6, #0x3]
-               	add	x6, x5, #0x4
-               	add	x9, x6, #0x0
-               	add	x4, x0, #0x4
-               	add	x7, x4, #0x0
-               	and	x7, x7, #0xff
-               	strb	w7, [x9]
-               	add	x7, x4, #0x1
-               	and	x7, x7, #0xff
-               	strb	w7, [x6, #0x1]
-               	add	x5, x4, #0x2
-               	and	x5, x5, #0xff
-               	strb	w5, [x6, #0x2]
-               	add	x5, x2, x0
-               	add	x5, x5, #0x4
-               	add	x0, x4, #0x3
+               	mul	x0, x1, x7
+               	add	x3, x4, x0
+               	add	x5, x3, #0x0
+               	add	x8, x5, #0x0
+               	add	x2, x0, #0x0
+               	add	x6, x2, #0x0
+               	and	x6, x6, #0xff
+               	strb	w6, [x8]
+               	add	x6, x2, #0x1
+               	and	x6, x6, #0xff
+               	strb	w6, [x5, #0x1]
+               	add	x6, x2, #0x2
+               	and	x6, x6, #0xff
+               	strb	w6, [x5, #0x2]
+               	add	x2, x2, #0x3
+               	and	x2, x2, #0xff
+               	strb	w2, [x5, #0x3]
+               	add	x5, x3, #0x4
+               	add	x8, x5, #0x0
+               	add	x2, x0, #0x4
+               	add	x6, x2, #0x0
+               	and	x6, x6, #0xff
+               	strb	w6, [x8]
+               	add	x6, x2, #0x1
+               	and	x6, x6, #0xff
+               	strb	w6, [x5, #0x1]
+               	add	x3, x2, #0x2
+               	and	x3, x3, #0xff
+               	strb	w3, [x5, #0x2]
+               	add	x3, x4, x0
+               	add	x5, x3, #0x4
+               	add	x2, x2, #0x3
+               	and	x2, x2, #0xff
+               	strb	w2, [x5, #0x3]
+               	add	x2, x3, #0x8
+               	add	x2, x2, #0x0
+               	add	x0, x0, #0x8
+               	add	x0, x0, #0x0
                	and	x0, x0, #0xff
-               	strb	w0, [x5, #0x3]
-               	mul	x0, x3, x8
-               	add	x6, x2, x0
-               	add	x5, x6, #0x8
-               	add	x9, x5, #0x0
-               	add	x4, x0, #0x8
-               	add	x7, x4, #0x0
-               	and	x7, x7, #0xff
-               	strb	w7, [x9]
-               	add	x7, x4, #0x1
-               	and	x7, x7, #0xff
-               	strb	w7, [x5, #0x1]
-               	add	x7, x4, #0x2
-               	and	x7, x7, #0xff
-               	strb	w7, [x5, #0x2]
-               	add	x0, x4, #0x3
+               	strb	w0, [x2]
+               	mul	x0, x1, x7
+               	add	x5, x4, x0
+               	add	x3, x5, #0x8
+               	add	x2, x0, #0x8
+               	add	x6, x2, #0x1
+               	and	x6, x6, #0xff
+               	strb	w6, [x3, #0x1]
+               	add	x6, x2, #0x2
+               	and	x6, x6, #0xff
+               	strb	w6, [x3, #0x2]
+               	add	x0, x2, #0x3
                	and	x0, x0, #0xff
-               	strb	w0, [x5, #0x3]
+               	strb	w0, [x3, #0x3]
                	add	x1, x1, #0x1
                	cmp	w1, #0x2
                	b.lt	<addr>
-               	mov	x6, #0x0                // =0
-               	mov	x12, #0xc               // =12
-               	cmp	w6, #0x2
+               	mov	x5, #0x0                // =0
+               	mov	x10, #0xc               // =12
+               	cmp	w5, #0x2
                	b.ge	<addr>
-               	mov	x11, #0x0               // =0
-               	mov	x3, x11
-               	cmp	w3, #0x3
+               	mov	x9, #0x0                // =0
+               	mov	x2, x9
+               	cmp	w2, #0x3
                	b.ge	<addr>
-               	sxtw	x7, w6
-               	mul	x0, x7, x12
-               	add	x8, x2, x0
-               	sxtw	x9, w3
-               	lsl	x1, x9, #2
-               	add	x5, x8, x1
-               	add	x4, x5, #0x0
-               	ldrb	w13, [x4]
-               	add	x4, x0, x1
-               	add	x10, x4, #0x0
-               	and	x10, x10, #0xff
-               	cmp	w13, w10
+               	mul	x0, x5, x10
+               	add	x7, x4, x0
+               	lsl	x1, x2, #2
+               	add	x6, x7, x1
+               	add	x3, x6, #0x0
+               	ldrb	w11, [x3]
+               	add	x3, x0, x1
+               	add	x8, x3, #0x0
+               	and	x8, x8, #0xff
+               	cmp	w11, w8
                	b.ne	<addr>
-               	mov	x14, #0x1               // =1
-               	ldrb	w13, [x5, #0x1]
-               	add	x10, x4, #0x1
-               	and	x10, x10, #0xff
-               	cmp	w13, w10
+               	mov	x12, #0x1               // =1
+               	ldrb	w11, [x6, #0x1]
+               	add	x8, x3, #0x1
+               	and	x8, x8, #0xff
+               	cmp	w11, w8
                	b.ne	<addr>
-               	mov	x10, #0x2               // =2
-               	ldrb	w5, [x5, #0x2]
-               	add	x4, x4, #0x2
-               	and	x4, x4, #0xff
-               	cmp	w5, w4
+               	mov	x12, #0x2               // =2
+               	ldrb	w11, [x6, #0x2]
+               	add	x8, x3, #0x2
+               	and	x8, x8, #0xff
+               	cmp	w11, w8
                	b.ne	<addr>
-               	mov	x5, #0x3                // =3
-               	add	x4, x8, x1
-               	ldrb	w4, [x4, #0x3]
-               	add	x0, x0, x1
-               	add	x0, x0, #0x3
+               	mov	x8, #0x3                // =3
+               	ldrb	w6, [x6, #0x3]
+               	add	x0, x3, #0x3
                	and	x0, x0, #0xff
-               	cmp	w4, w0
+               	cmp	w6, w0
                	b.ne	<addr>
-               	add	x3, x3, #0x1
-               	cmp	w3, #0x3
+               	add	x2, x2, #0x1
+               	cmp	w2, #0x3
                	b.lt	<addr>
-               	add	x6, x6, #0x1
-               	cmp	w6, #0x2
+               	add	x5, x5, #0x1
+               	cmp	w5, #0x2
                	b.lt	<addr>
-               	mov	x6, #0x0                // =0
-               	mov	x12, #0xc               // =12
-               	cmp	w6, #0x2
+               	mov	x5, #0x0                // =0
+               	mov	x10, #0xc               // =12
+               	cmp	w5, #0x2
                	b.ge	<addr>
-               	mov	x11, #0x0               // =0
-               	mov	x3, x11
-               	cmp	w3, #0x3
+               	mov	x9, #0x0                // =0
+               	mov	x2, x9
+               	cmp	w2, #0x3
                	b.ge	<addr>
-               	sxtw	x7, w6
-               	mul	x0, x7, x12
-               	add	x8, x2, x0
-               	sxtw	x9, w3
-               	lsl	x1, x9, #2
-               	add	x5, x8, x1
-               	add	x4, x5, #0x0
-               	ldrb	w13, [x4]
-               	add	x4, x0, x1
-               	add	x10, x4, #0x0
-               	and	x10, x10, #0xff
-               	cmp	w13, w10
+               	mul	x0, x5, x10
+               	add	x7, x4, x0
+               	lsl	x1, x2, #2
+               	add	x6, x7, x1
+               	add	x3, x6, #0x0
+               	ldrb	w11, [x3]
+               	add	x3, x0, x1
+               	add	x8, x3, #0x0
+               	and	x8, x8, #0xff
+               	cmp	w11, w8
                	b.ne	<addr>
-               	mov	x14, #0x1               // =1
-               	ldrb	w13, [x5, #0x1]
-               	add	x10, x4, #0x1
-               	and	x10, x10, #0xff
-               	cmp	w13, w10
+               	mov	x12, #0x1               // =1
+               	ldrb	w11, [x6, #0x1]
+               	add	x8, x3, #0x1
+               	and	x8, x8, #0xff
+               	cmp	w11, w8
                	b.ne	<addr>
-               	mov	x10, #0x2               // =2
-               	ldrb	w5, [x5, #0x2]
-               	add	x4, x4, #0x2
-               	and	x4, x4, #0xff
-               	cmp	w5, w4
+               	mov	x12, #0x2               // =2
+               	ldrb	w11, [x6, #0x2]
+               	add	x8, x3, #0x2
+               	and	x8, x8, #0xff
+               	cmp	w11, w8
                	b.ne	<addr>
-               	mov	x5, #0x3                // =3
-               	add	x4, x8, x1
-               	ldrb	w4, [x4, #0x3]
-               	add	x0, x0, x1
-               	add	x0, x0, #0x3
+               	mov	x8, #0x3                // =3
+               	ldrb	w6, [x6, #0x3]
+               	add	x0, x3, #0x3
                	and	x0, x0, #0xff
-               	cmp	w4, w0
+               	cmp	w6, w0
                	b.ne	<addr>
-               	add	x3, x3, #0x1
-               	cmp	w3, #0x3
+               	add	x2, x2, #0x1
+               	cmp	w2, #0x3
                	b.lt	<addr>
-               	add	x6, x6, #0x1
-               	cmp	w6, #0x2
+               	add	x5, x5, #0x1
+               	cmp	w5, #0x2
                	b.lt	<addr>
                	mov	x0, #0x0                // =0
                	ret
-               	mov	x11, x5
+               	mov	x9, x8
                	mov	x17, #0xc               // =12
-               	mul	x0, x6, x17
+               	mul	x0, x5, x17
                	add	x0, x0, #0x6e
-               	lsl	x1, x3, #2
+               	lsl	x1, x2, #2
                	add	x0, x0, x1
-               	add	x0, x0, x11
+               	add	x0, x0, x9
                	sxtw	x0, w0
                	ret
-               	mov	x11, x10
+               	mov	x9, x12
                	b	<addr>
-               	mov	x11, x14
+               	mov	x9, x12
                	b	<addr>
-               	mov	x11, x5
+               	mov	x9, x8
                	mov	x17, #0xc               // =12
-               	mul	x0, x6, x17
+               	mul	x0, x5, x17
                	add	x0, x0, #0x50
-               	lsl	x1, x3, #2
+               	lsl	x1, x2, #2
                	add	x0, x0, x1
-               	add	x0, x0, x11
+               	add	x0, x0, x9
                	sxtw	x0, w0
                	ret
-               	mov	x11, x10
+               	mov	x9, x12
                	b	<addr>
-               	mov	x11, x14
+               	mov	x9, x12
                	b	<addr>
-               	mov	x8, x7
+               	mov	x7, x11
                	mov	x17, #0x5               // =5
-               	mul	x0, x3, x17
+               	mul	x0, x0, x17
                	add	x0, x0, #0x3c
-               	add	x0, x0, x8
+               	add	x0, x0, x7
                	sxtw	x0, w0
                	ret
-               	mov	x8, x12
+               	mov	x7, x12
                	b	<addr>
-               	mov	x8, x12
+               	mov	x7, x12
                	b	<addr>
-               	mov	x8, x12
+               	mov	x7, x12
                	b	<addr>
-               	mov	x8, x12
+               	mov	x7, x11
                	mov	x17, #0x5               // =5
-               	mul	x0, x3, x17
+               	mul	x0, x0, x17
                	add	x0, x0, #0x28
-               	add	x0, x0, x8
+               	add	x0, x0, x7
                	sxtw	x0, w0
                	ret
-               	mov	x8, x13
+               	mov	x7, x12
                	b	<addr>
-               	mov	x8, x13
+               	mov	x7, x12
                	b	<addr>
-               	mov	x8, x13
+               	mov	x7, x12
                	b	<addr>

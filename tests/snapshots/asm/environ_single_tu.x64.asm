@@ -47,7 +47,6 @@ Disassembly of section .text:
                	testl	%eax, %eax
                	jle	<addr>
                	xorl	%eax, %eax
-               	movslq	%eax, %rax
                	popq	%rbp
                	retq
                	movl	$0x1, %eax

@@ -31,8 +31,7 @@ Disassembly of section .text:
                	cmpl	$0x5, %eax
                	jge	<addr>
                	leaq	0x1(%rax), %rcx
-               	movslq	%ecx, %rsi
-               	imulq	$0xa, %rsi, %rsi
+               	imulq	$0xa, %rcx, %rsi
                	addq	%rsi, %rdx
                	movq	%rcx, %rax
                	cmpl	$0x5, %eax
@@ -40,7 +39,6 @@ Disassembly of section .text:
                	cmpq	$0x96, %rdx
                	jne	<addr>
                	xorl	%eax, %eax
-               	movslq	%eax, %rax
                	retq
                	movl	$0x1, %eax
                	jmp	<addr>

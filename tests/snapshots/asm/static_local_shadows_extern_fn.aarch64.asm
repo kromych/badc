@@ -20,7 +20,6 @@ Disassembly of section .text:
                	b.lt	<addr>
                	cmp	w1, #0x2
                	b.eq	<addr>
-               	sxtw	x0, w0
                	ret
                	mov	x0, #-0x1               // =-1
                	b	<addr>

@@ -21,8 +21,8 @@ fn ent_pc=1 n_params=11 variadic=false locals=0
     v15  Binop { op=sub, lhs=v9, rhs=v3 }                 -> x0
     v16  BinopI { op=shl, lhs=v15, rhs_imm=32 }           -> x1
     v17  Extend { value=v15, kind=I32 }                   -> x1
-    v18  BinopI { op=shl, lhs=v15, rhs_imm=48 }           -> x0
-    v19  Extend { value=v17, kind=I16 }                   -> x6
+    v18  BinopI { op=shl, lhs=v15, rhs_imm=48 }           -> x1
+    v19  Extend { value=v15, kind=I16 }                   -> x6
     v20  Imm(0)                                           -> x0
     v21  BinopI { op=and, lhs=v11, rhs_imm=255 }          -> x0
     v22  BinopI { op=add, lhs=v21, rhs_imm=3 }            -> x0
@@ -77,23 +77,23 @@ fn ent_pc=2 n_params=0 variadic=false locals=3
     v1   ImmData(16)                                      -> x0
     v2   Load { addr=v1, disp=0, kind=I32, volatile }     -> x7
     v3   Imm(0)                                           -> x0
-    v4   Extend { value=v2, kind=I32 }                    -> x1
+    v4   Extend { value=v2, kind=I32 }                    -> x0
     v5   Imm(2)                                           -> x0
     v6   Imm(300)                                         -> x0
     v7   Imm(40000)                                       -> x0
     v8   Imm(-50)                                         -> x0
     v9   Imm(60)                                          -> x0
     v10  Imm(-7)                                          -> x0
-    v11  Imm(800)                                         -> x2
-    v12  Imm(9)                                           -> x2
-    v13  Imm(100000)                                      -> x2
-    v14  Imm(3000000000)                                  -> x6
+    v11  Imm(800)                                         -> x1
+    v12  Imm(9)                                           -> x1
+    v13  Imm(100000)                                      -> x1
+    v14  Imm(3000000000)                                  -> x2
     v15  StoreLocal { off=-2, value=v10, kind=I64 }       -> -
-    v16  Imm(0)                                           -> x8
-    v17  Imm(0)                                           -> x8
+    v16  Imm(0)                                           -> x6
+    v17  Imm(0)                                           -> x6
     v18  StoreLocal { off=-3, value=v13, kind=I64 }       -> -
     v19  StoreLocal { off=-1, value=v14, kind=I64 }       -> -
-    v20  Extend { value=v4, kind=I32 }                    -> x1
+    v20  Extend { value=v2, kind=I32 }                    -> x1
     v21  Imm(2)                                           -> x1
     v22  Imm(300)                                         -> x1
     v23  Imm(40000)                                       -> x1

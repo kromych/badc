@@ -39,7 +39,7 @@ Disassembly of section .text:
                	cmpl	$0x1, %eax
                	je	<addr>
                	xorl	%eax, %eax
-               	cmpq	$0x2a, %rax
+               	cmpl	$0x2a, %eax
                	je	<addr>
                	movl	$0x1, %eax
                	popq	%rbp

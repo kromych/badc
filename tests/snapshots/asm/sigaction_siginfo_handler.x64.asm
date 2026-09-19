@@ -139,7 +139,6 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	xorl	%eax, %eax
-               	movslq	%eax, %rax
                	popq	%rbx
                	popq	%r12
                	leave

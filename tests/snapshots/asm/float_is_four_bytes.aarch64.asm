@@ -184,7 +184,7 @@ Disassembly of section .text:
                	ldur	w1, [x29, #-0x8]
                	bl	<addr>
                	mov	x20, #0x10              // =16
-               	sxtw	x0, w20
+               	mov	x0, x20
                	ldp	x29, x30, [sp, #0x20]
                	ldr	x20, [sp], #0x30
                	ret

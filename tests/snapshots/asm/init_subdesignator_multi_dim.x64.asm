@@ -80,7 +80,7 @@ Disassembly of section .text:
                	testl	%eax, %eax
                	sete	%cl
                	movzbq	%cl, %rcx
-               	movslq	%ecx, %rax
+               	movq	%rcx, %rax
                	retq
                	movq	%rcx, %rax
                	jmp	<addr>

@@ -161,20 +161,17 @@ Disassembly of section .text:
                	subq	$0x10, %rsp
                	leaq	-0x10(%rbp), %rax
                	movq	$0x0, (%rax)
-               	leaq	0x8(%rax), %rcx
-               	movq	$0x0, (%rcx)
+               	movq	$0x0, 0x8(%rax)
                	movq	%rsi, (%rax)
-               	leaq	0x1(%rsi), %rdx
-               	movq	%rdx, (%rcx)
-               	movq	(%rax), %rdx
-               	movq	(%rcx), %rcx
-               	leaq	-0x10(%rbp), %rax
+               	leaq	0x1(%rsi), %rcx
+               	movq	%rcx, 0x8(%rax)
+               	movq	(%rax), %rcx
+               	movq	0x8(%rax), %rdx
                	movq	(%rax), %rsi
                	movq	%rsi, (%rdi)
-               	addq	$0x8, %rax
-               	movq	(%rax), %rax
+               	movq	0x8(%rax), %rax
                	movq	%rax, 0x8(%rdi)
-               	leaq	(%rdx,%rcx), %rax
+               	leaq	(%rcx,%rdx), %rax
                	leave
                	retq
 

@@ -68,20 +68,17 @@ Disassembly of section .text:
                	callq	<addr>
                	testq	%rax, %rax
                	je	<addr>
-               	leaq	0x18(%rax), %rcx
-               	movq	(%rcx), %rcx
+               	movq	0x18(%rax), %rcx
                	testb	$0x4, %cl
                	je	<addr>
                	popq	%rbp
                	retq
-               	leaq	0x10(%rax), %rcx
-               	movq	(%rcx), %rcx
+               	movq	0x10(%rax), %rcx
                	testb	$0x2, %cl
                	je	<addr>
                	movl	$0x1, %ecx
                	jmp	<addr>
-               	leaq	0x8(%rax), %rcx
-               	movq	(%rcx), %rcx
+               	movq	0x8(%rax), %rcx
                	testb	$0x1, %cl
                	je	<addr>
                	xorl	%ecx, %ecx

@@ -51,24 +51,18 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx
                	movzbq	(%rcx), %rdx
                	movb	%dl, (%rax)
-               	leaq	0x1(%rcx), %rdx
-               	movzbq	(%rdx), %rdx
+               	movzbq	0x1(%rcx), %rdx
                	movb	%dl, 0x1(%rax)
-               	leaq	0x2(%rcx), %rdx
-               	movzbq	(%rdx), %rdx
+               	movzbq	0x2(%rcx), %rdx
                	movb	%dl, 0x2(%rax)
-               	leaq	0x3(%rcx), %rdx
-               	movzbq	(%rdx), %rdx
+               	movzbq	0x3(%rcx), %rdx
                	movb	%dl, 0x3(%rax)
-               	leaq	0x4(%rcx), %rdx
-               	movzbq	(%rdx), %rdx
+               	movzbq	0x4(%rcx), %rdx
                	movb	%dl, 0x4(%rax)
-               	leaq	0x5(%rcx), %rdx
-               	movzbq	(%rdx), %rdx
+               	movzbq	0x5(%rcx), %rdx
                	movb	%dl, 0x5(%rax)
                	leaq	0xffff(%rax), %rdx
-               	addq	$0x6, %rcx
-               	movzbq	(%rcx), %rcx
+               	movzbq	0x6(%rcx), %rcx
                	movb	%cl, (%rdx)
                	movzbq	(%rax), %r15
                	movzbq	0x1(%rax), %rbx

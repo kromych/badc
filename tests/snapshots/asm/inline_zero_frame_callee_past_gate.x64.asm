@@ -29,8 +29,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movq	(%rax), %rcx
                	movq	(%rdi), %rdx
-               	leaq	0x2c8(%rdi), %rsi
-               	movq	(%rsi), %rsi
+               	movq	0x2c8(%rdi), %rsi
                	addq	%rsi, %rdx
                	addq	%rdx, %rcx
                	movq	%rcx, (%rax)
@@ -53,8 +52,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx
                	movq	(%rcx), %rdx
                	movq	(%rax), %rsi
-               	addq	$0x2c8, %rax            # imm = 0x2C8
-               	movq	(%rax), %rax
+               	movq	0x2c8(%rax), %rax
                	addq	%rsi, %rax
                	addq	%rdx, %rax
                	movq	%rax, (%rcx)
@@ -72,8 +70,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx
                	movq	(%rcx), %rdx
                	movq	(%rax), %rsi
-               	addq	$0x2c8, %rax            # imm = 0x2C8
-               	movq	(%rax), %rax
+               	movq	0x2c8(%rax), %rax
                	addq	%rsi, %rax
                	addq	%rdx, %rax
                	movq	%rax, (%rcx)
@@ -91,8 +88,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx
                	movq	(%rcx), %rdx
                	movq	(%rax), %rsi
-               	addq	$0x2c8, %rax            # imm = 0x2C8
-               	movq	(%rax), %rax
+               	movq	0x2c8(%rax), %rax
                	addq	%rsi, %rax
                	addq	%rdx, %rax
                	movq	%rax, (%rcx)
@@ -110,8 +106,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx
                	movq	(%rcx), %rdx
                	movq	(%rax), %rsi
-               	addq	$0x2c8, %rax            # imm = 0x2C8
-               	movq	(%rax), %rax
+               	movq	0x2c8(%rax), %rax
                	addq	%rsi, %rax
                	addq	%rdx, %rax
                	movq	%rax, (%rcx)

@@ -72,13 +72,12 @@ Disassembly of section .text:
                	and	x1, x1, #0x7f
                	cmp	w1, #0x3c
                	b.ne	<addr>
-               	add	x1, x0, #0x1
-               	ldrh	w3, [x1]
-               	and	x3, x3, #0xffffffffffff0000
+               	ldurh	w1, [x0, #0x1]
+               	and	x1, x1, #0xffffffffffff0000
                	mov	x17, #0x7530            // =30000
-               	orr	x3, x3, x17
-               	strh	w3, [x1]
-               	and	x1, x3, #0xffff
+               	orr	x1, x1, x17
+               	sturh	w1, [x0, #0x1]
+               	and	x1, x1, #0xffff
                	sxth	x1, w1
                	mov	x17, #0x7530            // =30000
                	cmp	w1, w17

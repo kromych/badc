@@ -68,8 +68,7 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	-0x20(%rbp), %rax
-               	incq	%rax
-               	movzwq	(%rax), %rax
+               	movzwq	0x1(%rax), %rax
                	xorq	$0x4342, %rax           # imm = 0x4342
                	testl	%eax, %eax
                	je	<addr>

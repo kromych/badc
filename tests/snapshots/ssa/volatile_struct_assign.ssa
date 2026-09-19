@@ -18,8 +18,8 @@ fn ent_pc=5 n_params=0 variadic=false locals=2
     v12  ImmData(16)                                      -> x0
     v13  Load { addr=v1, disp=0, kind=U32, volatile, align=4 } -> x2
     v14  Store { addr=v12, disp=0, value=v13, kind=I32, align=4 } -> -
-    v15  BinopI { op=add, lhs=v1, rhs_imm=4 }             -> x1
-    v16  Load { addr=v15, disp=0, kind=U32, volatile, align=4 } -> x1
+    v15  BinopI { op=add, lhs=v1, rhs_imm=4 }             -> x6
+    v16  Load { addr=v1, disp=4, kind=U32, volatile, align=4 } -> x1
     v17  BinopI { op=add, lhs=v12, rhs_imm=4 }            -> x6
     v18  Store { addr=v12, disp=4, value=v16, kind=I32, align=4 } -> -
     v19  ImmData(16)                                      -> x1
@@ -71,16 +71,16 @@ fn ent_pc=5 n_params=0 variadic=false locals=2
     v53  Imm(0)                                           -> x1
     v54  Imm(6)                                           -> x1
     v55  BinopI { op=add, lhs=v50, rhs_imm=4 }            -> x1
-    v56  Store { addr=v55, disp=0, value=v35, kind=I32, volatile, align=4 } -> -
-    v57  ImmData(24)                                      -> x2
-    v58  Load { addr=v50, disp=0, kind=I32, volatile }    -> x0
-    v59  BinopI { op=ne, lhs=v58, rhs_imm=5 }             -> x0
+    v56  Store { addr=v50, disp=4, value=v35, kind=I32, volatile, align=4 } -> -
+    v57  ImmData(24)                                      -> x1
+    v58  Load { addr=v50, disp=0, kind=I32, volatile }    -> x1
+    v59  BinopI { op=ne, lhs=v58, rhs_imm=5 }             -> x1
     v60  Imm(0)                                           -> x2
     terminator Bnz { cond=v59, target=b8, fall=b7 }   (exit_acc=v59)
   block 7  start_pc=0
-    v61  ImmData(24)                                      -> x0
-    v62  BinopI { op=add, lhs=v50, rhs_imm=4 }            -> x0
-    v63  Load { addr=v55, disp=0, kind=I32, volatile }    -> x0
+    v61  ImmData(24)                                      -> x1
+    v62  BinopI { op=add, lhs=v50, rhs_imm=4 }            -> x1
+    v63  Load { addr=v50, disp=4, kind=I32, volatile }    -> x0
     v64  BinopI { op=ne, lhs=v63, rhs_imm=6 }             -> x0
     v65  Imm(0)                                           -> x1
     v66  Imm(0)                                           -> x1
@@ -97,8 +97,8 @@ fn ent_pc=5 n_params=0 variadic=false locals=2
     v73  LocalAddr(-1)                                    -> x1
     v74  Load { addr=v69, disp=0, kind=U32, volatile, align=4 } -> x1
     v75  Imm(0)                                           -> x2
-    v76  BinopI { op=add, lhs=v69, rhs_imm=4 }            -> x0
-    v77  Load { addr=v76, disp=0, kind=U32, volatile, align=4 } -> x0
+    v76  BinopI { op=add, lhs=v69, rhs_imm=4 }            -> x2
+    v77  Load { addr=v69, disp=4, kind=U32, volatile, align=4 } -> x0
     v78  Imm(0)                                           -> x2
     v79  Imm(0)                                           -> x2
     v80  Imm(0)                                           -> x2

@@ -98,40 +98,38 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	add	x1, x0, #0x1
-               	ldr	w2, [x1]
-               	rev	w2, w2
+               	ldur	w1, [x0, #0x1]
+               	rev	w1, w1
                	mov	x17, #0x4455            // =17493
                	movk	x17, #0x2233, lsl #16
-               	cmp	w2, w17
+               	cmp	w1, w17
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	add	x2, x0, #0x3
-               	ldr	w2, [x2]
+               	ldur	w1, [x0, #0x3]
                	mov	x17, #0x5544            // =21828
                	movk	x17, #0x7766, lsl #16
-               	cmp	w2, w17
+               	cmp	w1, w17
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldr	x2, [x0]
-               	rev	x2, x2
+               	ldr	x1, [x0]
+               	rev	x1, x1
                	mov	x17, #0x7788            // =30600
                	movk	x17, #0x5566, lsl #16
                	movk	x17, #0x3344, lsl #32
                	movk	x17, #0x1122, lsl #48
-               	cmp	x2, x17
+               	cmp	x1, x17
                	b.eq	<addr>
                	mov	x0, #0x5                // =5
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldr	x1, [x1]
+               	ldur	x1, [x0, #0x1]
                	rev	x1, x1
                	mov	x17, #0x8899            // =34969
                	movk	x17, #0x6677, lsl #16
@@ -143,8 +141,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	add	x0, x0, #0x5
-               	ldrh	w0, [x0]
+               	ldurh	w0, [x0, #0x5]
                	mov	x17, #0x7766            // =30566
                	cmp	w0, w17
                	b.eq	<addr>

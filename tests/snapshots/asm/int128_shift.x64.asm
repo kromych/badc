@@ -349,8 +349,7 @@ Disassembly of section .text:
                	retq
                	xorl	%eax, %eax
                	leaq	<rip>, %rcx
-               	addq	$0xc, %rcx
-               	movslq	(%rcx), %rcx
+               	movslq	0xc(%rcx), %rcx
                	movq	%rcx, %rdx
                	andq	$0x7f, %rdx
                	andq	$0x3f, %rcx

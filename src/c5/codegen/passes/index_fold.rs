@@ -243,14 +243,15 @@ fn foldable_scaled_addresses(
 /// single-use case.
 ///
 /// `c` must be a positive byte offset aligned to the access width and
-/// within the scaled immediate-offset range of both targets. Aligning to
-/// the width keeps the AArch64 `ldr` / `str` immediate encoding (which
-/// scales by the width) valid; a width-`w` field is naturally
-/// `w`-aligned, while a packed field at an unaligned offset is left for
-/// the plain add path. The fold leaves the address itself unchanged, so
-/// an access carrying a proven alignment keeps it. A mix of access
-/// widths on one address, or any non-access use, leaves the address
-/// alone.
+/// within the scaled immediate-offset range of both targets, or below
+/// 256: the AArch64 `ldr` / `str` immediate scales by the width, and an
+/// unaligned offset -- a packed field's -- takes the unscaled 9-bit form.
+/// The fold leaves the address itself unchanged, so
+/// an access carrying a proven alignment keeps it. A volatile access
+/// folds too: it stays one access of its width (C99 6.7.3p6), with its
+/// flag; the indexed forms carry no such flag, so it takes this fold
+/// only. A mix of access widths on one address, or any non-access use,
+/// leaves the address alone.
 fn foldable_displaced_addresses(
     func: &FunctionSsa,
     counts: &[u32],
@@ -286,14 +287,13 @@ fn foldable_displaced_addresses(
                 addr,
                 disp: 0,
                 kind,
-                volatile: false,
                 align,
+                ..
             } => (*addr, load_width(*kind), *align),
             Inst::Store {
                 addr,
                 disp: 0,
                 kind,
-                volatile: false,
                 align,
                 ..
             } => (*addr, store_width(*kind), *align),
@@ -317,9 +317,9 @@ fn foldable_displaced_addresses(
                 return None;
             }
             let fits = if bounded.contains(&p) {
-                c % (w as i64) == 0 && c + (w as i64) <= 4096
+                c + (w as i64) <= 4096
             } else {
-                displacement_fits(c, w)
+                displacement_fits(c, w) || c < 256
             };
             if !fits {
                 return None;
@@ -414,12 +414,12 @@ pub(crate) fn run(funcs: &mut [FunctionSsa]) {
                     addr,
                     disp: 0,
                     kind,
-                    volatile: false,
+                    volatile,
                     align,
                 } => {
                     if let (Some(width), Some(&(base, index, scale))) = (
                         int_load_width(*kind),
-                        scaled.get(addr).filter(|_| *align == 0),
+                        scaled.get(addr).filter(|_| *align == 0 && !*volatile),
                     ) {
                         debug_assert_eq!(scale, width);
                         rewrites.push((
@@ -439,7 +439,7 @@ pub(crate) fn run(funcs: &mut [FunctionSsa]) {
                                 addr: base,
                                 disp,
                                 kind: *kind,
-                                volatile: false,
+                                volatile: *volatile,
                                 align: *align,
                             },
                         ));
@@ -450,12 +450,12 @@ pub(crate) fn run(funcs: &mut [FunctionSsa]) {
                     disp: 0,
                     value,
                     kind,
-                    volatile: false,
+                    volatile,
                     align,
                 } => {
                     if let (Some(width), Some(&(base, index, scale))) = (
                         int_store_width(*kind),
-                        scaled.get(addr).filter(|_| *align == 0),
+                        scaled.get(addr).filter(|_| *align == 0 && !*volatile),
                     ) {
                         debug_assert_eq!(scale, width);
                         rewrites.push((
@@ -477,7 +477,7 @@ pub(crate) fn run(funcs: &mut [FunctionSsa]) {
                                 disp,
                                 value: *value,
                                 kind: *kind,
-                                volatile: false,
+                                volatile: *volatile,
                                 align: *align,
                             },
                         ));
@@ -656,6 +656,100 @@ mod tests {
                 kind: LoadKind::I8
             }
         ));
+    }
+
+    /// A volatile access takes a constant offset as its displacement and
+    /// keeps its flag; a scaled index stays an address computation, since
+    /// the indexed forms carry no volatile flag.
+    #[test]
+    fn volatile_access_folds_a_displacement_only() {
+        let volatile = |mut i: Inst| {
+            if let Inst::Load { volatile, .. } | Inst::Store { volatile, .. } = &mut i {
+                *volatile = true;
+            }
+            i
+        };
+        let out = folded(vec![
+            param(0, LoadKind::I64),
+            Inst::BinopI {
+                op: BinOp::Add,
+                lhs: 0,
+                rhs_imm: 16,
+            },
+            volatile(load(1, LoadKind::U32)),
+            volatile(store(1, 2, StoreKind::I32)),
+        ]);
+        for i in [2, 3] {
+            assert!(
+                matches!(
+                    out[i],
+                    Inst::Load {
+                        addr: 0,
+                        disp: 16,
+                        volatile: true,
+                        ..
+                    } | Inst::Store {
+                        addr: 0,
+                        disp: 16,
+                        volatile: true,
+                        ..
+                    }
+                ),
+                "{:?}",
+                out[i]
+            );
+        }
+        let mut insts = pointer_and_index();
+        insts.extend([
+            Inst::BinopI {
+                op: BinOp::Shl,
+                lhs: 2,
+                rhs_imm: 2,
+            },
+            add(0, 3),
+            volatile(load(4, LoadKind::U32)),
+        ]);
+        let out = folded(insts);
+        assert!(
+            matches!(
+                out[5],
+                Inst::Load {
+                    addr: 4,
+                    disp: 0,
+                    volatile: true,
+                    ..
+                }
+            ),
+            "{:?}",
+            out[5]
+        );
+    }
+
+    /// An offset the access width does not divide folds below 256, where
+    /// the unscaled form takes it, and for an access with a proven
+    /// alignment wherever its pieces reach; a farther one stays an add.
+    #[test]
+    fn unaligned_offset_folds_where_an_encoding_takes_it() {
+        let run = |off: i64, align: u8| {
+            let mut ld = load(1, LoadKind::I32);
+            if let Inst::Load { align: a, .. } = &mut ld {
+                *a = align;
+            }
+            let out = folded(vec![
+                param(0, LoadKind::I64),
+                Inst::BinopI {
+                    op: BinOp::Add,
+                    lhs: 0,
+                    rhs_imm: off,
+                },
+                ld,
+            ]);
+            matches!(out[2], Inst::Load { addr: 0, disp, .. } if disp as i64 == off)
+        };
+        assert!(run(1, 0), "unscaled reach");
+        assert!(!run(257, 0), "past the unscaled reach");
+        assert!(run(257, 1), "a split access's byte pieces reach it");
+        assert!(!run(4093, 1), "past the pieces' reach");
     }
 
     /// The extension is the index and an address constant the base,

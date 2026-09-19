@@ -33,25 +33,19 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	ldrb	w2, [x1]
                	strb	w2, [x0]
-               	add	x2, x1, #0x1
-               	ldrb	w2, [x2]
+               	ldrb	w2, [x1, #0x1]
                	strb	w2, [x0, #0x1]
-               	add	x2, x1, #0x2
-               	ldrb	w2, [x2]
+               	ldrb	w2, [x1, #0x2]
                	strb	w2, [x0, #0x2]
-               	add	x2, x1, #0x3
-               	ldrb	w2, [x2]
+               	ldrb	w2, [x1, #0x3]
                	strb	w2, [x0, #0x3]
-               	add	x2, x1, #0x4
-               	ldrb	w2, [x2]
+               	ldrb	w2, [x1, #0x4]
                	strb	w2, [x0, #0x4]
-               	add	x2, x1, #0x5
-               	ldrb	w2, [x2]
+               	ldrb	w2, [x1, #0x5]
                	strb	w2, [x0, #0x5]
                	mov	x17, #0xffff            // =65535
                	add	x12, x0, x17
-               	add	x1, x1, #0x6
-               	ldrb	w1, [x1]
+               	ldrb	w1, [x1, #0x6]
                	strb	w1, [x12]
                	ldrb	w13, [x0]
                	ldrb	w10, [x0, #0x1]

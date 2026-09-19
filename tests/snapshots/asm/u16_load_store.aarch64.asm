@@ -62,8 +62,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x0, x29, #0x20
-               	add	x0, x0, #0x1
-               	ldrh	w0, [x0]
+               	ldurh	w0, [x0, #0x1]
                	mov	x17, #0x4342            // =17218
                	eor	x0, x0, x17
                	cbz	w0, <addr>

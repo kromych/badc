@@ -59,15 +59,12 @@ Disassembly of section .text:
 
 <put_volatile>:
                	movl	$0xdeadbeef, (%rdi)     # imm = 0xDEADBEEF
-               	leaq	0x10(%rdi), %rcx
-               	movl	$0x0, (%rcx)
+               	movl	$0x0, 0x10(%rdi)
                	retq
 
 <put_packed>:
-               	leaq	0x1(%rdi), %rax
-               	movq	$-0x3, (%rax)
-               	leaq	0x9(%rdi), %rax
-               	movl	$0x11223344, (%rax)     # imm = 0x11223344
+               	movq	$-0x3, 0x1(%rdi)
+               	movl	$0x11223344, 0x9(%rdi)  # imm = 0x11223344
                	retq
 
 <put_float>:
@@ -324,12 +321,10 @@ Disassembly of section .text:
                	popq	%rcx
                	callq	<addr>
                	leaq	-0x50(%rbp), %rax
-               	leaq	0x1(%rax), %rcx
-               	movq	(%rcx), %rcx
+               	movq	0x1(%rax), %rcx
                	cmpq	$-0x3, %rcx
                	jne	<addr>
-               	addq	$0x9, %rax
-               	movslq	(%rax), %rax
+               	movslq	0x9(%rax), %rax
                	cmpl	$0x11223344, %eax       # imm = 0x11223344
                	je	<addr>
                	movl	$0xb, %eax

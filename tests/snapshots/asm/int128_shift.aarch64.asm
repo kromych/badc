@@ -255,8 +255,7 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	add	x1, x1, #0xc
-               	ldrsw	x1, [x1]
+               	ldrsw	x1, [x1, #0xc]
                	and	x2, x1, #0x7f
                	and	x1, x1, #0x3f
                	mov	x3, #0x3f               // =63

@@ -776,27 +776,28 @@ mod imm_store_tests {
         assert!(code.ends_with(&want), "{code:02x?}");
     }
 
-    /// Under strict alignment a packed quadword splits into byte stores
-    /// of the sign-extended constant, least significant first, with no
-    /// borrowed register; without it the store is one `mov qword`.
+    /// Under strict alignment a packed quadword at offset 1 splits into
+    /// byte stores of the sign-extended constant, least significant
+    /// first, with no borrowed register; without it the store is one
+    /// `mov qword` at that offset.
     #[test]
     fn packed_constant_store_splits_into_its_bytes() {
         let (func, v, mut alloc) = marked_store(
             "struct __attribute__((packed)) h { char t; long v; };\n\
              void put(struct h *p){ p->v = -3; }",
         );
-        let Inst::Store { addr, .. } = func.insts[v as usize] else {
+        let Inst::Store { addr, disp: 1, .. } = func.insts[v as usize] else {
             panic!("{:?}", func.insts[v as usize])
         };
         alloc.places[addr as usize] = Place::IntReg(Reg::RDI.0);
         let mut abi = Target::LinuxX64.abi();
         assert_eq!(
             emit(&func, v, &alloc, abi),
-            [0x48, 0xC7, 0x07, 0xFD, 0xFF, 0xFF, 0xFF]
+            [0x48, 0xC7, 0x47, 0x01, 0xFD, 0xFF, 0xFF, 0xFF]
         );
         abi.strict_align = true;
-        let mut want = alloc::vec![0xC6, 0x07, 0xFD];
-        for at in 1..8 {
+        let mut want = alloc::vec![0xC6, 0x47, 0x01, 0xFD];
+        for at in 2..9 {
             want.extend([0xC6, 0x47, at, 0xFF]);
         }
         assert_eq!(emit(&func, v, &alloc, abi), want);

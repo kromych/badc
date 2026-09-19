@@ -18,8 +18,7 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	ldr	x2, [x1]
                	ldr	x3, [x0]
-               	add	x0, x0, #0x2c8
-               	ldr	x0, [x0]
+               	ldr	x0, [x0, #0x2c8]
                	add	x0, x3, x0
                	add	x0, x2, x0
                	str	x0, [x1]
@@ -42,8 +41,7 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	ldr	x2, [x1]
                	ldr	x3, [x0]
-               	add	x0, x0, #0x2c8
-               	ldr	x0, [x0]
+               	ldr	x0, [x0, #0x2c8]
                	add	x0, x3, x0
                	add	x0, x2, x0
                	str	x0, [x1]
@@ -61,8 +59,7 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	ldr	x2, [x1]
                	ldr	x3, [x0]
-               	add	x0, x0, #0x2c8
-               	ldr	x0, [x0]
+               	ldr	x0, [x0, #0x2c8]
                	add	x0, x3, x0
                	add	x0, x2, x0
                	str	x0, [x1]
@@ -80,8 +77,7 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	ldr	x2, [x1]
                	ldr	x3, [x0]
-               	add	x0, x0, #0x2c8
-               	ldr	x0, [x0]
+               	ldr	x0, [x0, #0x2c8]
                	add	x0, x3, x0
                	add	x0, x2, x0
                	str	x0, [x1]
@@ -99,8 +95,7 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	ldr	x2, [x1]
                	ldr	x3, [x0]
-               	add	x0, x0, #0x2c8
-               	ldr	x0, [x0]
+               	ldr	x0, [x0, #0x2c8]
                	add	x0, x3, x0
                	add	x0, x2, x0
                	str	x0, [x1]

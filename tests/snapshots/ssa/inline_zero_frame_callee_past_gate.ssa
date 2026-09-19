@@ -13,7 +13,7 @@ fn ent_pc=0 n_params=1 variadic=false locals=0
     v7   Load { addr=v1, disp=0, kind=I64, volatile }     -> x2
     v8   Imm(712)                                         -> x6
     v9   BinopI { op=add, lhs=v1, rhs_imm=712 }           -> x6
-    v10  Load { addr=v9, disp=0, kind=I64, volatile }     -> x6
+    v10  Load { addr=v1, disp=712, kind=I64, volatile }   -> x6
     v11  Binop { op=add, lhs=v7, rhs=v10 }                -> x2
     v12  Binop { op=add, lhs=v4, rhs=v11 }                -> x1
     v13  Store { addr=v3, disp=0, value=v12, kind=I64 }   -> -
@@ -51,8 +51,8 @@ fn ent_pc=8 n_params=1 variadic=false locals=360
     v19  ImmData(16)                                      -> x1
     v20  Load { addr=v19, disp=0, kind=I64 }              -> x2
     v21  Load { addr=v18, disp=0, kind=I64, volatile }    -> x6
-    v22  BinopI { op=add, lhs=v18, rhs_imm=712 }          -> x0
-    v23  Load { addr=v22, disp=0, kind=I64, volatile }    -> x0
+    v22  BinopI { op=add, lhs=v18, rhs_imm=712 }          -> x7
+    v23  Load { addr=v18, disp=712, kind=I64, volatile }  -> x0
     v24  Binop { op=add, lhs=v21, rhs=v23 }               -> x0
     v25  Binop { op=add, lhs=v20, rhs=v24 }               -> x0
     v26  Store { addr=v19, disp=0, value=v25, kind=I64 }  -> -
@@ -81,8 +81,8 @@ fn ent_pc=8 n_params=1 variadic=false locals=360
     v43  ImmData(16)                                      -> x1
     v44  Load { addr=v43, disp=0, kind=I64 }              -> x2
     v45  Load { addr=v42, disp=0, kind=I64, volatile }    -> x6
-    v46  BinopI { op=add, lhs=v42, rhs_imm=712 }          -> x0
-    v47  Load { addr=v46, disp=0, kind=I64, volatile }    -> x0
+    v46  BinopI { op=add, lhs=v42, rhs_imm=712 }          -> x7
+    v47  Load { addr=v42, disp=712, kind=I64, volatile }  -> x0
     v48  Binop { op=add, lhs=v45, rhs=v47 }               -> x0
     v49  Binop { op=add, lhs=v44, rhs=v48 }               -> x0
     v50  Store { addr=v43, disp=0, value=v49, kind=I64 }  -> -
@@ -111,8 +111,8 @@ fn ent_pc=8 n_params=1 variadic=false locals=360
     v67  ImmData(16)                                      -> x1
     v68  Load { addr=v67, disp=0, kind=I64 }              -> x2
     v69  Load { addr=v66, disp=0, kind=I64, volatile }    -> x6
-    v70  BinopI { op=add, lhs=v66, rhs_imm=712 }          -> x0
-    v71  Load { addr=v70, disp=0, kind=I64, volatile }    -> x0
+    v70  BinopI { op=add, lhs=v66, rhs_imm=712 }          -> x7
+    v71  Load { addr=v66, disp=712, kind=I64, volatile }  -> x0
     v72  Binop { op=add, lhs=v69, rhs=v71 }               -> x0
     v73  Binop { op=add, lhs=v68, rhs=v72 }               -> x0
     v74  Store { addr=v67, disp=0, value=v73, kind=I64 }  -> -
@@ -141,8 +141,8 @@ fn ent_pc=8 n_params=1 variadic=false locals=360
     v91  ImmData(16)                                      -> x1
     v92  Load { addr=v91, disp=0, kind=I64 }              -> x2
     v93  Load { addr=v90, disp=0, kind=I64, volatile }    -> x6
-    v94  BinopI { op=add, lhs=v90, rhs_imm=712 }          -> x0
-    v95  Load { addr=v94, disp=0, kind=I64, volatile }    -> x0
+    v94  BinopI { op=add, lhs=v90, rhs_imm=712 }          -> x7
+    v95  Load { addr=v90, disp=712, kind=I64, volatile }  -> x0
     v96  Binop { op=add, lhs=v93, rhs=v95 }               -> x0
     v97  Binop { op=add, lhs=v92, rhs=v96 }               -> x0
     v98  Store { addr=v91, disp=0, value=v97, kind=I64 }  -> -

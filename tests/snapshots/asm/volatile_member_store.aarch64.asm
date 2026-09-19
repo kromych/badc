@@ -40,44 +40,41 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ret
-               	mov	x2, #0x7                // =7
-               	add	x1, x0, #0x8
-               	str	x2, [x1]
-               	ldr	x2, [x1]
-               	add	x2, x2, #0x7
-               	str	x2, [x1]
-               	ldr	x1, [x1]
+               	mov	x1, #0x7                // =7
+               	str	x1, [x0, #0x8]
+               	ldr	x1, [x0, #0x8]
+               	add	x1, x1, #0x7
+               	str	x1, [x0, #0x8]
+               	ldr	x1, [x0, #0x8]
                	cmp	x1, #0xe
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ret
                	mov	x2, #0x5                // =5
                	add	x1, x0, #0x10
-               	add	x1, x1, #0x8
-               	str	x2, [x1]
-               	ldr	x3, [x1]
+               	str	x2, [x1, #0x8]
+               	ldr	x3, [x1, #0x8]
                	add	x3, x3, #0x5
-               	str	x3, [x1]
-               	ldr	x1, [x1]
+               	str	x3, [x1, #0x8]
+               	ldr	x1, [x1, #0x8]
                	cmp	x1, #0xa
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	ret
-               	add	x0, x0, #0x20
-               	ldr	w1, [x0]
+               	ldr	w1, [x0, #0x20]
                	and	x1, x1, #0xffffffffffffffe0
                	mov	x17, #0x9               // =9
                	orr	x1, x1, x17
-               	str	w1, [x0]
-               	ldr	w1, [x0]
+               	str	w1, [x0, #0x20]
+               	ldr	w1, [x0, #0x20]
                	and	x1, x1, #0x1f
                	add	x1, x1, #0x1
                	and	x1, x1, #0x1f
-               	ldr	w3, [x0]
+               	ldr	w3, [x0, #0x20]
                	and	x3, x3, #0xffffffffffffffe0
                	orr	x1, x3, x1
-               	str	w1, [x0]
-               	ldr	w0, [x0]
+               	str	w1, [x0, #0x20]
+               	ldr	w0, [x0, #0x20]
                	and	x0, x0, #0x1f
                	mov	x17, #0xa               // =10
                	eor	x0, x0, x17

@@ -1889,6 +1889,38 @@ int mneg(long k) { if (k & -8) return 3; return 5; }\n";
     m.finish();
 }
 
+/// A volatile element at a constant index, and a packed field at an
+/// unaligned offset, are one access through the base with the offset in
+/// the instruction, as a plain field is: no separate `lea` / `add`.
+#[test]
+fn volatile_or_packed_access_takes_its_offset_in_the_instruction() {
+    const SRC: &str = "void g(volatile unsigned *r) { r[4] = 0; }\n\
+unsigned h(volatile unsigned *r) { return r[3]; }\n\
+struct __attribute__((packed)) P { char c; int x; long y; };\n\
+int gx(struct P *p) { return p->x; }\n\
+void sy(struct P *p, long v) { p->y = v; }\n";
+    let mut m = Misses::default();
+    for name in ["g", "h", "gx", "sy"] {
+        let ws = a64(SRC, name);
+        let add_imm = |w: u32| w & 0xFF00_0000 == 0x9100_0000;
+        // A load or store of one register with a non-zero immediate
+        // offset: the scaled form (bit 24) or the unscaled one.
+        let at_offset = |w: u32| {
+            (w & 0x3B00_0000 == 0x3900_0000 && (w >> 10) & 0xFFF != 0)
+                || (w & 0x3B20_0C00 == 0x3800_0000 && (w >> 12) & 0x1FF != 0)
+        };
+        m.expect(
+            ws.iter().any(|&w| at_offset(w)) && !ws.iter().any(|&w| add_imm(w)),
+            || format!("aarch64 {name}: the offset is not in the access: {ws:08x?}"),
+        );
+        let insns = x64(SRC, name);
+        m.expect(!insns.iter().any(|i| i.op == 0x8D), || {
+            format!("x86-64 {name}: a lea: {insns:x?}")
+        });
+    }
+    m.finish();
+}
+
 /// A constant passed before and after a call is set again after it, not
 /// kept across it in a callee-saved register: the registers that survive
 /// the calls hold the target, `x` and the first result only.

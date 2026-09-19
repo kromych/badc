@@ -195,16 +195,14 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	<rip>, %rax
-               	leaq	0x20(%rax), %rcx
-               	movq	(%rcx), %rcx
+               	movq	0x20(%rax), %rcx
                	cmpq	$0xc, %rcx
                	je	<addr>
                	movl	$0x7, %eax
                	popq	%rbx
                	leave
                	retq
-               	leaq	0x10(%rax), %rcx
-               	movl	(%rcx), %ecx
+               	movl	0x10(%rax), %ecx
                	xorq	$0x9, %rcx
                	testl	%ecx, %ecx
                	je	<addr>
@@ -212,12 +210,11 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	addq	$0x1c, %rax
-               	movl	(%rax), %ecx
+               	movl	0x1c(%rax), %ecx
                	andq	$0x7, %rcx
                	cmpl	$0x5, %ecx
                	jne	<addr>
-               	movl	(%rax), %eax
+               	movl	0x1c(%rax), %eax
                	sarq	$0x3, %rax
                	testl	%eax, %eax
                	je	<addr>

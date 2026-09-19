@@ -44,8 +44,7 @@ Disassembly of section .text:
                	movb	$0x6, (%rdi)
                	leaq	-0x58(%rbp), %r8
                	movb	$0x7, (%r8)
-               	incq	%r8
-               	movl	$0x8, (%r8)
+               	movl	$0x8, 0x1(%r8)
                	leaq	0x10(%rsp), %r8
                	testb	$0xf, %r8b
                	je	<addr>
@@ -109,8 +108,7 @@ Disassembly of section .text:
                	addq	%rdx, %rcx
                	movsbq	(%rax), %rdx
                	addq	%rdx, %rcx
-               	incq	%rax
-               	movslq	(%rax), %rax
+               	movslq	0x1(%rax), %rax
                	addq	%rcx, %rax
                	subq	$0x9, %rax
                	subq	$0x24, %rax

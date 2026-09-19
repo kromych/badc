@@ -62,18 +62,15 @@ Disassembly of section .text:
                	mov	x2, #0xbeef             // =48879
                	movk	x2, #0xdead, lsl #16
                	str	w2, [x0]
-               	add	x0, x0, #0x10
-               	str	w1, [x0]
+               	str	w1, [x0, #0x10]
                	ret
 
 <put_packed>:
-               	add	x1, x0, #0x1
-               	mov	x2, #-0x3               // =-3
-               	str	x2, [x1]
-               	add	x0, x0, #0x9
+               	mov	x1, #-0x3               // =-3
+               	stur	x1, [x0, #0x1]
                	mov	x1, #0x3344             // =13124
                	movk	x1, #0x1122, lsl #16
-               	str	w1, [x0]
+               	stur	w1, [x0, #0x9]
                	ret
 
 <put_float>:
@@ -353,13 +350,11 @@ Disassembly of section .text:
                	ldr	x10, [sp], #0x10
                	bl	<addr>
                	sub	x0, x29, #0x50
-               	add	x1, x0, #0x1
-               	ldr	x1, [x1]
+               	ldur	x1, [x0, #0x1]
                	mov	x17, #-0x3              // =-3
                	cmp	x1, x17
                	b.ne	<addr>
-               	add	x0, x0, #0x9
-               	ldrsw	x0, [x0]
+               	ldursw	x0, [x0, #0x9]
                	mov	x17, #0x3344            // =13124
                	movk	x17, #0x1122, lsl #16
                	cmp	w0, w17

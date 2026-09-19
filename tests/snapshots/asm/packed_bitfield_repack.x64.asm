@@ -83,12 +83,10 @@ Disassembly of section .text:
                	sarq	$0x39, %rcx
                	cmpl	$0x3c, %ecx
                	jne	<addr>
-               	leaq	0x1(%rax), %rcx
-               	movzwq	(%rcx), %rdx
-               	andq	$-0x10000, %rdx         # imm = 0xFFFF0000
-               	orq	$0x7530, %rdx           # imm = 0x7530
-               	movw	%dx, (%rcx)
-               	movq	%rdx, %rcx
+               	movzwq	0x1(%rax), %rcx
+               	andq	$-0x10000, %rcx         # imm = 0xFFFF0000
+               	orq	$0x7530, %rcx           # imm = 0x7530
+               	movw	%cx, 0x1(%rax)
                	andq	$0xffff, %rcx           # imm = 0xFFFF
                	movswq	%cx, %rcx
                	cmpl	$0x7530, %ecx           # imm = 0x7530

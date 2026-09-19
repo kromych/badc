@@ -202,6 +202,12 @@ impl Allocation {
     pub(crate) fn high_clear(&self, v: ValueId) -> bool {
         self.high_clear.get(v as usize).copied().unwrap_or(false)
     }
+
+    /// True when no instruction and no terminator reads `v`. Unknown
+    /// values count as read.
+    pub(crate) fn is_unread(&self, v: ValueId) -> bool {
+        self.use_counts.get(v as usize).is_some_and(|&n| n == 0)
+    }
 }
 
 /// Floating-point scratch registers the emit pass needs: two operand

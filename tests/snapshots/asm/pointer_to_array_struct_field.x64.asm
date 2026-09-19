@@ -174,7 +174,6 @@ Disassembly of section .text:
                	movw	%ax, (%rdi)
                	xorl	%eax, %eax
                	callq	<addr>
-               	movzbq	%al, %rax
                	leaq	<rip>, %rdi
                	movb	$0x0, %al
                	callq	<addr>

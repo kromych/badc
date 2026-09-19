@@ -520,12 +520,8 @@ pub(super) fn emit_call_ext(
     if imp.returns_long_double {
         emit(code, enc_fmov_d_to_x(Reg(0), 0));
     } else {
-        // The 32-bit widenings write only bits 32..63, as the `ParamRef`
-        // entry conversion does on the incoming side of the same boundary.
-        let ext = super::return_extension(return_type_tag, target);
-        if !(ext.high_word_only() && alloc.high_dead(v)) {
-            emit_extend_x0_for_return(code, ext);
-        }
+        let ext = super::call_result_extension(return_type_tag, target, alloc, v);
+        emit_extend_x0_for_return(code, ext);
     }
     if let Some(rd) = int_reg(dst) {
         if rd.0 != 0 {

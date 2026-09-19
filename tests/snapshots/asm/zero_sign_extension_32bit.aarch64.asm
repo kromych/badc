@@ -60,7 +60,6 @@ Disassembly of section .text:
                	mov	x2, #0x5d               // =93
                	mov	x3, x21
                	bl	<addr>
-               	sxtw	x0, w0
                	mov	x17, #-0x7fffffff       // =-2147483647
                	cmp	w20, w17
                	b.eq	<addr>
@@ -75,7 +74,6 @@ Disassembly of section .text:
                	mov	x2, #0x5e               // =94
                	mov	x3, x20
                	bl	<addr>
-               	sxtw	x0, w0
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrsw	x0, [x0]

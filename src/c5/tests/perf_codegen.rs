@@ -630,7 +630,6 @@ fn repeated_indexed_load_reads_memory_once() {
 
 /// `free` returns nothing, so its call site has no result to extend.
 #[test]
-#[ignore = "TODO: the result register of a void external call is extended as a char"]
 fn void_external_call_result_is_not_extended() {
     let mut m = Misses::default();
     let ws = a64(DROP, "drop");
@@ -644,6 +643,117 @@ fn void_external_call_result_is_not_extended() {
     m.expect(!insns.iter().any(movzx_al), || {
         format!("x86-64: movzbq %al: {insns:x?}")
     });
+    m.finish();
+}
+
+/// A `void` prototype reaches the binding as `void`, not as the `unsigned
+/// char` whose band the tag shares, and asks for no extension; the
+/// `unsigned char` of the same band asks for its own.
+#[test]
+fn void_binding_asks_for_no_extension() {
+    use crate::c5::codegen::{ReturnExt, return_extension};
+    use crate::c5::compiler::types::is_void_ty;
+    let program = crate::Compiler::with_target(
+        "#pragma dylib(libc, \"libc.so.6\")\n\
+         #pragma binding(libc::ext_void, \"ext_void\")\n\
+         #pragma binding(libc::ext_uchar, \"ext_uchar\")\n\
+         void ext_void(void);\n\
+         unsigned char ext_uchar(void);\n\
+         int main(void) { ext_void(); return ext_uchar(); }\n"
+            .to_string(),
+        Target::LinuxX64,
+    )
+    .compile()
+    .expect("compile");
+    let tag = |name: &str| {
+        program
+            .dylibs
+            .iter()
+            .flat_map(|d| d.bindings.iter())
+            .find(|b| b.local_name == name)
+            .unwrap_or_else(|| panic!("binding {name}"))
+            .return_type_tag
+    };
+    assert!(is_void_ty(tag("ext_void")));
+    assert!(!is_void_ty(tag("ext_uchar")));
+    for target in [
+        Target::LinuxX64,
+        Target::WindowsX64,
+        Target::LinuxAarch64,
+        Target::MacOSAarch64,
+        Target::WindowsAarch64,
+    ] {
+        assert_eq!(return_extension(tag("ext_void"), target), ReturnExt::None);
+        assert_eq!(return_extension(tag("ext_uchar"), target), ReturnExt::Zero8);
+    }
+}
+
+/// Imports returning each narrow integer type, read (`read_*`) and called for
+/// effect (`drop_*`).
+const NARROW_RESULTS: &str = "#pragma dylib(libc, \"libc.so.6\")\n\
+    #pragma binding(libc::ext_bool, \"ext_bool\")\n\
+    #pragma binding(libc::ext_uchar, \"ext_uchar\")\n\
+    #pragma binding(libc::ext_short, \"ext_short\")\n\
+    #pragma binding(libc::ext_ushort, \"ext_ushort\")\n\
+    _Bool ext_bool(void);\n\
+    unsigned char ext_uchar(void);\n\
+    short ext_short(void);\n\
+    unsigned short ext_ushort(void);\n\
+    int read_bool(void) { return ext_bool(); }\n\
+    int read_uchar(void) { return ext_uchar(); }\n\
+    int read_short(void) { return ext_short(); }\n\
+    int read_ushort(void) { return ext_ushort(); }\n\
+    void drop_bool(void) { ext_bool(); }\n\
+    void drop_uchar(void) { ext_uchar(); }\n\
+    void drop_short(void) { ext_short(); }\n\
+    void drop_ushort(void) { ext_ushort(); }\n";
+
+/// `(function suffix, AArch64 word, x86-64 two-byte opcode)` of the extension
+/// each narrow result takes in the return register: `uxtb w0`, `sxth x0`,
+/// `uxth w0`; `movzx` / `movsx` of `al` / `ax` into `rax`.
+const NARROW_EXTENSIONS: [(&str, u32, u16); 4] = [
+    ("bool", 0x5300_1C00, 0x0FB6),
+    ("uchar", 0x5300_1C00, 0x0FB6),
+    ("short", 0x9340_3C00, 0x0FBF),
+    ("ushort", 0x5300_3C00, 0x0FB7),
+];
+
+/// The host ABIs leave the bits above a narrow result unspecified, so a
+/// result that is read is extended at the call site.
+#[test]
+fn read_narrow_external_result_keeps_its_extension() {
+    let mut m = Misses::default();
+    for (ty, word, op) in NARROW_EXTENSIONS {
+        let name = format!("read_{ty}");
+        let ws = a64(NARROW_RESULTS, &name);
+        m.expect(ws.contains(&word), || {
+            format!("aarch64 {name}: no {word:08x}: {ws:08x?}")
+        });
+        let insns = x64(NARROW_RESULTS, &name);
+        let extends = |i: &X64Insn| i.op == op && i.rex_w() && i.modrm == Some(0xC0);
+        m.expect(insns.iter().any(extends), || {
+            format!("x86-64 {name}: no {op:#x} on rax: {insns:x?}")
+        });
+    }
+    m.finish();
+}
+
+/// A result nothing reads takes no extension, whatever its width.
+#[test]
+fn unread_narrow_external_result_is_not_extended() {
+    let mut m = Misses::default();
+    for (ty, word, op) in NARROW_EXTENSIONS {
+        let name = format!("drop_{ty}");
+        let ws = a64(NARROW_RESULTS, &name);
+        m.expect(!ws.contains(&word), || {
+            format!("aarch64 {name}: {word:08x}: {ws:08x?}")
+        });
+        let insns = x64(NARROW_RESULTS, &name);
+        let extends = |i: &X64Insn| i.op == op && i.modrm == Some(0xC0);
+        m.expect(!insns.iter().any(extends), || {
+            format!("x86-64 {name}: {op:#x} on rax: {insns:x?}")
+        });
+    }
     m.finish();
 }
 

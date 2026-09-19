@@ -77,7 +77,6 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	sxtw	x1, w20
                	bl	<addr>
-               	sxtw	x0, w0
                	sxtw	x0, w20
                	add	x20, x0, #0x1
                	ldrsw	x0, [x29, #0x18]

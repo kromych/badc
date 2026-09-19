@@ -23,7 +23,6 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	bl	<addr>
-               	uxtb	w0, w0
                	mov	x0, #0x0                // =0
                	ldp	x29, x30, [sp], #0x10
                	ret

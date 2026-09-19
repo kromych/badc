@@ -19,7 +19,6 @@ Disassembly of section .text:
                	mov	x1, #0x7                // =7
                	str	w1, [x0, #0x200]
                	bl	<addr>
-               	uxtb	w0, w0
                	brk	#0x1
 
 <main>:

@@ -135,7 +135,6 @@ Disassembly of section .text:
                	strh	w0, [x2]
                	mov	x0, x2
                	bl	<addr>
-               	uxtb	w0, w0
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	bl	<addr>

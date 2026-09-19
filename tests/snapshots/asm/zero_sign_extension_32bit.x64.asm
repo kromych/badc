@@ -75,7 +75,6 @@ Disassembly of section .text:
                	movq	%r12, %rcx
                	movb	$0x0, %al
                	callq	<addr>
-               	movslq	%eax, %rax
                	cmpl	$0x80000001, %ebx       # imm = 0x80000001
                	je	<addr>
                	leaq	<rip>, %rax
@@ -89,7 +88,6 @@ Disassembly of section .text:
                	movq	%rbx, %rcx
                	movb	$0x0, %al
                	callq	<addr>
-               	movslq	%eax, %rax
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	testq	%rax, %rax

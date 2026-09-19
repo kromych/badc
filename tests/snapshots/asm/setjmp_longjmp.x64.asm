@@ -32,7 +32,6 @@ Disassembly of section .text:
                	movl	%esi, 0x200(%rdi)
                	xorl	%eax, %eax
                	callq	<addr>
-               	movzbq	%al, %rax
                	ud2
 
 <main>:

@@ -483,9 +483,9 @@ pub(crate) enum Machine {
 /// [`return_extension`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ReturnExt {
-    /// Already 64-bit (pointer, `long long`, LP64 `long`,
-    /// `void`/no return, FP) -- caller copies the host return
-    /// register into the accumulator without touching it.
+    /// Already 64-bit (pointer, `long long`, LP64 `long`, FP), or no
+    /// value at all (`void`) -- the caller takes the host return
+    /// register as it is.
     None,
     /// Sign-extend the low 8 / 16 / 32 bits.
     Sign8,
@@ -503,6 +503,22 @@ impl ReturnExt {
     pub(crate) fn high_word_only(self) -> bool {
         matches!(self, ReturnExt::Sign32 | ReturnExt::Zero32)
     }
+}
+
+/// The extension a call site applies to `v`, the result of an import
+/// returning `return_type_tag`: none for a result nothing reads, and none
+/// for a 32-bit widening whose high word nothing reads.
+pub(crate) fn call_result_extension(
+    return_type_tag: i64,
+    target: Target,
+    alloc: &ssa::reg_alloc::Allocation,
+    v: crate::c5::ir::ValueId,
+) -> ReturnExt {
+    let ext = return_extension(return_type_tag, target);
+    if alloc.is_unread(v) || (ext.high_word_only() && alloc.high_dead(v)) {
+        return ReturnExt::None;
+    }
+    ext
 }
 
 /// Upper bound on ent_pcs the lowering needs to look up. The
@@ -1073,6 +1089,10 @@ pub(crate) fn return_extension(return_type_tag: i64, target: Target) -> ReturnEx
         // prototype.
         return ReturnExt::None;
     }
+    // `void` shares `unsigned char`'s band; the call leaves no value.
+    if ty_helpers::is_void_ty(return_type_tag) {
+        return ReturnExt::None;
+    }
     let unsigned = ty_helpers::is_unsigned_ty(return_type_tag);
     let bare = ty_helpers::strip_unsigned(return_type_tag);
     if ty_helpers::is_pointer_ty(bare) {
@@ -1117,9 +1137,6 @@ pub(crate) fn return_extension(return_type_tag: i64, target: Target) -> ReturnEx
         };
     }
     if bare == Ty::Char as i64 {
-        // Lexer aliases `void` -> `Ty::Char`. Either way, signed
-        // is the safer extension for an 8-bit return; unsigned is
-        // a hint from a `unsigned char` prototype.
         return if unsigned {
             ReturnExt::Zero8
         } else {
@@ -1187,8 +1204,8 @@ pub(crate) struct ResolvedImport {
     /// (atoi, fclose, ...) leave the upper 32 bits of RAX
     /// undefined, and a downstream 64-bit comparison against a
     /// negative literal sees garbage. `0` (= `Ty::Char` = "no
-    /// prototype seen") falls through with no extension; `void`
-    /// also reduces to `Ty::Char` since the lexer aliases it.
+    /// prototype seen") falls through with no extension, as does
+    /// `void`, which the tag's void bit names.
     pub return_type_tag: i64,
     /// Prototype's return type was spelled `long double`. The
     /// SysV x86_64 ABI returns long double in x87 `st(0)`; c5's

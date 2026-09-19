@@ -400,5 +400,4 @@ Disassembly of section .text:
                	and	x0, x0, #0x7f
                	sxtw	x0, w0
                	bl	<addr>
-               	uxtb	w0, w0
                	brk	#0x1

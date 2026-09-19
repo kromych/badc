@@ -121,7 +121,6 @@ Disassembly of section .text:
                	cbnz	x0, <addr>
                	sub	x0, x29, #0x50
                	bl	<addr>
-               	uxtb	w0, w0
                	b	<addr>
                	b	<addr>
                	mov	x3, x0
@@ -142,7 +141,6 @@ Disassembly of section .text:
                	ret
                	sub	x0, x29, #0x50
                	bl	<addr>
-               	uxtb	w0, w0
                	add	x0, x21, #0x38
                	sxtw	x0, w0
                	ldp	x29, x30, [sp, #0x80]
@@ -152,7 +150,6 @@ Disassembly of section .text:
                	ret
                	sub	x0, x29, #0x50
                	bl	<addr>
-               	uxtb	w0, w0
                	add	x0, x21, #0x38
                	sxtw	x0, w0
                	ldp	x29, x30, [sp, #0x80]

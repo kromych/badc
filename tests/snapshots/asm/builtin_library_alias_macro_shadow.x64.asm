@@ -370,7 +370,6 @@ Disassembly of section .text:
                	retq
                	xorl	%eax, %eax
                	callq	<addr>
-               	movzbq	%al, %rax
                	movl	$0x2, %edi
                	movl	$0x4, %esi
                	xorl	%eax, %eax
@@ -391,7 +390,6 @@ Disassembly of section .text:
                	retq
                	xorl	%eax, %eax
                	callq	<addr>
-               	movzbq	%al, %rax
                	xorq	%rax, %rax
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12

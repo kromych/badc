@@ -24,7 +24,6 @@ Disassembly of section .text:
                	str	w0, [x20]
                	mov	x0, x20
                	bl	<addr>
-               	uxtb	w0, w0
                	ldrsw	x0, [x20]
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x20, [sp], #0x20

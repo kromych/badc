@@ -33,7 +33,6 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	bl	<addr>
-               	uxtb	w0, w0
                	brk	#0x1
 
 <main>:
@@ -79,7 +78,6 @@ Disassembly of section .text:
                	mov	x1, #0x0                // =0
                	mov	x0, x20
                	bl	<addr>
-               	uxtb	w0, w0
                	brk	#0x1
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
@@ -127,7 +125,6 @@ Disassembly of section .text:
                	str	w1, [x0]
                	mov	x0, x20
                	bl	<addr>
-               	uxtb	w0, w0
                	brk	#0x1
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
@@ -136,5 +133,4 @@ Disassembly of section .text:
                	mov	x1, #0x0                // =0
                	mov	x0, x20
                	bl	<addr>
-               	uxtb	w0, w0
                	brk	#0x1

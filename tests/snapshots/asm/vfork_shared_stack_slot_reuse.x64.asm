@@ -413,5 +413,4 @@ Disassembly of section .text:
                	movslq	%eax, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movzbq	%al, %rax
                	ud2

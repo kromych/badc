@@ -655,12 +655,8 @@ pub(super) fn emit_call_ext(
         xmm0_result_to_dst(code, dst, frame);
         return Ok(());
     }
-    // The 32-bit widenings write only bits 32..63, as the `ParamRef`
-    // entry conversion does on the incoming side of the same boundary.
-    let ext = super::return_extension(return_type_tag, target);
-    if !(ext.high_word_only() && alloc.high_dead(v)) {
-        super::encode::emit_extend_rax_for_return(code, ext);
-    }
+    let ext = super::call_result_extension(return_type_tag, target, alloc, v);
+    super::encode::emit_extend_rax_for_return(code, ext);
     mirror_int_dst(code, dst, Reg::RAX, frame);
     Ok(())
 }

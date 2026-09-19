@@ -306,7 +306,6 @@ Disassembly of section .text:
                	ldp	x20, x21, [sp], #0x20
                	ret
                	bl	<addr>
-               	uxtb	w0, w0
                	mov	x0, #0x2                // =2
                	mov	x1, #0x4                // =4
                	bl	<addr>
@@ -320,7 +319,6 @@ Disassembly of section .text:
                	ldp	x20, x21, [sp], #0x20
                	ret
                	bl	<addr>
-               	uxtb	w0, w0
                	mov	x0, #0x0                // =0
                	ldp	x29, x30, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x20

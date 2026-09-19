@@ -43,7 +43,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movzbq	%al, %rax
                	ud2
 
 <main>:
@@ -94,7 +93,6 @@ Disassembly of section .text:
                	movq	%rbx, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movzbq	%al, %rax
                	ud2
                	leaq	<rip>, %rax
                	xorq	%rcx, %rcx
@@ -145,7 +143,6 @@ Disassembly of section .text:
                	movq	%rbx, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movzbq	%al, %rax
                	ud2
                	leaq	<rip>, %rax
                	movl	$0x1, %ecx
@@ -154,5 +151,4 @@ Disassembly of section .text:
                	movq	%rbx, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movzbq	%al, %rax
                	ud2

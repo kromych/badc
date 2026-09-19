@@ -20,7 +20,6 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	mov	x1, #0x1                // =1
                	bl	<addr>
-               	uxtb	w0, w0
                	brk	#0x1
 
 <test>:

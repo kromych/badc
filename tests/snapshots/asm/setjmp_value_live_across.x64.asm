@@ -32,7 +32,6 @@ Disassembly of section .text:
                	movl	$0x1, %esi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movzbq	%al, %rax
                	ud2
 
 <test>:

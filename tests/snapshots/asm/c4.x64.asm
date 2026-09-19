@@ -81,12 +81,10 @@ Disassembly of section .text:
                	movq	(%rcx), %rsi
                	movb	$0x0, %al
                	callq	<addr>
-               	movslq	%eax, %rax
                	jmp	<addr>
                	leaq	<rip>, %rdi
                	movb	$0x0, %al
                	callq	<addr>
-               	movslq	%eax, %rax
                	leaq	<rip>, %rax
                	movq	(%rax), %rax
                	leaq	<rip>, %rcx
@@ -940,7 +938,6 @@ Disassembly of section .text:
                	movabsq	$-0x1, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movzbq	%al, %rax
                	ud2
                	movq	(%rbx), %rax
                	cmpq	$0x80, %rax
@@ -1700,7 +1697,6 @@ Disassembly of section .text:
                	movabsq	$-0x1, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movzbq	%al, %rax
                	ud2
                	leaq	<rip>, %rdi
                	leaq	<rip>, %rax
@@ -1710,7 +1706,6 @@ Disassembly of section .text:
                	movabsq	$-0x1, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movzbq	%al, %rax
                	ud2
                	leaq	<rip>, %rdi
                	leaq	<rip>, %rax
@@ -1721,7 +1716,6 @@ Disassembly of section .text:
                	movabsq	$-0x1, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movzbq	%al, %rax
                	ud2
                	leaq	<rip>, %rdi
                	leaq	<rip>, %rax
@@ -1731,7 +1725,6 @@ Disassembly of section .text:
                	movabsq	$-0x1, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movzbq	%al, %rax
                	ud2
                	leaq	<rip>, %rdi
                	leaq	<rip>, %rax
@@ -1741,7 +1734,6 @@ Disassembly of section .text:
                	movabsq	$-0x1, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movzbq	%al, %rax
                	ud2
                	leaq	<rip>, %rdi
                	leaq	<rip>, %rax
@@ -1751,7 +1743,6 @@ Disassembly of section .text:
                	movabsq	$-0x1, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movzbq	%al, %rax
                	ud2
                	movq	(%rbx), %rax
                	cmpq	$0x22, %rax
@@ -1839,7 +1830,6 @@ Disassembly of section .text:
                	movabsq	$-0x1, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movzbq	%al, %rax
                	ud2
                	movq	(%rbx), %rax
                	cmpq	$0x86, %rax
@@ -1857,7 +1847,6 @@ Disassembly of section .text:
                	movabsq	$-0x1, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movzbq	%al, %rax
                	ud2
                	movq	(%rbx), %rax
                	cmpq	$0x85, %rax
@@ -1936,7 +1925,6 @@ Disassembly of section .text:
                	movabsq	$-0x1, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movzbq	%al, %rax
                	ud2
                	movq	0x18(%r13), %rax
                	cmpq	$0x80, %rax
@@ -2009,7 +1997,6 @@ Disassembly of section .text:
                	movabsq	$-0x1, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movzbq	%al, %rax
                	ud2
                	movq	(%rbx), %rax
                	cmpq	$0x28, %rax
@@ -2052,7 +2039,6 @@ Disassembly of section .text:
                	movabsq	$-0x1, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movzbq	%al, %rax
                	ud2
                	xorq	%r12, %r12
                	jmp	<addr>
@@ -2071,7 +2057,6 @@ Disassembly of section .text:
                	movabsq	$-0x1, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movzbq	%al, %rax
                	ud2
                	movq	(%rbx), %rax
                	cmpq	$0x9f, %rax
@@ -2108,7 +2093,6 @@ Disassembly of section .text:
                	movabsq	$-0x1, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movzbq	%al, %rax
                	ud2
                	movq	(%rbx), %rax
                	cmpq	$0x94, %rax
@@ -2146,7 +2130,6 @@ Disassembly of section .text:
                	movabsq	$-0x1, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movzbq	%al, %rax
                	ud2
                	movq	(%rbx), %rax
                	cmpq	$0x21, %rax
@@ -2357,7 +2340,6 @@ Disassembly of section .text:
                	movabsq	$-0x1, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movzbq	%al, %rax
                	ud2
                	leaq	<rip>, %rdi
                	leaq	<rip>, %rax
@@ -2367,7 +2349,6 @@ Disassembly of section .text:
                	movabsq	$-0x1, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movzbq	%al, %rax
                	ud2
 
 <stmt>:
@@ -2437,7 +2418,6 @@ Disassembly of section .text:
                	movabsq	$-0x1, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movzbq	%al, %rax
                	ud2
                	leaq	<rip>, %rdi
                	leaq	<rip>, %rax
@@ -2447,7 +2427,6 @@ Disassembly of section .text:
                	movabsq	$-0x1, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movzbq	%al, %rax
                	ud2
                	movq	(%rbx), %rax
                	cmpq	$0x8d, %rax
@@ -2497,7 +2476,6 @@ Disassembly of section .text:
                	movabsq	$-0x1, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movzbq	%al, %rax
                	ud2
                	leaq	<rip>, %rdi
                	leaq	<rip>, %rax
@@ -2507,7 +2485,6 @@ Disassembly of section .text:
                	movabsq	$-0x1, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movzbq	%al, %rax
                	ud2
                	movq	(%rbx), %rax
                	cmpq	$0x8b, %rax
@@ -2537,7 +2514,6 @@ Disassembly of section .text:
                	movabsq	$-0x1, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movzbq	%al, %rax
                	ud2
                	movq	(%rbx), %rax
                	cmpq	$0x7b, %rax
@@ -2570,7 +2546,6 @@ Disassembly of section .text:
                	movabsq	$-0x1, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movzbq	%al, %rax
                	ud2
 
 <main>:
@@ -3361,7 +3336,6 @@ Disassembly of section .text:
                	movq	(%r14), %rsi
                	movb	$0x0, %al
                	callq	<addr>
-               	movslq	%eax, %rax
                	testq	%r12, %r12
                	jne	<addr>
                	leaq	0x8(%r14), %rax
@@ -3706,7 +3680,6 @@ Disassembly of section .text:
                	movq	(%rbx), %rdi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movzbq	%al, %rax
                	jmp	<addr>
                	cmpq	$0x24, %r12
                	jne	<addr>
@@ -3731,7 +3704,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi
                	movb	$0x0, %al
                	callq	<addr>
-               	movslq	%eax, %rax
                	jmp	<addr>
                	cmpq	$0x26, %r12
                	jne	<addr>

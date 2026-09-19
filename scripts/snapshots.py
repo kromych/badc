@@ -584,10 +584,10 @@ ARCH_ACCESS: dict[str, dict[str, re.Pattern[str]]] = {
 
 
 def access_counts(text: str, arch: str) -> tuple[int, int, int, int]:
-    """Functions, instructions, memory accesses and callee-saved
-    entry/exit accesses in one disassembly."""
+    """Functions, instructions, memory accesses and stores of a
+    callee-saved register to the stack in one disassembly."""
     rules = ARCH_ACCESS[arch]
-    funcs = insts = mem = saved = 0
+    funcs = insts = mem = saves = 0
     for line in text.splitlines():
         if FUNCTION_LABEL_RE.match(line):
             funcs += 1
@@ -601,46 +601,53 @@ def access_counts(text: str, arch: str) -> tuple[int, int, int, int]:
             # push / pop / leave name no operand but access the stack.
             if mnemonic.startswith(("push", "pop", "leave")):
                 mem += 1
-                saved += 1 if rules["saved"].search(operands) else 0
+                if mnemonic.startswith("push") and rules["saved"].search(operands):
+                    saves += 1
                 continue
             if mnemonic.startswith(("lea", "nop")) or not rules["mem"].search(operands):
                 continue
-        elif not rules["mem"].match(mnemonic):
+            mem += 1
+            src, _, dst = operands.partition(",")
+            if (mnemonic.startswith("mov") and rules["saved"].search(src)
+                    and rules["stack"].search(dst)):
+                saves += 1
+            continue
+        if not rules["mem"].match(mnemonic):
             continue
         mem += 1
-        if rules["stack"].search(operands) and rules["saved"].search(operands):
-            saved += 1
-    return funcs, insts, mem, saved
+        if (mnemonic.startswith("st") and rules["stack"].search(operands)
+                and rules["saved"].search(operands)):
+            saves += 1
+    return funcs, insts, mem, saves
 
 
-# Corpus ceiling per architecture: callee-saved entry/exit accesses per
-# function. A function pays these on every call it receives, whatever
-# path the call takes, so they are the part of the memory traffic that
-# scales with call frequency rather than with the work done.
+# Corpus ceiling per architecture: callee-saved accesses per function on
+# one call's path -- the saves at entry and the restores at one exit,
+# twice the saves. A function pays these on every call it receives,
+# whatever path the call takes, so they are the part of the memory
+# traffic that scales with call frequency rather than with the work done.
+# A call leaves through one return site, so the restores of the others
+# are not counted.
 #
 # Per function rather than per instruction: a change that removes
 # instructions raises a per-instruction ratio without adding any traffic,
 # and this budget must not read an optimization as a regression. Adding
 # fixtures adds functions, so the corpus can grow without moving it.
 #
-# The margin comes from the distribution. Over the 386 commits of the
-# branch this budget was written for, the ratio rose by more than 0.024
-# on no commit but one: a cross-block CSE that let a merged value's range
-# span a call, which raised it 0.594 (+49%) and cost a kernel boot 3.5x
-# its time. The headroom below is 0.10 -- four times the largest ordinary
-# rise, a sixth of that regression.
+# The margin comes from the distribution. Over the 417 commits that moved
+# the asm snapshots from 2026-07-26 to 2026-09-19, the ratio rose by more
+# than 0.022 on no commit but two: a merge of a branch, and a cross-block
+# CSE that let a merged value's range span a call, which raised it 0.172
+# (+35%) on aarch64 and 0.088 (+16%) on x86_64 and cost a kernel boot
+# 3.5x its time. The headroom below is 0.044 over the ratios of
+# 2026-09-19 -- twice the largest ordinary rise, half that regression on
+# x86_64.
 #
 # A ceiling moves only deliberately: regenerate, read `--budget`, and
 # change the number in the commit that spends it.
-#
-# The count takes the restores of every return site, so a function with
-# many returns weighs more than a call through it costs. Two fixtures of
-# functions returning from 43 to 61 sites took x64 from 1.98 to 2.07,
-# while the entry saves per function went from 0.279 to 0.286; the x64
-# ceiling moved from 2.06 to 2.17 with them.
 SAVED_PER_FUNCTION: dict[str, float] = {
-    "aarch64": 1.57,
-    "x64": 2.17,
+    "aarch64": 0.292,
+    "x64": 0.536,
 }
 
 
@@ -658,10 +665,10 @@ def corpus_access(root: Path) -> dict[str, tuple[int, int, int, int]]:
 def budget_report(root: Path) -> int:
     """Report the corpus access ratios and fail on a ceiling."""
     rc = 0
-    for arch, (funcs, insts, mem, saved) in sorted(corpus_access(root).items()):
+    for arch, (funcs, insts, mem, saves) in sorted(corpus_access(root).items()):
         if funcs == 0 or insts == 0:
             continue
-        ratio = saved / funcs
+        ratio = 2 * saves / funcs
         print(f"[budget] {arch}: {funcs} functions, {insts} instructions, "
               f"{mem * 100.0 / insts:.2f} memory accesses/100 instructions, "
               f"{ratio:.4f} callee-saved entry/exit accesses/function")
@@ -741,18 +748,21 @@ def self_test() -> int:
     # The access counters, over the forms that decide each field: a
     # callee-saved pair on the stack, an ordinary data access, an
     # address computation that reads nothing, and the frame record,
-    # which is not the allocator's traffic.
+    # which is not the allocator's traffic. Restores count nothing, so a
+    # second return site leaves the saves as they were.
     access_cases = [
         ("aarch64",
          "<f>:\n\tstp\tx20, x21, [sp, #-0x20]!\n\tstp\tx29, x30, [sp, #0x10]\n"
          "\tldr\tx0, [x1, #0x8]\n\tadd\tx0, x0, #0x1\n"
+         "\tldp\tx20, x21, [sp], #0x20\n\tret\n"
          "\tldp\tx20, x21, [sp], #0x20\n\tret\n",
-         (1, 6, 4, 2)),
+         (1, 8, 5, 1)),
         ("x64",
          "<f>:\n\tpushq\t%rbp\n\tpushq\t%rbx\n\tmovq\t%r12, 0x8(%rsp)\n"
          "\tleaq\t(%rdi,%rcx), %rax\n\tmovq\t(%rax), %rdx\n"
+         "\tmovq\t0x8(%rsp), %r12\n\tpopq\t%rbx\n\tretq\n"
          "\tpopq\t%rbx\n\tretq\n",
-         (1, 7, 5, 3)),
+         (1, 10, 7, 2)),
     ]
     for arch, text, want in access_cases:
         got = access_counts(text, arch)

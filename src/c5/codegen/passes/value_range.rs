@@ -1556,9 +1556,12 @@ fn apply_edge(
     // says only that it is not zero -- `if (x & 4)` reaches its body
     // with the value 4, not 1. A comparison bounds both of its operands,
     // at the width it reads them.
+    // `c` is an expression's first instance on the tape, whose definition
+    // range can carry a guard of its own block; each reader meets the
+    // fact with its own instance's range instead.
     edge_bounds(func, numbers, params, cond, holds, |c, bound| {
         let key = key_of(func, canon, c);
-        let r = bound.narrow(held(facts, def, key, c));
+        let r = bound.narrow(facts.get(key));
         facts.set(key, r);
     });
     // A condition that is itself a comparison against one value settles
@@ -3292,5 +3295,71 @@ mod tests {
         assert!(matches!(f.insts[1], Inst::BinopI { op: BinOp::Lt, .. }));
         assert!(matches!(f.blocks[0].terminator, Terminator::Bnz { .. }));
         assert!(matches!(f.blocks[2].terminator, Terminator::Jmp(0)));
+    }
+    /// Two instances of one expression, the first on the tape inside the
+    /// arm its guard pins to 3. The guard holds there only: the other
+    /// instance, read on the `>= 2` edge above that arm, is 2 or 3.
+    ///
+    /// b0: v0 = param                        Jmp b1
+    /// b3: v1 = sext32(v0)                   return v1   (entered when v2 == 3)
+    /// b1: v2 = sext32(v0); v3 = v2 < 2      Bnz v3 -> b2 else b4
+    /// b4: v4 = v2 < 3                       Bnz v4 -> b2 else b5
+    /// b5: v5 = v2 == 3                      Bnz v5 -> b3 else b2
+    /// b2: return
+    #[test]
+    fn a_guard_on_one_instance_bounds_no_other() {
+        let sext = Inst::Extend {
+            value: 0,
+            kind: LoadKind::I32,
+        };
+        let insts = vec![
+            Inst::ParamRef {
+                idx: 0,
+                kind: LoadKind::I64,
+            },
+            sext.clone(),
+            sext,
+            Inst::BinopI {
+                op: BinOp::Lt,
+                lhs: 2,
+                rhs_imm: 2,
+            },
+            Inst::BinopI {
+                op: BinOp::Lt,
+                lhs: 2,
+                rhs_imm: 3,
+            },
+            Inst::BinopI {
+                op: BinOp::Eq,
+                lhs: 2,
+                rhs_imm: 3,
+            },
+        ];
+        let block = |range: core::ops::Range<u32>, terminator| Block {
+            start_pc: 0,
+            inst_range: range,
+            terminator,
+            exit_acc: crate::c5::ir::NO_VALUE,
+        };
+        let branch = |cond, target, fall_through| Terminator::Bnz {
+            cond,
+            target,
+            fall_through,
+        };
+        let mut f = fresh(insts, 1);
+        f.blocks = vec![
+            block(0..1, Terminator::Jmp(1)),
+            block(2..4, branch(3, 2, 4)),
+            block(6..6, Terminator::Return(crate::c5::ir::NO_VALUE)),
+            block(1..2, Terminator::Return(1)),
+            block(4..5, branch(4, 2, 5)),
+            block(5..6, branch(5, 3, 2)),
+        ];
+        run_one(&mut f, &[]);
+        assert!(
+            matches!(f.insts[4], Inst::BinopI { op: BinOp::Lt, .. }),
+            "v2 < 3 decided on the >= 2 edge: {:?}",
+            f.insts[4]
+        );
     }
 }

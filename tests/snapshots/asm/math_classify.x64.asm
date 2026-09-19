@@ -37,11 +37,9 @@ Disassembly of section .text:
                	movq	%rax, %xmm15
                	movq	%rcx, %xmm1
                	divsd	%xmm15, %xmm1
-               	movq	%rcx, %xmm2
-               	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm2
+               	movabsq	$-0x4010000000000000, %rcx # imm = 0xBFF0000000000000
                	movq	%rax, %xmm15
+               	movq	%rcx, %xmm2
                	divsd	%xmm15, %xmm2
                	movsd	%xmm0, -0x8(%rbp)
                	movq	-0x8(%rbp), %rcx

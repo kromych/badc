@@ -903,8 +903,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	fmov	d0, #0.50000000
-               	fneg	d0, d0
+               	fmov	d0, #-0.50000000
                	mov	x0, #0x0                // =0
                	mov	x2, #0x47               // =71
                	mov	x1, x0
@@ -915,8 +914,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x16, <page>
-               	ldr	d0, [x16]
-               	fneg	d0, d0
+               	ldr	d0, [x16, #0x8]
                	mov	x0, #-0x1               // =-1
                	mov	x1, #-0x3               // =-3
                	mov	x2, #0x49               // =73
@@ -927,7 +925,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x16, <page>
-               	ldr	d0, [x16, #0x8]
+               	ldr	d0, [x16, #0x10]
                	mov	x0, #0x0                // =0
                	mov	x1, #0xcedc0000         // =3470524416
                	movk	x1, #0xb486, lsl #32
@@ -961,9 +959,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x16, #0x47e0000000000000 // =5179139571476070400
+               	mov	x16, #-0x3820000000000000 // =-4044232465378705408
                	fmov	d0, x16
-               	fneg	d0, d0
                	mov	x0, #-0x8000000000000000 // =-9223372036854775808
                	mov	x1, #0x0                // =0
                	mov	x2, #0x51               // =81
@@ -1076,8 +1073,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	fmov	s0, #3.50000000
-               	fneg	s0, s0
+               	fmov	s0, #-3.50000000
                	str	s0, [x1]
                	ldr	s0, [x1]
                	fcvt	d0, s0

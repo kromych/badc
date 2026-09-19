@@ -97,14 +97,14 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v75  Imm(0)                                           -> x0
     v76  Imm(0)                                           -> x0 [f32]
     v77  Imm(1110179840)                                  -> x0 [f32]
-    v78  Fneg(v77)                                        -> d1 [f32]
+    v78  Imm(3257663488)                                  -> x0 [f32]
     v79  Binop { op=fgt, lhs=v74, rhs=v78 }               -> x0
     v80  Imm(0)                                           -> x1
     terminator Bnz { cond=v79, target=b10, fall=b9 }   (exit_acc=v79)
   block 9  start_pc=0
     v81  Imm(0)                                           -> x0 [f32]
     v82  Imm(1110441984)                                  -> x0 [f32]
-    v83  Fneg(v82)                                        -> d1 [f32]
+    v83  Imm(3257925632)                                  -> x0 [f32]
     v84  Binop { op=flt, lhs=v74, rhs=v83 }               -> x0
     v85  Imm(0)                                           -> x1
     v86  Imm(0)                                           -> x1

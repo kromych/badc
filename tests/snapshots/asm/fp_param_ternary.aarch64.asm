@@ -30,41 +30,43 @@ Disassembly of section .text:
                	b	<addr>
 
 <main>:
-               	fmov	s0, #5.00000000
-               	fneg	s1, s0
-               	fcmp	s1, s1
+               	fmov	s0, #-5.00000000
+               	fmov	s1, #-5.00000000
+               	fcmp	s1, s0
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ret
+               	fmov	s1, #5.00000000
                	fmov	s2, #5.00000000
-               	fcmp	s2, s0
+               	fcmp	s2, s1
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ret
-               	fcmp	s1, s1
+               	fmov	s2, #-5.00000000
+               	fcmp	s2, s0
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ret
-               	fmov	s1, #5.00000000
-               	fcmp	s1, s0
+               	fmov	s0, #5.00000000
+               	fcmp	s0, s1
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	ret
                	fmov	s0, #1.50000000
-               	fmov	s1, #2.50000000
                	fmov	s2, #1.50000000
-               	fneg	s1, s1
-               	fadd	s2, s2, s1
+               	fmov	s1, #-2.50000000
+               	fmov	s3, #-2.50000000
+               	fadd	s2, s2, s3
                	fadd	s0, s0, s1
                	fcmp	s2, s0
                	b.eq	<addr>
                	mov	x0, #0x5                // =5
                	ret
-               	fmov	s1, #7.25000000
                	fmov	s0, #0.12500000
-               	fneg	s1, s1
-               	fmov	s2, #0.12500000
-               	fadd	s2, s1, s2
+               	fmov	s1, #-7.25000000
+               	fmov	s2, #-7.25000000
+               	fmov	s3, #0.12500000
+               	fadd	s2, s2, s3
                	fadd	s0, s1, s0
                	fcmp	s2, s0
                	b.eq	<addr>

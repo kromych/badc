@@ -113,24 +113,20 @@ Disassembly of section .text:
                	movl	$0xb, %eax
                	popq	%rbp
                	retq
-               	movabsq	$0x3fb99999a0000000, %rcx # imm = 0x3FB99999A0000000
-               	movq	%rcx, %xmm15
+               	movabsq	$0x3fb99999a0000000, %rax # imm = 0x3FB99999A0000000
+               	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0xc, %eax
                	popq	%rbp
                	retq
-               	movq	%rax, %xmm0
-               	movl	$0x80000000, %r10d      # imm = 0x80000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm0
-               	movq	%rcx, %xmm1
-               	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm1
-               	cvtss2sd	%xmm0, %xmm0
-               	ucomisd	%xmm1, %xmm0
+               	movl	$0xbdcccccd, %eax       # imm = 0xBDCCCCCD
+               	movabsq	$-0x4046666660000000, %rcx # imm = 0xBFB99999A0000000
+               	movq	%rax, %xmm14
+               	cvtss2sd	%xmm14, %xmm0
+               	movq	%rcx, %xmm15
+               	ucomisd	%xmm15, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0xd, %eax

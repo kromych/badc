@@ -67,19 +67,13 @@ Disassembly of section .text:
                	movq	$-0x7, %rax
                	xorps	%xmm0, %xmm0
                	cvtsi2sd	%rax, %xmm0
-               	movabsq	$0x401e000000000000, %rax # imm = 0x401E000000000000
-               	movq	%rax, %xmm1
-               	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm1
-               	ucomisd	%xmm0, %xmm1
+               	movabsq	$-0x3fe2000000000000, %rax # imm = 0xC01E000000000000
+               	movq	%rax, %xmm15
+               	ucomisd	%xmm0, %xmm15
                	ja	<addr>
-               	movabsq	$0x401a000000000000, %rax # imm = 0x401A000000000000
-               	movq	%rax, %xmm1
-               	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	movabsq	$-0x3fe6000000000000, %rax # imm = 0xC01A000000000000
+               	movq	%rax, %xmm15
+               	ucomisd	%xmm15, %xmm0
                	jbe	<addr>
                	leaq	<rip>, %rdi
                	movb	$0x1, %al
@@ -117,12 +111,9 @@ Disassembly of section .text:
                	movl	$0x5, %eax
                	popq	%rbp
                	retq
-               	movabsq	$0x4007333333333333, %rax # imm = 0x4007333333333333
-               	movq	%rax, %xmm0
-               	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm0
-               	cvttsd2si	%xmm0, %rax
+               	movabsq	$-0x3ff8cccccccccccd, %rax # imm = 0xC007333333333333
+               	movq	%rax, %xmm14
+               	cvttsd2si	%xmm14, %rax
                	cmpl	$-0x2, %eax
                	je	<addr>
                	leaq	<rip>, %rdi

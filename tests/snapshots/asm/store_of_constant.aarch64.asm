@@ -76,11 +76,12 @@ Disassembly of section .text:
                	movi	d0, #0000000000000000
                	fmov	s1, #1.50000000
                	str	s1, [x0]
-               	movi	d1, #0000000000000000
-               	fneg	s1, s1
+               	mov	x16, #0x80000000        // =2147483648
+               	fmov	s1, w16
                	str	s1, [x0, #0x4]
                	str	d0, [x1]
-               	fneg	d0, d0
+               	mov	x16, #-0x8000000000000000 // =-9223372036854775808
+               	fmov	d0, x16
                	str	d0, [x1, #0x8]
                	ret
 

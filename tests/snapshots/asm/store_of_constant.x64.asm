@@ -68,21 +68,12 @@ Disassembly of section .text:
                	retq
 
 <put_float>:
-               	xorl	%eax, %eax
                	movl	$0x3fc00000, (%rdi)     # imm = 0x3FC00000
-               	xorl	%ecx, %ecx
-               	movq	%rcx, %xmm0
-               	movl	$0x80000000, %r10d      # imm = 0x80000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm0
-               	movss	%xmm0, 0x4(%rdi)
+               	movl	$0x80000000, 0x4(%rdi)  # imm = 0x80000000
+               	movq	$0x0, (%rsi)
+               	movabsq	$-0x8000000000000000, %rax # imm = 0x8000000000000000
                	movq	%rax, %xmm14
-               	movsd	%xmm14, (%rsi)
-               	movq	%rax, %xmm0
-               	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm0
-               	movsd	%xmm0, 0x8(%rsi)
+               	movsd	%xmm14, 0x8(%rsi)
                	retq
 
 <both>:

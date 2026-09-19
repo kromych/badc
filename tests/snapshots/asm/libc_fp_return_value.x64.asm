@@ -59,10 +59,8 @@ Disassembly of section .text:
                	je	<addr>
                	xorl	%ebx, %ebx
                	movabsq	$0x400c000000000000, %rax # imm = 0x400C000000000000
-               	movq	%rax, %xmm0
-               	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm0
+               	movabsq	$-0x3ff4000000000000, %rcx # imm = 0xC00C000000000000
+               	movq	%rcx, %xmm0
                	movabsq	$0x7fffffffffffffff, %r10 # imm = 0x7FFFFFFFFFFFFFFF
                	movq	%r10, %xmm15
                	andpd	%xmm15, %xmm0
@@ -93,10 +91,8 @@ Disassembly of section .text:
                	je	<addr>
                	xorl	%ebx, %ebx
                	movl	$0x40600000, %eax       # imm = 0x40600000
-               	movq	%rax, %xmm0
-               	movl	$0x80000000, %r10d      # imm = 0x80000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm0
+               	movl	$0xc0600000, %ecx       # imm = 0xC0600000
+               	movq	%rcx, %xmm0
                	movl	$0x7fffffff, %r10d      # imm = 0x7FFFFFFF
                	movq	%r10, %xmm15
                	andpd	%xmm15, %xmm0

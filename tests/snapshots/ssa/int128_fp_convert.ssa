@@ -1128,7 +1128,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=3
     terminator Return(v185)   (exit_acc=v185)
   block 38  start_pc=0
     v188 Imm(4602678819172646912)                         -> x0
-    v189 Fneg(v188)                                       -> d0
+    v189 Imm(-4620693217682128896)                        -> x0
     v190 Imm(0)                                           -> x7
     v191 Imm(71)                                          -> x2
     v192 Call { target_pc=4, args=[v189, v190, v190, v191], fixed_args=4, fp_return=false, fp_arg_mask=0x1 } -> x0
@@ -1141,7 +1141,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=3
     terminator Return(v194)   (exit_acc=v194)
   block 40  start_pc=0
     v197 Imm(4616187366254944715)                         -> x0
-    v198 Fneg(v197)                                       -> d0
+    v198 Imm(-4607184670599831093)                        -> x0
     v199 Imm(-1)                                          -> x7
     v200 Imm(-3)                                          -> x6
     v201 Imm(73)                                          -> x2
@@ -1194,7 +1194,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=3
     terminator Return(v231)   (exit_acc=v231)
   block 48  start_pc=0
     v234 Imm(5179139571476070400)                         -> x0
-    v235 Fneg(v234)                                       -> d0
+    v235 Imm(-4044232465378705408)                        -> x0
     v236 Imm(-9223372036854775808)                        -> x7
     v237 Imm(0)                                           -> x6
     v238 Imm(81)                                          -> x2
@@ -1377,7 +1377,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=3
   block 53  start_pc=0
     v406 ImmData(40)                                      -> x0
     v407 Imm(1080033280)                                  -> x1 [f32]
-    v408 Fneg(v407)                                       -> d0 [f32]
+    v408 Imm(3227516928)                                  -> x1 [f32]
     v409 Store { addr=v406, disp=0, value=v408, kind=F32, volatile } -> -
     v410 Load { addr=v406, disp=0, kind=F32, volatile }   -> d0 [f32]
     v411 Imm(0)                                           -> x0

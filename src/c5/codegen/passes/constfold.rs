@@ -14,16 +14,17 @@
 //!     the immediate encodes without a per-use scratch
 //!     materialisation or the `Imm` def has no other use;
 //!   * `Binop { lhs = Imm }` -> the rhs-imm form via commutation or
-//!     compare mirroring, then the rule above.
+//!     compare mirroring, then the rule above;
+//!   * `Fneg { Imm }` -> `Imm` with the sign bit flipped.
 //!
-//! Only a plain integer `Inst::Imm` whose `f32_values` flag is clear
-//! participates: `ImmData` / `ImmCode` / `ImmExtCode` / `BlockAddr` /
-//! `TlsAddr` / `LocalAddr` resolve to addresses at emit time, and an
-//! f32 `Imm` carries the low-32 bit pattern in the IR while the
-//! evaluator's register convention is f64-widened. Division the
-//! evaluator computes but native code traps on (`/ 0`,
-//! `i64::MIN / -1`) is refused by `eval::fold_binop`, so folding
-//! never changes runtime behavior.
+//! Save for that sign flip, only a plain integer `Inst::Imm` whose
+//! `f32_values` flag is clear participates: `ImmData` / `ImmCode` /
+//! `ImmExtCode` / `BlockAddr` / `TlsAddr` / `LocalAddr` resolve to
+//! addresses at emit time, and an f32 `Imm` carries the low-32 bit
+//! pattern in the IR while the evaluator's register convention is
+//! f64-widened. Division the evaluator computes but native code traps
+//! on (`/ 0`, `i64::MIN / -1`) is refused by `eval::fold_binop`, so
+//! folding never changes runtime behavior.
 //!
 //! Blocks and terminators are untouched and every rewrite is
 //! in-place, so `inst_src` / `f32_values` stay parallel. Operand
@@ -734,7 +735,18 @@ fn fold_round(func: &mut FunctionSsa) -> bool {
     };
     let mut changed = false;
     for idx in 0..func.insts.len() {
-        if matches!(func.f32_values.get(idx), Some(true)) {
+        let f32 = |v: usize| matches!(func.f32_values.get(v), Some(true));
+        // IEEE 754 negation flips the sign bit, exactly for every value;
+        // an f32 `Imm` holds its pattern in the low word.
+        if let Inst::Fneg(src) = func.insts[idx]
+            && let Some(&Inst::Imm(k)) = func.insts.get(src as usize)
+            && f32(idx) == f32(src as usize)
+        {
+            func.insts[idx] = Inst::Imm(k ^ if f32(idx) { 0x8000_0000 } else { i64::MIN });
+            changed = true;
+            continue;
+        }
+        if f32(idx) {
             continue;
         }
         let new_inst = match &func.insts[idx] {
@@ -977,6 +989,29 @@ mod tests {
             };
             assert_eq!(reads == 0, forwarded, "{op:?} {k}");
         }
+    }
+
+    /// A negated constant is the constant with its sign bit flipped: bit
+    /// 63 of a double, bit 31 of a float's low-word pattern, zero
+    /// included. A negation whose width differs from its operand's stays.
+    #[test]
+    fn negated_constant_flips_its_sign_bit() {
+        let run = |bits: i64, f32_src: bool, f32_neg: bool| {
+            let mut f = fresh(vec![Inst::Imm(bits), Inst::Fneg(0)]);
+            f.f32_values = vec![f32_src, f32_neg];
+            run_one(&mut f);
+            f.insts[1].clone()
+        };
+        let neg = |x: f64| (-x).to_bits() as i64;
+        assert!(
+            matches!(run(2.5f64.to_bits() as i64, false, false), Inst::Imm(k) if k == neg(2.5))
+        );
+        assert!(matches!(run(0, false, false), Inst::Imm(i64::MIN)));
+        let f32_bits = 2.5f32.to_bits() as i64;
+        assert!(
+            matches!(run(f32_bits, true, true), Inst::Imm(k) if k == (-2.5f32).to_bits() as i64)
+        );
+        assert!(matches!(run(f32_bits, true, false), Inst::Fneg(0)));
     }
 
     #[test]

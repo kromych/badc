@@ -37,11 +37,8 @@ Disassembly of section .text:
                	movq	<rip>, %r12       # <addr>
                	movq	<rip>, %r13       # <addr>
                	movq	<rip>, %r14       # <addr>
-               	movabsq	$0x400c000000000000, %rcx # imm = 0x400C000000000000
+               	movabsq	$-0x3ff4000000000000, %rcx # imm = 0xC00C000000000000
                	movq	%rcx, %xmm0
-               	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm0
                	callq	*%rax
                	movabsq	$0x400c000000000000, %rax # imm = 0x400C000000000000
                	movq	%rax, %xmm15
@@ -115,11 +112,8 @@ Disassembly of section .text:
                	popq	%r14
                	popq	%rbp
                	retq
-               	movabsq	$0x4022000000000000, %rax # imm = 0x4022000000000000
+               	movabsq	$-0x3fde000000000000, %rax # imm = 0xC022000000000000
                	movq	%rax, %xmm0
-               	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm0
                	callq	<addr>
                	movabsq	$0x4022000000000000, %rax # imm = 0x4022000000000000
                	movq	%rax, %xmm15
@@ -164,10 +158,8 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	movabsq	$0x401c000000000000, %rax # imm = 0x401C000000000000
-               	movq	%rax, %xmm0
-               	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm0
+               	movabsq	$-0x3fe4000000000000, %rcx # imm = 0xC01C000000000000
+               	movq	%rcx, %xmm0
                	movabsq	$0x7fffffffffffffff, %r10 # imm = 0x7FFFFFFFFFFFFFFF
                	movq	%r10, %xmm15
                	andpd	%xmm15, %xmm0

@@ -17,8 +17,8 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	mov	x2, #0x0                // =0
-               	fmov	d16, x2
-               	fneg	d0, d16
+               	mov	x16, #-0x8000000000000000 // =-9223372036854775808
+               	fmov	d0, x16
                	fmov	d17, x2
                	fcmp	d0, d17
                	b.eq	<addr>

@@ -43,10 +43,8 @@ Disassembly of section .text:
                	movq	%rsi, %xmm15
                	ucomisd	%xmm14, %xmm15
                	jbe	<addr>
-               	movq	%rax, %xmm0
-               	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm0
+               	movabsq	$-0x4020000000000000, %r11 # imm = 0xBFE0000000000000
+               	movq	%r11, %xmm0
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>
@@ -66,14 +64,11 @@ Disassembly of section .text:
                	movq	%rsi, %xmm15
                	ucomisd	%xmm14, %xmm15
                	jbe	<addr>
-               	movq	%rax, %xmm0
-               	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm0
+               	movabsq	$-0x4020000000000000, %r11 # imm = 0xBFE0000000000000
+               	movq	%r11, %xmm0
                	movapd	%xmm0, %xmm15
                	movq	%rcx, %xmm0
                	addsd	%xmm15, %xmm0
-               	movabsq	$0x4000000000000000, %rdx # imm = 0x4000000000000000
                	movq	%rdx, %xmm15
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>
@@ -85,16 +80,13 @@ Disassembly of section .text:
                	movq	%rax, %xmm15
                	ucomisd	%xmm14, %xmm15
                	jbe	<addr>
-               	movabsq	$0x3fe0000000000000, %rsi # imm = 0x3FE0000000000000
-               	movq	%rsi, %xmm0
-               	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm0
+               	movabsq	$-0x4020000000000000, %r11 # imm = 0xBFE0000000000000
+               	movq	%r11, %xmm0
                	movapd	%xmm0, %xmm15
                	movq	%rcx, %xmm0
                	addsd	%xmm15, %xmm0
-               	cvttsd2si	%xmm0, %rsi
-               	cmpq	$0x2, %rsi
+               	cvttsd2si	%xmm0, %rdx
+               	cmpq	$0x2, %rdx
                	je	<addr>
                	movl	$0x5, %eax
                	retq
@@ -102,52 +94,44 @@ Disassembly of section .text:
                	movq	%rax, %xmm15
                	ucomisd	%xmm14, %xmm15
                	jbe	<addr>
-               	movabsq	$0x3fe0000000000000, %rsi # imm = 0x3FE0000000000000
-               	movq	%rsi, %xmm0
-               	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm0
+               	movabsq	$-0x4020000000000000, %r11 # imm = 0xBFE0000000000000
+               	movq	%r11, %xmm0
                	movapd	%xmm0, %xmm15
                	movq	%rcx, %xmm0
                	addsd	%xmm15, %xmm0
                	cvttsd2si	%xmm0, %rcx
                	xorps	%xmm0, %xmm0
                	cvtsi2sd	%rcx, %xmm0
-               	movq	%rdx, %xmm15
+               	movabsq	$0x4000000000000000, %rcx # imm = 0x4000000000000000
+               	movq	%rcx, %xmm15
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x6, %eax
                	retq
-               	movabsq	$0x3ff8000000000000, %rcx # imm = 0x3FF8000000000000
-               	movq	%rcx, %xmm0
-               	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm0
+               	movabsq	$-0x4008000000000000, %rcx # imm = 0xBFF8000000000000
+               	movq	%rcx, %xmm14
                	movq	%rax, %xmm15
-               	ucomisd	%xmm0, %xmm15
+               	ucomisd	%xmm14, %xmm15
                	jbe	<addr>
-               	movabsq	$0x3fe0000000000000, %rcx # imm = 0x3FE0000000000000
-               	movq	%rcx, %xmm1
-               	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm1
-               	addsd	%xmm1, %xmm0
+               	movabsq	$-0x4020000000000000, %r11 # imm = 0xBFE0000000000000
+               	movq	%r11, %xmm0
+               	movapd	%xmm0, %xmm15
+               	movq	%rcx, %xmm0
+               	addsd	%xmm15, %xmm0
                	cvttsd2si	%xmm0, %rcx
                	xorps	%xmm0, %xmm0
                	cvtsi2sd	%rcx, %xmm0
-               	movq	%rdx, %xmm1
-               	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	movabsq	$-0x4000000000000000, %rcx # imm = 0xC000000000000000
+               	movq	%rcx, %xmm15
+               	ucomisd	%xmm15, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x7, %eax
                	retq
                	retq
                	movabsq	$0x3fe0000000000000, %r11 # imm = 0x3FE0000000000000
-               	movq	%r11, %xmm1
+               	movq	%r11, %xmm0
                	jmp	<addr>
                	movabsq	$0x3fe0000000000000, %r11 # imm = 0x3FE0000000000000
                	movq	%r11, %xmm0

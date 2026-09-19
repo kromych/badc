@@ -616,14 +616,11 @@ Disassembly of section .text:
                	popq	%r13
                	leave
                	retq
-               	movabsq	$0x3ff0000000000000, %rax # imm = 0x3FF0000000000000
-               	movq	%rax, %xmm0
-               	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm0
+               	movabsq	$-0x4010000000000000, %rax # imm = 0xBFF0000000000000
                	movl	$0x4, %edi
                	leaq	-0x150(%rbp), %rsi
                	movl	$0x5, %ecx
+               	movq	%rax, %xmm0
                	movq	0x8(%rsi), %rdx
                	movq	(%rsi), %rsi
                	callq	<addr>

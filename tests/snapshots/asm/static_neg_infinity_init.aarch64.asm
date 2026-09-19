@@ -18,12 +18,11 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	ldr	d0, [x0]
                	adrp	x16, <page>
-               	ldr	d2, [x16]
-               	fneg	d1, d2
+               	ldr	d1, [x16]
                	fcmp	d0, d1
                	b.pl	<addr>
-               	fadd	d3, d0, d0
-               	fcmp	d3, d0
+               	fadd	d2, d0, d0
+               	fcmp	d2, d0
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ret
@@ -32,8 +31,8 @@ Disassembly of section .text:
                	ldr	d0, [x1, #0x8]
                	fcmp	d0, d1
                	b.pl	<addr>
-               	fadd	d3, d0, d0
-               	fcmp	d3, d0
+               	fadd	d2, d0, d0
+               	fcmp	d2, d0
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ret
@@ -49,7 +48,9 @@ Disassembly of section .text:
                	ret
                	ldr	d0, [x0]
                	fneg	d0, d0
-               	fcmp	d0, d2
+               	adrp	x16, <page>
+               	ldr	d1, [x16, #0x8]
+               	fcmp	d0, d1
                	b.hi	<addr>
                	mov	x0, #0x4                // =4
                	ret

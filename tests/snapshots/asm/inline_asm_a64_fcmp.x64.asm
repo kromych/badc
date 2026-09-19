@@ -32,12 +32,10 @@ Disassembly of section .text:
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm14
                	jb	<addr>
-               	movq	%rcx, %xmm0
-               	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm0
+               	movabsq	$-0x3ff8000000000000, %rcx # imm = 0xC008000000000000
+               	movq	%rcx, %xmm14
                	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm0
+               	ucomisd	%xmm15, %xmm14
                	jb	<addr>
                	retq
                	movl	$0x2a, %eax

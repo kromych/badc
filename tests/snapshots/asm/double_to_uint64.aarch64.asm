@@ -22,8 +22,7 @@ Disassembly of section .text:
                	ldr	d3, [x16, #0x8]
                	mov	x16, #0x4059000000000000 // =4636737291354636288
                	fmov	d0, x16
-               	fmov	d4, #5.00000000
-               	fneg	d4, d4
+               	fmov	d4, #-5.00000000
                	fcvtzu	x0, d1
                	mov	x17, #0x89e80000        // =2313682944
                	movk	x17, #0x2304, lsl #32

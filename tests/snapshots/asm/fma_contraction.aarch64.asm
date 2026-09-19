@@ -38,123 +38,107 @@ Disassembly of section .text:
                	ret
 
 <main>:
-               	stp	d8, d9, [sp, #-0x30]!
-               	str	d10, [sp, #0x10]
-               	stp	x29, x30, [sp, #0x20]
-               	add	x29, sp, #0x20
+               	str	d8, [sp, #-0x20]!
+               	stp	x29, x30, [sp, #0x10]
+               	add	x29, sp, #0x10
                	fmov	d0, #2.00000000
-               	fmov	d2, #3.00000000
-               	fmov	d1, #4.00000000
-               	fmadd	d5, d0, d2, d1
-               	fmov	d6, #10.00000000
-               	fcmp	d5, d6
+               	fmov	d1, #3.00000000
+               	fmov	d2, #4.00000000
+               	fmadd	d3, d0, d1, d2
+               	fmov	d4, #10.00000000
+               	fcmp	d3, d4
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
-               	ldp	x29, x30, [sp, #0x20]
-               	ldr	d10, [sp, #0x10]
-               	ldp	d8, d9, [sp], #0x30
+               	ldp	x29, x30, [sp, #0x10]
+               	ldr	d8, [sp], #0x20
                	ret
-               	fnmsub	d3, d0, d2, d1
-               	fcmp	d3, d0
+               	fnmsub	d5, d0, d1, d2
+               	fcmp	d5, d0
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
-               	ldp	x29, x30, [sp, #0x20]
-               	ldr	d10, [sp, #0x10]
-               	ldp	d8, d9, [sp], #0x30
+               	ldp	x29, x30, [sp, #0x10]
+               	ldr	d8, [sp], #0x20
                	ret
-               	fmsub	d1, d0, d2, d1
-               	fneg	d3, d0
-               	fcmp	d1, d3
-               	b.eq	<addr>
-               	mov	x0, #0x3                // =3
-               	ldp	x29, x30, [sp, #0x20]
-               	ldr	d10, [sp, #0x10]
-               	ldp	d8, d9, [sp], #0x30
-               	ret
-               	fmov	s1, #2.00000000
-               	fmov	s3, #3.00000000
-               	fmov	s4, #4.00000000
-               	fmadd	s7, s1, s3, s4
-               	fmov	s8, #10.00000000
-               	fcmp	s7, s8
-               	b.eq	<addr>
-               	mov	x0, #0x4                // =4
-               	ldp	x29, x30, [sp, #0x20]
-               	ldr	d10, [sp, #0x10]
-               	ldp	d8, d9, [sp], #0x30
-               	ret
-               	fnmsub	s9, s1, s3, s4
-               	fcmp	s9, s1
-               	b.eq	<addr>
-               	mov	x0, #0x5                // =5
-               	ldp	x29, x30, [sp, #0x20]
-               	ldr	d10, [sp, #0x10]
-               	ldp	d8, d9, [sp], #0x30
-               	ret
-               	fmsub	s3, s1, s3, s4
-               	fneg	s1, s1
-               	fcmp	s3, s1
-               	b.eq	<addr>
-               	mov	x0, #0x6                // =6
-               	ldp	x29, x30, [sp, #0x20]
-               	ldr	d10, [sp, #0x10]
-               	ldp	d8, d9, [sp], #0x30
-               	ret
-               	fmov	d3, #0.50000000
-               	fmov	d1, #0.25000000
-               	fmov	d4, #0.12500000
-               	fmadd	d3, d3, d1, d4
-               	fcmp	d3, d1
-               	b.eq	<addr>
-               	mov	x0, #0x7                // =7
-               	ldp	x29, x30, [sp, #0x20]
-               	ldr	d10, [sp, #0x10]
-               	ldp	d8, d9, [sp], #0x30
-               	ret
-               	fmov	s9, #0.50000000
-               	fmov	s4, #0.25000000
-               	fmov	s10, #0.12500000
-               	fmadd	s9, s9, s4, s10
-               	fcmp	s9, s4
-               	b.eq	<addr>
-               	mov	x0, #0x8                // =8
-               	ldp	x29, x30, [sp, #0x20]
-               	ldr	d10, [sp, #0x10]
-               	ldp	d8, d9, [sp], #0x30
-               	ret
-               	fcmp	d5, d6
-               	b.eq	<addr>
-               	mov	x0, #0x9                // =9
-               	ldp	x29, x30, [sp, #0x20]
-               	ldr	d10, [sp, #0x10]
-               	ldp	d8, d9, [sp], #0x30
-               	ret
-               	fcmp	d3, d1
-               	b.eq	<addr>
-               	mov	x0, #0xa                // =10
-               	ldp	x29, x30, [sp, #0x20]
-               	ldr	d10, [sp, #0x10]
-               	ldp	d8, d9, [sp], #0x30
-               	ret
-               	fcmp	s7, s8
-               	b.eq	<addr>
-               	mov	x0, #0xb                // =11
-               	ldp	x29, x30, [sp, #0x20]
-               	ldr	d10, [sp, #0x10]
-               	ldp	d8, d9, [sp], #0x30
-               	ret
-               	fmov	d1, #4.00000000
-               	fmadd	d0, d0, d2, d1
-               	fmov	d1, #10.00000000
+               	fmsub	d0, d0, d1, d2
+               	fmov	d1, #-2.00000000
                	fcmp	d0, d1
                	b.eq	<addr>
+               	mov	x0, #0x3                // =3
+               	ldp	x29, x30, [sp, #0x10]
+               	ldr	d8, [sp], #0x20
+               	ret
+               	fmov	s0, #2.00000000
+               	fmov	s1, #3.00000000
+               	fmov	s2, #4.00000000
+               	fmadd	s5, s0, s1, s2
+               	fmov	s6, #10.00000000
+               	fcmp	s5, s6
+               	b.eq	<addr>
+               	mov	x0, #0x4                // =4
+               	ldp	x29, x30, [sp, #0x10]
+               	ldr	d8, [sp], #0x20
+               	ret
+               	fnmsub	s7, s0, s1, s2
+               	fcmp	s7, s0
+               	b.eq	<addr>
+               	mov	x0, #0x5                // =5
+               	ldp	x29, x30, [sp, #0x10]
+               	ldr	d8, [sp], #0x20
+               	ret
+               	fmsub	s0, s0, s1, s2
+               	fmov	s1, #-2.00000000
+               	fcmp	s0, s1
+               	b.eq	<addr>
+               	mov	x0, #0x6                // =6
+               	ldp	x29, x30, [sp, #0x10]
+               	ldr	d8, [sp], #0x20
+               	ret
+               	fmov	d1, #0.50000000
+               	fmov	d0, #0.25000000
+               	fmov	d2, #0.12500000
+               	fmadd	d1, d1, d0, d2
+               	fcmp	d1, d0
+               	b.eq	<addr>
+               	mov	x0, #0x7                // =7
+               	ldp	x29, x30, [sp, #0x10]
+               	ldr	d8, [sp], #0x20
+               	ret
+               	fmov	s7, #0.50000000
+               	fmov	s2, #0.25000000
+               	fmov	s8, #0.12500000
+               	fmadd	s7, s7, s2, s8
+               	fcmp	s7, s2
+               	b.eq	<addr>
+               	mov	x0, #0x8                // =8
+               	ldp	x29, x30, [sp, #0x10]
+               	ldr	d8, [sp], #0x20
+               	ret
+               	fcmp	d3, d4
+               	b.eq	<addr>
+               	mov	x0, #0x9                // =9
+               	ldp	x29, x30, [sp, #0x10]
+               	ldr	d8, [sp], #0x20
+               	ret
+               	fcmp	d1, d0
+               	b.eq	<addr>
+               	mov	x0, #0xa                // =10
+               	ldp	x29, x30, [sp, #0x10]
+               	ldr	d8, [sp], #0x20
+               	ret
+               	fcmp	s5, s6
+               	b.eq	<addr>
+               	mov	x0, #0xb                // =11
+               	ldp	x29, x30, [sp, #0x10]
+               	ldr	d8, [sp], #0x20
+               	ret
+               	fmov	d0, #10.00000000
+               	fcmp	d3, d0
+               	b.eq	<addr>
                	mov	x0, #0xc                // =12
-               	ldp	x29, x30, [sp, #0x20]
-               	ldr	d10, [sp, #0x10]
-               	ldp	d8, d9, [sp], #0x30
+               	ldp	x29, x30, [sp, #0x10]
+               	ldr	d8, [sp], #0x20
                	ret
                	mov	x0, #0x0                // =0
-               	ldp	x29, x30, [sp, #0x20]
-               	ldr	d10, [sp, #0x10]
-               	ldp	d8, d9, [sp], #0x30
+               	ldp	x29, x30, [sp, #0x10]
+               	ldr	d8, [sp], #0x20
                	ret

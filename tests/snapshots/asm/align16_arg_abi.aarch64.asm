@@ -613,8 +613,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x170]
                	ldp	x20, x21, [sp], #0x180
                	ret
-               	fmov	d0, #1.00000000
-               	fneg	d0, d0
+               	fmov	d0, #-1.00000000
                	mov	x0, #0x4                // =4
                	sub	x2, x29, #0x150
                	mov	x4, #0x5                // =5

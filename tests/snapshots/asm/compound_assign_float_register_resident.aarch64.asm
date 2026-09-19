@@ -72,11 +72,11 @@ Disassembly of section .text:
                	ret
                	fmov	s1, #0.50000000
                	fmov	d2, #-1.00000000
-               	fcvt	d3, s1
-               	fadd	d2, d3, d2
-               	fcvt	s2, d2
-               	fneg	s1, s1
-               	fcmp	s2, s1
+               	fcvt	d1, s1
+               	fadd	d1, d1, d2
+               	fcvt	s1, d1
+               	fmov	s2, #-0.50000000
+               	fcmp	s1, s2
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ret

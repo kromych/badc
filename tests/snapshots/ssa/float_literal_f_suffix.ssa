@@ -60,25 +60,25 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v8   Imm(1036831949)                                  -> x0 [f32]
     v9   Imm(4591870180066957722)                         -> x1
     v10  FpCast { kind=F32ToF64, value=v8 }               -> d0
-    v11  Binop { op=feq, lhs=v10, rhs=v9 }                -> x1
+    v11  Binop { op=feq, lhs=v10, rhs=v9 }                -> x0
     terminator Bz { cond=v11, target=b6, fall=b5 }   (exit_acc=v11)
   block 5  start_pc=0
     v12  Imm(11)                                          -> x0
     terminator Return(v12)   (exit_acc=v12)
   block 6  start_pc=0
-    v13  Imm(1036831949)                                  -> x1 [f32]
-    v14  Imm(4591870180174331904)                         -> x1
+    v13  Imm(1036831949)                                  -> x0 [f32]
+    v14  Imm(4591870180174331904)                         -> x0
     v15  FpCast { kind=F32ToF64, value=v8 }               -> d1
-    v16  Binop { op=fne, lhs=v10, rhs=v14 }               -> x2
+    v16  Binop { op=fne, lhs=v10, rhs=v14 }               -> x0
     terminator Bz { cond=v16, target=b8, fall=b7 }   (exit_acc=v16)
   block 7  start_pc=0
     v17  Imm(12)                                          -> x0
     terminator Return(v17)   (exit_acc=v17)
   block 8  start_pc=0
-    v18  Imm(1036831949)                                  -> x2 [f32]
-    v19  Fneg(v8)                                         -> d0 [f32]
-    v20  Imm(4591870180174331904)                         -> x0
-    v21  Fneg(v14)                                        -> d1
+    v18  Imm(1036831949)                                  -> x0 [f32]
+    v19  Imm(3184315597)                                  -> x0 [f32]
+    v20  Imm(4591870180174331904)                         -> x1
+    v21  Imm(-4631501856680443904)                        -> x1
     v22  FpCast { kind=F32ToF64, value=v19 }              -> d0
     v23  Binop { op=fne, lhs=v22, rhs=v21 }               -> x0
     terminator Bz { cond=v23, target=b10, fall=b9 }   (exit_acc=v23)

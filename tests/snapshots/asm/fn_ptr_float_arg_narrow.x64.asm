@@ -58,12 +58,9 @@ Disassembly of section .text:
                	movl	$0x40400000, %eax       # imm = 0x40400000
                	movq	%rax, %xmm0
                	callq	<addr>
-               	movl	$0x40400000, %eax       # imm = 0x40400000
-               	movq	%rax, %xmm1
-               	movl	$0x80000000, %r10d      # imm = 0x80000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm1
-               	ucomiss	%xmm1, %xmm0
+               	movl	$0xc0400000, %eax       # imm = 0xC0400000
+               	movq	%rax, %xmm15
+               	ucomiss	%xmm15, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x2, %eax

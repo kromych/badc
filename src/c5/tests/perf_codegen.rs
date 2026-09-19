@@ -2071,6 +2071,32 @@ return a + f(x, 6, 5, 4, 3, 2, 1);\n}\n";
     );
 }
 
+/// A negated floating constant is a constant: no sign flip at run time,
+/// for a literal, a float, a stored zero and an inlined negation.
+#[test]
+fn negated_floating_constant_is_folded() {
+    const SRC: &str = "double f(void) { return -2.5; }\n\
+void g(double *d) { *d = -0.0; }\n\
+float h(void) { return -2.5f; }\n\
+static double neg(double x) { return -x; }\n\
+double k(void) { return neg(1.5); }\n";
+    let mut m = Misses::default();
+    for name in ["f", "g", "h", "k"] {
+        let ws = a64(SRC, name);
+        // `fneg` of either precision.
+        let fneg = |w: u32| w & 0xFF3F_FC00 == 0x1E21_4000;
+        m.expect(!ws.iter().any(|&w| fneg(w)), || {
+            format!("aarch64 {name}: fneg: {ws:08x?}")
+        });
+        let insns = x64(SRC, name);
+        // `xorps` / `xorpd`.
+        m.expect(!insns.iter().any(|i| i.op == 0x0F57), || {
+            format!("x86-64 {name}: a sign flip: {insns:x?}")
+        });
+    }
+    m.finish();
+}
+
 /// A floating comparison that an `int` result carries into a branch
 /// fuses into the branch: no flag materialized, masked and retested.
 #[test]

@@ -9,10 +9,10 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     v3   Binop { op=fmul, lhs=v1, rhs=v2 }                -> d0
     v4   Imm(0)                                           -> x2
     v5   Imm(4618441417868443648)                         -> x2
-    v6   Fneg(v1)                                         -> d0
-    v7   Imm(0)                                           -> x2
-    v8   Imm(0)                                           -> x2
-    v9   Imm(0)                                           -> x2
+    v6   Imm(-4604930618986332160)                        -> x2
+    v7   Imm(0)                                           -> x6
+    v8   Imm(0)                                           -> x6
+    v9   Imm(0)                                           -> x6
     v10  Fma { a=v1, b=v2, c=v6, neg_product=false, neg_addend=false } -> d0
     v11  Imm(0)                                           -> x0
     v12  Imm(0)                                           -> x0

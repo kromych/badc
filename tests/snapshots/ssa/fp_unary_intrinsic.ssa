@@ -32,7 +32,7 @@ fn ent_pc=15 n_params=0 variadic=false locals=0
     terminator Return(v15)   (exit_acc=v15)
   block 6  start_pc=0
     v16  Imm(1080033280)                                  -> x0 [f32]
-    v17  Fneg(v16)                                        -> d0 [f32]
+    v17  Imm(3227516928)                                  -> x1 [f32]
     v18  Intrinsic { kind=Fabsf, args=[v17] }             -> d0 [f32]
     v19  Binop { op=fne, lhs=v18, rhs=v16 }               -> x0
     terminator Bz { cond=v19, target=b8, fall=b7 }   (exit_acc=v19)
@@ -41,7 +41,7 @@ fn ent_pc=15 n_params=0 variadic=false locals=0
     terminator Return(v20)   (exit_acc=v20)
   block 8  start_pc=0
     v21  Imm(4615063718147915776)                         -> x0
-    v22  Fneg(v21)                                        -> d0
+    v22  Imm(-4608308318706860032)                        -> x1
     v23  Intrinsic { kind=Fabs, args=[v22] }              -> d0
     v24  Binop { op=fne, lhs=v23, rhs=v21 }               -> x0
     terminator Bz { cond=v24, target=b10, fall=b9 }   (exit_acc=v24)
@@ -69,10 +69,10 @@ fn ent_pc=15 n_params=0 variadic=false locals=0
     terminator Bnz { cond=v37, target=b14, fall=b13 }   (exit_acc=v37)
   block 13  start_pc=0
     v39  Imm(1075000115)                                  -> x0 [f32]
-    v40  Fneg(v39)                                        -> d0 [f32]
+    v40  Imm(3222483763)                                  -> x0 [f32]
     v41  Intrinsic { kind=Floorf, args=[v40] }            -> d0 [f32]
     v42  Imm(1077936128)                                  -> x0 [f32]
-    v43  Fneg(v42)                                        -> d1 [f32]
+    v43  Imm(3225419776)                                  -> x0 [f32]
     v44  Binop { op=fne, lhs=v41, rhs=v43 }               -> x0
     v45  Imm(0)                                           -> x1
     v46  Imm(0)                                           -> x1
@@ -90,10 +90,10 @@ fn ent_pc=15 n_params=0 variadic=false locals=0
     terminator Bnz { cond=v52, target=b17, fall=b16 }   (exit_acc=v52)
   block 16  start_pc=0
     v54  Imm(1076677837)                                  -> x0 [f32]
-    v55  Fneg(v54)                                        -> d0 [f32]
+    v55  Imm(3224161485)                                  -> x0 [f32]
     v56  Intrinsic { kind=Ceilf, args=[v55] }             -> d0 [f32]
     v57  Imm(1073741824)                                  -> x0 [f32]
-    v58  Fneg(v57)                                        -> d1 [f32]
+    v58  Imm(3221225472)                                  -> x0 [f32]
     v59  Binop { op=fne, lhs=v56, rhs=v58 }               -> x0
     v60  Imm(0)                                           -> x1
     v61  Imm(0)                                           -> x1
@@ -104,10 +104,10 @@ fn ent_pc=15 n_params=0 variadic=false locals=0
     terminator Return(v63)   (exit_acc=v63)
   block 18  start_pc=0
     v64  Imm(4613262278296967578)                         -> x0
-    v65  Fneg(v64)                                        -> d0
+    v65  Imm(-4610109758557808230)                        -> x0
     v66  Intrinsic { kind=Trunc, args=[v65] }             -> d0
     v67  Imm(4611686018427387904)                         -> x0
-    v68  Fneg(v67)                                        -> d1
+    v68  Imm(-4611686018427387904)                        -> x0
     v69  Binop { op=fne, lhs=v66, rhs=v68 }               -> x0
     v70  Imm(0)                                           -> x1
     terminator Bnz { cond=v69, target=b20, fall=b19 }   (exit_acc=v69)
@@ -127,7 +127,7 @@ fn ent_pc=15 n_params=0 variadic=false locals=0
     v79  Imm(1073741824)                                  -> x1 [f32]
     v80  Imm(0)                                           -> x1
     v81  Imm(1098907648)                                  -> x1 [f32]
-    v82  Fneg(v81)                                        -> d0 [f32]
+    v82  Imm(3246391296)                                  -> x1 [f32]
     v83  Intrinsic { kind=Fabsf, args=[v82] }             -> d0 [f32]
     v84  Intrinsic { kind=Sqrtf, args=[v83] }             -> d0 [f32]
     v85  Imm(1082130432)                                  -> x1 [f32]

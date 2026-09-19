@@ -98,12 +98,9 @@ Disassembly of section .text:
                	movq	%rcx, %xmm15
                	movq	%rdx, %xmm0
                	vfnmadd231sd	%xmm15, %xmm14, %xmm0 # xmm0 = -(xmm14 * xmm15) + xmm0
-               	movabsq	$0x4000000000000000, %rax # imm = 0x4000000000000000
-               	movq	%rax, %xmm1
-               	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	movabsq	$-0x4000000000000000, %rax # imm = 0xC000000000000000
+               	movq	%rax, %xmm15
+               	ucomisd	%xmm15, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x3, %eax
@@ -138,12 +135,9 @@ Disassembly of section .text:
                	movq	%rcx, %xmm15
                	movq	%rdx, %xmm0
                	vfnmadd231ss	%xmm15, %xmm14, %xmm0 # xmm0 = -(xmm14 * xmm15) + xmm0
-               	movl	$0x40000000, %ecx       # imm = 0x40000000
-               	movq	%rcx, %xmm1
-               	movl	$0x80000000, %r10d      # imm = 0x80000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm1
-               	ucomiss	%xmm1, %xmm0
+               	movl	$0xc0000000, %eax       # imm = 0xC0000000
+               	movq	%rax, %xmm15
+               	ucomiss	%xmm15, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x6, %eax
@@ -194,10 +188,10 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0xa, %eax
                	retq
-               	movl	$0x40400000, %eax       # imm = 0x40400000
+               	movl	$0x40000000, %eax       # imm = 0x40000000
                	movl	$0x40800000, %esi       # imm = 0x40800000
-               	movq	%rcx, %xmm14
-               	movq	%rax, %xmm15
+               	movq	%rax, %xmm14
+               	movq	%rcx, %xmm15
                	movq	%rsi, %xmm0
                	vfmadd231ss	%xmm15, %xmm14, %xmm0 # xmm0 = (xmm14 * xmm15) + xmm0
                	movl	$0x41200000, %eax       # imm = 0x41200000

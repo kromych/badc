@@ -76,8 +76,7 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <page>
                	ldr	x0, [x0, <lo12>]
-               	fmov	s0, #3.50000000
-               	fneg	s0, s0
+               	fmov	s0, #-3.50000000
                	blr	x0
                	fmov	s1, #3.50000000
                	fcmp	s0, s1
@@ -127,7 +126,7 @@ Disassembly of section .text:
                	ldp	d8, d9, [sp], #0x40
                	ret
                	fmov	s0, #7.00000000
-               	fneg	s1, s0
+               	fmov	s1, #-7.00000000
                	fabs	s1, s1
                	fcmp	s1, s0
                	b.eq	<addr>

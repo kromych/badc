@@ -29,8 +29,8 @@ Disassembly of section .text:
                	b.ne	<addr>
                	mov	x0, #0x2                // =2
                	ret
-               	fmov	d16, x0
-               	fneg	d0, d16
+               	mov	x16, #-0x8000000000000000 // =-9223372036854775808
+               	fmov	d0, x16
                	fmov	d17, x0
                	fcmp	d0, d17
                	cset	x1, eq

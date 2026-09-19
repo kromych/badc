@@ -24,7 +24,8 @@ Disassembly of section .text:
                	ldr	d0, [x16]
                	fcmp	d3, d0
                	b.pl	<addr>
-               	fneg	d1, d0
+               	adrp	x16, <page>
+               	ldr	d1, [x16, #0x8]
                	fcmp	d3, d1
                	b.gt	<addr>
                	mov	x0, #0x1                // =1

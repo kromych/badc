@@ -41,8 +41,7 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	mov	x1, #0x0                // =0
                	bl	<addr>
-               	fmov	d1, #0.25000000
-               	fneg	d1, d1
+               	fmov	d1, #-0.25000000
                	fcvt	d0, s0
                	fcmp	d0, d1
                	b.eq	<addr>

@@ -429,9 +429,8 @@ Disassembly of section .text:
                	ldp	x13, x14, [sp, #0x20]
                	ldr	x15, [sp, #0x30]
                	add	sp, sp, #0x40
-               	mov	x16, #0x4090000000000000 // =4652218415073722368
+               	mov	x16, #-0x3f70000000000000 // =-4571153621781053440
                	fmov	d1, x16
-               	fneg	d1, d1
                	fcmp	d0, d1
                	b.eq	<addr>
                	mov	x0, #0x3                // =3

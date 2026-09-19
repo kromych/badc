@@ -29,29 +29,27 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ret
-               	fmov	d0, #2.50000000
-               	fmov	d2, #4.00000000
-               	fmul	d3, d0, d2
-               	fmov	d4, #10.00000000
-               	fcmp	d3, d4
+               	fmov	d2, #2.50000000
+               	fmov	d0, #4.00000000
+               	fmul	d2, d2, d0
+               	fmov	d3, #10.00000000
+               	fcmp	d2, d3
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ret
-               	fmov	d3, #15.00000000
-               	fdiv	d2, d3, d2
-               	fcmp	d2, d1
+               	fmov	d2, #15.00000000
+               	fdiv	d0, d2, d0
+               	fcmp	d0, d1
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	ret
-               	fneg	d0, d0
+               	fmov	d0, #-2.50000000
                	fcmp	d0, d0
                	b.eq	<addr>
                	mov	x0, #0x5                // =5
                	ret
                	fmov	d0, #7.00000000
-               	fneg	d1, d0
-               	fneg	d1, d1
-               	fcmp	d1, d0
+               	fcmp	d0, d0
                	b.eq	<addr>
                	mov	x0, #0x6                // =6
                	ret
@@ -125,8 +123,7 @@ Disassembly of section .text:
                	ret
                	mov	x0, #-0x3               // =-3
                	scvtf	d1, x0
-               	fmov	d2, #3.00000000
-               	fneg	d2, d2
+               	fmov	d2, #-3.00000000
                	fcmp	d1, d2
                	b.eq	<addr>
                	mov	x0, #0x16               // =22
@@ -137,7 +134,7 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x17               // =23
                	ret
-               	fneg	d1, d1
+               	fmov	d1, #-3.75000000
                	fcvtzs	x0, d1
                	mov	x17, #-0x3              // =-3
                	cmp	w0, w17

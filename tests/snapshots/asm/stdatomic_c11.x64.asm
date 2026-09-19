@@ -108,18 +108,16 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	-0x28(%rbp), %rcx
-               	movl	$0x3fa00000, %edx       # imm = 0x3FA00000
-               	movq	%rdx, %xmm0
-               	movl	$0x80000000, %r10d      # imm = 0x80000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm0
-               	movss	%xmm0, (%rax)
-               	movl	(%rax), %edx
-               	movl	%edx, (%rcx)
-               	movl	(%rcx), %edx
-               	movl	%edx, (%rax)
-               	movss	(%rax), %xmm1
-               	ucomiss	%xmm0, %xmm1
+               	movl	$0xbfa00000, %edx       # imm = 0xBFA00000
+               	movq	%rdx, %xmm14
+               	movss	%xmm14, (%rax)
+               	movl	(%rax), %esi
+               	movl	%esi, (%rcx)
+               	movl	(%rcx), %esi
+               	movl	%esi, (%rax)
+               	movss	(%rax), %xmm0
+               	movq	%rdx, %xmm15
+               	ucomiss	%xmm15, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0xe, %eax

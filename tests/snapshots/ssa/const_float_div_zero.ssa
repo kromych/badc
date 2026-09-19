@@ -17,7 +17,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v7   ImmData(16)                                      -> x0
     v8   Load { addr=v7, disp=0, kind=F64 }               -> d0
     v9   Imm(9214871658872686752)                         -> x0
-    v10  Fneg(v3)                                         -> d1
+    v10  Imm(-8500377982089056)                           -> x0
     v11  Binop { op=flt, lhs=v8, rhs=v10 }                -> x0
     v12  BinopI { op=eq, lhs=v11, rhs_imm=0 }             -> x2
     terminator Bnz { cond=v11, target=b4, fall=b3 }   (exit_acc=v12)

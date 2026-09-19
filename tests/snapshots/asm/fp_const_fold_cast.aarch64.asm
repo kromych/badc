@@ -20,9 +20,7 @@ Disassembly of section .text:
                	mov	x0, #0x1                // =1
                	ret
                	fmov	s0, #-3.00000000
-               	fmov	s1, #3.00000000
-               	fneg	s2, s1
-               	fcmp	s0, s2
+               	fcmp	s0, s0
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ret
@@ -38,9 +36,7 @@ Disassembly of section .text:
                	mov	x0, #0x4                // =4
                	ret
                	fmov	d0, #-3.00000000
-               	fmov	d2, #3.00000000
-               	fneg	d2, d2
-               	fcmp	d0, d2
+               	fcmp	d0, d0
                	b.eq	<addr>
                	mov	x0, #0x5                // =5
                	ret
@@ -63,6 +59,7 @@ Disassembly of section .text:
                	mov	x0, #0x8                // =8
                	ret
                	fmov	s0, #2.00000000
+               	fmov	s1, #3.00000000
                	fmul	s1, s1, s0
                	fmov	s2, #5.00000000
                	fmul	s2, s2, s0

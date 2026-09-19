@@ -1125,8 +1125,16 @@ impl SsaBuilder {
     }
 
     /// `Inst::Fneg`. Pure value; same input -> same output bit
-    /// pattern. CSE-eligible.
+    /// pattern. CSE-eligible. A constant operand folds: IEEE 754
+    /// negation flips the sign bit, exactly for every value.
     pub(crate) fn fneg(&mut self, v: ValueId) -> ValueId {
+        if let Some(&Inst::Imm(k)) = self.func.insts.get(v as usize) {
+            return if self.is_f32(v) {
+                self.imm_f32(k as u32 ^ 0x8000_0000)
+            } else {
+                self.imm(k ^ i64::MIN)
+            };
+        }
         let key = PureKey::Fneg(v);
         if let Some(cached) = self.lookup_pure(key) {
             return cached;

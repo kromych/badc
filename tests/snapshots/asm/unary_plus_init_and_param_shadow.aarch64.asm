@@ -22,20 +22,22 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	ldr	d0, [x0]
                	adrp	x16, <page>
-               	ldr	d2, [x16]
-               	fneg	d1, d2
-               	fsub	d3, d0, d1
+               	ldr	d1, [x16]
+               	fsub	d2, d0, d1
                	adrp	x16, <page>
                	ldr	d0, [x16, #0x8]
-               	fcmp	d3, d0
+               	fcmp	d2, d0
                	b.pl	<addr>
-               	fneg	d1, d0
-               	fcmp	d3, d1
+               	adrp	x16, <page>
+               	ldr	d1, [x16, #0x10]
+               	fcmp	d2, d1
                	b.gt	<addr>
                	mov	x0, #0x1                // =1
                	ret
-               	ldr	d3, [x0, #0x8]
-               	fsub	d2, d3, d2
+               	ldr	d2, [x0, #0x8]
+               	adrp	x16, <page>
+               	ldr	d3, [x16, #0x18]
+               	fsub	d2, d2, d3
                	fcmp	d2, d0
                	b.pl	<addr>
                	fcmp	d2, d1
@@ -52,8 +54,7 @@ Disassembly of section .text:
                	mov	x0, #0x3                // =3
                	ret
                	ldr	d2, [x0, #0x18]
-               	fmov	d3, #2.00000000
-               	fneg	d3, d3
+               	fmov	d3, #-2.00000000
                	fsub	d2, d2, d3
                	fcmp	d2, d0
                	b.pl	<addr>

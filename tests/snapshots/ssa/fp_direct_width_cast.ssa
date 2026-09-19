@@ -8,7 +8,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     v2   Imm(-5)                                          -> x0
     v3   FpCast { kind=IntToFp, value=v2 }                -> d0 [f32]
     v4   Imm(1084227584)                                  -> x0 [f32]
-    v5   Fneg(v4)                                         -> d1 [f32]
+    v5   Imm(3231711232)                                  -> x0 [f32]
     v6   Binop { op=fne, lhs=v3, rhs=v5 }                 -> x0
     terminator Bz { cond=v6, target=b2, fall=b1 }   (exit_acc=v6)
   block 1  start_pc=0
@@ -35,7 +35,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     terminator Return(v18)   (exit_acc=v18)
   block 6  start_pc=0
     v19  Imm(1075838976)                                  -> x0 [f32]
-    v20  Fneg(v19)                                        -> d0 [f32]
+    v20  Imm(3223322624)                                  -> x0 [f32]
     v21  FpCast { kind=FpToInt, value=v20 }               -> x0
     v22  Extend { value=v21, kind=I32 }                   -> x1
     v23  BinopI { op=ne, lhs=v21, rhs_imm=-2 }            -> x0
@@ -104,15 +104,15 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     v62  Imm(1076887552)                                  -> x1 [f32]
     v63  Imm(0)                                           -> x2
     v64  Imm(0)                                           -> x2 [f32]
-    v65  FpCast { kind=FpToInt, value=v62 }               -> x2
-    v66  BinopI { op=ne, lhs=v65, rhs_imm=2 }             -> x2
+    v65  FpCast { kind=FpToInt, value=v62 }               -> x1
+    v66  BinopI { op=ne, lhs=v65, rhs_imm=2 }             -> x1
     terminator Bz { cond=v66, target=b20, fall=b19 }   (exit_acc=v66)
   block 19  start_pc=0
     v67  Imm(10)                                          -> x0
     terminator Return(v67)   (exit_acc=v67)
   block 20  start_pc=0
-    v68  Imm(0)                                           -> x2 [f32]
-    v69  Fneg(v62)                                        -> d0 [f32]
+    v68  Imm(0)                                           -> x1 [f32]
+    v69  Imm(3224371200)                                  -> x1 [f32]
     v70  FpCast { kind=FpToInt, value=v69 }               -> x1
     v71  BinopI { op=ne, lhs=v70, rhs_imm=-2 }            -> x1
     terminator Bz { cond=v71, target=b22, fall=b21 }   (exit_acc=v71)

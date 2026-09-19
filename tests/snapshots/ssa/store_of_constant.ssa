@@ -171,14 +171,14 @@ fn ent_pc=7 n_params=2 variadic=false locals=0
     v10  Imm(4)                                           -> x1
     v11  BinopI { op=add, lhs=v1, rhs_imm=4 }             -> x1
     v12  Imm(0)                                           -> x1 [f32]
-    v13  Fneg(v12)                                        -> d0 [f32]
+    v13  Imm(2147483648)                                  -> x1 [f32]
     v14  Store { addr=v1, disp=4, value=v13, kind=F32 }   -> -
     v15  Imm(0)                                           -> x1
     v16  Store { addr=v3, disp=0, value=v6, kind=F64 }    -> -
-    v17  Imm(0)                                           -> x1
-    v18  Imm(8)                                           -> x1
-    v19  BinopI { op=add, lhs=v3, rhs_imm=8 }             -> x1
-    v20  Fneg(v6)                                         -> d0
+    v17  Imm(0)                                           -> x0
+    v18  Imm(8)                                           -> x0
+    v19  BinopI { op=add, lhs=v3, rhs_imm=8 }             -> x0
+    v20  Imm(-9223372036854775808)                        -> x0
     v21  Store { addr=v3, disp=8, value=v20, kind=F64 }   -> -
     terminator Return
 ; --- SSA dump (ok=true) ent_pc=8 ---

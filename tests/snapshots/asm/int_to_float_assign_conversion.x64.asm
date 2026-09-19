@@ -90,19 +90,13 @@ Disassembly of section .text:
                	movl	$0x43000000, %eax       # imm = 0x43000000
                	movq	%rax, %xmm15
                	subss	%xmm15, %xmm0
-               	movl	$0x422c0000, %eax       # imm = 0x422C0000
-               	movq	%rax, %xmm1
-               	movl	$0x80000000, %r10d      # imm = 0x80000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm1
-               	ucomiss	%xmm1, %xmm0
+               	movl	$0xc22c0000, %eax       # imm = 0xC22C0000
+               	movq	%rax, %xmm15
+               	ucomiss	%xmm15, %xmm0
                	ja	<addr>
-               	movl	$0x42300000, %eax       # imm = 0x42300000
-               	movq	%rax, %xmm1
-               	movl	$0x80000000, %r10d      # imm = 0x80000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm1
-               	ucomiss	%xmm0, %xmm1
+               	movl	$0xc2300000, %eax       # imm = 0xC2300000
+               	movq	%rax, %xmm15
+               	ucomiss	%xmm0, %xmm15
                	jbe	<addr>
                	movl	$0x5, %eax
                	popq	%rbp

@@ -196,8 +196,7 @@ Disassembly of section .text:
                	ldr	d0, [x0, #0x28]
                	ldr	d1, [x0, #0x30]
                	bl	<addr>
-               	fmov	d1, #4.00000000
-               	fneg	d1, d1
+               	fmov	d1, #-4.00000000
                	fcmp	d0, d1
                	b.eq	<addr>
                	mov	x0, #0x7                // =7

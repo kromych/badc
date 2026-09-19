@@ -108,12 +108,9 @@ Disassembly of section .text:
                	retq
                	xorps	%xmm0, %xmm0
                	cvtsi2sd	%rcx, %xmm0
-               	movabsq	$0x3ff0000000000000, %rcx # imm = 0x3FF0000000000000
-               	movq	%rcx, %xmm1
-               	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	movabsq	$-0x4010000000000000, %rcx # imm = 0xBFF0000000000000
+               	movq	%rcx, %xmm15
+               	ucomisd	%xmm15, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x5, %eax

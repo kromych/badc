@@ -70,7 +70,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     terminator Return(v29)   (exit_acc=v29)
   block 18  start_pc=0
     v30  Imm(4602678819172646912)                         -> x0
-    v31  Fneg(v30)                                        -> d0
+    v31  Imm(-4620693217682128896)                        -> x0
     v32  Binop { op=fne, lhs=v31, rhs=v31 }               -> x0
     terminator Bz { cond=v32, target=b20, fall=b19 }   (exit_acc=v32)
   block 19  start_pc=0

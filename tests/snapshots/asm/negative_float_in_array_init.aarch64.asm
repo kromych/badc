@@ -23,8 +23,7 @@ Disassembly of section .text:
                	mov	x0, #0x1                // =1
                	ret
                	ldr	d0, [x0, #0x8]
-               	fmov	d2, #2.50000000
-               	fneg	d2, d2
+               	fmov	d2, #-2.50000000
                	fcmp	d0, d2
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
@@ -32,7 +31,6 @@ Disassembly of section .text:
                	ldr	d2, [x0, #0x10]
                	adrp	x16, <page>
                	ldr	d0, [x16, #0x18]
-               	fneg	d0, d0
                	fcmp	d2, d0
                	b.eq	<addr>
                	mov	x0, #0x3                // =3

@@ -29,7 +29,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=1
     v15  Imm(0)                                           -> x6
     v16  CallExt { binding_idx=15, args=[v14, v15], fp_arg_mask=0x0, fp_return=true } -> d0 [f32]
     v17  Imm(4598175219545276416)                         -> x0
-    v18  Fneg(v17)                                        -> d1
+    v18  Imm(-4625196817309499392)                        -> x0
     v19  FpCast { kind=F32ToF64, value=v16 }              -> d0
     v20  Binop { op=fne, lhs=v19, rhs=v18 }               -> x0
     terminator Bz { cond=v20, target=b6, fall=b5 }   (exit_acc=v20)

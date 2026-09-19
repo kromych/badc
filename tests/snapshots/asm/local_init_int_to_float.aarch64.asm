@@ -52,12 +52,10 @@ Disassembly of section .text:
                	ret
                	mov	x0, #-0x7               // =-7
                	scvtf	d0, x0
-               	fmov	d1, #7.50000000
-               	fneg	d1, d1
+               	fmov	d1, #-7.50000000
                	fcmp	d0, d1
                	b.mi	<addr>
-               	fmov	d1, #6.50000000
-               	fneg	d1, d1
+               	fmov	d1, #-6.50000000
                	fcmp	d0, d1
                	b.le	<addr>
                	adrp	x0, <page>
@@ -97,7 +95,6 @@ Disassembly of section .text:
                	ret
                	adrp	x16, <page>
                	ldr	d0, [x16, #0x90]
-               	fneg	d0, d0
                	fcvtzs	x1, d0
                	mov	x17, #-0x2              // =-2
                	cmp	w1, w17

@@ -50,8 +50,7 @@ Disassembly of section .text:
                	mov	x0, #0x4                // =4
                	ret
                	scvtf	d0, x1
-               	fmov	d1, #1.00000000
-               	fneg	d1, d1
+               	fmov	d1, #-1.00000000
                	fcmp	d0, d1
                	b.eq	<addr>
                	mov	x0, #0x5                // =5

@@ -109,8 +109,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x2, x29, #0x28
-               	fmov	s0, #1.25000000
-               	fneg	s0, s0
+               	fmov	s0, #-1.25000000
                	str	s0, [x1]
                	ldr	w3, [x1]
                	str	w3, [x2]

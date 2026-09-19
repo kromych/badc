@@ -25,17 +25,17 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	ldr	d1, [x0]
-               	fmov	d0, #5.00000000
-               	fneg	d2, d0
-               	fcmp	d1, d2
+               	ldr	d0, [x0]
+               	fmov	d1, #-5.00000000
+               	fcmp	d0, d1
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ret
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	ldr	d1, [x0]
-               	fcmp	d1, d0
+               	ldr	d0, [x0]
+               	fmov	d1, #5.00000000
+               	fcmp	d0, d1
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ret

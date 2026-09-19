@@ -19,7 +19,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v9   BinopI { op=add, lhs=v1, rhs_imm=4 }             -> x1
     v10  Load { addr=v1, disp=4, kind=F32 }               -> d0 [f32]
     v11  Imm(1075838976)                                  -> x1 [f32]
-    v12  Fneg(v11)                                        -> d1 [f32]
+    v12  Imm(3223322624)                                  -> x1 [f32]
     v13  Binop { op=fne, lhs=v10, rhs=v12 }               -> x1
     terminator Bz { cond=v13, target=b4, fall=b3 }   (exit_acc=v13)
   block 3  start_pc=0
@@ -63,7 +63,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v39  BinopI { op=add, lhs=v22, rhs_imm=8 }            -> x1
     v40  Load { addr=v22, disp=8, kind=F64 }              -> d0
     v41  Imm(4604930618986332160)                         -> x0
-    v42  Fneg(v41)                                        -> d1
+    v42  Imm(-4618441417868443648)                        -> x0
     v43  Binop { op=fne, lhs=v40, rhs=v42 }               -> x0
     terminator Bz { cond=v43, target=b11, fall=b10 }   (exit_acc=v43)
   block 10  start_pc=0

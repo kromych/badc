@@ -28,8 +28,7 @@ Disassembly of section .text:
                	ldr	x22, [x22, <lo12>]
                	adrp	x23, <page>
                	ldr	x23, [x23, <lo12>]
-               	fmov	d0, #3.50000000
-               	fneg	d0, d0
+               	fmov	d0, #-3.50000000
                	blr	x0
                	fmov	d1, #3.50000000
                	fcmp	d0, d1
@@ -82,8 +81,7 @@ Disassembly of section .text:
                	ldp	x22, x23, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x30
                	ret
-               	fmov	d0, #9.00000000
-               	fneg	d0, d0
+               	fmov	d0, #-9.00000000
                	bl	<addr>
                	fmov	d1, #9.00000000
                	fcmp	d0, d1
@@ -116,7 +114,7 @@ Disassembly of section .text:
                	ldp	x20, x21, [sp], #0x30
                	ret
                	fmov	d0, #7.00000000
-               	fneg	d1, d0
+               	fmov	d1, #-7.00000000
                	fabs	d1, d1
                	fcmp	d1, d0
                	b.eq	<addr>

@@ -187,9 +187,9 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v173 FpCast { kind=F32ToF64, value=v169 }             -> d0
     v174 Binop { op=fadd, lhs=v173, rhs=v172 }            -> d0
     v175 FpCast { kind=F64ToF32, value=v174 }             -> d0 [f32]
-    v176 Imm(0)                                           -> x2
-    v177 Imm(0)                                           -> x2 [f32]
-    v178 Fneg(v169)                                       -> d1 [f32]
+    v176 Imm(0)                                           -> x1
+    v177 Imm(0)                                           -> x1 [f32]
+    v178 Imm(3204448256)                                  -> x1 [f32]
     v179 Binop { op=fne, lhs=v175, rhs=v178 }             -> x1
     terminator Bz { cond=v179, target=b6, fall=b5 }   (exit_acc=v179)
   block 5  start_pc=0

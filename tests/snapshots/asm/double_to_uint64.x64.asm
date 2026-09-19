@@ -30,11 +30,7 @@ Disassembly of section .text:
                	movabsq	$0x43e0000000000000, %rdx # imm = 0x43E0000000000000
                	movabsq	$0x43ef399b1438a100, %rsi # imm = 0x43EF399B1438A100
                	movabsq	$0x4059000000000000, %rax # imm = 0x4059000000000000
-               	movabsq	$0x4014000000000000, %rdi # imm = 0x4014000000000000
-               	movq	%rdi, %xmm0
-               	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm0
+               	movabsq	$-0x3fec000000000000, %rdi # imm = 0xC014000000000000
                	movq	%rcx, %xmm14
                	movapd	%xmm14, %xmm14
                	movabsq	$0x43e0000000000000, %r11 # imm = 0x43E0000000000000
@@ -102,7 +98,8 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x4, %eax
                	retq
-               	cvttsd2si	%xmm0, %rcx
+               	movq	%rdi, %xmm14
+               	cvttsd2si	%xmm14, %rcx
                	cmpq	$-0x5, %rcx
                	je	<addr>
                	movl	$0x5, %eax

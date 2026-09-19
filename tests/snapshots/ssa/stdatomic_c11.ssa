@@ -81,17 +81,17 @@ fn ent_pc=0 n_params=0 variadic=false locals=9
   block 12  start_pc=0
     v52  LocalAddr(-5)                                    -> x1
     v53  Imm(1067450368)                                  -> x2 [f32]
-    v54  Fneg(v53)                                        -> d0 [f32]
-    v55  LocalAddr(-9)                                    -> x2
+    v54  Imm(3214934016)                                  -> x2 [f32]
+    v55  LocalAddr(-9)                                    -> x6
     v56  Store { addr=v41, disp=0, value=v54, kind=F32 }  -> -
-    v57  Load { addr=v41, disp=0, kind=U32 }              -> x2
+    v57  Load { addr=v41, disp=0, kind=U32 }              -> x6
     v58  AtomicStore { addr=v52, value=v57, width=4, order=Relaxed } -> -
-    v59  Imm(0)                                           -> x2
-    v60  LocalAddr(-5)                                    -> x2
-    v61  AtomicLoad { addr=v52, width=4, order=SeqCst }   -> x2
-    v62  LocalAddr(-9)                                    -> x6
+    v59  Imm(0)                                           -> x6
+    v60  LocalAddr(-5)                                    -> x6
+    v61  AtomicLoad { addr=v52, width=4, order=SeqCst }   -> x6
+    v62  LocalAddr(-9)                                    -> x7
     v63  Store { addr=v41, disp=0, value=v61, kind=I32 }  -> -
-    v64  Load { addr=v41, disp=0, kind=F32 }              -> d1 [f32]
+    v64  Load { addr=v41, disp=0, kind=F32 }              -> d0 [f32]
     v65  Binop { op=fne, lhs=v64, rhs=v54 }               -> x2
     terminator Bz { cond=v65, target=b14, fall=b13 }   (exit_acc=v65)
   block 13  start_pc=0

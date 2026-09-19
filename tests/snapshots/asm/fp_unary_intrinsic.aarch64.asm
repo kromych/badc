@@ -36,14 +36,14 @@ Disassembly of section .text:
                	mov	x0, #0x3                // =3
                	ret
                	fmov	s0, #3.50000000
-               	fneg	s1, s0
+               	fmov	s1, #-3.50000000
                	fabs	s1, s1
                	fcmp	s1, s0
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	ret
                	fmov	d0, #3.50000000
-               	fneg	d1, d0
+               	fmov	d1, #-3.50000000
                	fabs	d1, d1
                	fcmp	d1, d0
                	b.eq	<addr>
@@ -64,11 +64,9 @@ Disassembly of section .text:
                	fcmp	d0, d1
                	b.ne	<addr>
                	adrp	x16, <page>
-               	ldr	s0, [x16, #0x10]
-               	fneg	s0, s0
+               	ldr	s0, [x16, #0x18]
                	frintm	s0, s0
-               	fmov	s1, #3.00000000
-               	fneg	s1, s1
+               	fmov	s1, #-3.00000000
                	fcmp	s0, s1
                	b.eq	<addr>
                	mov	x0, #0x7                // =7
@@ -80,33 +78,28 @@ Disassembly of section .text:
                	fcmp	d0, d1
                	b.ne	<addr>
                	adrp	x16, <page>
-               	ldr	s0, [x16, #0x14]
-               	fneg	s0, s0
+               	ldr	s0, [x16, #0x1c]
                	frintp	s0, s0
-               	fmov	s1, #2.00000000
-               	fneg	s1, s1
+               	fmov	s1, #-2.00000000
                	fcmp	s0, s1
                	b.eq	<addr>
                	mov	x0, #0x8                // =8
                	ret
                	adrp	x16, <page>
-               	ldr	d0, [x16]
-               	fneg	d0, d0
+               	ldr	d0, [x16, #0x10]
                	frintz	d0, d0
-               	fmov	d1, #2.00000000
-               	fneg	d1, d1
+               	fmov	d1, #-2.00000000
                	fcmp	d0, d1
                	b.ne	<addr>
                	adrp	x16, <page>
-               	ldr	s0, [x16, #0x18]
+               	ldr	s0, [x16, #0x20]
                	frintz	s1, s0
                	fmov	s0, #2.00000000
                	fcmp	s1, s0
                	b.eq	<addr>
                	mov	x0, #0x9                // =9
                	ret
-               	fmov	s1, #16.00000000
-               	fneg	s1, s1
+               	fmov	s1, #-16.00000000
                	fabs	s1, s1
                	fsqrt	s1, s1
                	fmov	s2, #4.00000000
@@ -117,7 +110,7 @@ Disassembly of section .text:
                	fmul	s0, s0, s0
                	fsqrt	s0, s0
                	adrp	x16, <page>
-               	ldr	s1, [x16, #0x1c]
+               	ldr	s1, [x16, #0x24]
                	fadd	s0, s0, s1
                	frintm	s0, s0
                	fmov	s1, #2.00000000

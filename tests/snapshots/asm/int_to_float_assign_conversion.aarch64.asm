@@ -66,14 +66,12 @@ Disassembly of section .text:
                	mov	x16, #0x43000000        // =1124073472
                	fmov	s1, w16
                	fsub	s0, s0, s1
-               	mov	x16, #0x422c0000        // =1110179840
+               	mov	x16, #0xc22c0000        // =3257663488
                	fmov	s1, w16
-               	fneg	s1, s1
                	fcmp	s0, s1
                	b.gt	<addr>
-               	mov	x16, #0x42300000        // =1110441984
+               	mov	x16, #0xc2300000        // =3257925632
                	fmov	s1, w16
-               	fneg	s1, s1
                	fcmp	s0, s1
                	b.pl	<addr>
                	mov	x0, #0x5                // =5

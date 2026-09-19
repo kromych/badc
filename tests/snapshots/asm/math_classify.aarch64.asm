@@ -21,10 +21,10 @@ Disassembly of section .text:
                	fmov	d16, x0
                	fmov	d17, x0
                	fdiv	d0, d16, d17
-               	fmov	d2, #1.00000000
+               	fmov	d1, #1.00000000
                	fmov	d17, x0
-               	fdiv	d1, d2, d17
-               	fneg	d2, d2
+               	fdiv	d1, d1, d17
+               	fmov	d2, #-1.00000000
                	fmov	d17, x0
                	fdiv	d2, d2, d17
                	stur	d0, [x29, #-0x8]

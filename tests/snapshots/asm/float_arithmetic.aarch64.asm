@@ -47,13 +47,12 @@ Disassembly of section .text:
                	b.lt	<addr>
                	mov	x0, #0x5                // =5
                	ret
-               	fneg	d2, d0
+               	fmov	d2, #-1.50000000
                	fcmp	d2, d2
                	b.eq	<addr>
                	mov	x0, #0x6                // =6
                	ret
-               	fneg	d2, d2
-               	fcmp	d2, d0
+               	fcmp	d0, d0
                	b.eq	<addr>
                	mov	x0, #0x7                // =7
                	ret
@@ -109,7 +108,8 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x10               // =16
                	ret
-               	fneg	d0, d3
+               	adrp	x16, <page>
+               	ldr	d0, [x16, #0x10]
                	fcvtzs	x0, d0
                	mov	x17, #-0x1              // =-1
                	cmp	w0, w17

@@ -142,7 +142,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=0
     v20  Binop { op=fmul, lhs=v1, rhs=v18 }               -> d0
     v21  Fma { a=v1, b=v18, c=v19, neg_product=true, neg_addend=false } -> d0
     v22  Imm(4611686018427387904)                         -> x0
-    v23  Fneg(v22)                                        -> d1
+    v23  Imm(-4611686018427387904)                        -> x0
     v24  Binop { op=fne, lhs=v21, rhs=v23 }               -> x0
     terminator Bz { cond=v24, target=b6, fall=b5 }   (exit_acc=v24)
   block 5  start_pc=0
@@ -178,8 +178,8 @@ fn ent_pc=6 n_params=0 variadic=false locals=0
     v44  Imm(1082130432)                                  -> x2 [f32]
     v45  Binop { op=fmul, lhs=v26, rhs=v43 }              -> d0 [f32]
     v46  Fma { a=v26, b=v43, c=v44, neg_product=true, neg_addend=false } -> d0 [f32]
-    v47  Imm(1073741824)                                  -> x1 [f32]
-    v48  Fneg(v47)                                        -> d1 [f32]
+    v47  Imm(1073741824)                                  -> x0 [f32]
+    v48  Imm(3221225472)                                  -> x0 [f32]
     v49  Binop { op=fne, lhs=v46, rhs=v48 }               -> x0
     terminator Bz { cond=v49, target=b12, fall=b11 }   (exit_acc=v49)
   block 11  start_pc=0
@@ -232,9 +232,9 @@ fn ent_pc=6 n_params=0 variadic=false locals=0
     terminator Return(v79)   (exit_acc=v79)
   block 20  start_pc=0
     v80  Imm(1073741824)                                  -> x0 [f32]
-    v81  Imm(1077936128)                                  -> x0 [f32]
+    v81  Imm(1077936128)                                  -> x6 [f32]
     v82  Imm(1082130432)                                  -> x6 [f32]
-    v83  Fma { a=v47, b=v81, c=v82, neg_product=false, neg_addend=false } -> d0 [f32]
+    v83  Fma { a=v80, b=v43, c=v82, neg_product=false, neg_addend=false } -> d0 [f32]
     v84  Imm(1092616192)                                  -> x0 [f32]
     v85  Binop { op=fne, lhs=v83, rhs=v84 }               -> x0
     terminator Bz { cond=v85, target=b22, fall=b21 }   (exit_acc=v85)

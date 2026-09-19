@@ -34,7 +34,7 @@ fn ent_pc=7 n_params=0 variadic=false locals=10
     v20  StoreLocal { off=-6, value=v19, kind=F80 }       -> -
     v21  LoadLocal { off=-6, kind=F80 }                   -> d0
     v22  Imm(4652218415073722368)                         -> x0
-    v23  Fneg(v22)                                        -> d1
+    v23  Imm(-4571153621781053440)                        -> x0
     v24  Binop { op=fne, lhs=v21, rhs=v23 }               -> x0
     terminator Bz { cond=v24, target=b6, fall=b5 }   (exit_acc=v24)
   block 5  start_pc=0

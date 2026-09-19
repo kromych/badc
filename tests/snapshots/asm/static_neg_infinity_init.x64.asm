@@ -26,36 +26,35 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	leaq	<rip>, %rax
-               	movsd	(%rax), %xmm0
-               	movabsq	$0x7fe1ccf385ebc8a0, %rcx # imm = 0x7FE1CCF385EBC8A0
-               	movq	%rcx, %xmm1
-               	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm1
-               	ucomisd	%xmm0, %xmm1
+               	leaq	<rip>, %rcx
+               	movsd	(%rcx), %xmm0
+               	movabsq	$-0x1e330c7a143760, %rax # imm = 0xFFE1CCF385EBC8A0
+               	movq	%rax, %xmm15
+               	ucomisd	%xmm0, %xmm15
                	jbe	<addr>
-               	movapd	%xmm0, %xmm2
-               	addsd	%xmm0, %xmm2
-               	ucomisd	%xmm0, %xmm2
+               	movapd	%xmm0, %xmm1
+               	addsd	%xmm0, %xmm1
+               	ucomisd	%xmm0, %xmm1
                	jp	<addr>
                	je	<addr>
                	movl	$0x1, %eax
                	retq
                	leaq	<rip>, %rdx
                	movsd	0x8(%rdx), %xmm0
-               	ucomisd	%xmm0, %xmm1
+               	movq	%rax, %xmm15
+               	ucomisd	%xmm0, %xmm15
                	jbe	<addr>
-               	movapd	%xmm0, %xmm2
-               	addsd	%xmm0, %xmm2
-               	ucomisd	%xmm0, %xmm2
+               	movapd	%xmm0, %xmm1
+               	addsd	%xmm0, %xmm1
+               	ucomisd	%xmm0, %xmm1
                	jp	<addr>
                	je	<addr>
                	movl	$0x2, %eax
                	retq
                	leaq	<rip>, %rdx
                	movsd	(%rdx), %xmm0
-               	ucomisd	%xmm0, %xmm1
+               	movq	%rax, %xmm15
+               	ucomisd	%xmm0, %xmm15
                	jbe	<addr>
                	movapd	%xmm0, %xmm1
                	addsd	%xmm0, %xmm1
@@ -64,11 +63,12 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x3, %eax
                	retq
-               	movsd	(%rax), %xmm0
+               	movsd	(%rcx), %xmm0
                	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
                	movq	%r10, %xmm15
                	xorpd	%xmm15, %xmm0
-               	movq	%rcx, %xmm15
+               	movabsq	$0x7fe1ccf385ebc8a0, %rax # imm = 0x7FE1CCF385EBC8A0
+               	movq	%rax, %xmm15
                	ucomisd	%xmm0, %xmm15
                	jb	<addr>
                	movl	$0x4, %eax

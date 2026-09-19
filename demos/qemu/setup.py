@@ -155,9 +155,12 @@ def main(argv: list[str] | None = None) -> int:
     tar_path = cache / ASSET
     _fetch.fetch_and_verify(RELEASE_TAG, ASSET, tar_path, SHA256, log)
 
+    # The pinned version's tree is extracted afresh and any other version's is
+    # removed: the boxes' nested-KVM boot takes the first emulator it finds here.
+    for d in cache.glob("qemu-*"):
+        if d.is_dir():
+            shutil.rmtree(d)
     dst_root = cache / PREFIX
-    if dst_root.exists():
-        shutil.rmtree(dst_root)
     log(f"extracting {ASSET}")
     with tarfile.open(tar_path, "r:xz") as tf:
         _extractall(tf, cache)

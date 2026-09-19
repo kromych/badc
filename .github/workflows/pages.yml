@@ -55,7 +55,12 @@ jobs:
           # the tagline the site carries are named here.
           printf '%s\n' 'theme: jekyll-theme-primer' 'title: badc' \
               'description: Former bad C compiler' > _src/_config.yml
-          cp README.md _src/index.md
+          # The landing page's title is the site's own, so the theme adds no
+          # heading of its own above it and the browser title stays
+          # `<title> | <description>`; the page's first heading is the
+          # README's, with its links.
+          printf '%s\n' '---' 'title: badc' '---' > _src/index.md
+          cat README.md >> _src/index.md
           cp README.md _src/README.md
           cp LICENSE _src/LICENSE
           cp -R doc _src/doc

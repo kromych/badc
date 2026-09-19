@@ -18,8 +18,7 @@ Disassembly of section .text:
                	mov	x0, x1
                	cmp	w0, #0x5
                	b.eq	<addr>
-               	and	x2, x0, #0x1
-               	cbz	w2, <addr>
+               	tbz	w0, #0x0, <addr>
                	add	x1, x1, x0
                	add	x0, x0, #0x1
                	cmp	w0, #0xa

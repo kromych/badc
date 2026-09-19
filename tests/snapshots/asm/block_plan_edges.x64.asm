@@ -62,8 +62,7 @@ Disassembly of section .text:
                	movq	%rax, %rdx
                	andq	$0x7, %rdx
                	movslq	(%rdi,%rdx,4), %rsi
-               	andq	$0x1, %rsi
-               	testq	%rsi, %rsi
+               	testb	$0x1, %sil
                	je	<addr>
                	movslq	(%rdi,%rdx,4), %rdx
                	addq	%rdx, %rcx
@@ -79,9 +78,7 @@ Disassembly of section .text:
                	xorl	%ecx, %ecx
                	movabsq	$0x100000000, %rax      # imm = 0x100000000
                	jmp	<addr>
-               	movq	%rax, %rdx
-               	andq	$0x1, %rdx
-               	testq	%rdx, %rdx
+               	testb	$0x1, %al
                	je	<addr>
                	addq	$0x3, %rcx
                	jmp	<addr>
@@ -96,9 +93,7 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	movabsq	$0x100000000, %rcx      # imm = 0x100000000
                	jmp	<addr>
-               	movq	%rcx, %rdx
-               	andq	$0x1, %rdx
-               	testq	%rdx, %rdx
+               	testb	$0x1, %cl
                	je	<addr>
                	addq	$0x3, %rax
                	jmp	<addr>
@@ -111,9 +106,7 @@ Disassembly of section .text:
 <low_word_trips>:
                	xorl	%ecx, %ecx
                	movabsq	$0x100000003, %rax      # imm = 0x100000003
-               	movq	%rax, %rdx
-               	andq	$0x1, %rdx
-               	testq	%rdx, %rdx
+               	testb	$0x1, %al
                	je	<addr>
                	addq	$0x3, %rcx
                	jmp	<addr>
@@ -127,9 +120,7 @@ Disassembly of section .text:
 <wraps>:
                	xorl	%eax, %eax
                	movl	$0xfffffffe, %ecx       # imm = 0xFFFFFFFE
-               	movq	%rcx, %rdx
-               	andq	$0x1, %rdx
-               	testq	%rdx, %rdx
+               	testb	$0x1, %cl
                	je	<addr>
                	movq	%rdi, %rdx
                	shlq	%rdx
@@ -181,9 +172,7 @@ Disassembly of section .text:
                	movl	$0x1, %ecx
                	movl	$0x2, %edx
                	xorl	%eax, %eax
-               	movq	%rax, %rsi
-               	andq	$0x1, %rsi
-               	testq	%rsi, %rsi
+               	testb	$0x1, %al
                	je	<addr>
                	xchgq	%rdx, %rcx
                	incq	%rax
@@ -199,9 +188,7 @@ Disassembly of section .text:
                	movl	$0x1, %ecx
                	movl	$0x2, %edx
                	xorl	%eax, %eax
-               	movq	%rax, %rsi
-               	andq	$0x1, %rsi
-               	testq	%rsi, %rsi
+               	testb	$0x1, %al
                	je	<addr>
                	xchgq	%rdx, %rcx
                	incq	%rax
@@ -342,9 +329,7 @@ Disassembly of section .text:
                	movq	%r11, %xmm0
                	movabsq	$0x4000000000000000, %r11 # imm = 0x4000000000000000
                	movq	%r11, %xmm1
-               	movq	%rax, %rcx
-               	andq	$0x1, %rcx
-               	testq	%rcx, %rcx
+               	testb	$0x1, %al
                	je	<addr>
                	movapd	%xmm1, %xmm15
                	movapd	%xmm0, %xmm1
@@ -410,8 +395,7 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	movq	%rax, %rcx
                	movzbq	(%rdx,%rax), %rsi
-               	andq	$0x1, %rsi
-               	testl	%esi, %esi
+               	testb	$0x1, %sil
                	je	<addr>
                	incq	%rcx
                	incq	%rax

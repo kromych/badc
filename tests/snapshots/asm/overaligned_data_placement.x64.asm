@@ -27,60 +27,47 @@ Disassembly of section .text:
 
 <main>:
                	leaq	<rip>, %rax
-               	andq	$0x3f, %rax
-               	testl	%eax, %eax
+               	testb	$0x3f, %al
                	je	<addr>
                	movl	$0x1, %eax
                	retq
                	leaq	<rip>, %rax
-               	movq	%rax, %rcx
-               	andq	$0x7f, %rcx
-               	testl	%ecx, %ecx
+               	testb	$0x7f, %al
                	je	<addr>
                	movl	$0x2, %eax
                	retq
                	leaq	<rip>, %rcx
-               	andq	$0xff, %rcx
-               	testl	%ecx, %ecx
+               	testb	$-0x1, %cl
                	je	<addr>
                	movl	$0x3, %eax
                	retq
                	leaq	<rip>, %rcx
-               	andq	$0x3f, %rcx
-               	testl	%ecx, %ecx
+               	testb	$0x3f, %cl
                	je	<addr>
                	movl	$0x4, %eax
                	retq
                	leaq	<rip>, %rcx
-               	andq	$0x7f, %rcx
-               	testl	%ecx, %ecx
+               	testb	$0x7f, %cl
                	je	<addr>
                	movl	$0x5, %eax
                	retq
                	leaq	<rip>, %rcx
-               	movq	%rcx, %rdx
-               	andq	$0xff, %rdx
-               	testl	%edx, %edx
+               	testb	$-0x1, %cl
                	je	<addr>
                	movl	$0x6, %eax
                	retq
                	leaq	<rip>, %rdx
-               	andq	$0x3f, %rdx
-               	testl	%edx, %edx
+               	testb	$0x3f, %dl
                	je	<addr>
                	movl	$0x7, %eax
                	retq
                	leaq	<rip>, %rdx
-               	movq	%rdx, %rsi
-               	andq	$0x7f, %rsi
-               	testl	%esi, %esi
+               	testb	$0x7f, %dl
                	je	<addr>
                	movl	$0x8, %eax
                	retq
                	leaq	<rip>, %rsi
-               	movq	%rsi, %rdi
-               	andq	$0xff, %rdi
-               	testl	%edi, %edi
+               	testb	$-0x1, %sil
                	je	<addr>
                	movl	$0x9, %eax
                	retq

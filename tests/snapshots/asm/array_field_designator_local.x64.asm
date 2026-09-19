@@ -36,19 +36,16 @@ Disassembly of section .text:
                	cmpl	$0x2, %ecx
                	jne	<addr>
                	movl	0x10(%rax), %ecx
-               	andq	$0xff, %rcx
-               	testl	%ecx, %ecx
+               	testb	$-0x1, %cl
                	jne	<addr>
                	movl	0x18(%rax), %ecx
-               	andq	$0xff, %rcx
-               	testl	%ecx, %ecx
+               	testb	$-0x1, %cl
                	je	<addr>
                	movl	$0x1, %eax
                	retq
                	movl	(%rax), %ecx
                	sarq	$0x8, %rcx
-               	andq	$0xff, %rcx
-               	testl	%ecx, %ecx
+               	testb	$-0x1, %cl
                	jne	<addr>
                	cmpl	$0x0, 0x4(%rax)
                	je	<addr>

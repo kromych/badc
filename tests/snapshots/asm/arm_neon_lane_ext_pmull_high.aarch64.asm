@@ -287,8 +287,7 @@ Disassembly of section .text:
                	str	x0, [x1]
                	str	x0, [x2]
                	lsr	x4, x5, x0
-               	and	x4, x4, #0x1
-               	cbz	x4, <addr>
+               	tbz	w4, #0x0, <addr>
                	ldr	x4, [x1]
                	lsl	x6, x3, x0
                	eor	x4, x4, x6

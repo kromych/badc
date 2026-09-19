@@ -40,9 +40,7 @@ Disassembly of section .text:
                	movq	$0x2006, 0x30(%rax)     # imm = 0x2006
                	leaq	<rip>, %rcx
                	movq	$0x2007, 0x38(%rcx)     # imm = 0x2007
-               	movq	%rcx, %rax
-               	andq	$0x7, %rax
-               	testq	%rax, %rax
+               	testb	$0x7, %cl
                	je	<addr>
                	movl	$0x1, %eax
                	popq	%rbx

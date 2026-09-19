@@ -37,9 +37,7 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	movq	%rax, (%rsi)
                	movq	(%rcx), %rcx
-               	movq	%rcx, %rdi
-               	andq	$0xff, %rdi
-               	testl	%edi, %edi
+               	testb	$-0x1, %cl
                	jne	<addr>
                	testq	%rcx, %rcx
                	jne	<addr>

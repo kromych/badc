@@ -1823,6 +1823,46 @@ long long lu32(long long k, long long x) { long long n = 0; for (; (unsigned)k; 
     m.finish();
 }
 
+/// A branch on a mask it alone reads tests the bits in place: aarch64
+/// `tbz` / `tbnz` for one bit in either half, x86-64 `test $imm` at the
+/// narrowest width that holds the mask, or `bt` for a bit above them. No
+/// `and` into a scratch register.
+#[test]
+fn zero_test_of_a_mask_tests_the_bits_in_place() {
+    const SRC: &str = "int m1(long k) { if (k & 1) return 3; return 5; }\n\
+int m40(long k) { if (k & (1L << 40)) return 3; return 5; }\n\
+int mneg(long k) { if (k & -8) return 3; return 5; }\n";
+    let mut m = Misses::default();
+    let and_imm = |w: u32| w & 0x7F80_0000 == 0x1200_0000;
+    for (name, bit) in [("m1", 0), ("m40", 40)] {
+        let ws = a64(SRC, name);
+        let tb =
+            |w: u32| w & 0x7E00_0000 == 0x3600_0000 && ((w >> 31) << 5 | (w >> 19) & 31) == bit;
+        m.expect(
+            ws.iter().any(|&w| tb(w)) && !ws.iter().any(|&w| and_imm(w)),
+            || format!("aarch64 {name}: not tbz #{bit}: {ws:08x?}"),
+        );
+    }
+    let slash = |i: &X64Insn| i.modrm.map_or(8, |m| (m >> 3) & 7);
+    let and = |i: &X64Insn| {
+        matches!(i.op, 0x21 | 0x23 | 0x24 | 0x25) || (matches!(i.op, 0x81 | 0x83) && slash(i) == 4)
+    };
+    type Form = fn(&X64Insn) -> bool;
+    let cases: [(&str, Form); 3] = [
+        ("m1", |i| i.op == 0xF6 && i.imm == 1 && !i.rex_w()),
+        ("m40", |i| i.op == 0x0FBA && i.imm == 40 && i.rex_w()),
+        ("mneg", |i| i.op == 0xF7 && i.imm == -8 && i.rex_w()),
+    ];
+    for (name, form) in cases {
+        let insns = x64(SRC, name);
+        m.expect(
+            insns.iter().any(|i| form(i) && matches!(slash(i), 0 | 4)) && !insns.iter().any(and),
+            || format!("x86-64 {name}: the mask is not tested in place: {insns:x?}"),
+        );
+    }
+    m.finish();
+}
+
 /// A floating comparison that an `int` result carries into a branch
 /// fuses into the branch: no flag materialized, masked and retested.
 #[test]

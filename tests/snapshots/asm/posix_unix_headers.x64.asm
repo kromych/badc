@@ -44,19 +44,16 @@ Disassembly of section .text:
                	orq	$0x1, %rcx
                	movb	%cl, 0x5(%rax)
                	movzbq	(%rax), %rcx
-               	andq	$0x8, %rcx
-               	testl	%ecx, %ecx
+               	testb	$0x8, %cl
                	je	<addr>
                	movzbq	0x5(%rax), %rcx
-               	andq	$0x1, %rcx
-               	testl	%ecx, %ecx
+               	testb	$0x1, %cl
                	jne	<addr>
                	movl	$0x2, %eax
                	leave
                	retq
                	movzbq	(%rax), %rcx
-               	andq	$0x10, %rcx
-               	testq	%rcx, %rcx
+               	testb	$0x10, %cl
                	je	<addr>
                	movl	$0x3, %eax
                	leave
@@ -66,8 +63,7 @@ Disassembly of section .text:
                	andq	$-0x9, %rdx
                	movb	%dl, (%rax)
                	movzbq	(%rax), %rax
-               	andq	$0x8, %rax
-               	testq	%rax, %rax
+               	testb	$0x8, %al
                	je	<addr>
                	movl	$0x4, %eax
                	leave

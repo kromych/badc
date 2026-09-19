@@ -27,46 +27,33 @@ Disassembly of section .text:
 
 <file_scope_objects>:
                	leaq	<rip>, %rax
-               	movq	%rax, %rcx
-               	andq	$0x7, %rcx
-               	testl	%ecx, %ecx
+               	testb	$0x7, %al
                	je	<addr>
                	movl	$0xe, %eax
                	retq
                	leaq	<rip>, %rcx
-               	movq	%rcx, %rdx
-               	andq	$0xf, %rdx
-               	testl	%edx, %edx
+               	testb	$0xf, %cl
                	je	<addr>
                	movl	$0xf, %eax
                	retq
                	leaq	<rip>, %rdx
-               	movq	%rdx, %rsi
-               	andq	$0x1f, %rsi
-               	testl	%esi, %esi
+               	testb	$0x1f, %dl
                	je	<addr>
                	movl	$0x10, %eax
                	retq
                	leaq	<rip>, %rsi
-               	movq	%rsi, %rdi
-               	andq	$0xf, %rdi
-               	testl	%edi, %edi
+               	testb	$0xf, %sil
                	jne	<addr>
                	leaq	0x10(%rsi), %r8
-               	movq	%r8, %rdi
-               	andq	$0xf, %rdi
-               	testl	%edi, %edi
+               	testb	$0xf, %r8b
                	je	<addr>
                	movl	$0x11, %eax
                	retq
                	leaq	<rip>, %rdi
-               	movq	%rdi, %r9
-               	andq	$0xf, %r9
-               	testl	%r9d, %r9d
+               	testb	$0xf, %dil
                	jne	<addr>
                	leaq	0x10(%rdi), %r9
-               	andq	$0xf, %r9
-               	testl	%r9d, %r9d
+               	testb	$0xf, %r9b
                	je	<addr>
                	movl	$0x12, %eax
                	retq
@@ -123,38 +110,28 @@ Disassembly of section .text:
 
 <static_local_objects>:
                	leaq	<rip>, %rdx
-               	movq	%rdx, %rax
-               	andq	$0xf, %rax
-               	testl	%eax, %eax
+               	testb	$0xf, %dl
                	je	<addr>
                	movl	$0x17, %eax
                	retq
                	leaq	<rip>, %rsi
-               	movq	%rsi, %rax
-               	andq	$0x1f, %rax
-               	testl	%eax, %eax
+               	testb	$0x1f, %sil
                	je	<addr>
                	movl	$0x18, %eax
                	retq
                	leaq	<rip>, %rax
-               	movq	%rax, %rcx
-               	andq	$0x1f, %rcx
-               	testl	%ecx, %ecx
+               	testb	$0x1f, %al
                	jne	<addr>
                	leaq	0x20(%rax), %rcx
-               	andq	$0x1f, %rcx
-               	testl	%ecx, %ecx
+               	testb	$0x1f, %cl
                	je	<addr>
                	movl	$0x19, %eax
                	retq
                	leaq	<rip>, %rcx
-               	movq	%rcx, %rdi
-               	andq	$0xf, %rdi
-               	testl	%edi, %edi
+               	testb	$0xf, %cl
                	jne	<addr>
                	leaq	0x10(%rcx), %rdi
-               	andq	$0xf, %rdi
-               	testl	%edi, %edi
+               	testb	$0xf, %dil
                	je	<addr>
                	movl	$0x1a, %eax
                	retq
@@ -263,57 +240,44 @@ Disassembly of section .text:
                	movq	0x8(%r8), %rax
                	movq	%rax, 0x8(%rcx)
                	popq	%rax
-               	andq	$0x7, %rdx
-               	testl	%edx, %edx
+               	testb	$0x7, %dl
                	je	<addr>
                	movl	$0x1d, %eax
                	leaq	-0xf0(%rbp), %rsp
                	leave
                	retq
-               	movq	%rsi, %rdx
-               	andq	$0xf, %rdx
-               	testl	%edx, %edx
+               	testb	$0xf, %sil
                	je	<addr>
                	movl	$0x1e, %eax
                	leaq	-0xf0(%rbp), %rsp
                	leave
                	retq
-               	movq	%rdi, %rdx
-               	andq	$0x1f, %rdx
-               	testl	%edx, %edx
+               	testb	$0x1f, %dil
                	je	<addr>
                	movl	$0x1f, %eax
                	leaq	-0xf0(%rbp), %rsp
                	leave
                	retq
-               	movq	%rax, %rdx
-               	andq	$0xf, %rdx
-               	testl	%edx, %edx
+               	testb	$0xf, %al
                	jne	<addr>
                	addq	$0x10, %rax
-               	andq	$0xf, %rax
-               	testl	%eax, %eax
+               	testb	$0xf, %al
                	je	<addr>
                	movl	$0x20, %eax
                	leaq	-0xf0(%rbp), %rsp
                	leave
                	retq
                	leaq	0x50(%rsp), %rax
-               	movq	%rax, %rdx
-               	andq	$0xf, %rdx
-               	testl	%edx, %edx
+               	testb	$0xf, %al
                	jne	<addr>
                	addq	$0x10, %rax
-               	andq	$0xf, %rax
-               	testl	%eax, %eax
+               	testb	$0xf, %al
                	je	<addr>
                	movl	$0x21, %eax
                	leaq	-0xf0(%rbp), %rsp
                	leave
                	retq
-               	movq	%rcx, %rax
-               	andq	$0xf, %rax
-               	testl	%eax, %eax
+               	testb	$0xf, %cl
                	je	<addr>
                	movl	$0x22, %eax
                	leaq	-0xf0(%rbp), %rsp
@@ -366,31 +330,24 @@ Disassembly of section .text:
                	movsbq	%dil, %rdi
                	movb	%dil, -0x90(%rbp)
                	leaq	0x20(%rsp), %rcx
-               	movq	%rcx, %rax
-               	andq	$0xf, %rax
-               	testl	%eax, %eax
+               	testb	$0xf, %cl
                	je	<addr>
                	movl	$0x25, %eax
                	leaq	-0x90(%rbp), %rsp
                	leave
                	retq
                	leaq	(%rsp), %rdx
-               	movq	%rdx, %rax
-               	andq	$0x1f, %rax
-               	testl	%eax, %eax
+               	testb	$0x1f, %dl
                	je	<addr>
                	movl	$0x26, %eax
                	leaq	-0x90(%rbp), %rsp
                	leave
                	retq
                	leaq	0x30(%rsp), %rax
-               	movq	%rax, %rsi
-               	andq	$0xf, %rsi
-               	testl	%esi, %esi
+               	testb	$0xf, %al
                	jne	<addr>
                	leaq	0x10(%rax), %rsi
-               	andq	$0xf, %rsi
-               	testl	%esi, %esi
+               	testb	$0xf, %sil
                	je	<addr>
                	movl	$0x27, %eax
                	leaq	-0x90(%rbp), %rsp

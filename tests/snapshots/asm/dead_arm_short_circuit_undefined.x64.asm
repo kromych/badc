@@ -52,15 +52,12 @@ Disassembly of section .text:
                	movl	$0x1, %ecx
                	movq	%rcx, (%rax)
                	movq	%rcx, 0x8(%rax)
-               	movq	%rcx, %rsi
-               	andq	$0x1, %rsi
-               	testl	%esi, %esi
+               	testb	$0x1, %cl
                	jne	<addr>
                	cmpl	$0x1, %edx
                	leaq	-0x10(%rbp), %rax
                	movq	(%rax), %rdx
-               	andq	$0x1, %rdx
-               	testl	%edx, %edx
+               	testb	$0x1, %dl
                	jne	<addr>
                	xorl	%edx, %edx
                	cmpl	$0x1, %edx
@@ -69,14 +66,12 @@ Disassembly of section .text:
                	movq	$0x2, 0x8(%rax)
                	movq	%rcx, (%rax)
                	movq	$0x3, 0x8(%rax)
-               	andq	$0x1, %rcx
-               	testl	%ecx, %ecx
+               	testb	$0x1, %cl
                	jne	<addr>
                	cmpl	$0x1, %edx
                	leaq	-0x10(%rbp), %rax
                	movq	(%rax), %rcx
-               	andq	$0x1, %rcx
-               	testl	%ecx, %ecx
+               	testb	$0x1, %cl
                	jne	<addr>
                	xorl	%ecx, %ecx
                	cmpl	$0x1, %ecx
@@ -86,14 +81,11 @@ Disassembly of section .text:
                	movl	$0x1, %ecx
                	movq	%rcx, (%rax)
                	movq	$0x5, 0x8(%rax)
-               	movq	%rcx, %rsi
-               	andq	$0x1, %rsi
-               	testl	%esi, %esi
+               	testb	$0x1, %cl
                	jne	<addr>
                	cmpl	$0x1, %edx
                	movq	(%rax), %rdx
-               	andq	$0x1, %rdx
-               	testl	%edx, %edx
+               	testb	$0x1, %dl
                	jne	<addr>
                	xorl	%eax, %eax
                	cmpl	$0x1, %eax
@@ -103,14 +95,12 @@ Disassembly of section .text:
                	movq	$0x6, 0x8(%rax)
                	movq	%rcx, (%rax)
                	movq	$0x7, 0x8(%rax)
-               	andq	$0x1, %rcx
-               	testl	%ecx, %ecx
+               	testb	$0x1, %cl
                	jne	<addr>
                	cmpl	$0x1, %edx
                	leaq	-0x10(%rbp), %rax
                	movq	(%rax), %rcx
-               	andq	$0x1, %rcx
-               	testl	%ecx, %ecx
+               	testb	$0x1, %cl
                	jne	<addr>
                	xorl	%eax, %eax
                	cmpl	$0x1, %eax

@@ -33,9 +33,7 @@ Disassembly of section .text:
                	cmpq	%rax, %rax
                	jne	<addr>
                	leaq	<rip>, %rcx
-               	movq	%rcx, %rax
-               	andq	$0x3f, %rax
-               	testl	%eax, %eax
+               	testb	$0x3f, %cl
                	je	<addr>
                	movl	$0x5, %eax
                	popq	%rbp

@@ -180,6 +180,24 @@ pub(super) fn fused_branch_cc(
         return None;
     }
     let op = match func.insts.get(cond as usize)? {
+        // `emit_binop_imm` tested the mask: `bt` leaves the bit in CF,
+        // `test` the zero test in ZF.
+        Inst::BinopI {
+            op: BinOp::And,
+            rhs_imm,
+            ..
+        } => {
+            let cc = match (
+                crate::c5::codegen::ssa::reg_alloc::x86_mask_takes_bt(*rhs_imm),
+                negate,
+            ) {
+                (true, true) => Cc::Ae,
+                (true, false) => Cc::B,
+                (false, true) => Cc::E,
+                (false, false) => Cc::Ne,
+            };
+            return Some(FusedBranch::Jcc(cc));
+        }
         Inst::Binop { op, .. } | Inst::BinopI { op, .. } => *op,
         // `emit_zero_test_of_load` compared the memory operand with zero.
         Inst::Load { .. } | Inst::LoadLocal { .. } | Inst::LoadIndexed { .. } => {

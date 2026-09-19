@@ -4432,12 +4432,11 @@ fn undefined_references_stay_untyped() {
 }
 
 /// A `_Bool` returned by a callee defined in another unit is only
-/// defined in the low byte per the psABI; a caller that tests the full
-/// return register (`!f()` / `if (f())`) must mask to the low byte
-/// first, or garbage high bits (e.g. a gcc `sete %al` with no
-/// zero-extend) make the branch go the wrong way. Regression for a
-/// cross-unit `_Bool`-returning call whose `!f()` test took the wrong
-/// branch on garbage high bits.
+/// defined in the low byte per the psABI; a caller's test of it (`!f()`
+/// / `if (f())`) must read the low byte only, or garbage high bits (e.g.
+/// a gcc `sete %al` with no zero-extend) make the branch go the wrong
+/// way. Regression for a cross-unit `_Bool`-returning call whose `!f()`
+/// test took the wrong branch on garbage high bits.
 #[test]
 fn external_bool_return_is_masked_before_branch() {
     use crate::{Compiler, NativeOptions, OutputKind, Target, emit_native_with_options};
@@ -4457,16 +4456,20 @@ fn external_bool_return_is_masked_before_branch() {
     )
     .expect("emit relocatable");
     let text = elf64_section(&obj, ".text").expect(".text");
-    // The bool return must be reduced to its low byte before the conditional
-    // branch. `and $0xff, %rax` is the accumulator form 48 25 ff 00 00 00 --
-    // the catalogue's shortest encoding for rax; 48 81 e0 ff 00 00 00 is the
-    // equivalent 81 /4 form a non-accumulator register would take.
+    // The branch reads the low byte of the bool return only: `and $0xff,
+    // %rax` ahead of a full test (the accumulator form 48 25 ff 00 00 00, or
+    // the 81 /4 form 48 81 e0 ff 00 00 00 of another register), or the
+    // `test $0xff, %al` (a8 ff) a mask fuses into when the branch alone
+    // reads it, followed by `je` / `jne`.
     let masks = text
         .windows(6)
         .any(|w| w == [0x48, 0x25, 0xff, 0x00, 0x00, 0x00])
         || text
             .windows(7)
-            .any(|w| w == [0x48, 0x81, 0xe0, 0xff, 0x00, 0x00, 0x00]);
+            .any(|w| w == [0x48, 0x81, 0xe0, 0xff, 0x00, 0x00, 0x00])
+        || text
+            .windows(3)
+            .any(|w| w[..2] == [0xa8, 0xff] && matches!(w[2], 0x74 | 0x75 | 0x0f));
     assert!(
         masks,
         "expected the external _Bool return to be masked to its low byte before use"

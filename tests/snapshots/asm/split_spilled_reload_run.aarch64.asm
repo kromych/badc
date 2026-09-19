@@ -208,8 +208,7 @@ Disassembly of section .text:
                	mov	x9, x0
                	mov	x0, x1
                	blr	x9
-               	and	x0, x20, #0x1
-               	cbz	w0, <addr>
+               	tbz	w20, #0x0, <addr>
                	mov	x1, x21
                	b	<addr>
                	mov	x1, x21

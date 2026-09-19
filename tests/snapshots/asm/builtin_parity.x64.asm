@@ -83,8 +83,7 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	shrq	$0x20, %rcx
                	addq	%rcx, %rax
-               	andq	$0x1, %rax
-               	testl	%eax, %eax
+               	testb	$0x1, %al
                	je	<addr>
                	movl	$0xc, %eax
                	leave

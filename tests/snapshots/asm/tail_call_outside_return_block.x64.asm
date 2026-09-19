@@ -71,23 +71,20 @@ Disassembly of section .text:
                	je	<addr>
                	leaq	0x18(%rcx), %rax
                	movq	(%rax), %rax
-               	andq	$0x4, %rax
-               	testq	%rax, %rax
+               	testb	$0x4, %al
                	je	<addr>
                	movq	%rcx, %rax
                	popq	%rbp
                	retq
                	leaq	0x10(%rcx), %rax
                	movq	(%rax), %rax
-               	andq	$0x2, %rax
-               	testq	%rax, %rax
+               	testb	$0x2, %al
                	je	<addr>
                	movl	$0x1, %eax
                	jmp	<addr>
                	leaq	0x8(%rcx), %rax
                	movq	(%rax), %rax
-               	andq	$0x1, %rax
-               	testq	%rax, %rax
+               	testb	$0x1, %al
                	je	<addr>
                	xorl	%eax, %eax
                	jmp	<addr>

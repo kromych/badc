@@ -332,8 +332,7 @@ Disassembly of section .text:
                	movl	$0x3, %esi
                	movq	-0x20(%rbp), %rax
                	callq	*%rax
-               	andq	$0xff, %rax
-               	testl	%eax, %eax
+               	testb	$-0x1, %al
                	jne	<addr>
                	movl	$0x1, %esi
                	movq	-0x20(%rbp), %rax

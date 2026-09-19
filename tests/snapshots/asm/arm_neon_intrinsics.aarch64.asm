@@ -116,8 +116,7 @@ Disassembly of section .text:
                	ldrb	w7, [x3, x0]
                	ldrb	w2, [x1, x0]
                	lsl	x5, x2, #1
-               	and	x2, x2, #0x80
-               	cbz	x2, <addr>
+               	tbz	w2, #0x7, <addr>
                	mov	x2, x6
                	eor	x2, x5, x2
                	and	x5, x2, #0xff

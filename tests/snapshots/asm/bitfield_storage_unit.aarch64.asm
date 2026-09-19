@@ -127,8 +127,7 @@ Disassembly of section .text:
                	ret
                	mov	w0, w1
                	asr	x2, x0, #8
-               	and	x2, x2, #0x1
-               	cbz	w2, <addr>
+               	tbz	w2, #0x0, <addr>
                	mov	x0, #0x18               // =24
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10

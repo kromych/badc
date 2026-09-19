@@ -57,8 +57,7 @@ Disassembly of section .text:
                	retq
                	movzbq	0x1(%rax), %rax
                	sarq	%rax
-               	andq	$0x1, %rax
-               	testl	%eax, %eax
+               	testb	$0x1, %al
                	je	<addr>
                	movl	$0x2, %eax
                	leave
@@ -75,13 +74,11 @@ Disassembly of section .text:
                	leave
                	retq
                	movzbq	0x1(%rax), %rdx
-               	andq	$0x1, %rdx
-               	testq	%rdx, %rdx
+               	testb	$0x1, %dl
                	je	<addr>
                	movzbq	0x1(%rax), %rax
                	sarq	%rax
-               	andq	$0x1, %rax
-               	testl	%eax, %eax
+               	testb	$0x1, %al
                	jne	<addr>
                	movl	%ecx, %eax
                	movq	%rax, %rdx

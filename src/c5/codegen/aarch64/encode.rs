@@ -1223,6 +1223,27 @@ pub(crate) fn enc_cbnz_w(rt: Reg, imm19: i32) -> u32 {
     enc_cbnz(rt, imm19) & !0x8000_0000
 }
 
+/// `TBZ Rt, #bit, label` -- branch if bit `bit` of `Xt` is zero; `imm14`
+/// is signed, in instructions (+/-32 KiB).
+pub(crate) fn enc_tbz(rt: Reg, bit: u8, imm14: i32) -> u32 {
+    debug_assert!(bit < 64, "tbz: bit {bit}");
+    debug_assert!(
+        (-(1 << 13)..(1 << 13)).contains(&imm14),
+        "tbz: offset {imm14} out of range"
+    );
+    let b = bit as u32;
+    0x3600_0000
+        | ((b >> 5) << 31)
+        | ((b & 31) << 19)
+        | (((imm14 as u32) & 0x3FFF) << 5)
+        | rt.0 as u32
+}
+
+/// `TBNZ Rt, #bit, label` -- branch if bit `bit` of `Xt` is one.
+pub(crate) fn enc_tbnz(rt: Reg, bit: u8, imm14: i32) -> u32 {
+    enc_tbz(rt, bit, imm14) | 0x0100_0000
+}
+
 /// `B.<cond> <label>` -- branch if the NZCV flags satisfy `cond`.
 /// `imm19` is signed, in instructions; same +/-1 MiB range as
 /// `CBZ`/`CBNZ`. The encoder builds the canonical form
@@ -2405,6 +2426,17 @@ mod tests {
 
     fn one(word: u32) -> [u8; 4] {
         word.to_le_bytes()
+    }
+
+    #[test]
+    fn tbz_and_tbnz_forms() {
+        // tbz w4, #0, .+8; tbnz w4, #0, .+8; tbz x3, #40, .-4;
+        // tbnz x0, #63, .+32764; tbz w30, #31, .-32768
+        assert_eq!(enc_tbz(Reg(4), 0, 2), 0x3600_0044);
+        assert_eq!(enc_tbnz(Reg(4), 0, 2), 0x3700_0044);
+        assert_eq!(enc_tbz(Reg(3), 40, -1), 0xB647_FFE3);
+        assert_eq!(enc_tbnz(Reg::X0, 63, 8191), 0xB7FB_FFE0);
+        assert_eq!(enc_tbz(Reg(30), 31, -8192), 0x36FC_001E);
     }
 
     #[test]

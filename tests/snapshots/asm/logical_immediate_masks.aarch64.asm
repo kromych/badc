@@ -190,15 +190,13 @@ Disassembly of section .text:
 <classify>:
                	mov	x1, x0
                	mov	x0, #0x0                // =0
-               	and	x2, x1, #0x40
-               	cbz	x2, <addr>
+               	tbz	w1, #0x6, <addr>
                	mov	x0, #0x1                // =1
                	and	x2, x1, #0xf0
                	cmp	w2, #0x30
                	b.ne	<addr>
                	orr	x0, x0, #0x2
-               	and	x2, x1, #0x8000000000000000
-               	cbnz	x2, <addr>
+               	tbnz	x1, #0x3f, <addr>
                	orr	x0, x0, #0x4
                	and	w1, w1, #0xf0f0f0f
                	cbz	x1, <addr>

@@ -182,8 +182,7 @@ Disassembly of section .text:
                	xorq	%rdx, %rdi
                	movq	%rdx, %r9
                	shlq	%r9
-               	andq	$0x80, %rdx
-               	testq	%rdx, %rdx
+               	testb	$-0x80, %dl
                	je	<addr>
                	movl	$0x1d, %edx
                	xorq	%r9, %rdx
@@ -195,8 +194,7 @@ Disassembly of section .text:
                	xorq	%r9, %rdi
                	movq	%rdx, %r9
                	shlq	%r9
-               	andq	$0x80, %rdx
-               	testq	%rdx, %rdx
+               	testb	$-0x80, %dl
                	je	<addr>
                	movl	$0x1d, %edx
                	xorq	%r9, %rdx
@@ -207,8 +205,7 @@ Disassembly of section .text:
                	xorq	%rdi, %rsi
                	movq	%rdx, %rdi
                	shlq	%rdi
-               	andq	$0x80, %rdx
-               	testq	%rdx, %rdx
+               	testb	$-0x80, %dl
                	je	<addr>
                	movl	$0x1d, %edx
                	jmp	<addr>

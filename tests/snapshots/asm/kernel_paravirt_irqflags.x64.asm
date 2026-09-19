@@ -43,9 +43,7 @@ Disassembly of section .text:
                	movq	%rsi, %rbx
                	callq	<addr>
 		R_X86_64_PLT32	raw_spin_unlock-0x4
-               	movq	%rbx, %rax
-               	andq	$0x200, %rax            # imm = 0x200
-               	testl	%eax, %eax
+               	testl	$0x200, %ebx            # imm = 0x200
                	je	<addr>
                	movq	%rsp, %rax
                	callq	*(%rip)                 # <addr>

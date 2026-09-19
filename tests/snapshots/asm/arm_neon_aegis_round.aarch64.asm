@@ -571,8 +571,7 @@ Disassembly of section .text:
                	add	x4, x1, x2
                	ldrb	w4, [x3, x4]
                	lsl	x5, x4, #1
-               	and	x4, x4, #0x80
-               	cbz	x4, <addr>
+               	tbz	w4, #0x7, <addr>
                	mov	x4, #0x1b               // =27
                	eor	x4, x5, x4
                	and	x11, x4, #0xff
@@ -581,8 +580,7 @@ Disassembly of section .text:
                	add	x4, x1, x9
                	ldrb	w7, [x3, x4]
                	lsl	x10, x7, #1
-               	and	x7, x7, #0x80
-               	cbz	x7, <addr>
+               	tbz	w7, #0x7, <addr>
                	mov	x7, #0x1b               // =27
                	b	<addr>
                	mov	x7, x6

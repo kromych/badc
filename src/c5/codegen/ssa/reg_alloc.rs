@@ -1161,20 +1161,32 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
         if use_counts.get(cond as usize).copied().unwrap_or(0) != 1 {
             continue;
         }
-        // A comparison sets the flags; so does x86-64's `cmp $0, mem` in
-        // place of a load that only the branch reads.
-        let sets_flags = match func.insts.get(cond as usize) {
-            Some(Inst::Binop { op, .. } | Inst::BinopI { op, .. }) => is_compare_op(*op),
-            Some(inst) => is_x86 && zero_testable_load(inst),
-            None => false,
+        // A comparison sets the flags; so do x86-64's `cmp $0, mem` in
+        // place of a load that only the branch reads and its `test $imm`
+        // in place of a mask. aarch64 branches on a one-bit mask with
+        // `tbz` / `tbnz`, which read the masked register at the branch, so
+        // nothing may be emitted in between.
+        let low_word = func.low_word_tests.get(bidx).copied().unwrap_or(false);
+        let (sets_flags, masked) = match func.insts.get(cond as usize) {
+            Some(Inst::BinopI {
+                op: BinOp::And,
+                rhs_imm,
+                ..
+            }) => {
+                let fuses = branch_mask_fuses(*rhs_imm, low_word, is_x86);
+                (fuses && is_x86, fuses && !is_x86)
+            }
+            Some(Inst::Binop { op, .. } | Inst::BinopI { op, .. }) => (is_compare_op(*op), false),
+            Some(inst) => (is_x86 && zero_testable_load(inst), false),
+            None => (false, false),
         };
-        if !sets_flags {
+        if !sets_flags && !masked {
             continue;
         }
         let window_ok = ((cond + 1)..block.inst_range.end).all(|p| {
             let inst = &func.insts[p as usize];
             // A dead pure inst emits no code (`is_dead_pure`).
-            (inst.is_pure() && use_counts[p as usize] == 0) || flags_survive(inst)
+            (inst.is_pure() && use_counts[p as usize] == 0) || (sets_flags && flags_survive(inst))
         });
         if !window_ok {
             continue;
@@ -2212,6 +2224,25 @@ pub(crate) fn compute_use_counts(func: &FunctionSsa) -> Vec<u32> {
         }
     }
     counts
+}
+
+/// Whether a branch on `x & imm`, the mask read by that branch alone,
+/// tests the bits in place: x86-64 with a `test` whose immediate holds
+/// the mask (a byte, a zero-extended word, or a sign-extended word) or
+/// with `bt` for one bit, aarch64 with `tbz` / `tbnz` for one bit. A
+/// low-word branch reads the mask's low 32 bits, which a mask with a bit
+/// above 31 does not give.
+pub(crate) fn branch_mask_fuses(imm: i64, low_word: bool, is_x86: bool) -> bool {
+    let low = (0..=u32::MAX as i64).contains(&imm);
+    let one_bit = (imm as u64).is_power_of_two();
+    let in_place = one_bit || (is_x86 && (low || i32::try_from(imm).is_ok()));
+    in_place && (low || !low_word)
+}
+
+/// Whether x86-64 tests the fused mask `imm` with `bt`: its one bit is
+/// out of every `test` immediate's reach.
+pub(crate) fn x86_mask_takes_bt(imm: i64) -> bool {
+    !(0..=u32::MAX as i64).contains(&imm) && i32::try_from(imm).is_err()
 }
 
 /// Whether `inst` is the inline setjmp intrinsic. A longjmp back to
@@ -5234,6 +5265,67 @@ int main(void) { return 0; }
         };
         assert!(allocate(&build(), Target::LinuxAarch64).branch_fused[1]);
         assert!(!allocate(&build(), Target::LinuxX64).branch_fused[1]);
+    }
+
+    /// A mask the branch alone reads fuses into it: x86-64 tests it in
+    /// place and needs the flags to survive to the branch; aarch64 takes
+    /// one bit with `tbz`, which reads the register at the branch, so any
+    /// emitted instruction in between keeps the mask.
+    #[test]
+    fn mask_feeding_a_branch_fuses() {
+        let build = |imm: i64, between: bool| {
+            let mut insts = vec![
+                load_i64(),
+                Inst::BinopI {
+                    op: BinOp::And,
+                    lhs: 0,
+                    rhs_imm: imm,
+                },
+            ];
+            if between {
+                insts.push(Inst::BinopI {
+                    op: BinOp::Add,
+                    lhs: 0,
+                    rhs_imm: 7,
+                });
+                insts.push(store_of(2));
+            }
+            branch_func(insts, 1)
+        };
+        let fused = |t, imm, between| allocate(&build(imm, between), t).branch_fused[1];
+        assert!(fused(Target::LinuxAarch64, 4, false));
+        assert!(!fused(Target::LinuxAarch64, 4, true));
+        assert!(!fused(Target::LinuxAarch64, 6, false));
+        assert!(fused(Target::LinuxX64, 6, false));
+        assert!(!fused(Target::LinuxX64, 6, true));
+    }
+
+    /// The masks each target tests in place, and the ones a low-word
+    /// branch cannot: its test reads bits 0..31 of the mask only.
+    #[test]
+    fn masks_a_branch_tests_in_place() {
+        for (imm, low_word, x86, a64) in [
+            (0xFF, false, true, false),
+            (0xFFFF_FFFF, true, true, false),
+            (-8, false, true, false),
+            (-8, true, false, false),
+            (1 << 40, false, true, true),
+            (1 << 40, true, false, false),
+            (3 << 40, false, false, false),
+            (i64::MIN, false, true, true),
+            (1 << 31, true, true, true),
+        ] {
+            assert_eq!(
+                branch_mask_fuses(imm, low_word, true),
+                x86,
+                "{imm:#x} {low_word}"
+            );
+            assert_eq!(
+                branch_mask_fuses(imm, low_word, false),
+                a64,
+                "{imm:#x} {low_word}"
+            );
+        }
     }
 
     /// A compare with a second consumer keeps its materialisation on

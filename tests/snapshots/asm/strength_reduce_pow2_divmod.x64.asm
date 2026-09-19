@@ -142,8 +142,7 @@ Disassembly of section .text:
                	cmpl	$0x8000000, %eax        # imm = 0x8000000
                	jne	<addr>
                	movl	-0x18(%rbp), %eax
-               	andq	$0xf, %rax
-               	testl	%eax, %eax
+               	testb	$0xf, %al
                	je	<addr>
                	movl	$0x7, %eax
                	leave

@@ -47,56 +47,44 @@ Disassembly of section .text:
                	incq	%r8
                	movl	$0x8, (%r8)
                	leaq	0x10(%rsp), %r8
-               	andq	$0xf, %r8
-               	testl	%r8d, %r8d
+               	testb	$0xf, %r8b
                	je	<addr>
                	movl	$0x1e, %eax
                	leaq	-0x60(%rbp), %rsp
                	leave
                	retq
-               	andq	$0xf, %rax
-               	testl	%eax, %eax
+               	testb	$0xf, %al
                	je	<addr>
                	movl	$0x1f, %eax
                	leaq	-0x60(%rbp), %rsp
                	leave
                	retq
-               	movq	%rcx, %rax
-               	andq	$0x1f, %rax
-               	testl	%eax, %eax
+               	testb	$0x1f, %cl
                	je	<addr>
                	movl	$0x20, %eax
                	leaq	-0x60(%rbp), %rsp
                	leave
                	retq
-               	movq	%rdx, %rax
-               	andq	$0xf, %rax
-               	testl	%eax, %eax
+               	testb	$0xf, %dl
                	je	<addr>
                	movl	$0x21, %eax
                	leaq	-0x60(%rbp), %rsp
                	leave
                	retq
-               	movq	%rsi, %rax
-               	andq	$0xf, %rax
-               	testl	%eax, %eax
+               	testb	$0xf, %sil
                	je	<addr>
                	movl	$0x22, %eax
                	leaq	-0x60(%rbp), %rsp
                	leave
                	retq
-               	movq	%rdi, %rax
-               	andq	$0xf, %rax
-               	testl	%eax, %eax
+               	testb	$0xf, %dil
                	je	<addr>
                	movl	$0x23, %eax
                	leaq	-0x60(%rbp), %rsp
                	leave
                	retq
                	leaq	-0x58(%rbp), %rax
-               	movq	%rax, %rcx
-               	andq	$0x7, %rcx
-               	testl	%ecx, %ecx
+               	testb	$0x7, %al
                	je	<addr>
                	movl	$0x24, %eax
                	leaq	-0x60(%rbp), %rsp
@@ -143,8 +131,7 @@ Disassembly of section .text:
                	movsd	%xmm14, -0x20(%rbp,%riz)
                	leaq	-0x10(%rbp), %rsi
                	leaq	-0x20(%rbp), %rcx
-               	andq	$0xf, %rcx
-               	testl	%ecx, %ecx
+               	testb	$0xf, %cl
                	je	<addr>
                	movl	$0x35, %eax
                	leave
@@ -168,37 +155,31 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	leaq	<rip>, %rax
-               	andq	$0xf, %rax
-               	testl	%eax, %eax
+               	testb	$0xf, %al
                	je	<addr>
                	movl	$0x40, %eax
                	popq	%rbp
                	retq
                	leaq	<rip>, %rax
-               	andq	$0x1f, %rax
-               	testl	%eax, %eax
+               	testb	$0x1f, %al
                	je	<addr>
                	movl	$0x41, %eax
                	popq	%rbp
                	retq
                	leaq	<rip>, %rax
-               	andq	$0xf, %rax
-               	testl	%eax, %eax
+               	testb	$0xf, %al
                	je	<addr>
                	movl	$0x42, %eax
                	popq	%rbp
                	retq
                	leaq	<rip>, %rax
-               	movq	%rax, %rcx
-               	andq	$0xf, %rcx
-               	testl	%ecx, %ecx
+               	testb	$0xf, %al
                	je	<addr>
                	movl	$0x43, %eax
                	popq	%rbp
                	retq
                	leaq	<rip>, %rcx
-               	andq	$0xf, %rcx
-               	testl	%ecx, %ecx
+               	testb	$0xf, %cl
                	je	<addr>
                	movl	$0x44, %eax
                	popq	%rbp
@@ -211,9 +192,7 @@ Disassembly of section .text:
                	retq
                	leaq	<rip>, %rax
                	movl	$0x3, (%rax)
-               	movq	%rax, %rcx
-               	andq	$0xf, %rcx
-               	testl	%ecx, %ecx
+               	testb	$0xf, %al
                	je	<addr>
                	movl	$0x4c, %eax
                	popq	%rbp

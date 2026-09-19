@@ -146,8 +146,7 @@ Disassembly of section .text:
                	movl	%ecx, -0x20(%rbp)
                	movl	%edx, -0x18(%rbp)
                	movl	-0x20(%rbp), %eax
-               	andq	$0x8000000, %rax        # imm = 0x8000000
-               	testl	%eax, %eax
+               	testl	$0x8000000, %eax        # imm = 0x8000000
                	jne	<addr>
                	movl	$0x1, %eax
                	popq	%rbx

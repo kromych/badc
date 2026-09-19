@@ -18,8 +18,7 @@ Disassembly of section .text:
                	ldr	x2, [x1]
                	and	x0, x2, #0x1
                	add	x0, x0, #0xa
-               	and	x1, x2, #0x8
-               	cbz	w1, <addr>
+               	tbz	w2, #0x3, <addr>
                	mov	x1, #0x1                // =1
                	add	x0, x0, x1
                	ret
@@ -37,8 +36,7 @@ Disassembly of section .text:
                	str	x1, [x0]
                	and	x3, x1, #0x1
                	add	x3, x3, #0xa
-               	and	x4, x1, #0x8
-               	cbz	w4, <addr>
+               	tbz	w1, #0x3, <addr>
                	mov	x4, x1
                	add	x3, x3, x4
                	add	x5, x3, #0xa
@@ -46,8 +44,7 @@ Disassembly of section .text:
                	str	x4, [x0]
                	and	x3, x4, #0x1
                	add	x3, x3, #0xa
-               	and	x4, x4, #0x8
-               	cbz	w4, <addr>
+               	tbz	w4, #0x3, <addr>
                	mov	x4, x1
                	add	x3, x3, x4
                	add	x5, x5, x3
@@ -55,8 +52,7 @@ Disassembly of section .text:
                	str	x4, [x0]
                	and	x3, x4, #0x1
                	add	x3, x3, #0xa
-               	and	x4, x4, #0x8
-               	cbz	w4, <addr>
+               	tbz	w4, #0x3, <addr>
                	mov	x4, x1
                	add	x3, x3, x4
                	add	x5, x5, x3
@@ -64,8 +60,7 @@ Disassembly of section .text:
                	str	x4, [x0]
                	and	x3, x4, #0x1
                	add	x3, x3, #0xa
-               	and	x4, x4, #0x8
-               	cbz	w4, <addr>
+               	tbz	w4, #0x3, <addr>
                	mov	x2, x1
                	add	x2, x3, x2
                	add	x4, x5, x2
@@ -73,8 +68,7 @@ Disassembly of section .text:
                	str	x3, [x0]
                	and	x2, x3, #0x1
                	add	x2, x2, #0xa
-               	and	x0, x3, #0x8
-               	cbz	w0, <addr>
+               	tbz	w3, #0x3, <addr>
                	add	x0, x2, x1
                	add	x3, x4, x0
                	mov	x2, #0x6                // =6
@@ -82,8 +76,7 @@ Disassembly of section .text:
                	str	x2, [x0]
                	and	x1, x2, #0x1
                	add	x1, x1, #0xa
-               	and	x2, x2, #0x8
-               	cbz	w2, <addr>
+               	tbz	w2, #0x3, <addr>
                	mov	x2, #0x1                // =1
                	add	x1, x1, x2
                	add	x3, x3, x1
@@ -91,8 +84,7 @@ Disassembly of section .text:
                	str	x2, [x0]
                	and	x1, x2, #0x1
                	add	x1, x1, #0xa
-               	and	x2, x2, #0x8
-               	cbz	w2, <addr>
+               	tbz	w2, #0x3, <addr>
                	mov	x2, #0x1                // =1
                	add	x1, x1, x2
                	add	x3, x3, x1
@@ -100,8 +92,7 @@ Disassembly of section .text:
                	str	x2, [x0]
                	and	x1, x2, #0x1
                	add	x1, x1, #0xa
-               	and	x2, x2, #0x8
-               	cbz	w2, <addr>
+               	tbz	w2, #0x3, <addr>
                	mov	x2, #0x1                // =1
                	add	x1, x1, x2
                	add	x3, x3, x1
@@ -109,8 +100,7 @@ Disassembly of section .text:
                	str	x2, [x0]
                	and	x1, x2, #0x1
                	add	x1, x1, #0xa
-               	and	x2, x2, #0x8
-               	cbz	w2, <addr>
+               	tbz	w2, #0x3, <addr>
                	mov	x2, #0x1                // =1
                	add	x1, x1, x2
                	add	x3, x3, x1
@@ -118,8 +108,7 @@ Disassembly of section .text:
                	str	x2, [x0]
                	and	x1, x2, #0x1
                	add	x1, x1, #0xa
-               	and	x2, x2, #0x8
-               	cbz	w2, <addr>
+               	tbz	w2, #0x3, <addr>
                	mov	x2, #0x1                // =1
                	add	x1, x1, x2
                	add	x3, x3, x1
@@ -127,8 +116,7 @@ Disassembly of section .text:
                	str	x2, [x0]
                	and	x1, x2, #0x1
                	add	x1, x1, #0xa
-               	and	x2, x2, #0x8
-               	cbz	w2, <addr>
+               	tbz	w2, #0x3, <addr>
                	mov	x2, #0x1                // =1
                	add	x1, x1, x2
                	add	x3, x3, x1
@@ -136,8 +124,7 @@ Disassembly of section .text:
                	str	x2, [x0]
                	and	x1, x2, #0x1
                	add	x1, x1, #0xa
-               	and	x2, x2, #0x8
-               	cbz	w2, <addr>
+               	tbz	w2, #0x3, <addr>
                	mov	x2, #0x1                // =1
                	add	x1, x1, x2
                	add	x3, x3, x1
@@ -145,8 +132,7 @@ Disassembly of section .text:
                	str	x2, [x0]
                	and	x1, x2, #0x1
                	add	x1, x1, #0xa
-               	and	x2, x2, #0x8
-               	cbz	w2, <addr>
+               	tbz	w2, #0x3, <addr>
                	mov	x2, #0x1                // =1
                	add	x1, x1, x2
                	add	x3, x3, x1
@@ -154,8 +140,7 @@ Disassembly of section .text:
                	str	x2, [x0]
                	and	x1, x2, #0x1
                	add	x1, x1, #0xa
-               	and	x0, x2, #0x8
-               	cbz	w0, <addr>
+               	tbz	w2, #0x3, <addr>
                	mov	x0, #0x1                // =1
                	add	x0, x1, x0
                	add	x3, x3, x0
@@ -164,8 +149,7 @@ Disassembly of section .text:
                	str	x1, [x2]
                	and	x0, x1, #0x1
                	add	x0, x0, #0xa
-               	and	x1, x1, #0x8
-               	cbz	w1, <addr>
+               	tbz	w1, #0x3, <addr>
                	mov	x1, #0x1                // =1
                	add	x0, x0, x1
                	add	x0, x3, x0

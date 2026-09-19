@@ -41,13 +41,11 @@ Disassembly of section .text:
                	mov	x2, #0x1                // =1
                	str	x2, [x0]
                	str	x2, [x0, #0x8]
-               	and	x3, x2, #0x1
-               	cbnz	w3, <addr>
+               	tbnz	w2, #0x0, <addr>
                	mov	x3, x1
                	cmp	w3, #0x1
                	ldr	x3, [x0]
-               	and	x3, x3, #0x1
-               	cbnz	w3, <addr>
+               	tbnz	w3, #0x0, <addr>
                	mov	x3, x1
                	cmp	w3, #0x1
                	str	x1, [x0]
@@ -56,13 +54,11 @@ Disassembly of section .text:
                	str	x2, [x0]
                	mov	x3, #0x3                // =3
                	str	x3, [x0, #0x8]
-               	and	x3, x2, #0x1
-               	cbnz	w3, <addr>
+               	tbnz	w2, #0x0, <addr>
                	mov	x3, x1
                	cmp	w3, #0x1
                	ldr	x3, [x0]
-               	and	x3, x3, #0x1
-               	cbnz	w3, <addr>
+               	tbnz	w3, #0x0, <addr>
                	mov	x3, x1
                	cmp	w3, #0x1
                	str	x1, [x0]
@@ -72,13 +68,11 @@ Disassembly of section .text:
                	str	x2, [x0]
                	mov	x1, #0x5                // =5
                	str	x1, [x0, #0x8]
-               	and	x1, x2, #0x1
-               	cbnz	w1, <addr>
+               	tbnz	w2, #0x0, <addr>
                	mov	x1, #0x0                // =0
                	cmp	w1, #0x1
                	ldr	x1, [x0]
-               	and	x1, x1, #0x1
-               	cbnz	w1, <addr>
+               	tbnz	w1, #0x0, <addr>
                	mov	x1, #0x0                // =0
                	cmp	w1, #0x1
                	mov	x1, #0x0                // =0
@@ -89,13 +83,11 @@ Disassembly of section .text:
                	str	x2, [x0]
                	mov	x3, #0x7                // =7
                	str	x3, [x0, #0x8]
-               	and	x2, x2, #0x1
-               	cbnz	w2, <addr>
+               	tbnz	w2, #0x0, <addr>
                	mov	x2, x1
                	cmp	w2, #0x1
                	ldr	x2, [x0]
-               	and	x2, x2, #0x1
-               	cbnz	w2, <addr>
+               	tbnz	w2, #0x0, <addr>
                	mov	x0, x1
                	cmp	w0, #0x1
                	mov	x0, x1

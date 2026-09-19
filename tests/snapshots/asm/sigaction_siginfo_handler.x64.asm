@@ -102,8 +102,7 @@ Disassembly of section .text:
                	cmpq	%rdx, %rcx
                	jne	<addr>
                	movslq	0x88(%rax), %rax
-               	andq	$0x4, %rax
-               	testl	%eax, %eax
+               	testb	$0x4, %al
                	jne	<addr>
                	movl	$0x4, %eax
                	popq	%rbx

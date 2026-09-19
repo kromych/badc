@@ -1256,6 +1256,21 @@ pub(super) fn emit_binop_imm(
     let Some(rn) = int_operand_into_rd(code, lhs_place, rd, frame) else {
         return fail("BinopI: lhs not int reg / spill");
     };
+    // A mask the branch alone reads sets its flags with the narrowest
+    // `test` that holds it, or `bt` for a bit above them
+    // (`branch_mask_fuses`).
+    if op == BinOp::And && alloc.branch_fused.get(v as usize).copied().unwrap_or(false) {
+        let (mnem, width, imm) = match rhs_imm {
+            _ if crate::c5::codegen::ssa::reg_alloc::x86_mask_takes_bt(rhs_imm) => {
+                (Mnem::Bt, 8, (rhs_imm as u64).trailing_zeros() as i32)
+            }
+            0..=0xFF => (Mnem::Test, 1, rhs_imm as u8 as i8 as i32),
+            0x100..=0xFFFF_FFFF => (Mnem::Test, 4, rhs_imm as u32 as i32),
+            _ => (Mnem::Test, 8, rhs_imm as i32),
+        };
+        super::encode::emit_ri(code, mnem, width, rn, imm);
+        return Ok(());
+    }
     // The sign-narrow pair folds to one movsxd / movsx, as in `emit_binop`.
     let sxtw_source = alloc
         .sxtw_source

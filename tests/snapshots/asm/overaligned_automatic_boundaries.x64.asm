@@ -73,8 +73,7 @@ Disassembly of section .text:
                	movb	$0x3, (%rsi)
                	leaq	<rip>, %rdi
                	movq	%rax, (%rdi)
-               	andq	$0xf, %rax
-               	testl	%eax, %eax
+               	testb	$0xf, %al
                	jne	<addr>
                	movq	%rdx, %rax
                	andq	$0x1f, %rax
@@ -137,9 +136,7 @@ Disassembly of section .text:
                	xorl	%ecx, %ecx
                	movb	$0x1, (%rax)
                	movb	$0x2, 0xfff(%rax)
-               	movq	%rax, %rdx
-               	andq	$0xfff, %rdx            # imm = 0xFFF
-               	testl	%edx, %edx
+               	testl	$0xfff, %eax            # imm = 0xFFF
                	jne	<addr>
                	movsbq	(%rax), %rdx
                	cmpl	$0x1, %edx
@@ -183,9 +180,7 @@ Disassembly of section .text:
                	movb	$0x2, (%rdx)
                	leaq	0x2327(%rax), %rdx
                	movb	$0x3, (%rdx)
-               	movq	%rax, %rdx
-               	andq	$0x3f, %rdx
-               	testl	%edx, %edx
+               	testb	$0x3f, %al
                	jne	<addr>
                	movsbq	(%rax), %rax
                	cmpl	$0x1, %eax
@@ -225,8 +220,7 @@ Disassembly of section .text:
                	movq	%rcx, (%rax)
                	xorl	%eax, %eax
                	movw	$0x4, (%rcx)
-               	andq	$0x1f, %rcx
-               	testl	%ecx, %ecx
+               	testb	$0x1f, %cl
                	jne	<addr>
                	movl	$0x1, %eax
                	leaq	-0xa0(%rbp), %rsp
@@ -243,9 +237,7 @@ Disassembly of section .text:
                	xorl	%ecx, %ecx
                	movw	$0x1, (%rax)
                	movw	$0x2, 0x7e(%rax)
-               	movq	%rax, %rdx
-               	andq	$0xf, %rdx
-               	testl	%edx, %edx
+               	testb	$0xf, %al
                	jne	<addr>
                	movswq	(%rax), %rdx
                	cmpl	$0x1, %edx
@@ -268,9 +260,7 @@ Disassembly of section .text:
                	xorl	%ecx, %ecx
                	movq	$0x7, (%rax)
                	movq	$0x8, 0x18(%rax)
-               	movq	%rax, %rdx
-               	andq	$0xf, %rdx
-               	testl	%edx, %edx
+               	testb	$0xf, %al
                	jne	<addr>
                	movq	(%rax), %rdx
                	cmpq	$0x7, %rdx

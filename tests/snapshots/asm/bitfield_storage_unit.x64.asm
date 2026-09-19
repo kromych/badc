@@ -124,9 +124,7 @@ Disassembly of section .text:
                	movabsq	$-0xfffffe01, %r11      # imm = 0xFFFFFFFF000001FF
                	andq	%r11, %rcx
                	movl	%ecx, 0x4(%rax)
-               	movq	%rcx, %rax
-               	andq	$0xff, %rax
-               	testl	%eax, %eax
+               	testb	$-0x1, %cl
                	je	<addr>
                	movl	$0x17, %eax
                	leave
@@ -134,8 +132,7 @@ Disassembly of section .text:
                	movl	%ecx, %eax
                	movq	%rax, %rdx
                	sarq	$0x8, %rdx
-               	andq	$0x1, %rdx
-               	testl	%edx, %edx
+               	testb	$0x1, %dl
                	je	<addr>
                	movl	$0x18, %eax
                	leave

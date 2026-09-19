@@ -28,9 +28,7 @@ Disassembly of section .text:
 <check>:
                	movq	%fs:0x0, %rax
                	addq	$-0x20, %rax
-               	movq	%rax, %rcx
-               	andq	$0xf, %rcx
-               	testl	%ecx, %ecx
+               	testb	$0xf, %al
                	je	<addr>
                	leaq	0x1(%rdi), %rax
                	movslq	%eax, %rax

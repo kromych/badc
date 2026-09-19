@@ -45,14 +45,12 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx
                	movq	(%rcx), %rsi
                	movq	(%rsi), %rsi
-               	andq	$0x400000, %rsi         # imm = 0x400000
-               	testq	%rsi, %rsi
+               	testl	$0x400000, %esi         # imm = 0x400000
                	je	<addr>
                	movl	$0x4, %esi
                	movq	(%rcx), %rsi
                	movq	(%rsi), %rsi
-               	andq	$0x400000, %rsi         # imm = 0x400000
-               	testq	%rsi, %rsi
+               	testl	$0x400000, %esi         # imm = 0x400000
                	je	<addr>
                	movl	$0x4, %esi
                	orq	$0x100173, %rsi         # imm = 0x100173
@@ -63,14 +61,12 @@ Disassembly of section .text:
                	movq	$0x400000, (%rdx)       # imm = 0x400000
                	movq	(%rcx), %rdx
                	movq	(%rdx), %rdx
-               	andq	$0x400000, %rdx         # imm = 0x400000
-               	testq	%rdx, %rdx
+               	testl	$0x400000, %edx         # imm = 0x400000
                	je	<addr>
                	movl	$0x4, %eax
                	movq	(%rcx), %rax
                	movq	(%rax), %rax
-               	andq	$0x400000, %rax         # imm = 0x400000
-               	testq	%rax, %rax
+               	testl	$0x400000, %eax         # imm = 0x400000
                	je	<addr>
                	movl	$0x4, %eax
                	orq	$0x100173, %rax         # imm = 0x100173
@@ -87,8 +83,7 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	orq	$0x1000, %rax           # imm = 0x1000
                	movq	%rax, (%rcx)
-               	andq	$0x3, %rax
-               	testl	%eax, %eax
+               	testb	$0x3, %al
                	je	<addr>
                	movl	$0x3, %eax
                	retq

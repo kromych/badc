@@ -169,9 +169,7 @@ Disassembly of section .text:
                	movslq	-0xd0(%rbp), %rcx
                	cmpl	%ecx, %eax
                	jge	<addr>
-               	movq	%rax, %rcx
-               	andq	$0x1, %rcx
-               	testq	%rcx, %rcx
+               	testb	$0x1, %al
                	je	<addr>
                	leaq	-0x18(%rbp), %rcx
                	movq	%rcx, %r11

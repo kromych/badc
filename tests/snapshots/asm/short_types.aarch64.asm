@@ -87,8 +87,7 @@ Disassembly of section .text:
                	ret
                	lsl	x0, x2, #16
                	and	x0, x0, #0xffff
-               	and	x3, x0, #0x8000
-               	cbz	x3, <addr>
+               	tbz	w0, #0xf, <addr>
                	sub	x0, x0, #0x10, lsl #12  // =0x10000
                	sxth	x0, w0
                	cbz	w0, <addr>
@@ -98,8 +97,7 @@ Disassembly of section .text:
                	ret
                	lsl	x0, x2, #15
                	and	x0, x0, #0xffff
-               	and	x1, x0, #0x8000
-               	cbz	x1, <addr>
+               	tbz	w0, #0xf, <addr>
                	sub	x0, x0, #0x10, lsl #12  // =0x10000
                	sxth	x0, w0
                	mov	x17, #-0x8000           // =-32768
@@ -205,8 +203,7 @@ Disassembly of section .text:
                	add	x1, x1, x3
                	add	x0, x1, x2
                	and	x0, x0, #0xffff
-               	and	x1, x0, #0x8000
-               	cbz	x1, <addr>
+               	tbz	w0, #0xf, <addr>
                	sub	x0, x0, #0x10, lsl #12  // =0x10000
                	sxth	x1, w0
                	cbz	w1, <addr>

@@ -193,8 +193,7 @@ Disassembly of section .text:
                	ldrsw	x2, [x29, #0x10]
                	cmp	w0, w2
                	b.ge	<addr>
-               	and	x2, x0, #0x1
-               	cbz	x2, <addr>
+               	tbz	w0, #0x0, <addr>
                	mov	x17, x1
                	str	x9, [sp, #-0x10]!
                	ldrsw	x16, [x17, #0x1c]

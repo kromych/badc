@@ -271,8 +271,7 @@ Disassembly of section .text:
                	sub	x1, x29, #0x30
                	ldrb	w5, [x1, x0]
                	lsl	x2, x5, #1
-               	and	x1, x5, #0x80
-               	cbz	x1, <addr>
+               	tbz	w5, #0x7, <addr>
                	mov	x1, x6
                	eor	x1, x2, x1
                	and	x1, x1, #0xff

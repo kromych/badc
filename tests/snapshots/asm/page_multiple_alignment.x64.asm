@@ -27,74 +27,58 @@ Disassembly of section .text:
 
 <main>:
                	leaq	<rip>, %rcx
-               	movq	%rcx, %rax
-               	andq	$0x3fff, %rax           # imm = 0x3FFF
-               	testq	%rax, %rax
+               	testl	$0x3fff, %ecx           # imm = 0x3FFF
                	je	<addr>
                	movl	$0x1, %eax
                	retq
                	leaq	<rip>, %rdx
-               	movq	%rdx, %rax
-               	andq	$0x3fff, %rax           # imm = 0x3FFF
-               	testq	%rax, %rax
+               	testl	$0x3fff, %edx           # imm = 0x3FFF
                	je	<addr>
                	movl	$0x2, %eax
                	retq
                	leaq	<rip>, %rax
-               	andq	$0x3fff, %rax           # imm = 0x3FFF
-               	testq	%rax, %rax
+               	testl	$0x3fff, %eax           # imm = 0x3FFF
                	je	<addr>
                	movl	$0x3, %eax
                	retq
                	leaq	<rip>, %r8
-               	movq	%r8, %rax
-               	andq	$0x3fff, %rax           # imm = 0x3FFF
-               	testq	%rax, %rax
+               	testl	$0x3fff, %r8d           # imm = 0x3FFF
                	je	<addr>
                	movl	$0x4, %eax
                	retq
                	leaq	<rip>, %rsi
-               	movq	%rsi, %rax
-               	andq	$0x3fff, %rax           # imm = 0x3FFF
-               	testq	%rax, %rax
+               	testl	$0x3fff, %esi           # imm = 0x3FFF
                	je	<addr>
                	movl	$0x5, %eax
                	retq
                	leaq	0x4000(%rsi), %r9
-               	movq	%r9, %rax
-               	andq	$0x3fff, %rax           # imm = 0x3FFF
-               	testq	%rax, %rax
+               	testl	$0x3fff, %r9d           # imm = 0x3FFF
                	je	<addr>
                	movl	$0x6, %eax
                	retq
                	leaq	<rip>, %rax
                	leaq	0x8000(%rax), %rdi
-               	andq	$0x3fff, %rdi           # imm = 0x3FFF
-               	testq	%rdi, %rdi
+               	testl	$0x3fff, %edi           # imm = 0x3FFF
                	je	<addr>
                	movl	$0x7, %eax
                	retq
                	leaq	0xc000(%rax), %rdi
-               	andq	$0x3fff, %rdi           # imm = 0x3FFF
-               	testq	%rdi, %rdi
+               	testl	$0x3fff, %edi           # imm = 0x3FFF
                	je	<addr>
                	movl	$0x8, %eax
                	retq
                	addq	$0x10000, %rax          # imm = 0x10000
-               	andq	$0x3fff, %rax           # imm = 0x3FFF
-               	testq	%rax, %rax
+               	testl	$0x3fff, %eax           # imm = 0x3FFF
                	je	<addr>
                	movl	$0x9, %eax
                	retq
                	leaq	0x1(%rcx), %rax
-               	andq	$0x3fff, %rax           # imm = 0x3FFF
-               	testl	%eax, %eax
+               	testl	$0x3fff, %eax           # imm = 0x3FFF
                	jne	<addr>
                	movl	$0x14, %eax
                	retq
                	leaq	0x2000(%rcx), %rax
-               	andq	$0x3fff, %rax           # imm = 0x3FFF
-               	testl	%eax, %eax
+               	testl	$0x3fff, %eax           # imm = 0x3FFF
                	jne	<addr>
                	movl	$0x15, %eax
                	retq

@@ -26,9 +26,7 @@ Disassembly of section .text:
                	int3
 
 <pick>:
-               	movq	%rdi, %rax
-               	andq	$0x1, %rax
-               	testq	%rax, %rax
+               	testb	$0x1, %dil
                	je	<addr>
                	retq
                	movl	$0x80000000, %r10d      # imm = 0x80000000
@@ -37,13 +35,9 @@ Disassembly of section .text:
                	jmp	<addr>
 
 <grad_dot>:
-               	movq	%rdi, %rax
-               	andq	$0x1, %rax
-               	testq	%rax, %rax
+               	testb	$0x1, %dil
                	je	<addr>
-               	movq	%rdi, %rax
-               	andq	$0x2, %rax
-               	testq	%rax, %rax
+               	testb	$0x2, %dil
                	je	<addr>
                	addss	%xmm1, %xmm0
                	retq

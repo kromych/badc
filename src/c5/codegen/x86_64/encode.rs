@@ -2309,6 +2309,31 @@ mod tests {
     }
 
     #[test]
+    fn test_immediate_forms() {
+        // testb $1, %sil -> 40 F6 C6 01 (REX names sil, not dh);
+        // testb $0x80, %al -> A8 80; testl $0x8000, %r8d ->
+        // 41 F7 C0 00 80 00 00; testq $-8, %rdx -> 48 F7 C2 F8 FF FF FF;
+        // testl $0xffffffff, %ecx -> F7 C1 FF FF FF FF
+        let t = |w, r, imm| assemble(|c| emit_ri(c, Mnem::Test, w, r, imm));
+        assert_eq!(t(1, Reg::RSI, 1), vec![0x40, 0xF6, 0xC6, 0x01]);
+        assert_eq!(t(1, Reg::RAX, -128), vec![0xA8, 0x80]);
+        assert_eq!(
+            t(4, Reg::R8, 0x8000),
+            vec![0x41, 0xF7, 0xC0, 0x00, 0x80, 0x00, 0x00]
+        );
+        assert_eq!(
+            t(8, Reg::RDX, -8),
+            vec![0x48, 0xF7, 0xC2, 0xF8, 0xFF, 0xFF, 0xFF]
+        );
+        assert_eq!(t(4, Reg::RCX, -1), vec![0xF7, 0xC1, 0xFF, 0xFF, 0xFF, 0xFF]);
+        // btq $40, %rdi -> 48 0F BA E7 28
+        assert_eq!(
+            assemble(|c| emit_ri(c, Mnem::Bt, 8, Reg::RDI, 40)),
+            vec![0x48, 0x0F, 0xBA, 0xE7, 0x28]
+        );
+    }
+
+    #[test]
     fn short_branch_encodings() {
         // jmp rel8  ->  EB cb (2 bytes), vs the 5-byte E9 rel32 form.
         assert_eq!(assemble(|c| emit_jmp_rel8(c, 0x10)), vec![0xEB, 0x10]);

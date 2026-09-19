@@ -50,9 +50,7 @@ Disassembly of section .text:
                	leaq	-0x30(%rbp), %rax
                	movq	%rsi, (%rax)
                	movq	%rdi, 0x8(%rax)
-               	movq	%rax, %rsi
-               	andq	$0xf, %rsi
-               	testq	%rsi, %rsi
+               	testb	$0xf, %al
                	je	<addr>
                	leaq	<rip>, %rsi
                	movslq	(%rsi), %rdi
@@ -92,9 +90,7 @@ Disassembly of section .text:
                	subq	$0x1, %r11
                	jne	<addr>
                	movq	%rax, %rsp
-               	movq	%rax, %rcx
-               	andq	$0xf, %rcx
-               	testq	%rcx, %rcx
+               	testb	$0xf, %al
                	je	<addr>
                	leaq	<rip>, %rcx
                	movslq	(%rcx), %rdx

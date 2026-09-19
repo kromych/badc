@@ -93,8 +93,7 @@ Disassembly of section .text:
                	cmp	x1, x2
                	b.ne	<addr>
                	ldrsw	x0, [x0, #0x88]
-               	and	x0, x0, #0x4
-               	cbnz	w0, <addr>
+               	tbnz	w0, #0x2, <addr>
                	mov	x0, #0x4                // =4
                	ldr	x20, [sp]
                	add	sp, sp, #0x140

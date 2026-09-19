@@ -32,47 +32,37 @@ Disassembly of section .text:
 
 <main>:
                	leaq	<rip>, %rax
-               	movq	%rax, %rcx
-               	andq	$0xfff, %rcx            # imm = 0xFFF
-               	testl	%ecx, %ecx
+               	testl	$0xfff, %eax            # imm = 0xFFF
                	je	<addr>
                	movl	$0x1, %eax
                	retq
                	leaq	<rip>, %rdx
-               	movq	%rdx, %rcx
-               	andq	$0x3f, %rcx
-               	testl	%ecx, %ecx
+               	testb	$0x3f, %dl
                	je	<addr>
                	movl	$0x2, %eax
                	retq
                	leaq	<rip>, %rcx
-               	andq	$0x3f, %rcx
-               	testl	%ecx, %ecx
+               	testb	$0x3f, %cl
                	je	<addr>
                	movl	$0x3, %eax
                	retq
                	leaq	<rip>, %rcx
-               	andq	$0xf, %rcx
-               	testl	%ecx, %ecx
+               	testb	$0xf, %cl
                	je	<addr>
                	movl	$0x4, %eax
                	retq
                	leaq	<rip>, %rcx
-               	movq	%rcx, %rsi
-               	andq	$0xfff, %rsi            # imm = 0xFFF
-               	testl	%esi, %esi
+               	testl	$0xfff, %ecx            # imm = 0xFFF
                	je	<addr>
                	movl	$0x5, %eax
                	retq
                	leaq	<rip>, %rsi
-               	andq	$0x1f, %rsi
-               	testl	%esi, %esi
+               	testb	$0x1f, %sil
                	je	<addr>
                	movl	$0x6, %eax
                	retq
                	leaq	<rip>, %rsi
-               	andq	$0x7f, %rsi
-               	testl	%esi, %esi
+               	testb	$0x7f, %sil
                	je	<addr>
                	movl	$0x7, %eax
                	retq

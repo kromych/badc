@@ -255,9 +255,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movq	(%rax), %rax
                	callq	*%rax
-               	movq	%rbx, %rax
-               	andq	$0x1, %rax
-               	testl	%eax, %eax
+               	testb	$0x1, %bl
                	je	<addr>
                	movq	%r12, %rdx
                	jmp	<addr>

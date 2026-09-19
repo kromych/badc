@@ -167,8 +167,7 @@ Disassembly of section .text:
                	movl	%edx, -0x1b8(%rbp)
                	movl	-0x1d0(%rbp), %eax
                	shrq	$0x1c, %rax
-               	andq	$0x1, %rax
-               	testq	%rax, %rax
+               	testb	$0x1, %al
                	je	<addr>
                	leaq	-0x320(%rbp), %rax
                	leaq	<rip>, %rcx
@@ -208,8 +207,7 @@ Disassembly of section .text:
                	movl	%edx, -0x1b8(%rbp)
                	movl	-0x1d0(%rbp), %eax
                	shrq	$0x1c, %rax
-               	andq	$0x1, %rax
-               	testq	%rax, %rax
+               	testb	$0x1, %al
                	je	<addr>
                	leaq	-0x150(%rbp), %rax
                	vmovdqu	<rip>, %xmm0
@@ -249,8 +247,7 @@ Disassembly of section .text:
                	movl	%edx, -0x1b8(%rbp)
                	movl	-0x1d0(%rbp), %eax
                	shrq	$0x1c, %rax
-               	andq	$0x1, %rax
-               	testq	%rax, %rax
+               	testb	$0x1, %al
                	je	<addr>
                	leaq	-0x2d0(%rbp), %rax
                	leaq	<rip>, %rcx
@@ -300,8 +297,7 @@ Disassembly of section .text:
                	movl	%edx, -0x1b8(%rbp)
                	movl	-0x1d0(%rbp), %eax
                	shrq	$0x1c, %rax
-               	andq	$0x1, %rax
-               	testq	%rax, %rax
+               	testb	$0x1, %al
                	je	<addr>
                	movl	-0x30(%rbp), %eax
                	shrq	$0xc, %rax
@@ -370,8 +366,7 @@ Disassembly of section .text:
                	movl	%edx, -0x1b8(%rbp)
                	movl	-0x1d0(%rbp), %eax
                	shrq	$0x1c, %rax
-               	andq	$0x1, %rax
-               	testq	%rax, %rax
+               	testb	$0x1, %al
                	je	<addr>
                	movl	-0x18(%rbp), %eax
                	shrq	$0x5, %rax
@@ -412,8 +407,7 @@ Disassembly of section .text:
                	movl	%edx, -0x1b8(%rbp)
                	movl	-0x1d0(%rbp), %eax
                	shrq	$0x1c, %rax
-               	andq	$0x1, %rax
-               	testq	%rax, %rax
+               	testb	$0x1, %al
                	je	<addr>
                	movl	-0x18(%rbp), %eax
                	shrq	$0x5, %rax
@@ -469,8 +463,7 @@ Disassembly of section .text:
                	movl	%edx, -0x1b8(%rbp)
                	movl	-0x1d0(%rbp), %eax
                	shrq	$0x1c, %rax
-               	andq	$0x1, %rax
-               	testq	%rax, %rax
+               	testb	$0x1, %al
                	je	<addr>
                	movl	-0x18(%rbp), %eax
                	shrq	$0x5, %rax

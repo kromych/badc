@@ -82,15 +82,13 @@ Disassembly of section .text:
                	movl	$0x12, %eax
                	retq
                	leaq	<rip>, %rcx
-               	andq	$0x3f, %rcx
-               	testl	%ecx, %ecx
+               	testb	$0x3f, %cl
                	je	<addr>
                	movl	$0x13, %eax
                	retq
                	leaq	<rip>, %rsi
                	leaq	0x40(%rsi), %rcx
-               	andq	$0x3f, %rcx
-               	testl	%ecx, %ecx
+               	testb	$0x3f, %cl
                	je	<addr>
                	movl	$0x14, %eax
                	retq

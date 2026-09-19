@@ -46,8 +46,7 @@ Disassembly of section .text:
                	ret
                	ldrb	w2, [x0, #0x1]
                	asr	x2, x2, #1
-               	and	x2, x2, #0x1
-               	cbz	w2, <addr>
+               	tbz	w2, #0x0, <addr>
                	mov	x0, #0x2                // =2
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
@@ -64,12 +63,10 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldrb	w2, [x0, #0x1]
-               	and	x2, x2, #0x1
-               	cbz	x2, <addr>
+               	tbz	w2, #0x0, <addr>
                	ldrb	w0, [x0, #0x1]
                	asr	x0, x0, #1
-               	and	x0, x0, #0x1
-               	cbnz	w0, <addr>
+               	tbnz	w0, #0x0, <addr>
                	mov	w0, w1
                	asr	x2, x0, #11
                	and	x2, x2, #0x1

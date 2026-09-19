@@ -26,6 +26,10 @@ pub(super) enum LocalBranchKind {
     CbzW(Reg),
     /// CBNZ Wt, label.
     CbnzW(Reg),
+    /// TBZ Rt, #bit, label: `imm14` field, +/-32 KiB reach.
+    Tbz(Reg, u8),
+    /// TBNZ Rt, #bit, label.
+    Tbnz(Reg, u8),
     /// B.cond label.
     Bcc(Cond),
 }
@@ -39,6 +43,8 @@ impl LocalBranchKind {
             LocalBranchKind::Cbnz(rt) => Some(LocalBranchKind::Cbz(rt)),
             LocalBranchKind::CbzW(rt) => Some(LocalBranchKind::CbnzW(rt)),
             LocalBranchKind::CbnzW(rt) => Some(LocalBranchKind::CbzW(rt)),
+            LocalBranchKind::Tbz(rt, bit) => Some(LocalBranchKind::Tbnz(rt, bit)),
+            LocalBranchKind::Tbnz(rt, bit) => Some(LocalBranchKind::Tbz(rt, bit)),
             LocalBranchKind::Bcc(cond) => Some(LocalBranchKind::Bcc(cond.flip())),
         }
     }
@@ -48,6 +54,7 @@ impl LocalBranchKind {
     fn word(self, imm: i32) -> Option<u32> {
         let bits = match self {
             LocalBranchKind::B => 26,
+            LocalBranchKind::Tbz(..) | LocalBranchKind::Tbnz(..) => 14,
             _ => 19,
         };
         if !(-(1 << (bits - 1))..(1 << (bits - 1))).contains(&imm) {
@@ -59,6 +66,8 @@ impl LocalBranchKind {
             LocalBranchKind::Cbnz(rt) => enc_cbnz(rt, imm),
             LocalBranchKind::CbzW(rt) => super::encode::enc_cbz_w(rt, imm),
             LocalBranchKind::CbnzW(rt) => super::encode::enc_cbnz_w(rt, imm),
+            LocalBranchKind::Tbz(rt, bit) => super::encode::enc_tbz(rt, bit, imm),
+            LocalBranchKind::Tbnz(rt, bit) => super::encode::enc_tbnz(rt, bit, imm),
             LocalBranchKind::Bcc(cond) => enc_b_cond(cond, imm),
         })
     }
@@ -983,6 +992,19 @@ impl FunctionEmitter<'_, '_> {
             self.emit_cond(block_idx, target, LocalBranchKind::Bcc(bcc));
             return self.branch_unless_next(block_idx, fall_through);
         }
+        if let Some((value, bit)) = fused_bit_test(func, alloc, cond) {
+            let place = place_of(alloc, value);
+            let Some(rt) = materialize_int(self.cx.code, place, scratch.primary, frame) else {
+                return self.rollback(bail("Bz/Bnz: tested value Place not int", value, place));
+            };
+            let kind = if negate {
+                LocalBranchKind::Tbz(rt, bit)
+            } else {
+                LocalBranchKind::Tbnz(rt, bit)
+            };
+            self.emit_cond(block_idx, target, kind);
+            return self.branch_unless_next(block_idx, fall_through);
+        }
         let cond_place = place_of(alloc, cond);
         let rt = if let Place::FpReg(dr) = cond_place {
             emit(self.cx.code, enc_fmov_d_to_x(scratch.primary, dr));
@@ -1887,6 +1909,30 @@ fn fused_branch_cond(
     };
     let positive = compare_cond(op).or_else(|| fp_compare_cond(op))?;
     Some(if negate { positive.flip() } else { positive })
+}
+
+/// The value and bit a branch-fused one-bit mask tests (`tbz` / `tbnz`).
+fn fused_bit_test(
+    func: &super::super::ir::FunctionSsa,
+    alloc: &Allocation,
+    cond: super::super::ir::ValueId,
+) -> Option<(super::super::ir::ValueId, u8)> {
+    if !alloc
+        .branch_fused
+        .get(cond as usize)
+        .copied()
+        .unwrap_or(false)
+    {
+        return None;
+    }
+    match func.insts.get(cond as usize)? {
+        Inst::BinopI {
+            op: BinOp::And,
+            lhs,
+            rhs_imm,
+        } => Some((*lhs, (*rhs_imm as u64).trailing_zeros() as u8)),
+        _ => None,
+    }
 }
 
 /// Emit the function epilogue + `ret` for a Return terminator.

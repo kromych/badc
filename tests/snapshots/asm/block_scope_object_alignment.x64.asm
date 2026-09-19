@@ -41,42 +41,34 @@ Disassembly of section .text:
                	popq	%rcx
                	movq	$0x9, (%rsp)
                	leaq	<rip>, %rax
-               	movq	%rax, %rcx
-               	andq	$0xf, %rcx
-               	testl	%ecx, %ecx
+               	testb	$0xf, %al
                	je	<addr>
                	movl	$0x1, %eax
                	leaq	-0x90(%rbp), %rsp
                	leave
                	retq
                	leaq	<rip>, %rsi
-               	movq	%rsi, %rcx
-               	andq	$0x1f, %rcx
-               	testl	%ecx, %ecx
+               	testb	$0x1f, %sil
                	je	<addr>
                	movl	$0x2, %eax
                	leaq	-0x90(%rbp), %rsp
                	leave
                	retq
                	leaq	<rip>, %rcx
-               	movq	%rcx, %rdi
-               	andq	$0xf, %rdi
-               	testl	%edi, %edi
+               	testb	$0xf, %cl
                	je	<addr>
                	movl	$0x3, %eax
                	leaq	-0x90(%rbp), %rsp
                	leave
                	retq
-               	andq	$0xf, %rdx
-               	testl	%edx, %edx
+               	testb	$0xf, %dl
                	je	<addr>
                	movl	$0x4, %eax
                	leaq	-0x90(%rbp), %rsp
                	leave
                	retq
                	leaq	(%rsp), %rdx
-               	andq	$0x1f, %rdx
-               	testl	%edx, %edx
+               	testb	$0x1f, %dl
                	je	<addr>
                	movl	$0x5, %eax
                	leaq	-0x90(%rbp), %rsp
@@ -84,9 +76,7 @@ Disassembly of section .text:
                	retq
                	movq	%fs:0x0, %rdx
                	addq	$-0x18, %rdx
-               	movq	%rdx, %rdi
-               	andq	$0x7, %rdi
-               	testl	%edi, %edi
+               	testb	$0x7, %dl
                	je	<addr>
                	movl	$0x6, %eax
                	leaq	-0x90(%rbp), %rsp
@@ -94,9 +84,7 @@ Disassembly of section .text:
                	retq
                	movq	%fs:0x0, %rdi
                	addq	$-0x8, %rdi
-               	movq	%rdi, %r8
-               	andq	$0x7, %r8
-               	testl	%r8d, %r8d
+               	testb	$0x7, %dil
                	je	<addr>
                	movl	$0x7, %eax
                	leaq	-0x90(%rbp), %rsp

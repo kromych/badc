@@ -48,6 +48,8 @@ enum CondForm {
     BCond,
     Cbz,
     Cbnz,
+    Tbz,
+    Tbnz,
 }
 
 fn cond_form(w: u32) -> Option<CondForm> {
@@ -57,6 +59,10 @@ fn cond_form(w: u32) -> Option<CondForm> {
         Some(CondForm::Cbz)
     } else if w & 0x7F00_0000 == 0x3500_0000 {
         Some(CondForm::Cbnz)
+    } else if w & 0x7F00_0000 == 0x3600_0000 {
+        Some(CondForm::Tbz)
+    } else if w & 0x7F00_0000 == 0x3700_0000 {
+        Some(CondForm::Tbnz)
     } else {
         None
     }
@@ -165,6 +171,42 @@ fn far_conditional_branch_is_the_inverted_test_over_b() {
         [CondForm::BCond, CondForm::Cbz, CondForm::Cbnz],
         "the far pairs do not cover every conditional form"
     );
+}
+
+/// `tbz` / `tbnz` carry a 14-bit word displacement (+-32 KiB). A bit test
+/// over a hole past that is the inverted test over a `B`; over a short
+/// one it stays one instruction. Either way it tests bit 2.
+#[test]
+fn far_bit_test_is_the_inverted_test_over_b() {
+    let src = |space: u32| {
+        format!(
+            "int bit(long k) {{ int s = 1; if (k & 4) {{ s = 13; \
+             __asm__ volatile(\"b 1f\\n.space {space:#x}\\n1:\"); }} return s; }}"
+        )
+    };
+    let bit_tests = |ws: &[u32]| -> Vec<usize> {
+        (0..ws.len())
+            .filter(|&i| matches!(cond_form(ws[i]), Some(CondForm::Tbz | CondForm::Tbnz)))
+            .collect()
+    };
+    let tested_bit = |w: u32| ((w >> 31) << 5) | ((w >> 19) & 31);
+    for optimize in [false, true] {
+        let ws = words(&src(0x100), "bit", optimize);
+        let near = bit_tests(&ws);
+        assert!(
+            near.len() == 1 && tested_bit(ws[near[0]]) == 2,
+            "-O {optimize}: no single test of bit 2: {ws:08x?}"
+        );
+        let ws = words(&src(0x10000), "bit", optimize);
+        assert!(conditional_branches_land_inside(&ws), "-O {optimize}");
+        let far = bit_tests(&ws).into_iter().any(|i| {
+            a64_branch(ws[i], i) == Some((i as i64 + 2, false))
+                && a64_branch(ws[i + 1], i + 1)
+                    .is_some_and(|(t, uncond)| uncond && (t - i as i64 - 1).abs() >= 1 << 13)
+                && tested_bit(ws[i]) == 2
+        });
+        assert!(far, "-O {optimize}: no bit test over a far B: {ws:08x?}");
+    }
 }
 
 /// `for` at `-O0` lays its blocks out as header, step, body, exit, then the

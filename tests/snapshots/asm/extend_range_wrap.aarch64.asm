@@ -115,8 +115,7 @@ Disassembly of section .text:
                	add	x1, x1, #0x1
                	cmp	w1, #0x5
                	b.eq	<addr>
-               	and	x3, x1, #0x1
-               	cbz	x3, <addr>
+               	tbz	w1, #0x0, <addr>
                	add	x0, x0, #0x1
                	b	<addr>
                	sxtw	x0, w0

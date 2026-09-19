@@ -60,8 +60,7 @@ Disassembly of section .text:
                	add	x0, x0, x1
                	lsr	x1, x0, #32
                	add	x0, x0, x1
-               	and	x0, x0, #0x1
-               	cbz	w0, <addr>
+               	tbz	w0, #0x0, <addr>
                	mov	x0, #0xc                // =12
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10

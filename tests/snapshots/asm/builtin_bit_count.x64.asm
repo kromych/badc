@@ -124,8 +124,7 @@ Disassembly of section .text:
                	movq	%rax, %rdx
                	shrq	$0x10, %rdx
                	addq	%rdx, %rax
-               	andq	$0x7f, %rax
-               	testl	%eax, %eax
+               	testb	$0x7f, %al
                	je	<addr>
                	movl	$0x17, %eax
                	leave
@@ -192,8 +191,7 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	shrq	$0x20, %rcx
                	addq	%rcx, %rax
-               	andq	$0x7f, %rax
-               	testl	%eax, %eax
+               	testb	$0x7f, %al
                	je	<addr>
                	movl	$0x1d, %eax
                	leave

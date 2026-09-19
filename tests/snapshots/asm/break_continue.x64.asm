@@ -30,9 +30,7 @@ Disassembly of section .text:
                	movq	%rcx, %rax
                	cmpl	$0x5, %eax
                	je	<addr>
-               	movq	%rax, %rdx
-               	andq	$0x1, %rdx
-               	testl	%edx, %edx
+               	testb	$0x1, %al
                	je	<addr>
                	addq	%rax, %rcx
                	incq	%rax

@@ -119,9 +119,7 @@ Disassembly of section .text:
                	incq	%rax
                	cmpl	$0x5, %eax
                	je	<addr>
-               	movq	%rax, %rdx
-               	andq	$0x1, %rdx
-               	testq	%rdx, %rdx
+               	testb	$0x1, %al
                	je	<addr>
                	incq	%rdi
                	jmp	<addr>

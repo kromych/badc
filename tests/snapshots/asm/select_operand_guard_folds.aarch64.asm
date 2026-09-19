@@ -38,13 +38,11 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	ldr	x3, [x0]
                	ldr	x3, [x3]
-               	and	x3, x3, #0x400000
-               	cbz	x3, <addr>
+               	tbz	w3, #0x16, <addr>
                	mov	x3, #0x4                // =4
                	ldr	x3, [x0]
                	ldr	x3, [x3]
-               	and	x3, x3, #0x400000
-               	cbz	x3, <addr>
+               	tbz	w3, #0x16, <addr>
                	mov	x3, #0x4                // =4
                	mov	x17, #0x173             // =371
                	movk	x17, #0x10, lsl #16
@@ -59,13 +57,11 @@ Disassembly of section .text:
                	str	x3, [x2]
                	ldr	x2, [x0]
                	ldr	x2, [x2]
-               	and	x2, x2, #0x400000
-               	cbz	x2, <addr>
+               	tbz	w2, #0x16, <addr>
                	mov	x2, #0x4                // =4
                	ldr	x0, [x0]
                	ldr	x0, [x0]
-               	and	x0, x0, #0x400000
-               	cbz	x0, <addr>
+               	tbz	w0, #0x16, <addr>
                	mov	x0, #0x4                // =4
                	mov	x17, #0x173             // =371
                	movk	x17, #0x10, lsl #16

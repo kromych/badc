@@ -14,17 +14,14 @@ Disassembly of section .text:
                	brk	#0x1
 
 <pick>:
-               	and	x0, x0, #0x1
-               	cbz	x0, <addr>
+               	tbz	w0, #0x0, <addr>
                	ret
                	fneg	s0, s0
                	b	<addr>
 
 <grad_dot>:
-               	and	x1, x0, #0x1
-               	cbz	x1, <addr>
-               	and	x0, x0, #0x2
-               	cbz	x0, <addr>
+               	tbz	w0, #0x0, <addr>
+               	tbz	w0, #0x1, <addr>
                	fadd	s0, s0, s1
                	ret
                	fneg	s1, s1

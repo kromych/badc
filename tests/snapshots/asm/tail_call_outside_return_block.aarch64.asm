@@ -61,21 +61,18 @@ Disassembly of section .text:
                	cbz	x1, <addr>
                	add	x0, x1, #0x18
                	ldr	x0, [x0]
-               	and	x0, x0, #0x4
-               	cbz	x0, <addr>
+               	tbz	w0, #0x2, <addr>
                	mov	x0, x1
                	ldp	x29, x30, [sp], #0x10
                	ret
                	add	x0, x1, #0x10
                	ldr	x0, [x0]
-               	and	x0, x0, #0x2
-               	cbz	x0, <addr>
+               	tbz	w0, #0x1, <addr>
                	mov	x0, #0x1                // =1
                	b	<addr>
                	add	x0, x1, #0x8
                	ldr	x0, [x0]
-               	and	x0, x0, #0x1
-               	cbz	x0, <addr>
+               	tbz	w0, #0x0, <addr>
                	mov	x0, #0x0                // =0
                	b	<addr>
                	ldr	x0, [x1]

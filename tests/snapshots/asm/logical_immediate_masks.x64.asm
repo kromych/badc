@@ -210,9 +210,7 @@ Disassembly of section .text:
 
 <classify>:
                	xorl	%eax, %eax
-               	movq	%rdi, %rcx
-               	andq	$0x40, %rcx
-               	testq	%rcx, %rcx
+               	testb	$0x40, %dil
                	je	<addr>
                	movl	$0x1, %eax
                	movq	%rdi, %rcx
@@ -220,14 +218,10 @@ Disassembly of section .text:
                	cmpl	$0x30, %ecx
                	jne	<addr>
                	orq	$0x2, %rax
-               	movabsq	$-0x8000000000000000, %rcx # imm = 0x8000000000000000
-               	andq	%rdi, %rcx
-               	testq	%rcx, %rcx
-               	jne	<addr>
+               	btq	$0x3f, %rdi
+               	jb	<addr>
                	orq	$0x4, %rax
-               	movq	%rdi, %rcx
-               	andq	$0xf0f0f0f, %rcx        # imm = 0xF0F0F0F
-               	testq	%rcx, %rcx
+               	testl	$0xf0f0f0f, %edi        # imm = 0xF0F0F0F
                	je	<addr>
                	orq	$0x8, %rax
                	retq

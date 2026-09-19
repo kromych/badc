@@ -22,8 +22,7 @@ Disassembly of section .text:
                	orr	x1, x0, #0x1
                	stur	x1, [x29, #-0x8]
                	ldur	x1, [x29, #-0x8]
-               	and	x1, x1, #0x1
-               	cbnz	w1, <addr>
+               	tbnz	w1, #0x0, <addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10

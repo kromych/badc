@@ -585,6 +585,10 @@ pub(super) fn emit_binop_imm(
     frame: Frame,
     scratch: &ScratchPool,
 ) -> Emit {
+    // A one-bit mask the branch alone reads is the branch's `tbz` / `tbnz`.
+    if op == BinOp::And && alloc.branch_fused.get(v as usize).copied().unwrap_or(false) {
+        return Ok(());
+    }
     let Some(rd) = int_or_spill_scratch(dst, scratch) else {
         return fail("BinopI: dst not int reg / spill");
     };

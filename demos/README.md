@@ -18,9 +18,8 @@ The multi-source library demos (miniz, kissfft, bzip2, tweetnacl,
 monocypher, bearssl) each build their smoke harness three different
 ways at both `-O0` and `-O`:
 
-1. **Amalgamation** -- one combined source file straight through
-   `badc`. The classic single-TU path; same shape `sqlite3.c +
-   shell.c` already exercises.
+1. **Amalgamation** -- one combined source file straight through `badc`. The
+   classic single-TU path; same shape `sqlite3.c + shell.c` already exercises.
 2. **Translation units** -- `badc -c` on each `.c` file (emitting
    native ELF64 ET_REL `.o` files with machine code, `.symtab`,
    and `.rela.text` relocs), then `badc -o app *.o` to link them.
@@ -105,13 +104,12 @@ file-backed scenarios at both -O and noO. See
 
 ## lua/
 
-End-to-end of the upstream Lua 5.5.0 interpreter. Pinned release,
-fetched on demand by `demos/lua/setup.py`; builds the interpreter
-with badc at both -O and noO and runs a curated subset of the
-upstream test suite (`bitwise / calls / closure / constructs /
-coroutine / cstack / errors / events / goto / literals / locals /
-math / nextvar / pm / sort / strings / tpack / utf8 / vararg`)
-against each lane. See [`lua/README.md`](./lua/README.md).
+End-to-end of the upstream Lua 5.5.0 interpreter. Pinned release, fetched on
+demand by `demos/lua/setup.py`; builds the interpreter with badc at both -O and
+noO and runs a curated subset of the upstream test suite (`bitwise`, `calls`,
+`closure`, `constructs`, `coroutine`, `cstack`, `errors`, `events`, `goto`,
+`literals`, `locals`, `math`, `nextvar`, `pm`, `sort`, `strings`, `tpack`,
+`utf8`, `vararg`) against each lane. See [`lua/README.md`](./lua/README.md).
 
 ## miniz/
 
@@ -320,9 +318,7 @@ test-signing on the target. Same compiler plumbing as
 
 ## nt_loader/
 
-Launches user-mode NT-native programs (e.g. `nt_hello`)
-through a transacted `SEC_IMAGE` section and waits up to two
-seconds on a named event the child signals. Builds in both
-UNICODE (`wmain`, `__wgetmainargs`) and ANSI (`main`,
-`__getmainargs`) modes from the same source; `#define
-USE_UNICODE` selects.
+Launches user-mode NT-native programs (e.g. `nt_hello`) through a transacted
+`SEC_IMAGE` section and waits up to two seconds on a named event the child
+signals. Builds in both UNICODE (`wmain`, `__wgetmainargs`) and ANSI (`main`,
+`__getmainargs`) modes from the same source; `#define USE_UNICODE` selects.

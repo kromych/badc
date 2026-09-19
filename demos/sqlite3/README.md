@@ -31,9 +31,9 @@ python demos/sqlite3/setup.py   # fetches into demos/sqlite3/
 python demos/sqlite3/smoke.py   # builds + runs in-memory + file-backed scenarios
 ```
 
-`smoke.py` returns 0 with `smoke OK: in-memory + file-backed
-both green` when everything passes; on a regression it prints a
-unified diff against the expected output and returns 1.
+`smoke.py` returns 0 with `smoke OK: in-memory + file-backed both green` when
+everything passes; on a regression it prints a unified diff against the expected
+output and returns 1.
 
 `smoke.py` honours `BADC=path/to/badc` if you want a debug or
 custom-built binary instead of `target/release/badc`.

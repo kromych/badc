@@ -65,16 +65,15 @@ by `scripts/snapshots.py`. A codegen change shows up there as a reviewable diff.
 python3 scripts/coverage.py [--release] [--lcov FILE] [--html DIR] [--check PCT] [-- FILTER]
 ```
 
-`scripts/coverage.py` builds and runs `cargo test --features full` with
-rustc's `-C instrument-coverage` in `target/coverage`, merges the raw profile
-every test process and every `badc` the CLI suites spawned wrote at exit, and
-reports line and function coverage over `src/`: `llvm-cov`'s per-file table,
-a table per source directory, and the twenty files with the most uncovered
-lines. `src/c5/tests/` and the `tests.rs` modules are left out; test functions
-inside an inline `#[cfg(test)]` module count with their file. `--check PCT`
-fails below a line-coverage floor, `--clean` drops the profiles and the
-instrumented build. `llvm-profdata` and `llvm-cov` come from `rustup component
-add llvm-tools`.
+`scripts/coverage.py` builds and runs `cargo test --features full` with rustc's
+`-C instrument-coverage` in `target/coverage`, merges the raw profile every test
+process and every `badc` the CLI suites spawned wrote at exit, and reports line
+and function coverage over `src/`: `llvm-cov`'s per-file table, a table per
+source directory, and the twenty files with the most uncovered lines.
+`src/c5/tests/` and the `tests.rs` modules are left out; test functions inside
+an inline `#[cfg(test)]` module count with their file. `--check PCT` fails below
+a line-coverage floor, `--clean` drops the profiles and the instrumented build.
+`llvm-profdata` and `llvm-cov` come from `rustup component add llvm-tools`.
 
 ## CI
 
@@ -108,9 +107,9 @@ target. Per lane:
 
 * `cargo test`, then `cargo test --release` over all test targets. Release
   exercises the JIT and native fixture-parity paths a debug build skips.
-* the same run again under the register-pressure caps (`BADC_MAX_GPR=2
-  BADC_MAX_FPR=2`, `--features "codegen_test full"`), as CI's pressure
-  matrix does -- Linux lanes only, which is all CI covers.
+* the same run again under the register-pressure caps
+  (`BADC_MAX_GPR=2 BADC_MAX_FPR=2`, `--features "codegen_test full"`), as CI's
+  pressure matrix does -- Linux lanes only, which is all CI covers.
 * the gating demos for that lane kind, run concurrently. The roster is
   `GATING_DEMOS` in the script, which records why each demo earns its
   place; `--demo-jobs` bounds how many run at a time, never which ones.
@@ -118,12 +117,12 @@ target. Per lane:
   `tests/snapshots/` and fail on drift, as CI's `snapshots clean` job
   does. It needs `llvm-objdump`, since the committed snapshots were
   disassembled with it and GNU objdump's text does not match.
-* the kernel step on every Linux lane: `demos/linux/verify.py --linker
-  badc` over the pinned `defconfig` release -- compile, link **and** boot.
-  A build that links clean and then prints nothing on the console has
-  reached CI before, so the boots are part of the gate rather than an
-  extra. A box with no emulator for its own architecture keeps the
-  compile and link cover and says so in the summary.
+* the kernel step on every Linux lane: `demos/linux/verify.py --linker badc`
+  over the pinned `defconfig` release -- compile, link **and** boot. A build
+  that links clean and then prints nothing on the console has reached CI before,
+  so the boots are part of the gate rather than an extra. A box with no emulator
+  for its own architecture keeps the compile and link cover and says so in the
+  summary.
 
 The macOS lane skips the kernel step (that corpus is Linux-only), the
 pressure rerun and the clippy step. `--no-kernel` and `--no-snapshots`

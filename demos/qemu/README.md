@@ -68,8 +68,8 @@ the system shared libraries.
 - badc compiles every translation unit of the target (a compile failure fails
   the demo);
 - badc archives the in-tree libraries with `--ar`;
-- badc's own linker self-links the emulator and it reports `QEMU emulator
-  version 11.1.1`.
+- badc's own linker self-links the emulator and it reports
+  `QEMU emulator version 11.1.1`.
 
 `$BADC_QEMU_OPT=1` also runs the `-O` lane; `$BADC_QEMU_JOBS` sets the compile
 parallelism.
@@ -78,16 +78,16 @@ parallelism.
 
 The smoke can boot the emulator it just built on a real kernel and require a
 full round trip: the kernel boots, reaches its init process / a busybox shell,
-faults nowhere, and the guest powers the machine off on request. The gate is
-the serial log showing a boot marker (`Linux version` / `Booting Linux`) and
-userspace (`Run /sbin/init`), no fault marker (`Kernel panic`, `Unable to
-handle`, `Oops`, ...), and a clean power-down (the smoke sends `poweroff -f`
-over the console and the guest exits rc 0). The boot runs with `-smp 16`,
-`-nographic`, a 60s timeout, and `-no-reboot`. aarch64 `-M virt` and x86_64
-`-M q35` boot the EFI-stub kernel through UEFI firmware when one is configured --
-AAVMF (aarch64, with `acpi=off` so the PL011 probes as `ttyAMA0`) and OVMF
-(x86_64) -- matching a real UEFI system; without a configured firmware aarch64
-falls back to `-M virt`'s legacy `-kernel` loader.
+faults nowhere, and the guest powers the machine off on request. The gate is the
+serial log showing a boot marker (`Linux version` / `Booting Linux`) and
+userspace (`Run /sbin/init`), no fault marker (`Kernel panic`,
+`Unable to handle`, `Oops`, ...), and a clean power-down (the smoke sends
+`poweroff -f` over the console and the guest exits rc 0). The boot runs with
+`-smp 16`, `-nographic`, a 60s timeout, and `-no-reboot`. aarch64 `-M virt` and
+x86_64 `-M q35` boot the EFI-stub kernel through UEFI firmware when one is
+configured -- AAVMF (aarch64, with `acpi=off` so the PL011 probes as `ttyAMA0`)
+and OVMF (x86_64) -- matching a real UEFI system; without a configured firmware
+aarch64 falls back to `-M virt`'s legacy `-kernel` loader.
 
 `$BADC_QEMU_BOOT` drives it:
 

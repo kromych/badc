@@ -245,13 +245,13 @@ sudo cat /sys/fs/pstore/dmesg-efi-*
 sudo rm /sys/fs/pstore/dmesg-efi-* # clear before the next attempt
 ```
 
-`efi_pstore` is **builtin** on the Fedora kernels this box runs (`modinfo
-efi_pstore` reports `filename: (builtin)`), and it ships with
-`pstore_disable=Y`. A builtin takes its parameters from the kernel command
-line, not from `modprobe.d`: a `modprobe.d` drop-in for it is read by nothing
-and changes nothing. The parameter therefore goes on the badc entry's command
-line, as `efi_pstore.pstore_disable=0`, where it applies to the kernel whose
-death is being recorded and to no other.
+`efi_pstore` is **builtin** on the Fedora kernels this box runs
+(`modinfo efi_pstore` reports `filename: (builtin)`), and it ships with
+`pstore_disable=Y`. A builtin takes its parameters from the kernel command line,
+not from `modprobe.d`: a `modprobe.d` drop-in for it is read by nothing and
+changes nothing. The parameter therefore goes on the badc entry's command line,
+as `efi_pstore.pstore_disable=0`, where it applies to the kernel whose death is
+being recorded and to no other.
 
 The ESP has 2 GB free and EFI variable space is small; clearing records between
 runs keeps the variable store from filling.

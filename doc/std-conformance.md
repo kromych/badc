@@ -219,13 +219,12 @@ implemented; a selector is a diagnostic's name, one of its aliases, its
 `B` code or a group name, and one no catalogue row answers to is refused
 by name. `--list-diagnostics` prints the catalogue.
 
-The diagnostic pragmas -- `#pragma GCC diagnostic`, `#pragma clang
-diagnostic` and MSVC's `#pragma warning(...)` -- take the same selectors
-and decide a row's level at the source position they precede, for the
-parser's diagnostics as well as the preprocessor's. A pragma covering
-the position wins over the command line; `push` and `pop` bound the
-region it covers. A link diagnostic has no position in a translation
-unit, so the command line alone governs one.
+The diagnostic pragmas -- `#pragma GCC diagnostic`, `#pragma clang diagnostic`
+and MSVC's `#pragma warning(...)` -- take the same selectors and decide a row's
+level at the source position they precede, for the parser's diagnostics as well
+as the preprocessor's. A pragma covering the position wins over the command
+line; `push` and `pop` bound the region it covers. A link diagnostic has no
+position in a translation unit, so the command line alone governs one.
 
 `-Wa,<opt>` and `-Xassembler <opt>` are checked rather than passed on, since
 the assembler is built in: an option outside the accepted set is refused by
@@ -480,11 +479,11 @@ name. TODO: hold the bound version and the declared interface in step.
   composite rules instead of `v0`-`v3`. TODO: homogeneous vector
   aggregates.
 - GCC named-rest variadic macro (`#define foo(args...)`).
-- The GNU89 inline linkage model, per function via
-  `__attribute__((gnu_inline))` and per unit via `-fgnu89-inline`: `extern
-  inline` provides no external definition and a plain `inline` does, the
-  inverse of C99 6.7.4p6. With `--gnu`, `__GNUC_STDC_INLINE__` or
-  `__GNUC_GNU_INLINE__` reports which model is in force.
+- The GNU89 inline linkage model, per function via `__attribute__((gnu_inline))`
+  and per unit via `-fgnu89-inline`: `extern inline` provides no external
+  definition and a plain `inline` does, the inverse of C99 6.7.4p6. With
+  `--gnu`, `__GNUC_STDC_INLINE__` or `__GNUC_GNU_INLINE__` reports which model
+  is in force.
 - `--gnu` additionally defines the GCC identity macros (`__GNUC__` 4,
   `__GNUC_MINOR__` 3, `__GNUC_PATCHLEVEL__` 0, `__VERSION__`),
   `__STRICT_ANSI__`, the `__GCC_HAVE_SYNC_COMPARE_AND_SWAP_{1,2,4,8}` set,
@@ -572,21 +571,20 @@ name. TODO: hold the bound version and the declared interface in step.
   likewise warns, except that the `pack`, `once`, `STDC`, `GCC` and `clang`
   heads are accepted silently.
 - `__BADC_VERSION__`, `__BADC_TARGET__`, `__BADC_WINDOWS__` predefines.
-- Extension: a `#if` / `#elif` controlling expression accepts a string
-  operand -- a string literal, with any encoding prefix and its escapes
-  undecoded, or a macro expanding to one -- in exactly one position: as an
-  operand of `==` / `!=` whose other operand is also a string. The two
-  compare by spelling, prefix excluded (`#if __BADC_TARGET__ ==
-  "macos-aarch64"`, `#if __BADC_VERSION__ != "0.1.0"`). C99 6.10.1p4
-  restricts `#if` to an integer constant expression; badc admits the
-  comparison so the string-valued `__BADC_TARGET__` / `__BADC_VERSION__`
-  predefines can gate source. A string anywhere else -- the whole
-  controlling expression, an operand of `!`, `~`, unary `+` / `-`, of an
-  arithmetic, bitwise, shift, relational or logical operator, a `?:`
-  condition or arm, or the other side of an integer in `==` / `!=` -- is
-  an error naming the operator, whether or not that operand is evaluated.
-  Adjacent string literals do not concatenate. An identifier left after
-  macro expansion is 0 as in C99, a macro whose unquoted body is not a
+- Extension: a `#if` / `#elif` controlling expression accepts a string operand
+  -- a string literal, with any encoding prefix and its escapes undecoded, or a
+  macro expanding to one -- in exactly one position: as an operand of `==` /
+  `!=` whose other operand is also a string. The two compare by spelling, prefix
+  excluded (`#if __BADC_TARGET__ == "macos-aarch64"`,
+  `#if __BADC_VERSION__ != "0.1.0"`). C99 6.10.1p4 restricts `#if` to an integer
+  constant expression; badc admits the comparison so the string-valued
+  `__BADC_TARGET__` / `__BADC_VERSION__` predefines can gate source. A string
+  anywhere else -- the whole controlling expression, an operand of `!`, `~`,
+  unary `+` / `-`, of an arithmetic, bitwise, shift, relational or logical
+  operator, a `?:` condition or arm, or the other side of an integer in `==` /
+  `!=` -- is an error naming the operator, whether or not that operand is
+  evaluated. Adjacent string literals do not concatenate. An identifier left
+  after macro expansion is 0 as in C99, a macro whose unquoted body is not a
   number included.
 
 ## Roadmap

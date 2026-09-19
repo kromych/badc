@@ -95,12 +95,12 @@ hello.c:4: warning: unused variable `x` [B2001] [-Wunused-variable]
 hello.c:7: error: `)` expected after cast [B2020] [syntax]
 ```
 
-`-W<name>`, `-Wno-<name>`, `-Werror=<name>` and `-Wno-error=<name>` select
-one diagnostic by either spelling; `-Wall`, `-Wextra`, `-Wpedantic`, `-Werror`
-and `-w` work as they do on gcc, and `#pragma GCC diagnostic`, `#pragma clang
-diagnostic` and MSVC's `#pragma warning(...)` apply from their position.
-`badc --explain <name>` describes one row, `badc --list-diagnostics` prints
-the catalogue; [diagnostics](diagnostics.md) is the same table.
+`-W<name>`, `-Wno-<name>`, `-Werror=<name>` and `-Wno-error=<name>` select one
+diagnostic by either spelling; `-Wall`, `-Wextra`, `-Wpedantic`, `-Werror` and
+`-w` work as they do on gcc, and `#pragma GCC diagnostic`,
+`#pragma clang diagnostic` and MSVC's `#pragma warning(...)` apply from their
+position. `badc --explain <name>` describes one row, `badc --list-diagnostics`
+prints the catalogue; [diagnostics](diagnostics.md) is the same table.
 
 ## Debugging
 
@@ -146,10 +146,9 @@ For the SSA IR plus the register allocator's per-value placement, pass
 
 ## C as a script
 
-A `.c` file may start with a shebang. With `badc` on `PATH`, `chmod +x
-script.c` makes the file directly executable, and the shebang line picks the
-mode: `#!/usr/bin/env badc --interp` for the VM, the bare form for native
-compilation.
+A `.c` file may start with a shebang. With `badc` on `PATH`, `chmod +x script.c`
+makes the file directly executable, and the shebang line picks the mode:
+`#!/usr/bin/env badc --interp` for the VM, the bare form for native compilation.
 
 ## Headers on disk
 

@@ -212,10 +212,10 @@ kernel.sysrq = 1        # persistent; Fedora's default of 16 permits sync alone
 is what the harness does after the watchdog has had its chance. It is
 best-effort: it needs a kernel still servicing interrupts.
 
-A locked root account takes away the other half of the answer. `sulogin`
-refuses a console it cannot authenticate on -- `Cannot open access to
-console, the root account is locked` -- which on a box whose only console
-is a serial line leaves no way in at all:
+A locked root account takes away the other half of the answer. `sulogin` refuses
+a console it cannot authenticate on --
+`Cannot open access to console, the root account is locked` -- which on a box
+whose only console is a serial line leaves no way in at all:
 
 ```
 # /etc/systemd/system/emergency.service.d/override.conf, and the same for
@@ -226,10 +226,10 @@ Environment=SYSTEMD_SULOGIN_FORCE=1
 
 ### Suspend, disabled at every layer that can ask for it
 
-A desktop session on the target will put it to sleep mid-run. Observed on
-this box as a broadcast from the greeter -- `The system will suspend
-now!` -- which ends the ssh connection and silences the console, and is
-indistinguishable from a kernel that hung.
+A desktop session on the target will put it to sleep mid-run. Observed on this
+box as a broadcast from the greeter -- `The system will suspend now!` -- which
+ends the ssh connection and silences the console, and is indistinguishable from
+a kernel that hung.
 
 ```bash
 systemctl mask sleep.target suspend.target hibernate.target \
@@ -257,12 +257,11 @@ sudo -u gdm dbus-run-session -- gsettings set \
   org.gnome.desktop.session idle-delay 0
 ```
 
-Masking the targets is the layer that actually holds: whatever asks --
-greeter, logind idle, the power button -- the request fails rather than
-being honoured. `systemctl suspend` now answers `Call to Suspend failed:
-Access denied`. The lid settings matter separately, because the machine
-is a clamshell that will sit closed on a bench; without them, closing it
-ends the run.
+Masking the targets is the layer that actually holds: whatever asks -- greeter,
+logind idle, the power button -- the request fails rather than being honoured.
+`systemctl suspend` now answers `Call to Suspend failed: Access denied`. The lid
+settings matter separately, because the machine is a clamshell that will sit
+closed on a bench; without them, closing it ends the run.
 
 ### No desktop
 
@@ -294,12 +293,12 @@ Environment=SYSTEMD_SULOGIN_FORCE=1
 kernel.sysrq = 1
 ```
 
-The autologin getty covers a boot that reaches userspace. A boot that
-does **not** drops to emergency mode, which runs `sulogin` -- and Fedora
-ships the root account locked, so the console answers `Cannot open access
-to console, the root account is locked.` and there is no shell at the one
-moment a shell matters. `SYSTEMD_SULOGIN_FORCE=1` is the documented way
-to let a headless machine past that.
+The autologin getty covers a boot that reaches userspace. A boot that does
+**not** drops to emergency mode, which runs `sulogin` -- and Fedora ships the
+root account locked, so the console answers
+`Cannot open access to console, the root account is locked.` and there is no
+shell at the one moment a shell matters. `SYSTEMD_SULOGIN_FORCE=1` is the
+documented way to let a headless machine past that.
 
 `kernel.sysrq=1` makes a serial BREAK followed by a key reach the kernel,
 so a wedged box can be synced and reset over the wire (`BREAK` then `s`,
@@ -316,12 +315,11 @@ evidence**, which means the capture has to be running *before* the reboot
 is issued and stay open across it. Opening the port afterwards catches
 whatever is still in flight and nothing that came before.
 
-One case now leaves more than that. With `nmi_watchdog=panic
-softlockup_panic=1` on the badc entry, a lockup the NMI watchdog detects
-panics rather than sitting there, so the trace reaches the console and,
-where `hwprep.py arm` has enabled pstore, survives the reboot. A hang the
-detector cannot catch is unchanged: the console holds whatever was
-printed, and the chipset watchdog is what ends it.
+One case now leaves more than that. With `nmi_watchdog=panic softlockup_panic=1`
+on the badc entry, a lockup the NMI watchdog detects panics rather than sitting
+there, so the trace reaches the console and, where `hwprep.py arm` has enabled
+pstore, survives the reboot. A hang the detector cannot catch is unchanged: the
+console holds whatever was printed, and the chipset watchdog is what ends it.
 
 ## Booting a badc kernel
 
@@ -349,12 +347,13 @@ on. Put it back before rebooting:
 sudo grubby --set-default /boot/vmlinuz-7.1.10-200.fc44.x86_64
 ```
 
-`rpm -i` refuses a kernel whose version-release orders below the one the
-box already runs -- the pinned release built as `-1` against Fedora's
-`-200.fc44` -- with `package kernel-7.1.10-200.fc44.x86_64 (which is newer
-than ...) is already installed`. Kernels are install-only, so the version
-ordering is not meaningful here; `--oldpackage` is what gets past it, and
-`dnf install` applies the same semantics on its own.
+`rpm -i` refuses a kernel whose version-release orders below the one the box
+already runs -- the pinned release built as `-1` against Fedora's `-200.fc44` --
+with
+`package kernel-7.1.10-200.fc44.x86_64 (which is newer than ...) is already installed`.
+Kernels are install-only, so the version ordering is not meaningful here;
+`--oldpackage` is what gets past it, and `dnf install` applies the same
+semantics on its own.
 
 ## The harness lane
 

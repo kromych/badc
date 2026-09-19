@@ -61,8 +61,8 @@ through the GOT, so a badc `-c` object links into a PIE produced by the system
 toolchain. Archives are ar(5) with a SysV-style symbol index.
 
 The `full` cargo feature gates the entire pipeline; library consumers that do
-not need multi-TU artifacts can opt out via `default-features = false, features
-= ["std"]` to keep the footprint slim.
+not need multi-TU artifacts can opt out via
+`default-features = false, features = ["std"]` to keep the footprint slim.
 
 `-l<name>` is resolved in the `-L` directories, then in the standard library
 directories under `--sysroot=<dir>` (`usr/lib`, `lib`, their 64-bit and
@@ -219,8 +219,9 @@ For a flavour of what is reachable from each system:
   `dlopen("/System/Library/.../X.framework/X")` away.
 * **Linux** -- `clock_gettime`, `nanosleep`, `pipe2`, the entire `pthread_*`
   family. Anything in `/usr/lib`'s sonames if you spell the path.
-* **Windows** -- `dlopen` resolves to `LoadLibraryA`, so `dlopen("user32.dll",
-  0)` plus `dlsym(h, "MessageBoxA")` gives a callable Win32 API entry point.
+* **Windows** -- `dlopen` resolves to `LoadLibraryA`, so
+  `dlopen("user32.dll", 0)` plus `dlsym(h, "MessageBoxA")` gives a callable
+  Win32 API entry point.
 
 ## In-process JIT (`--jit`)
 
@@ -319,17 +320,17 @@ and every return path -- including a tail call's teardown -- reloads it,
 compares, and calls `__stack_chk_fail` on a mismatch.
 
 `-mstack-protector-guard=global|tls|sysreg` says where the guard value comes
-from, with `-mstack-protector-guard-reg=`, `-mstack-protector-guard-offset=`
-and `-mstack-protector-guard-symbol=` as its operands. The default follows
-the target: `%fs:0x28` on Linux/x86-64, the C library's `__stack_chk_guard`
-object elsewhere. `tls` is the x86-64 segment-relative form the kernel
-selects (`-mstack-protector-guard=tls -mstack-protector-guard-reg=gs
--mstack-protector-guard-symbol=__ref_stack_chk_guard`); `sysreg` is the
+from, with `-mstack-protector-guard-reg=`, `-mstack-protector-guard-offset=` and
+`-mstack-protector-guard-symbol=` as its operands. The default follows the
+target: `%fs:0x28` on Linux/x86-64, the C library's `__stack_chk_guard` object
+elsewhere. `tls` is the x86-64 segment-relative form the kernel selects
+(`-mstack-protector-guard=tls`, `-mstack-protector-guard-reg=gs`,
+`-mstack-protector-guard-symbol=__ref_stack_chk_guard`); `sysreg` is the
 aarch64 form that reads a per-task offset above a system register
-(`-mstack-protector-guard-reg=sp_el0 -mstack-protector-guard-offset=N`).
-The family needs relocatable output -- the failure branch is a relocation
-against `__stack_chk_fail` -- so `--jit` and `--interp` reject it, as do the
-Windows targets, whose C library exports neither symbol.
+(`-mstack-protector-guard-reg=sp_el0`, `-mstack-protector-guard-offset=N`). The
+family needs relocatable output -- the failure branch is a relocation against
+`__stack_chk_fail` -- so `--jit` and `--interp` reject it, as do the Windows
+targets, whose C library exports neither symbol.
 
 `-ftrivial-auto-var-init=uninitialized|zero|pattern` (the kernel's
 `CONFIG_INIT_STACK_ALL_ZERO` passes `zero`) initializes every automatic

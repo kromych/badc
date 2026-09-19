@@ -12,8 +12,8 @@ exit(0)
 
 The VM keeps code, stack, and data in three distinct address ranges and refuses
 to mix them. Function pointers carry a `CODE_BASE` bias; loading or storing
-through one is rejected, and so is calling through a fabricated integer (`fp =
-42; fp();`) -- the call site refuses an address it did not originate.
+through one is rejected, and so is calling through a fabricated integer
+(`fp = 42; fp();`) -- the call site refuses an address it did not originate.
 
 `--track-pointers` opts in to allocation tracking: `free` on an unknown or
 already-freed pointer errors, and any access into a freed allocation (or past

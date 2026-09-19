@@ -36,11 +36,11 @@ row wherever a selector is accepted:
   `-Wall`, `-Wextra` and `-Wpedantic` turn on the groups of the same
   names, following gcc's split. A code spelled `B2001` is accepted
   wherever a name is.
-* `#pragma GCC diagnostic ignored "-W<name>"` (also `warning`, `error`,
-  `push`, `pop`), `#pragma clang diagnostic ...` and MSVC's
-  `#pragma warning(disable | error | default | once | suppress | push |
-  pop : <number>)` apply from the pragma's position; an MSVC number
-  names the row it is an alias of.
+* `#pragma GCC diagnostic ignored "-W<name>"` (also `warning`, `error`, `push`,
+  `pop`), `#pragma clang diagnostic ...` and MSVC's
+  `#pragma warning(disable | error | default | once | suppress | push | pop : <number>)`
+  apply from the pragma's position; an MSVC number names the row it is an
+  alias of.
 * `badc --explain <selector>` prints one row with its aliases;
   `badc --list-diagnostics` prints this table.
 

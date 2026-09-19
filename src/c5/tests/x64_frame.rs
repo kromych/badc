@@ -397,6 +397,34 @@ fn a_tail_jump_pops_what_the_prologue_pushed() {
     }
 }
 
+/// A frame realigned for an over-aligned object has rsp below the saves, so
+/// a tail jump out of it resets rsp as a return does. The object's address
+/// is not taken, which is what admits the tail call.
+#[test]
+fn a_tail_jump_out_of_a_realigned_frame_resets_rsp() {
+    const SRC: &str = "long h(long);\n\
+        __attribute__((noinline)) long g(long a) { return h(a) * 3; }\n\
+        long f(long a) { _Alignas(64) long x = a; x += h(a); return g(x + a); }\n";
+    let target = Target::LinuxX64;
+    let insns = insns_of(&optimized(SRC, target), "f");
+    let frame = frame_of(&insns, target).expect("a frame");
+    assert!(!frame.pushes.is_empty(), "{insns:x?}");
+    // `and rsp, -64`.
+    let realigns = |x: &X64Insn| x.op == 0x83 && x.modrm == Some(0xE4) && x.imm == -64;
+    assert!(insns.iter().any(realigns), "{insns:x?}");
+    let exits = exits(&insns);
+    assert!(exits.iter().any(|&e| insns[e].is_jmp()), "{insns:x?}");
+    for e in exits {
+        let first_pop = check_exit(&insns, e, &frame, target, "f");
+        let lea = insns[first_pop - 1];
+        assert!(
+            lea.op == 0x8D && lea.regs().0 == 4 && lea.mem_base() == Some(5),
+            "no lea rsp ahead of the pops: {insns:x?}"
+        );
+        assert_eq!(lea.disp, -i64::from(frame.bytes()), "{insns:x?}");
+    }
+}
+
 /// A return value that spilled is read through rsp, so ahead of the pops.
 /// With the banks capped, `r` lives across the loop's calls with nothing
 /// reading it there, and is returned from its slot.

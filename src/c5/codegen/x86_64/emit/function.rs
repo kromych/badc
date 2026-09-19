@@ -1219,8 +1219,9 @@ fn save_callee_saved(code: &mut Vec<u8>, alloc: &Allocation) {
 
 /// Re-establish `rsp = rbp - frame_bytes` in a dynamic-sp frame before
 /// the epilogue's rsp-relative restores. No-op for static frames. Every
-/// return path calls this ahead of [`restore_callee_saved`].
-fn restore_dynamic_sp(code: &mut Vec<u8>, frame: Frame) {
+/// return path and the tail-call jump call this ahead of
+/// [`restore_callee_saved`].
+pub(super) fn restore_dynamic_sp(code: &mut Vec<u8>, frame: Frame) {
     if frame.dynamic_sp {
         emit_lea_r_mem(code, Reg::RSP, Reg::RBP, -(frame.frame_bytes as i32));
     }

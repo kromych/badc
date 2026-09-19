@@ -1032,10 +1032,6 @@ pub(super) fn emit_tail_call(
     extern_sites: &mut Vec<super::UserExternCallSite>,
     extern_data_refs: &mut Vec<super::UserExternDataRef>,
 ) -> Emit {
-    debug_assert!(
-        !frame.dynamic_sp,
-        "detect_tail_call rejects dynamic-sp frames"
-    );
     // The argument-register window is disjoint from `alloc.gpr_used`, so the
     // restores below cannot clobber the marshalled values.
     let mut plan = super::plan_call_args(args.len(), args.len(), fp_arg_mask, abi);
@@ -1055,8 +1051,11 @@ pub(super) fn emit_tail_call(
     // sp shift must be zero.
     plan.scratch_bytes = 0;
     marshal_args(code, &plan, args, &[], alloc, frame, abi, "TailCall")?;
-    // `emit_return`'s epilogue without the return-value staging.
+    // `emit_return`'s epilogue without the return-value staging. A frame
+    // realigned for an over-aligned object has rsp below the saves;
+    // `detect_tail_call` admits it, no address of the object being taken.
     emit_canary_check(code, frame, abi, extern_sites, extern_data_refs);
+    restore_dynamic_sp(code, frame);
     restore_callee_saved(code, alloc);
     emit_frame_teardown(code, func, frame, alloc, abi);
     // A Call-kind fixup resolves the rel32 like an intra-unit call; the

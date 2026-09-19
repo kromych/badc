@@ -1004,7 +1004,7 @@ fn emit_int_binop(
     // the LHS into rd first (preserves SSA semantics where the
     // result is `lhs OP rhs`). Cmp ops skip this -- they read
     // rn / rm directly and write dst via setcc+movzx.
-    if !is_cmp && rd.0 != rn.0 {
+    if !is_cmp && !is_shift && rd.0 != rn.0 {
         emit_mov_rr(code, rd, rn);
     }
     if let Some(m) = alu_mnem(op) {
@@ -1017,9 +1017,18 @@ fn emit_int_binop(
             return Ok(());
         }
     } else if is_shift {
-        // The count is a register here; `mov rd, rn` above left the lhs
-        // in rd.
-        return emit_shift_by_count_reg(code, op, v, dst, rd, ShiftCount::Reg(rm), alloc, frame);
+        // The count is a register here; the shift moves the lhs from rn.
+        return emit_shift_by_count_reg(
+            code,
+            op,
+            v,
+            dst,
+            rd,
+            rn,
+            ShiftCount::Reg(rm),
+            alloc,
+            frame,
+        );
     } else {
         // A new op variant reaching here is an IR producer / consumer
         // mismatch, not a register-pressure shape.
@@ -1137,9 +1146,9 @@ enum ShiftCount {
     Imm(i64),
 }
 
-/// `rd = rd OP count` for a variable count, the value already in `rd`: the
-/// count moves into rcx (cl), a live rcx preserved with push / pop; when
-/// `rd` is rcx the shift is staged in a reserved scratch and copied back.
+/// `rd = src OP count` for a variable count: the count moves into rcx (cl),
+/// a live rcx preserved with push / pop; when `rd` is rcx the value is
+/// shifted in a reserved scratch and copied back.
 #[allow(clippy::too_many_arguments)]
 fn emit_shift_by_count_reg(
     code: &mut Vec<u8>,
@@ -1147,6 +1156,7 @@ fn emit_shift_by_count_reg(
     v: super::super::ir::ValueId,
     dst: Place,
     rd: Reg,
+    src: Reg,
     count: ShiftCount,
     alloc: &Allocation,
     frame: Frame,
@@ -1161,7 +1171,7 @@ fn emit_shift_by_count_reg(
         // register; r11 is reserved outside both allocator banks and
         // never aliases rd, the count, or any live value.
         let scratch = SCRATCH_R11;
-        emit_mov_rr(code, scratch, rd);
+        emit_mov_rr(code, scratch, src);
         match count {
             ShiftCount::Reg(r) if r.0 != Reg::RCX.0 => emit_mov_rr(code, Reg::RCX, r),
             ShiftCount::Reg(_) => {}
@@ -1172,16 +1182,22 @@ fn emit_shift_by_count_reg(
         spill_dst_to_slot(code, dst, rd, frame);
         return Ok(());
     }
-    // rcx is saved whenever any value is allocated there: a `def < v <
-    // last_use` interval test misses a value carried around a loop back
-    // edge. A `-ffixed-rcx` value is preserved the same way.
-    let _ = v;
+    stage_lhs(code, rd, src);
+    // rcx is saved when the allocation records a value other than the count
+    // live in it across the shift, and for `-ffixed-rcx`; an allocation
+    // without the record counts any value placed in rcx.
     let rcx_holds_live = count_reg.map(|r| r.0).unwrap_or(u8::MAX) != Reg::RCX.0
         && (frame.fixed_regs.has_gpr(Reg::RCX.0)
             || alloc
-                .places
-                .iter()
-                .any(|p| matches!(p, Place::IntReg(r) if *r == Reg::RCX.0)));
+                .rcx_live_across
+                .get(v as usize)
+                .copied()
+                .unwrap_or_else(|| {
+                    alloc
+                        .places
+                        .iter()
+                        .any(|p| matches!(p, Place::IntReg(r) if *r == Reg::RCX.0))
+                }));
     if rcx_holds_live {
         emit_push_r(code, Reg::RCX);
     }
@@ -1360,13 +1376,13 @@ pub(super) fn emit_binop_imm(
     // routes through cl like the register-shift path, so the emit stays
     // well-formed.
     if matches!(op, BinOp::Shl | BinOp::Shr | BinOp::Shru | BinOp::Ror) {
-        stage_lhs(code, rd, rn);
         return emit_shift_by_count_reg(
             code,
             op,
             v,
             dst,
             rd,
+            rn,
             ShiftCount::Imm(rhs_imm),
             alloc,
             frame,

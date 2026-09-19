@@ -568,6 +568,55 @@ mod two_address_tests {
         assert!(spilled.starts_with(&[0x49, 0x89, 0xC2]), "{spilled:02x?}");
         assert!(spilled.ends_with(&[0x4C, 0x29, 0xD0]), "{spilled:02x?}");
     }
+
+    /// A shift saves rcx around the count's move into cl exactly when the
+    /// allocation records a value other than the count live there; without
+    /// a record, any value allocated to rcx counts. A result in rcx is
+    /// shifted in r11 from the lhs's own register.
+    #[test]
+    fn shift_saves_rcx_as_the_allocation_records() {
+        let target = Target::LinuxX64;
+        let reg = |r: Reg| Place::IntReg(r.0);
+        let (func, v, mut alloc) = binop_of("long f(long a, long c){ return a << c; }", BinOp::Shl);
+        let Inst::Binop { lhs, rhs, .. } = func.insts[v as usize] else {
+            panic!("{:?}", func.insts[v as usize])
+        };
+        for p in alloc.places.iter_mut() {
+            if *p == reg(Reg::RCX) {
+                *p = Place::None;
+            }
+        }
+        alloc.places[lhs as usize] = reg(Reg::RDI);
+        alloc.places[rhs as usize] = reg(Reg::RSI);
+        let emit = |alloc: &Allocation, dst: Reg| {
+            let frame = compute_frame(&func, alloc, target.abi(), target);
+            let mut code = Vec::new();
+            emit_binop(&mut code, BinOp::Shl, v, reg(dst), lhs, rhs, alloc, frame)
+                .expect("emit_binop");
+            code
+        };
+        // mov rax, rdi; [push rcx;] mov rcx, rsi; shl rax, cl; [pop rcx]
+        let bare = [0x48, 0x89, 0xF8, 0x48, 0x89, 0xF1, 0x48, 0xD3, 0xE0];
+        let saved = [
+            0x48, 0x89, 0xF8, 0x51, 0x48, 0x89, 0xF1, 0x48, 0xD3, 0xE0, 0x59,
+        ];
+        alloc.rcx_live_across = alloc::vec![false; func.insts.len()];
+        assert_eq!(emit(&alloc, Reg::RAX), bare);
+        alloc.rcx_live_across[v as usize] = true;
+        assert_eq!(emit(&alloc, Reg::RAX), saved);
+        alloc.rcx_live_across.clear();
+        assert_eq!(emit(&alloc, Reg::RAX), bare);
+        let other = (0..func.insts.len() as u32).find(|&i| i != lhs && i != rhs && i != v);
+        alloc.places[other.expect("another value") as usize] = reg(Reg::RCX);
+        assert_eq!(emit(&alloc, Reg::RAX), saved);
+        // mov r11, rdi; mov rcx, rsi; shl r11, cl; mov rcx, r11
+        assert_eq!(
+            emit(&alloc, Reg::RCX),
+            [
+                0x49, 0x89, 0xFB, 0x48, 0x89, 0xF1, 0x49, 0xD3, 0xE3, 0x4C, 0x89, 0xD9
+            ]
+        );
+    }
 }
 
 #[cfg(test)]

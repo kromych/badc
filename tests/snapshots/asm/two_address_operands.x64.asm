@@ -76,38 +76,33 @@ Disassembly of section .text:
 
 <ones>:
                	xorl	%eax, %eax
-               	movq	%rax, %rcx
+               	movq	%rax, %rdx
                	cmpl	%esi, %eax
                	jge	<addr>
-               	movq	%rdi, %rdx
-               	pushq	%rcx
+               	movq	%rdi, %r8
                	movq	%rax, %rcx
-               	shrq	%cl, %rdx
-               	popq	%rcx
-               	andq	$0x1, %rdx
-               	addq	%rdx, %rcx
+               	shrq	%cl, %r8
+               	movq	%r8, %rcx
+               	andq	$0x1, %rcx
+               	addq	%rcx, %rdx
                	incq	%rax
                	cmpl	%esi, %eax
                	jl	<addr>
-               	movq	%rcx, %rax
+               	movq	%rdx, %rax
                	retq
 
 <past_fourth>:
-               	movq	%rdi, %rax
-               	pushq	%rcx
+               	movq	%rcx, %rax
                	movq	%rsi, %rcx
-               	shlq	%cl, %rax
-               	popq	%rcx
-               	addq	%rcx, %rax
+               	shlq	%cl, %rdi
+               	addq	%rdi, %rax
                	addq	%rdx, %rax
                	retq
 
 <all_live>:
                	movq	%rdi, %rax
-               	pushq	%rcx
                	movq	%rsi, %rcx
                	sarq	%cl, %rax
-               	popq	%rcx
                	imulq	$0x3e8, %rax, %rax      # imm = 0x3E8
                	imulq	$0xa, %rdi, %rcx
                	addq	%rcx, %rax
@@ -115,40 +110,34 @@ Disassembly of section .text:
                	retq
 
 <carried>:
-               	movq	%rcx, %r8
+               	movq	%rdx, %r8
+               	movq	%rcx, %r9
                	xorl	%eax, %eax
-               	movq	%rax, %rcx
-               	cmpq	%rdi, %rcx
+               	movq	%rax, %rdx
+               	cmpq	%rdi, %rdx
                	jge	<addr>
-               	leaq	(%rax,%r8), %rcx
-               	movq	%rsi, %r9
-               	pushq	%rcx
-               	movq	%rdx, %rcx
-               	shlq	%cl, %r9
-               	popq	%rcx
-               	addq	%r9, %rax
-               	cmpq	%rdi, %rcx
+               	leaq	(%rax,%r9), %rdx
+               	movq	%rsi, %r11
+               	movq	%r8, %rcx
+               	shlq	%cl, %r11
+               	movq	%r11, %rcx
+               	addq	%rcx, %rax
+               	cmpq	%rdi, %rdx
                	jl	<addr>
-               	movq	%rcx, %rax
+               	movq	%rdx, %rax
                	retq
 
 <rotr>:
-               	movq	%rsi, %rax
-               	andq	$0x3f, %rax
-               	movq	%rdi, %rcx
-               	movq	%rcx, %r11
-               	movq	%rax, %rcx
-               	shrq	%cl, %r11
-               	movq	%r11, %rcx
+               	movq	%rsi, %rcx
+               	andq	$0x3f, %rcx
+               	movq	%rdi, %rdx
+               	shrq	%cl, %rdx
                	movl	$0x40, %eax
                	subq	%rsi, %rax
-               	andq	$0x3f, %rax
-               	movq	%rdi, %rdx
-               	pushq	%rcx
                	movq	%rax, %rcx
-               	shlq	%cl, %rdx
-               	popq	%rcx
-               	movq	%rcx, %rax
+               	andq	$0x3f, %rcx
+               	movq	%rdi, %rax
+               	shlq	%cl, %rax
                	orq	%rdx, %rax
                	retq
 

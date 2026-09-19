@@ -1447,6 +1447,32 @@ fn x64_reversed_fp_quotient_takes_no_staging_copy() {
     assert!(div.is_some_and(|d| d.regs().1 < 13), "{insns:x?}");
 }
 
+fn saves_rcx(i: &X64Insn) -> bool {
+    matches!(i.op, 0x51 | 0x59) && i.rex & 1 == 0
+}
+
+/// A variable shift in a loop takes its count in rcx and keeps the loop's
+/// values out of it, so rcx is not saved around the shift.
+#[test]
+fn x64_variable_shift_saves_no_rcx() {
+    const SRC: &str = "unsigned long ones(unsigned long v, int n) {\n\
+        unsigned long acc = 0;\n\
+        for (int i = 0; i < n; i++) acc += (v >> i) & 1;\n\
+        return acc;\n}\n";
+    let insns = x64(SRC, "ones");
+    assert!(!insns.iter().any(saves_rcx), "{insns:x?}");
+}
+
+/// A value that arrives in rcx and is read after a variable shift -- a
+/// fourth parameter -- leaves rcx to the count instead of being saved.
+#[test]
+fn x64_variable_shift_moves_a_live_value_out_of_rcx() {
+    const SRC: &str =
+        "long past_fourth(long x, long c, long z, long k) { return (x << c) + k + z; }\n";
+    let insns = x64(SRC, "past_fourth");
+    assert!(!insns.iter().any(saves_rcx), "{insns:x?}");
+}
+
 /// The parameter's entry extension reads the incoming register.
 #[test]
 fn parameter_entry_extension_is_one_instruction() {

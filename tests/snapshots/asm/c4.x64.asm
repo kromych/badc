@@ -3192,25 +3192,19 @@ Disassembly of section .text:
                	cmpq	$0x17, %r12
                	jne	<addr>
                	leaq	0x8(%rbx), %rax
-               	movq	(%rbx), %rcx
-               	movq	-0x8(%rbp), %rdx
-               	movq	%rcx, %r11
-               	movq	%rdx, %rcx
-               	shlq	%cl, %r11
-               	movq	%r11, %rcx
-               	movq	%rcx, -0x8(%rbp)
+               	movq	(%rbx), %rdx
+               	movq	-0x8(%rbp), %rcx
+               	shlq	%cl, %rdx
+               	movq	%rdx, -0x8(%rbp)
                	movq	%rax, %rbx
                	jmp	<addr>
                	cmpq	$0x18, %r12
                	jne	<addr>
                	leaq	0x8(%rbx), %rax
-               	movq	(%rbx), %rcx
-               	movq	-0x8(%rbp), %rdx
-               	movq	%rcx, %r11
-               	movq	%rdx, %rcx
-               	sarq	%cl, %r11
-               	movq	%r11, %rcx
-               	movq	%rcx, -0x8(%rbp)
+               	movq	(%rbx), %rdx
+               	movq	-0x8(%rbp), %rcx
+               	sarq	%cl, %rdx
+               	movq	%rdx, -0x8(%rbp)
                	movq	%rax, %rbx
                	jmp	<addr>
                	cmpq	$0x19, %r12

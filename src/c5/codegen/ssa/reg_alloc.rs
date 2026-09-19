@@ -148,6 +148,10 @@ pub(crate) struct Allocation {
     /// a store, so its use count is zero and it is never materialized;
     /// the store's own value is unread.
     pub imm_store: Vec<bool>,
+    /// Per x86-64 shift or rotate: whether a value other than its count
+    /// stays live in rcx across it, the one case in which the emitter
+    /// saves rcx around the count's move into cl. Empty elsewhere.
+    pub rcx_live_across: Vec<bool>,
     /// Per-value coalescing hint: the physical register the
     /// allocator should prefer when one is set and free at the
     /// pick site. The pick-reg path honours the hint only when it
@@ -276,28 +280,53 @@ fn store_immediate(func: &FunctionSsa, inst: &Inst, target: Target) -> Option<Va
     (target.is_x86_64() && fits).then_some(value)
 }
 
-/// Whether `op` is a shift or rotate, whose x86-64 form takes a variable
-/// count in cl.
+/// rcx, the count register of x86-64's variable shifts.
+const X86_RCX: u8 = 1;
+
+/// A shift or rotate, whose variable count x86-64 reads in cl.
 fn is_shift_op(op: BinOp) -> bool {
     matches!(op, BinOp::Shl | BinOp::Shr | BinOp::Shru | BinOp::Ror)
 }
 
-/// Keep-apart relations of x86-64's two-address operations, which the
-/// colorer honours among free caller-saved registers: `apart[root]` lists
-/// the classes whose register should differ from the class's own. A
-/// non-commutative `op dst, rhs` (`sub`, `subsd`, `divsd`, a shift) keeps
-/// `dst` apart from `rhs`, which the emitter otherwise copies aside before
-/// `dst` receives `lhs`.
-fn x86_preferences(func: &FunctionSsa, node_of: &[ValueId]) -> Vec<Vec<ValueId>> {
+/// x86-64 register preferences the colorer honours among free caller-saved
+/// registers. `apart[root]` keeps the result of a non-commutative `op dst,
+/// rhs` (`sub`, `subsd`, `divsd`, a shift) off the register of `rhs`, which
+/// the emitter would copy aside first. A shift reads a register count in
+/// cl: the count is hinted to rcx, and `avoid[v]` holds rcx for the shift's
+/// result and operand and the values live across it, counts excepted.
+fn x86_preferences(
+    func: &FunctionSsa,
+    liveness: &super::liveness::Liveness,
+    node_of: &[ValueId],
+    hints: &mut [Option<u8>],
+) -> (Vec<Vec<ValueId>>, Vec<u64>) {
     let n = func.insts.len();
+    let binop = |inst: &Inst| match *inst {
+        Inst::Binop { op, lhs, rhs } if (lhs as usize) < n && (rhs as usize) < n => {
+            Some((op, lhs, rhs))
+        }
+        _ => None,
+    };
+    let mut is_count = vec![false; n];
+    for (op, _, rhs) in func.insts.iter().filter_map(binop) {
+        if is_shift_op(op) {
+            is_count[rhs as usize] = true;
+            hints[rhs as usize].get_or_insert(X86_RCX);
+        }
+    }
     let mut apart: Vec<Vec<ValueId>> = vec![Vec::new(); n];
+    let mut avoid: Vec<u64> = vec![0; n];
+    let rcx = 1u64 << X86_RCX;
+    let mut keep_out = |u: ValueId| {
+        if !is_count[u as usize] && !produces_fp_result(&func.insts[u as usize]) {
+            avoid[u as usize] |= rcx;
+        }
+    };
     for (v, inst) in func.insts.iter().enumerate() {
-        let Inst::Binop { op, rhs, .. } = *inst else {
+        let Some((op, lhs, rhs)) = binop(inst) else {
             continue;
         };
-        if rhs as usize >= n
-            || !(is_shift_op(op) || matches!(op, BinOp::Sub | BinOp::Fsub | BinOp::Fdiv))
-        {
+        if !is_shift_op(op) && !matches!(op, BinOp::Sub | BinOp::Fsub | BinOp::Fdiv) {
             continue;
         }
         let (a, b) = (node_of[v], node_of[rhs as usize]);
@@ -305,8 +334,16 @@ fn x86_preferences(func: &FunctionSsa, node_of: &[ValueId]) -> Vec<Vec<ValueId>>
             apart[a as usize].push(b);
             apart[b as usize].push(a);
         }
+        if is_shift_op(op) {
+            keep_out(v as ValueId);
+            keep_out(lhs);
+        }
     }
-    apart
+    let variable_shift = |inst: &Inst| matches!(inst, Inst::Binop { op, .. } if is_shift_op(*op));
+    for (_, live) in liveness.values_live_after(func, &variable_shift) {
+        live.into_iter().for_each(&mut keep_out);
+    }
+    (apart, avoid)
 }
 
 /// Floating-point scratch registers the emit pass needs: two operand
@@ -652,6 +689,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             sxtw_k: Vec::new(),
             branch_fused: Vec::new(),
             imm_store: Vec::new(),
+            rcx_live_across: Vec::new(),
             hints,
             f32_values: Vec::new(),
             high_observed: Vec::new(),
@@ -711,10 +749,10 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     let node_of: Vec<ValueId> = (0..func.insts.len() as ValueId)
         .map(|v| classes.find(v))
         .collect();
-    let apart = if target.is_x86_64() {
-        x86_preferences(func, &node_of)
+    let (apart, avoid) = if target.is_x86_64() {
+        x86_preferences(func, &liveness, &node_of, &mut hints)
     } else {
-        Vec::new()
+        (Vec::new(), Vec::new())
     };
     let param_incoming_forbid = compute_param_incoming_forbid(func, conv_target);
     // Values live across an inline-asm block, and the registers each
@@ -734,6 +772,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             must_callee: false,
             hint: None,
             forbid: 0,
+            avoid: 0,
             wide: false,
         });
         entry.is_fp = produces_fp_result(inst);
@@ -743,6 +782,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             entry.hint = hints[v];
         }
         entry.forbid |= param_incoming_forbid[v];
+        entry.avoid |= avoid.get(v).copied().unwrap_or(0);
         if let Some(&(gpr, fpr)) = asm_forbid.get(root) {
             entry.forbid |= u64::from(if entry.is_fp { fpr } else { gpr });
         }
@@ -762,6 +802,20 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     );
     places = coloring.places;
     let spill_count = coloring.spill_count;
+    let mut rcx_live_across: Vec<bool> = Vec::new();
+    if target.is_x86_64() {
+        rcx_live_across = vec![false; func.insts.len()];
+        let shift = |inst: &Inst| matches!(inst, Inst::Binop { op, .. } | Inst::BinopI { op, .. } if is_shift_op(*op));
+        for (site, live) in liveness.values_live_after(func, &shift) {
+            let count = match func.insts[site as usize] {
+                Inst::Binop { rhs, .. } => rhs,
+                _ => NO_VALUE,
+            };
+            rcx_live_across[site as usize] = live
+                .iter()
+                .any(|&u| u != count && places[u as usize] == Place::IntReg(X86_RCX));
+        }
+    }
     let mut use_counts = compute_use_counts(func);
     // Recognise the c5 sign-narrow shape:
     //   Shl(X, K) ; Shr(_, K)   with K in {32, 48, 56}
@@ -1216,6 +1270,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
         sxtw_k,
         branch_fused,
         imm_store,
+        rcx_live_across,
         hints,
         f32_values: func.f32_values.clone(),
         high_observed: crate::c5::codegen::passes::drop_redundant_extend::compute_high_observed(
@@ -1677,6 +1732,9 @@ pub(crate) struct NodeConstraints {
     /// Used to keep a `ParamRef` off the incoming argument register of a
     /// later same-bank `ParamRef`, whose incoming value is still live.
     pub forbid: u64,
+    /// Registers (in this node's bank) the colorer passes over, the hint
+    /// included, for another free caller-saved one ([`x86_preferences`]).
+    pub avoid: u64,
     /// A 128-bit value, whose spill takes two units.
     pub wide: bool,
 }
@@ -1776,12 +1834,13 @@ fn class_members(node_of: &[ValueId]) -> (Vec<u32>, Vec<ValueId>) {
 /// processed by descending `weights` entry (loop-depth-weighted use
 /// count, so the hottest values color first), ties broken by ascending
 /// node id for host-independent output; an empty `weights` slice orders
-/// by ascending id. A node takes its hint when bank-legal and free,
-/// otherwise a caller-saved register (to avoid a prologue save) unless it
-/// must be callee-saved -- one apart from its `apart` neighbours (their
-/// registers, or the hints of those not yet colored) when one is free --
-/// otherwise a callee-saved register, and spills when its bank offers no
-/// free register. Because the coldest
+/// by ascending id. A node takes its hint when bank-legal, free and
+/// outside its `avoid` set, otherwise a caller-saved register (to avoid a
+/// prologue save) unless it must be callee-saved -- one outside its `avoid`
+/// set and apart from its `apart` neighbours (their registers, or the hints
+/// of those not yet colored) when one is free, else its hint -- otherwise
+/// a callee-saved register, and spills when its bank offers no free
+/// register. Because the coldest
 /// remaining node is colored last, it is the one left to spill when a
 /// bank fills. `interference` (built from CFG liveness) is the sole
 /// source of conflicts, so a value live across a back-edge passthrough
@@ -1878,7 +1937,7 @@ pub(crate) fn color_graph(
         };
         let caller = &caller_full[..caller_full.len().min(cap)];
         let free = |r: u8| !forbidden[r as usize];
-        let mut avoid = 0u64;
+        let mut avoid = c.avoid;
         for &o in apart.get(node).map_or(&[][..], Vec::as_slice) {
             match (color[o as usize], constraints[o as usize]) {
                 (Place::IntReg(r), _) if !c.is_fp => avoid |= 1 << r,
@@ -1889,17 +1948,18 @@ pub(crate) fn color_graph(
                 _ => {}
             }
         }
-        let pick = c
-            .hint
-            .filter(|&h| {
-                free(h) && (callee.contains(&h) || (!c.must_callee && caller.contains(&h)))
-            })
+        let hint = c.hint.filter(|&h| {
+            free(h) && (callee.contains(&h) || (!c.must_callee && caller.contains(&h)))
+        });
+        let pick = hint
+            .filter(|&h| (c.avoid >> h) & 1 == 0)
             .or_else(|| {
                 let kept = |r: &u8| free(*r) && (avoid >> *r) & 1 == 0;
                 (!c.must_callee)
                     .then(|| caller.iter().copied().find(kept))
                     .flatten()
             })
+            .or(hint)
             .or_else(|| {
                 if c.must_callee {
                     callee.iter().copied().find(|&r| free(r))
@@ -3032,6 +3092,7 @@ mod tests {
             must_callee,
             hint,
             forbid: 0,
+            avoid: 0,
             wide: false,
         })
     }
@@ -3042,6 +3103,7 @@ mod tests {
             must_callee,
             hint: None,
             forbid: 0,
+            avoid: 0,
             wide,
         })
     }
@@ -4894,6 +4956,103 @@ int main(void) { return 0; }
         ];
         let apart = vec![vec![], vec![2], vec![1]];
         assert_eq!(color_nodes(&g, &free, &[], &apart), [r0, r1, r1]);
+    }
+
+    /// A node's own avoid set outranks its hint: the hint is taken only
+    /// when no other caller-saved register is free.
+    #[test]
+    fn avoid_set_outranks_the_hint() {
+        let mut node = int_node(false, Some(0));
+        if let Some(c) = node.as_mut() {
+            c.avoid = 1;
+        }
+        let alone = Interference::from_edges(1, &[]);
+        assert_eq!(color_nodes(&alone, &[node], &[], &[]), [Place::IntReg(1)]);
+        // Node 0 holds r1 and interferes with node 1.
+        let g = Interference::from_edges(2, &[(0, 1)]);
+        let cons = [int_node(false, Some(1)), node];
+        assert_eq!(
+            color_nodes(&g, &cons, &[], &[]),
+            [Place::IntReg(1), Place::IntReg(0)]
+        );
+    }
+
+    /// On x86-64 a shift's count takes rcx, its result and a value live
+    /// across it keep out, and no save is recorded; a difference keeps its
+    /// result apart from its subtrahend. AArch64 records nothing.
+    #[test]
+    fn variable_shift_leaves_rcx_to_its_count() {
+        let local = |off| Inst::LoadLocal {
+            off,
+            kind: LoadKind::I64,
+            volatile: false,
+        };
+        let build = || {
+            store_func(
+                vec![
+                    local(2),
+                    local(3),
+                    local(4),
+                    Inst::Binop {
+                        op: BinOp::Shl,
+                        lhs: 0,
+                        rhs: 1,
+                    },
+                    Inst::Binop {
+                        op: BinOp::Sub,
+                        lhs: 2,
+                        rhs: 3,
+                    },
+                ],
+                4,
+            )
+        };
+        let full =
+            |target| with_pool_size_override(usize::MAX, usize::MAX, || allocate(&build(), target));
+        let x64 = full(Target::LinuxX64);
+        let rcx = Place::IntReg(X86_RCX);
+        assert_eq!(x64.places[1], rcx);
+        for v in [0, 2, 3] {
+            assert_ne!(x64.places[v], rcx, "v{v}");
+        }
+        assert_ne!(x64.places[4], x64.places[3]);
+        assert!(!x64.rcx_live_across[3]);
+        assert!(full(Target::LinuxAarch64).rcx_live_across.is_empty());
+    }
+
+    /// With two caller-saved registers a value live across the shift ends
+    /// in rcx, and the allocation records it for the emitter's save.
+    #[test]
+    fn rcx_held_across_a_shift_is_recorded() {
+        let local = |off| Inst::LoadLocal {
+            off,
+            kind: LoadKind::I64,
+            volatile: false,
+        };
+        let add = |lhs, rhs| Inst::Binop {
+            op: BinOp::Add,
+            lhs,
+            rhs,
+        };
+        let func = store_func(
+            vec![
+                local(2),
+                local(3),
+                local(4),
+                local(5),
+                Inst::Binop {
+                    op: BinOp::Shl,
+                    lhs: 0,
+                    rhs: 3,
+                },
+                add(4, 1),
+                add(5, 2),
+            ],
+            6,
+        );
+        let x64 = with_pool_size_override(2, usize::MAX, || allocate(&func, Target::LinuxX64));
+        assert_eq!(x64.places[1], Place::IntReg(X86_RCX));
+        assert!(x64.rcx_live_across[4]);
     }
 
     /// Integer ALU work between the compare and the branch writes

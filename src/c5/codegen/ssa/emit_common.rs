@@ -2146,9 +2146,9 @@ pub(crate) fn lower_unit<B: LowerTarget>(
             super::super::passes::inline::devirtualize(&mut ssa_funcs, &code_syms, &extern_fns);
         });
         // Block layout: fallthrough chains, loop rotation to
-        // bottom-test, branch inversion. Reorders blocks and remaps
-        // block ids only, so it runs last; the emit elides jumps to
-        // the next block in the new order.
+        // bottom-test. Reorders blocks and remaps block ids only, so it
+        // runs last; the emit elides jumps to the next block in the new
+        // order.
         time_pass_arch("passes::layout::run", B::ARCH, || {
             super::super::passes::layout::run(&mut ssa_funcs);
         });

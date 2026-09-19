@@ -260,8 +260,9 @@ pub(crate) fn emit_function(
         param_plan: &param_plan,
         name2entpc,
     };
+    let plan = super::ssa::block_plan::BlockPlan::build(func, alloc, repeat_tests);
     let endbr_targets = if abi.hardening.cf_protection_branch {
-        super::indirect_branch_target_blocks(func)
+        plan.landing_pads(func)
     } else {
         alloc::collections::BTreeSet::new()
     };
@@ -282,7 +283,7 @@ pub(crate) fn emit_function(
         abs_jump_tables,
         endbr_targets,
         param_prebatched: alloc::vec![false; func.insts.len()],
-        plan: super::ssa::block_plan::BlockPlan::build(func, alloc, repeat_tests),
+        plan,
         block_offsets: alloc::vec![0; func.blocks.len()],
         branch_fixups: Vec::new(),
         branch_short: Vec::new(),

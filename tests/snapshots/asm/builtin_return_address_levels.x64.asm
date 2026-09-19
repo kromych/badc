@@ -167,8 +167,7 @@ Disassembly of section .text:
                	leaq	<rip>, %r8
                	movq	(%r8), %r8
                	cmpq	%rcx, %rsi
-               	jae	<addr>
-               	jmp	<addr>
+               	jb	<addr>
                	movl	$0x6, %eax
                	leave
                	retq

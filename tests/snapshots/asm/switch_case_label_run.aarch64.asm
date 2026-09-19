@@ -21,10 +21,8 @@ Disassembly of section .text:
                	br	x17
                	mov	x0, #0x1                // =1
                	ret
-               	b	<addr>
                	mov	x0, #0x2                // =2
                	ret
-               	b	<addr>
 
 <main>:
                	stp	x29, x30, [sp, #-0x10]!

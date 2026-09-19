@@ -42,7 +42,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v27  Phi { incoming=[b0:v4, b4:v47], kind=I64 }       -> x0
     v28  Extend { value=v27, kind=I32 }                   -> x1
     v29  BinopI { op=gt, lhs=v27, rhs_imm=0 }             -> x1
-    terminator Bnz { cond=v29, target=b1, fall=b6 }   (exit_acc=v29)
+    terminator Bz { cond=v29, target=b6, fall=b1 }   (exit_acc=v29)
   block 6  start_pc=0
     v7   BinopI { op=ne, lhs=v26, rhs_imm=10000 }         -> x0
     terminator Bz { cond=v7, target=b8, fall=b7 }   (exit_acc=v7)
@@ -88,7 +88,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v50  Phi { incoming=[b8:v12, b12:v70], kind=I64 }     -> x0
     v51  Extend { value=v50, kind=I32 }                   -> x1
     v52  BinopI { op=gt, lhs=v50, rhs_imm=0 }             -> x1
-    terminator Bnz { cond=v52, target=b9, fall=b14 }   (exit_acc=v52)
+    terminator Bz { cond=v52, target=b14, fall=b9 }   (exit_acc=v52)
   block 14  start_pc=0
     v15  BinopI { op=ne, lhs=v49, rhs_imm=1 }             -> x0
     terminator Bz { cond=v15, target=b16, fall=b15 }   (exit_acc=v15)
@@ -134,7 +134,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v73  Phi { incoming=[b16:v20, b20:v93], kind=I64 }    -> x0
     v74  Extend { value=v73, kind=I32 }                   -> x1
     v75  BinopI { op=gt, lhs=v73, rhs_imm=0 }             -> x1
-    terminator Bnz { cond=v75, target=b17, fall=b22 }   (exit_acc=v75)
+    terminator Bz { cond=v75, target=b22, fall=b17 }   (exit_acc=v75)
   block 22  start_pc=0
     v23  BinopI { op=ne, lhs=v72, rhs_imm=0 }             -> x0
     terminator Bz { cond=v72, target=b24, fall=b23 }   (exit_acc=v23)
@@ -175,7 +175,7 @@ fn ent_pc=2 n_params=1 variadic=false locals=2
     v5   Phi { incoming=[b0:v4, b1:v8], kind=I64 }        -> x3
     v6   ImmData(0)                                       -> x0
     v7   Binop { op=ne, lhs=v5, rhs=v6 }                  -> x0
-    terminator Bnz { cond=v7, target=b1, fall=b3 }   (exit_acc=v7)
+    terminator Bz { cond=v7, target=b3, fall=b1 }   (exit_acc=v7)
   block 3  start_pc=0
     terminator Return
 ; --- SSA dump (ok=true) ent_pc=3 ---
@@ -218,7 +218,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     v8   Imm(0)                                           -> x0
     v9   ImmData(0)                                       -> x0
     v10  Binop { op=ne, lhs=v7, rhs=v9 }                  -> x0
-    terminator Bnz { cond=v10, target=b3, fall=b5 }   (exit_acc=v10)
+    terminator Bz { cond=v10, target=b5, fall=b3 }   (exit_acc=v10)
   block 5  start_pc=0
     terminator Return
 ; --- SSA dump (ok=true) ent_pc=5 ---
@@ -269,7 +269,7 @@ fn ent_pc=5 n_params=2 variadic=false locals=0
     v35  Phi { incoming=[b2:v34, b3:v40], kind=I64 }      -> x3
     v36  ImmData(0)                                       -> x0
     v37  Binop { op=ne, lhs=v35, rhs=v36 }                -> x0
-    terminator Bnz { cond=v37, target=b3, fall=b5 }   (exit_acc=v37)
+    terminator Bz { cond=v37, target=b5, fall=b3 }   (exit_acc=v37)
   block 5  start_pc=0
     v27  Imm(0)                                           -> x0
     v28  Imm(0)                                           -> x0

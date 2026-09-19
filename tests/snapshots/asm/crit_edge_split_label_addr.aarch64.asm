@@ -48,7 +48,7 @@ Disassembly of section .text:
                	and	x1, x1, #0xf
                	mov	x17, #0x5               // =5
                	eor	x1, x1, x17
-               	cbnz	w1, <addr>
+               	cbz	w1, <addr>
                	b	<addr>
                	ldursw	x0, [x29, #-0x10]
                	add	x0, x0, #0x2
@@ -60,8 +60,13 @@ Disassembly of section .text:
                	and	x1, x2, #0x1
                	cmp	w1, #0x0
                	cset	x1, ne
-               	cbz	x1, <addr>
-               	b	<addr>
+               	cbnz	x1, <addr>
+               	ldur	w1, [x29, #-0x30]
+               	ldur	w2, [x29, #-0x20]
+               	and	x1, x1, #0xf
+               	mov	x17, #0x5               // =5
+               	eor	x1, x1, x17
+               	cbnz	w1, <addr>
                	and	x0, x2, #0x2
                	cmp	w0, #0x0
                	cset	x0, ne

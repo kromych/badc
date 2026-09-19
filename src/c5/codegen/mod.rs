@@ -2792,24 +2792,6 @@ pub struct Hardening {
     pub cf_protection_branch: bool,
 }
 
-/// Blocks a function can be entered at by an indirect branch: every
-/// successor of a `Terminator::JumpTable` and every block whose address
-/// `&&label` took. Both arches place a landing pad at each -- `BTI J` on
-/// aarch64, `endbr64` on x86_64. A `Terminator::AsmGoto` label is
-/// excluded: the inline-asm lowering reaches it with a direct branch.
-pub(crate) fn indirect_branch_target_blocks(
-    func: &crate::c5::ir::FunctionSsa,
-) -> alloc::collections::BTreeSet<crate::c5::ir::BlockId> {
-    let mut out: alloc::collections::BTreeSet<_> =
-        func.computed_goto_targets.iter().copied().collect();
-    for block in &func.blocks {
-        if let crate::c5::ir::Terminator::JumpTable { table, .. } = block.terminator {
-            out.extend(func.jump_tables[table as usize].iter().copied());
-        }
-    }
-    out
-}
-
 impl Hardening {
     /// Every mitigation off: the emitters keep their unhardened forms.
     pub const NONE: Self = Self {

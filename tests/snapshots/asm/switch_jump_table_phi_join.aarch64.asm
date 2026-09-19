@@ -274,15 +274,6 @@ Disassembly of section .text:
                	add	x0, x0, #0x7
                	add	x1, x1, x0
                	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
                	mov	x0, #-0x2               // =-2
                	b	<addr>
                	mov	x1, #-0x2               // =-2
@@ -340,7 +331,6 @@ Disassembly of section .text:
                	b	<addr>
                	mov	x6, #0xd                // =13
                	mov	x1, #0x11               // =17
-               	b	<addr>
                	b	<addr>
                	mov	x6, x0
                	b	<addr>
@@ -426,15 +416,6 @@ Disassembly of section .text:
                	mov	x6, #0xd                // =13
                	mov	x0, #0x11               // =17
                	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
                	mov	x0, #0x0                // =0
                	b	<addr>
                	mov	x1, #-0x2               // =-2
@@ -502,15 +483,6 @@ Disassembly of section .text:
                	b	<addr>
                	mov	x1, #0xd                // =13
                	mov	x6, #0x11               // =17
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
                	b	<addr>
                	mov	x0, #0x1                // =1
                	b	<addr>

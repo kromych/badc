@@ -84,13 +84,6 @@ Disassembly of section .text:
                	ldrb	w4, [x4]
                	strb	w4, [x3]
                	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
 
 <main>:
                	stp	x20, x21, [sp, #-0x70]!

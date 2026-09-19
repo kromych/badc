@@ -31,7 +31,7 @@ fn ent_pc=2 n_params=3 variadic=false locals=4
     v41  Extend { value=v40, kind=I32 }                   -> x1
     v42  Imm(0)                                           -> x2
     v43  Imm(0)                                           -> x2
-    terminator Bz { cond=v41, target=b4, fall=b2 }   (exit_acc=v41)
+    terminator Bnz { cond=v41, target=b2, fall=b4 }   (exit_acc=v41)
   block 2  start_pc=0
     terminator Jmp(b3)
   block 3  start_pc=0
@@ -46,7 +46,7 @@ fn ent_pc=2 n_params=3 variadic=false locals=4
     v36  Intrinsic { kind=StackPointer, args=[] }         -> x1
     v37  InlineAsm { template="call preempt_schedule_thunk", ops=1, args=[v36] } -> -
     v38  BinopI { op=eq, lhs=v33, rhs_imm=-9223369824946618368 } -> x1
-    terminator Bnz { cond=v38, target=b1, fall=b4 }   (exit_acc=v38)
+    terminator Bz { cond=v38, target=b4, fall=b1 }   (exit_acc=v38)
   block 4  start_pc=0
     v21  Imm(0)                                           -> x1
     v22  Imm(0)                                           -> x1

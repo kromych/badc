@@ -269,15 +269,6 @@ Disassembly of section .text:
                	addq	$0x7, %rax
                	addq	%rax, %rcx
                	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
                	movq	$-0x2, %rax
                	jmp	<addr>
                	movq	$-0x2, %rcx
@@ -335,7 +326,6 @@ Disassembly of section .text:
                	jmp	<addr>
                	movl	$0xd, %esi
                	movl	$0x11, %ecx
-               	jmp	<addr>
                	jmp	<addr>
                	movq	%rax, %rsi
                	jmp	<addr>
@@ -421,15 +411,6 @@ Disassembly of section .text:
                	movl	$0xd, %esi
                	movl	$0x11, %eax
                	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
                	xorl	%eax, %eax
                	jmp	<addr>
                	movq	$-0x2, %rcx
@@ -497,15 +478,6 @@ Disassembly of section .text:
                	jmp	<addr>
                	movl	$0xd, %ecx
                	movl	$0x11, %esi
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
                	jmp	<addr>
                	movl	$0x1, %eax
                	jmp	<addr>

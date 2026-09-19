@@ -7918,6 +7918,84 @@ fn aarch64_switch_table_pic_object_uses_pcrel_entries() {
     }
 }
 
+/// Under `-mbranch-protection=bti` and `-fcf-protection=branch` every
+/// switch-table slot lands on a landing pad, and a case with no code of its
+/// own takes the slot of the block its edge reaches: no slot lands on a pad
+/// followed by a jump, and the empty cases share one slot target.
+#[test]
+fn switch_slots_land_on_pads_where_their_cases_reach() {
+    use crate::{
+        CompileOptions, Compiler, Hardening, NativeOptions, OutputKind, Target,
+        emit_native_with_options,
+    };
+    const SRC: &str = "int classify(int x) {\n\
+         int r = 0;\n\
+         switch (x) {\n\
+         case 0: break; case 1: case 2: r = 10; break; case 3: break;\n\
+         case 4: r = 40; break; case 5: case 6: case 7: break;\n\
+         case 8: r = 80; break; case 9: break; default: r = -1; break;\n\
+         }\n\
+         return r + x;\n}\n";
+    const EMPTY: [usize; 6] = [0, 3, 5, 6, 7, 9];
+    let bti = Hardening {
+        bti: true,
+        ..Hardening::NONE
+    };
+    let cet = Hardening {
+        cf_protection_branch: true,
+        ..Hardening::NONE
+    };
+    for (target, hardening, pad, jump) in [
+        (
+            Target::LinuxAarch64,
+            bti,
+            &[0x9F, 0x24, 0x03, 0xD5][..],
+            (|c: &[u8]| c[3] & 0xFC == 0x14) as fn(&[u8]) -> bool,
+        ),
+        (Target::LinuxX64, cet, &[0xF3, 0x0F, 0x1E, 0xFA][..], |c| {
+            matches!(c[0], 0xE9 | 0xEB)
+        }),
+    ] {
+        for optimize in [false, true] {
+            let prog = Compiler::with_options(
+                SRC.to_string(),
+                target,
+                CompileOptions::default()
+                    .with_no_entry_point(true)
+                    .with_optimize(optimize),
+            )
+            .compile()
+            .expect("compile");
+            let opts = NativeOptions {
+                output_kind: OutputKind::Relocatable,
+                hardening,
+                optimize,
+                ..NativeOptions::default()
+            };
+            let obj = emit_native_with_options(&prog, target, opts).expect("emit");
+            let elf = ElfView::new(&obj);
+            let text = elf.find(".text").expect("no .text");
+            let code = &obj[elf.sh_offset(text)..][..elf.sh_size(text)];
+            let rela = elf.find(".rela.rodata.jump_tables").expect("no table");
+            let slots: Vec<usize> = elf
+                .rela_rows(rela)
+                .iter()
+                .map(|r| r.addend as usize)
+                .collect();
+            assert_eq!(slots.len(), 10, "{target:?} -O {optimize}");
+            for &at in &slots {
+                let ctx = || format!("{target:?} -O {optimize}: slot at {at:#x}");
+                assert_eq!(&code[at..at + 4], pad, "{}", ctx());
+                assert!(!jump(&code[at + 4..]), "{}", ctx());
+            }
+            assert!(
+                EMPTY.iter().all(|&k| slots[k] == slots[EMPTY[0]]),
+                "{target:?} -O {optimize}: {slots:x?}"
+            );
+        }
+    }
+}
+
 /// `-fno-jump-tables`: a dense set that would otherwise table-dispatch
 /// stays on the compare tree, so no table section reaches the object
 /// and the dispatch takes no indirect branch. Kernel configurations

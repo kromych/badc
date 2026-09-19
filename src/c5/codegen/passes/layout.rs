@@ -1,4 +1,4 @@
-//! Block layout: fallthrough chains, loop rotation, branch inversion.
+//! Block layout: fallthrough chains, loop rotation.
 //!
 //! The walker lowers `for` / `while` as (header, post, body, after)
 //! with the header's exit test branching over `post`, so every
@@ -17,11 +17,10 @@
 //! * a loop whose header conditionally exits the loop is rotated to
 //!   bottom-test form: the header moves to the end of the loop's
 //!   chain, and an unconditional latch is placed directly before it
-//!   so the back edge falls through;
-//! * a conditional whose taken target is the next block in layout is
-//!   inverted (`Bz` <-> `Bnz`, arms swapped); the successor set is
-//!   unchanged, so no critical edge appears after
-//!   `split_crit_edges`.
+//!   so the back edge falls through.
+//!
+//! Which arm of a conditional is taken is decided at emission, where the
+//! block plan knows which blocks emit code (`ssa::block_plan`).
 //!
 //! Functions with a computed goto (`BlockAddr` pins label blocks and
 //! the flow can be irreducible) and functions with an irreducible
@@ -69,7 +68,6 @@ fn run_one(func: &mut FunctionSsa, chains: &mut JumpChains) {
         return;
     }
     super::remap_blocks::permute_blocks(func, &order);
-    invert_branches(func);
 }
 
 /// The unconditional target of a terminator, if any.
@@ -772,41 +770,6 @@ fn layout_order(func: &FunctionSsa, loops: &[NaturalLoop], forest: &LoopForest) 
     order
 }
 
-/// Invert a conditional whose taken target is the next block in
-/// layout so the emitters' next-block elision applies. The successor
-/// set is unchanged.
-fn invert_branches(func: &mut FunctionSsa) {
-    for i in 0..func.blocks.len() {
-        let next = (i + 1) as BlockId;
-        let term = &mut func.blocks[i].terminator;
-        match *term {
-            Terminator::Bz {
-                cond,
-                target,
-                fall_through,
-            } if target == next && fall_through != next => {
-                *term = Terminator::Bnz {
-                    cond,
-                    target: fall_through,
-                    fall_through: target,
-                };
-            }
-            Terminator::Bnz {
-                cond,
-                target,
-                fall_through,
-            } if target == next && fall_through != next => {
-                *term = Terminator::Bz {
-                    cond,
-                    target: fall_through,
-                    fall_through: target,
-                };
-            }
-            _ => {}
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -937,13 +900,13 @@ mod tests {
         // body falls into post, post falls into the header.
         assert!(matches!(f.blocks[1].terminator, Terminator::Jmp(2)));
         assert!(matches!(f.blocks[2].terminator, Terminator::Jmp(3)));
-        // The rotated header inverted Bz -> Bnz: the back edge is the
-        // taken conditional, the exit falls through.
+        // The rotated header keeps its test; the emit takes the back edge
+        // and runs into the exit.
         assert!(matches!(
             f.blocks[3].terminator,
-            Terminator::Bnz {
-                target: 1,
-                fall_through: 4,
+            Terminator::Bz {
+                target: 4,
+                fall_through: 1,
                 ..
             }
         ));

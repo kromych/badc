@@ -162,7 +162,7 @@ Disassembly of section .text:
                	addq	$0x3, %r13
                	subq	$0x3, %rbx
                	cmpl	$0x2, %ebx
-               	ja	<addr>
+               	jbe	<addr>
                	jmp	<addr>
 
 <walk1>:

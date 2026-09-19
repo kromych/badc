@@ -88,9 +88,9 @@ fn x64_branches_land_on_boundaries(insns: &[X64Insn]) -> bool {
         .all(|b| insns.iter().any(|t| t.at == b.target()))
 }
 
-/// Blocks whose address a table or a label holds stay in the code even
-/// when they hold none of their own, and every direct branch around them
-/// still lands on an instruction of the function.
+/// Blocks whose address a label holds stay in the code even when they hold
+/// none of their own; a table slot names where its case lands. Every direct
+/// branch around them still lands on an instruction of the function.
 #[test]
 fn addressed_blocks_stay_in_the_code() {
     let src = "int classify(int x) {\n\

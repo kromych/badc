@@ -32,10 +32,8 @@ Disassembly of section .text:
                	jmpq	*%r10
                	movl	$0x1, %eax
                	retq
-               	jmp	<addr>
                	movl	$0x2, %eax
                	retq
-               	jmp	<addr>
 
 <main>:
                	pushq	%rbp

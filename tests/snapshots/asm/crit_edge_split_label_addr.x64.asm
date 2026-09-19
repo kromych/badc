@@ -58,7 +58,7 @@ Disassembly of section .text:
                	andq	$0xf, %rcx
                	xorq	$0x5, %rcx
                	testl	%ecx, %ecx
-               	jne	<addr>
+               	je	<addr>
                	jmp	<addr>
                	movslq	-0x10(%rbp), %rax
                	addq	$0x2, %rax
@@ -72,8 +72,13 @@ Disassembly of section .text:
                	setne	%cl
                	movzbq	%cl, %rcx
                	testq	%rcx, %rcx
-               	je	<addr>
-               	jmp	<addr>
+               	jne	<addr>
+               	movl	-0x30(%rbp), %ecx
+               	movl	-0x20(%rbp), %edx
+               	andq	$0xf, %rcx
+               	xorq	$0x5, %rcx
+               	testl	%ecx, %ecx
+               	jne	<addr>
                	movq	%rdx, %rax
                	andq	$0x2, %rax
                	testl	%eax, %eax

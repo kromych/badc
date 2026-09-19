@@ -29,6 +29,8 @@ pub(crate) struct BlockPlan {
     next: Vec<BlockId>,
     /// The block repeated in place of the closing jump.
     repeat: Vec<BlockId>,
+    /// A conditional that runs into neither arm closes with its taken one.
+    flip: Vec<bool>,
     /// The arm a repeat takes when its test is decided where it is repeated.
     decided: Vec<BlockId>,
     /// Instructions only a decided repeat's test reads.
@@ -55,6 +57,7 @@ impl BlockPlan {
             skipped: alloc::vec![false; n],
             next: alloc::vec![NO_BLOCK; n],
             repeat: alloc::vec![NO_BLOCK; n],
+            flip: alloc::vec![false; n],
             decided: alloc::vec![NO_BLOCK; n],
             test_only: BTreeSet::new(),
         };
@@ -126,24 +129,15 @@ impl BlockPlan {
 
     fn plan_repeats(&mut self, func: &FunctionSsa, alloc: &Allocation) {
         let n = func.blocks.len();
-        for p in (0..n).filter(|&p| !self.skipped[p]) {
-            let Some(t) = self.closing_jump(func, p) else {
+        for p in 0..n {
+            let Some(t) = self.closing_jump(func, p).filter(|_| !self.skipped[p]) else {
                 continue;
             };
-            let h = self.resolve(t);
-            if h as usize == p {
-                continue;
-            }
-            let Some((a, b)) = repeatable_arms(func, alloc, h) else {
-                continue;
-            };
-            // The code runs into one arm: the repeat ends in one branch.
-            let into = self.runs_into(p);
-            if into != NO_BLOCK && (into == self.resolve(a) || into == self.resolve(b)) {
-                self.repeat[p] = h;
-                if let Some(arm) = self.decide(func, alloc, p as BlockId, t, h) {
-                    self.decided[p] = arm;
-                }
+            if !self.try_repeat(func, alloc, p, t)
+                && let Some(taken) = self.taken_arm(func, p)
+                && self.try_repeat(func, alloc, p, taken)
+            {
+                self.flip[p] = true;
             }
         }
         // A block reached by repeated edges only would be dead code.
@@ -161,6 +155,7 @@ impl BlockPlan {
         for p in 0..n {
             if self.repeat[p] != NO_BLOCK && !reached[self.repeat[p] as usize] {
                 self.repeat[p] = NO_BLOCK;
+                self.flip[p] = false;
                 self.decided[p] = NO_BLOCK;
             }
         }
@@ -171,6 +166,46 @@ impl BlockPlan {
         for h in decided {
             self.test_only.extend(test_only(func, alloc, h));
         }
+    }
+
+    /// Repeat the block `p`'s edge to `t` lands on, when `p` runs into an arm of it.
+    fn try_repeat(&mut self, func: &FunctionSsa, alloc: &Allocation, p: usize, t: BlockId) -> bool {
+        let h = self.resolve(t);
+        let into = self.runs_into(p);
+        let Some((a, b)) = repeatable_arms(func, alloc, h).filter(|_| h as usize != p) else {
+            return false;
+        };
+        if into == NO_BLOCK || (into != self.resolve(a) && into != self.resolve(b)) {
+            return false;
+        }
+        self.repeat[p] = h;
+        if let Some(arm) = self.decide(func, alloc, p as BlockId, t, h) {
+            self.decided[p] = arm;
+        }
+        true
+    }
+
+    /// The taken arm of `p`'s conditional when its code runs into neither.
+    fn taken_arm(&self, func: &FunctionSsa, p: usize) -> Option<BlockId> {
+        let (Terminator::Bz {
+            target,
+            fall_through,
+            ..
+        }
+        | Terminator::Bnz {
+            target,
+            fall_through,
+            ..
+        }) = func.blocks[p].terminator
+        else {
+            return None;
+        };
+        let (t, f, into) = (
+            self.resolve(target),
+            self.resolve(fall_through),
+            self.runs_into(p),
+        );
+        (t != f && into != t && into != f).then_some(target)
     }
 
     /// The arm `h`'s test takes when `p` reaches it through `t`: the path binds
@@ -238,6 +273,29 @@ impl BlockPlan {
         self.skipped[b]
     }
 
+    /// Blocks that open with a landing pad (`BTI J`, `endbr64`): each block
+    /// `&&label` addresses, and where each jump-table slot lands.
+    pub(crate) fn landing_pads(&self, func: &FunctionSsa) -> BTreeSet<BlockId> {
+        let lands = |b: BlockId| {
+            if self.skipped[b as usize] {
+                self.resolve(b)
+            } else {
+                b
+            }
+        };
+        let mut out: BTreeSet<BlockId> = func
+            .computed_goto_targets
+            .iter()
+            .map(|&b| lands(b))
+            .collect();
+        for block in &func.blocks {
+            if let Terminator::JumpTable { table, .. } = block.terminator {
+                out.extend(func.jump_tables[table as usize].iter().map(|&b| lands(b)));
+            }
+        }
+        out
+    }
+
     /// Where the code of `block_idx` runs off its end; a kept block that
     /// emits nothing passes it on.
     fn runs_into(&self, block_idx: usize) -> BlockId {
@@ -252,7 +310,8 @@ impl BlockPlan {
         self.runs_into(block_idx) == self.resolve(t)
     }
 
-    /// A taken arm the code runs into swaps the arms and inverts the test.
+    /// A taken arm the code runs into swaps the arms and inverts the test,
+    /// and so does a flipped block that runs into neither.
     pub(crate) fn cond_shape(
         &self,
         block_idx: usize,
@@ -261,9 +320,10 @@ impl BlockPlan {
         negate: bool,
     ) -> CondShape {
         let (t, f) = (self.resolve(target), self.resolve(fall_through));
+        let into = self.runs_into(block_idx);
         if t == f {
             CondShape::Jump(t)
-        } else if self.runs_into(block_idx) == t {
+        } else if into == t || (into != f && self.flip[block_idx]) {
             CondShape::Branch {
                 taken: f,
                 other: t,
@@ -414,8 +474,8 @@ fn repeatable_arms(
 }
 
 /// Blocks that stay: the entry, and every block addressed by other than a
-/// direct edge -- a label address, a jump-table slot (it takes the landing
-/// pad), an `asm goto` label (its template branch has its own reach).
+/// direct edge or a table slot (filled from the final offsets) -- a label
+/// address, an `asm goto` label (its template branch has its own reach).
 fn pinned_blocks(func: &FunctionSsa) -> Vec<bool> {
     let mut pinned = alloc::vec![false; func.blocks.len()];
     let mut pin = |b: BlockId| {
@@ -427,19 +487,11 @@ fn pinned_blocks(func: &FunctionSsa) -> Vec<bool> {
     func.computed_goto_targets.iter().for_each(|&b| pin(b));
     func.label_data_relocs.iter().for_each(|r| pin(r.block));
     for block in &func.blocks {
-        match block.terminator {
-            Terminator::JumpTable { table, .. } => {
-                func.jump_tables[table as usize]
-                    .iter()
-                    .for_each(|&b| pin(b));
-            }
-            // Row entry 0 is the fall-through, a direct edge.
-            Terminator::AsmGoto { table } => {
-                func.jump_tables[table as usize][1..]
-                    .iter()
-                    .for_each(|&b| pin(b));
-            }
-            _ => {}
+        // Row entry 0 is the fall-through, a direct edge.
+        if let Terminator::AsmGoto { table } = block.terminator {
+            func.jump_tables[table as usize][1..]
+                .iter()
+                .for_each(|&b| pin(b));
         }
     }
     pinned
@@ -650,12 +702,28 @@ mod tests {
         f.blocks[0].terminator = Terminator::JumpTable { idx: 0, table: 0 };
         f.blocks[6].terminator = Terminator::AsmGoto { table: 1 };
         let plan = BlockPlan::build(&f, &a, false);
-        // Row entry 0 of the `asm goto` is its fall-through, a direct edge.
-        assert_eq!(skipped(&plan), [5]);
+        // A table slot names where its row lands; row entry 0 of the
+        // `asm goto` is its fall-through, a direct edge.
+        assert_eq!(skipped(&plan), [3, 5]);
         // A direct edge still passes a kept block, and code that runs into
         // one runs into the block behind it.
         assert_eq!(plan.resolve(1), 6);
-        assert!(plan.falls_into(3, 6) && plan.falls_into(4, 6));
+        assert!(plan.falls_into(2, 6) && plan.falls_into(4, 6));
+        // The pads: the label's own block, and where both slots land.
+        assert_eq!(
+            plan.landing_pads(&f).into_iter().collect::<Vec<_>>(),
+            [1, 6]
+        );
+        f.computed_goto_targets.clear();
+        f.jump_tables[0] = alloc::vec![4, 2];
+        assert_eq!(
+            BlockPlan::build(&f, &a, false)
+                .landing_pads(&f)
+                .into_iter()
+                .collect::<Vec<_>>(),
+            [2, 4],
+            "a slot naming a kept block lands on it"
+        );
     }
 
     #[test]
@@ -1032,6 +1100,65 @@ mod tests {
         assert_eq!(plan.decided_at(0), Some(1));
         let only: Vec<ValueId> = (3..8).filter(|&v| plan.is_test_only(v)).collect();
         assert_eq!(only, [5, 7], "v3 is still read by v6");
+    }
+
+    #[test]
+    fn a_conditional_that_runs_into_neither_arm_closes_with_the_one_it_can_repeat() {
+        // b0: Bnz v0 -> target | fall / b1: v1; Jmp b2 / b2: v2 = v0 < 16;
+        // Bnz v2 -> b1 | b3 / b3, b4: Return. b0 runs into b1, an arm of b2.
+        let build = |target: BlockId, fall_through: BlockId| {
+            let f = func_with(
+                alloc::vec![
+                    Inst::ParamRef {
+                        idx: 0,
+                        kind: LoadKind::I64
+                    },
+                    Inst::Imm(5),
+                    op_imm(BinOp::Lt, 0, 16),
+                ],
+                alloc::vec![
+                    block(
+                        0..1,
+                        Terminator::Bnz {
+                            cond: 0,
+                            target,
+                            fall_through,
+                        }
+                    ),
+                    block(1..2, Terminator::Jmp(2)),
+                    block(
+                        2..3,
+                        Terminator::Bnz {
+                            cond: 2,
+                            target: 1,
+                            fall_through: 3,
+                        }
+                    ),
+                    block(3..3, Terminator::Return(0)),
+                    block(3..3, Terminator::Return(1)),
+                ],
+            );
+            (f, alloc_with(alloc::vec![Place::IntReg(0); 3]))
+        };
+        let branch = |taken, other, negate| CondShape::Branch {
+            taken,
+            other,
+            negate,
+        };
+        // The taken arm is the test: the arms swap and the jump to it repeats it.
+        let (f, a) = build(2, 4);
+        let plan = BlockPlan::build(&f, &a, true);
+        assert_eq!(repeats(&plan), [(0, 2)]);
+        assert_eq!(plan.cond_shape(0, 2, 4, false), branch(4, 2, true));
+        // The repeat's own branch, which runs into b1, keeps its sense.
+        assert_eq!(plan.cond_shape(0, 3, 1, false), branch(3, 1, false));
+        let plain = BlockPlan::build(&f, &a, false);
+        assert_eq!(plain.cond_shape(0, 2, 4, false), branch(2, 4, false));
+        // The closing arm is the test already: nothing swaps.
+        let (f, a) = build(4, 2);
+        let plan = BlockPlan::build(&f, &a, true);
+        assert_eq!(repeats(&plan), [(0, 2)]);
+        assert_eq!(plan.cond_shape(0, 4, 2, false), branch(4, 2, false));
     }
 
     #[test]

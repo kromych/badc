@@ -97,13 +97,6 @@ Disassembly of section .text:
                	movsbq	(%rdx), %rdx
                	movb	%dl, (%rcx)
                	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
 
 <main>:
                	pushq	%rbp

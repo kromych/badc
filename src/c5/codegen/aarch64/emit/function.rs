@@ -605,7 +605,7 @@ impl FunctionEmitter<'_, '_> {
         // Blocks a `BR` can reach take a `BTI J` at their head, ahead of
         // the offset every branch fixup resolves to.
         let bti_targets = if abi.hardening.bti {
-            super::super::indirect_branch_target_blocks(func)
+            self.plan.landing_pads(func)
         } else {
             alloc::collections::BTreeSet::new()
         };

@@ -145,7 +145,7 @@ Disassembly of section .text:
                	add	x22, x22, #0x3
                	sub	x20, x20, #0x3
                	cmp	w20, #0x2
-               	b.hi	<addr>
+               	b.ls	<addr>
                	b	<addr>
 
 <walk1>:

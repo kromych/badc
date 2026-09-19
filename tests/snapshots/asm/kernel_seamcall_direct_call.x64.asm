@@ -42,8 +42,7 @@ Disassembly of section .text:
                	decq	%rbx
                	movslq	%ebx, %rax
                	testq	%rax, %rax
-               	je	<addr>
-               	jmp	<addr>
+               	jne	<addr>
                	leaq	-0x20(%rbp), %rax
                	movq	0x10(%rax), %rax
                	movq	%rax, (%r14)

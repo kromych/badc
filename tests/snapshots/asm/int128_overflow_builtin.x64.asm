@@ -142,4 +142,3 @@ Disassembly of section .text:
                	jmp	<addr>
                	movq	%rax, %rdx
                	jmp	<addr>
-               	jmp	<addr>

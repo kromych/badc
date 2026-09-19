@@ -136,7 +136,6 @@ Disassembly of section .text:
                	jne	<addr>
                	movl	$0x18, %eax
                	retq
-               	jmp	<addr>
                	movsbq	(%rax), %rcx
                	movsbq	(%rdx), %rsi
                	cmpl	%esi, %ecx
@@ -163,11 +162,6 @@ Disassembly of section .text:
                	retq
                	xorq	%rax, %rax
                	retq
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
 
 <main>:
                	pushq	%rbp
@@ -240,7 +234,5 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	popq	%rbp
                	retq
-               	jmp	<addr>
                	xorq	%rax, %rax
-               	jmp	<addr>
                	jmp	<addr>

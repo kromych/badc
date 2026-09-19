@@ -85,7 +85,6 @@ Disassembly of section .text:
                	add	x21, x21, #0x40
                	cbz	x20, <addr>
                	add	x20, x20, #0x40
-               	b	<addr>
                	cmp	x23, #0x40
                	b.hs	<addr>
                	mov	x0, #0x0                // =0

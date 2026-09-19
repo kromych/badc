@@ -36,7 +36,6 @@ Disassembly of section .text:
                	sub	x0, x0, #0x1
                	b	<addr>
                	add	x0, x0, #0x2
-               	b	<addr>
                	add	x1, x1, #0x1
                	cmp	w1, w9
                	b.lt	<addr>
@@ -65,7 +64,6 @@ Disassembly of section .text:
                	sub	x0, x0, #0x1
                	b	<addr>
                	add	x0, x0, #0x2
-               	b	<addr>
                	add	x1, x1, #0x1
                	cmp	w1, #0xa
                	b.lt	<addr>

@@ -332,7 +332,6 @@ Disassembly of section .text:
                	retq
                	xorq	%rax, %rax
                	retq
-               	jmp	<addr>
                	movq	%rcx, %rsi
                	jmp	<addr>
                	movq	%rcx, %rsi
@@ -343,7 +342,6 @@ Disassembly of section .text:
                	jmp	<addr>
                	movq	%rcx, %rdx
                	jmp	<addr>
-               	jmp	<addr>
                	movq	%rdx, %rcx
                	jmp	<addr>
                	movq	%rdx, %rcx
@@ -353,21 +351,18 @@ Disassembly of section .text:
                	movq	%rdx, %rcx
                	jmp	<addr>
                	movq	%rdx, %rcx
-               	jmp	<addr>
                	jmp	<addr>
                	movq	%rsi, %rdi
                	jmp	<addr>
                	movq	%rsi, %rdi
                	jmp	<addr>
                	movq	%rsi, %rdi
-               	jmp	<addr>
                	jmp	<addr>
                	movq	%rdi, %rcx
                	jmp	<addr>
                	movq	%rdi, %rsi
                	jmp	<addr>
                	movq	%rdi, %rsi
-               	jmp	<addr>
                	jmp	<addr>
                	movq	%rsi, %rdi
                	jmp	<addr>
@@ -376,7 +371,6 @@ Disassembly of section .text:
                	movq	%rsi, %rdx
                	jmp	<addr>
                	movq	%rsi, %rdx
-               	jmp	<addr>
                	jmp	<addr>
                	movq	%rdx, %rcx
                	jmp	<addr>

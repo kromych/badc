@@ -131,13 +131,11 @@ Disassembly of section .text:
                	mov	x0, x1
                	b	<addr>
                	ldursw	x0, [x29, #-0x8]
-               	cbz	x0, <addr>
-               	b	<addr>
+               	cbnz	x0, <addr>
                	mov	x0, #0x63               // =99
                	b	<addr>
                	ldursw	x0, [x29, #-0x10]
-               	cbz	x0, <addr>
-               	b	<addr>
+               	cbnz	x0, <addr>
                	ldursw	x0, [x29, #-0x8]
                	b	<addr>
                	adrp	x0, <page>

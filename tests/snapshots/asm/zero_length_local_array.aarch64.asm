@@ -57,8 +57,7 @@ Disassembly of section .text:
                	str	w3, [x0, #0x8]
                	sub	x3, x29, #0x8
                	cmp	x3, x0
-               	b.ne	<addr>
-               	b	<addr>
+               	b.eq	<addr>
                	ldrsw	x1, [x0]
                	ldrsw	x3, [x0, #0x4]
                	add	x1, x1, x3

@@ -282,35 +282,6 @@ Disassembly of section .text:
                	add	x2, x3, x2
                	sxtw	x2, w2
                	add	x3, x5, x2
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x4
                	b.le	<addr>

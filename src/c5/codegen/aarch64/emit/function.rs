@@ -99,6 +99,8 @@ struct FunctionEmitter<'a, 'b> {
     abs_jump_tables: bool,
     entry: super::FunctionEntry,
     snapshot: EmitSnapshot,
+    /// Which blocks are emitted and where each branch lands.
+    plan: super::ssa::block_plan::BlockPlan,
     block_offsets: Vec<usize>,
     branch_fixups: Vec<BranchFixup>,
     /// Per block: its conditional branch does not reach its target and
@@ -239,6 +241,7 @@ pub(crate) fn emit_function(
         abs_jump_tables,
         entry,
         snapshot,
+        plan: super::ssa::block_plan::BlockPlan::build(func, alloc),
         block_offsets: alloc::vec![0; func.blocks.len()],
         branch_fixups: Vec::new(),
         far_cond: alloc::vec![false; func.blocks.len()],
@@ -374,9 +377,11 @@ impl FunctionEmitter<'_, '_> {
         }
     }
 
-    /// Branch to `target` unless it is the next block in layout order.
+    /// Branch to where an edge to `target` lands, unless the code of
+    /// `block_idx` runs into it.
     fn branch_unless_next(&mut self, block_idx: usize, target: BlockId) {
-        if target as usize != block_idx + 1 {
+        if !self.plan.falls_into(block_idx, target) {
+            let target = self.plan.resolve(target);
             self.emit_branch(block_idx, target, LocalBranchKind::B);
         }
     }
@@ -580,6 +585,11 @@ impl FunctionEmitter<'_, '_> {
             alloc::collections::BTreeSet::new()
         };
         for (block_idx, block) in func.blocks.iter().enumerate() {
+            if self.plan.is_skipped(block_idx) {
+                #[cfg(debug_assertions)]
+                self.assert_emits_nothing(block_idx, prebatched)?;
+                continue;
+            }
             let bti = bti_targets.contains(&(block_idx as BlockId));
             if bti {
                 self.align_stream();
@@ -614,6 +624,48 @@ impl FunctionEmitter<'_, '_> {
             }
             self.emit_terminator(block_idx, block)?;
         }
+        // A block left out stands where its edges land, for every reader of
+        // the offsets.
+        for b in 0..func.blocks.len() {
+            if self.plan.is_skipped(b) {
+                self.block_offsets[b] =
+                    self.block_offsets[self.plan.resolve(b as BlockId) as usize];
+            }
+        }
+        Ok(())
+    }
+
+    /// A block the plan leaves out writes nothing when lowered: its
+    /// instructions, then the moves of its outgoing edge.
+    #[cfg(debug_assertions)]
+    fn assert_emits_nothing(&mut self, block_idx: usize, prebatched: &[bool]) -> Emit {
+        let FnCtx {
+            func,
+            alloc,
+            frame,
+            scratch,
+            ..
+        } = self.fcx;
+        let block = &func.blocks[block_idx];
+        let (code, fixups) = (self.cx.code.len(), self.branch_fixups.len());
+        for v in block.inst_range.clone() {
+            self.emit_block_inst(block, v, prebatched)?;
+        }
+        if let Err(e) = emit_phi_predecessor_moves(
+            self.cx.code,
+            block_idx as BlockId,
+            func,
+            alloc,
+            scratch,
+            frame,
+        ) {
+            return self.rollback(e);
+        }
+        assert!(
+            self.cx.code.len() == code && self.branch_fixups.len() == fixups,
+            "block {block_idx} of `{}` is left out of the code but lowers to bytes",
+            func.name
+        );
         Ok(())
     }
 
@@ -632,7 +684,7 @@ impl FunctionEmitter<'_, '_> {
         if func.is_naked && !matches!(inst, Inst::InlineAsm { .. }) {
             return Ok(());
         }
-        if super::ssa::emit_common::is_dead_pure(inst, v, alloc) {
+        if super::ssa::emit_common::inst_emits_nothing(inst, v, alloc) {
             return Ok(());
         }
         if prebatched[v as usize] {
@@ -864,6 +916,7 @@ impl FunctionEmitter<'_, '_> {
         fall_through: BlockId,
         negate: bool,
     ) -> Emit {
+        use super::ssa::block_plan::CondShape;
         let FnCtx {
             func,
             alloc,
@@ -871,6 +924,21 @@ impl FunctionEmitter<'_, '_> {
             scratch,
             ..
         } = self.fcx;
+        let (target, fall_through, negate) =
+            match self
+                .plan
+                .cond_shape(block_idx, target, fall_through, negate)
+            {
+                CondShape::Jump(t) => {
+                    self.branch_unless_next(block_idx, t);
+                    return Ok(());
+                }
+                CondShape::Branch {
+                    taken,
+                    other,
+                    negate,
+                } => (taken, other, negate),
+            };
         if let Some(bcc) = fused_branch_cond(func, alloc, cond, negate) {
             self.emit_cond(block_idx, target, LocalBranchKind::Bcc(bcc));
             self.branch_unless_next(block_idx, fall_through);
@@ -1067,6 +1135,12 @@ impl FunctionEmitter<'_, '_> {
     fn patch_branch_fixups(&mut self) -> Emit {
         for fx in core::mem::take(&mut self.branch_fixups) {
             let rel = self.block_offsets[fx.target as usize] as i64 - fx.site as i64;
+            debug_assert!(
+                !(fx.owner.is_some() && fx.kind == LocalBranchKind::B && rel == 4),
+                "`{}`: block {:?} branches to the next instruction",
+                self.fcx.func.name,
+                fx.owner
+            );
             if rel % 4 != 0 {
                 return self.rollback(unsupported("branch fixup: rel not 4-aligned"));
             }

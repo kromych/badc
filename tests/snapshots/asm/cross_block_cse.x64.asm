@@ -218,8 +218,7 @@ Disassembly of section .text:
                	movq	%rax, %xmm15
                	ucomiss	%xmm15, %xmm0
                	jp	<addr>
-               	je	<addr>
-               	jmp	<addr>
+               	jne	<addr>
                	xorps	%xmm0, %xmm0
                	movq	%rcx, %r10
                	testq	%r10, %r10
@@ -236,8 +235,7 @@ Disassembly of section .text:
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>
-               	je	<addr>
-               	jmp	<addr>
+               	jne	<addr>
                	xorps	%xmm0, %xmm0
                	movq	%rcx, %r10
                	testq	%r10, %r10
@@ -254,8 +252,7 @@ Disassembly of section .text:
                	movq	%rax, %xmm15
                	ucomiss	%xmm15, %xmm0
                	jp	<addr>
-               	je	<addr>
-               	jmp	<addr>
+               	jne	<addr>
                	leaq	-0x30(%rbp), %rdx
                	leaq	<rip>, %rax
                	pushq	%rcx
@@ -286,7 +283,6 @@ Disassembly of section .text:
                	addq	%rsi, %rcx
                	jmp	<addr>
                	subq	%rdi, %rcx
-               	jmp	<addr>
                	incq	%rax
                	cmpq	$0x6, %rax
                	jl	<addr>
@@ -307,5 +303,4 @@ Disassembly of section .text:
                	movabsq	$-0x1, %rax
                	jmp	<addr>
                	movabsq	$-0x1, %rax
-               	jmp	<addr>
                	jmp	<addr>

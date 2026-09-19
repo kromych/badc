@@ -175,4 +175,3 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x20, %eax
                	jmp	<addr>
-               	jmp	<addr>

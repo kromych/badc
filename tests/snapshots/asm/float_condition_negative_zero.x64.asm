@@ -96,13 +96,7 @@ Disassembly of section .text:
                	retq
                	orq	$0x40, %rcx
                	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
                	movq	%rax, %rdx
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
                	jmp	<addr>
                	movq	%rdx, %rcx
                	jmp	<addr>

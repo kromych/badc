@@ -100,7 +100,6 @@ Disassembly of section .text:
                	b	<addr>
                	mov	x0, #0x0                // =0
                	b	<addr>
-               	b	<addr>
                	mov	x1, x0
                	b	<addr>
                	mov	x1, x0

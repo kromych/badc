@@ -26,6 +26,8 @@ use super::{C5Error, Compiler, Program, Vm};
 mod atomics;
 mod auto_var_init;
 #[cfg(feature = "full")]
+mod block_plan;
+#[cfg(feature = "full")]
 mod branch_reach;
 #[cfg(feature = "full")]
 mod codegen;

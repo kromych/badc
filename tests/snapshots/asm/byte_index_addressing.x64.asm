@@ -186,8 +186,6 @@ Disassembly of section .text:
                	testq	%rdx, %rdx
                	jne	<addr>
                	incq	%rcx
-               	jmp	<addr>
-               	jmp	<addr>
                	incq	%rax
                	cmpl	%esi, %eax
                	jl	<addr>

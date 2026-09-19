@@ -130,7 +130,6 @@ Disassembly of section .text:
                	b	<addr>
                	mov	x1, #0x7                // =7
                	b	<addr>
-               	b	<addr>
 
 <main>:
                	stp	x29, x30, [sp, #-0x10]!

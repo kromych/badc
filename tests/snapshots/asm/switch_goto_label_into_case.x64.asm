@@ -43,7 +43,6 @@ Disassembly of section .text:
                	retq
                	xorq	%rax, %rax
                	retq
-               	jmp	<addr>
                	cmpl	$0x2, %edi
                	jl	<addr>
                	movl	$0x14, %eax

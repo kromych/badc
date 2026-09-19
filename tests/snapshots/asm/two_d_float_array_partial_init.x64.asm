@@ -259,4 +259,3 @@ Disassembly of section .text:
                	jmp	<addr>
                	movq	%r8, %r12
                	jmp	<addr>
-               	jmp	<addr>

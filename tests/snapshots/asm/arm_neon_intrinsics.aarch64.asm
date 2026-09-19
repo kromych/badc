@@ -255,8 +255,6 @@ Disassembly of section .text:
                	lsl	x2, x5, x2
                	and	x2, x2, #0xff
                	eor	x1, x1, x2
-               	b	<addr>
-               	b	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x8
                	b.lt	<addr>

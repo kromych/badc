@@ -101,6 +101,5 @@ Disassembly of section .text:
                	cbz	x1, <addr>
                	mov	x0, #0x5                // =5
                	b	<addr>
-               	b	<addr>
                	mov	x0, #0x1                // =1
                	b	<addr>

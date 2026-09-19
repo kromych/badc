@@ -63,7 +63,6 @@ Disassembly of section .text:
                	cbnz	x4, <addr>
                	mov	x0, x1
                	cmp	x0, #0x1
-               	b.ls	<addr>
                	sub	x0, x29, #0x10
                	ldr	x1, [x0]
                	and	x1, x1, #0x1
@@ -91,7 +90,6 @@ Disassembly of section .text:
                	cbnz	x4, <addr>
                	mov	x4, x1
                	cmp	x4, #0x1
-               	b.ls	<addr>
                	ldr	x1, [x0]
                	and	x1, x1, #0x1
                	cbnz	x1, <addr>
@@ -118,7 +116,6 @@ Disassembly of section .text:
                	cbnz	x4, <addr>
                	mov	x4, x1
                	cmp	x4, #0x1
-               	b.ls	<addr>
                	ldr	x1, [x0]
                	and	x1, x1, #0x1
                	cbnz	x1, <addr>
@@ -144,7 +141,6 @@ Disassembly of section .text:
                	cbnz	x4, <addr>
                	mov	x4, x1
                	cmp	x4, #0x1
-               	b.ls	<addr>
                	ldr	x1, [x0]
                	and	x1, x1, #0x1
                	cbnz	x1, <addr>

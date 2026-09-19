@@ -235,10 +235,6 @@ Disassembly of section .text:
                	orq	$0x8, %rax
                	movslq	%eax, %rax
                	retq
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
 
 <update>:
                	movl	%esi, %eax
@@ -478,12 +474,7 @@ Disassembly of section .text:
                	orq	$0x8, %rax
                	movslq	%eax, %rax
                	cmpq	%rax, %rdx
-               	je	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
+               	jne	<addr>
                	incq	%r13
                	cmpl	$0x8, %r13d
                	jl	<addr>

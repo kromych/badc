@@ -307,10 +307,7 @@ Disassembly of section .text:
                	leaq	-0x1(%rax), %rbx
                	movl	%ebx, %eax
                	testq	%rax, %rax
-               	jne	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
+               	je	<addr>
                	movl	%r12d, %eax
                	leaq	(%r13,%rax), %rdx
                	xorq	%rdx, %rcx

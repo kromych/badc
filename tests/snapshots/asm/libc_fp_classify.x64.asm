@@ -238,7 +238,6 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	movslq	%eax, %rax
                	jmp	<addr>
-               	jmp	<addr>
                	movl	$0x4, %eax
                	jmp	<addr>
                	movl	$0x3, %ecx
@@ -251,7 +250,6 @@ Disassembly of section .text:
                	movslq	%ecx, %rcx
                	jmp	<addr>
                	movq	%rax, %rcx
-               	jmp	<addr>
                	jmp	<addr>
                	movl	$0x3, %eax
                	jmp	<addr>
@@ -274,7 +272,6 @@ Disassembly of section .text:
                	jne	<addr>
                	movl	$0x1, %edx
                	movslq	%edx, %rcx
-               	jmp	<addr>
                	jmp	<addr>
                	movl	$0x4, %ecx
                	jmp	<addr>

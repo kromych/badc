@@ -66,7 +66,6 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x20, [sp], #0x20
                	ret
-               	b	<addr>
 
 <main>:
                	str	x20, [sp, #-0x60]!
@@ -330,7 +329,6 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x50]
                	ldr	x20, [sp], #0x60
                	ret
-               	b	<addr>
                	mov	x0, #0x7                // =7
                	ldp	x29, x30, [sp, #0x50]
                	ldr	x20, [sp], #0x60
@@ -341,7 +339,6 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x0                // =0
                	b	<addr>
-               	b	<addr>
                	mov	x0, #0x3                // =3
                	ldp	x29, x30, [sp, #0x50]
                	ldr	x20, [sp], #0x60
@@ -350,4 +347,3 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x50]
                	ldr	x20, [sp], #0x60
                	ret
-               	b	<addr>

@@ -36,8 +36,7 @@ Disassembly of section .text:
                	movabsq	$-0x1, %rax
                	jmp	<addr>
                	cmpl	$0x1, %edi
-               	je	<addr>
-               	jmp	<addr>
+               	jne	<addr>
                	movl	$0x2a, %eax
                	jmp	<addr>
 

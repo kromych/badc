@@ -766,7 +766,7 @@ pub(crate) fn emit_phi_predecessor_moves<B: EmitBackend>(
     fp_hold: u8,
     fp_stage: u8,
 ) -> Emit {
-    use super::super::ir::{Inst, LoadKind, Terminator};
+    use super::super::ir::{Inst, Terminator};
     use super::reg_alloc::Place;
     let succs: alloc::vec::Vec<super::super::ir::BlockId> =
         match func.blocks[self_block as usize].terminator {
@@ -845,79 +845,13 @@ pub(crate) fn emit_phi_predecessor_moves<B: EmitBackend>(
             }
         };
     for succ in succs {
-        let head = func.blocks[succ as usize].inst_range.start;
-        let end = func.blocks[succ as usize].inst_range.end;
-        // Collect every phi's predecessor-exit move as one location-to-location
-        // parallel copy per register file: a register reg-to-reg move can
-        // overwrite a register a pending spill store still reads, so register
-        // and stack-slot operands must be scheduled together. An FP phi (kind
-        // F32 / F64 / V128) is FP-classed; every other phi is integer-classed. The two
-        // files do not alias, so the two copies are independent.
-        let mut moves: alloc::vec::Vec<(Place, Place)> = alloc::vec::Vec::new();
-        let mut fp_moves: alloc::vec::Vec<(Place, Place, bool)> = alloc::vec::Vec::new();
-        // (bits, dst_place, is_f64, wide) for a constant feeding an FP phi.
-        // `result_kind` classes every `Imm` in the integer file, so an FP
-        // phi's only integer-file operand is a float constant; `phi_class`
-        // refuses to coalesce the class boundary and delegates the move
-        // here. Re-materialising the constant reads only reserved scratch,
-        // so it is independent of the register moves scheduled above.
-        let mut fp_const_moves: alloc::vec::Vec<(i64, Place, bool, bool)> = alloc::vec::Vec::new();
-        for id in head..end {
-            let Inst::Phi { incoming, kind } = &func.insts[id as usize] else {
-                break;
-            };
-            let Some((_, src_v)) = incoming.iter().find(|(pred, _)| *pred == self_block) else {
-                continue;
-            };
-            let dst_place = alloc
-                .places
-                .get(id as usize)
-                .copied()
-                .unwrap_or(Place::None);
-            let src_place = alloc
-                .places
-                .get(*src_v as usize)
-                .copied()
-                .unwrap_or(Place::None);
-            let phi_is_fp = matches!(
-                kind,
-                LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128
-            );
-            let wide = matches!(kind, LoadKind::V128);
-            if matches!(dst_place, Place::None) {
-                continue;
-            }
-            if phi_is_fp {
-                if let Inst::Imm(bits) = func.insts[*src_v as usize] {
-                    fp_const_moves.push((
-                        bits,
-                        dst_place,
-                        matches!(kind, LoadKind::F64 | LoadKind::V128),
-                        wide,
-                    ));
-                    continue;
-                }
-                debug_assert!(
-                    !matches!(src_place, Place::IntReg(_)),
-                    "FP phi integer-file operand must be a constant"
-                );
-                if matches!(src_place, Place::None) {
-                    continue;
-                }
-                fp_moves.push((src_place, dst_place, wide));
-            } else {
-                if matches!(src_place, Place::None) {
-                    continue;
-                }
-                moves.push((src_place, dst_place));
-            }
-        }
-        schedule_place_moves(b, code, &mut moves, frame, int_hold, int_stage)?;
-        schedule_fp_place_moves(b, code, &mut fp_moves, frame, fp_hold, fp_stage);
+        let mut m = edge_moves(func, alloc, self_block, succ);
+        schedule_place_moves(b, code, &mut m.int, frame, int_hold, int_stage)?;
+        schedule_fp_place_moves(b, code, &mut m.fp, frame, fp_hold, fp_stage);
         // After both same-file parallel copies: any FP move reading a phi's
         // register as its source has already run, so overwriting the FP
         // destination here cannot clobber a still-pending read.
-        for (bits, dst, is_f64, wide) in fp_const_moves {
+        for (bits, dst, is_f64, wide) in m.fp_const {
             b.int_reg_load_imm(code, int_stage, bits);
             match dst {
                 Place::FpReg(t) => b.fp_reg_from_int_reg(code, t, int_stage, is_f64),
@@ -934,6 +868,83 @@ pub(crate) fn emit_phi_predecessor_moves<B: EmitBackend>(
         }
     }
     Ok(())
+}
+
+/// The phi moves of the CFG edge `pred -> succ`: one location-to-location
+/// parallel copy per register file, without the moves that stay in place.
+pub(crate) struct EdgeMoves {
+    pub(crate) int: alloc::vec::Vec<(super::reg_alloc::Place, super::reg_alloc::Place)>,
+    /// `(src, dst, wide)`.
+    pub(crate) fp: alloc::vec::Vec<(super::reg_alloc::Place, super::reg_alloc::Place, bool)>,
+    /// `(bits, dst, is_f64, wide)` for a constant feeding an FP phi.
+    pub(crate) fp_const: alloc::vec::Vec<(i64, super::reg_alloc::Place, bool, bool)>,
+}
+
+impl EdgeMoves {
+    /// Whether the edge emits no instruction.
+    pub(crate) fn is_empty(&self) -> bool {
+        self.int.is_empty() && self.fp.is_empty() && self.fp_const.is_empty()
+    }
+}
+
+/// Collect every phi of `succ` that names `pred`. A register reg-to-reg move
+/// can overwrite a register a pending spill store still reads, so register
+/// and stack-slot operands of one file are scheduled together. An FP phi
+/// (kind F32 / F64 / F80 / F128 / V128) is FP-classed, every other phi
+/// integer-classed; the two files do not alias.
+pub(crate) fn edge_moves(
+    func: &super::super::ir::FunctionSsa,
+    alloc: &super::reg_alloc::Allocation,
+    pred: super::super::ir::BlockId,
+    succ: super::super::ir::BlockId,
+) -> EdgeMoves {
+    use super::super::ir::{Inst, LoadKind};
+    use super::reg_alloc::Place;
+    let mut m = EdgeMoves {
+        int: alloc::vec::Vec::new(),
+        fp: alloc::vec::Vec::new(),
+        fp_const: alloc::vec::Vec::new(),
+    };
+    let place =
+        |v: super::super::ir::ValueId| alloc.places.get(v as usize).copied().unwrap_or(Place::None);
+    for id in func.blocks[succ as usize].inst_range.clone() {
+        let Inst::Phi { incoming, kind } = &func.insts[id as usize] else {
+            break;
+        };
+        let Some((_, src_v)) = incoming.iter().find(|(p, _)| *p == pred) else {
+            continue;
+        };
+        let (src_place, dst_place) = (place(*src_v), place(id));
+        if matches!(dst_place, Place::None) {
+            continue;
+        }
+        let wide = matches!(kind, LoadKind::V128);
+        let phi_is_fp = matches!(
+            kind,
+            LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128
+        );
+        if phi_is_fp {
+            // `result_kind` classes every `Imm` in the integer file, so an
+            // FP phi's only integer-file operand is a float constant;
+            // `phi_class` refuses to coalesce the class boundary and the
+            // constant is re-materialised through reserved scratch.
+            if let Inst::Imm(bits) = func.insts[*src_v as usize] {
+                let is_f64 = matches!(kind, LoadKind::F64 | LoadKind::V128);
+                m.fp_const.push((bits, dst_place, is_f64, wide));
+                continue;
+            }
+            debug_assert!(
+                !matches!(src_place, Place::IntReg(_)),
+                "FP phi integer-file operand must be a constant"
+            );
+            if !matches!(src_place, Place::None) && !place_same_loc(src_place, dst_place) {
+                m.fp.push((src_place, dst_place, wide));
+            }
+        } else if !matches!(src_place, Place::None) && !place_same_loc(src_place, dst_place) {
+            m.int.push((src_place, dst_place));
+        }
+    }
+    m
 }
 
 /// Sequentialize a set of parallel register moves `(src, dst)` (raw register
@@ -1306,6 +1317,18 @@ pub(crate) fn is_dead_pure(
     alloc: &super::reg_alloc::Allocation,
 ) -> bool {
     is_dead_pure_counts(inst, v, &alloc.use_counts)
+}
+
+/// Whether `inst` lowers to no machine code and records nothing: a phi,
+/// whose value the predecessors' exit moves place, or a dead pure value.
+/// The one definition both emitters skip by and the block plan reads, so a
+/// block the plan leaves out is one neither emitter would have written.
+pub(crate) fn inst_emits_nothing(
+    inst: &super::super::ir::Inst,
+    v: super::super::ir::ValueId,
+    alloc: &super::reg_alloc::Allocation,
+) -> bool {
+    matches!(inst, super::super::ir::Inst::Phi { .. }) || is_dead_pure(inst, v, alloc)
 }
 
 /// [`is_dead_pure`] over a bare use-count slice. The allocator applies

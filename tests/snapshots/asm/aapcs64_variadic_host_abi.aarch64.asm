@@ -231,7 +231,6 @@ Disassembly of section .text:
                	ldrsw	x2, [x2]
                	scvtf	d1, x2
                	fadd	d0, d0, d1
-               	b	<addr>
                	add	x0, x0, #0x1
                	ldrsw	x2, [x29, #0x10]
                	cmp	w0, w2
@@ -607,10 +606,3 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x20, [sp], #0x20
                	ret
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>

@@ -87,4 +87,3 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x3, %ebx
                	jmp	<addr>
-               	jmp	<addr>

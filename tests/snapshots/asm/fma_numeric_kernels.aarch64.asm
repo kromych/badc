@@ -231,10 +231,6 @@ Disassembly of section .text:
                	fcmp	d0, d17
                	cset	x0, mi
                	cbz	x0, <addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
                	add	x1, x1, #0x1
                	cmp	w1, #0x3
                	b.lt	<addr>
@@ -479,11 +475,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x90
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	b	<addr>
-               	b	<addr>
                	mov	x0, #0x3                // =3
                	add	sp, sp, #0x90
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	b	<addr>
-               	b	<addr>

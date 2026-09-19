@@ -25,8 +25,7 @@ Disassembly of section .text:
                	mov	x3, #0x1000             // =4096
                	mov	x4, #0x1                // =1
                	cmp	x2, x3
-               	b.hs	<addr>
-               	b	<addr>
+               	b.lo	<addr>
                	mov	x2, x3
                	mov	w2, w2
                	add	x1, x1, x2
@@ -47,8 +46,7 @@ Disassembly of section .text:
                	mov	x4, #0x1000             // =4096
                	mov	x5, x3
                	cmp	x2, x4
-               	b.hs	<addr>
-               	b	<addr>
+               	b.lo	<addr>
                	mov	x2, x4
                	mov	w2, w2
                	add	x1, x1, x2
@@ -67,8 +65,7 @@ Disassembly of section .text:
                	mov	x4, #0x1000             // =4096
                	mov	x5, x3
                	cmp	x2, x4
-               	b.hs	<addr>
-               	b	<addr>
+               	b.lo	<addr>
                	mov	x2, x4
                	mov	w2, w2
                	add	x1, x1, x2

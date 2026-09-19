@@ -137,14 +137,12 @@ Disassembly of section .text:
                	jmp	<addr>
                	movslq	-0x8(%rbp), %rax
                	testq	%rax, %rax
-               	je	<addr>
-               	jmp	<addr>
+               	jne	<addr>
                	movl	$0x63, %eax
                	jmp	<addr>
                	movslq	-0x10(%rbp), %rax
                	testq	%rax, %rax
-               	je	<addr>
-               	jmp	<addr>
+               	jne	<addr>
                	movslq	-0x8(%rbp), %rax
                	jmp	<addr>
                	leaq	<rip>, %rax

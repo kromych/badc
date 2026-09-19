@@ -95,7 +95,6 @@ Disassembly of section .text:
                	movsd	(%rdx,%riz), %xmm0
                	cvttsd2si	%xmm0, %rdx
                	addq	%rdx, %rcx
-               	jmp	<addr>
                	incq	%rax
                	cmpl	$0xa, %eax
                	jl	<addr>

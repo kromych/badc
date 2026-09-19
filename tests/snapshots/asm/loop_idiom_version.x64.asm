@@ -42,7 +42,6 @@ Disassembly of section .text:
                	callq	<addr>
                	popq	%rbp
                	retq
-               	jmp	<addr>
                	movslq	%eax, %rcx
                	movzbq	(%rsi,%rcx), %r8
                	movb	%r8b, (%rdi,%rcx)
@@ -70,7 +69,6 @@ Disassembly of section .text:
                	callq	<addr>
                	popq	%rbp
                	retq
-               	jmp	<addr>
                	leaq	<rip>, %rdx
                	movslq	%eax, %rcx
                	movzbq	(%rdi,%rcx), %r8
@@ -100,7 +98,6 @@ Disassembly of section .text:
                	callq	<addr>
                	popq	%rbp
                	retq
-               	jmp	<addr>
                	movslq	%eax, %rcx
                	leaq	<rip>, %rdx
                	movzbq	(%rdx,%rcx), %rdx
@@ -173,7 +170,6 @@ Disassembly of section .text:
                	movq	0x18(%rsp), %r14
                	leave
                	retq
-               	jmp	<addr>
                	movzbq	(%r12), %rcx
                	movb	%cl, (%rbx)
                	movzbq	0x1(%r12), %rcx
@@ -186,7 +182,6 @@ Disassembly of section .text:
                	movl	%r13d, %eax
                	cmpl	$0x2, %eax
                	ja	<addr>
-               	jmp	<addr>
                	jmp	<addr>
 
 <walk1>:
@@ -215,7 +210,6 @@ Disassembly of section .text:
                	movq	0x10(%rsp), %r13
                	leave
                	retq
-               	jmp	<addr>
                	movzbq	(%r13), %rcx
                	movb	%cl, (%r12)
                	incq	%r12
@@ -259,7 +253,6 @@ Disassembly of section .text:
                	movq	0x10(%rsp), %r13
                	leave
                	retq
-               	jmp	<addr>
                	movl	(%r12), %ecx
                	movl	%ecx, (%rbx)
                	movl	0x4(%r12), %ecx

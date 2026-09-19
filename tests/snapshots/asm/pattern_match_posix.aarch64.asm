@@ -121,7 +121,6 @@ Disassembly of section .text:
                	sub	x0, x29, #0x50
                	bl	<addr>
                	b	<addr>
-               	b	<addr>
                	mov	x3, x0
                	b	<addr>
                	mov	x3, x0

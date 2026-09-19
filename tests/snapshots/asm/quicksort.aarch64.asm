@@ -36,8 +36,6 @@ Disassembly of section .text:
                	ldrsw	x8, [x0, x3, lsl #2]
                	str	w8, [x0, x4, lsl #2]
                	str	w6, [x0, x3, lsl #2]
-               	b	<addr>
-               	b	<addr>
                	add	x1, x1, #0x1
                	cmp	w1, w7
                	b.lt	<addr>
@@ -77,8 +75,6 @@ Disassembly of section .text:
                	ldrsw	x8, [x20, x2, lsl #2]
                	str	w8, [x20, x3, lsl #2]
                	str	w5, [x20, x2, lsl #2]
-               	b	<addr>
-               	b	<addr>
                	add	x1, x1, #0x1
                	cmp	w1, w6
                	b.lt	<addr>

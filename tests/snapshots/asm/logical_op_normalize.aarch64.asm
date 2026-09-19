@@ -20,7 +20,6 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	sxtw	x0, w0
                	ret
-               	b	<addr>
 
 <or_rr>:
                	cmp	x1, #0x0
@@ -132,6 +131,5 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x20]
                	ldp	x20, x21, [sp], #0x30
                	ret
-               	b	<addr>
                	mov	x1, x0
                	b	<addr>

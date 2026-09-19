@@ -56,7 +56,6 @@ Disassembly of section .text:
                	decq	%rax
                	jmp	<addr>
                	addq	$0x2, %rax
-               	jmp	<addr>
                	incq	%rcx
                	cmpl	%r13d, %ecx
                	jl	<addr>
@@ -95,7 +94,6 @@ Disassembly of section .text:
                	decq	%rax
                	jmp	<addr>
                	addq	$0x2, %rax
-               	jmp	<addr>
                	incq	%rcx
                	cmpl	$0xa, %ecx
                	jl	<addr>

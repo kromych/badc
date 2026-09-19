@@ -30,7 +30,6 @@ Disassembly of section .text:
                	bl	<addr>
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	b	<addr>
                	sxtw	x1, w0
                	ldrb	w4, [x3, x1]
                	strb	w4, [x2, x1]
@@ -56,7 +55,6 @@ Disassembly of section .text:
                	bl	<addr>
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	b	<addr>
                	sxtw	x1, w0
                	ldrb	w4, [x3, x1]
                	strb	w4, [x2, x1]

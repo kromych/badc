@@ -17,7 +17,6 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	jmp	<addr>
 		R_X86_64_PLT32	__x86_return_thunk-0x4
-               	jmp	<addr>
                	cmpl	$0x2, %edi
                	jl	<addr>
                	movl	$0x14, %eax

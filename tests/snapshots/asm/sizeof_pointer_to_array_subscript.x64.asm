@@ -490,9 +490,6 @@ Disassembly of section .text:
                	movq	0x18(%rsp), %r14
                	leave
                	retq
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
                	imulq	$0xc, %rdi, %rax
                	addq	$0x50, %rax
                	shlq	$0x2, %rcx
@@ -505,9 +502,6 @@ Disassembly of section .text:
                	movq	0x18(%rsp), %r14
                	leave
                	retq
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
                	movq	%r8, %r12
                	leaq	(%rcx,%rcx,4), %rax
                	addq	$0x3c, %rax
@@ -525,7 +519,6 @@ Disassembly of section .text:
                	jmp	<addr>
                	movq	%r9, %r12
                	jmp	<addr>
-               	jmp	<addr>
                	movq	%r8, %r12
                	leaq	(%rcx,%rcx,4), %rax
                	addq	$0x28, %rax
@@ -542,5 +535,4 @@ Disassembly of section .text:
                	movq	%r14, %r12
                	jmp	<addr>
                	movq	%r9, %r12
-               	jmp	<addr>
                	jmp	<addr>

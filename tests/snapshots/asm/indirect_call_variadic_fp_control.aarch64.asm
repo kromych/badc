@@ -99,7 +99,6 @@ Disassembly of section .text:
                	mov	x2, x16
                	ldr	d1, [x2]
                	fadd	d0, d0, d1
-               	b	<addr>
                	add	x0, x0, #0x1
                	ldrsw	x2, [x29, #0x10]
                	cmp	w0, w2

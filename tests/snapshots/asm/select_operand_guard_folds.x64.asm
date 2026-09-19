@@ -185,9 +185,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	movl	$0x3, %eax
                	jmp	<addr>
-               	jmp	<addr>
                	movq	%rcx, %rax
-               	jmp	<addr>
                	jmp	<addr>
                	movq	%rax, %rcx
                	jmp	<addr>

@@ -38,8 +38,7 @@ Disassembly of section .text:
                	andq	$0x1, %rdx
                	subq	%rsi, %rdx
                	testq	%rdx, %rdx
-               	jne	<addr>
-               	jmp	<addr>
+               	je	<addr>
                	addq	%rax, %rcx
                	incq	%rax
                	cmpl	$0xa, %eax

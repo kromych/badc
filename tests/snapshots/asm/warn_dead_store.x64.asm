@@ -41,7 +41,6 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	movslq	%eax, %rax
                	retq
-               	jmp	<addr>
 
 <address_escapes_silences>:
                	pushq	%rbp

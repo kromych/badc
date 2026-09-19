@@ -55,9 +55,7 @@ Disassembly of section .text:
                	movzbq	-0x8(%rbp), %r8
                	movb	%r8b, (%rsi,%rcx)
                	cmpl	$0x4, %edx
-               	jge	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
+               	jl	<addr>
                	leaq	<rip>, %rcx
                	movslq	(%rcx), %rcx
                	testq	%rcx, %rcx
@@ -109,4 +107,3 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	leave
                	retq
-               	jmp	<addr>

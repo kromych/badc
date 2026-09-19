@@ -35,7 +35,6 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	b	<addr>
 
 <nested_auto_typed>:
                	stp	x29, x30, [sp, #-0x10]!
@@ -60,7 +59,6 @@ Disassembly of section .text:
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	b	<addr>
 
 <main>:
                	str	x20, [sp, #-0x20]!
@@ -104,7 +102,5 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x20, [sp], #0x20
                	ret
-               	b	<addr>
-               	b	<addr>
                	mov	x1, x0
                	b	<addr>

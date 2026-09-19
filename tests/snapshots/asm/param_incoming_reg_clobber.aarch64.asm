@@ -125,38 +125,31 @@ Disassembly of section .text:
                	mov	x4, #0x1                // =1
                	ldrb	w1, [x0, #0x1]
                	cmp	w1, #0x2
-               	b.eq	<addr>
-               	b	<addr>
+               	b.ne	<addr>
                	mov	x4, #0x2                // =2
                	ldrb	w1, [x0, #0x2]
                	cmp	w1, #0x3
-               	b.eq	<addr>
-               	b	<addr>
+               	b.ne	<addr>
                	mov	x4, #0x3                // =3
                	ldrb	w1, [x0, #0x3]
                	cmp	w1, #0x4
-               	b.eq	<addr>
-               	b	<addr>
+               	b.ne	<addr>
                	mov	x4, #0x4                // =4
                	ldrb	w1, [x0, #0x4]
                	cmp	w1, #0x5
-               	b.eq	<addr>
-               	b	<addr>
+               	b.ne	<addr>
                	mov	x4, #0x5                // =5
                	ldrb	w1, [x0, #0x5]
                	cmp	w1, #0x6
-               	b.eq	<addr>
-               	b	<addr>
+               	b.ne	<addr>
                	mov	x4, #0x6                // =6
                	ldrb	w1, [x0, #0x6]
                	cmp	w1, #0x7
-               	b.eq	<addr>
-               	b	<addr>
+               	b.ne	<addr>
                	mov	x4, #0x7                // =7
                	ldrb	w0, [x0, #0x7]
                	cmp	w0, #0x8
-               	b.eq	<addr>
-               	b	<addr>
+               	b.ne	<addr>
                	mov	x0, #0x0                // =0
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10

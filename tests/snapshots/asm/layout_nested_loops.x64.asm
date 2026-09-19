@@ -41,11 +41,9 @@ Disassembly of section .text:
                	leaq	(%rdi,%rdi,2), %rdi
                	subq	%rdi, %rsi
                	testq	%rsi, %rsi
-               	jne	<addr>
-               	jmp	<addr>
+               	je	<addr>
                	cmpl	$0x4, %eax
-               	jne	<addr>
-               	jmp	<addr>
+               	je	<addr>
                	addq	%rax, %rcx
                	incq	%rax
                	cmpl	%edx, %eax

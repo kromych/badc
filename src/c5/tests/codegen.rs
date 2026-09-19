@@ -2081,32 +2081,33 @@ fn elf_func_value(b: &[u8], name: &str) -> Option<u64> {
     None
 }
 
-/// A block whose unconditional `Jmp` targets the next block in layout
-/// must fall through, not emit a jump to the immediately-following
-/// instruction (`e9 00 00 00 00` -- `jmp rel32 = 0` -- on x86-64). Such
-/// dead jumps inflate the dynamic branch count and code size. Compile a
-/// branchy function and confirm the byte sequence is absent.
+/// A block reaches the block its code runs into without a branch, and no
+/// branch lands on a branch: an `if` / `else` whose arms rejoin, an `if`
+/// with an empty arm and a `do` left by `break`, decoded on both ELF
+/// targets at `-O0` and `-O`. The instructions are decoded: a zero-distance
+/// x86-64 `jmp` is `eb 00` once relaxed, not `e9 00 00 00 00`.
 #[test]
 fn jmp_to_next_block_falls_through() {
-    use crate::{NativeOptions, Target};
-    let program = super::compile_str_bare(
-        "int f(int x){ int r; if(x>0){r=1;}else{r=2;} return r+x; } \
-         int main(){ return f(3); }",
-    );
-    let bytes = crate::c5::object::emit_native_single_tu_for_test(
-        &program,
-        Target::LinuxX64,
-        NativeOptions::new().with_optimize(),
-    )
-    .expect("emit LinuxX64");
-    let dead = bytes
-        .windows(5)
-        .filter(|w| *w == [0xe9, 0x00, 0x00, 0x00, 0x00])
-        .count();
-    assert_eq!(
-        dead, 0,
-        "found {dead} `jmp +0` (dead fall-through jump) byte sequences"
-    );
+    use super::perf_codegen::{
+        a64_at, a64_branches_land_on_code, x64_at, x64_branches_land_on_code,
+    };
+    let src = "int rejoin(int x) { int r; if (x > 0) { r = 1; } else { r = 2; } return r + x; }\n\
+               int empty_arm(int x) { if (x) { } else { } return x; }\n\
+               int left_by_break(int x) { do { if (x) break; x += 3; } while (0); return x; }\n";
+    for optimize in [false, true] {
+        for name in ["rejoin", "empty_arm", "left_by_break"] {
+            let ws = a64_at(src, name, optimize);
+            assert!(
+                a64_branches_land_on_code(&ws),
+                "aarch64 {name} (-O {optimize}): {ws:08x?}"
+            );
+            let insns = x64_at(src, name, optimize);
+            assert!(
+                x64_branches_land_on_code(&insns),
+                "x86-64 {name} (-O {optimize}): {insns:x?}"
+            );
+        }
+    }
 }
 
 /// Switch lowering: a dense case set (>= 8 cases, span < 2 * cases)

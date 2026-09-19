@@ -32,7 +32,6 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	movslq	%eax, %rax
                	retq
-               	jmp	<addr>
 
 <or_rr>:
                	testq	%rsi, %rsi
@@ -159,6 +158,5 @@ Disassembly of section .text:
                	movq	0x8(%rsp), %r12
                	leave
                	retq
-               	jmp	<addr>
                	movq	%rax, %rcx
                	jmp	<addr>

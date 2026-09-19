@@ -190,4 +190,3 @@ Disassembly of section .text:
                	jmp	<addr>
                	movl	$0x100, %ebx            # imm = 0x100
                	jmp	<addr>
-               	jmp	<addr>

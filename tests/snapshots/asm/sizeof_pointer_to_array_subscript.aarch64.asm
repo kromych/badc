@@ -369,7 +369,6 @@ Disassembly of section .text:
                	b	<addr>
                	mov	x11, x14
                	b	<addr>
-               	b	<addr>
                	mov	x11, x5
                	mov	x17, #0xc               // =12
                	mul	x0, x6, x17
@@ -382,7 +381,6 @@ Disassembly of section .text:
                	mov	x11, x10
                	b	<addr>
                	mov	x11, x14
-               	b	<addr>
                	b	<addr>
                	mov	x8, x7
                	mov	x17, #0x5               // =5
@@ -397,7 +395,6 @@ Disassembly of section .text:
                	b	<addr>
                	mov	x8, x12
                	b	<addr>
-               	b	<addr>
                	mov	x8, x12
                	mov	x17, #0x5               // =5
                	mul	x0, x3, x17
@@ -410,5 +407,4 @@ Disassembly of section .text:
                	mov	x8, x13
                	b	<addr>
                	mov	x8, x13
-               	b	<addr>
                	b	<addr>

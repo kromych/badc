@@ -175,4 +175,3 @@ Disassembly of section .text:
                	b	<addr>
                	mov	x20, #0x100             // =256
                	b	<addr>
-               	b	<addr>

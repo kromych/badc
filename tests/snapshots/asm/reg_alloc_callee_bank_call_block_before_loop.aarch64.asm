@@ -33,7 +33,6 @@ Disassembly of section .text:
                	mov	x2, x22
                	mov	x20, x5
                	b	<addr>
-               	b	<addr>
                	add	x20, x20, #0x1
                	sxtw	x1, w20
                	ldrsw	x1, [x21, x1, lsl #2]
@@ -55,7 +54,6 @@ Disassembly of section .text:
                	str	w4, [x21, x1, lsl #2]
                	add	x20, x20, #0x1
                	sub	x2, x2, #0x1
-               	b	<addr>
                	cmp	w20, w2
                	b.le	<addr>
                	mov	x0, x21

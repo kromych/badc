@@ -56,7 +56,6 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	leave
                	retq
-               	jmp	<addr>
 
 <tick_int_halves>:
                	pushq	%rbp
@@ -124,8 +123,6 @@ Disassembly of section .text:
                	movslq	%edx, %rax
                	leave
                	retq
-               	jmp	<addr>
-               	jmp	<addr>
 
 <main>:
                	pushq	%rbp

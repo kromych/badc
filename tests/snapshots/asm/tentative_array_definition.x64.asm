@@ -52,8 +52,6 @@ Disassembly of section .text:
                	cmpl	%edx, %r9d
                	je	<addr>
                	orq	$0x8, %rax
-               	jmp	<addr>
-               	jmp	<addr>
                	incq	%rcx
                	movslq	%ecx, %rdx
                	movsbq	(%rsi,%rdx), %r9
@@ -74,6 +72,5 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	popq	%rbp
                	retq
-               	jmp	<addr>
                	movq	%rcx, %rax
                	jmp	<addr>

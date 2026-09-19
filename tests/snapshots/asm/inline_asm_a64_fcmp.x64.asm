@@ -54,6 +54,5 @@ Disassembly of section .text:
                	retq
                	xorq	%rax, %rax
                	jmp	<addr>
-               	jmp	<addr>
                	movq	%rax, %rdx
                	jmp	<addr>

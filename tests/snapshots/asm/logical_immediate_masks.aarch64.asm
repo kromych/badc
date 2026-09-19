@@ -210,10 +210,6 @@ Disassembly of section .text:
                	orr	x0, x0, #0x8
                	sxtw	x0, w0
                	ret
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
 
 <update>:
                	mov	w2, w1
@@ -452,12 +448,7 @@ Disassembly of section .text:
                	orr	x0, x0, #0x8
                	sxtw	x0, w0
                	cmp	x2, x0
-               	b.eq	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
+               	b.ne	<addr>
                	add	x22, x22, #0x1
                	cmp	w22, #0x8
                	b.lt	<addr>

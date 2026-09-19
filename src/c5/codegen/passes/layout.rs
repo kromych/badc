@@ -101,7 +101,7 @@ fn block_has_phis(func: &FunctionSsa, b: BlockId) -> bool {
 /// refilled per function, so a unit of many small functions pays no
 /// allocation per function.
 #[derive(Default)]
-struct JumpChains {
+pub(crate) struct JumpChains {
     /// Chain end per block, `NO_BLOCK` when the chain never terminates.
     end: Vec<BlockId>,
     /// Block preceding `end` on the chain; the block itself when the
@@ -120,7 +120,17 @@ struct JumpChains {
 
 impl JumpChains {
     fn build(&mut self, func: &FunctionSsa) {
-        let n = func.blocks.len();
+        self.build_with(func.blocks.len(), |b| {
+            if !block_is_empty(func, b) {
+                return None;
+            }
+            uncond_target(&func.blocks[b as usize].terminator).filter(|&t| t != b)
+        });
+    }
+
+    /// Resolve the chains of `n` blocks under `hop`: the block a chain
+    /// member hands every edge on to, `None` for a block that ends a chain.
+    pub(crate) fn build_with(&mut self, n: usize, hop: impl Fn(BlockId) -> Option<BlockId>) {
         let JumpChains {
             end,
             penultimate,
@@ -136,12 +146,6 @@ impl JumpChains {
         state.clear();
         state.resize(n, 0);
         path.clear();
-        let hop = |b: BlockId| -> Option<BlockId> {
-            if !block_is_empty(func, b) {
-                return None;
-            }
-            uncond_target(&func.blocks[b as usize].terminator).filter(|&t| t != b)
-        };
         for start in 0..n as BlockId {
             if state[start as usize] != 0 {
                 continue;
@@ -185,6 +189,12 @@ impl JumpChains {
                 };
             }
         }
+    }
+
+    /// The end of the chain from `b`: `b` itself when it ends one, `None`
+    /// when the chain runs into a jump cycle.
+    pub(crate) fn end(&self, b: BlockId) -> Option<BlockId> {
+        Some(self.end[b as usize]).filter(|&e| e != NO_BLOCK)
     }
 
     /// The block an edge into `start` may target instead. The chain's

@@ -180,10 +180,3 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x40]
                	ldp	x20, x21, [sp], #0x50
                	ret
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>

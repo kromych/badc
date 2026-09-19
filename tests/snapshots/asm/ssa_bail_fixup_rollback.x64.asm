@@ -112,7 +112,6 @@ Disassembly of section .text:
                	testq	%rbx, %rbx
                	je	<addr>
                	addq	$0x40, %rbx
-               	jmp	<addr>
                	cmpq	$0x40, %r13
                	jae	<addr>
                	xorq	%rax, %rax

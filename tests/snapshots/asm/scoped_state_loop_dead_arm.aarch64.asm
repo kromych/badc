@@ -39,8 +39,6 @@ Disassembly of section .text:
                	mov	x0, #0x1                // =1
                	b	<addr>
                	mov	x0, x2
-               	b	<addr>
-               	b	<addr>
                	cbnz	x0, <addr>
                	mov	x0, x3
                	ret

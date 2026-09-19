@@ -284,18 +284,6 @@ Disassembly of section .text:
                	add	sp, sp, #0x1f0
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrsw	x1, [x0, #0x40]

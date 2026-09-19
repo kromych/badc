@@ -43,7 +43,6 @@ Disassembly of section .text:
                	leaq	-0x10(%rbp), %rsp
                	leave
                	retq
-               	jmp	<addr>
 
 <nested_auto_typed>:
                	pushq	%rbp
@@ -68,7 +67,6 @@ Disassembly of section .text:
                	leaq	-0x50(%rbp), %rsp
                	leave
                	retq
-               	jmp	<addr>
 
 <main>:
                	pushq	%rbp
@@ -111,7 +109,5 @@ Disassembly of section .text:
                	movq	(%rsp), %rbx
                	leave
                	retq
-               	jmp	<addr>
-               	jmp	<addr>
                	movq	%rax, %rcx
                	jmp	<addr>

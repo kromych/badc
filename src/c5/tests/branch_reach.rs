@@ -168,8 +168,8 @@ fn far_conditional_branch_is_the_inverted_test_over_b() {
 }
 
 /// `for` at `-O0` lays its blocks out as header, step, body, exit, then the
-/// body's `if` arm: the `if`'s branch sits inside the span of the header's
-/// exit branch and targets a block past it. With the hole in the arm the
+/// body's `if` arm and the statement after it: the `if`'s branch sits inside
+/// the span of the header's exit branch and targets a block past it. With the hole in the arm the
 /// `if`'s branch is far on its own; its second instruction then lengthens
 /// the header's span. `pad` sizes the header's span.
 fn cascade_src(name: &str, pad: i64) -> String {
@@ -179,6 +179,7 @@ fn cascade_src(name: &str, pad: i64) -> String {
          for (int i = 0; i < n; i++) {{\n\
          __asm__ volatile(\"b 1f\\n.space {pad}\\n1:\");\n\
          if (c) {{ s += 2; {HOLE} }}\n\
+         s += 1;\n\
          }}\n\
          return s;\n}}\n"
     )
@@ -375,7 +376,7 @@ fn far_branches_run_under_the_jit() {
     );
     for k in 0..pads.len() {
         src.push_str(&format!(
-            "if (casc{k}(3, 1) != 6 || casc{k}(2, 0) != 0 || casc{k}(0, 1) != 0) return 6;\n"
+            "if (casc{k}(3, 1) != 9 || casc{k}(2, 0) != 2 || casc{k}(0, 1) != 0) return 6;\n"
         ));
     }
     src.push_str("return 42;\n}\n");

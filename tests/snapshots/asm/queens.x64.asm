@@ -64,9 +64,7 @@ Disassembly of section .text:
                	cmpl	%r12d, %edx
                	je	<addr>
                	cmpl	%ecx, %esi
-               	jne	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
+               	je	<addr>
                	incq	%rax
                	cmpl	%r13d, %eax
                	jl	<addr>
@@ -75,9 +73,6 @@ Disassembly of section .text:
                	movq	%rbx, %rdi
                	callq	<addr>
                	addq	%rax, %r14
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
                	incq	%r12
                	cmpl	$0x8, %r12d
                	jl	<addr>

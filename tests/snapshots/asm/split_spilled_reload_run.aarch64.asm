@@ -257,10 +257,7 @@ Disassembly of section .text:
                	mov	w0, w20
                	sub	x20, x0, #0x1
                	mov	w0, w20
-               	cbnz	x0, <addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
+               	cbz	x0, <addr>
                	mov	w0, w21
                	add	x2, x22, x0
                	eor	x1, x1, x2

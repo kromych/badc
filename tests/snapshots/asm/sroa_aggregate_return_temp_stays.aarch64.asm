@@ -45,7 +45,6 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	b	<addr>
 
 <times9>:
                	stp	x29, x30, [sp, #-0x10]!
@@ -79,7 +78,6 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	b	<addr>
 
 <step>:
                	str	x20, [sp, #-0x40]!

@@ -60,7 +60,6 @@ Disassembly of section .text:
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	b	<addr>
                	sxtw	x3, w0
                	lsl	x4, x3, #4
                	add	x2, x1, x4
@@ -291,7 +290,6 @@ Disassembly of section .text:
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	b	<addr>
                	sxtw	x3, w0
                	lsl	x4, x3, #3
                	add	x2, x1, x4

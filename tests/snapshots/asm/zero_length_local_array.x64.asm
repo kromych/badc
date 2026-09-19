@@ -65,8 +65,7 @@ Disassembly of section .text:
                	movl	%esi, 0x8(%rax)
                	leaq	-0x8(%rbp), %rsi
                	cmpq	%rax, %rsi
-               	jne	<addr>
-               	jmp	<addr>
+               	je	<addr>
                	movslq	(%rax), %rcx
                	movslq	0x4(%rax), %rax
                	addq	%rcx, %rax

@@ -64,4 +64,3 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x20, #0x3               // =3
                	b	<addr>
-               	b	<addr>

@@ -83,16 +83,6 @@ Disassembly of section .text:
                	incq	%rax
                	movslq	%eax, %rax
                	retq
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
 
 <main>:
                	pushq	%rbp
@@ -185,10 +175,4 @@ Disassembly of section .text:
                	movl	$0x64, %eax
                	jmp	<addr>
                	movl	$0x64, %eax
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
                	jmp	<addr>

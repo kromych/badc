@@ -33,7 +33,6 @@ Disassembly of section .text:
                	cset	x0, ne
                	sxtw	x0, w0
                	ret
-               	b	<addr>
 
 <loop_masked>:
                	stp	x20, x21, [sp, #-0x30]!
@@ -95,7 +94,6 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	sxtw	x0, w0
                	ret
-               	b	<addr>
 
 <join_unmasked>:
                	mov	x2, x1
@@ -106,7 +104,6 @@ Disassembly of section .text:
                	and	x0, x1, #0xff
                	sxtw	x0, w0
                	ret
-               	b	<addr>
 
 <join_byte_as_signed>:
                	mov	x1, x0
@@ -116,7 +113,6 @@ Disassembly of section .text:
                	and	x0, x1, #0xff
                	sxtb	x0, w0
                	ret
-               	b	<addr>
 
 <main>:
                	stp	x29, x30, [sp, #-0x10]!

@@ -30,11 +30,9 @@ Disassembly of section .text:
                	add	x4, x4, x7
                	mul	x4, x4, x5
                	sub	x3, x3, x4
-               	cbnz	x3, <addr>
-               	b	<addr>
+               	cbz	x3, <addr>
                	cmp	w0, #0x4
-               	b.ne	<addr>
-               	b	<addr>
+               	b.eq	<addr>
                	add	x1, x1, x0
                	add	x0, x0, #0x1
                	cmp	w0, w2

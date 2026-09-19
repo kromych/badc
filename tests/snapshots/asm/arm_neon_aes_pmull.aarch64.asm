@@ -88,7 +88,6 @@ Disassembly of section .text:
                	b	<addr>
                	mov	x0, x4
                	b	<addr>
-               	b	<addr>
                	add	x3, x3, #0x1
                	cmp	w3, #0x8
                	b.lt	<addr>
@@ -609,7 +608,6 @@ Disassembly of section .text:
                	b	<addr>
                	mov	x0, x4
                	b	<addr>
-               	b	<addr>
                	add	x3, x3, #0x1
                	cmp	w3, #0x8
                	b.lt	<addr>
@@ -632,7 +630,6 @@ Disassembly of section .text:
                	and	x0, x0, #0xff
                	b	<addr>
                	mov	x0, x5
-               	b	<addr>
                	b	<addr>
                	add	x4, x4, #0x1
                	cmp	w4, #0x8
@@ -672,7 +669,6 @@ Disassembly of section .text:
                	b	<addr>
                	mov	x0, x4
                	b	<addr>
-               	b	<addr>
                	add	x3, x3, #0x1
                	cmp	w3, #0x8
                	b.lt	<addr>
@@ -695,7 +691,6 @@ Disassembly of section .text:
                	and	x0, x0, #0xff
                	b	<addr>
                	mov	x0, x5
-               	b	<addr>
                	b	<addr>
                	add	x4, x4, #0x1
                	cmp	w4, #0x8
@@ -730,7 +725,6 @@ Disassembly of section .text:
                	b	<addr>
                	mov	x0, x4
                	b	<addr>
-               	b	<addr>
                	add	x3, x3, #0x1
                	cmp	w3, #0x8
                	b.lt	<addr>
@@ -753,7 +747,6 @@ Disassembly of section .text:
                	and	x0, x0, #0xff
                	b	<addr>
                	mov	x0, x5
-               	b	<addr>
                	b	<addr>
                	add	x4, x4, #0x1
                	cmp	w4, #0x8
@@ -788,7 +781,6 @@ Disassembly of section .text:
                	b	<addr>
                	mov	x0, x4
                	b	<addr>
-               	b	<addr>
                	add	x3, x3, #0x1
                	cmp	w3, #0x8
                	b.lt	<addr>
@@ -812,7 +804,6 @@ Disassembly of section .text:
                	and	x0, x0, #0xff
                	b	<addr>
                	mov	x0, x5
-               	b	<addr>
                	b	<addr>
                	add	x4, x4, #0x1
                	cmp	w4, #0x8
@@ -851,9 +842,6 @@ Disassembly of section .text:
                	sxtw	x3, w3
                	lsr	x3, x4, x3
                	eor	x1, x1, x3
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x40
                	b.lt	<addr>

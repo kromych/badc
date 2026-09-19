@@ -29,7 +29,6 @@ Disassembly of section .text:
                	mov	x0, #0x2                // =2
                	sxtw	x0, w0
                	ret
-               	b	<addr>
 
 <address_escapes_silences>:
                	stp	x29, x30, [sp, #-0x10]!

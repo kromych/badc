@@ -85,8 +85,6 @@ Disassembly of section .text:
                	shlq	%cl, %rdx
                	popq	%rcx
                	orq	%rdx, %rcx
-               	jmp	<addr>
-               	jmp	<addr>
                	incq	%rax
                	cmpl	$0x40, %eax
                	jl	<addr>
@@ -133,8 +131,6 @@ Disassembly of section .text:
                	shlq	%cl, %rdx
                	popq	%rcx
                	orq	%rdx, %rcx
-               	jmp	<addr>
-               	jmp	<addr>
                	incq	%rax
                	cmpl	$0x40, %eax
                	jl	<addr>

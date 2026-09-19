@@ -57,7 +57,6 @@ Disassembly of section .text:
                	movq	(%rcx), %rax
                	leave
                	retq
-               	jmp	<addr>
 
 <times9>:
                	pushq	%rbp
@@ -91,7 +90,6 @@ Disassembly of section .text:
                	movq	(%rcx), %rax
                	leave
                	retq
-               	jmp	<addr>
 
 <step>:
                	pushq	%rbp

@@ -62,8 +62,6 @@ Disassembly of section .text:
                	testq	%rdx, %rdx
                	je	<addr>
                	incq	%rax
-               	jmp	<addr>
-               	jmp	<addr>
                	incq	%rcx
                	cmpq	%rsi, %rcx
                	jb	<addr>
@@ -288,10 +286,8 @@ Disassembly of section .text:
                	movq	%rdx, %rax
                	jmp	<addr>
                	testq	%rax, %rax
-               	jne	<addr>
-               	jmp	<addr>
+               	je	<addr>
                	movq	%rdx, %rcx
-               	jmp	<addr>
                	incq	%rax
                	cmpl	$0x2, %eax
                	jl	<addr>
@@ -390,4 +386,3 @@ Disassembly of section .text:
                	movq	0x8(%rsp), %r12
                	leave
                	retq
-               	jmp	<addr>

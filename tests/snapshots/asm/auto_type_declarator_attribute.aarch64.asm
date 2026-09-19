@@ -104,7 +104,6 @@ Disassembly of section .text:
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	b	<addr>
-               	b	<addr>
                	stur	x2, [x29, #-0x8]
                	b	<addr>
                	ldur	x0, [x29, #-0x8]

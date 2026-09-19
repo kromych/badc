@@ -315,10 +315,6 @@ Disassembly of section .text:
                	andq	%r10, %rax
                	testq	%rax, %rax
                	je	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
                	incq	%rcx
                	cmpl	$0x3, %ecx
                	jl	<addr>
@@ -855,11 +851,7 @@ Disassembly of section .text:
                	movq	(%rsp), %rbx
                	leave
                	retq
-               	jmp	<addr>
-               	jmp	<addr>
                	movl	$0x3, %eax
                	movq	(%rsp), %rbx
                	leave
                	retq
-               	jmp	<addr>
-               	jmp	<addr>

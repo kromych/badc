@@ -555,7 +555,6 @@ Disassembly of section .text:
                	jmp	<addr>
                	movq	%rdi, %rsi
                	jmp	<addr>
-               	jmp	<addr>
                	shrq	%rax
                	testq	%rax, %rax
                	jne	<addr>
@@ -581,7 +580,6 @@ Disassembly of section .text:
                	andq	$0xff, %rsi
                	jmp	<addr>
                	movq	%rdi, %rsi
-               	jmp	<addr>
                	jmp	<addr>
                	shrq	%rax
                	testq	%rax, %rax
@@ -609,7 +607,6 @@ Disassembly of section .text:
                	jmp	<addr>
                	movq	%rdi, %rsi
                	jmp	<addr>
-               	jmp	<addr>
                	shrq	%rax
                	testq	%rax, %rax
                	jne	<addr>
@@ -635,7 +632,6 @@ Disassembly of section .text:
                	andq	$0xff, %rsi
                	jmp	<addr>
                	movq	%rdi, %rsi
-               	jmp	<addr>
                	jmp	<addr>
                	shrq	%rax
                	testq	%rax, %rax
@@ -663,7 +659,6 @@ Disassembly of section .text:
                	jmp	<addr>
                	movq	%rdi, %rsi
                	jmp	<addr>
-               	jmp	<addr>
                	shrq	%rax
                	testq	%rax, %rax
                	jne	<addr>
@@ -689,7 +684,6 @@ Disassembly of section .text:
                	andq	$0xff, %rsi
                	jmp	<addr>
                	movq	%rdi, %rsi
-               	jmp	<addr>
                	jmp	<addr>
                	shrq	%rax
                	testq	%rax, %rax
@@ -717,7 +711,6 @@ Disassembly of section .text:
                	jmp	<addr>
                	movq	%rdi, %rsi
                	jmp	<addr>
-               	jmp	<addr>
                	shrq	%rax
                	testq	%rax, %rax
                	jne	<addr>
@@ -743,7 +736,6 @@ Disassembly of section .text:
                	andq	$0xff, %rsi
                	jmp	<addr>
                	movq	%rdi, %rsi
-               	jmp	<addr>
                	jmp	<addr>
                	shrq	%rax
                	testq	%rax, %rax
@@ -771,7 +763,6 @@ Disassembly of section .text:
                	jmp	<addr>
                	movq	%rdi, %rsi
                	jmp	<addr>
-               	jmp	<addr>
                	shrq	%rax
                	testq	%rax, %rax
                	jne	<addr>
@@ -797,7 +788,6 @@ Disassembly of section .text:
                	andq	$0xff, %rsi
                	jmp	<addr>
                	movq	%rdi, %rsi
-               	jmp	<addr>
                	jmp	<addr>
                	shrq	%rax
                	testq	%rax, %rax
@@ -825,7 +815,6 @@ Disassembly of section .text:
                	jmp	<addr>
                	movq	%rdi, %rsi
                	jmp	<addr>
-               	jmp	<addr>
                	shrq	%rax
                	testq	%rax, %rax
                	jne	<addr>
@@ -851,7 +840,6 @@ Disassembly of section .text:
                	andq	$0xff, %rsi
                	jmp	<addr>
                	movq	%rdi, %rsi
-               	jmp	<addr>
                	jmp	<addr>
                	shrq	%rax
                	testq	%rax, %rax
@@ -879,7 +867,6 @@ Disassembly of section .text:
                	jmp	<addr>
                	movq	%rdi, %rsi
                	jmp	<addr>
-               	jmp	<addr>
                	shrq	%rax
                	testq	%rax, %rax
                	jne	<addr>
@@ -905,7 +892,6 @@ Disassembly of section .text:
                	andq	$0xff, %rsi
                	jmp	<addr>
                	movq	%rdi, %rsi
-               	jmp	<addr>
                	jmp	<addr>
                	shrq	%rax
                	testq	%rax, %rax
@@ -933,7 +919,6 @@ Disassembly of section .text:
                	jmp	<addr>
                	movq	%rdi, %rsi
                	jmp	<addr>
-               	jmp	<addr>
                	shrq	%rax
                	testq	%rax, %rax
                	jne	<addr>
@@ -959,7 +944,6 @@ Disassembly of section .text:
                	andq	$0xff, %rsi
                	jmp	<addr>
                	movq	%rdi, %rsi
-               	jmp	<addr>
                	jmp	<addr>
                	shrq	%rax
                	testq	%rax, %rax
@@ -987,7 +971,6 @@ Disassembly of section .text:
                	jmp	<addr>
                	movq	%rdi, %rsi
                	jmp	<addr>
-               	jmp	<addr>
                	shrq	%rax
                	testq	%rax, %rax
                	jne	<addr>
@@ -1013,7 +996,6 @@ Disassembly of section .text:
                	andq	$0xff, %rsi
                	jmp	<addr>
                	movq	%rdi, %rsi
-               	jmp	<addr>
                	jmp	<addr>
                	shrq	%rax
                	testq	%rax, %rax
@@ -1041,7 +1023,6 @@ Disassembly of section .text:
                	jmp	<addr>
                	movq	%rdi, %rsi
                	jmp	<addr>
-               	jmp	<addr>
                	shrq	%rax
                	testq	%rax, %rax
                	jne	<addr>
@@ -1067,7 +1048,6 @@ Disassembly of section .text:
                	andq	$0xff, %rsi
                	jmp	<addr>
                	movq	%rdi, %rsi
-               	jmp	<addr>
                	jmp	<addr>
                	shrq	%rax
                	testq	%rax, %rax
@@ -1095,7 +1075,6 @@ Disassembly of section .text:
                	jmp	<addr>
                	movq	%rdi, %rsi
                	jmp	<addr>
-               	jmp	<addr>
                	shrq	%rax
                	testq	%rax, %rax
                	jne	<addr>
@@ -1121,7 +1100,6 @@ Disassembly of section .text:
                	andq	$0xff, %rsi
                	jmp	<addr>
                	movq	%rdi, %rsi
-               	jmp	<addr>
                	jmp	<addr>
                	shrq	%rax
                	testq	%rax, %rax
@@ -1149,7 +1127,6 @@ Disassembly of section .text:
                	jmp	<addr>
                	movq	%rdi, %rsi
                	jmp	<addr>
-               	jmp	<addr>
                	shrq	%rax
                	testq	%rax, %rax
                	jne	<addr>
@@ -1175,7 +1152,6 @@ Disassembly of section .text:
                	andq	$0xff, %rsi
                	jmp	<addr>
                	movq	%rdi, %rsi
-               	jmp	<addr>
                	jmp	<addr>
                	shrq	%rax
                	testq	%rax, %rax
@@ -1203,7 +1179,6 @@ Disassembly of section .text:
                	jmp	<addr>
                	movq	%rdi, %rsi
                	jmp	<addr>
-               	jmp	<addr>
                	shrq	%rax
                	testq	%rax, %rax
                	jne	<addr>
@@ -1229,7 +1204,6 @@ Disassembly of section .text:
                	andq	$0xff, %rsi
                	jmp	<addr>
                	movq	%rdi, %rsi
-               	jmp	<addr>
                	jmp	<addr>
                	shrq	%rax
                	testq	%rax, %rax
@@ -1257,7 +1231,6 @@ Disassembly of section .text:
                	jmp	<addr>
                	movq	%rdi, %rsi
                	jmp	<addr>
-               	jmp	<addr>
                	shrq	%rax
                	testq	%rax, %rax
                	jne	<addr>
@@ -1284,7 +1257,6 @@ Disassembly of section .text:
                	jmp	<addr>
                	movq	%rdi, %rsi
                	jmp	<addr>
-               	jmp	<addr>
                	shrq	%rax
                	testq	%rax, %rax
                	jne	<addr>
@@ -1309,7 +1281,6 @@ Disassembly of section .text:
                	andq	$0xff, %rdx
                	jmp	<addr>
                	movq	%rsi, %rdx
-               	jmp	<addr>
                	jmp	<addr>
                	shrq	%rax
                	testq	%rax, %rax
@@ -1377,7 +1348,6 @@ Disassembly of section .text:
                	andq	$0xff, %rcx
                	jmp	<addr>
                	movq	%rsi, %rcx
-               	jmp	<addr>
                	jmp	<addr>
                	shrq	%rax
                	testq	%rax, %rax
@@ -1492,7 +1462,6 @@ Disassembly of section .text:
                	andq	$0xff, %rcx
                	jmp	<addr>
                	movq	%rsi, %rcx
-               	jmp	<addr>
                	jmp	<addr>
                	shrq	%rax
                	testq	%rax, %rax

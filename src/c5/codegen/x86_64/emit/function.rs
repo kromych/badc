@@ -328,6 +328,7 @@ pub(crate) fn emit_function(
         abs_jump_tables,
         endbr_targets,
         param_prebatched: alloc::vec![false; func.insts.len()],
+        plan: super::ssa::block_plan::BlockPlan::build(func, alloc),
         block_offsets: alloc::vec![0; func.blocks.len()],
         branch_fixups: Vec::new(),
         branch_short: Vec::new(),
@@ -359,6 +360,10 @@ struct FnEmit<'a, 'b> {
     endbr_targets: alloc::collections::BTreeSet<super::super::ir::BlockId>,
     /// `ParamRef` values the entry parallel copy already placed.
     param_prebatched: Vec<bool>,
+    /// Which blocks are emitted and where each branch lands. Fixed before
+    /// the first pass: the short forms are keyed by emission index, so both
+    /// passes have to write the same branches.
+    plan: super::ssa::block_plan::BlockPlan,
     block_offsets: Vec<usize>,
     branch_fixups: Vec<BranchFixup>,
     /// Per recorded branch, whether the layout pass chose the rel8 form;
@@ -559,7 +564,20 @@ impl FnEmit<'_, '_> {
             self.block_addr_fixups.clear();
             self.jump_table_fixups.clear();
             for block_idx in 0..self.fcx.func.blocks.len() {
+                if self.plan.is_skipped(block_idx) {
+                    #[cfg(debug_assertions)]
+                    self.assert_emits_nothing(block_idx)?;
+                    continue;
+                }
                 self.emit_block(block_idx)?;
+            }
+            // A block left out stands where its edges land, for every
+            // reader of the offsets.
+            for b in 0..self.fcx.func.blocks.len() {
+                if self.plan.is_skipped(b) {
+                    let lands = self.plan.resolve(b as super::super::ir::BlockId);
+                    self.block_offsets[b] = self.block_offsets[lands as usize];
+                }
             }
             if !self.branch_short.is_empty() {
                 break;
@@ -585,6 +603,33 @@ impl FnEmit<'_, '_> {
             self.branch_fixups.clear();
         }
         Ok(body)
+    }
+
+    /// A block the plan leaves out writes nothing when lowered: its
+    /// instructions, then the moves of its outgoing edge.
+    #[cfg(debug_assertions)]
+    fn assert_emits_nothing(&mut self, block_idx: usize) -> Emit {
+        let FnCtx {
+            func, alloc, frame, ..
+        } = self.fcx;
+        let block = &func.blocks[block_idx];
+        let (code, fixups) = (self.out.cx.code.len(), self.branch_fixups.len());
+        for v in block.inst_range.clone() {
+            self.emit_block_inst(block, v, None)?;
+        }
+        emit_phi_predecessor_moves(
+            self.out.cx.code,
+            block_idx as super::super::ir::BlockId,
+            func,
+            alloc,
+            frame,
+        )?;
+        assert!(
+            self.out.cx.code.len() == code && self.branch_fixups.len() == fixups,
+            "block {block_idx} of `{}` is left out of the code but lowers to bytes",
+            func.name
+        );
+        Ok(())
     }
 
     fn emit_block(&mut self, block_idx: usize) -> Emit {
@@ -656,7 +701,7 @@ impl FnEmit<'_, '_> {
         if func.is_naked && !matches!(inst, Inst::InlineAsm { .. }) {
             return Ok(());
         }
-        if super::ssa::emit_common::is_dead_pure(inst, v, alloc) {
+        if super::ssa::emit_common::inst_emits_nothing(inst, v, alloc) {
             return Ok(());
         }
         if self.param_prebatched[v as usize] {
@@ -867,9 +912,25 @@ impl FnEmit<'_, '_> {
         fall_through: super::super::ir::BlockId,
         negate: bool,
     ) -> Emit {
+        use super::ssa::block_plan::CondShape;
         let FnCtx {
             func, alloc, frame, ..
         } = self.fcx;
+        let (target, fall_through, negate) =
+            match self
+                .plan
+                .cond_shape(block_idx, target, fall_through, negate)
+            {
+                CondShape::Jump(t) => {
+                    self.jump_unless_next(block_idx, t);
+                    return Ok(());
+                }
+                CondShape::Branch {
+                    taken,
+                    other,
+                    negate,
+                } => (taken, other, negate),
+            };
         if let Some(fused) = fused_branch_cc(func, alloc, cond, negate) {
             emit_fused_branch(
                 self.out.cx.code,
@@ -907,9 +968,11 @@ impl FnEmit<'_, '_> {
         );
     }
 
-    /// A `jmp` to `t` unless it is the next block in layout.
+    /// A `jmp` to where an edge to `t` lands, unless the code of
+    /// `block_idx` runs into it.
     fn jump_unless_next(&mut self, block_idx: usize, t: super::super::ir::BlockId) {
-        if t as usize != block_idx + 1 {
+        if !self.plan.falls_into(block_idx, t) {
+            let t = self.plan.resolve(t);
             self.emit_local(LocalBranchKind::Jmp, t);
         }
     }
@@ -935,6 +998,13 @@ impl FnEmit<'_, '_> {
         let code = &mut *self.out.cx.code;
         for fx in &self.branch_fixups {
             let target_off = self.block_offsets[fx.target as usize];
+            debug_assert!(
+                fx.pinned_long
+                    || fx.kind != LocalBranchKind::Jmp
+                    || target_off != fx.site + if fx.short { 1 } else { 4 },
+                "`{}`: a jmp to the next instruction",
+                self.fcx.func.name
+            );
             if fx.short {
                 let rel = (target_off as i64) - (fx.site as i64 + 1);
                 let Ok(imm) = i8::try_from(rel) else {

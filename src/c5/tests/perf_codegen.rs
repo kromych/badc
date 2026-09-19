@@ -11,27 +11,36 @@
 use super::codegen::{function_bytes, function_words, optimized_function_full_pool};
 use crate::Target;
 
-/// The `-O` relocatable object of `src`, over the full register pool so the
-/// pressure caps do not move registers.
-fn object(src: &str, target: Target) -> Vec<u8> {
-    object_with_pool(src, target, (usize::MAX, usize::MAX))
+/// The relocatable object of `src` at `-O` or `-O0`, over the full register
+/// pool so the pressure caps do not move registers.
+pub(super) fn object_at(src: &str, target: Target, optimize: bool) -> Vec<u8> {
+    object_with(src, target, optimize, (usize::MAX, usize::MAX))
 }
 
-/// [`object`] over integer / FP banks capped to `caps`.
+/// The `-O` object of `src` over integer / FP banks capped to `caps`.
 fn object_with_pool(src: &str, target: Target, caps: (usize, usize)) -> Vec<u8> {
+    object_with(src, target, true, caps)
+}
+
+fn object_with(src: &str, target: Target, optimize: bool, caps: (usize, usize)) -> Vec<u8> {
     use crate::{CompileOptions, Compiler, NativeOptions, OutputKind, emit_native_with_options};
     let program = Compiler::with_options(
         src.to_string(),
         target,
         CompileOptions::default()
             .with_no_entry_point(true)
-            .with_optimize(true),
+            .with_optimize(optimize),
     )
     .compile()
     .unwrap_or_else(|e| panic!("compile ({target:?}): {e}"));
+    let level = if optimize {
+        NativeOptions::new().with_optimize()
+    } else {
+        NativeOptions::new()
+    };
     let opts = NativeOptions {
         output_kind: OutputKind::Relocatable,
-        ..NativeOptions::new().with_optimize()
+        ..level
     };
     crate::c5::codegen::ssa::reg_alloc::with_pool_size_override(caps.0, caps.1, || {
         emit_native_with_options(&program, target, opts)
@@ -39,36 +48,47 @@ fn object_with_pool(src: &str, target: Target, caps: (usize, usize)) -> Vec<u8> 
     .unwrap_or_else(|e| panic!("emit ({target:?}): {e}"))
 }
 
+pub(super) fn a64_at(src: &str, name: &str, optimize: bool) -> Vec<u32> {
+    function_words(&object_at(src, Target::LinuxAarch64, optimize), name)
+}
+
+pub(super) fn x64_at(src: &str, name: &str, optimize: bool) -> Vec<X64Insn> {
+    x64_insns(&function_bytes(
+        &object_at(src, Target::LinuxX64, optimize),
+        name,
+    ))
+}
+
 fn a64(src: &str, name: &str) -> Vec<u32> {
-    function_words(&object(src, Target::LinuxAarch64), name)
+    a64_at(src, name, true)
 }
 
 fn x64(src: &str, name: &str) -> Vec<X64Insn> {
-    x64_insns(&function_bytes(&object(src, Target::LinuxX64), name))
+    x64_at(src, name, true)
 }
 
 /// One decoded x86-64 instruction. `op` is the opcode with `0x0F00` set for
 /// the two-byte map and `0x3800` / `0x3A00` for the three-byte ones; `imm`
 /// is the sign-extended immediate or displacement of a relative branch.
 #[derive(Debug, Clone, Copy)]
-struct X64Insn {
-    at: usize,
-    len: usize,
+pub(super) struct X64Insn {
+    pub(super) at: usize,
+    pub(super) len: usize,
     rex: u8,
-    op: u16,
+    pub(super) op: u16,
     modrm: Option<u8>,
     sib: Option<u8>,
     imm: i64,
 }
 
 impl X64Insn {
-    fn is_jmp(&self) -> bool {
+    pub(super) fn is_jmp(&self) -> bool {
         matches!(self.op, 0xEB | 0xE9)
     }
-    fn is_jcc(&self) -> bool {
+    pub(super) fn is_jcc(&self) -> bool {
         matches!(self.op, 0x70..=0x7F | 0x0F80..=0x0F8F)
     }
-    fn target(&self) -> usize {
+    pub(super) fn target(&self) -> usize {
         (self.at as i64 + self.len as i64 + self.imm) as usize
     }
     /// ModRM `mod == 3`: both operands are registers.
@@ -287,7 +307,7 @@ impl Misses {
 
 /// Every direct branch lands on an instruction that is neither the next one
 /// nor an unconditional branch.
-fn a64_branches_land_on_code(ws: &[u32]) -> bool {
+pub(super) fn a64_branches_land_on_code(ws: &[u32]) -> bool {
     ws.iter().enumerate().all(|(i, &w)| {
         let Some((t, _)) = a64_branch(w, i) else {
             return true;
@@ -300,7 +320,7 @@ fn a64_branches_land_on_code(ws: &[u32]) -> bool {
     })
 }
 
-fn x64_branches_land_on_code(insns: &[X64Insn]) -> bool {
+pub(super) fn x64_branches_land_on_code(insns: &[X64Insn]) -> bool {
     insns.iter().filter(|i| i.is_jmp() || i.is_jcc()).all(|b| {
         let lands_on_jmp = insns.iter().any(|t| t.at == b.target() && t.is_jmp());
         b.target() != b.at + b.len && !lands_on_jmp
@@ -366,7 +386,6 @@ const DROP: &str = "#include <stdlib.h>\nvoid drop(void *p) { free(p); }\n";
 const MID: &str = "int mid(int lo, int hi) { return (lo + hi) / 2; }\n";
 
 #[test]
-#[ignore = "TODO: a block left without code after allocation still takes its branch"]
 fn codeless_blocks_cost_no_branch() {
     let mut m = Misses::default();
     for (src, name) in [(COUNT_ZERO, "count_zero"), (STEP, "step"), (TALLY, "tally")] {
@@ -998,7 +1017,7 @@ fn frame_bound_intrinsics_keep_the_frame_record() {
 #[test]
 fn macho_thread_local_access_keeps_the_frame_record() {
     const SRC: &str = "_Thread_local int tv;\nint tls(void) { return tv; }\n";
-    let ws = function_words(&object(SRC, Target::MacOSAarch64), "tls");
+    let ws = function_words(&object_at(SRC, Target::MacOSAarch64, true), "tls");
     // `blr xn`.
     assert!(
         ws.iter().any(|&w| w & 0xFFFF_FC1F == 0xD63F_0000),

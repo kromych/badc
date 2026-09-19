@@ -1032,7 +1032,6 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x56, %ecx
                	jmp	<addr>
-               	jmp	<addr>
                	pushq	%rax
                	movq	%rsi, %rax
                	xorq	%rdx, %rdx
@@ -1098,7 +1097,6 @@ Disassembly of section .text:
                	cmpq	%r11, %rsi
                	je	<addr>
                	movl	$0x30, %eax
-               	jmp	<addr>
                	jmp	<addr>
                	cmpq	$-0x1, %rdx
                	je	<addr>

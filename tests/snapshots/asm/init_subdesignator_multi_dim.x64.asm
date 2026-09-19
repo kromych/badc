@@ -82,9 +82,7 @@ Disassembly of section .text:
                	movzbq	%cl, %rcx
                	movslq	%ecx, %rax
                	retq
-               	jmp	<addr>
                	movq	%rcx, %rax
-               	jmp	<addr>
                	jmp	<addr>
                	movq	%rax, %rcx
                	jmp	<addr>

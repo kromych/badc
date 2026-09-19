@@ -193,7 +193,6 @@ Disassembly of section .text:
                	jmp	<addr>
                	leaq	-0x70(%rbp), %rax
                	jmp	<addr>
-               	jmp	<addr>
                	movq	%rcx, %rsi
                	jmp	<addr>
                	movq	%rcx, %rsi

@@ -71,7 +71,6 @@ Disassembly of section .text:
                	and	x0, x0, #0x4
                	cbz	x0, <addr>
                	mov	x0, #0x0                // =0
-               	cbz	x0, <addr>
                	mov	x0, x1
                	ldp	x29, x30, [sp], #0x10
                	ret

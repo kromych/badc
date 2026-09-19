@@ -226,13 +226,11 @@ Disassembly of section .text:
                	retq
                	movq	(%rbx), %rsi
                	cmpq	%rsi, %rdx
-               	je	<addr>
-               	jmp	<addr>
+               	jne	<addr>
                	movabsq	$0x2222222222222222, %r11 # imm = 0x2222222222222222
                	movq	%rax, %rsi
                	cmpq	%r11, %rax
-               	jne	<addr>
-               	jmp	<addr>
+               	je	<addr>
                	movq	%rcx, %rsi
                	movq	%rax, (%rdx)
                	movq	-0x80(%rbp), %rax

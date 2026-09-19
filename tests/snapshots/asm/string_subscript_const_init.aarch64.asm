@@ -37,7 +37,6 @@ Disassembly of section .text:
                	cset	x0, eq
                	sxtw	x0, w0
                	ret
-               	b	<addr>
                	mov	x1, x0
                	b	<addr>
                	mov	x1, #0x0                // =0
@@ -173,7 +172,6 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x0                // =0
                	ret
-               	b	<addr>
                	mov	x0, x1
                	b	<addr>
                	mov	x0, #0x0                // =0

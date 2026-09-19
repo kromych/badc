@@ -51,4 +51,3 @@ Disassembly of section .text:
                	movzbq	%al, %rax
                	movslq	%eax, %rax
                	retq
-               	jmp	<addr>

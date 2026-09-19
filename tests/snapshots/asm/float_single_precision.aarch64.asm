@@ -106,7 +106,6 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x0                // =0
                	b	<addr>
-               	b	<addr>
                	fmov	s17, w2
                	fcmp	s1, s17
                	b.ne	<addr>
@@ -114,7 +113,5 @@ Disassembly of section .text:
                	b	<addr>
                	mov	x0, #0x0                // =0
                	b	<addr>
-               	b	<addr>
                	mov	x0, #0x0                // =0
-               	b	<addr>
                	b	<addr>

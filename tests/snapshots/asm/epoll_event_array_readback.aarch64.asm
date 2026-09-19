@@ -143,7 +143,6 @@ Disassembly of section .text:
                	cmp	x1, x22
                	b.ne	<addr>
                	orr	x20, x20, #0x2
-               	b	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x2
                	b.lt	<addr>

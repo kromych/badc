@@ -312,7 +312,6 @@ Disassembly of section .text:
                	movl	$0x6a, %eax
                	leave
                	retq
-               	jmp	<addr>
                	leaq	-0x20(%rbp), %rdx
                	movslq	%eax, %rsi
                	movq	%rsi, %rdi

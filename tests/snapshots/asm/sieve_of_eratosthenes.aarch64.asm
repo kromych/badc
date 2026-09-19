@@ -46,8 +46,6 @@ Disassembly of section .text:
                	ldrb	w3, [x2, x3]
                	cbnz	x3, <addr>
                	add	x1, x1, #0x1
-               	b	<addr>
-               	b	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, w4
                	b.lt	<addr>

@@ -209,16 +209,13 @@ Disassembly of section .text:
                	retq
                	xorq	%rax, %rax
                	retq
-               	jmp	<addr>
                	movq	%rax, %rdx
                	jmp	<addr>
                	movq	%rax, %rdx
-               	jmp	<addr>
                	jmp	<addr>
                	movq	%rax, %rdx
                	jmp	<addr>
                	movq	%rax, %rcx
-               	jmp	<addr>
                	jmp	<addr>
                	movq	%rax, %rdx
                	jmp	<addr>

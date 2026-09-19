@@ -420,12 +420,10 @@ Disassembly of section .text:
                	movq	0x8(%rsp), %r12
                	leave
                	retq
-               	jmp	<addr>
                	movq	%rsi, %rax
                	jmp	<addr>
                	xorq	%rsi, %rsi
                	jmp	<addr>
-               	jmp	<addr>
                	xorq	%rsi, %rsi
                	jmp	<addr>
                	xorq	%rsi, %rsi
@@ -434,12 +432,9 @@ Disassembly of section .text:
                	jmp	<addr>
                	xorq	%rsi, %rsi
                	jmp	<addr>
-               	jmp	<addr>
-               	xorq	%rsi, %rsi
-               	jmp	<addr>
-               	jmp	<addr>
                	xorq	%rsi, %rsi
                	jmp	<addr>
                	xorq	%rsi, %rsi
                	jmp	<addr>
+               	xorq	%rsi, %rsi
                	jmp	<addr>

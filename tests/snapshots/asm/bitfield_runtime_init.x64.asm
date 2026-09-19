@@ -94,9 +94,7 @@ Disassembly of section .text:
                	movq	0x10(%rsp), %r13
                	leave
                	retq
-               	jmp	<addr>
                	movq	%rax, %rcx
-               	jmp	<addr>
                	jmp	<addr>
 
 <build_mixed>:
@@ -183,10 +181,7 @@ Disassembly of section .text:
                	movq	0x10(%rsp), %r13
                	leave
                	retq
-               	jmp	<addr>
                	movq	%rax, %rcx
-               	jmp	<addr>
-               	jmp	<addr>
                	jmp	<addr>
 
 <main>:

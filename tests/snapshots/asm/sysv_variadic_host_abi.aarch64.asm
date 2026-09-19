@@ -101,7 +101,6 @@ Disassembly of section .text:
                	ldr	d0, [x3]
                	fcvtzs	x3, d0
                	add	x1, x1, x3
-               	b	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0xa
                	b.lt	<addr>

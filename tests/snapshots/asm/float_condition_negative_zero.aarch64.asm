@@ -74,13 +74,7 @@ Disassembly of section .text:
                	ret
                	orr	x1, x1, #0x40
                	b	<addr>
-               	b	<addr>
-               	b	<addr>
                	mov	x2, x0
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
                	b	<addr>
                	mov	x1, x2
                	b	<addr>

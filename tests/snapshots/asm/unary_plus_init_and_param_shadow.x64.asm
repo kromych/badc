@@ -153,9 +153,7 @@ Disassembly of section .text:
                	retq
                	xorq	%rax, %rax
                	retq
-               	jmp	<addr>
                	movq	%rcx, %rsi
-               	jmp	<addr>
                	jmp	<addr>
                	movq	%rcx, %rsi
                	jmp	<addr>

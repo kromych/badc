@@ -160,4 +160,3 @@ Disassembly of section .text:
                	b	<addr>
                	mov	x8, x11
                	b	<addr>
-               	b	<addr>

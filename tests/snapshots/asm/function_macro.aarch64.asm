@@ -106,7 +106,6 @@ Disassembly of section .text:
                	cbnz	x3, <addr>
                	mov	x0, #0x18               // =24
                	ret
-               	b	<addr>
                	ldrb	w1, [x0]
                	ldrb	w3, [x2]
                	cmp	w1, w3
@@ -127,11 +126,6 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x0                // =0
                	ret
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
 
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
@@ -194,7 +188,5 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	b	<addr>
                	mov	x0, #0x0                // =0
-               	b	<addr>
                	b	<addr>

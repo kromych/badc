@@ -41,4 +41,3 @@ Disassembly of section .text:
                	cset	x0, eq
                	sxtw	x0, w0
                	ret
-               	b	<addr>

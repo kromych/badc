@@ -43,7 +43,6 @@ Disassembly of section .text:
                	b	<addr>
                	mov	x0, #0x1                // =1
                	b	<addr>
-               	b	<addr>
                	mov	x0, x1
                	cbnz	x0, <addr>
                	sxtw	x0, w6

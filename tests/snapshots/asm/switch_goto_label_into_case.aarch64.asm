@@ -29,7 +29,6 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x0                // =0
                	ret
-               	b	<addr>
                	cmp	w0, #0x2
                	b.lt	<addr>
                	mov	x0, #0x14               // =20

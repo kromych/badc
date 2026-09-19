@@ -75,7 +75,6 @@ Disassembly of section .text:
                	jne	<addr>
                	xorq	%rcx, %rcx
                	cmpq	$0x1, %rcx
-               	jbe	<addr>
                	xorq	%rcx, %rcx
                	movq	%rcx, %rdx
                	movq	(%rax), %rdx
@@ -84,7 +83,6 @@ Disassembly of section .text:
                	jne	<addr>
                	movq	%rcx, %rdx
                	cmpq	$0x1, %rdx
-               	jbe	<addr>
                	xorq	%rcx, %rcx
                	movq	%rcx, (%rax)
                	leaq	-0x10(%rbp), %rax
@@ -104,7 +102,6 @@ Disassembly of section .text:
                	jne	<addr>
                	xorq	%rax, %rax
                	cmpq	$0x1, %rax
-               	jbe	<addr>
                	xorq	%rcx, %rcx
                	movq	%rcx, %rax
                	leaq	-0x10(%rbp), %rax
@@ -114,7 +111,6 @@ Disassembly of section .text:
                	jne	<addr>
                	movq	%rcx, %rsi
                	cmpq	$0x1, %rsi
-               	jbe	<addr>
                	xorq	%rcx, %rcx
                	movq	%rcx, (%rax)
                	movl	$0x4, %edx
@@ -134,7 +130,6 @@ Disassembly of section .text:
                	jne	<addr>
                	movq	%rcx, %rsi
                	cmpq	$0x1, %rsi
-               	jbe	<addr>
                	movq	(%rax), %rcx
                	andq	$0x1, %rcx
                	testq	%rcx, %rcx
@@ -163,7 +158,6 @@ Disassembly of section .text:
                	jne	<addr>
                	xorq	%rcx, %rcx
                	cmpq	$0x1, %rcx
-               	jbe	<addr>
                	xorq	%rcx, %rcx
                	movq	%rcx, %rdx
                	movq	(%rax), %rdx
@@ -172,7 +166,6 @@ Disassembly of section .text:
                	jne	<addr>
                	movq	%rcx, %rax
                	cmpq	$0x1, %rax
-               	jbe	<addr>
                	xorq	%rax, %rax
                	leave
                	retq

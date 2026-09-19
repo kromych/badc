@@ -304,7 +304,6 @@ Disassembly of section .text:
                	and	x1, x1, x3
                	orr	x2, x2, x1
                	mov	x1, #0x1                // =1
-               	cbnz	x2, <addr>
                	mov	x1, x0
                	eor	x2, x22, x22
                	eor	x3, x20, x20
@@ -404,7 +403,6 @@ Disassembly of section .text:
                	ldp	x22, x23, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x40
                	ret
-               	b	<addr>
                	mov	x0, #0x9                // =9
                	ldp	x29, x30, [sp, #0x30]
                	ldp	x22, x23, [sp, #0x10]

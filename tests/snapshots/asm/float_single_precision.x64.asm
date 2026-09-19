@@ -124,7 +124,6 @@ Disassembly of section .text:
                	retq
                	xorq	%rax, %rax
                	jmp	<addr>
-               	jmp	<addr>
                	movl	$0x3f800000, %eax       # imm = 0x3F800000
                	movq	%rax, %xmm15
                	ucomiss	%xmm15, %xmm1
@@ -134,7 +133,5 @@ Disassembly of section .text:
                	jmp	<addr>
                	xorq	%rax, %rax
                	jmp	<addr>
-               	jmp	<addr>
                	xorq	%rax, %rax
-               	jmp	<addr>
                	jmp	<addr>

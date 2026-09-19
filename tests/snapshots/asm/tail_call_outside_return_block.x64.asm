@@ -89,8 +89,6 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	xorq	%rax, %rax
-               	testq	%rax, %rax
-               	je	<addr>
                	movq	%rcx, %rax
                	popq	%rbp
                	retq

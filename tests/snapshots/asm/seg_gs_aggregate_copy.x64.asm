@@ -835,7 +835,6 @@ Disassembly of section .text:
                	movq	0x20(%rsp), %r15
                	leave
                	retq
-               	jmp	<addr>
                	movq	%rax, %rdx
                	jmp	<addr>
                	movq	%rax, %rdx
@@ -846,22 +845,13 @@ Disassembly of section .text:
                	jmp	<addr>
                	movq	%rax, %rdx
                	jmp	<addr>
-               	jmp	<addr>
                	movq	%rax, %rcx
                	jmp	<addr>
                	movq	%rax, %rcx
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
                	jmp	<addr>
                	movq	%rcx, %rdx
                	jmp	<addr>
                	movq	%rcx, %rdx
-               	jmp	<addr>
                	jmp	<addr>
                	movq	%rcx, %rsi
                	jmp	<addr>

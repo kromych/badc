@@ -145,8 +145,6 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
                	movq	%rcx, %rax
                	jmp	<addr>
                	movl	$0x1, %eax

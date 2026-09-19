@@ -173,8 +173,6 @@ Disassembly of section .text:
                	movq	(%rsp), %rbx
                	leave
                	retq
-               	jmp	<addr>
-               	jmp	<addr>
                	movq	%rax, %rdx
                	jmp	<addr>
                	movq	%rax, %rdx

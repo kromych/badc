@@ -45,9 +45,7 @@ Disassembly of section .text:
                	cmp	w2, w21
                	b.eq	<addr>
                	cmp	w3, w1
-               	b.ne	<addr>
-               	b	<addr>
-               	b	<addr>
+               	b.eq	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, w22
                	b.lt	<addr>
@@ -56,9 +54,6 @@ Disassembly of section .text:
                	mov	x0, x20
                	bl	<addr>
                	add	x23, x23, x0
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
                	add	x21, x21, #0x1
                	cmp	w21, #0x8
                	b.lt	<addr>

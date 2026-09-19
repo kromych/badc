@@ -337,7 +337,6 @@ Disassembly of section .text:
                	jmp	<addr>
                	movl	$0x4, %eax
                	jmp	<addr>
-               	jmp	<addr>
                	movl	$0x3, %eax
                	jmp	<addr>
                	cmpl	$0x7ff, %edx            # imm = 0x7FF

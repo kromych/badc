@@ -209,13 +209,11 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x0                // =0
                	ret
-               	b	<addr>
                	mov	x4, x3
                	b	<addr>
                	mov	x4, x3
                	b	<addr>
                	mov	x4, x3
-               	b	<addr>
                	b	<addr>
                	mov	x4, x2
                	b	<addr>

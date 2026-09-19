@@ -122,7 +122,6 @@ Disassembly of section .text:
                	retq
                	xorq	%rax, %rax
                	jmp	<addr>
-               	jmp	<addr>
                	cvtss2sd	%xmm1, %xmm0
                	movq	%rcx, %xmm15
                	subsd	%xmm15, %xmm0
@@ -140,11 +139,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	xorq	%rax, %rax
                	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
                	movq	%rax, %rcx
                	jmp	<addr>
-               	jmp	<addr>
                	movq	%rax, %rcx
-               	jmp	<addr>
                	jmp	<addr>

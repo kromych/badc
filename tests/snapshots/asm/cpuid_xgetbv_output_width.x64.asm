@@ -81,9 +81,7 @@ Disassembly of section .text:
                	movq	0x8(%rsp), %rbx
                	leave
                	retq
-               	jmp	<addr>
                	movq	%rax, %rcx
-               	jmp	<addr>
                	jmp	<addr>
 
 <cpuid_int_outputs_agree>:
@@ -135,9 +133,7 @@ Disassembly of section .text:
                	movq	(%rsp), %rbx
                	leave
                	retq
-               	jmp	<addr>
                	movq	%rax, %rcx
-               	jmp	<addr>
                	jmp	<addr>
 
 <xgetbv_long_outputs_fill_all_bytes>:
@@ -191,8 +187,6 @@ Disassembly of section .text:
                	movq	(%rsp), %rbx
                	leave
                	retq
-               	jmp	<addr>
-               	jmp	<addr>
 
 <main>:
                	pushq	%rbp

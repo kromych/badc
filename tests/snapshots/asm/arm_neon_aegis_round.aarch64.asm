@@ -296,8 +296,6 @@ Disassembly of section .text:
                	b.ge	<addr>
                	ldrb	w1, [x2, x3]
                	sxtb	x1, w1
-               	b	<addr>
-               	b	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x10
                	b.lt	<addr>

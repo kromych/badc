@@ -26,8 +26,7 @@ Disassembly of section .text:
                	and	x3, x3, #0x7
                	sub	x3, x3, x4
                	cmp	x3, #0x8
-               	b.hs	<addr>
-               	b	<addr>
+               	b.lo	<addr>
                	mov	x0, #0x0                // =0
                	ret
                	mov	x3, x0
@@ -86,7 +85,6 @@ Disassembly of section .text:
                	sub	x2, x2, #0x1
                	cmp	w2, #0x0
                	b.gt	<addr>
-               	b	<addr>
                	b	<addr>
                	b	<addr>
                	b	<addr>

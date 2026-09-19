@@ -809,7 +809,6 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x30               // =48
                	b	<addr>
-               	b	<addr>
                	mov	x17, #-0x1              // =-1
                	cmp	x2, x17
                	b.eq	<addr>

@@ -24,8 +24,7 @@ Disassembly of section .text:
                	add	x2, x2, x3
                	and	x2, x2, #0x1
                	sub	x2, x2, x3
-               	cbnz	x2, <addr>
-               	b	<addr>
+               	cbz	x2, <addr>
                	add	x1, x1, x0
                	add	x0, x0, #0x1
                	cmp	w0, #0xa

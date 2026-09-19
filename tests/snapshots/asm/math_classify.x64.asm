@@ -372,7 +372,6 @@ Disassembly of section .text:
                	jmp	<addr>
                	xorq	%rax, %rax
                	jmp	<addr>
-               	jmp	<addr>
                	movl	$0x3, %eax
                	jmp	<addr>
                	cmpl	$0x7ff, %esi            # imm = 0x7FF
@@ -381,7 +380,6 @@ Disassembly of section .text:
                	jne	<addr>
                	movl	$0x1, %ecx
                	movslq	%ecx, %rax
-               	jmp	<addr>
                	jmp	<addr>
                	movl	$0x4, %eax
                	jmp	<addr>
@@ -484,7 +482,6 @@ Disassembly of section .text:
                	jne	<addr>
                	movl	$0x1, %eax
                	movslq	%eax, %rax
-               	jmp	<addr>
                	jmp	<addr>
                	movl	$0x4, %eax
                	jmp	<addr>

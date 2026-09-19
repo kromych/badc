@@ -38,7 +38,6 @@ Disassembly of section .text:
                	callq	<addr>
                	popq	%rbp
                	retq
-               	jmp	<addr>
                	movslq	%eax, %rcx
                	movsbq	(%rsi,%rcx), %rdx
                	movb	%dl, (%rdi,%rcx)
@@ -60,7 +59,6 @@ Disassembly of section .text:
                	callq	<addr>
                	popq	%rbp
                	retq
-               	jmp	<addr>
                	movslq	%eax, %rcx
                	movsbq	(%rsi,%rcx), %rdx
                	movb	%dl, (%rdi,%rcx)

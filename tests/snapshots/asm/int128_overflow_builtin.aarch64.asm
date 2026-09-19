@@ -134,4 +134,3 @@ Disassembly of section .text:
                	b	<addr>
                	mov	x2, x0
                	b	<addr>
-               	b	<addr>

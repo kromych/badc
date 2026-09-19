@@ -197,12 +197,10 @@ Disassembly of section .text:
                	ret
                	ldr	x4, [x20]
                	cmp	x0, x4
-               	b.eq	<addr>
-               	b	<addr>
+               	b.ne	<addr>
                	mov	x17, #0x2222222222222222 // =2459565876494606882
                	cmp	x2, x17
-               	b.ne	<addr>
-               	b	<addr>
+               	b.eq	<addr>
                	mov	x4, x1
                	str	x2, [x0]
                	ldur	x2, [x29, #-0x80]

@@ -196,7 +196,6 @@ Disassembly of section .text:
                	xorps	%xmm1, %xmm1
                	cvtsi2sd	%rcx, %xmm1
                	addsd	%xmm1, %xmm0
-               	jmp	<addr>
                	incq	%rax
                	movslq	-0xd0(%rbp), %rcx
                	cmpl	%ecx, %eax
@@ -541,10 +540,3 @@ Disassembly of section .text:
                	movq	0x20(%rsp), %r15
                	leave
                	retq
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>

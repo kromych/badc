@@ -36,8 +36,7 @@ Disassembly of section .text:
                	movl	$0x1000, %esi           # imm = 0x1000
                	movl	$0x1, %edi
                	cmpq	%rsi, %rdx
-               	jae	<addr>
-               	jmp	<addr>
+               	jb	<addr>
                	movq	%rsi, %rdx
                	movl	%edx, %edx
                	addq	%rdx, %rcx
@@ -57,8 +56,7 @@ Disassembly of section .text:
                	movl	$0x1000, %edi           # imm = 0x1000
                	movq	%rsi, %r8
                	cmpq	%rdi, %rdx
-               	jae	<addr>
-               	jmp	<addr>
+               	jb	<addr>
                	movq	%rdi, %rdx
                	movl	%edx, %edx
                	addq	%rdx, %rcx
@@ -77,8 +75,7 @@ Disassembly of section .text:
                	movl	$0x1000, %edi           # imm = 0x1000
                	movq	%rsi, %r8
                	cmpq	%rdi, %rdx
-               	jae	<addr>
-               	jmp	<addr>
+               	jb	<addr>
                	movq	%rdi, %rdx
                	movl	%edx, %edx
                	addq	%rdx, %rcx

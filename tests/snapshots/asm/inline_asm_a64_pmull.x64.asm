@@ -35,7 +35,6 @@ Disassembly of section .text:
                	testq	%rsi, %rsi
                	je	<addr>
                	xorq	%rcx, %rax
-               	jmp	<addr>
                	shlq	%rcx
                	shrq	%rdx
                	testq	%rdx, %rdx
@@ -55,7 +54,6 @@ Disassembly of section .text:
                	testq	%rsi, %rsi
                	je	<addr>
                	xorq	%rdx, %rax
-               	jmp	<addr>
                	shlq	%rdx
                	shrq	%rcx
                	testq	%rcx, %rcx
@@ -75,7 +73,6 @@ Disassembly of section .text:
                	testq	%rsi, %rsi
                	je	<addr>
                	xorq	%rcx, %rax
-               	jmp	<addr>
                	shlq	%rcx
                	shrq	%rdx
                	testq	%rdx, %rdx

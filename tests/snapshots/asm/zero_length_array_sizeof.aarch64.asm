@@ -39,9 +39,7 @@ Disassembly of section .text:
                	ldurb	w5, [x29, #-0x8]
                	strb	w5, [x3, x1]
                	cmp	w2, #0x4
-               	b.ge	<addr>
-               	b	<addr>
-               	b	<addr>
+               	b.lt	<addr>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	ldrsw	x1, [x1]
@@ -94,4 +92,3 @@ Disassembly of section .text:
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	b	<addr>

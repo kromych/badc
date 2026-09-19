@@ -173,8 +173,7 @@ Disassembly of section .text:
                	callq	<addr>
                	movslq	%eax, %rcx
                	testq	%rcx, %rcx
-               	je	<addr>
-               	jmp	<addr>
+               	jne	<addr>
                	movl	$0xffffffff, %edi       # imm = 0xFFFFFFFF
                	movl	$0xfffffffe, %esi       # imm = 0xFFFFFFFE
                	movl	$0x1, %edx
@@ -182,8 +181,7 @@ Disassembly of section .text:
                	callq	<addr>
                	movslq	%eax, %rcx
                	testq	%rcx, %rcx
-               	je	<addr>
-               	jmp	<addr>
+               	jne	<addr>
                	xorq	%rdi, %rdi
                	movl	$0x3, %esi
                	movq	%rdi, %rdx
@@ -191,8 +189,7 @@ Disassembly of section .text:
                	callq	<addr>
                	movslq	%eax, %rcx
                	testq	%rcx, %rcx
-               	je	<addr>
-               	jmp	<addr>
+               	jne	<addr>
                	xorq	%rcx, %rcx
                	movq	%rcx, %rax
                	movq	%rcx, %rax
@@ -270,6 +267,5 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	popq	%rbp
                	retq
-               	jmp	<addr>
                	movabsq	$-0x1, %rax
                	jmp	<addr>

@@ -230,7 +230,6 @@ Disassembly of section .text:
                	add	sp, sp, #0xc0
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	b	<addr>
                	ldr	x2, [x0, #0x8]
                	ldr	x3, [x1, #0x8]
                	cmp	x2, x3

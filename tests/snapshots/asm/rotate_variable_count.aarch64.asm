@@ -57,8 +57,6 @@ Disassembly of section .text:
                	sxtw	x3, w3
                	lsl	x3, x2, x3
                	orr	x1, x1, x3
-               	b	<addr>
-               	b	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x40
                	b.lt	<addr>
@@ -98,8 +96,6 @@ Disassembly of section .text:
                	sxtw	x3, w3
                	lsl	x2, x2, x3
                	orr	x1, x1, x2
-               	b	<addr>
-               	b	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x40
                	b.lt	<addr>

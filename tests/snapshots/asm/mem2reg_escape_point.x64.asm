@@ -65,8 +65,6 @@ Disassembly of section .text:
                	movslq	(%rcx), %rsi
                	incq	%rsi
                	movl	%esi, (%rcx)
-               	jmp	<addr>
-               	jmp	<addr>
                	incq	%rax
                	cmpl	$0x3, %eax
                	jl	<addr>

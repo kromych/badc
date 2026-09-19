@@ -115,7 +115,6 @@ Disassembly of section .text:
                	jmp	<addr>
                	xorq	%rcx, %rcx
                	jmp	<addr>
-               	jmp	<addr>
                	movq	%rax, %rcx
                	jmp	<addr>
                	movq	%rax, %rcx

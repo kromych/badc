@@ -79,16 +79,6 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	sxtw	x0, w0
                	ret
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
 
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
@@ -183,10 +173,4 @@ Disassembly of section .text:
                	mov	x0, #0x64               // =100
                	b	<addr>
                	mov	x0, #0x64               // =100
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
                	b	<addr>

@@ -367,8 +367,6 @@ Disassembly of section .text:
                	andq	%rdx, %rcx
                	orq	%rax, %rcx
                	movl	$0x1, %eax
-               	testq	%rcx, %rcx
-               	jne	<addr>
                	xorq	%rax, %rax
                	movq	%r13, %rcx
                	xorq	%r13, %rcx
@@ -506,7 +504,6 @@ Disassembly of section .text:
                	movq	0x18(%rsp), %r14
                	leave
                	retq
-               	jmp	<addr>
                	movl	$0x9, %eax
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12

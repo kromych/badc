@@ -55,7 +55,6 @@ Disassembly of section .text:
                	cset	x0, eq
                	sxtw	x0, w0
                	ret
-               	b	<addr>
                	mov	x1, x0
                	b	<addr>
                	mov	x3, x0
@@ -119,7 +118,6 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	b	<addr>
                	mov	x1, x0
                	b	<addr>
                	mov	x1, x0

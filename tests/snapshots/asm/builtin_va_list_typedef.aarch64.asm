@@ -306,7 +306,6 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	add	sp, sp, #0xc0
                	ret
-               	b	<addr>
                	mov	x1, x0
                	b	<addr>
                	mov	x1, x0

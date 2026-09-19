@@ -53,7 +53,6 @@ Disassembly of section .text:
                	cset	x1, eq
                	sxtw	x0, w1
                	ret
-               	b	<addr>
                	mov	x2, x1
                	b	<addr>
                	mov	x2, x1

@@ -244,7 +244,6 @@ Disassembly of section .text:
                	b	<addr>
                	mov	x0, #0x4                // =4
                	b	<addr>
-               	b	<addr>
                	mov	x0, #0x3                // =3
                	b	<addr>
                	cmp	w2, #0x7ff

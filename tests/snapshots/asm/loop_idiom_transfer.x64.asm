@@ -79,7 +79,6 @@ Disassembly of section .text:
                	movq	(%rsp), %rbx
                	leave
                	retq
-               	jmp	<addr>
 
 <main>:
                	pushq	%rbp
@@ -353,7 +352,6 @@ Disassembly of section .text:
                	movq	(%rsp), %rbx
                	leave
                	retq
-               	jmp	<addr>
                	movl	$0x7, %eax
                	movq	(%rsp), %rbx
                	leave
@@ -364,7 +362,6 @@ Disassembly of section .text:
                	retq
                	xorq	%rax, %rax
                	jmp	<addr>
-               	jmp	<addr>
                	movl	$0x3, %eax
                	movq	(%rsp), %rbx
                	leave
@@ -373,4 +370,3 @@ Disassembly of section .text:
                	movq	(%rsp), %rbx
                	leave
                	retq
-               	jmp	<addr>

@@ -89,7 +89,6 @@ Disassembly of section .text:
                	jne	<addr>
                	movl	$0x7, %ecx
                	jmp	<addr>
-               	jmp	<addr>
 
 <main>:
                	movl	$0x1, %eax

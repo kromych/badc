@@ -46,4 +46,3 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	leave
                	retq
-               	jmp	<addr>

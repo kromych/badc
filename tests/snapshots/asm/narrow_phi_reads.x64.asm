@@ -44,7 +44,6 @@ Disassembly of section .text:
                	movzbq	%al, %rax
                	movslq	%eax, %rax
                	retq
-               	jmp	<addr>
 
 <loop_masked>:
                	pushq	%rbp
@@ -108,7 +107,6 @@ Disassembly of section .text:
                	incq	%rax
                	movslq	%eax, %rax
                	retq
-               	jmp	<addr>
 
 <join_unmasked>:
                	movq	%rsi, %rax
@@ -120,7 +118,6 @@ Disassembly of section .text:
                	andq	$0xff, %rax
                	movslq	%eax, %rax
                	retq
-               	jmp	<addr>
 
 <join_byte_as_signed>:
                	xorq	%rax, %rax
@@ -130,7 +127,6 @@ Disassembly of section .text:
                	andq	$0xff, %rax
                	movsbq	%al, %rax
                	retq
-               	jmp	<addr>
 
 <main>:
                	pushq	%rbp

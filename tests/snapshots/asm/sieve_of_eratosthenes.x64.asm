@@ -56,8 +56,6 @@ Disassembly of section .text:
                	testq	%rsi, %rsi
                	jne	<addr>
                	incq	%rcx
-               	jmp	<addr>
-               	jmp	<addr>
                	incq	%rax
                	cmpl	$0x186a0, %eax          # imm = 0x186A0
                	jl	<addr>

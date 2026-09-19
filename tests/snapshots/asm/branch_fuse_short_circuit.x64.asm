@@ -126,7 +126,6 @@ Disassembly of section .text:
                	retq
                	xorq	%rax, %rax
                	retq
-               	jmp	<addr>
                	movq	%rcx, %rdx
                	jmp	<addr>
                	movl	$0x3, %ecx

@@ -23,8 +23,7 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrsw	x0, [x0]
-               	cbz	x0, <addr>
-               	b	<addr>
+               	cbnz	x0, <addr>
                	ldur	w0, [x29, #-0x30]
                	ldur	w2, [x29, #-0x20]
                	b	<addr>
@@ -72,7 +71,6 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	b	<addr>
                	mov	x1, x0
-               	b	<addr>
                	b	<addr>
 
 <main>:

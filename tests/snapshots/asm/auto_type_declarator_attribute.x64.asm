@@ -100,7 +100,6 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	leaq	<rip>, %rcx
                	jmp	<addr>
-               	jmp	<addr>
                	movq	%rdx, -0x8(%rbp)
                	jmp	<addr>
                	movq	-0x8(%rbp), %rax

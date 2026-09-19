@@ -51,7 +51,6 @@ Disassembly of section .text:
                	movzbq	%al, %rax
                	movslq	%eax, %rax
                	retq
-               	jmp	<addr>
                	movq	%rax, %rcx
                	jmp	<addr>
                	xorq	%rcx, %rcx
@@ -182,7 +181,6 @@ Disassembly of section .text:
                	retq
                	xorq	%rax, %rax
                	retq
-               	jmp	<addr>
                	movq	%rcx, %rax
                	jmp	<addr>
                	xorq	%rax, %rax

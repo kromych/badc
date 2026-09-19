@@ -330,7 +330,6 @@ Disassembly of section .text:
                	ret
                	mov	x1, x0
                	b	<addr>
-               	b	<addr>
                	mov	x4, x2
                	b	<addr>
                	mov	x4, x2
@@ -340,7 +339,6 @@ Disassembly of section .text:
                	mov	x2, #0x0                // =0
                	b	<addr>
                	mov	x2, #0x0                // =0
-               	b	<addr>
                	b	<addr>
                	mov	x4, x2
                	b	<addr>

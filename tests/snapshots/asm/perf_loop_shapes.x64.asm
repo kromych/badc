@@ -34,8 +34,6 @@ Disassembly of section .text:
                	testq	%rdx, %rdx
                	jne	<addr>
                	incq	%rcx
-               	jmp	<addr>
-               	jmp	<addr>
                	incq	%rax
                	cmpl	%esi, %eax
                	jl	<addr>
@@ -45,7 +43,6 @@ Disassembly of section .text:
 <partition>:
                	xorq	%rcx, %rcx
                	movl	$0x8, %eax
-               	jmp	<addr>
                	jmp	<addr>
                	incq	%rcx
                	movslq	%ecx, %rsi
@@ -66,7 +63,6 @@ Disassembly of section .text:
                	movl	%r8d, (%rdi,%rdx,4)
                	incq	%rcx
                	decq	%rax
-               	jmp	<addr>
                	cmpl	%eax, %ecx
                	jle	<addr>
                	retq
@@ -141,9 +137,6 @@ Disassembly of section .text:
                	movslq	%edx, %rcx
                	addq	%rcx, %rax
                	movq	%rax, (%r13)
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
                	incq	%rdx
                	cmpl	$0xfa0, %edx            # imm = 0xFA0
                	jl	<addr>

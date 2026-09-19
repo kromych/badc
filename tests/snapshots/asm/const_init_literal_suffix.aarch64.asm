@@ -191,4 +191,3 @@ Disassembly of section .text:
                	cbz	x1, <addr>
                	mov	x0, #0x20               // =32
                	b	<addr>
-               	b	<addr>

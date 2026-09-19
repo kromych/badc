@@ -177,7 +177,6 @@ Disassembly of section .text:
                	cmpq	%r13, %rcx
                	jne	<addr>
                	orq	$0x2, %rbx
-               	jmp	<addr>
                	incq	%rax
                	cmpl	$0x2, %eax
                	jl	<addr>

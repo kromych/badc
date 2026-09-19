@@ -161,7 +161,6 @@ Disassembly of section .text:
                	ret
                	mov	x0, x1
                	b	<addr>
-               	b	<addr>
                	mov	x0, x20
                	b	<addr>
                	mov	x0, x20

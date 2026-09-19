@@ -226,7 +226,3 @@ Disassembly of section .text:
                	movq	0x10(%rsp), %r13
                	leave
                	retq
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>

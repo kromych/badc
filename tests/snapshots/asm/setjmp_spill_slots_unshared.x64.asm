@@ -163,14 +163,6 @@ Disassembly of section .text:
                	movq	0x20(%rsp), %r15
                	leave
                	retq
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
                	leaq	<rip>, %rax
                	movslq	0x40(%rax), %rcx
                	leaq	(%rcx,%rcx,4), %rcx

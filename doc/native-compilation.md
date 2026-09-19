@@ -20,6 +20,22 @@ unless it binds a shared-library symbol, which the driver reports
 read-write, as `ld` lays out a static executable. EFI images are supported
 through the PE subsystem selector.
 
+## Instruction-set baseline
+
+On x86_64 badc assumes x86-64-v3: AVX, AVX2, FMA3, BMI1, BMI2, LZCNT, MOVBE and
+F16C on top of SSE4.2 and POPCNT, as in Intel Haswell, AMD Zen and later. On
+AArch64 it assumes what the Apple M1 implements, less Apple's own extensions:
+ARMv8.4-A with FP16, DotProd, FHM, AES, PMULL, SHA3 and SHA512, plus FRINTTS,
+FlagM2, SB and SSBS from ARMv8.5-A, without BTI, BF16 or I8MM. The emitted code
+may use any instruction of the set at any optimization level, and a processor
+that lacks one is not a target. `-mno-sse` / `-mgeneral-regs-only` take the
+floating-point and vector registers out of the set ([Hardening and code-model
+knobs](#hardening-and-code-model-knobs)); nothing else narrows it, and the
+driver refuses `-march=` and `-mtune=`. No instruction-set feature macro
+(`__SSE2__`, `__AVX2__`, `__ARM_NEON`, ...) is predefined but
+`__ARM_FEATURE_AES`, `__ARM_FEATURE_SHA2` and `__ARM_FEATURE_CRYPTO`, which
+`-mcpu=`'s `+aes`, `+sha2` and `+crypto` modifiers define.
+
 
 ## Multiple translation units
 
@@ -250,9 +266,8 @@ spellings, which all select the same single level) runs mem2reg, inlining,
 rotate and branch const-folding, and immediate dedup, and predefines `NDEBUG=1`
 and `__OPTIMIZE__=1`.
 
-Optimized binaries run on any modern ARM64 processor, and on x86_64 processors
-not older than Intel Haswell and AMD Zen (circa 2013 -- the optimizer emits
-FMA3).
+`-O` contracts `a*b+c` into one fused multiply-add on both architectures, an
+instruction of the [baseline](#instruction-set-baseline).
 
 `examples/bench.rs` runs a few pure-computation workloads (`fib32`,
 `quicksort-50k`, `matmul-50`) through the VM and the in-process JIT and reports

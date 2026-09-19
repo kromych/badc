@@ -195,7 +195,9 @@ accepted, and the request it names selects the one behaviour badc has.
 `-O1` / `-O2` / `-O3` / `-Os` / `-Oz` / `-Ofast` / `-Og` all select the
 single optimization level, `-g<level>` the single amount of debug
 information, and `-mcpu=<name>`, whose name must be an AArch64 part
-badc knows, a scheduling model badc does not differentiate. Only the
+badc knows, a scheduling model badc does not differentiate; the
+instructions stay the [baseline](./native-compilation.md#instruction-set-baseline)
+whatever the part. Only the
 `-g` family reports the gap, since a DWARF version and format are
 written into the output.
 

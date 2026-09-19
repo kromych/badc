@@ -327,8 +327,10 @@ IGNORE_PREFIX = (
     # arrives as `-fmin-function-alignment=`, forwarded above; the pinned
     # defconfig passes no `-falign-functions`.
     "-falign-",
-    # Instruction selection. badc's backends emit the base architecture, so
-    # the baseline these name is what a unit already gets.
+    # Instruction selection. badc emits its own baseline
+    # (doc/native-compilation.md); off the FP/SIMD registers, as a kernel
+    # object is, its integer lowering stays in the base architecture these
+    # name.
     "-march=", "-mtune=",
     # 32-bit calling convention and stack alignment. Only the -m16 / -m32
     # units carry them, and of those only the hand-written assembly reaches

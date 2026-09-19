@@ -36,6 +36,8 @@ more [here](./linux-kernel.md).
 * Windows ({`ARM64`, `x86_64`} x {`console`, `GUI`, `NT`, `driver`}).
 
 EFI images are supported as well. `--freestanding` drops the startup runtime.
+The x86_64 code assumes x86-64-v3 and the ARM64 code the Apple M1's ARMv8.4-A
+feature set ([baseline](./native-compilation.md#instruction-set-baseline)).
 
 ## Ship as one binary
 

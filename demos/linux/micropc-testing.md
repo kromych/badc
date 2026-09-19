@@ -26,6 +26,14 @@ here, so the inline-asm work they cover still needs the x86_64 Linux
 box. It also means the EVEX encoding gap is not reachable at runtime on
 this machine.
 
+**Below the baseline.** badc assumes x86-64-v3
+([native-compilation.md](../../doc/native-compilation.md#instruction-set-baseline));
+this CPU stops at x86-64-v2, with none of AVX2, FMA3, BMI1 or BMI2. Its
+kernels boot because `-mno-sse` keeps FMA3 out of kernel objects and badc's
+integer lowering uses nothing above x86-64-v2. A baseline instruction in
+that lowering would break the boot here first: the VEX-encoded ones fault,
+and LZCNT / TZCNT execute as BSR / BSF.
+
 **SATA, not NVMe.** A boot here exercises `ahci`/`libata`, not the `nvme`
 path the emulated lanes drive. The two are complementary rather than
 redundant: the module-autoload defect that hid behind NVMe was a

@@ -90,7 +90,8 @@ optimizing backend, without taking on the pass count of a titan toolchain.
 * [What `badc` can do](./doc/what-badc-can-do.md) -- a short survey of `badc` features.
 * [Getting started](./doc/getting-started.md) -- install, first run, flags,
   debugging, C as a script.
-* [Native compilation](./doc/native-compilation.md) -- targets, multiple
+* [Native compilation](./doc/native-compilation.md) -- targets, the
+  instruction-set baseline (x86-64-v3, the Apple M1's ARMv8.4-A), multiple
   translation units, the linker, headers and bindings, `#pragma`-driven build
   flags, the JIT, optimizations.
 * [Diagnostics](./doc/diagnostics.md) -- the catalogue: every warning and

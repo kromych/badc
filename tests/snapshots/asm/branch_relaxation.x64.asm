@@ -35,7 +35,8 @@ Disassembly of section .text:
                	movq	%rdi, %r13
                	xorq	%rcx, %rcx
                	movq	%rcx, %rax
-               	jmp	<addr>
+               	cmpl	%r13d, %ecx
+               	jge	<addr>
                	movslq	%ecx, %rdx
                	imulq	$0x55555556, %rdx, %rdi # imm = 0x55555556
                	movq	%rdi, %rsi
@@ -74,7 +75,8 @@ Disassembly of section .text:
                	movq	%r12, 0x8(%rsp)
                	xorq	%rcx, %rcx
                	movq	%rcx, %rax
-               	jmp	<addr>
+               	cmpl	$0xa, %ecx
+               	jge	<addr>
                	movslq	%ecx, %rdx
                	imulq	$0x55555556, %rdx, %r8  # imm = 0x55555556
                	movq	%r8, %rsi

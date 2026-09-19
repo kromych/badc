@@ -46,7 +46,10 @@ Disassembly of section .text:
                	leaq	<rip>, %rsi
                	leaq	<rip>, %rdi
                	leaq	<rip>, %r8
-               	jmp	<addr>
+               	movslq	%ecx, %rdx
+               	movsbq	(%rsi,%rdx), %r9
+               	testq	%r9, %r9
+               	je	<addr>
                	movsbq	(%r8,%rdx), %r9
                	movsbq	(%rdi,%rdx), %rdx
                	cmpl	%edx, %r9d

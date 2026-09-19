@@ -608,7 +608,8 @@ Disassembly of section .text:
                	movq	%r8, %rdi
                	movq	%rsi, %rdx
                	movq	%r8, %rsi
-               	jmp	<addr>
+               	testq	%rcx, %rcx
+               	je	<addr>
                	movq	%rax, %r9
                	shrq	$0x3f, %r9
                	movq	%rsi, %r12
@@ -703,7 +704,8 @@ Disassembly of section .text:
                	movq	%r8, %rdi
                	movq	%rsi, %rdx
                	movq	%r8, %rsi
-               	jmp	<addr>
+               	testq	%rcx, %rcx
+               	je	<addr>
                	movq	%rax, %rbx
                	shrq	$0x3f, %rbx
                	movq	%rsi, %r12

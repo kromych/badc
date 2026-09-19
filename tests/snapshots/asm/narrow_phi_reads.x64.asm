@@ -55,7 +55,8 @@ Disassembly of section .text:
                	movq	%rdi, %r13
                	xorq	%rbx, %rbx
                	movq	%rbx, %r12
-               	jmp	<addr>
+               	cmpl	%r13d, %ebx
+               	jge	<addr>
                	movq	%rbx, %rdi
                	callq	<addr>
                	addq	%r12, %rax
@@ -76,7 +77,8 @@ Disassembly of section .text:
 <count_u8>:
                	xorq	%rax, %rax
                	movq	%rax, %rcx
-               	jmp	<addr>
+               	cmpl	%edi, %eax
+               	jge	<addr>
                	incq	%rcx
                	andq	$0xff, %rcx
                	incq	%rax
@@ -88,7 +90,8 @@ Disassembly of section .text:
 <count_s8>:
                	xorq	%rax, %rax
                	movq	%rax, %rcx
-               	jmp	<addr>
+               	cmpl	%edi, %eax
+               	jge	<addr>
                	addq	$0x3, %rcx
                	movq	%rcx, %rdx
                	movsbq	%dl, %rcx

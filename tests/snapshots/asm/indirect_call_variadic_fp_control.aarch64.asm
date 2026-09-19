@@ -50,7 +50,9 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	mov	x17, #0x0               // =0
                	fmov	d0, x17
-               	b	<addr>
+               	ldrsw	x2, [x29, #0x10]
+               	cmp	w0, w2
+               	b.ge	<addr>
                	sxtw	x2, w0
                	lsr	x3, x2, #63
                	add	x2, x2, x3

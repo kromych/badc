@@ -43,7 +43,8 @@ Disassembly of section .text:
                	movq	%rax, 0x20(%rcx)
                	xorq	%rax, %rax
                	movq	%rax, %rdx
-               	jmp	<addr>
+               	cmpl	$0x5, %eax
+               	jge	<addr>
                	movslq	%eax, %rsi
                	movq	(%rcx,%rsi,8), %rsi
                	addq	%rsi, %rdx

@@ -73,7 +73,8 @@ Disassembly of section .text:
                	leaq	-0x20(%rbp), %rdx
                	xorq	%rcx, %rcx
                	movq	%rcx, %rax
-               	jmp	<addr>
+               	cmpl	$0x8, %eax
+               	jge	<addr>
                	movslq	%eax, %rsi
                	movq	%rsi, %rdi
                	shlq	$0x2, %rdi

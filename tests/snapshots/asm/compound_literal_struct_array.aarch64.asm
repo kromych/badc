@@ -602,7 +602,8 @@ Disassembly of section .text:
                	str	w1, [x4, #0xc]
                	mov	x5, #0xa                // =10
                	mov	x1, x0
-               	b	<addr>
+               	cmp	w0, #0x2
+               	b.ge	<addr>
                	sxtw	x2, w0
                	lsl	x2, x2, #3
                	add	x2, x4, x2
@@ -634,7 +635,8 @@ Disassembly of section .text:
                	mov	x5, #0xa                // =10
                	mov	x0, #0x0                // =0
                	mov	x1, x0
-               	b	<addr>
+               	cmp	w0, #0x3
+               	b.ge	<addr>
                	sxtw	x2, w0
                	lsl	x2, x2, #3
                	add	x2, x4, x2

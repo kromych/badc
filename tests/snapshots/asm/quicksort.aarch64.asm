@@ -25,7 +25,8 @@ Disassembly of section .text:
                	sxtw	x7, w7
                	ldrsw	x5, [x0, x7, lsl #2]
                	sub	x2, x1, #0x1
-               	b	<addr>
+               	cmp	w1, w7
+               	b.ge	<addr>
                	sxtw	x3, w1
                	ldrsw	x4, [x0, x3, lsl #2]
                	cmp	w4, w5
@@ -64,7 +65,8 @@ Disassembly of section .text:
                	ldrsw	x4, [x20, x6, lsl #2]
                	sub	x0, x7, #0x1
                	mov	x1, x7
-               	b	<addr>
+               	cmp	w1, w6
+               	b.ge	<addr>
                	sxtw	x2, w1
                	ldrsw	x3, [x20, x2, lsl #2]
                	cmp	w3, w4

@@ -15,7 +15,7 @@ Disassembly of section .text:
 
 <accumulate>:
                	sxtw	x0, w0
-               	b	<addr>
+               	cbz	x0, <addr>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	ldr	x2, [x1]

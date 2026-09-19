@@ -27,7 +27,9 @@ Disassembly of section .text:
 
 <__fortify_strlen>:
                	xorq	%rax, %rax
-               	jmp	<addr>
+               	movsbq	(%rdi,%rax), %rcx
+               	testq	%rcx, %rcx
+               	je	<addr>
                	incq	%rax
                	movsbq	(%rdi,%rax), %rcx
                	testq	%rcx, %rcx
@@ -55,7 +57,9 @@ Disassembly of section .text:
                	leave
                	retq
                	xorq	%rax, %rax
-               	jmp	<addr>
+               	movsbq	(%rbx,%rax), %rcx
+               	testq	%rcx, %rcx
+               	je	<addr>
                	incq	%rax
                	movsbq	(%rbx,%rax), %rcx
                	testq	%rcx, %rcx

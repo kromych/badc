@@ -53,7 +53,9 @@ Disassembly of section .text:
                	ldrsw	x2, [x29, #0x18]
                	bl	<addr>
                	mov	x20, #0x0               // =0
-               	b	<addr>
+               	ldrsw	x0, [x29, #0x18]
+               	cmp	w20, w0
+               	b.ge	<addr>
                	mov	x17, x21
                	str	x9, [sp, #-0x10]!
                	ldrsw	x16, [x17, #0x18]

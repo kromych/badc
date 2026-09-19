@@ -177,7 +177,9 @@ Disassembly of section .text:
                	mov	x17, #-0x80             // =-128
                	str	w17, [x16, #0x1c]
                	mov	x0, x20
-               	b	<addr>
+               	ldrsw	x2, [x29, #0x10]
+               	cmp	w20, w2
+               	b.ge	<addr>
                	mov	x17, x1
                	str	x9, [sp, #-0x10]!
                	ldrsw	x16, [x17, #0x18]

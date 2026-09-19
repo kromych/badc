@@ -36,7 +36,7 @@ Disassembly of section .text:
                	mov	x7, x3
                	mov	x6, x2
                	mov	x8, x5
-               	b	<addr>
+               	cbz	x4, <addr>
                	lsr	x11, x6, #63
                	lsl	x12, x8, #1
                	lsl	x9, x9, #1
@@ -87,7 +87,7 @@ Disassembly of section .text:
                	mov	x4, #0x80               // =128
                	mov	x7, x6
                	mov	x5, x6
-               	b	<addr>
+               	cbz	x4, <addr>
                	lsr	x9, x2, #63
                	lsl	x10, x5, #1
                	lsl	x7, x7, #1
@@ -138,7 +138,7 @@ Disassembly of section .text:
                	mov	x5, x1
                	mov	x7, x0
                	mov	x6, x8
-               	b	<addr>
+               	cbz	x4, <addr>
                	lsr	x10, x7, #63
                	lsl	x11, x6, #1
                	lsl	x9, x9, #1
@@ -192,7 +192,7 @@ Disassembly of section .text:
                	mov	x5, x1
                	mov	x7, x0
                	mov	x6, x8
-               	b	<addr>
+               	cbz	x4, <addr>
                	lsr	x10, x7, #63
                	lsl	x11, x6, #1
                	lsl	x9, x9, #1
@@ -244,7 +244,7 @@ Disassembly of section .text:
                	mov	x9, x5
                	mov	x7, x5
                	mov	x8, x5
-               	b	<addr>
+               	cbz	x6, <addr>
                	lsr	x10, x7, #63
                	lsl	x11, x8, #1
                	lsl	x9, x9, #1
@@ -291,7 +291,7 @@ Disassembly of section .text:
                	mov	x9, x5
                	mov	x8, x5
                	mov	x7, x5
-               	b	<addr>
+               	cbz	x6, <addr>
                	lsr	x10, x8, #63
                	lsl	x11, x7, #1
                	lsl	x9, x9, #1
@@ -340,7 +340,7 @@ Disassembly of section .text:
                	mov	x6, #0x80               // =128
                	mov	x9, x8
                	mov	x7, x8
-               	b	<addr>
+               	cbz	x6, <addr>
                	lsr	x10, x4, #63
                	lsl	x11, x7, #1
                	lsl	x9, x9, #1
@@ -402,7 +402,7 @@ Disassembly of section .text:
                	mov	x6, #0x80               // =128
                	mov	x9, x8
                	mov	x7, x8
-               	b	<addr>
+               	cbz	x6, <addr>
                	lsr	x10, x4, #63
                	lsl	x11, x7, #1
                	lsl	x9, x9, #1
@@ -459,7 +459,7 @@ Disassembly of section .text:
                	mov	x6, #0x80               // =128
                	mov	x10, x8
                	mov	x9, x8
-               	b	<addr>
+               	cbz	x6, <addr>
                	lsr	x11, x4, #63
                	lsl	x12, x9, #1
                	lsl	x7, x10, #1
@@ -512,7 +512,7 @@ Disassembly of section .text:
                	mov	x6, #0x80               // =128
                	mov	x10, x7
                	mov	x9, x7
-               	b	<addr>
+               	cbz	x6, <addr>
                	lsr	x11, x4, #63
                	lsl	x12, x9, #1
                	lsl	x10, x10, #1
@@ -567,7 +567,7 @@ Disassembly of section .text:
                	mov	x6, #0x80               // =128
                	mov	x10, x9
                	mov	x7, x9
-               	b	<addr>
+               	cbz	x6, <addr>
                	lsr	x11, x4, #63
                	lsl	x12, x7, #1
                	lsl	x10, x10, #1
@@ -623,7 +623,7 @@ Disassembly of section .text:
                	mov	x6, #0x80               // =128
                	mov	x10, x7
                	mov	x9, x7
-               	b	<addr>
+               	cbz	x6, <addr>
                	lsr	x11, x4, #63
                	lsl	x12, x9, #1
                	lsl	x10, x10, #1
@@ -680,7 +680,7 @@ Disassembly of section .text:
                	mov	x5, x1
                	mov	x7, x0
                	mov	x6, x9
-               	b	<addr>
+               	cbz	x4, <addr>
                	lsr	x12, x7, #63
                	lsl	x13, x6, #1
                	lsl	x10, x10, #1
@@ -736,7 +736,7 @@ Disassembly of section .text:
                	mov	x5, x1
                	mov	x9, x0
                	mov	x7, x6
-               	b	<addr>
+               	cbz	x4, <addr>
                	lsr	x12, x9, #63
                	lsl	x13, x7, #1
                	lsl	x10, x10, #1
@@ -786,7 +786,7 @@ Disassembly of section .text:
                	mov	x6, #0x80               // =128
                	mov	x10, x7
                	mov	x9, x7
-               	b	<addr>
+               	cbz	x6, <addr>
                	lsr	x11, x4, #63
                	lsl	x12, x9, #1
                	lsl	x10, x10, #1
@@ -844,7 +844,7 @@ Disassembly of section .text:
                	mov	x6, #0x80               // =128
                	mov	x9, x7
                	mov	x8, x7
-               	b	<addr>
+               	cbz	x6, <addr>
                	lsr	x10, x4, #63
                	lsl	x11, x8, #1
                	lsl	x9, x9, #1
@@ -903,7 +903,7 @@ Disassembly of section .text:
                	mov	x7, x6
                	mov	x4, x1
                	mov	x1, x6
-               	b	<addr>
+               	cbz	x5, <addr>
                	lsr	x9, x0, #63
                	lsl	x10, x1, #1
                	lsl	x7, x7, #1
@@ -940,7 +940,7 @@ Disassembly of section .text:
                	mov	x7, x6
                	mov	x5, x4
                	mov	x4, x6
-               	b	<addr>
+               	cbz	x1, <addr>
                	lsr	x8, x0, #63
                	lsl	x9, x4, #1
                	lsl	x7, x7, #1

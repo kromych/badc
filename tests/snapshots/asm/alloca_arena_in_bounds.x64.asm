@@ -50,7 +50,8 @@ Disassembly of section .text:
                	callq	<addr>
                	xorq	%rax, %rax
                	movq	%rax, %rcx
-               	jmp	<addr>
+               	cmpl	$0x1f40, %eax           # imm = 0x1F40
+               	jge	<addr>
                	movslq	%eax, %rdx
                	movzbq	(%rbx,%rdx), %rdx
                	addq	%rdx, %rcx

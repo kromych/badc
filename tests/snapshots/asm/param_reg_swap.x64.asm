@@ -88,7 +88,8 @@ Disassembly of section .text:
                	movl	$0xf, %ecx
                	movb	%cl, 0xf(%rax)
                	xorq	%rax, %rax
-               	jmp	<addr>
+               	cmpl	$0x20, %eax
+               	jge	<addr>
                	leaq	-0x20(%rbp), %rdx
                	movslq	%eax, %rcx
                	movq	%rcx, %rsi

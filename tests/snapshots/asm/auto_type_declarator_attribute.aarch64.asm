@@ -105,7 +105,7 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	b	<addr>
                	stur	x2, [x29, #-0x8]
-               	b	<addr>
+               	cbnz	x0, <addr>
                	ldur	x0, [x29, #-0x8]
                	ldrsw	x0, [x0]
                	cmp	w0, #0x2a

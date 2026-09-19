@@ -42,7 +42,8 @@ Disassembly of section .text:
                	movslq	%ebx, %rbx
                	movslq	(%rdi,%rbx,4), %r8
                	leaq	-0x1(%rsi), %rax
-               	jmp	<addr>
+               	cmpl	%ebx, %esi
+               	jge	<addr>
                	movslq	%esi, %rcx
                	movslq	(%rdi,%rcx,4), %rdx
                	cmpl	%r8d, %edx
@@ -87,7 +88,8 @@ Disassembly of section .text:
                	movslq	(%rbx,%r9,4), %rdi
                	leaq	-0x1(%r12), %rax
                	movq	%r12, %rsi
-               	jmp	<addr>
+               	cmpl	%r9d, %esi
+               	jge	<addr>
                	movslq	%esi, %rcx
                	movslq	(%rbx,%rcx,4), %rdx
                	cmpl	%edi, %edx

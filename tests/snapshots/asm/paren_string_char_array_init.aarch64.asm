@@ -43,7 +43,9 @@ Disassembly of section .text:
                	add	x3, x3, <lo12>
                	adrp	x4, <page>
                	add	x4, x4, <lo12>
-               	b	<addr>
+               	sxtw	x1, w0
+               	ldrsb	x5, [x3, x1]
+               	cbz	x5, <addr>
                	add	x5, x2, #0x8
                	ldrb	w5, [x5, x1]
                	ldrsb	x1, [x4, x1]

@@ -28,13 +28,18 @@ Disassembly of section .text:
 <main>:
                	movl	$0x2, %ecx
                	leaq	<rip>, %rdx
-               	jmp	<addr>
+               	movslq	%ecx, %rax
+               	movq	%rax, %rsi
+               	imulq	%rax, %rsi
+               	cmpq	$0x186a0, %rsi          # imm = 0x186A0
+               	jge	<addr>
                	movsbq	(%rdx,%rax), %rax
                	testq	%rax, %rax
                	jne	<addr>
                	movq	%rcx, %rax
                	imulq	%rcx, %rax
-               	jmp	<addr>
+               	cmpl	$0x186a0, %eax          # imm = 0x186A0
+               	jge	<addr>
                	movslq	%eax, %rsi
                	movl	$0x1, %edi
                	movb	%dil, (%rdx,%rsi)
@@ -50,7 +55,8 @@ Disassembly of section .text:
                	xorq	%rcx, %rcx
                	movl	$0x2, %eax
                	leaq	<rip>, %rdx
-               	jmp	<addr>
+               	cmpl	$0x186a0, %eax          # imm = 0x186A0
+               	jge	<addr>
                	movslq	%eax, %rsi
                	movsbq	(%rdx,%rsi), %rsi
                	testq	%rsi, %rsi

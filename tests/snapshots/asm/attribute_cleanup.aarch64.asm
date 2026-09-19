@@ -24,7 +24,8 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
-               	b	<addr>
+               	cmp	w0, #0x3
+               	b.ge	<addr>
                	stur	w0, [x29, #-0x8]
                	cmp	w0, #0x1
                	b.ne	<addr>

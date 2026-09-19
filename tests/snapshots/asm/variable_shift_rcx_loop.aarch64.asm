@@ -20,7 +20,8 @@ Disassembly of section .text:
                	mov	x2, x3
                	mov	x0, #0x0                // =0
                	mov	x1, x0
-               	b	<addr>
+               	cmp	x1, x4
+               	b.ge	<addr>
                	add	x1, x0, x2
                	lsl	x3, x5, x6
                	add	x0, x0, x3
@@ -32,7 +33,8 @@ Disassembly of section .text:
 <main>:
                	mov	x0, #0x0                // =0
                	mov	x1, x0
-               	b	<addr>
+               	cmp	x1, #0x64
+               	b.ge	<addr>
                	add	x1, x0, #0x1
                	add	x0, x0, #0x10
                	cmp	x1, #0x64

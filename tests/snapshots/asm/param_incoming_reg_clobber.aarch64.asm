@@ -37,7 +37,9 @@ Disassembly of section .text:
                	strb	w1, [x0, #0x7]
                	sub	x2, x29, #0x8
                	add	x2, x2, #0x7
-               	b	<addr>
+               	mov	w3, w1
+               	sub	x1, x3, #0x1
+               	cbz	x3, <addr>
                	sub	x3, x2, #0x1
                	add	x4, x0, #0x1
                	ldrb	w0, [x0]
@@ -102,7 +104,9 @@ Disassembly of section .text:
                	b	<addr>
                	sub	x1, x29, #0x10
                	mov	x2, #0x8                // =8
-               	b	<addr>
+               	mov	w3, w2
+               	sub	x2, x3, #0x1
+               	cbz	x3, <addr>
                	add	x3, x0, #0x1
                	add	x5, x1, #0x1
                	ldrb	w1, [x1]

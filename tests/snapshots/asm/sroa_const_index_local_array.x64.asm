@@ -43,7 +43,9 @@ Disassembly of section .text:
                	movq	0x28(%r12), %r8
                	movq	0x30(%r12), %r9
                	movq	0x38(%r12), %r12
-               	jmp	<addr>
+               	leaq	-0x1(%rbx), %r13
+               	testl	%ebx, %ebx
+               	jle	<addr>
                	movq	%r12, %rbx
                	shlq	%rbx
                	addq	%r9, %rbx

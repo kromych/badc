@@ -95,6 +95,34 @@ static int count_odd(const unsigned char *p, int n) {
     return c;
 }
 
+/* Loops whose bottom test is repeated ahead of the body at -O: no trip,
+ * one trip, many; a test that loads; a nest, whose inner loop is entered
+ * once per outer trip. */
+static long sum_to(const int *a, int n) {
+    long s = 0;
+    for (int i = 0; i < n; i++) s += a[i];
+    return s;
+}
+
+static long run_len(const char *p) {
+    long n = 0;
+    while (p[n]) n++;
+    return n;
+}
+
+static long grid(int rows, int cols) {
+    long s = 0;
+    for (int r = 0; r < rows; r++)
+        for (int c = 0; c < cols; c++) s += r * cols + c;
+    return s;
+}
+
+static unsigned halvings(unsigned n) {
+    unsigned steps = 0;
+    while (n != 0) { n >>= 1; steps++; }
+    return steps;
+}
+
 int main(void) {
     if (swap_walk(1, 2, 0) != 5) return 1;
     if (swap_walk(1, 2, 1) != 5) return 2;   /* i = 0: no swap */
@@ -132,5 +160,13 @@ int main(void) {
     static const unsigned char bytes[8] = { 1, 2, 3, 5, 8, 13, 21, 34 };
     if (count_odd(bytes, 8) != 5) return 37;
     if (count_odd(bytes, 0) != 0) return 38;
+
+    static const int ints[8] = { 3, -1, 4, -1, 5, -9, 2, 6 };
+    if (sum_to(ints, 0) != 0 || sum_to(ints, -2) != 0) return 39;
+    if (sum_to(ints, 1) != 3 || sum_to(ints, 8) != 9) return 40;
+    if (run_len("") != 0 || run_len("a") != 1 || run_len("abcdefg") != 7) return 41;
+    if (grid(0, 5) != 0 || grid(3, 0) != 0 || grid(1, 1) != 0) return 43;
+    if (grid(3, 4) != 66) return 44;
+    if (halvings(0) != 0 || halvings(1) != 1 || halvings(255) != 8) return 45;
     return 42;
 }

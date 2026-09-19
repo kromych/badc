@@ -27,7 +27,8 @@ Disassembly of section .text:
 
 <accumulate>:
                	movslq	%edi, %rdi
-               	jmp	<addr>
+               	testq	%rdi, %rdi
+               	je	<addr>
                	leaq	<rip>, %rax
                	movq	(%rax), %rcx
                	addq	%rdi, %rcx

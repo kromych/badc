@@ -16,7 +16,8 @@ Disassembly of section .text:
 <sum_to>:
                	sxtb	x0, w0
                	mov	x1, #0x0                // =0
-               	b	<addr>
+               	cmp	x0, #0x0
+               	b.le	<addr>
                	sub	x2, x0, #0x1
                	sxtb	x2, w2
                	add	x1, x1, x0

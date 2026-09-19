@@ -85,7 +85,8 @@ Disassembly of section .text:
                	movq	%rsi, %rax
                	movq	%rsi, %rax
                	movabsq	$-0x4, %rax
-               	jmp	<addr>
+               	cmpl	$0x4, %eax
+               	jg	<addr>
                	movq	%rax, %rdx
                	shlq	%rdx
                	movq	%rax, %rcx

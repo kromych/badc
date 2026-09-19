@@ -27,7 +27,9 @@ Disassembly of section .text:
                	movk	x10, #0xaaaa, lsl #16
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	b	<addr>
+               	mov	w0, w3
+               	cmp	w0, w5
+               	b.hs	<addr>
                	mul	x4, x0, x10
                	lsr	x4, x4, #33
                	mul	x4, x4, x7

@@ -78,7 +78,8 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	movl	$0x5, %ecx
                	movq	%rsi, %rdx
-               	jmp	<addr>
+               	testq	%rax, %rax
+               	je	<addr>
                	addq	%rcx, %rdx
                	cmpl	$0x2, %eax
                	jb	<addr>
@@ -125,7 +126,8 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	movl	$0x5, %ecx
                	movq	%rsi, %rdx
-               	jmp	<addr>
+               	testq	%rax, %rax
+               	je	<addr>
                	addq	%rcx, %rdx
                	cmpl	$0x2, %eax
                	jb	<addr>

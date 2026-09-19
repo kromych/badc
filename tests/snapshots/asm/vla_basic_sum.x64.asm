@@ -46,7 +46,8 @@ Disassembly of section .text:
                	jne	<addr>
                	movq	%rdx, %rsp
                	xorq	%rax, %rax
-               	jmp	<addr>
+               	cmpl	%edi, %eax
+               	jge	<addr>
                	movslq	%eax, %rcx
                	movq	%rcx, %rsi
                	shlq	%rsi
@@ -56,7 +57,8 @@ Disassembly of section .text:
                	jl	<addr>
                	xorq	%rax, %rax
                	movq	%rax, %rcx
-               	jmp	<addr>
+               	cmpl	%edi, %eax
+               	jge	<addr>
                	movslq	%eax, %rsi
                	movslq	(%rdx,%rsi,4), %rsi
                	addq	%rsi, %rcx

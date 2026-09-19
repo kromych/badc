@@ -97,7 +97,9 @@ Disassembly of section .text:
                	leaq	(%rax,%rcx), %r10
                	movq	%r10, 0x30(%rsp)
                	xorq	%rcx, %rcx
-               	jmp	<addr>
+               	movl	%ecx, %eax
+               	cmpl	$0x64, %eax
+               	jae	<addr>
                	movl	%ecx, %eax
                	leaq	(%rdx,%rax), %rdi
                	xorq	%r13, %rdi

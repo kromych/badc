@@ -24,7 +24,8 @@ Disassembly of section .text:
                	mov	x4, #0xa                // =10
                	adrp	x5, <page>
                	add	x5, x5, <lo12>
-               	b	<addr>
+               	cmp	w0, #0x4
+               	b.ge	<addr>
                	sxtw	x1, w0
                	lsl	x2, x1, #4
                	add	x2, x5, x2

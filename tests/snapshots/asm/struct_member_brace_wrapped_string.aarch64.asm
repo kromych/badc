@@ -22,7 +22,8 @@ Disassembly of section .text:
                	add	x0, x0, #0x8
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	b	<addr>
+               	ldrb	w2, [x0]
+               	cbz	x2, <addr>
                	ldrb	w2, [x0]
                	ldrb	w3, [x1]
                	cmp	w2, w3
@@ -46,7 +47,8 @@ Disassembly of section .text:
                	add	x0, x0, #0x4
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	b	<addr>
+               	ldrb	w2, [x0]
+               	cbz	x2, <addr>
                	ldrb	w2, [x0]
                	ldrb	w3, [x1]
                	cmp	w2, w3
@@ -141,7 +143,8 @@ Disassembly of section .text:
                	add	x0, x0, #0x8
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	b	<addr>
+               	ldrb	w2, [x0]
+               	cbz	x2, <addr>
                	ldrb	w2, [x0]
                	ldrb	w3, [x1]
                	cmp	w2, w3
@@ -180,7 +183,8 @@ Disassembly of section .text:
                	add	x0, x0, #0x4
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	b	<addr>
+               	ldrb	w2, [x0]
+               	cbz	x2, <addr>
                	ldrb	w2, [x0]
                	ldrb	w3, [x1]
                	cmp	w2, w3

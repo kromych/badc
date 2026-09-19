@@ -19,7 +19,8 @@ Disassembly of section .text:
                	sub	sp, sp, #0x80
                	mov	x0, #0x0                // =0
                	mov	x3, #0xa                // =10
-               	b	<addr>
+               	cmp	w0, #0x8
+               	b.ge	<addr>
                	sub	x2, x29, #0x80
                	sxtw	x1, w0
                	lsl	x4, x1, #4

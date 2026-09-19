@@ -143,7 +143,8 @@ Disassembly of section .text:
                	movq	%rdi, %r13
                	xorq	%rbx, %rbx
                	movq	%rbx, %r12
-               	jmp	<addr>
+               	cmpq	%r13, %rbx
+               	jge	<addr>
                	movq	%rbx, %rax
                	imulq	%rbx, %rax
                	addq	%rax, %r12
@@ -248,7 +249,8 @@ Disassembly of section .text:
                	xorq	%rbx, %rbx
                	movq	%rbx, %rax
                	movq	%rbx, %r12
-               	jmp	<addr>
+               	cmpq	$0xa, %rbx
+               	jge	<addr>
                	movq	%rbx, %rax
                	imulq	%rbx, %rax
                	addq	%rax, %r12

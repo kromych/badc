@@ -207,7 +207,8 @@ Disassembly of section .text:
                	movl	$0x24a0, %eax           # imm = 0x24A0
                	movl	$0xa, %esi
                	xorq	%rcx, %rcx
-               	jmp	<addr>
+               	testl	%eax, %eax
+               	jle	<addr>
                	movslq	%eax, %rdi
                	pushq	%rax
                	pushq	%rdx
@@ -237,7 +238,8 @@ Disassembly of section .text:
                	movabsq	$-0x1, %rax
                	movl	$0xa, %esi
                	xorq	%rcx, %rcx
-               	jmp	<addr>
+               	testl	%eax, %eax
+               	jle	<addr>
                	movslq	%eax, %rdi
                	pushq	%rax
                	pushq	%rdx

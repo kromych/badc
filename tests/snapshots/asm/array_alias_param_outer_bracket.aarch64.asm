@@ -35,7 +35,9 @@ Disassembly of section .text:
                	str	x1, [x0, #0x18]
                	mov	x0, #0x0                // =0
                	mov	x3, x0
-               	b	<addr>
+               	mov	w1, w0
+               	cmp	w1, #0x3
+               	b.hs	<addr>
                	lsl	x2, x1, #5
                	add	x2, x4, x2
                	ldr	x5, [x2]
@@ -77,7 +79,9 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x3, x0
-               	b	<addr>
+               	mov	w1, w0
+               	cmp	w1, #0x3
+               	b.hs	<addr>
                	lsl	x2, x1, #5
                	add	x2, x4, x2
                	ldr	x5, [x2]

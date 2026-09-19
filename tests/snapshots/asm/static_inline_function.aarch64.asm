@@ -17,7 +17,7 @@ Disassembly of section .text:
                	mov	x0, #0xbeef             // =48879
                	movk	x0, #0xdead, lsl #16
                	mov	x1, #0x0                // =0
-               	b	<addr>
+               	cbz	x0, <addr>
                	and	x2, x0, #0x1
                	add	x1, x1, x2
                	lsr	x0, x0, #1

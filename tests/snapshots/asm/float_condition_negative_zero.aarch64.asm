@@ -28,7 +28,9 @@ Disassembly of section .text:
                	b.eq	<addr>
                	orr	x1, x1, #0x2
                	mov	x0, x2
-               	b	<addr>
+               	fmov	d17, x2
+               	fcmp	d0, d17
+               	b.eq	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x2
                	b.gt	<addr>

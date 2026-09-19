@@ -15,7 +15,8 @@ Disassembly of section .text:
 
 <main>:
                	mov	x0, #0x0                // =0
-               	b	<addr>
+               	cmp	w0, #0x4
+               	b.ge	<addr>
                	yield
                	yield
                	yield

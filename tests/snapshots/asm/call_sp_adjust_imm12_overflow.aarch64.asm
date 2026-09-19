@@ -3166,7 +3166,8 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
-               	b	<addr>
+               	cmp	x0, #0x105
+               	b.ge	<addr>
                	lsl	x3, x0, #4
                	add	x1, x2, x3
                	str	x0, [x1]

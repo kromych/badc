@@ -18,7 +18,8 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	b	<addr>
+               	ldrb	w2, [x0]
+               	cbz	x2, <addr>
                	ldrb	w2, [x1]
                	cmp	w2, #0x0
                	cset	x2, ne
@@ -45,7 +46,8 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	b	<addr>
+               	ldrb	w2, [x0]
+               	cbz	x2, <addr>
                	ldrb	w2, [x1]
                	cmp	w2, #0x0
                	cset	x2, ne
@@ -72,7 +74,8 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	b	<addr>
+               	ldrb	w2, [x0]
+               	cbz	x2, <addr>
                	ldrb	w2, [x1]
                	cmp	w2, #0x0
                	cset	x2, ne
@@ -99,7 +102,8 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	b	<addr>
+               	ldrb	w2, [x0]
+               	cbz	x2, <addr>
                	ldrb	w2, [x1]
                	cmp	w2, #0x0
                	cset	x2, ne
@@ -126,7 +130,8 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	b	<addr>
+               	ldrb	w2, [x0]
+               	cbz	x2, <addr>
                	ldrb	w2, [x1]
                	cmp	w2, #0x0
                	cset	x2, ne
@@ -153,7 +158,8 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	b	<addr>
+               	ldrb	w2, [x0]
+               	cbz	x2, <addr>
                	ldrb	w2, [x1]
                	cmp	w2, #0x0
                	cset	x2, ne
@@ -180,7 +186,8 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	b	<addr>
+               	ldrb	w2, [x0]
+               	cbz	x2, <addr>
                	ldrb	w2, [x1]
                	cmp	w2, #0x0
                	cset	x2, ne

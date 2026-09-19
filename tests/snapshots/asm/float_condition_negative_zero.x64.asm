@@ -44,7 +44,10 @@ Disassembly of section .text:
                	je	<addr>
                	orq	$0x2, %rcx
                	movq	%rdx, %rax
-               	jmp	<addr>
+               	movq	%rdx, %xmm15
+               	ucomisd	%xmm15, %xmm0
+               	jp	<addr>
+               	je	<addr>
                	incq	%rax
                	cmpl	$0x2, %eax
                	jg	<addr>

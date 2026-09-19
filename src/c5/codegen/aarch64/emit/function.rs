@@ -101,6 +101,8 @@ struct FunctionEmitter<'a, 'b> {
     snapshot: EmitSnapshot,
     /// Which blocks are emitted and where each branch lands.
     plan: super::ssa::block_plan::BlockPlan,
+    /// `ParamRef` values the entry parallel copy already placed.
+    prebatched: Vec<bool>,
     block_offsets: Vec<usize>,
     branch_fixups: Vec<BranchFixup>,
     /// Per block: its conditional branch does not reach its target and
@@ -154,6 +156,8 @@ pub(crate) fn emit_function(
     stack_protect: super::StackProtect,
     entry: super::FunctionEntry,
     fixed_regs: super::FixedRegs,
+    // `-O`: the block plan may repeat a small test in place of a jump to it.
+    repeat_tests: bool,
 ) -> Emit {
     let abi = {
         let mut a = target.abi();
@@ -241,7 +245,8 @@ pub(crate) fn emit_function(
         abs_jump_tables,
         entry,
         snapshot,
-        plan: super::ssa::block_plan::BlockPlan::build(func, alloc),
+        plan: super::ssa::block_plan::BlockPlan::build(func, alloc, repeat_tests),
+        prebatched: Vec::new(),
         block_offsets: alloc::vec![0; func.blocks.len()],
         branch_fixups: Vec::new(),
         far_cond: alloc::vec![false; func.blocks.len()],
@@ -273,10 +278,10 @@ impl FunctionEmitter<'_, '_> {
     fn emit_body(&mut self) -> Emit {
         loop {
             self.emit_entry();
-            let mut prebatched: Vec<bool> = alloc::vec![false; self.fcx.func.insts.len()];
-            self.place_int_params(&mut prebatched)?;
-            self.place_fp_params(&mut prebatched);
-            self.emit_blocks(&prebatched)?;
+            self.prebatched = alloc::vec![false; self.fcx.func.insts.len()];
+            self.place_int_params()?;
+            self.place_fp_params();
+            self.emit_blocks()?;
             if !self.mark_far_branches() {
                 return Ok(());
             }
@@ -377,12 +382,42 @@ impl FunctionEmitter<'_, '_> {
         }
     }
 
-    /// Branch to where an edge to `target` lands, unless the code of
-    /// `block_idx` runs into it.
-    fn branch_unless_next(&mut self, block_idx: usize, target: BlockId) {
-        if !self.plan.falls_into(block_idx, target) {
-            let target = self.plan.resolve(target);
-            self.emit_branch(block_idx, target, LocalBranchKind::B);
+    /// Reach where an edge to `target` lands from the end of `block_idx`:
+    /// nothing when its code runs into it, the plan's repeat of a small
+    /// test, else a `B`.
+    fn branch_unless_next(&mut self, block_idx: usize, target: BlockId) -> Emit {
+        if self.plan.falls_into(block_idx, target) {
+            return Ok(());
+        }
+        if let Some(h) = self.plan.repeated_at(block_idx, target) {
+            return self.emit_repeat(block_idx, h);
+        }
+        let target = self.plan.resolve(target);
+        self.emit_branch(block_idx, target, LocalBranchKind::B);
+        Ok(())
+    }
+
+    /// The instructions of block `h` and its conditional branch, as the
+    /// end of `block_idx`. One arm of `h` is what this code runs into, so
+    /// the branch closes it.
+    fn emit_repeat(&mut self, block_idx: usize, h: BlockId) -> Emit {
+        let block = &self.fcx.func.blocks[h as usize];
+        for v in block.inst_range.clone() {
+            self.emit_block_inst(block, v)?;
+        }
+        self.align_stream();
+        match block.terminator {
+            Terminator::Bz {
+                cond,
+                target,
+                fall_through,
+            } => self.emit_cond_branch(block_idx, cond, target, fall_through, true),
+            Terminator::Bnz {
+                cond,
+                target,
+                fall_through,
+            } => self.emit_cond_branch(block_idx, cond, target, fall_through, false),
+            _ => unreachable!("the plan repeats a conditional block"),
         }
     }
 
@@ -441,7 +476,7 @@ impl FunctionEmitter<'_, '_> {
     /// homes are distinct; otherwise `emit_inst` places each in program order,
     /// which the allocator's self-home hint keeps sound
     /// (`param-shuffle-clobber` in `verify_allocation`).
-    fn place_int_params(&mut self, prebatched: &mut [bool]) -> Emit {
+    fn place_int_params(&mut self) -> Emit {
         let FnCtx {
             func,
             alloc,
@@ -509,14 +544,14 @@ impl FunctionEmitter<'_, '_> {
             }
         }
         for vid in vids {
-            prebatched[vid] = true;
+            self.prebatched[vid] = true;
         }
         Ok(())
     }
 
     /// The floating-point counterpart of [`Self::place_int_params`]: the
     /// FP scratch breaks cycles in the d-register bank.
-    fn place_fp_params(&mut self, prebatched: &mut [bool]) {
+    fn place_fp_params(&mut self) {
         let FnCtx {
             func,
             alloc,
@@ -562,13 +597,13 @@ impl FunctionEmitter<'_, '_> {
             16,
         );
         for vid in fp_vids {
-            prebatched[vid] = true;
+            self.prebatched[vid] = true;
         }
     }
 
     /// Walk the blocks in layout order: each block's landing pad,
     /// instructions, phi moves and terminator.
-    fn emit_blocks(&mut self, prebatched: &[bool]) -> Emit {
+    fn emit_blocks(&mut self) -> Emit {
         let FnCtx {
             func,
             alloc,
@@ -587,7 +622,7 @@ impl FunctionEmitter<'_, '_> {
         for (block_idx, block) in func.blocks.iter().enumerate() {
             if self.plan.is_skipped(block_idx) {
                 #[cfg(debug_assertions)]
-                self.assert_emits_nothing(block_idx, prebatched)?;
+                self.assert_emits_nothing(block_idx)?;
                 continue;
             }
             let bti = bti_targets.contains(&(block_idx as BlockId));
@@ -605,7 +640,7 @@ impl FunctionEmitter<'_, '_> {
                 emit(self.cx.code, super::encode::BTI_J);
             }
             for v in block.inst_range.clone() {
-                self.emit_block_inst(block, v, prebatched)?;
+                self.emit_block_inst(block, v)?;
             }
             // The phi moves and the terminator are instructions, except for
             // a naked function's synthetic return, which emits nothing.
@@ -638,7 +673,7 @@ impl FunctionEmitter<'_, '_> {
     /// A block the plan leaves out writes nothing when lowered: its
     /// instructions, then the moves of its outgoing edge.
     #[cfg(debug_assertions)]
-    fn assert_emits_nothing(&mut self, block_idx: usize, prebatched: &[bool]) -> Emit {
+    fn assert_emits_nothing(&mut self, block_idx: usize) -> Emit {
         let FnCtx {
             func,
             alloc,
@@ -649,7 +684,7 @@ impl FunctionEmitter<'_, '_> {
         let block = &func.blocks[block_idx];
         let (code, fixups) = (self.cx.code.len(), self.branch_fixups.len());
         for v in block.inst_range.clone() {
-            self.emit_block_inst(block, v, prebatched)?;
+            self.emit_block_inst(block, v)?;
         }
         if let Err(e) = emit_phi_predecessor_moves(
             self.cx.code,
@@ -676,7 +711,6 @@ impl FunctionEmitter<'_, '_> {
         &mut self,
         block: &super::super::ir::Block,
         v: super::super::ir::ValueId,
-        prebatched: &[bool],
     ) -> Emit {
         let FnCtx { func, alloc, .. } = self.fcx;
         let inst = &func.insts[v as usize];
@@ -687,7 +721,7 @@ impl FunctionEmitter<'_, '_> {
         if super::ssa::emit_common::inst_emits_nothing(inst, v, alloc) {
             return Ok(());
         }
-        if prebatched[v as usize] {
+        if self.prebatched[v as usize] {
             return Ok(());
         }
         // An inline-asm block takes the mapping state itself.
@@ -853,7 +887,7 @@ impl FunctionEmitter<'_, '_> {
                 self.cx.user_extern_data_refs,
             ),
             Terminator::Jmp(t) | Terminator::FallThrough(t) => {
-                self.branch_unless_next(block_idx, t)
+                return self.branch_unless_next(block_idx, t);
             }
             Terminator::Bz {
                 cond,
@@ -883,7 +917,7 @@ impl FunctionEmitter<'_, '_> {
             // only the fall-through edge (row entry 0) is emitted here.
             Terminator::AsmGoto { table } => {
                 let fall = func.jump_tables[table as usize][0];
-                self.branch_unless_next(block_idx, fall);
+                return self.branch_unless_next(block_idx, fall);
             }
             // Tail-jump through the GOT-patched trampoline; the writer fills
             // the adrp / ldr immediates once the target's RVA is final.
@@ -929,10 +963,7 @@ impl FunctionEmitter<'_, '_> {
                 .plan
                 .cond_shape(block_idx, target, fall_through, negate)
             {
-                CondShape::Jump(t) => {
-                    self.branch_unless_next(block_idx, t);
-                    return Ok(());
-                }
+                CondShape::Jump(t) => return self.branch_unless_next(block_idx, t),
                 CondShape::Branch {
                     taken,
                     other,
@@ -941,8 +972,7 @@ impl FunctionEmitter<'_, '_> {
             };
         if let Some(bcc) = fused_branch_cond(func, alloc, cond, negate) {
             self.emit_cond(block_idx, target, LocalBranchKind::Bcc(bcc));
-            self.branch_unless_next(block_idx, fall_through);
-            return Ok(());
+            return self.branch_unless_next(block_idx, fall_through);
         }
         let cond_place = place_of(alloc, cond);
         let rt = if let Place::FpReg(dr) = cond_place {
@@ -962,8 +992,7 @@ impl FunctionEmitter<'_, '_> {
             LocalBranchKind::Cbnz(rt)
         };
         self.emit_cond(block_idx, target, kind);
-        self.branch_unless_next(block_idx, fall_through);
-        Ok(())
+        self.branch_unless_next(block_idx, fall_through)
     }
 
     /// Table dispatch through the read-only blob: image output reads a

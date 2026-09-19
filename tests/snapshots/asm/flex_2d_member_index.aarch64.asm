@@ -26,7 +26,8 @@ Disassembly of section .text:
                	mov	x0, #0x4                // =4
                	str	w0, [x4]
                	mov	x8, #0x6                // =6
-               	b	<addr>
+               	cmp	w1, #0x4
+               	b.ge	<addr>
                	add	x5, x4, #0x4
                	sxtw	x2, w1
                	mul	x6, x2, x8

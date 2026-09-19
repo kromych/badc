@@ -18,7 +18,8 @@ Disassembly of section .text:
                	adrp	x3, <page>
                	add	x3, x3, <lo12>
                	mov	x2, x0
-               	b	<addr>
+               	eor	x1, x0, #0x2
+               	cbz	x1, <addr>
                	ldr	x1, [x3]
                	add	x1, x1, x0
                	str	x1, [x3]

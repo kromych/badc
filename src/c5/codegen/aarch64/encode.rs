@@ -2058,6 +2058,7 @@ impl super::ssa::emit_common::LowerTarget for Aarch64Lower {
             native.stack_protect.resolved_for(target),
             entry,
             native.fixed_regs,
+            native.optimize,
         )
     }
 

@@ -953,7 +953,9 @@ Disassembly of section .text:
                	callq	<addr>
                	leaq	<rip>, %rax
                	movq	%r12, (%rax)
-               	jmp	<addr>
+               	movq	(%rbx), %rax
+               	cmpq	%r14, %rax
+               	jl	<addr>
                	leaq	<rip>, %rax
                	movq	(%rax), %r12
                	movq	(%rbx), %rax
@@ -1756,7 +1758,9 @@ Disassembly of section .text:
                	movq	(%rax), %rax
                	movq	%rax, (%rcx)
                	callq	<addr>
-               	jmp	<addr>
+               	movq	(%rbx), %rax
+               	cmpq	$0x22, %rax
+               	jne	<addr>
                	callq	<addr>
                	movq	(%rbx), %rax
                	cmpq	$0x22, %rax
@@ -1785,7 +1789,9 @@ Disassembly of section .text:
                	cmpq	$0x8a, %rax
                	jne	<addr>
                	callq	<addr>
-               	jmp	<addr>
+               	movq	(%rbx), %rax
+               	cmpq	$0x9f, %rax
+               	jne	<addr>
                	callq	<addr>
                	leaq	<rip>, %rax
                	movq	(%rax), %rcx
@@ -1855,7 +1861,9 @@ Disassembly of section .text:
                	jne	<addr>
                	callq	<addr>
                	xorq	%r12, %r12
-               	jmp	<addr>
+               	movq	(%rbx), %rax
+               	cmpq	$0x29, %rax
+               	je	<addr>
                	movl	$0x8e, %edi
                	callq	<addr>
                	leaq	<rip>, %rax
@@ -2012,7 +2020,9 @@ Disassembly of section .text:
                	jne	<addr>
                	movl	$0x1, %r12d
                	callq	<addr>
-               	jmp	<addr>
+               	movq	(%rbx), %rax
+               	cmpq	$0x9f, %rax
+               	jne	<addr>
                	callq	<addr>
                	addq	$0x2, %r12
                	movq	(%rbx), %rax
@@ -2513,7 +2523,9 @@ Disassembly of section .text:
                	cmpq	$0x7b, %rax
                	jne	<addr>
                	callq	<addr>
-               	jmp	<addr>
+               	movq	(%rbx), %rax
+               	cmpq	$0x7d, %rax
+               	je	<addr>
                	callq	<addr>
                	movq	(%rbx), %rax
                	cmpq	$0x7d, %rax

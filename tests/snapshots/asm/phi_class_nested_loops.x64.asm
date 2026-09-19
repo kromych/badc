@@ -28,10 +28,12 @@ Disassembly of section .text:
 <test>:
                	xorq	%rsi, %rsi
                	movq	%rsi, %r8
-               	jmp	<addr>
+               	cmpl	%edi, %r8d
+               	jge	<addr>
                	xorq	%rax, %rax
                	movq	%rax, %rcx
-               	jmp	<addr>
+               	cmpl	%edi, %ecx
+               	jge	<addr>
                	incq	%rax
                	incq	%rcx
                	cmpl	%edi, %ecx
@@ -46,10 +48,12 @@ Disassembly of section .text:
 <main>:
                	xorq	%rsi, %rsi
                	movq	%rsi, %rdi
-               	jmp	<addr>
+               	cmpl	$0x7, %edi
+               	jge	<addr>
                	xorq	%rax, %rax
                	movq	%rax, %rcx
-               	jmp	<addr>
+               	cmpl	$0x7, %ecx
+               	jge	<addr>
                	incq	%rax
                	incq	%rcx
                	cmpl	$0x7, %ecx

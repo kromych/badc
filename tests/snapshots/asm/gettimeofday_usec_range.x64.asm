@@ -31,7 +31,8 @@ Disassembly of section .text:
                	subq	$0x20, %rsp
                	movq	%rbx, (%rsp)
                	xorq	%rbx, %rbx
-               	jmp	<addr>
+               	cmpl	$0x64, %ebx
+               	jge	<addr>
                	leaq	-0x10(%rbp), %rdi
                	xorq	%rsi, %rsi
                	xorl	%eax, %eax

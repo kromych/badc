@@ -101,7 +101,8 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx
                	jmp	<addr>
                	movq	%rdx, -0x8(%rbp)
-               	jmp	<addr>
+               	testq	%rax, %rax
+               	jne	<addr>
                	movq	-0x8(%rbp), %rax
                	movslq	(%rax), %rax
                	cmpl	$0x2a, %eax

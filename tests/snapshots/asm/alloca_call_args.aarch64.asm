@@ -49,7 +49,8 @@ Disassembly of section .text:
                	mov	x2, #0x7                // =7
                	mov	x3, #0x100000           // =1048576
                	mov	x0, #0x0                // =0
-               	b	<addr>
+               	cmp	x0, x3
+               	b.ge	<addr>
                	strb	w2, [x1, x0]
                	add	x0, x0, #0x1, lsl #12   // =0x1000
                	cmp	x0, x3

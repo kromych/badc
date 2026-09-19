@@ -29,7 +29,10 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	leaq	<rip>, %rsi
                	movq	%rax, %rdx
-               	jmp	<addr>
+               	movq	%rax, %rcx
+               	xorq	$0x2, %rcx
+               	testq	%rcx, %rcx
+               	je	<addr>
                	movq	(%rsi), %rcx
                	addq	%rax, %rcx
                	movq	%rcx, (%rsi)

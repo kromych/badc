@@ -27,7 +27,8 @@ Disassembly of section .text:
 
 <main>:
                	movl	$0x3, %ecx
-               	jmp	<addr>
+               	cmpl	$0x13, %ecx
+               	jg	<addr>
                	cmpl	$0xf, %ecx
                	je	<addr>
                	cmpl	$0xf, %ecx

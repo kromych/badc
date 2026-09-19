@@ -50,7 +50,10 @@ Disassembly of section .text:
                	movb	%cl, 0x7(%rax)
                	leaq	-0x8(%rbp), %rdx
                	addq	$0x7, %rdx
-               	jmp	<addr>
+               	movl	%ecx, %esi
+               	leaq	-0x1(%rsi), %rcx
+               	testq	%rsi, %rsi
+               	je	<addr>
                	leaq	-0x1(%rdx), %rsi
                	leaq	0x1(%rax), %rdi
                	movsbq	(%rax), %rax
@@ -103,7 +106,10 @@ Disassembly of section .text:
                	leaq	-0x10(%rbp), %rcx
                	xorq	%rdi, %rdi
                	movl	$0x8, %edx
-               	jmp	<addr>
+               	movl	%edx, %esi
+               	leaq	-0x1(%rsi), %rdx
+               	testq	%rsi, %rsi
+               	je	<addr>
                	leaq	0x1(%rax), %rsi
                	leaq	0x1(%rcx), %r8
                	movsbq	(%rcx), %rcx

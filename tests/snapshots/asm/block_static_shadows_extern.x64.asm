@@ -28,7 +28,8 @@ Disassembly of section .text:
 <sink>:
                	xorq	%rax, %rax
                	movq	%rax, %rcx
-               	jmp	<addr>
+               	cmpl	%esi, %eax
+               	jge	<addr>
                	shlq	$0x4, %rcx
                	movslq	%eax, %rdx
                	movzbq	(%rdi,%rdx), %rdx

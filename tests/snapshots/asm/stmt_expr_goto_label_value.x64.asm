@@ -50,7 +50,8 @@ Disassembly of section .text:
                	movl	$0x64, %edi
                	movabsq	$-0x7fffffffffffffef, %rax # imm = 0x8000000000000011
                	movq	%r8, %rsi
-               	jmp	<addr>
+               	testq	%rax, %rax
+               	jne	<addr>
                	leaq	0x1(%rsi), %rcx
                	movq	%rcx, %rax
                	shlq	$0x6, %rax
@@ -96,7 +97,8 @@ Disassembly of section .text:
                	jbe	<addr>
                	movq	%r8, %r9
                	movq	%r8, %rbx
-               	jmp	<addr>
+               	cmpq	$0x64, %rdi
+               	jae	<addr>
                	cmpq	$0xc8, %r8
                	setb	%al
                	movzbq	%al, %rax
@@ -121,7 +123,8 @@ Disassembly of section .text:
                	shlq	%cl, %rax
                	popq	%rcx
                	andq	%rcx, %rax
-               	jmp	<addr>
+               	testq	%rax, %rax
+               	jne	<addr>
                	leaq	0x1(%rdx), %rcx
                	movq	%rcx, %rax
                	shlq	$0x6, %rax
@@ -189,7 +192,8 @@ Disassembly of section .text:
                	leaq	-0x10(%rbp), %rsi
                	movl	$0x1, %edx
                	xorq	%rax, %rax
-               	jmp	<addr>
+               	testq	%rax, %rax
+               	jne	<addr>
                	leaq	0x1(%rdx), %rcx
                	movq	%rcx, %rax
                	shlq	$0x6, %rax

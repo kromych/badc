@@ -27,7 +27,8 @@ Disassembly of section .text:
 
 <sum_zero>:
                	movl	$0x8, %eax
-               	jmp	<addr>
+               	testl	%eax, %eax
+               	jle	<addr>
                	leaq	-0x1(%rax), %rcx
                	movslq	%ecx, %rcx
                	movq	(%rdi,%rcx,8), %rcx
@@ -73,7 +74,8 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	xorq	%r11, %r11
                	movq	%r11, %xmm0
-               	jmp	<addr>
+               	cmpl	$0x2, %eax
+               	jge	<addr>
                	movslq	%eax, %rdx
                	shlq	$0x3, %rdx
                	addq	%rcx, %rdx
@@ -93,7 +95,8 @@ Disassembly of section .text:
                	leaq	-0x50(%rbp), %rcx
                	xorq	%r11, %r11
                	movq	%r11, %xmm0
-               	jmp	<addr>
+               	cmpl	$0x2, %eax
+               	jge	<addr>
                	movslq	%eax, %rdx
                	shlq	$0x3, %rdx
                	addq	%rcx, %rdx
@@ -114,7 +117,8 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	xorq	%r11, %r11
                	movq	%r11, %xmm0
-               	jmp	<addr>
+               	cmpl	$0x2, %eax
+               	jge	<addr>
                	movslq	%eax, %rdx
                	shlq	$0x3, %rdx
                	addq	%rcx, %rdx
@@ -135,7 +139,8 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	xorq	%r11, %r11
                	movq	%r11, %xmm0
-               	jmp	<addr>
+               	cmpl	$0x2, %eax
+               	jge	<addr>
                	movslq	%eax, %rdx
                	shlq	$0x3, %rdx
                	addq	%rcx, %rdx
@@ -158,7 +163,8 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	xorq	%r11, %r11
                	movq	%r11, %xmm0
-               	jmp	<addr>
+               	cmpl	$0x2, %eax
+               	jge	<addr>
                	movslq	%eax, %rdx
                	shlq	$0x3, %rdx
                	addq	%rcx, %rdx

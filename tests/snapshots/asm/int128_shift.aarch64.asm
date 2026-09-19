@@ -30,7 +30,8 @@ Disassembly of section .text:
                	orr	x7, x1, x0
                	mov	x20, #0x1               // =1
                	mov	x10, #-0x8000000000000000 // =-9223372036854775808
-               	b	<addr>
+               	cmp	w0, #0x6
+               	b.ge	<addr>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	sxtw	x2, w0

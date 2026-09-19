@@ -28,7 +28,8 @@ Disassembly of section .text:
 <sum_to>:
                	movsbq	%dil, %rdi
                	xorq	%rax, %rax
-               	jmp	<addr>
+               	testq	%rdi, %rdi
+               	jle	<addr>
                	leaq	-0x1(%rdi), %rcx
                	movsbq	%cl, %rcx
                	addq	%rdi, %rax

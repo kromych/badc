@@ -133,3 +133,171 @@ fn addressed_blocks_stay_in_the_code() {
         assert!(jumps >= 2, "aarch64 dispatch (-O {optimize}): {ws:08x?}");
     }
 }
+
+/// `(conditional, unconditional)` direct branches ahead of the first
+/// backward branch, the loop's bottom test: what it takes to enter the loop.
+fn a64_entry_branches(ws: &[u32]) -> (usize, usize) {
+    let bottom = ws
+        .iter()
+        .enumerate()
+        .position(|(i, &w)| matches!(a64_branch(w, i), Some((t, _)) if t <= i as i64))
+        .unwrap_or(ws.len());
+    let ahead = |uncond: bool| {
+        ws[..bottom]
+            .iter()
+            .enumerate()
+            .filter(|&(i, &w)| matches!(a64_branch(w, i), Some((_, u)) if u == uncond))
+            .count()
+    };
+    (ahead(false), ahead(true))
+}
+
+fn x64_entry_branches(insns: &[X64Insn]) -> (usize, usize) {
+    let bottom = insns
+        .iter()
+        .position(|i| (i.is_jmp() || i.is_jcc()) && i.target() <= i.at)
+        .unwrap_or(insns.len());
+    (
+        insns[..bottom].iter().filter(|i| i.is_jcc()).count(),
+        insns[..bottom].iter().filter(|i| i.is_jmp()).count(),
+    )
+}
+
+const SUM: &str = "long sum(const int *a, int n) {\n\
+    long s = 0;\n\
+    for (int i = 0; i < n; i++) s += a[i];\n\
+    return s;\n}\n";
+
+/// A rotated loop is entered through a copy of its bottom test: one
+/// conditional branch and no jump ahead of the body. The test may load.
+#[test]
+fn small_bottom_test_is_repeated_ahead_of_the_loop() {
+    let run_len = "long run_len(const char *p) { long n = 0; while (p[n]) n++; return n; }\n";
+    for (src, name) in [(SUM, "sum"), (run_len, "run_len")] {
+        let ws = a64_at(src, name, true);
+        assert_eq!(a64_entry_branches(&ws), (1, 0), "aarch64 {name}: {ws:08x?}");
+        assert!(a64_branches_land_on_code(&ws), "aarch64 {name}: {ws:08x?}");
+        let insns = x64_at(src, name, true);
+        assert_eq!(
+            x64_entry_branches(&insns),
+            (1, 0),
+            "x86-64 {name}: {insns:x?}"
+        );
+        assert!(
+            x64_branches_land_on_code(&insns),
+            "x86-64 {name}: {insns:x?}"
+        );
+    }
+}
+
+/// What a second copy would change stays single: a volatile read (C99
+/// 6.7.3p6), a call, and a test longer than the bound. Each loop keeps the
+/// jump to its bottom test.
+#[test]
+fn bottom_test_that_may_not_run_twice_keeps_the_jump() {
+    let srcs = [
+        (
+            "until_set",
+            "extern volatile int stop;\n\
+             long until_set(long n) { long c = 0; while (!stop) c += n; return c; }\n",
+        ),
+        (
+            "drain",
+            "extern int more(void);\n\
+             long drain(void) { long c = 0; while (more()) c++; return c; }\n",
+        ),
+        (
+            "long_test",
+            "long long_test(const int *a, const int *b, const int *c, const int *d, int m) {\n\
+             long i = 0;\n\
+             while (((a[i] ^ b[i]) + (c[i] ^ d[i])) & m) i++;\n\
+             return i;\n}\n",
+        ),
+    ];
+    for (name, src) in srcs {
+        let ws = a64_at(src, name, true);
+        assert_eq!(a64_entry_branches(&ws), (0, 1), "aarch64 {name}: {ws:08x?}");
+        let insns = x64_at(src, name, true);
+        assert_eq!(
+            x64_entry_branches(&insns),
+            (0, 1),
+            "x86-64 {name}: {insns:x?}"
+        );
+    }
+}
+
+/// Without `-O` no test is repeated: the loop holds one conditional branch.
+#[test]
+fn no_test_is_repeated_without_optimization() {
+    let ws = a64_at(SUM, "sum", false);
+    let conds = |ws: &[u32]| {
+        ws.iter()
+            .enumerate()
+            .filter(|&(i, &w)| matches!(a64_branch(w, i), Some((_, false))))
+            .count()
+    };
+    assert_eq!(conds(&ws), 1, "aarch64: {ws:08x?}");
+    let insns = x64_at(SUM, "sum", false);
+    assert_eq!(
+        insns.iter().filter(|i| i.is_jcc()).count(),
+        1,
+        "x86-64: {insns:x?}"
+    );
+    // At `-O` the repeat is the second one.
+    assert_eq!(conds(&a64_at(SUM, "sum", true)), 2);
+}
+
+/// The repeat is covered by a line row, and that row names the line the
+/// bottom test's row names: both hold the same instructions.
+#[test]
+fn repeated_test_keeps_its_source_line() {
+    use crate::c5::codegen::{LowerMode, ResolvedImports, aarch64};
+    use crate::{CompileOptions, Compiler, NativeOptions, Target};
+    let src = "long sum(const int *a, int n) {\n\
+               long s = 0;\n\
+               int i = 0;\n\
+               while (i < n) {\n\
+               s += a[i];\n\
+               i++;\n\
+               }\n\
+               return s;\n}\n";
+    let target = Target::LinuxAarch64;
+    let program = Compiler::with_options(
+        src.to_string(),
+        target,
+        CompileOptions::default()
+            .with_no_entry_point(true)
+            .with_optimize(true),
+    )
+    .compile()
+    .expect("compile");
+    let imports = ResolvedImports::resolve(&program).expect("imports");
+    let opts = NativeOptions::new().with_optimize();
+    let build =
+        aarch64::lower(&program, target, opts, &imports, None, LowerMode::Full).expect("lower");
+    let rows = &build.ssa_line_rows;
+    assert!(rows.windows(2).all(|w| w[0].0 <= w[1].0), "{rows:?}");
+    let ws: Vec<u32> = build
+        .text
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|w| u32::from_le_bytes(*w))
+        .collect();
+    let conds: Vec<usize> = (0..ws.len())
+        .filter(|&i| matches!(a64_branch(ws[i], i), Some((_, false))))
+        .collect();
+    let &[guard, bottom] = conds.as_slice() else {
+        panic!("a guard and a bottom test expected: {ws:08x?}");
+    };
+    // The row covering a pc is the last one at or below it.
+    let line_at = |word: usize| {
+        rows.iter()
+            .rev()
+            .find(|r| r.0 <= word * 4)
+            .map(|r| r.1)
+            .unwrap_or(0)
+    };
+    assert_ne!(line_at(bottom), 0, "{rows:?}");
+    assert_eq!(line_at(guard), line_at(bottom), "{rows:?}");
+}

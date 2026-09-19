@@ -16,7 +16,8 @@ Disassembly of section .text:
 <__fortify_strlen>:
                	mov	x1, x0
                	mov	x0, #0x0                // =0
-               	b	<addr>
+               	ldrb	w2, [x1, x0]
+               	cbz	x2, <addr>
                	add	x0, x0, #0x1
                	ldrb	w2, [x1, x0]
                	cbnz	x2, <addr>
@@ -42,7 +43,8 @@ Disassembly of section .text:
                	ldp	x20, x21, [sp], #0x20
                	ret
                	mov	x0, #0x0                // =0
-               	b	<addr>
+               	ldrb	w1, [x20, x0]
+               	cbz	x1, <addr>
                	add	x0, x0, #0x1
                	ldrb	w1, [x20, x0]
                	cbnz	x1, <addr>

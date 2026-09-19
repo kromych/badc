@@ -33,7 +33,8 @@ Disassembly of section .text:
                	movq	%rcx, (%r8)
                	movq	%rsi, 0x8(%r8)
                	leaq	<rip>, %rdi
-               	jmp	<addr>
+               	cmpl	$0x4, %eax
+               	jge	<addr>
                	movslq	%eax, %rcx
                	movq	%rcx, %rdx
                	shlq	$0x4, %rdx

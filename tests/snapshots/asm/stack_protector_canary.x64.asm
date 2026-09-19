@@ -165,7 +165,9 @@ Disassembly of section .text:
                	leaq	-0xf0(%rbp), %r10
                	movq	%r10, 0x10(%rax)
                	movq	%rbx, %rax
-               	jmp	<addr>
+               	movslq	-0xf0(%rbp), %rcx
+               	cmpl	%ecx, %ebx
+               	jge	<addr>
                	leaq	-0x28(%rbp), %rcx
                	movq	%rcx, %r11
                	movl	(%r11), %r10d

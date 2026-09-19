@@ -75,7 +75,8 @@ Disassembly of section .text:
                	retq
                	xorq	%rax, %rax
                	movl	%eax, -0x28(%rbp)
-               	jmp	<addr>
+               	cmpl	$0xf4240, %eax          # imm = 0xF4240
+               	jge	<addr>
                	movslq	-0x28(%rbp), %rcx
                	incq	%rcx
                	movl	%ecx, -0x28(%rbp)

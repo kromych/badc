@@ -47,7 +47,8 @@ Disassembly of section .text:
                	leave
                	retq
                	xorq	%rcx, %rcx
-               	jmp	<addr>
+               	cmpl	$0x4, %ecx
+               	jge	<addr>
                	movslq	%ecx, %rax
                	movq	%rax, %rsi
                	shlq	$0x4, %rsi
@@ -93,7 +94,8 @@ Disassembly of section .text:
                	jl	<addr>
                	xorq	%rbx, %rbx
                	movq	%rbx, %rcx
-               	jmp	<addr>
+               	cmpl	$0x4, %ecx
+               	jge	<addr>
                	movslq	%ecx, %rax
                	movq	%rax, %r9
                	shlq	$0x4, %r9

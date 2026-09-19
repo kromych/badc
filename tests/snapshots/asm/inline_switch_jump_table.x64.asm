@@ -340,9 +340,11 @@ Disassembly of section .text:
                	movq	%r12, 0x8(%rsp)
                	movq	%r13, 0x10(%rsp)
                	movabsq	$-0x2, %r12
-               	jmp	<addr>
+               	cmpl	$0xf, %r12d
+               	jge	<addr>
                	movabsq	$-0x2, %rbx
-               	jmp	<addr>
+               	cmpl	$0xf, %ebx
+               	jge	<addr>
                	movq	%r12, %rdi
                	movq	%rbx, %rsi
                	callq	<addr>

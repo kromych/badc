@@ -50,7 +50,8 @@ Disassembly of section .text:
                	jne	<addr>
                	movq	%rcx, %rsp
                	xorq	%rax, %rax
-               	jmp	<addr>
+               	cmpq	%rdx, %rax
+               	jge	<addr>
                	movl	$0x1, %esi
                	movl	%esi, (%rcx,%rax,4)
                	incq	%rax
@@ -58,7 +59,8 @@ Disassembly of section .text:
                	jl	<addr>
                	xorq	%rax, %rax
                	movq	%rax, %rsi
-               	jmp	<addr>
+               	cmpq	%rdx, %rax
+               	jge	<addr>
                	movslq	(%rcx,%rax,4), %rdi
                	addq	%rdi, %rsi
                	incq	%rax

@@ -62,7 +62,9 @@ Disassembly of section .text:
                	movl	%ecx, %r10d
                	movq	%r10, 0x30(%rsp)
                	movq	%rax, %rcx
-               	jmp	<addr>
+               	movl	%eax, %edx
+               	cmpl	$0x3e8, %edx            # imm = 0x3E8
+               	jae	<addr>
                	movl	%ecx, %esi
                	movl	%eax, %ecx
                	movq	%rcx, %rdx

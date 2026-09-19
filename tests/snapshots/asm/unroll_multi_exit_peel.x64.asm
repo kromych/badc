@@ -691,7 +691,8 @@ Disassembly of section .text:
                	cmpq	%rax, %r8
                	jne	<addr>
                	movabsq	$-0x2, %r14
-               	jmp	<addr>
+               	cmpq	$0x2, %r14
+               	jg	<addr>
                	movl	$0x1, %ecx
                	movl	$0x2, %eax
                	movl	$0x3, %edx

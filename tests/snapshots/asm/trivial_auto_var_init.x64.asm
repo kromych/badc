@@ -35,14 +35,17 @@ Disassembly of section .text:
                	leaq	-0x2000(%rbp), %rdx
                	leaq	0x2000(%rdx), %rcx
                	movq	%rdx, %rax
-               	jmp	<addr>
+               	cmpq	%rcx, %rax
+               	jae	<addr>
                	xorq	%rsi, %rsi
                	movq	%rsi, (%rax)
                	addq	$0x8, %rax
                	cmpq	%rcx, %rax
                	jb	<addr>
                	xorq	%rax, %rax
-               	jmp	<addr>
+               	movl	%eax, %ecx
+               	cmpl	$0x2000, %ecx           # imm = 0x2000
+               	jae	<addr>
                	leaq	(%rdx,%rcx), %rsi
                	movl	$0xaa, %edi
                	movb	%dil, (%rsi)
@@ -56,7 +59,8 @@ Disassembly of section .text:
 <mismatches>:
                	xorq	%rax, %rax
                	movq	%rax, %rcx
-               	jmp	<addr>
+               	cmpq	%rsi, %rcx
+               	jae	<addr>
                	leaq	(%rdi,%rcx), %rdx
                	movzbq	(%rdx), %rdx
                	testq	%rdx, %rdx
@@ -236,7 +240,8 @@ Disassembly of section .text:
                	andq	$-0x8, %rax
                	leaq	(%rdi,%rax), %rcx
                	movq	%rdi, %rax
-               	jmp	<addr>
+               	cmpq	%rcx, %rax
+               	jae	<addr>
                	xorq	%rdx, %rdx
                	movq	%rdx, (%rax)
                	addq	$0x8, %rax
@@ -268,7 +273,8 @@ Disassembly of section .text:
                	movq	%rdi, %rsp
                	leaq	0x8(%rdi), %rcx
                	movq	%rdi, %rax
-               	jmp	<addr>
+               	cmpq	%rcx, %rax
+               	jae	<addr>
                	xorq	%rdx, %rdx
                	movq	%rdx, (%rax)
                	addq	$0x8, %rax
@@ -284,7 +290,8 @@ Disassembly of section .text:
                	xorq	%rdx, %rdx
                	movq	%rdx, %rcx
                	movq	%rdx, %rax
-               	jmp	<addr>
+               	cmpl	$0x2, %eax
+               	jge	<addr>
                	testq	%rax, %rax
                	je	<addr>
                	movq	%rdx, %rcx

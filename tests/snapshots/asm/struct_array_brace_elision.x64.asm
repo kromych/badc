@@ -39,9 +39,11 @@ Disassembly of section .text:
                	movups	%xmm14, 0x20(%rax)
                	leaq	<rip>, %rsi
                	xorq	%rdx, %rdx
-               	jmp	<addr>
+               	cmpl	$0x3, %edx
+               	jge	<addr>
                	xorq	%rax, %rax
-               	jmp	<addr>
+               	cmpl	$0x2, %eax
+               	jge	<addr>
                	movslq	%edx, %rdi
                	movq	%rdi, %r8
                	shlq	$0x4, %r8
@@ -67,9 +69,11 @@ Disassembly of section .text:
                	jl	<addr>
                	leaq	-0x30(%rbp), %rsi
                	xorq	%rdx, %rdx
-               	jmp	<addr>
+               	cmpl	$0x3, %edx
+               	jge	<addr>
                	xorq	%rax, %rax
-               	jmp	<addr>
+               	cmpl	$0x2, %eax
+               	jge	<addr>
                	movslq	%edx, %rdi
                	movq	%rdi, %r8
                	shlq	$0x4, %r8

@@ -142,7 +142,8 @@ Disassembly of section .text:
                	movq	%rbx, (%rsp)
                	movq	%r12, 0x8(%rsp)
                	movl	$0x3, %ebx
-               	jmp	<addr>
+               	cmpl	$0x13, %ebx
+               	jg	<addr>
                	cmpl	$0xf, %ebx
                	je	<addr>
                	cmpl	$0xf, %ebx

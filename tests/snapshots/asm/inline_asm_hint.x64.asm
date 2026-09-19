@@ -28,7 +28,8 @@ Disassembly of section .text:
 <main>:
                	xorq	%rax, %rax
                	movq	%rax, %rcx
-               	jmp	<addr>
+               	cmpl	$0x5, %eax
+               	jge	<addr>
                	pause
                	addq	%rax, %rcx
                	incq	%rax
@@ -40,7 +41,8 @@ Disassembly of section .text:
                	retq
                	xorq	%rax, %rax
                	movq	%rax, %rcx
-               	jmp	<addr>
+               	cmpl	$0xa, %eax
+               	jge	<addr>
                	pause
                	addq	%rax, %rcx
                	incq	%rax

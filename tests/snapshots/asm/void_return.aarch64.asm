@@ -76,7 +76,7 @@ Disassembly of section .text:
 
 <count_down>:
                	sxtw	x0, w0
-               	b	<addr>
+               	cbz	x0, <addr>
                	ldrsw	x2, [x1]
                	add	x2, x2, x0
                	str	w2, [x1]

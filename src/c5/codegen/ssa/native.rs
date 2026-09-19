@@ -134,6 +134,7 @@ pub(crate) fn compile_function_to_bytes(
                     super::super::StackProtect::OFF,
                     super::super::FunctionEntry::default(),
                     super::super::FixedRegs::NONE,
+                    false,
                 )
             };
             if ok.is_err() {
@@ -242,6 +243,7 @@ pub(crate) fn compile_function_to_bytes(
                     super::super::StackProtect::OFF,
                     super::super::FunctionEntry::default(),
                     super::super::FixedRegs::NONE,
+                    false,
                 )
             };
             if ok.is_err() {

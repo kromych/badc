@@ -70,7 +70,9 @@ Disassembly of section .text:
                	movl	$0x44332211, %ecx       # imm = 0x44332211
                	movl	%ecx, (%rdx)
                	leaq	<rip>, %rsi
-               	jmp	<addr>
+               	movl	%eax, %ecx
+               	cmpl	$0x4, %ecx
+               	jae	<addr>
                	movzbq	(%rdx,%rcx), %rdi
                	movzbq	(%rsi,%rcx), %r8
                	cmpl	%r8d, %edi
@@ -85,7 +87,9 @@ Disassembly of section .text:
                	leaq	0x4(%rax), %rdx
                	leaq	<rip>, %rsi
                	xorq	%rax, %rax
-               	jmp	<addr>
+               	movl	%eax, %ecx
+               	cmpl	$0x4, %ecx
+               	jae	<addr>
                	movzbq	(%rdx,%rcx), %rdi
                	movzbq	(%rsi,%rcx), %r8
                	cmpl	%r8d, %edi
@@ -100,7 +104,9 @@ Disassembly of section .text:
                	movl	%ecx, (%rdx)
                	leaq	<rip>, %rsi
                	xorq	%rax, %rax
-               	jmp	<addr>
+               	movl	%eax, %ecx
+               	cmpl	$0x4, %ecx
+               	jae	<addr>
                	movzbq	(%rdx,%rcx), %rdi
                	movzbq	(%rsi,%rcx), %r8
                	cmpl	%r8d, %edi
@@ -115,7 +121,9 @@ Disassembly of section .text:
                	movq	%rcx, (%rdx)
                	leaq	<rip>, %rsi
                	xorq	%rax, %rax
-               	jmp	<addr>
+               	movl	%eax, %ecx
+               	cmpl	$0x8, %ecx
+               	jae	<addr>
                	movzbq	(%rdx,%rcx), %rdi
                	movzbq	(%rsi,%rcx), %r8
                	cmpl	%r8d, %edi
@@ -130,7 +138,9 @@ Disassembly of section .text:
                	movw	%cx, (%rdx)
                	leaq	<rip>, %rsi
                	xorq	%rax, %rax
-               	jmp	<addr>
+               	movl	%eax, %ecx
+               	cmpl	$0x2, %ecx
+               	jae	<addr>
                	movzbq	(%rdx,%rcx), %rdi
                	movzbq	(%rsi,%rcx), %r8
                	cmpl	%r8d, %edi
@@ -149,7 +159,9 @@ Disassembly of section .text:
                	movb	%cl, 0x2(%rdx)
                	leaq	<rip>, %rsi
                	xorq	%rax, %rax
-               	jmp	<addr>
+               	movl	%eax, %ecx
+               	cmpl	$0x3, %ecx
+               	jae	<addr>
                	movzbq	(%rdx,%rcx), %rdi
                	movzbq	(%rsi,%rcx), %r8
                	cmpl	%r8d, %edi

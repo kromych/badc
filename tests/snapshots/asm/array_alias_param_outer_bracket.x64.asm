@@ -48,7 +48,9 @@ Disassembly of section .text:
                	leaq	-0x60(%rbp), %rdi
                	xorq	%rax, %rax
                	movq	%rax, %rsi
-               	jmp	<addr>
+               	movl	%eax, %ecx
+               	cmpl	$0x3, %ecx
+               	jae	<addr>
                	movq	%rcx, %rdx
                	shlq	$0x5, %rdx
                	addq	%rdi, %rdx
@@ -91,7 +93,9 @@ Disassembly of section .text:
                	leave
                	retq
                	movq	%rax, %rsi
-               	jmp	<addr>
+               	movl	%eax, %ecx
+               	cmpl	$0x3, %ecx
+               	jae	<addr>
                	movq	%rcx, %rdx
                	shlq	$0x5, %rdx
                	addq	%rdi, %rdx

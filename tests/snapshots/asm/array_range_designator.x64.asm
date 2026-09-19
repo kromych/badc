@@ -41,7 +41,8 @@ Disassembly of section .text:
                	movq	%r12, 0x8(%rsp)
                	movq	%r13, 0x10(%rsp)
                	xorq	%rbx, %rbx
-               	jmp	<addr>
+               	cmpl	$0x2, %ebx
+               	jge	<addr>
                	leaq	<rip>, %rax
                	movslq	%ebx, %r12
                	imulq	$0x18, %r12, %r13

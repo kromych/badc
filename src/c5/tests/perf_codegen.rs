@@ -402,7 +402,6 @@ fn codeless_blocks_cost_no_branch() {
 }
 
 #[test]
-#[ignore = "TODO: a rotated loop is entered by a jump to its bottom test"]
 fn counted_loop_is_entered_through_its_guard() {
     let mut m = Misses::default();
     let ws = a64(SUM, "sum");

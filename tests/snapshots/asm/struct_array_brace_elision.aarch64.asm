@@ -24,9 +24,11 @@ Disassembly of section .text:
                	adrp	x3, <page>
                	add	x3, x3, <lo12>
                	mov	x2, #0x0                // =0
-               	b	<addr>
+               	cmp	w2, #0x3
+               	b.ge	<addr>
                	mov	x0, #0x0                // =0
-               	b	<addr>
+               	cmp	w0, #0x2
+               	b.ge	<addr>
                	sxtw	x4, w2
                	lsl	x5, x4, #4
                	add	x6, x3, x5
@@ -47,9 +49,11 @@ Disassembly of section .text:
                	b.lt	<addr>
                	sub	x3, x29, #0x30
                	mov	x2, #0x0                // =0
-               	b	<addr>
+               	cmp	w2, #0x3
+               	b.ge	<addr>
                	mov	x0, #0x0                // =0
-               	b	<addr>
+               	cmp	w0, #0x2
+               	b.ge	<addr>
                	sxtw	x4, w2
                	lsl	x5, x4, #4
                	add	x6, x3, x5

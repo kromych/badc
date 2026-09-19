@@ -30,7 +30,9 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x800, %rsp            # imm = 0x800
                	xorq	%rax, %rax
-               	jmp	<addr>
+               	movl	%eax, %ecx
+               	cmpl	$0x800, %ecx            # imm = 0x800
+               	jae	<addr>
                	leaq	-0x800(%rbp), %rdx
                	addq	%rcx, %rdx
                	movl	$0xaa, %esi
@@ -46,7 +48,10 @@ Disassembly of section .text:
                	movq	%rdx, %r8
                	xorq	%rax, %rax
                	movq	%rax, %rcx
-               	jmp	<addr>
+               	movl	%ecx, %edx
+               	movl	%r8d, %r9d
+               	cmpl	%r9d, %edx
+               	jae	<addr>
                	movzbq	(%rsi,%rdx), %r9
                	addq	%rdi, %r9
                	movzbq	(%r9), %r9

@@ -54,7 +54,8 @@ Disassembly of section .text:
                	movl	$0x320, %eax            # imm = 0x320
                	movl	%eax, 0x208(%rdx)
                	xorq	%rax, %rax
-               	jmp	<addr>
+               	cmpl	$0x28, %eax
+               	jge	<addr>
                	leaq	0x10(%rdx), %rdi
                	movslq	%eax, %rcx
                	leaq	0x3e8(%rcx), %rsi
@@ -283,7 +284,8 @@ Disassembly of section .text:
                	leave
                	retq
                	xorq	%rax, %rax
-               	jmp	<addr>
+               	cmpl	$0x28, %eax
+               	jge	<addr>
                	leaq	0x10(%rdx), %rsi
                	movslq	%eax, %rcx
                	movslq	(%rsi,%rcx,4), %rdi

@@ -50,7 +50,8 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #0x10]
                	add	x29, sp, #0x10
                	mov	x20, #0x0               // =0
-               	b	<addr>
+               	cmp	w20, #0x14
+               	b.ge	<addr>
                	mov	x0, x20
                	bl	<addr>
                	cbnz	x0, <addr>

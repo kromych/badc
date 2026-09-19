@@ -34,7 +34,8 @@ Disassembly of section .text:
                	movq	$0x0, (%rsp)
                	subq	$0x330, %rsp            # imm = 0x330
                	xorq	%rax, %rax
-               	jmp	<addr>
+               	cmpl	$0x2328, %eax           # imm = 0x2328
+               	jge	<addr>
                	leaq	-0x2330(%rbp), %rsi
                	movslq	%eax, %rcx
                	movq	%rcx, %rdx

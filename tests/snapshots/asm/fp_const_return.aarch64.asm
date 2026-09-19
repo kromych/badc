@@ -16,7 +16,8 @@ Disassembly of section .text:
 <sum_zero>:
                	mov	x1, x0
                	mov	x0, #0x8                // =8
-               	b	<addr>
+               	cmp	w0, #0x0
+               	b.le	<addr>
                	sub	x2, x0, #0x1
                	sxtw	x2, w2
                	ldr	x2, [x1, x2, lsl #3]
@@ -57,7 +58,8 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	mov	x17, #0x0               // =0
                	fmov	d0, x17
-               	b	<addr>
+               	cmp	w0, #0x2
+               	b.ge	<addr>
                	sxtw	x2, w0
                	lsl	x2, x2, #3
                	add	x2, x1, x2
@@ -77,7 +79,8 @@ Disassembly of section .text:
                	sub	x1, x29, #0x50
                	mov	x17, #0x0               // =0
                	fmov	d0, x17
-               	b	<addr>
+               	cmp	w0, #0x2
+               	b.ge	<addr>
                	sxtw	x2, w0
                	lsl	x2, x2, #3
                	add	x2, x1, x2
@@ -98,7 +101,8 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	mov	x17, #0x0               // =0
                	fmov	d0, x17
-               	b	<addr>
+               	cmp	w0, #0x2
+               	b.ge	<addr>
                	sxtw	x2, w0
                	lsl	x2, x2, #3
                	add	x2, x1, x2
@@ -119,7 +123,8 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	mov	x17, #0x0               // =0
                	fmov	d0, x17
-               	b	<addr>
+               	cmp	w0, #0x2
+               	b.ge	<addr>
                	sxtw	x2, w0
                	lsl	x2, x2, #3
                	add	x2, x1, x2
@@ -142,7 +147,8 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	mov	x17, #0x0               // =0
                	fmov	d0, x17
-               	b	<addr>
+               	cmp	w0, #0x2
+               	b.ge	<addr>
                	sxtw	x2, w0
                	lsl	x2, x2, #3
                	add	x2, x1, x2

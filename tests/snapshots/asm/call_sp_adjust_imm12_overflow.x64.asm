@@ -2908,7 +2908,8 @@ Disassembly of section .text:
                	movq	%r15, 0x20(%rsp)
                	xorq	%rax, %rax
                	leaq	<rip>, %rdx
-               	jmp	<addr>
+               	cmpq	$0x105, %rax            # imm = 0x105
+               	jge	<addr>
                	movq	%rax, %rsi
                	shlq	$0x4, %rsi
                	leaq	(%rdx,%rsi), %rcx

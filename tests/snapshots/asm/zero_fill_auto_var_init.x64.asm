@@ -190,7 +190,8 @@ Disassembly of section .text:
                	andq	$-0x8, %rax
                	leaq	(%rcx,%rax), %rdx
                	movq	%rcx, %rax
-               	jmp	<addr>
+               	cmpq	%rdx, %rax
+               	jae	<addr>
                	xorq	%rsi, %rsi
                	movq	%rsi, (%rax)
                	addq	$0x8, %rax

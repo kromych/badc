@@ -61,7 +61,8 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx
                	leaq	<rip>, %rdx
                	movq	%r12, %rbx
-               	jmp	<addr>
+               	cmpl	$0xc, %ebx
+               	jge	<addr>
                	movslq	%ebx, %rsi
                	movq	%rsi, %rax
                	shlq	$0x4, %rax

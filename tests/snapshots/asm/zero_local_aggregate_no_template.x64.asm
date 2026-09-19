@@ -124,7 +124,8 @@ Disassembly of section .text:
                	movups	%xmm14, 0x1d0(%rcx)
                	movups	%xmm14, 0x1e0(%rcx)
                	movups	%xmm14, 0x1f0(%rcx)
-               	jmp	<addr>
+               	cmpl	$0x200, %eax            # imm = 0x200
+               	jge	<addr>
                	movslq	%eax, %rdx
                	movsbq	(%rcx,%rdx), %rdx
                	testq	%rdx, %rdx

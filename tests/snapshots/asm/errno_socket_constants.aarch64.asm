@@ -39,14 +39,16 @@ Disassembly of section .text:
                	str	x10, [x0, #0x38]
                	ldr	x10, [sp], #0x10
                	mov	x4, #0x0                // =0
-               	b	<addr>
+               	cmp	w4, #0x10
+               	b.ge	<addr>
                	sub	x1, x29, #0x40
                	sxtw	x2, w4
                	ldrsw	x0, [x1, x2, lsl #2]
                	cmp	w0, #0x0
                	b.le	<addr>
                	add	x0, x4, #0x1
-               	b	<addr>
+               	cmp	w0, #0x10
+               	b.ge	<addr>
                	ldrsw	x5, [x1, x2, lsl #2]
                	sxtw	x3, w0
                	ldrsw	x3, [x1, x3, lsl #2]

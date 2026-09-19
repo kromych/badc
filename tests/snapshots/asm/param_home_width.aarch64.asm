@@ -17,7 +17,8 @@ Disassembly of section .text:
                	mov	x2, x1
                	mov	x1, #0x0                // =0
                	mov	x3, #0x3                // =3
-               	b	<addr>
+               	cmp	w1, w2
+               	b.ge	<addr>
                	and	x0, x0, #0xff
                	mul	x0, x0, x3
                	add	x0, x0, #0x1
@@ -31,7 +32,8 @@ Disassembly of section .text:
                	mov	x2, x1
                	mov	x1, #0x0                // =0
                	mov	x3, #0x3                // =3
-               	b	<addr>
+               	cmp	w1, w2
+               	b.ge	<addr>
                	and	x0, x0, #0xffff
                	mul	x0, x0, x3
                	add	x0, x0, #0x1
@@ -45,7 +47,8 @@ Disassembly of section .text:
                	mov	x2, x0
                	mov	x0, #0x0                // =0
                	mov	x3, #0x3                // =3
-               	b	<addr>
+               	cmp	w0, w1
+               	b.ge	<addr>
                	mov	w2, w2
                	mul	x2, x2, x3
                	mov	w2, w2
@@ -61,7 +64,8 @@ Disassembly of section .text:
                	mov	x2, x1
                	sxtb	x0, w0
                	mov	x1, #0x0                // =0
-               	b	<addr>
+               	cmp	w1, w2
+               	b.ge	<addr>
                	sxtb	x0, w0
                	sub	x0, x0, #0x3
                	add	x1, x1, #0x1
@@ -74,7 +78,8 @@ Disassembly of section .text:
                	mov	x2, x1
                	sxth	x0, w0
                	mov	x1, #0x0                // =0
-               	b	<addr>
+               	cmp	w1, w2
+               	b.ge	<addr>
                	sxth	x0, w0
                	sub	x0, x0, #0x3
                	add	x1, x1, #0x1
@@ -86,7 +91,8 @@ Disassembly of section .text:
 <step_i32>:
                	mov	x2, x1
                	mov	x1, #0x0                // =0
-               	b	<addr>
+               	cmp	w1, w2
+               	b.ge	<addr>
                	sub	x0, x0, #0x3
                	add	x1, x1, #0x1
                	cmp	w1, w2
@@ -97,7 +103,8 @@ Disassembly of section .text:
 <step_long>:
                	mov	x2, x0
                	mov	x0, #0x0                // =0
-               	b	<addr>
+               	cmp	w0, w1
+               	b.ge	<addr>
                	sub	x2, x2, #0x3
                	add	x0, x0, #0x1
                	cmp	w0, w1
@@ -108,7 +115,8 @@ Disassembly of section .text:
 <flip>:
                	mov	x2, x0
                	mov	x0, #0x0                // =0
-               	b	<addr>
+               	cmp	w0, w1
+               	b.ge	<addr>
                	and	x2, x2, #0xff
                	cmp	w2, #0x0
                	cset	x2, eq
@@ -121,7 +129,8 @@ Disassembly of section .text:
 <toggle>:
                	mov	x2, x0
                	mov	x0, #0x0                // =0
-               	b	<addr>
+               	cmp	w0, w1
+               	b.ge	<addr>
                	mov	w2, w2
                	eor	x2, x2, #0x1
                	add	x0, x0, #0x1

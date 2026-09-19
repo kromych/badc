@@ -31,7 +31,8 @@ Disassembly of section .text:
                	movl	%eax, (%r9)
                	movslq	(%r9), %rax
                	xorq	%rcx, %rcx
-               	jmp	<addr>
+               	testl	%eax, %eax
+               	jle	<addr>
                	movslq	%eax, %rdx
                	movl	$0x1000, %esi           # imm = 0x1000
                	movl	$0x1, %edi
@@ -51,7 +52,8 @@ Disassembly of section .text:
                	movl	%esi, (%r9)
                	movslq	(%r9), %rax
                	xorq	%rcx, %rcx
-               	jmp	<addr>
+               	testl	%eax, %eax
+               	jle	<addr>
                	movslq	%eax, %rdx
                	movl	$0x1000, %edi           # imm = 0x1000
                	movq	%rsi, %r8
@@ -70,7 +72,8 @@ Disassembly of section .text:
                	xorq	%rcx, %rcx
                	movl	%ecx, (%r9)
                	movslq	(%r9), %rax
-               	jmp	<addr>
+               	testl	%eax, %eax
+               	jle	<addr>
                	movslq	%eax, %rdx
                	movl	$0x1000, %edi           # imm = 0x1000
                	movq	%rsi, %r8

@@ -28,7 +28,8 @@ Disassembly of section .text:
 <driver>:
                	xorq	%rax, %rax
                	movq	%rax, %rcx
-               	jmp	<addr>
+               	cmpl	$0x7, %eax
+               	jge	<addr>
                	incq	%rcx
                	incq	%rax
                	cmpl	$0x7, %eax
@@ -40,7 +41,8 @@ Disassembly of section .text:
 <main>:
                	xorq	%rax, %rax
                	movq	%rax, %rcx
-               	jmp	<addr>
+               	cmpl	$0x7, %eax
+               	jge	<addr>
                	incq	%rcx
                	incq	%rax
                	cmpl	$0x7, %eax

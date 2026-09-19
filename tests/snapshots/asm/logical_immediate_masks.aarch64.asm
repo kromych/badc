@@ -177,7 +177,8 @@ Disassembly of section .text:
                	mov	x1, #0x1                // =1
                	mov	x0, #0x0                // =0
                	mov	x5, #0x1234             // =4660
-               	b	<addr>
+               	cmp	w0, w4
+               	b.ge	<addr>
                	ror	x6, x1, #0x39
                	sxtw	x1, w0
                	ldr	x3, [x2, x1, lsl #3]
@@ -249,7 +250,8 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #0x50]
                	add	x29, sp, #0x50
                	mov	x22, #0x0               // =0
-               	b	<addr>
+               	cmp	w22, #0x8
+               	b.ge	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	sxtw	x1, w22
@@ -466,7 +468,8 @@ Disassembly of section .text:
                	stur	x0, [x29, #-0x18]
                	mov	x1, #0x1                // =1
                	mov	x0, #0x0                // =0
-               	b	<addr>
+               	cmp	w0, #0x8
+               	b.ge	<addr>
                	ror	x3, x1, #0x39
                	sxtw	x1, w0
                	ldr	x2, [x20, x1, lsl #3]

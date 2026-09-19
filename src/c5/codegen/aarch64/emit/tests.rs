@@ -1423,6 +1423,7 @@ fn emit_return_42() {
             super::super::StackProtect::OFF,
             super::super::FunctionEntry::default(),
             super::super::FixedRegs::NONE,
+            false,
         )
     };
     assert!(
@@ -2153,6 +2154,7 @@ fn emit_return_one_plus_two() {
             super::super::StackProtect::OFF,
             super::super::FunctionEntry::default(),
             super::super::FixedRegs::NONE,
+            false,
         )
     };
     assert!(ok.is_ok(), "binop handler should cover Add + Shl + Shr");
@@ -2248,6 +2250,7 @@ fn emit_if_else_returns() {
             super::super::StackProtect::OFF,
             super::super::FunctionEntry::default(),
             super::super::FixedRegs::NONE,
+            false,
         )
     };
     assert!(

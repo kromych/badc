@@ -245,6 +245,8 @@ pub(crate) fn emit_function(
     stack_protect: super::StackProtect,
     entry: super::FunctionEntry,
     fixed_regs: super::FixedRegs,
+    // `-O`: the block plan may repeat a small test in place of a jump to it.
+    repeat_tests: bool,
 ) -> Emit {
     let abi = {
         let mut a = target.abi_for(func.conv);
@@ -328,7 +330,7 @@ pub(crate) fn emit_function(
         abs_jump_tables,
         endbr_targets,
         param_prebatched: alloc::vec![false; func.insts.len()],
-        plan: super::ssa::block_plan::BlockPlan::build(func, alloc),
+        plan: super::ssa::block_plan::BlockPlan::build(func, alloc, repeat_tests),
         block_offsets: alloc::vec![0; func.blocks.len()],
         branch_fixups: Vec::new(),
         branch_short: Vec::new(),
@@ -821,10 +823,7 @@ impl FnEmit<'_, '_> {
                     Ok(())
                 }
             }
-            Terminator::Jmp(t) | Terminator::FallThrough(t) => {
-                self.jump_unless_next(block_idx, t);
-                Ok(())
-            }
+            Terminator::Jmp(t) | Terminator::FallThrough(t) => self.jump_unless_next(block_idx, t),
             Terminator::Bz {
                 cond,
                 target,
@@ -874,8 +873,7 @@ impl FnEmit<'_, '_> {
             // only the fall-through edge (row entry 0) is emitted here.
             Terminator::AsmGoto { table } => {
                 let fall = func.jump_tables[table as usize][0];
-                self.jump_unless_next(block_idx, fall);
-                Ok(())
+                self.jump_unless_next(block_idx, fall)
             }
             // A sys-trampoline body: the indirect call already placed every
             // argument, so control forwards through the PLT slot and the
@@ -921,10 +919,7 @@ impl FnEmit<'_, '_> {
                 .plan
                 .cond_shape(block_idx, target, fall_through, negate)
             {
-                CondShape::Jump(t) => {
-                    self.jump_unless_next(block_idx, t);
-                    return Ok(());
-                }
+                CondShape::Jump(t) => return self.jump_unless_next(block_idx, t),
                 CondShape::Branch {
                     taken,
                     other,
@@ -954,8 +949,7 @@ impl FnEmit<'_, '_> {
             let cc = if negate { Cc::E } else { Cc::Ne };
             self.emit_local(LocalBranchKind::Jcc(cc), target);
         }
-        self.jump_unless_next(block_idx, fall_through);
-        Ok(())
+        self.jump_unless_next(block_idx, fall_through)
     }
 
     fn emit_local(&mut self, kind: LocalBranchKind, target: super::super::ir::BlockId) {
@@ -968,12 +962,41 @@ impl FnEmit<'_, '_> {
         );
     }
 
-    /// A `jmp` to where an edge to `t` lands, unless the code of
-    /// `block_idx` runs into it.
-    fn jump_unless_next(&mut self, block_idx: usize, t: super::super::ir::BlockId) {
-        if !self.plan.falls_into(block_idx, t) {
-            let t = self.plan.resolve(t);
-            self.emit_local(LocalBranchKind::Jmp, t);
+    /// Reach where an edge to `t` lands from the end of `block_idx`:
+    /// nothing when its code runs into it, the plan's repeat of a small
+    /// test, else a `jmp`.
+    fn jump_unless_next(&mut self, block_idx: usize, t: super::super::ir::BlockId) -> Emit {
+        if self.plan.falls_into(block_idx, t) {
+            return Ok(());
+        }
+        if let Some(h) = self.plan.repeated_at(block_idx, t) {
+            return self.emit_repeat(block_idx, h);
+        }
+        let t = self.plan.resolve(t);
+        self.emit_local(LocalBranchKind::Jmp, t);
+        Ok(())
+    }
+
+    /// The instructions of block `h` and its conditional branch, as the
+    /// end of `block_idx`. One arm of `h` is what this code runs into, so
+    /// the branch closes it.
+    fn emit_repeat(&mut self, block_idx: usize, h: super::super::ir::BlockId) -> Emit {
+        let block = &self.fcx.func.blocks[h as usize];
+        for v in block.inst_range.clone() {
+            self.emit_block_inst(block, v, None)?;
+        }
+        match block.terminator {
+            Terminator::Bz {
+                cond,
+                target,
+                fall_through,
+            } => self.emit_cond_branch(block_idx, cond, target, fall_through, true),
+            Terminator::Bnz {
+                cond,
+                target,
+                fall_through,
+            } => self.emit_cond_branch(block_idx, cond, target, fall_through, false),
+            _ => unreachable!("the plan repeats a conditional block"),
         }
     }
 

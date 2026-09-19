@@ -65,7 +65,9 @@ Disassembly of section .text:
                	popq	%rdx
                	xorq	%rax, %rax
                	movq	%rax, %rcx
-               	jmp	<addr>
+               	movslq	-0xe0(%rbp), %rdx
+               	cmpl	%edx, %eax
+               	jge	<addr>
                	leaq	-0x18(%rbp), %rdx
                	movq	%rdx, %r11
                	movl	(%r11), %r10d

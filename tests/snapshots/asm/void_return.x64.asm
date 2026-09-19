@@ -89,7 +89,8 @@ Disassembly of section .text:
 
 <count_down>:
                	movslq	%edi, %rdi
-               	jmp	<addr>
+               	testq	%rdi, %rdi
+               	je	<addr>
                	movslq	(%rsi), %rax
                	addq	%rdi, %rax
                	movl	%eax, (%rsi)

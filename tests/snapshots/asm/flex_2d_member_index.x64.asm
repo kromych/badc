@@ -39,7 +39,8 @@ Disassembly of section .text:
                	movl	%eax, 0x18(%rsi)
                	movl	$0x4, %ecx
                	movl	%ecx, (%rsi)
-               	jmp	<addr>
+               	cmpl	$0x4, %eax
+               	jge	<addr>
                	leaq	0x4(%rsi), %rdi
                	movslq	%eax, %rcx
                	imulq	$0x6, %rcx, %r8

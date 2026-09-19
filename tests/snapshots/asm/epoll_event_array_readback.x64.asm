@@ -153,7 +153,8 @@ Disassembly of section .text:
                	retq
                	xorq	%rax, %rax
                	movq	%rax, %rbx
-               	jmp	<addr>
+               	cmpl	$0x2, %eax
+               	jge	<addr>
                	leaq	-0x18(%rbp), %rsi
                	movslq	%eax, %rcx
                	imulq	$0xc, %rcx, %rdx

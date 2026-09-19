@@ -28,7 +28,8 @@ Disassembly of section .text:
 <count_zero>:
                	xorq	%rax, %rax
                	movq	%rax, %rcx
-               	jmp	<addr>
+               	cmpl	%esi, %eax
+               	jge	<addr>
                	movslq	%eax, %rdx
                	movsbq	(%rdi,%rdx), %rdx
                	testq	%rdx, %rdx
@@ -49,7 +50,10 @@ Disassembly of section .text:
                	movslq	(%rdi,%rsi,4), %rdx
                	cmpl	$0x4, %edx
                	jl	<addr>
-               	jmp	<addr>
+               	movslq	%eax, %rdx
+               	movslq	(%rdi,%rdx,4), %r8
+               	cmpl	$0x4, %r8d
+               	jle	<addr>
                	decq	%rax
                	movslq	%eax, %rdx
                	movslq	(%rdi,%rdx,4), %r8
@@ -76,7 +80,8 @@ Disassembly of section .text:
                	movq	%rdi, %rbx
                	movslq	%ebx, %rbx
                	xorq	%r12, %r12
-               	jmp	<addr>
+               	cmpq	$0x2, %rbx
+               	jl	<addr>
                	leaq	-0x1(%rbx), %rdi
                	callq	<addr>
                	movq	%rax, %rcx
@@ -100,10 +105,12 @@ Disassembly of section .text:
                	movq	%rsi, %r13
                	xorq	%rdx, %rdx
                	movq	%rdx, %r12
-               	jmp	<addr>
+               	cmpl	$0xfa0, %edx            # imm = 0xFA0
+               	jge	<addr>
                	xorq	%rax, %rax
                	movq	%rdx, %rcx
-               	jmp	<addr>
+               	testl	%ecx, %ecx
+               	jle	<addr>
                	movslq	%ecx, %rsi
                	imulq	$0x66666667, %rsi, %rdi # imm = 0x66666667
                	movq	%rdi, %r8
@@ -149,7 +156,8 @@ Disassembly of section .text:
 <lcg>:
                	movl	$0x3039, %ecx           # imm = 0x3039
                	xorq	%rax, %rax
-               	jmp	<addr>
+               	cmpl	%esi, %eax
+               	jge	<addr>
                	imulq	$0x41c64e6d, %rcx, %rcx # imm = 0x41C64E6D
                	movl	%ecx, %ecx
                	addq	$0x3039, %rcx           # imm = 0x3039
@@ -163,7 +171,8 @@ Disassembly of section .text:
 <lcg_wide>:
                	movl	$0x3039, %ecx           # imm = 0x3039
                	xorq	%rax, %rax
-               	jmp	<addr>
+               	cmpl	$0x3e8, %eax            # imm = 0x3E8
+               	jge	<addr>
                	imulq	$0x41c64e6d, %rcx, %rcx # imm = 0x41C64E6D
                	addq	$0x3039, %rcx           # imm = 0x3039
                	movl	%ecx, %ecx
@@ -177,13 +186,18 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	movl	$0x2, %ecx
-               	jmp	<addr>
+               	movslq	%ecx, %rax
+               	movq	%rax, %rdx
+               	imulq	%rax, %rdx
+               	cmpq	$0x3e8, %rdx            # imm = 0x3E8
+               	jge	<addr>
                	movsbq	(%rdi,%rax), %rax
                	testq	%rax, %rax
                	jne	<addr>
                	movq	%rcx, %rax
                	imulq	%rcx, %rax
-               	jmp	<addr>
+               	cmpl	$0x3e8, %eax            # imm = 0x3E8
+               	jge	<addr>
                	movslq	%eax, %rdx
                	movl	$0x1, %esi
                	movb	%sil, (%rdi,%rdx)
@@ -313,7 +327,8 @@ Disassembly of section .text:
                	movl	$0x4, %ecx
                	movq	%rbx, %rsi
                	callq	<addr>
-               	jmp	<addr>
+               	cmpl	$0x9, %ebx
+               	jge	<addr>
                	leaq	-0x30(%rbp), %rax
                	movslq	%ebx, %rcx
                	movslq	(%rax,%rcx,4), %rax
@@ -325,7 +340,8 @@ Disassembly of section .text:
                	incq	%rbx
                	cmpl	$0x9, %ebx
                	jl	<addr>
-               	jmp	<addr>
+               	cmpl	$0x9, %ebx
+               	jge	<addr>
                	leaq	-0x30(%rbp), %rax
                	movslq	%ebx, %rcx
                	movslq	(%rax,%rcx,4), %rax

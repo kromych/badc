@@ -592,7 +592,8 @@ Disassembly of section .text:
                	xorq	%rcx, %rcx
                	leaq	<rip>, %rsi
                	movq	%rcx, %rax
-               	jmp	<addr>
+               	cmpl	$0xb4, %eax
+               	jge	<addr>
                	movslq	%eax, %rdx
                	movq	%rdx, (%rsi,%rdx,8)
                	incq	%rax
@@ -600,7 +601,8 @@ Disassembly of section .text:
                	jl	<addr>
                	xorq	%rax, %rax
                	leaq	<rip>, %rsi
-               	jmp	<addr>
+               	cmpl	$0xb4, %eax
+               	jge	<addr>
                	movslq	%eax, %rdx
                	movq	(%rsi,%rdx,8), %rdi
                	incq	%rdx

@@ -55,7 +55,10 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	leaq	<rip>, %rsi
                	leaq	<rip>, %rdi
-               	jmp	<addr>
+               	movslq	%eax, %rcx
+               	movsbq	(%rsi,%rcx), %r8
+               	testq	%r8, %r8
+               	je	<addr>
                	leaq	0x8(%rdx), %r8
                	movzbq	(%r8,%rcx), %r8
                	movsbq	(%rdi,%rcx), %rcx

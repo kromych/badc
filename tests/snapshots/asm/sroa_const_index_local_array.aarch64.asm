@@ -25,7 +25,9 @@ Disassembly of section .text:
                	ldr	x5, [x8, #0x28]
                	ldr	x6, [x8, #0x30]
                	ldr	x8, [x8, #0x38]
-               	b	<addr>
+               	sub	x9, x7, #0x1
+               	cmp	w7, #0x0
+               	b.le	<addr>
                	lsl	x7, x8, #1
                	add	x7, x6, x7
                	lsl	x6, x6, #1

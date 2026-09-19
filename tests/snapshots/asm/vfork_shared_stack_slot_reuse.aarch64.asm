@@ -62,7 +62,8 @@ Disassembly of section .text:
                	stp	x26, x27, [sp, #0x30]
                	str	x28, [sp, #0x40]
                	mov	x0, #0x0                // =0
-               	b	<addr>
+               	cmp	w0, #0x40
+               	b.ge	<addr>
                	adrp	x3, <page>
                	add	x3, x3, <lo12>
                	sxtw	x1, w0

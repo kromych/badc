@@ -34,14 +34,16 @@ Disassembly of section .text:
                	b.ne	<addr>
                	mov	sp, x1
                	mov	x0, #0x0                // =0
-               	b	<addr>
+               	cmp	x0, x2
+               	b.ge	<addr>
                	str	w3, [x1, x0, lsl #2]
                	add	x0, x0, #0x1
                	cmp	x0, x2
                	b.lt	<addr>
                	mov	x0, #0x0                // =0
                	mov	x3, x0
-               	b	<addr>
+               	cmp	x0, x2
+               	b.ge	<addr>
                	ldrsw	x4, [x1, x0, lsl #2]
                	add	x3, x3, x4
                	add	x0, x0, #0x1

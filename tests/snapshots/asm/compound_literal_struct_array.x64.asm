@@ -665,7 +665,8 @@ Disassembly of section .text:
                	movl	$0x6, %ecx
                	movl	%ecx, 0xc(%rdi)
                	movq	%rax, %rcx
-               	jmp	<addr>
+               	cmpl	$0x2, %eax
+               	jge	<addr>
                	movslq	%eax, %rdx
                	shlq	$0x3, %rdx
                	addq	%rdi, %rdx
@@ -697,7 +698,8 @@ Disassembly of section .text:
                	popq	%rcx
                	xorq	%rax, %rax
                	movq	%rax, %rcx
-               	jmp	<addr>
+               	cmpl	$0x3, %eax
+               	jge	<addr>
                	movslq	%eax, %rdx
                	shlq	$0x3, %rdx
                	addq	%rdi, %rdx

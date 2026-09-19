@@ -25,7 +25,8 @@ Disassembly of section .text:
                	ret
                	mov	x3, #0x0                // =0
                	mov	x7, #0x64               // =100
-               	b	<addr>
+               	cmp	w3, #0x4
+               	b.ge	<addr>
                	sxtw	x2, w3
                	lsl	x5, x2, #4
                	add	x4, x1, x5
@@ -64,7 +65,8 @@ Disassembly of section .text:
                	mov	x8, #0x0                // =0
                	mov	x7, #0x64               // =100
                	mov	x3, x8
-               	b	<addr>
+               	cmp	w3, #0x4
+               	b.ge	<addr>
                	sxtw	x2, w3
                	lsl	x5, x2, #4
                	add	x4, x1, x5

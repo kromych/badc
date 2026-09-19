@@ -176,7 +176,8 @@ Disassembly of section .text:
                	and	x0, x0, #0xfffffffffffffff8
                	add	x2, x1, x0
                	mov	x0, x1
-               	b	<addr>
+               	cmp	x0, x2
+               	b.hs	<addr>
                	mov	x3, #0x0                // =0
                	str	x3, [x0]
                	add	x0, x0, #0x8

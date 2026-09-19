@@ -129,7 +129,8 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #0x10]
                	add	x29, sp, #0x10
                	mov	x20, #0x3               // =3
-               	b	<addr>
+               	cmp	w20, #0x13
+               	b.gt	<addr>
                	cmp	w20, #0xf
                	b.eq	<addr>
                	cmp	w20, #0xf

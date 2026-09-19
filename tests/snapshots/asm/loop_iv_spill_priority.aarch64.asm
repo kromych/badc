@@ -41,7 +41,9 @@ Disassembly of section .text:
                	add	x1, x1, #0x8
                	mov	w13, w1
                	mov	x3, x0
-               	b	<addr>
+               	mov	w1, w0
+               	cmp	w1, #0x3e8
+               	b.hs	<addr>
                	mov	w4, w3
                	and	x3, x1, #0x7
                	ldr	w3, [x2, x3, lsl #2]

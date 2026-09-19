@@ -20,7 +20,8 @@ Disassembly of section .text:
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	mov	x0, x4
-               	b	<addr>
+               	cmp	w0, #0x2
+               	b.ge	<addr>
                	sxtw	x2, w0
                	mul	x3, x2, x7
                	add	x5, x1, x3

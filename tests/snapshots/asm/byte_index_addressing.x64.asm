@@ -180,7 +180,8 @@ Disassembly of section .text:
 <count_zero>:
                	xorq	%rax, %rax
                	movq	%rax, %rcx
-               	jmp	<addr>
+               	cmpl	%esi, %eax
+               	jge	<addr>
                	movslq	%eax, %rdx
                	movsbq	(%rdi,%rdx), %rdx
                	testq	%rdx, %rdx
@@ -195,7 +196,8 @@ Disassembly of section .text:
 <mark>:
                	movq	%rsi, %rax
                	imulq	%rsi, %rax
-               	jmp	<addr>
+               	cmpl	%edx, %eax
+               	jge	<addr>
                	movslq	%eax, %rcx
                	movl	$0x1, %r8d
                	movb	%r8b, (%rdi,%rcx)
@@ -725,7 +727,10 @@ Disassembly of section .text:
                	movb	%cl, (%rax)
                	movb	%cl, 0x1(%rax)
                	movl	$0x2, %ebx
-               	jmp	<addr>
+               	movq	%rbx, %rax
+               	imulq	%rbx, %rax
+               	cmpl	$0x40, %eax
+               	jge	<addr>
                	leaq	<rip>, %rax
                	movslq	%ebx, %rcx
                	movsbq	(%rax,%rcx), %rax

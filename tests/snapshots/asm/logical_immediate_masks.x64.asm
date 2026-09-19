@@ -193,7 +193,8 @@ Disassembly of section .text:
 <mix_loop>:
                	movl	$0x1, %ecx
                	xorq	%rax, %rax
-               	jmp	<addr>
+               	cmpl	%esi, %eax
+               	jge	<addr>
                	movq	%rcx, %r8
                	rorq	$0x39, %r8
                	movslq	%eax, %rcx
@@ -279,7 +280,8 @@ Disassembly of section .text:
                	movq	%r13, 0x10(%rsp)
                	movq	%r14, 0x18(%rsp)
                	xorq	%r13, %r13
-               	jmp	<addr>
+               	cmpl	$0x8, %r13d
+               	jge	<addr>
                	leaq	<rip>, %rax
                	movslq	%r13d, %rcx
                	movq	(%rax,%rcx,8), %rbx
@@ -491,7 +493,8 @@ Disassembly of section .text:
                	movq	%rax, -0x18(%rbp)
                	movl	$0x1, %ecx
                	xorq	%rax, %rax
-               	jmp	<addr>
+               	cmpl	$0x8, %eax
+               	jge	<addr>
                	movq	%rcx, %rsi
                	rorq	$0x39, %rsi
                	movslq	%eax, %rcx

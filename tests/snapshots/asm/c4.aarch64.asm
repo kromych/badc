@@ -1026,7 +1026,9 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	str	x21, [x0]
-               	b	<addr>
+               	ldr	x0, [x20]
+               	cmp	x0, x23
+               	b.lt	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	x21, [x0]
@@ -1881,7 +1883,9 @@ Disassembly of section .text:
                	ldr	x0, [x0]
                	str	x0, [x1]
                	bl	<addr>
-               	b	<addr>
+               	ldr	x0, [x20]
+               	cmp	x0, #0x22
+               	b.ne	<addr>
                	bl	<addr>
                	ldr	x0, [x20]
                	cmp	x0, #0x22
@@ -1913,7 +1917,9 @@ Disassembly of section .text:
                	cmp	x0, #0x8a
                	b.ne	<addr>
                	bl	<addr>
-               	b	<addr>
+               	ldr	x0, [x20]
+               	cmp	x0, #0x9f
+               	b.ne	<addr>
                	bl	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
@@ -1988,7 +1994,9 @@ Disassembly of section .text:
                	b.ne	<addr>
                	bl	<addr>
                	mov	x21, #0x0               // =0
-               	b	<addr>
+               	ldr	x0, [x20]
+               	cmp	x0, #0x29
+               	b.eq	<addr>
                	mov	x0, #0x8e               // =142
                	bl	<addr>
                	adrp	x0, <page>
@@ -2153,7 +2161,9 @@ Disassembly of section .text:
                	b.ne	<addr>
                	mov	x21, #0x1               // =1
                	bl	<addr>
-               	b	<addr>
+               	ldr	x0, [x20]
+               	cmp	x0, #0x9f
+               	b.ne	<addr>
                	bl	<addr>
                	add	x21, x21, #0x2
                	ldr	x0, [x20]
@@ -2681,7 +2691,9 @@ Disassembly of section .text:
                	cmp	x0, #0x7b
                	b.ne	<addr>
                	bl	<addr>
-               	b	<addr>
+               	ldr	x0, [x20]
+               	cmp	x0, #0x7d
+               	b.eq	<addr>
                	bl	<addr>
                	ldr	x0, [x20]
                	cmp	x0, #0x7d

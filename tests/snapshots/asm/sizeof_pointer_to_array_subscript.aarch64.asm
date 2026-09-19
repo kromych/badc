@@ -137,7 +137,8 @@ Disassembly of section .text:
                	mov	x9, #0x14               // =20
                	mov	x10, #0x64              // =100
                	mov	x3, x8
-               	b	<addr>
+               	cmp	w3, #0x3
+               	b.ge	<addr>
                	sxtw	x4, w3
                	mul	x6, x4, x9
                	add	x5, x1, x6
@@ -173,7 +174,8 @@ Disassembly of section .text:
                	mov	x9, #0x14               // =20
                	mov	x10, #0x64              // =100
                	mov	x3, x8
-               	b	<addr>
+               	cmp	w3, #0x3
+               	b.ge	<addr>
                	sxtw	x4, w3
                	mul	x6, x4, x9
                	add	x5, x1, x6
@@ -208,7 +210,8 @@ Disassembly of section .text:
                	b.lt	<addr>
                	mov	x1, #0x0                // =0
                	mov	x8, #0xc                // =12
-               	b	<addr>
+               	cmp	w1, #0x2
+               	b.ge	<addr>
                	sxtw	x3, w1
                	mul	x0, x3, x8
                	add	x5, x2, x0
@@ -266,10 +269,12 @@ Disassembly of section .text:
                	b.lt	<addr>
                	mov	x6, #0x0                // =0
                	mov	x12, #0xc               // =12
-               	b	<addr>
+               	cmp	w6, #0x2
+               	b.ge	<addr>
                	mov	x11, #0x0               // =0
                	mov	x3, x11
-               	b	<addr>
+               	cmp	w3, #0x3
+               	b.ge	<addr>
                	sxtw	x7, w6
                	mul	x0, x7, x12
                	add	x8, x2, x0
@@ -311,10 +316,12 @@ Disassembly of section .text:
                	b.lt	<addr>
                	mov	x6, #0x0                // =0
                	mov	x12, #0xc               // =12
-               	b	<addr>
+               	cmp	w6, #0x2
+               	b.ge	<addr>
                	mov	x11, #0x0               // =0
                	mov	x3, x11
-               	b	<addr>
+               	cmp	w3, #0x3
+               	b.ge	<addr>
                	sxtw	x7, w6
                	mul	x0, x7, x12
                	add	x8, x2, x0

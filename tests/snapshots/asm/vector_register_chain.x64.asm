@@ -82,7 +82,8 @@ Disassembly of section .text:
                	movups	%xmm0, -0x50(%rbp,%riz)
                	xorq	%r12, %r12
                	movq	%r12, %rsi
-               	jmp	<addr>
+               	cmpl	$0x30, %r12d
+               	jge	<addr>
                	movq	0x18(%rbx), %rax
                	movslq	%r12d, %rcx
                	addq	%rcx, %rax
@@ -91,7 +92,8 @@ Disassembly of section .text:
                	movl	$0x2, %ecx
                	movups	0x50(%rsp), %xmm14
                	movups	%xmm14, 0x40(%rsp)
-               	jmp	<addr>
+               	testl	%ecx, %ecx
+               	jl	<addr>
                	movslq	%ecx, %rax
                	movq	(%rbx,%rax,8), %rax
                	movslq	%r12d, %rdx
@@ -166,14 +168,16 @@ Disassembly of section .text:
                	movq	%r12, 0x8(%rsp)
                	xorq	%r9, %r9
                	leaq	<rip>, %rbx
-               	jmp	<addr>
+               	cmpl	$0x4, %r9d
+               	jge	<addr>
                	leaq	-0x20(%rbp), %rax
                	movslq	%r9d, %rcx
                	imulq	$0x30, %rcx, %r12
                	leaq	(%rbx,%r12), %rdx
                	movq	%rdx, (%rax,%rcx,8)
                	xorq	%rax, %rax
-               	jmp	<addr>
+               	cmpl	$0x30, %eax
+               	jge	<addr>
                	leaq	(%rbx,%r12), %r8
                	movslq	%eax, %rdx
                	leaq	0x3(%rcx), %rsi
@@ -193,7 +197,8 @@ Disassembly of section .text:
                	xorq	%r9, %r9
                	leaq	<rip>, %rdx
                	movq	%r9, %rcx
-               	jmp	<addr>
+               	cmpl	$0x30, %ecx
+               	jge	<addr>
                	leaq	0x90(%rdx), %rsi
                	movslq	%ecx, %rax
                	movzbq	(%rsi,%rax), %rsi
@@ -293,7 +298,8 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	leaq	<rip>, %rdx
                	leaq	<rip>, %rsi
-               	jmp	<addr>
+               	cmpl	$0x30, %eax
+               	jge	<addr>
                	movslq	%eax, %rcx
                	movzbq	(%rdx,%rcx), %r8
                	leaq	-0x80(%rbp), %rdi

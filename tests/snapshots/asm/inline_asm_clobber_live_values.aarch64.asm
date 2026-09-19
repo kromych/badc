@@ -103,7 +103,8 @@ Disassembly of section .text:
                	mov	x12, x0
                	mov	x8, #0x0                // =0
                	mov	x11, x8
-               	b	<addr>
+               	cmp	x8, x12
+               	b.ge	<addr>
                	madd	x11, x8, x8, x11
                	mov	x0, xzr
                	mov	x1, xzr
@@ -205,7 +206,8 @@ Disassembly of section .text:
                	mov	x8, #0x0                // =0
                	mov	x0, x8
                	mov	x11, x8
-               	b	<addr>
+               	cmp	x8, #0xa
+               	b.ge	<addr>
                	madd	x11, x8, x8, x11
                	mov	x0, xzr
                	mov	x1, xzr

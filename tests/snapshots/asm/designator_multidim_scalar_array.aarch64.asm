@@ -22,7 +22,8 @@ Disassembly of section .text:
                	mov	x1, x0
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	b	<addr>
+               	cmp	w0, #0x4
+               	b.ge	<addr>
                	add	x4, x1, #0x20
                	sxtw	x2, w0
                	lsl	x3, x2, #3
@@ -42,7 +43,8 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	b	<addr>
+               	cmp	w0, #0x4
+               	b.ge	<addr>
                	sxtw	x2, w0
                	lsl	x3, x2, #3
                	add	x4, x1, x3

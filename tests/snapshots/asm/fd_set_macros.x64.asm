@@ -32,14 +32,16 @@ Disassembly of section .text:
                	leaq	-0x80(%rbp), %rcx
                	xorq	%rdx, %rdx
                	movq	%rdx, %rax
-               	jmp	<addr>
+               	cmpl	$0x80, %eax
+               	jge	<addr>
                	movslq	%eax, %rsi
                	movb	%dl, (%rcx,%rsi)
                	incq	%rax
                	cmpl	$0x80, %eax
                	jl	<addr>
                	xorq	%rax, %rax
-               	jmp	<addr>
+               	cmpl	$0x80, %eax
+               	jge	<addr>
                	movslq	%eax, %rdx
                	movsbq	(%rcx,%rdx), %rdx
                	testq	%rdx, %rdx
@@ -166,7 +168,8 @@ Disassembly of section .text:
                	leaq	-0x80(%rbp), %rcx
                	xorq	%rdx, %rdx
                	movq	%rdx, %rax
-               	jmp	<addr>
+               	cmpl	$0x80, %eax
+               	jge	<addr>
                	movslq	%eax, %rsi
                	movb	%dl, (%rcx,%rsi)
                	incq	%rax

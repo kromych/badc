@@ -81,7 +81,8 @@ Disassembly of section .text:
                	subq	$0x10, %rsp
                	movq	%rbx, (%rsp)
                	xorq	%rbx, %rbx
-               	jmp	<addr>
+               	cmpl	$0x14, %ebx
+               	jge	<addr>
                	movq	%rbx, %rdi
                	callq	<addr>
                	testq	%rax, %rax

@@ -25,7 +25,8 @@ Disassembly of section .text:
                	sxth	x4, w0
                	mov	x0, #0x0                // =0
                	stur	w0, [x29, #-0x8]
-               	b	<addr>
+               	cmp	w0, #0x3
+               	b.ge	<addr>
                	ldursw	x1, [x29, #-0x8]
                	add	x1, x1, x0
                	stur	w1, [x29, #-0x8]
@@ -50,7 +51,8 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x0                // =0
                	stur	w0, [x29, #-0x8]
-               	b	<addr>
+               	cmp	w0, #0x3
+               	b.ge	<addr>
                	ldursw	x1, [x29, #-0x8]
                	add	x1, x1, x0
                	stur	w1, [x29, #-0x8]

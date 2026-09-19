@@ -140,7 +140,8 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	xorq	%rax, %rax
-               	jmp	<addr>
+               	cmpl	$0xa, %eax
+               	jge	<addr>
                	movslq	%eax, %rcx
                	leaq	0x2(%rcx), %rdx
                	movslq	%edx, %rdx

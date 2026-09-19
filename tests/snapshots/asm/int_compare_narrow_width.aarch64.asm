@@ -150,7 +150,8 @@ Disassembly of section .text:
                	mov	x6, #0x3                // =3
                	adrp	x3, <page>
                	add	x3, x3, <lo12>
-               	b	<addr>
+               	cmp	w0, #0x14
+               	b.ge	<addr>
                	sxtw	x1, w0
                	mul	x2, x1, x6
                	str	w2, [x3, x1, lsl #2]

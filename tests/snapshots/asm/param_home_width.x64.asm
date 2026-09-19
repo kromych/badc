@@ -27,7 +27,8 @@ Disassembly of section .text:
 
 <step_u8>:
                	xorq	%rax, %rax
-               	jmp	<addr>
+               	cmpl	%esi, %eax
+               	jge	<addr>
                	movq	%rdi, %rcx
                	andq	$0xff, %rcx
                	leaq	(%rcx,%rcx,2), %rcx
@@ -41,7 +42,8 @@ Disassembly of section .text:
 
 <step_u16>:
                	xorq	%rax, %rax
-               	jmp	<addr>
+               	cmpl	%esi, %eax
+               	jge	<addr>
                	movq	%rdi, %rcx
                	andq	$0xffff, %rcx           # imm = 0xFFFF
                	leaq	(%rcx,%rcx,2), %rcx
@@ -55,7 +57,8 @@ Disassembly of section .text:
 
 <step_u32>:
                	xorq	%rax, %rax
-               	jmp	<addr>
+               	cmpl	%esi, %eax
+               	jge	<addr>
                	movl	%edi, %ecx
                	leaq	(%rcx,%rcx,2), %rcx
                	movl	%ecx, %ecx
@@ -70,7 +73,8 @@ Disassembly of section .text:
 <step_i8>:
                	movsbq	%dil, %rdi
                	xorq	%rax, %rax
-               	jmp	<addr>
+               	cmpl	%esi, %eax
+               	jge	<addr>
                	movsbq	%dil, %rcx
                	leaq	-0x3(%rcx), %rdi
                	incq	%rax
@@ -82,7 +86,8 @@ Disassembly of section .text:
 <step_i16>:
                	movswq	%di, %rdi
                	xorq	%rax, %rax
-               	jmp	<addr>
+               	cmpl	%esi, %eax
+               	jge	<addr>
                	movswq	%di, %rcx
                	leaq	-0x3(%rcx), %rdi
                	incq	%rax
@@ -93,7 +98,8 @@ Disassembly of section .text:
 
 <step_i32>:
                	xorq	%rax, %rax
-               	jmp	<addr>
+               	cmpl	%esi, %eax
+               	jge	<addr>
                	subq	$0x3, %rdi
                	incq	%rax
                	cmpl	%esi, %eax
@@ -103,7 +109,8 @@ Disassembly of section .text:
 
 <step_long>:
                	xorq	%rax, %rax
-               	jmp	<addr>
+               	cmpl	%esi, %eax
+               	jge	<addr>
                	subq	$0x3, %rdi
                	incq	%rax
                	cmpl	%esi, %eax
@@ -113,7 +120,8 @@ Disassembly of section .text:
 
 <flip>:
                	xorq	%rax, %rax
-               	jmp	<addr>
+               	cmpl	%esi, %eax
+               	jge	<addr>
                	movq	%rdi, %rcx
                	andq	$0xff, %rcx
                	testl	%ecx, %ecx
@@ -128,7 +136,8 @@ Disassembly of section .text:
 
 <toggle>:
                	xorq	%rax, %rax
-               	jmp	<addr>
+               	cmpl	%esi, %eax
+               	jge	<addr>
                	movl	%edi, %ecx
                	movq	%rcx, %rdi
                	xorq	$0x1, %rdi

@@ -66,18 +66,12 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	xorq	%rdi, %rdi
-               	movq	%rdi, %rax
-               	movq	%rdi, %rax
-               	movq	%rdi, %rax
                	callq	<addr>
                	cmpq	$0xd, %rax
                	jne	<addr>
                	movl	$0x1, %edi
                	callq	<addr>
                	cmpq	$0x17, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x3, %eax
                	popq	%rbp

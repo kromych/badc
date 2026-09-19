@@ -34,14 +34,9 @@ Disassembly of section .text:
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	mov	x0, #0x7                // =7
-               	mov	x0, #0x9                // =9
-               	mov	x0, #0x80000000         // =2147483648
-               	mov	x0, #0xb                // =11
-               	mov	x1, #0x0                // =0
-               	mov	x0, x1
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
+               	mov	x1, #0x0                // =0
                	mov	x2, #0xa                // =10
                	bl	<addr>
                	mov	x17, #0x3039            // =12345

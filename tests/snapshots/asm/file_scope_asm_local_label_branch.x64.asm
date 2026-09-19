@@ -49,9 +49,6 @@ Disassembly of section .text:
                	jne	<addr>
                	leaq	<rip>, %rax
                	movl	(%rax), %eax
-               	testl	%eax, %eax
-               	setne	%al
-               	movzbq	%al, %rax
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x1, %eax
@@ -69,9 +66,6 @@ Disassembly of section .text:
                	movl	(%rax), %eax
                	xorq	$0x1, %rax
                	testl	%eax, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x2, %eax
                	movq	(%rsp), %rbx
@@ -81,7 +75,7 @@ Disassembly of section .text:
                	movq	(%rsp), %rbx
                	leave
                	retq
-               	addb	%dl, -0x48(%rdx)
+               	addb	%al, (%rax)
 
 <pv_unlock>:
                	pushq	%rdx

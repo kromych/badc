@@ -55,10 +55,7 @@ Disassembly of section .text:
                	jne	<addr>
                	movq	-0x8(%rbp), %rax
                	cmpq	$0x2a, %rax
-               	sete	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	je	<addr>
+               	jne	<addr>
                	xorq	%rax, %rax
                	movslq	%eax, %rax
                	leave

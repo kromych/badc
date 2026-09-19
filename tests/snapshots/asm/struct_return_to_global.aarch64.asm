@@ -63,15 +63,13 @@ Disassembly of section .text:
                	ldr	x2, [x0]
                	ldr	x0, [x0, #0x8]
                	add	x0, x2, x0
-               	add	x0, x1, x0
-               	mov	x1, #0x3                // =3
-               	mov	x2, #0x4                // =4
-               	str	x1, [x6]
-               	str	x2, [x6, #0x8]
-               	ldr	x1, [x6]
-               	ldr	x2, [x6, #0x8]
-               	add	x1, x1, x2
+               	add	x2, x1, x0
+               	mov	x0, #0x3                // =3
+               	mov	x1, #0x4                // =4
+               	str	x0, [x6]
+               	str	x1, [x6, #0x8]
                	add	x0, x0, x1
+               	add	x0, x2, x0
                	cmp	x0, #0x4e
                	b.ne	<addr>
                	mov	x0, #0x0                // =0

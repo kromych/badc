@@ -51,9 +51,6 @@ Disassembly of section .text:
                	jne	<addr>
                	movq	-0x18(%rbp), %rax
                	testq	%rax, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x1, %eax
                	movq	(%rsp), %rbx
@@ -80,9 +77,6 @@ Disassembly of section .text:
                	jne	<addr>
                	movq	-0x18(%rbp), %rax
                	cmpq	$0xd, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x2, %eax
                	movq	(%rsp), %rbx
@@ -103,9 +97,6 @@ Disassembly of section .text:
                	movzbq	%al, %rax
                	movb	%al, -0x10(%rbp)
                	movzbq	-0x10(%rbp), %rax
-               	testl	%eax, %eax
-               	setne	%al
-               	movzbq	%al, %rax
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x3, %eax
@@ -127,9 +118,6 @@ Disassembly of section .text:
                	movzbq	%al, %rax
                	movb	%al, -0x10(%rbp)
                	movzbq	-0x10(%rbp), %rax
-               	testl	%eax, %eax
-               	setne	%al
-               	movzbq	%al, %rax
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x4, %eax
@@ -159,9 +147,6 @@ Disassembly of section .text:
                	movq	%rax, -0x8(%rbp)
                	movb	%bl, -0x10(%rbp)
                	movzbq	-0x10(%rbp), %rax
-               	testl	%eax, %eax
-               	setne	%al
-               	movzbq	%al, %rax
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x5, %eax
@@ -188,9 +173,6 @@ Disassembly of section .text:
                	movzbq	%al, %rax
                	movl	%eax, -0x10(%rbp)
                	movslq	-0x10(%rbp), %rax
-               	testl	%eax, %eax
-               	setne	%al
-               	movzbq	%al, %rax
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x6, %eax

@@ -26,11 +26,8 @@ Disassembly of section .text:
                	int3
 
 <main>:
+               	leaq	<rip>, %rax
+               	movl	$0x9, %ecx
+               	movq	%rcx, 0x10(%rax)
                	xorq	%rax, %rax
-               	movq	%rax, %rcx
-               	movq	%rax, %rcx
-               	movq	%rax, %rcx
-               	leaq	<rip>, %rcx
-               	movl	$0x9, %edx
-               	movq	%rdx, 0x10(%rcx)
                	retq

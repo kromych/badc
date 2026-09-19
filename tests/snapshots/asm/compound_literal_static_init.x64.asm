@@ -33,25 +33,26 @@ Disassembly of section .text:
                	leaq	<rip>, %rdx
                	movl	(%rdx), %edx
                	addq	%rdx, %rcx
-               	movl	%ecx, %esi
-               	leaq	<rip>, %rdi
-               	movq	(%rdi), %rcx
-               	movslq	(%rcx), %rdx
-               	incq	%rdx
-               	movl	%edx, (%rcx)
+               	movl	%ecx, %edx
                	leaq	<rip>, %rcx
-               	movq	(%rcx), %rdx
-               	movslq	0x4(%rdx), %r8
-               	addq	$0xa, %r8
-               	movl	%r8d, 0x4(%rdx)
-               	xorq	%rax, %rax
-               	movq	(%rdi), %rax
+               	movq	(%rcx), %rcx
+               	movslq	(%rcx), %rsi
+               	incq	%rsi
+               	movl	%esi, (%rcx)
+               	leaq	<rip>, %rcx
+               	movq	(%rcx), %rcx
+               	movslq	0x4(%rcx), %rsi
+               	addq	$0xa, %rsi
+               	movl	%esi, 0x4(%rcx)
+               	leaq	<rip>, %rax
+               	movq	(%rax), %rax
                	movslq	(%rax), %rax
+               	addq	%rdx, %rax
+               	leaq	<rip>, %rdx
+               	movq	(%rdx), %rcx
+               	movslq	(%rcx), %rsi
                	addq	%rsi, %rax
-               	movq	(%rcx), %rdx
-               	movslq	(%rdx), %rsi
-               	addq	%rsi, %rax
-               	movslq	0x4(%rdx), %rcx
+               	movslq	0x4(%rcx), %rcx
                	addq	%rcx, %rax
                	leaq	<rip>, %rcx
                	movq	(%rcx), %rcx

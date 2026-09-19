@@ -57,8 +57,7 @@ Disassembly of section .text:
                	movk	x0, #0x400f, lsl #48
                	fmov	d17, x0
                	fcmp	d0, d17
-               	cset	x0, gt
-               	cbz	x0, <addr>
+               	b.le	<addr>
                	mov	x0, #0x4                // =4
                	ret
                	adrp	x0, <page>

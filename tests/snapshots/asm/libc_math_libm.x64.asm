@@ -215,21 +215,20 @@ Disassembly of section .text:
                	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
                	movq	%r10, %xmm15
                	xorpd	%xmm15, %xmm0
-               	movabsq	$0x3e112e0be826d695, %rax # imm = 0x3E112E0BE826D695
-               	movq	%rax, %xmm15
+               	movabsq	$0x3e112e0be826d695, %rcx # imm = 0x3E112E0BE826D695
+               	movq	%rcx, %xmm15
                	ucomisd	%xmm15, %xmm0
-               	setb	%al
-               	movzbq	%al, %rax
+               	setb	%cl
+               	movzbq	%cl, %rcx
                	setnp	%r10b
                	movzbq	%r10b, %r10
-               	andq	%r10, %rax
-               	testl	%eax, %eax
+               	andq	%r10, %rcx
+               	testl	%ecx, %ecx
                	jne	<addr>
                	movl	$0x9, %eax
                	movq	(%rsp), %rbx
                	leave
                	retq
-               	xorq	%rax, %rax
                	movq	(%rsp), %rbx
                	leave
                	retq

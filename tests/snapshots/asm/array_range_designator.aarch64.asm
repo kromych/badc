@@ -47,15 +47,13 @@ Disassembly of section .text:
                	mov	x9, x0
                	blr	x9
                	cmp	w0, #0x16
-               	cset	x0, ne
-               	cbnz	x0, <addr>
+               	b.ne	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	add	x0, x0, x22
                	ldrsw	x0, [x0, #0x10]
                	cmp	w0, #0x7
-               	cset	x0, ne
-               	cbnz	x0, <addr>
+               	b.ne	<addr>
                	add	x20, x20, #0x1
                	cmp	w20, #0x2
                	b.lt	<addr>
@@ -64,18 +62,14 @@ Disassembly of section .text:
                	b.ne	<addr>
                	bl	<addr>
                	cmp	w0, #0xb
-               	cset	x0, ne
-               	cbnz	x0, <addr>
-               	mov	x0, #0x0                // =0
+               	b.ne	<addr>
                	bl	<addr>
                	cmp	w0, #0xb
                	b.ne	<addr>
                	bl	<addr>
                	cmp	w0, #0xb
-               	cset	x0, ne
-               	cbnz	x0, <addr>
+               	b.ne	<addr>
                	mov	x0, #0x0                // =0
-               	mov	x1, x0
                	ldp	x29, x30, [sp, #0x20]
                	ldr	x22, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x30
@@ -99,9 +93,6 @@ Disassembly of section .text:
 
 <check_const>:
                	mov	x0, #0x0                // =0
-               	mov	x1, x0
-               	mov	x1, x0
-               	mov	x1, x0
                	ret
 
 <dispatch>:
@@ -147,18 +138,14 @@ Disassembly of section .text:
                	b.ne	<addr>
                	bl	<addr>
                	cmp	w0, #0x16
-               	cset	x0, ne
-               	cbnz	x0, <addr>
-               	mov	x0, #0x0                // =0
+               	b.ne	<addr>
                	bl	<addr>
                	cmp	w0, #0x16
                	b.ne	<addr>
                	bl	<addr>
                	cmp	w0, #0x16
-               	cset	x0, ne
-               	cbnz	x0, <addr>
+               	b.ne	<addr>
                	mov	x0, #0x0                // =0
-               	mov	x1, x0
                	sxtw	x1, w0
                	cbz	x1, <addr>
                	mov	x0, x1

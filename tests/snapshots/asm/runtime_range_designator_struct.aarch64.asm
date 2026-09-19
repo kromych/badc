@@ -68,8 +68,7 @@ Disassembly of section .text:
                	b.ne	<addr>
                	ldr	x2, [x2, #0x8]
                	cmp	x2, #0x9
-               	cset	x2, ne
-               	cbnz	x2, <addr>
+               	b.ne	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x3
                	b.lt	<addr>
@@ -79,8 +78,7 @@ Disassembly of section .text:
                	b.ne	<addr>
                	ldr	x0, [x0, #0x38]
                	cmp	x0, #0x6
-               	cset	x0, ne
-               	cbz	x0, <addr>
+               	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
@@ -127,8 +125,6 @@ Disassembly of section .text:
                	ldrsw	x0, [x1]
                	cbnz	x0, <addr>
                	ldr	x0, [x1, #0x8]
-               	cmp	x0, #0x0
-               	cset	x0, ne
                	cbz	x0, <addr>
                	mov	x0, #0x3                // =3
                	add	sp, sp, #0x50
@@ -145,8 +141,7 @@ Disassembly of section .text:
                	b.ne	<addr>
                	ldr	x2, [x2, #0x8]
                	cmp	x2, #0x9
-               	cset	x2, ne
-               	cbnz	x2, <addr>
+               	b.ne	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x3
                	b.le	<addr>
@@ -156,8 +151,7 @@ Disassembly of section .text:
                	b.ne	<addr>
                	ldr	x0, [x0, #0x48]
                	cmp	x0, #0x6
-               	cset	x0, ne
-               	cbz	x0, <addr>
+               	b.eq	<addr>
                	mov	x0, #0x5                // =5
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
@@ -206,16 +200,13 @@ Disassembly of section .text:
                	b.ne	<addr>
                	ldr	x1, [x0, #0x8]
                	cmp	x1, #0x1
-               	cset	x1, ne
-               	cbnz	x1, <addr>
+               	b.ne	<addr>
                	ldrsw	x1, [x0, #0x20]
                	cmp	w1, #0xd
-               	cset	x1, ne
-               	cbnz	x1, <addr>
+               	b.ne	<addr>
                	ldr	x1, [x0, #0x28]
                	cmp	x1, #0x1
-               	cset	x1, ne
-               	cbz	x1, <addr>
+               	b.eq	<addr>
                	mov	x0, #0x6                // =6
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
@@ -224,7 +215,6 @@ Disassembly of section .text:
                	cmp	w0, #0x11
                	b.ne	<addr>
                	mov	x0, #0x0                // =0
-               	mov	x1, x0
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
@@ -242,23 +232,21 @@ Disassembly of section .text:
                	ret
 
 <check_member_range>:
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	mov	x0, #0x0                // =0
-               	str	w0, [x1]
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	mov	x1, #0x0                // =0
+               	str	w1, [x0]
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	ldrsw	x3, [x2]
                	add	x3, x3, #0x1
                	str	w3, [x2]
-               	ldrsw	x1, [x1]
-               	cmp	w1, #0x1
+               	ldrsw	x0, [x0]
+               	cmp	w0, #0x1
                	b.eq	<addr>
                	mov	x0, #0x69               // =105
                	ret
-               	mov	x1, x0
-               	mov	x1, x0
-               	mov	x1, x0
+               	mov	x0, x1
                	ret
 
 <check_row_range>:
@@ -299,8 +287,7 @@ Disassembly of section .text:
                	b.ne	<addr>
                	ldrsw	x2, [x2, #0x4]
                	cmp	w2, #0x5
-               	cset	x2, ne
-               	cbnz	x2, <addr>
+               	b.ne	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x3
                	b.lt	<addr>
@@ -308,8 +295,6 @@ Disassembly of section .text:
                	ldrsw	x1, [x0, #0x18]
                	cbnz	x1, <addr>
                	ldrsw	x0, [x0, #0x1c]
-               	cmp	w0, #0x0
-               	cset	x0, ne
                	cbz	x0, <addr>
                	mov	x0, #0xc                // =12
                	add	sp, sp, #0x20

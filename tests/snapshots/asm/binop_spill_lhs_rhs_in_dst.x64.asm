@@ -54,10 +54,10 @@ Disassembly of section .text:
                	movl	%eax, 0x8(%rdx)
                	movl	$0x5, %eax
                	movl	%eax, 0xc(%rdx)
-               	movl	$0xa, %eax
-               	movl	%eax, 0x10(%rdx)
+               	movl	$0xa, %ecx
+               	movl	%ecx, 0x10(%rdx)
                	xorq	%rax, %rax
-               	movslq	0x10(%rdx), %r8
+               	movq	%rcx, %r8
                	movq	%rax, %rcx
                	cmpl	$0x4, %ecx
                	jg	<addr>

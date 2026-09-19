@@ -79,15 +79,11 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	movq	%rax, (%rcx)
                	movq	%rax, 0x18(%rcx)
-               	movq	%rax, %rcx
                	movq	(%rdi), %rcx
                	cmpq	$0x1, %rcx
                	jne	<addr>
                	movq	0x58(%rdi), %rcx
                	cmpq	$0x16, %rcx
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x4, %eax
                	leave

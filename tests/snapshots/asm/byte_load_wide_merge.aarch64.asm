@@ -79,6 +79,7 @@ Disassembly of section .text:
                	strb	w1, [x0, #0xe]
                	mov	x1, #0x10               // =16
                	strb	w1, [x0, #0xf]
+               	sub	x0, x29, #0x10
                	ldr	w1, [x0]
                	rev	w1, w1
                	mov	x17, #0x3344            // =13124
@@ -99,40 +100,38 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	add	x1, x0, #0x1
-               	ldr	w1, [x1]
-               	rev	w1, w1
+               	ldr	w2, [x1]
+               	rev	w2, w2
                	mov	x17, #0x4455            // =17493
                	movk	x17, #0x2233, lsl #16
-               	cmp	w1, w17
+               	cmp	w2, w17
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	add	x0, x0, #0x3
-               	ldr	w0, [x0]
+               	add	x2, x0, #0x3
+               	ldr	w2, [x2]
                	mov	x17, #0x5544            // =21828
                	movk	x17, #0x7766, lsl #16
-               	cmp	w0, w17
+               	cmp	w2, w17
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x0, x29, #0x10
-               	ldr	x1, [x0]
-               	rev	x1, x1
+               	ldr	x2, [x0]
+               	rev	x2, x2
                	mov	x17, #0x7788            // =30600
                	movk	x17, #0x5566, lsl #16
                	movk	x17, #0x3344, lsl #32
                	movk	x17, #0x1122, lsl #48
-               	cmp	x1, x17
+               	cmp	x2, x17
                	b.eq	<addr>
                	mov	x0, #0x5                // =5
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	add	x1, x0, #0x1
                	ldr	x1, [x1]
                	rev	x1, x1
                	mov	x17, #0x8899            // =34969

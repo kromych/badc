@@ -17,18 +17,17 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	mov	x0, #0x0                // =0
-               	mov	x1, #0x15               // =21
-               	stur	w1, [x29, #-0x8]
-               	ldursw	x1, [x29, #-0x8]
-               	ldursw	x1, [x29, #-0x8]
-               	mov	x1, #0x12               // =18
-               	ldursw	x1, [x29, #-0x8]
-               	add	x1, x1, x1
-               	cmp	w1, #0x2a
+               	mov	x1, #0x0                // =0
+               	mov	x0, #0x15               // =21
+               	stur	w0, [x29, #-0x8]
+               	ldursw	x0, [x29, #-0x8]
+               	ldursw	x0, [x29, #-0x8]
+               	ldursw	x0, [x29, #-0x8]
+               	add	x0, x0, x0
+               	cmp	w0, #0x2a
                	b.eq	<addr>
-               	mov	x0, #0x400              // =1024
-               	sxtw	x0, w0
+               	mov	x1, #0x400              // =1024
+               	sxtw	x0, w1
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret

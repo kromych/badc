@@ -164,8 +164,7 @@ Disassembly of section .text:
                	mov	x17, #0x6f              // =111
                	eor	x0, x0, x17
                	cmp	w0, #0x0
-               	cset	x0, ne
-               	cbz	x0, <addr>
+               	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ldp	x29, x30, [sp], #0x10
                	ret

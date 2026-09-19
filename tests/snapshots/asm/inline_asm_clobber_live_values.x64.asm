@@ -247,7 +247,6 @@ Disassembly of section .text:
                	xorq	%r14, %r14
                	xorq	%r15, %r15
                	xorq	%rbx, %rbx
-               	movq	%rbx, %rax
                	movq	%rbx, %r12
                	cmpq	$0xa, %rbx
                	jge	<addr>
@@ -325,9 +324,6 @@ Disassembly of section .text:
                	xorq	%r10, %r10
                	xorq	%r11, %r11
                	cmpq	$0x18, %r12
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x4, %eax
                	movq	(%rsp), %rbx

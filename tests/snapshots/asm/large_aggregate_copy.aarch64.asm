@@ -40,29 +40,22 @@ Disassembly of section .text:
                	ldrb	w1, [x0]
                	add	x17, x0, #0x2, lsl #12  // =0x2000
                	ldrb	w2, [x17]
-               	ldr	w3, [x0, #0x2328]
-               	mov	x0, #0x0                // =0
-               	mov	x4, x0
-               	mov	x4, x0
-               	mov	x4, x0
-               	mov	x4, x0
-               	mov	x4, x0
+               	ldr	w0, [x0, #0x2328]
                	cbnz	x1, <addr>
-               	cmp	w2, #0x0
-               	cset	x1, ne
-               	cbz	x1, <addr>
+               	cbz	x2, <addr>
                	mov	x0, #0x3                // =3
                	add	sp, sp, #0x2, lsl #12   // =0x2000
                	add	sp, sp, #0x330
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	cmp	w3, #0x4d2
+               	cmp	w0, #0x4d2
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	add	sp, sp, #0x2, lsl #12   // =0x2000
                	add	sp, sp, #0x330
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	mov	x0, #0x0                // =0
                	add	sp, sp, #0x2, lsl #12   // =0x2000
                	add	sp, sp, #0x330
                	ldp	x29, x30, [sp], #0x10

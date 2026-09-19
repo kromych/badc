@@ -15,38 +15,13 @@ Disassembly of section .text:
 
 <file_scope_values>:
                	mov	x0, #0x0                // =0
-               	mov	x1, x0
-               	mov	x1, x0
-               	mov	x1, x0
-               	mov	x1, x0
-               	mov	x1, x0
-               	mov	x1, x0
-               	mov	x1, x0
-               	mov	x0, #0x0                // =0
-               	mov	x1, x0
                	ret
 
 <block_static_values>:
                	mov	x0, #0x0                // =0
-               	mov	x1, x0
-               	mov	x1, x0
-               	mov	x1, x0
-               	mov	x1, x0
-               	mov	x1, x0
-               	mov	x1, x0
-               	mov	x1, x0
-               	mov	x0, #0x0                // =0
                	ret
 
 <block_auto_values>:
-               	mov	x0, #0x0                // =0
-               	mov	x1, x0
-               	mov	x1, x0
-               	mov	x1, x0
-               	mov	x1, x0
-               	mov	x1, x0
-               	mov	x1, x0
-               	mov	x1, x0
                	mov	x0, #0x0                // =0
                	ret
 

@@ -54,8 +54,7 @@ Disassembly of section .text:
                	fmov	d17, x2
                	fsub	d0, d0, d17
                	fcmp	d1, d0
-               	cset	x0, mi
-               	cbz	x0, <addr>
+               	b.pl	<addr>
                	mov	x0, #0x4                // =4
                	ret
                	mov	x0, #0x0                // =0

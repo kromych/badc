@@ -91,13 +91,14 @@ Disassembly of section .text:
                	mov	x17, #0x1092            // =4242
                	cmp	x2, x17
                	b.ne	<addr>
-               	mov	x1, x0
-               	cmp	w1, #0x1
+               	cmp	w0, #0x1
                	b.eq	<addr>
                	mov	x0, #0x6                // =6
                	ret
-               	mov	x0, #0x0                // =0
+               	mov	x0, x1
                	ret
+               	mov	x0, x1
+               	b	<addr>
                	mov	x2, x1
                	b	<addr>
                	mov	x1, #0xa                // =10

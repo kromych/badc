@@ -795,10 +795,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x20, [sp], #0x20
                	ret
-               	mov	x0, #0x4                // =4
-               	mov	x0, #0x1                // =1
                	mov	x0, #0x0                // =0
-               	mov	x1, x0
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x20, [sp], #0x20
                	ret

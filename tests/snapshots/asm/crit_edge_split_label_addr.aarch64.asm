@@ -26,8 +26,12 @@ Disassembly of section .text:
                	cbnz	x0, <addr>
                	ldur	w0, [x29, #-0x30]
                	ldur	w1, [x29, #-0x20]
-               	b	<addr>
-               	cbz	x1, <addr>
+               	and	x0, x0, #0xf
+               	mov	x17, #0x5               // =5
+               	eor	x0, x0, x17
+               	cmp	w0, #0x0
+               	mov	x0, #0x0                // =0
+               	b.ne	<addr>
                	b	<addr>
                	adr	x0, <addr>
                	adrp	x1, <page>
@@ -42,8 +46,12 @@ Disassembly of section .text:
                	stur	w1, [x29, #-0x10]
                	ldur	w1, [x29, #-0x30]
                	ldur	w2, [x29, #-0x20]
+               	and	x1, x1, #0xf
+               	mov	x17, #0x5               // =5
+               	eor	x1, x1, x17
+               	cmp	w1, #0x0
+               	b.ne	<addr>
                	b	<addr>
-               	cbz	x0, <addr>
                	ldursw	x0, [x29, #-0x10]
                	add	x0, x0, #0x2
                	stur	w0, [x29, #-0x10]
@@ -51,26 +59,17 @@ Disassembly of section .text:
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	and	x0, x0, #0xf
-               	mov	x17, #0x5               // =5
-               	eor	x0, x0, x17
-               	cmp	w0, #0x0
-               	mov	x0, #0x0                // =0
-               	b.ne	<addr>
                	and	x1, x1, #0x1
                	cmp	w1, #0x0
                	cset	x1, ne
                	sxtw	x1, w1
+               	cbz	x1, <addr>
                	b	<addr>
-               	and	x1, x1, #0xf
-               	mov	x17, #0x5               // =5
-               	eor	x1, x1, x17
-               	cmp	w1, #0x0
-               	b.ne	<addr>
                	and	x0, x2, #0x2
                	cmp	w0, #0x0
                	cset	x0, ne
                	sxtw	x0, w0
+               	cbz	x0, <addr>
                	b	<addr>
                	mov	x1, x0
                	b	<addr>
@@ -128,9 +127,7 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	x0, [x0]
-               	cmp	x0, #0x0
-               	cset	x0, eq
-               	cbz	x0, <addr>
+               	cbnz	x0, <addr>
                	mov	x0, #0x5                // =5
                	ldp	x29, x30, [sp], #0x10
                	ret

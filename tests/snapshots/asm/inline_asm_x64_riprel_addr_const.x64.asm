@@ -60,21 +60,12 @@ Disassembly of section .text:
                	cmpq	%rax, %rcx
                	jne	<addr>
                	cmpq	%rdi, %rbx
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	jne	<addr>
                	leaq	0x10(%rdx), %rax
                	cmpq	%rax, %r13
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	jne	<addr>
                	leaq	0x8(%rsi), %rax
                	cmpq	%rax, %r14
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x1, %eax
                	movq	(%rsp), %rbx

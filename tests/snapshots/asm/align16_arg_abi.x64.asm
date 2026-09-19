@@ -89,9 +89,9 @@ Disassembly of section .text:
                	movq	(%rax), %rdx
                	movq	0x8(%rax), %rax
                	imulq	$0x3e8, %rax, %rax      # imm = 0x3E8
-               	addq	%rax, %rdx
-               	imulq	$0x7, %rcx, %rax
                	addq	%rdx, %rax
+               	imulq	$0x7, %rcx, %rcx
+               	addq	%rcx, %rax
                	testq	%rdi, %rdi
                	setne	%cl
                	movzbq	%cl, %rcx
@@ -112,9 +112,9 @@ Disassembly of section .text:
                	movq	(%rax), %rbx
                	movq	0x8(%rax), %rax
                	imulq	$0x3e8, %rax, %rax      # imm = 0x3E8
-               	addq	%rax, %rbx
-               	imulq	$0x7, %r9, %rax
                	addq	%rbx, %rax
+               	imulq	$0x7, %r9, %r9
+               	addq	%r9, %rax
                	addq	%rdi, %rax
                	shlq	%rsi
                	addq	%rsi, %rax
@@ -141,9 +141,9 @@ Disassembly of section .text:
                	movq	(%rax), %rbx
                	movq	0x8(%rax), %rax
                	imulq	$0x3e8, %rax, %rax      # imm = 0x3E8
-               	addq	%rax, %rbx
-               	movq	0x30(%rbp), %rax
-               	imulq	$0x7, %rax, %rax
+               	addq	%rbx, %rax
+               	movq	0x30(%rbp), %rbx
+               	imulq	$0x7, %rbx, %rbx
                	addq	%rbx, %rax
                	addq	%rdi, %rax
                	shlq	%rsi
@@ -173,9 +173,9 @@ Disassembly of section .text:
                	movq	(%rax), %rdx
                	movq	0x8(%rax), %rax
                	imulq	$0x3e8, %rax, %rax      # imm = 0x3E8
-               	addq	%rax, %rdx
-               	imulq	$0x7, %rcx, %rax
                	addq	%rdx, %rax
+               	imulq	$0x7, %rcx, %rcx
+               	addq	%rcx, %rax
                	leaq	(%rdi,%rdi,2), %rcx
                	addq	%rcx, %rax
                	cvttsd2si	%xmm0, %rcx
@@ -259,9 +259,9 @@ Disassembly of section .text:
                	movq	(%rax), %rdx
                	movq	0x8(%rax), %rax
                	imulq	$0x3e8, %rax, %rax      # imm = 0x3E8
-               	addq	%rax, %rdx
-               	imulq	$0x7, %rcx, %rax
                	addq	%rdx, %rax
+               	imulq	$0x7, %rcx, %rcx
+               	addq	%rcx, %rax
                	leaq	(%rdi,%rdi,2), %rcx
                	addq	%rcx, %rax
                	leave
@@ -367,12 +367,12 @@ Disassembly of section .text:
                	movq	%r10, 0x8(%rcx)
                	leaq	-0xd0(%rbp), %r10
                	movq	%r10, 0x10(%rcx)
-               	movq	%rax, %rcx
-               	movslq	-0xd0(%rbp), %rdx
-               	cmpl	%edx, %eax
+               	movq	%rax, %rdx
+               	movslq	-0xd0(%rbp), %rcx
+               	cmpl	%ecx, %eax
                	jge	<addr>
-               	leaq	-0x18(%rbp), %rdx
-               	movq	%rdx, %r11
+               	leaq	-0x18(%rbp), %rcx
+               	movq	%rcx, %r11
                	movl	(%r11), %r10d
                	cmpq	$0x30, %r10
                	jae	<addr>
@@ -381,15 +381,15 @@ Disassembly of section .text:
                	jmp	<addr>
                	movq	0x8(%r11), %r10
                	addq	$0x8, 0x8(%r11)
-               	movq	%r10, %rdx
-               	movq	(%rdx), %rsi
-               	leaq	0x1(%rax), %rdx
-               	movslq	%edx, %rdx
-               	imulq	%rsi, %rdx
-               	addq	%rdx, %rcx
-               	incq	%rax
-               	movslq	-0xd0(%rbp), %rdx
-               	cmpl	%edx, %eax
+               	movq	%r10, %rcx
+               	movq	(%rcx), %rsi
+               	leaq	0x1(%rax), %rcx
+               	movslq	%ecx, %rdi
+               	imulq	%rdi, %rsi
+               	addq	%rsi, %rdx
+               	movq	%rcx, %rax
+               	movslq	-0xd0(%rbp), %rcx
+               	cmpl	%ecx, %eax
                	jl	<addr>
                	leaq	-0x18(%rbp), %rax
                	movq	%rax, %r11
@@ -405,7 +405,7 @@ Disassembly of section .text:
                	movq	%r10, 0x8(%r11)
                	addq	$0x10, 0x8(%r11)
                	movq	%r10, %rax
-               	movq	(%rax), %rdx
+               	movq	(%rax), %rcx
                	movq	0x8(%rax), %rax
                	leaq	-0x18(%rbp), %rsi
                	movq	%rsi, %r11
@@ -421,8 +421,8 @@ Disassembly of section .text:
                	movq	(%rsi), %rsi
                	leaq	-0x18(%rbp), %rdi
                	imulq	$0x3e8, %rax, %rax      # imm = 0x3E8
-               	addq	%rdx, %rax
                	addq	%rcx, %rax
+               	addq	%rdx, %rax
                	imulq	$0x7, %rsi, %rcx
                	addq	%rcx, %rax
                	leave
@@ -461,21 +461,18 @@ Disassembly of section .text:
                	movq	0x8(%rcx), %rdx
                	movq	%rdx, 0x8(%rax)
                	popq	%rdx
-               	leaq	-0x160(%rbp), %rcx
-               	movq	(%rcx), %rsi
-               	movq	0x8(%rcx), %rdx
-               	imulq	$0x3e8, %rdx, %rdx      # imm = 0x3E8
-               	addq	%rsi, %rdx
-               	cmpq	$0x1393, %rdx           # imm = 0x1393
+               	leaq	-0x160(%rbp), %rsi
+               	movq	(%rsi), %rdx
+               	movq	0x8(%rsi), %rcx
+               	imulq	$0x3e8, %rcx, %rcx      # imm = 0x3E8
+               	addq	%rdx, %rcx
+               	cmpq	$0x1393, %rcx           # imm = 0x1393
                	jne	<addr>
-               	movq	(%rax), %rdx
+               	movq	(%rax), %rcx
                	movq	0x8(%rax), %rax
                	imulq	$0x3e8, %rax, %rax      # imm = 0x3E8
-               	addq	%rdx, %rax
+               	addq	%rcx, %rax
                	cmpq	$-0x7a8, %rax           # imm = 0xF858
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x1, %eax
                	movq	(%rsp), %rbx
@@ -484,9 +481,7 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	<rip>, %rdi
-               	movl	$0x3, %eax
-               	movq	%rcx, %rsi
-               	movq	%rax, %rcx
+               	movl	$0x3, %ecx
                	movq	0x8(%rsi), %rdx
                	movq	(%rsi), %rsi
                	callq	<addr>

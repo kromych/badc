@@ -221,21 +221,12 @@ Disassembly of section .text:
                	jne	<addr>
                	movslq	0x4(%rax), %rcx
                	cmpl	$0xc8, %ecx
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
                	jne	<addr>
                	movslq	0x8(%rax), %rcx
                	cmpl	$0x12c, %ecx            # imm = 0x12C
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
                	jne	<addr>
                	movslq	0xc(%rax), %rcx
                	cmpl	$0x190, %ecx            # imm = 0x190
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x1, %eax
                	leave
@@ -245,22 +236,13 @@ Disassembly of section .text:
                	jne	<addr>
                	movslq	0x200(%rax), %rax
                	cmpl	$0x258, %eax            # imm = 0x258
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	jne	<addr>
                	leaq	-0x210(%rbp), %rdx
                	movslq	0x204(%rdx), %rax
                	cmpl	$0x2bc, %eax            # imm = 0x2BC
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	jne	<addr>
                	movslq	0x208(%rdx), %rax
                	cmpl	$0x320, %eax            # imm = 0x320
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x2, %eax
                	leave

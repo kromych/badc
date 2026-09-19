@@ -39,10 +39,7 @@ Disassembly of section .text:
                	jne	<addr>
                	movslq	-0x8(%rbp), %rax
                	cmpl	$0x7, %eax
-               	sete	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	je	<addr>
+               	jne	<addr>
                	xorq	%rax, %rax
                	movslq	%eax, %rax
                	leave

@@ -95,9 +95,6 @@ Disassembly of section .text:
                	callq	*%rax
                	movslq	(%rax), %rax
                	cmpl	$0x2a, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x5, %eax
                	movq	(%rsp), %rbx

@@ -78,10 +78,7 @@ Disassembly of section .text:
                	testq	%r13, %r13
                	je	<addr>
                	testq	%r14, %r14
-               	sete	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	je	<addr>
+               	jne	<addr>
                	movl	$0x1, %eax
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
@@ -99,10 +96,7 @@ Disassembly of section .text:
                	testl	%r12d, %r12d
                	jl	<addr>
                	testl	%ebx, %ebx
-               	setl	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	je	<addr>
+               	jge	<addr>
                	movl	$0x2, %eax
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
@@ -135,9 +129,6 @@ Disassembly of section .text:
                	jne	<addr>
                	movq	-0x8(%rbp), %rax
                	cmpq	$0x8, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x4, %eax
                	movq	(%rsp), %rbx
@@ -350,15 +341,9 @@ Disassembly of section .text:
                	jne	<addr>
                	movq	-0x10(%rbp), %rax
                	cmpq	$0x10, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	jne	<addr>
                	movq	-0x8(%rbp), %rax
                	cmpq	$0x3, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x12, %eax
                	movq	(%rsp), %rbx
@@ -391,9 +376,6 @@ Disassembly of section .text:
                	cmpq	$0x10, %rax
                	jne	<addr>
                	movq	-0x8(%rbp), %rax
-               	testq	%rax, %rax
-               	setne	%al
-               	movzbq	%al, %rax
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x14, %eax
@@ -428,9 +410,6 @@ Disassembly of section .text:
                	jne	<addr>
                	movq	-0x8(%rbp), %rax
                	cmpq	$0x5, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x16, %eax
                	movq	(%rsp), %rbx

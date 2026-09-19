@@ -95,8 +95,7 @@ Disassembly of section .text:
                	blr	x9
                	ldrsw	x0, [x0]
                	cmp	w0, #0x2a
-               	cset	x0, ne
-               	cbz	x0, <addr>
+               	b.eq	<addr>
                	mov	x0, #0x5                // =5
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x20, [sp], #0x20

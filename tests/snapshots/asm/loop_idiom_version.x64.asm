@@ -609,16 +609,10 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx
                	addq	$0x9, %rcx
                	cmpq	%rcx, %rdx
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
                	jne	<addr>
                	leaq	<rip>, %rcx
                	addq	$0x29, %rcx
                	cmpq	%rcx, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x5, %eax
                	movq	(%rsp), %rbx
@@ -641,9 +635,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movzbq	0x9(%rax), %rax
                	cmpl	%eax, %ecx
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x6, %eax
                	movq	(%rsp), %rbx

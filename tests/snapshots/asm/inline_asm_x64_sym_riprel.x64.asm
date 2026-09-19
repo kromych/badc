@@ -38,9 +38,6 @@ Disassembly of section .text:
                	incq	%gs:<rip>
                	movq	-0x10(%rbp), %rax
                	testq	%rax, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x1, %eax
                	leave

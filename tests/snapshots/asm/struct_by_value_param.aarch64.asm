@@ -32,6 +32,5 @@ Disassembly of section .text:
                	ret
 
 <main>:
-               	mov	x0, #0xa                // =10
                	mov	x0, #0x0                // =0
                	ret

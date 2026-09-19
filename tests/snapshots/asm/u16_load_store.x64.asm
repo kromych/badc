@@ -51,9 +51,6 @@ Disassembly of section .text:
                	testq	%rcx, %rcx
                	jne	<addr>
                	movsbq	0x1(%rax), %rcx
-               	testl	%ecx, %ecx
-               	setne	%cl
-               	movzbq	%cl, %rcx
                	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x1, %eax
@@ -64,9 +61,6 @@ Disassembly of section .text:
                	jne	<addr>
                	movsbq	0x3(%rax), %rcx
                	cmpl	$0x42, %ecx
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x2, %eax
                	leave

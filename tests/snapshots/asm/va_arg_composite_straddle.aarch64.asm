@@ -116,8 +116,7 @@ Disassembly of section .text:
                	cmp	x1, #0x6f
                	b.ne	<addr>
                	cmp	x0, #0xde
-               	cset	x0, ne
-               	cbz	x0, <addr>
+               	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10

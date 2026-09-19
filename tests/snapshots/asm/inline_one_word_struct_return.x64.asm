@@ -27,17 +27,17 @@ Disassembly of section .text:
 
 <main>:
                	xorq	%rax, %rax
-               	movq	%rax, %rcx
+               	movq	%rax, %rdx
                	cmpl	$0x5, %eax
                	jge	<addr>
-               	leaq	0x1(%rax), %rdx
-               	movslq	%edx, %rdx
-               	imulq	$0xa, %rdx, %rdx
-               	addq	%rdx, %rcx
-               	incq	%rax
+               	leaq	0x1(%rax), %rcx
+               	movslq	%ecx, %rsi
+               	imulq	$0xa, %rsi, %rsi
+               	addq	%rsi, %rdx
+               	movq	%rcx, %rax
                	cmpl	$0x5, %eax
                	jl	<addr>
-               	cmpq	$0x96, %rcx
+               	cmpq	$0x96, %rdx
                	jne	<addr>
                	xorq	%rax, %rax
                	movslq	%eax, %rax

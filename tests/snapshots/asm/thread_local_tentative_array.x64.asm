@@ -35,7 +35,7 @@ Disassembly of section .text:
                	retq
                	movl	$0x63, %ecx
                	movl	%ecx, (%rax)
-               	movslq	(%rax), %rax
+               	movslq	%ecx, %rax
                	retq
 
 <second_thread_result>:

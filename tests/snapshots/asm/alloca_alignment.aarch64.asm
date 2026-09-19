@@ -95,15 +95,12 @@ Disassembly of section .text:
                	mov	x17, #0x16              // =22
                	eor	x0, x0, x17
                	cmp	w0, #0x0
-               	cset	x0, eq
-               	cbz	x0, <addr>
+               	b.ne	<addr>
                	ldrb	w0, [x1, #0x20]
                	mov	x17, #0x21              // =33
                	eor	x0, x0, x17
                	cmp	w0, #0x0
-               	cset	x0, eq
-               	cbz	x0, <addr>
-               	mov	x0, #0x1                // =1
+               	b.ne	<addr>
                	mov	x0, #0x0                // =0
                	sxtw	x0, w0
                	sub	sp, x29, #0x10

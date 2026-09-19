@@ -122,8 +122,7 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x2                // =2
                	bl	<addr>
-               	sxtw	x0, w0
-               	cmp	x0, #0x16
+               	cmp	w0, #0x16
                	b.eq	<addr>
                	mov	x0, #0x6                // =6
                	ldp	x29, x30, [sp], #0x10

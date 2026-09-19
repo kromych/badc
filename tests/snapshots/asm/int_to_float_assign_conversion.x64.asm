@@ -103,14 +103,8 @@ Disassembly of section .text:
                	movl	$0x80000000, %r10d      # imm = 0x80000000
                	movq	%r10, %xmm15
                	xorpd	%xmm15, %xmm1
-               	ucomiss	%xmm1, %xmm0
-               	setb	%al
-               	movzbq	%al, %rax
-               	setnp	%r10b
-               	movzbq	%r10b, %r10
-               	andq	%r10, %rax
-               	testq	%rax, %rax
-               	je	<addr>
+               	ucomiss	%xmm0, %xmm1
+               	jbe	<addr>
                	movl	$0x5, %eax
                	popq	%rbp
                	retq

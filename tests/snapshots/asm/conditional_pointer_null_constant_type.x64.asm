@@ -33,29 +33,8 @@ Disassembly of section .text:
                	movl	$0x1, %ecx
                	movl	%ecx, (%rax)
                	movq	%rcx, 0x8(%rax)
-               	movl	$0x2a, %edx
-               	movl	%edx, 0x10(%rax)
-               	movq	%rax, %rdx
-               	movslq	0x10(%rdx), %rdx
-               	cmpl	$0x2a, %edx
-               	je	<addr>
-               	movq	%rcx, %rax
-               	leave
-               	retq
-               	movq	%rax, %rcx
-               	movslq	0x10(%rcx), %rcx
-               	cmpl	$0x2a, %ecx
-               	je	<addr>
-               	movl	$0x2, %eax
-               	leave
-               	retq
-               	movslq	0x10(%rax), %rax
-               	cmpl	$0x2a, %eax
-               	je	<addr>
-               	movl	$0x3, %eax
-               	leave
-               	retq
-               	leaq	-0x18(%rbp), %rax
+               	movl	$0x2a, %ecx
+               	movl	%ecx, 0x10(%rax)
                	testq	%rax, %rax
                	je	<addr>
                	movq	%rax, %rcx

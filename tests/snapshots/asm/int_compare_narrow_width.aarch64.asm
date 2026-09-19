@@ -50,10 +50,7 @@ Disassembly of section .text:
                	cmp	w4, #0xc
                	b.gt	<addr>
                	cmp	w4, #0xc
-               	cset	x2, ge
-               	cmp	w2, #0x0
-               	cset	x2, eq
-               	cbz	x2, <addr>
+               	b.ge	<addr>
                	mov	x0, #0x6                // =6
                	ret
                	cmp	w0, w7
@@ -113,38 +110,32 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x19               // =25
                	ret
-               	adrp	x2, <page>
-               	add	x2, x2, <lo12>
-               	ldr	x0, [x2]
-               	sxtb	x1, w0
-               	ldr	x0, [x2]
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	ldr	x0, [x1]
+               	sxtb	x2, w0
+               	ldr	x0, [x1]
                	and	x0, x0, #0xff
-               	ldr	x2, [x2]
-               	sxth	x3, w2
-               	cmp	w1, #0x0
+               	ldr	x1, [x1]
+               	sxth	x3, w1
+               	cmp	w2, #0x0
                	b.ge	<addr>
                	mov	x17, #-0x6e             // =-110
-               	cmp	w1, w17
-               	cset	x2, ne
-               	cbz	x2, <addr>
+               	cmp	w2, w17
+               	b.eq	<addr>
                	mov	x0, #0x1d               // =29
                	ret
                	cmp	w0, #0x0
                	b.le	<addr>
                	mov	x17, #0x92              // =146
-               	eor	x2, x0, x17
-               	cmp	w2, #0x0
-               	cset	x2, ne
-               	cbz	x2, <addr>
+               	eor	x0, x0, x17
+               	cmp	w0, #0x0
+               	b.eq	<addr>
                	mov	x0, #0x1e               // =30
                	ret
-               	cmp	w1, w3
+               	cmp	w2, w3
                	b.eq	<addr>
                	mov	x0, #0x1f               // =31
-               	ret
-               	cmp	w1, w0
-               	b.lt	<addr>
-               	mov	x0, #0x20               // =32
                	ret
                	mov	x0, #0x0                // =0
                	mov	x6, #0x3                // =3
@@ -187,12 +178,10 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x23               // =35
                	ret
-               	mov	x1, #-0x1               // =-1
-               	mov	x0, x1
                	mov	x17, #-0x5              // =-5
                	cmp	w4, w17
                	b.ge	<addr>
-               	mov	x0, x1
+               	mov	x0, #-0x1               // =-1
                	cmp	x0, #0x1
                	b.eq	<addr>
                	mov	x0, #0x26               // =38

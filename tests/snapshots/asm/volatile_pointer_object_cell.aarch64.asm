@@ -21,27 +21,25 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	stur	x0, [x29, #-0x8]
                	ldur	x0, [x29, #-0x8]
-               	ldr	x0, [x0]
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	stur	x1, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	ldr	x1, [x1]
-               	add	x0, x0, x1
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	stur	x1, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	ldr	x1, [x1]
-               	add	x0, x0, x1
-               	cmp	x0, #0x3c
+               	ldr	x1, [x0]
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	stur	x0, [x29, #-0x8]
+               	ldur	x2, [x29, #-0x8]
+               	ldr	x2, [x2]
+               	add	x1, x1, x2
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
+               	stur	x2, [x29, #-0x8]
+               	ldur	x2, [x29, #-0x8]
+               	ldr	x2, [x2]
+               	add	x1, x1, x2
+               	cmp	x1, #0x3c
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
                	stur	x0, [x29, #-0x10]
                	ldur	x0, [x29, #-0x10]
                	ldr	x0, [x0]

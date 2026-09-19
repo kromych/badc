@@ -23,7 +23,7 @@ Disassembly of section .text:
                	ret
                	mov	x1, #0x63               // =99
                	str	w1, [x0]
-               	ldrsw	x0, [x0]
+               	sxtw	x0, w1
                	ret
 
 <main>:

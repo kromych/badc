@@ -25,21 +25,16 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	ldrsw	x0, [x0, #0x8]
                	cmp	w0, #0x3
-               	cset	x0, ne
-               	cbz	x0, <addr>
+               	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, sp
                	mov	x1, sp
-               	add	x3, x29, #0x0
+               	add	x2, x29, #0x0
                	cbz	x0, <addr>
-               	cmp	x1, #0x0
-               	cset	x2, eq
+               	cbz	x1, <addr>
                	cbnz	x2, <addr>
-               	cmp	x3, #0x0
-               	cset	x2, eq
-               	cbz	x2, <addr>
                	mov	x0, #0x2                // =2
                	ldp	x29, x30, [sp], #0x10
                	ret

@@ -214,30 +214,6 @@ Disassembly of section .text:
                	movq	0x8(%rsp), %r12
                	leave
                	retq
-               	movl	$0x1, %eax
-               	movl	$0x2, %eax
-               	movl	$0x3, %eax
-               	movl	$0x4, %eax
-               	movl	$0x5, %eax
-               	movl	$0x6, %eax
-               	movl	$0x7, %eax
-               	movl	$0x8, %eax
-               	movl	$0x9, %eax
-               	movabsq	$-0x1, %rax
-               	movq	%rax, %rcx
-               	movq	%rax, %rcx
-               	movl	$0x1, %eax
-               	movl	$0x2, %eax
-               	movl	$0x3, %eax
-               	movl	$0x4, %eax
-               	movl	$0x5, %eax
-               	movl	$0x6, %eax
-               	movl	$0x7, %eax
-               	movl	$0x8, %eax
-               	movl	$0x9, %eax
-               	movl	$0xa, %eax
-               	movabsq	$-0x1, %rax
-               	movq	%rax, %rcx
                	xorq	%rdi, %rdi
                	callq	<addr>
                	cmpq	$0xff, %rax

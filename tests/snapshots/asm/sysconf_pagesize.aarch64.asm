@@ -34,8 +34,7 @@ Disassembly of section .text:
                	b.lt	<addr>
                	mov	x17, #0x100000          // =1048576
                	cmp	x0, x17
-               	cset	x0, gt
-               	cbz	x0, <addr>
+               	b.le	<addr>
                	mov	x0, #0x3                // =3
                	ldp	x29, x30, [sp], #0x10
                	ret

@@ -77,8 +77,7 @@ Disassembly of section .text:
                	movq	%rbx, %rcx
                	testl	%ecx, %ecx
                	jg	<addr>
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	je	<addr>
                	movl	$0x1, %eax
                	movq	(%rsp), %rbx
@@ -181,8 +180,6 @@ Disassembly of section .text:
                	movq	0x8(%rsp), %r12
                	leave
                	retq
-               	movl	$0x21, %eax
-               	movl	$0x40, %eax
                	leaq	<rip>, %rax
                	movslq	(%rax), %rcx
                	incq	%rcx

@@ -45,8 +45,7 @@ Disassembly of section .text:
                	b.ne	<addr>
                	ldur	x0, [x29, #-0x8]
                	cmp	x0, #0x2a
-               	cset	x0, eq
-               	cbz	x0, <addr>
+               	b.ne	<addr>
                	mov	x0, #0x0                // =0
                	sxtw	x0, w0
                	add	sp, sp, #0x10

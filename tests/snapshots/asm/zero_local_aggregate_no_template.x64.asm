@@ -57,39 +57,30 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x210, %rsp            # imm = 0x210
                	movq	%rbx, (%rsp)
-               	movl	$0x1, %eax
-               	movq	%rax, %rcx
                	leaq	-0x10(%rbp), %rcx
                	movq	$0x0, (%rcx)
                	movl	$0x0, 0x8(%rcx)
-               	movq	%rax, %rdx
-               	movq	%rax, %rdx
-               	leaq	<rip>, %rdx
-               	pushq	%rax
-               	movq	(%rdx), %rax
-               	movq	%rax, (%rcx)
-               	movzbq	0x8(%rdx), %rax
-               	movb	%al, 0x8(%rcx)
-               	movzbq	0x9(%rdx), %rax
-               	movb	%al, 0x9(%rcx)
-               	movzbq	0xa(%rdx), %rax
-               	movb	%al, 0xa(%rcx)
-               	movzbq	0xb(%rdx), %rax
-               	movb	%al, 0xb(%rcx)
-               	popq	%rax
-               	movq	%rax, %rdx
+               	leaq	<rip>, %rax
+               	pushq	%rdx
+               	movq	(%rax), %rdx
+               	movq	%rdx, (%rcx)
+               	movzbq	0x8(%rax), %rdx
+               	movb	%dl, 0x8(%rcx)
+               	movzbq	0x9(%rax), %rdx
+               	movb	%dl, 0x9(%rcx)
+               	movzbq	0xa(%rax), %rdx
+               	movb	%dl, 0xa(%rcx)
+               	movzbq	0xb(%rax), %rdx
+               	movb	%dl, 0xb(%rcx)
+               	popq	%rdx
                	movl	$0x9, %eax
                	xorps	%xmm14, %xmm14
                	movups	%xmm14, (%rcx)
                	movl	%eax, (%rcx)
                	xorq	%rax, %rax
-               	leaq	-0x10(%rbp), %rcx
                	movl	%eax, 0x4(%rcx)
                	movl	%eax, 0x8(%rcx)
                	movl	%eax, 0xc(%rcx)
-               	movl	$0x1, %ecx
-               	movq	%rcx, %rdx
-               	movq	%rcx, %rdx
                	leaq	-0x200(%rbp), %rcx
                	xorps	%xmm14, %xmm14
                	movups	%xmm14, (%rcx)
@@ -141,9 +132,6 @@ Disassembly of section .text:
                	movq	0x8(%rcx), %rdx
                	movq	%rdx, 0x8(%rax)
                	popq	%rdx
-               	movl	$0x1, %ecx
-               	movq	%rcx, %rdx
-               	movq	%rcx, %rdx
                	xorps	%xmm14, %xmm14
                	movups	%xmm14, (%rax)
                	leaq	-<rip>, %rcx      # <addr>

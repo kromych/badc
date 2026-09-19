@@ -23,7 +23,5 @@ Disassembly of section .text:
                	b	<addr>
 
 <main>:
-               	mov	x0, #0xb                // =11
-               	mov	x0, #0x13               // =19
                	mov	x0, #0x1e               // =30
                	ret

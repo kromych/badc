@@ -40,8 +40,7 @@ Disassembly of section .text:
                	cbnz	x1, <addr>
                	ldrsh	x0, [x0, #0xe]
                	cmp	w0, #0x15
-               	cset	x0, ne
-               	cbz	x0, <addr>
+               	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10

@@ -38,10 +38,7 @@ Disassembly of section .text:
                	movl	$0x42286666, %eax       # imm = 0x42286666
                	movq	%rax, %xmm15
                	ucomiss	%xmm15, %xmm0
-               	seta	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	je	<addr>
+               	jbe	<addr>
                	leaq	<rip>, %rdi
                	cvtss2sd	%xmm0, %xmm0
                	movb	$0x1, %al
@@ -59,10 +56,7 @@ Disassembly of section .text:
                	movl	$0x4640e600, %eax       # imm = 0x4640E600
                	movq	%rax, %xmm15
                	ucomiss	%xmm15, %xmm0
-               	seta	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	je	<addr>
+               	jbe	<addr>
                	leaq	<rip>, %rdi
                	cvtss2sd	%xmm0, %xmm0
                	movb	$0x1, %al
@@ -86,10 +80,7 @@ Disassembly of section .text:
                	movq	%r10, %xmm15
                	xorpd	%xmm15, %xmm1
                	ucomisd	%xmm1, %xmm0
-               	seta	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	je	<addr>
+               	jbe	<addr>
                	leaq	<rip>, %rdi
                	movb	$0x1, %al
                	callq	<addr>
@@ -106,10 +97,7 @@ Disassembly of section .text:
                	movl	$0x4f802666, %eax       # imm = 0x4F802666
                	movq	%rax, %xmm15
                	ucomiss	%xmm15, %xmm0
-               	seta	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	je	<addr>
+               	jbe	<addr>
                	leaq	<rip>, %rdi
                	cvtss2sd	%xmm0, %xmm0
                	movb	$0x1, %al

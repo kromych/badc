@@ -64,16 +64,15 @@ Disassembly of section .text:
                	testl	%eax, %eax
                	jne	<addr>
                	movq	%rcx, %rsi
+               	jmp	<addr>
+               	cmpq	%rsi, %rcx
+               	jne	<addr>
                	movsbq	(%rcx), %r8
                	movsbq	(%rcx,%rdx), %rcx
                	addq	%r8, %rcx
                	movslq	%ecx, %rcx
                	addq	%rcx, %r9
                	movq	%r12, %rsp
-               	jmp	<addr>
-               	cmpq	%rsi, %rcx
-               	jne	<addr>
-               	jmp	<addr>
                	incq	%rax
                	cmpl	$0x40, %eax
                	jl	<addr>

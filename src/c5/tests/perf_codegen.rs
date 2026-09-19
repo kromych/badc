@@ -595,7 +595,6 @@ fn x64_zero_test_of_a_loaded_byte_reads_memory() {
 /// second operand of `&&`, the return of an inlined predicate -- decides
 /// the branch through the flags.
 #[test]
-#[ignore = "TODO: a comparison reaching its branch through a one-input phi is materialized"]
 fn comparison_behind_a_join_branches_on_the_flags() {
     const BOTH: &str = "int g(int);\n\
         int both(int a, int b) { if (a < 3 && b < 7) return g(a); return 0; }\n";
@@ -613,6 +612,63 @@ fn comparison_behind_a_join_branches_on_the_flags() {
         );
     }
     m.finish();
+}
+
+/// The SSA dump of `name`, at `-O` or at the default level.
+fn ssa_dump(src: &str, name: &str, optimize: bool) -> String {
+    use crate::{CompileOptions, Compiler, NativeOptions, OutputKind};
+    let target = Target::LinuxX64;
+    let program = Compiler::with_options(
+        src.to_string(),
+        target,
+        CompileOptions::default()
+            .with_no_entry_point(true)
+            .with_optimize(optimize),
+    )
+    .compile()
+    .unwrap_or_else(|e| panic!("compile: {e}"));
+    let native = if optimize {
+        NativeOptions::new().with_optimize()
+    } else {
+        NativeOptions::new()
+    };
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..native.with_dump_ssa()
+    };
+    let dump = crate::c5::codegen::lower_for(&program, target, opts)
+        .unwrap_or_else(|e| panic!("lower: {e:?}"))
+        .ssa_dump;
+    let head = format!("; name={name}\n");
+    let start = dump.find(&head).expect("function in the dump") + head.len();
+    let body = &dump[start..];
+    body.split("\n; ").next().unwrap_or(body).to_string()
+}
+
+/// The `-O` pipeline hands the allocator no one-input phi and no block
+/// that only continues its single predecessor; the default level keeps
+/// the blocks the walker made.
+#[test]
+fn straight_line_blocks_are_merged_at_o_only() {
+    const BOTH: &str = "int g(int);\n\
+        int both(int a, int b) { if (a < 3 && b < 7) return g(a); return 0; }\n";
+    let blocks = |dump: &str| dump.matches("\n  block ").count();
+    // A phi whose incoming list closes after its first entry.
+    let one_input = |dump: &str| {
+        dump.lines().any(|l| {
+            l.split_once("Phi { incoming=[")
+                .is_some_and(|(_, rest)| !rest.split(']').next().unwrap_or("").contains(','))
+        })
+    };
+    for (src, name) in [(TALLY, "tally"), (BOTH, "both")] {
+        let dump = ssa_dump(src, name, true);
+        assert!(!one_input(&dump), "{name}: a one-input phi:\n{dump}");
+    }
+    // Entry test, second test, the call, `return 0`.
+    let dump = ssa_dump(BOTH, "both", true);
+    assert_eq!(blocks(&dump), 4, "{dump}");
+    let dump = ssa_dump(BOTH, "both", false);
+    assert_eq!(blocks(&dump), 5, "{dump}");
 }
 
 /// The divisor is a constant once `dv` is inlined.

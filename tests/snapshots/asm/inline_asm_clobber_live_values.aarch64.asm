@@ -204,7 +204,6 @@ Disassembly of section .text:
                	mov	x24, xzr
                	mov	x25, xzr
                	mov	x8, #0x0                // =0
-               	mov	x0, x8
                	mov	x11, x8
                	cmp	x8, #0xa
                	b.ge	<addr>
@@ -289,8 +288,7 @@ Disassembly of section .text:
                	b	<addr>
                	b	<addr>
                	cmp	x11, #0x18
-               	cset	x0, ne
-               	cbz	x0, <addr>
+               	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	ldp	x29, x30, [sp, #0x40]
                	ldp	x24, x25, [sp, #0x20]

@@ -46,50 +46,16 @@ Disassembly of section .text:
                	jne	<addr>
                	movslq	(%rcx), %rax
                	cmpl	$0x6, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	jne	<addr>
                	movslq	(%rdx), %rax
                	cmpl	$0x7, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	jne	<addr>
                	movslq	(%rsi), %rax
                	cmpl	$0x8, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x1, %eax
                	leave
                	retq
-               	movslq	(%rdx), %rax
-               	cmpl	$0x7, %eax
-               	jne	<addr>
-               	movslq	(%rsi), %rax
-               	cmpl	$0x8, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x2, %eax
-               	leave
-               	retq
                	xorq	%rax, %rax
-               	movq	%rax, %rdx
-               	movslq	(%rcx), %rcx
-               	cmpl	$0x6, %ecx
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
-               	jne	<addr>
-               	movq	%rax, %rcx
-               	movq	%rax, %rcx
-               	movq	%rax, %rcx
-               	leave
-               	retq
-               	movl	$0x3, %eax
                	leave
                	retq

@@ -42,24 +42,21 @@ Disassembly of section .text:
                	incq	%rax
                	cmpl	$0xc, %eax
                	jl	<addr>
-               	xorq	%rax, %rax
-               	movq	%rax, %rdx
-               	movq	%rax, %rdx
-               	movq	%rax, %rdx
                	leaq	-0x10(%rbp), %rsi
-               	leaq	<rip>, %rdx
-               	pushq	%rax
-               	movq	(%rdx), %rax
-               	movq	%rax, (%rsi)
-               	movzbq	0x8(%rdx), %rax
-               	movb	%al, 0x8(%rsi)
-               	movzbq	0x9(%rdx), %rax
-               	movb	%al, 0x9(%rsi)
-               	movzbq	0xa(%rdx), %rax
-               	movb	%al, 0xa(%rsi)
-               	movzbq	0xb(%rdx), %rax
-               	movb	%al, 0xb(%rsi)
-               	popq	%rax
+               	leaq	<rip>, %rax
+               	pushq	%rcx
+               	movq	(%rax), %rcx
+               	movq	%rcx, (%rsi)
+               	movzbq	0x8(%rax), %rcx
+               	movb	%cl, 0x8(%rsi)
+               	movzbq	0x9(%rax), %rcx
+               	movb	%cl, 0x9(%rsi)
+               	movzbq	0xa(%rax), %rcx
+               	movb	%cl, 0xa(%rsi)
+               	movzbq	0xb(%rax), %rcx
+               	movb	%cl, 0xb(%rsi)
+               	popq	%rcx
+               	xorq	%rax, %rax
                	cmpl	$0xc, %eax
                	jge	<addr>
                	movslq	%eax, %rdx

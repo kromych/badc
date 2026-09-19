@@ -145,16 +145,10 @@ Disassembly of section .text:
                	movzbq	0x8(%rax), %rcx
                	xorq	$0xff, %rcx
                	testl	%ecx, %ecx
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
                	jne	<addr>
                	movzbq	0x9(%rax), %rax
                	xorq	$0x3f, %rax
                	testl	%eax, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x5, %eax
                	movq	(%rsp), %rbx

@@ -45,8 +45,7 @@ Disassembly of section .text:
                	movk	x0, #0x3fde, lsl #48
                	fmov	d17, x0
                	fcmp	d8, d17
-               	cset	x0, gt
-               	cbz	x0, <addr>
+               	b.le	<addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp, #0x30]
                	ldr	x20, [sp, #0x20]
@@ -66,8 +65,7 @@ Disassembly of section .text:
                	movk	x0, #0x3fec, lsl #48
                	fmov	d17, x0
                	fcmp	d9, d17
-               	cset	x0, gt
-               	cbz	x0, <addr>
+               	b.le	<addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp, #0x30]
                	ldr	x20, [sp, #0x20]
@@ -97,8 +95,7 @@ Disassembly of section .text:
                	movk	x0, #0x3ff0, lsl #48
                	fmov	d17, x0
                	fcmp	d0, d17
-               	cset	x0, gt
-               	cbz	x0, <addr>
+               	b.le	<addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp, #0x30]
                	ldr	x20, [sp, #0x20]

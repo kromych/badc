@@ -671,13 +671,13 @@ Disassembly of section .text:
                	strb	w5, [x0, #0x3]
                	strb	w6, [x0, #0x4]
                	strb	w2, [x0, #0x5]
-               	mov	x4, #0x7                // =7
-               	strb	w4, [x0, #0x6]
-               	mov	x5, #0x8                // =8
-               	strb	w5, [x0, #0x7]
-               	sub	x3, x29, #0x68
+               	mov	x3, #0x7                // =7
+               	strb	w3, [x0, #0x6]
+               	mov	x4, #0x8                // =8
+               	strb	w4, [x0, #0x7]
+               	sub	x5, x29, #0x68
                	ldr	x6, [x0]
-               	str	x6, [x3]
+               	str	x6, [x5]
                	mov	x12, #0x3fe0000000000000 // =4602678819172646912
                	strb	w1, [x7]
                	sub	x0, x29, #0x8
@@ -689,30 +689,30 @@ Disassembly of section .text:
                	strb	w8, [x0, #0x3]
                	mov	x9, #0x6                // =6
                	strb	w9, [x0, #0x4]
-               	strb	w4, [x0, #0x5]
-               	strb	w5, [x0, #0x6]
+               	strb	w3, [x0, #0x5]
+               	strb	w4, [x0, #0x6]
                	mov	x1, #0x9                // =9
                	strb	w1, [x0, #0x7]
-               	sub	x4, x29, #0x58
-               	ldr	x5, [x0]
-               	str	x5, [x4]
+               	sub	x3, x29, #0x58
+               	ldr	x4, [x0]
+               	str	x4, [x3]
                	mov	x13, #0x3fe8000000000000 // =4604930618986332160
-               	add	x5, x0, #0x0
-               	strb	w6, [x5]
+               	add	x4, x0, #0x0
+               	strb	w6, [x4]
                	strb	w7, [x0, #0x1]
                	strb	w8, [x0, #0x2]
                	strb	w9, [x0, #0x3]
-               	mov	x6, #0x7                // =7
-               	strb	w6, [x0, #0x4]
+               	mov	x4, #0x7                // =7
+               	strb	w4, [x0, #0x4]
                	sub	x0, x29, #0x8
-               	mov	x7, #0x8                // =8
-               	strb	w7, [x0, #0x5]
+               	mov	x6, #0x8                // =8
+               	strb	w6, [x0, #0x5]
                	strb	w1, [x0, #0x6]
-               	mov	x8, #0xa                // =10
-               	strb	w8, [x0, #0x7]
-               	sub	x5, x29, #0x48
+               	mov	x7, #0xa                // =10
+               	strb	w7, [x0, #0x7]
+               	sub	x8, x29, #0x48
                	ldr	x9, [x0]
-               	str	x9, [x5]
+               	str	x9, [x8]
                	mov	x14, #0x3ff0000000000000 // =4607182418800017408
                	add	x9, x0, #0x0
                	mov	x10, #0x4               // =4
@@ -721,71 +721,71 @@ Disassembly of section .text:
                	strb	w9, [x0, #0x1]
                	mov	x10, #0x6               // =6
                	strb	w10, [x0, #0x2]
-               	strb	w6, [x0, #0x3]
-               	strb	w7, [x0, #0x4]
+               	strb	w4, [x0, #0x3]
+               	strb	w6, [x0, #0x4]
                	strb	w1, [x0, #0x5]
                	sub	x0, x29, #0x8
-               	strb	w8, [x0, #0x6]
-               	mov	x6, #0xb                // =11
-               	strb	w6, [x0, #0x7]
-               	sub	x1, x29, #0x38
-               	ldr	x7, [x0]
-               	str	x7, [x1]
+               	strb	w7, [x0, #0x6]
+               	mov	x1, #0xb                // =11
+               	strb	w1, [x0, #0x7]
+               	sub	x7, x29, #0x38
+               	ldr	x4, [x0]
+               	str	x4, [x7]
                	mov	x15, #0x3ff4000000000000 // =4608308318706860032
-               	add	x7, x0, #0x0
-               	strb	w9, [x7]
+               	add	x4, x0, #0x0
+               	strb	w9, [x4]
                	strb	w10, [x0, #0x1]
-               	mov	x7, #0x7                // =7
-               	strb	w7, [x0, #0x2]
-               	mov	x8, #0x8                // =8
-               	strb	w8, [x0, #0x3]
+               	mov	x4, #0x7                // =7
+               	strb	w4, [x0, #0x2]
+               	mov	x6, #0x8                // =8
+               	strb	w6, [x0, #0x3]
                	mov	x9, #0x9                // =9
                	strb	w9, [x0, #0x4]
                	mov	x9, #0xa                // =10
                	strb	w9, [x0, #0x5]
                	sub	x0, x29, #0x8
-               	strb	w6, [x0, #0x6]
-               	mov	x9, #0xc                // =12
-               	strb	w9, [x0, #0x7]
-               	sub	x6, x29, #0x28
+               	strb	w1, [x0, #0x6]
+               	mov	x1, #0xc                // =12
+               	strb	w1, [x0, #0x7]
+               	sub	x9, x29, #0x28
                	ldr	x10, [x0]
-               	str	x10, [x6]
+               	str	x10, [x9]
                	mov	x10, #0x3ff8000000000000 // =4609434218613702656
                	add	x20, x0, #0x0
                	mov	x21, #0x6               // =6
                	strb	w21, [x20]
-               	strb	w7, [x0, #0x1]
-               	strb	w8, [x0, #0x2]
-               	mov	x7, #0x9                // =9
-               	strb	w7, [x0, #0x3]
+               	strb	w4, [x0, #0x1]
+               	strb	w6, [x0, #0x2]
+               	mov	x4, #0x9                // =9
+               	strb	w4, [x0, #0x3]
                	sub	x0, x29, #0x8
-               	mov	x7, #0xa                // =10
-               	strb	w7, [x0, #0x4]
-               	mov	x7, #0xb                // =11
-               	strb	w7, [x0, #0x5]
-               	strb	w9, [x0, #0x6]
-               	mov	x7, #0xd                // =13
-               	strb	w7, [x0, #0x7]
-               	sub	x7, x29, #0x18
+               	mov	x4, #0xa                // =10
+               	strb	w4, [x0, #0x4]
+               	mov	x4, #0xb                // =11
+               	strb	w4, [x0, #0x5]
+               	strb	w1, [x0, #0x6]
+               	mov	x1, #0xd                // =13
+               	strb	w1, [x0, #0x7]
+               	sub	x1, x29, #0x18
                	ldr	x0, [x0]
-               	str	x0, [x7]
+               	str	x0, [x1]
                	sub	sp, sp, #0x20
                	str	x15, [sp]
                	str	x10, [sp, #0x10]
-               	mov	x16, x6
+               	mov	x16, x9
                	ldr	x17, [x16]
                	str	x17, [sp, #0x8]
-               	mov	x16, x7
+               	mov	x16, x1
                	ldr	x17, [x16]
                	str	x17, [sp, #0x18]
                	fmov	d0, x11
                	fmov	d2, x12
                	fmov	d4, x13
                	fmov	d6, x14
-               	ldr	d1, [x3]
-               	ldr	d3, [x4]
-               	ldr	d5, [x5]
-               	ldr	d7, [x1]
+               	ldr	d1, [x5]
+               	ldr	d3, [x3]
+               	ldr	d5, [x8]
+               	ldr	d7, [x7]
                	mov	x0, x2
                	bl	<addr>
                	add	sp, sp, #0x20

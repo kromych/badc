@@ -48,9 +48,6 @@ Disassembly of section .text:
                	jne	<addr>
                	movq	0x38(%rax), %rax
                	cmpq	$0x1234568, %rax        # imm = 0x1234568
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x1, %eax
                	leave

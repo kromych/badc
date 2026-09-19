@@ -83,38 +83,6 @@ Disassembly of section .text:
                	incq	%rcx
                	cmpl	$0x13, %ecx
                	jle	<addr>
-               	movabsq	$-0x1, %rax
-               	movq	%rax, %rcx
-               	movq	%rax, %rcx
-               	movq	%rax, %rcx
-               	movq	%rax, %rcx
-               	movq	%rax, %rcx
-               	movl	$0x1, %eax
-               	movl	$0x2, %eax
-               	movl	$0x3, %eax
-               	movl	$0x4, %eax
-               	movl	$0x5, %eax
-               	movl	$0x6, %eax
-               	movl	$0x7, %eax
-               	movl	$0x8, %eax
-               	movl	$0x9, %eax
-               	movabsq	$-0x1, %rax
-               	movq	%rax, %rcx
-               	movq	%rax, %rcx
-               	movq	%rax, %rcx
-               	movl	$0x1, %eax
-               	movl	$0x2, %eax
-               	movl	$0x3, %eax
-               	movl	$0x4, %eax
-               	movl	$0x5, %eax
-               	movl	$0x6, %eax
-               	movl	$0x7, %eax
-               	movl	$0x8, %eax
-               	movl	$0x9, %eax
-               	movl	$0xa, %eax
-               	movabsq	$-0x1, %rax
-               	movq	%rax, %rcx
-               	movq	%rax, %rcx
                	xorq	%rax, %rax
                	retq
                	movl	$0x1, %eax

@@ -21,7 +21,6 @@ Disassembly of section .text:
                	ret
 
 <c1>:
-               	mov	x1, #0x0                // =0
                	add	x0, x0, #0x2
                	lsl	x0, x0, #1
                	add	x0, x0, #0x1
@@ -29,7 +28,6 @@ Disassembly of section .text:
                	ret
 
 <c2>:
-               	mov	x1, #0x1                // =1
                	add	x0, x0, #0x1
                	lsl	x0, x0, #1
                	add	x0, x0, #0x2
@@ -37,7 +35,6 @@ Disassembly of section .text:
                	ret
 
 <c3>:
-               	mov	x1, #0x0                // =0
                	add	x0, x0, #0x4
                	lsl	x0, x0, #1
                	add	x0, x0, #0x3
@@ -45,89 +42,5 @@ Disassembly of section .text:
                	ret
 
 <main>:
-               	mov	x1, #0xb                // =11
-               	mov	x0, x1
-               	mov	x2, #0x0                // =0
-               	mov	x0, x2
-               	mov	x0, #0xc                // =12
-               	mov	x0, #0x1                // =1
-               	mov	x0, #0xe                // =14
-               	mov	x0, #-0x4               // =-4
-               	mov	x1, x0
-               	mov	x1, #0x0                // =0
-               	mov	x2, x1
-               	mov	x2, #-0x3               // =-3
-               	mov	x3, x2
-               	mov	x3, #0x1                // =1
-               	mov	x0, #-0x1               // =-1
-               	mov	x0, #0x0                // =0
-               	mov	x1, x0
-               	mov	x1, #-0x2               // =-2
-               	mov	x2, x1
-               	mov	x2, #0x1                // =1
-               	mov	x2, #-0x3               // =-3
-               	mov	x2, x0
-               	mov	x1, #0x0                // =0
-               	mov	x0, x1
-               	mov	x2, #-0x1               // =-1
-               	mov	x0, x2
-               	mov	x0, #0x1                // =1
-               	mov	x3, x0
-               	mov	x3, #-0x2               // =-2
-               	mov	x0, #0x0                // =0
-               	mov	x1, x0
-               	mov	x1, x0
-               	mov	x2, #0x1                // =1
-               	mov	x1, x2
-               	mov	x1, #-0x1               // =-1
-               	mov	x1, x0
-               	mov	x1, #0x2                // =2
-               	mov	x0, #0x0                // =0
-               	mov	x1, x0
-               	mov	x1, #0x1                // =1
-               	mov	x2, x1
-               	mov	x2, x0
-               	mov	x0, #0x3                // =3
-               	mov	x1, #0x0                // =0
-               	mov	x0, x1
-               	mov	x2, #0x2                // =2
-               	mov	x0, x2
-               	mov	x0, #0x1                // =1
-               	mov	x3, x0
-               	mov	x0, #0x4                // =4
-               	mov	x0, #0x0                // =0
-               	mov	x1, x0
-               	mov	x1, #0x3                // =3
-               	mov	x2, x1
-               	mov	x2, #0x1                // =1
-               	mov	x2, #0x2                // =2
-               	mov	x0, #0x5                // =5
-               	mov	x0, #0x0                // =0
-               	mov	x1, x0
-               	mov	x1, #0x4                // =4
-               	mov	x2, x1
-               	mov	x2, #0x1                // =1
-               	mov	x2, #0x3                // =3
-               	mov	x0, #0x6                // =6
-               	mov	x0, #0x0                // =0
-               	mov	x1, x0
-               	mov	x1, #0x5                // =5
-               	mov	x2, x1
-               	mov	x2, #0x1                // =1
-               	mov	x2, #0x4                // =4
-               	mov	x0, #0x7                // =7
-               	mov	x0, #0x0                // =0
-               	mov	x1, x0
-               	mov	x1, #0x6                // =6
-               	mov	x2, x1
-               	mov	x2, #0x1                // =1
-               	mov	x2, #0x5                // =5
-               	mov	x0, #0x8                // =8
-               	mov	x1, #0x0                // =0
-               	mov	x0, x1
-               	mov	x0, #0x7                // =7
-               	mov	x0, #0x1                // =1
-               	mov	x0, #0x6                // =6
-               	mov	x0, #0x9                // =9
                	mov	x0, #0x0                // =0
                	ret

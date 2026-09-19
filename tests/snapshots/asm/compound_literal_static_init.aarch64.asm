@@ -24,27 +24,30 @@ Disassembly of section .text:
                	add	x2, x2, <lo12>
                	ldr	w2, [x2]
                	add	x1, x1, x2
-               	mov	w3, w1
-               	adrp	x4, <page>
-               	add	x4, x4, <lo12>
-               	ldr	x1, [x4]
-               	ldrsw	x2, [x1]
-               	add	x2, x2, #0x1
-               	str	w2, [x1]
+               	mov	w2, w1
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	ldr	x2, [x1]
-               	ldrsw	x5, [x2, #0x4]
-               	add	x5, x5, #0xa
-               	str	w5, [x2, #0x4]
-               	mov	x0, #0x0                // =0
-               	ldr	x0, [x4]
+               	ldr	x1, [x1]
+               	ldrsw	x3, [x1]
+               	add	x3, x3, #0x1
+               	str	w3, [x1]
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	ldr	x1, [x1]
+               	ldrsw	x3, [x1, #0x4]
+               	add	x3, x3, #0xa
+               	str	w3, [x1, #0x4]
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldr	x0, [x0]
                	ldrsw	x0, [x0]
-               	add	x0, x3, x0
-               	ldr	x2, [x1]
-               	ldrsw	x3, [x2]
+               	add	x0, x2, x0
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
+               	ldr	x1, [x2]
+               	ldrsw	x3, [x1]
                	add	x0, x0, x3
-               	ldrsw	x1, [x2, #0x4]
+               	ldrsw	x1, [x1, #0x4]
                	add	x0, x0, x1
                	adrp	x1, <page>
                	add	x1, x1, <lo12>

@@ -110,9 +110,6 @@ Disassembly of section .text:
                	andq	$0xffff, %rax           # imm = 0xFFFF
                	andq	$0x1ff, %rax            # imm = 0x1FF
                	cmpl	$0x123, %eax            # imm = 0x123
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	je	<addr>
                	movl	$0xa, %eax
                	leave

@@ -27,5 +27,4 @@ Disassembly of section .text:
 
 <main>:
                	movl	$0x64, %eax
-               	movl	$0x64, %eax
                	retq

@@ -98,13 +98,14 @@ Disassembly of section .text:
                	movq	(%rdx), %rdx
                	cmpq	$0x1092, %rdx           # imm = 0x1092
                	jne	<addr>
-               	movq	%rax, %rcx
-               	cmpl	$0x1, %ecx
+               	cmpl	$0x1, %eax
                	je	<addr>
                	movl	$0x6, %eax
                	retq
-               	xorq	%rax, %rax
+               	movq	%rcx, %rax
                	retq
+               	movq	%rcx, %rax
+               	jmp	<addr>
                	movq	%rcx, %rdx
                	jmp	<addr>
                	movl	$0xa, %ecx

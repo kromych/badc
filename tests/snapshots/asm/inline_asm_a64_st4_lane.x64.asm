@@ -35,12 +35,6 @@ Disassembly of section .text:
                	callq	<addr>
                	testq	%rax, %rax
                	je	<addr>
-               	movl	$0x1, %ecx
-               	movq	%rcx, %rax
-               	xorq	%rax, %rax
-               	movq	%rax, %rdx
-               	movq	%rcx, %rdx
-               	movq	%rax, %rdx
                	movl	$0x2a, %eax
                	popq	%rbp
                	retq

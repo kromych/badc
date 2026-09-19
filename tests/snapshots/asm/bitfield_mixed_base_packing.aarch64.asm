@@ -98,8 +98,7 @@ Disassembly of section .text:
                	and	x0, x3, #0xffff
                	and	x0, x0, #0x1ff
                	cmp	w0, #0x123
-               	cset	x0, ne
-               	cbz	x0, <addr>
+               	b.eq	<addr>
                	mov	x0, #0xa                // =10
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10

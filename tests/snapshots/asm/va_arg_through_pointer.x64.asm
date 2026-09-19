@@ -133,9 +133,6 @@ Disassembly of section .text:
                	movq	(%rax), %rax
                	movsbq	0x4(%rax), %rax
                	cmpl	$0x6f, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x3, %eax
                	popq	%rbp

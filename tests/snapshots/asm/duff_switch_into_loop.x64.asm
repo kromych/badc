@@ -87,6 +87,9 @@ Disassembly of section .text:
                	leaq	0x1(%rsi), %rdx
                	movsbq	(%rsi), %rsi
                	movb	%sil, (%rdi)
+               	decq	%rax
+               	testl	%eax, %eax
+               	jg	<addr>
                	jmp	<addr>
                	leaq	<rip>, %r11
                	movq	(%r11,%rcx,8), %r10
@@ -95,10 +98,6 @@ Disassembly of section .text:
                	leaq	0x1(%rdx), %rsi
                	movsbq	(%rdx), %rdx
                	movb	%dl, (%rcx)
-               	jmp	<addr>
-               	decq	%rax
-               	testl	%eax, %eax
-               	jg	<addr>
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>

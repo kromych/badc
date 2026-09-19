@@ -46,12 +46,5 @@ Disassembly of section .text:
                	jmp	<addr>
 
 <main>:
-               	movl	$0x1, %eax
-               	movl	$0x65, %eax
-               	movl	$0x2, %eax
-               	movl	$0x66, %eax
-               	movl	$0x3, %eax
-               	movl	$0x67, %eax
-               	movabsq	$-0x1, %rax
                	xorq	%rax, %rax
                	retq

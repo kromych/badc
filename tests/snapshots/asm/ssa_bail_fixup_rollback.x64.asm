@@ -98,13 +98,12 @@ Disassembly of section .text:
                	testq	%rbx, %rbx
                	je	<addr>
                	movzbq	(%rbx,%rcx), %rdx
+               	jmp	<addr>
+               	xorq	%rdx, %rdx
                	leaq	-0x40(%rbp), %rsi
                	movzbq	(%rsi,%rcx), %rsi
                	xorq	%rsi, %rdx
                	movb	%dl, (%r12,%rcx)
-               	jmp	<addr>
-               	xorq	%rdx, %rdx
-               	jmp	<addr>
                	movl	%eax, %eax
                	incq	%rax
                	movl	%eax, %ecx

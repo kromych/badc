@@ -63,13 +63,5 @@ Disassembly of section .text:
                	jmp	<addr>
 
 <main>:
-               	movl	$0x1, %eax
-               	movq	%rax, %rcx
-               	movq	%rax, %rcx
-               	movl	$0x1, %eax
-               	movl	$0x2, %eax
-               	movq	%rax, %rcx
-               	movl	$0x3, %eax
-               	movq	%rax, %rcx
                	xorq	%rax, %rax
                	retq

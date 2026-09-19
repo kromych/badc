@@ -55,9 +55,6 @@ Disassembly of section .text:
                	movq	(%rcx), %rcx
                	movsbq	0x1(%rcx), %rcx
                	cmpl	$0x66, %ecx
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x4, %eax
                	retq
@@ -98,9 +95,6 @@ Disassembly of section .text:
                	jne	<addr>
                	movq	0x10(%rax), %rcx
                	movq	0x10(%rcx), %rcx
-               	testq	%rcx, %rcx
-               	setne	%cl
-               	movzbq	%cl, %rcx
                	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0xa, %eax

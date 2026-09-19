@@ -50,5 +50,4 @@ Disassembly of section .text:
 
 <main>:
                	mov	x0, #0x12c              // =300
-               	mov	x0, #0x12c              // =300
                	ret

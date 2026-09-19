@@ -44,7 +44,6 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	xorq	%rax, %rax
                	movl	$0xa, %edi
                	callq	<addr>
                	movq	%rax, -0x8(%rbp)
@@ -54,9 +53,6 @@ Disassembly of section .text:
                	cmpl	$0xa, %ecx
                	jne	<addr>
                	cmpl	$0x14, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x2, %eax
                	leave

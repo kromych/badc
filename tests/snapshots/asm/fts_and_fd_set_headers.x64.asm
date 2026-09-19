@@ -79,9 +79,6 @@ Disassembly of section .text:
                	movq	0x30(%rax), %rcx
                	movsbq	(%rcx), %rcx
                	cmpl	$0x2e, %ecx
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x4, %eax
                	movq	(%rsp), %rbx

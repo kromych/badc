@@ -81,16 +81,16 @@ Disassembly of section .text:
                	movl	$0x64, %ecx
                	movl	%ecx, (%rax)
                	leaq	<rip>, %rax
-               	xorq	%rcx, %rcx
-               	movl	%ecx, (%rax)
+               	xorq	%rdx, %rdx
+               	movl	%edx, (%rax)
                	leaq	<rip>, %rax
                	movslq	(%rax), %rcx
                	incq	%rcx
                	movl	%ecx, (%rax)
-               	leaq	<rip>, %rdx
-               	movslq	(%rdx), %rsi
-               	addq	%rsi, %rcx
-               	movl	%ecx, (%rdx)
+               	leaq	<rip>, %rsi
+               	movslq	(%rsi), %rdi
+               	addq	%rdi, %rcx
+               	movl	%ecx, (%rsi)
                	movslq	(%rax), %rax
                	addq	%rcx, %rax
                	cmpl	$0xca, %eax
@@ -137,5 +137,5 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0xb, %eax
                	retq
-               	xorq	%rax, %rax
+               	movq	%rdx, %rax
                	retq

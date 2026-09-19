@@ -26,12 +26,5 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	movl	$0x1, %eax
-               	movl	$0x2, %eax
-               	movl	$0x3, %eax
-               	movl	$0x4, %eax
-               	movl	$0x5, %eax
-               	movl	$0x6, %eax
-               	movl	$0x7, %eax
                	xorq	%rax, %rax
                	retq

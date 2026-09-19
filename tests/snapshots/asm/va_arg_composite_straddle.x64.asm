@@ -99,9 +99,6 @@ Disassembly of section .text:
                	cmpq	$0x6f, %rcx
                	jne	<addr>
                	cmpq	$0xde, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x1, %eax
                	leave

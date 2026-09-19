@@ -60,8 +60,8 @@ Disassembly of section .text:
                	mov	x1, x7
                	cmp	w1, #0x0
                	b.gt	<addr>
-               	sxtw	x0, w0
-               	cbz	x0, <addr>
+               	cmp	w0, #0x0
+               	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
@@ -158,8 +158,6 @@ Disassembly of section .text:
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x21               // =33
-               	mov	x0, #0x40               // =64
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrsw	x1, [x0]

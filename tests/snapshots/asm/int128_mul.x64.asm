@@ -71,9 +71,6 @@ Disassembly of section .text:
                	movabsq	$-0x22409b8b647cc5c5, %r11 # imm = 0xDDBF64749B833A3B
                	movq	%rdi, %r8
                	cmpq	%r11, %rdi
-               	setne	%r8b
-               	movzbq	%r8b, %r8
-               	testq	%r8, %r8
                	je	<addr>
                	movl	$0x1, %r8d
                	testq	%r8, %r8
@@ -157,9 +154,6 @@ Disassembly of section .text:
                	jne	<addr>
                	movabsq	$-0x6a05b5499fbdfde8, %r11 # imm = 0x95FA4AB660420218
                	cmpq	%r11, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x4, %eax
                	testq	%rax, %rax
@@ -170,14 +164,6 @@ Disassembly of section .text:
                	movq	0x10(%rsp), %r13
                	leave
                	retq
-               	xorq	%rax, %rax
-               	movq	%rax, %rcx
-               	movq	%rax, %rcx
-               	movq	%rax, %rcx
-               	movq	%rax, %rcx
-               	movq	%rax, %rcx
-               	xorq	%rax, %rax
-               	movq	%rax, %rcx
                	movabsq	$-0x61c8864680b583eb, %rax # imm = 0x9E3779B97F4A7C15
                	movq	%rdx, %rbx
                	imulq	%rax, %rbx
@@ -209,9 +195,6 @@ Disassembly of section .text:
                	jne	<addr>
                	movabsq	$-0x54b9b0367b5ac859, %r11 # imm = 0xAB464FC984A537A7
                	cmpq	%r11, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x9, %eax
                	testq	%rax, %rax

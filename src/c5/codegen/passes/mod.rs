@@ -15,6 +15,7 @@ pub(crate) mod index_fold;
 pub(crate) mod inline;
 pub(crate) mod ipa_const_param;
 pub(crate) mod layout;
+pub(crate) mod merge_blocks;
 pub(crate) mod mul_add;
 pub(crate) mod narrow;
 pub(crate) mod prune_unreachable;

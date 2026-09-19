@@ -34,30 +34,14 @@ Disassembly of section .text:
                	movl	%eax, -0x10(%rbp)
                	movl	%eax, -0x18(%rbp)
                	movl	%eax, -0x20(%rbp)
-               	movl	$0x1, %ecx
-               	movq	%rcx, %rdx
-               	movq	%rcx, %rdx
-               	movq	%rcx, %rdx
-               	movq	%rcx, %rdx
                	movl	%eax, -0x68(%rbp)
                	movl	%eax, -0x70(%rbp)
                	movl	%eax, -0x78(%rbp)
                	movl	%eax, -0x80(%rbp)
-               	movq	%rcx, %rax
-               	movq	%rcx, %rax
-               	movl	$0x1, %eax
-               	movq	%rax, %rcx
-               	movl	$0xa5a5a5a5, %ecx       # imm = 0xA5A5A5A5
-               	movl	%ecx, -0xc8(%rbp)
-               	movl	%ecx, -0xd0(%rbp)
-               	movl	%ecx, -0xd8(%rbp)
-               	movl	%ecx, -0xe0(%rbp)
-               	movq	%rax, %rcx
-               	movq	%rax, %rcx
-               	movq	%rax, %rcx
-               	xorq	%rax, %rax
-               	movq	%rax, %rcx
-               	movq	%rax, %rcx
+               	movl	%eax, -0xc8(%rbp)
+               	movl	%eax, -0xd0(%rbp)
+               	movl	%eax, -0xd8(%rbp)
+               	movl	%eax, -0xe0(%rbp)
                	xorq	%rax, %rax
                	leave
                	retq

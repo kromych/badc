@@ -48,18 +48,6 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	xorq	%rax, %rax
-               	movq	%rax, %rcx
-               	movl	$0x1, %ecx
-               	movl	$0x64, %ecx
-               	movq	%rcx, %rdx
-               	movl	$0x12d, %edx            # imm = 0x12D
-               	movl	$0x3e9, %eax            # imm = 0x3E9
-               	movl	$0x65, %eax
-               	movl	$0x1, %eax
-               	movl	$0x2, %eax
-               	movl	$0x6, %eax
-               	movl	$0x5, %eax
                	movl	$0x1, %edi
                	callq	<addr>
                	cmpq	$0x8, %rax
@@ -74,12 +62,6 @@ Disassembly of section .text:
                	movl	$0xa, %eax
                	popq	%rbp
                	retq
-               	movl	$0x1, %ecx
-               	movq	%rcx, %rax
-               	movl	$0x2, %eax
-               	movq	%rax, %rdx
-               	xorq	%rax, %rax
-               	movq	%rax, %rcx
                	xorq	%rax, %rax
                	popq	%rbp
                	retq

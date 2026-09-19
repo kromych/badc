@@ -69,15 +69,13 @@ Disassembly of section .text:
                	movq	(%rax), %rdx
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
+               	leaq	(%rcx,%rax), %rdx
+               	movl	$0x3, %eax
+               	movl	$0x4, %ecx
+               	movq	%rax, (%r8)
+               	movq	%rcx, 0x8(%r8)
                	addq	%rcx, %rax
-               	movl	$0x3, %ecx
-               	movl	$0x4, %edx
-               	movq	%rcx, (%r8)
-               	movq	%rdx, 0x8(%r8)
-               	movq	(%r8), %rcx
-               	movq	0x8(%r8), %rdx
-               	addq	%rdx, %rcx
-               	addq	%rcx, %rax
+               	addq	%rdx, %rax
                	cmpq	$0x4e, %rax
                	jne	<addr>
                	xorq	%rax, %rax

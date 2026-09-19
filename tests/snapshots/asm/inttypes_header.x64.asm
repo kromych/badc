@@ -34,26 +34,5 @@ Disassembly of section .text:
                	movl	$0x4, %eax
                	movq	%rax, -0x8(%rbp)
                	xorq	%rax, %rax
-               	movq	%rax, %rdx
-               	movq	%rax, %rdx
-               	movq	%rax, %rcx
-               	movq	%rax, %rdx
-               	movq	%rax, %rdx
-               	movq	%rax, %rcx
-               	xorq	%rax, %rax
-               	movq	%rax, %rdx
-               	movq	%rax, %rcx
-               	movq	%rax, %rcx
-               	movq	%rax, %rdx
-               	movq	%rax, %rdx
-               	movq	%rax, %rcx
-               	xorq	%rax, %rax
-               	movq	%rax, %rcx
-               	movq	%rax, %rdx
-               	movq	%rax, %rdx
-               	movq	%rax, %rcx
-               	movq	%rax, %rdx
-               	movq	%rax, %rdx
-               	xorq	%rax, %rax
                	leave
                	retq

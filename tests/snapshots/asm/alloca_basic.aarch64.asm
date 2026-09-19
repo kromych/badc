@@ -152,8 +152,7 @@ Disassembly of section .text:
                	mov	x17, #0x41              // =65
                	eor	x0, x0, x17
                	cmp	w0, #0x0
-               	cset	x0, ne
-               	cbz	x0, <addr>
+               	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	sub	sp, x29, #0x30
                	ldp	x29, x30, [sp, #0x30]
@@ -169,8 +168,7 @@ Disassembly of section .text:
                	mov	x17, #0x42              // =66
                	eor	x0, x0, x17
                	cmp	w0, #0x0
-               	cset	x0, ne
-               	cbz	x0, <addr>
+               	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	sub	sp, x29, #0x30
                	ldp	x29, x30, [sp, #0x30]

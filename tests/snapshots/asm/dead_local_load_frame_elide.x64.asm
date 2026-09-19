@@ -61,18 +61,17 @@ Disassembly of section .text:
                	movb	%cl, 0x5(%rax)
                	movl	$0x7, %ecx
                	movb	%cl, 0x6(%rax)
-               	leaq	-0x8(%rbp), %rax
-               	movl	$0x8, %ecx
-               	movb	%cl, 0x7(%rax)
-               	movq	(%rax), %rcx
-               	bswapq	%rcx
+               	leaq	-0x8(%rbp), %rdi
+               	movl	$0x8, %eax
+               	movb	%al, 0x7(%rdi)
+               	movq	(%rdi), %rax
+               	bswapq	%rax
                	movabsq	$0x102030405060708, %r11 # imm = 0x102030405060708
-               	cmpq	%r11, %rcx
+               	cmpq	%r11, %rax
                	je	<addr>
                	movl	$0x1, %eax
                	leave
                	retq
-               	movq	%rax, %rdi
                	callq	<addr>
                	cmpq	$0x9, %rax
                	je	<addr>

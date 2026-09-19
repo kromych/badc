@@ -45,9 +45,6 @@ Disassembly of section .text:
                	movl	-0x20(%rbp), %eax
                	xorq	$0x14, %rax
                	testl	%eax, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x1, %eax
                	movq	(%rsp), %rbx
@@ -66,9 +63,6 @@ Disassembly of section .text:
                	movl	-0x20(%rbp), %eax
                	xorq	$0x14, %rax
                	testl	%eax, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x2, %eax
                	movq	(%rsp), %rbx
@@ -90,9 +84,6 @@ Disassembly of section .text:
                	movl	-0x18(%rbp), %eax
                	xorq	$0x8, %rax
                	testl	%eax, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x3, %eax
                	movq	(%rsp), %rbx
@@ -111,9 +102,6 @@ Disassembly of section .text:
                	jne	<addr>
                	movq	-0x10(%rbp), %rax
                	cmpq	$0xc8, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x4, %eax
                	movq	(%rsp), %rbx

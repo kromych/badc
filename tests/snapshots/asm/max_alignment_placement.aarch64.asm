@@ -87,15 +87,13 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	ldr	x0, [x0]
                	cmp	x0, #0x16
-               	cset	x0, ne
-               	cbnz	x0, <addr>
+               	b.ne	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	add	x0, x0, #0x10, lsl #12  // =0x10000
                	ldr	x0, [x0]
                	cmp	x0, #0x21
-               	cset	x0, ne
-               	cbz	x0, <addr>
+               	b.eq	<addr>
                	mov	x0, #0x1e               // =30
                	ret
                	mov	x0, #0x0                // =0

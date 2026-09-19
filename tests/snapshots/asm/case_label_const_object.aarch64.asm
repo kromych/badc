@@ -39,7 +39,6 @@ Disassembly of section .text:
                	mov	x2, #0x3                // =3
                	str	w2, [x0, #0xc]
                	mov	x0, x1
-               	mov	x0, x1
                	sub	sp, x29, #0x10
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
@@ -48,32 +47,17 @@ Disassembly of section .text:
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	mov	x0, #0x6                // =6
-               	mov	x0, #0x4                // =4
-               	mov	x0, #0x2                // =2
-               	mov	x1, x0
-               	mov	x1, #0x0                // =0
-               	mov	x1, #0x1                // =1
-               	mov	x0, #0x3                // =3
-               	mov	x0, #0x9                // =9
-               	mov	x1, x0
-               	mov	x1, #0x8                // =8
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
+               	mov	x0, #0x9                // =9
                	str	w0, [x1]
-               	mov	x0, #0x1                // =1
-               	mov	x1, x0
-               	mov	x1, x0
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrsw	x0, [x0]
                	cmp	w0, #0x3e8
-               	cset	x1, eq
                	mov	x0, #0x0                // =0
-               	cbz	x1, <addr>
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	b.ne	<addr>
+               	ldrsw	x0, [x1]
                	cmp	w0, #0x9
                	cset	x0, eq
                	cmp	w0, #0x0

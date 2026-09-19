@@ -47,27 +47,19 @@ Disassembly of section .text:
                	leaq	-0x2330(%rbp), %rax
                	movl	$0x4d2, %ecx            # imm = 0x4D2
                	movl	%ecx, 0x2328(%rax)
-               	movzbq	(%rax), %rdx
-               	movzbq	0x2000(%rax), %rsi
-               	movl	0x2328(%rax), %ecx
-               	xorq	%rax, %rax
-               	movq	%rax, %rdi
-               	movq	%rax, %rdi
-               	movq	%rax, %rdi
-               	movq	%rax, %rdi
-               	movsbq	%dl, %rax
-               	testq	%rax, %rax
+               	movzbq	(%rax), %rcx
+               	movzbq	0x2000(%rax), %rdx
+               	movl	0x2328(%rax), %eax
+               	movsbq	%cl, %rcx
+               	testq	%rcx, %rcx
                	jne	<addr>
-               	movsbq	%sil, %rax
-               	testl	%eax, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
+               	movsbq	%dl, %rcx
+               	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x3, %eax
                	leave
                	retq
-               	cmpl	$0x4d2, %ecx            # imm = 0x4D2
+               	cmpl	$0x4d2, %eax            # imm = 0x4D2
                	je	<addr>
                	movl	$0x4, %eax
                	leave

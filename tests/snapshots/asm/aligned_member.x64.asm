@@ -39,9 +39,6 @@ Disassembly of section .text:
                	movq	%rcx, %rax
                	subq	%r10, %rax
                	cmpq	$0x14, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x2, %eax
                	leave
@@ -50,9 +47,6 @@ Disassembly of section .text:
                	leaq	0x10(%rax), %rcx
                	subq	%rax, %rcx
                	cmpq	$0x10, %rcx
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x3, %eax
                	leave
@@ -63,9 +57,6 @@ Disassembly of section .text:
                	movq	%rdx, %rcx
                	subq	%r10, %rcx
                	cmpq	$0x10, %rcx
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x4, %eax
                	leave
@@ -79,7 +70,6 @@ Disassembly of section .text:
                	cmpq	%r11, %rcx
                	jne	<addr>
                	xorq	%rax, %rax
-               	movq	%rax, %rcx
                	leave
                	retq
                	movl	$0x5, %eax

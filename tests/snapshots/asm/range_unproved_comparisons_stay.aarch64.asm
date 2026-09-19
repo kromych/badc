@@ -17,10 +17,10 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
                	mov	x3, #0x100              // =256
-               	str	x3, [x1]
+               	str	x3, [x0]
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	str	x3, [x2]
@@ -28,6 +28,8 @@ Disassembly of section .text:
                	add	x4, x4, <lo12>
                	mov	x0, #0x0                // =0
                	str	x0, [x4]
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
                	ldr	x1, [x1]
                	and	x5, x1, #0xff
                	cbnz	x5, <addr>
@@ -63,18 +65,18 @@ Disassembly of section .text:
                	ldur	x3, [x29, #-0x8]
                	cmp	x3, #0x64
                	b.ge	<addr>
-               	mov	x0, #0x3                // =3
-               	cbz	x0, <addr>
-               	sxtw	x0, w0
+               	mov	x3, #0x3                // =3
+               	cbz	x3, <addr>
+               	sxtw	x0, w3
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldr	x0, [x2]
-               	cmp	x0, #0x0
+               	ldr	x3, [x2]
+               	cmp	x3, #0x0
                	b.ls	<addr>
-               	sub	x0, x0, #0x11
+               	sub	x3, x3, #0x11
                	mov	x17, #-0x11             // =-17
-               	cmp	x0, x17
+               	cmp	x3, x17
                	b.ls	<addr>
                	mov	x0, #0x4                // =4
                	cbz	x0, <addr>
@@ -98,7 +100,7 @@ Disassembly of section .text:
                	ret
                	mov	x1, #0x0                // =0
                	b	<addr>
-               	mov	x0, #0x0                // =0
+               	mov	x3, x0
                	b	<addr>
                	mov	x1, x0
                	b	<addr>

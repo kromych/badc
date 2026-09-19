@@ -74,7 +74,5 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x12               // =18
                	ret
-               	mov	x0, #0xa                // =10
-               	mov	x0, #0x2                // =2
                	mov	x0, #0x0                // =0
                	ret

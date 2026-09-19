@@ -30,23 +30,12 @@ Disassembly of section .text:
                	ret
 
 <main>:
-               	mov	x2, #0x4028000000000000 // =4622945017495814144
-               	mov	x1, #0x1                // =1
-               	mov	x0, x1
-               	mov	x0, x1
-               	mov	x0, #0x0                // =0
-               	mov	x3, x0
-               	mov	x1, x0
-               	mov	x1, #0x2                // =2
-               	mov	x3, x1
-               	mov	x0, #0x0                // =0
-               	mov	x0, #0x0                // =0
-               	mov	x1, x0
-               	mov	x1, #0x4028000000000000 // =4622945017495814144
-               	fmov	d16, x2
-               	fmov	d17, x1
+               	mov	x0, #0x4028000000000000 // =4622945017495814144
+               	fmov	d16, x0
+               	fmov	d17, x0
                	fcmp	d16, d17
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	ret
+               	mov	x0, #0x0                // =0
                	ret

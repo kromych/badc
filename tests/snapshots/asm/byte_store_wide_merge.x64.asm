@@ -171,16 +171,14 @@ Disassembly of section .text:
                	cmpl	$0x3, %ecx
                	jb	<addr>
                	leaq	-0x10(%rbp), %rax
-               	movzbq	(%rax), %rcx
-               	xorq	$0x11, %rcx
-               	testl	%ecx, %ecx
+               	movzbq	(%rax), %rax
+               	xorq	$0x11, %rax
+               	testl	%eax, %eax
                	jne	<addr>
+               	leaq	-0x10(%rbp), %rax
                	movzbq	0x9(%rax), %rax
                	xorq	$0xaa, %rax
                	testl	%eax, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x7, %eax
                	leave

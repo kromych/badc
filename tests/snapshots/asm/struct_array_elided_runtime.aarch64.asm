@@ -14,35 +14,27 @@ Disassembly of section .text:
                	brk	#0x1
 
 <run>:
-               	add	x2, x0, #0x1
-               	add	x3, x0, #0x2
-               	add	x1, x0, #0x3
+               	add	x1, x0, #0x1
+               	add	x2, x0, #0x2
+               	add	x3, x0, #0x3
                	cmp	w0, w0
                	b.ne	<addr>
-               	cmp	w2, w2
-               	cset	x2, ne
-               	cbz	x2, <addr>
+               	cmp	w1, w1
+               	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ret
-               	cmp	w3, w3
+               	cmp	w2, w2
                	b.ne	<addr>
-               	cmp	w1, w1
-               	cset	x2, ne
-               	cbz	x2, <addr>
+               	cmp	w3, w3
+               	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ret
-               	add	x2, x0, #0x4
-               	mov	x3, #0x0                // =0
-               	mov	x6, x3
+               	add	x1, x0, #0x4
                	cmp	w1, w1
-               	b.ne	<addr>
-               	cmp	w2, w2
-               	cset	x0, ne
-               	cbz	x0, <addr>
+               	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	ret
-               	mov	x0, x3
-               	mov	x0, x3
+               	mov	x0, #0x0                // =0
                	ret
 
 <main>:

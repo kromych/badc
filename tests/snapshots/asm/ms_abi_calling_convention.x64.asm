@@ -298,14 +298,8 @@ Disassembly of section .text:
                	cmpl	$0x2, %ebx
                	jne	<addr>
                	cmpl	$0x4, %r12d
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	jne	<addr>
                	cmpl	$0x6, %r13d
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x9, %eax
                	movq	(%rsp), %rbx

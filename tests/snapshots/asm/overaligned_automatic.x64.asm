@@ -64,27 +64,20 @@ Disassembly of section .text:
                	jne	<addr>
                	movslq	0xc(%rax), %rax
                	cmpl	$0x16, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	jne	<addr>
                	movq	0x40(%rsp), %rax
                	cmpq	$0x21, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	jne	<addr>
-               	xorq	%rax, %rax
-               	movq	%rax, %rsi
-               	leaq	0x40(%rsp), %rcx
-               	andq	$0x3f, %rcx
-               	orq	%rdx, %rcx
-               	testq	%rcx, %rcx
+               	leaq	0x40(%rsp), %rax
+               	andq	$0x3f, %rax
+               	orq	%rdx, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x3, %eax
                	leaq	-0xa0(%rbp), %rsp
                	leave
                	retq
+               	xorq	%rax, %rax
                	leaq	-0xa0(%rbp), %rsp
                	leave
                	retq

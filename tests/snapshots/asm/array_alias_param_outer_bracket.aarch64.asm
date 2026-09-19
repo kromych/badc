@@ -66,14 +66,12 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	str	x0, [x1]
                	str	x0, [x1, #0x18]
-               	mov	x1, x0
                	ldr	x1, [x4]
                	cmp	x1, #0x1
                	b.ne	<addr>
                	ldr	x1, [x4, #0x58]
                	cmp	x1, #0x16
-               	cset	x1, ne
-               	cbz	x1, <addr>
+               	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	add	sp, sp, #0x60
                	ldp	x29, x30, [sp], #0x10

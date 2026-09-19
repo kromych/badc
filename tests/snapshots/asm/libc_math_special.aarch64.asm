@@ -48,8 +48,8 @@ Disassembly of section .text:
                	bl	<addr>
                	fmov	d17, x20
                	fsub	d0, d0, d17
-               	mov	x0, #0x0                // =0
-               	fmov	d17, x0
+               	mov	x20, #0x0               // =0
+               	fmov	d17, x20
                	fcmp	d0, d17
                	b.pl	<addr>
                	fneg	d0, d0
@@ -67,7 +67,6 @@ Disassembly of section .text:
                	ldr	x20, [sp, #0x10]
                	ldr	d8, [sp], #0x30
                	ret
-               	mov	x20, #0x0               // =0
                	fmov	d0, x20
                	bl	<addr>
                	fmov	d17, x20
@@ -77,21 +76,20 @@ Disassembly of section .text:
                	fcmp	d0, d17
                	b.pl	<addr>
                	fneg	d0, d0
-               	mov	x0, #0xed8d             // =60813
-               	movk	x0, #0xa0b5, lsl #16
-               	movk	x0, #0xc6f7, lsl #32
-               	movk	x0, #0x3eb0, lsl #48
-               	fmov	d17, x0
+               	mov	x1, #0xed8d             // =60813
+               	movk	x1, #0xa0b5, lsl #16
+               	movk	x1, #0xc6f7, lsl #32
+               	movk	x1, #0x3eb0, lsl #48
+               	fmov	d17, x1
                	fcmp	d0, d17
-               	cset	x0, mi
-               	cmp	w0, #0x0
+               	cset	x1, mi
+               	cmp	w1, #0x0
                	b.ne	<addr>
                	mov	x0, #0x3                // =3
                	ldp	x29, x30, [sp, #0x20]
                	ldr	x20, [sp, #0x10]
                	ldr	d8, [sp], #0x30
                	ret
-               	mov	x0, #0x0                // =0
                	fmov	d0, x0
                	bl	<addr>
                	mov	x20, #0x3ff0000000000000 // =4607182418800017408

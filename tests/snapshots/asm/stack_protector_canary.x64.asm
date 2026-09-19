@@ -230,7 +230,7 @@ Disassembly of section .text:
                	callq	<addr>
                	leaq	-0x20(%rbp), %rdi
                	movsbq	(%rdi), %rax
-               	cmpq	$0x1, %rax
+               	cmpl	$0x1, %eax
                	je	<addr>
                	movl	$0x2, %eax
                	movq	%fs:0x28, %r11
@@ -246,8 +246,7 @@ Disassembly of section .text:
                	leaq	-0x20(%rbp), %rdi
                	movsbq	(%rdi), %rax
                	incq	%rax
-               	movslq	%eax, %rax
-               	cmpq	$0x3, %rax
+               	cmpl	$0x3, %eax
                	je	<addr>
                	movl	$0x3, %eax
                	movq	%fs:0x28, %r11
@@ -263,8 +262,7 @@ Disassembly of section .text:
                	leaq	-0x20(%rbp), %rax
                	movsbq	(%rax), %rax
                	addq	$0x2, %rax
-               	movslq	%eax, %rax
-               	cmpq	$0x9, %rax
+               	cmpl	$0x9, %eax
                	je	<addr>
                	movl	$0x4, %eax
                	movq	%fs:0x28, %r11

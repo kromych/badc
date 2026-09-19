@@ -60,8 +60,7 @@ Disassembly of section .text:
                	mov	x17, #0x2e              // =46
                	eor	x1, x1, x17
                	cmp	w1, #0x0
-               	cset	x1, ne
-               	cbz	x1, <addr>
+               	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	ldp	x29, x30, [sp, #0x30]
                	ldp	x20, x21, [sp], #0x40

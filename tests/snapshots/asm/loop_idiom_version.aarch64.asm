@@ -575,14 +575,12 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	add	x1, x1, #0x9
                	cmp	x2, x1
-               	cset	x1, ne
-               	cbnz	x1, <addr>
+               	b.ne	<addr>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	add	x1, x1, #0x29
                	cmp	x0, x1
-               	cset	x0, ne
-               	cbz	x0, <addr>
+               	b.eq	<addr>
                	mov	x0, #0x5                // =5
                	ldp	x29, x30, [sp, #0x40]
                	ldp	x24, x25, [sp, #0x20]
@@ -605,8 +603,7 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	ldrb	w0, [x0, #0x9]
                	cmp	w1, w0
-               	cset	x0, ne
-               	cbz	x0, <addr>
+               	b.eq	<addr>
                	mov	x0, #0x6                // =6
                	ldp	x29, x30, [sp, #0x40]
                	ldp	x24, x25, [sp, #0x20]

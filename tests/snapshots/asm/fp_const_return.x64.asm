@@ -33,10 +33,7 @@ Disassembly of section .text:
                	movslq	%ecx, %rcx
                	movq	(%rdi,%rcx,8), %rcx
                	testq	%rcx, %rcx
-               	sete	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
-               	je	<addr>
+               	jne	<addr>
                	decq	%rax
                	testl	%eax, %eax
                	jg	<addr>

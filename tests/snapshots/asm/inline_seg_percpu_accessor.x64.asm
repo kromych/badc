@@ -136,22 +136,19 @@ Disassembly of section .text:
                	pushfq
                	popq	%rax
                	movq	%rax, -0x8(%rbp)
-               	movq	-0x8(%rbp), %rdi
-               	leaq	(%rcx), %rax
-               	movq	%gs:(%rax), %rax
+               	movq	-0x8(%rbp), %rax
+               	leaq	(%rcx), %rdi
+               	movq	%gs:(%rdi), %rdi
                	movabsq	$0x1122334455667788, %r11 # imm = 0x1122334455667788
                	movq	%rsi, %r8
                	cmpq	%r11, %rsi
                	jne	<addr>
-               	cmpq	%rsi, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
+               	cmpq	%rsi, %rdi
                	je	<addr>
                	movl	$0xe, %eax
                	leave
                	retq
-               	testq	%rdi, %rdi
+               	testq	%rax, %rax
                	jne	<addr>
                	movl	$0xf, %eax
                	leave
@@ -241,16 +238,10 @@ Disassembly of section .text:
                	leaq	0x20(%rdx), %rax
                	movq	(%rax), %rax
                	testq	%rax, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	jne	<addr>
                	leaq	0x38(%rdx), %rax
                	movq	(%rax), %rax
                	cmpq	$0x3, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	je	<addr>
                	movl	$0xc, %eax
                	leave
@@ -270,15 +261,9 @@ Disassembly of section .text:
                	leaq	0x50(%rdx), %rax
                	movq	(%rax), %rax
                	testq	%rax, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	jne	<addr>
                	leaq	0x58(%rdx), %rax
                	movq	(%rax), %rax
-               	testq	%rax, %rax
-               	setne	%al
-               	movzbq	%al, %rax
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x12, %eax

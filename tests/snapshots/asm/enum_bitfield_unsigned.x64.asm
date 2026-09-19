@@ -75,9 +75,6 @@ Disassembly of section .text:
                	movl	$0x4, %eax
                	leave
                	retq
-               	movl	$0x3c, %eax
-               	movl	$0x32, %eax
-               	movl	$0x28, %eax
                	xorq	%rax, %rax
                	leave
                	retq

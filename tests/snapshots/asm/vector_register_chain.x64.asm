@@ -212,10 +212,8 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x1d, %esi
                	xorq	%rbx, %rsi
-               	movq	%rsi, %rbx
-               	andq	$0xff, %rbx
-               	movzbq	(%rdi,%rax), %rsi
-               	movq	%rbx, %rdi
+               	andq	$0xff, %rsi
+               	movzbq	(%rdi,%rax), %rdi
                	xorq	%rsi, %rdi
                	leaq	0x30(%rdx), %rsi
                	movzbq	(%rsi,%rax), %r12
@@ -239,6 +237,13 @@ Disassembly of section .text:
                	testq	%rdi, %rdi
                	je	<addr>
                	movl	$0x1d, %edi
+               	jmp	<addr>
+               	xorq	%rdi, %rdi
+               	jmp	<addr>
+               	xorq	%rdi, %rdi
+               	jmp	<addr>
+               	movq	%r9, %rsi
+               	jmp	<addr>
                	xorq	%rbx, %rdi
                	andq	$0xff, %rdi
                	movzbq	(%rsi,%rax), %rsi
@@ -247,13 +252,6 @@ Disassembly of section .text:
                	movb	%r8b, (%rdi,%rax)
                	leaq	-0x50(%rbp), %rdi
                	movb	%sil, (%rdi,%rax)
-               	jmp	<addr>
-               	xorq	%rdi, %rdi
-               	jmp	<addr>
-               	xorq	%rdi, %rdi
-               	jmp	<addr>
-               	movq	%r9, %rsi
-               	jmp	<addr>
                	incq	%rcx
                	cmpl	$0x30, %ecx
                	jl	<addr>

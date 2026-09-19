@@ -105,9 +105,6 @@ Disassembly of section .text:
                	testl	%r14d, %r14d
                	jne	<addr>
                	testl	%r15d, %r15d
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x2, %eax
                	movq	(%rsp), %rbx

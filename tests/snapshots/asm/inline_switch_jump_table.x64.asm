@@ -267,10 +267,7 @@ Disassembly of section .text:
                	testl	%esi, %esi
                	jl	<addr>
                	cmpl	$0xc, %esi
-               	setl	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	je	<addr>
+               	jge	<addr>
                	leaq	(%rsi,%rsi,2), %rax
                	addq	$0x2, %rax
                	movslq	%eax, %rdx
@@ -279,10 +276,7 @@ Disassembly of section .text:
                	testl	%edi, %edi
                	jl	<addr>
                	cmpl	$0xc, %edi
-               	setl	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	je	<addr>
+               	jge	<addr>
                	imulq	$0x7, %rdi, %rax
                	addq	$0x64, %rax
                	incq	%rax
@@ -293,10 +287,7 @@ Disassembly of section .text:
                	testl	%ecx, %ecx
                	jl	<addr>
                	cmpl	$0xc, %ecx
-               	setl	%r8b
-               	movzbq	%r8b, %r8
-               	testq	%r8, %r8
-               	je	<addr>
+               	jge	<addr>
                	imulq	$0x7, %rcx, %r8
                	movslq	%r8d, %r8
                	addq	%rsi, %r8
@@ -313,10 +304,7 @@ Disassembly of section .text:
                	testl	%edi, %edi
                	jl	<addr>
                	cmpl	$0xa, %edi
-               	setle	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	je	<addr>
+               	jg	<addr>
                	leaq	0x64(%rdi), %rax
                	movslq	%eax, %rax
                	addq	%rcx, %rax

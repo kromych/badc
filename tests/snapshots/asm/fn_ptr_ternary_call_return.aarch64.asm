@@ -27,20 +27,13 @@ Disassembly of section .text:
                	mov	x21, #0x6789            // =26505
                	movk	x21, #0x2345, lsl #16
                	movk	x21, #0x1, lsl #32
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	mov	x9, x0
                	mov	x0, x21
-               	blr	x9
+               	bl	<addr>
                	mov	x20, x0
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	mov	x1, #0x7890             // =30864
-               	movk	x1, #0x3456, lsl #16
-               	movk	x1, #0x12, lsl #32
-               	mov	x9, x0
-               	mov	x0, x1
-               	blr	x9
+               	mov	x0, #0x7890             // =30864
+               	movk	x0, #0x3456, lsl #16
+               	movk	x0, #0x12, lsl #32
+               	bl	<addr>
                	mov	x2, x0
                	cmp	x20, x21
                	b.eq	<addr>

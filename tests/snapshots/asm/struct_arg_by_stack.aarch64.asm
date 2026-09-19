@@ -14,79 +14,62 @@ Disassembly of section .text:
                	brk	#0x1
 
 <main>:
-               	mov	x0, #0xb                // =11
-               	mov	x1, #0x16               // =22
-               	mov	x2, #0x21               // =33
-               	mov	x3, #0x2c               // =44
-               	mov	x4, #0x5                // =5
-               	mov	x5, #0x6                // =6
-               	mov	x6, #0x7                // =7
+               	mov	x1, #0xb                // =11
+               	mov	x2, #0x16               // =22
+               	mov	x3, #0x21               // =33
+               	mov	x4, #0x2c               // =44
+               	mov	x5, #0x5                // =5
+               	mov	x6, #0x6                // =6
+               	mov	x0, #0x7                // =7
                	adrp	x7, <page>
                	add	x7, x7, <lo12>
-               	str	x6, [x7]
-               	adrp	x6, <page>
-               	add	x6, x6, <lo12>
-               	str	x0, [x6]
+               	str	x0, [x7]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	str	x1, [x0]
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	str	x2, [x0]
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	str	x3, [x0]
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	str	x4, [x0]
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	str	x5, [x0]
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x0, [x0]
-               	cmp	x0, #0x7
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	str	x2, [x1]
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
+               	str	x3, [x2]
+               	adrp	x3, <page>
+               	add	x3, x3, <lo12>
+               	str	x4, [x3]
+               	adrp	x4, <page>
+               	add	x4, x4, <lo12>
+               	str	x5, [x4]
+               	adrp	x5, <page>
+               	add	x5, x5, <lo12>
+               	str	x6, [x5]
+               	adrp	x6, <page>
+               	add	x6, x6, <lo12>
+               	ldr	x6, [x6]
+               	cmp	x6, #0x7
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ret
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
                	ldr	x0, [x0]
                	cmp	x0, #0xb
                	b.ne	<addr>
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x0, [x0]
+               	ldr	x0, [x1]
                	cmp	x0, #0x16
-               	cset	x0, ne
-               	cbnz	x0, <addr>
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x0, [x0]
+               	b.ne	<addr>
+               	ldr	x0, [x2]
                	cmp	x0, #0x21
-               	cset	x0, ne
-               	cbnz	x0, <addr>
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x0, [x0]
+               	b.ne	<addr>
+               	ldr	x0, [x3]
                	cmp	x0, #0x2c
-               	cset	x0, ne
-               	cbz	x0, <addr>
+               	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ret
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x0, [x0]
+               	ldr	x0, [x4]
                	cmp	x0, #0x5
                	b.ne	<addr>
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x0, [x0]
+               	ldr	x0, [x5]
                	cmp	x0, #0x6
-               	cset	x0, ne
-               	cbz	x0, <addr>
+               	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ret
                	mov	x0, #0x0                // =0
-               	mov	x1, x0
                	ret

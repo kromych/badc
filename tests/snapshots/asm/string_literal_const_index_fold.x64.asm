@@ -60,8 +60,6 @@ Disassembly of section .text:
                	cmpl	$0x5, %eax
                	jl	<addr>
                	xorq	%rax, %rax
-               	movq	%rax, %rcx
-               	movl	$0x1, %ecx
                	retq
                	movl	$0x8, %eax
                	retq

@@ -57,17 +57,13 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	mov	x0, #0x0                // =0
-               	mov	x1, x0
-               	mov	x1, x0
-               	mov	x1, x0
                	bl	<addr>
                	cmp	x0, #0xd
                	b.ne	<addr>
                	mov	x0, #0x1                // =1
                	bl	<addr>
                	cmp	x0, #0x17
-               	cset	x0, ne
-               	cbz	x0, <addr>
+               	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ldp	x29, x30, [sp], #0x10
                	ret

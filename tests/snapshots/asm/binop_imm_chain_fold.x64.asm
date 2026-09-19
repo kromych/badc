@@ -33,6 +33,5 @@ Disassembly of section .text:
                	movb	$0x0, %al
                	callq	<addr>
                	xorq	%rax, %rax
-               	movq	%rax, %rcx
                	popq	%rbp
                	retq

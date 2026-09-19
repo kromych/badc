@@ -70,14 +70,8 @@ Disassembly of section .text:
                	ja	<addr>
                	movq	%rdx, %xmm15
                	subsd	%xmm15, %xmm0
-               	ucomisd	%xmm0, %xmm1
-               	setb	%al
-               	movzbq	%al, %rax
-               	setnp	%r10b
-               	movzbq	%r10b, %r10
-               	andq	%r10, %rax
-               	testq	%rax, %rax
-               	je	<addr>
+               	ucomisd	%xmm1, %xmm0
+               	jbe	<addr>
                	movl	$0x4, %eax
                	retq
                	xorq	%rax, %rax

@@ -26,61 +26,39 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	xorq	%rax, %rax
-               	movq	%rax, %rcx
-               	movq	%rax, %rcx
-               	movq	%rax, %rcx
-               	movq	%rax, %rcx
-               	movq	%rax, %rcx
-               	movq	%rax, %rcx
-               	movq	%rax, %rcx
-               	leaq	<rip>, %rcx
-               	movq	0x28(%rcx), %rcx
+               	leaq	<rip>, %rax
+               	movq	0x28(%rax), %rcx
                	leaq	<rip>, %rdx
                	cmpq	%rdx, %rcx
                	jne	<addr>
-               	leaq	<rip>, %rcx
-               	movq	0x30(%rcx), %rcx
+               	movq	0x30(%rax), %rcx
                	leaq	<rip>, %rdx
                	cmpq	%rdx, %rcx
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x6, %eax
                	retq
-               	xorq	%rax, %rax
-               	movq	%rax, %rcx
-               	movq	%rax, %rcx
-               	movq	%rax, %rcx
-               	movq	%rax, %rcx
-               	leaq	<rip>, %rcx
-               	movzbq	0x2(%rcx), %rcx
-               	xorq	$0x28, %rcx
-               	testl	%ecx, %ecx
+               	leaq	<rip>, %rax
+               	movzbq	0x2(%rax), %rax
+               	xorq	$0x28, %rax
+               	testl	%eax, %eax
                	jne	<addr>
-               	leaq	<rip>, %rcx
-               	movzbq	0x3(%rcx), %rcx
-               	xorq	$0x29, %rcx
-               	testl	%ecx, %ecx
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
+               	leaq	<rip>, %rax
+               	movzbq	0x3(%rax), %rax
+               	xorq	$0x29, %rax
+               	testl	%eax, %eax
                	je	<addr>
                	movl	$0xb, %eax
                	retq
-               	leaq	<rip>, %rcx
-               	movzbq	0xb(%rcx), %rcx
-               	xorq	$0x2a, %rcx
-               	testl	%ecx, %ecx
+               	leaq	<rip>, %rax
+               	movzbq	0xb(%rax), %rax
+               	xorq	$0x2a, %rax
+               	testl	%eax, %eax
                	jne	<addr>
-               	leaq	<rip>, %rcx
-               	movzbq	0xa(%rcx), %rcx
-               	testl	%ecx, %ecx
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
+               	leaq	<rip>, %rax
+               	movzbq	0xa(%rax), %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0xc, %eax
                	retq
+               	xorq	%rax, %rax
                	retq

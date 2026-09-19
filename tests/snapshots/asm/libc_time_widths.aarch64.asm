@@ -53,8 +53,7 @@ Disassembly of section .text:
                	ldur	x0, [x29, #-0x8]
                	sub	x0, x0, x20
                	cmp	x0, #0x5
-               	cset	x0, gt
-               	cbz	x0, <addr>
+               	b.le	<addr>
                	mov	x0, #0x3                // =3
                	ldp	x29, x30, [sp, #0x20]
                	ldp	x20, x21, [sp], #0x30

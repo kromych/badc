@@ -30,8 +30,8 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
                	movq	%rbx, (%rsp)
-               	leaq	<rip>, %rax
-               	addq	$0x0, %rax
+               	leaq	<rip>, %rdx
+               	leaq	(%rdx), %rax
                	movl	$0x2000, %ecx           # imm = 0x2000
                	movq	%rcx, (%rax)
                	leaq	<rip>, %rax
@@ -104,8 +104,7 @@ Disassembly of section .text:
                	shrq	$0x3, %rax
                	movl	$0xbeef, %ebx           # imm = 0xBEEF
                	movq	%rbx, 0x18(,%rax,8)
-               	leaq	<rip>, %rax
-               	movq	0x18(%rax), %rax
+               	movq	0x18(%rdx), %rax
                	cmpq	$0xbeef, %rax           # imm = 0xBEEF
                	je	<addr>
                	movl	$0x5, %eax
@@ -118,7 +117,6 @@ Disassembly of section .text:
                	leaq	0x8(,%rbx,8), %rax
                	movq	%rax, -0x8(%rbp)
                	movq	-0x8(%rbp), %rax
-               	leaq	<rip>, %rdx
                	addq	$0x8, %rdx
                	cmpq	%rdx, %rax
                	je	<addr>

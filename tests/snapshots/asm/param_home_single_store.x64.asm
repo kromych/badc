@@ -84,45 +84,45 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	movabsq	$0x4004000000000000, %rcx # imm = 0x4004000000000000
-               	movl	$0x3f000000, %edx       # imm = 0x3F000000
-               	movabsq	$0x4011000000000000, %rsi # imm = 0x4011000000000000
-               	movl	$0x1, %edi
-               	movl	$0x3, %eax
+               	movabsq	$0x4004000000000000, %rax # imm = 0x4004000000000000
+               	movl	$0x3f000000, %ecx       # imm = 0x3F000000
+               	movabsq	$0x4011000000000000, %rdx # imm = 0x4011000000000000
+               	movl	$0x1, %esi
+               	movl	$0x3, %edi
                	xorps	%xmm0, %xmm0
-               	cvtsi2sd	%rdi, %xmm0
-               	movq	%rcx, %xmm15
+               	cvtsi2sd	%rsi, %xmm0
+               	movq	%rax, %xmm15
                	addsd	%xmm15, %xmm0
-               	movq	%rdx, %xmm14
+               	movq	%rcx, %xmm14
                	cvtss2sd	%xmm14, %xmm1
                	addsd	%xmm1, %xmm0
                	xorps	%xmm1, %xmm1
-               	cvtsi2sd	%rax, %xmm1
+               	cvtsi2sd	%rdi, %xmm1
                	addsd	%xmm1, %xmm0
-               	movq	%rsi, %xmm15
+               	movq	%rdx, %xmm15
                	addsd	%xmm15, %xmm0
-               	movabsq	$0x4026800000000000, %rcx # imm = 0x4026800000000000
-               	movq	%rcx, %xmm15
+               	movabsq	$0x4026800000000000, %rax # imm = 0x4026800000000000
+               	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x2, %eax
                	leave
                	retq
-               	movl	$0x29, %ecx
-               	movq	%rcx, -0x8(%rbp)
-               	leaq	-0x8(%rbp), %rcx
-               	movq	(%rcx), %rdx
-               	incq	%rdx
-               	movq	%rdx, (%rcx)
-               	cmpq	$0x2a, %rdx
+               	movl	$0x29, %eax
+               	movq	%rax, -0x8(%rbp)
+               	leaq	-0x8(%rbp), %rax
+               	movq	(%rax), %rcx
+               	incq	%rcx
+               	movq	%rcx, (%rax)
+               	cmpq	$0x2a, %rcx
                	je	<addr>
+               	movq	%rdi, %rax
                	leave
                	retq
                	movl	$0xa, %esi
                	movl	$0x14, %edx
                	movl	$0x1e, %ecx
-               	movq	%rax, %rdi
                	movb	$0x0, %al
                	callq	<addr>
                	cmpq	$0x3f, %rax

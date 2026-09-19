@@ -591,24 +591,15 @@ Disassembly of section .text:
                	sarq	$0x3, %rcx
                	andq	$0x1f, %rcx
                	cmpl	$0x5, %ecx
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
                	jne	<addr>
                	movl	(%rax), %ecx
                	sarq	$0x8, %rcx
                	andq	$0xff, %rcx
                	cmpl	$0xc8, %ecx
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
                	jne	<addr>
                	movl	(%rax), %ecx
                	sarq	$0x10, %rcx
                	cmpl	$0x9daa, %ecx           # imm = 0x9DAA
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x1a, %eax
                	movq	(%rsp), %rbx

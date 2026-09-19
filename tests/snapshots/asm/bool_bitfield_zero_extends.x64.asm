@@ -85,11 +85,8 @@ Disassembly of section .text:
                	movzbq	0x1(%rax), %rax
                	sarq	%rax
                	andq	$0x1, %rax
-               	testl	%eax, %eax
-               	sete	%al
-               	movzbq	%al, %rax
                	testq	%rax, %rax
-               	je	<addr>
+               	jne	<addr>
                	movl	%ecx, %eax
                	movq	%rax, %rdx
                	sarq	$0xb, %rdx

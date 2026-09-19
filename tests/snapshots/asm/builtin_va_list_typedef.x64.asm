@@ -314,7 +314,7 @@ Disassembly of section .text:
                	cmpl	%edx, %eax
                	jl	<addr>
                	movslq	%ecx, %rax
-               	leaq	-0x18(%rbp), %rcx
+               	leaq	-0x18(%rbp), %rdx
                	leave
                	retq
 

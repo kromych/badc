@@ -93,7 +93,7 @@ Disassembly of section .text:
                	ldr	x2, [x0, #0x10]
                	add	x1, x1, x2
                	ldr	x0, [x0, #0x18]
-               	add	x1, x1, x0
+               	add	x0, x1, x0
                	cmp	x21, #0x1c
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
@@ -101,7 +101,7 @@ Disassembly of section .text:
                	ldp	x20, x21, [sp], #0x40
                	ret
                	mov	x17, #-0x2              // =-2
-               	cmp	x1, x17
+               	cmp	x0, x17
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ldp	x29, x30, [sp, #0x30]

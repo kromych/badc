@@ -27,13 +27,6 @@ Disassembly of section .text:
 
 <check_const>:
                	xorq	%rax, %rax
-               	movq	%rax, %rcx
-               	movq	%rax, %rcx
-               	movq	%rax, %rcx
-               	movq	%rax, %rcx
-               	movq	%rax, %rcx
-               	movq	%rax, %rcx
-               	movq	%rax, %rcx
                	retq
 
 <opaque>:
@@ -74,9 +67,6 @@ Disassembly of section .text:
                	imulq	%r12, %rax
                	andq	$0xff, %rax
                	cmpl	%eax, %ecx
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	je	<addr>
                	movl	$0xa, %eax
                	movq	(%rsp), %rbx
@@ -103,15 +93,9 @@ Disassembly of section .text:
                	movzbq	0x3(%rax), %rcx
                	xorq	$0x6, %rcx
                	testl	%ecx, %ecx
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
                	jne	<addr>
                	movslq	0x4(%rax), %rax
                	cmpl	%ebx, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	je	<addr>
                	movl	$0xb, %eax
                	movq	(%rsp), %rbx

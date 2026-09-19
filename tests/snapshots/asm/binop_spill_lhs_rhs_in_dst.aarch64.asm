@@ -44,10 +44,10 @@ Disassembly of section .text:
                	str	w0, [x2, #0x8]
                	mov	x0, #0x5                // =5
                	str	w0, [x2, #0xc]
-               	mov	x0, #0xa                // =10
-               	str	w0, [x2, #0x10]
+               	mov	x1, #0xa                // =10
+               	str	w1, [x2, #0x10]
                	mov	x0, #0x0                // =0
-               	ldrsw	x5, [x2, #0x10]
+               	mov	x5, x1
                	mov	x1, x0
                	cmp	w1, #0x4
                	b.gt	<addr>

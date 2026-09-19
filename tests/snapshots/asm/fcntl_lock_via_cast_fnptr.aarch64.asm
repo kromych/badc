@@ -82,8 +82,7 @@ Disassembly of section .text:
                	cmp	w23, #0x0
                	b.ne	<addr>
                	cmp	w24, #0x0
-               	cset	x0, ne
-               	cbz	x0, <addr>
+               	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ldp	x29, x30, [sp, #0x90]
                	ldr	x24, [sp, #0x20]

@@ -187,15 +187,9 @@ Disassembly of section .text:
                	cmpq	$0xe0, %rcx
                	jne	<addr>
                	cmpq	$0x8, %rdx
-               	sete	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	je	<addr>
+               	jne	<addr>
                	cmpq	$0x7, %rsi
-               	sete	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	je	<addr>
+               	jne	<addr>
                	movl	$0x2a, %eax
                	movslq	%eax, %rax
                	leaq	-0x70(%rbp), %rsp

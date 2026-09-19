@@ -52,21 +52,18 @@ Disassembly of section .text:
                	b.ne	<addr>
                	ldrsw	x0, [x0, #0xc]
                	cmp	w0, #0x16
-               	cset	x0, ne
-               	cbnz	x0, <addr>
+               	b.ne	<addr>
                	ldr	x0, [sp, #0x40]
                	cmp	x0, #0x21
-               	cset	x0, ne
-               	cbnz	x0, <addr>
-               	mov	x0, #0x0                // =0
-               	mov	x5, x0
-               	orr	x1, x2, x4
-               	cbz	x1, <addr>
+               	b.ne	<addr>
+               	orr	x0, x2, x4
+               	cbz	x0, <addr>
                	mov	x0, #0x3                // =3
                	sub	sp, x29, #0xa0
                	add	sp, sp, #0xa0
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	mov	x0, #0x0                // =0
                	sub	sp, x29, #0xa0
                	add	sp, sp, #0xa0
                	ldp	x29, x30, [sp], #0x10

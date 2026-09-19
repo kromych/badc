@@ -37,7 +37,7 @@ Disassembly of section .text:
                	ret
 
 <main>:
-               	str	x20, [sp, #-0x30]!
+               	stp	x20, x21, [sp, #-0x30]!
                	stp	x29, x30, [sp, #0x20]
                	add	x29, sp, #0x20
                	mov	x20, #0x0               // =0
@@ -47,13 +47,13 @@ Disassembly of section .text:
                	stur	x1, [x29, #-0x8]
                	sub	x0, x29, #0x10
                	ldr	x1, [x0]
-               	ldr	x2, [x0, #0x8]
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x3, [x0]
-               	add	x3, x3, #0x1
-               	str	w3, [x0]
-               	add	x0, x1, x2
+               	ldr	x0, [x0, #0x8]
+               	adrp	x21, <page>
+               	add	x21, x21, <lo12>
+               	ldrsw	x2, [x21]
+               	add	x2, x2, #0x1
+               	str	w2, [x21]
+               	add	x0, x1, x0
                	add	x0, x0, #0x4
                	add	x0, x0, #0x5
                	add	x0, x0, #0x6
@@ -69,13 +69,11 @@ Disassembly of section .text:
                	stur	x1, [x29, #-0x8]
                	sub	x0, x29, #0x10
                	ldr	x1, [x0]
-               	ldr	x2, [x0, #0x8]
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x3, [x0]
-               	add	x3, x3, #0x1
-               	str	w3, [x0]
-               	add	x0, x1, x2
+               	ldr	x0, [x0, #0x8]
+               	ldrsw	x2, [x21]
+               	add	x2, x2, #0x1
+               	str	w2, [x21]
+               	add	x0, x1, x0
                	add	x0, x0, #0x0
                	add	x0, x0, #0x1
                	add	x0, x0, #0x2
@@ -92,13 +90,11 @@ Disassembly of section .text:
                	sub	x1, x29, #0x10
                	ldr	x0, [x1]
                	ldr	x1, [x1, #0x8]
-               	add	x2, x0, #0x5
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x3, [x0]
-               	add	x3, x3, #0x1
-               	str	w3, [x0]
-               	add	x0, x1, x2
+               	add	x0, x0, #0x5
+               	ldrsw	x2, [x21]
+               	add	x2, x2, #0x1
+               	str	w2, [x21]
+               	add	x0, x1, x0
                	cmp	x0, #0x16
                	b.eq	<addr>
                	orr	x20, x20, #0x4
@@ -109,13 +105,11 @@ Disassembly of section .text:
                	sub	x1, x29, #0x10
                	ldr	x0, [x1]
                	ldr	x1, [x1, #0x8]
-               	add	x2, x0, #0x5
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x3, [x0]
-               	add	x3, x3, #0x1
-               	str	w3, [x0]
-               	add	x0, x1, x2
+               	add	x0, x0, #0x5
+               	ldrsw	x2, [x21]
+               	add	x2, x2, #0x1
+               	str	w2, [x21]
+               	add	x0, x1, x0
                	cmp	x0, #0x1a
                	b.eq	<addr>
                	orr	x20, x20, #0x8
@@ -136,27 +130,23 @@ Disassembly of section .text:
                	mov	x1, #0x4000000000000000 // =4611686018427387904
                	fmov	d17, x1
                	fdiv	d1, d0, d17
-               	fadd	d1, d1, d0
+               	fadd	d0, d1, d0
                	mov	x0, #0x4008000000000000 // =4613937818241073152
                	mov	x1, #0x4018000000000000 // =4618441417868443648
                	fmov	d16, x0
                	fmov	d17, x1
-               	fadd	d0, d16, d17
-               	fcmp	d1, d0
+               	fadd	d1, d16, d17
+               	fcmp	d0, d1
                	b.eq	<addr>
                	orr	x20, x20, #0x20
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x1, [x0]
-               	add	x1, x1, #0x1
-               	str	w1, [x0]
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x21]
+               	add	x0, x0, #0x1
+               	str	w0, [x21]
+               	ldrsw	x0, [x21]
                	cmp	w0, #0xa
                	b.eq	<addr>
                	orr	x20, x20, #0x80
                	sxtw	x0, w20
                	ldp	x29, x30, [sp, #0x20]
-               	ldr	x20, [sp], #0x30
+               	ldp	x20, x21, [sp], #0x30
                	ret

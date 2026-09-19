@@ -44,30 +44,23 @@ Disassembly of section .text:
                	leave
                	retq
                	movl	$0x41, %ecx
-               	shlq	%cl, %rax
+               	movq	%rcx, %r10
+               	movq	%rax, %rcx
+               	movq	%rcx, %r11
+               	movq	%r10, %rcx
+               	shlq	%cl, %r11
+               	movq	%r11, %rcx
                	movabsq	$0x2468acf13579bde, %r11 # imm = 0x2468ACF13579BDE
-               	cmpq	%r11, %rax
+               	cmpq	%r11, %rcx
                	je	<addr>
                	movl	$0x6, %eax
                	leave
                	retq
-               	xorq	%rax, %rax
-               	movq	%rax, %rcx
-               	movq	%rax, %rcx
-               	movq	%rax, %rcx
-               	movq	%rax, %rcx
-               	movq	%rax, %rcx
-               	movq	%rax, %rcx
-               	movq	%rax, %rcx
-               	xorq	%rcx, %rcx
-               	movq	%rcx, %rax
-               	movq	%rcx, %rax
-               	movabsq	$0x123456789abcdef, %rax # imm = 0x123456789ABCDEF
                	movq	%rax, -0x10(%rbp)
                	movq	-0x10(%rbp), %rax
-               	leaq	0x5(%rax), %rdx
+               	leaq	0x5(%rax), %rcx
                	movabsq	$0x123456789abcdf4, %r11 # imm = 0x123456789ABCDF4
-               	cmpq	%r11, %rdx
+               	cmpq	%r11, %rcx
                	je	<addr>
                	movl	$0x24, %eax
                	leave
@@ -77,10 +70,10 @@ Disassembly of section .text:
                	movl	$0x28, %eax
                	leave
                	retq
-               	movq	%rax, %rdx
-               	rorq	$0x7, %rdx
+               	movq	%rax, %rcx
+               	rorq	$0x7, %rcx
                	movabsq	$-0x21fdb97530eca865, %r11 # imm = 0xDE02468ACF13579B
-               	cmpq	%r11, %rdx
+               	cmpq	%r11, %rcx
                	je	<addr>
                	movl	$0x29, %eax
                	leave
@@ -104,6 +97,6 @@ Disassembly of section .text:
                	movl	$0x2b, %eax
                	leave
                	retq
-               	movq	%rcx, %rax
+               	xorq	%rax, %rax
                	leave
                	retq

@@ -60,5 +60,4 @@ Disassembly of section .text:
 
 <main>:
                	xorq	%rax, %rax
-               	movq	%rax, %rcx
                	retq

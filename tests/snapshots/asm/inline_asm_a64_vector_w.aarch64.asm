@@ -250,25 +250,26 @@ Disassembly of section .text:
                	add	sp, sp, #0x60
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	mov	x7, #0x1d               // =29
                	mov	x16, #0x1d              // =29
                	str	x16, [sp]
                	ldr	x0, [sp]
                	dup	v0.16b, w0
-               	mov	v5.16b, v0.16b
-               	str	q4, [sp]
-               	ldr	q1, [sp]
-               	sshr	v0.16b, v1.16b, #0x7
                	mov	v2.16b, v0.16b
                	str	q4, [sp]
                	ldr	q1, [sp]
-               	shl	v0.16b, v1.16b, #0x1
+               	sshr	v0.16b, v1.16b, #0x7
                	mov	v3.16b, v0.16b
-               	str	q2, [sp]
-               	str	q5, [sp, #0x10]
+               	str	q4, [sp]
+               	ldr	q1, [sp]
+               	shl	v0.16b, v1.16b, #0x1
+               	mov	v4.16b, v0.16b
+               	str	q3, [sp]
+               	str	q2, [sp, #0x10]
                	ldr	q1, [sp]
                	ldr	q2, [sp, #0x10]
                	and	v0.16b, v1.16b, v2.16b
-               	str	q3, [sp]
+               	str	q4, [sp]
                	str	q0, [sp, #0x10]
                	ldr	q1, [sp]
                	ldr	q2, [sp, #0x10]
@@ -289,7 +290,7 @@ Disassembly of section .text:
                	lsl	x3, x6, #1
                	and	x2, x6, #0x80
                	cbz	x2, <addr>
-               	mov	x2, #0x1d               // =29
+               	mov	x2, x7
                	eor	x2, x3, x2
                	and	x2, x2, #0xff
                	ldrb	w1, [x4, x1]

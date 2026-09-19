@@ -34,18 +34,12 @@ Disassembly of section .text:
                	leaq	0x40(%rax), %rcx
                	subq	%rax, %rcx
                	cmpl	$0x40, %ecx
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
                	jne	<addr>
                	leaq	0x44(%rax), %rcx
                	movq	%rax, %r10
                	movq	%rcx, %rax
                	subq	%r10, %rax
                	cmpl	$0x44, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x8, %eax
                	retq
@@ -60,9 +54,6 @@ Disassembly of section .text:
                	movq	%rcx, %rax
                	subq	%r10, %rax
                	cmpl	$0x40, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	jne	<addr>
                	leaq	<rip>, %rax
                	leaq	0x80(%rax), %rcx
@@ -70,9 +61,6 @@ Disassembly of section .text:
                	movq	%rcx, %rax
                	subq	%r10, %rax
                	cmpl	$0x80, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x9, %eax
                	retq
@@ -229,23 +217,14 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movslq	0xc0(%rax), %rax
                	cmpl	$0x21, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	jne	<addr>
                	leaq	<rip>, %rax
                	movslq	0x40(%rax), %rax
                	cmpl	$0x2c, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	jne	<addr>
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	cmpl	$0x37, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x17, %eax
                	retq

@@ -124,18 +124,12 @@ Disassembly of section .text:
                	movq	-0x30(%rbp), %rax
                	callq	*%rax
                	testl	%eax, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	jne	<addr>
                	movl	$0x1, %edi
                	movl	$0x2, %esi
                	movq	-0x30(%rbp), %rax
                	callq	*%rax
                	cmpl	$0x1, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x2, %eax
                	leave
@@ -151,9 +145,6 @@ Disassembly of section .text:
                	movq	-0x28(%rbp), %rax
                	callq	*%rax
                	testl	%eax, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x3, %eax
                	leave
@@ -178,18 +169,12 @@ Disassembly of section .text:
                	movq	-0x20(%rbp), %rax
                	callq	*%rax
                	cmpl	$0x1, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	jne	<addr>
                	xorq	%rdi, %rdi
                	movl	$0x7, %esi
                	movq	-0x20(%rbp), %rax
                	callq	*%rax
                	testl	%eax, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x5, %eax
                	leave
@@ -205,9 +190,6 @@ Disassembly of section .text:
                	movq	-0x18(%rbp), %rax
                	callq	*%rax
                	testl	%eax, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x6, %eax
                	leave
@@ -232,9 +214,6 @@ Disassembly of section .text:
                	movq	-0x10(%rbp), %rax
                	callq	*%rax
                	testl	%eax, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x8, %eax
                	leave
@@ -248,17 +227,11 @@ Disassembly of section .text:
                	movq	-0x8(%rbp), %rax
                	callq	*%rax
                	cmpl	$0x1, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	jne	<addr>
                	movl	$0x5, %edi
                	movq	-0x8(%rbp), %rax
                	callq	*%rax
                	cmpl	$0x1, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x9, %eax
                	leave

@@ -121,16 +121,14 @@ Disassembly of section .text:
                	ldrb	w0, [x0, #0x5]
                	eor	x0, x0, #0x8
                	cmp	w0, #0x0
-               	cset	x0, ne
-               	cbnz	x0, <addr>
+               	b.ne	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrb	w0, [x0, #0x6]
                	mov	x17, #0x9               // =9
                	eor	x0, x0, x17
                	cmp	w0, #0x0
-               	cset	x0, ne
-               	cbz	x0, <addr>
+               	b.eq	<addr>
                	mov	x0, #0x29               // =41
                	ldp	x29, x30, [sp], #0x10
                	ret

@@ -31,5 +31,4 @@ Disassembly of section .text:
 
 <main>:
                	mov	x0, #0x2a               // =42
-               	mov	x0, #0x2a               // =42
                	ret

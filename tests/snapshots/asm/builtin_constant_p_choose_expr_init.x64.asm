@@ -27,7 +27,8 @@ Disassembly of section .text:
 
 <main>:
                	leaq	<rip>, %rax
-               	movsd	0x18(%rax,%riz), %xmm0
+               	leaq	<rip>, %rcx
+               	movsd	0x18(%rcx,%riz), %xmm0
                	movabsq	$0x4004000000000000, %rcx # imm = 0x4004000000000000
                	movq	%rcx, %xmm15
                	ucomisd	%xmm15, %xmm0

@@ -34,45 +34,33 @@ Disassembly of section .text:
                	movq	%r13, 0x10(%rsp)
                	movq	%r14, 0x18(%rsp)
                	movq	%r15, 0x20(%rsp)
-               	xorq	%r12, %r12
-               	movq	%r12, %rax
-               	movq	%r12, %rax
-               	movq	%r12, %rax
-               	movabsq	$0x123456789abcdef, %r13 # imm = 0x123456789ABCDEF
+               	xorq	%r13, %r13
+               	movabsq	$0x123456789abcdef, %r12 # imm = 0x123456789ABCDEF
                	movabsq	$-0x123456789abcdf0, %r14 # imm = 0xFEDCBA9876543210
                	movl	$0xdeadbeef, %r15d      # imm = 0xDEADBEEF
                	movl	$0x5a, %r10d
                	movq	%r10, 0x38(%rsp)
                	leaq	-0x418(%rbp), %rax
-               	movq	%r13, (%rax)
+               	movq	%r12, (%rax)
                	movq	%r14, 0x8(%rax)
                	movl	%r15d, 0x10(%rax)
                	movq	0x38(%rsp), %r11
                	movb	%r11b, 0x14(%rax)
-               	movb	%r12b, 0x15(%rax)
-               	movw	%r12w, 0x16(%rax)
-               	cmpq	%r13, %r13
+               	movb	%r13b, 0x15(%rax)
+               	movw	%r13w, 0x16(%rax)
+               	cmpq	%r12, %r12
                	jne	<addr>
                	leaq	-0x418(%rbp), %rax
                	movq	0x8(%rax), %rcx
                	cmpq	%r14, %rcx
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
                	jne	<addr>
                	movl	0x10(%rax), %eax
                	movl	$0xdeadbeef, %r11d      # imm = 0xDEADBEEF
                	cmpl	%r11d, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	jne	<addr>
                	leaq	-0x418(%rbp), %rax
                	movzbq	0x14(%rax), %rax
                	cmpl	$0x5a, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x2, %eax
                	movq	(%rsp), %rbx
@@ -619,19 +607,19 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	-0x418(%rbp), %rax
-               	movq	%r13, (%rax)
+               	movq	%r12, (%rax)
                	movq	%r14, 0x8(%rax)
                	movl	%r15d, 0x10(%rax)
                	movq	0x38(%rsp), %r11
                	movb	%r11b, 0x14(%rax)
-               	movb	%r12b, 0x15(%rax)
-               	movw	%r12w, 0x16(%rax)
+               	movb	%r13b, 0x15(%rax)
+               	movw	%r13w, 0x16(%rax)
                	xorq	%rcx, %rcx
                	movq	%rcx, (%rax)
                	movq	%rcx, 0x8(%rax)
                	movq	%rcx, 0x10(%rax)
                	leaq	-0x418(%rbp), %rax
-               	movq	%r13, (%rax)
+               	movq	%r12, (%rax)
                	movq	%r14, 0x8(%rax)
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12

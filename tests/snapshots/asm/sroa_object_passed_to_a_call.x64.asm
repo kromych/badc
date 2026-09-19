@@ -55,10 +55,7 @@ Disassembly of section .text:
                	cmpq	$0xf, %rbx
                	jne	<addr>
                	cmpq	$0xf, %rax
-               	sete	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	je	<addr>
+               	jne	<addr>
                	xorq	%rax, %rax
                	movslq	%eax, %rax
                	movq	(%rsp), %rbx

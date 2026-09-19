@@ -21,9 +21,7 @@ Disassembly of section .text:
                	sub	x2, x0, #0x1
                	sxtw	x2, w2
                	ldr	x2, [x1, x2, lsl #3]
-               	cmp	x2, #0x0
-               	cset	x2, eq
-               	cbz	x2, <addr>
+               	cbnz	x2, <addr>
                	sub	x0, x0, #0x1
                	cmp	w0, #0x0
                	b.gt	<addr>

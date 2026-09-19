@@ -167,17 +167,17 @@ Disassembly of section .text:
                	cmp	w1, #0x3
                	b.lo	<addr>
                	sub	x0, x29, #0x10
-               	ldrb	w1, [x0]
+               	ldrb	w0, [x0]
                	mov	x17, #0x11              // =17
-               	eor	x1, x1, x17
-               	cmp	w1, #0x0
+               	eor	x0, x0, x17
+               	cmp	w0, #0x0
                	b.ne	<addr>
+               	sub	x0, x29, #0x10
                	ldrb	w0, [x0, #0x9]
                	mov	x17, #0xaa              // =170
                	eor	x0, x0, x17
                	cmp	w0, #0x0
-               	cset	x0, ne
-               	cbz	x0, <addr>
+               	b.eq	<addr>
                	mov	x0, #0x7                // =7
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10

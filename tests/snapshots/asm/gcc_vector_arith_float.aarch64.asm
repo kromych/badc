@@ -1014,32 +1014,32 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, #0x10
                	b.lt	<addr>
-               	sub	x4, x29, #0x480
-               	sub	x6, x29, #0x470
-               	ldr	s0, [x4]
-               	ldr	s1, [x6]
+               	sub	x3, x29, #0x480
+               	sub	x5, x29, #0x470
+               	ldr	s0, [x3]
+               	ldr	s1, [x5]
                	fadd	s0, s0, s1
-               	ldr	s1, [x4, #0x4]
-               	ldr	s2, [x6, #0x4]
+               	ldr	s1, [x3, #0x4]
+               	ldr	s2, [x5, #0x4]
                	fadd	s1, s1, s2
-               	ldr	s2, [x4, #0x8]
-               	ldr	s3, [x6, #0x8]
+               	ldr	s2, [x3, #0x8]
+               	ldr	s3, [x5, #0x8]
                	fadd	s2, s2, s3
-               	ldr	s3, [x4, #0xc]
-               	ldr	s4, [x6, #0xc]
+               	ldr	s3, [x3, #0xc]
+               	ldr	s4, [x5, #0xc]
                	fadd	s3, s3, s4
-               	mov	x3, #0x40000000         // =1073741824
-               	ldr	s4, [x4]
-               	fmov	s17, w3
+               	mov	x0, #0x40000000         // =1073741824
+               	ldr	s4, [x3]
+               	fmov	s17, w0
                	fnmsub	s0, s0, s17, s4
-               	ldr	s4, [x4, #0x4]
-               	fmov	s17, w3
+               	ldr	s4, [x3, #0x4]
+               	fmov	s17, w0
                	fnmsub	s1, s1, s17, s4
-               	ldr	s4, [x4, #0x8]
-               	fmov	s17, w3
+               	ldr	s4, [x3, #0x8]
+               	fmov	s17, w0
                	fnmsub	s2, s2, s17, s4
-               	ldr	s4, [x4, #0xc]
-               	fmov	s17, w3
+               	ldr	s4, [x3, #0xc]
+               	fmov	s17, w0
                	fnmsub	s3, s3, s17, s4
                	sub	x0, x29, #0x260
                	str	s0, [x0]
@@ -1051,15 +1051,16 @@ Disassembly of section .text:
                	b.ge	<addr>
                	sxtw	x1, w0
                	lsl	x1, x1, #2
-               	add	x7, x2, x1
-               	add	x5, x4, x1
-               	ldr	s0, [x5]
-               	add	x1, x6, x1
+               	add	x6, x2, x1
+               	add	x4, x3, x1
+               	ldr	s0, [x4]
+               	add	x1, x5, x1
                	ldr	s1, [x1]
                	fadd	s1, s0, s1
-               	fmov	s17, w3
+               	mov	x1, #0x40000000         // =1073741824
+               	fmov	s17, w1
                	fnmsub	s0, s1, s17, s0
-               	str	s0, [x7]
+               	str	s0, [x6]
                	add	x0, x0, #0x1
                	cmp	w0, #0x4
                	b.lt	<addr>

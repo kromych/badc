@@ -46,10 +46,7 @@ Disassembly of section .text:
                	jl	<addr>
                	movq	0x8(%rax), %rcx
                	cmpq	$0xf4240, %rcx          # imm = 0xF4240
-               	setge	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
-               	jne	<addr>
+               	jge	<addr>
                	movq	(%rax), %rax
                	testq	%rax, %rax
                	jle	<addr>

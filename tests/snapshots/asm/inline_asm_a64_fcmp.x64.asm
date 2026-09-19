@@ -43,16 +43,13 @@ Disassembly of section .text:
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
                	jb	<addr>
-               	movl	$0x1, %eax
-               	testl	%eax, %eax
-               	sete	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	je	<addr>
+               	movl	$0x1, %ecx
+               	testl	%ecx, %ecx
+               	jne	<addr>
                	movl	$0x2a, %eax
                	movslq	%eax, %rax
                	retq
-               	xorq	%rax, %rax
+               	movq	%rax, %rcx
                	jmp	<addr>
                	movq	%rax, %rdx
                	jmp	<addr>

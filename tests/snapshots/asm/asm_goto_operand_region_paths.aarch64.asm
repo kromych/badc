@@ -126,7 +126,6 @@ Disassembly of section .text:
                	cbnz	w0, <addr>
                	b	<addr>
                	b	<addr>
-               	mov	x0, #0x0                // =0
                	mov	x0, #0x9                // =9
                	bl	<addr>
                	cmp	x0, #0x10
@@ -156,8 +155,7 @@ Disassembly of section .text:
                	cbz	x0, <addr>
                	mov	x0, #-0x64              // =-100
                	cmp	x0, #0x2
-               	cset	x0, ne
-               	cbz	x0, <addr>
+               	b.eq	<addr>
                	mov	x0, #0x6                // =6
                	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
@@ -198,8 +196,6 @@ Disassembly of section .text:
                	b	<addr>
                	b	<addr>
                	ldursw	x0, [x29, #-0x18]
-               	cmp	x0, #0x0
-               	cset	x0, ne
                	cbz	x0, <addr>
                	mov	x0, #0x7                // =7
                	add	sp, sp, #0x40

@@ -272,11 +272,9 @@ Disassembly of section .text:
                	cmp	w20, #0x2
                	b.ne	<addr>
                	cmp	w21, #0x4
-               	cset	x0, ne
-               	cbnz	x0, <addr>
+               	b.ne	<addr>
                	cmp	w22, #0x6
-               	cset	x0, ne
-               	cbz	x0, <addr>
+               	b.eq	<addr>
                	mov	x0, #0x9                // =9
                	ldp	x29, x30, [sp, #0x50]
                	ldr	x24, [sp, #0x30]

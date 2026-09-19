@@ -156,9 +156,6 @@ Disassembly of section .text:
                	jne	<addr>
                	movslq	0x4(%r12), %rax
                	cmpl	$0x28, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	je	<addr>
                	movl	$0xa, %eax
                	movq	(%rsp), %rbx
@@ -171,9 +168,6 @@ Disassembly of section .text:
                	jne	<addr>
                	movslq	0x4(%r13), %rax
                	cmpl	$0xc8, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	je	<addr>
                	movl	$0xb, %eax
                	movq	(%rsp), %rbx

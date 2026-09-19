@@ -46,10 +46,7 @@ Disassembly of section .text:
                	cmpq	$0x1000, %rax           # imm = 0x1000
                	jl	<addr>
                	cmpq	$0x100000, %rax         # imm = 0x100000
-               	setg	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	je	<addr>
+               	jle	<addr>
                	movl	$0x3, %eax
                	popq	%rbp
                	retq

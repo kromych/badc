@@ -575,20 +575,17 @@ Disassembly of section .text:
                	asr	x1, x1, #3
                	and	x1, x1, #0x1f
                	cmp	w1, #0x5
-               	cset	x1, ne
-               	cbnz	x1, <addr>
+               	b.ne	<addr>
                	ldr	w1, [x0]
                	asr	x1, x1, #8
                	and	x1, x1, #0xff
                	cmp	w1, #0xc8
-               	cset	x1, ne
-               	cbnz	x1, <addr>
+               	b.ne	<addr>
                	ldr	w1, [x0]
                	asr	x1, x1, #16
                	mov	x17, #0x9daa            // =40362
                	cmp	w1, w17
-               	cset	x1, ne
-               	cbz	x1, <addr>
+               	b.eq	<addr>
                	mov	x0, #0x1a               // =26
                	ldp	x29, x30, [sp, #0x50]
                	ldp	x22, x23, [sp, #0x10]

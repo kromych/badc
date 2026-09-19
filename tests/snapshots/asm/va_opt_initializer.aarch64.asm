@@ -41,8 +41,7 @@ Disassembly of section .text:
                	ldr	x1, [x1, x2, lsl #3]
                	cbnz	x1, <addr>
                	cmp	w0, #0x1
-               	cset	x0, ne
-               	cbnz	x0, <addr>
+               	b.ne	<addr>
                	adrp	x3, <page>
                	add	x3, x3, <lo12>
                	mov	x0, #0x0                // =0
@@ -56,14 +55,12 @@ Disassembly of section .text:
                	ldr	x1, [x1, x2, lsl #3]
                	cbnz	x1, <addr>
                	cmp	w0, #0x2
-               	cset	x0, ne
-               	cbz	x0, <addr>
+               	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ret
-               	mov	x0, #0x0                // =0
-               	mov	x1, x0
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
+               	mov	x0, #0x0                // =0
                	sxtw	x2, w0
                	ldrb	w2, [x1, x2]
                	cbz	x2, <addr>

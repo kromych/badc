@@ -53,8 +53,7 @@ Disassembly of section .text:
                	movk	x17, #0x6474, lsl #32
                	movk	x17, #0xddbf, lsl #48
                	cmp	x8, x17
-               	cset	x10, ne
-               	cbz	x10, <addr>
+               	b.eq	<addr>
                	mov	x10, #0x1               // =1
                	cbz	x10, <addr>
                	sxtw	x0, w10
@@ -111,8 +110,7 @@ Disassembly of section .text:
                	movk	x17, #0x4ab6, lsl #32
                	movk	x17, #0x95fa, lsl #48
                	cmp	x0, x17
-               	cset	x0, ne
-               	cbz	x0, <addr>
+               	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	cbz	x0, <addr>
                	sxtw	x0, w0
@@ -120,14 +118,6 @@ Disassembly of section .text:
                	ldr	x22, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x30
                	ret
-               	mov	x0, #0x0                // =0
-               	mov	x1, x0
-               	mov	x1, x0
-               	mov	x1, x0
-               	mov	x1, x0
-               	mov	x1, x0
-               	mov	x1, x0
-               	mov	x1, x0
                	mov	x3, #0x7c15             // =31765
                	movk	x3, #0x7f4a, lsl #16
                	movk	x3, #0x79b9, lsl #32
@@ -163,8 +153,7 @@ Disassembly of section .text:
                	movk	x17, #0x4fc9, lsl #32
                	movk	x17, #0xab46, lsl #48
                	cmp	x0, x17
-               	cset	x0, ne
-               	cbz	x0, <addr>
+               	b.eq	<addr>
                	mov	x0, #0x9                // =9
                	cbz	x0, <addr>
                	sxtw	x0, w0

@@ -51,8 +51,7 @@ Disassembly of section .text:
                	mov	x17, #0x40              // =64
                	movk	x17, #0x1, lsl #16
                	cmp	w0, w17
-               	cset	x0, eq
-               	cbz	x0, <addr>
+               	b.ne	<addr>
                	mov	x0, #0x0                // =0
                	sxtw	x0, w0
                	ldp	x29, x30, [sp, #0x20]

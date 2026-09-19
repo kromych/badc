@@ -72,9 +72,7 @@ Disassembly of section .text:
                	ldrb	w0, [x0, #0x1]
                	asr	x0, x0, #1
                	and	x0, x0, #0x1
-               	cmp	w0, #0x0
-               	cset	x0, eq
-               	cbz	x0, <addr>
+               	cbnz	x0, <addr>
                	mov	w0, w1
                	asr	x2, x0, #11
                	and	x2, x2, #0x1

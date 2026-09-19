@@ -218,8 +218,7 @@ Disassembly of section .text:
                	add	x0, x0, #0xa8
                	ldr	x0, [x0]
                	cmp	x0, #0x5
-               	cset	x0, ne
-               	cbz	x0, <addr>
+               	b.eq	<addr>
                	mov	x0, x5
                	ret
                	mrs	x0, TPIDR_EL0

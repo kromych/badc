@@ -35,8 +35,7 @@ Disassembly of section .text:
                	b.ne	<addr>
                	ldursw	x0, [x29, #-0x8]
                	cmp	w0, #0x1
-               	cset	x0, ne
-               	cbz	x0, <addr>
+               	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp, #0x20]
                	ldr	x20, [sp], #0x30

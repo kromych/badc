@@ -72,6 +72,9 @@ Disassembly of section .text:
                	add	x4, x1, #0x1
                	ldrb	w1, [x1]
                	strb	w1, [x0]
+               	sub	x2, x2, #0x1
+               	cmp	w2, #0x0
+               	b.gt	<addr>
                	b	<addr>
                	adrp	x17, <page>
                	add	x17, x17, <lo12>
@@ -81,10 +84,6 @@ Disassembly of section .text:
                	add	x1, x4, #0x1
                	ldrb	w4, [x4]
                	strb	w4, [x3]
-               	b	<addr>
-               	sub	x2, x2, #0x1
-               	cmp	w2, #0x0
-               	b.gt	<addr>
                	b	<addr>
                	b	<addr>
                	b	<addr>

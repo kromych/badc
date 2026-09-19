@@ -86,7 +86,6 @@ Disassembly of section .text:
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	mov	x0, #0x1                // =1
                	mov	x0, #0x3                // =3
                	mov	x1, #0xa                // =10
                	mov	x2, #0x14               // =20

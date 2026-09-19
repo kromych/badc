@@ -132,16 +132,10 @@ Disassembly of section .text:
                	jne	<addr>
                	movq	0x8(%rax), %rax
                	cmpq	$0x2, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	jne	<addr>
                	leaq	<rip>, %rax
                	movq	(%rax), %rax
                	cmpq	$0x3, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x8, %eax
                	leaq	-0x90(%rbp), %rsp
@@ -154,74 +148,57 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movq	0x10(%rax), %rax
                	cmpq	$0x6, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	je	<addr>
                	leaq	-0x90(%rbp), %rsp
                	movq	%rdx, %rax
                	leave
                	retq
-               	xorq	%rax, %rax
-               	movq	%rax, %rcx
-               	movq	%rax, %rcx
-               	movq	%fs:0x0, %rcx
-               	addq	$-0x18, %rcx
-               	movl	$0xd, %edx
-               	movq	%rdx, (%rcx)
-               	movq	%fs:0x0, %rsi
-               	addq	$-0x10, %rsi
-               	movl	$0xe, %edi
-               	movb	%dil, (%rsi)
-               	movq	%fs:0x0, %rsi
-               	addq	$-0x8, %rsi
-               	movl	$0xf, %edi
-               	movq	%rdi, (%rsi)
-               	movq	(%rcx), %rcx
-               	cmpq	$0xd, %rcx
+               	movq	%fs:0x0, %rax
+               	addq	$-0x18, %rax
+               	movl	$0xd, %ecx
+               	movq	%rcx, (%rax)
+               	movq	%fs:0x0, %rdx
+               	addq	$-0x10, %rdx
+               	movl	$0xe, %esi
+               	movb	%sil, (%rdx)
+               	movq	%fs:0x0, %rdx
+               	addq	$-0x8, %rdx
+               	movl	$0xf, %esi
+               	movq	%rsi, (%rdx)
+               	movq	(%rax), %rax
+               	cmpq	$0xd, %rax
                	jne	<addr>
-               	movq	%fs:0x0, %rcx
-               	addq	$-0x10, %rcx
-               	movsbq	(%rcx), %rcx
-               	cmpl	$0xe, %ecx
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
+               	movq	%fs:0x0, %rax
+               	addq	$-0x10, %rax
+               	movsbq	(%rax), %rax
+               	cmpl	$0xe, %eax
                	jne	<addr>
-               	movq	%fs:0x0, %rcx
-               	addq	$-0x8, %rcx
-               	movq	(%rcx), %rcx
-               	cmpq	$0xf, %rcx
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
+               	movq	%fs:0x0, %rax
+               	addq	$-0x8, %rax
+               	movq	(%rax), %rax
+               	cmpq	$0xf, %rax
                	je	<addr>
                	movl	$0xc, %eax
                	leaq	-0x90(%rbp), %rsp
                	leave
                	retq
-               	leaq	<rip>, %rcx
-               	movsbq	(%rcx), %rcx
-               	cmpl	$0x61, %ecx
+               	leaq	<rip>, %rax
+               	movsbq	(%rax), %rax
+               	cmpl	$0x61, %eax
                	jne	<addr>
-               	leaq	<rip>, %rcx
-               	movsbq	(%rcx), %rcx
-               	cmpl	$0x63, %ecx
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
+               	leaq	<rip>, %rax
+               	movsbq	(%rax), %rax
+               	cmpl	$0x63, %eax
                	jne	<addr>
-               	leaq	<rip>, %rcx
-               	movsbq	(%rcx), %rcx
-               	cmpl	$0x65, %ecx
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
+               	leaq	<rip>, %rax
+               	movsbq	(%rax), %rax
+               	cmpl	$0x65, %eax
                	je	<addr>
                	leaq	-0x90(%rbp), %rsp
-               	movq	%rdx, %rax
+               	movq	%rcx, %rax
                	leave
                	retq
+               	xorq	%rax, %rax
                	leaq	-0x90(%rbp), %rsp
                	leave
                	retq

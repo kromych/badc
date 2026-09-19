@@ -69,8 +69,8 @@ Disassembly of section .text:
                	movk	x2, #0xb2d0, lsl #16
                	stur	x1, [x29, #-0x18]
                	stur	x2, [x29, #-0x8]
-               	mov	x3, #-0x7               // =-7
-               	sturb	w3, [x29, #-0x10]
+               	mov	x6, #-0x7               // =-7
+               	sturb	w6, [x29, #-0x10]
                	add	x5, x0, #0x9
                	sub	x3, x29, #0x18
                	ldr	x4, [x3]
@@ -97,10 +97,9 @@ Disassembly of section .text:
                	ret
                	mov	x4, #0x2                // =2
                	mov	x5, #0x12c              // =300
-               	mov	x6, #0x9c40             // =40000
-               	mov	x7, #-0x32              // =-50
-               	mov	x8, #0x3c               // =60
-               	mov	x9, #-0x7               // =-7
+               	mov	x7, #0x9c40             // =40000
+               	mov	x8, #-0x32              // =-50
+               	mov	x9, #0x3c               // =60
                	mov	x10, #0x320             // =800
                	mov	x11, #0x9               // =9
                	adrp	x3, <page>
@@ -113,11 +112,10 @@ Disassembly of section .text:
                	str	x2, [sp, #0x10]
                	mov	x1, x4
                	mov	x2, x5
-               	mov	x3, x6
-               	mov	x5, x8
-               	mov	x4, x7
+               	mov	x5, x9
+               	mov	x4, x8
+               	mov	x3, x7
                	mov	x7, x10
-               	mov	x6, x9
                	blr	x12
                	add	sp, sp, #0x20
                	mov	x17, #0x8602            // =34306

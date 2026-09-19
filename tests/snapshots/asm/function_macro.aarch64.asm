@@ -28,8 +28,7 @@ Disassembly of section .text:
                	ldrb	w5, [x3]
                	ldrb	w6, [x4]
                	cmp	w5, w6
-               	cset	x5, eq
-               	cbz	x5, <addr>
+               	b.ne	<addr>
                	add	x3, x3, #0x1
                	add	x4, x4, #0x1
                	ldrb	w5, [x3]
@@ -52,8 +51,7 @@ Disassembly of section .text:
                	ldrb	w5, [x3]
                	ldrb	w6, [x4]
                	cmp	w5, w6
-               	cset	x5, eq
-               	cbz	x5, <addr>
+               	b.ne	<addr>
                	add	x3, x3, #0x1
                	add	x4, x4, #0x1
                	ldrb	w5, [x3]
@@ -76,8 +74,7 @@ Disassembly of section .text:
                	ldrb	w5, [x3]
                	ldrb	w6, [x4]
                	cmp	w5, w6
-               	cset	x5, eq
-               	cbz	x5, <addr>
+               	b.ne	<addr>
                	add	x3, x3, #0x1
                	add	x4, x4, #0x1
                	ldrb	w5, [x3]
@@ -98,8 +95,7 @@ Disassembly of section .text:
                	ldrb	w4, [x3]
                	ldrb	w5, [x1]
                	cmp	w4, w5
-               	cset	x4, eq
-               	cbz	x4, <addr>
+               	b.ne	<addr>
                	add	x3, x3, #0x1
                	add	x1, x1, #0x1
                	ldrb	w4, [x3]
@@ -117,8 +113,7 @@ Disassembly of section .text:
                	ldrb	w1, [x0]
                	ldrb	w3, [x2]
                	cmp	w1, w3
-               	cset	x1, eq
-               	cbz	x1, <addr>
+               	b.ne	<addr>
                	add	x0, x0, #0x1
                	add	x2, x2, #0x1
                	ldrb	w1, [x0]
@@ -154,8 +149,7 @@ Disassembly of section .text:
                	ldrb	w2, [x0]
                	ldrb	w3, [x1]
                	cmp	w2, w3
-               	cset	x2, eq
-               	cbz	x2, <addr>
+               	b.ne	<addr>
                	add	x0, x0, #0x1
                	add	x1, x1, #0x1
                	ldrb	w2, [x0]
@@ -183,8 +177,7 @@ Disassembly of section .text:
                	ldrb	w2, [x0]
                	ldrb	w3, [x1]
                	cmp	w2, w3
-               	cset	x2, eq
-               	cbz	x2, <addr>
+               	b.ne	<addr>
                	add	x0, x0, #0x1
                	add	x1, x1, #0x1
                	ldrb	w2, [x0]

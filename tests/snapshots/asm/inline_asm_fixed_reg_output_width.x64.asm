@@ -146,10 +146,7 @@ Disassembly of section .text:
                	jne	<addr>
                	movq	-0x8(%rbp), %rcx
                	cmpq	%rcx, %rax
-               	setb	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	je	<addr>
+               	jae	<addr>
                	movl	$0x2, %eax
                	leave
                	retq

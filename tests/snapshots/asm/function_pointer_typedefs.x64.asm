@@ -51,9 +51,6 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	movabsq	$-0x1, %rax
-               	movl	$0x1, %eax
-               	xorq	%rax, %rax
                	movl	$0x2, %edi
                	movl	$0x3, %esi
                	callq	<addr>

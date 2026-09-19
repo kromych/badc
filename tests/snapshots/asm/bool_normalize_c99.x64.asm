@@ -217,25 +217,17 @@ Disassembly of section .text:
                	movzbq	%bl, %rbx
                	movq	%r12, %rdi
                	callq	<addr>
-               	testq	%rax, %rax
-               	setne	%r12b
-               	movzbq	%r12b, %r12
+               	movq	%rax, %r12
                	movabsq	$-0x3, %rdi
                	callq	<addr>
                	testq	%rax, %rax
-               	setne	%cl
-               	movzbq	%cl, %rcx
+               	setne	%al
+               	movzbq	%al, %rax
                	cmpl	$0x1, %ebx
                	jne	<addr>
-               	testl	%r12d, %r12d
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
+               	testq	%r12, %r12
                	jne	<addr>
-               	cmpl	$0x1, %ecx
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
+               	cmpl	$0x1, %eax
                	je	<addr>
                	movl	$0x10, %eax
                	movq	(%rsp), %rbx

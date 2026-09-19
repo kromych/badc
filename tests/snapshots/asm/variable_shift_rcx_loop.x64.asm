@@ -54,5 +54,4 @@ Disassembly of section .text:
                	cmpq	$0x64, %rcx
                	jl	<addr>
                	xorq	%rax, %rax
-               	movq	%rax, %rcx
                	retq

@@ -203,8 +203,9 @@ Disassembly of section .text:
                	movapd	%xmm0, %xmm14
                	addss	%xmm1, %xmm14
                	movsd	%xmm14, 0x18(%rsp)
+               	xorq	%rax, %rax
                	movsd	0x18(%rsp), %xmm14
-               	movq	%rcx, %xmm15
+               	movq	%rax, %xmm15
                	ucomiss	%xmm15, %xmm14
                	jp	<addr>
                	je	<addr>

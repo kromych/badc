@@ -83,7 +83,6 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	movl	$0x1, %eax
                	movl	$0x3, %edi
                	movl	$0xa, %esi
                	movl	$0x14, %edx

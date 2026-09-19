@@ -63,5 +63,4 @@ Disassembly of section .text:
 
 <main>:
                	movl	$0x12c, %eax            # imm = 0x12C
-               	movl	$0x12c, %eax            # imm = 0x12C
                	retq

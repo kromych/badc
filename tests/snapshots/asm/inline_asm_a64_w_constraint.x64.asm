@@ -36,13 +36,11 @@ Disassembly of section .text:
                	movsd	-0x8(%rbp,%riz), %xmm0
                	movq	%rax, -0x8(%rbp)
                	movsd	%xmm0, -0x8(%rbp,%riz)
-               	movq	-0x8(%rbp), %rax
+               	movq	-0x8(%rbp), %rcx
                	movabsq	$0x4045000000000000, %r11 # imm = 0x4045000000000000
-               	cmpq	%r11, %rax
+               	cmpq	%r11, %rcx
                	jne	<addr>
                	movl	$0x2a, %eax
                	movslq	%eax, %rax
                	leave
                	retq
-               	xorq	%rax, %rax
-               	jmp	<addr>

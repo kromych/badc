@@ -43,6 +43,5 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	movl	$0xa, %eax
                	xorq	%rax, %rax
                	retq

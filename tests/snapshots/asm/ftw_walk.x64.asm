@@ -123,10 +123,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	cmpl	$0x4, %eax
-               	setge	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	je	<addr>
+               	jl	<addr>
                	xorq	%rax, %rax
                	movslq	%eax, %rax
                	leave

@@ -41,10 +41,6 @@ Disassembly of section .text:
                	b.eq	<addr>
                	and	x4, x0, #0x3
                	str	w2, [x1, x4, lsl #2]
-               	mul	x2, x2, x9
-               	mov	w2, w2
-               	add	x2, x2, x8
-               	mov	w2, w2
                	b	<addr>
                	and	x4, x0, #0x3
                	ldr	w6, [x1, x4, lsl #2]
@@ -55,7 +51,10 @@ Disassembly of section .text:
                	ldr	w6, [x1, x4, lsl #2]
                	add	x6, x6, x2
                	str	w6, [x1, x4, lsl #2]
-               	b	<addr>
+               	mul	x2, x2, x9
+               	mov	w2, w2
+               	add	x2, x2, x8
+               	mov	w2, w2
                	add	x3, x0, #0x1
                	mov	w0, w3
                	cmp	w0, w5

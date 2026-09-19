@@ -179,9 +179,6 @@ Disassembly of section .text:
                	jne	<addr>
                	movq	0x20(%rax), %rcx
                	cmpq	$0x5, %rcx
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x2, %eax
                	leave
@@ -212,16 +209,10 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movq	0x20(%rax), %rax
                	cmpq	$0x4d, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	jne	<addr>
                	leaq	<rip>, %rax
                	movq	0x8(%rax), %rax
                	cmpq	$0x2, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x4, %eax
                	leave

@@ -317,9 +317,7 @@ fn extern_imm_data(func: &FunctionSsa) -> BTreeSet<u32> {
 }
 
 /// Resolve `v` to a data-segment offset when it is an `ImmData` plus a
-/// folded constant displacement chain, chasing degenerate phis -- the
-/// residue a pruned branch leaves between an inlined accessor's return
-/// and its consumer. An `ImmData` naming an extern symbol resolves to
+/// folded constant displacement chain. An `ImmData` naming an extern symbol resolves to
 /// nothing: its payload is a placeholder, so the bytes at that offset
 /// belong to an unrelated object of this unit.
 fn data_addr(func: &FunctionSsa, ext: &BTreeSet<u32>, mut v: ValueId, mut off: i64) -> Option<i64> {
@@ -343,7 +341,6 @@ fn data_addr(func: &FunctionSsa, ext: &BTreeSet<u32>, mut v: ValueId, mut off: i
                 off = off.wrapping_sub(*rhs_imm);
                 v = *lhs;
             }
-            Inst::Phi { incoming, .. } if incoming.len() == 1 => v = incoming[0].1,
             _ => return None,
         }
     }
@@ -386,7 +383,7 @@ pub(crate) fn fold_loads(func: &mut FunctionSsa, cd: &ConstData<'_>) -> bool {
 
 /// Resolve `v` to a frame byte coordinate: `LocalAddr(slot)` addresses
 /// byte `slot * 8` of the 8-byte cell array, plus any folded constant
-/// displacement, through degenerate phis.
+/// displacement.
 fn frame_addr(func: &FunctionSsa, mut v: ValueId, mut off: i64) -> Option<i64> {
     for _ in 0..16 {
         match func.insts.get(v as usize)? {
@@ -407,7 +404,6 @@ fn frame_addr(func: &FunctionSsa, mut v: ValueId, mut off: i64) -> Option<i64> {
                 off = off.wrapping_sub(*rhs_imm);
                 v = *lhs;
             }
-            Inst::Phi { incoming, .. } if incoming.len() == 1 => v = incoming[0].1,
             _ => return None,
         }
     }

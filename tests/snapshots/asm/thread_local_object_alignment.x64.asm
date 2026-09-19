@@ -236,9 +236,6 @@ Disassembly of section .text:
                	addq	$-0x68, %rax
                	movq	(%rax), %rax
                	cmpq	$0x5, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x5, %eax
                	movq	(%rsp), %rbx

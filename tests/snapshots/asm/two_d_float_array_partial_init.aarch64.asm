@@ -194,7 +194,8 @@ Disassembly of section .text:
                	ldr	s2, [x0, #0x8]
                	fadd	s1, s1, s2
                	fadd	s8, s0, s1
-               	fmov	s17, w1
+               	mov	x0, #0x0                // =0
+               	fmov	s17, w0
                	fcmp	s8, s17
                	b.eq	<addr>
                	mov	x20, #0x2               // =2

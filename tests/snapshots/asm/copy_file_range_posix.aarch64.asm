@@ -55,9 +55,7 @@ Disassembly of section .text:
                	bl	<addr>
                	mov	x23, x0
                	cbz	x22, <addr>
-               	cmp	x23, #0x0
-               	cset	x0, eq
-               	cbz	x0, <addr>
+               	cbnz	x23, <addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp, #0x50]
                	ldp	x22, x23, [sp, #0x10]
@@ -72,8 +70,7 @@ Disassembly of section .text:
                	cmp	w21, #0x0
                	b.lt	<addr>
                	cmp	w20, #0x0
-               	cset	x0, lt
-               	cbz	x0, <addr>
+               	b.ge	<addr>
                	mov	x0, #0x2                // =2
                	ldp	x29, x30, [sp, #0x50]
                	ldp	x22, x23, [sp, #0x10]
@@ -101,8 +98,7 @@ Disassembly of section .text:
                	b.ne	<addr>
                	ldur	x0, [x29, #-0x8]
                	cmp	x0, #0x8
-               	cset	x0, ne
-               	cbz	x0, <addr>
+               	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	ldp	x29, x30, [sp, #0x50]
                	ldp	x22, x23, [sp, #0x10]
@@ -270,12 +266,10 @@ Disassembly of section .text:
                	b.ne	<addr>
                	ldur	x0, [x29, #-0x10]
                	cmp	x0, #0x10
-               	cset	x0, ne
-               	cbnz	x0, <addr>
+               	b.ne	<addr>
                	ldur	x0, [x29, #-0x8]
                	cmp	x0, #0x3
-               	cset	x0, ne
-               	cbz	x0, <addr>
+               	b.eq	<addr>
                	mov	x0, #0x12               // =18
                	ldp	x29, x30, [sp, #0x50]
                	ldp	x22, x23, [sp, #0x10]
@@ -301,8 +295,6 @@ Disassembly of section .text:
                	cmp	x0, #0x10
                	b.ne	<addr>
                	ldur	x0, [x29, #-0x8]
-               	cmp	x0, #0x0
-               	cset	x0, ne
                	cbz	x0, <addr>
                	mov	x0, #0x14               // =20
                	ldp	x29, x30, [sp, #0x50]
@@ -330,8 +322,7 @@ Disassembly of section .text:
                	b.ne	<addr>
                	ldur	x0, [x29, #-0x8]
                	cmp	x0, #0x5
-               	cset	x0, ne
-               	cbz	x0, <addr>
+               	b.eq	<addr>
                	mov	x0, #0x16               // =22
                	ldp	x29, x30, [sp, #0x50]
                	ldp	x22, x23, [sp, #0x10]

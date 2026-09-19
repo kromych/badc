@@ -54,15 +54,13 @@ Disassembly of section .text:
                	cmp	x7, x3
                	b.ne	<addr>
                	msub	x3, x0, x1, x2
-               	sxtw	x3, w3
                	mov	w6, w4
                	mul	x6, x6, x10
                	add	x6, x5, x6
                	ldrsw	x6, [x6, #0x10]
-               	cmp	x3, x6
+               	cmp	w3, w6
                	b.ne	<addr>
-               	mov	x0, x2
-               	cmp	x0, x2
+               	cmp	w2, w2
                	b.ne	<addr>
                	mov	w0, w4
                	add	x4, x0, #0x1

@@ -47,22 +47,13 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	jne	<addr>
                	movzbq	0x1(%rbx), %rax
-               	testl	%eax, %eax
-               	setne	%al
-               	movzbq	%al, %rax
                	testq	%rax, %rax
                	jne	<addr>
                	movzbq	0x2(%rbx), %rax
                	xorq	$0x4, %rax
                	testl	%eax, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	jne	<addr>
                	movzbq	0x3(%rbx), %rax
-               	testl	%eax, %eax
-               	setne	%al
-               	movzbq	%al, %rax
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x11, %eax
@@ -83,22 +74,13 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	jne	<addr>
                	movzbq	0x1(%rbx), %rax
-               	testl	%eax, %eax
-               	setne	%al
-               	movzbq	%al, %rax
                	testq	%rax, %rax
                	jne	<addr>
                	movzbq	0x2(%rbx), %rax
                	xorq	$0xf8, %rax
                	testl	%eax, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	jne	<addr>
                	movzbq	0x3(%rbx), %rax
-               	testl	%eax, %eax
-               	setne	%al
-               	movzbq	%al, %rax
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x12, %eax
@@ -119,23 +101,14 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	jne	<addr>
                	movzbq	0x1(%rbx), %rax
-               	testl	%eax, %eax
-               	setne	%al
-               	movzbq	%al, %rax
                	testq	%rax, %rax
                	jne	<addr>
                	movzbq	0x2(%rbx), %rax
-               	testl	%eax, %eax
-               	setne	%al
-               	movzbq	%al, %rax
                	testq	%rax, %rax
                	jne	<addr>
                	movzbq	0x3(%rbx), %rax
                	xorq	$0x7f, %rax
                	testl	%eax, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x13, %eax
                	movq	(%rsp), %rbx
@@ -168,16 +141,10 @@ Disassembly of section .text:
                	movzbq	0x2(%rax), %rcx
                	sarq	$0x3, %rcx
                	cmpl	$0x9, %ecx
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
                	jne	<addr>
                	movzbq	0x3(%rax), %rax
                	andq	$0x7f, %rax
                	cmpl	$0x64, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x14, %eax
                	movq	(%rsp), %rbx
@@ -197,23 +164,14 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	jne	<addr>
                	movzbq	0x1(%rbx), %rax
-               	testl	%eax, %eax
-               	setne	%al
-               	movzbq	%al, %rax
                	testq	%rax, %rax
                	jne	<addr>
                	movzbq	0x2(%rbx), %rax
-               	testl	%eax, %eax
-               	setne	%al
-               	movzbq	%al, %rax
                	testq	%rax, %rax
                	jne	<addr>
                	movzbq	0x3(%rbx), %rax
                	xorq	$0xff, %rax
                	testl	%eax, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x15, %eax
                	movq	(%rsp), %rbx
@@ -248,9 +206,6 @@ Disassembly of section .text:
                	movl	0xc(%rax), %ecx
                	xorq	$0x55667788, %rcx       # imm = 0x55667788
                	testl	%ecx, %ecx
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x17, %eax
                	movq	(%rsp), %rbx

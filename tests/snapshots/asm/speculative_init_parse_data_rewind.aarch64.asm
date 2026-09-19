@@ -14,63 +14,48 @@ Disassembly of section .text:
                	brk	#0x1
 
 <main>:
-               	mov	x0, #0x0                // =0
-               	mov	x1, x0
-               	mov	x1, x0
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldrsw	x1, [x1]
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldrsw	x1, [x0]
                	cmp	w1, #0x1
                	b.ne	<addr>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	ldrsw	x1, [x1]
                	cmp	w1, #0x2
-               	cset	x1, ne
-               	cbz	x1, <addr>
+               	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ret
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	x1, [x1, #0x8]
+               	ldr	x1, [x0, #0x8]
                	ldr	w1, [x1]
                	mov	x17, #0xa               // =10
                	eor	x1, x1, x17
                	cmp	w1, #0x0
                	b.ne	<addr>
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	x1, [x1, #0x8]
+               	ldr	x1, [x0, #0x8]
                	ldr	w1, [x1, #0x4]
                	mov	x17, #0x14              // =20
                	eor	x1, x1, x17
                	cmp	w1, #0x0
-               	cset	x1, ne
-               	cbnz	x1, <addr>
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	x1, [x1, #0x8]
-               	ldr	w1, [x1, #0x8]
-               	cmp	w1, #0x0
-               	cset	x1, ne
-               	cbz	x1, <addr>
+               	b.ne	<addr>
+               	ldr	x0, [x0, #0x8]
+               	ldr	w0, [x0, #0x8]
+               	cbz	x0, <addr>
                	mov	x0, #0x4                // =4
                	ret
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	x1, [x1, #0x8]
-               	ldr	w1, [x1]
-               	eor	x1, x1, #0x1e
-               	cmp	w1, #0x0
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldr	x0, [x0, #0x8]
+               	ldr	w0, [x0]
+               	eor	x0, x0, #0x1e
+               	cmp	w0, #0x0
                	b.ne	<addr>
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	x1, [x1, #0x8]
-               	ldr	w1, [x1, #0x4]
-               	cmp	w1, #0x0
-               	cset	x1, ne
-               	cbz	x1, <addr>
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldr	x0, [x0, #0x8]
+               	ldr	w0, [x0, #0x4]
+               	cbz	x0, <addr>
                	mov	x0, #0x5                // =5
                	ret
-               	mov	x1, x0
+               	mov	x0, #0x0                // =0
                	ret

@@ -55,9 +55,6 @@ Disassembly of section .text:
                	testq	%rcx, %rcx
                	jne	<addr>
                	cmpl	$0x1, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	jne	<addr>
                	leaq	<rip>, %rsi
                	xorq	%rax, %rax
@@ -73,15 +70,11 @@ Disassembly of section .text:
                	testq	%rcx, %rcx
                	jne	<addr>
                	cmpl	$0x2, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x1, %eax
                	retq
-               	xorq	%rax, %rax
-               	movq	%rax, %rcx
                	leaq	<rip>, %rcx
+               	xorq	%rax, %rax
                	movslq	%eax, %rdx
                	movsbq	(%rcx,%rdx), %rdx
                	testq	%rdx, %rdx

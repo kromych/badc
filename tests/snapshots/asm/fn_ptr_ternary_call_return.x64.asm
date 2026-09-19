@@ -40,13 +40,11 @@ Disassembly of section .text:
                	movq	%rbx, (%rsp)
                	movq	%r12, 0x8(%rsp)
                	movabsq	$0x123456789, %r12      # imm = 0x123456789
-               	leaq	-<rip>, %rax       # <addr>
                	movq	%r12, %rdi
-               	callq	*%rax
+               	callq	<addr>
                	movq	%rax, %rbx
-               	leaq	-<rip>, %rax       # <addr>
                	movabsq	$0x1234567890, %rdi     # imm = 0x1234567890
-               	callq	*%rax
+               	callq	<addr>
                	movq	%rax, %rdx
                	cmpq	%r12, %rbx
                	je	<addr>

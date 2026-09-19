@@ -57,16 +57,13 @@ Disassembly of section .text:
                	b.ne	<addr>
                	ldr	x1, [x20, #0x8]
                	cmp	x1, x21
-               	cset	x1, ne
-               	cbnz	x1, <addr>
+               	b.ne	<addr>
                	ldr	x1, [x20, #0x10]
                	cmp	x1, x22
-               	cset	x1, ne
-               	cbnz	x1, <addr>
+               	b.ne	<addr>
                	ldrsw	x1, [x20, #0x18]
                	cmp	w1, #0x7
-               	cset	x1, ne
-               	cbz	x1, <addr>
+               	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp, #0x60]
                	ldr	x22, [sp, #0x10]
@@ -77,16 +74,13 @@ Disassembly of section .text:
                	b.ne	<addr>
                	ldr	x1, [x0, #0x8]
                	cmp	x1, x21
-               	cset	x1, ne
-               	cbnz	x1, <addr>
+               	b.ne	<addr>
                	ldr	x1, [x0, #0x10]
                	cmp	x1, x22
-               	cset	x1, ne
-               	cbnz	x1, <addr>
+               	b.ne	<addr>
                	ldrsw	x0, [x0, #0x18]
                	cmp	w0, #0x8
-               	cset	x0, ne
-               	cbz	x0, <addr>
+               	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ldp	x29, x30, [sp, #0x60]
                	ldr	x22, [sp, #0x10]
@@ -128,8 +122,7 @@ Disassembly of section .text:
                	b.ne	<addr>
                	ldr	x0, [x0, #0x8]
                	cmp	x0, x20
-               	cset	x0, eq
-               	cbz	x0, <addr>
+               	b.ne	<addr>
                	mov	x0, #0x0                // =0
                	sxtw	x0, w0
                	cbz	x0, <addr>
@@ -157,20 +150,16 @@ Disassembly of section .text:
                	b.ne	<addr>
                	ldrsw	x1, [x0, #0x8]
                	cmp	w1, #0x4
-               	cset	x1, eq
-               	cbz	x1, <addr>
+               	b.ne	<addr>
                	ldr	x1, [x0, #0x10]
                	cmp	x1, x20
-               	cset	x1, eq
-               	cbz	x1, <addr>
+               	b.ne	<addr>
                	ldr	x1, [x0, #0x18]
                	cmp	x1, x21
-               	cset	x1, eq
-               	cbz	x1, <addr>
+               	b.ne	<addr>
                	ldrsw	x0, [x0, #0x20]
                	cmp	w0, #0x5
-               	cset	x0, eq
-               	cbz	x0, <addr>
+               	b.ne	<addr>
                	mov	x0, #0x0                // =0
                	sxtw	x0, w0
                	cbz	x0, <addr>

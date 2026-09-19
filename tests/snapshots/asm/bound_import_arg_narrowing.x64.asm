@@ -45,15 +45,9 @@ Disassembly of section .text:
                	jne	<addr>
                	movsbq	0x1(%rax), %rcx
                	cmpl	$0x41, %ecx
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
                	jne	<addr>
                	movsbq	0x2(%rax), %rcx
                	cmpl	$0x41, %ecx
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x3, %eax
                	leave

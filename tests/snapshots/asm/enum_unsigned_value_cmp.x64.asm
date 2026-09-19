@@ -95,8 +95,6 @@ Disassembly of section .text:
                	movl	$0xd, %eax
                	leave
                	retq
-               	movl	$0x2, %eax
-               	movl	$0x1, %eax
                	movslq	-0x10(%rbp), %rax
                	movl	%eax, %eax
                	movl	$0x80000000, %r11d      # imm = 0x80000000

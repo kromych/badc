@@ -530,8 +530,7 @@ Disassembly of section .text:
                	ldrb	w1, [x0, #0xe]
                	eor	x1, x1, #0xff
                	cmp	w1, #0x0
-               	cset	x1, ne
-               	cbz	x1, <addr>
+               	b.eq	<addr>
                	mov	x0, #0x5                // =5
                	ldp	x29, x30, [sp, #0x70]
                	ldr	x22, [sp, #0x10]
@@ -637,8 +636,7 @@ Disassembly of section .text:
                	mov	x17, #0xcd              // =205
                	eor	x1, x1, x17
                	cmp	w1, #0x0
-               	cset	x1, ne
-               	cbz	x1, <addr>
+               	b.eq	<addr>
                	mov	x0, #0x7                // =7
                	ldp	x29, x30, [sp, #0x70]
                	ldr	x22, [sp, #0x10]

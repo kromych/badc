@@ -72,38 +72,6 @@ Disassembly of section .text:
                	add	x1, x1, #0x1
                	cmp	w1, #0x13
                	b.le	<addr>
-               	mov	x0, #-0x1               // =-1
-               	mov	x1, x0
-               	mov	x1, x0
-               	mov	x1, x0
-               	mov	x1, x0
-               	mov	x1, x0
-               	mov	x0, #0x1                // =1
-               	mov	x0, #0x2                // =2
-               	mov	x0, #0x3                // =3
-               	mov	x0, #0x4                // =4
-               	mov	x0, #0x5                // =5
-               	mov	x0, #0x6                // =6
-               	mov	x0, #0x7                // =7
-               	mov	x0, #0x8                // =8
-               	mov	x0, #0x9                // =9
-               	mov	x0, #-0x1               // =-1
-               	mov	x1, x0
-               	mov	x1, x0
-               	mov	x1, x0
-               	mov	x0, #0x1                // =1
-               	mov	x0, #0x2                // =2
-               	mov	x0, #0x3                // =3
-               	mov	x0, #0x4                // =4
-               	mov	x0, #0x5                // =5
-               	mov	x0, #0x6                // =6
-               	mov	x0, #0x7                // =7
-               	mov	x0, #0x8                // =8
-               	mov	x0, #0x9                // =9
-               	mov	x0, #0xa                // =10
-               	mov	x0, #-0x1               // =-1
-               	mov	x1, x0
-               	mov	x1, x0
                	mov	x0, #0x0                // =0
                	ret
                	mov	x0, #0x1                // =1

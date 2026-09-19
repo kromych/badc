@@ -123,8 +123,7 @@ Disassembly of section .text:
                	ldrb	w2, [x20, x1]
                	and	x1, x1, #0xff
                	cmp	w2, w1
-               	cset	x1, ne
-               	cbnz	x1, <addr>
+               	b.ne	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x10
                	b.lt	<addr>
@@ -151,8 +150,7 @@ Disassembly of section .text:
                	ldrb	w2, [x4, x1]
                	and	x1, x1, #0xff
                	cmp	w2, w1
-               	cset	x1, ne
-               	cbnz	x1, <addr>
+               	b.ne	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x10
                	b.lt	<addr>
@@ -192,8 +190,7 @@ Disassembly of section .text:
                	ldrb	w2, [x21, x1]
                	and	x1, x1, #0xff
                	cmp	w2, w1
-               	cset	x1, ne
-               	cbnz	x1, <addr>
+               	b.ne	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x10
                	b.lt	<addr>

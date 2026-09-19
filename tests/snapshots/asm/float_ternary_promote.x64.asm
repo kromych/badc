@@ -40,8 +40,7 @@ Disassembly of section .text:
                	movl	$0x80000000, %r10d      # imm = 0x80000000
                	movq	%r10, %xmm15
                	xorpd	%xmm15, %xmm0
-               	movapd	%xmm0, %xmm1
-               	ucomiss	%xmm0, %xmm1
+               	ucomiss	%xmm0, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x2, %eax
@@ -73,7 +72,6 @@ Disassembly of section .text:
                	movl	$0x41a00000, %eax       # imm = 0x41A00000
                	movl	$0x41a00000, %r11d      # imm = 0x41A00000
                	movq	%r11, %xmm0
-               	movl	$0x41a00000, %eax       # imm = 0x41A00000
                	movq	%rax, %xmm15
                	ucomiss	%xmm15, %xmm0
                	jp	<addr>

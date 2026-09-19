@@ -51,8 +51,6 @@ Disassembly of section .text:
                	cmp	w0, #0x5
                	b.lt	<addr>
                	mov	x0, #0x0                // =0
-               	mov	x1, x0
-               	mov	x1, #0x1                // =1
                	ret
                	mov	x0, #0x8                // =8
                	ret

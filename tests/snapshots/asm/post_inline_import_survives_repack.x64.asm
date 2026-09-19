@@ -52,7 +52,6 @@ Disassembly of section .text:
                	movq	0x8(%rsp), %r12
                	leave
                	retq
-               	xorq	%rax, %rax
                	leaq	<rip>, %r12
                	movq	<rip>, %rax      # <addr>
                	movq	%rbx, %rdi

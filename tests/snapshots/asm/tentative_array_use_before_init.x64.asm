@@ -54,9 +54,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movslq	0x28(%rax), %rax
                	cmpl	$0x1e, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x2, %eax
                	retq

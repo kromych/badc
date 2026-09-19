@@ -77,10 +77,10 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	movl	$0x3, %edx
                	movl	%edx, (%rcx)
-               	andq	$0x3f, %rcx
-               	testq	%rcx, %rcx
+               	movq	%rcx, %rdx
+               	andq	$0x3f, %rdx
+               	testq	%rdx, %rdx
                	jne	<addr>
-               	leaq	<rip>, %rcx
                	movl	(%rcx), %ecx
                	xorq	$0x3, %rcx
                	testl	%ecx, %ecx

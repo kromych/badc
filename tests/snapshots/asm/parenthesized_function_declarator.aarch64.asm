@@ -32,5 +32,4 @@ Disassembly of section .text:
                	mov	x1, #0xa                // =10
                	str	w1, [x0]
                	mov	x0, #0x0                // =0
-               	mov	x1, x0
                	ret

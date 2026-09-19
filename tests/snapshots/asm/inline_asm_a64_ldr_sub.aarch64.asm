@@ -44,8 +44,7 @@ Disassembly of section .text:
                	ldur	x0, [x29, #-0x8]
                	mov	x17, #-0x7              // =-7
                	cmp	x0, x17
-               	cset	x0, eq
-               	cbz	x0, <addr>
+               	b.ne	<addr>
                	mov	x0, #0x2a               // =42
                	sxtw	x0, w0
                	add	sp, sp, #0x20

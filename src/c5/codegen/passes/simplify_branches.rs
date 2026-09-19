@@ -3,14 +3,19 @@
 //!
 //! Folding a `Bz`/`Bnz` on a constant orphans its not-taken successor;
 //! pruning that block drops the phi incomings naming it, which can
-//! collapse a merge phi to a single incoming. A constant then reaches
-//! the survivor either directly (`constfold_branch::fold` chases the
-//! degenerate phi) or through a value chain built on it -- an `Extend`,
-//! a `BinopI` -- which `constfold` resolves once its `imm_of` sees
+//! leave a merge phi one incoming. A constant then reaches the survivor
+//! either directly (the constant resolver reads a merge of equal
+//! constants) or through a value chain built on it -- an `Extend`, a
+//! `BinopI` -- which `constfold` resolves once its `imm_of` sees
 //! through the phi. This is the pattern a constant argument produces
 //! after inlining an `if`/`else-if` chain, and any constant that flows
 //! through one folded branch into a later one. The passes alternate
 //! until the branch fold and the prune both reach a fixed point.
+//!
+//! At `-O` each round opens with [`super::merge_blocks`]: a one-input
+//! phi gives way to its value and a block joins the predecessor that
+//! only jumps to it, so the folds of the round read the values
+//! themselves and the code that leaves the fixed point has neither.
 //!
 //! The `-O` pipeline runs the const-data-aware form: loads from const
 //! initialized data fold inside the same fixed point, so an address that
@@ -43,6 +48,9 @@ struct Opts<'a> {
     /// Entry range per declared parameter, from the interprocedural
     /// join in [`super::ipa_const_param`]. Empty when none is known.
     param_ranges: &'a [Range],
+    /// Forward one-input phis and merge straight-line blocks
+    /// ([`super::merge_blocks`]).
+    merge_blocks: bool,
 }
 
 /// The post-walk correctness cleanup, run at every optimization level.
@@ -58,6 +66,7 @@ pub(crate) fn run(funcs: &mut [FunctionSsa]) {
                 implied_ranges: false,
                 const_stores: false,
                 param_ranges: &[],
+                merge_blocks: false,
             },
         );
     }
@@ -88,6 +97,7 @@ pub(crate) fn run_with_const_data(
                 implied_ranges: true,
                 const_stores: true,
                 param_ranges: ranges,
+                merge_blocks: true,
             },
         );
     }
@@ -104,6 +114,12 @@ fn run_one(func: &mut FunctionSsa, opts: &Opts<'_>) {
     let mut bound = func.blocks.len() + func.insts.len() + 1;
     let mut resolved = !opts.resolve_constant_p;
     loop {
+        // First: the folds below then read through what the last round's
+        // prune and thread left. It enables folds and is not a reason
+        // for another round by itself.
+        if opts.merge_blocks {
+            super::merge_blocks::run_one(func);
+        }
         super::constfold::run_one(func);
         let selected = opts.fold_selects && super::constfold::fold_selects(func);
         let nulled = opts

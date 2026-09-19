@@ -35,10 +35,8 @@ Disassembly of section .text:
 <main>:
                	mov	x0, #0x40a00000         // =1084227584
                	fmov	s16, w0
-               	fneg	s1, s16
-               	fmov	s16, w0
                	fneg	s0, s16
-               	fcmp	s1, s0
+               	fcmp	s0, s0
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ret
@@ -49,8 +47,7 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ret
-               	fmov	d1, d0
-               	fcmp	s1, s0
+               	fcmp	s0, s0
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ret
@@ -68,8 +65,6 @@ Disassembly of section .text:
                	fmov	s16, w1
                	fneg	s0, s16
                	fadd	s1, s1, s0
-               	fmov	s16, w1
-               	fneg	s0, s16
                	fmov	s16, w0
                	fadd	s0, s16, s0
                	fcmp	s1, s0
@@ -83,8 +78,6 @@ Disassembly of section .text:
                	mov	x17, #0x3e000000        // =1040187392
                	fmov	s1, w17
                	fadd	s1, s0, s1
-               	fmov	s16, w0
-               	fneg	s0, s16
                	fmov	s17, w1
                	fadd	s0, s0, s17
                	fcmp	s1, s0
@@ -97,11 +90,11 @@ Disassembly of section .text:
                	fmov	s0, w17
                	mov	x17, #0x40800000        // =1082130432
                	fmov	s1, w17
-               	fadd	s1, s0, s1
+               	fadd	s0, s0, s1
                	fmov	s16, w0
                	fmov	s17, w1
-               	fadd	s0, s16, s17
-               	fcmp	s1, s0
+               	fadd	s1, s16, s17
+               	fcmp	s0, s1
                	b.eq	<addr>
                	mov	x0, #0x7                // =7
                	ret

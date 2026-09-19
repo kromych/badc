@@ -74,12 +74,11 @@ Disassembly of section .text:
                	b.hs	<addr>
                	cbz	x20, <addr>
                	ldrb	w3, [x20, x0]
+               	b	<addr>
+               	mov	x3, x2
                	ldrb	w4, [x22, x0]
                	eor	x3, x3, x4
                	strb	w3, [x21, x0]
-               	b	<addr>
-               	mov	x3, x2
-               	b	<addr>
                	add	x1, x0, #0x1
                	mov	w0, w1
                	cmp	w0, #0x40

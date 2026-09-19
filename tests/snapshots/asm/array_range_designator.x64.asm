@@ -56,9 +56,6 @@ Disassembly of section .text:
                	movq	0x8(%rax), %rax
                	callq	*%rax
                	cmpl	$0x16, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	jne	<addr>
                	leaq	<rip>, %rax
                	movslq	%ebx, %rcx
@@ -66,9 +63,6 @@ Disassembly of section .text:
                	addq	%rcx, %rax
                	movslq	0x10(%rax), %rax
                	cmpl	$0x7, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	jne	<addr>
                	incq	%rbx
                	cmpl	$0x2, %ebx
@@ -78,22 +72,14 @@ Disassembly of section .text:
                	jne	<addr>
                	callq	<addr>
                	cmpl	$0xb, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	jne	<addr>
-               	xorq	%rax, %rax
                	callq	<addr>
                	cmpl	$0xb, %eax
                	jne	<addr>
                	callq	<addr>
                	cmpl	$0xb, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	jne	<addr>
                	xorq	%rax, %rax
-               	movq	%rax, %rcx
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r13
@@ -121,9 +107,6 @@ Disassembly of section .text:
 
 <check_const>:
                	xorq	%rax, %rax
-               	movq	%rax, %rcx
-               	movq	%rax, %rcx
-               	movq	%rax, %rcx
                	retq
 
 <dispatch>:
@@ -167,22 +150,14 @@ Disassembly of section .text:
                	jne	<addr>
                	callq	<addr>
                	cmpl	$0x16, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	jne	<addr>
-               	xorq	%rax, %rax
                	callq	<addr>
                	cmpl	$0x16, %eax
                	jne	<addr>
                	callq	<addr>
                	cmpl	$0x16, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	jne	<addr>
                	xorq	%rax, %rax
-               	movq	%rax, %rcx
                	movslq	%eax, %rcx
                	testq	%rcx, %rcx
                	je	<addr>

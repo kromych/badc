@@ -91,16 +91,14 @@ Disassembly of section .text:
                	movq	%rdi, %r10
                	movq	%rdx, %rdi
                	subq	%r10, %rdi
-               	movslq	%edi, %rdi
                	leaq	<rip>, %r8
                	movl	%esi, %r9d
                	imulq	$0x18, %r9, %r9
                	addq	%r9, %r8
                	movslq	0x10(%r8), %r8
-               	cmpq	%r8, %rdi
+               	cmpl	%r8d, %edi
                	jne	<addr>
-               	movq	%rdx, %rax
-               	cmpq	%rdx, %rax
+               	cmpl	%edx, %edx
                	jne	<addr>
                	movl	%esi, %eax
                	leaq	0x1(%rax), %rsi

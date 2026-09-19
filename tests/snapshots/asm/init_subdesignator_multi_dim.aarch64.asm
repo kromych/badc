@@ -180,21 +180,17 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	ldrsw	x0, [x0, #0x6c]
                	cmp	w0, #0x3
-               	cset	x0, eq
-               	cbz	x0, <addr>
+               	b.ne	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrh	w0, [x0, #0x8]
                	eor	x0, x0, #0x8
                	cmp	w0, #0x0
-               	cset	x0, eq
-               	cbz	x0, <addr>
+               	b.ne	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrsw	x0, [x0, #0x98]
-               	cmp	w0, #0x0
-               	cset	x0, eq
-               	cbnz	x0, <addr>
+               	cbz	x0, <addr>
                	mov	x0, #0x4                // =4
                	add	sp, sp, #0x140
                	ldp	x29, x30, [sp], #0x10

@@ -18,55 +18,41 @@ Disassembly of section .text:
                	mov	x29, sp
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	add	x0, x0, #0x0
-               	ldrb	w0, [x0]
-               	eor	x0, x0, #0x4
-               	cmp	w0, #0x0
+               	add	x1, x0, #0x0
+               	ldrb	w1, [x1]
+               	eor	x1, x1, #0x4
+               	cmp	w1, #0x0
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrb	w0, [x0, #0x1]
-               	eor	x0, x0, #0x4
-               	cmp	w0, #0x0
+               	ldrb	w1, [x0, #0x1]
+               	eor	x1, x1, #0x4
+               	cmp	w1, #0x0
                	b.ne	<addr>
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrb	w0, [x0, #0x2]
-               	eor	x0, x0, #0x4
-               	cmp	w0, #0x0
+               	ldrb	w1, [x0, #0x2]
+               	eor	x1, x1, #0x4
+               	cmp	w1, #0x0
                	b.ne	<addr>
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrb	w0, [x0, #0x3]
-               	eor	x0, x0, #0x7
-               	cmp	w0, #0x0
+               	ldrb	w1, [x0, #0x3]
+               	eor	x1, x1, #0x7
+               	cmp	w1, #0x0
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrb	w0, [x0, #0x4]
-               	eor	x0, x0, #0x7
-               	cmp	w0, #0x0
+               	ldrb	w1, [x0, #0x4]
+               	eor	x1, x1, #0x7
+               	cmp	w1, #0x0
                	b.ne	<addr>
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrb	w0, [x0, #0x5]
-               	eor	x0, x0, #0x7
-               	cmp	w0, #0x0
+               	ldrb	w1, [x0, #0x5]
+               	eor	x1, x1, #0x7
+               	cmp	w1, #0x0
                	b.ne	<addr>
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrb	w0, [x0, #0x6]
-               	eor	x0, x0, #0x7
-               	cmp	w0, #0x0
+               	ldrb	w1, [x0, #0x6]
+               	eor	x1, x1, #0x7
+               	cmp	w1, #0x0
                	b.ne	<addr>
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
                	ldrb	w0, [x0, #0x7]
                	eor	x0, x0, #0x7
                	cmp	w0, #0x0

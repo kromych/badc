@@ -97,16 +97,13 @@ Disassembly of section .text:
                	add	x1, x1, #0x1
                	str	w1, [x0]
                	mov	x0, #0x0                // =0
-               	mov	x1, x0
-               	mov	x1, x0
-               	mov	x1, x0
                	ret
 
 <check_override>:
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	mov	x0, #0x0                // =0
-               	str	w0, [x1]
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	mov	x1, #0x0                // =0
+               	str	w1, [x0]
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	ldrsw	x3, [x2]
@@ -117,17 +114,12 @@ Disassembly of section .text:
                	ldrsw	x3, [x2]
                	add	x3, x3, #0x1
                	str	w3, [x2]
-               	ldrsw	x1, [x1]
-               	cmp	w1, #0x2
+               	ldrsw	x0, [x0]
+               	cmp	w0, #0x2
                	b.eq	<addr>
                	mov	x0, #0x66               // =102
                	ret
-               	mov	x1, x0
-               	mov	x1, x0
-               	mov	x1, x0
-               	mov	x1, x0
-               	mov	x1, x0
-               	mov	x1, x0
+               	mov	x0, x1
                	ret
 
 <check_widths>:
@@ -190,30 +182,21 @@ Disassembly of section .text:
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x5, x0
-               	mov	x5, x0
-               	mov	x5, x0
-               	mov	x5, x0
-               	mov	x5, x0
-               	mov	x5, x0
                	fmov	d16, x0
                	fmov	d17, x0
                	fcmp	d16, d17
                	b.ne	<addr>
                	ldur	d4, [x29, #-0x18]
                	fcmp	d4, d1
-               	cset	x5, ne
-               	cbnz	x5, <addr>
+               	b.ne	<addr>
                	ldur	d4, [x29, #-0x10]
                	fcmp	d4, d1
-               	cset	x3, ne
-               	cbnz	x3, <addr>
+               	b.ne	<addr>
                	fmov	d16, x0
                	fmov	d17, x0
                	fcmp	d16, d17
-               	cset	x0, ne
-               	cbz	x0, <addr>
-               	mov	x0, #0xc                // =12
+               	b.eq	<addr>
+               	mov	x0, x2
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
@@ -222,13 +205,11 @@ Disassembly of section .text:
                	b.ne	<addr>
                	ldr	s0, [x1, #0x8]
                	fcmp	s0, s3
-               	cset	x0, ne
-               	cbz	x0, <addr>
+               	b.eq	<addr>
                	mov	x0, #0xd                // =13
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x0                // =0
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
@@ -305,10 +286,6 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	str	w0, [x4]
                	mov	x0, #0x0                // =0
-               	mov	x1, x0
-               	mov	x1, x0
-               	mov	x1, x0
-               	mov	x1, x0
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret

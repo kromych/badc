@@ -14,17 +14,16 @@ Disassembly of section .text:
                	brk	#0x1
 
 <main>:
-               	adrp	x6, <page>
-               	add	x6, x6, <lo12>
+               	adrp	x5, <page>
+               	add	x5, x5, <lo12>
                	mov	x0, #0x2710             // =10000
-               	str	w0, [x6]
-               	ldrsw	x0, [x6]
+               	str	w0, [x5]
+               	ldrsw	x0, [x5]
                	mov	x1, #0x0                // =0
                	cmp	w0, #0x0
                	b.le	<addr>
                	sxtw	x2, w0
                	mov	x3, #0x1000             // =4096
-               	mov	x4, #0x1                // =1
                	cmp	x2, x3
                	b.lo	<addr>
                	mov	x2, x3
@@ -38,18 +37,17 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ret
-               	mov	x3, #0x1                // =1
-               	str	w3, [x6]
-               	ldrsw	x0, [x6]
+               	mov	x0, #0x1                // =1
+               	str	w0, [x5]
+               	ldrsw	x0, [x5]
                	mov	x1, #0x0                // =0
                	cmp	w0, #0x0
                	b.le	<addr>
                	sxtw	x2, w0
-               	mov	x4, #0x1000             // =4096
-               	mov	x5, x3
-               	cmp	x2, x4
+               	mov	x3, #0x1000             // =4096
+               	cmp	x2, x3
                	b.lo	<addr>
-               	mov	x2, x4
+               	mov	x2, x3
                	mov	w2, w2
                	add	x1, x1, x2
                	sub	x0, x0, x2
@@ -60,16 +58,15 @@ Disassembly of section .text:
                	mov	x0, #0x2                // =2
                	ret
                	mov	x1, #0x0                // =0
-               	str	w1, [x6]
-               	ldrsw	x0, [x6]
+               	str	w1, [x5]
+               	ldrsw	x0, [x5]
                	cmp	w0, #0x0
                	b.le	<addr>
                	sxtw	x2, w0
-               	mov	x4, #0x1000             // =4096
-               	mov	x5, x3
-               	cmp	x2, x4
+               	mov	x3, #0x1000             // =4096
+               	cmp	x2, x3
                	b.lo	<addr>
-               	mov	x2, x4
+               	mov	x2, x3
                	mov	w2, w2
                	add	x1, x1, x2
                	sub	x0, x0, x2

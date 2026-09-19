@@ -124,16 +124,14 @@ Disassembly of section .text:
                	fcmp	d0, d17
                	b.pl	<addr>
                	fneg	d0, d0
-               	mov	x0, #0xd695             // =54933
-               	movk	x0, #0xe826, lsl #16
-               	movk	x0, #0x2e0b, lsl #32
-               	movk	x0, #0x3e11, lsl #48
-               	fmov	d17, x0
+               	mov	x1, #0xd695             // =54933
+               	movk	x1, #0xe826, lsl #16
+               	movk	x1, #0x2e0b, lsl #32
+               	movk	x1, #0x3e11, lsl #48
+               	fmov	d17, x1
                	fcmp	d0, d17
                	b.pl	<addr>
                	mov	x0, #0x4                // =4
-               	b	<addr>
-               	mov	x0, #0x0                // =0
                	b	<addr>
                	mov	x1, x0
                	b	<addr>

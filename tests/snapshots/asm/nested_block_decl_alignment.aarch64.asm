@@ -69,10 +69,8 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	mov	x2, #0x3                // =3
                	str	w2, [x1]
-               	and	x1, x1, #0x3f
-               	cbnz	x1, <addr>
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
+               	and	x2, x1, #0x3f
+               	cbnz	x2, <addr>
                	ldr	w1, [x1]
                	eor	x1, x1, #0x3
                	cmp	w1, #0x0

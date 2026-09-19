@@ -27,7 +27,6 @@ Disassembly of section .text:
 
 <main>:
                	xorq	%rdi, %rdi
-               	movq	%rdi, %rax
                	leaq	<rip>, %rcx
                	movq	%rdi, %rax
                	cmpl	$0x2, %eax
@@ -96,9 +95,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movslq	0x4(%rax), %rax
                	cmpl	$0x1, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x2, %eax
                	retq
@@ -160,9 +156,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movslq	0x4(%rax), %rax
                	cmpl	$0x1, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	je	<addr>
                	movq	%rdx, %rax
                	retq

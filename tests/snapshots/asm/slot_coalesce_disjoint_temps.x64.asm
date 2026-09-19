@@ -43,10 +43,7 @@ Disassembly of section .text:
                	cmpl	$0xa, %ecx
                	jle	<addr>
                	cmpl	$0x64, %ecx
-               	setl	%dl
-               	movzbq	%dl, %rdx
-               	testq	%rdx, %rdx
-               	je	<addr>
+               	jge	<addr>
                	leaq	-0x1(%rcx), %rdx
                	movslq	%edx, %rsi
                	movq	%rsi, %rbx
@@ -57,10 +54,7 @@ Disassembly of section .text:
                	testq	%rsi, %rsi
                	je	<addr>
                	cmpl	$0x32, %edx
-               	setg	%sil
-               	movzbq	%sil, %rsi
-               	testq	%rsi, %rsi
-               	je	<addr>
+               	jle	<addr>
                	movq	%rdx, %rsi
                	shlq	%rsi
                	addq	%rsi, %rcx
@@ -72,10 +66,7 @@ Disassembly of section .text:
                	cmpl	$0xa, %ecx
                	jle	<addr>
                	cmpl	$0x64, %ecx
-               	setl	%dl
-               	movzbq	%dl, %rdx
-               	testq	%rdx, %rdx
-               	je	<addr>
+               	jge	<addr>
                	leaq	-0x1(%rcx), %rdx
                	movslq	%edx, %rsi
                	movq	%rsi, %r9
@@ -86,28 +77,25 @@ Disassembly of section .text:
                	testq	%rsi, %rsi
                	je	<addr>
                	cmpl	$0x32, %edx
-               	setg	%sil
-               	movzbq	%sil, %rsi
-               	testq	%rsi, %rsi
-               	je	<addr>
+               	jle	<addr>
                	movq	%rdx, %rsi
                	shlq	%rsi
+               	jmp	<addr>
+               	movq	%rdx, %rsi
+               	jmp	<addr>
+               	leaq	0x1(%rcx), %rdx
+               	jmp	<addr>
+               	leaq	0x7(%rax), %rcx
+               	jmp	<addr>
+               	movq	%rdx, %rsi
+               	jmp	<addr>
+               	leaq	0x1(%rcx), %rdx
+               	jmp	<addr>
+               	leaq	0x7(%rax), %rcx
+               	jmp	<addr>
                	addq	%rsi, %rcx
                	addq	%rdx, %rcx
                	addq	%rcx, %rdi
-               	jmp	<addr>
-               	movq	%rdx, %rsi
-               	jmp	<addr>
-               	leaq	0x1(%rcx), %rdx
-               	jmp	<addr>
-               	leaq	0x7(%rax), %rcx
-               	jmp	<addr>
-               	movq	%rdx, %rsi
-               	jmp	<addr>
-               	leaq	0x1(%rcx), %rdx
-               	jmp	<addr>
-               	leaq	0x7(%rax), %rcx
-               	jmp	<addr>
                	incq	%rax
                	cmpl	$0x40, %eax
                	jl	<addr>

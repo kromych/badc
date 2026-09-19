@@ -27,9 +27,6 @@ Disassembly of section .text:
 
 <check>:
                	xorq	%rax, %rax
-               	movq	%rax, %rdx
-               	movq	%rax, %rdx
-               	movq	%rax, %rcx
                	retq
 
 <main>:

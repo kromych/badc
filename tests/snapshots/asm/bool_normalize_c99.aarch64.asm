@@ -173,20 +173,16 @@ Disassembly of section .text:
                	cset	x20, ne
                	mov	x0, x21
                	bl	<addr>
-               	cmp	x0, #0x0
-               	cset	x21, ne
+               	mov	x21, x0
                	mov	x0, #-0x3               // =-3
                	bl	<addr>
                	cmp	x0, #0x0
-               	cset	x1, ne
+               	cset	x0, ne
                	cmp	w20, #0x1
                	b.ne	<addr>
-               	cmp	w21, #0x0
-               	cset	x0, ne
-               	cbnz	x0, <addr>
-               	cmp	w1, #0x1
-               	cset	x0, ne
-               	cbz	x0, <addr>
+               	cbnz	x21, <addr>
+               	cmp	w0, #0x1
+               	b.eq	<addr>
                	mov	x0, #0x10               // =16
                	ldp	x29, x30, [sp, #0x20]
                	ldp	x20, x21, [sp], #0x30

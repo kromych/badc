@@ -19,9 +19,9 @@
 //! Folding a terminator only makes code unreachable, but after
 //! `prune_unreachable` drops the not-taken predecessor a merge phi can
 //! collapse to a single incoming, exposing a fresh constant condition
-//! downstream. `fold` therefore chases single-incoming (degenerate)
-//! phis, and the driver in [`super::simplify_branches`] alternates this
-//! pass with the prune to a fixed point.
+//! downstream. `fold` therefore reads a merge of equal constants, one
+//! incoming included, and the driver in [`super::simplify_branches`]
+//! alternates this pass with the prune to a fixed point.
 
 use crate::c5::ir::{BlockId, FunctionSsa, Inst, Terminator};
 

@@ -26,21 +26,12 @@ Disassembly of section .text:
                	int3
 
 <check_runtime>:
-               	movl	$0x1, %eax
-               	movq	%rax, %rcx
-               	movq	%rax, %rcx
-               	movq	%rax, %rcx
-               	movq	%rax, %rcx
                	xorq	%rax, %rax
                	retq
 
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	movl	$0x1, %eax
-               	movq	%rax, %rcx
-               	movq	%rax, %rcx
-               	movq	%rax, %rcx
                	movl	$0x14, %edi
                	movl	$0x16, %esi
                	callq	<addr>

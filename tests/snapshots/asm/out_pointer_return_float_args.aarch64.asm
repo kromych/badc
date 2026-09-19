@@ -25,18 +25,15 @@ Disassembly of section .text:
                	fmov	s16, w1
                	fmov	s17, w1
                	fcmp	s16, s17
-               	cset	x0, ne
-               	cbnz	x0, <addr>
+               	b.ne	<addr>
                	fmov	s16, w2
                	fmov	s17, w2
                	fcmp	s16, s17
-               	cset	x0, ne
-               	cbnz	x0, <addr>
+               	b.ne	<addr>
                	fmov	s16, w3
                	fmov	s17, w3
                	fcmp	s16, s17
-               	cset	x0, ne
-               	cbz	x0, <addr>
+               	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ret
                	mov	x0, #0x3fc00000         // =1069547520
@@ -51,23 +48,19 @@ Disassembly of section .text:
                	fmov	s16, w1
                	fmov	s17, w1
                	fcmp	s16, s17
-               	cset	x0, ne
-               	cbnz	x0, <addr>
+               	b.ne	<addr>
                	fmov	s16, w2
                	fmov	s17, w2
                	fcmp	s16, s17
-               	cset	x0, ne
-               	cbnz	x0, <addr>
+               	b.ne	<addr>
                	fmov	s16, w3
                	fmov	s17, w3
                	fcmp	s16, s17
-               	cset	x0, ne
-               	cbnz	x0, <addr>
+               	b.ne	<addr>
                	fmov	s16, w4
                	fmov	s17, w4
                	fcmp	s16, s17
-               	cset	x0, ne
-               	cbz	x0, <addr>
+               	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ret
                	mov	x0, #0x4024000000000000 // =4621819117588971520
@@ -80,13 +73,11 @@ Disassembly of section .text:
                	fmov	d16, x1
                	fmov	d17, x1
                	fcmp	d16, d17
-               	cset	x0, ne
-               	cbnz	x0, <addr>
+               	b.ne	<addr>
                	fmov	d16, x2
                	fmov	d17, x2
                	fcmp	d16, d17
-               	cset	x0, ne
-               	cbz	x0, <addr>
+               	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ret
                	mov	x0, #0x0                // =0

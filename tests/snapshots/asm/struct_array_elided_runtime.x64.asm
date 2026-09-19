@@ -36,9 +36,6 @@ Disassembly of section .text:
                	cmpl	%edi, %edi
                	jne	<addr>
                	cmpl	%eax, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x1, %eax
                	movq	(%rsp), %rbx
@@ -48,29 +45,19 @@ Disassembly of section .text:
                	jne	<addr>
                	leaq	0x3(%rdi), %rax
                	cmpl	%eax, %edx
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x2, %eax
                	movq	(%rsp), %rbx
                	leave
                	retq
-               	leaq	0x4(%rdi), %rcx
-               	xorq	%r8, %r8
+               	leaq	0x4(%rdi), %rax
                	cmpl	%eax, %eax
-               	jne	<addr>
-               	cmpl	%ecx, %ecx
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x4, %eax
                	movq	(%rsp), %rbx
                	leave
                	retq
                	xorq	%rax, %rax
-               	movq	%rax, %rcx
                	movq	(%rsp), %rbx
                	leave
                	retq

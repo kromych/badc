@@ -409,15 +409,10 @@ pub(crate) fn addr_facts(program: &crate::c5::program::Program) -> AddrFacts {
     facts
 }
 
-/// Recursion budget for the non-null address walk: a base behind a few
-/// collapsed merges.
-const NONNULL_DEPTH: u32 = 8;
-
 /// Whether `v` produces an address that cannot compare equal to a null
 /// pointer constant (C99 6.3.2.3p3, 6.5.9p6): a local slot, a block
 /// address, an import stub, or a code / data / TLS address whose
-/// referent has a non-weak definition in this unit per [`AddrFacts`].
-/// Degenerate phis are chased like the constant resolver does. A
+/// referent has a non-weak definition in this unit per [`AddrFacts`]. A
 /// displacement chain on such a base is not walked through: the IR does
 /// not distinguish pointer arithmetic (in-bounds by C99 6.5.6p8) from
 /// integer arithmetic on a converted address, and the latter may wrap
@@ -427,11 +422,7 @@ fn is_nonnull_addr(
     extern_syms: &BTreeMap<u32, u32>,
     facts: &AddrFacts,
     v: ValueId,
-    depth: u32,
 ) -> bool {
-    if depth == 0 {
-        return false;
-    }
     // An extern-resolved instruction is judged by its symbol; its
     // payload is a placeholder.
     if let Some(sym) = extern_syms.get(&v) {
@@ -444,9 +435,6 @@ fn is_nonnull_addr(
         Some(Inst::ImmData(off)) => outside(&facts.weak_data, *off),
         Some(Inst::TlsAddr(off)) => outside(&facts.weak_tls, *off),
         Some(Inst::ImmExtCode(_) | Inst::LocalAddr(_) | Inst::BlockAddr(_)) => true,
-        Some(Inst::Phi { incoming, .. }) if incoming.len() == 1 => {
-            is_nonnull_addr(func, extern_syms, facts, incoming[0].1, depth - 1)
-        }
         _ => false,
     }
 }
@@ -464,17 +452,6 @@ enum AddrIdent {
     ExtCode(i64),
     Local(i64),
     ExternSym(u32),
-}
-
-/// Chase degenerate phis to the defining instruction's index.
-fn resolve_value(func: &FunctionSsa, mut v: ValueId) -> ValueId {
-    for _ in 0..NONNULL_DEPTH {
-        match func.insts.get(v as usize) {
-            Some(Inst::Phi { incoming, .. }) if incoming.len() == 1 => v = incoming[0].1,
-            _ => break,
-        }
-    }
-    v
 }
 
 fn addr_ident(
@@ -525,11 +502,11 @@ pub(crate) fn fold_addr_compares(func: &mut FunctionSsa, facts: &AddrFacts) -> b
                 op: op @ (BinOp::Eq | BinOp::Ne),
                 lhs,
                 rhs_imm: 0,
-            } if is_nonnull_addr(func, &extern_syms, facts, *lhs, NONNULL_DEPTH) => {
+            } if is_nonnull_addr(func, &extern_syms, facts, *lhs) => {
                 Some(i64::from(*op == BinOp::Ne))
             }
             Inst::Binop { op, lhs, rhs } => same_operand_compare(*op).filter(|_| {
-                let (l, r) = (resolve_value(func, *lhs), resolve_value(func, *rhs));
+                let (l, r) = (*lhs, *rhs);
                 l == r
                     || matches!(
                         (
@@ -681,38 +658,27 @@ fn imm_through_phis_depth(
     v: ValueId,
     depth: u32,
 ) -> Option<i64> {
-    let mut i = v as usize;
-    // Chase single-incoming (degenerate) phis to the constant they
-    // collapse to: such a phi always takes its one predecessor's value.
-    // prune_unreachable produces them when it drops a folded branch's
-    // dead predecessor, so folding through them lets a chain built on the
-    // survivor (an `Extend`, a `BinopI`) resolve on the next round.
-    for _ in 0..insts.len() {
-        match insts.get(i)? {
-            Inst::Imm(k) if !matches!(f32_values.get(i), Some(true)) => return Some(*k),
-            Inst::Phi { incoming, .. } if incoming.len() == 1 => {
-                i = incoming[0].1 as usize;
+    match insts.get(v as usize)? {
+        Inst::Imm(k) if !matches!(f32_values.get(v as usize), Some(true)) => Some(*k),
+        // Every predecessor supplying the same constant makes the merge
+        // that constant, whichever edge is taken. A `&&` / `||` whose
+        // arms decide the same way reaches the fold in this shape, as
+        // does any merge of equal constants an inline exposed, and a
+        // merge a pruned branch left with one predecessor. The depth
+        // bound also terminates a loop phi, whose back edge reaches
+        // itself.
+        Inst::Phi { incoming, .. } => {
+            if depth == 0 {
+                return None;
             }
-            // Every predecessor supplying the same constant makes the
-            // merge that constant, whichever edge is taken. A `&&` / `||`
-            // whose arms decide the same way reaches the fold in this
-            // shape, as does any merge of equal constants an inline
-            // exposed. The depth bound also terminates a loop phi, whose
-            // back edge reaches itself.
-            Inst::Phi { incoming, .. } => {
-                if depth == 0 {
-                    return None;
-                }
-                let mut vals = incoming
-                    .iter()
-                    .map(|&(_, v)| imm_through_phis_depth(insts, f32_values, v, depth - 1));
-                let first = vals.next()??;
-                return vals.all(|k| k == Some(first)).then_some(first);
-            }
-            _ => return None,
+            let mut vals = incoming
+                .iter()
+                .map(|&(_, v)| imm_through_phis_depth(insts, f32_values, v, depth - 1));
+            let first = vals.next()??;
+            vals.all(|k| k == Some(first)).then_some(first)
         }
+        _ => None,
     }
-    None
 }
 
 /// Operand-reference counts, including terminator conditions and the

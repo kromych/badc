@@ -39,9 +39,6 @@ Disassembly of section .text:
                	movzbq	0x7(%rax), %rcx
                	xorq	$0xc, %rcx
                	testl	%ecx, %ecx
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x2, %eax
                	retq
@@ -52,9 +49,6 @@ Disassembly of section .text:
                	movzbq	0xb(%rax), %rcx
                	xorq	$0x16, %rcx
                	testl	%ecx, %ecx
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x3, %eax
                	retq
@@ -65,9 +59,6 @@ Disassembly of section .text:
                	movzbq	0xd(%rax), %rcx
                	xorq	$0x5, %rcx
                	testl	%ecx, %ecx
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x4, %eax
                	retq

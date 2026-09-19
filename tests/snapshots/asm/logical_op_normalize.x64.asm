@@ -42,7 +42,6 @@ Disassembly of section .text:
 
 <and_ll>:
                	xorq	%rax, %rax
-               	movq	%rax, %rcx
                	retq
 
 <and_rr>:

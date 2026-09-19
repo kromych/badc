@@ -85,13 +85,13 @@ Disassembly of section .text:
                	str	w3, [x1, #0x60]
                	add	x3, x1, #0x60
                	str	x2, [x3, #0x20]
-               	mov	x1, #0x22               // =34
-               	str	w1, [x3, #0x4]
-               	add	x2, x0, #0x180
-               	add	x1, x2, #0x60
-               	str	x4, [x1, #0x28]
-               	mov	x0, #0x2100             // =8448
-               	str	x0, [x1, #0x10]
+               	mov	x2, #0x22               // =34
+               	str	w2, [x3, #0x4]
+               	str	x4, [x3, #0x28]
+               	add	x0, x0, #0x180
+               	add	x0, x0, #0x60
+               	mov	x1, #0x2100             // =8448
+               	str	x1, [x0, #0x10]
                	ret
 
 <main>:
@@ -120,15 +120,12 @@ Disassembly of section .text:
                	b.ne	<addr>
                	ldr	x4, [x1, #0x20]
                	cmp	x4, x22
-               	cset	x4, ne
-               	cbnz	x4, <addr>
+               	b.ne	<addr>
                	ldr	w4, [x1, #0x4]
                	mov	w6, w2
                	cmp	w4, w6
                	b.ne	<addr>
                	ldr	x1, [x1, #0x28]
-               	cmp	x1, #0x0
-               	cset	x1, ne
                	cbnz	x1, <addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x8
@@ -149,8 +146,7 @@ Disassembly of section .text:
                	b.ne	<addr>
                	ldr	x5, [x1, #0x20]
                	cmp	x5, x22
-               	cset	x5, ne
-               	cbnz	x5, <addr>
+               	b.ne	<addr>
                	ldr	w8, [x1, #0x4]
                	add	x5, x2, #0x20
                	mov	w5, w5

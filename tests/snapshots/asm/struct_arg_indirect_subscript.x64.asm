@@ -29,10 +29,6 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0xb0, %rsp
-               	xorq	%rax, %rax
-               	movq	%rax, %rcx
-               	movq	%rax, %rcx
-               	movl	$0x1, %eax
                	leaq	-0x88(%rbp), %rax
                	xorq	%rsi, %rsi
                	movq	%rsi, (%rax)
@@ -154,20 +150,21 @@ Disassembly of section .text:
                	movq	%rax, %xmm15
                	movapd	%xmm2, %xmm1
                	vfmadd231sd	%xmm15, %xmm14, %xmm1 # xmm1 = (xmm14 * xmm15) + xmm1
-               	addsd	%xmm0, %xmm1
-               	movabsq	$0x3ff8000000000000, %rax # imm = 0x3FF8000000000000
-               	movabsq	$0x4010000000000000, %rcx # imm = 0x4010000000000000
-               	movabsq	$0x4002000000000000, %rdx # imm = 0x4002000000000000
-               	movabsq	$0x4000000000000000, %rsi # imm = 0x4000000000000000
-               	movq	%rsi, %xmm15
-               	movq	%rdx, %xmm0
-               	mulsd	%xmm15, %xmm0
-               	movq	%rax, %xmm14
-               	movq	%rcx, %xmm15
-               	vfmadd231sd	%xmm15, %xmm14, %xmm0 # xmm0 = (xmm14 * xmm15) + xmm0
-               	movq	%rdi, %xmm15
+               	movapd	%xmm0, %xmm15
+               	movapd	%xmm1, %xmm0
                	addsd	%xmm15, %xmm0
-               	ucomisd	%xmm0, %xmm1
+               	movabsq	$0x3ff8000000000000, %rax # imm = 0x3FF8000000000000
+               	movabsq	$0x4010000000000000, %rdx # imm = 0x4010000000000000
+               	movabsq	$0x4002000000000000, %rsi # imm = 0x4002000000000000
+               	movq	%rcx, %xmm15
+               	movq	%rsi, %xmm1
+               	mulsd	%xmm15, %xmm1
+               	movq	%rax, %xmm14
+               	movq	%rdx, %xmm15
+               	vfmadd231sd	%xmm15, %xmm14, %xmm1 # xmm1 = (xmm14 * xmm15) + xmm1
+               	movq	%rdi, %xmm15
+               	addsd	%xmm15, %xmm1
+               	ucomisd	%xmm1, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x5, %eax

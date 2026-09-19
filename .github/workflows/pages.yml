@@ -73,6 +73,8 @@ jobs:
           destination: ./_site
       - name: the markdown keeps the URLs the links spell
         run: |
+          # The build runs in a container as root, so its output is root-owned.
+          sudo chown -R "$(id -u):$(id -g)" _site
           (cd _src && find . -name '*.md' ! -name index.md) | while read -r f
           do
             mkdir -p "_site/$(dirname "$f")"

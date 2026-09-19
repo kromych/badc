@@ -600,11 +600,11 @@ mod two_address_tests {
         let saved = [
             0x48, 0x89, 0xF8, 0x51, 0x48, 0x89, 0xF1, 0x48, 0xD3, 0xE0, 0x59,
         ];
-        alloc.rcx_live_across = alloc::vec![false; func.insts.len()];
+        alloc.implicit_live = alloc::vec![0; func.insts.len()];
         assert_eq!(emit(&alloc, Reg::RAX), bare);
-        alloc.rcx_live_across[v as usize] = true;
+        alloc.implicit_live[v as usize] = 1 << Reg::RCX.0;
         assert_eq!(emit(&alloc, Reg::RAX), saved);
-        alloc.rcx_live_across.clear();
+        alloc.implicit_live.clear();
         assert_eq!(emit(&alloc, Reg::RAX), bare);
         let other = (0..func.insts.len() as u32).find(|&i| i != lhs && i != rhs && i != v);
         alloc.places[other.expect("another value") as usize] = reg(Reg::RCX);
@@ -616,6 +616,95 @@ mod two_address_tests {
                 0x49, 0x89, 0xFB, 0x48, 0x89, 0xF1, 0x49, 0xD3, 0xE3, 0x4C, 0x89, 0xD9
             ]
         );
+    }
+
+    /// A division saves rax / rdx exactly for the values the allocation
+    /// records live in them across it, never over its own result; without
+    /// a record, any value placed there counts. Encodings are clang's.
+    #[test]
+    fn division_saves_as_the_allocation_records() {
+        let target = Target::LinuxX64;
+        let reg = |r: Reg| Place::IntReg(r.0);
+        let lower = |src: &str, op: BinOp| {
+            let (func, v, mut alloc) = binop_of(src, op);
+            let Inst::Binop { lhs, rhs, .. } = func.insts[v as usize] else {
+                panic!("{:?}", func.insts[v as usize])
+            };
+            for p in alloc.places.iter_mut() {
+                if *p == reg(Reg::RAX) || *p == reg(Reg::RDX) {
+                    *p = Place::None;
+                }
+            }
+            alloc.places[lhs as usize] = reg(Reg::RDI);
+            alloc.places[rhs as usize] = reg(Reg::RSI);
+            (func, v, alloc)
+        };
+        let emit = |func: &FunctionSsa, v: u32, alloc: &Allocation, op: BinOp, dst: Reg| {
+            let Inst::Binop { lhs, rhs, .. } = func.insts[v as usize] else {
+                panic!("{:?}", func.insts[v as usize])
+            };
+            let frame = compute_frame(func, alloc, target.abi(), target);
+            let mut code = Vec::new();
+            emit_binop(&mut code, op, v, reg(dst), lhs, rhs, alloc, frame).expect("emit_binop");
+            code
+        };
+        let (rax, rdx) = (1u16 << Reg::RAX.0, 1u16 << Reg::RDX.0);
+        // mov rax, rdi; cqo; idiv rsi
+        let divide = [0x48, 0x89, 0xF8, 0x48, 0x99, 0x48, 0xF7, 0xFE];
+        let with = |pre: &[u8], post: &[u8], tail: &[u8]| {
+            let mut w = pre.to_vec();
+            w.extend(divide);
+            w.extend(tail);
+            w.extend(post);
+            w
+        };
+        let quot = [0x48, 0x89, 0xC1]; // mov rcx, rax
+
+        let (func, v, mut alloc) = lower("long f(long a, long b){ return a / b; }", BinOp::Div);
+        let n = func.insts.len();
+        for (record, pre, post) in [
+            (0, &[][..], &[][..]),
+            (rdx, &[0x52], &[0x5A]),
+            (rax | rdx, &[0x50, 0x52], &[0x5A, 0x58]),
+        ] {
+            alloc.implicit_live = alloc::vec![0; n];
+            alloc.implicit_live[v as usize] = record;
+            assert_eq!(
+                emit(&func, v, &alloc, BinOp::Div, Reg::RCX),
+                with(pre, post, &quot)
+            );
+        }
+        // The quotient's own register is never restored over it.
+        assert_eq!(
+            emit(&func, v, &alloc, BinOp::Div, Reg::RAX),
+            with(&[0x52], &[0x5A], &[])
+        );
+        alloc.implicit_live.clear();
+        assert_eq!(
+            emit(&func, v, &alloc, BinOp::Div, Reg::RCX),
+            with(&[], &[], &quot)
+        );
+        let other = (0..n as u32).find(|&i| i != v && alloc.places[i as usize] == Place::None);
+        alloc.places[other.expect("another value") as usize] = reg(Reg::RDX);
+        assert_eq!(
+            emit(&func, v, &alloc, BinOp::Div, Reg::RCX),
+            with(&[0x52], &[0x5A], &quot)
+        );
+
+        // The remainder is read from rdx; an unsigned divide zeroes rdx.
+        let (func, v, mut alloc) = lower("long f(long a, long b){ return a % b; }", BinOp::Mod);
+        alloc.implicit_live = alloc::vec![0; func.insts.len()];
+        assert_eq!(
+            emit(&func, v, &alloc, BinOp::Mod, Reg::RCX),
+            with(&[], &[], &[0x48, 0x89, 0xD1])
+        );
+        let src = "unsigned long f(unsigned long a, unsigned long b){ return a / b; }";
+        let (func, v, mut alloc) = lower(src, BinOp::Divu);
+        alloc.implicit_live = alloc::vec![0; func.insts.len()];
+        let divu = [
+            0x48, 0x89, 0xF8, 0x31, 0xD2, 0x48, 0xF7, 0xF6, 0x48, 0x89, 0xC1,
+        ];
+        assert_eq!(emit(&func, v, &alloc, BinOp::Divu, Reg::RCX), divu);
     }
 }
 

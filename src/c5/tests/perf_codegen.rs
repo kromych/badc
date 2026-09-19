@@ -1473,6 +1473,60 @@ fn x64_variable_shift_moves_a_live_value_out_of_rcx() {
     assert!(!insns.iter().any(saves_rcx), "{insns:x?}");
 }
 
+/// `push r` or `pop r` of a low register `r`.
+fn saves(i: &X64Insn, r: u16) -> bool {
+    (i.op == 0x50 + r || i.op == 0x58 + r) && i.rex & 1 == 0
+}
+
+/// A one-operand `mul`, `imul`, `div` or `idiv`: the F7 group, /4 to /7.
+fn uses_rdx_rax(i: &X64Insn) -> bool {
+    i.op == 0xF7 && i.modrm.is_some_and(|m| (m >> 3) & 7 >= 4)
+}
+
+/// A division, a remainder and a division by a constant (a high multiply)
+/// save neither rax nor rdx when neither holds a value across them, on
+/// either x86-64 convention and at either width.
+#[test]
+fn x64_division_saves_nothing_it_does_not_clobber() {
+    const SRC: &str = "long q2(long a, long b) { return a / b * 3; }\n\
+        long r2(long a, long b) { return a % b + 1; }\n\
+        unsigned long uq(unsigned long a, unsigned long b) { return a / b; }\n\
+        int iq(int a, int b, int c) { return a / b + c; }\n\
+        unsigned ur(unsigned a, unsigned b) { return a % b; }\n\
+        long long by7(long long a) { return a / 7; }\n";
+    let mut m = Misses::default();
+    for target in [Target::LinuxX64, Target::WindowsX64] {
+        let obj = object_at(SRC, target, true);
+        for name in ["q2", "r2", "uq", "iq", "ur", "by7"] {
+            let insns = x64_insns(&function_bytes(&obj, name));
+            let saved = insns.iter().any(|i| saves(i, 0) || saves(i, 2));
+            m.expect(insns.iter().any(uses_rdx_rax) && !saved, || {
+                format!("{target:?} {name}: {insns:x?}")
+            });
+        }
+    }
+    m.finish();
+}
+
+/// Six values live across a division, one more than the caller-saved
+/// registers outside rdx:rax, leave the sixth in rdx, which the division
+/// saves around itself; nothing is live in rax, which it does not save.
+#[test]
+fn x64_division_saves_rdx_a_live_value_holds() {
+    const SRC: &str = "long keep(long a, long b, long c, long d, long e, long f) {\n\
+        long q = a / b;\n\
+        return q + a + b + c + d + e + f;\n}\n";
+    let insns = x64(SRC, "keep");
+    let div = insns.iter().position(uses_rdx_rax);
+    let push = insns.iter().position(|i| saves(i, 2) && i.op == 0x52);
+    let pop = insns.iter().position(|i| saves(i, 2) && i.op == 0x5A);
+    let around = div
+        .zip(push.zip(pop))
+        .is_some_and(|(d, (p, q))| p < d && d < q);
+    assert!(around, "{insns:x?}");
+    assert!(!insns.iter().any(|i| saves(i, 0)), "{insns:x?}");
+}
+
 /// The parameter's entry extension reads the incoming register.
 #[test]
 fn parameter_entry_extension_is_one_instruction() {

@@ -148,10 +148,11 @@ pub(crate) struct Allocation {
     /// a store, so its use count is zero and it is never materialized;
     /// the store's own value is unread.
     pub imm_store: Vec<bool>,
-    /// Per x86-64 shift or rotate: whether a value other than its count
-    /// stays live in rcx across it, the one case in which the emitter
-    /// saves rcx around the count's move into cl. Empty elsewhere.
-    pub rcx_live_across: Vec<bool>,
+    /// Per x86-64 instruction that writes registers besides its result
+    /// ([`x86_implicit_writes`]): those of them that hold a value live
+    /// across it, a shift count left in rcx excepted, which the emitter
+    /// saves around it. Empty elsewhere.
+    pub implicit_live: Vec<u16>,
     /// Per-value coalescing hint: the physical register the
     /// allocator should prefer when one is set and free at the
     /// pick site. The pick-reg path honours the hint only when it
@@ -218,6 +219,16 @@ impl Allocation {
     pub(crate) fn is_unread(&self, v: ValueId) -> bool {
         self.use_counts.get(v as usize).is_some_and(|&n| n == 0)
     }
+
+    /// Whether register `r`, which the x86-64 lowering of `v` writes, holds
+    /// a value live across `v` (`implicit_live`). Without the record any
+    /// value placed in `r` counts.
+    pub(crate) fn holds_live_across(&self, v: ValueId, r: u8) -> bool {
+        match self.implicit_live.get(v as usize) {
+            Some(&regs) => (regs >> r) & 1 != 0,
+            None => self.places.contains(&Place::IntReg(r)),
+        }
+    }
 }
 
 /// An integer load whose zero test is a compare of its memory operand:
@@ -280,12 +291,37 @@ fn store_immediate(func: &FunctionSsa, inst: &Inst, target: Target) -> Option<Va
     (target.is_x86_64() && fits).then_some(value)
 }
 
-/// rcx, the count register of x86-64's variable shifts.
+/// The x86-64 registers some lowerings use implicitly.
+const X86_RAX: u8 = 0;
 const X86_RCX: u8 = 1;
+const X86_RDX: u8 = 2;
 
 /// A shift or rotate, whose variable count x86-64 reads in cl.
 fn is_shift_op(op: BinOp) -> bool {
     matches!(op, BinOp::Shl | BinOp::Shr | BinOp::Shru | BinOp::Ror)
+}
+
+/// A division, a remainder or a high multiply, which x86-64 computes in
+/// rdx:rax.
+fn is_rdx_rax_op(op: BinOp) -> bool {
+    matches!(
+        op,
+        BinOp::Div | BinOp::Divu | BinOp::Mod | BinOp::Modu | BinOp::Mulh | BinOp::Mulhu
+    )
+}
+
+/// The registers x86-64's lowering of `inst` writes besides its result, as
+/// a mask: rcx for a shift or rotate by a count no immediate form takes,
+/// rdx:rax for a division, a remainder and a high multiply.
+pub(crate) fn x86_implicit_writes(inst: &Inst) -> u16 {
+    match *inst {
+        Inst::Binop { op, .. } if is_shift_op(op) => 1 << X86_RCX,
+        Inst::BinopI { op, rhs_imm, .. } if is_shift_op(op) && !(0..64).contains(&rhs_imm) => {
+            1 << X86_RCX
+        }
+        Inst::Binop { op, .. } if is_rdx_rax_op(op) => (1 << X86_RAX) | (1 << X86_RDX),
+        _ => 0,
+    }
 }
 
 /// x86-64 register preferences the colorer honours among free caller-saved
@@ -293,7 +329,10 @@ fn is_shift_op(op: BinOp) -> bool {
 /// rhs` (`sub`, `subsd`, `divsd`, a shift) off the register of `rhs`, which
 /// the emitter would copy aside first. A shift reads a register count in
 /// cl: the count is hinted to rcx, and `avoid[v]` holds rcx for the shift's
-/// result and operand and the values live across it, counts excepted.
+/// result and operand. A division takes its dividend in rax and leaves the
+/// quotient there and the remainder in rdx, which the hints follow; its
+/// divisor avoids rdx:rax. The values live across an instruction avoid the
+/// registers it writes ([`x86_implicit_writes`]), a count excepted for rcx.
 fn x86_preferences(
     func: &FunctionSsa,
     liveness: &super::liveness::Liveness,
@@ -308,24 +347,40 @@ fn x86_preferences(
         _ => None,
     };
     let mut is_count = vec![false; n];
-    for (op, _, rhs) in func.insts.iter().filter_map(binop) {
+    for (v, inst) in func.insts.iter().enumerate() {
+        let Some((op, lhs, rhs)) = binop(inst) else {
+            continue;
+        };
         if is_shift_op(op) {
             is_count[rhs as usize] = true;
             hints[rhs as usize].get_or_insert(X86_RCX);
+        } else if is_rdx_rax_op(op) {
+            hints[lhs as usize].get_or_insert(X86_RAX);
+            let high = matches!(op, BinOp::Mod | BinOp::Modu | BinOp::Mulh | BinOp::Mulhu);
+            hints[v].get_or_insert(if high { X86_RDX } else { X86_RAX });
         }
     }
     let mut apart: Vec<Vec<ValueId>> = vec![Vec::new(); n];
     let mut avoid: Vec<u64> = vec![0; n];
     let rcx = 1u64 << X86_RCX;
-    let mut keep_out = |u: ValueId| {
-        if !is_count[u as usize] && !produces_fp_result(&func.insts[u as usize]) {
-            avoid[u as usize] |= rcx;
+    let rdx_rax = (1u64 << X86_RAX) | (1u64 << X86_RDX);
+    let mut keep_out = |u: ValueId, regs: u64| {
+        let regs = if is_count[u as usize] {
+            regs & !rcx
+        } else {
+            regs
+        };
+        if !produces_fp_result(&func.insts[u as usize]) {
+            avoid[u as usize] |= regs;
         }
     };
     for (v, inst) in func.insts.iter().enumerate() {
         let Some((op, lhs, rhs)) = binop(inst) else {
             continue;
         };
+        if is_rdx_rax_op(op) {
+            keep_out(rhs, rdx_rax);
+        }
         if !is_shift_op(op) && !matches!(op, BinOp::Sub | BinOp::Fsub | BinOp::Fdiv) {
             continue;
         }
@@ -335,13 +390,16 @@ fn x86_preferences(
             apart[b as usize].push(a);
         }
         if is_shift_op(op) {
-            keep_out(v as ValueId);
-            keep_out(lhs);
+            keep_out(v as ValueId, rcx);
+            keep_out(lhs, rcx);
         }
     }
-    let variable_shift = |inst: &Inst| matches!(inst, Inst::Binop { op, .. } if is_shift_op(*op));
-    for (_, live) in liveness.values_live_after(func, &variable_shift) {
-        live.into_iter().for_each(&mut keep_out);
+    let writes = |inst: &Inst| x86_implicit_writes(inst) != 0;
+    for (site, live) in liveness.values_live_after(func, &writes) {
+        let regs = u64::from(x86_implicit_writes(&func.insts[site as usize]));
+        for u in live {
+            keep_out(u, regs);
+        }
     }
     (apart, avoid)
 }
@@ -689,7 +747,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             sxtw_k: Vec::new(),
             branch_fused: Vec::new(),
             imm_store: Vec::new(),
-            rcx_live_across: Vec::new(),
+            implicit_live: Vec::new(),
             hints,
             f32_values: Vec::new(),
             high_observed: Vec::new(),
@@ -802,18 +860,25 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     );
     places = coloring.places;
     let spill_count = coloring.spill_count;
-    let mut rcx_live_across: Vec<bool> = Vec::new();
+    let mut implicit_live: Vec<u16> = Vec::new();
     if target.is_x86_64() {
-        rcx_live_across = vec![false; func.insts.len()];
-        let shift = |inst: &Inst| matches!(inst, Inst::Binop { op, .. } | Inst::BinopI { op, .. } if is_shift_op(*op));
-        for (site, live) in liveness.values_live_after(func, &shift) {
-            let count = match func.insts[site as usize] {
-                Inst::Binop { rhs, .. } => rhs,
+        implicit_live = vec![0; func.insts.len()];
+        let writes = |inst: &Inst| x86_implicit_writes(inst) != 0;
+        for (site, live) in liveness.values_live_after(func, &writes) {
+            let inst = &func.insts[site as usize];
+            // A shift reads its count in cl and leaves it there.
+            let kept = match *inst {
+                Inst::Binop { op, rhs, .. } if is_shift_op(op) => rhs,
                 _ => NO_VALUE,
             };
-            rcx_live_across[site as usize] = live
-                .iter()
-                .any(|&u| u != count && places[u as usize] == Place::IntReg(X86_RCX));
+            let regs = x86_implicit_writes(inst);
+            for u in live.into_iter().filter(|&u| u != kept) {
+                if let Place::IntReg(r) = places[u as usize]
+                    && (regs >> r) & 1 != 0
+                {
+                    implicit_live[site as usize] |= 1 << r;
+                }
+            }
         }
     }
     let mut use_counts = compute_use_counts(func);
@@ -1270,7 +1335,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
         sxtw_k,
         branch_fused,
         imm_store,
-        rcx_live_across,
+        implicit_live,
         hints,
         f32_values: func.f32_values.clone(),
         high_observed: crate::c5::codegen::passes::drop_redundant_extend::compute_high_observed(
@@ -5016,8 +5081,8 @@ int main(void) { return 0; }
             assert_ne!(x64.places[v], rcx, "v{v}");
         }
         assert_ne!(x64.places[4], x64.places[3]);
-        assert!(!x64.rcx_live_across[3]);
-        assert!(full(Target::LinuxAarch64).rcx_live_across.is_empty());
+        assert!(!x64.holds_live_across(3, X86_RCX));
+        assert!(full(Target::LinuxAarch64).implicit_live.is_empty());
     }
 
     /// With two caller-saved registers a value live across the shift ends
@@ -5052,7 +5117,96 @@ int main(void) { return 0; }
         );
         let x64 = with_pool_size_override(2, usize::MAX, || allocate(&func, Target::LinuxX64));
         assert_eq!(x64.places[1], Place::IntReg(X86_RCX));
-        assert!(x64.rcx_live_across[4]);
+        assert!(x64.holds_live_across(4, X86_RCX));
+    }
+
+    fn local_i64(off: i64) -> Inst {
+        Inst::LoadLocal {
+            off,
+            kind: LoadKind::I64,
+            volatile: false,
+        }
+    }
+
+    /// `(v0 op v1) + v2`, returned: `v2` is live across the operation.
+    fn rdx_rax_func(op: BinOp) -> FunctionSsa {
+        store_func(
+            vec![
+                local_i64(2),
+                local_i64(3),
+                local_i64(4),
+                Inst::Binop { op, lhs: 0, rhs: 1 },
+                Inst::Binop {
+                    op: BinOp::Add,
+                    lhs: 3,
+                    rhs: 2,
+                },
+            ],
+            4,
+        )
+    }
+
+    /// On x86-64 a division takes its dividend in rax and leaves its
+    /// quotient there, its remainder or high product in rdx; the divisor
+    /// and a value live across it keep out of rdx:rax, and no save is
+    /// recorded. AArch64 records nothing.
+    #[test]
+    fn division_leaves_rdx_rax_to_its_operation() {
+        let (rax, rdx) = (Place::IntReg(X86_RAX), Place::IntReg(X86_RDX));
+        for (op, result) in [
+            (BinOp::Div, rax),
+            (BinOp::Divu, rax),
+            (BinOp::Mod, rdx),
+            (BinOp::Modu, rdx),
+            (BinOp::Mulh, rdx),
+            (BinOp::Mulhu, rdx),
+        ] {
+            let x64 = with_pool_size_override(usize::MAX, usize::MAX, || {
+                allocate(&rdx_rax_func(op), Target::LinuxX64)
+            });
+            assert_eq!((x64.places[0], x64.places[3]), (rax, result), "{op:?}");
+            for v in [1, 2] {
+                assert!(![rax, rdx].contains(&x64.places[v]), "{op:?} v{v}");
+            }
+            assert!(!x64.holds_live_across(3, X86_RAX) && !x64.holds_live_across(3, X86_RDX));
+            let a64 = allocate(&rdx_rax_func(op), Target::LinuxAarch64);
+            assert!(a64.implicit_live.is_empty());
+        }
+    }
+
+    /// Over the caller-saved rax, rcx and rdx, three values live across a
+    /// division -- its divisor among them -- leave one in rdx:rax, and the
+    /// record names exactly the registers such values hold.
+    #[test]
+    fn value_held_in_rdx_rax_across_a_division_is_recorded() {
+        let add = |lhs, rhs| Inst::Binop {
+            op: BinOp::Add,
+            lhs,
+            rhs,
+        };
+        let func = store_func(
+            vec![
+                local_i64(2),
+                local_i64(3),
+                local_i64(4),
+                local_i64(5),
+                Inst::Binop {
+                    op: BinOp::Div,
+                    lhs: 0,
+                    rhs: 1,
+                },
+                add(4, 1),
+                add(5, 2),
+                add(6, 3),
+            ],
+            7,
+        );
+        let x64 = with_pool_size_override(3, usize::MAX, || allocate(&func, Target::LinuxX64));
+        let held = |r: u8| [1, 2, 3].iter().any(|&u| x64.places[u] == Place::IntReg(r));
+        assert!(held(X86_RAX) || held(X86_RDX), "{:?}", x64.places);
+        for r in [X86_RAX, X86_RDX] {
+            assert_eq!(x64.holds_live_across(4, r), held(r), "{:?}", x64.places);
+        }
     }
 
     /// Integer ALU work between the compare and the branch writes

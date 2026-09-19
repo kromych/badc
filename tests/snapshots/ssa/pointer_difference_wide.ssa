@@ -13,7 +13,7 @@ fn ent_pc=0 n_params=2 variadic=false locals=0
     v7   Binop { op=sub, lhs=v1, rhs=v3 }                 -> x0
     v8   Imm(12)                                          -> x1
     v9   Imm(3074457345618258603)                         -> x1
-    v10  Binop { op=mulh, lhs=v7, rhs=v9 }                -> x0
+    v10  Binop { op=mulh, lhs=v7, rhs=v9 }                -> x2
     v11  BinopI { op=shr, lhs=v10, rhs_imm=1 }            -> x0
     v12  BinopI { op=shru, lhs=v11, rhs_imm=63 }          -> x1
     v13  Binop { op=add, lhs=v11, rhs=v12 }               -> x0
@@ -76,33 +76,33 @@ fn ent_pc=3 n_params=0 variadic=false locals=7
     v12  Imm(274877906940)                                -> x0
     v13  BinopI { op=add, lhs=v3, rhs_imm=274877906940 }  -> x14
     v14  Imm(0)                                           -> x0
-    v15  LocalAddr(-6)                                    -> x0
-    v16  Imm(36)                                          -> x1
-    v17  BinopI { op=add, lhs=v15, rhs_imm=36 }           -> x1
+    v15  LocalAddr(-6)                                    -> x1
+    v16  Imm(36)                                          -> x0
+    v17  BinopI { op=add, lhs=v15, rhs_imm=36 }           -> x0
     v18  LocalAddr(-6)                                    -> x2
     v19  Imm(0)                                           -> x2
-    v20  Binop { op=sub, lhs=v17, rhs=v15 }               -> x2
-    v21  Imm(12)                                          -> x1
-    v22  Imm(3074457345618258603)                         -> x1
+    v20  Binop { op=sub, lhs=v17, rhs=v15 }               -> x0
+    v21  Imm(12)                                          -> x2
+    v22  Imm(3074457345618258603)                         -> x6
     v23  Binop { op=mulh, lhs=v20, rhs=v22 }              -> x2
-    v24  BinopI { op=shr, lhs=v23, rhs_imm=1 }            -> x2
-    v25  BinopI { op=shru, lhs=v24, rhs_imm=63 }          -> x6
-    v26  Binop { op=add, lhs=v24, rhs=v25 }               -> x2
-    v27  BinopI { op=ne, lhs=v26, rhs_imm=3 }             -> x2
+    v24  BinopI { op=shr, lhs=v23, rhs_imm=1 }            -> x0
+    v25  BinopI { op=shru, lhs=v24, rhs_imm=63 }          -> x2
+    v26  Binop { op=add, lhs=v24, rhs=v25 }               -> x0
+    v27  BinopI { op=ne, lhs=v26, rhs_imm=3 }             -> x0
     terminator Bz { cond=v27, target=b2, fall=b1 }   (exit_acc=v27)
   block 1  start_pc=0
     v28  Imm(3)                                           -> x0
     terminator Return(v28)   (exit_acc=v28)
   block 2  start_pc=0
-    v29  LocalAddr(-6)                                    -> x2
-    v30  Imm(0)                                           -> x2
-    v31  LocalAddr(-6)                                    -> x2
-    v32  Imm(36)                                          -> x6
+    v29  LocalAddr(-6)                                    -> x0
+    v30  Imm(0)                                           -> x0
+    v31  LocalAddr(-6)                                    -> x0
+    v32  Imm(36)                                          -> x2
     v33  BinopI { op=add, lhs=v31, rhs_imm=36 }           -> x2
     v34  Binop { op=sub, lhs=v15, rhs=v33 }               -> x0
-    v35  Imm(12)                                          -> x2
-    v36  Imm(3074457345618258603)                         -> x2
-    v37  Binop { op=mulh, lhs=v34, rhs=v22 }              -> x0
+    v35  Imm(12)                                          -> x1
+    v36  Imm(3074457345618258603)                         -> x1
+    v37  Binop { op=mulh, lhs=v34, rhs=v22 }              -> x2
     v38  BinopI { op=shr, lhs=v37, rhs_imm=1 }            -> x0
     v39  BinopI { op=shru, lhs=v38, rhs_imm=63 }          -> x1
     v40  Binop { op=add, lhs=v38, rhs=v39 }               -> x0

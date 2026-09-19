@@ -4777,11 +4777,11 @@ fn ent_pc=14 n_params=2 variadic=false locals=1
     terminator Bz { cond=v1303, target=b205, fall=b203 }   (exit_acc=v1303)
   block 203  start_pc=0
     v1304 Imm(0)                                           -> x0
-    v1305 BinopI { op=add, lhs=v966, rhs_imm=8 }           -> x0
-    v1306 Imm(0)                                           -> x1
-    v1307 Load { addr=v966, disp=0, kind=I64 }             -> x1
-    v1308 LoadLocal { off=-1, kind=I64 }                   -> x2
-    v1309 Binop { op=div, lhs=v1307, rhs=v1308 }           -> x1
+    v1305 BinopI { op=add, lhs=v966, rhs_imm=8 }           -> x1
+    v1306 Imm(0)                                           -> x0
+    v1307 Load { addr=v966, disp=0, kind=I64 }             -> x0
+    v1308 LoadLocal { off=-1, kind=I64 }                   -> x6
+    v1309 Binop { op=div, lhs=v1307, rhs=v1308 }           -> x0
     v1310 StoreLocal { off=-1, value=v1309, kind=I64 }     -> -
     terminator Jmp(b204)   (exit_acc=v1310)
   block 204  start_pc=0
@@ -4793,13 +4793,13 @@ fn ent_pc=14 n_params=2 variadic=false locals=1
     terminator Bz { cond=v1313, target=b208, fall=b206 }   (exit_acc=v1313)
   block 206  start_pc=0
     v1314 Imm(0)                                           -> x0
-    v1315 BinopI { op=add, lhs=v966, rhs_imm=8 }           -> x2
+    v1315 BinopI { op=add, lhs=v966, rhs_imm=8 }           -> x7
     v1316 Imm(0)                                           -> x0
-    v1317 Load { addr=v966, disp=0, kind=I64 }             -> x1
-    v1318 LoadLocal { off=-1, kind=I64 }                   -> x0
-    v1319 Binop { op=div, lhs=v1317, rhs=v1318 }           -> x6
-    v1320 Binop { op=mul, lhs=v1319, rhs=v1318 }           -> x6
-    v1321 Binop { op=mod, lhs=v1317, rhs=v1318 }           -> x0
+    v1317 Load { addr=v966, disp=0, kind=I64 }             -> x6
+    v1318 LoadLocal { off=-1, kind=I64 }                   -> x1
+    v1319 Binop { op=div, lhs=v1317, rhs=v1318 }           -> x0
+    v1320 Binop { op=mul, lhs=v1319, rhs=v1318 }           -> x0
+    v1321 Binop { op=mod, lhs=v1317, rhs=v1318 }           -> x2
     v1322 StoreLocal { off=-1, value=v1321, kind=I64 }     -> -
     terminator Jmp(b207)   (exit_acc=v1322)
   block 207  start_pc=0

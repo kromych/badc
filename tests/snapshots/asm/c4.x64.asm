@@ -3151,35 +3151,24 @@ Disassembly of section .text:
                	jmp	<addr>
                	cmpq	$0x1c, %r12
                	jne	<addr>
-               	leaq	0x8(%rbx), %rax
-               	movq	(%rbx), %rcx
-               	movq	-0x8(%rbp), %rdx
-               	movq	%rdx, %r10
-               	pushq	%rax
-               	pushq	%rdx
-               	movq	%rcx, %rax
+               	leaq	0x8(%rbx), %rcx
+               	movq	(%rbx), %rax
+               	movq	-0x8(%rbp), %rsi
                	cqto
-               	idivq	%r10
-               	movq	%rax, %rcx
-               	popq	%rdx
-               	popq	%rax
-               	movq	%rcx, -0x8(%rbp)
-               	movq	%rax, %rbx
+               	idivq	%rsi
+               	movq	%rax, -0x8(%rbp)
+               	movq	%rcx, %rbx
                	jmp	<addr>
                	cmpq	$0x1d, %r12
                	jne	<addr>
-               	leaq	0x8(%rbx), %rdx
-               	movq	(%rbx), %rcx
-               	movq	-0x8(%rbp), %rax
-               	movq	%rax, %r10
-               	pushq	%rdx
-               	movq	%rcx, %rax
+               	leaq	0x8(%rbx), %rdi
+               	movq	(%rbx), %rsi
+               	movq	-0x8(%rbp), %rcx
+               	movq	%rsi, %rax
                	cqto
-               	idivq	%r10
-               	movq	%rdx, %rax
-               	popq	%rdx
-               	movq	%rax, -0x8(%rbp)
-               	movq	%rdx, %rbx
+               	idivq	%rcx
+               	movq	%rdx, -0x8(%rbp)
+               	movq	%rdi, %rbx
                	jmp	<addr>
                	cmpq	$0x1e, %r12
                	jne	<addr>

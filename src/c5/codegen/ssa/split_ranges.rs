@@ -386,7 +386,7 @@ mod tests {
             sxtw_k: vec![0; n],
             branch_fused: vec![false; n],
             imm_store: vec![false; n],
-            rcx_live_across: Vec::new(),
+            implicit_live: Vec::new(),
             hints: vec![None; n],
             f32_values: vec![false; n],
             high_observed: Vec::new(),

@@ -29,10 +29,8 @@ Disassembly of section .text:
                	movq	%rdi, %rax
                	subq	%rsi, %rax
                	movabsq	$0x2aaaaaaaaaaaaaab, %rcx # imm = 0x2AAAAAAAAAAAAAAB
-               	pushq	%rdx
                	imulq	%rcx
                	movq	%rdx, %rax
-               	popq	%rdx
                	sarq	%rax
                	movq	%rax, %rcx
                	shrq	$0x3f, %rcx
@@ -76,20 +74,17 @@ Disassembly of section .text:
                	addq	%rbx, %r13
                	movabsq	$0x3ffffffffc, %r14     # imm = 0x3FFFFFFFFC
                	addq	%rbx, %r14
-               	leaq	-0x30(%rbp), %rax
-               	leaq	0x24(%rax), %rcx
-               	movq	%rcx, %rdx
-               	subq	%rax, %rdx
-               	movabsq	$0x2aaaaaaaaaaaaaab, %rcx # imm = 0x2AAAAAAAAAAAAAAB
-               	pushq	%rax
+               	leaq	-0x30(%rbp), %rcx
+               	leaq	0x24(%rcx), %rax
+               	subq	%rcx, %rax
+               	movabsq	$0x2aaaaaaaaaaaaaab, %rsi # imm = 0x2AAAAAAAAAAAAAAB
+               	imulq	%rsi
                	movq	%rdx, %rax
-               	imulq	%rcx
-               	popq	%rax
-               	sarq	%rdx
-               	movq	%rdx, %rsi
-               	shrq	$0x3f, %rsi
-               	addq	%rsi, %rdx
-               	cmpq	$0x3, %rdx
+               	sarq	%rax
+               	movq	%rax, %rdx
+               	shrq	$0x3f, %rdx
+               	addq	%rdx, %rax
+               	cmpq	$0x3, %rax
                	je	<addr>
                	movl	$0x3, %eax
                	popq	%rbx
@@ -98,13 +93,12 @@ Disassembly of section .text:
                	popq	%r14
                	leave
                	retq
-               	leaq	-0x30(%rbp), %rdx
-               	addq	$0x24, %rdx
+               	leaq	-0x30(%rbp), %rax
+               	leaq	0x24(%rax), %rdx
+               	movq	%rcx, %rax
                	subq	%rdx, %rax
-               	pushq	%rdx
-               	imulq	%rcx
+               	imulq	%rsi
                	movq	%rdx, %rax
-               	popq	%rdx
                	sarq	%rax
                	movq	%rax, %rcx
                	shrq	$0x3f, %rcx

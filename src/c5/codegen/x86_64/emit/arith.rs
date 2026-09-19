@@ -936,7 +936,7 @@ fn emit_int_binop(
         } else {
             rhs_place
         };
-        return emit_binop_rdx_rax(code, op, dst, rd, rn, rhs_place, frame);
+        return emit_binop_rdx_rax(code, op, v, dst, rd, rn, rhs_place, alloc, frame);
     }
     // `OP rd, rm` mutates rd. When rhs already sits in rd, a commutative op
     // takes `OP rd, rn` as it stands; a non-commutative one stages rhs into
@@ -1038,19 +1038,34 @@ fn emit_int_binop(
     Ok(())
 }
 
+/// Whether `r`, which the lowering of `v` writes besides its result, holds
+/// a value that must survive it: one live across `v`, or a `-ffixed-` one.
+fn implicit_holds_live(
+    alloc: &Allocation,
+    v: super::super::ir::ValueId,
+    r: Reg,
+    frame: Frame,
+) -> bool {
+    frame.fixed_regs.has_gpr(r.0) || alloc.holds_live_across(v, r.0)
+}
+
 /// `BinOp::{Div,Mod,Divu,Modu,Mulh,Mulhu}`, all through the implicit
 /// rdx:rax pair: IDIV / DIV read the dividend there and leave the quotient
 /// in rax and the remainder in rdx; one-operand IMUL / MUL write the
-/// 128-bit product to rdx:rax. Allocated values in rax / rdx are preserved
-/// with push / pop; the transient misalignment is harmless since no call
-/// intervenes. `rn` is the materialised lhs; `rhs_place` routes into r10.
+/// 128-bit product to rdx:rax. A value live in rax / rdx across the
+/// operation is preserved with push / pop; the transient misalignment is
+/// harmless since no call intervenes. `rn` is the materialised lhs;
+/// `rhs_place` routes into r10.
+#[allow(clippy::too_many_arguments)]
 fn emit_binop_rdx_rax(
     code: &mut Vec<u8>,
     op: BinOp,
+    v: super::super::ir::ValueId,
     dst: Place,
     rd: Reg,
     rn: Reg,
     rhs_place: Place,
+    alloc: &Allocation,
     frame: Frame,
 ) -> Emit {
     let is_mulh = matches!(op, BinOp::Mulh | BinOp::Mulhu);
@@ -1060,8 +1075,8 @@ fn emit_binop_rdx_rax(
 
     // rax receives the lhs and the quotient / low half, rdx the high half and
     // the remainder; a register rd overwrites anyway is not saved.
-    let preserve_rax = rd.0 != Reg::RAX.0;
-    let preserve_rdx = rd.0 != Reg::RDX.0;
+    let preserve_rax = rd.0 != Reg::RAX.0 && implicit_holds_live(alloc, v, Reg::RAX, frame);
+    let preserve_rdx = rd.0 != Reg::RDX.0 && implicit_holds_live(alloc, v, Reg::RDX, frame);
     let pushed_bytes = (preserve_rax as i32 + preserve_rdx as i32) * 8;
 
     // The one-operand forms accept r/m64, so a spilled operand is named
@@ -1183,21 +1198,10 @@ fn emit_shift_by_count_reg(
         return Ok(());
     }
     stage_lhs(code, rd, src);
-    // rcx is saved when the allocation records a value other than the count
-    // live in it across the shift, and for `-ffixed-rcx`; an allocation
-    // without the record counts any value placed in rcx.
+    // rcx is saved for a value other than the count live in it across the
+    // shift, and for `-ffixed-rcx`.
     let rcx_holds_live = count_reg.map(|r| r.0).unwrap_or(u8::MAX) != Reg::RCX.0
-        && (frame.fixed_regs.has_gpr(Reg::RCX.0)
-            || alloc
-                .rcx_live_across
-                .get(v as usize)
-                .copied()
-                .unwrap_or_else(|| {
-                    alloc
-                        .places
-                        .iter()
-                        .any(|p| matches!(p, Place::IntReg(r) if *r == Reg::RCX.0))
-                }));
+        && implicit_holds_live(alloc, v, Reg::RCX, frame);
     if rcx_holds_live {
         emit_push_r(code, Reg::RCX);
     }

@@ -32,11 +32,9 @@ Disassembly of section .text:
                	pushq	%r12
                	pushq	%rbx
                	leaq	-0x40(%rbp), %rax
-               	leaq	(%rax), %rcx
-               	movl	$0x1, (%rcx)
+               	movl	$0x1, (%rax)
                	leaq	-0x20(%rbp), %rcx
-               	leaq	(%rcx), %rdx
-               	movl	$0xa, (%rdx)
+               	movl	$0xa, (%rcx)
                	movl	$0x2, 0x4(%rax)
                	movl	$0x14, 0x4(%rcx)
                	movl	$0x3, 0x8(%rax)

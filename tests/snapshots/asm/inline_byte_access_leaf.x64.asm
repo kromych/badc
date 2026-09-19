@@ -26,18 +26,17 @@ Disassembly of section .text:
                	int3
 
 <mix>:
-               	leaq	(%rdi), %rax
-               	movq	(%rax), %rcx
-               	movq	%rcx, %rdx
-               	bswapq	%rdx
-               	leaq	(%rsi), %rcx
-               	movq	(%rcx), %r8
-               	bswapq	%r8
-               	movl	(%rcx), %ecx
-               	addq	%r8, %rcx
-               	xorq	%rdx, %rcx
+               	movq	(%rdi), %rax
+               	movq	%rax, %rcx
                	bswapq	%rcx
-               	movq	%rcx, (%rax)
+               	movq	(%rsi), %rax
+               	movq	%rax, %rdx
+               	bswapq	%rdx
+               	movl	(%rsi), %eax
+               	addq	%rdx, %rax
+               	xorq	%rcx, %rax
+               	bswapq	%rax
+               	movq	%rax, (%rdi)
                	movq	0x8(%rdi), %rax
                	movq	%rax, %rcx
                	bswapq	%rcx

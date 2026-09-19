@@ -315,8 +315,8 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v13  Imm(0)                                           -> x0
     v14  Imm(0)                                           -> x0
     v15  Extend { value=v2, kind=I32 }                    -> x0
-    v16  Call { target_pc=1, args=[v6, v4, v2], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v17  BinopI { op=add, lhs=v16, rhs_imm=0 }            -> x14
+    v16  Call { target_pc=1, args=[v6, v4, v2], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x14
+    v17  BinopI { op=add, lhs=v16, rhs_imm=0 }            -> x0
     v18  Imm(0)                                           -> x0
     v19  Imm(0)                                           -> x0
     v20  Imm(1)                                           -> x0
@@ -328,7 +328,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v26  Imm(0)                                           -> x0
     v27  Extend { value=v2, kind=I32 }                    -> x0
     v28  Call { target_pc=1, args=[v25, v4, v2], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v29  Binop { op=add, lhs=v17, rhs=v28 }               -> x14
+    v29  Binop { op=add, lhs=v16, rhs=v28 }               -> x14
     v30  Imm(0)                                           -> x0
     v31  Imm(1)                                           -> x0
     v32  Imm(2)                                           -> x0

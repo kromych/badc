@@ -876,10 +876,8 @@ Disassembly of section .text:
                	sub	sp, sp, #0x20
                	mov	x1, x0
                	sub	x0, x29, #0x20
-               	add	x4, x0, #0x0
                	and	x2, x1, #0xff
-               	add	x3, x2, #0x0
-               	strb	w3, [x4]
+               	strb	w2, [x0]
                	add	x3, x2, #0x1
                	and	x3, x3, #0xff
                	strb	w3, [x0, #0x1]
@@ -1050,8 +1048,7 @@ Disassembly of section .text:
                	strb	w2, [x0, #0x7]
                	ldr	x2, [x0]
                	str	x2, [x0]
-               	add	x2, x0, #0x0
-               	ldrb	w2, [x2]
+               	ldrb	w2, [x0]
                	mov	x17, #0x27              // =39
                	eor	x2, x2, x17
                	cbz	w2, <addr>

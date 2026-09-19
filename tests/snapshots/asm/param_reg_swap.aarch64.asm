@@ -15,8 +15,7 @@ Disassembly of section .text:
 
 <core>:
                	mov	x7, x0
-               	add	x0, x3, #0x0
-               	ldr	w0, [x0]
+               	ldr	w0, [x3]
                	ldr	w4, [x3, #0x4]
                	ldr	w5, [x3, #0x8]
                	ldr	w3, [x3, #0xc]
@@ -32,9 +31,8 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x40
                	sub	x1, x29, #0x30
-               	add	x2, x1, #0x0
                	mov	x0, #0x0                // =0
-               	strb	w0, [x2]
+               	strb	w0, [x1]
                	mov	x2, #0x1                // =1
                	strb	w2, [x1, #0x1]
                	mov	x2, #0x2                // =2

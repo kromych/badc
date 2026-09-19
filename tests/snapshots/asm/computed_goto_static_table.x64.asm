@@ -34,8 +34,7 @@ Disassembly of section .text:
                	movl	$0x0, -0x10(%rbp)
                	leaq	<rip>, %rax
                	movl	$0x1, -0x10(%rbp)
-               	leaq	(%rdi), %rcx
-               	movzbq	(%rcx), %rcx
+               	movzbq	(%rdi), %rcx
                	movq	(%rax,%rcx,8), %rcx
                	jmpq	*%rcx
                	movslq	-0x8(%rbp), %rdi

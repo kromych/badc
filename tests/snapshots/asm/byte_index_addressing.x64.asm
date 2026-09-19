@@ -203,11 +203,9 @@ Disassembly of section .text:
                	pushq	%r12
                	pushq	%rbx
                	leaq	<rip>, %r13
-               	leaq	(%r13), %rax
-               	movb	$-0x80, (%rax)
+               	movb	$-0x80, (%r13)
                	leaq	<rip>, %rbx
-               	leaq	(%rbx), %rax
-               	movb	$0x78, (%rax)
+               	movb	$0x78, (%rbx)
                	leaq	<rip>, %rax
                	movb	$-0x6f, 0x1(%rax)
                	leaq	<rip>, %rax

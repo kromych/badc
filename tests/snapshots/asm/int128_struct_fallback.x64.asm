@@ -50,9 +50,8 @@ Disassembly of section .text:
                	callq	<addr>
                	leaq	(%r12,%rax), %rbx
                	cmpq	%r12, %rbx
-               	setb	%al
-               	movzbq	%al, %rax
-               	leaq	(%rax), %r12
+               	setb	%r12b
+               	movzbq	%r12b, %r12
                	testq	%rbx, %rbx
                	jne	<addr>
                	cmpl	$0x1, %r12d
@@ -76,12 +75,11 @@ Disassembly of section .text:
                	callq	<addr>
                	movq	%r13, %rcx
                	subq	%rax, %rcx
-               	leaq	(%r15), %rdx
                	cmpq	%rax, %r13
-               	setb	%sil
-               	movzbq	%sil, %rsi
-               	movq	%rdx, %rax
-               	subq	%rsi, %rax
+               	setb	%dl
+               	movzbq	%dl, %rdx
+               	movq	%r15, %rax
+               	subq	%rdx, %rax
                	cmpq	$-0x1, %rcx
                	jne	<addr>
                	testq	%rax, %rax
@@ -117,7 +115,6 @@ Disassembly of section .text:
                	movl	$0x1, %edi
                	callq	<addr>
                	movq	%rax, %rcx
-               	shlq	$0x0, %rcx
                	leaq	-0x10(%rbp), %rax
                	xorps	%xmm14, %xmm14
                	movups	%xmm14, (%rax)

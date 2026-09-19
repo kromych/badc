@@ -23,56 +23,49 @@ Disassembly of section .text:
                	b.ge	<addr>
                	mul	x2, x0, x6
                	add	x4, x1, x2
-               	add	x4, x4, #0x0
-               	add	x5, x4, #0x0
-               	add	x4, x3, #0x1
-               	str	w3, [x5]
+               	add	x5, x3, #0x1
+               	str	w3, [x4]
                	add	x3, x1, x2
-               	add	x5, x3, #0x0
-               	add	x3, x4, #0x1
-               	str	w4, [x5, #0x4]
-               	add	x4, x1, x2
-               	add	x5, x4, #0x0
-               	add	x4, x3, #0x1
-               	str	w3, [x5, #0x8]
+               	add	x4, x5, #0x1
+               	str	w5, [x3, #0x4]
                	add	x3, x1, x2
-               	add	x5, x3, #0x0
-               	add	x3, x4, #0x1
-               	str	w4, [x5, #0xc]
-               	add	x4, x1, x2
-               	add	x4, x4, #0x10
-               	add	x5, x4, #0x0
-               	add	x4, x3, #0x1
-               	str	w3, [x5]
+               	add	x5, x4, #0x1
+               	str	w4, [x3, #0x8]
+               	add	x3, x1, x2
+               	add	x4, x5, #0x1
+               	str	w5, [x3, #0xc]
                	add	x3, x1, x2
                	add	x5, x3, #0x10
                	add	x3, x4, #0x1
-               	str	w4, [x5, #0x4]
+               	str	w4, [x5]
                	add	x4, x1, x2
                	add	x5, x4, #0x10
                	add	x4, x3, #0x1
-               	str	w3, [x5, #0x8]
+               	str	w3, [x5, #0x4]
                	add	x3, x1, x2
                	add	x5, x3, #0x10
                	add	x3, x4, #0x1
-               	str	w4, [x5, #0xc]
+               	str	w4, [x5, #0x8]
                	add	x4, x1, x2
-               	add	x4, x4, #0x20
-               	add	x5, x4, #0x0
+               	add	x5, x4, #0x10
                	add	x4, x3, #0x1
-               	str	w3, [x5]
+               	str	w3, [x5, #0xc]
                	add	x3, x1, x2
                	add	x5, x3, #0x20
                	add	x3, x4, #0x1
-               	str	w4, [x5, #0x4]
+               	str	w4, [x5]
                	add	x4, x1, x2
                	add	x5, x4, #0x20
                	add	x4, x3, #0x1
-               	str	w3, [x5, #0x8]
+               	str	w3, [x5, #0x4]
+               	add	x3, x1, x2
+               	add	x3, x3, #0x20
+               	add	x5, x4, #0x1
+               	str	w4, [x3, #0x8]
                	add	x2, x1, x2
                	add	x2, x2, #0x20
-               	add	x3, x4, #0x1
-               	str	w4, [x2, #0xc]
+               	add	x3, x5, #0x1
+               	str	w5, [x2, #0xc]
                	add	x0, x0, #0x1
                	cmp	w0, #0x2
                	b.lt	<addr>
@@ -90,29 +83,23 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	add	x0, x0, #0x0
-               	add	x0, x0, #0x0
                	mov	x1, #0x0                // =0
                	str	w1, [x0]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	add	x0, x0, #0x0
                	mov	x2, #0x1                // =1
                	str	w2, [x0, #0x4]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	add	x0, x0, #0x0
                	mov	x2, #0x2                // =2
                	str	w2, [x0, #0x8]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	add	x0, x0, #0x0
                	mov	x2, #0x3                // =3
                	str	w2, [x0, #0xc]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	add	x0, x0, #0x8
-               	add	x0, x0, #0x0
                	mov	x3, #0xa                // =10
                	str	w3, [x0]
                	adrp	x0, <page>
@@ -133,7 +120,6 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	add	x0, x0, #0x10
-               	add	x0, x0, #0x0
                	mov	x3, #0x14               // =20
                	str	w3, [x0]
                	adrp	x0, <page>

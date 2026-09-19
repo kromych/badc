@@ -15,8 +15,7 @@ Disassembly of section .text:
 
 <core>:
                	mov	x7, x0
-               	add	x0, x3, #0x0
-               	ldr	w0, [x0]
+               	ldr	w0, [x3]
                	ldr	w4, [x3, #0x4]
                	ldr	w5, [x3, #0x8]
                	ldr	w3, [x3, #0xc]
@@ -39,10 +38,8 @@ Disassembly of section .text:
                	sub	x1, x29, #0x50
                	str	x22, [x1]
                	str	x22, [x1, #0x8]
-               	add	x2, x1, #0x0
-               	add	x4, x3, #0x0
-               	ldrb	w4, [x4]
-               	strb	w4, [x2]
+               	ldrb	w2, [x3]
+               	strb	w2, [x1]
                	ldrb	w2, [x3, #0x1]
                	strb	w2, [x1, #0x1]
                	ldrb	w2, [x3, #0x2]
@@ -70,8 +67,6 @@ Disassembly of section .text:
                	cmp	w0, #0x40
                	b.hs	<addr>
                	ldrb	w1, [x21, x0]
-               	mov	x17, #0x0               // =0
-               	eor	x1, x1, x17
                	strb	w1, [x20, x0]
                	add	x0, x0, #0x1
                	cmp	w0, #0x40

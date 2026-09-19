@@ -16,8 +16,7 @@ Disassembly of section .text:
 <rounds>:
                	mov	x8, x0
                	mov	x7, x1
-               	add	x0, x8, #0x0
-               	ldr	x0, [x0]
+               	ldr	x0, [x8]
                	ldr	x1, [x8, #0x8]
                	ldr	x2, [x8, #0x10]
                	ldr	x3, [x8, #0x18]
@@ -49,7 +48,6 @@ Disassembly of section .text:
                	sub	x9, x7, #0x1
                	cmp	w7, #0x0
                	b.gt	<addr>
-               	add	x0, x0, #0x0
                	add	x0, x0, x1
                	add	x0, x0, x2
                	add	x0, x0, x3
@@ -64,9 +62,8 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x40
                	sub	x0, x29, #0x40
-               	add	x1, x0, #0x0
-               	mov	x2, #0x7                // =7
-               	str	x2, [x1]
+               	mov	x1, #0x7                // =7
+               	str	x1, [x0]
                	mov	x1, #0x1118             // =4376
                	str	x1, [x0, #0x8]
                	mov	x1, #0x2229             // =8745

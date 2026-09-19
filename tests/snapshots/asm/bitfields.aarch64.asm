@@ -23,8 +23,6 @@ Disassembly of section .text:
                	orr	x1, x1, #0x1
                	str	w1, [x0]
                	and	x1, x1, #0xfffffffffffffffd
-               	mov	x17, #0x0               // =0
-               	orr	x1, x1, x17
                	str	w1, [x0]
                	and	x1, x1, #0xffffffffffffffe3
                	mov	x17, #0x14              // =20
@@ -80,8 +78,6 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	and	x1, x1, #0xfffffffffffffffe
-               	mov	x17, #0x0               // =0
-               	orr	x1, x1, x17
                	str	w1, [x0]
                	and	x2, x1, #0x1
                	cbz	x2, <addr>
@@ -147,8 +143,6 @@ Disassembly of section .text:
                	orr	x0, x0, #0x2
                	stur	w0, [x29, #-0x8]
                	and	x0, x0, #0xfffffffffffffffb
-               	mov	x17, #0x0               // =0
-               	orr	x0, x0, x17
                	stur	w0, [x29, #-0x8]
                	and	x0, x0, #0xfffffffffffffff7
                	orr	x0, x0, #0x8

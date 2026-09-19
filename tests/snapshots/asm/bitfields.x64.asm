@@ -35,7 +35,6 @@ Disassembly of section .text:
                	orq	$0x1, %rcx
                	movl	%ecx, (%rax)
                	andq	$-0x3, %rcx
-               	orq	$0x0, %rcx
                	movl	%ecx, (%rax)
                	andq	$-0x1d, %rcx
                	orq	$0x14, %rcx
@@ -86,7 +85,6 @@ Disassembly of section .text:
                	leave
                	retq
                	andq	$-0x2, %rcx
-               	orq	$0x0, %rcx
                	movl	%ecx, (%rax)
                	movq	%rcx, %rdx
                	andq	$0x1, %rdx
@@ -153,7 +151,6 @@ Disassembly of section .text:
                	orq	$0x2, %rax
                	movl	%eax, -0x8(%rbp)
                	andq	$-0x5, %rax
-               	orq	$0x0, %rax
                	movl	%eax, -0x8(%rbp)
                	andq	$-0x9, %rax
                	orq	$0x8, %rax

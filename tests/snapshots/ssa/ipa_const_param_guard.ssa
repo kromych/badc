@@ -19,14 +19,14 @@ fn ent_pc=0 n_params=2 variadic=false locals=0
     v13  ImmData(16)                                      -> x0
     v14  Imm(0)                                           -> x1
     v15  Load { addr=v13, disp=0, kind=I64 }              -> x1
-    v16  BinopI { op=add, lhs=v15, rhs_imm=0 }            -> x1
+    v16  BinopI { op=add, lhs=v15, rhs_imm=0 }            -> x2
     v17  Imm(0)                                           -> x2
     v18  Imm(0)                                           -> x2
     v19  Imm(8)                                           -> x2
     v20  BinopI { op=add, lhs=v13, rhs_imm=8 }            -> x2
     v21  Load { addr=v13, disp=8, kind=I64 }              -> x2
     v22  BinopI { op=shl, lhs=v21, rhs_imm=1 }            -> x2
-    v23  Binop { op=add, lhs=v16, rhs=v22 }               -> x1
+    v23  Binop { op=add, lhs=v15, rhs=v22 }               -> x1
     v24  Imm(0)                                           -> x2
     v25  Imm(0)                                           -> x2
     v26  Imm(16)                                          -> x2

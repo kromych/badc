@@ -279,14 +279,10 @@ Disassembly of section .text:
                	retq
 
 <loop_block>:
-               	xorl	%edx, %edx
-               	movq	%rdx, %rcx
-               	movq	%rdx, %rax
+               	xorl	%ecx, %ecx
+               	movq	%rcx, %rax
                	cmpl	$0x2, %eax
                	jge	<addr>
-               	testl	%eax, %eax
-               	je	<addr>
-               	movq	%rdx, %rcx
                	incq	%rax
                	cmpl	$0x2, %eax
                	jl	<addr>
@@ -314,7 +310,7 @@ Disassembly of section .text:
                	xorl	%r12d, %r12d
                	callq	<addr>
                	callq	<addr>
-               	leaq	(%rax), %rbx
+               	movq	%rax, %rbx
                	callq	<addr>
                	callq	<addr>
                	addq	%rax, %rbx

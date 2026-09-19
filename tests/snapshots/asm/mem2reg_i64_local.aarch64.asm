@@ -16,8 +16,7 @@ Disassembly of section .text:
 <f>:
                	mov	x17, #0x3               // =3
                	mul	x0, x0, x17
-               	add	x1, x0, #0x0
-               	add	x1, x1, x0
+               	add	x1, x0, x0
                	add	x1, x1, x0
                	add	x0, x1, x0
                	ret

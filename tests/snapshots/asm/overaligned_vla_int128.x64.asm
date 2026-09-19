@@ -66,7 +66,6 @@ Disassembly of section .text:
                	cmpq	%rdx, %rcx
                	setb	%dl
                	movzbq	%dl, %rdx
-               	addq	$0x0, %rsi
                	addq	%rsi, %rdx
                	movq	%rcx, (%rax)
                	movq	%rdx, 0x8(%rax)

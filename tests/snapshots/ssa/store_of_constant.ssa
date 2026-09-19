@@ -523,7 +523,7 @@ fn ent_pc=15 n_params=0 variadic=false locals=28
     v177 Imm(0)                                           -> x1
     v178 Imm(0)                                           -> x1
     v179 BinopI { op=add, lhs=v176, rhs_imm=0 }           -> x1
-    v180 Load { addr=v179, disp=0, kind=I16 }             -> x1
+    v180 Load { addr=v176, disp=0, kind=I16 }             -> x1
     v181 BinopI { op=ne, lhs=v180, rhs_imm=-300 }         -> x1
     terminator Bz { cond=v181, target=b27, fall=b26 }   (exit_acc=v181)
   block 26  start_pc=0

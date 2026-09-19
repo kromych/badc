@@ -40,7 +40,6 @@ Disassembly of section .text:
                	movb	%cl, 0x1(%rax)
                	andq	$0xff, %rcx
                	andq	$-0x3, %rcx
-               	orq	$0x0, %rcx
                	movb	%cl, 0x1(%rax)
                	movl	(%rax), %ecx
                	andq	$-0x401, %rcx           # imm = 0xFBFF

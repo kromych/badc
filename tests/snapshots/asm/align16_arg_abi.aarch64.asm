@@ -34,13 +34,11 @@ Disassembly of section .text:
                	lsr	x4, x4, #32
                	add	x5, x7, x8
                	add	x4, x5, x4
-               	lsr	x2, x2, #0
                	add	x2, x4, x2
                	madd	x0, x1, x0, x2
                	add	x1, x3, x9
                	cmp	x1, x3
                	cset	x2, lo
-               	add	x0, x0, #0x0
                	add	x2, x0, x2
                	sub	x0, x29, #0x60
                	str	x1, [x0]

@@ -28,8 +28,6 @@ Disassembly of section .text:
                	strb	w1, [x0, #0x1]
                	and	x1, x1, #0xff
                	and	x1, x1, #0xfffffffffffffffd
-               	mov	x17, #0x0               // =0
-               	orr	x1, x1, x17
                	strb	w1, [x0, #0x1]
                	ldr	w1, [x0]
                	and	x1, x1, #0xfffffffffffffbff

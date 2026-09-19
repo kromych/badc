@@ -9,7 +9,7 @@ fn ent_pc=7 n_params=0 variadic=false locals=0
     v3   ImmData(16)                                      -> x0
     v4   Imm(0)                                           -> x1
     v5   BinopI { op=add, lhs=v3, rhs_imm=0 }             -> x1
-    v6   Store { addr=v5, disp=0, value=v2, kind=I32 }    -> -
+    v6   Store { addr=v3, disp=0, value=v2, kind=I32 }    -> -
     v7   Imm(0)                                           -> x1
     v8   BinopI { op=add, lhs=v3, rhs_imm=0 }             -> x0
     v9   Imm(0)                                           -> x0

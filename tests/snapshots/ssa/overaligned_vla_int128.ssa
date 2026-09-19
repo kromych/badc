@@ -70,8 +70,8 @@ fn ent_pc=0 n_params=1 variadic=false locals=4
     v60  Imm(0)                                           -> x1
     v61  BinopI { op=add, lhs=v45, rhs_imm=9 }            -> x1
     v62  Binop { op=ult, lhs=v61, rhs=v45 }               -> x2
-    v63  BinopI { op=add, lhs=v47, rhs_imm=0 }            -> x6
-    v64  Binop { op=add, lhs=v63, rhs=v62 }               -> x2
+    v63  BinopI { op=add, lhs=v47, rhs_imm=0 }            -> x7
+    v64  Binop { op=add, lhs=v47, rhs=v62 }               -> x2
     v65  Store { addr=v16, disp=0, value=v61, kind=I64 }  -> -
     v66  Store { addr=v16, disp=8, value=v64, kind=I64 }  -> -
     v67  LocalAddr(-2)                                    -> x2

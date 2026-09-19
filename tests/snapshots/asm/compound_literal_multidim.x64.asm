@@ -29,41 +29,35 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x30, %rsp
-               	leaq	<rip>, %rcx
-               	movq	(%rcx), %rax
-               	addq	$0x0, %rax
-               	addq	$0x0, %rax
+               	leaq	<rip>, %rdx
+               	movq	(%rdx), %rax
                	movsbq	(%rax), %rax
-               	addq	$0x0, %rax
-               	leaq	<rip>, %rdx
-               	movq	(%rdx), %rdx
-               	addq	$0x0, %rdx
-               	movsbq	0x1(%rdx), %rdx
-               	addq	%rdx, %rax
-               	leaq	<rip>, %rdx
-               	movq	(%rdx), %rdx
-               	addq	$0x0, %rdx
-               	movsbq	0x2(%rdx), %rdx
-               	addq	%rdx, %rax
-               	leaq	<rip>, %rdx
-               	movq	(%rdx), %rdx
-               	addq	$0x3, %rdx
-               	addq	$0x0, %rdx
-               	movsbq	(%rdx), %rdx
-               	addq	%rdx, %rax
-               	leaq	<rip>, %rdx
-               	movq	(%rdx), %rdx
-               	addq	$0x3, %rdx
-               	movsbq	0x1(%rdx), %rdx
-               	addq	%rdx, %rax
-               	leaq	<rip>, %rdx
-               	movq	(%rdx), %rdx
-               	addq	$0x3, %rdx
-               	movsbq	0x2(%rdx), %rdx
-               	addq	%rdx, %rax
+               	leaq	<rip>, %rcx
+               	movq	(%rcx), %rcx
+               	movsbq	0x1(%rcx), %rcx
+               	addq	%rcx, %rax
+               	leaq	<rip>, %rcx
+               	movq	(%rcx), %rcx
+               	movsbq	0x2(%rcx), %rcx
+               	addq	%rcx, %rax
+               	leaq	<rip>, %rcx
+               	movq	(%rcx), %rcx
+               	addq	$0x3, %rcx
+               	movsbq	(%rcx), %rcx
+               	addq	%rcx, %rax
+               	leaq	<rip>, %rcx
+               	movq	(%rcx), %rcx
+               	addq	$0x3, %rcx
+               	movsbq	0x1(%rcx), %rcx
+               	addq	%rcx, %rax
+               	leaq	<rip>, %rcx
+               	movq	(%rcx), %rcx
+               	addq	$0x3, %rcx
+               	movsbq	0x2(%rcx), %rcx
+               	addq	%rcx, %rax
                	cmpl	$0x15, %eax
                	jne	<addr>
-               	movq	(%rcx), %rax
+               	movq	(%rdx), %rax
                	movsbq	0x5(%rax), %rax
                	cmpl	$0x6, %eax
                	je	<addr>

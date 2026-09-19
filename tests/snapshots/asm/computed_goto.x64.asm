@@ -64,7 +64,6 @@ Disassembly of section .text:
                	movl	$0x0, -0x28(%rbp)
                	movq	-0x40(%rbp), %rcx
                	movl	$0x1, -0x28(%rbp)
-               	addq	$0x0, %rcx
                	movslq	(%rcx), %rcx
                	movq	(%rax,%rcx,8), %rcx
                	jmpq	*%rcx

@@ -1399,13 +1399,13 @@ fn ent_pc=7 n_params=1 variadic=false locals=2
     v6   Imm(1)                                           -> x0
     v7   LocalAddr(-2)                                    -> x0
     v8   Imm(0)                                           -> x1
-    v9   BinopI { op=add, lhs=v7, rhs_imm=0 }             -> x6
+    v9   BinopI { op=add, lhs=v7, rhs_imm=0 }             -> x1
     v10  BinopI { op=and, lhs=v1, rhs_imm=255 }           -> x1
     v11  BinopI { op=add, lhs=v10, rhs_imm=0 }            -> x2
-    v12  BinopI { op=shl, lhs=v11, rhs_imm=32 }           -> x8
-    v13  Extend { value=v11, kind=I32 }                   -> x8
-    v14  BinopI { op=and, lhs=v11, rhs_imm=255 }          -> x8
-    v15  Store { addr=v9, disp=0, value=v11, kind=I8 }    -> -
+    v12  BinopI { op=shl, lhs=v10, rhs_imm=32 }           -> x2
+    v13  Extend { value=v10, kind=I32 }                   -> x2
+    v14  BinopI { op=and, lhs=v10, rhs_imm=255 }          -> x2
+    v15  Store { addr=v7, disp=0, value=v10, kind=I8 }    -> -
     v16  Imm(0)                                           -> x2
     v17  Imm(1)                                           -> x2
     v18  Imm(0)                                           -> x2
@@ -1652,7 +1652,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=97
     v21  LocalAddr(-11)                                   -> x1
     v22  Imm(0)                                           -> x1
     v23  BinopI { op=add, lhs=v15, rhs_imm=0 }            -> x1
-    v24  Load { addr=v23, disp=0, kind=U8 }               -> x1
+    v24  Load { addr=v15, disp=0, kind=U8 }               -> x1
     v25  BinopI { op=xor, lhs=v24, rhs_imm=99 }           -> x1
     v26  BinopI { op=and, lhs=v25, rhs_imm=4294967295 }   -> x2
     v27  BinopI { op=ne, lhs=v25, rhs_imm=0 }             -> x2
@@ -2123,7 +2123,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=97
     v457 LocalAddr(-16)                                   -> x1
     v458 Imm(0)                                           -> x1
     v459 BinopI { op=add, lhs=v451, rhs_imm=0 }           -> x1
-    v460 Load { addr=v459, disp=0, kind=U8 }              -> x1
+    v460 Load { addr=v451, disp=0, kind=U8 }              -> x1
     v461 BinopI { op=xor, lhs=v460, rhs_imm=39 }          -> x1
     v462 BinopI { op=and, lhs=v461, rhs_imm=4294967295 }  -> x2
     v463 BinopI { op=ne, lhs=v461, rhs_imm=0 }            -> x2

@@ -18,8 +18,7 @@ Disassembly of section .text:
                	mov	x29, sp
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	add	x1, x0, #0x0
-               	ldrb	w1, [x1]
+               	ldrb	w1, [x0]
                	eor	x1, x1, #0x4
                	cbz	w1, <addr>
                	mov	x0, #0x1                // =1
@@ -63,7 +62,6 @@ Disassembly of section .text:
                	mov	x0, #0x2a               // =42
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	udf	#0x0
 
 <rept_run>:
                	<unknown>

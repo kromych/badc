@@ -1072,8 +1072,7 @@ Disassembly of section .text:
                	leaq	-0x1050(%rbp), %rax
                	movq	(%rax), %rcx
                	movq	0x8(%rax), %rax
-               	addq	%rcx, %rax
-               	leaq	(%rax), %rcx
+               	addq	%rax, %rcx
                	leaq	-0x1040(%rbp), %rax
                	movq	(%rax), %rdx
                	movq	0x8(%rax), %rax
@@ -2380,8 +2379,7 @@ Disassembly of section .text:
 <sum_longs>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	leaq	(%rdi), %rax
-               	addq	%rsi, %rax
+               	leaq	(%rdi,%rsi), %rax
                	addq	%rdx, %rax
                	addq	%rcx, %rax
                	addq	%r8, %rax

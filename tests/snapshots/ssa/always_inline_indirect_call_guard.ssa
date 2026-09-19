@@ -461,8 +461,8 @@ fn ent_pc=6 n_params=0 variadic=false locals=1
     v129 LocalAddr(-1)                                    -> x2
     v130 Call { target_pc=4, args=[v125, v125, v129], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v131 LoadLocal { off=-1, kind=I64 }                   -> x1
-    v132 Binop { op=add, lhs=v130, rhs=v131 }             -> x0
-    v133 BinopI { op=add, lhs=v132, rhs_imm=0 }           -> x3
+    v132 Binop { op=add, lhs=v130, rhs=v131 }             -> x3
+    v133 BinopI { op=add, lhs=v132, rhs_imm=0 }           -> x0
     v134 Imm(0)                                           -> x0
     v135 Imm(0)                                           -> x7
     v136 StoreLocal { off=-1, value=v135, kind=I64 }      -> -
@@ -475,7 +475,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=1
     v143 Extend { value=v141, kind=I32 }                  -> x0
     v144 LoadLocal { off=-1, kind=I64 }                   -> x1
     v145 Binop { op=add, lhs=v143, rhs=v144 }             -> x0
-    v146 Binop { op=add, lhs=v133, rhs=v145 }             -> x3
+    v146 Binop { op=add, lhs=v132, rhs=v145 }             -> x3
     v147 Imm(0)                                           -> x0
     v148 Imm(0)                                           -> x0
     v149 Imm(1)                                           -> x0

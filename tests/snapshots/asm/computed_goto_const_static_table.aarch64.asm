@@ -26,7 +26,6 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	mov	x2, #0x1                // =1
                	stur	w2, [x29, #-0x10]
-               	add	x1, x1, #0x0
                	ldrb	w1, [x1]
                	ldr	x1, [x0, x1, lsl #3]
                	br	x1
@@ -86,7 +85,6 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	mov	x2, #0x1                // =1
                	stur	w2, [x29, #-0x10]
-               	add	x1, x1, #0x0
                	ldrb	w1, [x1]
                	ldr	x1, [x0, x1, lsl #3]
                	br	x1
@@ -146,7 +144,6 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	mov	x2, #0x1                // =1
                	stur	w2, [x29, #-0x10]
-               	add	x1, x1, #0x0
                	ldrb	w1, [x1]
                	ldr	x1, [x0, x1, lsl #3]
                	br	x1

@@ -46,8 +46,7 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	leaq	(%rdi), %rax
-               	movb	$0x1, (%rax)
+               	movb	$0x1, (%rdi)
                	leaq	0x1000(%rdi), %rax
                	movb	$0x2, (%rax)
                	leaq	0x2000(%rdi), %rax

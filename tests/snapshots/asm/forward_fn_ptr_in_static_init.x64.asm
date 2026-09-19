@@ -47,8 +47,7 @@ Disassembly of section .text:
                	pushq	%rbx
                	movl	$0xa, %edi
                	leaq	<rip>, %rbx
-               	leaq	(%rbx), %rax
-               	movq	(%rax), %rax
+               	movq	(%rbx), %rax
                	callq	*%rax
                	cmpl	$0xc, %eax
                	je	<addr>

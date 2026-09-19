@@ -36,8 +36,7 @@ Disassembly of section .text:
                	sete	%al
                	movb	%al, -0x8(%rbp)
                	movzbq	-0x8(%rbp), %rax
-               	imulq	$0x14, %rax, %rax
-               	leaq	(%rax), %rdx
+               	imulq	$0x14, %rax, %rdx
                	movl	$0x3, %ebx
                	movl	$0x7, %ecx
                	cmpq	%rcx, %rbx

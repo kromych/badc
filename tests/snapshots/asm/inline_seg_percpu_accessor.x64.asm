@@ -129,14 +129,12 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx
                	movq	(%rcx), %rcx
                	addq	%rax, %rcx
-               	leaq	(%rcx), %rax
-               	movq	%gs:(%rax), %rsi
+               	movq	%gs:(%rcx), %rsi
                	pushfq
                	popq	%rax
                	movq	%rax, -0x8(%rbp)
                	movq	-0x8(%rbp), %rax
-               	leaq	(%rcx), %rdi
-               	movq	%gs:(%rdi), %rdi
+               	movq	%gs:(%rcx), %rdi
                	movabsq	$0x1122334455667788, %r11 # imm = 0x1122334455667788
                	movq	%rsi, %r8
                	cmpq	%r11, %rsi

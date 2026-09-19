@@ -23,7 +23,7 @@ Disassembly of section .text:
                	mov	x1, x0
                	cmp	w1, #0x0
                	b.gt	<addr>
-               	add	x0, x2, #0x0
+               	mov	x0, x2
                	ret
 
 <main>:

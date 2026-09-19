@@ -21,11 +21,9 @@ Disassembly of section .text:
                	b.ge	<addr>
                	lsl	x4, x0, #7
                	add	x2, x1, x4
-               	add	x7, x2, #0x0
                	lsl	x3, x0, #4
-               	add	x6, x3, #0x0
-               	str	x6, [x7]
-               	add	x6, x5, x6
+               	str	x3, [x2]
+               	add	x6, x5, x3
                	add	x5, x3, #0x1
                	str	x5, [x2, #0x8]
                	add	x6, x6, x5
@@ -34,30 +32,32 @@ Disassembly of section .text:
                	add	x5, x6, x5
                	add	x3, x3, #0x3
                	str	x3, [x2, #0x18]
-               	add	x6, x5, x3
+               	add	x5, x5, x3
+               	add	x4, x1, x4
+               	lsl	x3, x0, #4
+               	add	x2, x3, #0x4
+               	str	x2, [x4, #0x20]
                	lsl	x4, x0, #7
                	add	x2, x1, x4
-               	lsl	x3, x0, #4
-               	add	x5, x3, #0x4
-               	str	x5, [x2, #0x20]
-               	add	x6, x6, x5
+               	ldr	x6, [x2, #0x20]
+               	add	x6, x5, x6
                	add	x5, x3, #0x5
                	str	x5, [x2, #0x28]
                	add	x6, x6, x5
                	add	x5, x3, #0x6
                	str	x5, [x2, #0x30]
+               	add	x6, x6, x5
+               	add	x5, x3, #0x7
+               	str	x5, [x2, #0x38]
                	add	x5, x6, x5
-               	add	x3, x3, #0x7
-               	str	x3, [x2, #0x38]
-               	add	x5, x5, x3
-               	add	x4, x1, x4
-               	lsl	x3, x0, #4
-               	add	x2, x3, #0x8
-               	str	x2, [x4, #0x40]
+               	add	x3, x3, #0x8
+               	str	x3, [x2, #0x40]
+               	add	x2, x1, x4
+               	ldr	x2, [x2, #0x40]
+               	add	x6, x5, x2
                	lsl	x4, x0, #7
                	add	x2, x1, x4
-               	ldr	x6, [x2, #0x40]
-               	add	x6, x5, x6
+               	lsl	x3, x0, #4
                	add	x5, x3, #0x9
                	str	x5, [x2, #0x48]
                	add	x6, x6, x5
@@ -69,15 +69,15 @@ Disassembly of section .text:
                	add	x5, x6, x5
                	add	x3, x3, #0xc
                	str	x3, [x2, #0x60]
-               	add	x2, x1, x4
-               	ldr	x2, [x2, #0x60]
-               	add	x6, x5, x2
+               	add	x5, x5, x3
+               	add	x4, x1, x4
+               	lsl	x3, x0, #4
+               	add	x2, x3, #0xd
+               	str	x2, [x4, #0x68]
                	lsl	x4, x0, #7
                	add	x2, x1, x4
-               	lsl	x3, x0, #4
-               	add	x5, x3, #0xd
-               	str	x5, [x2, #0x68]
-               	add	x6, x6, x5
+               	ldr	x6, [x2, #0x68]
+               	add	x6, x5, x6
                	add	x5, x3, #0xe
                	str	x5, [x2, #0x70]
                	add	x5, x6, x5

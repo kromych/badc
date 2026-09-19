@@ -237,7 +237,6 @@ Disassembly of section .text:
                	movb	%cl, 0xe(%rax)
                	movb	%cl, 0xf(%rax)
                	leaq	<rip>, %rax
-               	addq	$0x0, %rax
                	movzbq	(%rax), %rax
                	xorq	$0x5a, %rax
                	testl	%eax, %eax
@@ -337,9 +336,7 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	leaq	<rip>, %rax
-               	movzbq	0x4(%rax), %rax
-               	xorq	$0x0, %rax
-               	testl	%eax, %eax
+               	cmpb	$0x0, 0x4(%rax)
                	je	<addr>
                	movl	$0xd, %eax
                	popq	%rbx
@@ -436,7 +433,6 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	leaq	<rip>, %rax
-               	addq	$0x0, %rax
                	movzbq	(%rax), %rax
                	xorq	$0x4, %rax
                	testl	%eax, %eax

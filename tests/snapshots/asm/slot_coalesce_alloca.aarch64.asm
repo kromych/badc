@@ -29,9 +29,8 @@ Disassembly of section .text:
                	subs	x17, x17, #0x1
                	b.ne	<addr>
                	mov	sp, x2
-               	add	x0, x2, #0x0
-               	mov	x1, #0x74               // =116
-               	str	x1, [x0]
+               	mov	x0, #0x74               // =116
+               	str	x0, [x2]
                	mov	x0, #0x75               // =117
                	str	x0, [x2, #0x8]
                	mov	x0, #0x76               // =118
@@ -77,8 +76,7 @@ Disassembly of section .text:
                	add	sp, sp, #0xd0
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	add	x0, x2, #0x0
-               	ldr	x0, [x0]
+               	ldr	x0, [x2]
                	cmp	x0, #0x74
                	b.eq	<addr>
                	mov	x0, #0x1                // =1

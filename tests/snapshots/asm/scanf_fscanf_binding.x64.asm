@@ -31,10 +31,9 @@ Disassembly of section .text:
                	subq	$0x8, %rsp
                	pushq	%rbx
                	leaq	<rip>, %rbx
-               	leaq	(%rbx), %rax
-               	cmpq	$0x0, (%rax)
+               	cmpq	$0x0, (%rbx)
                	je	<addr>
-               	movq	(%rax), %rax
+               	movq	(%rbx), %rax
                	popq	%rbx
                	leave
                	retq
@@ -44,11 +43,9 @@ Disassembly of section .text:
                	callq	<addr>
                	testq	%rax, %rax
                	je	<addr>
-               	leaq	(%rbx), %rcx
                	movq	(%rax), %rax
-               	movq	%rax, (%rcx)
-               	leaq	(%rbx), %rax
-               	movq	(%rax), %rax
+               	movq	%rax, (%rbx)
+               	movq	(%rbx), %rax
                	popq	%rbx
                	leave
                	retq

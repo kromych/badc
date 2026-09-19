@@ -31,10 +31,8 @@ Disassembly of section .text:
                	subq	$0x20, %rsp
                	movups	%xmm0, -0x20(%rbp,%riz)
                	leaq	-0x20(%rbp), %rax
-               	leaq	(%rax), %rcx
-               	movzbq	(%rcx), %rcx
-               	leaq	(%rdi), %rdx
-               	movzbq	(%rdx), %rdx
+               	movzbq	(%rax), %rcx
+               	movzbq	(%rdi), %rdx
                	cmpl	%edx, %ecx
                	je	<addr>
                	xorl	%eax, %eax
@@ -361,10 +359,8 @@ Disassembly of section .text:
                	retq
                	leaq	-0xf0(%rbp), %rcx
                	leaq	-0xe0(%rbp), %rdx
-               	leaq	(%rcx), %rax
-               	movb	$0x1, (%rax)
-               	leaq	(%rdx), %rax
-               	movb	$-0x38, (%rax)
+               	movb	$0x1, (%rcx)
+               	movb	$-0x38, (%rdx)
                	movb	$0x8, 0x1(%rcx)
                	movb	$-0x39, 0x1(%rdx)
                	movb	$0xf, 0x2(%rcx)

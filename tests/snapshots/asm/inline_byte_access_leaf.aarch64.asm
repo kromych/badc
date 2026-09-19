@@ -14,17 +14,15 @@ Disassembly of section .text:
                	brk	#0x1
 
 <mix>:
-               	add	x2, x0, #0x0
-               	ldr	x3, [x2]
-               	rev	x4, x3
-               	add	x3, x1, #0x0
-               	ldr	x5, [x3]
-               	rev	x5, x5
-               	ldr	w3, [x3]
-               	add	x3, x5, x3
-               	eor	x3, x4, x3
-               	rev	x3, x3
-               	str	x3, [x2]
+               	ldr	x2, [x0]
+               	rev	x3, x2
+               	ldr	x2, [x1]
+               	rev	x4, x2
+               	ldr	w2, [x1]
+               	add	x2, x4, x2
+               	eor	x2, x3, x2
+               	rev	x2, x2
+               	str	x2, [x0]
                	ldr	x2, [x0, #0x8]
                	rev	x3, x2
                	ldr	x2, [x1, #0x8]

@@ -34,8 +34,7 @@ Disassembly of section .text:
                	pushq	%rbx
                	movq	%rdi, %r12
                	movq	%rsi, %rbx
-               	leaq	(%r12), %rax
-               	movq	(%rax), %rax
+               	movq	(%r12), %rax
                	movq	0x8(%r12), %rcx
                	movq	0x10(%r12), %rdx
                	movq	0x18(%r12), %rsi
@@ -68,7 +67,6 @@ Disassembly of section .text:
                	leaq	-0x1(%rbx), %r13
                	testl	%ebx, %ebx
                	jg	<addr>
-               	addq	$0x0, %rax
                	addq	%rcx, %rax
                	addq	%rdx, %rax
                	addq	%rsi, %rax
@@ -87,8 +85,7 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x40, %rsp
                	leaq	-0x40(%rbp), %rax
-               	leaq	(%rax), %rcx
-               	movq	$0x7, (%rcx)
+               	movq	$0x7, (%rax)
                	movq	$0x1118, 0x8(%rax)      # imm = 0x1118
                	movq	$0x2229, 0x10(%rax)     # imm = 0x2229
                	movq	$0x333a, 0x18(%rax)     # imm = 0x333A

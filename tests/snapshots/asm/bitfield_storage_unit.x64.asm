@@ -116,17 +116,13 @@ Disassembly of section .text:
                	movl	$0xfffffe00, %r11d      # imm = 0xFFFFFE00
                	orq	%r11, %rcx
                	movl	%ecx, (%rax)
-               	xorl	%edx, %edx
                	movl	0x4(%rax), %ecx
                	andq	$-0x100, %rcx
-               	orq	%rdx, %rcx
                	movl	%ecx, 0x4(%rax)
                	andq	$-0x101, %rcx           # imm = 0xFEFF
-               	orq	%rdx, %rcx
                	movl	%ecx, 0x4(%rax)
                	movabsq	$-0xfffffe01, %r11      # imm = 0xFFFFFFFF000001FF
                	andq	%r11, %rcx
-               	orq	%rdx, %rcx
                	movl	%ecx, 0x4(%rax)
                	movq	%rcx, %rax
                	andq	$0xff, %rax
@@ -136,10 +132,10 @@ Disassembly of section .text:
                	leave
                	retq
                	movl	%ecx, %eax
-               	movq	%rax, %rsi
-               	sarq	$0x8, %rsi
-               	andq	$0x1, %rsi
-               	testq	%rsi, %rsi
+               	movq	%rax, %rdx
+               	sarq	$0x8, %rdx
+               	andq	$0x1, %rdx
+               	testq	%rdx, %rdx
                	je	<addr>
                	movl	$0x18, %eax
                	leave
@@ -150,6 +146,6 @@ Disassembly of section .text:
                	movl	$0x19, %eax
                	leave
                	retq
-               	movq	%rdx, %rax
+               	xorl	%eax, %eax
                	leave
                	retq

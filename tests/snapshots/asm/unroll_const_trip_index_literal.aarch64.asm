@@ -15,13 +15,12 @@ Disassembly of section .text:
 
 <bank_init>:
                	mov	x2, x1
-               	add	x4, x0, #0x0
                	mov	x1, #0x1                // =1
-               	str	w1, [x4]
-               	str	x2, [x4, #0x20]
+               	str	w1, [x0]
+               	str	x2, [x0, #0x20]
                	mov	x3, #0x0                // =0
-               	str	w3, [x4, #0x4]
-               	str	x3, [x4, #0x28]
+               	str	w3, [x0, #0x4]
+               	str	x3, [x0, #0x28]
                	str	w1, [x0, #0x30]
                	add	x4, x0, #0x30
                	str	x2, [x4, #0x20]
@@ -64,15 +63,14 @@ Disassembly of section .text:
                	str	w4, [x1, #0x4]
                	str	x3, [x1, #0x28]
                	add	x1, x0, #0x180
-               	add	x3, x1, #0x0
-               	str	w5, [x3]
-               	str	x2, [x3, #0x20]
-               	mov	x4, #0x20               // =32
-               	str	w4, [x3, #0x4]
+               	str	w5, [x1]
+               	str	x2, [x1, #0x20]
+               	mov	x3, #0x20               // =32
+               	str	w3, [x1, #0x4]
                	mov	x4, #0x0                // =0
-               	str	x4, [x3, #0x28]
-               	mov	x6, #0xb00              // =2816
-               	str	x6, [x3, #0x10]
+               	str	x4, [x1, #0x28]
+               	mov	x3, #0xb00              // =2816
+               	str	x3, [x1, #0x10]
                	str	w5, [x1, #0x30]
                	add	x3, x1, #0x30
                	str	x2, [x3, #0x20]
@@ -88,10 +86,8 @@ Disassembly of section .text:
                	mov	x2, #0x22               // =34
                	str	w2, [x3, #0x4]
                	str	x4, [x3, #0x28]
-               	add	x0, x0, #0x180
-               	add	x0, x0, #0x60
-               	mov	x1, #0x2100             // =8448
-               	str	x1, [x0, #0x10]
+               	mov	x0, #0x2100             // =8448
+               	str	x0, [x3, #0x10]
                	ret
 
 <main>:

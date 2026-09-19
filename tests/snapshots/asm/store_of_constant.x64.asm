@@ -271,8 +271,7 @@ Disassembly of section .text:
                	movl	$0x5, %esi
                	callq	<addr>
                	leaq	-0x78(%rbp), %rax
-               	leaq	(%rax), %rcx
-               	movswq	(%rcx), %rcx
+               	movswq	(%rax), %rcx
                	cmpl	$0xfffffed4, %ecx       # imm = 0xFFFFFED4
                	je	<addr>
                	movl	$0x8, %eax

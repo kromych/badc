@@ -52,10 +52,8 @@ Disassembly of section .text:
                	b.ge	<addr>
                	lsl	x0, x20, #4
                	add	x3, x2, x0
-               	add	x3, x3, #0x0
                	ldr	s0, [x3]
                	add	x3, x1, x0
-               	add	x3, x3, #0x0
                	ldr	s1, [x3]
                	fcmp	s0, s1
                	b.ne	<addr>
@@ -86,7 +84,6 @@ Disassembly of section .text:
                	mov	x1, #0x0                // =0
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	add	x0, x0, #0x0
                	ldr	s0, [x0]
                	ldr	s1, [x0, #0x4]
                	fadd	s0, s0, s1

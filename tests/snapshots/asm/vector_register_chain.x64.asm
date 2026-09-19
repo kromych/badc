@@ -26,9 +26,7 @@ Disassembly of section .text:
                	int3
 
 <block_sum>:
-               	leaq	(%rdi), %rax
-               	movzbq	(%rax), %rax
-               	addq	$0x0, %rax
+               	movzbq	(%rdi), %rax
                	movzbq	0x1(%rdi), %rcx
                	addq	%rcx, %rax
                	movzbq	0x2(%rdi), %rcx
@@ -216,11 +214,10 @@ Disassembly of section .text:
                	andq	$0xff, %rdx
                	movzbq	(%rsi,%rax), %rsi
                	xorq	%rsi, %rdx
-               	leaq	(%rcx), %rsi
-               	movzbq	(%rsi,%rax), %r9
-               	xorq	%r9, %r8
-               	movq	%rdx, %r9
-               	shlq	%r9
+               	movzbq	(%rcx,%rax), %rsi
+               	xorq	%r8, %rsi
+               	movq	%rdx, %r8
+               	shlq	%r8
                	andq	$0x80, %rdx
                	testq	%rdx, %rdx
                	je	<addr>
@@ -232,26 +229,24 @@ Disassembly of section .text:
                	jmp	<addr>
                	movq	%rdi, %rdx
                	jmp	<addr>
-               	xorq	%r9, %rdx
+               	xorq	%r8, %rdx
                	andq	$0xff, %rdx
-               	movzbq	(%rsi,%rax), %rsi
-               	xorq	%rsi, %rdx
-               	leaq	-0x80(%rbp), %rsi
-               	movb	%r8b, (%rsi,%rax)
+               	movzbq	(%rcx,%rax), %r8
+               	xorq	%r8, %rdx
+               	leaq	-0x80(%rbp), %r8
+               	movb	%sil, (%r8,%rax)
                	leaq	-0x50(%rbp), %rsi
                	movb	%dl, (%rsi,%rax)
                	incq	%rax
                	cmpl	$0x30, %eax
                	jl	<addr>
                	leaq	<rip>, %rax
-               	addq	$0x90, %rax
-               	leaq	(%rax), %rdi
+               	leaq	0x90(%rax), %rdi
                	callq	<addr>
-               	leaq	-0x50(%rbp), %rcx
-               	addq	$0x0, %rcx
-               	movzbq	(%rcx), %rcx
-               	addq	%rcx, %rax
-               	leaq	(%rax), %rbx
+               	movq	%rax, %rcx
+               	leaq	-0x50(%rbp), %rax
+               	movzbq	(%rax), %rax
+               	leaq	(%rcx,%rax), %rbx
                	leaq	<rip>, %rax
                	addq	$0x90, %rax
                	leaq	0x10(%rax), %rdi

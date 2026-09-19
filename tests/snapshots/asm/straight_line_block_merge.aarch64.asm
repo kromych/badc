@@ -362,18 +362,16 @@ Disassembly of section .text:
                	cset	x1, lt
                	cmp	w21, #0x7
                	cset	x2, lt
-               	and	x1, x1, x2
-               	add	x2, x0, x21
-               	mov	x17, #0x0               // =0
-               	orr	x3, x0, x17
-               	cmp	w1, #0x0
+               	and	x2, x1, x2
+               	add	x3, x0, x21
+               	cmp	w2, #0x0
                	cset	x4, ne
                	mov	x17, #-0x1              // =-1
-               	mul	x0, x4, x17
-               	and	x2, x0, x2
-               	mvn	x0, x0
-               	and	x0, x0, x3
-               	orr	x0, x2, x0
+               	mul	x1, x4, x17
+               	and	x3, x1, x3
+               	mvn	x1, x1
+               	and	x0, x1, x0
+               	orr	x0, x3, x0
                	sxtw	x23, w0
                	cbnz	w20, <addr>
                	mov	x0, x22
@@ -468,9 +466,7 @@ Disassembly of section .text:
                	mov	x17, #-0x1              // =-1
                	mul	x1, x1, x17
                	and	x1, x1, x24
-               	mov	x17, #0x0               // =0
-               	orr	x0, x1, x17
-               	add	x0, x0, x22
+               	add	x0, x1, x22
                	cmp	x2, x0
                	b.eq	<addr>
                	mov	x20, #0x6               // =6
@@ -676,53 +672,30 @@ Disassembly of section .text:
                	cset	x5, ne
                	mov	x17, #-0x1              // =-1
                	mul	x2, x5, x17
-               	and	x6, x2, x4
-               	mov	x17, #0x0               // =0
-               	orr	x4, x6, x17
+               	and	x4, x2, x4
                	add	x3, x3, x4
                	add	x4, x3, #0x4
                	add	x3, x0, #0x5
-               	and	x6, x2, x3
-               	mov	x17, #0x0               // =0
-               	orr	x3, x6, x17
+               	and	x3, x2, x3
                	add	x3, x4, x3
                	add	x4, x3, #0x5
                	add	x3, x0, #0x6
-               	and	x3, x2, x3
-               	mov	x17, #0x0               // =0
-               	orr	x2, x3, x17
+               	and	x2, x2, x3
                	add	x2, x4, x2
                	add	x2, x2, #0x6
-               	add	x3, x2, #0x0
-               	mov	x17, #0x0               // =0
-               	orr	x1, x1, x17
-               	cmp	w1, #0x0
-               	cset	x2, ne
                	mov	x17, #-0x1              // =-1
-               	mul	x2, x2, x17
-               	and	x2, x2, #0x7
-               	mov	x17, #0x0               // =0
-               	orr	x1, x2, x17
-               	add	x1, x3, x1
-               	add	x4, x1, #0x0
+               	mul	x3, x1, x17
+               	and	x3, x3, #0x7
+               	add	x3, x2, x3
                	cmp	w0, #0x3
-               	cset	x5, lt
-               	mov	x17, #0x0               // =0
-               	orr	x1, x5, x17
-               	cmp	w1, #0x0
-               	cset	x6, ne
+               	cset	x1, lt
                	mov	x17, #-0x1              // =-1
-               	mul	x2, x6, x17
-               	and	x7, x2, #0x8
-               	mov	x17, #0x0               // =0
-               	orr	x3, x7, x17
-               	add	x3, x4, x3
-               	add	x3, x3, #0x0
+               	mul	x2, x1, x17
+               	and	x4, x2, #0x8
+               	add	x3, x3, x4
                	mov	x17, #0x9               // =9
                	and	x2, x2, x17
-               	mov	x17, #0x0               // =0
-               	orr	x1, x2, x17
-               	add	x3, x3, x1
+               	add	x3, x3, x2
                	add	x0, x0, #0x1
                	cmp	w0, #0x6
                	b.lt	<addr>

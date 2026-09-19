@@ -296,7 +296,7 @@ Disassembly of section .text:
                	movl	$0x3, %r14d
                	movq	%r14, %rdi
                	callq	<addr>
-               	leaq	(%rax), %r15
+               	movq	%rax, %r15
                	movq	%r14, %rdi
                	callq	<addr>
                	addq	%rax, %r15

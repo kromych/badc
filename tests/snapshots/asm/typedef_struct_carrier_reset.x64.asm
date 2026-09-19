@@ -26,11 +26,9 @@ Disassembly of section .text:
                	int3
 
 <zero_and_sum>:
-               	leaq	(%rdi), %rcx
-               	movl	$0x0, (%rcx)
+               	movl	$0x0, (%rdi)
                	leaq	0x28(%rdi), %rax
-               	leaq	(%rax), %rdx
-               	movl	$0x1, (%rdx)
+               	movl	$0x1, (%rax)
                	movl	$0x1, 0x4(%rdi)
                	movl	$0x2, 0x4(%rax)
                	movl	$0x2, 0x8(%rdi)

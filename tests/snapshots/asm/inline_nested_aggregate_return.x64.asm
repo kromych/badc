@@ -83,7 +83,6 @@ Disassembly of section .text:
                	incq	%rdx
                	movl	%edx, (%r12)
                	addq	%rcx, %rax
-               	addq	$0x0, %rax
                	incq	%rax
                	addq	$0x2, %rax
                	addq	$0x3, %rax

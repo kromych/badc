@@ -89,14 +89,12 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	add	x0, x0, #0x0
                	and	x0, x0, #0x3f
                	cbz	x0, <addr>
                	mov	x0, #0x15               // =21
                	ret
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	add	x0, x0, #0x0
                	and	x0, x0, #0x3f
                	cbz	x0, <addr>
                	mov	x0, #0x16               // =22

@@ -230,8 +230,7 @@ Disassembly of section .text:
                	add	x29, sp, #0x10
                	bl	<addr>
                	bl	<addr>
-               	mov	x17, #0x0               // =0
-               	orr	x21, x0, x17
+               	mov	x21, x0
                	bl	<addr>
                	mov	x20, #0x1               // =1
                	mov	x0, x20

@@ -51,7 +51,6 @@ Disassembly of section .text:
                	add	x1, x2, #0x9
                	cmp	x1, x2
                	cset	x2, lo
-               	add	x3, x3, #0x0
                	add	x2, x3, x2
                	str	x1, [x0]
                	str	x2, [x0, #0x8]

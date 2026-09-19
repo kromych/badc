@@ -28,7 +28,6 @@ Disassembly of section .text:
 <patch_map>:
                	leaq	<rip>, %rax
                	movq	(%rax), %rcx
-               	addq	$0x0, %rcx
                	movq	0x8(%rax), %rdx
                	shlq	%rdx
                	addq	%rdx, %rcx

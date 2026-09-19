@@ -139,9 +139,8 @@ Disassembly of section .text:
                	cmp	w0, #0x10
                	b.lt	<addr>
                	sub	x0, x29, #0x10
-               	add	x1, x0, #0x0
-               	mov	x2, #0x2                // =2
-               	strb	w2, [x1]
+               	mov	x1, #0x2                // =2
+               	strb	w1, [x0]
                	mov	x1, #0xb                // =11
                	strb	w1, [x0, #0x1]
                	mov	x1, #0x14               // =20

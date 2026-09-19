@@ -43,8 +43,7 @@ Disassembly of section .text:
                	subq	$0x1, %r11
                	jne	<addr>
                	movq	%rdx, %rsp
-               	leaq	(%rdx), %rax
-               	movq	$0x74, (%rax)
+               	movq	$0x74, (%rdx)
                	movq	$0x75, 0x8(%rdx)
                	movq	$0x76, 0x10(%rdx)
                	movq	$0x77, 0x18(%rdx)
@@ -84,8 +83,7 @@ Disassembly of section .text:
                	leaq	-0xd0(%rbp), %rsp
                	leave
                	retq
-               	leaq	(%rdx), %rax
-               	movq	(%rax), %rax
+               	movq	(%rdx), %rax
                	cmpq	$0x74, %rax
                	je	<addr>
                	movl	$0x1, %eax

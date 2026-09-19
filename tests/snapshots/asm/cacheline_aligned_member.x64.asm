@@ -98,14 +98,12 @@ Disassembly of section .text:
                	movl	$0x14, %eax
                	retq
                	leaq	<rip>, %rax
-               	addq	$0x0, %rax
                	andq	$0x3f, %rax
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x15, %eax
                	retq
                	leaq	<rip>, %rax
-               	addq	$0x0, %rax
                	andq	$0x3f, %rax
                	testq	%rax, %rax
                	je	<addr>

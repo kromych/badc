@@ -32,16 +32,14 @@ Disassembly of section .text:
                	cmp	w0, #0x8
                	b.lt	<addr>
                	sub	x0, x29, #0x80
-               	add	x1, x0, #0x0
-               	ldrsw	x2, [x1]
-               	ldr	x1, [x1, #0x8]
-               	add	x1, x2, x1
-               	add	x2, x1, #0x0
+               	ldrsw	x1, [x0]
+               	ldr	x2, [x0, #0x8]
+               	add	x1, x1, x2
                	ldrsw	x3, [x0, #0x10]
-               	add	x1, x0, #0x10
-               	ldr	x1, [x1, #0x8]
-               	add	x1, x3, x1
-               	add	x2, x2, x1
+               	add	x2, x0, #0x10
+               	ldr	x2, [x2, #0x8]
+               	add	x2, x3, x2
+               	add	x2, x1, x2
                	ldrsw	x3, [x0, #0x20]
                	add	x1, x0, #0x20
                	ldr	x1, [x1, #0x8]

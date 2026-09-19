@@ -58,8 +58,7 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	leaq	-0x10(%rbp), %rax
-               	leaq	(%rax), %rcx
-               	movb	$0x11, (%rcx)
+               	movb	$0x11, (%rax)
                	movb	$0x22, 0x1(%rax)
                	movb	$0x33, 0x2(%rax)
                	movb	$0x44, 0x3(%rax)

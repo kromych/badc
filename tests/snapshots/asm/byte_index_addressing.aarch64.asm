@@ -193,14 +193,12 @@ Disassembly of section .text:
                	add	x29, sp, #0x40
                	adrp	x22, <page>
                	add	x22, x22, <lo12>
-               	add	x0, x22, #0x0
-               	mov	x1, #-0x80              // =-128
-               	strb	w1, [x0]
+               	mov	x0, #-0x80              // =-128
+               	strb	w0, [x22]
                	adrp	x20, <page>
                	add	x20, x20, <lo12>
-               	add	x0, x20, #0x0
-               	mov	x1, #0x78               // =120
-               	strb	w1, [x0]
+               	mov	x0, #0x78               // =120
+               	strb	w0, [x20]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	mov	x1, #-0x6f              // =-111

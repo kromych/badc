@@ -12,8 +12,8 @@ fn ent_pc=0 n_params=261 variadic=false locals=522
     v6   LocalAddr(-522)                                  -> x2
     v7   BinopI { op=add, lhs=v4, rhs_imm=8 }             -> x2
     v8   Load { addr=v4, disp=8, kind=I64 }               -> x0
-    v9   Binop { op=add, lhs=v5, rhs=v8 }                 -> x0
-    v10  BinopI { op=add, lhs=v9, rhs_imm=0 }             -> x1
+    v9   Binop { op=add, lhs=v5, rhs=v8 }                 -> x1
+    v10  BinopI { op=add, lhs=v9, rhs_imm=0 }             -> x0
     v11  Imm(0)                                           -> x0
     v12  Imm(0)                                           -> x0
     v13  LocalAddr(-520)                                  -> x0
@@ -22,7 +22,7 @@ fn ent_pc=0 n_params=261 variadic=false locals=522
     v16  BinopI { op=add, lhs=v13, rhs_imm=8 }            -> x6
     v17  Load { addr=v13, disp=8, kind=I64 }              -> x0
     v18  Binop { op=add, lhs=v14, rhs=v17 }               -> x0
-    v19  Binop { op=add, lhs=v10, rhs=v18 }               -> x1
+    v19  Binop { op=add, lhs=v9, rhs=v18 }                -> x1
     v20  Imm(0)                                           -> x0
     v21  Imm(0)                                           -> x0
     v22  LocalAddr(-518)                                  -> x0
@@ -2380,10 +2380,10 @@ fn ent_pc=1 n_params=260 variadic=false locals=0
     v15  Imm(0)                                           -> x0
     v16  Imm(0)                                           -> x0
     v17  BinopI { op=add, lhs=v1, rhs_imm=0 }             -> x0
-    v18  Imm(0)                                           -> x7
-    v19  Imm(0)                                           -> x7
-    v20  Imm(0)                                           -> x7
-    v21  Binop { op=add, lhs=v17, rhs=v3 }                -> x0
+    v18  Imm(0)                                           -> x0
+    v19  Imm(0)                                           -> x0
+    v20  Imm(0)                                           -> x0
+    v21  Binop { op=add, lhs=v1, rhs=v3 }                 -> x0
     v22  Imm(0)                                           -> x6
     v23  Imm(0)                                           -> x6
     v24  Imm(0)                                           -> x6

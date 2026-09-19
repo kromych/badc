@@ -221,8 +221,7 @@ Disassembly of section .text:
                	mov	x1, x0
                	bl	<addr>
                	ldur	x1, [x29, #-0x8]
-               	add	x0, x0, x1
-               	add	x20, x0, #0x0
+               	add	x20, x0, x1
                	mov	x0, #0x0                // =0
                	stur	x0, [x29, #-0x8]
                	sub	x2, x29, #0x8

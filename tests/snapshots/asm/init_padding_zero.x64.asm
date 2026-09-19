@@ -213,7 +213,6 @@ Disassembly of section .text:
                	callq	<addr>
                	callq	<addr>
                	movq	%rax, %r12
-               	orq	$0x0, %r12
                	callq	<addr>
                	movl	$0x1, %ebx
                	movq	%rbx, %rdi

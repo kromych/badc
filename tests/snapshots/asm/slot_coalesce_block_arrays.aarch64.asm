@@ -152,7 +152,7 @@ Disassembly of section .text:
                	mov	x2, x22
                	mov	x1, x20
                	bl	<addr>
-               	add	x23, x0, #0x0
+               	mov	x23, x0
                	mov	x0, #0x1                // =1
                	mov	x1, x20
                	mov	x2, x22

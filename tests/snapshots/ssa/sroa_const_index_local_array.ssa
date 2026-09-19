@@ -18,7 +18,7 @@ fn ent_pc=0 n_params=2 variadic=false locals=0
     v12  Imm(0)                                           -> x0
     v13  Imm(0)                                           -> x0
     v14  BinopI { op=add, lhs=v1, rhs_imm=0 }             -> x0
-    v15  Load { addr=v14, disp=0, kind=I64 }              -> x0
+    v15  Load { addr=v1, disp=0, kind=I64 }               -> x0
     v16  Imm(0)                                           -> x1
     v17  Imm(0)                                           -> x1
     v18  Imm(1)                                           -> x1
@@ -338,7 +338,7 @@ fn ent_pc=0 n_params=2 variadic=false locals=0
     v326 Imm(0)                                           -> x3
     v327 Imm(0)                                           -> x3
     v328 Imm(0)                                           -> x3
-    v329 BinopI { op=add, lhs=v113, rhs_imm=0 }           -> x0
+    v329 BinopI { op=add, lhs=v113, rhs_imm=0 }           -> x3
     v330 Imm(0)                                           -> x3
     v331 Imm(0)                                           -> x3
     v332 Imm(1)                                           -> x3
@@ -351,7 +351,7 @@ fn ent_pc=0 n_params=2 variadic=false locals=0
     v339 Imm(8)                                           -> x3
     v340 Imm(0)                                           -> x3
     v341 Imm(0)                                           -> x3
-    v342 Binop { op=add, lhs=v329, rhs=v114 }             -> x0
+    v342 Binop { op=add, lhs=v113, rhs=v114 }             -> x0
     v343 Imm(0)                                           -> x1
     v344 Imm(1)                                           -> x1
     v345 Imm(2)                                           -> x1
@@ -452,9 +452,9 @@ fn ent_pc=1 n_params=0 variadic=false locals=8
     v6   Imm(0)                                           -> x1
     v7   Imm(0)                                           -> x1
     v8   BinopI { op=add, lhs=v5, rhs_imm=0 }             -> x1
-    v9   Imm(0)                                           -> x2
-    v10  Imm(7)                                           -> x2
-    v11  Store { addr=v8, disp=0, value=v10, kind=I64 }   -> -
+    v9   Imm(0)                                           -> x1
+    v10  Imm(7)                                           -> x1
+    v11  Store { addr=v5, disp=0, value=v10, kind=I64 }   -> -
     v12  Imm(0)                                           -> x1
     v13  Imm(1)                                           -> x1
     v14  Imm(0)                                           -> x1

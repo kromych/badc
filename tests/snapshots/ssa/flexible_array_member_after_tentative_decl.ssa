@@ -48,7 +48,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v26  Imm(0)                                           -> x2
     v27  Imm(0)                                           -> x2
     v28  BinopI { op=add, lhs=v25, rhs_imm=0 }            -> x2
-    v29  Load { addr=v28, disp=0, kind=I64 }              -> x2
+    v29  Load { addr=v25, disp=0, kind=I64 }              -> x2
     v30  Imm(10)                                          -> x6
     v31  Imm(10)                                          -> x6
     v32  Imm(42949672960)                                 -> x6

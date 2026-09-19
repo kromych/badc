@@ -472,7 +472,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rsi
                	callq	<addr>
                	movq	%rax, %rbx
-               	xorq	$0x0, %rbx
                	movl	$0xd2f51ac0, %edi       # imm = 0xD2F51AC0
                	leaq	<rip>, %rsi
                	callq	<addr>

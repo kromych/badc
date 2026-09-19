@@ -65,11 +65,10 @@ Disassembly of section .text:
                	andq	$0xff, %rdx
                	movzbq	(%rsi,%rax), %rsi
                	xorq	%rsi, %rdx
-               	leaq	(%rcx), %rsi
-               	movzbq	(%rsi,%rax), %r12
-               	xorq	%r12, %rdi
-               	movq	%rdx, %r12
-               	shlq	%r12
+               	movzbq	(%rcx,%rax), %rsi
+               	xorq	%rdi, %rsi
+               	movq	%rdx, %rdi
+               	shlq	%rdi
                	andq	$0x80, %rdx
                	testq	%rdx, %rdx
                	je	<addr>
@@ -81,11 +80,11 @@ Disassembly of section .text:
                	jmp	<addr>
                	movq	%rbx, %rdx
                	jmp	<addr>
-               	xorq	%r12, %rdx
+               	xorq	%rdi, %rdx
                	andq	$0xff, %rdx
-               	movzbq	(%rsi,%rax), %rsi
-               	xorq	%rsi, %rdx
-               	movb	%dil, (%r8,%rax)
+               	movzbq	(%rcx,%rax), %rdi
+               	xorq	%rdi, %rdx
+               	movb	%sil, (%r8,%rax)
                	movb	%dl, (%r9,%rax)
                	incq	%rax
                	cmpl	$0x100, %eax            # imm = 0x100
@@ -125,8 +124,7 @@ Disassembly of section .text:
                	leaq	0x100(%rdx), %rax
                	addq	%rcx, %rax
                	vmovdqa	(%rax), %ymm6
-               	leaq	(%rdx), %rax
-               	addq	%rcx, %rax
+               	leaq	(%rdx,%rcx), %rax
                	prefetchnta	(%rax)
                	vpcmpgtb	%ymm4, %ymm3, %ymm5
                	vpaddb	%ymm4, %ymm4, %ymm4
@@ -134,8 +132,7 @@ Disassembly of section .text:
                	vpxor	%ymm5, %ymm4, %ymm4
                	vpxor	%ymm6, %ymm2, %ymm2
                	vpxor	%ymm6, %ymm4, %ymm4
-               	leaq	(%rdx), %rax
-               	addq	%rcx, %rax
+               	leaq	(%rdx,%rcx), %rax
                	vmovdqa	(%rax), %ymm6
                	vpcmpgtb	%ymm4, %ymm3, %ymm5
                	vpaddb	%ymm4, %ymm4, %ymm4
@@ -491,11 +488,9 @@ Disassembly of section .text:
                	cmpl	$0x40, %eax
                	jb	<addr>
                	leaq	<rip>, %rax
-               	addq	$0x0, %rax
                	xorl	%esi, %esi
                	movb	%sil, (%rax)
                	leaq	<rip>, %rax
-               	addq	$0x0, %rax
                	movb	%sil, (%rax)
                	leaq	<rip>, %r8
                	movl	$0x1, %edi

@@ -291,8 +291,7 @@ Disassembly of section .text:
                	mov	x1, #0x5                // =5
                	bl	<addr>
                	sub	x0, x29, #0x78
-               	add	x1, x0, #0x0
-               	ldrsh	x1, [x1]
+               	ldrsh	x1, [x0]
                	mov	x17, #-0x12c            // =-300
                	cmp	w1, w17
                	b.eq	<addr>

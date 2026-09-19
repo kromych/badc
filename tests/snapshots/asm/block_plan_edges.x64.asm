@@ -407,29 +407,21 @@ Disassembly of section .text:
                	incq	%rax
                	cmpl	$0x3, %eax
                	jl	<addr>
+               	xorl	%ecx, %ecx
+               	movq	%rcx, %rsi
+               	cmpl	$0x1, %ecx
+               	jge	<addr>
                	xorl	%edx, %edx
-               	movq	%rdx, %rcx
-               	cmpl	$0x1, %edx
-               	jge	<addr>
-               	xorl	%eax, %eax
+               	movq	%rdx, %rax
                	cmpl	$0x1, %eax
                	jge	<addr>
-               	movq	%rdx, %rsi
-               	shlq	$0x0, %rsi
-               	addq	%rax, %rsi
-               	movslq	%esi, %rsi
-               	addq	%rsi, %rcx
                	movl	$0x1, %eax
+               	movq	%rdx, %rsi
                	cmpl	$0x1, %eax
                	jl	<addr>
-               	movl	$0x1, %edx
-               	cmpl	$0x1, %edx
+               	movl	$0x1, %ecx
+               	cmpl	$0x1, %ecx
                	jl	<addr>
-               	testq	%rcx, %rcx
-               	je	<addr>
-               	movl	$0x2b, %eax
-               	popq	%rbp
-               	retq
                	xorl	%edx, %edx
                	movq	%rdx, %rcx
                	cmpl	$0x3, %edx

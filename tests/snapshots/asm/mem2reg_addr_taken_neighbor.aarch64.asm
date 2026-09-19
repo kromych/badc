@@ -21,8 +21,8 @@ Disassembly of section .text:
                	stur	w1, [x29, #-0x8]
                	lsl	x0, x0, #1
                	sub	x2, x29, #0x8
-               	add	x1, x0, #0x0
-               	str	w1, [x2]
+               	str	w0, [x2]
+               	mov	x1, x0
                	add	x1, x1, x0
                	str	w1, [x2]
                	add	x0, x1, x0

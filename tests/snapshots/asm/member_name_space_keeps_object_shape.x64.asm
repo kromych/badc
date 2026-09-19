@@ -33,57 +33,50 @@ Disassembly of section .text:
                	jge	<addr>
                	imulq	$0x30, %rax, %rdx
                	leaq	(%rcx,%rdx), %rdi
-               	addq	$0x0, %rdi
-               	leaq	(%rdi), %r8
-               	leaq	0x1(%rsi), %rdi
-               	movl	%esi, (%r8)
+               	leaq	0x1(%rsi), %r8
+               	movl	%esi, (%rdi)
                	leaq	(%rcx,%rdx), %rsi
-               	leaq	(%rsi), %r8
-               	leaq	0x1(%rdi), %rsi
-               	movl	%edi, 0x4(%r8)
-               	leaq	(%rcx,%rdx), %rdi
-               	leaq	(%rdi), %r8
-               	leaq	0x1(%rsi), %rdi
-               	movl	%esi, 0x8(%r8)
+               	leaq	0x1(%r8), %rdi
+               	movl	%r8d, 0x4(%rsi)
                	leaq	(%rcx,%rdx), %rsi
-               	leaq	(%rsi), %r8
-               	leaq	0x1(%rdi), %rsi
-               	movl	%edi, 0xc(%r8)
-               	leaq	(%rcx,%rdx), %rdi
-               	addq	$0x10, %rdi
-               	leaq	(%rdi), %r8
-               	leaq	0x1(%rsi), %rdi
-               	movl	%esi, (%r8)
+               	leaq	0x1(%rdi), %r8
+               	movl	%edi, 0x8(%rsi)
+               	leaq	(%rcx,%rdx), %rsi
+               	leaq	0x1(%r8), %rdi
+               	movl	%r8d, 0xc(%rsi)
                	leaq	(%rcx,%rdx), %rsi
                	leaq	0x10(%rsi), %r8
                	leaq	0x1(%rdi), %rsi
-               	movl	%edi, 0x4(%r8)
+               	movl	%edi, (%r8)
                	leaq	(%rcx,%rdx), %rdi
                	leaq	0x10(%rdi), %r8
                	leaq	0x1(%rsi), %rdi
-               	movl	%esi, 0x8(%r8)
+               	movl	%esi, 0x4(%r8)
+               	leaq	(%rcx,%rdx), %rsi
+               	leaq	0x10(%rsi), %r8
+               	leaq	0x1(%rdi), %rsi
+               	movl	%edi, 0x8(%r8)
                	addq	%rcx, %rdx
                	addq	$0x10, %rdx
-               	leaq	0x1(%rdi), %rsi
-               	movl	%edi, 0xc(%rdx)
-               	imulq	$0x30, %rax, %rdx
-               	leaq	(%rcx,%rdx), %rdi
-               	addq	$0x20, %rdi
-               	leaq	(%rdi), %r8
                	leaq	0x1(%rsi), %rdi
-               	movl	%esi, (%r8)
+               	movl	%esi, 0xc(%rdx)
+               	imulq	$0x30, %rax, %rdx
                	leaq	(%rcx,%rdx), %rsi
                	leaq	0x20(%rsi), %r8
                	leaq	0x1(%rdi), %rsi
-               	movl	%edi, 0x4(%r8)
+               	movl	%edi, (%r8)
                	leaq	(%rcx,%rdx), %rdi
                	leaq	0x20(%rdi), %r8
                	leaq	0x1(%rsi), %rdi
-               	movl	%esi, 0x8(%r8)
+               	movl	%esi, 0x4(%r8)
+               	leaq	(%rcx,%rdx), %rsi
+               	addq	$0x20, %rsi
+               	leaq	0x1(%rdi), %r8
+               	movl	%edi, 0x8(%rsi)
                	addq	%rcx, %rdx
                	addq	$0x20, %rdx
-               	leaq	0x1(%rdi), %rsi
-               	movl	%edi, 0xc(%rdx)
+               	leaq	0x1(%r8), %rsi
+               	movl	%r8d, 0xc(%rdx)
                	incq	%rax
                	cmpl	$0x2, %eax
                	jl	<addr>
@@ -98,23 +91,17 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	retq
                	leaq	<rip>, %rax
-               	addq	$0x0, %rax
-               	addq	$0x0, %rax
                	xorl	%ecx, %ecx
                	movl	%ecx, (%rax)
                	leaq	<rip>, %rax
-               	addq	$0x0, %rax
                	movl	$0x1, 0x4(%rax)
                	leaq	<rip>, %rax
-               	addq	$0x0, %rax
                	movl	$0x2, 0x8(%rax)
                	leaq	<rip>, %rax
-               	addq	$0x0, %rax
                	movl	$0x3, %edx
                	movl	%edx, 0xc(%rax)
                	leaq	<rip>, %rax
                	addq	$0x8, %rax
-               	addq	$0x0, %rax
                	movl	$0xa, (%rax)
                	leaq	<rip>, %rax
                	addq	$0x8, %rax
@@ -127,7 +114,6 @@ Disassembly of section .text:
                	movl	$0xd, 0xc(%rax)
                	leaq	<rip>, %rax
                	addq	$0x10, %rax
-               	addq	$0x0, %rax
                	movl	$0x14, (%rax)
                	leaq	<rip>, %rax
                	addq	$0x10, %rax

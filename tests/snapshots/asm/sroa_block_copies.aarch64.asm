@@ -519,10 +519,7 @@ Disassembly of section .text:
                	mov	x1, #0x0                // =0
                	stur	w1, [x29, #-0x8]
                	sub	x1, x29, #0x8
-               	lsr	x2, x0, #0
-               	and	x2, x2, #0xff
-               	mov	x17, #0x0               // =0
-               	orr	x2, x2, x17
+               	and	x2, x0, #0xff
                	str	w2, [x1]
                	add	x0, x0, #0x1
                	ldr	w2, [x1]
@@ -870,12 +867,10 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x1, x29, #0x1c0
-               	add	x0, x1, #0x0
                	mov	x17, #0x0               // =0
-               	mul	x2, x20, x17
-               	str	x2, [x0]
-               	lsr	x0, x20, #0
-               	str	x0, [x1, #0x8]
+               	mul	x0, x20, x17
+               	str	x0, [x1]
+               	str	x20, [x1, #0x8]
                	lsl	x0, x20, #1
                	str	x0, [x1, #0x10]
                	mov	x17, #0x3               // =3

@@ -20,7 +20,6 @@ Disassembly of section .text:
                	cmp	w1, #0x0
                	b.le	<addr>
                	mov	x2, #0x2                // =2
-               	sub	x1, x1, #0x0
                	mov	x16, x2
                	mov	x2, x1
                	mov	x1, x16
@@ -40,11 +39,11 @@ Disassembly of section .text:
 <copy_arrays>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
+               	mov	x2, #0x28               // =40
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	mov	x2, #0x28               // =40
                	bl	<addr>
                	ldp	x29, x30, [sp], #0x10
                	ret
@@ -58,7 +57,7 @@ Disassembly of section .text:
                	cmp	w20, #0x0
                	b.le	<addr>
                	mov	x1, #0x1                // =1
-               	sub	x2, x20, #0x0
+               	mov	x2, x20
                	bl	<addr>
                	mov	x1, x20
                	mov	x0, x1

@@ -137,7 +137,6 @@ Disassembly of section .text:
 <other_guard>:
                	leaq	0x1(%rdi), %rax
                	movslq	%eax, %rax
-               	addq	$0x0, %rax
                	retq
 
 <guard_then_join>:
@@ -156,7 +155,6 @@ Disassembly of section .text:
                	cmpl	$0x64, %edi
                	jge	<addr>
                	leaq	0x1(%rdi), %rax
-               	addq	$0x0, %rax
                	retq
 
 <uwrap>:

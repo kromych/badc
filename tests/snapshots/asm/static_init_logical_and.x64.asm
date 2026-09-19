@@ -49,11 +49,10 @@ Disassembly of section .text:
                	movq	(%rax,%rcx,8), %rax
                	jmpq	*%rax
                	movl	$0xa, -0x8(%rbp)
-               	movslq	-0x8(%rbp), %rcx
-               	incq	%rcx
-               	addq	$0x0, %rcx
-               	incq	%rcx
-               	leaq	0x1(%rcx), %rax
+               	movslq	-0x8(%rbp), %rax
+               	incq	%rax
+               	incq	%rax
+               	incq	%rax
                	movslq	%eax, %rax
                	leave
                	retq

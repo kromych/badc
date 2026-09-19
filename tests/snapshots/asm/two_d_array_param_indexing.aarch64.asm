@@ -53,10 +53,8 @@ Disassembly of section .text:
                	sub	x3, x29, #0x78
                	mul	x4, x0, x6
                	add	x2, x3, x4
-               	add	x8, x2, #0x0
                	mul	x1, x0, x7
-               	add	x5, x1, #0x0
-               	str	w5, [x8]
+               	str	w1, [x2]
                	add	x5, x1, #0x1
                	str	w5, [x2, #0x4]
                	add	x1, x1, #0x2
@@ -83,10 +81,8 @@ Disassembly of section .text:
                	sub	x3, x29, #0x20
                	lsl	x4, x0, #2
                	add	x2, x3, x4
-               	add	x6, x2, #0x0
                	add	x1, x0, #0x41
-               	add	x5, x1, #0x0
-               	strb	w5, [x6]
+               	strb	w1, [x2]
                	add	x5, x1, #0x1
                	strb	w5, [x2, #0x1]
                	add	x5, x1, #0x2

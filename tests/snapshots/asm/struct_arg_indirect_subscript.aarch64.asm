@@ -18,31 +18,30 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0xb0
                	sub	x1, x29, #0x88
-               	mov	x3, #0x0                // =0
-               	str	x3, [x1]
+               	mov	x2, #0x0                // =0
+               	str	x2, [x1]
                	add	x0, x1, #0x8
-               	add	x2, x0, #0x0
-               	mov	x4, #0x1                // =1
-               	str	x4, [x2]
-               	str	x3, [x2, #0x8]
-               	mov	x3, #0x2                // =2
-               	str	x3, [x0, #0x10]
+               	mov	x3, #0x1                // =1
+               	str	x3, [x0]
+               	str	x2, [x0, #0x8]
+               	mov	x4, #0x2                // =2
+               	str	x4, [x0, #0x10]
                	add	x2, x0, #0x10
-               	str	x4, [x2, #0x8]
+               	str	x3, [x2, #0x8]
                	mov	x2, #0x3                // =3
                	str	x2, [x0, #0x20]
-               	add	x4, x0, #0x20
-               	str	x3, [x4, #0x8]
+               	add	x3, x0, #0x20
+               	str	x4, [x3, #0x8]
                	mov	x4, #0x4                // =4
                	str	x4, [x0, #0x30]
                	add	x3, x0, #0x30
                	str	x2, [x3, #0x8]
                	mov	x5, #0x5                // =5
                	str	x5, [x0, #0x40]
+               	add	x0, x0, #0x40
+               	str	x4, [x0, #0x8]
                	sub	x1, x29, #0x88
                	add	x0, x1, #0x8
-               	add	x3, x0, #0x40
-               	str	x4, [x3, #0x8]
                	mov	x3, #0x6                // =6
                	str	x3, [x0, #0x50]
                	add	x6, x0, #0x50
@@ -68,10 +67,9 @@ Disassembly of section .text:
                	add	x6, x0, #0x3
                	cbz	x1, <addr>
                	mov	x0, #0x0                // =0
-               	add	x1, x6, #0x0
                	cbz	x3, <addr>
                	mov	x0, #0x1                // =1
-               	add	x0, x1, x0
+               	add	x0, x6, x0
                	cmp	x0, #0xfc2
                	b.eq	<addr>
                	mov	x0, x2

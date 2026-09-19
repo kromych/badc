@@ -1325,8 +1325,7 @@ Disassembly of section .text:
                	sub	x0, x0, #0x50
                	ldr	x1, [x0]
                	ldr	x0, [x0, #0x8]
-               	add	x0, x1, x0
-               	add	x1, x0, #0x0
+               	add	x1, x1, x0
                	sub	x0, x29, #0x1, lsl #12  // =0x1000
                	sub	x0, x0, #0x40
                	ldr	x2, [x0]
@@ -2639,7 +2638,6 @@ Disassembly of section .text:
 <sum_longs>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	add	x0, x0, #0x0
                	add	x0, x0, x1
                	add	x0, x0, x2
                	add	x0, x0, x3

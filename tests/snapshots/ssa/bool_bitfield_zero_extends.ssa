@@ -22,8 +22,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=1
     v16  Imm(0)                                           -> x2
     v17  BinopI { op=and, lhs=v12, rhs_imm=255 }          -> x1
     v18  BinopI { op=and, lhs=v17, rhs_imm=-3 }           -> x1
-    v19  BinopI { op=or, lhs=v18, rhs_imm=0 }             -> x1
-    v20  Store { addr=v1, disp=1, value=v19, kind=I8 }    -> -
+    v19  BinopI { op=or, lhs=v18, rhs_imm=0 }             -> x2
+    v20  Store { addr=v1, disp=1, value=v18, kind=I8 }    -> -
     v21  LocalAddr(-1)                                    -> x1
     v22  Load { addr=v1, disp=0, kind=U32 }               -> x1
     v23  BinopI { op=and, lhs=v22, rhs_imm=-1025 }        -> x1

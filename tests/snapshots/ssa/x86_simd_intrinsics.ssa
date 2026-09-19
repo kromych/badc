@@ -35,10 +35,10 @@ fn ent_pc=89 n_params=2 variadic=false locals=6
     v13  LocalAddr(-4)                                    -> x1
     v14  Imm(0)                                           -> x1
     v15  BinopI { op=add, lhs=v3, rhs_imm=0 }             -> x1
-    v16  Load { addr=v15, disp=0, kind=U8 }               -> x1
+    v16  Load { addr=v3, disp=0, kind=U8 }                -> x1
     v17  Imm(0)                                           -> x2
     v18  BinopI { op=add, lhs=v1, rhs_imm=0 }             -> x2
-    v19  Load { addr=v18, disp=0, kind=U8 }               -> x2
+    v19  Load { addr=v1, disp=0, kind=U8 }                -> x2
     v20  Binop { op=ne, lhs=v16, rhs=v19 }                -> x1
     terminator Bz { cond=v20, target=b2, fall=b1 }   (exit_acc=v20)
   block 1  start_pc=0
@@ -2888,14 +2888,14 @@ fn ent_pc=93 n_params=0 variadic=false locals=229
     v1615 LocalAddr(-227)                                  -> x0
     v1616 Imm(0)                                           -> x1
     v1617 BinopI { op=add, lhs=v1615, rhs_imm=0 }          -> x1
-    v1618 Imm(0)                                           -> x2
-    v1619 Imm(0)                                           -> x2
-    v1620 Imm(0)                                           -> x2
-    v1621 Imm(1)                                           -> x2
-    v1622 Imm(4294967296)                                  -> x2
-    v1623 Imm(1)                                           -> x2
-    v1624 Imm(1)                                           -> x2
-    v1625 Store { addr=v1617, disp=0, value=v1624, kind=I8 } -> -
+    v1618 Imm(0)                                           -> x1
+    v1619 Imm(0)                                           -> x1
+    v1620 Imm(0)                                           -> x1
+    v1621 Imm(1)                                           -> x1
+    v1622 Imm(4294967296)                                  -> x1
+    v1623 Imm(1)                                           -> x1
+    v1624 Imm(1)                                           -> x1
+    v1625 Store { addr=v1615, disp=0, value=v1624, kind=I8 } -> -
     v1626 Imm(0)                                           -> x1
     v1627 Imm(1)                                           -> x1
     v1628 Imm(0)                                           -> x1
@@ -6344,11 +6344,11 @@ fn ent_pc=93 n_params=0 variadic=false locals=229
     v4800 LocalAddr(-227)                                  -> x0
     v4801 Imm(0)                                           -> x1
     v4802 BinopI { op=add, lhs=v4800, rhs_imm=0 }          -> x1
-    v4803 Imm(1)                                           -> x2
-    v4804 Imm(4294967296)                                  -> x2
-    v4805 Imm(1)                                           -> x2
-    v4806 Imm(1)                                           -> x2
-    v4807 Store { addr=v4802, disp=0, value=v4806, kind=I8 } -> -
+    v4803 Imm(1)                                           -> x1
+    v4804 Imm(4294967296)                                  -> x1
+    v4805 Imm(1)                                           -> x1
+    v4806 Imm(1)                                           -> x1
+    v4807 Store { addr=v4800, disp=0, value=v4806, kind=I8 } -> -
     v4808 Imm(0)                                           -> x1
     v4809 Imm(1)                                           -> x1
     v4810 Imm(0)                                           -> x1
@@ -6721,7 +6721,7 @@ fn ent_pc=93 n_params=0 variadic=false locals=229
     v5159 LocalAddr(-227)                                  -> x1
     v5160 Imm(0)                                           -> x1
     v5161 BinopI { op=add, lhs=v5112, rhs_imm=0 }          -> x1
-    v5162 Load { addr=v5161, disp=0, kind=U8 }             -> x1
+    v5162 Load { addr=v5112, disp=0, kind=U8 }             -> x1
     v5163 Imm(0)                                           -> x2
     v5164 BinopI { op=ne, lhs=v5162, rhs_imm=0 }           -> x2
     terminator Bz { cond=v5162, target=b250, fall=b249 }   (exit_acc=v5164)

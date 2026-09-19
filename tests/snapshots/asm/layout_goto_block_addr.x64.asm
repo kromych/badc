@@ -70,7 +70,7 @@ Disassembly of section .text:
                	pushq	%rbx
                	xorl	%edi, %edi
                	callq	<addr>
-               	leaq	(%rax), %rbx
+               	movq	%rax, %rbx
                	movl	$0x1, %edi
                	callq	<addr>
                	addq	%rax, %rbx

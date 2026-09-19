@@ -43,9 +43,7 @@ Disassembly of section .text:
                	ret
 
 <block_sum>:
-               	add	x1, x0, #0x0
-               	ldrb	w1, [x1]
-               	add	x1, x1, #0x0
+               	ldrb	w1, [x0]
                	ldrb	w2, [x0, #0x1]
                	add	x1, x1, x2
                	ldrb	w2, [x0, #0x2]
@@ -253,10 +251,9 @@ Disassembly of section .text:
                	and	x2, x2, #0xff
                	ldrb	w4, [x4, x0]
                	eor	x2, x2, x4
-               	add	x4, x1, #0x0
-               	ldrb	w6, [x4, x0]
-               	eor	x5, x5, x6
-               	lsl	x6, x2, #1
+               	ldrb	w4, [x1, x0]
+               	eor	x4, x5, x4
+               	lsl	x5, x2, #1
                	and	x2, x2, #0x80
                	cbz	x2, <addr>
                	mov	x2, #0x1d               // =29
@@ -267,12 +264,12 @@ Disassembly of section .text:
                	b	<addr>
                	mov	x2, x3
                	b	<addr>
-               	eor	x2, x6, x2
+               	eor	x2, x5, x2
                	and	x2, x2, #0xff
-               	ldrb	w4, [x4, x0]
-               	eor	x2, x2, x4
-               	sub	x4, x29, #0xc0
-               	strb	w5, [x4, x0]
+               	ldrb	w5, [x1, x0]
+               	eor	x2, x2, x5
+               	sub	x5, x29, #0xc0
+               	strb	w4, [x5, x0]
                	sub	x4, x29, #0x90
                	strb	w2, [x4, x0]
                	add	x0, x0, #0x1
@@ -281,13 +278,11 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	add	x0, x0, #0x90
-               	add	x0, x0, #0x0
                	bl	<addr>
-               	sub	x1, x29, #0x90
-               	add	x1, x1, #0x0
-               	ldrb	w1, [x1]
-               	add	x0, x0, x1
-               	add	x20, x0, #0x0
+               	mov	x1, x0
+               	sub	x0, x29, #0x90
+               	ldrb	w0, [x0]
+               	add	x20, x1, x0
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	add	x0, x0, #0x90

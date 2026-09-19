@@ -529,9 +529,7 @@ Disassembly of section .text:
                	movl	$0x0, -0x8(%rbp)
                	leaq	-0x8(%rbp), %rax
                	movq	%rdi, %rcx
-               	shlq	$0x0, %rcx
                	andq	$0xff, %rcx
-               	orq	$0x0, %rcx
                	movl	%ecx, (%rax)
                	leaq	0x1(%rdi), %rcx
                	movl	(%rax), %edx
@@ -858,12 +856,9 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	-0x1d8(%rbp), %rax
-               	leaq	(%rax), %rcx
-               	imulq	$0x0, %rbx, %rdx
-               	movq	%rdx, (%rcx)
-               	movq	%rbx, %rcx
-               	shlq	$0x0, %rcx
-               	movq	%rcx, 0x8(%rax)
+               	imulq	$0x0, %rbx, %rcx
+               	movq	%rcx, (%rax)
+               	movq	%rbx, 0x8(%rax)
                	movq	%rbx, %rcx
                	shlq	%rcx
                	movq	%rcx, 0x10(%rax)

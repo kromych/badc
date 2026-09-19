@@ -428,28 +428,21 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, #0x3
                	b.lt	<addr>
+               	mov	x1, #0x0                // =0
+               	mov	x3, x1
+               	cmp	w1, #0x1
+               	b.ge	<addr>
                	mov	x2, #0x0                // =0
-               	mov	x1, x2
-               	cmp	w2, #0x1
-               	b.ge	<addr>
-               	mov	x0, #0x0                // =0
+               	mov	x0, x2
                	cmp	w0, #0x1
                	b.ge	<addr>
-               	lsr	x3, x2, #0
-               	add	x3, x3, x0
-               	sxtw	x3, w3
-               	add	x1, x1, x3
                	mov	x0, #0x1                // =1
+               	mov	x3, x2
                	cmp	w0, #0x1
                	b.lt	<addr>
-               	mov	x2, #0x1                // =1
-               	cmp	w2, #0x1
+               	mov	x1, #0x1                // =1
+               	cmp	w1, #0x1
                	b.lt	<addr>
-               	cbz	x1, <addr>
-               	mov	x0, #0x2b               // =43
-               	ldp	x29, x30, [sp, #0x10]
-               	ldr	x20, [sp], #0x20
-               	ret
                	mov	x2, #0x0                // =0
                	mov	x1, x2
                	cmp	w2, #0x3

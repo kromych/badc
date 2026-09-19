@@ -4239,7 +4239,6 @@ Disassembly of section .text:
                	leaq	0x80(%rsp), %rdx
                	leaq	-0x1988(%rbp), %rax
                	movzbq	(%rdx), %rsi
-               	shlq	$0x0, %rsi
                	movb	%sil, (%rax)
                	movzbq	0x1(%rdx), %rsi
                	shlq	%rsi
@@ -4263,7 +4262,6 @@ Disassembly of section .text:
                	shlq	$0x7, %rsi
                	movb	%sil, 0x7(%rax)
                	movzbq	0x8(%rdx), %rsi
-               	shlq	$0x0, %rsi
                	movb	%sil, 0x8(%rax)
                	movzbq	0x9(%rdx), %rsi
                	shlq	%rsi

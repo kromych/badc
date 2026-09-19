@@ -88,9 +88,9 @@ fn ent_pc=5 n_params=0 variadic=false locals=0
     v74  Imm(0)                                           -> x2
     v75  BinopI { op=xor, lhs=v57, rhs_imm=-1 }           -> x1
     v76  Imm(0)                                           -> x2
-    v77  BinopI { op=or, lhs=v75, rhs_imm=0 }             -> x1
-    v78  BinopI { op=ne, lhs=v77, rhs_imm=0 }             -> x2
-    terminator Bz { cond=v77, target=b6, fall=b5 }   (exit_acc=v78)
+    v77  BinopI { op=or, lhs=v75, rhs_imm=0 }             -> x2
+    v78  BinopI { op=ne, lhs=v75, rhs_imm=0 }             -> x2
+    terminator Bz { cond=v75, target=b6, fall=b5 }   (exit_acc=v78)
   block 5  start_pc=0
     v79  Imm(4)                                           -> x0
     terminator Return(v79)   (exit_acc=v79)
@@ -185,8 +185,8 @@ fn ent_pc=5 n_params=0 variadic=false locals=0
     v164 Imm(0)                                           -> x0
     v165 BinopI { op=add, lhs=v150, rhs_imm=4 }           -> x0
     v166 Binop { op=ult, lhs=v165, rhs=v150 }             -> x1
-    v167 BinopI { op=add, lhs=v151, rhs_imm=0 }           -> x2
-    v168 Binop { op=add, lhs=v167, rhs=v166 }             -> x1
+    v167 BinopI { op=add, lhs=v151, rhs_imm=0 }           -> x6
+    v168 Binop { op=add, lhs=v151, rhs=v166 }             -> x1
     v169 Imm(0)                                           -> x1
     v170 Imm(0)                                           -> x1
     v171 Imm(0)                                           -> x1

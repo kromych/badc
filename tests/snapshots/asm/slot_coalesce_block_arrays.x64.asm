@@ -164,7 +164,7 @@ Disassembly of section .text:
                	movq	%r13, %rdx
                	movq	%rbx, %rsi
                	callq	<addr>
-               	leaq	(%rax), %r14
+               	movq	%rax, %r14
                	movl	$0x1, %edi
                	movq	%rbx, %rsi
                	movq	%r13, %rdx

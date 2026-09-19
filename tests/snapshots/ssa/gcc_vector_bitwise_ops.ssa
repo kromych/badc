@@ -15,10 +15,10 @@ fn ent_pc=1 n_params=2 variadic=false locals=2
     v9   Imm(0)                                           -> x1
     v10  Imm(0)                                           -> x1
     v11  BinopI { op=add, lhs=v3, rhs_imm=0 }             -> x1
-    v12  Load { addr=v11, disp=0, kind=U8 }               -> x1
+    v12  Load { addr=v3, disp=0, kind=U8 }                -> x1
     v13  Imm(0)                                           -> x2
     v14  BinopI { op=add, lhs=v1, rhs_imm=0 }             -> x2
-    v15  Load { addr=v14, disp=0, kind=U8 }               -> x2
+    v15  Load { addr=v1, disp=0, kind=U8 }                -> x2
     v16  Binop { op=ne, lhs=v12, rhs=v15 }                -> x1
     terminator Bz { cond=v16, target=b2, fall=b1 }   (exit_acc=v16)
   block 1  start_pc=0
@@ -625,23 +625,23 @@ fn ent_pc=2 n_params=0 variadic=false locals=22
     v314 Imm(0)                                           -> x0
     v315 Imm(0)                                           -> x0
     v316 BinopI { op=add, lhs=v306, rhs_imm=0 }           -> x0
-    v317 Imm(0)                                           -> x6
-    v318 Imm(0)                                           -> x6
-    v319 Imm(0)                                           -> x6
-    v320 Imm(1)                                           -> x6
-    v321 Imm(4294967296)                                  -> x6
-    v322 Imm(1)                                           -> x6
-    v323 Imm(1)                                           -> x6
-    v324 Store { addr=v316, disp=0, value=v323, kind=I8 } -> -
+    v317 Imm(0)                                           -> x0
+    v318 Imm(0)                                           -> x0
+    v319 Imm(0)                                           -> x0
+    v320 Imm(1)                                           -> x0
+    v321 Imm(4294967296)                                  -> x0
+    v322 Imm(1)                                           -> x0
+    v323 Imm(1)                                           -> x0
+    v324 Store { addr=v306, disp=0, value=v323, kind=I8 } -> -
     v325 Imm(0)                                           -> x0
     v326 Imm(0)                                           -> x0
     v327 BinopI { op=add, lhs=v308, rhs_imm=0 }           -> x0
-    v328 Imm(200)                                         -> x6
-    v329 Imm(200)                                         -> x6
-    v330 Imm(858993459200)                                -> x6
-    v331 Imm(200)                                         -> x6
-    v332 Imm(200)                                         -> x6
-    v333 Store { addr=v327, disp=0, value=v332, kind=I8 } -> -
+    v328 Imm(200)                                         -> x0
+    v329 Imm(200)                                         -> x0
+    v330 Imm(858993459200)                                -> x0
+    v331 Imm(200)                                         -> x0
+    v332 Imm(200)                                         -> x0
+    v333 Store { addr=v308, disp=0, value=v332, kind=I8 } -> -
     v334 Imm(0)                                           -> x0
     v335 Imm(1)                                           -> x0
     v336 Imm(0)                                           -> x0

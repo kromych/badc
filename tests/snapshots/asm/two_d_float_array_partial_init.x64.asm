@@ -65,10 +65,8 @@ Disassembly of section .text:
                	movq	%rbx, %rax
                	shlq	$0x4, %rax
                	leaq	(%rdx,%rax), %rsi
-               	addq	$0x0, %rsi
                	movss	(%rsi,%riz), %xmm0
                	leaq	(%rcx,%rax), %rsi
-               	addq	$0x0, %rsi
                	movss	(%rsi,%riz), %xmm1
                	ucomiss	%xmm1, %xmm0
                	jp	<addr>
@@ -102,7 +100,6 @@ Disassembly of section .text:
                	jl	<addr>
                	xorl	%ecx, %ecx
                	leaq	<rip>, %rax
-               	addq	$0x0, %rax
                	movss	(%rax,%riz), %xmm0
                	movss	0x4(%rax,%riz), %xmm1
                	addss	%xmm1, %xmm0

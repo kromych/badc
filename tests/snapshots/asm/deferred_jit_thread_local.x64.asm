@@ -28,8 +28,7 @@ Disassembly of section .text:
 <main>:
                	xorl	%edx, %edx
                	leaq	<rip>, %rax
-               	leaq	(%rax), %rcx
-               	movl	%edx, (%rcx)
+               	movl	%edx, (%rax)
                	movq	%fs:0x0, %rcx
                	addq	$-0x10, %rcx
                	movslq	(%rcx), %rax

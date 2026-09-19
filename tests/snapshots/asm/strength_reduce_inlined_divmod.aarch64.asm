@@ -213,29 +213,28 @@ Disassembly of section .text:
                	ldrsw	x0, [x2]
                	add	x0, x0, #0x1
                	str	w0, [x2]
-               	mov	x0, #0x0                // =0
+               	mov	x1, #0x0                // =0
                	adrp	x4, <page>
                	add	x4, x4, <lo12>
-               	cmp	w0, #0x18
+               	cmp	w1, #0x18
                	b.ge	<addr>
-               	mov	x1, #0x1                // =1
-               	stur	w1, [x29, #-0x90]
-               	ldr	x1, [x4, x0, lsl #3]
-               	sxtw	x1, w1
+               	mov	x0, #0x1                // =1
+               	stur	w0, [x29, #-0x90]
+               	ldr	x0, [x4, x1, lsl #3]
+               	sxtw	x0, w0
                	ldursw	x3, [x29, #-0x90]
-               	sdiv	x3, x1, x3
-               	cmp	x1, x3
+               	sdiv	x3, x0, x3
+               	cmp	x0, x3
                	b.ne	<addr>
-               	lsr	x3, x1, #0
-               	sub	x3, x1, x3
+               	sub	x3, x0, x0
                	sxtw	x5, w3
                	ldursw	x3, [x29, #-0x90]
-               	sdiv	x17, x1, x3
-               	msub	x1, x17, x3, x1
-               	cmp	x5, x1
+               	sdiv	x17, x0, x3
+               	msub	x0, x17, x3, x0
+               	cmp	x5, x0
                	b.ne	<addr>
-               	add	x0, x0, #0x1
-               	cmp	w0, #0x18
+               	add	x1, x1, #0x1
+               	cmp	w1, #0x18
                	b.lt	<addr>
                	ldrsw	x0, [x2]
                	add	x0, x0, #0x1
@@ -537,8 +536,7 @@ Disassembly of section .text:
                	udiv	x5, x3, x5
                	cmp	w3, w5
                	b.ne	<addr>
-               	lsr	x5, x3, #0
-               	sub	x5, x3, x5
+               	sub	x5, x3, x3
                	mov	w5, w5
                	ldur	w1, [x29, #-0x40]
                	udiv	x17, x3, x1
@@ -1062,8 +1060,7 @@ Disassembly of section .text:
                	sdiv	x3, x1, x3
                	cmp	x1, x3
                	b.ne	<addr>
-               	lsr	x3, x1, #0
-               	sub	x6, x1, x3
+               	sub	x6, x1, x1
                	ldur	x3, [x29, #-0xa0]
                	sdiv	x17, x1, x3
                	msub	x1, x17, x3, x1
@@ -2286,11 +2283,10 @@ Disassembly of section .text:
                	ldur	x2, [x29, #-0x28]
                	sdiv	x2, x1, x2
                	cbnz	x2, <addr>
-               	sub	x5, x1, #0x0
                	ldur	x2, [x29, #-0x28]
                	sdiv	x17, x1, x2
-               	msub	x1, x17, x2, x1
-               	cmp	x5, x1
+               	msub	x2, x17, x2, x1
+               	cmp	x1, x2
                	b.ne	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x18

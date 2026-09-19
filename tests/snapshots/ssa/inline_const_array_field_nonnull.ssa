@@ -10,26 +10,25 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
     v4   Imm(0)                                           -> x0
     v5   BinopI { op=add, lhs=v4, rhs_imm=8 }             -> x1
     v6   Imm(10)                                          -> x1
-    v7   Imm(10)                                          -> x1
-    v8   BinopI { op=add, lhs=v4, rhs_imm=32 }            -> x0
+    v7   BinopI { op=add, lhs=v4, rhs_imm=32 }            -> x0
+    v8   Imm(0)                                           -> x0
     v9   Imm(0)                                           -> x0
-    v10  Imm(0)                                           -> x0
-    v11  Imm(10)                                          -> x0
-    v12  Imm(0)                                           -> x0
-    v13  BinopI { op=add, lhs=v12, rhs_imm=40 }           -> x1
-    v14  Imm(30)                                          -> x1
-    v15  Imm(40)                                          -> x1
-    v16  BinopI { op=add, lhs=v12, rhs_imm=32 }           -> x0
+    v10  Imm(10)                                          -> x0
+    v11  Imm(0)                                           -> x0
+    v12  BinopI { op=add, lhs=v11, rhs_imm=40 }           -> x1
+    v13  Imm(30)                                          -> x1
+    v14  Imm(40)                                          -> x1
+    v15  BinopI { op=add, lhs=v11, rhs_imm=32 }           -> x0
+    v16  Imm(0)                                           -> x0
     v17  Imm(0)                                           -> x0
-    v18  Imm(0)                                           -> x0
-    v19  Imm(40)                                          -> x0
+    v18  Imm(40)                                          -> x0
+    v19  Imm(43)                                          -> x0
     v20  Imm(43)                                          -> x0
     v21  Imm(43)                                          -> x0
-    v22  Imm(43)                                          -> x0
-    v23  Imm(0)                                           -> x0
-    v24  Imm(184683593728)                                -> x0
-    v25  Imm(43)                                          -> x0
-    terminator Return(v25)   (exit_acc=v25)
+    v22  Imm(0)                                           -> x0
+    v23  Imm(184683593728)                                -> x0
+    v24  Imm(43)                                          -> x0
+    terminator Return(v24)   (exit_acc=v24)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

@@ -74,7 +74,6 @@ Disassembly of section .text:
                	add	x2, x2, #0x1
                	str	w2, [x21]
                	add	x0, x1, x0
-               	add	x0, x0, #0x0
                	add	x0, x0, #0x1
                	add	x0, x0, #0x2
                	add	x0, x0, #0x3

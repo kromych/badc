@@ -19,7 +19,6 @@ Disassembly of section .text:
                	cmp	x1, #0x0
                	b.ls	<addr>
                	and	x2, x2, #0xff
-               	sub	x1, x1, #0x0
                	mov	x16, x2
                	mov	x2, x1
                	mov	x1, x16

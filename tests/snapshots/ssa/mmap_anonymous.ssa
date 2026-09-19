@@ -28,12 +28,12 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v18  Imm(0)                                           -> x0
     v19  Imm(0)                                           -> x0
     v20  BinopI { op=add, lhs=v8, rhs_imm=0 }             -> x0
-    v21  Imm(4096)                                        -> x1
-    v22  Imm(0)                                           -> x1
-    v23  Imm(1)                                           -> x1
-    v24  Imm(72057594037927936)                           -> x1
-    v25  Imm(1)                                           -> x1
-    v26  Store { addr=v20, disp=0, value=v25, kind=I8 }   -> -
+    v21  Imm(4096)                                        -> x0
+    v22  Imm(0)                                           -> x0
+    v23  Imm(1)                                           -> x0
+    v24  Imm(72057594037927936)                           -> x0
+    v25  Imm(1)                                           -> x0
+    v26  Store { addr=v8, disp=0, value=v25, kind=I8 }    -> -
     v27  Imm(0)                                           -> x0
     v28  Imm(4096)                                        -> x0
     v29  Imm(0)                                           -> x0

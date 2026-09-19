@@ -35,7 +35,7 @@ Disassembly of section .text:
                	movq	%rdi, %rax
                	testl	%eax, %eax
                	jg	<addr>
-               	leaq	(%rcx), %rax
+               	movq	%rcx, %rax
                	retq
 
 <main>:

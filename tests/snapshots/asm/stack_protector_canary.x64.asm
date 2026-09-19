@@ -31,9 +31,7 @@ Disassembly of section .text:
                	movsbq	%dl, %rdx
                	testq	%rsi, %rsi
                	jbe	<addr>
-               	leaq	(%rsi), %rax
-               	movq	%rdx, %rsi
-               	movq	%rax, %rdx
+               	xchgq	%rdx, %rsi
                	xorl	%eax, %eax
                	callq	<addr>
                	popq	%rbp

@@ -12,10 +12,10 @@ fn ent_pc=6 n_params=0 variadic=false locals=6
     v6   Imm(0)                                           -> x1
     v7   Imm(0)                                           -> x1
     v8   BinopI { op=add, lhs=v5, rhs_imm=0 }             -> x1
-    v9   Imm(0)                                           -> x2
-    v10  Imm(0)                                           -> x2
-    v11  Imm(0)                                           -> x2
-    v12  Store { addr=v8, disp=0, value=v11, kind=I32 }   -> -
+    v9   Imm(0)                                           -> x1
+    v10  Imm(0)                                           -> x1
+    v11  Imm(0)                                           -> x1
+    v12  Store { addr=v5, disp=0, value=v11, kind=I32 }   -> -
     v13  Imm(0)                                           -> x1
     v14  Imm(1)                                           -> x1
     v15  Imm(0)                                           -> x1

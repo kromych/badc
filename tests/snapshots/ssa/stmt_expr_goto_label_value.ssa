@@ -66,11 +66,11 @@ fn ent_pc=3 n_params=0 variadic=false locals=2
     v60  Imm(0)                                           -> x0
     v61  BinopI { op=add, lhs=v46, rhs_imm=0 }            -> x0
     v62  Imm(-9223372036854775791)                        -> x0
-    v63  Imm(-1)                                          -> x0
-    v64  Imm(0)                                           -> x0
-    v65  Imm(-1)                                          -> x0
-    v66  Imm(-9223372036854775791)                        -> x0
-    terminator Jmp(b3)   (exit_acc=v66)
+    v63  Imm(-1)                                          -> x1
+    v64  Imm(0)                                           -> x1
+    v65  Imm(-1)                                          -> x1
+    v66  Imm(-9223372036854775791)                        -> x1
+    terminator Jmp(b3)   (exit_acc=v62)
   block 1  start_pc=0
     v150 BinopI { op=add, lhs=v148, rhs_imm=1 }           -> x1
     v151 BinopI { op=shl, lhs=v150, rhs_imm=6 }           -> x0
@@ -83,7 +83,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=2
     v179 LoadIndexed { base=v46, index=v150, scale=8, kind=I64 } -> x0
     terminator Jmp(b3)   (exit_acc=v179)
   block 3  start_pc=0
-    v147 Phi { incoming=[b0:v66, b2:v179], kind=I64 }     -> x0
+    v147 Phi { incoming=[b0:v62, b2:v179], kind=I64 }     -> x0
     v148 Phi { incoming=[b0:v51, b2:v150], kind=I64 }     -> x6
     v149 BinopI { op=eq, lhs=v147, rhs_imm=0 }            -> x1
     terminator Bz { cond=v147, target=b1, fall=b4 }   (exit_acc=v149)

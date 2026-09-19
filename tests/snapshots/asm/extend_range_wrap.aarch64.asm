@@ -131,7 +131,6 @@ Disassembly of section .text:
 <other_guard>:
                	add	x0, x0, #0x1
                	sxtw	x0, w0
-               	add	x0, x0, #0x0
                	ret
 
 <guard_then_join>:
@@ -151,7 +150,6 @@ Disassembly of section .text:
                	cmp	w1, #0x64
                	b.ge	<addr>
                	add	x0, x1, #0x1
-               	add	x0, x0, #0x0
                	ret
 
 <uwrap>:

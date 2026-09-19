@@ -44,7 +44,6 @@ Disassembly of section .text:
                	cmpl	$0x4, %eax
                	jl	<addr>
                	leaq	<rip>, %rax
-               	addq	$0x0, %rax
                	movq	(%rax), %rcx
                	movq	0x8(%rax), %rax
                	addq	%rcx, %rax

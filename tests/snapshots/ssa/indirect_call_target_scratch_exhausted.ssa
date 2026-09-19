@@ -130,18 +130,18 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v6   Imm(0)                                           -> x0
     v7   Imm(0)                                           -> x0
     v8   Imm(1)                                           -> x0
-    v9   ImmData(16)                                      -> x2
-    v10  Imm(0)                                           -> x0
-    v11  Imm(0)                                           -> x0
-    v12  BinopI { op=add, lhs=v9, rhs_imm=0 }             -> x0
-    v13  Store { addr=v12, disp=0, value=v5, kind=I64 }   -> -
-    v14  Imm(0)                                           -> x6
-    v15  Imm(0)                                           -> x6
+    v9   ImmData(16)                                      -> x0
+    v10  Imm(0)                                           -> x2
+    v11  Imm(0)                                           -> x2
+    v12  BinopI { op=add, lhs=v9, rhs_imm=0 }             -> x2
+    v13  Store { addr=v9, disp=0, value=v5, kind=I64 }    -> -
+    v14  Imm(0)                                           -> x2
+    v15  Imm(0)                                           -> x2
     v16  BinopI { op=add, lhs=v9, rhs_imm=0 }             -> x2
-    v17  BinopI { op=add, lhs=v12, rhs_imm=8 }            -> x2
+    v17  BinopI { op=add, lhs=v9, rhs_imm=8 }             -> x2
     v18  Imm(2)                                           -> x2
     v19  Imm(0)                                           -> x2
-    v20  Store { addr=v12, disp=8, value=v5, kind=I64 }   -> -
+    v20  Store { addr=v9, disp=8, value=v5, kind=I64 }    -> -
     v21  Imm(0)                                           -> x0
     v22  Imm(1)                                           -> x1
     v23  Imm(0)                                           -> x0

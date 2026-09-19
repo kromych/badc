@@ -98,13 +98,10 @@ Disassembly of section .text:
                	str	s2, [x2, #0x8]
                	str	s3, [x2, #0xc]
                	sub	x1, x29, #0x240
-               	add	x4, x1, #0x0
-               	add	x5, x0, #0x0
-               	ldr	s0, [x5]
-               	add	x5, x3, #0x0
-               	ldr	s1, [x5]
+               	ldr	s0, [x0]
+               	ldr	s1, [x3]
                	fadd	s0, s0, s1
-               	str	s0, [x4]
+               	str	s0, [x1]
                	ldr	s0, [x0, #0x4]
                	ldr	s1, [x3, #0x4]
                	fadd	s0, s0, s1
@@ -147,13 +144,10 @@ Disassembly of section .text:
                	str	s2, [x2, #0x8]
                	str	s3, [x2, #0xc]
                	sub	x1, x29, #0x240
-               	add	x4, x1, #0x0
-               	add	x5, x0, #0x0
-               	ldr	s0, [x5]
-               	add	x5, x3, #0x0
-               	ldr	s1, [x5]
+               	ldr	s0, [x0]
+               	ldr	s1, [x3]
                	fsub	s0, s0, s1
-               	str	s0, [x4]
+               	str	s0, [x1]
                	ldr	s0, [x0, #0x4]
                	ldr	s1, [x3, #0x4]
                	fsub	s0, s0, s1
@@ -196,13 +190,10 @@ Disassembly of section .text:
                	str	s2, [x2, #0x8]
                	str	s3, [x2, #0xc]
                	sub	x1, x29, #0x240
-               	add	x4, x1, #0x0
-               	add	x5, x0, #0x0
-               	ldr	s0, [x5]
-               	add	x5, x3, #0x0
-               	ldr	s1, [x5]
+               	ldr	s0, [x0]
+               	ldr	s1, [x3]
                	fmul	s0, s0, s1
-               	str	s0, [x4]
+               	str	s0, [x1]
                	ldr	s0, [x0, #0x4]
                	ldr	s1, [x3, #0x4]
                	fmul	s0, s0, s1
@@ -245,13 +236,10 @@ Disassembly of section .text:
                	str	s2, [x2, #0x8]
                	str	s3, [x2, #0xc]
                	sub	x1, x29, #0x240
-               	add	x4, x1, #0x0
-               	add	x5, x0, #0x0
-               	ldr	s0, [x5]
-               	add	x5, x3, #0x0
-               	ldr	s1, [x5]
+               	ldr	s0, [x0]
+               	ldr	s1, [x3]
                	fdiv	s0, s0, s1
-               	str	s0, [x4]
+               	str	s0, [x1]
                	ldr	s0, [x0, #0x4]
                	ldr	s1, [x3, #0x4]
                	fdiv	s0, s0, s1
@@ -286,13 +274,10 @@ Disassembly of section .text:
                	str	d0, [x2]
                	str	d1, [x2, #0x8]
                	sub	x1, x29, #0x240
-               	add	x4, x1, #0x0
-               	add	x5, x0, #0x0
-               	ldr	d0, [x5]
-               	add	x5, x3, #0x0
-               	ldr	d1, [x5]
+               	ldr	d0, [x0]
+               	ldr	d1, [x3]
                	fadd	d0, d0, d1
-               	str	d0, [x4]
+               	str	d0, [x1]
                	ldr	d0, [x0, #0x8]
                	ldr	d1, [x3, #0x8]
                	fadd	d0, d0, d1
@@ -319,13 +304,10 @@ Disassembly of section .text:
                	str	d0, [x2]
                	str	d1, [x2, #0x8]
                	sub	x1, x29, #0x240
-               	add	x4, x1, #0x0
-               	add	x5, x0, #0x0
-               	ldr	d0, [x5]
-               	add	x5, x3, #0x0
-               	ldr	d1, [x5]
+               	ldr	d0, [x0]
+               	ldr	d1, [x3]
                	fsub	d0, d0, d1
-               	str	d0, [x4]
+               	str	d0, [x1]
                	ldr	d0, [x0, #0x8]
                	ldr	d1, [x3, #0x8]
                	fsub	d0, d0, d1
@@ -352,13 +334,10 @@ Disassembly of section .text:
                	str	d0, [x2]
                	str	d1, [x2, #0x8]
                	sub	x1, x29, #0x240
-               	add	x4, x1, #0x0
-               	add	x5, x0, #0x0
-               	ldr	d0, [x5]
-               	add	x5, x3, #0x0
-               	ldr	d1, [x5]
+               	ldr	d0, [x0]
+               	ldr	d1, [x3]
                	fmul	d0, d0, d1
-               	str	d0, [x4]
+               	str	d0, [x1]
                	ldr	d0, [x0, #0x8]
                	ldr	d1, [x3, #0x8]
                	fmul	d0, d0, d1
@@ -385,13 +364,10 @@ Disassembly of section .text:
                	str	d0, [x2]
                	str	d1, [x2, #0x8]
                	sub	x1, x29, #0x240
-               	add	x4, x1, #0x0
-               	add	x5, x0, #0x0
-               	ldr	d0, [x5]
-               	add	x5, x3, #0x0
-               	ldr	d1, [x5]
+               	ldr	d0, [x0]
+               	ldr	d1, [x3]
                	fdiv	d0, d0, d1
-               	str	d0, [x4]
+               	str	d0, [x1]
                	ldr	d0, [x0, #0x8]
                	ldr	d1, [x3, #0x8]
                	fdiv	d0, d0, d1
@@ -442,13 +418,10 @@ Disassembly of section .text:
                	str	s6, [x3, #0x18]
                	str	s7, [x3, #0x1c]
                	sub	x1, x29, #0x250
-               	add	x4, x1, #0x0
-               	add	x5, x0, #0x0
-               	ldr	s0, [x5]
-               	add	x5, x2, #0x0
-               	ldr	s1, [x5]
+               	ldr	s0, [x0]
+               	ldr	s1, [x2]
                	fadd	s0, s0, s1
-               	str	s0, [x4]
+               	str	s0, [x1]
                	ldr	s0, [x0, #0x4]
                	ldr	s1, [x2, #0x4]
                	fadd	s0, s0, s1
@@ -523,13 +496,10 @@ Disassembly of section .text:
                	str	s6, [x3, #0x18]
                	str	s7, [x3, #0x1c]
                	sub	x1, x29, #0x250
-               	add	x4, x1, #0x0
-               	add	x5, x0, #0x0
-               	ldr	s0, [x5]
-               	add	x5, x2, #0x0
-               	ldr	s1, [x5]
+               	ldr	s0, [x0]
+               	ldr	s1, [x2]
                	fmul	s0, s0, s1
-               	str	s0, [x4]
+               	str	s0, [x1]
                	ldr	s0, [x0, #0x4]
                	ldr	s1, [x2, #0x4]
                	fmul	s0, s0, s1
@@ -588,12 +558,10 @@ Disassembly of section .text:
                	str	s2, [x2, #0x8]
                	str	s3, [x2, #0xc]
                	sub	x1, x29, #0x240
-               	add	x4, x1, #0x0
-               	add	x5, x0, #0x0
-               	ldr	s0, [x5]
+               	ldr	s0, [x0]
                	fmov	s17, w3
                	fmul	s0, s0, s17
-               	str	s0, [x4]
+               	str	s0, [x1]
                	ldr	s0, [x0, #0x4]
                	fmov	s17, w3
                	fmul	s0, s0, s17
@@ -633,13 +601,11 @@ Disassembly of section .text:
                	str	s3, [x2, #0x8]
                	str	s0, [x2, #0xc]
                	sub	x1, x29, #0x240
-               	add	x4, x1, #0x0
-               	add	x3, x0, #0x0
-               	ldr	s0, [x3]
+               	ldr	s0, [x0]
                	mov	x3, #0x40400000         // =1077936128
                	fmov	s17, w3
                	fmul	s0, s0, s17
-               	str	s0, [x4]
+               	str	s0, [x1]
                	ldr	s0, [x0, #0x4]
                	fmov	s17, w3
                	fmul	s0, s0, s17
@@ -674,12 +640,10 @@ Disassembly of section .text:
                	str	d0, [x2]
                	str	d1, [x2, #0x8]
                	sub	x1, x29, #0x240
-               	add	x4, x1, #0x0
-               	add	x5, x0, #0x0
-               	ldr	d0, [x5]
+               	ldr	d0, [x0]
                	fmov	d17, x3
                	fdiv	d0, d0, d17
-               	str	d0, [x4]
+               	str	d0, [x1]
                	ldr	d0, [x0, #0x8]
                	fmov	d17, x3
                	fdiv	d0, d0, d17
@@ -705,13 +669,11 @@ Disassembly of section .text:
                	str	d1, [x2]
                	str	d0, [x2, #0x8]
                	sub	x1, x29, #0x240
-               	add	x4, x1, #0x0
-               	add	x3, x0, #0x0
-               	ldr	d0, [x3]
+               	ldr	d0, [x0]
                	mov	x3, #0x4008000000000000 // =4613937818241073152
                	fmov	d17, x3
                	fadd	d0, d0, d17
-               	str	d0, [x4]
+               	str	d0, [x1]
                	ldr	d0, [x0, #0x8]
                	fmov	d17, x3
                	fadd	d0, d0, d17
@@ -933,11 +895,9 @@ Disassembly of section .text:
                	str	s2, [x2, #0x8]
                	str	s3, [x2, #0xc]
                	sub	x1, x29, #0x240
-               	add	x3, x1, #0x0
-               	add	x4, x0, #0x0
-               	ldr	s0, [x4]
+               	ldr	s0, [x0]
                	fneg	s0, s0
-               	str	s0, [x3]
+               	str	s0, [x1]
                	ldr	s0, [x0, #0x4]
                	fneg	s0, s0
                	str	s0, [x1, #0x4]
@@ -975,11 +935,9 @@ Disassembly of section .text:
                	str	d0, [x2]
                	str	d1, [x2, #0x8]
                	sub	x1, x29, #0x240
-               	add	x3, x1, #0x0
-               	add	x4, x0, #0x0
-               	ldr	d0, [x4]
+               	ldr	d0, [x0]
                	fneg	d0, d0
-               	str	d0, [x3]
+               	str	d0, [x1]
                	ldr	d0, [x0, #0x8]
                	fneg	d0, d0
                	str	d0, [x1, #0x8]

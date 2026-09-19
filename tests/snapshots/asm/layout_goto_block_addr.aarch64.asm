@@ -59,7 +59,7 @@ Disassembly of section .text:
                	add	x29, sp, #0x10
                	mov	x0, #0x0                // =0
                	bl	<addr>
-               	add	x20, x0, #0x0
+               	mov	x20, x0
                	mov	x0, #0x1                // =1
                	bl	<addr>
                	add	x20, x20, x0

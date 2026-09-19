@@ -34,7 +34,6 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	incq	%rax
                	incq	%rax
-               	addq	$0x0, %rax
                	retq
                	movq	$-0x64, %rax
                	jmp	<addr>

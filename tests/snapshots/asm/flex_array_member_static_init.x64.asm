@@ -39,8 +39,7 @@ Disassembly of section .text:
                	retq
                	xorl	%edx, %edx
                	leaq	0x18(%rcx), %rax
-               	leaq	(%rax), %rsi
-               	movsbq	(%rsi), %rsi
+               	movsbq	(%rax), %rsi
                	cmpl	$-0x1, %esi
                	je	<addr>
                	leaq	0xa(%rdx), %rax
@@ -88,7 +87,6 @@ Disassembly of section .text:
                	xorl	%ecx, %ecx
                	leaq	<rip>, %rdi
                	addq	$0x4, %rdi
-               	addq	$0x0, %rdi
                	movsbq	(%rdi), %rdi
                	cmpl	$0x68, %edi
                	je	<addr>

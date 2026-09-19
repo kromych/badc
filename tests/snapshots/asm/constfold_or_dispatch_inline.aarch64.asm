@@ -16,7 +16,6 @@ Disassembly of section .text:
 <c0>:
                	add	x0, x0, #0x1
                	lsl	x0, x0, #1
-               	add	x0, x0, #0x0
                	sxtw	x0, w0
                	ret
 

@@ -40,11 +40,10 @@ Disassembly of section .text:
                	br	x0
                	mov	x0, #0xa                // =10
                	stur	w0, [x29, #-0x8]
-               	ldursw	x1, [x29, #-0x8]
-               	add	x1, x1, #0x1
-               	add	x1, x1, #0x0
-               	add	x1, x1, #0x1
-               	add	x0, x1, #0x1
+               	ldursw	x0, [x29, #-0x8]
+               	add	x0, x0, #0x1
+               	add	x0, x0, #0x1
+               	add	x0, x0, #0x1
                	sxtw	x0, w0
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10

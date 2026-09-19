@@ -130,7 +130,7 @@ fn ent_pc=10 n_params=0 variadic=false locals=1
     v92  Imm(0)                                           -> x0
     v93  Imm(0)                                           -> x0
     v94  BinopI { op=add, lhs=v90, rhs_imm=0 }            -> x0
-    v95  SegLoad { addr=v94, kind=I64, seg=Gs }           -> x6
+    v95  SegLoad { addr=v90, kind=I64, seg=Gs }           -> x6
     v96  Imm(0)                                           -> x0
     v97  LocalAddr(-1)                                    -> x0
     v98  InlineAsm { template="pushf ; pop %0", ops=1, args=[v97] } -> -
@@ -138,7 +138,7 @@ fn ent_pc=10 n_params=0 variadic=false locals=1
     v100 Imm(0)                                           -> x7
     v101 Imm(0)                                           -> x7
     v102 BinopI { op=add, lhs=v90, rhs_imm=0 }            -> x7
-    v103 SegLoad { addr=v102, kind=I64, seg=Gs }          -> x7
+    v103 SegLoad { addr=v90, kind=I64, seg=Gs }           -> x7
     v104 Imm(0)                                           -> x8
     v105 Imm(0)                                           -> x8
     v106 BinopI { op=ne, lhs=v95, rhs_imm=1234605616436508552 } -> x8

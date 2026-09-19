@@ -30,8 +30,7 @@ Disassembly of section .text:
                	b.ne	<addr>
                	mov	sp, x0
                	mov	x1, #0x0                // =0
-               	add	x2, x0, #0x0
-               	str	w1, [x2]
+               	str	w1, [x0]
                	mov	x1, #0x1                // =1
                	str	w1, [x0, #0x4]
                	mov	x2, #0x2                // =2

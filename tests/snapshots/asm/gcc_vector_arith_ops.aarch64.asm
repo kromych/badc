@@ -3383,7 +3383,6 @@ Disassembly of section .text:
                	sub	x1, x1, #0x7b0
                	sub	x0, x29, #0xeb0
                	ldrb	w4, [x1]
-               	lsr	x4, x4, #0
                	strb	w4, [x0]
                	ldrb	w4, [x1, #0x1]
                	lsl	x4, x4, #1
@@ -3407,7 +3406,6 @@ Disassembly of section .text:
                	lsl	x4, x4, #7
                	strb	w4, [x0, #0x7]
                	ldrb	w4, [x1, #0x8]
-               	lsr	x4, x4, #0
                	strb	w4, [x0, #0x8]
                	ldrb	w4, [x1, #0x9]
                	lsl	x4, x4, #1

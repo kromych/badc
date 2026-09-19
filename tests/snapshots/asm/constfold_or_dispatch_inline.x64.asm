@@ -28,7 +28,6 @@ Disassembly of section .text:
 <c0>:
                	leaq	0x1(%rdi), %rax
                	shlq	%rax
-               	addq	$0x0, %rax
                	movslq	%eax, %rax
                	retq
 

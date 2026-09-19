@@ -151,37 +151,31 @@ Disassembly of section .text:
                	movq	%r8, %rax
                	cmpl	$0x3, %eax
                	jge	<addr>
-               	leaq	-0x90(%rbp), %rsi
-               	leaq	-0x48(%rbp), %rdi
-               	imulq	$0x18, %rax, %rdx
-               	leaq	(%rsi,%rdx), %rcx
-               	leaq	(%rcx), %r9
-               	movsd	(%r9,%riz), %xmm0
-               	leaq	(%rdi), %r9
-               	addq	$0x0, %r9
-               	movsd	(%r9,%riz), %xmm1
+               	leaq	-0x90(%rbp), %rdi
+               	leaq	-0x48(%rbp), %rdx
+               	imulq	$0x18, %rax, %rsi
+               	leaq	(%rdi,%rsi), %rcx
+               	movsd	(%rcx,%riz), %xmm0
+               	movsd	(%rdx,%riz), %xmm1
                	movapd	%xmm0, %xmm14
                	movapd	%xmm1, %xmm15
                	movq	%r8, %xmm2
                	vfmadd231sd	%xmm15, %xmm14, %xmm2 # xmm2 = (xmm14 * xmm15) + xmm2
                	movsd	0x8(%rcx,%riz), %xmm0
-               	leaq	0x18(%rdi), %r9
-               	addq	$0x0, %r9
+               	leaq	0x18(%rdx), %r9
                	movsd	(%r9,%riz), %xmm1
                	movapd	%xmm0, %xmm14
                	movapd	%xmm1, %xmm15
                	vfmadd231sd	%xmm15, %xmm14, %xmm2 # xmm2 = (xmm14 * xmm15) + xmm2
                	movsd	0x10(%rcx,%riz), %xmm0
-               	leaq	0x30(%rdi), %rcx
-               	addq	$0x0, %rcx
+               	leaq	0x30(%rdx), %rcx
                	movsd	(%rcx,%riz), %xmm1
                	movapd	%xmm0, %xmm14
                	movapd	%xmm1, %xmm15
                	movapd	%xmm2, %xmm0
                	vfmadd231sd	%xmm15, %xmm14, %xmm0 # xmm0 = (xmm14 * xmm15) + xmm0
-               	leaq	-0x90(%rbp), %rsi
-               	leaq	(%rsi,%rdx), %rcx
-               	addq	$0x0, %rcx
+               	leaq	-0x90(%rbp), %rdx
+               	leaq	(%rdx,%rsi), %rcx
                	movsd	(%rcx,%riz), %xmm1
                	subsd	%xmm1, %xmm0
                	xorl	%r9d, %r9d
@@ -195,32 +189,30 @@ Disassembly of section .text:
                	movq	%rcx, %xmm15
                	ucomisd	%xmm0, %xmm15
                	jbe	<addr>
-               	leaq	-0x48(%rbp), %rdi
-               	imulq	$0x18, %rax, %rdx
-               	leaq	(%rsi,%rdx), %rcx
-               	leaq	(%rcx), %rbx
-               	movsd	(%rbx,%riz), %xmm0
-               	leaq	(%rdi), %rbx
-               	movsd	0x8(%rbx,%riz), %xmm1
+               	leaq	-0x48(%rbp), %rsi
+               	imulq	$0x18, %rax, %rdi
+               	leaq	(%rdx,%rdi), %rcx
+               	movsd	(%rcx,%riz), %xmm0
+               	movsd	0x8(%rsi,%riz), %xmm1
                	movapd	%xmm0, %xmm14
                	movapd	%xmm1, %xmm15
                	movq	%r9, %xmm2
                	vfmadd231sd	%xmm15, %xmm14, %xmm2 # xmm2 = (xmm14 * xmm15) + xmm2
                	movsd	0x8(%rcx,%riz), %xmm0
-               	leaq	0x18(%rdi), %r9
+               	leaq	0x18(%rsi), %r9
                	movsd	0x8(%r9,%riz), %xmm1
                	movapd	%xmm0, %xmm14
                	movapd	%xmm1, %xmm15
                	vfmadd231sd	%xmm15, %xmm14, %xmm2 # xmm2 = (xmm14 * xmm15) + xmm2
                	movsd	0x10(%rcx,%riz), %xmm0
-               	leaq	0x30(%rdi), %rcx
+               	leaq	0x30(%rsi), %rcx
                	movsd	0x8(%rcx,%riz), %xmm1
                	movapd	%xmm0, %xmm14
                	movapd	%xmm1, %xmm15
                	movapd	%xmm2, %xmm0
                	vfmadd231sd	%xmm15, %xmm14, %xmm0 # xmm0 = (xmm14 * xmm15) + xmm0
-               	leaq	-0x90(%rbp), %rsi
-               	leaq	(%rsi,%rdx), %rcx
+               	leaq	-0x90(%rbp), %rdx
+               	leaq	(%rdx,%rdi), %rcx
                	movsd	0x8(%rcx,%riz), %xmm1
                	subsd	%xmm1, %xmm0
                	xorl	%r9d, %r9d
@@ -234,32 +226,30 @@ Disassembly of section .text:
                	movq	%rcx, %xmm15
                	ucomisd	%xmm0, %xmm15
                	jbe	<addr>
-               	leaq	-0x48(%rbp), %rdi
-               	imulq	$0x18, %rax, %rdx
-               	leaq	(%rsi,%rdx), %rcx
-               	leaq	(%rcx), %rbx
-               	movsd	(%rbx,%riz), %xmm0
-               	leaq	(%rdi), %rbx
-               	movsd	0x10(%rbx,%riz), %xmm1
+               	leaq	-0x48(%rbp), %rsi
+               	imulq	$0x18, %rax, %rdi
+               	leaq	(%rdx,%rdi), %rcx
+               	movsd	(%rcx,%riz), %xmm0
+               	movsd	0x10(%rsi,%riz), %xmm1
                	movapd	%xmm0, %xmm14
                	movapd	%xmm1, %xmm15
                	movq	%r9, %xmm2
                	vfmadd231sd	%xmm15, %xmm14, %xmm2 # xmm2 = (xmm14 * xmm15) + xmm2
                	movsd	0x8(%rcx,%riz), %xmm0
-               	leaq	0x18(%rdi), %r9
+               	leaq	0x18(%rsi), %r9
                	movsd	0x10(%r9,%riz), %xmm1
                	movapd	%xmm0, %xmm14
                	movapd	%xmm1, %xmm15
                	vfmadd231sd	%xmm15, %xmm14, %xmm2 # xmm2 = (xmm14 * xmm15) + xmm2
                	movsd	0x10(%rcx,%riz), %xmm0
-               	leaq	0x30(%rdi), %rcx
+               	leaq	0x30(%rsi), %rcx
                	movsd	0x10(%rcx,%riz), %xmm1
                	movapd	%xmm0, %xmm14
                	movapd	%xmm1, %xmm15
                	movapd	%xmm2, %xmm0
                	vfmadd231sd	%xmm15, %xmm14, %xmm0 # xmm0 = (xmm14 * xmm15) + xmm0
                	leaq	-0x90(%rbp), %rcx
-               	addq	%rdx, %rcx
+               	addq	%rdi, %rcx
                	movsd	0x10(%rcx,%riz), %xmm1
                	subsd	%xmm1, %xmm0
                	xorl	%ecx, %ecx
@@ -276,23 +266,21 @@ Disassembly of section .text:
                	incq	%rax
                	cmpl	$0x3, %eax
                	jl	<addr>
-               	leaq	-0x90(%rbp), %rcx
+               	leaq	-0x90(%rbp), %rax
                	xorl	%edx, %edx
-               	leaq	0x18(%rcx), %rax
-               	leaq	(%rax), %rsi
-               	movsd	(%rsi,%riz), %xmm0
-               	leaq	(%rcx), %rsi
-               	movsd	0x10(%rsi,%riz), %xmm1
+               	movsd	0x18(%rax,%riz), %xmm0
+               	movsd	0x10(%rax,%riz), %xmm1
                	movapd	%xmm0, %xmm14
                	movapd	%xmm1, %xmm15
                	movq	%rdx, %xmm2
                	vfmadd231sd	%xmm15, %xmm14, %xmm2 # xmm2 = (xmm14 * xmm15) + xmm2
-               	movsd	0x8(%rax,%riz), %xmm1
-               	movsd	0x10(%rax,%riz), %xmm0
+               	leaq	0x18(%rax), %rcx
+               	movsd	0x8(%rcx,%riz), %xmm1
+               	movsd	0x10(%rcx,%riz), %xmm0
                	movapd	%xmm1, %xmm14
                	movapd	%xmm0, %xmm15
                	vfmadd231sd	%xmm15, %xmm14, %xmm2 # xmm2 = (xmm14 * xmm15) + xmm2
-               	leaq	0x30(%rcx), %rax
+               	addq	$0x30, %rax
                	movsd	0x10(%rax,%riz), %xmm1
                	movapd	%xmm0, %xmm14
                	movapd	%xmm1, %xmm15

@@ -281,7 +281,7 @@ Disassembly of section .text:
                	mov	x23, #0x3               // =3
                	mov	x0, x23
                	bl	<addr>
-               	add	x24, x0, #0x0
+               	mov	x24, x0
                	mov	x0, x23
                	bl	<addr>
                	add	x24, x24, x0

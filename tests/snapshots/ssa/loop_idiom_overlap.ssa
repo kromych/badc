@@ -8,7 +8,7 @@ fn ent_pc=4 n_params=3 variadic=false locals=0
     v2   Imm(0)                                           -> x0
     v3   ParamRef(1, kind=I64)                            -> x6
     v4   Imm(0)                                           -> x0
-    v5   Imm(9)                                           -> x0
+    v5   Imm(9)                                           -> x2
     v6   Imm(0)                                           -> x0
     v7   Imm(0)                                           -> x0
     v8   Imm(0)                                           -> x1
@@ -18,9 +18,9 @@ fn ent_pc=4 n_params=3 variadic=false locals=0
     v12  Imm(0)                                           -> x1
     v13  Imm(0)                                           -> x1
     v14  Binop { op=sub, lhs=v1, rhs=v3 }                 -> x1
-    v15  Imm(0)                                           -> x2
-    v16  Imm(0)                                           -> x2
-    v17  Imm(9)                                           -> x2
+    v15  Imm(0)                                           -> x8
+    v16  Imm(0)                                           -> x8
+    v17  Imm(9)                                           -> x8
     v18  BinopI { op=uge, lhs=v14, rhs_imm=9 }            -> x1
     terminator Bz { cond=v18, target=b3, fall=b1 }   (exit_acc=v18)
   block 1  start_pc=0
@@ -28,8 +28,8 @@ fn ent_pc=4 n_params=3 variadic=false locals=0
     v20  Imm(0)                                           -> x0
     v21  Imm(0)                                           -> x0
     v22  Imm(0)                                           -> x0
-    v23  Imm(9)                                           -> x2
-    v24  CallExt { binding_idx=10, args=[v1, v3, v23], fp_arg_mask=0x0 } -> x0
+    v23  Imm(9)                                           -> x0
+    v24  CallExt { binding_idx=10, args=[v1, v3, v5], fp_arg_mask=0x0 } -> x0
     terminator Jmp(b2)   (exit_acc=v24)
   block 2  start_pc=0
     terminator Return
@@ -63,7 +63,7 @@ fn ent_pc=5 n_params=3 variadic=false locals=0
     v2   Imm(0)                                           -> x0
     v3   ParamRef(1, kind=I64)                            -> x6
     v4   Imm(0)                                           -> x0
-    v5   Imm(7)                                           -> x0
+    v5   Imm(7)                                           -> x2
     v6   Imm(0)                                           -> x0
     v7   Imm(0)                                           -> x0
     v8   Imm(0)                                           -> x1
@@ -73,9 +73,9 @@ fn ent_pc=5 n_params=3 variadic=false locals=0
     v12  Imm(0)                                           -> x1
     v13  Imm(0)                                           -> x1
     v14  Binop { op=sub, lhs=v1, rhs=v3 }                 -> x1
-    v15  Imm(0)                                           -> x2
-    v16  Imm(0)                                           -> x2
-    v17  Imm(7)                                           -> x2
+    v15  Imm(0)                                           -> x8
+    v16  Imm(0)                                           -> x8
+    v17  Imm(7)                                           -> x8
     v18  BinopI { op=uge, lhs=v14, rhs_imm=7 }            -> x1
     terminator Bz { cond=v18, target=b3, fall=b1 }   (exit_acc=v18)
   block 1  start_pc=0
@@ -83,8 +83,8 @@ fn ent_pc=5 n_params=3 variadic=false locals=0
     v20  Imm(0)                                           -> x0
     v21  Imm(0)                                           -> x0
     v22  Imm(0)                                           -> x0
-    v23  Imm(7)                                           -> x2
-    v24  CallExt { binding_idx=10, args=[v1, v3, v23], fp_arg_mask=0x0 } -> x0
+    v23  Imm(7)                                           -> x0
+    v24  CallExt { binding_idx=10, args=[v1, v3, v5], fp_arg_mask=0x0 } -> x0
     terminator Jmp(b2)   (exit_acc=v24)
   block 2  start_pc=0
     terminator Return

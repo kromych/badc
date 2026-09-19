@@ -968,13 +968,13 @@ fn ent_pc=33 n_params=1 variadic=false locals=1
     v45  Imm(0)                                           -> x1
     v46  Imm(0)                                           -> x1
     v47  BinopI { op=shl, lhs=v1, rhs_imm=0 }             -> x1
-    v48  BinopI { op=and, lhs=v47, rhs_imm=4294967295 }   -> x2
-    v49  Imm(0)                                           -> x2
-    v50  Imm(0)                                           -> x2
-    v51  Imm(255)                                         -> x2
-    v52  BinopI { op=and, lhs=v47, rhs_imm=255 }          -> x1
-    v53  BinopI { op=or, lhs=v52, rhs_imm=0 }             -> x1
-    v54  Store { addr=v5, disp=0, value=v53, kind=I32 }   -> -
+    v48  BinopI { op=and, lhs=v1, rhs_imm=4294967295 }    -> x1
+    v49  Imm(0)                                           -> x1
+    v50  Imm(0)                                           -> x1
+    v51  Imm(255)                                         -> x1
+    v52  BinopI { op=and, lhs=v1, rhs_imm=255 }           -> x1
+    v53  BinopI { op=or, lhs=v52, rhs_imm=0 }             -> x2
+    v54  Store { addr=v5, disp=0, value=v52, kind=I32 }   -> -
     v55  LocalAddr(-1)                                    -> x1
     v56  Imm(0)                                           -> x1
     v57  Imm(0)                                           -> x1
@@ -1569,9 +1569,9 @@ fn ent_pc=34 n_params=0 variadic=false locals=85
     v373 Imm(0)                                           -> x1
     v374 Imm(0)                                           -> x1
     v375 BinopI { op=add, lhs=v372, rhs_imm=0 }           -> x1
-    v376 Imm(0)                                           -> x2
-    v377 BinopI { op=mul, lhs=v2, rhs_imm=0 }             -> x2
-    v378 Store { addr=v375, disp=0, value=v377, kind=I64 } -> -
+    v376 Imm(0)                                           -> x1
+    v377 BinopI { op=mul, lhs=v2, rhs_imm=0 }             -> x1
+    v378 Store { addr=v372, disp=0, value=v377, kind=I64 } -> -
     v379 Imm(0)                                           -> x1
     v380 Imm(1)                                           -> x1
     v381 Imm(0)                                           -> x1
@@ -1583,7 +1583,7 @@ fn ent_pc=34 n_params=0 variadic=false locals=85
     v387 BinopI { op=add, lhs=v372, rhs_imm=8 }           -> x1
     v388 Imm(0)                                           -> x1
     v389 BinopI { op=mul, lhs=v2, rhs_imm=1 }             -> x1
-    v390 Store { addr=v372, disp=8, value=v389, kind=I64 } -> -
+    v390 Store { addr=v372, disp=8, value=v2, kind=I64 }  -> -
     v391 Imm(1)                                           -> x1
     v392 Imm(2)                                           -> x1
     v393 Imm(0)                                           -> x1

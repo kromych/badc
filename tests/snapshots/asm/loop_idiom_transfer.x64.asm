@@ -32,7 +32,7 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	testl	%esi, %esi
                	jle	<addr>
-               	leaq	(%rsi), %rdx
+               	movq	%rsi, %rdx
                	movq	%rax, %rsi
                	xorl	%eax, %eax
                	callq	<addr>
@@ -52,9 +52,9 @@ Disassembly of section .text:
 <copy_arrays>:
                	pushq	%rbp
                	movq	%rsp, %rbp
+               	movl	$0x28, %edx
                	leaq	<rip>, %rdi
                	leaq	<rip>, %rsi
-               	movl	$0x28, %edx
                	xorl	%eax, %eax
                	callq	<addr>
                	popq	%rbp
@@ -70,7 +70,7 @@ Disassembly of section .text:
                	testl	%ebx, %ebx
                	jle	<addr>
                	movl	$0x1, %esi
-               	leaq	(%rbx), %rdx
+               	movq	%rbx, %rdx
                	xorl	%eax, %eax
                	callq	<addr>
                	movq	%rbx, %rsi

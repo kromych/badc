@@ -222,8 +222,7 @@ Disassembly of section .text:
                	movq	%rdi, %rsi
                	callq	<addr>
                	movq	-0x8(%rbp), %rcx
-               	addq	%rcx, %rax
-               	leaq	(%rax), %rbx
+               	leaq	(%rax,%rcx), %rbx
                	xorl	%edi, %edi
                	movq	%rdi, -0x8(%rbp)
                	leaq	-0x8(%rbp), %rdx

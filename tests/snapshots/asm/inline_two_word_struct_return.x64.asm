@@ -43,23 +43,21 @@ Disassembly of section .text:
                	cmpl	$0x8, %eax
                	jl	<addr>
                	leaq	-0x80(%rbp), %rax
-               	leaq	(%rax), %rcx
-               	movslq	(%rcx), %rdx
-               	movq	0x8(%rcx), %rcx
+               	movslq	(%rax), %rcx
+               	movq	0x8(%rax), %rdx
                	addq	%rdx, %rcx
-               	leaq	(%rcx), %rdx
                	movslq	0x10(%rax), %rsi
-               	leaq	0x10(%rax), %rcx
+               	leaq	0x10(%rax), %rdx
+               	movq	0x8(%rdx), %rdx
+               	addq	%rsi, %rdx
+               	addq	%rcx, %rdx
+               	movslq	0x20(%rax), %rsi
+               	leaq	0x20(%rax), %rcx
                	movq	0x8(%rcx), %rcx
                	addq	%rsi, %rcx
-               	addq	%rdx, %rcx
-               	movslq	0x20(%rax), %rdx
-               	addq	$0x20, %rax
-               	movq	0x8(%rax), %rax
-               	addq	%rdx, %rax
-               	leaq	(%rcx,%rax), %rdx
-               	leaq	-0x80(%rbp), %rax
+               	addq	%rcx, %rdx
                	movslq	0x30(%rax), %rsi
+               	leaq	-0x80(%rbp), %rax
                	leaq	0x30(%rax), %rcx
                	movq	0x8(%rcx), %rcx
                	addq	%rsi, %rcx
@@ -68,14 +66,14 @@ Disassembly of section .text:
                	leaq	0x40(%rax), %rcx
                	movq	0x8(%rcx), %rcx
                	addq	%rsi, %rcx
-               	addq	%rdx, %rcx
-               	movslq	0x50(%rax), %rdx
-               	addq	$0x50, %rax
-               	movq	0x8(%rax), %rax
-               	addq	%rdx, %rax
-               	leaq	(%rcx,%rax), %rdx
-               	leaq	-0x80(%rbp), %rax
+               	addq	%rcx, %rdx
+               	movslq	0x50(%rax), %rsi
+               	leaq	0x50(%rax), %rcx
+               	movq	0x8(%rcx), %rcx
+               	addq	%rsi, %rcx
+               	addq	%rcx, %rdx
                	movslq	0x60(%rax), %rsi
+               	leaq	-0x80(%rbp), %rax
                	leaq	0x60(%rax), %rcx
                	movq	0x8(%rcx), %rcx
                	addq	%rsi, %rcx

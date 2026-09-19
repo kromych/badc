@@ -32,9 +32,8 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x20, [sp], #0x20
                	ret
-               	add	x1, x0, #0x0
-               	mov	x2, #0x1                // =1
-               	strb	w2, [x1]
+               	mov	x1, #0x1                // =1
+               	strb	w1, [x0]
                	add	x1, x0, #0x1, lsl #12   // =0x1000
                	mov	x2, #0x2                // =2
                	strb	w2, [x1]

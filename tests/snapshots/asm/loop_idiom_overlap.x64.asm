@@ -28,12 +28,12 @@ Disassembly of section .text:
 <copy_up>:
                	pushq	%rbp
                	movq	%rsp, %rbp
+               	movl	$0x9, %edx
                	xorl	%eax, %eax
                	movq	%rdi, %rcx
                	subq	%rsi, %rcx
                	cmpq	$0x9, %rcx
                	jb	<addr>
-               	movl	$0x9, %edx
                	xorl	%eax, %eax
                	callq	<addr>
                	popq	%rbp
@@ -48,12 +48,12 @@ Disassembly of section .text:
 <copy_down>:
                	pushq	%rbp
                	movq	%rsp, %rbp
+               	movl	$0x7, %edx
                	xorl	%eax, %eax
                	movq	%rdi, %rcx
                	subq	%rsi, %rcx
                	cmpq	$0x7, %rcx
                	jb	<addr>
-               	movl	$0x7, %edx
                	xorl	%eax, %eax
                	callq	<addr>
                	popq	%rbp

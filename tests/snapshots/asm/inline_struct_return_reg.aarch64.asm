@@ -40,9 +40,7 @@ Disassembly of section .text:
                	cmp	w0, #0x4
                	b.lt	<addr>
                	sub	x0, x29, #0x40
-               	add	x1, x0, #0x0
-               	ldr	x1, [x1]
-               	add	x1, x1, #0x0
+               	ldr	x1, [x0]
                	ldr	x2, [x0, #0x8]
                	add	x1, x1, x2
                	ldr	x2, [x0, #0x10]

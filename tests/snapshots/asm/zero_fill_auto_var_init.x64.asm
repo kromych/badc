@@ -217,7 +217,7 @@ Disassembly of section .text:
                	movl	$0x3, %ebx
                	movq	%rbx, %rdi
                	callq	<addr>
-               	leaq	(%rax), %r12
+               	movq	%rax, %r12
                	movq	%rbx, %rdi
                	callq	<addr>
                	addq	%rax, %r12

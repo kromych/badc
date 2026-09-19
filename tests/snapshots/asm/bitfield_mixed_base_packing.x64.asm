@@ -72,39 +72,36 @@ Disassembly of section .text:
                	movl	$0x4, %eax
                	leave
                	retq
-               	movq	%rcx, %rsi
-               	andq	$0xff, %rsi
-               	movq	%rsi, %rdx
-               	sarq	$0x6, %rdx
-               	cmpl	$0x3, %edx
+               	movq	%rcx, %rdx
+               	andq	$0xff, %rdx
+               	movq	%rdx, %rsi
+               	sarq	$0x6, %rsi
+               	cmpl	$0x3, %esi
                	je	<addr>
                	movl	$0x5, %eax
                	leave
                	retq
-               	xorl	%edx, %edx
                	movl	(%rax), %edi
                	andq	$-0x80000000, %rdi      # imm = 0x80000000
-               	orq	%rdx, %rdi
                	movl	%edi, (%rax)
-               	movq	%rsi, %rcx
+               	movq	%rdx, %rcx
                	andq	$-0xc1, %rcx
-               	orq	%rdx, %rcx
                	movb	%cl, 0x7(%rax)
                	leaq	-0x8(%rbp), %rax
                	movzwq	(%rax), %rcx
                	andq	$-0x200, %rcx           # imm = 0xFE00
                	orq	$0x1ff, %rcx            # imm = 0x1FF
                	movw	%cx, (%rax)
-               	movzwq	0x2(%rax), %rsi
-               	andq	$-0x200, %rsi           # imm = 0xFE00
-               	orq	$0x123, %rsi            # imm = 0x123
-               	movw	%si, 0x2(%rax)
+               	movzwq	0x2(%rax), %rdx
+               	andq	$-0x200, %rdx           # imm = 0xFE00
+               	orq	$0x123, %rdx            # imm = 0x123
+               	movw	%dx, 0x2(%rax)
                	movq	%rcx, %rax
                	andq	$0xffff, %rax           # imm = 0xFFFF
                	andq	$0x1ff, %rax            # imm = 0x1FF
                	cmpl	$0x1ff, %eax            # imm = 0x1FF
                	jne	<addr>
-               	movq	%rsi, %rax
+               	movq	%rdx, %rax
                	andq	$0xffff, %rax           # imm = 0xFFFF
                	andq	$0x1ff, %rax            # imm = 0x1FF
                	cmpl	$0x123, %eax            # imm = 0x123
@@ -112,6 +109,6 @@ Disassembly of section .text:
                	movl	$0xa, %eax
                	leave
                	retq
-               	movq	%rdx, %rax
+               	xorl	%eax, %eax
                	leave
                	retq

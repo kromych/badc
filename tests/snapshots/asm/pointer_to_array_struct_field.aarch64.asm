@@ -29,10 +29,8 @@ Disassembly of section .text:
                	b.ge	<addr>
                	lsl	x4, x0, #4
                	add	x3, x2, x4
-               	add	x7, x3, #0x0
                	mul	x1, x0, x6
-               	add	x5, x1, #0x0
-               	strh	w5, [x7]
+               	strh	w1, [x3]
                	add	x5, x1, #0x1
                	strh	w5, [x3, #0x2]
                	add	x5, x1, #0x2
@@ -58,12 +56,10 @@ Disassembly of section .text:
                	b.ge	<addr>
                	lsl	x4, x0, #4
                	add	x3, x2, x4
-               	add	x1, x3, #0x0
-               	ldrsh	x8, [x1]
+               	ldrsh	x5, [x3]
                	mul	x1, x0, x6
-               	add	x5, x1, #0x0
-               	sxth	x5, w5
-               	cmp	w8, w5
+               	sxth	x8, w1
+               	cmp	w5, w8
                	b.ne	<addr>
                	mov	x9, #0x1                // =1
                	ldrsh	x8, [x3, #0x2]

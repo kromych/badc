@@ -17,8 +17,7 @@ Disassembly of section .text:
                	mov	x2, #0x0                // =0
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	add	x1, x0, #0x0
-               	str	w2, [x1]
+               	str	w2, [x0]
                	mrs	x1, TPIDR_EL0
                	add	x1, x1, #0x0, lsl #12   // =0x0
                	add	x1, x1, #0x10

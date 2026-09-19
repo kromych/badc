@@ -56,16 +56,13 @@ Disassembly of section .text:
                	imulq	%r9, %rsi
                	addq	%r8, %rsi
                	addq	%rsi, %rdx
-               	movq	%rdi, %rsi
-               	shlq	$0x0, %rsi
                	imulq	%r12, %rax
-               	addq	%rsi, %rdx
+               	addq	%rdi, %rdx
                	addq	%rdx, %rax
                	leaq	(%rcx,%rbx), %rdx
                	cmpq	%rcx, %rdx
                	setb	%cl
                	movzbq	%cl, %rcx
-               	addq	$0x0, %rax
                	addq	%rax, %rcx
                	leaq	-0x60(%rbp), %rax
                	movq	%rdx, (%rax)

@@ -51,7 +51,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx
                	movq	(%rcx), %rcx
                	xorq	$-0x1, %rcx
-               	orq	$0x0, %rcx
                	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x4, %eax

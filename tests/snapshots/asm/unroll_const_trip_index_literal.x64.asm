@@ -26,11 +26,10 @@ Disassembly of section .text:
                	int3
 
 <bank_init>:
-               	leaq	(%rdi), %rax
-               	movl	$0x1, (%rax)
-               	movq	%rsi, 0x20(%rax)
-               	movl	$0x0, 0x4(%rax)
-               	movq	$0x0, 0x28(%rax)
+               	movl	$0x1, (%rdi)
+               	movq	%rsi, 0x20(%rdi)
+               	movl	$0x0, 0x4(%rdi)
+               	movq	$0x0, 0x28(%rdi)
                	movl	$0x1, 0x30(%rdi)
                	leaq	0x30(%rdi), %rax
                	movq	%rsi, 0x20(%rax)
@@ -66,22 +65,21 @@ Disassembly of section .text:
                	movq	%rsi, 0x20(%rax)
                	movl	$0x7, 0x4(%rax)
                	movq	$0x0, 0x28(%rax)
-               	leaq	0x180(%rdi), %rcx
-               	leaq	(%rcx), %rax
+               	leaq	0x180(%rdi), %rax
                	movl	$0x2, (%rax)
                	movq	%rsi, 0x20(%rax)
                	movl	$0x20, 0x4(%rax)
                	movq	$0x0, 0x28(%rax)
-               	leaq	0x180(%rdi), %rax
-               	leaq	(%rax), %rcx
-               	movq	$0xb00, 0x10(%rcx)      # imm = 0xB00
+               	movq	$0xb00, 0x10(%rax)      # imm = 0xB00
                	movl	$0x2, 0x30(%rax)
-               	leaq	0x30(%rax), %rcx
-               	movq	%rsi, 0x20(%rcx)
-               	movl	$0x21, 0x4(%rcx)
-               	movq	$0x0, 0x28(%rcx)
-               	movq	$0x1600, 0x10(%rcx)     # imm = 0x1600
-               	movl	$0x2, 0x60(%rax)
+               	addq	$0x30, %rax
+               	movq	%rsi, 0x20(%rax)
+               	leaq	0x180(%rdi), %rcx
+               	leaq	0x30(%rcx), %rax
+               	movl	$0x21, 0x4(%rax)
+               	movq	$0x0, 0x28(%rax)
+               	movq	$0x1600, 0x10(%rax)     # imm = 0x1600
+               	movl	$0x2, 0x60(%rcx)
                	leaq	0x180(%rdi), %rcx
                	leaq	0x60(%rcx), %rax
                	movq	%rsi, 0x20(%rax)

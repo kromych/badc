@@ -37,8 +37,6 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	ldr	x1, [x1]
                	mvn	x1, x1
-               	mov	x17, #0x0               // =0
-               	orr	x1, x1, x17
                	cbz	x1, <addr>
                	mov	x0, #0x4                // =4
                	ret

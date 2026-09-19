@@ -31,10 +31,8 @@ Disassembly of section .text:
                	add	x4, x3, #0x4
                	mul	x5, x0, x7
                	add	x2, x4, x5
-               	add	x8, x2, #0x0
                	lsl	x1, x0, #4
-               	add	x6, x1, #0x0
-               	strb	w6, [x8]
+               	strb	w1, [x2]
                	add	x6, x1, #0x1
                	strb	w6, [x2, #0x1]
                	add	x6, x1, #0x2
@@ -92,12 +90,10 @@ Disassembly of section .text:
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	add	x1, x1, #0x0
                	mov	x2, #0x77               // =119
                	strb	w2, [x1, #0x4]
-               	add	x2, x0, #0x0
                	mov	x1, #0x0                // =0
-               	strh	w1, [x2]
+               	strh	w1, [x0]
                	strh	w1, [x0, #0x2]
                	strh	w1, [x0, #0x4]
                	strh	w1, [x0, #0x6]

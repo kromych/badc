@@ -112,16 +112,12 @@ Disassembly of section .text:
                	and	x1, x1, #0xffffffff000001ff
                	orr	x1, x1, #0xfffffe00
                	str	w1, [x0]
-               	mov	x2, #0x0                // =0
                	ldr	w1, [x0, #0x4]
                	and	x1, x1, #0xffffffffffffff00
-               	orr	x1, x1, x2
                	str	w1, [x0, #0x4]
                	and	x1, x1, #0xfffffffffffffeff
-               	orr	x1, x1, x2
                	str	w1, [x0, #0x4]
                	and	x1, x1, #0xffffffff000001ff
-               	orr	x1, x1, x2
                	str	w1, [x0, #0x4]
                	and	x0, x1, #0xff
                	cbz	x0, <addr>
@@ -130,9 +126,9 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	w0, w1
-               	asr	x3, x0, #8
-               	and	x3, x3, #0x1
-               	cbz	x3, <addr>
+               	asr	x2, x0, #8
+               	and	x2, x2, #0x1
+               	cbz	x2, <addr>
                	mov	x0, #0x18               // =24
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
@@ -143,7 +139,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, x2
+               	mov	x0, #0x0                // =0
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret

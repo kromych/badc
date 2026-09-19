@@ -22,18 +22,18 @@ fn ent_pc=0 n_params=1 variadic=false locals=1
     v16  Imm(0)                                           -> x1
     v17  Imm(0)                                           -> x1
     v18  BinopI { op=add, lhs=v6, rhs_imm=0 }             -> x1
-    v19  BinopI { op=shl, lhs=v18, rhs_imm=32 }           -> x6
-    v20  Extend { value=v18, kind=I32 }                   -> x6
-    v21  Store { addr=v10, disp=0, value=v18, kind=I32 }  -> -
-    v22  Imm(0)                                           -> x6
-    v23  Imm(1)                                           -> x6
-    v24  Imm(4294967296)                                  -> x6
-    v25  Imm(1)                                           -> x6
-    v26  Imm(0)                                           -> x6
-    v27  Imm(1)                                           -> x6
-    v28  Imm(1)                                           -> x6
-    v29  Imm(0)                                           -> x6
-    v30  Extend { value=v18, kind=I32 }                   -> x1
+    v19  BinopI { op=shl, lhs=v6, rhs_imm=32 }            -> x1
+    v20  Extend { value=v6, kind=I32 }                    -> x1
+    v21  Store { addr=v10, disp=0, value=v6, kind=I32 }   -> -
+    v22  Imm(0)                                           -> x1
+    v23  Imm(1)                                           -> x1
+    v24  Imm(4294967296)                                  -> x1
+    v25  Imm(1)                                           -> x1
+    v26  Imm(0)                                           -> x1
+    v27  Imm(1)                                           -> x1
+    v28  Imm(1)                                           -> x1
+    v29  Imm(0)                                           -> x1
+    v30  Extend { value=v6, kind=I32 }                    -> x1
     v31  Imm(0)                                           -> x6
     v32  Binop { op=add, lhs=v30, rhs=v6 }                -> x1
     v33  BinopI { op=shl, lhs=v32, rhs_imm=32 }           -> x6

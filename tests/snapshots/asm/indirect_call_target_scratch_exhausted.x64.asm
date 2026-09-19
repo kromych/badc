@@ -178,8 +178,7 @@ Disassembly of section .text:
                	pushq	%r13
                	pushq	%r12
                	pushq	%rbx
-               	leaq	<rip>, %rdx
-               	leaq	(%rdx), %rax
+               	leaq	<rip>, %rax
                	movq	$0x0, (%rax)
                	movq	$0x0, 0x8(%rax)
                	leaq	<rip>, %rax

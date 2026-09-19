@@ -26,8 +26,7 @@ Disassembly of section .text:
                	int3
 
 <setup>:
-               	leaq	<rip>, %rax
-               	leaq	(%rax), %rcx
+               	leaq	<rip>, %rcx
                	xorl	%eax, %eax
                	movl	%eax, (%rcx)
                	leaq	<rip>, %rcx
@@ -49,7 +48,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx
                	movl	$0x51, 0x24(%rcx)
                	leaq	<rip>, %rcx
-               	addq	$0x0, %rcx
                	movq	%rax, (%rcx)
                	leaq	<rip>, %rcx
                	movq	$0x3b9aca07, 0x8(%rcx)  # imm = 0x3B9ACA07

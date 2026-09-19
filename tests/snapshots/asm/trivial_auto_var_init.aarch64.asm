@@ -279,13 +279,10 @@ Disassembly of section .text:
                	ret
 
 <loop_block>:
-               	mov	x2, #0x0                // =0
-               	mov	x1, x2
-               	mov	x0, x2
+               	mov	x1, #0x0                // =0
+               	mov	x0, x1
                	cmp	w0, #0x2
                	b.ge	<addr>
-               	cbz	w0, <addr>
-               	mov	x1, x2
                	add	x0, x0, #0x1
                	cmp	w0, #0x2
                	b.lt	<addr>
@@ -313,7 +310,7 @@ Disassembly of section .text:
                	mov	x21, #0x0               // =0
                	bl	<addr>
                	bl	<addr>
-               	add	x20, x0, #0x0
+               	mov	x20, x0
                	bl	<addr>
                	bl	<addr>
                	add	x20, x20, x0

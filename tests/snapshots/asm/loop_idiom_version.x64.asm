@@ -32,12 +32,10 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	testl	%edx, %edx
                	jle	<addr>
-               	movq	%rdi, %r8
-               	subq	%rsi, %r8
-               	leaq	(%rdx), %rcx
-               	cmpq	%rcx, %r8
+               	movq	%rdi, %rcx
+               	subq	%rsi, %rcx
+               	cmpq	%rdx, %rcx
                	jb	<addr>
-               	movq	%rcx, %rdx
                	xorl	%eax, %eax
                	callq	<addr>
                	popq	%rbp
@@ -58,10 +56,10 @@ Disassembly of section .text:
                	jle	<addr>
                	leaq	<rip>, %rcx
                	subq	%rdi, %rcx
-               	leaq	(%rsi), %rdx
-               	cmpq	%rdx, %rcx
+               	cmpq	%rsi, %rcx
                	jb	<addr>
                	leaq	<rip>, %rax
+               	movq	%rsi, %rdx
                	movq	%rdi, %rsi
                	movq	%rax, %rdi
                	xorl	%eax, %eax
@@ -84,12 +82,12 @@ Disassembly of section .text:
                	testl	%esi, %esi
                	jle	<addr>
                	leaq	<rip>, %rcx
-               	movq	%rdi, %r8
-               	subq	%rcx, %r8
-               	leaq	(%rsi), %rdx
-               	cmpq	%rdx, %r8
+               	movq	%rdi, %rdx
+               	subq	%rcx, %rdx
+               	cmpq	%rsi, %rdx
                	jb	<addr>
                	leaq	<rip>, %rax
+               	movq	%rsi, %rdx
                	movq	%rax, %rsi
                	xorl	%eax, %eax
                	callq	<addr>
@@ -590,10 +588,8 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	<rip>, %rax
-               	leaq	(%rax), %rdx
-               	movl	$0x1020304, (%rdx)      # imm = 0x1020304
+               	movl	$0x1020304, (%rax)      # imm = 0x1020304
                	leaq	<rip>, %rdx
-               	addq	$0x0, %rdx
                	movl	$0x1020304, (%rdx)      # imm = 0x1020304
                	leaq	<rip>, %rax
                	movl	$0x2040608, 0x4(%rax)   # imm = 0x2040608

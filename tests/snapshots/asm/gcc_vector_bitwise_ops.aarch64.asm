@@ -19,10 +19,8 @@ Disassembly of section .text:
                	sub	sp, sp, #0x20
                	stur	q0, [x29, #-0x20]
                	sub	x1, x29, #0x20
-               	add	x2, x1, #0x0
-               	ldrb	w2, [x2]
-               	add	x3, x0, #0x0
-               	ldrb	w3, [x3]
+               	ldrb	w2, [x1]
+               	ldrb	w3, [x0]
                	cmp	w2, w3
                	b.eq	<addr>
                	mov	x0, #0x0                // =0
@@ -347,12 +345,10 @@ Disassembly of section .text:
                	ret
                	sub	x1, x29, #0xf0
                	sub	x2, x29, #0xe0
-               	add	x0, x1, #0x0
-               	mov	x3, #0x1                // =1
-               	strb	w3, [x0]
-               	add	x0, x2, #0x0
-               	mov	x3, #0xc8               // =200
-               	strb	w3, [x0]
+               	mov	x0, #0x1                // =1
+               	strb	w0, [x1]
+               	mov	x0, #0xc8               // =200
+               	strb	w0, [x2]
                	mov	x0, #0x8                // =8
                	strb	w0, [x1, #0x1]
                	mov	x0, #0xc7               // =199

@@ -1688,8 +1688,13 @@ pub(crate) fn lower_unit<B: LowerTarget>(
     // post-inline bodies directly; the walk and the -O passes that produced
     // them are skipped, the rest of the pipeline runs unchanged.
     let walked = prebuilt.is_none();
-    let (mut ssa_funcs, prebuilt_promoted, prebuilt_owners) = match prebuilt {
-        Some(p) => (p.funcs, p.promoted_local_slots, Some(p.reachable_owners)),
+    let (mut ssa_funcs, prebuilt_promoted, prebuilt_owners, mut param_ranges) = match prebuilt {
+        Some(p) => (
+            p.funcs,
+            p.promoted_local_slots,
+            Some(p.reachable_owners),
+            p.param_ranges,
+        ),
         None => (
             time_pass_arch("ssa::produce_ssa_funcs", B::ARCH, || {
                 super::shadow::produce_ssa_funcs(
@@ -1701,6 +1706,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
             })?,
             alloc::collections::BTreeMap::new(),
             None,
+            super::shadow::ParamRanges::new(),
         ),
     };
     // The walk's own output is the reachable set the -O passes below
@@ -1806,7 +1812,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         // what reaches the bodies that stay out of line.
         // Interprocedural parameter ranges, by entry PC; read by the
         // range analysis inside the branch-fold fixed point below.
-        let param_ranges = time_pass_arch("passes::ipa_const_param::run", B::ARCH, || {
+        param_ranges = time_pass_arch("passes::ipa_const_param::run", B::ARCH, || {
             let escaping =
                 super::super::passes::ipa_const_param::escaping_functions(&ssa_funcs, program);
             super::super::passes::ipa_const_param::run(&mut ssa_funcs, &escaping)
@@ -1950,6 +1956,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         });
         if let Some(o) = &mut orphaned_data {
             o.ssa.promoted_local_slots = promoted_local_slots.clone();
+            o.ssa.param_ranges = param_ranges.clone();
         }
         // A probe caller relowers the reported bodies against a `.data`
         // this run cannot know, so everything below would be discarded.
@@ -1982,6 +1989,13 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         });
         time_pass_arch("passes::drop_redundant_extend::run", B::ARCH, || {
             super::super::passes::drop_redundant_extend::run(&mut ssa_funcs);
+        });
+        // Expand the divides by a constant the walker and the constant
+        // folder left whole. After the range rule above has read their
+        // bounds; before the value numbering, which merges the quotient a
+        // division and a remainder over the same operands both compute.
+        time_pass_arch("passes::divmod_const::run", B::ARCH, || {
+            super::super::passes::divmod_const::run(&mut ssa_funcs, &param_ranges);
         });
         // Indexed addressing: fold `base + index*scale` into the load /
         // store. Runs after every pass that reads the address arithmetic;

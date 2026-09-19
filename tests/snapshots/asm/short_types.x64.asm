@@ -70,26 +70,16 @@ Disassembly of section .text:
                	movq	0x8(%rsp), %r12
                	leave
                	retq
-               	movl	$0x92492493, %edx       # imm = 0x92492493
-               	imulq	%rcx, %rdx
-               	movq	%rdx, %rax
+               	movl	$0x92492493, %eax       # imm = 0x92492493
+               	imulq	%rcx, %rax
                	sarq	$0x22, %rax
-               	movq	%rax, %rsi
-               	shrq	$0x3f, %rsi
-               	leaq	(%rax,%rsi), %rdi
-               	movswq	%di, %r8
-               	cmpl	$0xb0, %r8d
-               	je	<addr>
-               	movl	$0x6, %eax
-               	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
-               	leave
-               	retq
-               	imulq	$0x7, %rdi, %rax
+               	movq	%rax, %rdx
+               	shrq	$0x3f, %rdx
+               	addq	%rdx, %rax
+               	imulq	$0x7, %rax, %rax
                	movq	%rax, %r10
                	movq	%rcx, %rax
                	subq	%r10, %rax
-               	movswq	%ax, %rax
                	cmpl	$0x2, %eax
                	je	<addr>
                	movl	$0x7, %eax

@@ -1343,15 +1343,15 @@ Disassembly of section .text:
                	retq
                	xorq	%rax, %rax
                	jmp	<addr>
-               	movq	%rdx, %r10
-               	pushq	%rax
+               	movabsq	$-0x5555555555555555, %rax # imm = 0xAAAAAAAAAAAAAAAB
+               	movq	%rax, %r10
                	pushq	%rdx
                	movq	%rdi, %rax
-               	xorq	%rdx, %rdx
-               	divq	%r10
-               	movq	%rax, %r9
+               	mulq	%r10
+               	movq	%rdx, %rax
                	popq	%rdx
-               	popq	%rax
+               	movq	%rax, %r9
+               	shrq	%r9
                	movq	%r9, %rax
                	imulq	%rdx, %rax
                	subq	%rax, %rdi
@@ -1420,15 +1420,16 @@ Disassembly of section .text:
                	jmp	<addr>
                	xorq	%rdi, %rdi
                	jmp	<addr>
-               	movq	%rdx, %r10
+               	movabsq	$-0x5555555555555555, %rdi # imm = 0xAAAAAAAAAAAAAAAB
                	pushq	%rax
                	pushq	%rdx
                	movq	%rcx, %rax
-               	xorq	%rdx, %rdx
-               	divq	%r10
-               	movq	%rax, %rbx
+               	mulq	%rdi
+               	movq	%rdx, %rdi
                	popq	%rdx
                	popq	%rax
+               	movq	%rdi, %rbx
+               	shrq	%rbx
                	movq	%rbx, %rdi
                	imulq	%rdx, %rdi
                	movq	%rcx, %r9
@@ -1438,15 +1439,16 @@ Disassembly of section .text:
                	jmp	<addr>
                	xorq	%rdi, %rdi
                	jmp	<addr>
-               	movq	%rdx, %r10
+               	movabsq	$-0x5555555555555555, %rdi # imm = 0xAAAAAAAAAAAAAAAB
                	pushq	%rax
                	pushq	%rdx
                	movq	%rcx, %rax
-               	xorq	%rdx, %rdx
-               	divq	%r10
-               	movq	%rax, %r9
+               	mulq	%rdi
+               	movq	%rdx, %rdi
                	popq	%rdx
                	popq	%rax
+               	movq	%rdi, %r9
+               	shrq	%r9
                	movq	%r9, %rdi
                	imulq	%rdx, %rdi
                	movq	%rcx, %r12

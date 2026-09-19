@@ -971,7 +971,12 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x0                // =0
                	b	<addr>
-               	udiv	x5, x4, x2
+               	mov	x0, #0xaaab             // =43691
+               	movk	x0, #0xaaaa, lsl #16
+               	movk	x0, #0xaaaa, lsl #32
+               	movk	x0, #0xaaaa, lsl #48
+               	umulh	x0, x4, x0
+               	lsr	x5, x0, #1
                	msub	x4, x5, x2, x4
                	mov	x7, #0x0                // =0
                	mov	x0, x7
@@ -1008,14 +1013,24 @@ Disassembly of section .text:
                	b	<addr>
                	mov	x4, #0x0                // =0
                	b	<addr>
-               	udiv	x5, x1, x2
+               	mov	x4, #0xaaab             // =43691
+               	movk	x4, #0xaaaa, lsl #16
+               	movk	x4, #0xaaaa, lsl #32
+               	movk	x4, #0xaaaa, lsl #48
+               	umulh	x4, x1, x4
+               	lsr	x5, x4, #1
                	msub	x6, x5, x2, x1
                	mov	x9, #0x0                // =0
                	mov	x7, x9
                	b	<addr>
                	mov	x4, #0x0                // =0
                	b	<addr>
-               	udiv	x5, x1, x2
+               	mov	x4, #0xaaab             // =43691
+               	movk	x4, #0xaaaa, lsl #16
+               	movk	x4, #0xaaaa, lsl #32
+               	movk	x4, #0xaaaa, lsl #48
+               	umulh	x4, x1, x4
+               	lsr	x5, x4, #1
                	msub	x7, x5, x2, x1
                	mov	x9, #0x0                // =0
                	mov	x6, x9

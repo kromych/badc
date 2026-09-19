@@ -225,7 +225,14 @@ pub(crate) struct PrebuiltSsa {
     /// walk cannot re-derive from `funcs`: see
     /// [`compute_live_sets`]'s `reachable_owners`.
     pub reachable_owners: alloc::collections::BTreeSet<usize>,
+    /// `passes::ipa_const_param`'s entry range per parameter, by entry
+    /// PC, for the passes that run on these bodies and read ranges.
+    pub param_ranges: ParamRanges,
 }
+
+/// Entry range of each parameter of a function, by entry PC.
+pub(crate) type ParamRanges =
+    alloc::collections::BTreeMap<usize, Vec<crate::c5::codegen::passes::value_range::Range>>;
 
 /// Data objects the post-inline bodies no longer reach, reported by
 /// [`drop_unreachable_statics`]: `.data` was compacted from the
@@ -283,6 +290,7 @@ pub(crate) fn drop_unreachable_statics(
         ssa: PrebuiltSsa {
             funcs: kept,
             promoted_local_slots: alloc::collections::BTreeMap::new(),
+            param_ranges: ParamRanges::new(),
             reachable_owners: reachable_owners.clone(),
         },
     })

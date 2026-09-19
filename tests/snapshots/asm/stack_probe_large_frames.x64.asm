@@ -29,17 +29,16 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	movb	%al, (%rdi)
                	movl	$0x2, %ecx
-               	leaq	(%rsi), %rdx
-               	movq	%rdx, %rax
-               	sarq	%rax
+               	movq	%rsi, %rax
+               	shrq	%rax
                	movb	%cl, (%rdi,%rax)
                	leaq	-0x1(%rsi), %rcx
-               	movl	$0x3, %r8d
-               	movb	%r8b, (%rdi,%rcx)
-               	movsbq	(%rdi), %r9
+               	movl	$0x3, %edx
+               	movb	%dl, (%rdi,%rcx)
+               	movsbq	(%rdi), %r8
                	movsbq	(%rdi,%rax), %rax
-               	addq	%r9, %rax
-               	movsbq	%r8b, %rcx
+               	addq	%r8, %rax
+               	movsbq	%dl, %rcx
                	addq	%rcx, %rax
                	movslq	%eax, %rax
                	retq

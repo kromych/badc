@@ -147,6 +147,9 @@ pub(crate) struct SsaBuilder {
     /// divide plus `n - q*d` so a division over the same operands
     /// shares the quotient. See [`Self::binop`].
     split_modulo: bool,
+    /// When set, a divide by a constant stays one `BinopI` for the
+    /// mid-end to fold, bound and expand. See [`Self::divmod_const`].
+    defer_divmod: bool,
     /// Current `(line, file_idx)` source position. Stamped onto
     /// every inst pushed into the function so the DWARF emitter
     /// can recover a per-statement line table for walker-produced
@@ -221,6 +224,7 @@ impl SsaBuilder {
             last_def: NO_VALUE,
             cur_src: (0, 0),
             split_modulo: false,
+            defer_divmod: false,
         };
         let entry = b.new_block();
         b.switch_to(entry);
@@ -254,6 +258,12 @@ impl SsaBuilder {
     /// Enable the register-divisor modulo split. See [`Self::binop`].
     pub(crate) fn set_split_modulo(&mut self, on: bool) {
         self.split_modulo = on;
+    }
+
+    /// Leave constant divides to `passes::divmod_const`. See
+    /// [`Self::divmod_const`].
+    pub(crate) fn set_defer_divmod(&mut self, on: bool) {
+        self.defer_divmod = on;
     }
 
     /// Record the over-aligned frame region for over-aligned automatic
@@ -869,10 +879,17 @@ impl SsaBuilder {
     /// divisor to shifts, masks and reciprocal multiplies. Returns
     /// `None` when `op` is not a divide / modulo, `rhs` is not an
     /// immediate, or the divisor is zero, leaving the caller on the
-    /// register-rhs divide path (the per-arch `BinopI` emit does not
-    /// lower Div / Mod). `width_bits` is the operand width after the
-    /// usual arithmetic conversions; narrower types are already
+    /// register-rhs divide path. `width_bits` is the operand width after
+    /// the usual arithmetic conversions; narrower types are already
     /// sign- / zero-extended into the 64-bit SSA value.
+    ///
+    /// With [`Self::set_defer_divmod`] the result is one `BinopI`, which
+    /// no emitter lowers: `passes::divmod_const` expands it once the
+    /// constant folder and the range analysis have read it, sizing the
+    /// operation from the operand's range instead of `width_bits`. An
+    /// expansion of at most one instruction is not deferred: the operand
+    /// itself, a constant, a shift, a mask or a comparison bounds the
+    /// result as tightly, and keeps its shape for the passes in between.
     pub(crate) fn divmod_const(
         &mut self,
         op: BinOp,
@@ -881,7 +898,11 @@ impl SsaBuilder {
         width_bits: u32,
     ) -> Option<ValueId> {
         let d = self.peek_imm(rhs)?;
-        super::super::magic::lower_divmod(self, op, lhs, d, width_bits)
+        use super::super::magic::{lower_divmod, step_count};
+        if self.defer_divmod && step_count(op, d, width_bits).is_some_and(|n| n > 1) {
+            return Some(self.binop_imm(op, lhs, d));
+        }
+        lower_divmod(self, op, lhs, d, width_bits)
     }
 
     /// If `v` names an `Inst::Imm` in the current function, return

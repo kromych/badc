@@ -1029,6 +1029,11 @@ pub(crate) fn eval_int_binop(op: BinOp, lhs: i64, rhs: i64) -> Result<i64, DivBy
     Ok(v)
 }
 
+/// Integer division and remainder, signed and unsigned (C99 6.5.5).
+pub(crate) fn is_divmod_op(op: BinOp) -> bool {
+    matches!(op, BinOp::Div | BinOp::Divu | BinOp::Mod | BinOp::Modu)
+}
+
 /// The divide sharing a modulo's quotient, and its inverse. The two
 /// halves of `n = (n / d) * d + n % d` (C99 6.5.5p6) pair by
 /// signedness.

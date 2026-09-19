@@ -1009,12 +1009,19 @@ Disassembly of section .text:
                	jmp	<addr>
                	xorq	%rax, %rax
                	jmp	<addr>
-               	pushq	%rax
+               	movabsq	$0xc6f45449cb59c69, %rax # imm = 0xC6F45449CB59C69
+               	movq	%rax, %r10
+               	pushq	%rdx
                	movq	%rsi, %rax
-               	xorq	%rdx, %rdx
-               	divq	%r9
+               	mulq	%r10
+               	movq	%rdx, %rax
+               	popq	%rdx
+               	movq	%rsi, %rcx
+               	subq	%rax, %rcx
+               	shrq	%rcx
+               	addq	%rcx, %rax
                	movq	%rax, %rdx
-               	popq	%rax
+               	shrq	$0x13, %rdx
                	movq	%rdx, %rax
                	imulq	%r9, %rax
                	subq	%rax, %rsi
@@ -1025,12 +1032,19 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x56, %ecx
                	jmp	<addr>
-               	pushq	%rax
+               	movabsq	$0x2492492492492493, %rax # imm = 0x2492492492492493
+               	movq	%rax, %r10
+               	pushq	%rdx
                	movq	%rsi, %rax
-               	xorq	%rdx, %rdx
-               	divq	%rbx
+               	mulq	%r10
+               	movq	%rdx, %rax
+               	popq	%rdx
+               	movq	%rsi, %rcx
+               	subq	%rax, %rcx
+               	shrq	%rcx
+               	addq	%rcx, %rax
                	movq	%rax, %rdx
-               	popq	%rax
+               	shrq	$0x2, %rdx
                	movq	%rdx, %rax
                	imulq	%rbx, %rax
                	subq	%rax, %rsi

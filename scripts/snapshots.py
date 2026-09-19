@@ -632,9 +632,15 @@ def access_counts(text: str, arch: str) -> tuple[int, int, int, int]:
 #
 # A ceiling moves only deliberately: regenerate, read `--budget`, and
 # change the number in the commit that spends it.
+#
+# The count takes the restores of every return site, so a function with
+# many returns weighs more than a call through it costs. Two fixtures of
+# functions returning from 43 to 61 sites took x64 from 1.98 to 2.07,
+# while the entry saves per function went from 0.279 to 0.286; the x64
+# ceiling moved from 2.06 to 2.17 with them.
 SAVED_PER_FUNCTION: dict[str, float] = {
     "aarch64": 1.57,
-    "x64": 2.06,
+    "x64": 2.17,
 }
 
 

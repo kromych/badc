@@ -48,7 +48,7 @@ use crate::c5::ir::{BinOp, BlockId, FunctionSsa, Inst, LoadKind, StoreKind, Term
 /// Inclusive bounds on a value's 64-bit register contents, read as a
 /// signed integer. `i128` so intersection and the +-1 steps below cannot
 /// overflow at the extremes.
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) struct Range {
     lo: i128,
     hi: i128,
@@ -85,6 +85,10 @@ impl Range {
 
     pub(crate) fn is_universe(self) -> bool {
         self == UNIVERSE
+    }
+
+    pub(crate) fn bounds(self) -> (i128, i128) {
+        (self.lo, self.hi)
     }
 
     /// Widening: an endpoint that moved outward goes to the first bound
@@ -716,22 +720,100 @@ fn shift(a: Range, by: i64, op: BinOp) -> Range {
     r
 }
 
-/// Bounds a remainder by a constant divisor. The C99 6.5.5p6 result has
-/// the sign of the dividend, so a dividend that may be negative reaches
-/// down to `-(|k| - 1)`. The unsigned form reads both operands as
-/// unsigned, where a negative immediate is a divisor above `2^63` and a
-/// negative dividend a huge numerator, neither of which `|k|` describes.
-fn remainder(a: Range, k: i64, unsigned: bool) -> Range {
-    if unsigned && !(a.non_negative() && k > 0) {
-        return UNIVERSE;
+/// Largest magnitude in the range.
+fn magnitude(r: Range) -> i128 {
+    r.lo.abs().max(r.hi.abs())
+}
+
+/// `r` when it lies in the register's signed range. A bound outside it
+/// means the operation can wrap, and a wrapped interval says nothing.
+fn representable(r: Range) -> Range {
+    if UNIVERSE.contains(r) { r } else { UNIVERSE }
+}
+
+/// Bounds `a / d`, C99 6.5.5p6. The truncating quotient is monotone in
+/// each operand while the divisor keeps its sign, so the corners bound it;
+/// across zero only `|a / d| <= |a|` holds, which the quotient 0 of an
+/// aarch64 divide by zero satisfies too. `i64::MIN / -1` leaves the range.
+/// The unsigned form reads a negative register as a value of 2^63 and up.
+fn quotient(a: Range, d: Range, unsigned: bool) -> Range {
+    if unsigned {
+        return match (a.non_negative(), d.lo > 0) {
+            (true, true) => Range {
+                lo: a.lo / d.hi,
+                hi: a.hi / d.lo,
+            },
+            (true, false) => Range { lo: 0, hi: a.hi },
+            (false, true) if d.lo > 1 => Range {
+                lo: 0,
+                hi: u64::MAX as i128 / d.lo,
+            },
+            _ => UNIVERSE,
+        };
     }
-    let m = match (k as i128).checked_abs() {
-        Some(m) if m > 0 => m - 1,
-        _ => return UNIVERSE,
+    if d.lo <= 0 && d.hi >= 0 {
+        let m = magnitude(a);
+        return representable(Range { lo: -m, hi: m });
+    }
+    let corners = [a.lo / d.lo, a.lo / d.hi, a.hi / d.lo, a.hi / d.hi];
+    representable(Range {
+        lo: corners.into_iter().min().unwrap_or(UNIVERSE.lo),
+        hi: corners.into_iter().max().unwrap_or(UNIVERSE.hi),
+    })
+}
+
+/// Bounds `a % d`, C99 6.5.5p6: the result has the dividend's sign and at
+/// most its magnitude -- an aarch64 remainder by zero is the dividend --
+/// and stays below a divisor that cannot be zero. The unsigned form reads
+/// a negative register as a value of 2^63 and up, which neither bound
+/// describes.
+fn remainder(a: Range, d: Range, unsigned: bool) -> Range {
+    if unsigned {
+        let below = (d.lo > 0).then_some(d.hi - 1);
+        return match (a.non_negative(), below) {
+            (true, Some(m)) => Range {
+                lo: 0,
+                hi: a.hi.min(m),
+            },
+            (true, None) => Range { lo: 0, hi: a.hi },
+            (false, Some(m)) => Range { lo: 0, hi: m },
+            (false, None) => UNIVERSE,
+        };
+    }
+    let by_dividend = Range {
+        lo: a.lo.min(0),
+        hi: a.hi.max(0),
     };
-    Range {
-        lo: if a.non_negative() { 0 } else { -m },
-        hi: m,
+    if d.lo <= 0 && d.hi >= 0 {
+        return by_dividend;
+    }
+    let m = magnitude(d) - 1;
+    by_dividend.meet(Range { lo: -m, hi: m })
+}
+
+/// The unsigned operator computing what the signed division `op` does
+/// over a non-negative dividend and a positive divisor (C99 6.5.5p6).
+/// [`run_one`] rewrites a division by a power of two that way where the
+/// facts in scope bound the dividend, a guard included: the unsigned
+/// form is a shift or a mask at any operand width, and the signed one
+/// biases the dividend first. The rewrite holds wherever the result is
+/// read, every reader being dominated by the instruction and so by the
+/// guard, whatever the dividend holds elsewhere.
+fn unsigned_form(op: BinOp) -> Option<BinOp> {
+    match op {
+        BinOp::Div => Some(BinOp::Divu),
+        BinOp::Mod => Some(BinOp::Modu),
+        _ => None,
+    }
+}
+
+/// Bounds of a division or remainder `op` over operand ranges.
+fn divmod(op: BinOp, a: Range, d: Range) -> Range {
+    match op {
+        BinOp::Div => quotient(a, d, false),
+        BinOp::Divu => quotient(a, d, true),
+        BinOp::Mod => remainder(a, d, false),
+        _ => remainder(a, d, true),
     }
 }
 
@@ -790,8 +872,9 @@ fn eval(inst: &Inst, params: &[Range], mut range_of: impl FnMut(ValueId) -> Rang
                 matches!(op, BinOp::Or),
             ),
             BinOp::Shl | BinOp::Shr | BinOp::Shru => shift(range_of(*lhs), *rhs_imm, *op),
-            BinOp::Mod => remainder(range_of(*lhs), *rhs_imm, false),
-            BinOp::Modu => remainder(range_of(*lhs), *rhs_imm, true),
+            BinOp::Div | BinOp::Divu | BinOp::Mod | BinOp::Modu => {
+                divmod(*op, range_of(*lhs), Range::exact(*rhs_imm))
+            }
             _ => UNIVERSE,
         },
         Inst::Binop { op, lhs, rhs } => match op {
@@ -812,6 +895,9 @@ fn eval(inst: &Inst, params: &[Range], mut range_of: impl FnMut(ValueId) -> Rang
             BinOp::Sub => arith(range_of(*lhs), range_of(*rhs), true),
             BinOp::Or | BinOp::Xor => {
                 bitwise(range_of(*lhs), range_of(*rhs), matches!(op, BinOp::Or))
+            }
+            BinOp::Div | BinOp::Divu | BinOp::Mod | BinOp::Modu => {
+                divmod(*op, range_of(*lhs), range_of(*rhs))
             }
             _ => UNIVERSE,
         },
@@ -1154,6 +1240,8 @@ pub(crate) fn run_one(func: &mut FunctionSsa, params: &[Range]) -> bool {
     }
     let mut facts = Facts::default();
     let mut folded: Vec<(u32, i64)> = Vec::new();
+    // Divisions [`unsigned_form`] applies to.
+    let mut unsigned: Vec<ValueId> = Vec::new();
     // Zero-test terminators the walk's facts settle: (block, cond is
     // non-zero). Applied after the walk so the CFG the tables describe
     // stays fixed while facts flow.
@@ -1253,6 +1341,20 @@ pub(crate) fn run_one(func: &mut FunctionSsa, params: &[Range]) -> bool {
                 Inst::Binop { op, lhs, rhs } => decide(*op, at(*lhs), at(*rhs)),
                 _ => None,
             };
+            if let Inst::BinopI { op, lhs, .. } | Inst::Binop { op, lhs, .. } = inst
+                && let Some(d) = match inst {
+                    Inst::BinopI { rhs_imm, .. } => Some(Range::exact(*rhs_imm)),
+                    Inst::Binop { rhs, .. } => Some(at(*rhs)),
+                    _ => None,
+                }
+                && unsigned_form(*op).is_some()
+                && d.lo == d.hi
+                && d.lo > 0
+                && (d.lo as u128).is_power_of_two()
+                && at(*lhs).non_negative()
+            {
+                unsigned.push(pc);
+            }
             // Either the operands' bounds answer the comparison, or the
             // bounds on the expression itself have closed to one value
             // -- which is how a dominating branch's own answer reaches a
@@ -1300,6 +1402,13 @@ pub(crate) fn run_one(func: &mut FunctionSsa, params: &[Range]) -> bool {
     }
     for &(pc, v) in &folded {
         func.insts[pc as usize] = Inst::Imm(v);
+    }
+    for &pc in &unsigned {
+        if let Inst::BinopI { op, .. } | Inst::Binop { op, .. } = &mut func.insts[pc as usize]
+            && let Some(u) = unsigned_form(*op)
+        {
+            *op = u;
+        }
     }
     // Apply the deferred terminator folds and drop each removed edge's
     // phi incomings so the successor reflects its real predecessors.
@@ -1834,6 +1943,219 @@ mod tests {
                     hi: u32::MAX as i128
                 }
         );
+    }
+
+    /// The digit loop `while (n > 0) { digit = n % 10; ...; n = n / 10; }`:
+    /// b0: v0 = param(I32)                                    -> b1
+    /// b1: v1 = phi(v0, v4); v2 = sext32(v1); v3 = v2 % 10;
+    ///     v4 = v2 / 10                                       -> b1
+    /// The remainder lies in (-10, 10), so an `int` extension of it is
+    /// the identity, and the quotient of an `int` by 10 is an `int`.
+    #[test]
+    fn remainder_and_quotient_by_a_constant_bound_the_digit_loop() {
+        let insts = alloc::vec![
+            Inst::ParamRef {
+                idx: 0,
+                kind: LoadKind::I32,
+            },
+            Inst::Phi {
+                incoming: alloc::vec![(0, 0), (1, 4)],
+                kind: LoadKind::I64,
+            },
+            Inst::Extend {
+                value: 1,
+                kind: LoadKind::I32,
+            },
+            Inst::BinopI {
+                op: BinOp::Mod,
+                lhs: 2,
+                rhs_imm: 10,
+            },
+            Inst::BinopI {
+                op: BinOp::Div,
+                lhs: 2,
+                rhs_imm: 10,
+            },
+        ];
+        let block = |range: core::ops::Range<u32>| Block {
+            start_pc: 0,
+            inst_range: range,
+            terminator: Terminator::Jmp(1),
+            exit_acc: 0,
+        };
+        let f = FunctionSsa {
+            n_params: 1,
+            inst_src: vec![(0, 0); 5],
+            f32_values: vec![false; 5],
+            insts,
+            blocks: vec![block(0..1), block(1..5)],
+            ..FunctionSsa::default()
+        };
+        let def = def_ranges(&f, &[]);
+        assert!(def[3] == Range { lo: -9, hi: 9 });
+        assert!(def[3].fits(LoadKind::I32) && def[3].fits(LoadKind::I8));
+        let tenth = Range {
+            lo: i32::MIN as i128 / 10,
+            hi: i32::MAX as i128 / 10,
+        };
+        assert!(def[4] == tenth);
+        // The phi is the hull of the parameter and the quotient.
+        assert!(def[1].fits(LoadKind::I32));
+    }
+
+    /// A signed division by a power of two whose dividend the guard keeps
+    /// non-negative becomes the unsigned one, in the guarded arm only and
+    /// for that divisor shape only.
+    /// b0: v0 = param(I32); v1 = v0 >= 0; bz v1 -> b2
+    /// b1: v2 = v0 / 8; v3 = v0 % 8; v4 = v0 / 10; v5 = v0 / -8
+    /// b2: v6 = v0 / 8
+    #[test]
+    fn guarded_division_by_a_power_of_two_becomes_unsigned() {
+        let div = |op, rhs_imm| Inst::BinopI {
+            op,
+            lhs: 0,
+            rhs_imm,
+        };
+        let insts = alloc::vec![
+            Inst::ParamRef {
+                idx: 0,
+                kind: LoadKind::I32,
+            },
+            Inst::BinopI {
+                op: BinOp::Ge,
+                lhs: 0,
+                rhs_imm: 0,
+            },
+            div(BinOp::Div, 8),
+            div(BinOp::Mod, 8),
+            div(BinOp::Div, 10),
+            div(BinOp::Div, -8),
+            div(BinOp::Div, 8),
+        ];
+        let block = |range: core::ops::Range<u32>, t: Terminator| Block {
+            start_pc: 0,
+            inst_range: range,
+            terminator: t,
+            exit_acc: 0,
+        };
+        let mut f = FunctionSsa {
+            n_params: 1,
+            inst_src: vec![(0, 0); 7],
+            f32_values: vec![false; 7],
+            insts,
+            blocks: vec![
+                block(
+                    0..2,
+                    Terminator::Bz {
+                        cond: 1,
+                        target: 2,
+                        fall_through: 1,
+                    },
+                ),
+                block(2..6, Terminator::Return(2)),
+                block(6..7, Terminator::Return(6)),
+            ],
+            ..FunctionSsa::default()
+        };
+        run_one(&mut f, &[]);
+        let op = |v: usize| match f.insts[v] {
+            Inst::BinopI { op, .. } => op,
+            ref other => panic!("{other:?}"),
+        };
+        assert_eq!(
+            [op(2), op(3), op(4), op(5), op(6)],
+            [BinOp::Divu, BinOp::Modu, BinOp::Div, BinOp::Div, BinOp::Div]
+        );
+    }
+
+    /// `quotient` and `remainder` over the operand ranges that decide
+    /// their rules, each beside the case it must not cover.
+    #[test]
+    fn division_bounds_hold_at_the_edges_of_their_rules() {
+        let r = |lo: i128, hi: i128| Range { lo, hi };
+        let exact = |k: i64| Range::exact(k);
+        let (min, max) = (i64::MIN as i128, i64::MAX as i128);
+        // Signed quotient: the corners, with either divisor sign.
+        assert!(quotient(r(-7, 100), exact(10), false) == r(0, 10));
+        assert!(quotient(r(-70, 100), exact(-10), false) == r(-10, 7));
+        assert!(quotient(r(10, 20), r(2, 5), false) == r(2, 10));
+        assert!(quotient(r(-20, -10), r(-5, -2), false) == r(2, 10));
+        // `i64::MIN / -1` leaves the register; next to it, it does not.
+        assert!(quotient(r(min, 0), exact(-1), false) == UNIVERSE);
+        assert!(quotient(r(min + 1, 0), exact(-1), false) == r(0, max));
+        assert!(quotient(r(min, 0), r(-2, -1), false) == UNIVERSE);
+        // A divisor range holding zero bounds by the dividend only.
+        assert!(quotient(r(-5, 9), r(-3, 3), false) == r(-9, 9));
+        assert!(quotient(r(-5, 9), exact(0), false) == r(-9, 9));
+        assert!(quotient(UNIVERSE, r(-3, 3), false) == UNIVERSE);
+        // Unsigned quotient. A register that can be negative reads as
+        // 2^63 and up: only a divisor above 1 brings it back in range.
+        assert!(quotient(r(10, 100), r(2, 5), true) == r(2, 50));
+        assert!(quotient(r(10, 100), r(-1, 5), true) == r(0, 100));
+        assert!(quotient(r(-1, 100), exact(2), true) == r(0, max));
+        assert!(quotient(r(-1, 100), exact(1), true) == UNIVERSE);
+        assert!(quotient(r(-1, 100), r(-4, 4), true) == UNIVERSE);
+        // Signed remainder: the dividend's sign and magnitude, and below
+        // the divisor's magnitude when the divisor cannot be zero.
+        assert!(remainder(r(-100, 100), exact(10), false) == r(-9, 9));
+        assert!(remainder(r(0, 100), exact(-10), false) == r(0, 9));
+        assert!(remainder(r(-100, -1), exact(10), false) == r(-9, 0));
+        assert!(remainder(r(-3, 4), exact(10), false) == r(-3, 4));
+        assert!(remainder(UNIVERSE, exact(i64::MIN), false) == r(-max, max));
+        assert!(remainder(r(-100, 100), r(-10, 10), false) == r(-100, 100));
+        assert!(remainder(r(-100, 100), exact(0), false) == r(-100, 100));
+        assert!(remainder(r(5, 100), r(3, 7), false) == r(0, 6));
+        // Unsigned remainder.
+        assert!(remainder(r(0, 100), exact(10), true) == r(0, 9));
+        assert!(remainder(r(0, 5), exact(10), true) == r(0, 5));
+        assert!(remainder(r(-100, 100), exact(10), true) == r(0, 9));
+        assert!(remainder(r(0, 100), exact(-10), true) == r(0, 100));
+        assert!(remainder(r(0, 100), exact(0), true) == r(0, 100));
+        assert!(remainder(r(-1, 100), exact(-10), true) == UNIVERSE);
+        assert!(remainder(r(-1, 100), r(0, 10), true) == UNIVERSE);
+    }
+
+    /// Each bound against the operation itself, over every pair of a small
+    /// operand grid: the evaluator's result lies inside the range computed
+    /// from the exact operand ranges and from intervals around them.
+    #[test]
+    fn division_bounds_contain_every_evaluated_result() {
+        use crate::c5::vm::eval::apply_binop;
+        let grid: [i64; 15] = [
+            i64::MIN,
+            i64::MIN + 1,
+            -(1 << 32),
+            i32::MIN as i64,
+            -11,
+            -2,
+            -1,
+            0,
+            1,
+            2,
+            11,
+            i32::MAX as i64,
+            1 << 32,
+            i64::MAX - 1,
+            i64::MAX,
+        ];
+        let holds = |got: Range, v: i64| got.lo <= v as i128 && v as i128 <= got.hi;
+        for op in [BinOp::Div, BinOp::Divu, BinOp::Mod, BinOp::Modu] {
+            for (i, &a) in grid.iter().enumerate() {
+                for (j, &d) in grid.iter().enumerate() {
+                    // A trapping pair has no result to bound.
+                    let Ok(v) = apply_binop(op, a, d) else {
+                        continue;
+                    };
+                    let exact = divmod(op, Range::exact(a), Range::exact(d));
+                    assert!(holds(exact, v), "{op:?} {a} {d}: {v}");
+                    let wide = |k: usize| Range {
+                        lo: grid[k.saturating_sub(1)] as i128,
+                        hi: grid[(k + 1).min(grid.len() - 1)] as i128,
+                    };
+                    assert!(holds(divmod(op, wide(i), wide(j)), v), "{op:?} {a} {d}");
+                }
+            }
+        }
     }
 
     /// The bounds a definition carries must not depend on the order the

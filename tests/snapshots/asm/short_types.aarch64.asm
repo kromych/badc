@@ -59,21 +59,13 @@ Disassembly of section .text:
                	ret
                	mov	x17, #0x2493            // =9363
                	movk	x17, #0x9249, lsl #16
-               	mul	x2, x1, x17
-               	asr	x0, x2, #34
-               	lsr	x3, x0, #63
-               	add	x4, x0, x3
-               	sxth	x5, w4
-               	cmp	w5, #0xb0
-               	b.eq	<addr>
-               	mov	x0, #0x6                // =6
-               	ldp	x29, x30, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0x20
-               	ret
+               	mul	x0, x1, x17
+               	asr	x0, x0, #34
+               	lsr	x2, x0, #63
+               	add	x0, x0, x2
                	mov	x17, #0x7               // =7
-               	mul	x0, x4, x17
+               	mul	x0, x0, x17
                	sub	x0, x1, x0
-               	sxth	x0, w0
                	cmp	w0, #0x2
                	b.eq	<addr>
                	mov	x0, #0x7                // =7

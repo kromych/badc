@@ -26,8 +26,10 @@ pub(crate) fn walk_function(
     b.set_end_pc(fun.end_pc);
     b.set_ssp(fun.ssp);
     // Only at -O, where `passes::divmod_pair` folds the split back when
-    // the quotient stays unshared.
+    // the quotient stays unshared and `passes::divmod_const` expands the
+    // deferred constant divides.
     b.set_split_modulo(optimize);
+    b.set_defer_divmod(optimize);
     place_over_aligned_slots(&mut b, &fun.over_aligned_slots, fun.alloca_top_slot)?;
     // C99 6.8: the frame holds the declared locals, alloca and VLA
     // storage being carved from the stack at runtime. With alloca the

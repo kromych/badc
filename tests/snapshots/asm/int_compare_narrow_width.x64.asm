@@ -116,9 +116,13 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	shrq	$0x3f, %rcx
                	addq	%rcx, %rax
-               	cmpq	$-0x12492492, %rax      # imm = 0xEDB6DB6E
+               	imulq	$0x7, %rax, %rax
+               	movq	%rax, %r10
+               	movq	%r8, %rax
+               	subq	%r10, %rax
+               	cmpq	$-0x1, %rax
                	je	<addr>
-               	movl	$0x19, %eax
+               	movl	$0x1a, %eax
                	retq
                	leaq	<rip>, %rcx
                	movq	(%rcx), %rax
@@ -184,21 +188,6 @@ Disassembly of section .text:
                	cmpq	$0x1, %rax
                	je	<addr>
                	movl	$0x26, %eax
-               	retq
-               	movabsq	$0x4924924924924925, %rax # imm = 0x4924924924924925
-               	movq	%rax, %r10
-               	pushq	%rdx
-               	movq	%r8, %rax
-               	imulq	%r10
-               	movq	%rdx, %rax
-               	popq	%rdx
-               	sarq	%rax
-               	movq	%rax, %rcx
-               	shrq	$0x3f, %rcx
-               	addq	%rcx, %rax
-               	cmpq	$-0x12492492, %rax      # imm = 0xEDB6DB6E
-               	je	<addr>
-               	movl	$0x2a, %eax
                	retq
                	xorq	%rax, %rax
                	retq

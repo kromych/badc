@@ -16,37 +16,33 @@ fn ent_pc=0 n_params=2 variadic=false locals=0
     v10  Imm(0)                                           -> x0
     v11  Imm(0)                                           -> x0
     v12  Imm(2)                                           -> x1
-    v13  Imm(0)                                           -> x0
-    v14  BinopI { op=add, lhs=v3, rhs_imm=0 }             -> x2
-    v15  BinopI { op=shr, lhs=v14, rhs_imm=1 }            -> x0
-    v16  Binop { op=add, lhs=v1, rhs=v15 }                -> x8
-    v17  StoreIndexed { base=v1, index=v15, scale=1, value=v12, kind=I8 } -> -
-    v18  Imm(144115188075855872)                          -> x1
-    v19  Imm(0)                                           -> x1
-    v20  Imm(0)                                           -> x1
-    v21  BinopI { op=sub, lhs=v3, rhs_imm=1 }             -> x1
-    v22  Binop { op=add, lhs=v1, rhs=v21 }                -> x8
-    v23  Imm(3)                                           -> x8
-    v24  StoreIndexed { base=v1, index=v21, scale=1, value=v23, kind=I8 } -> -
-    v25  Imm(216172782113783808)                          -> x9
+    v13  BinopI { op=shru, lhs=v3, rhs_imm=1 }            -> x0
+    v14  Binop { op=add, lhs=v1, rhs=v13 }                -> x2
+    v15  StoreIndexed { base=v1, index=v13, scale=1, value=v12, kind=I8 } -> -
+    v16  Imm(144115188075855872)                          -> x1
+    v17  Imm(0)                                           -> x1
+    v18  Imm(0)                                           -> x1
+    v19  BinopI { op=sub, lhs=v3, rhs_imm=1 }             -> x1
+    v20  Binop { op=add, lhs=v1, rhs=v19 }                -> x2
+    v21  Imm(3)                                           -> x2
+    v22  StoreIndexed { base=v1, index=v19, scale=1, value=v21, kind=I8 } -> -
+    v23  Imm(216172782113783808)                          -> x8
+    v24  Imm(0)                                           -> x8
+    v25  Load { addr=v1, disp=0, kind=I8 }                -> x8
     v26  Imm(0)                                           -> x9
-    v27  Load { addr=v1, disp=0, kind=I8 }                -> x9
-    v28  Imm(0)                                           -> x3
-    v29  Imm(0)                                           -> x3
-    v30  BinopI { op=add, lhs=v3, rhs_imm=0 }             -> x3
-    v31  BinopI { op=shr, lhs=v14, rhs_imm=1 }            -> x2
-    v32  Binop { op=add, lhs=v1, rhs=v15 }                -> x2
-    v33  LoadIndexed { base=v1, index=v15, scale=1, kind=I8 } -> x0
-    v34  Binop { op=add, lhs=v27, rhs=v33 }               -> x0
-    v35  BinopI { op=shl, lhs=v34, rhs_imm=32 }           -> x2
-    v36  Extend { value=v34, kind=I32 }                   -> x2
-    v37  BinopI { op=sub, lhs=v3, rhs_imm=1 }             -> x2
-    v38  Binop { op=add, lhs=v1, rhs=v21 }                -> x1
-    v39  Extend { value=v23, kind=I8 }                    -> x1
-    v40  Binop { op=add, lhs=v34, rhs=v39 }               -> x0
-    v41  BinopI { op=shl, lhs=v40, rhs_imm=32 }           -> x1
-    v42  Extend { value=v40, kind=I32 }                   -> x0
-    terminator Return(v42)   (exit_acc=v42)
+    v27  Imm(0)                                           -> x9
+    v28  Binop { op=add, lhs=v1, rhs=v13 }                -> x9
+    v29  LoadIndexed { base=v1, index=v13, scale=1, kind=I8 } -> x0
+    v30  Binop { op=add, lhs=v25, rhs=v29 }               -> x0
+    v31  BinopI { op=shl, lhs=v30, rhs_imm=32 }           -> x8
+    v32  Extend { value=v30, kind=I32 }                   -> x8
+    v33  BinopI { op=sub, lhs=v3, rhs_imm=1 }             -> x6
+    v34  Binop { op=add, lhs=v1, rhs=v19 }                -> x1
+    v35  Extend { value=v21, kind=I8 }                    -> x1
+    v36  Binop { op=add, lhs=v30, rhs=v35 }               -> x0
+    v37  BinopI { op=shl, lhs=v36, rhs_imm=32 }           -> x1
+    v38  Extend { value=v36, kind=I32 }                   -> x0
+    terminator Return(v38)   (exit_acc=v38)
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=two_pages
 fn ent_pc=1 n_params=0 variadic=false locals=0
@@ -58,29 +54,25 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v3   Imm(1)                                           -> x0
     v4   Imm(0)                                           -> x0
     v5   Imm(2)                                           -> x0
-    v6   Imm(0)                                           -> x0
-    v7   Imm(9000)                                        -> x0
-    v8   Imm(4500)                                        -> x0
-    v9   Imm(0)                                           -> x0
+    v6   Imm(4500)                                        -> x0
+    v7   Imm(0)                                           -> x0
+    v8   Imm(0)                                           -> x0
+    v9   Imm(8999)                                        -> x0
     v10  Imm(0)                                           -> x0
-    v11  Imm(8999)                                        -> x0
+    v11  Imm(3)                                           -> x0
     v12  Imm(0)                                           -> x0
-    v13  Imm(3)                                           -> x0
-    v14  Imm(0)                                           -> x0
+    v13  Imm(0)                                           -> x0
+    v14  Imm(4500)                                        -> x0
     v15  Imm(0)                                           -> x0
     v16  Imm(0)                                           -> x0
-    v17  Imm(9000)                                        -> x0
-    v18  Imm(4500)                                        -> x0
-    v19  Imm(0)                                           -> x0
+    v17  Imm(3)                                           -> x0
+    v18  Imm(3)                                           -> x0
+    v19  Imm(8999)                                        -> x0
     v20  Imm(0)                                           -> x0
-    v21  Imm(3)                                           -> x0
-    v22  Imm(3)                                           -> x0
-    v23  Imm(8999)                                        -> x0
-    v24  Imm(0)                                           -> x0
-    v25  Imm(0)                                           -> x0
-    v26  Imm(6)                                           -> x0
-    v27  Imm(6)                                           -> x0
-    terminator Return(v27)   (exit_acc=v27)
+    v21  Imm(0)                                           -> x0
+    v22  Imm(6)                                           -> x0
+    v23  Imm(6)                                           -> x0
+    terminator Return(v23)   (exit_acc=v23)
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=fifty_pages
 fn ent_pc=2 n_params=0 variadic=false locals=0
@@ -92,29 +84,25 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v3   Imm(1)                                           -> x0
     v4   Imm(0)                                           -> x0
     v5   Imm(2)                                           -> x0
-    v6   Imm(0)                                           -> x0
-    v7   Imm(200000)                                      -> x0
-    v8   Imm(100000)                                      -> x0
-    v9   Imm(0)                                           -> x0
+    v6   Imm(100000)                                      -> x0
+    v7   Imm(0)                                           -> x0
+    v8   Imm(0)                                           -> x0
+    v9   Imm(199999)                                      -> x0
     v10  Imm(0)                                           -> x0
-    v11  Imm(199999)                                      -> x0
+    v11  Imm(3)                                           -> x0
     v12  Imm(0)                                           -> x0
-    v13  Imm(3)                                           -> x0
-    v14  Imm(0)                                           -> x0
+    v13  Imm(0)                                           -> x0
+    v14  Imm(100000)                                      -> x0
     v15  Imm(0)                                           -> x0
     v16  Imm(0)                                           -> x0
-    v17  Imm(200000)                                      -> x0
-    v18  Imm(100000)                                      -> x0
-    v19  Imm(0)                                           -> x0
+    v17  Imm(3)                                           -> x0
+    v18  Imm(3)                                           -> x0
+    v19  Imm(199999)                                      -> x0
     v20  Imm(0)                                           -> x0
-    v21  Imm(3)                                           -> x0
-    v22  Imm(3)                                           -> x0
-    v23  Imm(199999)                                      -> x0
-    v24  Imm(0)                                           -> x0
-    v25  Imm(0)                                           -> x0
-    v26  Imm(6)                                           -> x0
-    v27  Imm(6)                                           -> x0
-    terminator Return(v27)   (exit_acc=v27)
+    v21  Imm(0)                                           -> x0
+    v22  Imm(6)                                           -> x0
+    v23  Imm(6)                                           -> x0
+    terminator Return(v23)   (exit_acc=v23)
 ; --- SSA dump (ok=true) ent_pc=3 ---
 ; name=by_value
 fn ent_pc=3 n_params=1 variadic=false locals=1127

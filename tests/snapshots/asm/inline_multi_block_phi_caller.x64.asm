@@ -26,10 +26,6 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%rbx, (%rsp)
                	movl	$0x1, %ecx
                	leaq	<rip>, %rax
                	movl	(%rax), %r8d
@@ -41,12 +37,12 @@ Disassembly of section .text:
                	imulq	%rax, %rsi
                	shrq	$0x21, %rsi
                	leaq	(%rsi,%rsi,2), %rsi
-               	movq	%rax, %rdi
-               	subq	%rsi, %rdi
-               	movl	%edi, %edi
-               	cmpl	$0x1, %edi
+               	movq	%rsi, %r10
+               	movq	%rax, %rsi
+               	subq	%r10, %rsi
+               	cmpl	$0x1, %esi
                	jb	<addr>
-               	cmpl	$0x1, %edi
+               	cmpl	$0x1, %esi
                	je	<addr>
                	leaq	<rip>, %rsi
                	movq	%rax, %rdi
@@ -56,16 +52,15 @@ Disassembly of section .text:
                	leaq	<rip>, %rsi
                	movq	%rax, %rdi
                	andq	$0x3, %rdi
-               	movl	(%rsi,%rdi,4), %ebx
-               	movq	%rbx, %r9
+               	movl	(%rsi,%rdi,4), %r9d
                	xorq	%rcx, %r9
                	movl	%r9d, (%rsi,%rdi,4)
                	jmp	<addr>
                	leaq	<rip>, %rsi
                	movq	%rax, %rdi
                	andq	$0x3, %rdi
-               	movl	(%rsi,%rdi,4), %ebx
-               	leaq	(%rbx,%rcx), %r9
+               	movl	(%rsi,%rdi,4), %r9d
+               	addq	%rcx, %r9
                	movl	%r9d, (%rsi,%rdi,4)
                	imulq	$0x41c64e6d, %rcx, %rcx # imm = 0x41C64E6D
                	movl	%ecx, %ecx
@@ -85,6 +80,4 @@ Disassembly of section .text:
                	xorq	%rcx, %rax
                	andq	$0x7f, %rax
                	movslq	%eax, %rax
-               	movq	(%rsp), %rbx
-               	leave
                	retq

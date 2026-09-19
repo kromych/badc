@@ -673,7 +673,6 @@ fn straight_line_blocks_are_merged_at_o_only() {
 
 /// The divisor is a constant once `dv` is inlined.
 #[test]
-#[ignore = "TODO: a divisor that becomes constant after inlining keeps the hardware divide"]
 fn division_by_an_inlined_constant_takes_no_divide() {
     const SRC: &str = "static int dv(int a, int d) { return a / d; }\n\
         int tenth(int a) { return dv(a, 10); }\n";

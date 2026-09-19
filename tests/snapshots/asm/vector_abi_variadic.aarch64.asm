@@ -35,9 +35,9 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x20
                	mov	x0, #0x0                // =0
-               	sub	x4, x29, #0x20
+               	sub	x3, x29, #0x20
                	add	x1, x29, #0x10
-               	mov	x16, x4
+               	mov	x16, x3
                	add	x17, x29, #0xd0
                	str	x17, [x16]
                	add	x17, x29, #0x50
@@ -52,7 +52,7 @@ Disassembly of section .text:
                	ldrsw	x2, [x29, #0x10]
                	cmp	w0, w2
                	b.ge	<addr>
-               	mov	x17, x4
+               	mov	x17, x3
                	str	x9, [sp, #-0x10]!
                	ldrsw	x16, [x17, #0x1c]
                	cmp	x16, #0x0
@@ -72,9 +72,9 @@ Disassembly of section .text:
                	str	x9, [x17]
                	ldr	x9, [sp], #0x10
                	mov	x2, x16
-               	ldrb	w3, [x2]
+               	ldrb	w4, [x2]
                	ldrb	w2, [x2, #0xf]
-               	add	x2, x3, x2
+               	add	x2, x4, x2
                	add	x1, x1, x2
                	add	x0, x0, #0x1
                	ldrsw	x2, [x29, #0x10]
@@ -109,9 +109,9 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x20
                	mov	x0, #0x0                // =0
-               	sub	x4, x29, #0x20
+               	sub	x3, x29, #0x20
                	add	x1, x29, #0x10
-               	mov	x16, x4
+               	mov	x16, x3
                	add	x17, x29, #0xd0
                	str	x17, [x16]
                	add	x17, x29, #0x50
@@ -126,7 +126,7 @@ Disassembly of section .text:
                	ldrsw	x2, [x29, #0x10]
                	cmp	w0, w2
                	b.ge	<addr>
-               	mov	x17, x4
+               	mov	x17, x3
                	str	x9, [sp, #-0x10]!
                	ldrsw	x16, [x17, #0x1c]
                	cmp	x16, #0x0
@@ -144,9 +144,9 @@ Disassembly of section .text:
                	str	x9, [x17]
                	ldr	x9, [sp], #0x10
                	mov	x2, x16
-               	ldrb	w3, [x2]
+               	ldrb	w4, [x2]
                	ldrb	w2, [x2, #0x7]
-               	add	x2, x3, x2
+               	add	x2, x4, x2
                	add	x1, x1, x2
                	add	x0, x0, #0x1
                	ldrsw	x2, [x29, #0x10]
@@ -296,9 +296,9 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x20
                	mov	x0, #0x0                // =0
-               	sub	x2, x29, #0x20
-               	add	x1, x29, #0x10
-               	mov	x16, x2
+               	sub	x1, x29, #0x20
+               	add	x2, x29, #0x10
+               	mov	x16, x1
                	add	x17, x29, #0xd0
                	str	x17, [x16]
                	add	x17, x29, #0x50
@@ -311,10 +311,10 @@ Disassembly of section .text:
                	str	w17, [x16, #0x1c]
                	mov	x17, #0x0               // =0
                	fmov	d0, x17
-               	ldrsw	x1, [x29, #0x10]
-               	cmp	w0, w1
+               	ldrsw	x2, [x29, #0x10]
+               	cmp	w0, w2
                	b.ge	<addr>
-               	mov	x17, x2
+               	mov	x17, x1
                	str	x9, [sp, #-0x10]!
                	ldrsw	x16, [x17, #0x1c]
                	cmp	x16, #0x0
@@ -331,9 +331,9 @@ Disassembly of section .text:
                	add	x9, x16, #0x8
                	str	x9, [x17]
                	ldr	x9, [sp], #0x10
-               	mov	x1, x16
-               	ldr	d1, [x1]
-               	mov	x17, x2
+               	mov	x2, x16
+               	ldr	d1, [x2]
+               	mov	x17, x1
                	str	x9, [sp, #-0x10]!
                	ldrsw	x16, [x17, #0x1c]
                	cmp	x16, #0x0
@@ -350,16 +350,16 @@ Disassembly of section .text:
                	add	x9, x16, #0x8
                	str	x9, [x17]
                	ldr	x9, [sp], #0x10
-               	mov	x1, x16
-               	ldrb	w3, [x1]
-               	ldrb	w1, [x1, #0x7]
-               	add	x1, x3, x1
-               	scvtf	d2, x1
+               	mov	x2, x16
+               	ldrb	w3, [x2]
+               	ldrb	w2, [x2, #0x7]
+               	add	x2, x3, x2
+               	scvtf	d2, x2
                	fadd	d1, d1, d2
                	fadd	d0, d0, d1
                	add	x0, x0, #0x1
-               	ldrsw	x1, [x29, #0x10]
-               	cmp	w0, w1
+               	ldrsw	x2, [x29, #0x10]
+               	cmp	w0, w2
                	b.lt	<addr>
                	sub	x0, x29, #0x20
                	add	sp, sp, #0x20
@@ -371,58 +371,58 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x20
-               	mov	x1, x0
-               	sub	x0, x29, #0x20
-               	and	x2, x1, #0xff
-               	strb	w2, [x0]
-               	add	x3, x2, #0x1
+               	mov	x2, x0
+               	sub	x1, x29, #0x20
+               	and	x0, x2, #0xff
+               	strb	w0, [x1]
+               	add	x3, x0, #0x1
                	and	x3, x3, #0xff
-               	strb	w3, [x0, #0x1]
-               	add	x3, x2, #0x2
+               	strb	w3, [x1, #0x1]
+               	add	x3, x0, #0x2
                	and	x3, x3, #0xff
-               	strb	w3, [x0, #0x2]
-               	add	x3, x2, #0x3
+               	strb	w3, [x1, #0x2]
+               	add	x3, x0, #0x3
                	and	x3, x3, #0xff
-               	strb	w3, [x0, #0x3]
-               	add	x3, x2, #0x4
+               	strb	w3, [x1, #0x3]
+               	add	x3, x0, #0x4
                	and	x3, x3, #0xff
-               	strb	w3, [x0, #0x4]
-               	add	x3, x2, #0x5
+               	strb	w3, [x1, #0x4]
+               	add	x3, x0, #0x5
                	and	x3, x3, #0xff
-               	strb	w3, [x0, #0x5]
-               	add	x3, x2, #0x6
+               	strb	w3, [x1, #0x5]
+               	add	x3, x0, #0x6
                	and	x3, x3, #0xff
-               	strb	w3, [x0, #0x6]
-               	add	x3, x2, #0x7
+               	strb	w3, [x1, #0x6]
+               	add	x3, x0, #0x7
                	and	x3, x3, #0xff
-               	strb	w3, [x0, #0x7]
-               	add	x3, x2, #0x8
+               	strb	w3, [x1, #0x7]
+               	add	x3, x0, #0x8
                	and	x3, x3, #0xff
-               	strb	w3, [x0, #0x8]
-               	add	x3, x2, #0x9
+               	strb	w3, [x1, #0x8]
+               	add	x3, x0, #0x9
                	and	x3, x3, #0xff
-               	strb	w3, [x0, #0x9]
-               	sub	x0, x29, #0x20
-               	add	x3, x2, #0xa
+               	strb	w3, [x1, #0x9]
+               	sub	x1, x29, #0x20
+               	add	x3, x0, #0xa
                	and	x3, x3, #0xff
-               	strb	w3, [x0, #0xa]
-               	add	x2, x2, #0xb
+               	strb	w3, [x1, #0xa]
+               	add	x0, x0, #0xb
+               	and	x0, x0, #0xff
+               	strb	w0, [x1, #0xb]
+               	and	x0, x2, #0xff
+               	add	x2, x0, #0xc
                	and	x2, x2, #0xff
-               	strb	w2, [x0, #0xb]
-               	and	x2, x1, #0xff
-               	add	x3, x2, #0xc
-               	and	x3, x3, #0xff
-               	strb	w3, [x0, #0xc]
-               	add	x3, x2, #0xd
-               	and	x3, x3, #0xff
-               	strb	w3, [x0, #0xd]
-               	add	x3, x2, #0xe
-               	and	x3, x3, #0xff
-               	strb	w3, [x0, #0xe]
-               	add	x1, x2, #0xf
-               	and	x1, x1, #0xff
-               	strb	w1, [x0, #0xf]
-               	mov	x16, x0
+               	strb	w2, [x1, #0xc]
+               	add	x2, x0, #0xd
+               	and	x2, x2, #0xff
+               	strb	w2, [x1, #0xd]
+               	add	x2, x0, #0xe
+               	and	x2, x2, #0xff
+               	strb	w2, [x1, #0xe]
+               	add	x0, x0, #0xf
+               	and	x0, x0, #0xff
+               	strb	w0, [x1, #0xf]
+               	mov	x16, x1
                	ldr	q0, [x16]
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10

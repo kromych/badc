@@ -109,11 +109,11 @@ Disassembly of section .text:
                	ldur	q0, [sp, #0x8]
                	str	q0, [x0]
                	mov	x0, #0x0                // =0
-               	ldrb	w5, [x3, x0]
-               	ldrb	w4, [x1, x0]
+               	ldrb	w4, [x3, x0]
+               	ldrb	w5, [x1, x0]
                	ldrb	w6, [x2, x0]
-               	eor	x4, x4, x6
-               	cmp	w5, w4
+               	eor	x5, x5, x6
+               	cmp	w4, w5
                	b.ne	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x10
@@ -137,21 +137,21 @@ Disassembly of section .text:
                	ldur	q0, [sp, #0x8]
                	str	q0, [x0]
                	mov	x0, #0x0                // =0
-               	mov	x4, #0xa5               // =165
-               	ldrb	w5, [x2, x0]
-               	ldrb	w6, [x1, x0]
-               	sub	x3, x29, #0x20
-               	ldrb	w3, [x3, x0]
-               	eor	x3, x6, x3
-               	eor	x3, x3, x4
-               	cmp	w5, w3
+               	mov	x3, #0xa5               // =165
+               	ldrb	w4, [x2, x0]
+               	ldrb	w5, [x1, x0]
+               	sub	x6, x29, #0x20
+               	ldrb	w6, [x6, x0]
+               	eor	x5, x5, x6
+               	eor	x5, x5, x3
+               	cmp	w4, w5
                	b.ne	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x10
                	b.lt	<addr>
                	sub	x1, x29, #0x10
-               	mov	x4, #0xf                // =15
-               	strb	w4, [x1]
+               	mov	x2, #0xf                // =15
+               	strb	w2, [x1]
                	mov	x0, #0xe                // =14
                	strb	w0, [x1, #0x1]
                	mov	x0, #0xd                // =13
@@ -198,11 +198,11 @@ Disassembly of section .text:
                	ldur	q0, [sp, #0x8]
                	str	q0, [x0]
                	mov	x0, #0x0                // =0
-               	ldrb	w5, [x1, x0]
-               	sub	x3, x29, #0x30
-               	sub	x2, x4, x0
-               	ldrb	w2, [x3, x2]
-               	cmp	w5, w2
+               	ldrb	w3, [x1, x0]
+               	sub	x4, x29, #0x30
+               	sub	x5, x2, x0
+               	ldrb	w4, [x4, x5]
+               	cmp	w3, w4
                	b.ne	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x10
@@ -236,7 +236,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x60
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x6, #0x1d               // =29
+               	mov	x4, #0x1d               // =29
                	mov	x16, #0x1d              // =29
                	str	x16, [sp]
                	ldr	x0, [sp]
@@ -266,24 +266,24 @@ Disassembly of section .text:
                	ldr	x0, [sp]
                	ldur	q0, [sp, #0x8]
                	str	q0, [x0]
-               	mov	x4, #0x0                // =0
-               	mov	x0, x4
-               	sub	x1, x29, #0x30
-               	ldrb	w5, [x1, x0]
-               	lsl	x2, x5, #1
-               	tbz	w5, #0x7, <addr>
-               	mov	x1, x6
-               	eor	x1, x2, x1
-               	and	x1, x1, #0xff
-               	ldrb	w2, [x3, x0]
-               	cmp	w2, w1
+               	mov	x1, #0x0                // =0
+               	mov	x0, x1
+               	sub	x2, x29, #0x30
+               	ldrb	w2, [x2, x0]
+               	lsl	x5, x2, #1
+               	tbz	w2, #0x7, <addr>
+               	mov	x2, x4
+               	eor	x2, x5, x2
+               	and	x2, x2, #0xff
+               	ldrb	w5, [x3, x0]
+               	cmp	w5, w2
                	b.eq	<addr>
                	b	<addr>
-               	mov	x1, x4
-               	eor	x1, x2, x1
-               	and	x1, x1, #0xff
-               	ldrb	w2, [x3, x0]
-               	cmp	w2, w1
+               	mov	x2, x1
+               	eor	x2, x5, x2
+               	and	x2, x2, #0xff
+               	ldrb	w5, [x3, x0]
+               	cmp	w5, w2
                	b.ne	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x10

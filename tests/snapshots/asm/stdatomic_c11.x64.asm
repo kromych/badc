@@ -31,42 +31,43 @@ Disassembly of section .text:
                	subq	$0x50, %rsp
                	movl	$0x0, -0x40(%rbp)
                	leaq	-0x40(%rbp), %rax
-               	movl	$0x5, %edx
-               	movl	%edx, (%rax)
-               	movl	(%rax), %ecx
-               	cmpl	$0x5, %ecx
+               	movl	$0x5, %ecx
+               	movl	%ecx, (%rax)
+               	movl	(%rax), %edx
+               	cmpl	$0x5, %edx
                	je	<addr>
                	movl	$0x1, %eax
                	leave
                	retq
-               	movl	$0xa, %ecx
+               	movl	$0xa, %edx
                	pushq	%rax
                	movq	%rax, %r11
-               	movq	%rcx, %r10
+               	movq	%rdx, %r10
                	movq	%r10, %rax
                	lock
                	xaddl	%eax, (%r11)
                	movq	%rax, %r10
                	popq	%rax
-               	movq	%r10, %rcx
-               	cmpl	$0x5, %ecx
+               	movq	%r10, %rdx
+               	cmpl	$0x5, %edx
                	je	<addr>
                	movl	$0x2, %eax
                	leave
                	retq
-               	movslq	-0x40(%rbp), %rcx
-               	cmpl	$0xf, %ecx
+               	movslq	-0x40(%rbp), %rdx
+               	cmpl	$0xf, %edx
                	je	<addr>
                	movl	$0x3, %eax
                	leave
                	retq
                	movl	$0xf, -0x38(%rbp)
-               	leaq	-0x38(%rbp), %rcx
+               	leaq	-0x38(%rbp), %rdx
                	movl	$0x63, %esi
                	pushq	%rax
                	pushq	%rcx
                	movq	%rax, %r11
                	movq	%rsi, %r10
+               	movq	%rdx, %rcx
                	movl	(%rcx), %eax
                	lock
                	cmpxchgl	%r10d, (%r11)
@@ -85,7 +86,7 @@ Disassembly of section .text:
                	movslq	-0x40(%rbp), %rax
                	cmpl	$0x63, %eax
                	je	<addr>
-               	movq	%rdx, %rax
+               	movq	%rcx, %rax
                	leave
                	retq
                	mfence

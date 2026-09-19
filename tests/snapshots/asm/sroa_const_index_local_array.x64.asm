@@ -32,22 +32,22 @@ Disassembly of section .text:
                	pushq	%r13
                	pushq	%r12
                	pushq	%rbx
-               	movq	%rdi, %r12
-               	movq	%rsi, %rbx
-               	movq	(%r12), %rax
-               	movq	0x8(%r12), %rcx
-               	movq	0x10(%r12), %rdx
-               	movq	0x18(%r12), %rsi
-               	movq	0x20(%r12), %rdi
-               	movq	0x28(%r12), %r8
-               	movq	0x30(%r12), %r9
-               	movq	0x38(%r12), %r12
-               	leaq	-0x1(%rbx), %r13
-               	testl	%ebx, %ebx
+               	movq	%rdi, %rbx
+               	movq	%rsi, %r12
+               	movq	(%rbx), %rax
+               	movq	0x8(%rbx), %rcx
+               	movq	0x10(%rbx), %rdx
+               	movq	0x18(%rbx), %rsi
+               	movq	0x20(%rbx), %rdi
+               	movq	0x28(%rbx), %r8
+               	movq	0x30(%rbx), %r9
+               	movq	0x38(%rbx), %rbx
+               	leaq	-0x1(%r12), %r13
+               	testl	%r12d, %r12d
                	jle	<addr>
-               	movq	%r12, %rbx
-               	shlq	%rbx
-               	addq	%r9, %rbx
+               	movq	%rbx, %r12
+               	shlq	%r12
+               	addq	%r9, %r12
                	shlq	%r9
                	addq	%r8, %r9
                	shlq	%r8
@@ -61,11 +61,11 @@ Disassembly of section .text:
                	shlq	%rcx
                	addq	%rax, %rcx
                	shlq	%rax
-               	xorq	%r12, %rax
-               	movq	%rbx, %r12
-               	movq	%r13, %rbx
-               	leaq	-0x1(%rbx), %r13
-               	testl	%ebx, %ebx
+               	xorq	%rbx, %rax
+               	movq	%r12, %rbx
+               	movq	%r13, %r12
+               	leaq	-0x1(%r12), %r13
+               	testl	%r12d, %r12d
                	jg	<addr>
                	addq	%rcx, %rax
                	addq	%rdx, %rax
@@ -73,7 +73,7 @@ Disassembly of section .text:
                	addq	%rdi, %rax
                	addq	%r8, %rax
                	addq	%r9, %rax
-               	addq	%r12, %rax
+               	addq	%rbx, %rax
                	popq	%rbx
                	popq	%r12
                	popq	%r13

@@ -14,52 +14,52 @@ Disassembly of section .text:
                	brk	#0x1
 
 <classify>:
-               	mov	x6, x0
-               	mov	x0, #0x0                // =0
-               	mov	x7, #0x3                // =3
-               	mov	x8, #0x5556             // =21846
-               	movk	x8, #0x5555, lsl #16
-               	mov	x1, x0
-               	cmp	w0, w6
+               	mov	x3, x0
+               	mov	x1, #0x0                // =0
+               	mov	x4, #0x3                // =3
+               	mov	x5, #0x5556             // =21846
+               	movk	x5, #0x5555, lsl #16
+               	mov	x0, x1
+               	cmp	w1, w3
                	b.ge	<addr>
-               	mul	x3, x0, x8
-               	lsr	x4, x3, #32
-               	mul	x5, x4, x7
-               	sub	x2, x0, x5
+               	mul	x2, x1, x5
+               	lsr	x2, x2, #32
+               	mul	x2, x2, x4
+               	sub	x2, x1, x2
                	cbnz	w2, <addr>
-               	add	x1, x1, x0
+               	add	x0, x0, x1
                	b	<addr>
                	cmp	w2, #0x1
                	b.ne	<addr>
-               	sub	x1, x1, #0x1
+               	sub	x0, x0, #0x1
                	b	<addr>
-               	add	x1, x1, #0x2
-               	add	x0, x0, #0x1
-               	cmp	w0, w6
+               	add	x0, x0, #0x2
+               	add	x1, x1, #0x1
+               	cmp	w1, w3
                	b.lt	<addr>
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	ret
 
 <main>:
-               	mov	x6, #0x3                // =3
-               	mov	x7, #0x5556             // =21846
-               	movk	x7, #0x5555, lsl #16
-               	mov	x0, #0x0                // =0
-               	mov	x1, x0
-               	mul	x3, x0, x7
-               	lsr	x4, x3, #32
-               	mul	x5, x4, x6
-               	sub	x2, x0, x5
+               	mov	x3, #0x3                // =3
+               	mov	x4, #0x5556             // =21846
+               	movk	x4, #0x5555, lsl #16
+               	mov	x1, #0x0                // =0
+               	mov	x0, x1
+               	mul	x2, x1, x4
+               	lsr	x2, x2, #32
+               	mul	x2, x2, x3
+               	sub	x2, x1, x2
                	cbnz	w2, <addr>
-               	add	x1, x1, x0
+               	add	x0, x0, x1
                	b	<addr>
                	cmp	w2, #0x1
                	b.ne	<addr>
-               	sub	x1, x1, #0x1
+               	sub	x0, x0, #0x1
                	b	<addr>
-               	add	x1, x1, #0x2
-               	add	x0, x0, #0x1
-               	cmp	w0, #0xa
+               	add	x0, x0, #0x2
+               	add	x1, x1, #0x1
+               	cmp	w1, #0xa
                	b.lt	<addr>
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	ret

@@ -4,21 +4,21 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ImmData(16)                                      -> x1
-    v2   Imm(41)                                          -> x0
+    v1   ImmData(16)                                      -> x0
+    v2   Imm(41)                                          -> x1
     v3   Store { addr=v1, disp=0, value=v2, kind=I32 }    -> -
     v4   Imm(0)                                           -> x2
     v5   Imm(0)                                           -> x2
     v6   ImmData(16)                                      -> x2
-    v7   Extend { value=v2, kind=I32 }                    -> x0
+    v7   Extend { value=v2, kind=I32 }                    -> x1
     v8   ImmCode(ent_pc=2)                                -> x2
     v9   Imm(0)                                           -> x2
     v10  ImmData(16)                                      -> x2
     v11  Extend { value=v7, kind=I32 }                    -> x2
-    v12  BinopI { op=add, lhs=v7, rhs_imm=1 }             -> x0
+    v12  BinopI { op=add, lhs=v7, rhs_imm=1 }             -> x1
     v13  Extend { value=v12, kind=I32 }                   -> x2
     v14  Store { addr=v1, disp=0, value=v12, kind=I32 }   -> -
-    v15  ImmData(16)                                      -> x1
+    v15  ImmData(16)                                      -> x0
     v16  Extend { value=v12, kind=I32 }                   -> x0
     v17  BinopI { op=eq, lhs=v16, rhs_imm=42 }            -> x0
     terminator Bz { cond=v17, target=b3, fall=b1 }   (exit_acc=v17)

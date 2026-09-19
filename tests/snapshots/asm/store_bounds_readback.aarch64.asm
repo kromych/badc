@@ -36,12 +36,12 @@ Disassembly of section .text:
                	stur	w0, [x29, #-0x8]
                	ldursw	x0, [x29, #-0x8]
                	cmp	w0, #0x0
-               	cset	x1, ge
-               	ldursw	x0, [x29, #-0x8]
-               	cmp	w0, #0x1ff
-               	cset	x0, le
-               	lsl	x0, x0, #1
-               	add	x0, x1, x0
+               	cset	x0, ge
+               	ldursw	x1, [x29, #-0x8]
+               	cmp	w1, #0x1ff
+               	cset	x1, le
+               	lsl	x1, x1, #1
+               	add	x0, x0, x1
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
@@ -62,14 +62,14 @@ Disassembly of section .text:
                	stur	w1, [x29, #-0x18]
                	ldrsw	x1, [x0]
                	and	x1, x1, #0x1ff
-               	sxtb	x2, w1
-               	cmp	w2, #0x0
-               	cset	x3, lt
+               	sxtb	x1, w1
+               	cmp	w1, #0x0
+               	cset	x2, lt
                	mov	x17, #-0x38             // =-56
-               	cmp	w2, w17
+               	cmp	w1, w17
                	cset	x1, eq
                	lsl	x1, x1, #1
-               	add	x1, x3, x1
+               	add	x1, x2, x1
                	cmp	w1, #0x3
                	b.eq	<addr>
                	mov	x20, #0x2               // =2
@@ -89,14 +89,14 @@ Disassembly of section .text:
                	and	x1, x1, #0x1ff
                	mov	x17, #0xc8              // =200
                	mul	x1, x1, x17
-               	sxth	x2, w1
-               	cmp	w2, #0x0
-               	cset	x3, lt
+               	sxth	x1, w1
+               	cmp	w1, #0x0
+               	cset	x2, lt
                	mov	x17, #-0x63c0           // =-25536
-               	cmp	w2, w17
+               	cmp	w1, w17
                	cset	x1, eq
                	lsl	x1, x1, #1
-               	add	x1, x3, x1
+               	add	x1, x2, x1
                	cmp	w1, #0x3
                	b.eq	<addr>
                	orr	x20, x20, #0x8

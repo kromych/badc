@@ -408,22 +408,22 @@ Disassembly of section .text:
                	mov	x0, #0xb9               // =185
                	strb	w0, [x2, #0xf]
                	sub	x3, x29, #0xd0
-               	sub	x4, x29, #0xf0
-               	sub	x0, x29, #0xe0
-               	ldr	x5, [x4]
-               	ldr	x4, [x4, #0x8]
-               	ldr	x6, [x0]
-               	eor	x5, x5, x6
+               	sub	x0, x29, #0xf0
+               	sub	x4, x29, #0xe0
+               	ldr	x5, [x0]
                	ldr	x0, [x0, #0x8]
-               	eor	x0, x4, x0
+               	ldr	x6, [x4]
+               	eor	x5, x5, x6
+               	ldr	x4, [x4, #0x8]
+               	eor	x0, x0, x4
                	str	x5, [x3]
                	str	x0, [x3, #0x8]
                	mov	x0, #0x0                // =0
-               	ldrb	w5, [x3, x0]
-               	ldrb	w4, [x1, x0]
+               	ldrb	w4, [x3, x0]
+               	ldrb	w5, [x1, x0]
                	ldrb	w6, [x2, x0]
-               	eor	x4, x4, x6
-               	cmp	w5, w4
+               	eor	x5, x5, x6
+               	cmp	w4, w5
                	b.ne	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x10

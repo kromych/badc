@@ -56,8 +56,8 @@ Disassembly of section .text:
 
 <twice_s>:
                	movslq	%esi, %rsi
-               	movsbq	(%rdi,%rsi), %rcx
-               	imulq	$0x3e8, %rcx, %rax      # imm = 0x3E8
+               	movsbq	(%rdi,%rsi), %rax
+               	imulq	$0x3e8, %rax, %rcx      # imm = 0x3E8
                	addq	%rcx, %rax
                	movslq	%eax, %rax
                	retq

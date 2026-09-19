@@ -39,19 +39,19 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	leave
                	retq
-               	leaq	<rip>, %rcx        # <addr>
-               	movl	(%rcx), %eax
-               	xorq	$0x5678, %rax           # imm = 0x5678
-               	testl	%eax, %eax
+               	leaq	<rip>, %rax        # <addr>
+               	movl	(%rax), %ecx
+               	xorq	$0x5678, %rcx           # imm = 0x5678
+               	testl	%ecx, %ecx
                	je	<addr>
                	movl	$0x2, %eax
                	leave
                	retq
-               	leaq	<rip>, %rax        # <addr>
-               	subq	%rax, %rcx
-               	leaq	<rip>, %rax        # <addr>
-               	movslq	(%rax), %rax
-               	cmpq	%rax, %rcx
+               	leaq	<rip>, %rcx        # <addr>
+               	subq	%rcx, %rax
+               	leaq	<rip>, %rcx        # <addr>
+               	movslq	(%rcx), %rcx
+               	cmpq	%rcx, %rax
                	je	<addr>
                	movl	$0x3, %eax
                	leave
@@ -64,7 +64,6 @@ Disassembly of section .text:
                	retq
                	addb	%al, (%rax)
                	addb	%al, (%rax)
-               	addb	%al, %bh
 
 <asm_store_magic>:
                	movl	$0x1234, (%rdi)         # imm = 0x1234

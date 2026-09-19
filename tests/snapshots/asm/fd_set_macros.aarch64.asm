@@ -102,8 +102,8 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldrb	w0, [x1]
-               	and	x2, x0, #0xffffffffffffff7f
-               	strb	w2, [x1]
+               	and	x0, x0, #0xffffffffffffff7f
+               	strb	w0, [x1]
                	ldrb	w0, [x1]
                	tbz	w0, #0x7, <addr>
                	mov	x0, #0x15               // =21

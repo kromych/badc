@@ -225,36 +225,35 @@ Disassembly of section .text:
                	movb	$-0x1, 0x3(%rcx)
                	movb	%al, 0x4(%rcx)
                	movb	$-0x1, 0x5(%rcx)
-               	movb	$0x0, 0x6(%rcx)
+               	movb	%al, 0x6(%rcx)
                	movb	$0x0, 0x7(%rcx)
                	movb	$0x0, 0x8(%rcx)
                	movb	$-0x1, 0x9(%rcx)
                	movb	$0x0, 0xa(%rcx)
                	movb	$0x0, 0xb(%rcx)
                	movb	$0x0, 0xc(%rcx)
-               	movq	$-0x1, %r8
-               	movb	%r8b, 0xd(%rcx)
+               	movb	$-0x1, 0xd(%rcx)
                	movb	$0x0, 0xe(%rcx)
-               	xorl	%r9d, %r9d
-               	movb	%r9b, 0xf(%rcx)
-               	leaq	-0xae0(%rbp), %rdx
+               	xorl	%edx, %edx
+               	movb	%dl, 0xf(%rcx)
+               	leaq	-0xae0(%rbp), %rsi
                	pushq	%rax
                	movq	(%rcx), %rax
-               	movq	%rax, (%rdx)
+               	movq	%rax, (%rsi)
                	movq	0x8(%rcx), %rax
-               	movq	%rax, 0x8(%rdx)
+               	movq	%rax, 0x8(%rsi)
                	popq	%rax
-               	leaq	-0xbf0(%rbp), %rdx
-               	leaq	-0xbe0(%rbp), %rsi
-               	leaq	-0x620(%rbp), %rdi
-               	movzbq	(%rdx,%rax), %rcx
-               	movzbq	(%rsi,%rax), %rbx
-               	cmpl	%ebx, %ecx
+               	leaq	-0xbf0(%rbp), %rsi
+               	leaq	-0xbe0(%rbp), %rdi
+               	leaq	-0x620(%rbp), %r8
+               	movzbq	(%rsi,%rax), %rcx
+               	movzbq	(%rdi,%rax), %r9
+               	cmpl	%r9d, %ecx
                	jne	<addr>
-               	movq	%r8, %rcx
+               	movq	$-0x1, %rcx
                	jmp	<addr>
-               	movq	%r9, %rcx
-               	movb	%cl, (%rdi,%rax)
+               	movq	%rdx, %rcx
+               	movb	%cl, (%r8,%rax)
                	incq	%rax
                	cmpl	$0x10, %eax
                	jl	<addr>
@@ -268,154 +267,154 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	leaq	-0xbf0(%rbp), %rcx
-               	leaq	-0xbe0(%rbp), %rdx
-               	leaq	-0x750(%rbp), %rsi
-               	movzbq	(%rcx), %rax
-               	movzbq	(%rdx), %rdi
+               	leaq	-0xbf0(%rbp), %rdx
+               	leaq	-0xbe0(%rbp), %rsi
+               	leaq	-0x750(%rbp), %rcx
+               	movzbq	(%rdx), %rax
+               	movzbq	(%rsi), %rdi
                	cmpl	%edi, %eax
                	setne	%dil
                	movzbq	%dil, %rdi
                	xorl	%eax, %eax
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, (%rsi)
-               	movzbq	0x1(%rcx), %rdi
-               	movzbq	0x1(%rdx), %r8
+               	movb	%r8b, (%rcx)
+               	movzbq	0x1(%rdx), %rdi
+               	movzbq	0x1(%rsi), %r8
                	cmpl	%r8d, %edi
                	setne	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x1(%rsi)
-               	movzbq	0x2(%rcx), %rdi
-               	movzbq	0x2(%rdx), %r8
+               	movb	%r8b, 0x1(%rcx)
+               	movzbq	0x2(%rdx), %rdi
+               	movzbq	0x2(%rsi), %r8
                	cmpl	%r8d, %edi
                	setne	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x2(%rsi)
-               	movzbq	0x3(%rcx), %rdi
-               	movzbq	0x3(%rdx), %r8
+               	movb	%r8b, 0x2(%rcx)
+               	movzbq	0x3(%rdx), %rdi
+               	movzbq	0x3(%rsi), %r8
                	cmpl	%r8d, %edi
                	setne	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x3(%rsi)
-               	movzbq	0x4(%rcx), %rdi
-               	movzbq	0x4(%rdx), %r8
+               	movb	%r8b, 0x3(%rcx)
+               	movzbq	0x4(%rdx), %rdi
+               	movzbq	0x4(%rsi), %r8
                	cmpl	%r8d, %edi
                	setne	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x4(%rsi)
-               	movzbq	0x5(%rcx), %rdi
-               	movzbq	0x5(%rdx), %r8
+               	movb	%r8b, 0x4(%rcx)
+               	movzbq	0x5(%rdx), %rdi
+               	movzbq	0x5(%rsi), %r8
                	cmpl	%r8d, %edi
                	setne	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x5(%rsi)
-               	movzbq	0x6(%rcx), %rdi
-               	movzbq	0x6(%rdx), %r8
+               	movb	%r8b, 0x5(%rcx)
+               	movzbq	0x6(%rdx), %rdi
+               	movzbq	0x6(%rsi), %r8
                	cmpl	%r8d, %edi
                	setne	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x6(%rsi)
-               	movzbq	0x7(%rcx), %rdi
-               	movzbq	0x7(%rdx), %r8
+               	movb	%r8b, 0x6(%rcx)
+               	movzbq	0x7(%rdx), %rdi
+               	movzbq	0x7(%rsi), %r8
                	cmpl	%r8d, %edi
                	setne	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x7(%rsi)
-               	movzbq	0x8(%rcx), %rdi
-               	movzbq	0x8(%rdx), %r8
+               	movb	%r8b, 0x7(%rcx)
+               	movzbq	0x8(%rdx), %rdi
+               	movzbq	0x8(%rsi), %r8
                	cmpl	%r8d, %edi
                	setne	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x8(%rsi)
-               	movzbq	0x9(%rcx), %rdi
-               	movzbq	0x9(%rdx), %r8
+               	movb	%r8b, 0x8(%rcx)
+               	movzbq	0x9(%rdx), %rdi
+               	movzbq	0x9(%rsi), %r8
                	cmpl	%r8d, %edi
                	setne	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x9(%rsi)
-               	movzbq	0xa(%rcx), %rdi
-               	movzbq	0xa(%rdx), %r8
+               	movb	%r8b, 0x9(%rcx)
+               	movzbq	0xa(%rdx), %rdi
+               	movzbq	0xa(%rsi), %r8
                	cmpl	%r8d, %edi
                	setne	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0xa(%rsi)
-               	movzbq	0xb(%rcx), %rdi
-               	movzbq	0xb(%rdx), %r8
+               	movb	%r8b, 0xa(%rcx)
+               	movzbq	0xb(%rdx), %rdi
+               	movzbq	0xb(%rsi), %r8
                	cmpl	%r8d, %edi
                	setne	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0xb(%rsi)
-               	movzbq	0xc(%rcx), %rdi
-               	movzbq	0xc(%rdx), %r8
+               	movb	%r8b, 0xb(%rcx)
+               	movzbq	0xc(%rdx), %rdi
+               	movzbq	0xc(%rsi), %r8
                	cmpl	%r8d, %edi
                	setne	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0xc(%rsi)
-               	movzbq	0xd(%rcx), %rdi
-               	movzbq	0xd(%rdx), %r8
+               	movb	%r8b, 0xc(%rcx)
+               	movzbq	0xd(%rdx), %rdi
+               	movzbq	0xd(%rsi), %r8
                	cmpl	%r8d, %edi
                	setne	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0xd(%rsi)
-               	movzbq	0xe(%rcx), %rdi
-               	movzbq	0xe(%rdx), %r8
+               	movb	%r8b, 0xd(%rcx)
+               	movzbq	0xe(%rdx), %rdi
+               	movzbq	0xe(%rsi), %r8
                	cmpl	%r8d, %edi
                	setne	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0xe(%rsi)
-               	movzbq	0xf(%rcx), %rdi
-               	movzbq	0xf(%rdx), %r8
+               	movb	%r8b, 0xe(%rcx)
+               	movzbq	0xf(%rdx), %rdi
+               	movzbq	0xf(%rsi), %r8
                	cmpl	%r8d, %edi
                	setne	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0xf(%rsi)
+               	movb	%r8b, 0xf(%rcx)
                	leaq	-0xad0(%rbp), %rdi
                	pushq	%rax
-               	movq	(%rsi), %rax
+               	movq	(%rcx), %rax
                	movq	%rax, (%rdi)
-               	movq	0x8(%rsi), %rax
+               	movq	0x8(%rcx), %rax
                	movq	%rax, 0x8(%rdi)
                	popq	%rax
                	leaq	-0x600(%rbp), %rdi
-               	movzbq	(%rcx,%rax), %rsi
-               	movzbq	(%rdx,%rax), %r8
-               	cmpl	%r8d, %esi
+               	movzbq	(%rdx,%rax), %rcx
+               	movzbq	(%rsi,%rax), %r8
+               	cmpl	%r8d, %ecx
                	je	<addr>
-               	movq	$-0x1, %rsi
+               	movq	$-0x1, %rcx
                	jmp	<addr>
-               	xorl	%esi, %esi
-               	movb	%sil, (%rdi,%rax)
+               	xorl	%ecx, %ecx
+               	movb	%cl, (%rdi,%rax)
                	incq	%rax
                	cmpl	$0x10, %eax
                	jl	<addr>
@@ -429,154 +428,154 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	leaq	-0xbf0(%rbp), %rcx
-               	leaq	-0xbe0(%rbp), %rdx
-               	leaq	-0x750(%rbp), %rsi
-               	movzbq	(%rcx), %rax
-               	movzbq	(%rdx), %rdi
+               	leaq	-0xbf0(%rbp), %rdx
+               	leaq	-0xbe0(%rbp), %rsi
+               	leaq	-0x750(%rbp), %rcx
+               	movzbq	(%rdx), %rax
+               	movzbq	(%rsi), %rdi
                	cmpl	%edi, %eax
                	setb	%dil
                	movzbq	%dil, %rdi
                	xorl	%eax, %eax
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, (%rsi)
-               	movzbq	0x1(%rcx), %rdi
-               	movzbq	0x1(%rdx), %r8
+               	movb	%r8b, (%rcx)
+               	movzbq	0x1(%rdx), %rdi
+               	movzbq	0x1(%rsi), %r8
                	cmpl	%r8d, %edi
                	setb	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x1(%rsi)
-               	movzbq	0x2(%rcx), %rdi
-               	movzbq	0x2(%rdx), %r8
+               	movb	%r8b, 0x1(%rcx)
+               	movzbq	0x2(%rdx), %rdi
+               	movzbq	0x2(%rsi), %r8
                	cmpl	%r8d, %edi
                	setb	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x2(%rsi)
-               	movzbq	0x3(%rcx), %rdi
-               	movzbq	0x3(%rdx), %r8
+               	movb	%r8b, 0x2(%rcx)
+               	movzbq	0x3(%rdx), %rdi
+               	movzbq	0x3(%rsi), %r8
                	cmpl	%r8d, %edi
                	setb	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x3(%rsi)
-               	movzbq	0x4(%rcx), %rdi
-               	movzbq	0x4(%rdx), %r8
+               	movb	%r8b, 0x3(%rcx)
+               	movzbq	0x4(%rdx), %rdi
+               	movzbq	0x4(%rsi), %r8
                	cmpl	%r8d, %edi
                	setb	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x4(%rsi)
-               	movzbq	0x5(%rcx), %rdi
-               	movzbq	0x5(%rdx), %r8
+               	movb	%r8b, 0x4(%rcx)
+               	movzbq	0x5(%rdx), %rdi
+               	movzbq	0x5(%rsi), %r8
                	cmpl	%r8d, %edi
                	setb	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x5(%rsi)
-               	movzbq	0x6(%rcx), %rdi
-               	movzbq	0x6(%rdx), %r8
+               	movb	%r8b, 0x5(%rcx)
+               	movzbq	0x6(%rdx), %rdi
+               	movzbq	0x6(%rsi), %r8
                	cmpl	%r8d, %edi
                	setb	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x6(%rsi)
-               	movzbq	0x7(%rcx), %rdi
-               	movzbq	0x7(%rdx), %r8
+               	movb	%r8b, 0x6(%rcx)
+               	movzbq	0x7(%rdx), %rdi
+               	movzbq	0x7(%rsi), %r8
                	cmpl	%r8d, %edi
                	setb	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x7(%rsi)
-               	movzbq	0x8(%rcx), %rdi
-               	movzbq	0x8(%rdx), %r8
+               	movb	%r8b, 0x7(%rcx)
+               	movzbq	0x8(%rdx), %rdi
+               	movzbq	0x8(%rsi), %r8
                	cmpl	%r8d, %edi
                	setb	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x8(%rsi)
-               	movzbq	0x9(%rcx), %rdi
-               	movzbq	0x9(%rdx), %r8
+               	movb	%r8b, 0x8(%rcx)
+               	movzbq	0x9(%rdx), %rdi
+               	movzbq	0x9(%rsi), %r8
                	cmpl	%r8d, %edi
                	setb	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x9(%rsi)
-               	movzbq	0xa(%rcx), %rdi
-               	movzbq	0xa(%rdx), %r8
+               	movb	%r8b, 0x9(%rcx)
+               	movzbq	0xa(%rdx), %rdi
+               	movzbq	0xa(%rsi), %r8
                	cmpl	%r8d, %edi
                	setb	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0xa(%rsi)
-               	movzbq	0xb(%rcx), %rdi
-               	movzbq	0xb(%rdx), %r8
+               	movb	%r8b, 0xa(%rcx)
+               	movzbq	0xb(%rdx), %rdi
+               	movzbq	0xb(%rsi), %r8
                	cmpl	%r8d, %edi
                	setb	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0xb(%rsi)
-               	movzbq	0xc(%rcx), %rdi
-               	movzbq	0xc(%rdx), %r8
+               	movb	%r8b, 0xb(%rcx)
+               	movzbq	0xc(%rdx), %rdi
+               	movzbq	0xc(%rsi), %r8
                	cmpl	%r8d, %edi
                	setb	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0xc(%rsi)
-               	movzbq	0xd(%rcx), %rdi
-               	movzbq	0xd(%rdx), %r8
+               	movb	%r8b, 0xc(%rcx)
+               	movzbq	0xd(%rdx), %rdi
+               	movzbq	0xd(%rsi), %r8
                	cmpl	%r8d, %edi
                	setb	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0xd(%rsi)
-               	movzbq	0xe(%rcx), %rdi
-               	movzbq	0xe(%rdx), %r8
+               	movb	%r8b, 0xd(%rcx)
+               	movzbq	0xe(%rdx), %rdi
+               	movzbq	0xe(%rsi), %r8
                	cmpl	%r8d, %edi
                	setb	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0xe(%rsi)
-               	movzbq	0xf(%rcx), %rdi
-               	movzbq	0xf(%rdx), %r8
+               	movb	%r8b, 0xe(%rcx)
+               	movzbq	0xf(%rdx), %rdi
+               	movzbq	0xf(%rsi), %r8
                	cmpl	%r8d, %edi
                	setb	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0xf(%rsi)
+               	movb	%r8b, 0xf(%rcx)
                	leaq	-0xac0(%rbp), %rdi
                	pushq	%rax
-               	movq	(%rsi), %rax
+               	movq	(%rcx), %rax
                	movq	%rax, (%rdi)
-               	movq	0x8(%rsi), %rax
+               	movq	0x8(%rcx), %rax
                	movq	%rax, 0x8(%rdi)
                	popq	%rax
                	leaq	-0x5e0(%rbp), %rdi
-               	movzbq	(%rcx,%rax), %rsi
-               	movzbq	(%rdx,%rax), %r8
-               	cmpl	%r8d, %esi
+               	movzbq	(%rdx,%rax), %rcx
+               	movzbq	(%rsi,%rax), %r8
+               	cmpl	%r8d, %ecx
                	jge	<addr>
-               	movq	$-0x1, %rsi
+               	movq	$-0x1, %rcx
                	jmp	<addr>
-               	xorl	%esi, %esi
-               	movb	%sil, (%rdi,%rax)
+               	xorl	%ecx, %ecx
+               	movb	%cl, (%rdi,%rax)
                	incq	%rax
                	cmpl	$0x10, %eax
                	jl	<addr>
@@ -590,154 +589,154 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	leaq	-0xbf0(%rbp), %rcx
-               	leaq	-0xbe0(%rbp), %rdx
-               	leaq	-0x750(%rbp), %rsi
-               	movzbq	(%rcx), %rax
-               	movzbq	(%rdx), %rdi
+               	leaq	-0xbf0(%rbp), %rdx
+               	leaq	-0xbe0(%rbp), %rsi
+               	leaq	-0x750(%rbp), %rcx
+               	movzbq	(%rdx), %rax
+               	movzbq	(%rsi), %rdi
                	cmpl	%edi, %eax
                	setbe	%dil
                	movzbq	%dil, %rdi
                	xorl	%eax, %eax
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, (%rsi)
-               	movzbq	0x1(%rcx), %rdi
-               	movzbq	0x1(%rdx), %r8
+               	movb	%r8b, (%rcx)
+               	movzbq	0x1(%rdx), %rdi
+               	movzbq	0x1(%rsi), %r8
                	cmpl	%r8d, %edi
                	setbe	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x1(%rsi)
-               	movzbq	0x2(%rcx), %rdi
-               	movzbq	0x2(%rdx), %r8
+               	movb	%r8b, 0x1(%rcx)
+               	movzbq	0x2(%rdx), %rdi
+               	movzbq	0x2(%rsi), %r8
                	cmpl	%r8d, %edi
                	setbe	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x2(%rsi)
-               	movzbq	0x3(%rcx), %rdi
-               	movzbq	0x3(%rdx), %r8
+               	movb	%r8b, 0x2(%rcx)
+               	movzbq	0x3(%rdx), %rdi
+               	movzbq	0x3(%rsi), %r8
                	cmpl	%r8d, %edi
                	setbe	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x3(%rsi)
-               	movzbq	0x4(%rcx), %rdi
-               	movzbq	0x4(%rdx), %r8
+               	movb	%r8b, 0x3(%rcx)
+               	movzbq	0x4(%rdx), %rdi
+               	movzbq	0x4(%rsi), %r8
                	cmpl	%r8d, %edi
                	setbe	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x4(%rsi)
-               	movzbq	0x5(%rcx), %rdi
-               	movzbq	0x5(%rdx), %r8
+               	movb	%r8b, 0x4(%rcx)
+               	movzbq	0x5(%rdx), %rdi
+               	movzbq	0x5(%rsi), %r8
                	cmpl	%r8d, %edi
                	setbe	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x5(%rsi)
-               	movzbq	0x6(%rcx), %rdi
-               	movzbq	0x6(%rdx), %r8
+               	movb	%r8b, 0x5(%rcx)
+               	movzbq	0x6(%rdx), %rdi
+               	movzbq	0x6(%rsi), %r8
                	cmpl	%r8d, %edi
                	setbe	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x6(%rsi)
-               	movzbq	0x7(%rcx), %rdi
-               	movzbq	0x7(%rdx), %r8
+               	movb	%r8b, 0x6(%rcx)
+               	movzbq	0x7(%rdx), %rdi
+               	movzbq	0x7(%rsi), %r8
                	cmpl	%r8d, %edi
                	setbe	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x7(%rsi)
-               	movzbq	0x8(%rcx), %rdi
-               	movzbq	0x8(%rdx), %r8
+               	movb	%r8b, 0x7(%rcx)
+               	movzbq	0x8(%rdx), %rdi
+               	movzbq	0x8(%rsi), %r8
                	cmpl	%r8d, %edi
                	setbe	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x8(%rsi)
-               	movzbq	0x9(%rcx), %rdi
-               	movzbq	0x9(%rdx), %r8
+               	movb	%r8b, 0x8(%rcx)
+               	movzbq	0x9(%rdx), %rdi
+               	movzbq	0x9(%rsi), %r8
                	cmpl	%r8d, %edi
                	setbe	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x9(%rsi)
-               	movzbq	0xa(%rcx), %rdi
-               	movzbq	0xa(%rdx), %r8
+               	movb	%r8b, 0x9(%rcx)
+               	movzbq	0xa(%rdx), %rdi
+               	movzbq	0xa(%rsi), %r8
                	cmpl	%r8d, %edi
                	setbe	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0xa(%rsi)
-               	movzbq	0xb(%rcx), %rdi
-               	movzbq	0xb(%rdx), %r8
+               	movb	%r8b, 0xa(%rcx)
+               	movzbq	0xb(%rdx), %rdi
+               	movzbq	0xb(%rsi), %r8
                	cmpl	%r8d, %edi
                	setbe	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0xb(%rsi)
-               	movzbq	0xc(%rcx), %rdi
-               	movzbq	0xc(%rdx), %r8
+               	movb	%r8b, 0xb(%rcx)
+               	movzbq	0xc(%rdx), %rdi
+               	movzbq	0xc(%rsi), %r8
                	cmpl	%r8d, %edi
                	setbe	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0xc(%rsi)
-               	movzbq	0xd(%rcx), %rdi
-               	movzbq	0xd(%rdx), %r8
+               	movb	%r8b, 0xc(%rcx)
+               	movzbq	0xd(%rdx), %rdi
+               	movzbq	0xd(%rsi), %r8
                	cmpl	%r8d, %edi
                	setbe	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0xd(%rsi)
-               	movzbq	0xe(%rcx), %rdi
-               	movzbq	0xe(%rdx), %r8
+               	movb	%r8b, 0xd(%rcx)
+               	movzbq	0xe(%rdx), %rdi
+               	movzbq	0xe(%rsi), %r8
                	cmpl	%r8d, %edi
                	setbe	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0xe(%rsi)
-               	movzbq	0xf(%rcx), %rdi
-               	movzbq	0xf(%rdx), %r8
+               	movb	%r8b, 0xe(%rcx)
+               	movzbq	0xf(%rdx), %rdi
+               	movzbq	0xf(%rsi), %r8
                	cmpl	%r8d, %edi
                	setbe	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0xf(%rsi)
+               	movb	%r8b, 0xf(%rcx)
                	leaq	-0xab0(%rbp), %rdi
                	pushq	%rax
-               	movq	(%rsi), %rax
+               	movq	(%rcx), %rax
                	movq	%rax, (%rdi)
-               	movq	0x8(%rsi), %rax
+               	movq	0x8(%rcx), %rax
                	movq	%rax, 0x8(%rdi)
                	popq	%rax
                	leaq	-0x5c0(%rbp), %rdi
-               	movzbq	(%rcx,%rax), %rsi
-               	movzbq	(%rdx,%rax), %r8
-               	cmpl	%r8d, %esi
+               	movzbq	(%rdx,%rax), %rcx
+               	movzbq	(%rsi,%rax), %r8
+               	cmpl	%r8d, %ecx
                	jg	<addr>
-               	movq	$-0x1, %rsi
+               	movq	$-0x1, %rcx
                	jmp	<addr>
-               	xorl	%esi, %esi
-               	movb	%sil, (%rdi,%rax)
+               	xorl	%ecx, %ecx
+               	movb	%cl, (%rdi,%rax)
                	incq	%rax
                	cmpl	$0x10, %eax
                	jl	<addr>
@@ -751,154 +750,154 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	leaq	-0xbf0(%rbp), %rcx
-               	leaq	-0xbe0(%rbp), %rdx
-               	leaq	-0x750(%rbp), %rsi
-               	movzbq	(%rcx), %rax
-               	movzbq	(%rdx), %rdi
+               	leaq	-0xbf0(%rbp), %rdx
+               	leaq	-0xbe0(%rbp), %rsi
+               	leaq	-0x750(%rbp), %rcx
+               	movzbq	(%rdx), %rax
+               	movzbq	(%rsi), %rdi
                	cmpl	%edi, %eax
                	seta	%dil
                	movzbq	%dil, %rdi
                	xorl	%eax, %eax
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, (%rsi)
-               	movzbq	0x1(%rcx), %rdi
-               	movzbq	0x1(%rdx), %r8
+               	movb	%r8b, (%rcx)
+               	movzbq	0x1(%rdx), %rdi
+               	movzbq	0x1(%rsi), %r8
                	cmpl	%r8d, %edi
                	seta	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x1(%rsi)
-               	movzbq	0x2(%rcx), %rdi
-               	movzbq	0x2(%rdx), %r8
+               	movb	%r8b, 0x1(%rcx)
+               	movzbq	0x2(%rdx), %rdi
+               	movzbq	0x2(%rsi), %r8
                	cmpl	%r8d, %edi
                	seta	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x2(%rsi)
-               	movzbq	0x3(%rcx), %rdi
-               	movzbq	0x3(%rdx), %r8
+               	movb	%r8b, 0x2(%rcx)
+               	movzbq	0x3(%rdx), %rdi
+               	movzbq	0x3(%rsi), %r8
                	cmpl	%r8d, %edi
                	seta	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x3(%rsi)
-               	movzbq	0x4(%rcx), %rdi
-               	movzbq	0x4(%rdx), %r8
+               	movb	%r8b, 0x3(%rcx)
+               	movzbq	0x4(%rdx), %rdi
+               	movzbq	0x4(%rsi), %r8
                	cmpl	%r8d, %edi
                	seta	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x4(%rsi)
-               	movzbq	0x5(%rcx), %rdi
-               	movzbq	0x5(%rdx), %r8
+               	movb	%r8b, 0x4(%rcx)
+               	movzbq	0x5(%rdx), %rdi
+               	movzbq	0x5(%rsi), %r8
                	cmpl	%r8d, %edi
                	seta	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x5(%rsi)
-               	movzbq	0x6(%rcx), %rdi
-               	movzbq	0x6(%rdx), %r8
+               	movb	%r8b, 0x5(%rcx)
+               	movzbq	0x6(%rdx), %rdi
+               	movzbq	0x6(%rsi), %r8
                	cmpl	%r8d, %edi
                	seta	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x6(%rsi)
-               	movzbq	0x7(%rcx), %rdi
-               	movzbq	0x7(%rdx), %r8
+               	movb	%r8b, 0x6(%rcx)
+               	movzbq	0x7(%rdx), %rdi
+               	movzbq	0x7(%rsi), %r8
                	cmpl	%r8d, %edi
                	seta	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x7(%rsi)
-               	movzbq	0x8(%rcx), %rdi
-               	movzbq	0x8(%rdx), %r8
+               	movb	%r8b, 0x7(%rcx)
+               	movzbq	0x8(%rdx), %rdi
+               	movzbq	0x8(%rsi), %r8
                	cmpl	%r8d, %edi
                	seta	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x8(%rsi)
-               	movzbq	0x9(%rcx), %rdi
-               	movzbq	0x9(%rdx), %r8
+               	movb	%r8b, 0x8(%rcx)
+               	movzbq	0x9(%rdx), %rdi
+               	movzbq	0x9(%rsi), %r8
                	cmpl	%r8d, %edi
                	seta	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x9(%rsi)
-               	movzbq	0xa(%rcx), %rdi
-               	movzbq	0xa(%rdx), %r8
+               	movb	%r8b, 0x9(%rcx)
+               	movzbq	0xa(%rdx), %rdi
+               	movzbq	0xa(%rsi), %r8
                	cmpl	%r8d, %edi
                	seta	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0xa(%rsi)
-               	movzbq	0xb(%rcx), %rdi
-               	movzbq	0xb(%rdx), %r8
+               	movb	%r8b, 0xa(%rcx)
+               	movzbq	0xb(%rdx), %rdi
+               	movzbq	0xb(%rsi), %r8
                	cmpl	%r8d, %edi
                	seta	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0xb(%rsi)
-               	movzbq	0xc(%rcx), %rdi
-               	movzbq	0xc(%rdx), %r8
+               	movb	%r8b, 0xb(%rcx)
+               	movzbq	0xc(%rdx), %rdi
+               	movzbq	0xc(%rsi), %r8
                	cmpl	%r8d, %edi
                	seta	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0xc(%rsi)
-               	movzbq	0xd(%rcx), %rdi
-               	movzbq	0xd(%rdx), %r8
+               	movb	%r8b, 0xc(%rcx)
+               	movzbq	0xd(%rdx), %rdi
+               	movzbq	0xd(%rsi), %r8
                	cmpl	%r8d, %edi
                	seta	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0xd(%rsi)
-               	movzbq	0xe(%rcx), %rdi
-               	movzbq	0xe(%rdx), %r8
+               	movb	%r8b, 0xd(%rcx)
+               	movzbq	0xe(%rdx), %rdi
+               	movzbq	0xe(%rsi), %r8
                	cmpl	%r8d, %edi
                	seta	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0xe(%rsi)
-               	movzbq	0xf(%rcx), %rdi
-               	movzbq	0xf(%rdx), %r8
+               	movb	%r8b, 0xe(%rcx)
+               	movzbq	0xf(%rdx), %rdi
+               	movzbq	0xf(%rsi), %r8
                	cmpl	%r8d, %edi
                	seta	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0xf(%rsi)
+               	movb	%r8b, 0xf(%rcx)
                	leaq	-0xaa0(%rbp), %rdi
                	pushq	%rax
-               	movq	(%rsi), %rax
+               	movq	(%rcx), %rax
                	movq	%rax, (%rdi)
-               	movq	0x8(%rsi), %rax
+               	movq	0x8(%rcx), %rax
                	movq	%rax, 0x8(%rdi)
                	popq	%rax
                	leaq	-0x5a0(%rbp), %rdi
-               	movzbq	(%rcx,%rax), %rsi
-               	movzbq	(%rdx,%rax), %r8
-               	cmpl	%r8d, %esi
+               	movzbq	(%rdx,%rax), %rcx
+               	movzbq	(%rsi,%rax), %r8
+               	cmpl	%r8d, %ecx
                	jle	<addr>
-               	movq	$-0x1, %rsi
+               	movq	$-0x1, %rcx
                	jmp	<addr>
-               	xorl	%esi, %esi
-               	movb	%sil, (%rdi,%rax)
+               	xorl	%ecx, %ecx
+               	movb	%cl, (%rdi,%rax)
                	incq	%rax
                	cmpl	$0x10, %eax
                	jl	<addr>
@@ -912,154 +911,154 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	leaq	-0xbf0(%rbp), %rcx
-               	leaq	-0xbe0(%rbp), %rdx
-               	leaq	-0x750(%rbp), %rsi
-               	movzbq	(%rcx), %rax
-               	movzbq	(%rdx), %rdi
+               	leaq	-0xbf0(%rbp), %rdx
+               	leaq	-0xbe0(%rbp), %rsi
+               	leaq	-0x750(%rbp), %rcx
+               	movzbq	(%rdx), %rax
+               	movzbq	(%rsi), %rdi
                	cmpl	%edi, %eax
                	setae	%dil
                	movzbq	%dil, %rdi
                	xorl	%eax, %eax
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, (%rsi)
-               	movzbq	0x1(%rcx), %rdi
-               	movzbq	0x1(%rdx), %r8
+               	movb	%r8b, (%rcx)
+               	movzbq	0x1(%rdx), %rdi
+               	movzbq	0x1(%rsi), %r8
                	cmpl	%r8d, %edi
                	setae	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x1(%rsi)
-               	movzbq	0x2(%rcx), %rdi
-               	movzbq	0x2(%rdx), %r8
+               	movb	%r8b, 0x1(%rcx)
+               	movzbq	0x2(%rdx), %rdi
+               	movzbq	0x2(%rsi), %r8
                	cmpl	%r8d, %edi
                	setae	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x2(%rsi)
-               	movzbq	0x3(%rcx), %rdi
-               	movzbq	0x3(%rdx), %r8
+               	movb	%r8b, 0x2(%rcx)
+               	movzbq	0x3(%rdx), %rdi
+               	movzbq	0x3(%rsi), %r8
                	cmpl	%r8d, %edi
                	setae	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x3(%rsi)
-               	movzbq	0x4(%rcx), %rdi
-               	movzbq	0x4(%rdx), %r8
+               	movb	%r8b, 0x3(%rcx)
+               	movzbq	0x4(%rdx), %rdi
+               	movzbq	0x4(%rsi), %r8
                	cmpl	%r8d, %edi
                	setae	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x4(%rsi)
-               	movzbq	0x5(%rcx), %rdi
-               	movzbq	0x5(%rdx), %r8
+               	movb	%r8b, 0x4(%rcx)
+               	movzbq	0x5(%rdx), %rdi
+               	movzbq	0x5(%rsi), %r8
                	cmpl	%r8d, %edi
                	setae	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x5(%rsi)
-               	movzbq	0x6(%rcx), %rdi
-               	movzbq	0x6(%rdx), %r8
+               	movb	%r8b, 0x5(%rcx)
+               	movzbq	0x6(%rdx), %rdi
+               	movzbq	0x6(%rsi), %r8
                	cmpl	%r8d, %edi
                	setae	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x6(%rsi)
-               	movzbq	0x7(%rcx), %rdi
-               	movzbq	0x7(%rdx), %r8
+               	movb	%r8b, 0x6(%rcx)
+               	movzbq	0x7(%rdx), %rdi
+               	movzbq	0x7(%rsi), %r8
                	cmpl	%r8d, %edi
                	setae	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x7(%rsi)
-               	movzbq	0x8(%rcx), %rdi
-               	movzbq	0x8(%rdx), %r8
+               	movb	%r8b, 0x7(%rcx)
+               	movzbq	0x8(%rdx), %rdi
+               	movzbq	0x8(%rsi), %r8
                	cmpl	%r8d, %edi
                	setae	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x8(%rsi)
-               	movzbq	0x9(%rcx), %rdi
-               	movzbq	0x9(%rdx), %r8
+               	movb	%r8b, 0x8(%rcx)
+               	movzbq	0x9(%rdx), %rdi
+               	movzbq	0x9(%rsi), %r8
                	cmpl	%r8d, %edi
                	setae	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x9(%rsi)
-               	movzbq	0xa(%rcx), %rdi
-               	movzbq	0xa(%rdx), %r8
+               	movb	%r8b, 0x9(%rcx)
+               	movzbq	0xa(%rdx), %rdi
+               	movzbq	0xa(%rsi), %r8
                	cmpl	%r8d, %edi
                	setae	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0xa(%rsi)
-               	movzbq	0xb(%rcx), %rdi
-               	movzbq	0xb(%rdx), %r8
+               	movb	%r8b, 0xa(%rcx)
+               	movzbq	0xb(%rdx), %rdi
+               	movzbq	0xb(%rsi), %r8
                	cmpl	%r8d, %edi
                	setae	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0xb(%rsi)
-               	movzbq	0xc(%rcx), %rdi
-               	movzbq	0xc(%rdx), %r8
+               	movb	%r8b, 0xb(%rcx)
+               	movzbq	0xc(%rdx), %rdi
+               	movzbq	0xc(%rsi), %r8
                	cmpl	%r8d, %edi
                	setae	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0xc(%rsi)
-               	movzbq	0xd(%rcx), %rdi
-               	movzbq	0xd(%rdx), %r8
+               	movb	%r8b, 0xc(%rcx)
+               	movzbq	0xd(%rdx), %rdi
+               	movzbq	0xd(%rsi), %r8
                	cmpl	%r8d, %edi
                	setae	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0xd(%rsi)
-               	movzbq	0xe(%rcx), %rdi
-               	movzbq	0xe(%rdx), %r8
+               	movb	%r8b, 0xd(%rcx)
+               	movzbq	0xe(%rdx), %rdi
+               	movzbq	0xe(%rsi), %r8
                	cmpl	%r8d, %edi
                	setae	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0xe(%rsi)
-               	movzbq	0xf(%rcx), %rdi
-               	movzbq	0xf(%rdx), %r8
+               	movb	%r8b, 0xe(%rcx)
+               	movzbq	0xf(%rdx), %rdi
+               	movzbq	0xf(%rsi), %r8
                	cmpl	%r8d, %edi
                	setae	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0xf(%rsi)
+               	movb	%r8b, 0xf(%rcx)
                	leaq	-0xa90(%rbp), %rdi
                	pushq	%rax
-               	movq	(%rsi), %rax
+               	movq	(%rcx), %rax
                	movq	%rax, (%rdi)
-               	movq	0x8(%rsi), %rax
+               	movq	0x8(%rcx), %rax
                	movq	%rax, 0x8(%rdi)
                	popq	%rax
                	leaq	-0x580(%rbp), %rdi
-               	movzbq	(%rcx,%rax), %rsi
-               	movzbq	(%rdx,%rax), %r8
-               	cmpl	%r8d, %esi
+               	movzbq	(%rdx,%rax), %rcx
+               	movzbq	(%rsi,%rax), %r8
+               	cmpl	%r8d, %ecx
                	jl	<addr>
-               	movq	$-0x1, %rsi
+               	movq	$-0x1, %rcx
                	jmp	<addr>
-               	xorl	%esi, %esi
-               	movb	%sil, (%rdi,%rax)
+               	xorl	%ecx, %ecx
+               	movb	%cl, (%rdi,%rax)
                	incq	%rax
                	cmpl	$0x10, %eax
                	jl	<addr>
@@ -1073,154 +1072,154 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	leaq	-0xbd0(%rbp), %rcx
-               	leaq	-0xbc0(%rbp), %rdx
-               	leaq	-0x750(%rbp), %rsi
-               	movsbq	(%rcx), %rax
-               	movsbq	(%rdx), %rdi
+               	leaq	-0xbd0(%rbp), %rdx
+               	leaq	-0xbc0(%rbp), %rsi
+               	leaq	-0x750(%rbp), %rcx
+               	movsbq	(%rdx), %rax
+               	movsbq	(%rsi), %rdi
                	cmpl	%edi, %eax
                	sete	%dil
                	movzbq	%dil, %rdi
                	xorl	%eax, %eax
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, (%rsi)
-               	movsbq	0x1(%rcx), %rdi
-               	movsbq	0x1(%rdx), %r8
+               	movb	%r8b, (%rcx)
+               	movsbq	0x1(%rdx), %rdi
+               	movsbq	0x1(%rsi), %r8
                	cmpl	%r8d, %edi
                	sete	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x1(%rsi)
-               	movsbq	0x2(%rcx), %rdi
-               	movsbq	0x2(%rdx), %r8
+               	movb	%r8b, 0x1(%rcx)
+               	movsbq	0x2(%rdx), %rdi
+               	movsbq	0x2(%rsi), %r8
                	cmpl	%r8d, %edi
                	sete	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x2(%rsi)
-               	movsbq	0x3(%rcx), %rdi
-               	movsbq	0x3(%rdx), %r8
+               	movb	%r8b, 0x2(%rcx)
+               	movsbq	0x3(%rdx), %rdi
+               	movsbq	0x3(%rsi), %r8
                	cmpl	%r8d, %edi
                	sete	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x3(%rsi)
-               	movsbq	0x4(%rcx), %rdi
-               	movsbq	0x4(%rdx), %r8
+               	movb	%r8b, 0x3(%rcx)
+               	movsbq	0x4(%rdx), %rdi
+               	movsbq	0x4(%rsi), %r8
                	cmpl	%r8d, %edi
                	sete	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x4(%rsi)
-               	movsbq	0x5(%rcx), %rdi
-               	movsbq	0x5(%rdx), %r8
+               	movb	%r8b, 0x4(%rcx)
+               	movsbq	0x5(%rdx), %rdi
+               	movsbq	0x5(%rsi), %r8
                	cmpl	%r8d, %edi
                	sete	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x5(%rsi)
-               	movsbq	0x6(%rcx), %rdi
-               	movsbq	0x6(%rdx), %r8
+               	movb	%r8b, 0x5(%rcx)
+               	movsbq	0x6(%rdx), %rdi
+               	movsbq	0x6(%rsi), %r8
                	cmpl	%r8d, %edi
                	sete	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x6(%rsi)
-               	movsbq	0x7(%rcx), %rdi
-               	movsbq	0x7(%rdx), %r8
+               	movb	%r8b, 0x6(%rcx)
+               	movsbq	0x7(%rdx), %rdi
+               	movsbq	0x7(%rsi), %r8
                	cmpl	%r8d, %edi
                	sete	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x7(%rsi)
-               	movsbq	0x8(%rcx), %rdi
-               	movsbq	0x8(%rdx), %r8
+               	movb	%r8b, 0x7(%rcx)
+               	movsbq	0x8(%rdx), %rdi
+               	movsbq	0x8(%rsi), %r8
                	cmpl	%r8d, %edi
                	sete	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x8(%rsi)
-               	movsbq	0x9(%rcx), %rdi
-               	movsbq	0x9(%rdx), %r8
+               	movb	%r8b, 0x8(%rcx)
+               	movsbq	0x9(%rdx), %rdi
+               	movsbq	0x9(%rsi), %r8
                	cmpl	%r8d, %edi
                	sete	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x9(%rsi)
-               	movsbq	0xa(%rcx), %rdi
-               	movsbq	0xa(%rdx), %r8
+               	movb	%r8b, 0x9(%rcx)
+               	movsbq	0xa(%rdx), %rdi
+               	movsbq	0xa(%rsi), %r8
                	cmpl	%r8d, %edi
                	sete	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0xa(%rsi)
-               	movsbq	0xb(%rcx), %rdi
-               	movsbq	0xb(%rdx), %r8
+               	movb	%r8b, 0xa(%rcx)
+               	movsbq	0xb(%rdx), %rdi
+               	movsbq	0xb(%rsi), %r8
                	cmpl	%r8d, %edi
                	sete	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0xb(%rsi)
-               	movsbq	0xc(%rcx), %rdi
-               	movsbq	0xc(%rdx), %r8
+               	movb	%r8b, 0xb(%rcx)
+               	movsbq	0xc(%rdx), %rdi
+               	movsbq	0xc(%rsi), %r8
                	cmpl	%r8d, %edi
                	sete	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0xc(%rsi)
-               	movsbq	0xd(%rcx), %rdi
-               	movsbq	0xd(%rdx), %r8
+               	movb	%r8b, 0xc(%rcx)
+               	movsbq	0xd(%rdx), %rdi
+               	movsbq	0xd(%rsi), %r8
                	cmpl	%r8d, %edi
                	sete	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0xd(%rsi)
-               	movsbq	0xe(%rcx), %rdi
-               	movsbq	0xe(%rdx), %r8
+               	movb	%r8b, 0xd(%rcx)
+               	movsbq	0xe(%rdx), %rdi
+               	movsbq	0xe(%rsi), %r8
                	cmpl	%r8d, %edi
                	sete	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0xe(%rsi)
-               	movsbq	0xf(%rcx), %rdi
-               	movsbq	0xf(%rdx), %r8
+               	movb	%r8b, 0xe(%rcx)
+               	movsbq	0xf(%rdx), %rdi
+               	movsbq	0xf(%rsi), %r8
                	cmpl	%r8d, %edi
                	sete	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0xf(%rsi)
+               	movb	%r8b, 0xf(%rcx)
                	leaq	-0xa80(%rbp), %rdi
                	pushq	%rax
-               	movq	(%rsi), %rax
+               	movq	(%rcx), %rax
                	movq	%rax, (%rdi)
-               	movq	0x8(%rsi), %rax
+               	movq	0x8(%rcx), %rax
                	movq	%rax, 0x8(%rdi)
                	popq	%rax
                	leaq	-0x560(%rbp), %rdi
-               	movsbq	(%rcx,%rax), %rsi
-               	movsbq	(%rdx,%rax), %r8
-               	cmpl	%r8d, %esi
+               	movsbq	(%rdx,%rax), %rcx
+               	movsbq	(%rsi,%rax), %r8
+               	cmpl	%r8d, %ecx
                	jne	<addr>
-               	movq	$-0x1, %rsi
+               	movq	$-0x1, %rcx
                	jmp	<addr>
-               	xorl	%esi, %esi
-               	movb	%sil, (%rdi,%rax)
+               	xorl	%ecx, %ecx
+               	movb	%cl, (%rdi,%rax)
                	incq	%rax
                	cmpl	$0x10, %eax
                	jl	<addr>
@@ -1234,154 +1233,154 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	leaq	-0xbd0(%rbp), %rcx
-               	leaq	-0xbc0(%rbp), %rdx
-               	leaq	-0x750(%rbp), %rsi
-               	movsbq	(%rcx), %rax
-               	movsbq	(%rdx), %rdi
+               	leaq	-0xbd0(%rbp), %rdx
+               	leaq	-0xbc0(%rbp), %rsi
+               	leaq	-0x750(%rbp), %rcx
+               	movsbq	(%rdx), %rax
+               	movsbq	(%rsi), %rdi
                	cmpl	%edi, %eax
                	setne	%dil
                	movzbq	%dil, %rdi
                	xorl	%eax, %eax
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, (%rsi)
-               	movsbq	0x1(%rcx), %rdi
-               	movsbq	0x1(%rdx), %r8
+               	movb	%r8b, (%rcx)
+               	movsbq	0x1(%rdx), %rdi
+               	movsbq	0x1(%rsi), %r8
                	cmpl	%r8d, %edi
                	setne	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x1(%rsi)
-               	movsbq	0x2(%rcx), %rdi
-               	movsbq	0x2(%rdx), %r8
+               	movb	%r8b, 0x1(%rcx)
+               	movsbq	0x2(%rdx), %rdi
+               	movsbq	0x2(%rsi), %r8
                	cmpl	%r8d, %edi
                	setne	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x2(%rsi)
-               	movsbq	0x3(%rcx), %rdi
-               	movsbq	0x3(%rdx), %r8
+               	movb	%r8b, 0x2(%rcx)
+               	movsbq	0x3(%rdx), %rdi
+               	movsbq	0x3(%rsi), %r8
                	cmpl	%r8d, %edi
                	setne	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x3(%rsi)
-               	movsbq	0x4(%rcx), %rdi
-               	movsbq	0x4(%rdx), %r8
+               	movb	%r8b, 0x3(%rcx)
+               	movsbq	0x4(%rdx), %rdi
+               	movsbq	0x4(%rsi), %r8
                	cmpl	%r8d, %edi
                	setne	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x4(%rsi)
-               	movsbq	0x5(%rcx), %rdi
-               	movsbq	0x5(%rdx), %r8
+               	movb	%r8b, 0x4(%rcx)
+               	movsbq	0x5(%rdx), %rdi
+               	movsbq	0x5(%rsi), %r8
                	cmpl	%r8d, %edi
                	setne	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x5(%rsi)
-               	movsbq	0x6(%rcx), %rdi
-               	movsbq	0x6(%rdx), %r8
+               	movb	%r8b, 0x5(%rcx)
+               	movsbq	0x6(%rdx), %rdi
+               	movsbq	0x6(%rsi), %r8
                	cmpl	%r8d, %edi
                	setne	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x6(%rsi)
-               	movsbq	0x7(%rcx), %rdi
-               	movsbq	0x7(%rdx), %r8
+               	movb	%r8b, 0x6(%rcx)
+               	movsbq	0x7(%rdx), %rdi
+               	movsbq	0x7(%rsi), %r8
                	cmpl	%r8d, %edi
                	setne	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x7(%rsi)
-               	movsbq	0x8(%rcx), %rdi
-               	movsbq	0x8(%rdx), %r8
+               	movb	%r8b, 0x7(%rcx)
+               	movsbq	0x8(%rdx), %rdi
+               	movsbq	0x8(%rsi), %r8
                	cmpl	%r8d, %edi
                	setne	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x8(%rsi)
-               	movsbq	0x9(%rcx), %rdi
-               	movsbq	0x9(%rdx), %r8
+               	movb	%r8b, 0x8(%rcx)
+               	movsbq	0x9(%rdx), %rdi
+               	movsbq	0x9(%rsi), %r8
                	cmpl	%r8d, %edi
                	setne	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x9(%rsi)
-               	movsbq	0xa(%rcx), %rdi
-               	movsbq	0xa(%rdx), %r8
+               	movb	%r8b, 0x9(%rcx)
+               	movsbq	0xa(%rdx), %rdi
+               	movsbq	0xa(%rsi), %r8
                	cmpl	%r8d, %edi
                	setne	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0xa(%rsi)
-               	movsbq	0xb(%rcx), %rdi
-               	movsbq	0xb(%rdx), %r8
+               	movb	%r8b, 0xa(%rcx)
+               	movsbq	0xb(%rdx), %rdi
+               	movsbq	0xb(%rsi), %r8
                	cmpl	%r8d, %edi
                	setne	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0xb(%rsi)
-               	movsbq	0xc(%rcx), %rdi
-               	movsbq	0xc(%rdx), %r8
+               	movb	%r8b, 0xb(%rcx)
+               	movsbq	0xc(%rdx), %rdi
+               	movsbq	0xc(%rsi), %r8
                	cmpl	%r8d, %edi
                	setne	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0xc(%rsi)
-               	movsbq	0xd(%rcx), %rdi
-               	movsbq	0xd(%rdx), %r8
+               	movb	%r8b, 0xc(%rcx)
+               	movsbq	0xd(%rdx), %rdi
+               	movsbq	0xd(%rsi), %r8
                	cmpl	%r8d, %edi
                	setne	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0xd(%rsi)
-               	movsbq	0xe(%rcx), %rdi
-               	movsbq	0xe(%rdx), %r8
+               	movb	%r8b, 0xd(%rcx)
+               	movsbq	0xe(%rdx), %rdi
+               	movsbq	0xe(%rsi), %r8
                	cmpl	%r8d, %edi
                	setne	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0xe(%rsi)
-               	movsbq	0xf(%rcx), %rdi
-               	movsbq	0xf(%rdx), %r8
+               	movb	%r8b, 0xe(%rcx)
+               	movsbq	0xf(%rdx), %rdi
+               	movsbq	0xf(%rsi), %r8
                	cmpl	%r8d, %edi
                	setne	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0xf(%rsi)
+               	movb	%r8b, 0xf(%rcx)
                	leaq	-0xa70(%rbp), %rdi
                	pushq	%rax
-               	movq	(%rsi), %rax
+               	movq	(%rcx), %rax
                	movq	%rax, (%rdi)
-               	movq	0x8(%rsi), %rax
+               	movq	0x8(%rcx), %rax
                	movq	%rax, 0x8(%rdi)
                	popq	%rax
                	leaq	-0x540(%rbp), %rdi
-               	movsbq	(%rcx,%rax), %rsi
-               	movsbq	(%rdx,%rax), %r8
-               	cmpl	%r8d, %esi
+               	movsbq	(%rdx,%rax), %rcx
+               	movsbq	(%rsi,%rax), %r8
+               	cmpl	%r8d, %ecx
                	je	<addr>
-               	movq	$-0x1, %rsi
+               	movq	$-0x1, %rcx
                	jmp	<addr>
-               	xorl	%esi, %esi
-               	movb	%sil, (%rdi,%rax)
+               	xorl	%ecx, %ecx
+               	movb	%cl, (%rdi,%rax)
                	incq	%rax
                	cmpl	$0x10, %eax
                	jl	<addr>
@@ -1395,154 +1394,154 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	leaq	-0xbd0(%rbp), %rcx
-               	leaq	-0xbc0(%rbp), %rdx
-               	leaq	-0x750(%rbp), %rsi
-               	movsbq	(%rcx), %rax
-               	movsbq	(%rdx), %rdi
+               	leaq	-0xbd0(%rbp), %rdx
+               	leaq	-0xbc0(%rbp), %rsi
+               	leaq	-0x750(%rbp), %rcx
+               	movsbq	(%rdx), %rax
+               	movsbq	(%rsi), %rdi
                	cmpl	%edi, %eax
                	setl	%dil
                	movzbq	%dil, %rdi
                	xorl	%eax, %eax
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, (%rsi)
-               	movsbq	0x1(%rcx), %rdi
-               	movsbq	0x1(%rdx), %r8
+               	movb	%r8b, (%rcx)
+               	movsbq	0x1(%rdx), %rdi
+               	movsbq	0x1(%rsi), %r8
                	cmpl	%r8d, %edi
                	setl	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x1(%rsi)
-               	movsbq	0x2(%rcx), %rdi
-               	movsbq	0x2(%rdx), %r8
+               	movb	%r8b, 0x1(%rcx)
+               	movsbq	0x2(%rdx), %rdi
+               	movsbq	0x2(%rsi), %r8
                	cmpl	%r8d, %edi
                	setl	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x2(%rsi)
-               	movsbq	0x3(%rcx), %rdi
-               	movsbq	0x3(%rdx), %r8
+               	movb	%r8b, 0x2(%rcx)
+               	movsbq	0x3(%rdx), %rdi
+               	movsbq	0x3(%rsi), %r8
                	cmpl	%r8d, %edi
                	setl	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x3(%rsi)
-               	movsbq	0x4(%rcx), %rdi
-               	movsbq	0x4(%rdx), %r8
+               	movb	%r8b, 0x3(%rcx)
+               	movsbq	0x4(%rdx), %rdi
+               	movsbq	0x4(%rsi), %r8
                	cmpl	%r8d, %edi
                	setl	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x4(%rsi)
-               	movsbq	0x5(%rcx), %rdi
-               	movsbq	0x5(%rdx), %r8
+               	movb	%r8b, 0x4(%rcx)
+               	movsbq	0x5(%rdx), %rdi
+               	movsbq	0x5(%rsi), %r8
                	cmpl	%r8d, %edi
                	setl	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x5(%rsi)
-               	movsbq	0x6(%rcx), %rdi
-               	movsbq	0x6(%rdx), %r8
+               	movb	%r8b, 0x5(%rcx)
+               	movsbq	0x6(%rdx), %rdi
+               	movsbq	0x6(%rsi), %r8
                	cmpl	%r8d, %edi
                	setl	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x6(%rsi)
-               	movsbq	0x7(%rcx), %rdi
-               	movsbq	0x7(%rdx), %r8
+               	movb	%r8b, 0x6(%rcx)
+               	movsbq	0x7(%rdx), %rdi
+               	movsbq	0x7(%rsi), %r8
                	cmpl	%r8d, %edi
                	setl	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x7(%rsi)
-               	movsbq	0x8(%rcx), %rdi
-               	movsbq	0x8(%rdx), %r8
+               	movb	%r8b, 0x7(%rcx)
+               	movsbq	0x8(%rdx), %rdi
+               	movsbq	0x8(%rsi), %r8
                	cmpl	%r8d, %edi
                	setl	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x8(%rsi)
-               	movsbq	0x9(%rcx), %rdi
-               	movsbq	0x9(%rdx), %r8
+               	movb	%r8b, 0x8(%rcx)
+               	movsbq	0x9(%rdx), %rdi
+               	movsbq	0x9(%rsi), %r8
                	cmpl	%r8d, %edi
                	setl	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x9(%rsi)
-               	movsbq	0xa(%rcx), %rdi
-               	movsbq	0xa(%rdx), %r8
+               	movb	%r8b, 0x9(%rcx)
+               	movsbq	0xa(%rdx), %rdi
+               	movsbq	0xa(%rsi), %r8
                	cmpl	%r8d, %edi
                	setl	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0xa(%rsi)
-               	movsbq	0xb(%rcx), %rdi
-               	movsbq	0xb(%rdx), %r8
+               	movb	%r8b, 0xa(%rcx)
+               	movsbq	0xb(%rdx), %rdi
+               	movsbq	0xb(%rsi), %r8
                	cmpl	%r8d, %edi
                	setl	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0xb(%rsi)
-               	movsbq	0xc(%rcx), %rdi
-               	movsbq	0xc(%rdx), %r8
+               	movb	%r8b, 0xb(%rcx)
+               	movsbq	0xc(%rdx), %rdi
+               	movsbq	0xc(%rsi), %r8
                	cmpl	%r8d, %edi
                	setl	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0xc(%rsi)
-               	movsbq	0xd(%rcx), %rdi
-               	movsbq	0xd(%rdx), %r8
+               	movb	%r8b, 0xc(%rcx)
+               	movsbq	0xd(%rdx), %rdi
+               	movsbq	0xd(%rsi), %r8
                	cmpl	%r8d, %edi
                	setl	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0xd(%rsi)
-               	movsbq	0xe(%rcx), %rdi
-               	movsbq	0xe(%rdx), %r8
+               	movb	%r8b, 0xd(%rcx)
+               	movsbq	0xe(%rdx), %rdi
+               	movsbq	0xe(%rsi), %r8
                	cmpl	%r8d, %edi
                	setl	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0xe(%rsi)
-               	movsbq	0xf(%rcx), %rdi
-               	movsbq	0xf(%rdx), %r8
+               	movb	%r8b, 0xe(%rcx)
+               	movsbq	0xf(%rdx), %rdi
+               	movsbq	0xf(%rsi), %r8
                	cmpl	%r8d, %edi
                	setl	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0xf(%rsi)
+               	movb	%r8b, 0xf(%rcx)
                	leaq	-0xa60(%rbp), %rdi
                	pushq	%rax
-               	movq	(%rsi), %rax
+               	movq	(%rcx), %rax
                	movq	%rax, (%rdi)
-               	movq	0x8(%rsi), %rax
+               	movq	0x8(%rcx), %rax
                	movq	%rax, 0x8(%rdi)
                	popq	%rax
                	leaq	-0x520(%rbp), %rdi
-               	movsbq	(%rcx,%rax), %rsi
-               	movsbq	(%rdx,%rax), %r8
-               	cmpl	%r8d, %esi
+               	movsbq	(%rdx,%rax), %rcx
+               	movsbq	(%rsi,%rax), %r8
+               	cmpl	%r8d, %ecx
                	jge	<addr>
-               	movq	$-0x1, %rsi
+               	movq	$-0x1, %rcx
                	jmp	<addr>
-               	xorl	%esi, %esi
-               	movb	%sil, (%rdi,%rax)
+               	xorl	%ecx, %ecx
+               	movb	%cl, (%rdi,%rax)
                	incq	%rax
                	cmpl	$0x10, %eax
                	jl	<addr>
@@ -1556,154 +1555,154 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	leaq	-0xbd0(%rbp), %rcx
-               	leaq	-0xbc0(%rbp), %rdx
-               	leaq	-0x750(%rbp), %rsi
-               	movsbq	(%rcx), %rax
-               	movsbq	(%rdx), %rdi
+               	leaq	-0xbd0(%rbp), %rdx
+               	leaq	-0xbc0(%rbp), %rsi
+               	leaq	-0x750(%rbp), %rcx
+               	movsbq	(%rdx), %rax
+               	movsbq	(%rsi), %rdi
                	cmpl	%edi, %eax
                	setle	%dil
                	movzbq	%dil, %rdi
                	xorl	%eax, %eax
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, (%rsi)
-               	movsbq	0x1(%rcx), %rdi
-               	movsbq	0x1(%rdx), %r8
+               	movb	%r8b, (%rcx)
+               	movsbq	0x1(%rdx), %rdi
+               	movsbq	0x1(%rsi), %r8
                	cmpl	%r8d, %edi
                	setle	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x1(%rsi)
-               	movsbq	0x2(%rcx), %rdi
-               	movsbq	0x2(%rdx), %r8
+               	movb	%r8b, 0x1(%rcx)
+               	movsbq	0x2(%rdx), %rdi
+               	movsbq	0x2(%rsi), %r8
                	cmpl	%r8d, %edi
                	setle	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x2(%rsi)
-               	movsbq	0x3(%rcx), %rdi
-               	movsbq	0x3(%rdx), %r8
+               	movb	%r8b, 0x2(%rcx)
+               	movsbq	0x3(%rdx), %rdi
+               	movsbq	0x3(%rsi), %r8
                	cmpl	%r8d, %edi
                	setle	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x3(%rsi)
-               	movsbq	0x4(%rcx), %rdi
-               	movsbq	0x4(%rdx), %r8
+               	movb	%r8b, 0x3(%rcx)
+               	movsbq	0x4(%rdx), %rdi
+               	movsbq	0x4(%rsi), %r8
                	cmpl	%r8d, %edi
                	setle	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x4(%rsi)
-               	movsbq	0x5(%rcx), %rdi
-               	movsbq	0x5(%rdx), %r8
+               	movb	%r8b, 0x4(%rcx)
+               	movsbq	0x5(%rdx), %rdi
+               	movsbq	0x5(%rsi), %r8
                	cmpl	%r8d, %edi
                	setle	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x5(%rsi)
-               	movsbq	0x6(%rcx), %rdi
-               	movsbq	0x6(%rdx), %r8
+               	movb	%r8b, 0x5(%rcx)
+               	movsbq	0x6(%rdx), %rdi
+               	movsbq	0x6(%rsi), %r8
                	cmpl	%r8d, %edi
                	setle	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x6(%rsi)
-               	movsbq	0x7(%rcx), %rdi
-               	movsbq	0x7(%rdx), %r8
+               	movb	%r8b, 0x6(%rcx)
+               	movsbq	0x7(%rdx), %rdi
+               	movsbq	0x7(%rsi), %r8
                	cmpl	%r8d, %edi
                	setle	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x7(%rsi)
-               	movsbq	0x8(%rcx), %rdi
-               	movsbq	0x8(%rdx), %r8
+               	movb	%r8b, 0x7(%rcx)
+               	movsbq	0x8(%rdx), %rdi
+               	movsbq	0x8(%rsi), %r8
                	cmpl	%r8d, %edi
                	setle	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x8(%rsi)
-               	movsbq	0x9(%rcx), %rdi
-               	movsbq	0x9(%rdx), %r8
+               	movb	%r8b, 0x8(%rcx)
+               	movsbq	0x9(%rdx), %rdi
+               	movsbq	0x9(%rsi), %r8
                	cmpl	%r8d, %edi
                	setle	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x9(%rsi)
-               	movsbq	0xa(%rcx), %rdi
-               	movsbq	0xa(%rdx), %r8
+               	movb	%r8b, 0x9(%rcx)
+               	movsbq	0xa(%rdx), %rdi
+               	movsbq	0xa(%rsi), %r8
                	cmpl	%r8d, %edi
                	setle	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0xa(%rsi)
-               	movsbq	0xb(%rcx), %rdi
-               	movsbq	0xb(%rdx), %r8
+               	movb	%r8b, 0xa(%rcx)
+               	movsbq	0xb(%rdx), %rdi
+               	movsbq	0xb(%rsi), %r8
                	cmpl	%r8d, %edi
                	setle	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0xb(%rsi)
-               	movsbq	0xc(%rcx), %rdi
-               	movsbq	0xc(%rdx), %r8
+               	movb	%r8b, 0xb(%rcx)
+               	movsbq	0xc(%rdx), %rdi
+               	movsbq	0xc(%rsi), %r8
                	cmpl	%r8d, %edi
                	setle	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0xc(%rsi)
-               	movsbq	0xd(%rcx), %rdi
-               	movsbq	0xd(%rdx), %r8
+               	movb	%r8b, 0xc(%rcx)
+               	movsbq	0xd(%rdx), %rdi
+               	movsbq	0xd(%rsi), %r8
                	cmpl	%r8d, %edi
                	setle	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0xd(%rsi)
-               	movsbq	0xe(%rcx), %rdi
-               	movsbq	0xe(%rdx), %r8
+               	movb	%r8b, 0xd(%rcx)
+               	movsbq	0xe(%rdx), %rdi
+               	movsbq	0xe(%rsi), %r8
                	cmpl	%r8d, %edi
                	setle	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0xe(%rsi)
-               	movsbq	0xf(%rcx), %rdi
-               	movsbq	0xf(%rdx), %r8
+               	movb	%r8b, 0xe(%rcx)
+               	movsbq	0xf(%rdx), %rdi
+               	movsbq	0xf(%rsi), %r8
                	cmpl	%r8d, %edi
                	setle	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0xf(%rsi)
+               	movb	%r8b, 0xf(%rcx)
                	leaq	-0xa50(%rbp), %rdi
                	pushq	%rax
-               	movq	(%rsi), %rax
+               	movq	(%rcx), %rax
                	movq	%rax, (%rdi)
-               	movq	0x8(%rsi), %rax
+               	movq	0x8(%rcx), %rax
                	movq	%rax, 0x8(%rdi)
                	popq	%rax
                	leaq	-0x500(%rbp), %rdi
-               	movsbq	(%rcx,%rax), %rsi
-               	movsbq	(%rdx,%rax), %r8
-               	cmpl	%r8d, %esi
+               	movsbq	(%rdx,%rax), %rcx
+               	movsbq	(%rsi,%rax), %r8
+               	cmpl	%r8d, %ecx
                	jg	<addr>
-               	movq	$-0x1, %rsi
+               	movq	$-0x1, %rcx
                	jmp	<addr>
-               	xorl	%esi, %esi
-               	movb	%sil, (%rdi,%rax)
+               	xorl	%ecx, %ecx
+               	movb	%cl, (%rdi,%rax)
                	incq	%rax
                	cmpl	$0x10, %eax
                	jl	<addr>
@@ -1717,154 +1716,154 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	leaq	-0xbd0(%rbp), %rcx
-               	leaq	-0xbc0(%rbp), %rdx
-               	leaq	-0x750(%rbp), %rsi
-               	movsbq	(%rcx), %rax
-               	movsbq	(%rdx), %rdi
+               	leaq	-0xbd0(%rbp), %rdx
+               	leaq	-0xbc0(%rbp), %rsi
+               	leaq	-0x750(%rbp), %rcx
+               	movsbq	(%rdx), %rax
+               	movsbq	(%rsi), %rdi
                	cmpl	%edi, %eax
                	setg	%dil
                	movzbq	%dil, %rdi
                	xorl	%eax, %eax
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, (%rsi)
-               	movsbq	0x1(%rcx), %rdi
-               	movsbq	0x1(%rdx), %r8
+               	movb	%r8b, (%rcx)
+               	movsbq	0x1(%rdx), %rdi
+               	movsbq	0x1(%rsi), %r8
                	cmpl	%r8d, %edi
                	setg	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x1(%rsi)
-               	movsbq	0x2(%rcx), %rdi
-               	movsbq	0x2(%rdx), %r8
+               	movb	%r8b, 0x1(%rcx)
+               	movsbq	0x2(%rdx), %rdi
+               	movsbq	0x2(%rsi), %r8
                	cmpl	%r8d, %edi
                	setg	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x2(%rsi)
-               	movsbq	0x3(%rcx), %rdi
-               	movsbq	0x3(%rdx), %r8
+               	movb	%r8b, 0x2(%rcx)
+               	movsbq	0x3(%rdx), %rdi
+               	movsbq	0x3(%rsi), %r8
                	cmpl	%r8d, %edi
                	setg	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x3(%rsi)
-               	movsbq	0x4(%rcx), %rdi
-               	movsbq	0x4(%rdx), %r8
+               	movb	%r8b, 0x3(%rcx)
+               	movsbq	0x4(%rdx), %rdi
+               	movsbq	0x4(%rsi), %r8
                	cmpl	%r8d, %edi
                	setg	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x4(%rsi)
-               	movsbq	0x5(%rcx), %rdi
-               	movsbq	0x5(%rdx), %r8
+               	movb	%r8b, 0x4(%rcx)
+               	movsbq	0x5(%rdx), %rdi
+               	movsbq	0x5(%rsi), %r8
                	cmpl	%r8d, %edi
                	setg	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x5(%rsi)
-               	movsbq	0x6(%rcx), %rdi
-               	movsbq	0x6(%rdx), %r8
+               	movb	%r8b, 0x5(%rcx)
+               	movsbq	0x6(%rdx), %rdi
+               	movsbq	0x6(%rsi), %r8
                	cmpl	%r8d, %edi
                	setg	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x6(%rsi)
-               	movsbq	0x7(%rcx), %rdi
-               	movsbq	0x7(%rdx), %r8
+               	movb	%r8b, 0x6(%rcx)
+               	movsbq	0x7(%rdx), %rdi
+               	movsbq	0x7(%rsi), %r8
                	cmpl	%r8d, %edi
                	setg	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x7(%rsi)
-               	movsbq	0x8(%rcx), %rdi
-               	movsbq	0x8(%rdx), %r8
+               	movb	%r8b, 0x7(%rcx)
+               	movsbq	0x8(%rdx), %rdi
+               	movsbq	0x8(%rsi), %r8
                	cmpl	%r8d, %edi
                	setg	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x8(%rsi)
-               	movsbq	0x9(%rcx), %rdi
-               	movsbq	0x9(%rdx), %r8
+               	movb	%r8b, 0x8(%rcx)
+               	movsbq	0x9(%rdx), %rdi
+               	movsbq	0x9(%rsi), %r8
                	cmpl	%r8d, %edi
                	setg	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x9(%rsi)
-               	movsbq	0xa(%rcx), %rdi
-               	movsbq	0xa(%rdx), %r8
+               	movb	%r8b, 0x9(%rcx)
+               	movsbq	0xa(%rdx), %rdi
+               	movsbq	0xa(%rsi), %r8
                	cmpl	%r8d, %edi
                	setg	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0xa(%rsi)
-               	movsbq	0xb(%rcx), %rdi
-               	movsbq	0xb(%rdx), %r8
+               	movb	%r8b, 0xa(%rcx)
+               	movsbq	0xb(%rdx), %rdi
+               	movsbq	0xb(%rsi), %r8
                	cmpl	%r8d, %edi
                	setg	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0xb(%rsi)
-               	movsbq	0xc(%rcx), %rdi
-               	movsbq	0xc(%rdx), %r8
+               	movb	%r8b, 0xb(%rcx)
+               	movsbq	0xc(%rdx), %rdi
+               	movsbq	0xc(%rsi), %r8
                	cmpl	%r8d, %edi
                	setg	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0xc(%rsi)
-               	movsbq	0xd(%rcx), %rdi
-               	movsbq	0xd(%rdx), %r8
+               	movb	%r8b, 0xc(%rcx)
+               	movsbq	0xd(%rdx), %rdi
+               	movsbq	0xd(%rsi), %r8
                	cmpl	%r8d, %edi
                	setg	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0xd(%rsi)
-               	movsbq	0xe(%rcx), %rdi
-               	movsbq	0xe(%rdx), %r8
+               	movb	%r8b, 0xd(%rcx)
+               	movsbq	0xe(%rdx), %rdi
+               	movsbq	0xe(%rsi), %r8
                	cmpl	%r8d, %edi
                	setg	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0xe(%rsi)
-               	movsbq	0xf(%rcx), %rdi
-               	movsbq	0xf(%rdx), %r8
+               	movb	%r8b, 0xe(%rcx)
+               	movsbq	0xf(%rdx), %rdi
+               	movsbq	0xf(%rsi), %r8
                	cmpl	%r8d, %edi
                	setg	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0xf(%rsi)
+               	movb	%r8b, 0xf(%rcx)
                	leaq	-0xa40(%rbp), %rdi
                	pushq	%rax
-               	movq	(%rsi), %rax
+               	movq	(%rcx), %rax
                	movq	%rax, (%rdi)
-               	movq	0x8(%rsi), %rax
+               	movq	0x8(%rcx), %rax
                	movq	%rax, 0x8(%rdi)
                	popq	%rax
                	leaq	-0x4e0(%rbp), %rdi
-               	movsbq	(%rcx,%rax), %rsi
-               	movsbq	(%rdx,%rax), %r8
-               	cmpl	%r8d, %esi
+               	movsbq	(%rdx,%rax), %rcx
+               	movsbq	(%rsi,%rax), %r8
+               	cmpl	%r8d, %ecx
                	jle	<addr>
-               	movq	$-0x1, %rsi
+               	movq	$-0x1, %rcx
                	jmp	<addr>
-               	xorl	%esi, %esi
-               	movb	%sil, (%rdi,%rax)
+               	xorl	%ecx, %ecx
+               	movb	%cl, (%rdi,%rax)
                	incq	%rax
                	cmpl	$0x10, %eax
                	jl	<addr>
@@ -1878,154 +1877,154 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	leaq	-0xbd0(%rbp), %rcx
-               	leaq	-0xbc0(%rbp), %rdx
-               	leaq	-0x750(%rbp), %rsi
-               	movsbq	(%rcx), %rax
-               	movsbq	(%rdx), %rdi
+               	leaq	-0xbd0(%rbp), %rdx
+               	leaq	-0xbc0(%rbp), %rsi
+               	leaq	-0x750(%rbp), %rcx
+               	movsbq	(%rdx), %rax
+               	movsbq	(%rsi), %rdi
                	cmpl	%edi, %eax
                	setge	%dil
                	movzbq	%dil, %rdi
                	xorl	%eax, %eax
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, (%rsi)
-               	movsbq	0x1(%rcx), %rdi
-               	movsbq	0x1(%rdx), %r8
+               	movb	%r8b, (%rcx)
+               	movsbq	0x1(%rdx), %rdi
+               	movsbq	0x1(%rsi), %r8
                	cmpl	%r8d, %edi
                	setge	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x1(%rsi)
-               	movsbq	0x2(%rcx), %rdi
-               	movsbq	0x2(%rdx), %r8
+               	movb	%r8b, 0x1(%rcx)
+               	movsbq	0x2(%rdx), %rdi
+               	movsbq	0x2(%rsi), %r8
                	cmpl	%r8d, %edi
                	setge	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x2(%rsi)
-               	movsbq	0x3(%rcx), %rdi
-               	movsbq	0x3(%rdx), %r8
+               	movb	%r8b, 0x2(%rcx)
+               	movsbq	0x3(%rdx), %rdi
+               	movsbq	0x3(%rsi), %r8
                	cmpl	%r8d, %edi
                	setge	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x3(%rsi)
-               	movsbq	0x4(%rcx), %rdi
-               	movsbq	0x4(%rdx), %r8
+               	movb	%r8b, 0x3(%rcx)
+               	movsbq	0x4(%rdx), %rdi
+               	movsbq	0x4(%rsi), %r8
                	cmpl	%r8d, %edi
                	setge	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x4(%rsi)
-               	movsbq	0x5(%rcx), %rdi
-               	movsbq	0x5(%rdx), %r8
+               	movb	%r8b, 0x4(%rcx)
+               	movsbq	0x5(%rdx), %rdi
+               	movsbq	0x5(%rsi), %r8
                	cmpl	%r8d, %edi
                	setge	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x5(%rsi)
-               	movsbq	0x6(%rcx), %rdi
-               	movsbq	0x6(%rdx), %r8
+               	movb	%r8b, 0x5(%rcx)
+               	movsbq	0x6(%rdx), %rdi
+               	movsbq	0x6(%rsi), %r8
                	cmpl	%r8d, %edi
                	setge	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x6(%rsi)
-               	movsbq	0x7(%rcx), %rdi
-               	movsbq	0x7(%rdx), %r8
+               	movb	%r8b, 0x6(%rcx)
+               	movsbq	0x7(%rdx), %rdi
+               	movsbq	0x7(%rsi), %r8
                	cmpl	%r8d, %edi
                	setge	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x7(%rsi)
-               	movsbq	0x8(%rcx), %rdi
-               	movsbq	0x8(%rdx), %r8
+               	movb	%r8b, 0x7(%rcx)
+               	movsbq	0x8(%rdx), %rdi
+               	movsbq	0x8(%rsi), %r8
                	cmpl	%r8d, %edi
                	setge	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x8(%rsi)
-               	movsbq	0x9(%rcx), %rdi
-               	movsbq	0x9(%rdx), %r8
+               	movb	%r8b, 0x8(%rcx)
+               	movsbq	0x9(%rdx), %rdi
+               	movsbq	0x9(%rsi), %r8
                	cmpl	%r8d, %edi
                	setge	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0x9(%rsi)
-               	movsbq	0xa(%rcx), %rdi
-               	movsbq	0xa(%rdx), %r8
+               	movb	%r8b, 0x9(%rcx)
+               	movsbq	0xa(%rdx), %rdi
+               	movsbq	0xa(%rsi), %r8
                	cmpl	%r8d, %edi
                	setge	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0xa(%rsi)
-               	movsbq	0xb(%rcx), %rdi
-               	movsbq	0xb(%rdx), %r8
+               	movb	%r8b, 0xa(%rcx)
+               	movsbq	0xb(%rdx), %rdi
+               	movsbq	0xb(%rsi), %r8
                	cmpl	%r8d, %edi
                	setge	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0xb(%rsi)
-               	movsbq	0xc(%rcx), %rdi
-               	movsbq	0xc(%rdx), %r8
+               	movb	%r8b, 0xb(%rcx)
+               	movsbq	0xc(%rdx), %rdi
+               	movsbq	0xc(%rsi), %r8
                	cmpl	%r8d, %edi
                	setge	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0xc(%rsi)
-               	movsbq	0xd(%rcx), %rdi
-               	movsbq	0xd(%rdx), %r8
+               	movb	%r8b, 0xc(%rcx)
+               	movsbq	0xd(%rdx), %rdi
+               	movsbq	0xd(%rsi), %r8
                	cmpl	%r8d, %edi
                	setge	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0xd(%rsi)
-               	movsbq	0xe(%rcx), %rdi
-               	movsbq	0xe(%rdx), %r8
+               	movb	%r8b, 0xd(%rcx)
+               	movsbq	0xe(%rdx), %rdi
+               	movsbq	0xe(%rsi), %r8
                	cmpl	%r8d, %edi
                	setge	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0xe(%rsi)
-               	movsbq	0xf(%rcx), %rdi
-               	movsbq	0xf(%rdx), %r8
+               	movb	%r8b, 0xe(%rcx)
+               	movsbq	0xf(%rdx), %rdi
+               	movsbq	0xf(%rsi), %r8
                	cmpl	%r8d, %edi
                	setge	%dil
                	movzbq	%dil, %rdi
                	movq	%rax, %r8
                	subq	%rdi, %r8
-               	movb	%r8b, 0xf(%rsi)
+               	movb	%r8b, 0xf(%rcx)
                	leaq	-0xa30(%rbp), %rdi
                	pushq	%rax
-               	movq	(%rsi), %rax
+               	movq	(%rcx), %rax
                	movq	%rax, (%rdi)
-               	movq	0x8(%rsi), %rax
+               	movq	0x8(%rcx), %rax
                	movq	%rax, 0x8(%rdi)
                	popq	%rax
                	leaq	-0x4c0(%rbp), %rdi
-               	movsbq	(%rcx,%rax), %rsi
-               	movsbq	(%rdx,%rax), %r8
-               	cmpl	%r8d, %esi
+               	movsbq	(%rdx,%rax), %rcx
+               	movsbq	(%rsi,%rax), %r8
+               	cmpl	%r8d, %ecx
                	jl	<addr>
-               	movq	$-0x1, %rsi
+               	movq	$-0x1, %rcx
                	jmp	<addr>
-               	xorl	%esi, %esi
-               	movb	%sil, (%rdi,%rax)
+               	xorl	%ecx, %ecx
+               	movb	%cl, (%rdi,%rax)
                	incq	%rax
                	cmpl	$0x10, %eax
                	jl	<addr>
@@ -2656,37 +2655,37 @@ Disassembly of section .text:
                	movl	(%rdx), %eax
                	movl	(%rcx), %esi
                	cmpl	%esi, %eax
-               	setb	%dil
-               	movzbq	%dil, %rdi
+               	setb	%sil
+               	movzbq	%sil, %rsi
                	xorl	%eax, %eax
-               	movq	%rax, %rsi
-               	subq	%rdi, %rsi
-               	movl	0x4(%rdx), %edi
-               	movl	0x4(%rcx), %r8d
-               	cmpl	%r8d, %edi
-               	setb	%r8b
-               	movzbq	%r8b, %r8
                	movq	%rax, %rdi
-               	subq	%r8, %rdi
-               	movl	0x8(%rdx), %r8d
-               	movl	0x8(%rcx), %r9d
-               	cmpl	%r9d, %r8d
-               	setb	%r9b
-               	movzbq	%r9b, %r9
+               	subq	%rsi, %rdi
+               	movl	0x4(%rdx), %esi
+               	movl	0x4(%rcx), %r8d
+               	cmpl	%r8d, %esi
+               	setb	%sil
+               	movzbq	%sil, %rsi
                	movq	%rax, %r8
-               	subq	%r9, %r8
-               	movl	0xc(%rdx), %r9d
+               	subq	%rsi, %r8
+               	movl	0x8(%rdx), %esi
+               	movl	0x8(%rcx), %r9d
+               	cmpl	%r9d, %esi
+               	setb	%sil
+               	movzbq	%sil, %rsi
+               	movq	%rax, %r9
+               	subq	%rsi, %r9
+               	movl	0xc(%rdx), %esi
                	movl	0xc(%rcx), %ecx
-               	cmpl	%ecx, %r9d
+               	cmpl	%ecx, %esi
                	setb	%cl
                	movzbq	%cl, %rcx
-               	movq	%rax, %r9
-               	subq	%rcx, %r9
+               	movq	%rax, %rsi
+               	subq	%rcx, %rsi
                	leaq	-0x9c0(%rbp), %rcx
-               	movl	%esi, (%rcx)
-               	movl	%edi, 0x4(%rcx)
-               	movl	%r8d, 0x8(%rcx)
-               	movl	%r9d, 0xc(%rcx)
+               	movl	%edi, (%rcx)
+               	movl	%r8d, 0x4(%rcx)
+               	movl	%r9d, 0x8(%rcx)
+               	movl	%esi, 0xc(%rcx)
                	leaq	-0xb60(%rbp), %rsi
                	leaq	-0x3e0(%rbp), %rdi
                	movq	%rax, %rcx
@@ -2720,37 +2719,37 @@ Disassembly of section .text:
                	movl	(%rdx), %eax
                	movl	(%rcx), %esi
                	cmpl	%esi, %eax
-               	sete	%dil
-               	movzbq	%dil, %rdi
+               	sete	%sil
+               	movzbq	%sil, %rsi
                	xorl	%eax, %eax
-               	movq	%rax, %rsi
-               	subq	%rdi, %rsi
-               	movl	0x4(%rdx), %edi
-               	movl	0x4(%rcx), %r8d
-               	cmpl	%r8d, %edi
-               	sete	%r8b
-               	movzbq	%r8b, %r8
                	movq	%rax, %rdi
-               	subq	%r8, %rdi
-               	movl	0x8(%rdx), %r8d
-               	movl	0x8(%rcx), %r9d
-               	cmpl	%r9d, %r8d
-               	sete	%r9b
-               	movzbq	%r9b, %r9
+               	subq	%rsi, %rdi
+               	movl	0x4(%rdx), %esi
+               	movl	0x4(%rcx), %r8d
+               	cmpl	%r8d, %esi
+               	sete	%sil
+               	movzbq	%sil, %rsi
                	movq	%rax, %r8
-               	subq	%r9, %r8
-               	movl	0xc(%rdx), %r9d
+               	subq	%rsi, %r8
+               	movl	0x8(%rdx), %esi
+               	movl	0x8(%rcx), %r9d
+               	cmpl	%r9d, %esi
+               	sete	%sil
+               	movzbq	%sil, %rsi
+               	movq	%rax, %r9
+               	subq	%rsi, %r9
+               	movl	0xc(%rdx), %esi
                	movl	0xc(%rcx), %ecx
-               	cmpl	%ecx, %r9d
+               	cmpl	%ecx, %esi
                	sete	%cl
                	movzbq	%cl, %rcx
-               	movq	%rax, %r9
-               	subq	%rcx, %r9
+               	movq	%rax, %rsi
+               	subq	%rcx, %rsi
                	leaq	-0x9b0(%rbp), %rcx
-               	movl	%esi, (%rcx)
-               	movl	%edi, 0x4(%rcx)
-               	movl	%r8d, 0x8(%rcx)
-               	movl	%r9d, 0xc(%rcx)
+               	movl	%edi, (%rcx)
+               	movl	%r8d, 0x4(%rcx)
+               	movl	%r9d, 0x8(%rcx)
+               	movl	%esi, 0xc(%rcx)
                	leaq	-0xb60(%rbp), %rsi
                	leaq	-0x3c0(%rbp), %rdi
                	movq	%rax, %rcx
@@ -2784,37 +2783,37 @@ Disassembly of section .text:
                	movslq	(%rdx), %rax
                	movslq	(%rcx), %rsi
                	cmpl	%esi, %eax
-               	setl	%dil
-               	movzbq	%dil, %rdi
+               	setl	%sil
+               	movzbq	%sil, %rsi
                	xorl	%eax, %eax
-               	movq	%rax, %rsi
-               	subq	%rdi, %rsi
-               	movslq	0x4(%rdx), %rdi
-               	movslq	0x4(%rcx), %r8
-               	cmpl	%r8d, %edi
-               	setl	%r8b
-               	movzbq	%r8b, %r8
                	movq	%rax, %rdi
-               	subq	%r8, %rdi
-               	movslq	0x8(%rdx), %r8
-               	movslq	0x8(%rcx), %r9
-               	cmpl	%r9d, %r8d
-               	setl	%r9b
-               	movzbq	%r9b, %r9
+               	subq	%rsi, %rdi
+               	movslq	0x4(%rdx), %rsi
+               	movslq	0x4(%rcx), %r8
+               	cmpl	%r8d, %esi
+               	setl	%sil
+               	movzbq	%sil, %rsi
                	movq	%rax, %r8
-               	subq	%r9, %r8
-               	movslq	0xc(%rdx), %r9
+               	subq	%rsi, %r8
+               	movslq	0x8(%rdx), %rsi
+               	movslq	0x8(%rcx), %r9
+               	cmpl	%r9d, %esi
+               	setl	%sil
+               	movzbq	%sil, %rsi
+               	movq	%rax, %r9
+               	subq	%rsi, %r9
+               	movslq	0xc(%rdx), %rsi
                	movslq	0xc(%rcx), %rcx
-               	cmpl	%ecx, %r9d
+               	cmpl	%ecx, %esi
                	setl	%cl
                	movzbq	%cl, %rcx
-               	movq	%rax, %r9
-               	subq	%rcx, %r9
+               	movq	%rax, %rsi
+               	subq	%rcx, %rsi
                	leaq	-0x9a0(%rbp), %rcx
-               	movl	%esi, (%rcx)
-               	movl	%edi, 0x4(%rcx)
-               	movl	%r8d, 0x8(%rcx)
-               	movl	%r9d, 0xc(%rcx)
+               	movl	%edi, (%rcx)
+               	movl	%r8d, 0x4(%rcx)
+               	movl	%r9d, 0x8(%rcx)
+               	movl	%esi, 0xc(%rcx)
                	leaq	-0xb40(%rbp), %rsi
                	leaq	-0x3a0(%rbp), %rdi
                	movq	%rax, %rcx
@@ -2848,37 +2847,37 @@ Disassembly of section .text:
                	movslq	(%rdx), %rax
                	movslq	(%rcx), %rsi
                	cmpl	%esi, %eax
-               	setge	%dil
-               	movzbq	%dil, %rdi
+               	setge	%sil
+               	movzbq	%sil, %rsi
                	xorl	%eax, %eax
-               	movq	%rax, %rsi
-               	subq	%rdi, %rsi
-               	movslq	0x4(%rdx), %rdi
-               	movslq	0x4(%rcx), %r8
-               	cmpl	%r8d, %edi
-               	setge	%r8b
-               	movzbq	%r8b, %r8
                	movq	%rax, %rdi
-               	subq	%r8, %rdi
-               	movslq	0x8(%rdx), %r8
-               	movslq	0x8(%rcx), %r9
-               	cmpl	%r9d, %r8d
-               	setge	%r9b
-               	movzbq	%r9b, %r9
+               	subq	%rsi, %rdi
+               	movslq	0x4(%rdx), %rsi
+               	movslq	0x4(%rcx), %r8
+               	cmpl	%r8d, %esi
+               	setge	%sil
+               	movzbq	%sil, %rsi
                	movq	%rax, %r8
-               	subq	%r9, %r8
-               	movslq	0xc(%rdx), %r9
+               	subq	%rsi, %r8
+               	movslq	0x8(%rdx), %rsi
+               	movslq	0x8(%rcx), %r9
+               	cmpl	%r9d, %esi
+               	setge	%sil
+               	movzbq	%sil, %rsi
+               	movq	%rax, %r9
+               	subq	%rsi, %r9
+               	movslq	0xc(%rdx), %rsi
                	movslq	0xc(%rcx), %rcx
-               	cmpl	%ecx, %r9d
+               	cmpl	%ecx, %esi
                	setge	%cl
                	movzbq	%cl, %rcx
-               	movq	%rax, %r9
-               	subq	%rcx, %r9
+               	movq	%rax, %rsi
+               	subq	%rcx, %rsi
                	leaq	-0x990(%rbp), %rcx
-               	movl	%esi, (%rcx)
-               	movl	%edi, 0x4(%rcx)
-               	movl	%r8d, 0x8(%rcx)
-               	movl	%r9d, 0xc(%rcx)
+               	movl	%edi, (%rcx)
+               	movl	%r8d, 0x4(%rcx)
+               	movl	%r9d, 0x8(%rcx)
+               	movl	%esi, 0xc(%rcx)
                	leaq	-0xb40(%rbp), %rsi
                	leaq	-0x380(%rbp), %rdi
                	movq	%rax, %rcx
@@ -2912,37 +2911,37 @@ Disassembly of section .text:
                	movslq	(%rdx), %rax
                	movslq	(%rcx), %rsi
                	cmpl	%esi, %eax
-               	setne	%dil
-               	movzbq	%dil, %rdi
+               	setne	%sil
+               	movzbq	%sil, %rsi
                	xorl	%eax, %eax
-               	movq	%rax, %rsi
-               	subq	%rdi, %rsi
-               	movslq	0x4(%rdx), %rdi
-               	movslq	0x4(%rcx), %r8
-               	cmpl	%r8d, %edi
-               	setne	%r8b
-               	movzbq	%r8b, %r8
                	movq	%rax, %rdi
-               	subq	%r8, %rdi
-               	movslq	0x8(%rdx), %r8
-               	movslq	0x8(%rcx), %r9
-               	cmpl	%r9d, %r8d
-               	setne	%r9b
-               	movzbq	%r9b, %r9
+               	subq	%rsi, %rdi
+               	movslq	0x4(%rdx), %rsi
+               	movslq	0x4(%rcx), %r8
+               	cmpl	%r8d, %esi
+               	setne	%sil
+               	movzbq	%sil, %rsi
                	movq	%rax, %r8
-               	subq	%r9, %r8
-               	movslq	0xc(%rdx), %r9
+               	subq	%rsi, %r8
+               	movslq	0x8(%rdx), %rsi
+               	movslq	0x8(%rcx), %r9
+               	cmpl	%r9d, %esi
+               	setne	%sil
+               	movzbq	%sil, %rsi
+               	movq	%rax, %r9
+               	subq	%rsi, %r9
+               	movslq	0xc(%rdx), %rsi
                	movslq	0xc(%rcx), %rcx
-               	cmpl	%ecx, %r9d
+               	cmpl	%ecx, %esi
                	setne	%cl
                	movzbq	%cl, %rcx
-               	movq	%rax, %r9
-               	subq	%rcx, %r9
+               	movq	%rax, %rsi
+               	subq	%rcx, %rsi
                	leaq	-0x980(%rbp), %rcx
-               	movl	%esi, (%rcx)
-               	movl	%edi, 0x4(%rcx)
-               	movl	%r8d, 0x8(%rcx)
-               	movl	%r9d, 0xc(%rcx)
+               	movl	%edi, (%rcx)
+               	movl	%r8d, 0x4(%rcx)
+               	movl	%r9d, 0x8(%rcx)
+               	movl	%esi, 0xc(%rcx)
                	leaq	-0xb40(%rbp), %rsi
                	leaq	-0x360(%rbp), %rdi
                	movq	%rax, %rcx
@@ -3715,43 +3714,43 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	-0x930(%rbp), %rdx
-               	movabsq	$0x4000000000000000, %rsi # imm = 0x4000000000000000
-               	movq	%rsi, %xmm14
+               	movabsq	$0x4000000000000000, %rax # imm = 0x4000000000000000
+               	movq	%rax, %xmm14
                	cvtsd2ss	%xmm14, %xmm0
                	movss	(%rdx,%riz), %xmm1
                	ucomiss	%xmm0, %xmm1
                	seta	%cl
                	movzbq	%cl, %rcx
                	xorl	%eax, %eax
+               	movq	%rax, %rsi
+               	subq	%rcx, %rsi
+               	movss	0x4(%rdx,%riz), %xmm1
+               	ucomiss	%xmm0, %xmm1
+               	seta	%cl
+               	movzbq	%cl, %rcx
                	movq	%rax, %rdi
                	subq	%rcx, %rdi
-               	movss	0x4(%rdx,%riz), %xmm1
+               	movss	0x8(%rdx,%riz), %xmm1
                	ucomiss	%xmm0, %xmm1
                	seta	%cl
                	movzbq	%cl, %rcx
                	movq	%rax, %r8
                	subq	%rcx, %r8
-               	movss	0x8(%rdx,%riz), %xmm1
+               	movss	0xc(%rdx,%riz), %xmm1
                	ucomiss	%xmm0, %xmm1
                	seta	%cl
                	movzbq	%cl, %rcx
                	movq	%rax, %r9
                	subq	%rcx, %r9
-               	movss	0xc(%rdx,%riz), %xmm1
-               	ucomiss	%xmm0, %xmm1
-               	seta	%cl
-               	movzbq	%cl, %rcx
-               	movq	%rax, %rbx
-               	subq	%rcx, %rbx
                	leaq	-0x8b0(%rbp), %rcx
-               	movl	%edi, (%rcx)
-               	movl	%r8d, 0x4(%rcx)
-               	movl	%r9d, 0x8(%rcx)
-               	movl	%ebx, 0xc(%rcx)
-               	leaq	-0x1d0(%rbp), %rdi
+               	movl	%esi, (%rcx)
+               	movl	%edi, 0x4(%rcx)
+               	movl	%r8d, 0x8(%rcx)
+               	movl	%r9d, 0xc(%rcx)
+               	leaq	-0x1d0(%rbp), %rsi
                	movq	%rax, %rcx
                	shlq	$0x2, %rcx
-               	addq	%rcx, %rdi
+               	addq	%rcx, %rsi
                	addq	%rdx, %rcx
                	movss	(%rcx,%riz), %xmm1
                	ucomiss	%xmm0, %xmm1
@@ -3759,7 +3758,7 @@ Disassembly of section .text:
                	movq	$-0x1, %rcx
                	jmp	<addr>
                	xorl	%ecx, %ecx
-               	movl	%ecx, (%rdi)
+               	movl	%ecx, (%rsi)
                	incq	%rax
                	cmpl	$0x4, %eax
                	jl	<addr>
@@ -3959,137 +3958,137 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	leaq	-0xbf0(%rbp), %rcx
+               	leaq	-0xbf0(%rbp), %rdx
                	leaq	-0x750(%rbp), %rax
-               	movzbq	(%rcx), %rdx
-               	cmpl	$0x64, %edx
-               	seta	%dl
-               	movzbq	%dl, %rdx
-               	xorl	%esi, %esi
-               	movq	%rsi, %rdi
-               	subq	%rdx, %rdi
+               	movzbq	(%rdx), %rcx
+               	cmpl	$0x64, %ecx
+               	seta	%sil
+               	movzbq	%sil, %rsi
+               	xorl	%ecx, %ecx
+               	movq	%rcx, %rdi
+               	subq	%rsi, %rdi
                	movb	%dil, (%rax)
-               	movzbq	0x1(%rcx), %rdx
-               	cmpl	$0x64, %edx
-               	seta	%dl
-               	movzbq	%dl, %rdx
-               	movq	%rsi, %rdi
-               	subq	%rdx, %rdi
+               	movzbq	0x1(%rdx), %rsi
+               	cmpl	$0x64, %esi
+               	seta	%sil
+               	movzbq	%sil, %rsi
+               	movq	%rcx, %rdi
+               	subq	%rsi, %rdi
                	movb	%dil, 0x1(%rax)
-               	movzbq	0x2(%rcx), %rdx
-               	cmpl	$0x64, %edx
-               	seta	%dl
-               	movzbq	%dl, %rdx
-               	movq	%rsi, %rdi
-               	subq	%rdx, %rdi
+               	movzbq	0x2(%rdx), %rsi
+               	cmpl	$0x64, %esi
+               	seta	%sil
+               	movzbq	%sil, %rsi
+               	movq	%rcx, %rdi
+               	subq	%rsi, %rdi
                	movb	%dil, 0x2(%rax)
-               	movzbq	0x3(%rcx), %rdx
-               	cmpl	$0x64, %edx
-               	seta	%dl
-               	movzbq	%dl, %rdx
-               	movq	%rsi, %rdi
-               	subq	%rdx, %rdi
+               	movzbq	0x3(%rdx), %rsi
+               	cmpl	$0x64, %esi
+               	seta	%sil
+               	movzbq	%sil, %rsi
+               	movq	%rcx, %rdi
+               	subq	%rsi, %rdi
                	movb	%dil, 0x3(%rax)
-               	movzbq	0x4(%rcx), %rdx
-               	cmpl	$0x64, %edx
-               	seta	%dl
-               	movzbq	%dl, %rdx
-               	movq	%rsi, %rdi
-               	subq	%rdx, %rdi
+               	movzbq	0x4(%rdx), %rsi
+               	cmpl	$0x64, %esi
+               	seta	%sil
+               	movzbq	%sil, %rsi
+               	movq	%rcx, %rdi
+               	subq	%rsi, %rdi
                	movb	%dil, 0x4(%rax)
-               	movzbq	0x5(%rcx), %rdx
-               	cmpl	$0x64, %edx
-               	seta	%dl
-               	movzbq	%dl, %rdx
-               	movq	%rsi, %rdi
-               	subq	%rdx, %rdi
+               	movzbq	0x5(%rdx), %rsi
+               	cmpl	$0x64, %esi
+               	seta	%sil
+               	movzbq	%sil, %rsi
+               	movq	%rcx, %rdi
+               	subq	%rsi, %rdi
                	movb	%dil, 0x5(%rax)
-               	movzbq	0x6(%rcx), %rdx
-               	cmpl	$0x64, %edx
-               	seta	%dl
-               	movzbq	%dl, %rdx
-               	movq	%rsi, %rdi
-               	subq	%rdx, %rdi
+               	movzbq	0x6(%rdx), %rsi
+               	cmpl	$0x64, %esi
+               	seta	%sil
+               	movzbq	%sil, %rsi
+               	movq	%rcx, %rdi
+               	subq	%rsi, %rdi
                	movb	%dil, 0x6(%rax)
-               	movzbq	0x7(%rcx), %rdx
-               	cmpl	$0x64, %edx
-               	seta	%dl
-               	movzbq	%dl, %rdx
-               	movq	%rsi, %rdi
-               	subq	%rdx, %rdi
+               	movzbq	0x7(%rdx), %rsi
+               	cmpl	$0x64, %esi
+               	seta	%sil
+               	movzbq	%sil, %rsi
+               	movq	%rcx, %rdi
+               	subq	%rsi, %rdi
                	movb	%dil, 0x7(%rax)
-               	movzbq	0x8(%rcx), %rdx
-               	cmpl	$0x64, %edx
-               	seta	%dl
-               	movzbq	%dl, %rdx
-               	movq	%rsi, %rdi
-               	subq	%rdx, %rdi
+               	movzbq	0x8(%rdx), %rsi
+               	cmpl	$0x64, %esi
+               	seta	%sil
+               	movzbq	%sil, %rsi
+               	movq	%rcx, %rdi
+               	subq	%rsi, %rdi
                	movb	%dil, 0x8(%rax)
-               	movzbq	0x9(%rcx), %rdx
-               	cmpl	$0x64, %edx
-               	seta	%dl
-               	movzbq	%dl, %rdx
-               	movq	%rsi, %rdi
-               	subq	%rdx, %rdi
+               	movzbq	0x9(%rdx), %rsi
+               	cmpl	$0x64, %esi
+               	seta	%sil
+               	movzbq	%sil, %rsi
+               	movq	%rcx, %rdi
+               	subq	%rsi, %rdi
                	movb	%dil, 0x9(%rax)
-               	movzbq	0xa(%rcx), %rdx
-               	cmpl	$0x64, %edx
-               	seta	%dl
-               	movzbq	%dl, %rdx
-               	movq	%rsi, %rdi
-               	subq	%rdx, %rdi
+               	movzbq	0xa(%rdx), %rsi
+               	cmpl	$0x64, %esi
+               	seta	%sil
+               	movzbq	%sil, %rsi
+               	movq	%rcx, %rdi
+               	subq	%rsi, %rdi
                	movb	%dil, 0xa(%rax)
-               	movzbq	0xb(%rcx), %rdx
-               	cmpl	$0x64, %edx
-               	seta	%dl
-               	movzbq	%dl, %rdx
-               	movq	%rsi, %rdi
-               	subq	%rdx, %rdi
+               	movzbq	0xb(%rdx), %rsi
+               	cmpl	$0x64, %esi
+               	seta	%sil
+               	movzbq	%sil, %rsi
+               	movq	%rcx, %rdi
+               	subq	%rsi, %rdi
                	movb	%dil, 0xb(%rax)
-               	movzbq	0xc(%rcx), %rdx
-               	cmpl	$0x64, %edx
-               	seta	%dl
-               	movzbq	%dl, %rdx
-               	movq	%rsi, %rdi
-               	subq	%rdx, %rdi
+               	movzbq	0xc(%rdx), %rsi
+               	cmpl	$0x64, %esi
+               	seta	%sil
+               	movzbq	%sil, %rsi
+               	movq	%rcx, %rdi
+               	subq	%rsi, %rdi
                	movb	%dil, 0xc(%rax)
-               	movzbq	0xd(%rcx), %rdx
-               	cmpl	$0x64, %edx
-               	seta	%dl
-               	movzbq	%dl, %rdx
-               	movq	%rsi, %rdi
-               	subq	%rdx, %rdi
+               	movzbq	0xd(%rdx), %rsi
+               	cmpl	$0x64, %esi
+               	seta	%sil
+               	movzbq	%sil, %rsi
+               	movq	%rcx, %rdi
+               	subq	%rsi, %rdi
                	movb	%dil, 0xd(%rax)
-               	movzbq	0xe(%rcx), %rdx
-               	cmpl	$0x64, %edx
-               	seta	%dl
-               	movzbq	%dl, %rdx
-               	movq	%rsi, %rdi
-               	subq	%rdx, %rdi
+               	movzbq	0xe(%rdx), %rsi
+               	cmpl	$0x64, %esi
+               	seta	%sil
+               	movzbq	%sil, %rsi
+               	movq	%rcx, %rdi
+               	subq	%rsi, %rdi
                	movb	%dil, 0xe(%rax)
-               	movzbq	0xf(%rcx), %rdx
-               	cmpl	$0x64, %edx
-               	seta	%dl
-               	movzbq	%dl, %rdx
-               	movq	%rsi, %rdi
-               	subq	%rdx, %rdi
+               	movzbq	0xf(%rdx), %rsi
+               	cmpl	$0x64, %esi
+               	seta	%sil
+               	movzbq	%sil, %rsi
+               	movq	%rcx, %rdi
+               	subq	%rsi, %rdi
                	movb	%dil, 0xf(%rax)
-               	leaq	-0x850(%rbp), %rdx
+               	leaq	-0x850(%rbp), %rsi
                	pushq	%rcx
                	movq	(%rax), %rcx
-               	movq	%rcx, (%rdx)
+               	movq	%rcx, (%rsi)
                	movq	0x8(%rax), %rcx
-               	movq	%rcx, 0x8(%rdx)
+               	movq	%rcx, 0x8(%rsi)
                	popq	%rcx
-               	movq	%rsi, %rax
+               	movq	%rcx, %rax
                	leaq	-0x130(%rbp), %rdi
-               	movzbq	(%rcx,%rax), %rdx
-               	cmpl	$0x64, %edx
+               	movzbq	(%rdx,%rax), %rsi
+               	cmpl	$0x64, %esi
                	jle	<addr>
-               	movq	$-0x1, %rdx
+               	movq	$-0x1, %rsi
                	jmp	<addr>
-               	movq	%rsi, %rdx
-               	movb	%dl, (%rdi,%rax)
+               	movq	%rcx, %rsi
+               	movb	%sil, (%rdi,%rax)
                	incq	%rax
                	cmpl	$0x10, %eax
                	jl	<addr>
@@ -4103,137 +4102,137 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	leaq	-0xbf0(%rbp), %rcx
+               	leaq	-0xbf0(%rbp), %rdx
                	leaq	-0x750(%rbp), %rax
-               	movzbq	(%rcx), %rdx
-               	cmpl	$0x3, %edx
-               	sete	%dl
-               	movzbq	%dl, %rdx
-               	xorl	%esi, %esi
-               	movq	%rsi, %rdi
-               	subq	%rdx, %rdi
+               	movzbq	(%rdx), %rcx
+               	cmpl	$0x3, %ecx
+               	sete	%sil
+               	movzbq	%sil, %rsi
+               	xorl	%ecx, %ecx
+               	movq	%rcx, %rdi
+               	subq	%rsi, %rdi
                	movb	%dil, (%rax)
-               	movzbq	0x1(%rcx), %rdx
-               	cmpl	$0x3, %edx
-               	sete	%dl
-               	movzbq	%dl, %rdx
-               	movq	%rsi, %rdi
-               	subq	%rdx, %rdi
+               	movzbq	0x1(%rdx), %rsi
+               	cmpl	$0x3, %esi
+               	sete	%sil
+               	movzbq	%sil, %rsi
+               	movq	%rcx, %rdi
+               	subq	%rsi, %rdi
                	movb	%dil, 0x1(%rax)
-               	movzbq	0x2(%rcx), %rdx
-               	cmpl	$0x3, %edx
-               	sete	%dl
-               	movzbq	%dl, %rdx
-               	movq	%rsi, %rdi
-               	subq	%rdx, %rdi
+               	movzbq	0x2(%rdx), %rsi
+               	cmpl	$0x3, %esi
+               	sete	%sil
+               	movzbq	%sil, %rsi
+               	movq	%rcx, %rdi
+               	subq	%rsi, %rdi
                	movb	%dil, 0x2(%rax)
-               	movzbq	0x3(%rcx), %rdx
-               	cmpl	$0x3, %edx
-               	sete	%dl
-               	movzbq	%dl, %rdx
-               	movq	%rsi, %rdi
-               	subq	%rdx, %rdi
+               	movzbq	0x3(%rdx), %rsi
+               	cmpl	$0x3, %esi
+               	sete	%sil
+               	movzbq	%sil, %rsi
+               	movq	%rcx, %rdi
+               	subq	%rsi, %rdi
                	movb	%dil, 0x3(%rax)
-               	movzbq	0x4(%rcx), %rdx
-               	cmpl	$0x3, %edx
-               	sete	%dl
-               	movzbq	%dl, %rdx
-               	movq	%rsi, %rdi
-               	subq	%rdx, %rdi
+               	movzbq	0x4(%rdx), %rsi
+               	cmpl	$0x3, %esi
+               	sete	%sil
+               	movzbq	%sil, %rsi
+               	movq	%rcx, %rdi
+               	subq	%rsi, %rdi
                	movb	%dil, 0x4(%rax)
-               	movzbq	0x5(%rcx), %rdx
-               	cmpl	$0x3, %edx
-               	sete	%dl
-               	movzbq	%dl, %rdx
-               	movq	%rsi, %rdi
-               	subq	%rdx, %rdi
+               	movzbq	0x5(%rdx), %rsi
+               	cmpl	$0x3, %esi
+               	sete	%sil
+               	movzbq	%sil, %rsi
+               	movq	%rcx, %rdi
+               	subq	%rsi, %rdi
                	movb	%dil, 0x5(%rax)
-               	movzbq	0x6(%rcx), %rdx
-               	cmpl	$0x3, %edx
-               	sete	%dl
-               	movzbq	%dl, %rdx
-               	movq	%rsi, %rdi
-               	subq	%rdx, %rdi
+               	movzbq	0x6(%rdx), %rsi
+               	cmpl	$0x3, %esi
+               	sete	%sil
+               	movzbq	%sil, %rsi
+               	movq	%rcx, %rdi
+               	subq	%rsi, %rdi
                	movb	%dil, 0x6(%rax)
-               	movzbq	0x7(%rcx), %rdx
-               	cmpl	$0x3, %edx
-               	sete	%dl
-               	movzbq	%dl, %rdx
-               	movq	%rsi, %rdi
-               	subq	%rdx, %rdi
+               	movzbq	0x7(%rdx), %rsi
+               	cmpl	$0x3, %esi
+               	sete	%sil
+               	movzbq	%sil, %rsi
+               	movq	%rcx, %rdi
+               	subq	%rsi, %rdi
                	movb	%dil, 0x7(%rax)
-               	movzbq	0x8(%rcx), %rdx
-               	cmpl	$0x3, %edx
-               	sete	%dl
-               	movzbq	%dl, %rdx
-               	movq	%rsi, %rdi
-               	subq	%rdx, %rdi
+               	movzbq	0x8(%rdx), %rsi
+               	cmpl	$0x3, %esi
+               	sete	%sil
+               	movzbq	%sil, %rsi
+               	movq	%rcx, %rdi
+               	subq	%rsi, %rdi
                	movb	%dil, 0x8(%rax)
-               	movzbq	0x9(%rcx), %rdx
-               	cmpl	$0x3, %edx
-               	sete	%dl
-               	movzbq	%dl, %rdx
-               	movq	%rsi, %rdi
-               	subq	%rdx, %rdi
+               	movzbq	0x9(%rdx), %rsi
+               	cmpl	$0x3, %esi
+               	sete	%sil
+               	movzbq	%sil, %rsi
+               	movq	%rcx, %rdi
+               	subq	%rsi, %rdi
                	movb	%dil, 0x9(%rax)
-               	movzbq	0xa(%rcx), %rdx
-               	cmpl	$0x3, %edx
-               	sete	%dl
-               	movzbq	%dl, %rdx
-               	movq	%rsi, %rdi
-               	subq	%rdx, %rdi
+               	movzbq	0xa(%rdx), %rsi
+               	cmpl	$0x3, %esi
+               	sete	%sil
+               	movzbq	%sil, %rsi
+               	movq	%rcx, %rdi
+               	subq	%rsi, %rdi
                	movb	%dil, 0xa(%rax)
-               	movzbq	0xb(%rcx), %rdx
-               	cmpl	$0x3, %edx
-               	sete	%dl
-               	movzbq	%dl, %rdx
-               	movq	%rsi, %rdi
-               	subq	%rdx, %rdi
+               	movzbq	0xb(%rdx), %rsi
+               	cmpl	$0x3, %esi
+               	sete	%sil
+               	movzbq	%sil, %rsi
+               	movq	%rcx, %rdi
+               	subq	%rsi, %rdi
                	movb	%dil, 0xb(%rax)
-               	movzbq	0xc(%rcx), %rdx
-               	cmpl	$0x3, %edx
-               	sete	%dl
-               	movzbq	%dl, %rdx
-               	movq	%rsi, %rdi
-               	subq	%rdx, %rdi
+               	movzbq	0xc(%rdx), %rsi
+               	cmpl	$0x3, %esi
+               	sete	%sil
+               	movzbq	%sil, %rsi
+               	movq	%rcx, %rdi
+               	subq	%rsi, %rdi
                	movb	%dil, 0xc(%rax)
-               	movzbq	0xd(%rcx), %rdx
-               	cmpl	$0x3, %edx
-               	sete	%dl
-               	movzbq	%dl, %rdx
-               	movq	%rsi, %rdi
-               	subq	%rdx, %rdi
+               	movzbq	0xd(%rdx), %rsi
+               	cmpl	$0x3, %esi
+               	sete	%sil
+               	movzbq	%sil, %rsi
+               	movq	%rcx, %rdi
+               	subq	%rsi, %rdi
                	movb	%dil, 0xd(%rax)
-               	movzbq	0xe(%rcx), %rdx
-               	cmpl	$0x3, %edx
-               	sete	%dl
-               	movzbq	%dl, %rdx
-               	movq	%rsi, %rdi
-               	subq	%rdx, %rdi
+               	movzbq	0xe(%rdx), %rsi
+               	cmpl	$0x3, %esi
+               	sete	%sil
+               	movzbq	%sil, %rsi
+               	movq	%rcx, %rdi
+               	subq	%rsi, %rdi
                	movb	%dil, 0xe(%rax)
-               	movzbq	0xf(%rcx), %rdx
-               	cmpl	$0x3, %edx
-               	sete	%dl
-               	movzbq	%dl, %rdx
-               	movq	%rsi, %rdi
-               	subq	%rdx, %rdi
+               	movzbq	0xf(%rdx), %rsi
+               	cmpl	$0x3, %esi
+               	sete	%sil
+               	movzbq	%sil, %rsi
+               	movq	%rcx, %rdi
+               	subq	%rsi, %rdi
                	movb	%dil, 0xf(%rax)
-               	leaq	-0x840(%rbp), %rdx
+               	leaq	-0x840(%rbp), %rsi
                	pushq	%rcx
                	movq	(%rax), %rcx
-               	movq	%rcx, (%rdx)
+               	movq	%rcx, (%rsi)
                	movq	0x8(%rax), %rcx
-               	movq	%rcx, 0x8(%rdx)
+               	movq	%rcx, 0x8(%rsi)
                	popq	%rcx
-               	movq	%rsi, %rax
+               	movq	%rcx, %rax
                	leaq	-0x110(%rbp), %rdi
-               	movzbq	(%rcx,%rax), %rdx
-               	cmpl	$0x3, %edx
+               	movzbq	(%rdx,%rax), %rsi
+               	cmpl	$0x3, %esi
                	jne	<addr>
-               	movq	$-0x1, %rdx
+               	movq	$-0x1, %rsi
                	jmp	<addr>
-               	movq	%rsi, %rdx
-               	movb	%dl, (%rdi,%rax)
+               	movq	%rcx, %rsi
+               	movb	%sil, (%rdi,%rax)
                	incq	%rax
                	cmpl	$0x10, %eax
                	jl	<addr>
@@ -4247,137 +4246,137 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	leaq	-0xbf0(%rbp), %rcx
+               	leaq	-0xbf0(%rbp), %rdx
                	leaq	-0x750(%rbp), %rax
-               	movzbq	(%rcx), %rdx
-               	cmpl	$0xff, %edx
-               	setb	%dl
-               	movzbq	%dl, %rdx
-               	xorl	%esi, %esi
-               	movq	%rsi, %rdi
-               	subq	%rdx, %rdi
+               	movzbq	(%rdx), %rcx
+               	cmpl	$0xff, %ecx
+               	setb	%sil
+               	movzbq	%sil, %rsi
+               	xorl	%ecx, %ecx
+               	movq	%rcx, %rdi
+               	subq	%rsi, %rdi
                	movb	%dil, (%rax)
-               	movzbq	0x1(%rcx), %rdx
-               	cmpl	$0xff, %edx
-               	setb	%dl
-               	movzbq	%dl, %rdx
-               	movq	%rsi, %rdi
-               	subq	%rdx, %rdi
+               	movzbq	0x1(%rdx), %rsi
+               	cmpl	$0xff, %esi
+               	setb	%sil
+               	movzbq	%sil, %rsi
+               	movq	%rcx, %rdi
+               	subq	%rsi, %rdi
                	movb	%dil, 0x1(%rax)
-               	movzbq	0x2(%rcx), %rdx
-               	cmpl	$0xff, %edx
-               	setb	%dl
-               	movzbq	%dl, %rdx
-               	movq	%rsi, %rdi
-               	subq	%rdx, %rdi
+               	movzbq	0x2(%rdx), %rsi
+               	cmpl	$0xff, %esi
+               	setb	%sil
+               	movzbq	%sil, %rsi
+               	movq	%rcx, %rdi
+               	subq	%rsi, %rdi
                	movb	%dil, 0x2(%rax)
-               	movzbq	0x3(%rcx), %rdx
-               	cmpl	$0xff, %edx
-               	setb	%dl
-               	movzbq	%dl, %rdx
-               	movq	%rsi, %rdi
-               	subq	%rdx, %rdi
+               	movzbq	0x3(%rdx), %rsi
+               	cmpl	$0xff, %esi
+               	setb	%sil
+               	movzbq	%sil, %rsi
+               	movq	%rcx, %rdi
+               	subq	%rsi, %rdi
                	movb	%dil, 0x3(%rax)
-               	movzbq	0x4(%rcx), %rdx
-               	cmpl	$0xff, %edx
-               	setb	%dl
-               	movzbq	%dl, %rdx
-               	movq	%rsi, %rdi
-               	subq	%rdx, %rdi
+               	movzbq	0x4(%rdx), %rsi
+               	cmpl	$0xff, %esi
+               	setb	%sil
+               	movzbq	%sil, %rsi
+               	movq	%rcx, %rdi
+               	subq	%rsi, %rdi
                	movb	%dil, 0x4(%rax)
-               	movzbq	0x5(%rcx), %rdx
-               	cmpl	$0xff, %edx
-               	setb	%dl
-               	movzbq	%dl, %rdx
-               	movq	%rsi, %rdi
-               	subq	%rdx, %rdi
+               	movzbq	0x5(%rdx), %rsi
+               	cmpl	$0xff, %esi
+               	setb	%sil
+               	movzbq	%sil, %rsi
+               	movq	%rcx, %rdi
+               	subq	%rsi, %rdi
                	movb	%dil, 0x5(%rax)
-               	movzbq	0x6(%rcx), %rdx
-               	cmpl	$0xff, %edx
-               	setb	%dl
-               	movzbq	%dl, %rdx
-               	movq	%rsi, %rdi
-               	subq	%rdx, %rdi
+               	movzbq	0x6(%rdx), %rsi
+               	cmpl	$0xff, %esi
+               	setb	%sil
+               	movzbq	%sil, %rsi
+               	movq	%rcx, %rdi
+               	subq	%rsi, %rdi
                	movb	%dil, 0x6(%rax)
-               	movzbq	0x7(%rcx), %rdx
-               	cmpl	$0xff, %edx
-               	setb	%dl
-               	movzbq	%dl, %rdx
-               	movq	%rsi, %rdi
-               	subq	%rdx, %rdi
+               	movzbq	0x7(%rdx), %rsi
+               	cmpl	$0xff, %esi
+               	setb	%sil
+               	movzbq	%sil, %rsi
+               	movq	%rcx, %rdi
+               	subq	%rsi, %rdi
                	movb	%dil, 0x7(%rax)
-               	movzbq	0x8(%rcx), %rdx
-               	cmpl	$0xff, %edx
-               	setb	%dl
-               	movzbq	%dl, %rdx
-               	movq	%rsi, %rdi
-               	subq	%rdx, %rdi
+               	movzbq	0x8(%rdx), %rsi
+               	cmpl	$0xff, %esi
+               	setb	%sil
+               	movzbq	%sil, %rsi
+               	movq	%rcx, %rdi
+               	subq	%rsi, %rdi
                	movb	%dil, 0x8(%rax)
-               	movzbq	0x9(%rcx), %rdx
-               	cmpl	$0xff, %edx
-               	setb	%dl
-               	movzbq	%dl, %rdx
-               	movq	%rsi, %rdi
-               	subq	%rdx, %rdi
+               	movzbq	0x9(%rdx), %rsi
+               	cmpl	$0xff, %esi
+               	setb	%sil
+               	movzbq	%sil, %rsi
+               	movq	%rcx, %rdi
+               	subq	%rsi, %rdi
                	movb	%dil, 0x9(%rax)
-               	movzbq	0xa(%rcx), %rdx
-               	cmpl	$0xff, %edx
-               	setb	%dl
-               	movzbq	%dl, %rdx
-               	movq	%rsi, %rdi
-               	subq	%rdx, %rdi
+               	movzbq	0xa(%rdx), %rsi
+               	cmpl	$0xff, %esi
+               	setb	%sil
+               	movzbq	%sil, %rsi
+               	movq	%rcx, %rdi
+               	subq	%rsi, %rdi
                	movb	%dil, 0xa(%rax)
-               	movzbq	0xb(%rcx), %rdx
-               	cmpl	$0xff, %edx
-               	setb	%dl
-               	movzbq	%dl, %rdx
-               	movq	%rsi, %rdi
-               	subq	%rdx, %rdi
+               	movzbq	0xb(%rdx), %rsi
+               	cmpl	$0xff, %esi
+               	setb	%sil
+               	movzbq	%sil, %rsi
+               	movq	%rcx, %rdi
+               	subq	%rsi, %rdi
                	movb	%dil, 0xb(%rax)
-               	movzbq	0xc(%rcx), %rdx
-               	cmpl	$0xff, %edx
-               	setb	%dl
-               	movzbq	%dl, %rdx
-               	movq	%rsi, %rdi
-               	subq	%rdx, %rdi
+               	movzbq	0xc(%rdx), %rsi
+               	cmpl	$0xff, %esi
+               	setb	%sil
+               	movzbq	%sil, %rsi
+               	movq	%rcx, %rdi
+               	subq	%rsi, %rdi
                	movb	%dil, 0xc(%rax)
-               	movzbq	0xd(%rcx), %rdx
-               	cmpl	$0xff, %edx
-               	setb	%dl
-               	movzbq	%dl, %rdx
-               	movq	%rsi, %rdi
-               	subq	%rdx, %rdi
+               	movzbq	0xd(%rdx), %rsi
+               	cmpl	$0xff, %esi
+               	setb	%sil
+               	movzbq	%sil, %rsi
+               	movq	%rcx, %rdi
+               	subq	%rsi, %rdi
                	movb	%dil, 0xd(%rax)
-               	movzbq	0xe(%rcx), %rdx
-               	cmpl	$0xff, %edx
-               	setb	%dl
-               	movzbq	%dl, %rdx
-               	movq	%rsi, %rdi
-               	subq	%rdx, %rdi
+               	movzbq	0xe(%rdx), %rsi
+               	cmpl	$0xff, %esi
+               	setb	%sil
+               	movzbq	%sil, %rsi
+               	movq	%rcx, %rdi
+               	subq	%rsi, %rdi
                	movb	%dil, 0xe(%rax)
-               	movzbq	0xf(%rcx), %rdx
-               	cmpl	$0xff, %edx
-               	setb	%dl
-               	movzbq	%dl, %rdx
-               	movq	%rsi, %rdi
-               	subq	%rdx, %rdi
+               	movzbq	0xf(%rdx), %rsi
+               	cmpl	$0xff, %esi
+               	setb	%sil
+               	movzbq	%sil, %rsi
+               	movq	%rcx, %rdi
+               	subq	%rsi, %rdi
                	movb	%dil, 0xf(%rax)
-               	leaq	-0x830(%rbp), %rdx
+               	leaq	-0x830(%rbp), %rsi
                	pushq	%rcx
                	movq	(%rax), %rcx
-               	movq	%rcx, (%rdx)
+               	movq	%rcx, (%rsi)
                	movq	0x8(%rax), %rcx
-               	movq	%rcx, 0x8(%rdx)
+               	movq	%rcx, 0x8(%rsi)
                	popq	%rcx
-               	movq	%rsi, %rax
+               	movq	%rcx, %rax
                	leaq	-0xf0(%rbp), %rdi
-               	movzbq	(%rcx,%rax), %rdx
-               	cmpl	$0xff, %edx
+               	movzbq	(%rdx,%rax), %rsi
+               	cmpl	$0xff, %esi
                	jge	<addr>
-               	movq	$-0x1, %rdx
+               	movq	$-0x1, %rsi
                	jmp	<addr>
-               	movq	%rsi, %rdx
-               	movb	%dl, (%rdi,%rax)
+               	movq	%rcx, %rsi
+               	movb	%sil, (%rdi,%rax)
                	incq	%rax
                	cmpl	$0x10, %eax
                	jl	<addr>
@@ -4391,138 +4390,138 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	leaq	-0xbd0(%rbp), %rcx
-               	movq	$-0x5, %rdx
+               	leaq	-0xbd0(%rbp), %rdx
+               	movq	$-0x5, %rsi
                	leaq	-0x750(%rbp), %rax
-               	movsbq	(%rcx), %rsi
-               	cmpl	%edx, %esi
+               	movsbq	(%rdx), %rcx
+               	cmpl	%esi, %ecx
                	setg	%dil
                	movzbq	%dil, %rdi
-               	xorl	%esi, %esi
-               	movq	%rsi, %r8
+               	xorl	%ecx, %ecx
+               	movq	%rcx, %r8
                	subq	%rdi, %r8
                	movb	%r8b, (%rax)
-               	movsbq	0x1(%rcx), %rdi
-               	cmpl	%edx, %edi
+               	movsbq	0x1(%rdx), %rdi
+               	cmpl	%esi, %edi
                	setg	%dil
                	movzbq	%dil, %rdi
-               	movq	%rsi, %r8
+               	movq	%rcx, %r8
                	subq	%rdi, %r8
                	movb	%r8b, 0x1(%rax)
-               	movsbq	0x2(%rcx), %rdi
-               	cmpl	%edx, %edi
+               	movsbq	0x2(%rdx), %rdi
+               	cmpl	%esi, %edi
                	setg	%dil
                	movzbq	%dil, %rdi
-               	movq	%rsi, %r8
+               	movq	%rcx, %r8
                	subq	%rdi, %r8
                	movb	%r8b, 0x2(%rax)
-               	movsbq	0x3(%rcx), %rdi
-               	cmpl	%edx, %edi
+               	movsbq	0x3(%rdx), %rdi
+               	cmpl	%esi, %edi
                	setg	%dil
                	movzbq	%dil, %rdi
-               	movq	%rsi, %r8
+               	movq	%rcx, %r8
                	subq	%rdi, %r8
                	movb	%r8b, 0x3(%rax)
-               	movsbq	0x4(%rcx), %rdi
-               	cmpl	%edx, %edi
+               	movsbq	0x4(%rdx), %rdi
+               	cmpl	%esi, %edi
                	setg	%dil
                	movzbq	%dil, %rdi
-               	movq	%rsi, %r8
+               	movq	%rcx, %r8
                	subq	%rdi, %r8
                	movb	%r8b, 0x4(%rax)
-               	movsbq	0x5(%rcx), %rdi
-               	cmpl	%edx, %edi
+               	movsbq	0x5(%rdx), %rdi
+               	cmpl	%esi, %edi
                	setg	%dil
                	movzbq	%dil, %rdi
-               	movq	%rsi, %r8
+               	movq	%rcx, %r8
                	subq	%rdi, %r8
                	movb	%r8b, 0x5(%rax)
-               	movsbq	0x6(%rcx), %rdi
-               	cmpl	%edx, %edi
+               	movsbq	0x6(%rdx), %rdi
+               	cmpl	%esi, %edi
                	setg	%dil
                	movzbq	%dil, %rdi
-               	movq	%rsi, %r8
+               	movq	%rcx, %r8
                	subq	%rdi, %r8
                	movb	%r8b, 0x6(%rax)
-               	movsbq	0x7(%rcx), %rdi
-               	cmpl	%edx, %edi
+               	movsbq	0x7(%rdx), %rdi
+               	cmpl	%esi, %edi
                	setg	%dil
                	movzbq	%dil, %rdi
-               	movq	%rsi, %r8
+               	movq	%rcx, %r8
                	subq	%rdi, %r8
                	movb	%r8b, 0x7(%rax)
-               	movsbq	0x8(%rcx), %rdi
-               	cmpl	%edx, %edi
+               	movsbq	0x8(%rdx), %rdi
+               	cmpl	%esi, %edi
                	setg	%dil
                	movzbq	%dil, %rdi
-               	movq	%rsi, %r8
+               	movq	%rcx, %r8
                	subq	%rdi, %r8
                	movb	%r8b, 0x8(%rax)
-               	movsbq	0x9(%rcx), %rdi
-               	cmpl	%edx, %edi
+               	movsbq	0x9(%rdx), %rdi
+               	cmpl	%esi, %edi
                	setg	%dil
                	movzbq	%dil, %rdi
-               	movq	%rsi, %r8
+               	movq	%rcx, %r8
                	subq	%rdi, %r8
                	movb	%r8b, 0x9(%rax)
-               	movsbq	0xa(%rcx), %rdi
-               	cmpl	%edx, %edi
+               	movsbq	0xa(%rdx), %rdi
+               	cmpl	%esi, %edi
                	setg	%dil
                	movzbq	%dil, %rdi
-               	movq	%rsi, %r8
+               	movq	%rcx, %r8
                	subq	%rdi, %r8
                	movb	%r8b, 0xa(%rax)
-               	movsbq	0xb(%rcx), %rdi
-               	cmpl	%edx, %edi
+               	movsbq	0xb(%rdx), %rdi
+               	cmpl	%esi, %edi
                	setg	%dil
                	movzbq	%dil, %rdi
-               	movq	%rsi, %r8
+               	movq	%rcx, %r8
                	subq	%rdi, %r8
                	movb	%r8b, 0xb(%rax)
-               	movsbq	0xc(%rcx), %rdi
-               	cmpl	%edx, %edi
+               	movsbq	0xc(%rdx), %rdi
+               	cmpl	%esi, %edi
                	setg	%dil
                	movzbq	%dil, %rdi
-               	movq	%rsi, %r8
+               	movq	%rcx, %r8
                	subq	%rdi, %r8
                	movb	%r8b, 0xc(%rax)
-               	movsbq	0xd(%rcx), %rdi
-               	cmpl	%edx, %edi
+               	movsbq	0xd(%rdx), %rdi
+               	cmpl	%esi, %edi
                	setg	%dil
                	movzbq	%dil, %rdi
-               	movq	%rsi, %r8
+               	movq	%rcx, %r8
                	subq	%rdi, %r8
                	movb	%r8b, 0xd(%rax)
-               	movsbq	0xe(%rcx), %rdi
-               	cmpl	%edx, %edi
+               	movsbq	0xe(%rdx), %rdi
+               	cmpl	%esi, %edi
                	setg	%dil
                	movzbq	%dil, %rdi
-               	movq	%rsi, %r8
+               	movq	%rcx, %r8
                	subq	%rdi, %r8
                	movb	%r8b, 0xe(%rax)
-               	movsbq	0xf(%rcx), %rdi
-               	cmpl	%edx, %edi
-               	setg	%dl
-               	movzbq	%dl, %rdx
-               	movq	%rsi, %rdi
-               	subq	%rdx, %rdi
+               	movsbq	0xf(%rdx), %rdi
+               	cmpl	%esi, %edi
+               	setg	%sil
+               	movzbq	%sil, %rsi
+               	movq	%rcx, %rdi
+               	subq	%rsi, %rdi
                	movb	%dil, 0xf(%rax)
-               	leaq	-0x820(%rbp), %rdx
+               	leaq	-0x820(%rbp), %rsi
                	pushq	%rcx
                	movq	(%rax), %rcx
-               	movq	%rcx, (%rdx)
+               	movq	%rcx, (%rsi)
                	movq	0x8(%rax), %rcx
-               	movq	%rcx, 0x8(%rdx)
+               	movq	%rcx, 0x8(%rsi)
                	popq	%rcx
-               	movq	%rsi, %rax
+               	movq	%rcx, %rax
                	leaq	-0xd0(%rbp), %rdi
-               	movsbq	(%rcx,%rax), %rdx
-               	cmpl	$-0x5, %edx
+               	movsbq	(%rdx,%rax), %rsi
+               	cmpl	$-0x5, %esi
                	jle	<addr>
-               	movq	$-0x1, %rdx
+               	movq	$-0x1, %rsi
                	jmp	<addr>
-               	movq	%rsi, %rdx
-               	movb	%dl, (%rdi,%rax)
+               	movq	%rcx, %rsi
+               	movb	%sil, (%rdi,%rax)
                	incq	%rax
                	cmpl	$0x10, %eax
                	jl	<addr>
@@ -4636,137 +4635,137 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	leaq	-0xbf0(%rbp), %rcx
+               	leaq	-0xbf0(%rbp), %rdx
                	leaq	-0x750(%rbp), %rax
-               	movzbq	(%rcx), %rdx
-               	cmpl	$0x64, %edx
-               	setb	%dl
-               	movzbq	%dl, %rdx
-               	xorl	%esi, %esi
-               	movq	%rsi, %rdi
-               	subq	%rdx, %rdi
+               	movzbq	(%rdx), %rcx
+               	cmpl	$0x64, %ecx
+               	setb	%sil
+               	movzbq	%sil, %rsi
+               	xorl	%ecx, %ecx
+               	movq	%rcx, %rdi
+               	subq	%rsi, %rdi
                	movb	%dil, (%rax)
-               	movzbq	0x1(%rcx), %rdx
-               	cmpl	$0x64, %edx
-               	setb	%dl
-               	movzbq	%dl, %rdx
-               	movq	%rsi, %rdi
-               	subq	%rdx, %rdi
+               	movzbq	0x1(%rdx), %rsi
+               	cmpl	$0x64, %esi
+               	setb	%sil
+               	movzbq	%sil, %rsi
+               	movq	%rcx, %rdi
+               	subq	%rsi, %rdi
                	movb	%dil, 0x1(%rax)
-               	movzbq	0x2(%rcx), %rdx
-               	cmpl	$0x64, %edx
-               	setb	%dl
-               	movzbq	%dl, %rdx
-               	movq	%rsi, %rdi
-               	subq	%rdx, %rdi
+               	movzbq	0x2(%rdx), %rsi
+               	cmpl	$0x64, %esi
+               	setb	%sil
+               	movzbq	%sil, %rsi
+               	movq	%rcx, %rdi
+               	subq	%rsi, %rdi
                	movb	%dil, 0x2(%rax)
-               	movzbq	0x3(%rcx), %rdx
-               	cmpl	$0x64, %edx
-               	setb	%dl
-               	movzbq	%dl, %rdx
-               	movq	%rsi, %rdi
-               	subq	%rdx, %rdi
+               	movzbq	0x3(%rdx), %rsi
+               	cmpl	$0x64, %esi
+               	setb	%sil
+               	movzbq	%sil, %rsi
+               	movq	%rcx, %rdi
+               	subq	%rsi, %rdi
                	movb	%dil, 0x3(%rax)
-               	movzbq	0x4(%rcx), %rdx
-               	cmpl	$0x64, %edx
-               	setb	%dl
-               	movzbq	%dl, %rdx
-               	movq	%rsi, %rdi
-               	subq	%rdx, %rdi
+               	movzbq	0x4(%rdx), %rsi
+               	cmpl	$0x64, %esi
+               	setb	%sil
+               	movzbq	%sil, %rsi
+               	movq	%rcx, %rdi
+               	subq	%rsi, %rdi
                	movb	%dil, 0x4(%rax)
-               	movzbq	0x5(%rcx), %rdx
-               	cmpl	$0x64, %edx
-               	setb	%dl
-               	movzbq	%dl, %rdx
-               	movq	%rsi, %rdi
-               	subq	%rdx, %rdi
+               	movzbq	0x5(%rdx), %rsi
+               	cmpl	$0x64, %esi
+               	setb	%sil
+               	movzbq	%sil, %rsi
+               	movq	%rcx, %rdi
+               	subq	%rsi, %rdi
                	movb	%dil, 0x5(%rax)
-               	movzbq	0x6(%rcx), %rdx
-               	cmpl	$0x64, %edx
-               	setb	%dl
-               	movzbq	%dl, %rdx
-               	movq	%rsi, %rdi
-               	subq	%rdx, %rdi
+               	movzbq	0x6(%rdx), %rsi
+               	cmpl	$0x64, %esi
+               	setb	%sil
+               	movzbq	%sil, %rsi
+               	movq	%rcx, %rdi
+               	subq	%rsi, %rdi
                	movb	%dil, 0x6(%rax)
-               	movzbq	0x7(%rcx), %rdx
-               	cmpl	$0x64, %edx
-               	setb	%dl
-               	movzbq	%dl, %rdx
-               	movq	%rsi, %rdi
-               	subq	%rdx, %rdi
+               	movzbq	0x7(%rdx), %rsi
+               	cmpl	$0x64, %esi
+               	setb	%sil
+               	movzbq	%sil, %rsi
+               	movq	%rcx, %rdi
+               	subq	%rsi, %rdi
                	movb	%dil, 0x7(%rax)
-               	movzbq	0x8(%rcx), %rdx
-               	cmpl	$0x64, %edx
-               	setb	%dl
-               	movzbq	%dl, %rdx
-               	movq	%rsi, %rdi
-               	subq	%rdx, %rdi
+               	movzbq	0x8(%rdx), %rsi
+               	cmpl	$0x64, %esi
+               	setb	%sil
+               	movzbq	%sil, %rsi
+               	movq	%rcx, %rdi
+               	subq	%rsi, %rdi
                	movb	%dil, 0x8(%rax)
-               	movzbq	0x9(%rcx), %rdx
-               	cmpl	$0x64, %edx
-               	setb	%dl
-               	movzbq	%dl, %rdx
-               	movq	%rsi, %rdi
-               	subq	%rdx, %rdi
+               	movzbq	0x9(%rdx), %rsi
+               	cmpl	$0x64, %esi
+               	setb	%sil
+               	movzbq	%sil, %rsi
+               	movq	%rcx, %rdi
+               	subq	%rsi, %rdi
                	movb	%dil, 0x9(%rax)
-               	movzbq	0xa(%rcx), %rdx
-               	cmpl	$0x64, %edx
-               	setb	%dl
-               	movzbq	%dl, %rdx
-               	movq	%rsi, %rdi
-               	subq	%rdx, %rdi
+               	movzbq	0xa(%rdx), %rsi
+               	cmpl	$0x64, %esi
+               	setb	%sil
+               	movzbq	%sil, %rsi
+               	movq	%rcx, %rdi
+               	subq	%rsi, %rdi
                	movb	%dil, 0xa(%rax)
-               	movzbq	0xb(%rcx), %rdx
-               	cmpl	$0x64, %edx
-               	setb	%dl
-               	movzbq	%dl, %rdx
-               	movq	%rsi, %rdi
-               	subq	%rdx, %rdi
+               	movzbq	0xb(%rdx), %rsi
+               	cmpl	$0x64, %esi
+               	setb	%sil
+               	movzbq	%sil, %rsi
+               	movq	%rcx, %rdi
+               	subq	%rsi, %rdi
                	movb	%dil, 0xb(%rax)
-               	movzbq	0xc(%rcx), %rdx
-               	cmpl	$0x64, %edx
-               	setb	%dl
-               	movzbq	%dl, %rdx
-               	movq	%rsi, %rdi
-               	subq	%rdx, %rdi
+               	movzbq	0xc(%rdx), %rsi
+               	cmpl	$0x64, %esi
+               	setb	%sil
+               	movzbq	%sil, %rsi
+               	movq	%rcx, %rdi
+               	subq	%rsi, %rdi
                	movb	%dil, 0xc(%rax)
-               	movzbq	0xd(%rcx), %rdx
-               	cmpl	$0x64, %edx
-               	setb	%dl
-               	movzbq	%dl, %rdx
-               	movq	%rsi, %rdi
-               	subq	%rdx, %rdi
+               	movzbq	0xd(%rdx), %rsi
+               	cmpl	$0x64, %esi
+               	setb	%sil
+               	movzbq	%sil, %rsi
+               	movq	%rcx, %rdi
+               	subq	%rsi, %rdi
                	movb	%dil, 0xd(%rax)
-               	movzbq	0xe(%rcx), %rdx
-               	cmpl	$0x64, %edx
-               	setb	%dl
-               	movzbq	%dl, %rdx
-               	movq	%rsi, %rdi
-               	subq	%rdx, %rdi
+               	movzbq	0xe(%rdx), %rsi
+               	cmpl	$0x64, %esi
+               	setb	%sil
+               	movzbq	%sil, %rsi
+               	movq	%rcx, %rdi
+               	subq	%rsi, %rdi
                	movb	%dil, 0xe(%rax)
-               	movzbq	0xf(%rcx), %rdx
-               	cmpl	$0x64, %edx
-               	setb	%dl
-               	movzbq	%dl, %rdx
-               	movq	%rsi, %rdi
-               	subq	%rdx, %rdi
+               	movzbq	0xf(%rdx), %rsi
+               	cmpl	$0x64, %esi
+               	setb	%sil
+               	movzbq	%sil, %rsi
+               	movq	%rcx, %rdi
+               	subq	%rsi, %rdi
                	movb	%dil, 0xf(%rax)
-               	leaq	-0x7f0(%rbp), %rdx
+               	leaq	-0x7f0(%rbp), %rsi
                	pushq	%rcx
                	movq	(%rax), %rcx
-               	movq	%rcx, (%rdx)
+               	movq	%rcx, (%rsi)
                	movq	0x8(%rax), %rcx
-               	movq	%rcx, 0x8(%rdx)
+               	movq	%rcx, 0x8(%rsi)
                	popq	%rcx
-               	movq	%rsi, %rax
+               	movq	%rcx, %rax
                	leaq	-0x70(%rbp), %rdi
-               	movzbq	(%rcx,%rax), %rdx
-               	cmpl	$0x64, %edx
+               	movzbq	(%rdx,%rax), %rsi
+               	cmpl	$0x64, %esi
                	jge	<addr>
-               	movq	$-0x1, %rdx
+               	movq	$-0x1, %rsi
                	jmp	<addr>
-               	movq	%rsi, %rdx
-               	movb	%dl, (%rdi,%rax)
+               	movq	%rcx, %rsi
+               	movb	%sil, (%rdi,%rax)
                	incq	%rax
                	cmpl	$0x10, %eax
                	jl	<addr>
@@ -4874,39 +4873,38 @@ Disassembly of section .text:
                	movl	$0x0, 0x4(%rax)
                	movl	$0xffffffff, 0x8(%rax)  # imm = 0xFFFFFFFF
                	movl	$0x0, 0xc(%rax)
-               	movq	(%rax), %rcx
-               	movq	0x8(%rax), %rdx
-               	movabsq	$0x500000001, %r8       # imm = 0x500000001
-               	andq	%rcx, %r8
-               	movabsq	$0x900000003, %rdi      # imm = 0x900000003
-               	andq	%rdx, %rdi
+               	movq	(%rax), %rsi
+               	movq	0x8(%rax), %rdi
+               	movabsq	$0x500000001, %r11      # imm = 0x500000001
+               	andq	%r11, %rsi
+               	movabsq	$0x900000003, %r11      # imm = 0x900000003
+               	andq	%r11, %rdi
                	movl	$0x0, (%rax)
                	movl	$0xffffffff, 0x4(%rax)  # imm = 0xFFFFFFFF
-               	xorl	%edx, %edx
-               	leaq	0x8(%rax), %rsi
-               	movl	%edx, (%rsi)
+               	leaq	0x8(%rax), %rdx
+               	movl	$0x0, (%rdx)
                	movl	$0xffffffff, 0xc(%rax)  # imm = 0xFFFFFFFF
                	movq	(%rax), %rax
-               	movabsq	$0x400000002, %r9       # imm = 0x400000002
-               	andq	%rax, %r9
-               	movq	(%rsi), %rax
-               	movabsq	$0x800000006, %rcx      # imm = 0x800000006
+               	movabsq	$0x400000002, %rcx      # imm = 0x400000002
                	andq	%rax, %rcx
+               	movq	(%rdx), %rax
+               	movabsq	$0x800000006, %rdx      # imm = 0x800000006
+               	andq	%rax, %rdx
                	leaq	-0x750(%rbp), %rax
-               	movq	%r8, %rsi
-               	orq	%r9, %rsi
-               	movq	%rsi, (%rax)
-               	orq	%rdi, %rcx
+               	orq	%rsi, %rcx
+               	movq	%rcx, (%rax)
+               	movq	%rdi, %rcx
+               	orq	%rdx, %rcx
                	movq	%rcx, 0x8(%rax)
                	movl	(%rax), %ecx
-               	movl	0x4(%rax), %esi
-               	movl	0x8(%rax), %edi
+               	movl	0x4(%rax), %edx
+               	movl	0x8(%rax), %esi
                	movl	0xc(%rax), %eax
                	cmpl	$0x1, %ecx
                	jne	<addr>
-               	cmpl	$0x4, %esi
+               	cmpl	$0x4, %edx
                	jne	<addr>
-               	cmpl	$0x3, %edi
+               	cmpl	$0x3, %esi
                	jne	<addr>
                	cmpl	$0x8, %eax
                	je	<addr>
@@ -4914,7 +4912,7 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	movq	%rdx, %rax
+               	xorl	%eax, %eax
                	popq	%rbx
                	leave
                	retq

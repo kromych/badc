@@ -14,8 +14,8 @@ Disassembly of section .text:
                	brk	#0x1
 
 <load_be32>:
-               	ldr	w1, [x0]
-               	rev	w0, w1
+               	ldr	w0, [x0]
+               	rev	w0, w0
                	ret
 
 <load_le32>:
@@ -23,8 +23,8 @@ Disassembly of section .text:
                	ret
 
 <load_be64>:
-               	ldr	x1, [x0]
-               	rev	x0, x1
+               	ldr	x0, [x0]
+               	rev	x0, x0
                	ret
 
 <load_le16>:

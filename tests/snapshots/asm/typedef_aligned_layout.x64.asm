@@ -125,26 +125,26 @@ Disassembly of section .text:
                	subq	$0x20, %rsp
                	movl	$0x1, %eax
                	movl	%eax, -0x10(%rbp)
-               	movabsq	$0x4000000000000000, %rdx # imm = 0x4000000000000000
-               	movabsq	$0x4008000000000000, %rcx # imm = 0x4008000000000000
-               	movq	%rcx, %xmm14
+               	movabsq	$0x4000000000000000, %rcx # imm = 0x4000000000000000
+               	movabsq	$0x4008000000000000, %rdx # imm = 0x4008000000000000
+               	movq	%rdx, %xmm14
                	movsd	%xmm14, -0x20(%rbp,%riz)
-               	leaq	-0x10(%rbp), %rsi
-               	leaq	-0x20(%rbp), %rcx
-               	testb	$0xf, %cl
+               	leaq	-0x10(%rbp), %rdx
+               	leaq	-0x20(%rbp), %rsi
+               	testb	$0xf, %sil
                	je	<addr>
                	movl	$0x35, %eax
                	leave
                	retq
                	xorps	%xmm0, %xmm0
                	cvtsi2sd	%rax, %xmm0
-               	movq	%rdx, %xmm15
+               	movq	%rcx, %xmm15
                	addsd	%xmm15, %xmm0
                	movsd	-0x20(%rbp,%riz), %xmm1
                	addsd	%xmm1, %xmm0
                	cvttsd2si	%xmm0, %rax
                	subq	$0x6, %rax
-               	movslq	(%rsi), %rcx
+               	movslq	(%rdx), %rcx
                	decq	%rcx
                	addq	%rcx, %rax
                	movslq	%eax, %rax

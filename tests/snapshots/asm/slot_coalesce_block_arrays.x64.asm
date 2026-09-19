@@ -197,10 +197,10 @@ Disassembly of section .text:
                	addq	%rdx, %rcx
                	movq	%rbx, %rdx
                	xorq	%rax, %rdx
-               	addq	%rcx, %rdx
-               	leaq	(%rax,%rax,2), %rcx
-               	movslq	%ecx, %rcx
-               	addq	$0x3e8, %rcx            # imm = 0x3E8
+               	addq	%rdx, %rcx
+               	leaq	(%rax,%rax,2), %rdx
+               	movslq	%edx, %rdx
+               	addq	$0x3e8, %rdx            # imm = 0x3E8
                	addq	%rdx, %rcx
                	addq	%rcx, %r12
                	incq	%rax

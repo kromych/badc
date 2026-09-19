@@ -43,18 +43,18 @@ Disassembly of section .text:
                	ret
 
 <mismatches>:
-               	mov	x3, x0
-               	mov	x4, x1
+               	mov	x2, x0
+               	mov	x3, x1
                	mov	x0, #0x0                // =0
                	mov	x1, x0
-               	cmp	x1, x4
+               	cmp	x1, x3
                	b.hs	<addr>
-               	add	x2, x3, x1
-               	ldrb	w2, [x2]
-               	cbz	w2, <addr>
+               	add	x4, x2, x1
+               	ldrb	w4, [x4]
+               	cbz	w4, <addr>
                	add	x0, x0, #0x1
                	add	x1, x1, #0x1
-               	cmp	x1, x4
+               	cmp	x1, x3
                	b.lo	<addr>
                	sxtw	x0, w0
                	ret
@@ -277,12 +277,11 @@ Disassembly of section .text:
                	ret
 
 <loop_block>:
-               	mov	x1, #0x0                // =0
-               	mov	x0, x1
-               	add	x0, x0, #0x1
-               	cmp	w0, #0x2
+               	mov	x0, #0x0                // =0
+               	mov	x1, x0
+               	add	x1, x1, #0x1
+               	cmp	w1, #0x2
                	b.lt	<addr>
-               	mov	x0, x1
                	ret
 
 <addressed_int>:
@@ -303,61 +302,61 @@ Disassembly of section .text:
                	stp	x20, x21, [sp, #-0x20]!
                	stp	x29, x30, [sp, #0x10]
                	add	x29, sp, #0x10
-               	mov	x21, #0x0               // =0
+               	mov	x20, #0x0               // =0
                	bl	<addr>
                	bl	<addr>
-               	mov	x20, x0
+               	mov	x21, x0
                	bl	<addr>
                	bl	<addr>
-               	add	x20, x20, x0
+               	add	x21, x21, x0
                	bl	<addr>
                	bl	<addr>
-               	add	x20, x20, x0
+               	add	x21, x21, x0
                	bl	<addr>
                	bl	<addr>
-               	add	x20, x20, x0
+               	add	x21, x21, x0
                	bl	<addr>
                	bl	<addr>
-               	add	x20, x20, x0
+               	add	x21, x21, x0
                	bl	<addr>
                	bl	<addr>
-               	add	x20, x20, x0
+               	add	x21, x21, x0
                	bl	<addr>
                	bl	<addr>
-               	add	x20, x20, x0
+               	add	x21, x21, x0
                	bl	<addr>
                	bl	<addr>
-               	add	x20, x20, x0
+               	add	x21, x21, x0
                	bl	<addr>
                	bl	<addr>
-               	add	x20, x20, x0
+               	add	x21, x21, x0
                	bl	<addr>
                	bl	<addr>
-               	add	x20, x20, x0
+               	add	x21, x21, x0
                	bl	<addr>
                	bl	<addr>
-               	add	x20, x20, x0
+               	add	x21, x21, x0
                	bl	<addr>
                	bl	<addr>
-               	add	x20, x20, x0
+               	add	x21, x21, x0
                	bl	<addr>
                	bl	<addr>
-               	add	x20, x20, x0
+               	add	x21, x21, x0
                	bl	<addr>
                	bl	<addr>
-               	add	x20, x20, x0
+               	add	x21, x21, x0
                	bl	<addr>
                	mov	x0, #0x25               // =37
                	bl	<addr>
-               	add	x20, x20, x0
+               	add	x21, x21, x0
                	bl	<addr>
                	mov	x0, #0x5                // =5
                	bl	<addr>
-               	add	x20, x20, x0
+               	add	x21, x21, x0
                	bl	<addr>
-               	mov	x0, x21
+               	mov	x0, x20
                	bl	<addr>
-               	add	x20, x20, x0
+               	add	x20, x21, x0
                	bl	<addr>
                	bl	<addr>
                	add	x20, x20, x0

@@ -14,88 +14,85 @@ Disassembly of section .text:
                	brk	#0x1
 
 <step_u8>:
-               	mov	x2, x1
-               	mov	x1, #0x0                // =0
+               	mov	x2, x0
+               	mov	x0, #0x0                // =0
                	mov	x3, #0x3                // =3
-               	cmp	w1, w2
+               	cmp	w0, w1
                	b.ge	<addr>
-               	and	x0, x0, #0xff
-               	mul	x0, x0, x3
+               	and	x2, x2, #0xff
+               	mul	x2, x2, x3
+               	add	x2, x2, #0x1
                	add	x0, x0, #0x1
-               	add	x1, x1, #0x1
-               	cmp	w1, w2
+               	cmp	w0, w1
                	b.lt	<addr>
-               	and	x0, x0, #0xff
+               	and	x0, x2, #0xff
                	ret
 
 <step_u16>:
-               	mov	x2, x1
-               	mov	x1, #0x0                // =0
+               	mov	x2, x0
+               	mov	x0, #0x0                // =0
                	mov	x3, #0x3                // =3
-               	cmp	w1, w2
+               	cmp	w0, w1
                	b.ge	<addr>
-               	and	x0, x0, #0xffff
-               	mul	x0, x0, x3
+               	and	x2, x2, #0xffff
+               	mul	x2, x2, x3
+               	add	x2, x2, #0x1
                	add	x0, x0, #0x1
-               	add	x1, x1, #0x1
-               	cmp	w1, w2
+               	cmp	w0, w1
                	b.lt	<addr>
-               	and	x0, x0, #0xffff
+               	and	x0, x2, #0xffff
                	ret
 
 <step_u32>:
                	mov	x2, x0
-               	mov	x3, x1
                	mov	x0, #0x0                // =0
-               	mov	x4, #0x3                // =3
-               	cmp	w0, w3
+               	mov	x3, #0x3                // =3
+               	cmp	w0, w1
                	b.ge	<addr>
-               	mul	x1, x2, x4
-               	add	x2, x1, #0x1
+               	mul	x2, x2, x3
+               	add	x2, x2, #0x1
                	add	x0, x0, #0x1
-               	cmp	w0, w3
+               	cmp	w0, w1
                	b.lt	<addr>
                	mov	w0, w2
                	ret
 
 <step_i8>:
-               	sxtb	x0, w0
-               	mov	x2, x1
-               	mov	x1, #0x0                // =0
-               	cmp	w1, w2
+               	sxtb	x2, w0
+               	mov	x0, #0x0                // =0
+               	cmp	w0, w1
                	b.ge	<addr>
-               	sxtb	x0, w0
-               	sub	x0, x0, #0x3
-               	add	x1, x1, #0x1
-               	cmp	w1, w2
+               	sxtb	x2, w2
+               	sub	x2, x2, #0x3
+               	add	x0, x0, #0x1
+               	cmp	w0, w1
                	b.lt	<addr>
-               	sxtb	x0, w0
+               	sxtb	x0, w2
                	ret
 
 <step_i16>:
-               	sxth	x0, w0
-               	mov	x2, x1
-               	mov	x1, #0x0                // =0
-               	cmp	w1, w2
+               	sxth	x2, w0
+               	mov	x0, #0x0                // =0
+               	cmp	w0, w1
                	b.ge	<addr>
-               	sxth	x0, w0
-               	sub	x0, x0, #0x3
-               	add	x1, x1, #0x1
-               	cmp	w1, w2
+               	sxth	x2, w2
+               	sub	x2, x2, #0x3
+               	add	x0, x0, #0x1
+               	cmp	w0, w1
                	b.lt	<addr>
-               	sxth	x0, w0
+               	sxth	x0, w2
                	ret
 
 <step_i32>:
-               	mov	x2, x1
-               	mov	x1, #0x0                // =0
-               	cmp	w1, w2
+               	mov	x2, x0
+               	mov	x0, #0x0                // =0
+               	cmp	w0, w1
                	b.ge	<addr>
-               	sub	x0, x0, #0x3
-               	add	x1, x1, #0x1
-               	cmp	w1, w2
+               	sub	x2, x2, #0x3
+               	add	x0, x0, #0x1
+               	cmp	w0, w1
                	b.lt	<addr>
-               	sxtw	x0, w0
+               	sxtw	x0, w2
                	ret
 
 <step_long>:

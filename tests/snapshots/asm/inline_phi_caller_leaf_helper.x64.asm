@@ -45,12 +45,12 @@ Disassembly of section .text:
                	movl	$0xbb67ae85, %edx       # imm = 0xBB67AE85
                	movl	$0x3c6ef372, %esi       # imm = 0x3C6EF372
                	xorl	%eax, %eax
-               	movq	%rcx, %r9
-               	andq	%rdx, %r9
                	movq	%rcx, %r8
-               	xorq	$-0x1, %r8
-               	andq	%r8, %rsi
-               	xorq	%r9, %rsi
+               	andq	%rdx, %r8
+               	movq	%rcx, %r9
+               	xorq	$-0x1, %r9
+               	andq	%r9, %rsi
+               	xorq	%r8, %rsi
                	movl	(%rdi,%rax,4), %r8d
                	addq	%r8, %rsi
                	incq	%rax

@@ -41,39 +41,39 @@ Disassembly of section .text:
                	pushq	%r13
                	pushq	%r12
                	pushq	%rbx
-               	movq	%rdi, %r12
-               	movq	%rsi, %r13
+               	movq	%rdi, %rbx
+               	movq	%rsi, %r12
                	leaq	-0x40(%rbp), %rax
                	xorps	%xmm14, %xmm14
                	movups	%xmm14, (%rax)
                	movups	%xmm14, 0x10(%rax)
                	movl	$0x1, (%rax)
-               	movq	%r12, 0x8(%rax)
-               	movq	%r13, 0x10(%rax)
+               	movq	%rbx, 0x8(%rax)
+               	movq	%r12, 0x10(%rax)
                	movl	$0x7, 0x18(%rax)
                	leaq	-0x20(%rbp), %rax
                	xorps	%xmm14, %xmm14
                	movups	%xmm14, (%rax)
                	movups	%xmm14, 0x10(%rax)
                	movl	$0x2, (%rax)
-               	movq	%r12, 0x8(%rax)
-               	movq	%r13, 0x10(%rax)
+               	movq	%rbx, 0x8(%rax)
+               	movq	%r12, 0x10(%rax)
                	movl	$0x8, 0x18(%rax)
                	leaq	-0x40(%rbp), %rdi
                	callq	<addr>
-               	movq	%rax, %rbx
+               	movq	%rax, %r13
                	leaq	-0x20(%rbp), %rdi
                	callq	<addr>
-               	movslq	(%rbx), %rcx
+               	movslq	(%r13), %rcx
                	cmpl	$0x1, %ecx
                	jne	<addr>
-               	movq	0x8(%rbx), %rcx
+               	movq	0x8(%r13), %rcx
+               	cmpq	%rbx, %rcx
+               	jne	<addr>
+               	movq	0x10(%r13), %rcx
                	cmpq	%r12, %rcx
                	jne	<addr>
-               	movq	0x10(%rbx), %rcx
-               	cmpq	%r13, %rcx
-               	jne	<addr>
-               	movslq	0x18(%rbx), %rcx
+               	movslq	0x18(%r13), %rcx
                	cmpl	$0x7, %ecx
                	je	<addr>
                	movl	$0x1, %eax
@@ -86,10 +86,10 @@ Disassembly of section .text:
                	cmpl	$0x2, %ecx
                	jne	<addr>
                	movq	0x8(%rax), %rcx
-               	cmpq	%r12, %rcx
+               	cmpq	%rbx, %rcx
                	jne	<addr>
                	movq	0x10(%rax), %rcx
-               	cmpq	%r13, %rcx
+               	cmpq	%r12, %rcx
                	jne	<addr>
                	movslq	0x18(%rax), %rax
                	cmpl	$0x8, %eax

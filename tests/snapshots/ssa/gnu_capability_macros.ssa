@@ -135,31 +135,31 @@ fn ent_pc=2 n_params=0 variadic=false locals=9
     v89  Imm(-8613303245920329199)                        -> x0
     v90  Imm(0)                                           -> x0
     v91  Imm(0)                                           -> x0
-    v92  Imm(0)                                           -> x1
-    v93  Imm(0)                                           -> x1
-    v94  Imm(0)                                           -> x2
-    v95  Imm(0)                                           -> x2
-    v96  Imm(0)                                           -> x2
-    v97  Imm(65)                                          -> x2
-    v98  Imm(0)                                           -> x2
-    v99  Imm(0)                                           -> x2
-    v100 Imm(0)                                           -> x2
-    v101 Imm(1)                                           -> x2
-    v102 Imm(0)                                           -> x2
-    v103 Imm(0)                                           -> x2
-    v104 Imm(2)                                           -> x2
-    v105 BinopI { op=add, lhs=v91, rhs_imm=2 }            -> x2
-    v106 Imm(233)                                         -> x2
-    v107 Imm(0)                                           -> x2
-    v108 Imm(0)                                           -> x2
-    v109 Imm(0)                                           -> x2
-    v110 Imm(0)                                           -> x2
-    v111 Imm(0)                                           -> x2
-    v112 Imm(0)                                           -> x2
-    v113 Imm(0)                                           -> x2
-    v114 Imm(0)                                           -> x2
-    v115 Imm(0)                                           -> x2
-    v116 Imm(4)                                           -> x2
+    v92  Imm(0)                                           -> x0
+    v93  Imm(0)                                           -> x0
+    v94  Imm(0)                                           -> x0
+    v95  Imm(0)                                           -> x0
+    v96  Imm(0)                                           -> x0
+    v97  Imm(65)                                          -> x0
+    v98  Imm(0)                                           -> x0
+    v99  Imm(0)                                           -> x0
+    v100 Imm(0)                                           -> x0
+    v101 Imm(1)                                           -> x0
+    v102 Imm(0)                                           -> x0
+    v103 Imm(0)                                           -> x0
+    v104 Imm(2)                                           -> x0
+    v105 BinopI { op=add, lhs=v91, rhs_imm=2 }            -> x0
+    v106 Imm(233)                                         -> x0
+    v107 Imm(0)                                           -> x0
+    v108 Imm(0)                                           -> x0
+    v109 Imm(0)                                           -> x0
+    v110 Imm(0)                                           -> x0
+    v111 Imm(0)                                           -> x0
+    v112 Imm(0)                                           -> x0
+    v113 Imm(0)                                           -> x0
+    v114 Imm(0)                                           -> x0
+    v115 Imm(0)                                           -> x0
+    v116 Imm(4)                                           -> x0
     v117 BinopI { op=add, lhs=v91, rhs_imm=4 }            -> x0
     v118 Imm(0)                                           -> x0
     v119 Imm(0)                                           -> x0

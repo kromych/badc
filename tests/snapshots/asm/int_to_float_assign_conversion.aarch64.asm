@@ -17,24 +17,24 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	mov	x0, #0xa                // =10
+               	scvtf	s1, x0
+               	mov	x0, #0x64               // =100
                	scvtf	s0, x0
-               	mov	x1, #0x64               // =100
-               	scvtf	s1, x1
                	mov	x0, #0xc8               // =200
                	scvtf	s2, x0
                	mov	x0, #0x41200000         // =1092616192
                	fmov	s17, w0
-               	fmul	s3, s0, s17
-               	fcvtzs	x2, s3
-               	cmp	x2, #0x64
+               	fmul	s3, s1, s17
+               	fcvtzs	x1, s3
+               	cmp	x1, #0x64
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp], #0x10
                	ret
                	fmov	s17, w0
-               	fmul	s3, s1, s17
-               	fcvtzs	x2, s3
-               	cmp	x2, #0x3e8
+               	fmul	s3, s0, s17
+               	fcvtzs	x1, s3
+               	cmp	x1, #0x3e8
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ldp	x29, x30, [sp], #0x10
@@ -49,7 +49,7 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x42c80000         // =1120403456
                	fmov	s17, w0
-               	fmul	s3, s1, s17
+               	fmul	s3, s0, s17
                	fcvtzs	x0, s3
                	mov	x17, #0x2710            // =10000
                	cmp	x0, x17
@@ -62,9 +62,9 @@ Disassembly of section .text:
                	mov	x1, #0x45a2             // =17826
                	movk	x1, #0x3f16, lsl #16
                	fmov	s16, w1
-               	fmul	s1, s16, s1
+               	fmul	s0, s16, s0
                	fmov	s16, w0
-               	fmadd	s0, s16, s0, s1
+               	fmadd	s0, s16, s1, s0
                	mov	x0, #0x78d5             // =30933
                	movk	x0, #0x3de9, lsl #16
                	fmov	s16, w0

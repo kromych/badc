@@ -29,39 +29,39 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	leaq	<rip>, %rdx
-               	xorl	%eax, %eax
+               	xorl	%ecx, %ecx
                	movl	$0x1, (%rdx)
                	movl	$0x2, 0x4(%rdx)
                	movl	$0x4, 0x8(%rdx)
-               	movq	%rdx, %rcx
+               	movq	%rdx, %rax
                	leaq	0xc(%rdx), %rsi
-               	cmpq	%rsi, %rcx
+               	cmpq	%rsi, %rax
                	jae	<addr>
-               	movslq	(%rcx), %rsi
-               	addq	%rsi, %rax
-               	addq	$0x4, %rcx
+               	movslq	(%rax), %rsi
+               	addq	%rsi, %rcx
+               	addq	$0x4, %rax
                	leaq	0xc(%rdx), %rsi
-               	cmpq	%rsi, %rcx
+               	cmpq	%rsi, %rax
                	jb	<addr>
-               	cmpl	$0x7, %eax
+               	cmpl	$0x7, %ecx
                	je	<addr>
                	leaq	<rip>, %rdi
                	leaq	<rip>, %rdx
-               	xorl	%eax, %eax
+               	xorl	%ecx, %ecx
                	movl	$0x1, (%rdx)
                	movl	$0x2, 0x4(%rdx)
                	movl	$0x4, 0x8(%rdx)
-               	movq	%rdx, %rcx
+               	movq	%rdx, %rax
                	leaq	0xc(%rdx), %rsi
-               	cmpq	%rsi, %rcx
+               	cmpq	%rsi, %rax
                	jae	<addr>
-               	movslq	(%rcx), %rsi
-               	addq	%rsi, %rax
-               	addq	$0x4, %rcx
+               	movslq	(%rax), %rsi
+               	addq	%rsi, %rcx
+               	addq	$0x4, %rax
                	leaq	0xc(%rdx), %rsi
-               	cmpq	%rsi, %rcx
+               	cmpq	%rsi, %rax
                	jb	<addr>
-               	movslq	%eax, %rsi
+               	movslq	%ecx, %rsi
                	movb	$0x0, %al
                	callq	<addr>
                	movl	$0x5, %eax

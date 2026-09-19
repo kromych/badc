@@ -18,9 +18,9 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v6   Imm(1)                                           -> x0
     terminator Return(v6)   (exit_acc=v6)
   block 3  start_pc=0
-    v7   Imm(0)                                           -> x1
+    v7   Imm(0)                                           -> x0
     v8   StoreLocal { off=-1, value=v7, kind=I32, volatile } -> -
-    v9   LoadLocal { off=-1, kind=I32, volatile }         -> x0
+    v9   LoadLocal { off=-1, kind=I32, volatile }         -> x1
     v10  Extend { value=v9, kind=I32 }                    -> x2
     v11  BinopI { op=ge, lhs=v9, rhs_imm=0 }              -> x2
     terminator Bz { cond=v11, target=b7, fall=b4 }   (exit_acc=v11)
@@ -32,7 +32,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v12  Imm(2)                                           -> x0
     terminator Return(v12)   (exit_acc=v12)
   block 6  start_pc=0
-    v13  Imm(0)                                           -> x0
+    v13  Imm(0)                                           -> x1
     terminator Return(v7)   (exit_acc=v7)
   block 7  start_pc=0
     terminator Unreachable

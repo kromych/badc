@@ -130,14 +130,13 @@ Disassembly of section .text:
 <rotr>:
                	movq	%rsi, %rcx
                	andq	$0x3f, %rcx
-               	movq	%rdi, %rdx
-               	shrq	%cl, %rdx
-               	movl	$0x40, %eax
-               	subq	%rsi, %rax
-               	movq	%rax, %rcx
-               	andq	$0x3f, %rcx
                	movq	%rdi, %rax
-               	shlq	%cl, %rax
+               	shrq	%cl, %rax
+               	movl	$0x40, %ecx
+               	subq	%rsi, %rcx
+               	andq	$0x3f, %rcx
+               	movq	%rdi, %rdx
+               	shlq	%cl, %rdx
                	orq	%rdx, %rax
                	retq
 

@@ -31,11 +31,10 @@ Disassembly of section .text:
                	retq
 
 <two>:
-               	leaq	<rip>, %rcx
-               	movq	%rdi, %rax
-               	shlq	%rax
-               	movl	%eax, (%rcx)
-               	movq	%rcx, %rax
+               	leaq	<rip>, %rax
+               	movq	%rdi, %rcx
+               	shlq	%rcx
+               	movl	%ecx, (%rax)
                	retq
 
 <main>:

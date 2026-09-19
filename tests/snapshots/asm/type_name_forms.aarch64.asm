@@ -41,9 +41,9 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #0x40]
                	add	x29, sp, #0x40
                	mov	x20, #0x0               // =0
-               	sub	x22, x29, #0x20
+               	sub	x21, x29, #0x20
                	add	x0, x29, #0x10
-               	mov	x16, x22
+               	mov	x16, x21
                	add	x17, x29, #0xd0
                	str	x17, [x16]
                	add	x17, x29, #0x50
@@ -55,7 +55,7 @@ Disassembly of section .text:
                	mov	x17, #-0x80             // =-128
                	str	w17, [x16, #0x1c]
                	b	<addr>
-               	mov	x17, x22
+               	mov	x17, x21
                	str	x9, [sp, #-0x10]!
                	ldrsw	x16, [x17, #0x18]
                	cmp	x16, #0x0
@@ -73,7 +73,7 @@ Disassembly of section .text:
                	str	x9, [x17]
                	ldr	x9, [sp], #0x10
                	mov	x0, x16
-               	ldr	x1, [x0]
+               	ldr	x2, [x0]
                	sub	x0, x29, #0x20
                	mov	x17, x0
                	str	x9, [sp, #-0x10]!
@@ -92,10 +92,9 @@ Disassembly of section .text:
                	add	x9, x16, #0x8
                	str	x9, [x17]
                	ldr	x9, [sp], #0x10
-               	mov	x0, x16
-               	ldr	x0, [x0]
-               	sub	x2, x29, #0x20
-               	mov	x17, x2
+               	mov	x1, x16
+               	ldr	x1, [x1]
+               	mov	x17, x0
                	str	x9, [sp, #-0x10]!
                	ldrsw	x16, [x17, #0x18]
                	cmp	x16, #0x0
@@ -112,13 +111,12 @@ Disassembly of section .text:
                	add	x9, x16, #0x8
                	str	x9, [x17]
                	ldr	x9, [sp], #0x10
-               	mov	x2, x16
-               	ldr	x21, [x2]
-               	ldrb	w1, [x1]
-               	mov	x9, x0
-               	mov	x0, x1
+               	mov	x0, x16
+               	ldr	x22, [x0]
+               	ldrb	w0, [x2]
+               	mov	x9, x1
                	blr	x9
-               	ldrsw	x1, [x21, #0x4]
+               	ldrsw	x1, [x22, #0x4]
                	add	x0, x0, x1
                	sxtw	x0, w0
                	add	x20, x20, x0

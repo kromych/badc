@@ -37,8 +37,8 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	retq
                	cvtsd2ss	%xmm0, %xmm1
-               	movl	$0x7f61b1e6, %edx       # imm = 0x7F61B1E6
-               	movq	%rdx, %xmm15
+               	movl	$0x7f61b1e6, %ecx       # imm = 0x7F61B1E6
+               	movq	%rcx, %xmm15
                	ucomiss	%xmm15, %xmm1
                	ja	<addr>
                	movl	$0x2, %eax

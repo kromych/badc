@@ -73,15 +73,15 @@ Disassembly of section .text:
                	movq	0x10(%rbp), %rcx
                	addq	%rcx, %rax
                	movq	0x18(%rbp), %rcx
-               	leaq	(%rax,%rcx), %rdx
+               	addq	%rax, %rcx
                	leaq	-0x10(%rbp), %rax
-               	movslq	(%rax), %rcx
-               	imulq	$0x64, %rcx, %rcx
-               	movslq	%ecx, %rcx
-               	addq	%rcx, %rdx
-               	movslq	0x4(%rax), %rcx
-               	imulq	$0xa, %rcx, %rcx
-               	movslq	%ecx, %rcx
+               	movslq	(%rax), %rdx
+               	imulq	$0x64, %rdx, %rdx
+               	movslq	%edx, %rdx
+               	addq	%rdx, %rcx
+               	movslq	0x4(%rax), %rdx
+               	imulq	$0xa, %rdx, %rdx
+               	movslq	%edx, %rdx
                	addq	%rdx, %rcx
                	movslq	0x8(%rax), %rax
                	addq	%rcx, %rax

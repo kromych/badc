@@ -62,9 +62,8 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	-<rip>, %rdx       # <addr>
-               	movq	%rcx, %rsi
-               	subq	%rdx, %rsi
-               	cmpq	%rax, %rsi
+               	subq	%rdx, %rcx
+               	cmpq	%rax, %rcx
                	je	<addr>
                	movl	$0x3, %eax
                	popq	%rbx
@@ -138,14 +137,14 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	leaq	0x8(%rax), %rcx
-               	cmpq	%rcx, %rcx
+               	addq	$0x8, %rax
+               	cmpq	%rax, %rax
                	je	<addr>
                	movl	$0x12, %eax
                	popq	%rbx
                	leave
                	retq
-               	addq	$0x8, %rcx
+               	leaq	0x8(%rax), %rcx
                	leaq	-0x28(%rbp), %rax
                	leaq	0x10(%rax), %rdx
                	cmpq	%rdx, %rcx
@@ -168,13 +167,13 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	-0x10(%rbp), %rax
-               	leaq	0xc(%rax), %rcx
-               	movq	%rcx, %rdx
-               	subq	%rax, %rdx
-               	movq	%rdx, %rsi
+               	leaq	0xc(%rax), %rdx
+               	movq	%rdx, %rcx
+               	subq	%rax, %rcx
+               	movq	%rcx, %rsi
                	sarq	$0x3f, %rsi
                	shrq	$0x3e, %rsi
-               	addq	%rdx, %rsi
+               	addq	%rcx, %rsi
                	sarq	$0x2, %rsi
                	cmpq	$0x3, %rsi
                	je	<addr>
@@ -182,13 +181,13 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	cmpq	$0xc, %rdx
+               	cmpq	$0xc, %rcx
                	je	<addr>
                	movl	$0x9, %eax
                	popq	%rbx
                	leave
                	retq
-               	addq	$-0x4, %rcx
+               	leaq	-0x4(%rdx), %rcx
                	leaq	0x8(%rax), %rdx
                	cmpq	%rdx, %rcx
                	je	<addr>

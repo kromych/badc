@@ -156,16 +156,16 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	testl	%eax, %eax
                	jne	<addr>
-               	movabsq	$0x3ff0000000000000, %rdx # imm = 0x3FF0000000000000
-               	movq	%rdx, %xmm14
+               	movabsq	$0x3ff0000000000000, %rcx # imm = 0x3FF0000000000000
+               	movq	%rcx, %xmm14
                	movsd	%xmm14, -0x8(%rbp,%riz)
                	movq	-0x8(%rbp), %rax
-               	movq	%rax, %rcx
-               	shrq	$0x34, %rcx
-               	andq	$0x7ff, %rcx            # imm = 0x7FF
+               	movq	%rax, %rdx
+               	shrq	$0x34, %rdx
+               	andq	$0x7ff, %rdx            # imm = 0x7FF
                	movabsq	$0xfffffffffffff, %r11  # imm = 0xFFFFFFFFFFFFF
                	andq	%r11, %rax
-               	testl	%ecx, %ecx
+               	testl	%edx, %edx
                	jne	<addr>
                	testq	%rax, %rax
                	jne	<addr>
@@ -174,19 +174,19 @@ Disassembly of section .text:
                	je	<addr>
                	movsd	%xmm0, -0x8(%rbp,%riz)
                	movq	-0x8(%rbp), %rax
-               	movq	%rax, %rcx
-               	shrq	$0x34, %rcx
-               	andq	$0x7ff, %rcx            # imm = 0x7FF
+               	movq	%rax, %rdx
+               	shrq	$0x34, %rdx
+               	andq	$0x7ff, %rdx            # imm = 0x7FF
                	movabsq	$0xfffffffffffff, %r11  # imm = 0xFFFFFFFFFFFFF
                	andq	%r11, %rax
-               	testl	%ecx, %ecx
+               	testl	%edx, %edx
                	jne	<addr>
                	testq	%rax, %rax
                	jne	<addr>
                	movl	$0x2, %eax
                	testl	%eax, %eax
                	jne	<addr>
-               	movq	%rdx, %xmm14
+               	movq	%rcx, %xmm14
                	movsd	%xmm14, -0x8(%rbp,%riz)
                	movq	-0x8(%rbp), %rax
                	movq	%rax, %rcx
@@ -251,7 +251,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	movl	$0x3, %eax
                	jmp	<addr>
-               	cmpl	$0x7ff, %ecx            # imm = 0x7FF
+               	cmpl	$0x7ff, %edx            # imm = 0x7FF
                	jne	<addr>
                	testq	%rax, %rax
                	jne	<addr>
@@ -263,7 +263,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	movl	$0x3, %eax
                	jmp	<addr>
-               	cmpl	$0x7ff, %ecx            # imm = 0x7FF
+               	cmpl	$0x7ff, %edx            # imm = 0x7FF
                	jne	<addr>
                	testq	%rax, %rax
                	jne	<addr>

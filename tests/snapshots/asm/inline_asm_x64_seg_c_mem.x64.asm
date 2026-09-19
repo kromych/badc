@@ -44,10 +44,10 @@ Disassembly of section .text:
                	retq
                	movq	%fs:0x8, %rax
                	movq	%rax, -0x18(%rbp)
-               	movq	-0x18(%rbp), %rcx
-               	movq	-0x20(%rbp), %rax
-               	movq	0x8(%rax), %rax
-               	cmpq	%rax, %rcx
+               	movq	-0x18(%rbp), %rax
+               	movq	-0x20(%rbp), %rcx
+               	movq	0x8(%rcx), %rcx
+               	cmpq	%rcx, %rax
                	je	<addr>
                	movl	$0x2, %eax
                	popq	%rbx

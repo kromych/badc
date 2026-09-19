@@ -14,20 +14,19 @@ Disassembly of section .text:
                	brk	#0x1
 
 <touch>:
-               	mov	x3, x1
-               	mov	x1, #0x1                // =1
-               	strb	w1, [x0]
-               	mov	x2, #0x2                // =2
-               	lsr	x1, x3, #1
-               	strb	w2, [x0, x1]
-               	sub	x2, x3, #0x1
-               	mov	x4, #0x3                // =3
-               	strb	w4, [x0, x2]
-               	ldrb	w4, [x0]
-               	ldrb	w1, [x0, x1]
-               	add	x1, x4, x1
-               	ldrb	w0, [x0, x2]
-               	add	x0, x1, x0
+               	mov	x2, #0x1                // =1
+               	strb	w2, [x0]
+               	mov	x3, #0x2                // =2
+               	lsr	x2, x1, #1
+               	strb	w3, [x0, x2]
+               	sub	x1, x1, #0x1
+               	mov	x3, #0x3                // =3
+               	strb	w3, [x0, x1]
+               	ldrb	w3, [x0]
+               	ldrb	w2, [x0, x2]
+               	add	x2, x3, x2
+               	ldrb	w0, [x0, x1]
+               	add	x0, x2, x0
                	ret
 
 <two_pages>:
@@ -44,15 +43,15 @@ Disassembly of section .text:
                	sub	sp, sp, #0x10
                	stur	x0, [x29, #-0x10]
                	ldur	x0, [x29, #-0x10]
-               	ldr	x3, [x0]
-               	ldrb	w1, [x0, #0x8]
+               	ldr	x1, [x0]
+               	ldrb	w2, [x0, #0x8]
                	add	x17, x0, #0x2, lsl #12  // =0x2000
                	add	x17, x17, #0x32f
-               	ldrb	w2, [x17]
+               	ldrb	w3, [x17]
                	ldr	x0, [x0, #0x2330]
-               	add	x0, x3, x0
-               	add	x0, x0, x1
+               	add	x0, x1, x0
                	add	x0, x0, x2
+               	add	x0, x0, x3
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret

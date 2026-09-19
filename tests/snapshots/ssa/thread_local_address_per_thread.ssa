@@ -86,13 +86,13 @@ fn ent_pc=7 n_params=0 variadic=false locals=2
     v26  ImmCode(ent_pc=6)                                -> x2
     v27  Imm(0)                                           -> x0
     v28  CallIndirect { target=v19, args=[v25, v13, v26, v13], callee_variadic=false, fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v29  BinopI { op=shl, lhs=v28, rhs_imm=32 }           -> x1
+    v29  BinopI { op=shl, lhs=v28, rhs_imm=32 }           -> x0
     v30  Extend { value=v28, kind=I32 }                   -> x0
     v31  LoadLocal { off=-2, kind=I64 }                   -> x7
     v32  LocalAddr(-1)                                    -> x6
     v33  Imm(0)                                           -> x0
     v34  CallIndirect { target=v23, args=[v31, v32], callee_variadic=false, fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v35  BinopI { op=shl, lhs=v34, rhs_imm=32 }           -> x1
+    v35  BinopI { op=shl, lhs=v34, rhs_imm=32 }           -> x0
     v36  Extend { value=v34, kind=I32 }                   -> x0
     v37  LoadLocal { off=-1, kind=I64 }                   -> x0
     v38  Imm(99)                                          -> x1
@@ -147,13 +147,13 @@ fn ent_pc=7 n_params=0 variadic=false locals=2
     v71  ImmCode(ent_pc=6)                                -> x2
     v72  Imm(0)                                           -> x0
     v73  CallIndirect { target=v19, args=[v69, v70, v71, v70], callee_variadic=false, fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v74  BinopI { op=shl, lhs=v73, rhs_imm=32 }           -> x1
+    v74  BinopI { op=shl, lhs=v73, rhs_imm=32 }           -> x0
     v75  Extend { value=v73, kind=I32 }                   -> x0
     v76  LoadLocal { off=-2, kind=I64 }                   -> x7
     v77  LocalAddr(-1)                                    -> x6
     v78  Imm(0)                                           -> x0
     v79  CallIndirect { target=v23, args=[v76, v77], callee_variadic=false, fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v80  BinopI { op=shl, lhs=v79, rhs_imm=32 }           -> x1
+    v80  BinopI { op=shl, lhs=v79, rhs_imm=32 }           -> x0
     v81  Extend { value=v79, kind=I32 }                   -> x0
     v82  LoadLocal { off=-1, kind=I64 }                   -> x0
     v83  Imm(99)                                          -> x1

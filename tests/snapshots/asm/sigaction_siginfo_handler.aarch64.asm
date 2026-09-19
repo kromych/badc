@@ -15,16 +15,16 @@ Disassembly of section .text:
 
 <on_usr1>:
                	mov	x3, x1
-               	ldr	x4, [x2, #0x1b0]
-               	adrp	x2, <page>
-               	add	x2, x2, <lo12>
-               	ldrsw	x1, [x2]
-               	add	x1, x1, #0x1
-               	str	w1, [x2]
+               	ldr	x2, [x2, #0x1b0]
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	ldrsw	x2, [x3]
-               	cmp	w2, w0
+               	ldrsw	x4, [x1]
+               	add	x4, x4, #0x1
+               	str	w4, [x1]
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	ldrsw	x3, [x3]
+               	cmp	w3, w0
                	b.ne	<addr>
                	str	w0, [x1]
                	adrp	x0, <page>
@@ -32,7 +32,7 @@ Disassembly of section .text:
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	ldr	x1, [x1]
-               	sub	x1, x1, x4
+               	sub	x1, x1, x2
                	mov	x17, #0x100000          // =1048576
                	cmp	x1, x17
                	cset	x1, lo

@@ -14,103 +14,103 @@ Disassembly of section .text:
                	brk	#0x1
 
 <main>:
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	x0, [x1]
-               	cmp	x0, #0x9
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldr	x1, [x0]
+               	cmp	x1, #0x9
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ret
-               	ldrsw	x0, [x1, #0xc]
-               	cmp	w0, #0x1
+               	ldrsw	x1, [x0, #0xc]
+               	cmp	w1, #0x1
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ret
-               	mov	x2, #0x0                // =0
-               	add	x0, x1, #0x18
-               	ldrb	w3, [x0]
-               	cmp	w3, #0xff
+               	mov	x1, #0x0                // =0
+               	add	x0, x0, #0x18
+               	ldrb	w2, [x0]
+               	cmp	w2, #0xff
                	b.eq	<addr>
-               	add	x0, x2, #0xa
+               	add	x0, x1, #0xa
                	ret
-               	mov	x4, #0x1                // =1
+               	mov	x2, #0x1                // =1
                	ldrb	w3, [x0, #0x1]
                	cmp	w3, #0xff
                	b.eq	<addr>
-               	mov	x2, x4
+               	mov	x1, x2
                	b	<addr>
-               	mov	x5, #0x2                // =2
-               	ldrb	w3, [x0, #0x2]
-               	cmp	w3, #0xfe
+               	mov	x3, #0x2                // =2
+               	ldrb	w4, [x0, #0x2]
+               	cmp	w4, #0xfe
                	b.eq	<addr>
-               	mov	x2, x5
+               	mov	x1, x3
                	b	<addr>
-               	mov	x6, #0x3                // =3
-               	ldrb	w3, [x0, #0x3]
-               	cmp	w3, #0xfe
+               	mov	x4, #0x3                // =3
+               	ldrb	w5, [x0, #0x3]
+               	cmp	w5, #0xfe
                	b.eq	<addr>
-               	mov	x2, x6
+               	mov	x1, x4
                	b	<addr>
-               	mov	x7, #0x4                // =4
-               	ldrb	w3, [x0, #0x4]
-               	cmp	w3, #0x5
+               	mov	x5, #0x4                // =4
+               	ldrb	w6, [x0, #0x4]
+               	cmp	w6, #0x5
                	b.eq	<addr>
-               	mov	x2, x7
+               	mov	x1, x5
                	b	<addr>
-               	mov	x8, #0x5                // =5
-               	ldrb	w3, [x0, #0x5]
-               	cmp	w3, #0x6
+               	mov	x6, #0x5                // =5
+               	ldrb	w7, [x0, #0x5]
+               	cmp	w7, #0x6
                	b.eq	<addr>
-               	mov	x2, x8
+               	mov	x1, x6
                	b	<addr>
-               	mov	x3, #0x6                // =6
-               	ldrb	w9, [x0, #0x6]
-               	cmp	w9, #0x7
+               	mov	x7, #0x6                // =6
+               	ldrb	w8, [x0, #0x6]
+               	cmp	w8, #0x7
                	b.eq	<addr>
-               	mov	x2, x3
+               	mov	x1, x7
                	b	<addr>
-               	mov	x3, #0x7                // =7
+               	mov	x7, #0x7                // =7
                	ldrb	w0, [x0, #0x7]
                	cmp	w0, #0x8
                	b.eq	<addr>
-               	mov	x2, x3
+               	mov	x1, x7
                	b	<addr>
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldrsw	x0, [x1]
-               	cmp	w0, #0x5
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldrsw	x7, [x0]
+               	cmp	w7, #0x5
                	b.eq	<addr>
                	mov	x0, #0x14               // =20
                	ret
-               	add	x0, x1, #0x4
-               	ldrb	w9, [x0]
-               	cmp	w9, #0x68
+               	add	x0, x0, #0x4
+               	ldrb	w7, [x0]
+               	cmp	w7, #0x68
                	b.eq	<addr>
-               	add	x0, x2, #0x1e
+               	add	x0, x1, #0x1e
                	ret
-               	ldrb	w2, [x0, #0x1]
-               	cmp	w2, #0x65
+               	ldrb	w1, [x0, #0x1]
+               	cmp	w1, #0x65
                	b.eq	<addr>
-               	mov	x2, x4
+               	mov	x1, x2
                	b	<addr>
-               	ldrb	w2, [x0, #0x2]
-               	cmp	w2, #0x6c
+               	ldrb	w1, [x0, #0x2]
+               	cmp	w1, #0x6c
                	b.eq	<addr>
-               	mov	x2, x5
+               	mov	x1, x3
                	b	<addr>
-               	ldrb	w2, [x0, #0x3]
-               	cmp	w2, #0x6c
+               	ldrb	w1, [x0, #0x3]
+               	cmp	w1, #0x6c
                	b.eq	<addr>
-               	mov	x2, x6
+               	mov	x1, x4
                	b	<addr>
-               	ldrb	w2, [x0, #0x4]
-               	cmp	w2, #0x6f
+               	ldrb	w1, [x0, #0x4]
+               	cmp	w1, #0x6f
                	b.eq	<addr>
-               	mov	x2, x7
+               	mov	x1, x5
                	b	<addr>
                	ldrb	w0, [x0, #0x5]
                	cbz	w0, <addr>
-               	mov	x2, x8
+               	mov	x1, x6
                	b	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>

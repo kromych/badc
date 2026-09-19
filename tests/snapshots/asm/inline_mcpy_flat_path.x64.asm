@@ -26,26 +26,23 @@ Disassembly of section .text:
                	int3
 
 <use_decode>:
-               	movq	%rdi, %r8
+               	leaq	<rip>, %rax
                	leaq	<rip>, %rcx
-               	leaq	<rip>, %rdx
-               	movq	(%rcx), %rax
-               	movq	%rax, %rsi
-               	shrq	$0x3e, %rsi
-               	movq	%rsi, %rdi
-               	shlq	$0x2, %rdi
-               	leaq	(%rdx,%rdi), %rax
-               	pushq	%rcx
-               	movzbq	(%rax), %rcx
-               	movb	%cl, (%r8)
-               	movzbq	0x1(%rax), %rcx
-               	movb	%cl, 0x1(%r8)
-               	popq	%rcx
-               	movslq	0x8(%rcx), %r8
-               	movzbq	0x2(%rax), %r9
-               	addq	%r9, %r8
-               	movl	%r8d, 0x8(%rcx)
-               	movzbq	0x3(%rax), %rax
+               	movq	(%rax), %rdx
+               	shrq	$0x3e, %rdx
+               	shlq	$0x2, %rdx
+               	addq	%rdx, %rcx
+               	pushq	%rax
+               	movzbq	(%rcx), %rax
+               	movb	%al, (%rdi)
+               	movzbq	0x1(%rcx), %rax
+               	movb	%al, 0x1(%rdi)
+               	popq	%rax
+               	movslq	0x8(%rax), %rdx
+               	movzbq	0x2(%rcx), %rsi
+               	addq	%rsi, %rdx
+               	movl	%edx, 0x8(%rax)
+               	movzbq	0x3(%rcx), %rax
                	retq
 
 <use_widen>:
@@ -69,10 +66,10 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	movw	$0x0, -0x8(%rbp)
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rcx
                	movabsq	$-0x8000000000000000, %rdx # imm = 0x8000000000000000
-               	movq	%rdx, (%rax)
-               	movl	$0x0, 0x8(%rax)
+               	movq	%rdx, (%rcx)
+               	movl	$0x0, 0x8(%rcx)
                	leaq	-0x8(%rbp), %rdi
                	callq	<addr>
                	xorq	$0x1e, %rax

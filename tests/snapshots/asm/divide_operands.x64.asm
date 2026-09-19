@@ -139,16 +139,16 @@ Disassembly of section .text:
                	retq
 
 <chain>:
-               	movq	%rdx, %rcx
+               	movq	%rdx, %r8
                	movq	%rdi, %rax
                	cqto
                	idivq	%rsi
-               	movq	%rax, %rsi
-               	addq	%rsi, %rdi
-               	movq	%rdi, %rax
+               	movq	%rax, %rcx
+               	leaq	(%rdi,%rcx), %rsi
+               	movq	%rsi, %rax
                	cqto
-               	idivq	%rcx
-               	imulq	$0x3e8, %rsi, %rax      # imm = 0x3E8
+               	idivq	%r8
+               	imulq	$0x3e8, %rcx, %rax      # imm = 0x3E8
                	addq	%rdx, %rax
                	retq
 

@@ -5,14 +5,14 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(0)                                           -> x0
-    v2   Imm(0)                                           -> x1
-    v3   Imm(0)                                           -> x1
-    v4   Imm(0)                                           -> x1
-    v5   Imm(95)                                          -> x1
-    v6   Imm(0)                                           -> x1
-    v7   Imm(0)                                           -> x1
-    v8   Imm(0)                                           -> x1
-    v9   Imm(1)                                           -> x1
+    v2   Imm(0)                                           -> x0
+    v3   Imm(0)                                           -> x0
+    v4   Imm(0)                                           -> x0
+    v5   Imm(95)                                          -> x0
+    v6   Imm(0)                                           -> x0
+    v7   Imm(0)                                           -> x0
+    v8   Imm(0)                                           -> x0
+    v9   Imm(1)                                           -> x0
     v10  BinopI { op=add, lhs=v1, rhs_imm=1 }             -> x0
     v11  Imm(80)                                          -> x0
     v12  Imm(0)                                           -> x0

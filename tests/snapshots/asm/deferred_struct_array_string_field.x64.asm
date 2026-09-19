@@ -38,35 +38,35 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x1, %eax
                	retq
-               	xorl	%ecx, %ecx
-               	movslq	%ecx, %rax
-               	cmpb	$0x0, (%rsi,%rax)
+               	xorl	%eax, %eax
+               	movslq	%eax, %rcx
+               	cmpb	$0x0, (%rsi,%rcx)
                	jne	<addr>
                	movq	(%rdi), %r8
-               	cmpb	$0x0, (%r8,%rax)
+               	cmpb	$0x0, (%r8,%rcx)
                	je	<addr>
                	movq	(%rdi), %r8
-               	movsbq	(%r8,%rax), %r8
-               	movsbq	(%rsi,%rax), %rax
-               	cmpl	%eax, %r8d
+               	movsbq	(%r8,%rcx), %r8
+               	movsbq	(%rsi,%rcx), %rcx
+               	cmpl	%ecx, %r8d
                	jne	<addr>
-               	incq	%rcx
+               	incq	%rax
                	jmp	<addr>
                	movl	$0x1, %eax
                	retq
-               	xorl	%ecx, %ecx
-               	movslq	%ecx, %rax
-               	cmpb	$0x0, (%rdx,%rax)
+               	xorl	%eax, %eax
+               	movslq	%eax, %rcx
+               	cmpb	$0x0, (%rdx,%rcx)
                	jne	<addr>
                	movq	0x10(%rdi), %rsi
-               	cmpb	$0x0, (%rsi,%rax)
+               	cmpb	$0x0, (%rsi,%rcx)
                	je	<addr>
                	movq	0x10(%rdi), %rsi
-               	movsbq	(%rsi,%rax), %rsi
-               	movsbq	(%rdx,%rax), %rax
-               	cmpl	%eax, %esi
+               	movsbq	(%rsi,%rcx), %rsi
+               	movsbq	(%rdx,%rcx), %rcx
+               	cmpl	%ecx, %esi
                	jne	<addr>
-               	incq	%rcx
+               	incq	%rax
                	jmp	<addr>
                	movl	$0x1, %eax
                	retq

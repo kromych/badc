@@ -103,10 +103,10 @@ Disassembly of section .text:
                	mulq	%rsi
                	movq	%rdx, %rax
                	shrq	%rax
-               	imulq	$0x21, %rax, %rdx
-               	movq	%rdi, %rax
-               	subq	%rdx, %rax
-               	movq	%rdi, (%rcx,%rax,8)
+               	imulq	$0x21, %rax, %rax
+               	movq	%rdi, %rdx
+               	subq	%rax, %rdx
+               	movq	%rdi, (%rcx,%rdx,8)
                	movq	(%rcx), %rax
                	movq	0x100(%rcx), %rcx
                	addq	%rcx, %rax
@@ -183,10 +183,10 @@ Disassembly of section .text:
                	shrq	%rax
                	addq	%rdx, %rax
                	shrq	$0x9, %rax
-               	imulq	$0x3fd, %rax, %rdx      # imm = 0x3FD
-               	movq	%rdi, %rax
-               	subq	%rdx, %rax
-               	movl	%edi, (%rcx,%rax,4)
+               	imulq	$0x3fd, %rax, %rax      # imm = 0x3FD
+               	movq	%rdi, %rdx
+               	subq	%rax, %rdx
+               	movl	%edi, (%rcx,%rdx,4)
                	movslq	(%rcx), %rax
                	movslq	0xff0(%rcx), %rcx
                	addq	%rcx, %rax

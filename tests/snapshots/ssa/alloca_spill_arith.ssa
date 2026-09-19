@@ -212,23 +212,23 @@ fn ent_pc=0 n_params=0 variadic=false locals=1
     v200 Imm(3)                                           -> x7
     v201 BinopI { op=add, lhs=v4, rhs_imm=3 }             -> x7
     v202 Load { addr=v4, disp=3, kind=U8 }                -> x0
-    v203 Binop { op=add, lhs=v199, rhs=v202 }             -> x6
-    v204 Imm(0)                                           -> x0
-    v205 Imm(0)                                           -> x0
-    v206 BinopI { op=eq, lhs=v186, rhs_imm=224 }          -> x0
-    v207 Imm(0)                                           -> x1
+    v203 Binop { op=add, lhs=v199, rhs=v202 }             -> x0
+    v204 Imm(0)                                           -> x6
+    v205 Imm(0)                                           -> x6
+    v206 BinopI { op=eq, lhs=v186, rhs_imm=224 }          -> x1
+    v207 Imm(0)                                           -> x6
     terminator Bz { cond=v206, target=b11, fall=b7 }   (exit_acc=v206)
   block 7  start_pc=0
-    v208 Imm(0)                                           -> x0
-    v209 BinopI { op=eq, lhs=v195, rhs_imm=8 }            -> x0
-    v210 BinopI { op=ne, lhs=v209, rhs_imm=0 }            -> x1
-    v211 Imm(0)                                           -> x1
-    v212 Imm(0)                                           -> x1
-    v213 Imm(0)                                           -> x1
-    v214 Imm(0)                                           -> x1
+    v208 Imm(0)                                           -> x1
+    v209 BinopI { op=eq, lhs=v195, rhs_imm=8 }            -> x1
+    v210 BinopI { op=ne, lhs=v209, rhs_imm=0 }            -> x2
+    v211 Imm(0)                                           -> x2
+    v212 Imm(0)                                           -> x2
+    v213 Imm(0)                                           -> x2
+    v214 Imm(0)                                           -> x2
     terminator Bz { cond=v209, target=b11, fall=b8 }   (exit_acc=v209)
   block 8  start_pc=0
-    v215 Imm(0)                                           -> x0
+    v215 Imm(0)                                           -> x1
     v216 BinopI { op=eq, lhs=v203, rhs_imm=7 }            -> x0
     v217 Imm(0)                                           -> x1
     v218 Imm(0)                                           -> x1

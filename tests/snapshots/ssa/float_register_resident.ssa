@@ -12,14 +12,14 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v6   Imm(1)                                           -> x0
     v7   Imm(0)                                           -> x0
     v8   FpCast { kind=IntToFp, value=v7 }                -> d0 [f32]
-    v9   Imm(1056964608)                                  -> x1 [f32]
+    v9   Imm(1056964608)                                  -> x0 [f32]
     v10  Binop { op=fmul, lhs=v8, rhs=v9 }                -> d0 [f32]
-    v11  Imm(0)                                           -> x0
-    v12  Imm(0)                                           -> x0 [f32]
-    v13  Imm(1073741824)                                  -> x0 [f32]
+    v11  Imm(0)                                           -> x1
+    v12  Imm(0)                                           -> x1 [f32]
+    v13  Imm(1073741824)                                  -> x1 [f32]
     v14  Imm(0)                                           -> x6 [f32]
     v15  Binop { op=fmul, lhs=v10, rhs=v13 }              -> d1 [f32]
-    v16  Fma { a=v10, b=v13, c=v1, neg_product=false, neg_addend=false } -> d1 [f32]
+    v16  Fma { a=v10, b=v13, c=v1, neg_product=false, neg_addend=false } -> d0 [f32]
     v17  Imm(0)                                           -> x2
     v18  Imm(0)                                           -> x2
     v19  Imm(1)                                           -> x2
@@ -27,15 +27,15 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v21  Imm(1)                                           -> x2
     v22  Imm(1)                                           -> x2
     v23  Imm(1)                                           -> x2
-    v24  FpCast { kind=IntToFp, value=v23 }               -> d0 [f32]
+    v24  FpCast { kind=IntToFp, value=v23 }               -> d1 [f32]
     v25  Imm(1056964608)                                  -> x2 [f32]
-    v26  Binop { op=fmul, lhs=v24, rhs=v9 }               -> d0 [f32]
+    v26  Binop { op=fmul, lhs=v24, rhs=v9 }               -> d1 [f32]
     v27  Imm(0)                                           -> x2
     v28  Imm(0)                                           -> x2 [f32]
     v29  Imm(1073741824)                                  -> x2 [f32]
     v30  Imm(0)                                           -> x2 [f32]
     v31  Binop { op=fmul, lhs=v26, rhs=v13 }              -> d2 [f32]
-    v32  Fma { a=v26, b=v13, c=v16, neg_product=false, neg_addend=false } -> d1 [f32]
+    v32  Fma { a=v26, b=v13, c=v16, neg_product=false, neg_addend=false } -> d0 [f32]
     v33  Imm(0)                                           -> x2
     v34  Imm(1)                                           -> x2
     v35  Imm(2)                                           -> x2
@@ -43,15 +43,15 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v37  Imm(2)                                           -> x2
     v38  Imm(1)                                           -> x2
     v39  Imm(2)                                           -> x2
-    v40  FpCast { kind=IntToFp, value=v39 }               -> d0 [f32]
+    v40  FpCast { kind=IntToFp, value=v39 }               -> d1 [f32]
     v41  Imm(1056964608)                                  -> x2 [f32]
-    v42  Binop { op=fmul, lhs=v40, rhs=v9 }               -> d0 [f32]
+    v42  Binop { op=fmul, lhs=v40, rhs=v9 }               -> d1 [f32]
     v43  Imm(0)                                           -> x2
     v44  Imm(0)                                           -> x2 [f32]
     v45  Imm(1073741824)                                  -> x2 [f32]
     v46  Imm(0)                                           -> x2 [f32]
     v47  Binop { op=fmul, lhs=v42, rhs=v13 }              -> d2 [f32]
-    v48  Fma { a=v42, b=v13, c=v32, neg_product=false, neg_addend=false } -> d1 [f32]
+    v48  Fma { a=v42, b=v13, c=v32, neg_product=false, neg_addend=false } -> d0 [f32]
     v49  Imm(0)                                           -> x2
     v50  Imm(2)                                           -> x2
     v51  Imm(3)                                           -> x2
@@ -59,15 +59,15 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v53  Imm(3)                                           -> x2
     v54  Imm(1)                                           -> x2
     v55  Imm(3)                                           -> x2
-    v56  FpCast { kind=IntToFp, value=v55 }               -> d0 [f32]
+    v56  FpCast { kind=IntToFp, value=v55 }               -> d1 [f32]
     v57  Imm(1056964608)                                  -> x2 [f32]
-    v58  Binop { op=fmul, lhs=v56, rhs=v9 }               -> d0 [f32]
-    v59  Imm(0)                                           -> x1
-    v60  Imm(0)                                           -> x1 [f32]
-    v61  Imm(1073741824)                                  -> x1 [f32]
-    v62  Imm(0)                                           -> x1 [f32]
+    v58  Binop { op=fmul, lhs=v56, rhs=v9 }               -> d1 [f32]
+    v59  Imm(0)                                           -> x0
+    v60  Imm(0)                                           -> x0 [f32]
+    v61  Imm(1073741824)                                  -> x0 [f32]
+    v62  Imm(0)                                           -> x0 [f32]
     v63  Binop { op=fmul, lhs=v58, rhs=v13 }              -> d2 [f32]
-    v64  Fma { a=v58, b=v13, c=v48, neg_product=false, neg_addend=false } -> d1 [f32]
+    v64  Fma { a=v58, b=v13, c=v48, neg_product=false, neg_addend=false } -> d0 [f32]
     v65  Imm(0)                                           -> x0
     v66  Imm(3)                                           -> x0
     v67  Imm(4)                                           -> x0
@@ -75,15 +75,15 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v69  Imm(4)                                           -> x0
     v70  Imm(1)                                           -> x0
     v71  Imm(4)                                           -> x0
-    v72  FpCast { kind=IntToFp, value=v71 }               -> d0 [f32]
-    v73  Imm(1056964608)                                  -> x1 [f32]
-    v74  Binop { op=fmul, lhs=v72, rhs=v73 }              -> d0 [f32]
-    v75  Imm(0)                                           -> x0
-    v76  Imm(0)                                           -> x0 [f32]
-    v77  Imm(1073741824)                                  -> x0 [f32]
+    v72  FpCast { kind=IntToFp, value=v71 }               -> d1 [f32]
+    v73  Imm(1056964608)                                  -> x0 [f32]
+    v74  Binop { op=fmul, lhs=v72, rhs=v73 }              -> d1 [f32]
+    v75  Imm(0)                                           -> x1
+    v76  Imm(0)                                           -> x1 [f32]
+    v77  Imm(1073741824)                                  -> x1 [f32]
     v78  Imm(0)                                           -> x2 [f32]
     v79  Binop { op=fmul, lhs=v74, rhs=v77 }              -> d2 [f32]
-    v80  Fma { a=v74, b=v77, c=v64, neg_product=false, neg_addend=false } -> d1 [f32]
+    v80  Fma { a=v74, b=v77, c=v64, neg_product=false, neg_addend=false } -> d0 [f32]
     v81  Imm(0)                                           -> x2
     v82  Imm(4)                                           -> x2
     v83  Imm(5)                                           -> x2
@@ -91,15 +91,15 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v85  Imm(5)                                           -> x2
     v86  Imm(1)                                           -> x2
     v87  Imm(5)                                           -> x2
-    v88  FpCast { kind=IntToFp, value=v87 }               -> d0 [f32]
+    v88  FpCast { kind=IntToFp, value=v87 }               -> d1 [f32]
     v89  Imm(1056964608)                                  -> x2 [f32]
-    v90  Binop { op=fmul, lhs=v88, rhs=v73 }              -> d0 [f32]
+    v90  Binop { op=fmul, lhs=v88, rhs=v73 }              -> d1 [f32]
     v91  Imm(0)                                           -> x2
     v92  Imm(0)                                           -> x2 [f32]
     v93  Imm(1073741824)                                  -> x2 [f32]
     v94  Imm(0)                                           -> x2 [f32]
     v95  Binop { op=fmul, lhs=v90, rhs=v77 }              -> d2 [f32]
-    v96  Fma { a=v90, b=v77, c=v80, neg_product=false, neg_addend=false } -> d1 [f32]
+    v96  Fma { a=v90, b=v77, c=v80, neg_product=false, neg_addend=false } -> d0 [f32]
     v97  Imm(0)                                           -> x2
     v98  Imm(5)                                           -> x2
     v99  Imm(6)                                           -> x2
@@ -107,15 +107,15 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v101 Imm(6)                                           -> x2
     v102 Imm(1)                                           -> x2
     v103 Imm(6)                                           -> x2
-    v104 FpCast { kind=IntToFp, value=v103 }              -> d0 [f32]
+    v104 FpCast { kind=IntToFp, value=v103 }              -> d1 [f32]
     v105 Imm(1056964608)                                  -> x2 [f32]
-    v106 Binop { op=fmul, lhs=v104, rhs=v73 }             -> d0 [f32]
+    v106 Binop { op=fmul, lhs=v104, rhs=v73 }             -> d1 [f32]
     v107 Imm(0)                                           -> x2
     v108 Imm(0)                                           -> x2 [f32]
     v109 Imm(1073741824)                                  -> x2 [f32]
     v110 Imm(0)                                           -> x2 [f32]
     v111 Binop { op=fmul, lhs=v106, rhs=v77 }             -> d2 [f32]
-    v112 Fma { a=v106, b=v77, c=v96, neg_product=false, neg_addend=false } -> d1 [f32]
+    v112 Fma { a=v106, b=v77, c=v96, neg_product=false, neg_addend=false } -> d0 [f32]
     v113 Imm(0)                                           -> x2
     v114 Imm(6)                                           -> x2
     v115 Imm(7)                                           -> x2
@@ -123,31 +123,31 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v117 Imm(7)                                           -> x2
     v118 Imm(1)                                           -> x2
     v119 Imm(7)                                           -> x2
-    v120 FpCast { kind=IntToFp, value=v119 }              -> d0 [f32]
+    v120 FpCast { kind=IntToFp, value=v119 }              -> d1 [f32]
     v121 Imm(1056964608)                                  -> x2 [f32]
-    v122 Binop { op=fmul, lhs=v120, rhs=v73 }             -> d0 [f32]
+    v122 Binop { op=fmul, lhs=v120, rhs=v73 }             -> d1 [f32]
     v123 Imm(0)                                           -> x2
     v124 Imm(0)                                           -> x2 [f32]
     v125 Imm(1073741824)                                  -> x2 [f32]
     v126 Imm(0)                                           -> x2 [f32]
     v127 Binop { op=fmul, lhs=v122, rhs=v77 }             -> d2 [f32]
-    v128 Fma { a=v122, b=v77, c=v112, neg_product=false, neg_addend=false } -> d1 [f32]
-    v129 Imm(0)                                           -> x0
-    v130 Imm(7)                                           -> x0
-    v131 Imm(8)                                           -> x0
-    v132 Imm(0)                                           -> x0
-    v133 Imm(8)                                           -> x0
-    v134 Imm(1)                                           -> x0
-    v135 Imm(8)                                           -> x0
-    v136 FpCast { kind=IntToFp, value=v135 }              -> d0 [f32]
-    v137 Imm(1056964608)                                  -> x0 [f32]
-    v138 Binop { op=fmul, lhs=v136, rhs=v73 }             -> d0 [f32]
+    v128 Fma { a=v122, b=v77, c=v112, neg_product=false, neg_addend=false } -> d0 [f32]
+    v129 Imm(0)                                           -> x1
+    v130 Imm(7)                                           -> x1
+    v131 Imm(8)                                           -> x1
+    v132 Imm(0)                                           -> x1
+    v133 Imm(8)                                           -> x1
+    v134 Imm(1)                                           -> x1
+    v135 Imm(8)                                           -> x1
+    v136 FpCast { kind=IntToFp, value=v135 }              -> d1 [f32]
+    v137 Imm(1056964608)                                  -> x1 [f32]
+    v138 Binop { op=fmul, lhs=v136, rhs=v73 }             -> d1 [f32]
     v139 Imm(0)                                           -> x0
     v140 Imm(0)                                           -> x0 [f32]
     v141 Imm(1073741824)                                  -> x0 [f32]
     v142 Imm(0)                                           -> x1 [f32]
     v143 Binop { op=fmul, lhs=v138, rhs=v141 }            -> d2 [f32]
-    v144 Fma { a=v138, b=v141, c=v128, neg_product=false, neg_addend=false } -> d1 [f32]
+    v144 Fma { a=v138, b=v141, c=v128, neg_product=false, neg_addend=false } -> d0 [f32]
     v145 Imm(0)                                           -> x1
     v146 Imm(8)                                           -> x1
     v147 Imm(9)                                           -> x1
@@ -155,9 +155,9 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v149 Imm(9)                                           -> x1
     v150 Imm(1)                                           -> x1
     v151 Imm(9)                                           -> x1
-    v152 FpCast { kind=IntToFp, value=v151 }              -> d0 [f32]
+    v152 FpCast { kind=IntToFp, value=v151 }              -> d1 [f32]
     v153 Imm(1056964608)                                  -> x1 [f32]
-    v154 Binop { op=fmul, lhs=v152, rhs=v153 }            -> d0 [f32]
+    v154 Binop { op=fmul, lhs=v152, rhs=v153 }            -> d1 [f32]
     v155 Imm(0)                                           -> x1
     v156 Imm(0)                                           -> x1 [f32]
     v157 Imm(1073741824)                                  -> x1 [f32]

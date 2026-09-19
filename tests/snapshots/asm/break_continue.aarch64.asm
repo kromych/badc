@@ -14,14 +14,14 @@ Disassembly of section .text:
                	brk	#0x1
 
 <main>:
-               	mov	x1, #0x0                // =0
-               	mov	x0, x1
-               	cmp	w0, #0x5
+               	mov	x0, #0x0                // =0
+               	mov	x1, x0
+               	cmp	w1, #0x5
                	b.eq	<addr>
-               	tbz	w0, #0x0, <addr>
-               	add	x1, x1, x0
-               	add	x0, x0, #0x1
-               	cmp	w0, #0xa
+               	tbz	w1, #0x0, <addr>
+               	add	x0, x0, x1
+               	add	x1, x1, #0x1
+               	cmp	w1, #0xa
                	b.lt	<addr>
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	ret

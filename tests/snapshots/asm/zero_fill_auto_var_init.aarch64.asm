@@ -187,10 +187,10 @@ Disassembly of section .text:
                	udiv	x17, x0, x4
                	msub	x2, x17, x4, x0
                	str	x0, [x1, x2, lsl #3]
-               	ldr	x2, [x1]
-               	sub	x0, x4, #0x1
-               	ldr	x0, [x1, x0, lsl #3]
-               	add	x0, x2, x0
+               	ldr	x0, [x1]
+               	sub	x2, x4, #0x1
+               	ldr	x1, [x1, x2, lsl #3]
+               	add	x0, x0, x1
                	sub	sp, x29, #0x30
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10

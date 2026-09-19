@@ -4,9 +4,9 @@ fn ent_pc=0 n_params=0 variadic=false locals=16
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   LocalAddr(-16)                                   -> x1
+    v1   LocalAddr(-16)                                   -> x2
     v2   Imm(0)                                           -> x0
-    v3   Imm(0)                                           -> x2
+    v3   Imm(0)                                           -> x1
     v4   Imm(0)                                           -> x0
     terminator Jmp(b2)   (exit_acc=v3)
   block 1  start_pc=0
@@ -111,7 +111,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=16
     v89  Imm(1)                                           -> x2
     v90  Imm(34359738368)                                 -> x2
     v91  Imm(-9)                                          -> x2
-    v92  BinopI { op=and, lhs=v88, rhs_imm=-9 }           -> x2
+    v92  BinopI { op=and, lhs=v88, rhs_imm=-9 }           -> x1
     v93  Store { addr=v6, disp=0, value=v92, kind=I8 }    -> -
     v94  BinopI { op=and, lhs=v88, rhs_imm=247 }          -> x1
     v95  Imm(0)                                           -> x1

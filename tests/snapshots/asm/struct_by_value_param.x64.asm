@@ -34,10 +34,10 @@ Disassembly of section .text:
                	movslq	(%rax), %rcx
                	movslq	0x4(%rax), %rdx
                	addq	%rdx, %rcx
-               	movslq	%ecx, %rcx
+               	movslq	%ecx, %rdx
                	movl	$0xffffffff, (%rax)     # imm = 0xFFFFFFFF
                	movl	$0xffffffff, 0x4(%rax)  # imm = 0xFFFFFFFF
-               	movq	%rcx, %rax
+               	movq	%rdx, %rax
                	leave
                	retq
 

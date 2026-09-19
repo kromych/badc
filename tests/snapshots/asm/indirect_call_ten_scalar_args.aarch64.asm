@@ -27,30 +27,30 @@ Disassembly of section .text:
                	add	x8, x0, #0x8
                	add	x9, x0, #0x9
                	lsl	x1, x1, #1
-               	add	x1, x0, x1
+               	add	x0, x0, x1
                	mov	x17, #0x3               // =3
-               	mul	x2, x2, x17
-               	add	x1, x1, x2
-               	lsl	x2, x3, #2
-               	add	x1, x1, x2
+               	mul	x1, x2, x17
+               	add	x0, x0, x1
+               	lsl	x1, x3, #2
+               	add	x0, x0, x1
                	mov	x17, #0x5               // =5
-               	mul	x2, x4, x17
-               	add	x1, x1, x2
+               	mul	x1, x4, x17
+               	add	x0, x0, x1
                	mov	x17, #0x6               // =6
-               	mul	x2, x5, x17
-               	add	x1, x1, x2
+               	mul	x1, x5, x17
+               	add	x0, x0, x1
                	mov	x17, #0x7               // =7
-               	mul	x2, x6, x17
-               	add	x1, x1, x2
-               	lsl	x2, x7, #3
-               	add	x1, x1, x2
+               	mul	x1, x6, x17
+               	add	x0, x0, x1
+               	lsl	x1, x7, #3
+               	add	x0, x0, x1
                	mov	x17, #0x9               // =9
-               	mul	x2, x8, x17
-               	add	x1, x1, x2
+               	mul	x1, x8, x17
+               	add	x0, x0, x1
                	mov	x17, #0xa               // =10
-               	mul	x2, x9, x17
-               	add	x1, x1, x2
-               	cmp	x1, #0x181
+               	mul	x1, x9, x17
+               	add	x0, x0, x1
+               	cmp	x0, #0x181
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ret

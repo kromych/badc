@@ -29,14 +29,12 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	bl	<addr>
-               	mov	x1, x0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	cbz	x0, <addr>
                	ldp	x29, x30, [sp], #0x10
                	ret
                	bl	<addr>
-               	mov	x1, x0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	cbz	x0, <addr>
                	ldp	x29, x30, [sp], #0x10
                	ret

@@ -17,37 +17,37 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	sxtw	x3, w0
-               	add	x17, x3, #0xf
+               	sxtw	x1, w0
+               	add	x17, x1, #0xf
                	and	x17, x17, #0xfffffffffffffff0
-               	mov	x2, sp
-               	sub	x2, x2, x17
+               	mov	x3, sp
+               	sub	x3, x3, x17
                	lsr	x17, x17, #12
                	cbz	x17, <addr>
                	sub	sp, sp, #0x1, lsl #12   // =0x1000
                	str	xzr, [sp]
                	subs	x17, x17, #0x1
                	b.ne	<addr>
-               	mov	sp, x2
+               	mov	sp, x3
                	mov	x0, #0x0                // =0
-               	cmp	w0, w3
+               	cmp	w0, w1
                	b.ge	<addr>
-               	add	x1, x0, #0x1
-               	and	x4, x1, #0xff
-               	strb	w4, [x2, x0]
-               	mov	x0, x1
-               	cmp	w0, w3
+               	add	x2, x0, #0x1
+               	and	x4, x2, #0xff
+               	strb	w4, [x3, x0]
+               	mov	x0, x2
+               	cmp	w0, w1
                	b.lt	<addr>
                	mov	x0, #0x0                // =0
-               	mov	x1, x0
-               	cmp	w0, w3
+               	mov	x2, x0
+               	cmp	w0, w1
                	b.ge	<addr>
-               	ldrb	w4, [x2, x0]
-               	add	x1, x1, x4
+               	ldrb	w4, [x3, x0]
+               	add	x2, x2, x4
                	add	x0, x0, #0x1
-               	cmp	w0, w3
+               	cmp	w0, w1
                	b.lt	<addr>
-               	sxtw	x0, w1
+               	sxtw	x0, w2
                	sub	sp, x29, #0x10
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10

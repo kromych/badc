@@ -86,8 +86,8 @@ Disassembly of section .text:
                	retq
 
 <putu>:
-               	movl	%esi, %eax
-               	movq	$0x21, (%rdi,%rax,8)
+               	movl	%esi, %ecx
+               	movq	$0x21, (%rdi,%rcx,8)
                	retq
 
 <wrapped_int>:
@@ -445,11 +445,11 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	leaq	<rip>, %rdi
-               	leaq	<rip>, %rcx
-               	movslq	(%rcx), %rax
-               	decq	%rax
-               	movl	%eax, %esi
-               	movslq	(%rcx), %rax
+               	leaq	<rip>, %rax
+               	movslq	(%rax), %rcx
+               	decq	%rcx
+               	movl	%ecx, %esi
+               	movslq	(%rax), %rax
                	addq	$0x3, %rax
                	movl	%eax, %edx
                	callq	<addr>

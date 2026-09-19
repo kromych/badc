@@ -25,34 +25,34 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ret
-               	mov	x2, #0x4000000000000000 // =4611686018427387904
-               	fmov	d17, x2
+               	mov	x1, #0x4000000000000000 // =4611686018427387904
+               	fmov	d17, x1
                	fmul	d0, d0, d17
-               	mov	x0, #0x4008000000000000 // =4613937818241073152
-               	fmov	d16, x0
+               	mov	x2, #0x4008000000000000 // =4613937818241073152
+               	fmov	d16, x2
                	fneg	d1, d16
                	fcmp	d0, d1
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ret
-               	mov	x1, #0x3ff0000000000000 // =4607182418800017408
-               	fmov	d17, x1
+               	mov	x0, #0x3ff0000000000000 // =4607182418800017408
+               	fmov	d17, x0
                	fadd	d0, d0, d17
-               	fmov	d16, x2
+               	fmov	d16, x1
                	fneg	d2, d16
                	fcmp	d0, d2
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ret
-               	fmov	d17, x1
+               	fmov	d17, x0
                	fsub	d0, d0, d17
                	fcmp	d0, d1
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ret
-               	fmov	d17, x0
+               	fmov	d17, x2
                	fdiv	d0, d0, d17
-               	fmov	d16, x1
+               	fmov	d16, x0
                	fneg	d1, d16
                	fcmp	d0, d1
                	b.eq	<addr>

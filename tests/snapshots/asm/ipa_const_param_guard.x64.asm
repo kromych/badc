@@ -596,12 +596,11 @@ Disassembly of section .text:
                	cmpl	$0xb4, %eax
                	jl	<addr>
                	xorl	%eax, %eax
-               	leaq	<rip>, %rsi
-               	movq	(%rsi,%rax,8), %rdi
-               	leaq	0x1(%rax), %rdx
-               	imulq	%rdx, %rdi
-               	addq	%rdi, %rcx
-               	movq	%rdx, %rax
+               	leaq	<rip>, %rdx
+               	movq	(%rdx,%rax,8), %rsi
+               	incq	%rax
+               	imulq	%rax, %rsi
+               	addq	%rsi, %rcx
                	cmpl	$0xb4, %eax
                	jl	<addr>
                	leaq	0xa(%rcx), %rbx

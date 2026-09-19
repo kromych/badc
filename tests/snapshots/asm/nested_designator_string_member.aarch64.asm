@@ -102,13 +102,13 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x0, x29, #0x10
-               	ldrsw	x2, [x0, #0xc]
-               	add	x1, x4, #0x6
-               	cmp	w2, w1
+               	ldrsw	x1, [x0, #0xc]
+               	add	x2, x4, #0x6
+               	cmp	w1, w2
                	b.ne	<addr>
-               	ldrsw	x1, [x0]
-               	add	x0, x4, #0x4
-               	cmp	w1, w0
+               	ldrsw	x0, [x0]
+               	add	x1, x4, #0x4
+               	cmp	w0, w1
                	b.eq	<addr>
                	mov	x0, #0x6                // =6
                	add	sp, sp, #0x10

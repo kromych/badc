@@ -56,11 +56,10 @@ Disassembly of section .text:
                	leaq	-0xc0(%rbp), %rsi
                	movq	%rax, %rdi
                	shlq	$0x3, %rdi
-               	addq	%rsi, %rdi
-               	leaq	0x1(%rax), %rsi
-               	imulq	$0x74, %rsi, %r8
-               	movq	%r8, (%rdi)
-               	movq	%rsi, %rax
+               	addq	%rdi, %rsi
+               	incq	%rax
+               	imulq	$0x74, %rax, %rdi
+               	movq	%rdi, (%rsi)
                	cmpl	$0x18, %eax
                	jl	<addr>
                	xorl	%eax, %eax

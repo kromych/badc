@@ -45,8 +45,8 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v13  Imm(1)                                           -> x1
     v14  Imm(8)                                           -> x1
     v15  Imm(1)                                           -> x1
-    v16  Imm(4614256656552045848)                         -> x6
-    v17  Imm(-4611686018427387904)                        -> x6
+    v16  Imm(4614256656552045848)                         -> x2
+    v17  Imm(-4611686018427387904)                        -> x2
     v18  Binop { op=fmul, lhs=v6, rhs=v5 }                -> d1
     v19  FpCast { kind=IntToFp, value=v15 }               -> d1
     v20  Binop { op=fmul, lhs=v7, rhs=v19 }               -> d0

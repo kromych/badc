@@ -74,26 +74,26 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x2, %eax
                	retq
-               	leaq	<rip>, %rdx
-               	xorl	%eax, %eax
-               	movl	%eax, (%rdx)
                	leaq	<rip>, %rcx
+               	xorl	%eax, %eax
+               	movl	%eax, (%rcx)
+               	leaq	<rip>, %rdx
                	testl	%eax, %eax
                	je	<addr>
                	movl	$0x1, %eax
                	orq	$0x1000, %rax           # imm = 0x1000
-               	movq	%rax, (%rcx)
+               	movq	%rax, (%rdx)
                	testb	$0x3, %al
                	je	<addr>
                	movl	$0x3, %eax
                	retq
                	movl	$0x1, %eax
-               	movl	%eax, (%rdx)
+               	movl	%eax, (%rcx)
                	testl	%eax, %eax
                	je	<addr>
-               	movq	%rax, %rdx
-               	orq	$0x1000, %rdx           # imm = 0x1000
-               	movq	%rdx, (%rcx)
+               	movq	%rax, %rcx
+               	orq	$0x1000, %rcx           # imm = 0x1000
+               	movq	%rcx, (%rdx)
                	leaq	<rip>, %rcx
                	movq	(%rcx), %rcx
                	andq	$0x3, %rcx
@@ -154,7 +154,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	movl	$0x3, %ecx
                	jmp	<addr>
-               	xorl	%edx, %edx
+               	xorl	%ecx, %ecx
                	jmp	<addr>
                	xorl	%eax, %eax
                	jmp	<addr>

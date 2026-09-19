@@ -1660,6 +1660,32 @@ fn x64_has_frame_record(insns: &[X64Insn]) -> bool {
     insns.iter().any(|i| i.op == 0x55 && i.rex == 0)
 }
 
+/// `munchausen.c`'s predicate: the loop's values fit the caller-saved
+/// registers once the reads of instructions no emitter lowers -- the
+/// division's pieces the value numbering merged away -- keep nothing live,
+/// so neither target saves a register or takes a frame.
+#[test]
+fn munchausen_predicate_is_a_frameless_leaf() {
+    const SRC: &str = "int cache[10];\n\
+        _Bool is_munchausen(const int number) {\n\
+        int n = number;\n\
+        int total = 0;\n\
+        while (n > 0) {\n\
+            int digit = n % 10;\n\
+            total += cache[digit];\n\
+            if (total > number) return 0;\n\
+            n = n / 10;\n\
+        }\n\
+        return total == number;\n}\n";
+    let mut m = Misses::default();
+    let ws = a64(SRC, "is_munchausen");
+    m.expect(!a64_has_frame_record(&ws), || format!("aarch64: {ws:08x?}"));
+    let insns = x64(SRC, "is_munchausen");
+    let pushes = insns.iter().any(|i| matches!(i.op, 0x50..=0x57));
+    m.expect(!pushes, || format!("x86-64: {insns:x?}"));
+    m.finish();
+}
+
 /// Intrinsics that lower to register and memory instructions leave a leaf
 /// without a frame record: the rounding and absolute-value forms, a trap, a
 /// `va_list` walked by the cursor or System V forms, and a thread-local

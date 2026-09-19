@@ -26,42 +26,42 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rcx
                	xorl	%eax, %eax
-               	leaq	0x8(%rsi), %rcx
-               	movslq	%eax, %rdx
-               	cmpq	$0x0, (%rcx,%rdx,8)
+               	leaq	0x8(%rcx), %rdx
+               	movslq	%eax, %rsi
+               	cmpq	$0x0, (%rdx,%rsi,8)
                	je	<addr>
                	incq	%rax
-               	leaq	0x8(%rsi), %rcx
-               	movslq	%eax, %rdx
-               	cmpq	$0x0, (%rcx,%rdx,8)
+               	leaq	0x8(%rcx), %rdx
+               	movslq	%eax, %rsi
+               	cmpq	$0x0, (%rdx,%rsi,8)
                	jne	<addr>
                	testl	%eax, %eax
                	jne	<addr>
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rcx
                	xorl	%eax, %eax
-               	leaq	0x8(%rsi), %rcx
-               	movslq	%eax, %rdx
-               	cmpq	$0x0, (%rcx,%rdx,8)
+               	leaq	0x8(%rcx), %rdx
+               	movslq	%eax, %rsi
+               	cmpq	$0x0, (%rdx,%rsi,8)
                	je	<addr>
                	incq	%rax
-               	leaq	0x8(%rsi), %rcx
-               	movslq	%eax, %rdx
-               	cmpq	$0x0, (%rcx,%rdx,8)
+               	leaq	0x8(%rcx), %rdx
+               	movslq	%eax, %rsi
+               	cmpq	$0x0, (%rdx,%rsi,8)
                	jne	<addr>
                	cmpl	$0x1, %eax
                	jne	<addr>
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rcx
                	xorl	%eax, %eax
-               	leaq	0x8(%rsi), %rcx
-               	movslq	%eax, %rdx
-               	cmpq	$0x0, (%rcx,%rdx,8)
+               	leaq	0x8(%rcx), %rdx
+               	movslq	%eax, %rsi
+               	cmpq	$0x0, (%rdx,%rsi,8)
                	je	<addr>
                	incq	%rax
-               	leaq	0x8(%rsi), %rcx
-               	movslq	%eax, %rdx
-               	cmpq	$0x0, (%rcx,%rdx,8)
+               	leaq	0x8(%rcx), %rdx
+               	movslq	%eax, %rsi
+               	cmpq	$0x0, (%rdx,%rsi,8)
                	jne	<addr>
                	cmpl	$0x2, %eax
                	je	<addr>

@@ -88,16 +88,16 @@ Disassembly of section .text:
                	bl	<addr>
                	stur	x0, [x29, #-0x10]
                	stur	x1, [x29, #-0x8]
-               	sub	x1, x29, #0x10
-               	ldr	x0, [x1]
-               	ldr	x1, [x1, #0x8]
-               	add	x2, x0, #0x5
+               	sub	x0, x29, #0x10
+               	ldr	x1, [x0]
+               	ldr	x2, [x0, #0x8]
+               	add	x1, x1, #0x5
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrsw	x3, [x0]
                	add	x3, x3, #0x1
                	str	w3, [x0]
-               	add	x0, x1, x2
+               	add	x0, x2, x1
                	cmp	x0, #0x16
                	b.eq	<addr>
                	orr	x20, x20, #0x4
@@ -105,16 +105,16 @@ Disassembly of section .text:
                	bl	<addr>
                	stur	x0, [x29, #-0x10]
                	stur	x1, [x29, #-0x8]
-               	sub	x1, x29, #0x10
-               	ldr	x0, [x1]
-               	ldr	x1, [x1, #0x8]
-               	add	x2, x0, #0x5
+               	sub	x0, x29, #0x10
+               	ldr	x1, [x0]
+               	ldr	x2, [x0, #0x8]
+               	add	x1, x1, #0x5
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrsw	x3, [x0]
                	add	x3, x3, #0x1
                	str	w3, [x0]
-               	add	x0, x1, x2
+               	add	x0, x2, x1
                	cmp	x0, #0x1a
                	b.eq	<addr>
                	orr	x20, x20, #0x8
@@ -132,8 +132,8 @@ Disassembly of section .text:
                	orr	x20, x20, #0x10
                	mov	x0, #0x6                // =6
                	scvtf	d0, x0
-               	mov	x1, #0x4000000000000000 // =4611686018427387904
-               	fmov	d17, x1
+               	mov	x0, #0x4000000000000000 // =4611686018427387904
+               	fmov	d17, x0
                	fdiv	d1, d0, d17
                	fadd	d0, d1, d0
                	mov	x0, #0x4008000000000000 // =4613937818241073152

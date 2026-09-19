@@ -37,11 +37,11 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	movzbq	(%rdi,%rsi), %rdx
-               	movq	%rsi, %rax
-               	shlq	$0x3, %rax
-               	movslq	%eax, %rcx
-               	movq	%rdx, %rbx
+               	movzbq	(%rdi,%rsi), %rax
+               	movq	%rsi, %rcx
+               	shlq	$0x3, %rcx
+               	movslq	%ecx, %rcx
+               	movq	%rax, %rbx
                	shlq	%cl, %rbx
                	incq	%rsi
                	callq	<addr>

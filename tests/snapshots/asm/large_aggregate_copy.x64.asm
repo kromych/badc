@@ -34,10 +34,10 @@ Disassembly of section .text:
                	movq	$0x0, (%rsp)
                	subq	$0x330, %rsp            # imm = 0x330
                	xorl	%eax, %eax
-               	leaq	-0x2330(%rbp), %rdx
-               	movq	%rax, %rcx
-               	andq	$0x7f, %rcx
-               	movb	%cl, (%rdx,%rax)
+               	leaq	-0x2330(%rbp), %rcx
+               	movq	%rax, %rdx
+               	andq	$0x7f, %rdx
+               	movb	%dl, (%rcx,%rax)
                	incq	%rax
                	cmpl	$0x2328, %eax           # imm = 0x2328
                	jl	<addr>

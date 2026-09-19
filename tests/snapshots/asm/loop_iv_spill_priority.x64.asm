@@ -55,8 +55,8 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	movq	%rax, %rdx
                	andq	$0x7, %rdx
-               	movl	(%rdi,%rdx,4), %esi
-               	leaq	0x1(%rax), %rdx
+               	movl	(%rdi,%rdx,4), %edx
+               	leaq	0x1(%rax), %rsi
                	imulq	%rsi, %rdx
                	addq	%rdx, %rcx
                	movq	%rcx, %rdx

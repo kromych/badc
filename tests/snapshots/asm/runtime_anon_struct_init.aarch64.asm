@@ -28,15 +28,15 @@ Disassembly of section .text:
                	str	x22, [sp, #0x10]
                	stp	x29, x30, [sp, #0x60]
                	add	x29, sp, #0x60
-               	mov	x21, x0
-               	mov	x22, x1
+               	mov	x20, x0
+               	mov	x21, x1
                	sub	x0, x29, #0x40
                	stp	xzr, xzr, [x0]
                	stp	xzr, xzr, [x0, #0x10]
                	mov	x1, #0x1                // =1
                	str	w1, [x0]
-               	str	x21, [x0, #0x8]
-               	str	x22, [x0, #0x10]
+               	str	x20, [x0, #0x8]
+               	str	x21, [x0, #0x10]
                	mov	x1, #0x7                // =7
                	str	w1, [x0, #0x18]
                	sub	x1, x29, #0x20
@@ -44,24 +44,24 @@ Disassembly of section .text:
                	stp	xzr, xzr, [x1, #0x10]
                	mov	x2, #0x2                // =2
                	str	w2, [x1]
-               	str	x21, [x1, #0x8]
-               	str	x22, [x1, #0x10]
+               	str	x20, [x1, #0x8]
+               	str	x21, [x1, #0x10]
                	mov	x2, #0x8                // =8
                	str	w2, [x1, #0x18]
                	bl	<addr>
-               	mov	x20, x0
+               	mov	x22, x0
                	sub	x0, x29, #0x20
                	bl	<addr>
-               	ldrsw	x1, [x20]
+               	ldrsw	x1, [x22]
                	cmp	w1, #0x1
                	b.ne	<addr>
-               	ldr	x1, [x20, #0x8]
+               	ldr	x1, [x22, #0x8]
+               	cmp	x1, x20
+               	b.ne	<addr>
+               	ldr	x1, [x22, #0x10]
                	cmp	x1, x21
                	b.ne	<addr>
-               	ldr	x1, [x20, #0x10]
-               	cmp	x1, x22
-               	b.ne	<addr>
-               	ldrsw	x1, [x20, #0x18]
+               	ldrsw	x1, [x22, #0x18]
                	cmp	w1, #0x7
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
@@ -73,10 +73,10 @@ Disassembly of section .text:
                	cmp	w1, #0x2
                	b.ne	<addr>
                	ldr	x1, [x0, #0x8]
-               	cmp	x1, x21
+               	cmp	x1, x20
                	b.ne	<addr>
                	ldr	x1, [x0, #0x10]
-               	cmp	x1, x22
+               	cmp	x1, x21
                	b.ne	<addr>
                	ldrsw	x0, [x0, #0x18]
                	cmp	w0, #0x8

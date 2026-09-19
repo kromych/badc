@@ -141,15 +141,14 @@ Disassembly of section .text:
                	movq	%rax, %xmm0
                	addss	%xmm15, %xmm0
                	movq	%rdx, %xmm15
-               	movapd	%xmm0, %xmm1
-               	addss	%xmm15, %xmm1
-               	movl	$0x40d00000, %esi       # imm = 0x40D00000
-               	movq	%rsi, %xmm15
-               	ucomiss	%xmm15, %xmm1
+               	addss	%xmm15, %xmm0
+               	movl	$0x40d00000, %eax       # imm = 0x40D00000
+               	movq	%rax, %xmm15
+               	ucomiss	%xmm15, %xmm0
                	jp	<addr>
                	je	<addr>
                	leaq	<rip>, %rdi
-               	cvtss2sd	%xmm1, %xmm0
+               	cvtss2sd	%xmm0, %xmm0
                	movb	$0x1, %al
                	callq	<addr>
                	movl	$0xe, %ebx

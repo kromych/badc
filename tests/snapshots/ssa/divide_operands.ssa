@@ -245,14 +245,14 @@ fn ent_pc=11 n_params=3 variadic=false locals=0
     v2   Imm(0)                                           -> x0
     v3   ParamRef(1, kind=I64)                            -> x6
     v4   Imm(0)                                           -> x0
-    v5   ParamRef(2, kind=I64)                            -> x1
+    v5   ParamRef(2, kind=I64)                            -> x8
     v6   Imm(0)                                           -> x0
     v7   Imm(0)                                           -> x0
     v8   Imm(0)                                           -> x0
-    v9   Binop { op=div, lhs=v1, rhs=v3 }                 -> x6
+    v9   Binop { op=div, lhs=v1, rhs=v3 }                 -> x1
     v10  Imm(0)                                           -> x0
     v11  Imm(0)                                           -> x0
-    v12  Binop { op=add, lhs=v1, rhs=v9 }                 -> x7
+    v12  Binop { op=add, lhs=v1, rhs=v9 }                 -> x6
     v13  Imm(0)                                           -> x0
     v14  Binop { op=div, lhs=v12, rhs=v5 }                -> x0
     v15  Binop { op=mul, lhs=v14, rhs=v5 }                -> x0

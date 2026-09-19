@@ -36,7 +36,8 @@
 
 use crate::c5::codegen::ssa::liveness::BlockLiveness;
 use crate::c5::codegen::ssa::reg_alloc::{
-    BankCapacity, compute_use_counts, produces_fp_result, produces_value,
+    BankCapacity, compute_use_counts, for_each_operand, operands_read, produces_fp_result,
+    produces_value,
 };
 use crate::c5::ir::{
     BinOp, BlockId, FpCastKind, FunctionSsa, Inst, LoadKind, NO_VALUE, Terminator, ValueId,
@@ -210,9 +211,11 @@ impl LiveCount<'_> {
     }
 }
 
-fn pressure(func: &FunctionSsa) -> Pressure {
+/// The allocator's liveness view: `reads` from `operands_read`, so an
+/// instruction the emitters skip keeps no operand live here either.
+fn pressure(func: &FunctionSsa, reads: &[bool]) -> Pressure {
     let n = func.insts.len();
-    let live_sets = BlockLiveness::compute(func);
+    let live_sets = BlockLiveness::compute_reading(func, reads);
     // Bank per value, `u8::MAX` for one the allocator never places.
     let bank: Vec<u8> = func
         .insts
@@ -258,8 +261,8 @@ fn pressure(func: &FunctionSsa) -> Pressure {
             }
             lc.remove(idx);
             // Phi operands are edge uses, in the predecessors' live-out.
-            if !matches!(func.insts[i], Inst::Phi { .. }) {
-                func.insts[i].for_each_operand(|op| lc.add(op));
+            if !matches!(func.insts[i], Inst::Phi { .. }) && reads[i] {
+                for_each_operand(&func.insts[i], |op| lc.add(op));
             }
         }
     }
@@ -644,7 +647,7 @@ fn run_one(func: &mut FunctionSsa, caps: BankCapacity) {
     let depth = loop_depth(&preds, &tin, &tout);
     let use_counts = compute_use_counts(func);
     let pinned = branch_pinned(func, &use_counts);
-    let p = pressure(func);
+    let p = pressure(func, &operands_read(func, &use_counts));
     let mut gate = Gate {
         preds: &preds,
         p: &p,
@@ -894,6 +897,37 @@ mod tests {
             3,
             "a merge that overruns the bank must not happen"
         );
+    }
+
+    /// `dominated_dup` with a constant that only an unread sum in b1 reads:
+    /// no emitter lowers the sum, so the constant holds no register across
+    /// the region, and the merge is taken at the bank size that takes the
+    /// plain one.
+    #[test]
+    fn a_read_by_a_skipped_instruction_raises_no_pressure() {
+        let plain_merges = |total| {
+            let mut f = dominated_dup();
+            run_one(&mut f, caps(total, total));
+            return_val(&f, 1) == 2
+        };
+        assert!(!plain_merges(4) && plain_merges(5));
+        let mut f = fresh(
+            alloc::vec![
+                Inst::Imm(3),
+                Inst::Imm(5),
+                add(0, 1),
+                Inst::Imm(9),
+                add(0, 1),
+                add(3, 3),
+            ],
+            alloc::vec![
+                blk(0..4, bz(2, 2, 1), 2),
+                blk(4..6, Terminator::Return(4), 4),
+                blk(6..6, Terminator::Return(0), 0),
+            ],
+        );
+        run_one(&mut f, caps(5, 5));
+        assert_eq!(return_val(&f, 1), 2);
     }
 
     /// b1 and b2 are siblings, so b1's computation is not available on

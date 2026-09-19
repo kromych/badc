@@ -11,10 +11,10 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v5   Imm(1)                                           -> x0
     v6   Imm(0)                                           -> x0
     v7   ImmData(8)                                       -> x0
-    v8   Imm(2)                                           -> x1
-    v9   Imm(1)                                           -> x1
-    v10  Imm(1)                                           -> x1
-    v11  Imm(8)                                           -> x1
+    v8   Imm(2)                                           -> x0
+    v9   Imm(1)                                           -> x0
+    v10  Imm(1)                                           -> x0
+    v11  Imm(8)                                           -> x0
     v12  BinopI { op=add, lhs=v7, rhs_imm=8 }             -> x0
     v13  Imm(0)                                           -> x0
     v14  Imm(100)                                         -> x0
@@ -32,10 +32,10 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v26  Imm(1)                                           -> x0
     v27  Imm(0)                                           -> x0
     v28  Imm(0)                                           -> x0
-    v29  Imm(9)                                           -> x1
-    v30  Imm(1)                                           -> x1
-    v31  Imm(1)                                           -> x1
-    v32  Imm(8)                                           -> x1
+    v29  Imm(9)                                           -> x0
+    v30  Imm(1)                                           -> x0
+    v31  Imm(1)                                           -> x0
+    v32  Imm(8)                                           -> x0
     v33  BinopI { op=add, lhs=v28, rhs_imm=8 }            -> x0
     v34  Imm(0)                                           -> x0
     v35  Imm(725)                                         -> x0
@@ -66,7 +66,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v59  Imm(1)                                           -> x0
     terminator Return(v59)   (exit_acc=v59)
   block 2  start_pc=0
-    v60  Imm(0)                                           -> x1
+    v60  Imm(0)                                           -> x0
     v61  BinopI { op=add, lhs=v53, rhs_imm=4 }            -> x0
     v62  Imm(11)                                          -> x0
     v63  Imm(1)                                           -> x0

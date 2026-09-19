@@ -37,10 +37,10 @@ Disassembly of section .text:
                	mov	x3, #0xf372             // =62322
                	movk	x3, #0x3c6e, lsl #16
                	mov	x0, #0x0                // =0
-               	and	x6, x1, x2
-               	mvn	x5, x1
-               	and	x3, x5, x3
-               	eor	x3, x6, x3
+               	and	x5, x1, x2
+               	mvn	x6, x1
+               	and	x3, x6, x3
+               	eor	x3, x5, x3
                	ldr	w5, [x4, x0, lsl #2]
                	add	x3, x3, x5
                	add	x0, x0, #0x1

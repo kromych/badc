@@ -43,15 +43,15 @@ Disassembly of section .text:
                	movl	$0x2bc, 0x204(%rcx)     # imm = 0x2BC
                	movl	$0x320, 0x208(%rcx)     # imm = 0x320
                	xorl	%eax, %eax
-               	leaq	0x10(%rcx), %rsi
-               	leaq	0x3e8(%rax), %rdx
-               	movl	%edx, (%rsi,%rax,4)
-               	leaq	0xb4(%rcx), %rsi
-               	leaq	0x7d0(%rax), %rdx
-               	movl	%edx, (%rsi,%rax,4)
-               	leaq	0x158(%rcx), %rsi
-               	leaq	0xbb8(%rax), %rdx
-               	movl	%edx, (%rsi,%rax,4)
+               	leaq	0x10(%rcx), %rdx
+               	leaq	0x3e8(%rax), %rsi
+               	movl	%esi, (%rdx,%rax,4)
+               	leaq	0xb4(%rcx), %rdx
+               	leaq	0x7d0(%rax), %rsi
+               	movl	%esi, (%rdx,%rax,4)
+               	leaq	0x158(%rcx), %rdx
+               	leaq	0xbb8(%rax), %rsi
+               	movl	%esi, (%rdx,%rax,4)
                	incq	%rax
                	cmpl	$0x28, %eax
                	jl	<addr>
@@ -253,19 +253,19 @@ Disassembly of section .text:
                	retq
                	xorl	%eax, %eax
                	leaq	0x10(%rcx), %rdx
-               	movslq	(%rdx,%rax,4), %rsi
-               	leaq	0x3e8(%rax), %rdx
-               	cmpl	%edx, %esi
+               	movslq	(%rdx,%rax,4), %rdx
+               	leaq	0x3e8(%rax), %rsi
+               	cmpl	%esi, %edx
                	jne	<addr>
                	leaq	0xb4(%rcx), %rdx
-               	movslq	(%rdx,%rax,4), %rsi
-               	leaq	0x7d0(%rax), %rdx
-               	cmpl	%edx, %esi
+               	movslq	(%rdx,%rax,4), %rdx
+               	leaq	0x7d0(%rax), %rsi
+               	cmpl	%esi, %edx
                	jne	<addr>
                	leaq	0x158(%rcx), %rdx
-               	movslq	(%rdx,%rax,4), %rsi
-               	leaq	0xbb8(%rax), %rdx
-               	cmpl	%edx, %esi
+               	movslq	(%rdx,%rax,4), %rdx
+               	leaq	0xbb8(%rax), %rsi
+               	cmpl	%esi, %edx
                	jne	<addr>
                	incq	%rax
                	cmpl	$0x28, %eax

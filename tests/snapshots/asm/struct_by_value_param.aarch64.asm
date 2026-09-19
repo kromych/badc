@@ -22,11 +22,11 @@ Disassembly of section .text:
                	ldrsw	x1, [x0]
                	ldrsw	x2, [x0, #0x4]
                	add	x1, x1, x2
-               	sxtw	x1, w1
-               	mov	x2, #-0x1               // =-1
-               	str	w2, [x0]
-               	str	w2, [x0, #0x4]
-               	mov	x0, x1
+               	sxtw	x2, w1
+               	mov	x1, #-0x1               // =-1
+               	str	w1, [x0]
+               	str	w1, [x0, #0x4]
+               	mov	x0, x2
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret

@@ -35,18 +35,18 @@ Disassembly of section .text:
                	ldrsw	x1, [x1]
                	ldr	x1, [x0, x1, lsl #3]
                	br	x1
-               	ldur	x5, [x29, #-0x28]
-               	ldur	x3, [x29, #-0x40]
+               	ldur	x4, [x29, #-0x28]
+               	ldur	x5, [x29, #-0x40]
                	ldur	x1, [x29, #-0x50]
                	ldursw	x2, [x29, #-0x20]
-               	add	x4, x2, #0x1
-               	stur	w4, [x29, #-0x20]
+               	add	x3, x2, #0x1
+               	stur	w3, [x29, #-0x20]
                	ldrsw	x2, [x1, x2, lsl #2]
-               	ldr	x2, [x3, x2, lsl #3]
+               	ldr	x2, [x5, x2, lsl #3]
                	and	x2, x2, #0xfffffffffffffffc
-               	add	x2, x5, x2
+               	add	x2, x4, x2
                	stur	x2, [x29, #-0x28]
-               	sxtw	x2, w4
+               	sxtw	x2, w3
                	add	x3, x2, #0x1
                	stur	w3, [x29, #-0x20]
                	ldrsw	x1, [x1, x2, lsl #2]

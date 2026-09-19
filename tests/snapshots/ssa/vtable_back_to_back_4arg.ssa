@@ -65,7 +65,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=3
     v7   Imm(1)                                           -> x3
     v8   Imm(100)                                         -> x1
     v9   CallIndirect { target=v4, args=[v1, v6, v7, v8], callee_variadic=false, fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v10  BinopI { op=shl, lhs=v9, rhs_imm=32 }            -> x1
+    v10  BinopI { op=shl, lhs=v9, rhs_imm=32 }            -> x0
     v11  Extend { value=v9, kind=I32 }                    -> x0
     v12  LocalAddr(-3)                                    -> x7
     v13  Load { addr=v12, disp=0, kind=I64 }              -> x0
@@ -74,7 +74,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=3
     v16  LocalAddr(-3)                                    -> x1
     v17  LocalAddr(-1)                                    -> x6
     v18  CallIndirect { target=v15, args=[v12, v17, v7], callee_variadic=false, fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v19  BinopI { op=shl, lhs=v18, rhs_imm=32 }           -> x1
+    v19  BinopI { op=shl, lhs=v18, rhs_imm=32 }           -> x0
     v20  Extend { value=v18, kind=I32 }                   -> x0
     v21  LoadLocal { off=-1, kind=I32 }                   -> x0
     v22  BinopI { op=shl, lhs=v21, rhs_imm=32 }           -> x1

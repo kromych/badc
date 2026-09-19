@@ -1793,7 +1793,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v1787 Imm(0)                                           -> x0
     v1788 Imm(0)                                           -> x0
     v1789 Imm(0)                                           -> x0
-    v1790 LocalAddr(-1)                                    -> x2
+    v1790 LocalAddr(-1)                                    -> x1
     v1791 Imm(123)                                         -> x0
     v1792 Imm(0)                                           -> x0
     v1793 Imm(0)                                           -> x0
@@ -1815,19 +1815,19 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v1809 Imm(0)                                           -> x0
     v1810 Imm(0)                                           -> x0
     v1811 LoadLocal { off=-1, kind=U32 }                   -> x0
-    v1812 Imm(0)                                           -> x1
-    v1813 Imm(0)                                           -> x1
-    v1814 Imm(0)                                           -> x1
-    v1815 Imm(0)                                           -> x1
-    v1816 Imm(123)                                         -> x1
-    v1817 Imm(55)                                          -> x1
-    v1818 Imm(0)                                           -> x1
-    v1819 Imm(0)                                           -> x1
-    v1820 Imm(0)                                           -> x1
-    v1821 Imm(0)                                           -> x1
-    v1822 Imm(0)                                           -> x1
-    v1823 Imm(0)                                           -> x1
-    v1824 Imm(0)                                           -> x1
+    v1812 Imm(0)                                           -> x2
+    v1813 Imm(0)                                           -> x2
+    v1814 Imm(0)                                           -> x2
+    v1815 Imm(0)                                           -> x2
+    v1816 Imm(123)                                         -> x2
+    v1817 Imm(55)                                          -> x2
+    v1818 Imm(0)                                           -> x2
+    v1819 Imm(0)                                           -> x2
+    v1820 Imm(0)                                           -> x2
+    v1821 Imm(0)                                           -> x2
+    v1822 Imm(0)                                           -> x2
+    v1823 Imm(0)                                           -> x2
+    v1824 Imm(0)                                           -> x2
     v1825 BinopI { op=ne, lhs=v1811, rhs_imm=123 }         -> x0
     terminator Bz { cond=v1825, target=b31, fall=b1 }   (exit_acc=v1825)
   block 1  start_pc=0
@@ -1838,7 +1838,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     terminator Jmp(b2)   (exit_acc=v2822)
   block 2  start_pc=0
     v2838 Phi { incoming=[b1:v2822, b31:v2833], kind=I64 } -> x0
-    v2839 Imm(0)                                           -> x1
+    v2839 Imm(0)                                           -> x2
     terminator Bz { cond=v2838, target=b4, fall=b3 }   (exit_acc=v2838)
   block 3  start_pc=0
     v1880 Extend { value=v2838, kind=I32 }                 -> x1
@@ -1875,82 +1875,82 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v1909 Imm(0)                                           -> x0
     v1910 Imm(0)                                           -> x0
     v1911 Store { addr=v1790, disp=0, value=v1910, kind=I32 } -> -
-    v1912 Imm(0)                                           -> x1
-    v1913 Imm(1)                                           -> x1
-    v1914 Imm(0)                                           -> x1
-    v1915 Imm(1)                                           -> x1
-    v1916 Imm(1)                                           -> x1
-    v1917 Imm(0)                                           -> x1
-    v1918 Imm(1)                                           -> x1
-    v1919 Imm(0)                                           -> x1
-    v1920 Imm(0)                                           -> x1
-    v1921 Imm(0)                                           -> x1
-    v1922 Imm(0)                                           -> x1
-    v1923 Imm(0)                                           -> x1
-    v1924 Imm(58)                                          -> x1
-    v1925 Imm(0)                                           -> x1
-    v1926 Imm(0)                                           -> x1
-    v1927 Imm(1)                                           -> x1
-    v1928 Imm(1)                                           -> x1
-    v1929 Imm(0)                                           -> x1
-    v1930 Imm(0)                                           -> x1
-    v1931 Imm(0)                                           -> x1
-    v1932 Imm(0)                                           -> x1
-    v1933 Imm(0)                                           -> x1
-    v1934 Imm(0)                                           -> x1
-    v1935 Imm(0)                                           -> x1
-    v1936 Imm(0)                                           -> x1
-    v1937 Imm(0)                                           -> x1
-    v1938 Imm(0)                                           -> x1
-    v1939 Imm(0)                                           -> x1
-    v1940 Imm(0)                                           -> x1
-    v1941 Imm(0)                                           -> x1
-    v1942 Imm(0)                                           -> x1
-    v1943 Imm(0)                                           -> x1
-    v1944 Imm(0)                                           -> x1
-    v1945 Imm(0)                                           -> x1
-    v1946 Imm(5)                                           -> x1
-    v1947 Imm(0)                                           -> x1
-    v1948 Imm(0)                                           -> x1
-    v1949 Imm(0)                                           -> x1
-    v1950 Imm(0)                                           -> x1
-    v1951 Imm(0)                                           -> x1
-    v1952 Imm(0)                                           -> x1
-    v1953 Imm(0)                                           -> x1
-    v1954 Imm(7)                                           -> x1
-    v1955 Imm(0)                                           -> x1
-    v1956 Imm(0)                                           -> x1
-    v1957 Imm(0)                                           -> x1
-    v1958 Imm(0)                                           -> x1
-    v1959 Imm(0)                                           -> x1
-    v1960 Imm(0)                                           -> x1
-    v1961 LocalAddr(-1)                                    -> x1
-    v1962 Imm(0)                                           -> x1
-    v1963 Imm(0)                                           -> x1
-    v1964 Imm(1)                                           -> x1
-    v1965 Imm(-2)                                          -> x1
-    v1966 Imm(0)                                           -> x1
-    v1967 Imm(-1)                                          -> x1
-    v1968 Imm(0)                                           -> x1
-    v1969 Imm(1)                                           -> x1
-    v1970 Imm(1)                                           -> x1
-    v1971 Imm(1)                                           -> x1
-    v1972 Imm(0)                                           -> x1
-    v1973 Imm(-1)                                          -> x1
-    v1974 Imm(-1)                                          -> x1
-    v1975 Imm(0)                                           -> x1
-    v1976 Imm(-8589934592)                                 -> x1
-    v1977 Imm(-2)                                          -> x1
+    v1912 Imm(0)                                           -> x2
+    v1913 Imm(1)                                           -> x2
+    v1914 Imm(0)                                           -> x2
+    v1915 Imm(1)                                           -> x2
+    v1916 Imm(1)                                           -> x2
+    v1917 Imm(0)                                           -> x2
+    v1918 Imm(1)                                           -> x2
+    v1919 Imm(0)                                           -> x2
+    v1920 Imm(0)                                           -> x2
+    v1921 Imm(0)                                           -> x2
+    v1922 Imm(0)                                           -> x2
+    v1923 Imm(0)                                           -> x2
+    v1924 Imm(58)                                          -> x2
+    v1925 Imm(0)                                           -> x2
+    v1926 Imm(0)                                           -> x2
+    v1927 Imm(1)                                           -> x2
+    v1928 Imm(1)                                           -> x2
+    v1929 Imm(0)                                           -> x2
+    v1930 Imm(0)                                           -> x2
+    v1931 Imm(0)                                           -> x2
+    v1932 Imm(0)                                           -> x2
+    v1933 Imm(0)                                           -> x2
+    v1934 Imm(0)                                           -> x2
+    v1935 Imm(0)                                           -> x2
+    v1936 Imm(0)                                           -> x2
+    v1937 Imm(0)                                           -> x2
+    v1938 Imm(0)                                           -> x2
+    v1939 Imm(0)                                           -> x2
+    v1940 Imm(0)                                           -> x2
+    v1941 Imm(0)                                           -> x2
+    v1942 Imm(0)                                           -> x2
+    v1943 Imm(0)                                           -> x2
+    v1944 Imm(0)                                           -> x2
+    v1945 Imm(0)                                           -> x2
+    v1946 Imm(5)                                           -> x2
+    v1947 Imm(0)                                           -> x2
+    v1948 Imm(0)                                           -> x2
+    v1949 Imm(0)                                           -> x2
+    v1950 Imm(0)                                           -> x2
+    v1951 Imm(0)                                           -> x2
+    v1952 Imm(0)                                           -> x2
+    v1953 Imm(0)                                           -> x2
+    v1954 Imm(7)                                           -> x2
+    v1955 Imm(0)                                           -> x2
+    v1956 Imm(0)                                           -> x2
+    v1957 Imm(0)                                           -> x2
+    v1958 Imm(0)                                           -> x2
+    v1959 Imm(0)                                           -> x2
+    v1960 Imm(0)                                           -> x2
+    v1961 LocalAddr(-1)                                    -> x2
+    v1962 Imm(0)                                           -> x2
+    v1963 Imm(0)                                           -> x2
+    v1964 Imm(1)                                           -> x2
+    v1965 Imm(-2)                                          -> x2
+    v1966 Imm(0)                                           -> x2
+    v1967 Imm(-1)                                          -> x2
+    v1968 Imm(0)                                           -> x2
+    v1969 Imm(1)                                           -> x2
+    v1970 Imm(1)                                           -> x2
+    v1971 Imm(1)                                           -> x2
+    v1972 Imm(0)                                           -> x2
+    v1973 Imm(-1)                                          -> x2
+    v1974 Imm(-1)                                          -> x2
+    v1975 Imm(0)                                           -> x2
+    v1976 Imm(-8589934592)                                 -> x2
+    v1977 Imm(-2)                                          -> x2
     v1978 Store { addr=v1790, disp=0, value=v1977, kind=I32 } -> -
-    v1979 Imm(-1)                                          -> x1
-    v1980 Imm(1)                                           -> x1
-    v1981 Imm(1)                                           -> x1
-    v1982 Imm(1)                                           -> x1
-    v1983 Imm(0)                                           -> x1
-    v1984 Imm(0)                                           -> x1
-    v1985 Imm(0)                                           -> x1
-    v1986 Imm(0)                                           -> x1
-    v1987 LoadLocal { off=-1, kind=I32 }                   -> x1
+    v1979 Imm(-1)                                          -> x2
+    v1980 Imm(1)                                           -> x2
+    v1981 Imm(1)                                           -> x2
+    v1982 Imm(1)                                           -> x2
+    v1983 Imm(0)                                           -> x2
+    v1984 Imm(0)                                           -> x2
+    v1985 Imm(0)                                           -> x2
+    v1986 Imm(0)                                           -> x2
+    v1987 LoadLocal { off=-1, kind=I32 }                   -> x2
     v1988 Imm(0)                                           -> x6
     v1989 Imm(0)                                           -> x6
     v1990 BinopI { op=shr, lhs=v1987, rhs_imm=63 }         -> x6
@@ -1966,16 +1966,16 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v2000 Imm(0)                                           -> x7
     v2001 Imm(0)                                           -> x7
     v2002 Imm(0)                                           -> x7
-    v2003 BinopI { op=ne, lhs=v1987, rhs_imm=-2 }          -> x1
+    v2003 BinopI { op=ne, lhs=v1987, rhs_imm=-2 }          -> x2
     terminator Bz { cond=v2003, target=b28, fall=b5 }   (exit_acc=v2003)
   block 5  start_pc=0
-    v2852 Imm(61)                                          -> x1
-    v2853 Imm(62)                                          -> x1
-    v2854 Imm(62)                                          -> x1
-    v2855 Imm(62)                                          -> x1
+    v2852 Imm(61)                                          -> x2
+    v2853 Imm(62)                                          -> x2
+    v2854 Imm(62)                                          -> x2
+    v2855 Imm(62)                                          -> x2
     terminator Jmp(b6)   (exit_acc=v2855)
   block 6  start_pc=0
-    v2871 Phi { incoming=[b5:v2855, b29:v2869, b30:v1910], kind=I64 } -> x1
+    v2871 Phi { incoming=[b5:v2855, b29:v2869, b30:v1910], kind=I64 } -> x2
     v2872 Imm(0)                                           -> x6
     terminator Bz { cond=v2871, target=b8, fall=b7 }   (exit_acc=v2871)
   block 7  start_pc=0
@@ -1984,173 +1984,173 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v2009 Extend { value=v2871, kind=I32 }                 -> x0
     terminator Return(v2871)   (exit_acc=v2871)
   block 8  start_pc=0
-    v2010 Imm(65536)                                       -> x1
-    v2011 Imm(0)                                           -> x1
-    v2012 Imm(0)                                           -> x1
-    v2013 Imm(0)                                           -> x1
-    v2014 Imm(0)                                           -> x1
-    v2015 Imm(0)                                           -> x1
-    v2016 Imm(0)                                           -> x1
-    v2017 Imm(0)                                           -> x1
-    v2018 Imm(0)                                           -> x1
-    v2019 Imm(0)                                           -> x1
-    v2020 Imm(0)                                           -> x1
-    v2021 Imm(0)                                           -> x1
-    v2022 Imm(0)                                           -> x1
-    v2023 Imm(0)                                           -> x1
-    v2024 LocalAddr(-1)                                    -> x1
-    v2025 Imm(0)                                           -> x1
-    v2026 Imm(0)                                           -> x1
-    v2027 Imm(65536)                                       -> x1
-    v2028 Imm(0)                                           -> x1
-    v2029 Imm(0)                                           -> x1
-    v2030 Imm(65536)                                       -> x1
-    v2031 Imm(0)                                           -> x1
-    v2032 Imm(0)                                           -> x1
-    v2033 Imm(65536)                                       -> x1
-    v2034 Imm(0)                                           -> x1
-    v2035 Imm(0)                                           -> x1
-    v2036 Imm(65536)                                       -> x1
-    v2037 Imm(0)                                           -> x1
-    v2038 Imm(0)                                           -> x1
-    v2039 Imm(4294967296)                                  -> x1
-    v2040 Imm(65536)                                       -> x1
-    v2041 Imm(0)                                           -> x1
-    v2042 Imm(65536)                                       -> x1
-    v2043 Imm(0)                                           -> x1
-    v2044 Imm(4294967296)                                  -> x1
-    v2045 Imm(1)                                           -> x1
-    v2046 Imm(0)                                           -> x1
-    v2047 Imm(1)                                           -> x1
-    v2048 Imm(1)                                           -> x1
-    v2049 Imm(0)                                           -> x1
-    v2050 Imm(0)                                           -> x1
-    v2051 Imm(1)                                           -> x1
-    v2052 Imm(0)                                           -> x1
-    v2053 Imm(0)                                           -> x1
-    v2054 Imm(0)                                           -> x1
-    v2055 Imm(0)                                           -> x1
-    v2056 Imm(0)                                           -> x1
-    v2057 Imm(0)                                           -> x1
-    v2058 Imm(0)                                           -> x1
-    v2059 Imm(0)                                           -> x1
-    v2060 Imm(0)                                           -> x1
-    v2061 Imm(0)                                           -> x1
-    v2062 Imm(0)                                           -> x1
-    v2063 Imm(0)                                           -> x1
-    v2064 Imm(0)                                           -> x1
-    v2065 Imm(0)                                           -> x1
-    v2066 Imm(0)                                           -> x1
-    v2067 Imm(0)                                           -> x1
-    v2068 Imm(0)                                           -> x1
-    v2069 Imm(0)                                           -> x1
-    v2070 Imm(0)                                           -> x1
-    v2071 Imm(0)                                           -> x1
-    v2072 Imm(0)                                           -> x1
-    v2073 Imm(0)                                           -> x1
-    v2074 Imm(0)                                           -> x1
-    v2075 Imm(0)                                           -> x1
-    v2076 Imm(0)                                           -> x1
-    v2077 Imm(0)                                           -> x1
-    v2078 Imm(0)                                           -> x1
-    v2079 Imm(0)                                           -> x1
-    v2080 Imm(0)                                           -> x1
-    v2081 Imm(0)                                           -> x1
-    v2082 Imm(0)                                           -> x1
-    v2083 Imm(0)                                           -> x1
-    v2084 Imm(0)                                           -> x1
-    v2085 Imm(0)                                           -> x1
-    v2086 Imm(0)                                           -> x1
-    v2087 Imm(0)                                           -> x1
-    v2088 Imm(0)                                           -> x1
-    v2089 Imm(0)                                           -> x1
-    v2090 Imm(0)                                           -> x1
-    v2091 Imm(0)                                           -> x1
-    v2092 Imm(0)                                           -> x1
-    v2093 Imm(0)                                           -> x1
-    v2094 Imm(0)                                           -> x1
-    v2095 Imm(0)                                           -> x1
-    v2096 Imm(0)                                           -> x1
-    v2097 Imm(0)                                           -> x1
-    v2098 Imm(0)                                           -> x1
-    v2099 Imm(0)                                           -> x1
-    v2100 Imm(4294967296)                                  -> x1
-    v2101 Imm(0)                                           -> x1
-    v2102 Imm(0)                                           -> x1
-    v2103 Imm(4294967296)                                  -> x1
-    v2104 Imm(0)                                           -> x1
-    v2105 Imm(0)                                           -> x1
-    v2106 Imm(-9223372036854775808)                        -> x1
-    v2107 Imm(0)                                           -> x1
-    v2108 Imm(0)                                           -> x1
-    v2109 Imm(1)                                           -> x1
-    v2110 Imm(0)                                           -> x1
-    v2111 Imm(0)                                           -> x1
-    v2112 Imm(4294967296)                                  -> x1
-    v2113 Imm(-9223372036854775808)                        -> x1
-    v2114 Imm(-9223372032559808512)                        -> x1
-    v2115 Imm(0)                                           -> x1
-    v2116 Imm(1)                                           -> x1
-    v2117 Imm(0)                                           -> x1
-    v2118 Imm(0)                                           -> x1
-    v2119 Imm(0)                                           -> x1
-    v2120 Imm(0)                                           -> x1
-    v2121 Imm(0)                                           -> x1
+    v2010 Imm(65536)                                       -> x2
+    v2011 Imm(0)                                           -> x2
+    v2012 Imm(0)                                           -> x2
+    v2013 Imm(0)                                           -> x2
+    v2014 Imm(0)                                           -> x2
+    v2015 Imm(0)                                           -> x2
+    v2016 Imm(0)                                           -> x2
+    v2017 Imm(0)                                           -> x2
+    v2018 Imm(0)                                           -> x2
+    v2019 Imm(0)                                           -> x2
+    v2020 Imm(0)                                           -> x2
+    v2021 Imm(0)                                           -> x2
+    v2022 Imm(0)                                           -> x2
+    v2023 Imm(0)                                           -> x2
+    v2024 LocalAddr(-1)                                    -> x2
+    v2025 Imm(0)                                           -> x2
+    v2026 Imm(0)                                           -> x2
+    v2027 Imm(65536)                                       -> x2
+    v2028 Imm(0)                                           -> x2
+    v2029 Imm(0)                                           -> x2
+    v2030 Imm(65536)                                       -> x2
+    v2031 Imm(0)                                           -> x2
+    v2032 Imm(0)                                           -> x2
+    v2033 Imm(65536)                                       -> x2
+    v2034 Imm(0)                                           -> x2
+    v2035 Imm(0)                                           -> x2
+    v2036 Imm(65536)                                       -> x2
+    v2037 Imm(0)                                           -> x2
+    v2038 Imm(0)                                           -> x2
+    v2039 Imm(4294967296)                                  -> x2
+    v2040 Imm(65536)                                       -> x2
+    v2041 Imm(0)                                           -> x2
+    v2042 Imm(65536)                                       -> x2
+    v2043 Imm(0)                                           -> x2
+    v2044 Imm(4294967296)                                  -> x2
+    v2045 Imm(1)                                           -> x2
+    v2046 Imm(0)                                           -> x2
+    v2047 Imm(1)                                           -> x2
+    v2048 Imm(1)                                           -> x2
+    v2049 Imm(0)                                           -> x2
+    v2050 Imm(0)                                           -> x2
+    v2051 Imm(1)                                           -> x2
+    v2052 Imm(0)                                           -> x2
+    v2053 Imm(0)                                           -> x2
+    v2054 Imm(0)                                           -> x2
+    v2055 Imm(0)                                           -> x2
+    v2056 Imm(0)                                           -> x2
+    v2057 Imm(0)                                           -> x2
+    v2058 Imm(0)                                           -> x2
+    v2059 Imm(0)                                           -> x2
+    v2060 Imm(0)                                           -> x2
+    v2061 Imm(0)                                           -> x2
+    v2062 Imm(0)                                           -> x2
+    v2063 Imm(0)                                           -> x2
+    v2064 Imm(0)                                           -> x2
+    v2065 Imm(0)                                           -> x2
+    v2066 Imm(0)                                           -> x2
+    v2067 Imm(0)                                           -> x2
+    v2068 Imm(0)                                           -> x2
+    v2069 Imm(0)                                           -> x2
+    v2070 Imm(0)                                           -> x2
+    v2071 Imm(0)                                           -> x2
+    v2072 Imm(0)                                           -> x2
+    v2073 Imm(0)                                           -> x2
+    v2074 Imm(0)                                           -> x2
+    v2075 Imm(0)                                           -> x2
+    v2076 Imm(0)                                           -> x2
+    v2077 Imm(0)                                           -> x2
+    v2078 Imm(0)                                           -> x2
+    v2079 Imm(0)                                           -> x2
+    v2080 Imm(0)                                           -> x2
+    v2081 Imm(0)                                           -> x2
+    v2082 Imm(0)                                           -> x2
+    v2083 Imm(0)                                           -> x2
+    v2084 Imm(0)                                           -> x2
+    v2085 Imm(0)                                           -> x2
+    v2086 Imm(0)                                           -> x2
+    v2087 Imm(0)                                           -> x2
+    v2088 Imm(0)                                           -> x2
+    v2089 Imm(0)                                           -> x2
+    v2090 Imm(0)                                           -> x2
+    v2091 Imm(0)                                           -> x2
+    v2092 Imm(0)                                           -> x2
+    v2093 Imm(0)                                           -> x2
+    v2094 Imm(0)                                           -> x2
+    v2095 Imm(0)                                           -> x2
+    v2096 Imm(0)                                           -> x2
+    v2097 Imm(0)                                           -> x2
+    v2098 Imm(0)                                           -> x2
+    v2099 Imm(0)                                           -> x2
+    v2100 Imm(4294967296)                                  -> x2
+    v2101 Imm(0)                                           -> x2
+    v2102 Imm(0)                                           -> x2
+    v2103 Imm(4294967296)                                  -> x2
+    v2104 Imm(0)                                           -> x2
+    v2105 Imm(0)                                           -> x2
+    v2106 Imm(-9223372036854775808)                        -> x2
+    v2107 Imm(0)                                           -> x2
+    v2108 Imm(0)                                           -> x2
+    v2109 Imm(1)                                           -> x2
+    v2110 Imm(0)                                           -> x2
+    v2111 Imm(0)                                           -> x2
+    v2112 Imm(4294967296)                                  -> x2
+    v2113 Imm(-9223372036854775808)                        -> x2
+    v2114 Imm(-9223372032559808512)                        -> x2
+    v2115 Imm(0)                                           -> x2
+    v2116 Imm(1)                                           -> x2
+    v2117 Imm(0)                                           -> x2
+    v2118 Imm(0)                                           -> x2
+    v2119 Imm(0)                                           -> x2
+    v2120 Imm(0)                                           -> x2
+    v2121 Imm(0)                                           -> x2
     v2122 Store { addr=v1790, disp=0, value=v1910, kind=I32 } -> -
-    v2123 Imm(0)                                           -> x1
-    v2124 Imm(0)                                           -> x1
-    v2125 Imm(1)                                           -> x1
-    v2126 Imm(0)                                           -> x1
-    v2127 Imm(1)                                           -> x1
-    v2128 Imm(1)                                           -> x1
-    v2129 Imm(0)                                           -> x1
-    v2130 Imm(1)                                           -> x1
-    v2131 Imm(0)                                           -> x1
-    v2132 Imm(0)                                           -> x1
-    v2133 Imm(0)                                           -> x1
-    v2134 Imm(0)                                           -> x1
-    v2135 Imm(0)                                           -> x1
-    v2136 Imm(0)                                           -> x1
-    v2137 Imm(1)                                           -> x1
-    v2138 Imm(64)                                          -> x1
-    v2139 Imm(0)                                           -> x1
-    v2140 Imm(0)                                           -> x1
-    v2141 Imm(1)                                           -> x1
-    v2142 Imm(1)                                           -> x1
-    v2143 Imm(0)                                           -> x1
-    v2144 Imm(0)                                           -> x1
-    v2145 Imm(0)                                           -> x1
-    v2146 Imm(0)                                           -> x1
-    v2147 Imm(0)                                           -> x1
-    v2148 Imm(0)                                           -> x1
-    v2149 Imm(0)                                           -> x1
-    v2150 Imm(0)                                           -> x1
-    v2151 Imm(0)                                           -> x1
-    v2152 Imm(0)                                           -> x1
-    v2153 Imm(0)                                           -> x1
-    v2154 Imm(0)                                           -> x1
-    v2155 Imm(0)                                           -> x1
-    v2156 Imm(0)                                           -> x1
-    v2157 Imm(0)                                           -> x1
-    v2158 Imm(0)                                           -> x1
-    v2159 Imm(0)                                           -> x1
-    v2160 Imm(0)                                           -> x1
-    v2161 Imm(0)                                           -> x1
-    v2162 Imm(0)                                           -> x1
-    v2163 Imm(0)                                           -> x1
-    v2164 Imm(0)                                           -> x1
-    v2165 Imm(0)                                           -> x1
-    v2166 Imm(0)                                           -> x1
-    v2167 Imm(1)                                           -> x1
-    v2168 Imm(0)                                           -> x1
-    v2169 Imm(0)                                           -> x1
-    v2170 Imm(0)                                           -> x1
-    v2171 Imm(0)                                           -> x1
-    v2172 Imm(0)                                           -> x1
-    v2173 Imm(0)                                           -> x1
-    v2174 LocalAddr(-1)                                    -> x1
-    v2175 Imm(1)                                           -> x1
-    v2176 Imm(-1)                                          -> x1
+    v2123 Imm(0)                                           -> x2
+    v2124 Imm(0)                                           -> x2
+    v2125 Imm(1)                                           -> x2
+    v2126 Imm(0)                                           -> x2
+    v2127 Imm(1)                                           -> x2
+    v2128 Imm(1)                                           -> x2
+    v2129 Imm(0)                                           -> x2
+    v2130 Imm(1)                                           -> x2
+    v2131 Imm(0)                                           -> x2
+    v2132 Imm(0)                                           -> x2
+    v2133 Imm(0)                                           -> x2
+    v2134 Imm(0)                                           -> x2
+    v2135 Imm(0)                                           -> x2
+    v2136 Imm(0)                                           -> x2
+    v2137 Imm(1)                                           -> x2
+    v2138 Imm(64)                                          -> x2
+    v2139 Imm(0)                                           -> x2
+    v2140 Imm(0)                                           -> x2
+    v2141 Imm(1)                                           -> x2
+    v2142 Imm(1)                                           -> x2
+    v2143 Imm(0)                                           -> x2
+    v2144 Imm(0)                                           -> x2
+    v2145 Imm(0)                                           -> x2
+    v2146 Imm(0)                                           -> x2
+    v2147 Imm(0)                                           -> x2
+    v2148 Imm(0)                                           -> x2
+    v2149 Imm(0)                                           -> x2
+    v2150 Imm(0)                                           -> x2
+    v2151 Imm(0)                                           -> x2
+    v2152 Imm(0)                                           -> x2
+    v2153 Imm(0)                                           -> x2
+    v2154 Imm(0)                                           -> x2
+    v2155 Imm(0)                                           -> x2
+    v2156 Imm(0)                                           -> x2
+    v2157 Imm(0)                                           -> x2
+    v2158 Imm(0)                                           -> x2
+    v2159 Imm(0)                                           -> x2
+    v2160 Imm(0)                                           -> x2
+    v2161 Imm(0)                                           -> x2
+    v2162 Imm(0)                                           -> x2
+    v2163 Imm(0)                                           -> x2
+    v2164 Imm(0)                                           -> x2
+    v2165 Imm(0)                                           -> x2
+    v2166 Imm(0)                                           -> x2
+    v2167 Imm(1)                                           -> x2
+    v2168 Imm(0)                                           -> x2
+    v2169 Imm(0)                                           -> x2
+    v2170 Imm(0)                                           -> x2
+    v2171 Imm(0)                                           -> x2
+    v2172 Imm(0)                                           -> x2
+    v2173 Imm(0)                                           -> x2
+    v2174 LocalAddr(-1)                                    -> x2
+    v2175 Imm(1)                                           -> x2
+    v2176 Imm(-1)                                          -> x2
     v2177 Imm(0)                                           -> x6
     v2178 Imm(-1)                                          -> x6
     v2179 Imm(0)                                           -> x6
@@ -2698,25 +2698,25 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v2899 Imm(0)                                           -> x1
     terminator Jmp(b10)   (exit_acc=v1910)
   block 28  start_pc=0
-    v2856 Imm(0)                                           -> x1
-    v2857 Imm(0)                                           -> x1
-    v2858 Imm(0)                                           -> x1
-    v2859 Imm(0)                                           -> x1
-    v2860 Imm(0)                                           -> x1
-    v2861 Imm(0)                                           -> x1
-    v2862 Imm(0)                                           -> x1
-    v2863 Imm(0)                                           -> x1
-    v2864 Imm(0)                                           -> x1
-    v2865 BinopI { op=ne, lhs=v1990, rhs_imm=-1 }          -> x1
+    v2856 Imm(0)                                           -> x2
+    v2857 Imm(0)                                           -> x2
+    v2858 Imm(0)                                           -> x2
+    v2859 Imm(0)                                           -> x2
+    v2860 Imm(0)                                           -> x2
+    v2861 Imm(0)                                           -> x2
+    v2862 Imm(0)                                           -> x2
+    v2863 Imm(0)                                           -> x2
+    v2864 Imm(0)                                           -> x2
+    v2865 BinopI { op=ne, lhs=v1990, rhs_imm=-1 }          -> x2
     terminator Bz { cond=v2865, target=b30, fall=b29 }   (exit_acc=v2865)
   block 29  start_pc=0
-    v2866 Imm(61)                                          -> x1
-    v2867 Imm(63)                                          -> x1
-    v2868 Imm(63)                                          -> x1
-    v2869 Imm(63)                                          -> x1
+    v2866 Imm(61)                                          -> x2
+    v2867 Imm(63)                                          -> x2
+    v2868 Imm(63)                                          -> x2
+    v2869 Imm(63)                                          -> x2
     terminator Jmp(b6)   (exit_acc=v2869)
   block 30  start_pc=0
-    v2870 Imm(0)                                           -> x1
+    v2870 Imm(0)                                           -> x2
     terminator Jmp(b6)   (exit_acc=v1910)
   block 31  start_pc=0
     v2823 Imm(0)                                           -> x0

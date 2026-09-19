@@ -33,9 +33,9 @@ Disassembly of section .text:
                	stur	w1, [x29, #-0x20]
                	sub	x0, x29, #0x20
                	sub	x2, x0, x0
-               	asr	x5, x2, #63
-               	lsr	x5, x5, #62
-               	add	x2, x2, x5
+               	asr	x3, x2, #63
+               	lsr	x3, x3, #62
+               	add	x2, x2, x3
                	asr	x2, x2, #2
                	cbnz	x2, <addr>
                	add	x2, x0, #0x4

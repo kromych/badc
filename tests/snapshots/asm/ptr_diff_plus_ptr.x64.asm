@@ -50,18 +50,17 @@ Disassembly of section .text:
                	subq	%rax, %rcx
                	movq	%rcx, %rsi
                	sarq	$0x3f, %rsi
-               	movq	%rsi, %rdi
-               	shrq	$0x3c, %rdi
-               	leaq	(%rcx,%rdi), %r8
-               	sarq	$0x4, %r8
-               	shlq	$0x4, %r8
-               	addq	%rax, %r8
-               	cmpq	%rdx, %r8
+               	shrq	$0x3c, %rsi
+               	leaq	(%rcx,%rsi), %rdi
+               	sarq	$0x4, %rdi
+               	shlq	$0x4, %rdi
+               	addq	%rax, %rdi
+               	cmpq	%rdx, %rdi
                	je	<addr>
                	movl	$0x1, %eax
                	leave
                	retq
-               	addq	%rdi, %rcx
+               	addq	%rsi, %rcx
                	sarq	$0x4, %rcx
                	shlq	$0x4, %rcx
                	leaq	0x10(%rax), %rdx

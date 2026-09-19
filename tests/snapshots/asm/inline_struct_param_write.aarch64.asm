@@ -14,8 +14,8 @@ Disassembly of section .text:
                	brk	#0x1
 
 <use_bump>:
-               	ldr	x1, [x0]
-               	add	x0, x1, #0x6
+               	ldr	x0, [x0]
+               	add	x0, x0, #0x6
                	mov	x17, #0x64              // =100
                	mul	x0, x0, x17
                	add	x0, x0, #0x6

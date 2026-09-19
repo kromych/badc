@@ -14,17 +14,17 @@ Disassembly of section .text:
                	brk	#0x1
 
 <main>:
-               	mov	x1, #0x3ff8000000000000 // =4609434218613702656
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0, #0x4]
-               	cmp	w0, #0x2
+               	mov	x0, #0x3ff8000000000000 // =4609434218613702656
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	ldrsw	x1, [x1, #0x4]
+               	cmp	w1, #0x2
                	b.eq	<addr>
                	mov	x0, #0x5                // =5
                	ret
-               	mov	x0, #0x4000000000000000 // =4611686018427387904
-               	fmov	d16, x1
-               	fmov	d17, x0
+               	mov	x1, #0x4000000000000000 // =4611686018427387904
+               	fmov	d16, x0
+               	fmov	d17, x1
                	fmul	d0, d16, d17
                	mov	x0, #0x4008000000000000 // =4613937818241073152
                	fmov	d17, x0

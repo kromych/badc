@@ -40,10 +40,9 @@ Disassembly of section .text:
                	shrq	%rax
                	addq	%rdx, %rax
                	shrq	$0x2, %rax
-               	imulq	$0x7, %rax, %rdx
-               	movq	%rcx, %rax
-               	subq	%rdx, %rax
-               	imulq	$0x64, %rsi, %rcx
+               	imulq	$0x7, %rax, %rax
+               	subq	%rax, %rcx
+               	imulq	$0x64, %rsi, %rax
                	addq	%rcx, %rax
                	movslq	%eax, %rax
                	retq

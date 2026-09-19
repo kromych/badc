@@ -37,8 +37,7 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	callq	<addr>
-               	movq	%rax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	testq	%rax, %rax
                	je	<addr>
                	popq	%rbp
@@ -46,8 +45,7 @@ Disassembly of section .text:
                	movl	$0x3, %edi
                	movl	$0x5, %esi
                	callq	<addr>
-               	movq	%rax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	testq	%rax, %rax
                	je	<addr>
                	popq	%rbp

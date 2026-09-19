@@ -17,45 +17,45 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	mov	x2, #0x5                // =5
-               	stur	w2, [x29, #-0x8]
+               	mov	x1, #0x5                // =5
+               	stur	w1, [x29, #-0x8]
                	sub	x0, x29, #0x8
-               	ldrsw	x1, [x0]
-               	cmp	w1, #0x5
+               	ldrsw	x2, [x0]
+               	cmp	w2, #0x5
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x1, #0xa                // =10
-               	str	w1, [x0]
-               	mov	x1, #0x9                // =9
-               	stur	w1, [x29, #-0x8]
-               	ldrsw	x1, [x0]
-               	cmp	w1, #0x9
+               	mov	x2, #0xa                // =10
+               	str	w2, [x0]
+               	mov	x2, #0x9                // =9
+               	stur	w2, [x29, #-0x8]
+               	ldrsw	x2, [x0]
+               	cmp	w2, #0x9
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x1, #0x4004000000000000 // =4612811918334230528
-               	fmov	d16, x1
+               	mov	x2, #0x4004000000000000 // =4612811918334230528
+               	fmov	d16, x2
                	stur	d16, [x29, #-0x8]
                	ldr	d0, [x0]
-               	fmov	d17, x1
+               	fmov	d17, x2
                	fcmp	d0, d17
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x1, #0x41               // =65
-               	sturb	w1, [x29, #-0x8]
-               	ldrb	w1, [x0]
+               	mov	x2, #0x41               // =65
+               	sturb	w2, [x29, #-0x8]
+               	ldrb	w2, [x0]
                	mov	x17, #0x41              // =65
-               	eor	x1, x1, x17
-               	cbz	w1, <addr>
-               	mov	x0, x2
+               	eor	x2, x2, x17
+               	cbz	w2, <addr>
+               	mov	x0, x1
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret

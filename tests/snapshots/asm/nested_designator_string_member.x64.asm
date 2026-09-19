@@ -102,13 +102,13 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	-0x10(%rbp), %rax
-               	movslq	0xc(%rax), %rdx
-               	leaq	0x6(%rdi), %rcx
-               	cmpl	%ecx, %edx
+               	movslq	0xc(%rax), %rcx
+               	leaq	0x6(%rdi), %rdx
+               	cmpl	%edx, %ecx
                	jne	<addr>
-               	movslq	(%rax), %rcx
-               	leaq	0x4(%rdi), %rax
-               	cmpl	%eax, %ecx
+               	movslq	(%rax), %rax
+               	leaq	0x4(%rdi), %rcx
+               	cmpl	%ecx, %eax
                	je	<addr>
                	movl	$0x6, %eax
                	leave

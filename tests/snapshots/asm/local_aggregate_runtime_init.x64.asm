@@ -49,13 +49,13 @@ Disassembly of section .text:
                	movb	$0x6f, 0x5(%rax)
                	movb	$0x6c, 0x6(%rax)
                	movb	$0x61, 0x7(%rax)
-               	leaq	-0x28(%rbp), %rax
-               	movb	$0x0, 0x8(%rax)
-               	movb	$0x0, 0x9(%rax)
-               	movb	$0x0, 0xa(%rax)
-               	movb	$0x0, 0xb(%rax)
-               	movb	$0x0, 0xc(%rax)
-               	movb	$0x0, 0xd(%rax)
+               	leaq	-0x28(%rbp), %rcx
+               	movb	$0x0, 0x8(%rcx)
+               	movb	$0x0, 0x9(%rcx)
+               	movb	$0x0, 0xa(%rcx)
+               	movb	$0x0, 0xb(%rcx)
+               	movb	$0x0, 0xc(%rcx)
+               	movb	$0x0, 0xd(%rcx)
                	leaq	-0x28(%rbp), %rdi
                	movq	%rdx, 0x10(%rdi)
                	callq	<addr>

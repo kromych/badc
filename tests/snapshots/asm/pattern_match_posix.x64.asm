@@ -92,20 +92,20 @@ Disassembly of section .text:
                	movslq	0x20(%rdx), %rdx
                	cmpl	%edx, %esi
                	jne	<addr>
-               	movslq	0x4(%rax), %rax
-               	leaq	(%r12,%rcx), %rdx
-               	movslq	0x24(%rdx), %rsi
-               	cmpl	%esi, %eax
-               	jne	<addr>
-               	leaq	-0x10(%rbp), %rax
-               	movslq	0x8(%rax), %rsi
-               	movslq	0x28(%rdx), %rdx
-               	cmpl	%edx, %esi
-               	jne	<addr>
-               	movslq	0xc(%rax), %rdx
+               	movslq	0x4(%rax), %rdx
                	leaq	(%r12,%rcx), %rax
-               	movslq	0x2c(%rax), %rax
-               	cmpl	%eax, %edx
+               	movslq	0x24(%rax), %rsi
+               	cmpl	%esi, %edx
+               	jne	<addr>
+               	leaq	-0x10(%rbp), %rdx
+               	movslq	0x8(%rdx), %rsi
+               	movslq	0x28(%rax), %rax
+               	cmpl	%eax, %esi
+               	jne	<addr>
+               	movslq	0xc(%rdx), %rax
+               	addq	%r12, %rcx
+               	movslq	0x2c(%rcx), %rcx
+               	cmpl	%ecx, %eax
                	je	<addr>
                	jmp	<addr>
                	movl	$0x1, %eax

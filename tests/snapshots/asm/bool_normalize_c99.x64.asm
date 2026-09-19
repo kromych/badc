@@ -208,23 +208,23 @@ Disassembly of section .text:
                	popq	%r12
                	leave
                	retq
-               	xorl	%r12d, %r12d
+               	xorl	%ebx, %ebx
                	movl	$0x9, %edi
                	callq	<addr>
                	testq	%rax, %rax
-               	setne	%bl
-               	movzbq	%bl, %rbx
-               	movq	%r12, %rdi
+               	setne	%r12b
+               	movzbq	%r12b, %r12
+               	movq	%rbx, %rdi
                	callq	<addr>
-               	movq	%rax, %r12
+               	movq	%rax, %rbx
                	movq	$-0x3, %rdi
                	callq	<addr>
                	testq	%rax, %rax
                	setne	%al
                	movzbq	%al, %rax
-               	cmpl	$0x1, %ebx
+               	cmpl	$0x1, %r12d
                	jne	<addr>
-               	testq	%r12, %r12
+               	testq	%rbx, %rbx
                	jne	<addr>
                	cmpl	$0x1, %eax
                	je	<addr>

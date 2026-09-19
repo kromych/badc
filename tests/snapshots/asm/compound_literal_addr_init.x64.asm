@@ -71,8 +71,7 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	callq	<addr>
-               	movq	%rax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	testq	%rax, %rax
                	je	<addr>
                	popq	%rbp

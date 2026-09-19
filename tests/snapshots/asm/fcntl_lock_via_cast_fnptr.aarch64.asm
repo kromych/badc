@@ -49,23 +49,23 @@ Disassembly of section .text:
                	mov	x1, x21
                	bl	<addr>
                	sub	x2, x29, #0x20
-               	mov	x24, #0x1               // =1
-               	strh	w24, [x2]
+               	mov	x22, #0x1               // =1
+               	strh	w22, [x2]
                	strh	w21, [x2, #0x2]
                	sxtw	x0, w20
                	mov	x21, #0x6               // =6
                	mov	x1, x21
                	bl	<addr>
-               	mov	x22, x0
+               	mov	x23, x0
                	sub	x2, x29, #0x20
                	mov	x0, #0x2                // =2
                	strh	w0, [x2]
                	sxtw	x0, w20
                	mov	x1, x21
                	bl	<addr>
-               	mov	x23, x0
+               	mov	x24, x0
                	sub	x2, x29, #0x20
-               	strh	w24, [x2]
+               	strh	w22, [x2]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	x0, [x0]
@@ -79,8 +79,8 @@ Disassembly of section .text:
                	bl	<addr>
                	sub	x0, x29, #0x60
                	bl	<addr>
-               	cbnz	w22, <addr>
-               	cbz	w23, <addr>
+               	cbnz	w23, <addr>
+               	cbz	w24, <addr>
                	mov	x0, #0x2                // =2
                	ldp	x29, x30, [sp, #0x90]
                	ldr	x24, [sp, #0x20]

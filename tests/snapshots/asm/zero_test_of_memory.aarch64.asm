@@ -142,14 +142,12 @@ Disassembly of section .text:
                	ret
 
 <read_then_clear>:
-               	mov	x2, x1
-               	ldrb	w0, [x0]
-               	mov	x1, #0x0                // =0
-               	strb	w1, [x2]
-               	cbz	x0, <addr>
+               	ldrb	w2, [x0]
+               	mov	x0, #0x0                // =0
+               	strb	w0, [x1]
+               	cbz	x2, <addr>
                	mov	x0, #0x1                // =1
                	ret
-               	mov	x0, x1
                	ret
 
 <length>:

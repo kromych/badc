@@ -32,9 +32,9 @@ Disassembly of section .text:
                	movslq	%edi, %rdi
                	xorl	%eax, %eax
                	leaq	-0x100(%rbp), %rcx
-               	leaq	(%rcx,%rax), %rdx
-               	leaq	(%rdi,%rax), %rcx
-               	movb	%cl, (%rdx)
+               	addq	%rax, %rcx
+               	leaq	(%rdi,%rax), %rdx
+               	movb	%dl, (%rcx)
                	incq	%rax
                	cmpl	$0x100, %eax            # imm = 0x100
                	jl	<addr>

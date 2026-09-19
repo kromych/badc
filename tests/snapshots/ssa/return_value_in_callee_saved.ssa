@@ -17,11 +17,11 @@ fn ent_pc=0 n_params=1 variadic=false locals=0
   block 2  start_pc=0
     v8   Imm(0)                                           -> x1
     v9   BinopI { op=sub, lhs=v1, rhs_imm=1 }             -> x1
-    v10  BinopI { op=shl, lhs=v9, rhs_imm=32 }            -> x2
-    v11  Extend { value=v9, kind=I32 }                    -> x2
-    v12  Extend { value=v9, kind=I32 }                    -> x2
+    v10  BinopI { op=shl, lhs=v9, rhs_imm=32 }            -> x1
+    v11  Extend { value=v9, kind=I32 }                    -> x1
+    v12  Extend { value=v9, kind=I32 }                    -> x1
     v13  BinopI { op=add, lhs=v9, rhs_imm=1 }             -> x1
-    v14  Extend { value=v13, kind=I32 }                   -> x2
+    v14  Extend { value=v13, kind=I32 }                   -> x1
     v15  Extend { value=v13, kind=I32 }                   -> x1
     v16  Imm(0)                                           -> x1
     v17  BinopI { op=shl, lhs=v1, rhs_imm=32 }            -> x1

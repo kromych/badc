@@ -92,30 +92,31 @@ Disassembly of section .text:
                	subq	$0x10, %rsp
                	leaq	-0x8(%rbp), %rax
                	movw	$0xbeef, (%rax)         # imm = 0xBEEF
-               	xorl	%edx, %edx
-               	movw	%dx, 0x2(%rax)
+               	xorl	%ecx, %ecx
+               	movw	%cx, 0x2(%rax)
                	movw	$0xfeed, 0x4(%rax)      # imm = 0xFEED
-               	leaq	0x2(%rax), %rcx
+               	leaq	0x2(%rax), %rdx
                	movl	$0x11223344, %eax       # imm = 0x11223344
-               	movw	%ax, (%rcx)
-               	leaq	-0x8(%rbp), %rcx
-               	movzwq	(%rcx), %rax
-               	xorq	$0xbeef, %rax           # imm = 0xBEEF
-               	testl	%eax, %eax
+               	movw	%ax, (%rdx)
+               	leaq	-0x8(%rbp), %rax
+               	movzwq	(%rax), %rdx
+               	xorq	$0xbeef, %rdx           # imm = 0xBEEF
+               	testl	%edx, %edx
                	jne	<addr>
-               	movzwq	0x2(%rcx), %rax
-               	xorq	$0x3344, %rax           # imm = 0x3344
+               	movzwq	0x2(%rax), %rcx
+               	xorq	$0x3344, %rcx           # imm = 0x3344
+               	testl	%ecx, %ecx
+               	sete	%cl
+               	movzbq	%cl, %rcx
+               	xorl	%edx, %edx
+               	testq	%rcx, %rcx
+               	je	<addr>
+               	movzwq	0x4(%rax), %rax
+               	xorq	$0xfeed, %rax           # imm = 0xFEED
                	testl	%eax, %eax
                	sete	%dl
                	movzbq	%dl, %rdx
-               	xorl	%eax, %eax
-               	testq	%rdx, %rdx
-               	je	<addr>
-               	movzwq	0x4(%rcx), %rax
-               	xorq	$0xfeed, %rax           # imm = 0xFEED
-               	testl	%eax, %eax
-               	sete	%al
-               	movzbq	%al, %rax
+               	movq	%rdx, %rax
                	leave
                	retq
 

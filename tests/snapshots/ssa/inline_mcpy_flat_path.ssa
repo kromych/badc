@@ -4,33 +4,33 @@ fn ent_pc=3 n_params=1 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(0, kind=I64)                            -> x8
+    v1   ParamRef(0, kind=I64)                            -> x7
     v2   Imm(0)                                           -> x0
     v3   Imm(0)                                           -> x0
-    v4   ImmData(80)                                      -> x1
-    v5   ImmData(8)                                       -> x2
-    v6   Imm(2)                                           -> x0
-    v7   Imm(2)                                           -> x0
-    v8   Load { addr=v4, disp=0, kind=I64 }               -> x0
+    v4   ImmData(80)                                      -> x0
+    v5   ImmData(8)                                       -> x1
+    v6   Imm(2)                                           -> x2
+    v7   Imm(2)                                           -> x2
+    v8   Load { addr=v4, disp=0, kind=I64 }               -> x2
     v9   Imm(64)                                          -> x6
     v10  Imm(2)                                           -> x6
     v11  Imm(62)                                          -> x6
     v12  Imm(62)                                          -> x6
-    v13  BinopI { op=shru, lhs=v8, rhs_imm=62 }           -> x6
-    v14  BinopI { op=shl, lhs=v13, rhs_imm=2 }            -> x7
-    v15  Binop { op=add, lhs=v5, rhs=v14 }                -> x0
+    v13  BinopI { op=shru, lhs=v8, rhs_imm=62 }           -> x2
+    v14  BinopI { op=shl, lhs=v13, rhs_imm=2 }            -> x2
+    v15  Binop { op=add, lhs=v5, rhs=v14 }                -> x1
     v16  Mcpy { dst=v1, src=v15, size=2, align=1 }        -> -
-    v17  BinopI { op=add, lhs=v4, rhs_imm=8 }             -> x8
-    v18  Load { addr=v4, disp=8, kind=I32 }               -> x8
-    v19  BinopI { op=shl, lhs=v13, rhs_imm=2 }            -> x9
-    v20  Binop { op=add, lhs=v5, rhs=v14 }                -> x9
-    v21  BinopI { op=add, lhs=v15, rhs_imm=2 }            -> x9
-    v22  Load { addr=v15, disp=2, kind=U8 }               -> x9
-    v23  Binop { op=add, lhs=v18, rhs=v22 }               -> x8
+    v17  BinopI { op=add, lhs=v4, rhs_imm=8 }             -> x2
+    v18  Load { addr=v4, disp=8, kind=I32 }               -> x2
+    v19  BinopI { op=shl, lhs=v13, rhs_imm=2 }            -> x6
+    v20  Binop { op=add, lhs=v5, rhs=v14 }                -> x6
+    v21  BinopI { op=add, lhs=v15, rhs_imm=2 }            -> x6
+    v22  Load { addr=v15, disp=2, kind=U8 }               -> x6
+    v23  Binop { op=add, lhs=v18, rhs=v22 }               -> x2
     v24  Store { addr=v4, disp=8, value=v23, kind=I32 }   -> -
-    v25  BinopI { op=shl, lhs=v13, rhs_imm=2 }            -> x1
-    v26  Binop { op=add, lhs=v5, rhs=v14 }                -> x1
-    v27  BinopI { op=add, lhs=v15, rhs_imm=3 }            -> x1
+    v25  BinopI { op=shl, lhs=v13, rhs_imm=2 }            -> x0
+    v26  Binop { op=add, lhs=v5, rhs=v14 }                -> x0
+    v27  BinopI { op=add, lhs=v15, rhs_imm=3 }            -> x0
     v28  Load { addr=v15, disp=3, kind=U8 }               -> x0
     v29  BinopI { op=and, lhs=v28, rhs_imm=4294967295 }   -> x1
     terminator Return(v28)   (exit_acc=v28)
@@ -118,9 +118,9 @@ fn ent_pc=6 n_params=0 variadic=false locals=1
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   Imm(0)                                           -> x1
+    v1   Imm(0)                                           -> x0
     v2   StoreLocal { off=-1, value=v1, kind=I16 }        -> -
-    v3   ImmData(80)                                      -> x0
+    v3   ImmData(80)                                      -> x1
     v4   Imm(-9223372036854775808)                        -> x2
     v5   Store { addr=v3, disp=0, value=v4, kind=I64 }    -> -
     v6   BinopI { op=add, lhs=v3, rhs_imm=8 }             -> x2

@@ -17,22 +17,22 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrsw	x0, [x0]
-               	sxtb	x5, w0
-               	sxth	x6, w0
+               	sxtb	x1, w0
+               	sxth	x2, w0
                	mov	x17, #0x86a0            // =34464
                	movk	x17, #0x1, lsl #16
-               	mul	x2, x5, x17
+               	mul	x1, x1, x17
                	mov	x17, #0xa               // =10
-               	mul	x3, x6, x17
-               	add	x4, x2, x3
-               	add	x1, x4, x0
-               	cmp	w1, w1
+               	mul	x2, x2, x17
+               	add	x1, x1, x2
+               	add	x0, x1, x0
+               	cmp	w0, w0
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ret
                	mov	x17, #0xcd17            // =52503
                	movk	x17, #0x6b, lsl #16
-               	cmp	w1, w17
+               	cmp	w0, w17
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ret

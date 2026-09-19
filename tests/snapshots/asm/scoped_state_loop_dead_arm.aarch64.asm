@@ -15,30 +15,30 @@ Disassembly of section .text:
 
 <reader>:
                	mov	x2, #0x0                // =0
-               	mov	x0, #0x3                // =3
+               	mov	x1, #0x3                // =3
                	adrp	x5, <page>
                	add	x5, x5, <lo12>
-               	ldr	x1, [x5]
+               	ldr	x0, [x5]
                	adrp	x4, <page>
                	add	x4, x4, <lo12>
                	mov	x3, x2
                	ldr	x6, [x4]
-               	add	x6, x6, x1
+               	add	x6, x6, x0
                	str	x6, [x4]
                	add	x3, x3, #0x1
-               	cmp	w0, #0x2
+               	cmp	w1, #0x2
                	b.lo	<addr>
-               	cmp	w0, #0x3
+               	cmp	w1, #0x3
                	b.lo	<addr>
-               	ldr	x0, [x5]
-               	cmp	x1, x0
+               	ldr	x1, [x5]
+               	cmp	x0, x1
                	b.ne	<addr>
-               	mov	x0, x2
+               	mov	x1, x2
                	b	<addr>
-               	mov	x0, #0x1                // =1
+               	mov	x1, #0x1                // =1
                	b	<addr>
-               	mov	x0, x2
-               	cbnz	w0, <addr>
+               	mov	x1, x2
+               	cbnz	w1, <addr>
                	mov	x0, x3
                	ret
 

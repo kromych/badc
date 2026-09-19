@@ -46,16 +46,13 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	adrp	x2, <page>
-               	add	x2, x2, <lo12>
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
                	sub	x1, x29, #0x8
-               	ldrb	w0, [x1]
-               	sub	x0, x0, #0x61
-               	add	x0, x0, #0x3
-               	mov	w0, w0
-               	mov	x16, x2
-               	mov	x2, x0
-               	mov	x0, x16
+               	ldrb	w2, [x1]
+               	sub	x2, x2, #0x61
+               	add	x2, x2, #0x3
+               	mov	w2, w2
                	bl	<addr>
                	sxtw	x0, w0
                	cbz	x0, <addr>

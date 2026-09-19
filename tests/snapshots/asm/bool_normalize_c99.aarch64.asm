@@ -165,21 +165,21 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x20]
                	ldp	x20, x21, [sp], #0x30
                	ret
-               	mov	x21, #0x0               // =0
+               	mov	x20, #0x0               // =0
                	mov	x0, #0x9                // =9
                	bl	<addr>
                	cmp	x0, #0x0
-               	cset	x20, ne
-               	mov	x0, x21
+               	cset	x21, ne
+               	mov	x0, x20
                	bl	<addr>
-               	mov	x21, x0
+               	mov	x20, x0
                	mov	x0, #-0x3               // =-3
                	bl	<addr>
                	cmp	x0, #0x0
                	cset	x0, ne
-               	cmp	w20, #0x1
+               	cmp	w21, #0x1
                	b.ne	<addr>
-               	cbnz	x21, <addr>
+               	cbnz	x20, <addr>
                	cmp	w0, #0x1
                	b.eq	<addr>
                	mov	x0, #0x10               // =16

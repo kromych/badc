@@ -44,26 +44,26 @@ Disassembly of section .text:
                	mov	x0, x2
                	mov	x2, x1
                	blr	x9
-               	sxtw	x21, w0
-               	cmp	w21, #0x0
+               	sxtw	x20, w0
+               	cmp	w20, #0x0
                	b.ge	<addr>
                	mov	x0, #0x2                // =2
                	ldp	x29, x30, [sp, #0x30]
                	ldr	x22, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x40
                	ret
-               	adrp	x20, <page>
-               	add	x20, x20, <lo12>
-               	ldr	x0, [x20, #0x68]
+               	adrp	x21, <page>
+               	add	x21, x21, <lo12>
+               	ldr	x0, [x21, #0x68]
                	sub	x1, x29, #0x8
                	mov	x2, #0x4                // =4
                	mov	x9, x0
-               	mov	x0, x21
+               	mov	x0, x20
                	blr	x9
                	mov	x22, x0
-               	ldr	x0, [x20, #0x20]
+               	ldr	x0, [x21, #0x20]
                	mov	x9, x0
-               	mov	x0, x21
+               	mov	x0, x20
                	blr	x9
                	cmp	w22, #0x4
                	b.eq	<addr>

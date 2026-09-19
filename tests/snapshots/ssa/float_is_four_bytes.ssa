@@ -42,14 +42,14 @@ fn ent_pc=7 n_params=0 variadic=false locals=2
     v39  BinopI { op=add, lhs=v36, rhs_imm=4 }            -> x1
     v40  Imm(0)                                           -> x2
     v41  Binop { op=sub, lhs=v39, rhs=v36 }               -> x6
-    v42  BinopI { op=ne, lhs=v41, rhs_imm=4 }             -> x2
+    v42  BinopI { op=ne, lhs=v41, rhs_imm=4 }             -> x0
     terminator Bz { cond=v42, target=b35, fall=b3 }   (exit_acc=v42)
   block 3  start_pc=0
     v43  ImmData(37)                                      -> x7
-    v44  ImmData(304)                                     -> x2
-    v45  Imm(4)                                           -> x2
-    v46  BinopI { op=add, lhs=v36, rhs_imm=4 }            -> x2
-    v47  Imm(0)                                           -> x2
+    v44  ImmData(304)                                     -> x0
+    v45  Imm(4)                                           -> x0
+    v46  BinopI { op=add, lhs=v36, rhs_imm=4 }            -> x0
+    v47  Imm(0)                                           -> x0
     v48  Binop { op=sub, lhs=v39, rhs=v36 }               -> x1
     v49  CallExt { binding_idx=0, args=[v43, v41], fp_arg_mask=0x0 } -> x0
     v50  Imm(6)                                           -> x3
@@ -173,17 +173,17 @@ fn ent_pc=7 n_params=0 variadic=false locals=2
     v138 Imm(1073741824)                                  -> x1 [f32]
     v139 Imm(1080033280)                                  -> x2 [f32]
     v140 Binop { op=fadd, lhs=v137, rhs=v138 }            -> d0 [f32]
-    v141 Binop { op=fadd, lhs=v140, rhs=v139 }            -> d1 [f32]
-    v142 Imm(1087373312)                                  -> x6 [f32]
-    v143 Binop { op=fne, lhs=v141, rhs=v142 }             -> x6
+    v141 Binop { op=fadd, lhs=v140, rhs=v139 }            -> d0 [f32]
+    v142 Imm(1087373312)                                  -> x0 [f32]
+    v143 Binop { op=fne, lhs=v141, rhs=v142 }             -> x0
     terminator Bz { cond=v143, target=b27, fall=b19 }   (exit_acc=v143)
   block 19  start_pc=0
     v144 ImmData(228)                                     -> x7
-    v145 Imm(1065353216)                                  -> x6 [f32]
-    v146 Imm(1073741824)                                  -> x6 [f32]
-    v147 Imm(1080033280)                                  -> x6 [f32]
-    v148 Binop { op=fadd, lhs=v137, rhs=v138 }            -> d2 [f32]
-    v149 Binop { op=fadd, lhs=v140, rhs=v139 }            -> d0 [f32]
+    v145 Imm(1065353216)                                  -> x0 [f32]
+    v146 Imm(1073741824)                                  -> x0 [f32]
+    v147 Imm(1080033280)                                  -> x0 [f32]
+    v148 Binop { op=fadd, lhs=v137, rhs=v138 }            -> d1 [f32]
+    v149 Binop { op=fadd, lhs=v140, rhs=v139 }            -> d1 [f32]
     v150 FpCast { kind=F32ToF64, value=v141 }             -> d0
     v151 CallExt { binding_idx=0, args=[v144, v150], fp_arg_mask=0x2 } -> x0
     v152 Imm(14)                                          -> x3

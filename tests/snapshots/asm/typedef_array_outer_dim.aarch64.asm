@@ -15,41 +15,41 @@ Disassembly of section .text:
 
 <fill_and_sum>:
                	mov	x1, x0
-               	mov	x5, #0x0                // =0
-               	mov	x0, x5
+               	mov	x3, #0x0                // =0
+               	mov	x0, x3
+               	lsl	x5, x0, #7
+               	add	x4, x1, x5
+               	lsl	x2, x0, #4
+               	str	x2, [x4]
+               	add	x6, x3, x2
+               	add	x3, x2, #0x1
+               	str	x3, [x4, #0x8]
+               	add	x6, x6, x3
+               	add	x3, x2, #0x2
+               	str	x3, [x4, #0x10]
+               	add	x3, x6, x3
+               	add	x2, x2, #0x3
+               	str	x2, [x4, #0x18]
+               	add	x6, x3, x2
+               	add	x3, x1, x5
+               	lsl	x2, x0, #4
+               	add	x4, x2, #0x4
+               	str	x4, [x3, #0x20]
                	lsl	x4, x0, #7
-               	add	x2, x1, x4
-               	lsl	x3, x0, #4
-               	str	x3, [x2]
-               	add	x6, x5, x3
-               	add	x5, x3, #0x1
-               	str	x5, [x2, #0x8]
+               	add	x3, x1, x4
+               	ldr	x5, [x3, #0x20]
                	add	x6, x6, x5
-               	add	x5, x3, #0x2
-               	str	x5, [x2, #0x10]
+               	add	x5, x2, #0x5
+               	str	x5, [x3, #0x28]
+               	add	x6, x6, x5
+               	add	x5, x2, #0x6
+               	str	x5, [x3, #0x30]
+               	add	x6, x6, x5
+               	add	x5, x2, #0x7
+               	str	x5, [x3, #0x38]
                	add	x5, x6, x5
-               	add	x3, x3, #0x3
-               	str	x3, [x2, #0x18]
-               	add	x5, x5, x3
-               	add	x4, x1, x4
-               	lsl	x3, x0, #4
-               	add	x2, x3, #0x4
-               	str	x2, [x4, #0x20]
-               	lsl	x4, x0, #7
-               	add	x2, x1, x4
-               	ldr	x6, [x2, #0x20]
-               	add	x6, x5, x6
-               	add	x5, x3, #0x5
-               	str	x5, [x2, #0x28]
-               	add	x6, x6, x5
-               	add	x5, x3, #0x6
-               	str	x5, [x2, #0x30]
-               	add	x6, x6, x5
-               	add	x5, x3, #0x7
-               	str	x5, [x2, #0x38]
-               	add	x5, x6, x5
-               	add	x3, x3, #0x8
-               	str	x3, [x2, #0x40]
+               	add	x2, x2, #0x8
+               	str	x2, [x3, #0x40]
                	add	x2, x1, x4
                	ldr	x2, [x2, #0x40]
                	add	x6, x5, x2
@@ -68,24 +68,24 @@ Disassembly of section .text:
                	add	x3, x3, #0xc
                	str	x3, [x2, #0x60]
                	add	x5, x5, x3
-               	add	x4, x1, x4
-               	lsl	x3, x0, #4
-               	add	x2, x3, #0xd
-               	str	x2, [x4, #0x68]
-               	lsl	x4, x0, #7
-               	add	x2, x1, x4
-               	ldr	x6, [x2, #0x68]
-               	add	x6, x5, x6
-               	add	x5, x3, #0xe
-               	str	x5, [x2, #0x70]
-               	add	x5, x6, x5
-               	add	x3, x3, #0xf
-               	str	x3, [x2, #0x78]
-               	add	x5, x5, x3
+               	add	x3, x1, x4
+               	lsl	x2, x0, #4
+               	add	x4, x2, #0xd
+               	str	x4, [x3, #0x68]
+               	lsl	x3, x0, #7
+               	add	x3, x1, x3
+               	ldr	x4, [x3, #0x68]
+               	add	x5, x5, x4
+               	add	x4, x2, #0xe
+               	str	x4, [x3, #0x70]
+               	add	x4, x5, x4
+               	add	x2, x2, #0xf
+               	str	x2, [x3, #0x78]
+               	add	x3, x4, x2
                	add	x0, x0, #0x1
                	cmp	w0, #0x4
                	b.lt	<addr>
-               	mov	x0, x5
+               	mov	x0, x3
                	ret
 
 <main>:

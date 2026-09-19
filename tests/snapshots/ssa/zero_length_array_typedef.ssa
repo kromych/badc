@@ -56,7 +56,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=2
     terminator Return(v60)   (exit_acc=v60)
   block 2  start_pc=0
     v61  LocalAddr(-2)                                    -> x1
-    v62  BinopI { op=add, lhs=v61, rhs_imm=8 }            -> x2
+    v62  BinopI { op=add, lhs=v61, rhs_imm=8 }            -> x1
     v63  Load { addr=v61, disp=8, kind=I64 }              -> x1
     v64  Imm(0)                                           -> x1
     v65  LocalAddr(-2)                                    -> x1

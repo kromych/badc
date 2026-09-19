@@ -29,29 +29,29 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x70, %rsp
-               	leaq	-0x68(%rbp), %rsi
+               	leaq	-0x68(%rbp), %rdx
                	leaq	<rip>, %rax
                	pushq	%rcx
                	movq	(%rax), %rcx
-               	movq	%rcx, (%rsi)
+               	movq	%rcx, (%rdx)
                	movq	0x8(%rax), %rcx
-               	movq	%rcx, 0x8(%rsi)
+               	movq	%rcx, 0x8(%rdx)
                	movq	0x10(%rax), %rcx
-               	movq	%rcx, 0x10(%rsi)
+               	movq	%rcx, 0x10(%rdx)
                	movq	0x18(%rax), %rcx
-               	movq	%rcx, 0x18(%rsi)
+               	movq	%rcx, 0x18(%rdx)
                	movq	0x20(%rax), %rcx
-               	movq	%rcx, 0x20(%rsi)
+               	movq	%rcx, 0x20(%rdx)
                	movq	0x28(%rax), %rcx
-               	movq	%rcx, 0x28(%rsi)
+               	movq	%rcx, 0x28(%rdx)
                	popq	%rcx
                	xorl	%eax, %eax
                	movq	%rax, %rcx
-               	movq	%rax, %rdx
-               	shlq	$0x4, %rdx
-               	addq	%rsi, %rdx
-               	movq	0x8(%rdx), %rdx
-               	addq	%rdx, %rcx
+               	movq	%rax, %rsi
+               	shlq	$0x4, %rsi
+               	addq	%rdx, %rsi
+               	movq	0x8(%rsi), %rsi
+               	addq	%rsi, %rcx
                	incq	%rax
                	cmpl	$0x3, %eax
                	jl	<addr>
@@ -74,14 +74,14 @@ Disassembly of section .text:
                	leaq	-0x8(%rbp), %rcx
                	movq	%rcx, 0x20(%rax)
                	movq	$0x8, 0x28(%rax)
-               	leaq	-0x68(%rbp), %rsi
+               	leaq	-0x68(%rbp), %rdx
                	xorl	%eax, %eax
                	movq	%rax, %rcx
-               	movq	%rax, %rdx
-               	shlq	$0x4, %rdx
-               	addq	%rsi, %rdx
-               	movq	0x8(%rdx), %rdx
-               	addq	%rdx, %rcx
+               	movq	%rax, %rsi
+               	shlq	$0x4, %rsi
+               	addq	%rdx, %rsi
+               	movq	0x8(%rsi), %rsi
+               	addq	%rsi, %rcx
                	incq	%rax
                	cmpl	$0x3, %eax
                	jl	<addr>

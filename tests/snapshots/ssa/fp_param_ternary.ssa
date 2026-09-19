@@ -140,7 +140,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     v58  Phi { incoming=[b10:v30], kind=F32 }             -> d1 [f32]
     v59  Imm(0)                                           -> x2
     v60  Fneg(v31)                                        -> d0 [f32]
-    v61  Imm(0)                                           -> x2
+    v61  Imm(0)                                           -> x1
     v62  Binop { op=fadd, lhs=v58, rhs=v60 }              -> d1 [f32]
     v63  Fneg(v31)                                        -> d2 [f32]
     v64  Binop { op=fadd, lhs=v30, rhs=v60 }              -> d0 [f32]
@@ -151,13 +151,13 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     terminator Return(v34)   (exit_acc=v34)
   block 13  start_pc=0
     v35  Imm(2)                                           -> x0
-    v36  Imm(1088946176)                                  -> x0 [f32]
-    v37  Imm(1040187392)                                  -> x1 [f32]
+    v36  Imm(1088946176)                                  -> x1 [f32]
+    v37  Imm(1040187392)                                  -> x0 [f32]
     v38  Imm(2)                                           -> x2
     v39  Imm(0)                                           -> x2
     v40  Fneg(v36)                                        -> d0 [f32]
-    v41  Imm(0)                                           -> x2
-    v42  Imm(2)                                           -> x2
+    v41  Imm(0)                                           -> x1
+    v42  Imm(2)                                           -> x1
     terminator Jmp(b14)   (exit_acc=v37)
   block 14  start_pc=0
     v67  Phi { incoming=[b13:v37], kind=F32 }             -> d1 [f32]

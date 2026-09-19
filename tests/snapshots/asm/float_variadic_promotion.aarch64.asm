@@ -188,16 +188,16 @@ Disassembly of section .text:
                	movk	x0, #0x4054, lsl #48
                	fmov	d17, x0
                	fsub	d0, d0, d17
-               	mov	x1, #0x0                // =0
-               	fmov	d17, x1
+               	mov	x0, #0x0                // =0
+               	fmov	d17, x0
                	fcmp	d0, d17
                	b.pl	<addr>
                	fneg	d0, d0
-               	mov	x0, #0xa9fc             // =43516
-               	movk	x0, #0xd2f1, lsl #16
-               	movk	x0, #0x624d, lsl #32
-               	movk	x0, #0x3f50, lsl #48
-               	fmov	d17, x0
+               	mov	x1, #0xa9fc             // =43516
+               	movk	x1, #0xd2f1, lsl #16
+               	movk	x1, #0x624d, lsl #32
+               	movk	x1, #0x3f50, lsl #48
+               	fmov	d17, x1
                	fcmp	d0, d17
                	b.mi	<addr>
                	mov	x0, #0x4                // =4
@@ -205,7 +205,6 @@ Disassembly of section .text:
                	ldr	x22, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x30
                	ret
-               	mov	x0, x1
                	ldp	x29, x30, [sp, #0x20]
                	ldr	x22, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x30

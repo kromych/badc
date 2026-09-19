@@ -14,11 +14,11 @@ Disassembly of section .text:
                	brk	#0x1
 
 <sum_zero>:
-               	mov	x2, x0
+               	mov	x1, x0
                	mov	x0, #0x8                // =8
-               	sub	x1, x0, #0x1
-               	ldr	x1, [x2, x1, lsl #3]
-               	cbnz	x1, <addr>
+               	sub	x2, x0, #0x1
+               	ldr	x2, [x1, x2, lsl #3]
+               	cbnz	x2, <addr>
                	sub	x0, x0, #0x1
                	cmp	w0, #0x0
                	b.gt	<addr>
@@ -27,7 +27,7 @@ Disassembly of section .text:
                	fmov	d0, x0
                	ret
                	sub	x0, x0, #0x1
-               	ldr	x0, [x2, x0, lsl #3]
+               	ldr	x0, [x1, x0, lsl #3]
                	scvtf	d0, x0
                	ret
 

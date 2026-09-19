@@ -14,8 +14,8 @@ Disassembly of section .text:
                	brk	#0x1
 
 <store_be32>:
-               	rev	w2, w1
-               	str	w2, [x0]
+               	rev	w1, w1
+               	str	w1, [x0]
                	ret
 
 <store_le32>:
@@ -23,8 +23,8 @@ Disassembly of section .text:
                	ret
 
 <store_be64>:
-               	rev	x2, x1
-               	str	x2, [x0]
+               	rev	x1, x1
+               	str	x1, [x0]
                	ret
 
 <store_le16>:
@@ -80,9 +80,9 @@ Disassembly of section .text:
                	b.lo	<addr>
                	sub	x0, x29, #0x10
                	add	x1, x0, #0x9
-               	mov	x2, #0xbbaa             // =48042
-               	movk	x2, #0xddcc, lsl #16
-               	str	w2, [x1]
+               	mov	x0, #0xbbaa             // =48042
+               	movk	x0, #0xddcc, lsl #16
+               	str	w0, [x1]
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	mov	x0, #0x0                // =0
@@ -95,11 +95,11 @@ Disassembly of section .text:
                	b.lo	<addr>
                	sub	x0, x29, #0x10
                	add	x1, x0, #0x1
-               	mov	x2, #0x201              // =513
-               	movk	x2, #0x403, lsl #16
-               	movk	x2, #0x605, lsl #32
-               	movk	x2, #0x807, lsl #48
-               	str	x2, [x1]
+               	mov	x0, #0x201              // =513
+               	movk	x0, #0x403, lsl #16
+               	movk	x0, #0x605, lsl #32
+               	movk	x0, #0x807, lsl #48
+               	str	x0, [x1]
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	mov	x0, #0x0                // =0
@@ -112,8 +112,8 @@ Disassembly of section .text:
                	b.lo	<addr>
                	sub	x0, x29, #0x10
                	add	x1, x0, #0xb
-               	mov	x2, #0xfeed             // =65261
-               	strh	w2, [x1]
+               	mov	x0, #0xfeed             // =65261
+               	strh	w0, [x1]
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	mov	x0, #0x0                // =0
@@ -126,12 +126,12 @@ Disassembly of section .text:
                	b.lo	<addr>
                	sub	x0, x29, #0x10
                	add	x1, x0, #0xd
-               	mov	x2, #0x77               // =119
-               	strb	w2, [x1]
-               	mov	x2, #0x88               // =136
-               	strb	w2, [x1, #0x1]
-               	mov	x2, #0x99               // =153
-               	strb	w2, [x1, #0x2]
+               	mov	x0, #0x77               // =119
+               	strb	w0, [x1]
+               	mov	x0, #0x88               // =136
+               	strb	w0, [x1, #0x1]
+               	mov	x0, #0x99               // =153
+               	strb	w0, [x1, #0x2]
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	mov	x0, #0x0                // =0

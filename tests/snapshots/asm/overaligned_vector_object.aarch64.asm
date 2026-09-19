@@ -46,9 +46,9 @@ Disassembly of section .text:
                	str	w3, [x0, #0xc]
                	mov	x3, #0x11               // =17
                	str	w3, [x1, #0x4]
-               	ldrsw	x4, [x0]
+               	ldrsw	x1, [x0]
                	ldrsw	x0, [x0, #0xc]
-               	add	x0, x4, x0
+               	add	x0, x1, x0
                	mov	x1, x3
                	add	x0, x0, x1
                	cmp	w0, #0x29

@@ -118,10 +118,10 @@ Disassembly of section .text:
                	movq	%rbx, %rdi
                	callq	<addr>
                	xorl	%eax, %eax
-               	movsbq	(%rbx,%rax), %rdx
-               	leaq	-0x50(%rbp), %rcx
-               	movsbq	(%rcx,%rax), %rcx
-               	cmpl	%ecx, %edx
+               	movsbq	(%rbx,%rax), %rcx
+               	leaq	-0x50(%rbp), %rdx
+               	movsbq	(%rdx,%rax), %rdx
+               	cmpl	%edx, %ecx
                	jne	<addr>
                	incq	%rax
                	cmpl	$0x27, %eax

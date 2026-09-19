@@ -87,16 +87,15 @@ Disassembly of section .text:
                	movl	$0x14, %eax
                	leave
                	retq
-               	movl	%eax, %ecx
-               	movq	%rcx, %rdx
-               	sarq	$0x8, %rdx
-               	andq	$0x1, %rdx
-               	cmpl	$0x1, %edx
+               	movl	%eax, %eax
+               	movq	%rax, %rcx
+               	sarq	$0x8, %rcx
+               	andq	$0x1, %rcx
+               	cmpl	$0x1, %ecx
                	je	<addr>
                	movl	$0x15, %eax
                	leave
                	retq
-               	movq	%rcx, %rax
                	sarq	$0x9, %rax
                	cmpl	$0x12345, %eax          # imm = 0x12345
                	je	<addr>
@@ -130,9 +129,9 @@ Disassembly of section .text:
                	leave
                	retq
                	movl	%ecx, %eax
-               	movq	%rax, %rdx
-               	sarq	$0x8, %rdx
-               	testb	$0x1, %dl
+               	movq	%rax, %rcx
+               	sarq	$0x8, %rcx
+               	testb	$0x1, %cl
                	je	<addr>
                	movl	$0x18, %eax
                	leave

@@ -26,16 +26,15 @@ Disassembly of section .text:
                	int3
 
 <sum_to>:
-               	movsbq	%dil, %rax
-               	xorl	%ecx, %ecx
-               	testl	%eax, %eax
+               	movsbq	%dil, %rdi
+               	xorl	%eax, %eax
+               	testl	%edi, %edi
                	jle	<addr>
-               	leaq	-0x1(%rax), %rdi
-               	addq	%rax, %rcx
-               	movq	%rdi, %rax
-               	testl	%eax, %eax
+               	leaq	-0x1(%rdi), %rcx
+               	addq	%rdi, %rax
+               	movq	%rcx, %rdi
+               	testl	%edi, %edi
                	jg	<addr>
-               	movq	%rcx, %rax
                	retq
 
 <main>:

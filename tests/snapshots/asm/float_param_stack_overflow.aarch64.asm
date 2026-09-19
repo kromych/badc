@@ -17,15 +17,14 @@ Disassembly of section .text:
                	stp	d8, d9, [sp, #-0x20]!
                	stp	x29, x30, [sp, #0x10]
                	add	x29, sp, #0x10
-               	fmov	d9, d1
-               	ldr	s1, [x29, #0x10]
-               	ldr	s8, [x29, #0x18]
+               	ldr	s8, [x29, #0x10]
+               	ldr	s9, [x29, #0x18]
                	mov	x0, #0x3f800000         // =1065353216
                	mov	x1, #0x40000000         // =1073741824
                	fmov	s17, w1
-               	fmul	s9, s9, s17
+               	fmul	s1, s1, s17
                	fmov	s17, w0
-               	fmadd	s0, s0, s17, s9
+               	fmadd	s0, s0, s17, s1
                	mov	x0, #0x40800000         // =1082130432
                	fmov	s17, w0
                	fmadd	s0, s2, s17, s0
@@ -46,10 +45,10 @@ Disassembly of section .text:
                	fmadd	s0, s7, s17, s0
                	mov	x0, #0x43800000         // =1132462080
                	fmov	s17, w0
-               	fmadd	s0, s1, s17, s0
+               	fmadd	s0, s8, s17, s0
                	mov	x0, #0x44000000         // =1140850688
                	fmov	s17, w0
-               	fmadd	s0, s8, s17, s0
+               	fmadd	s0, s9, s17, s0
                	fcvtzs	x0, s0
                	sxtw	x0, w0
                	ldp	x29, x30, [sp, #0x10]

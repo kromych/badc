@@ -36,27 +36,27 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	mov	x1, #0x80               // =128
-               	stur	w1, [x29, #-0x10]
-               	ldursw	x0, [x29, #-0x10]
-               	and	x0, x0, #0xff
-               	eor	x0, x0, #0x80
-               	cbz	w0, <addr>
+               	mov	x0, #0x80               // =128
+               	stur	w0, [x29, #-0x10]
+               	ldursw	x1, [x29, #-0x10]
+               	and	x1, x1, #0xff
+               	eor	x1, x1, #0x80
+               	cbz	w1, <addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0xff               // =255
-               	stur	w0, [x29, #-0x10]
-               	ldursw	x0, [x29, #-0x10]
-               	and	x0, x0, #0xff
-               	eor	x0, x0, #0xff
-               	cbz	w0, <addr>
+               	mov	x1, #0xff               // =255
+               	stur	w1, [x29, #-0x10]
+               	ldursw	x1, [x29, #-0x10]
+               	and	x1, x1, #0xff
+               	eor	x1, x1, #0xff
+               	cbz	w1, <addr>
                	mov	x0, #0x2                // =2
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	stur	w1, [x29, #-0x10]
+               	stur	w0, [x29, #-0x10]
                	sub	x0, x29, #0x8
                	ldursw	x1, [x29, #-0x10]
                	and	x1, x1, #0xff

@@ -68,14 +68,14 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x5                // =5
                	ret
-               	mov	x0, #0x40e80000         // =1088946176
-               	mov	x1, #0x3e000000         // =1040187392
-               	fmov	s16, w0
+               	mov	x1, #0x40e80000         // =1088946176
+               	mov	x0, #0x3e000000         // =1040187392
+               	fmov	s16, w1
                	fneg	s0, s16
                	mov	x17, #0x3e000000        // =1040187392
                	fmov	s1, w17
                	fadd	s1, s0, s1
-               	fmov	s17, w1
+               	fmov	s17, w0
                	fadd	s0, s0, s17
                	fcmp	s1, s0
                	b.eq	<addr>

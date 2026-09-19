@@ -30,12 +30,13 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	movq	%fs:0x0, %rcx
-               	addq	$-0x8, %rcx
-               	movslq	(%rcx), %rax
-               	incq	%rax
-               	addq	$0x3, %rax
-               	movl	%eax, (%rcx)
+               	movq	%fs:0x0, %rax
+               	addq	$-0x8, %rax
+               	movslq	(%rax), %rcx
+               	incq	%rcx
+               	addq	$0x3, %rcx
+               	movl	%ecx, (%rax)
+               	movq	%rcx, %rax
                	cmpl	$0xb, %eax
                	je	<addr>
                	jmp	<addr>

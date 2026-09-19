@@ -111,14 +111,14 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x7                // =7
                	ret
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	x0, [x1]
-               	ldrb	w0, [x0]
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldr	x1, [x0]
+               	ldrb	w1, [x1]
                	mov	x17, #0x61              // =97
-               	eor	x0, x0, x17
-               	cbnz	w0, <addr>
-               	ldr	x0, [x1]
+               	eor	x1, x1, x17
+               	cbnz	w1, <addr>
+               	ldr	x0, [x0]
                	ldrb	w0, [x0, #0x2]
                	mov	x17, #0x63              // =99
                	eor	x0, x0, x17

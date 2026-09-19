@@ -16,16 +16,16 @@ Disassembly of section .text:
 <deep>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sxtw	x2, w0
+               	sxtw	x0, w0
                	sxtw	x1, w1
-               	adrp	x3, <page>
-               	add	x3, x3, <lo12>
-               	ldrsw	x0, [x3]
-               	add	x0, x0, #0x1
-               	str	w0, [x3]
-               	cmp	w2, #0x0
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
+               	ldrsw	x3, [x2]
+               	add	x3, x3, #0x1
+               	str	w3, [x2]
+               	cmp	w0, #0x0
                	b.le	<addr>
-               	sub	x0, x2, #0x1
+               	sub	x0, x0, #0x1
                	bl	<addr>
                	ldp	x29, x30, [sp], #0x10
                	ret

@@ -50,20 +50,20 @@ fn ent_pc=6 n_params=0 variadic=false locals=0
   block 8  start_pc=0
     v29  Imm(0)                                           -> x2
     v30  Imm(0)                                           -> x2
-    v31  Binop { op=uge, lhs=v2, rhs=v5 }                 -> x2
-    v32  Extend { value=v31, kind=I32 }                   -> x6
-    v33  BinopI { op=eq, lhs=v31, rhs_imm=0 }             -> x6
+    v31  Binop { op=uge, lhs=v2, rhs=v5 }                 -> x0
+    v32  Extend { value=v31, kind=I32 }                   -> x1
+    v33  BinopI { op=eq, lhs=v31, rhs_imm=0 }             -> x1
     terminator Bnz { cond=v31, target=b10, fall=b9 }   (low word)   (exit_acc=v33)
   block 9  start_pc=0
     v34  Imm(5)                                           -> x0
     terminator Return(v34)   (exit_acc=v34)
   block 10  start_pc=0
-    v35  Imm(0)                                           -> x2
-    v36  Imm(0)                                           -> x2
-    v37  Binop { op=ule, lhs=v2, rhs=v5 }                 -> x2
-    v38  Extend { value=v37, kind=I32 }                   -> x2
-    v39  Imm(0)                                           -> x2
-    v40  Imm(0)                                           -> x2
+    v35  Imm(0)                                           -> x0
+    v36  Imm(0)                                           -> x0
+    v37  Binop { op=ule, lhs=v2, rhs=v5 }                 -> x0
+    v38  Extend { value=v37, kind=I32 }                   -> x0
+    v39  Imm(0)                                           -> x0
+    v40  Imm(0)                                           -> x0
     v41  Binop { op=ule, lhs=v2, rhs=v5 }                 -> x0
     v42  Extend { value=v41, kind=I32 }                   -> x0
     v43  Imm(0)                                           -> x0

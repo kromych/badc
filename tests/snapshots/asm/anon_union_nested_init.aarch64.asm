@@ -46,10 +46,10 @@ Disassembly of section .text:
                	and	x2, x20, #0xff
                	cmp	w1, w2
                	b.ne	<addr>
-               	ldrb	w1, [x0, #0x3]
-               	mul	x0, x20, x21
-               	and	x0, x0, #0xff
-               	cmp	w1, w0
+               	ldrb	w0, [x0, #0x3]
+               	mul	x1, x20, x21
+               	and	x1, x1, #0xff
+               	cmp	w0, w1
                	b.eq	<addr>
                	mov	x0, #0xa                // =10
                	ldp	x29, x30, [sp, #0x30]
@@ -91,8 +91,7 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x10
                	bl	<addr>
-               	mov	x1, x0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	cbz	x0, <addr>
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10

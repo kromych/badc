@@ -37,9 +37,9 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	<rip>, %rax
-               	movslq	(%rax), %rcx
-               	leaq	<rip>, %rax
-               	movl	(%rax), %eax
+               	movslq	(%rax), %rax
+               	leaq	<rip>, %rcx
+               	movl	(%rcx), %ecx
                	addq	%rcx, %rax
                	addq	$0x2, %rax
                	cmpl	$0xc, %eax

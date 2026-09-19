@@ -57,14 +57,14 @@ Disassembly of section .text:
                	cmpq	%rbx, %rax
                	cmovgq	%rbx, %rax
                	movq	%rax, -0x8(%rbp)
-               	movq	-0x8(%rbp), %rcx
+               	movq	-0x8(%rbp), %rax
                	cmpq	$0x2a, %rdx
                	jne	<addr>
                	cmpq	$0x2a, %rsi
                	jne	<addr>
                	cmpq	$0x2a, %rdi
                	jne	<addr>
-               	cmpq	$0x2a, %rcx
+               	cmpq	$0x2a, %rax
                	jne	<addr>
                	movl	$0x2a, %eax
                	popq	%rbx

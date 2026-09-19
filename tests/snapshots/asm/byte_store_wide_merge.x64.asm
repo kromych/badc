@@ -36,9 +36,9 @@ Disassembly of section .text:
                	retq
 
 <store_be64>:
-               	movq	%rsi, %rcx
-               	bswapq	%rcx
-               	movq	%rcx, (%rdi)
+               	movq	%rsi, %rax
+               	bswapq	%rax
+               	movq	%rax, (%rdi)
                	retq
 
 <store_le16>:
@@ -102,8 +102,8 @@ Disassembly of section .text:
                	jb	<addr>
                	leaq	-0x10(%rbp), %rax
                	leaq	0x1(%rax), %rcx
-               	movabsq	$0x807060504030201, %rdx # imm = 0x807060504030201
-               	movq	%rdx, (%rcx)
+               	movabsq	$0x807060504030201, %rax # imm = 0x807060504030201
+               	movq	%rax, (%rcx)
                	leaq	<rip>, %rdx
                	xorl	%eax, %eax
                	movzbq	(%rcx,%rax), %rsi

@@ -57,8 +57,8 @@ Disassembly of section .text:
                	str	w1, [x0]
                	add	x1, x0, #0x4
                	str	w2, [x1]
-               	ldrsw	x2, [x0]
-               	cmp	w2, #0x5
+               	ldrsw	x0, [x0]
+               	cmp	w0, #0x5
                	b.ne	<addr>
                	ldrsw	x0, [x1]
                	cmp	w0, #0x6
@@ -86,24 +86,24 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x0                // =0
-               	mov	x3, #0x7                // =7
+               	mov	x1, #0x7                // =7
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
-               	mul	x1, x0, x3
-               	add	x1, x1, #0x1
-               	and	x1, x1, #0xff
-               	strb	w1, [x2, x0]
+               	mul	x3, x0, x1
+               	add	x3, x3, #0x1
+               	and	x3, x3, #0xff
+               	strb	w3, [x2, x0]
                	add	x0, x0, #0x1
                	cmp	w0, #0x400
                	b.lt	<addr>
                	mov	x0, #0x0                // =0
-               	mov	x2, #0x4243             // =16963
-               	movk	x2, #0xf, lsl #16
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	mul	x3, x0, x2
+               	mov	x1, #0x4243             // =16963
+               	movk	x1, #0xf, lsl #16
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
+               	mul	x3, x0, x1
                	sub	x3, x3, #0x5
-               	str	x3, [x1, x0, lsl #3]
+               	str	x3, [x2, x0, lsl #3]
                	add	x0, x0, #0x1
                	cmp	w0, #0x100
                	b.lt	<addr>
@@ -156,12 +156,12 @@ Disassembly of section .text:
                	cmp	w0, #0x800
                	b.lo	<addr>
                	mov	x0, #0x0                // =0
-               	mov	x4, #0x7                // =7
-               	ldrb	w5, [x1, x0]
-               	mul	x3, x0, x4
-               	add	x3, x3, #0x1
-               	and	x3, x3, #0xff
-               	cmp	w5, w3
+               	mov	x3, #0x7                // =7
+               	ldrb	w4, [x1, x0]
+               	mul	x5, x0, x3
+               	add	x5, x5, #0x1
+               	and	x5, x5, #0xff
+               	cmp	w4, w5
                	b.ne	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x400

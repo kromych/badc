@@ -104,9 +104,9 @@ Disassembly of section .text:
                	movl	$0x7, %eax
                	leave
                	retq
-               	movq	(%rax), %rdx
+               	movq	(%rax), %rcx
                	leaq	<rip>, %rcx
-               	movq	(%rcx), %rsi
+               	movq	(%rcx), %rdx
                	movq	(%rcx), %rdx
                	movq	(%rax), %rax
                	movq	(%rcx), %rdx

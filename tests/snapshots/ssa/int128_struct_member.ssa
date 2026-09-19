@@ -360,8 +360,8 @@ fn ent_pc=2 n_params=0 variadic=false locals=8
     v309 Imm(11)                                          -> x0
     terminator Return(v309)   (exit_acc=v309)
   block 18  start_pc=0
-    v310 LocalAddr(-6)                                    -> x0
-    v311 BinopI { op=add, lhs=v310, rhs_imm=16 }          -> x1
+    v310 LocalAddr(-6)                                    -> x1
+    v311 BinopI { op=add, lhs=v310, rhs_imm=16 }          -> x0
     v312 Imm(0)                                           -> x2
     v313 Imm(0)                                           -> x6
     v314 Imm(0)                                           -> x6
@@ -372,8 +372,8 @@ fn ent_pc=2 n_params=0 variadic=false locals=8
     v319 Imm(0)                                           -> x6
     v320 Store { addr=v311, disp=8, value=v312, kind=I64 } -> -
     v321 LocalAddr(-6)                                    -> x2
-    v322 BinopI { op=add, lhs=v321, rhs_imm=16 }          -> x6
-    v323 Imm(0)                                           -> x6
+    v322 BinopI { op=add, lhs=v321, rhs_imm=16 }          -> x2
+    v323 Imm(0)                                           -> x2
     v324 BinopI { op=add, lhs=v321, rhs_imm=24 }          -> x2
     v325 Imm(0)                                           -> x2
     v326 Imm(0)                                           -> x2
@@ -394,22 +394,22 @@ fn ent_pc=2 n_params=0 variadic=false locals=8
   block 19  start_pc=0
     v340 LocalAddr(-6)                                    -> x2
     v341 BinopI { op=add, lhs=v310, rhs_imm=32 }          -> x2
-    v342 Load { addr=v310, disp=32, kind=I32 }            -> x2
-    v343 BinopI { op=ne, lhs=v342, rhs_imm=2 }            -> x2
-    v344 Imm(0)                                           -> x6
-    v345 Imm(0)                                           -> x6
-    v346 Imm(0)                                           -> x6
+    v342 Load { addr=v310, disp=32, kind=I32 }            -> x1
+    v343 BinopI { op=ne, lhs=v342, rhs_imm=2 }            -> x1
+    v344 Imm(0)                                           -> x2
+    v345 Imm(0)                                           -> x2
+    v346 Imm(0)                                           -> x2
     terminator Bz { cond=v343, target=b21, fall=b20 }   (exit_acc=v343)
   block 20  start_pc=0
     v347 Imm(12)                                          -> x0
     terminator Return(v347)   (exit_acc=v347)
   block 21  start_pc=0
-    v348 LocalAddr(-6)                                    -> x2
-    v349 BinopI { op=add, lhs=v310, rhs_imm=16 }          -> x0
-    v350 Imm(0)                                           -> x0
-    v351 Imm(0)                                           -> x0
+    v348 LocalAddr(-6)                                    -> x1
+    v349 BinopI { op=add, lhs=v310, rhs_imm=16 }          -> x1
+    v350 Imm(0)                                           -> x1
+    v351 Imm(0)                                           -> x1
     v352 Store { addr=v311, disp=0, value=v19, kind=I64 } -> -
-    v353 Imm(0)                                           -> x0
+    v353 Imm(0)                                           -> x1
     v354 Store { addr=v311, disp=8, value=v2, kind=I64 }  -> -
     v355 LocalAddr(-6)                                    -> x7
     v356 Call { target_pc=1, args=[v355], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0

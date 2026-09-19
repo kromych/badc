@@ -134,8 +134,8 @@ Disassembly of section .text:
                	ldr	x10, [x1, #0x8]
                	str	x10, [x0, #0x8]
                	ldr	x10, [sp], #0x10
-               	and	x1, x0, #0xf
-               	cbz	w1, <addr>
+               	and	x0, x0, #0xf
+               	cbz	w0, <addr>
                	mov	x0, #0xa                // =10
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10

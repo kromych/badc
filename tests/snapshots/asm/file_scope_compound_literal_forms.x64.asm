@@ -92,13 +92,13 @@ Disassembly of section .text:
                	movl	$0xc, %eax
                	leave
                	retq
-               	leaq	<rip>, %rcx
-               	movq	(%rcx), %rax
-               	movl	(%rax), %eax
-               	xorq	$0x7d, %rax
-               	testl	%eax, %eax
+               	leaq	<rip>, %rax
+               	movq	(%rax), %rcx
+               	movl	(%rcx), %ecx
+               	xorq	$0x7d, %rcx
+               	testl	%ecx, %ecx
                	jne	<addr>
-               	movq	(%rcx), %rax
+               	movq	(%rax), %rax
                	movl	0xc(%rax), %eax
                	xorq	$0xfa0, %rax            # imm = 0xFA0
                	testl	%eax, %eax

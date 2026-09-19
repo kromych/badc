@@ -29,8 +29,8 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ret
-               	add	x1, x0, #0x4
-               	cmp	w1, w1
+               	add	x0, x0, #0x4
+               	cmp	w0, w0
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	ret

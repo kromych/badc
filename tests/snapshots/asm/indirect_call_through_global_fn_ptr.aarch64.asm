@@ -14,9 +14,8 @@ Disassembly of section .text:
                	brk	#0x1
 
 <do_add>:
-               	mov	x3, x0
-               	add	x0, x1, x2
-               	str	w0, [x3]
+               	add	x1, x1, x2
+               	str	w1, [x0]
                	mov	x0, #0x0                // =0
                	ret
 

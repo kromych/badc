@@ -66,8 +66,8 @@ fn ent_pc=0 n_params=2 variadic=false locals=0
     v63  BinopI { op=and, lhs=v55, rhs_imm=7 }            -> x2
     v64  BinopI { op=shl, lhs=v63, rhs_imm=2 }            -> x6
     v65  Binop { op=add, lhs=v1, rhs=v64 }                -> x6
-    v66  LoadIndexed { base=v1, index=v63, scale=4, kind=U32 } -> x6
-    v67  BinopI { op=add, lhs=v55, rhs_imm=1 }            -> x2
+    v66  LoadIndexed { base=v1, index=v63, scale=4, kind=U32 } -> x2
+    v67  BinopI { op=add, lhs=v55, rhs_imm=1 }            -> x6
     v68  BinopI { op=and, lhs=v67, rhs_imm=4294967295 }   -> [spill 1]
     v69  Binop { op=mul, lhs=v66, rhs=v67 }               -> x2
     v70  BinopI { op=and, lhs=v69, rhs_imm=4294967295 }   -> x6

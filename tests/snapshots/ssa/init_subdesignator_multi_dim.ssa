@@ -324,10 +324,10 @@ fn ent_pc=1 n_params=0 variadic=false locals=40
     v126 BinopI { op=add, lhs=v81, rhs_imm=152 }          -> x1
     v127 Load { addr=v81, disp=152, kind=I32 }            -> x0
     v128 BinopI { op=eq, lhs=v127, rhs_imm=0 }            -> x1
-    v129 BinopI { op=ne, lhs=v128, rhs_imm=0 }            -> x2
-    v130 Imm(0)                                           -> x2
-    v131 Imm(0)                                           -> x2
-    v132 Imm(0)                                           -> x2
+    v129 BinopI { op=ne, lhs=v128, rhs_imm=0 }            -> x1
+    v130 Imm(0)                                           -> x1
+    v131 Imm(0)                                           -> x1
+    v132 Imm(0)                                           -> x1
     v133 BinopI { op=eq, lhs=v128, rhs_imm=0 }            -> x1
     terminator Bz { cond=v127, target=b11, fall=b10 }   (low word)   (exit_acc=v133)
   block 10  start_pc=0

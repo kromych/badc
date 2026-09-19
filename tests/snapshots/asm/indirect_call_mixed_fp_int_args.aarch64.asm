@@ -16,32 +16,32 @@ Disassembly of section .text:
 <main>:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	ldrsw	x1, [x0]
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	d0, [x0]
-               	add	x2, x1, #0x2
-               	mov	x7, #0x3fd0000000000000 // =4598175219545276416
-               	mov	x8, #0x3fc00000         // =1069547520
-               	mov	x9, #0x4024000000000000 // =4621819117588971520
-               	fmov	d17, x9
-               	fmul	d1, d0, d17
-               	fcvtzs	x10, d1
-               	add	x3, x1, x10
-               	add	x4, x3, x2
-               	mov	x11, #0x4059000000000000 // =4636737291354636288
-               	fmov	d16, x7
-               	fmov	d17, x11
-               	fmul	d2, d16, d17
-               	fcvtzs	x12, d2
-               	add	x5, x4, x12
-               	mov	x13, #0x40000000        // =1073741824
-               	fmov	s16, w8
-               	fmov	s17, w13
-               	fmul	s3, s16, s17
-               	fcvtzs	x14, s3
-               	add	x6, x5, x14
-               	add	x0, x6, #0x7
+               	ldrsw	x0, [x0]
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	ldr	d0, [x1]
+               	add	x1, x0, #0x2
+               	mov	x2, #0x3fd0000000000000 // =4598175219545276416
+               	mov	x3, #0x3fc00000         // =1069547520
+               	mov	x4, #0x4024000000000000 // =4621819117588971520
+               	fmov	d17, x4
+               	fmul	d0, d0, d17
+               	fcvtzs	x4, d0
+               	add	x0, x0, x4
+               	add	x0, x0, x1
+               	mov	x1, #0x4059000000000000 // =4636737291354636288
+               	fmov	d16, x2
+               	fmov	d17, x1
+               	fmul	d0, d16, d17
+               	fcvtzs	x1, d0
+               	add	x0, x0, x1
+               	mov	x1, #0x40000000         // =1073741824
+               	fmov	s16, w3
+               	fmov	s17, w1
+               	fmul	s0, s16, s17
+               	fcvtzs	x1, s0
+               	add	x0, x0, x1
+               	add	x0, x0, #0x7
                	cmp	w0, #0x40
                	b.eq	<addr>
                	mov	x0, #0x1                // =1

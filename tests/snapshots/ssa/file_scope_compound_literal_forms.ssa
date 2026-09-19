@@ -123,17 +123,17 @@ fn ent_pc=2 n_params=0 variadic=false locals=2
     v81  Imm(12)                                          -> x0
     terminator Return(v81)   (exit_acc=v81)
   block 19  start_pc=0
-    v82  ImmData(160)                                     -> x1
-    v83  Load { addr=v82, disp=0, kind=I64 }              -> x0
+    v82  ImmData(160)                                     -> x0
+    v83  Load { addr=v82, disp=0, kind=I64 }              -> x1
     v84  Imm(0)                                           -> x2
-    v85  Load { addr=v83, disp=0, kind=U32 }              -> x0
-    v86  BinopI { op=xor, lhs=v85, rhs_imm=125 }          -> x0
+    v85  Load { addr=v83, disp=0, kind=U32 }              -> x1
+    v86  BinopI { op=xor, lhs=v85, rhs_imm=125 }          -> x1
     v87  BinopI { op=and, lhs=v86, rhs_imm=4294967295 }   -> x2
     v88  BinopI { op=ne, lhs=v86, rhs_imm=0 }             -> x2
     v89  Imm(0)                                           -> x2
     terminator Bnz { cond=v86, target=b21, fall=b20 }   (low word)   (exit_acc=v88)
   block 20  start_pc=0
-    v90  ImmData(160)                                     -> x0
+    v90  ImmData(160)                                     -> x1
     v91  Load { addr=v82, disp=0, kind=I64 }              -> x0
     v92  Imm(12)                                          -> x1
     v93  BinopI { op=add, lhs=v91, rhs_imm=12 }           -> x1
@@ -247,30 +247,30 @@ fn ent_pc=2 n_params=0 variadic=false locals=2
     v133 ImmData(40)                                      -> x1
     v134 Mcpy { dst=v132, src=v133, size=12, align=8 }    -> -
     v135 LocalAddr(-2)                                    -> x0
-    v136 Imm(0)                                           -> x1
-    v137 Imm(0)                                           -> x1
-    v138 Imm(0)                                           -> x1
-    v139 Imm(13)                                          -> x1
-    v140 Imm(0)                                           -> x1
-    v141 Imm(14)                                          -> x1
-    v142 Imm(0)                                           -> x1
-    v143 Imm(0)                                           -> x1
-    v144 Imm(0)                                           -> x1
-    v145 Imm(13)                                          -> x1
-    v146 Imm(0)                                           -> x1
-    v147 Imm(14)                                          -> x1
-    v148 Imm(0)                                           -> x1
-    v149 Imm(45)                                          -> x1
-    v150 Imm(0)                                           -> x1
-    v151 Imm(0)                                           -> x1
-    v152 Imm(0)                                           -> x1
-    v153 Imm(0)                                           -> x1
-    v154 Imm(0)                                           -> x1
-    v155 Imm(7)                                           -> x1
-    v156 Imm(0)                                           -> x1
-    v157 Imm(0)                                           -> x1
-    v158 Imm(0)                                           -> x1
-    v159 Imm(8)                                           -> x1
+    v136 Imm(0)                                           -> x0
+    v137 Imm(0)                                           -> x0
+    v138 Imm(0)                                           -> x0
+    v139 Imm(13)                                          -> x0
+    v140 Imm(0)                                           -> x0
+    v141 Imm(14)                                          -> x0
+    v142 Imm(0)                                           -> x0
+    v143 Imm(0)                                           -> x0
+    v144 Imm(0)                                           -> x0
+    v145 Imm(13)                                          -> x0
+    v146 Imm(0)                                           -> x0
+    v147 Imm(14)                                          -> x0
+    v148 Imm(0)                                           -> x0
+    v149 Imm(45)                                          -> x0
+    v150 Imm(0)                                           -> x0
+    v151 Imm(0)                                           -> x0
+    v152 Imm(0)                                           -> x0
+    v153 Imm(0)                                           -> x0
+    v154 Imm(0)                                           -> x0
+    v155 Imm(7)                                           -> x0
+    v156 Imm(0)                                           -> x0
+    v157 Imm(0)                                           -> x0
+    v158 Imm(0)                                           -> x0
+    v159 Imm(8)                                           -> x0
     v160 BinopI { op=add, lhs=v135, rhs_imm=8 }           -> x0
     v161 Imm(9)                                           -> x0
     v162 Imm(0)                                           -> x0

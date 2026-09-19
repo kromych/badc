@@ -33,49 +33,49 @@ Disassembly of section .text:
                	ldr	x10, [x1, #0x10]
                	str	x10, [x0, #0x10]
                	ldr	x10, [sp], #0x10
-               	adrp	x3, <page>
-               	add	x3, x3, <lo12>
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
                	sub	x1, x29, #0x8
-               	ldrsw	x2, [x1]
+               	ldrsw	x3, [x1]
                	ldrsw	x1, [x1, #0x4]
-               	add	x1, x2, x1
-               	add	x2, x1, #0x3e8
+               	add	x1, x3, x1
+               	add	x3, x1, #0x3e8
                	sub	x1, x29, #0x18
                	ldrsw	x4, [x1]
-               	add	x2, x2, x4
+               	add	x3, x3, x4
                	ldrsw	x4, [x1, #0x4]
-               	add	x2, x2, x4
+               	add	x3, x3, x4
                	ldrsw	x1, [x1, #0x8]
-               	add	x1, x2, x1
-               	sub	x2, x29, #0x20
-               	ldrsw	x2, [x2]
-               	add	x2, x1, x2
+               	add	x1, x3, x1
+               	sub	x3, x29, #0x20
+               	ldrsw	x3, [x3]
+               	add	x3, x1, x3
                	sub	x1, x29, #0x30
                	ldrsw	x4, [x1]
-               	add	x2, x2, x4
+               	add	x3, x3, x4
                	ldrsw	x4, [x1, #0x4]
-               	add	x2, x2, x4
+               	add	x3, x3, x4
                	ldrsw	x4, [x1, #0x8]
-               	add	x2, x2, x4
+               	add	x3, x3, x4
                	ldrsw	x1, [x1, #0xc]
-               	add	x1, x2, x1
+               	add	x1, x3, x1
                	add	x1, x1, #0x7d0
-               	ldrsw	x2, [x0]
-               	add	x1, x1, x2
-               	ldrsw	x2, [x0, #0x4]
-               	add	x1, x1, x2
-               	ldrsw	x2, [x0, #0x8]
-               	add	x1, x1, x2
-               	ldrsw	x2, [x0, #0xc]
-               	add	x1, x1, x2
-               	ldrsw	x2, [x0, #0x10]
-               	add	x1, x1, x2
+               	ldrsw	x3, [x0]
+               	add	x1, x1, x3
+               	ldrsw	x3, [x0, #0x4]
+               	add	x1, x1, x3
+               	ldrsw	x3, [x0, #0x8]
+               	add	x1, x1, x3
+               	ldrsw	x3, [x0, #0xc]
+               	add	x1, x1, x3
+               	ldrsw	x3, [x0, #0x10]
+               	add	x1, x1, x3
                	ldrsw	x0, [x0, #0x14]
                	add	x0, x1, x0
                	ldrsw	x1, [x29, #0x18]
                	add	x0, x0, x1
                	sxtw	x0, w0
-               	str	x0, [x3]
+               	str	x0, [x2]
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret

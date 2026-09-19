@@ -23,7 +23,7 @@ fn ent_pc=0 n_params=1 variadic=false locals=1
     v19  BinopI { op=shl, lhs=v16, rhs_imm=56 }           -> x6
     v20  Extend { value=v16, kind=I8 }                    -> x6
     v21  StoreIndexed { base=v5, index=v9, scale=1, value=v16, kind=I8 } -> -
-    v22  Extend { value=v9, kind=I32 }                    -> x6
+    v22  Extend { value=v9, kind=I32 }                    -> x0
     v23  BinopI { op=add, lhs=v9, rhs_imm=1 }             -> x0
     v24  Imm(0)                                           -> x0
     terminator Jmp(b2)   (exit_acc=v16)

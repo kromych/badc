@@ -26,13 +26,13 @@ fn ent_pc=4 n_params=1 variadic=false locals=1
     v20  BinopI { op=add, lhs=v8, rhs_imm=12 }            -> x2
     v21  Imm(1)                                           -> x2
     v22  Store { addr=v8, disp=12, value=v21, kind=I32 }  -> -
-    v23  Imm(0)                                           -> x2
-    v24  Imm(41)                                          -> x2
-    v25  Imm(0)                                           -> x2
-    v26  Imm(3)                                           -> x2
-    v27  Imm(12884901888)                                 -> x2
-    v28  Imm(3)                                           -> x2
-    v29  Imm(12)                                          -> x2
+    v23  Imm(0)                                           -> x0
+    v24  Imm(41)                                          -> x0
+    v25  Imm(0)                                           -> x0
+    v26  Imm(3)                                           -> x0
+    v27  Imm(12884901888)                                 -> x0
+    v28  Imm(3)                                           -> x0
+    v29  Imm(12)                                          -> x0
     v30  BinopI { op=add, lhs=v8, rhs_imm=12 }            -> x0
     v31  Imm(1)                                           -> x0
     v32  Imm(42)                                          -> x0

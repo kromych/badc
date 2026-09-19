@@ -42,18 +42,18 @@ Disassembly of section .text:
                	mov	x0, #0x1                // =1
                	mov	x9, x20
                	blr	x9
-               	mov	x22, #0x3               // =3
+               	mov	x21, #0x3               // =3
                	mov	x9, x0
-               	mov	x0, x22
+               	mov	x0, x21
                	blr	x9
-               	mov	x21, x0
+               	mov	x22, x0
                	mov	x0, #0x0                // =0
                	mov	x9, x20
                	blr	x9
                	mov	x9, x0
-               	mov	x0, x22
+               	mov	x0, x21
                	blr	x9
-               	add	x0, x21, x0
+               	add	x0, x22, x0
                	sxtw	x0, w0
                	ldp	x29, x30, [sp, #0x20]
                	ldr	x22, [sp, #0x10]

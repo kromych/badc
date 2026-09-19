@@ -766,11 +766,15 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     // collapses to today's per-value behaviour. Class-level
     // last-use is the max over all members so a value stays live
     // until every member of its class is dead.
+    // An instruction the emitters skip reads nothing, so it keeps no
+    // operand live and weighs on no spill decision.
+    let mut use_counts = compute_use_counts(func);
+    let reads = operands_read(func, &use_counts);
     let liveness = super::emit_common::time_pass("ssa::liveness::Liveness::compute", || {
-        super::liveness::Liveness::compute(func)
+        super::liveness::Liveness::compute_reading(func, reads)
     });
     // Reads the block-level live-out sets the analysis above solved.
-    let last_use = compute_last_use(func, liveness.block_liveness());
+    let last_use = compute_last_use(func, &liveness);
     // Interference over individual values, the relation the coalescer
     // tests classes against. `node_of` is the identity here because no
     // class exists yet; the colourer's graph below is the same sweep over
@@ -846,7 +850,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
         }
     }
     let (max_gpr, max_fpr) = pool_size_limits();
-    let spill_weights = compute_spill_weights(func, &node_of);
+    let spill_weights = compute_spill_weights(func, &node_of, &liveness);
     let coloring = color_graph(
         &value_interference,
         &node_of,
@@ -881,7 +885,6 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             }
         }
     }
-    let mut use_counts = compute_use_counts(func);
     // Recognise the c5 sign-narrow shape:
     //   Shl(X, K) ; Shr(_, K)   with K in {32, 48, 56}
     // The shift's rhs may arrive either as a `BinopI` (with the
@@ -2125,13 +2128,20 @@ pub(crate) fn block_weights(func: &FunctionSsa) -> Vec<u64> {
 /// nodes first, so the coldest values are the ones that spill when a
 /// bank fills. Straight-line functions weight every use at depth 0, so
 /// the order degrades to raw use count.
-fn compute_spill_weights(func: &FunctionSsa, node_of: &[ValueId]) -> Vec<u64> {
+fn compute_spill_weights(
+    func: &FunctionSsa,
+    node_of: &[ValueId],
+    liveness: &super::liveness::Liveness,
+) -> Vec<u64> {
     let n = func.insts.len();
     let block_weight = block_weights(func);
     let mut w: Vec<u64> = vec![0u64; n];
     for (b, block) in func.blocks.iter().enumerate() {
         let wb = block_weight[b];
         for i in block.inst_range.clone() {
+            if !liveness.reads(i) {
+                continue;
+            }
             let inst = &func.insts[i as usize];
             for_each_operand(inst, |op| {
                 if op != NO_VALUE && (op as usize) < n {
@@ -2243,6 +2253,18 @@ pub(crate) fn branch_mask_fuses(imm: i64, low_word: bool, is_x86: bool) -> bool 
 /// out of every `test` immediate's reach.
 pub(crate) fn x86_mask_takes_bt(imm: i64) -> bool {
     !(0..=u32::MAX as i64).contains(&imm) && i32::try_from(imm).is_err()
+}
+
+/// Per instruction: whether its lowering reads its operands. A dead pure
+/// value ([`super::emit_common::is_dead_pure_counts`]) lowers to nothing,
+/// so the liveness and pressure walks skip its reads; the instruction
+/// itself stays as it is, since a site that folds it reads its contents.
+pub(crate) fn operands_read(func: &FunctionSsa, use_counts: &[u32]) -> Vec<bool> {
+    func.insts
+        .iter()
+        .enumerate()
+        .map(|(v, inst)| !super::emit_common::is_dead_pure_counts(inst, v as ValueId, use_counts))
+        .collect()
 }
 
 /// Whether `inst` is the inline setjmp intrinsic. A longjmp back to
@@ -3029,11 +3051,14 @@ fn populate_phi_hints_by_rescan(func: &FunctionSsa, hints: &mut [Option<u8>]) ->
 /// For each value, the PC index of its last use across the
 /// function. Defaults to the value's own PC (so a value with no
 /// uses still has a single-PC interval).
-fn compute_last_use(func: &FunctionSsa, live: &super::liveness::BlockLiveness) -> Vec<u32> {
+fn compute_last_use(func: &FunctionSsa, liveness: &super::liveness::Liveness) -> Vec<u32> {
     let n = func.insts.len();
     let mut last_use: Vec<u32> = (0..n as u32).collect();
     for (idx, inst) in func.insts.iter().enumerate() {
         let pc = idx as u32;
+        if !liveness.reads(pc) {
+            continue;
+        }
         for_each_operand(inst, |target| {
             if target != NO_VALUE
                 && (target as usize) < last_use.len()
@@ -3058,7 +3083,7 @@ fn compute_last_use(func: &FunctionSsa, live: &super::liveness::BlockLiveness) -
             }
         });
     }
-    extend_last_use_across_blocks(func, live, &mut last_use);
+    extend_last_use_across_blocks(func, liveness.block_liveness(), &mut last_use);
     last_use
 }
 
@@ -3858,9 +3883,13 @@ int main(void) { return 0; }
         );
         let node_of: Vec<ValueId> = (0..swap.insts.len() as ValueId).collect();
         assert!(
-            compute_spill_weights(swap, &node_of)
-                .iter()
-                .all(|&w| w < LOOP_WEIGHT),
+            compute_spill_weights(
+                swap,
+                &node_of,
+                &super::super::liveness::Liveness::compute(swap)
+            )
+            .iter()
+            .all(|&w| w < LOOP_WEIGHT),
             "a loop-free function weights every use at depth 0 (raw use count)"
         );
         // Loop function: the loop body sits at depth >= 1 and a
@@ -3873,9 +3902,13 @@ int main(void) { return 0; }
         );
         let node_of: Vec<ValueId> = (0..hot.insts.len() as ValueId).collect();
         assert!(
-            compute_spill_weights(hot, &node_of)
-                .iter()
-                .any(|&w| w >= LOOP_WEIGHT),
+            compute_spill_weights(
+                hot,
+                &node_of,
+                &super::super::liveness::Liveness::compute(hot)
+            )
+            .iter()
+            .any(|&w| w >= LOOP_WEIGHT),
             "a loop-carried value must outweigh a function-scope value"
         );
     }
@@ -4199,7 +4232,7 @@ int main(void) { return 0; }
 
         let last_use = compute_last_use(
             &func,
-            &crate::c5::codegen::ssa::liveness::BlockLiveness::compute(&func),
+            &crate::c5::codegen::ssa::liveness::Liveness::compute(&func),
         );
         assert!(
             last_use[v_imm_idx] > v_tls_idx as u32,
@@ -5175,6 +5208,47 @@ int main(void) { return 0; }
             ],
             4,
         )
+    }
+
+    /// A value read after a call only by an instruction no emitter lowers
+    /// (a sum nothing reads) does not cross the call: it takes a
+    /// caller-saved register and the function saves nothing.
+    #[test]
+    fn a_read_by_a_skipped_instruction_crosses_no_call() {
+        let func = store_func(
+            vec![
+                local_i64(2),
+                Inst::Call {
+                    target_pc: 0,
+                    args: Vec::new(),
+                    fixed_args: 0,
+                    fp_return: false,
+                    fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
+                    arg_aggs: Vec::new(),
+                    ret_agg: None,
+                    ret_slot_local: 0,
+                },
+                Inst::Binop {
+                    op: BinOp::Add,
+                    lhs: 0,
+                    rhs: 1,
+                },
+            ],
+            1,
+        );
+        for target in [Target::LinuxX64, Target::LinuxAarch64] {
+            let a = with_pool_size_override(usize::MAX, usize::MAX, || allocate(&func, target));
+            let banks = RegBanks::for_target(target);
+            let Place::IntReg(r) = a.places[0] else {
+                panic!("{target:?}: {:?}", a.places[0])
+            };
+            assert!(banks.caller_gprs.contains(&r), "{target:?}: x{r}");
+            assert!(a.gpr_used.is_empty(), "{target:?}: {:?}", a.gpr_used);
+            assert_eq!(a.last_use[0], 0, "{target:?}: no emitted read");
+        }
+        let live = super::super::liveness::Liveness::compute(&func);
+        let node_of: Vec<ValueId> = (0..3).collect();
+        assert_eq!(compute_spill_weights(&func, &node_of, &live)[0], 0);
     }
 
     /// On x86-64 a division takes its dividend in rax and leaves its

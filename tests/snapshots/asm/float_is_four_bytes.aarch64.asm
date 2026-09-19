@@ -30,13 +30,11 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	add	x1, x0, #0x4
-               	sub	x2, x1, x0
-               	cmp	x2, #0x4
+               	sub	x1, x1, x0
+               	cmp	x1, #0x4
                	b.eq	<addr>
-               	adrp	x3, <page>
-               	add	x3, x3, <lo12>
-               	mov	x0, x3
-               	mov	x1, x2
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
                	bl	<addr>
                	mov	x20, #0x6               // =6
                	adrp	x0, <page>
@@ -130,15 +128,14 @@ Disassembly of section .text:
                	fmov	s17, w1
                	fadd	s0, s16, s17
                	fmov	s17, w2
-               	fadd	s1, s0, s17
-               	mov	x3, #0x40d00000         // =1087373312
-               	fmov	s17, w3
-               	fcmp	s1, s17
+               	fadd	s0, s0, s17
+               	mov	x0, #0x40d00000         // =1087373312
+               	fmov	s17, w0
+               	fcmp	s0, s17
                	b.eq	<addr>
-               	adrp	x3, <page>
-               	add	x3, x3, <lo12>
-               	fcvt	d0, s1
-               	mov	x0, x3
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	fcvt	d0, s0
                	bl	<addr>
                	mov	x20, #0xe               // =14
                	mov	x0, #0x3fc00000         // =1069547520

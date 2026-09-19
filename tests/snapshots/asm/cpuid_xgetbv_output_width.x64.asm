@@ -97,32 +97,32 @@ Disassembly of section .text:
                	movl	%ebx, -0x18(%rbp)
                	movl	%ecx, -0x10(%rbp)
                	movl	%edx, -0x8(%rbp)
-               	movl	-0x20(%rbp), %ecx
-               	leaq	<rip>, %rax
-               	movq	(%rax), %rax
-               	cmpl	%eax, %ecx
+               	movl	-0x20(%rbp), %eax
+               	leaq	<rip>, %rcx
+               	movq	(%rcx), %rcx
+               	cmpl	%ecx, %eax
                	jne	<addr>
-               	movl	-0x18(%rbp), %ecx
-               	leaq	<rip>, %rax
-               	movq	(%rax), %rax
-               	cmpl	%eax, %ecx
+               	movl	-0x18(%rbp), %eax
+               	leaq	<rip>, %rcx
+               	movq	(%rcx), %rcx
+               	cmpl	%ecx, %eax
                	sete	%sil
                	movzbq	%sil, %rsi
                	xorl	%eax, %eax
                	testq	%rsi, %rsi
                	je	<addr>
-               	movl	-0x10(%rbp), %edx
-               	leaq	<rip>, %rcx
-               	movq	(%rcx), %rcx
-               	cmpl	%ecx, %edx
+               	movl	-0x10(%rbp), %ecx
+               	leaq	<rip>, %rdx
+               	movq	(%rdx), %rdx
+               	cmpl	%edx, %ecx
                	sete	%cl
                	movzbq	%cl, %rcx
                	testq	%rcx, %rcx
                	je	<addr>
-               	movl	-0x8(%rbp), %ecx
-               	leaq	<rip>, %rax
-               	movq	(%rax), %rax
-               	cmpl	%eax, %ecx
+               	movl	-0x8(%rbp), %eax
+               	leaq	<rip>, %rcx
+               	movq	(%rcx), %rcx
+               	cmpl	%ecx, %eax
                	sete	%al
                	movzbq	%al, %rax
                	popq	%rbx

@@ -84,7 +84,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v77  Imm(0)                                           -> x2
     v78  Imm(0)                                           -> x2
     v79  Extend { value=v3, kind=I32 }                    -> x2
-    v80  BinopI { op=shl, lhs=v3, rhs_imm=1 }             -> x6
+    v80  BinopI { op=shl, lhs=v3, rhs_imm=1 }             -> x2
     v81  BinopI { op=shl, lhs=v80, rhs_imm=32 }           -> x2
     v82  Extend { value=v80, kind=I32 }                   -> x2
     v83  Imm(0)                                           -> x2
@@ -92,23 +92,23 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v85  Imm(0)                                           -> x2
     v86  Extend { value=v3, kind=I32 }                    -> x2
     v87  BinopI { op=add, lhs=v3, rhs_imm=5 }             -> x2
-    v88  BinopI { op=shl, lhs=v87, rhs_imm=32 }           -> x7
-    v89  Extend { value=v87, kind=I32 }                   -> x7
-    v90  Imm(0)                                           -> x7
-    v91  Imm(0)                                           -> x7
-    v92  Imm(0)                                           -> x7
-    v93  Imm(0)                                           -> x7
-    v94  Extend { value=v3, kind=I32 }                    -> x7
-    v95  Extend { value=v3, kind=I32 }                    -> x7
-    v96  Imm(0)                                           -> x7
-    v97  Imm(1)                                           -> x7
-    v98  Imm(0)                                           -> x7
-    v99  Imm(0)                                           -> x7
-    v100 Imm(0)                                           -> x7
+    v88  BinopI { op=shl, lhs=v87, rhs_imm=32 }           -> x6
+    v89  Extend { value=v87, kind=I32 }                   -> x6
+    v90  Imm(0)                                           -> x6
+    v91  Imm(0)                                           -> x6
+    v92  Imm(0)                                           -> x6
+    v93  Imm(0)                                           -> x6
+    v94  Extend { value=v3, kind=I32 }                    -> x6
+    v95  Extend { value=v3, kind=I32 }                    -> x6
+    v96  Imm(0)                                           -> x6
+    v97  Imm(1)                                           -> x6
+    v98  Imm(0)                                           -> x6
+    v99  Imm(0)                                           -> x6
+    v100 Imm(0)                                           -> x6
     v101 Extend { value=v80, kind=I32 }                   -> x6
     v102 Extend { value=v3, kind=I32 }                    -> x6
     v103 BinopI { op=shl, lhs=v3, rhs_imm=1 }             -> x6
-    v104 BinopI { op=shl, lhs=v103, rhs_imm=32 }          -> x7
+    v104 BinopI { op=shl, lhs=v103, rhs_imm=32 }          -> x6
     v105 Extend { value=v103, kind=I32 }                  -> x6
     v106 Imm(0)                                           -> x6
     v107 Imm(0)                                           -> x6

@@ -25,12 +25,12 @@ Disassembly of section .text:
                	ldrsw	x0, [x0]
                	cbnz	x0, <addr>
                	ldur	w0, [x29, #-0x30]
-               	ldur	w2, [x29, #-0x20]
+               	ldur	w1, [x29, #-0x20]
                	and	x0, x0, #0xf
                	mov	x17, #0x5               // =5
-               	eor	x1, x0, x17
+               	eor	x2, x0, x17
                	mov	x0, #0x0                // =0
-               	cbnz	w1, <addr>
+               	cbnz	w2, <addr>
                	b	<addr>
                	adr	x0, <addr>
                	adrp	x1, <page>
@@ -57,7 +57,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	and	x1, x2, #0x1
+               	and	x1, x1, #0x1
                	cmp	w1, #0x0
                	cset	x1, ne
                	cbnz	x1, <addr>

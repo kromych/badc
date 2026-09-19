@@ -209,8 +209,23 @@ enum LiveSets {
     Sparse(SparseLive),
 }
 
+/// Whether instruction `idx`'s operands count as read: `reads` from
+/// [`super::reg_alloc::operands_read`], every instruction past its end.
+fn reads_at(reads: &[bool], idx: ValueId) -> bool {
+    reads.get(idx as usize).copied().unwrap_or(true)
+}
+
 impl BlockLiveness {
+    /// [`Self::compute_reading`] over the reads the emitted instructions make.
+    #[cfg(test)]
     pub(crate) fn compute(func: &FunctionSsa) -> Self {
+        let counts = super::reg_alloc::compute_use_counts(func);
+        Self::compute_reading(func, &super::reg_alloc::operands_read(func, &counts))
+    }
+
+    /// The live sets when instruction `i`'s operands are read iff
+    /// `reads[i]` ([`super::reg_alloc::operands_read`]).
+    pub(crate) fn compute_reading(func: &FunctionSsa, reads: &[bool]) -> Self {
         let nblocks = func.blocks.len();
         let n = func.insts.len();
         // Universe: upward-exposed operands and phi-incoming values.
@@ -224,6 +239,9 @@ impl BlockLiveness {
                             crossing[*v as usize] = true;
                         }
                     }
+                    continue;
+                }
+                if !reads_at(reads, idx) {
                     continue;
                 }
                 super::reg_alloc::for_each_operand(&func.insts[idx as usize], |v| {
@@ -252,9 +270,15 @@ impl BlockLiveness {
         // The bit rows cost their whole area whatever is live, so they
         // stay only while that area is within the budget.
         let live = if nblocks.saturating_mul(words) <= DENSE_WORD_BUDGET {
-            Self::solve_dense(func, &graph, &rank, words)
+            Self::solve_dense(func, reads, &graph, &rank, words)
         } else {
-            LiveSets::Sparse(Self::solve_sparse(func, &graph, &rank, universe.len()))
+            LiveSets::Sparse(Self::solve_sparse(
+                func,
+                reads,
+                &graph,
+                &rank,
+                universe.len(),
+            ))
         };
         Self {
             rank,
@@ -271,6 +295,7 @@ impl BlockLiveness {
     ///   live_in[b]  = used_set[b] | (live_out[b] & ~kill[b]).
     fn solve_dense(
         func: &FunctionSsa,
+        reads: &[bool],
         graph: &super::mem2reg::SuccGraph,
         rank: &[u32],
         words: usize,
@@ -324,7 +349,9 @@ impl BlockLiveness {
                     }
                     continue;
                 }
-                super::reg_alloc::for_each_operand(&func.insts[idx as usize], &mut mark);
+                if reads_at(reads, idx) {
+                    super::reg_alloc::for_each_operand(&func.insts[idx as usize], &mut mark);
+                }
             }
             Self::for_each_exit_use(blk, &mut mark);
         }
@@ -374,6 +401,7 @@ impl BlockLiveness {
     /// scan below collects.
     fn solve_sparse(
         func: &FunctionSsa,
+        reads: &[bool],
         graph: &super::mem2reg::SuccGraph,
         rank: &[u32],
         nelems: usize,
@@ -425,7 +453,7 @@ impl BlockLiveness {
                 }
             };
             for idx in start..end {
-                if matches!(func.insts[idx as usize], Inst::Phi { .. }) {
+                if matches!(func.insts[idx as usize], Inst::Phi { .. }) || !reads_at(reads, idx) {
                     continue;
                 }
                 super::reg_alloc::for_each_operand(&func.insts[idx as usize], &mut mark);
@@ -512,10 +540,21 @@ pub(crate) struct Liveness {
     /// `inst_range.end` for a terminator use. `0` when never used.
     /// Drives the O(1) `block_has_use_after` query.
     last_use_pos: Vec<u32>,
+    /// Per instruction: whether its operands are read
+    /// ([`super::reg_alloc::operands_read`]).
+    reads: Vec<bool>,
 }
 
 impl Liveness {
+    /// [`Self::compute_reading`] over the reads the emitted instructions make.
+    #[cfg(test)]
     pub(crate) fn compute(func: &FunctionSsa) -> Self {
+        let counts = super::reg_alloc::compute_use_counts(func);
+        Self::compute_reading(func, super::reg_alloc::operands_read(func, &counts))
+    }
+
+    /// The liveness when instruction `i`'s operands are read iff `reads[i]`.
+    pub(crate) fn compute_reading(func: &FunctionSsa, reads: Vec<bool>) -> Self {
         let n = func.insts.len();
 
         let mut block_of: Vec<BlockId> = vec![NO_BLOCK; n];
@@ -529,7 +568,7 @@ impl Liveness {
         let mut last_use_pos: Vec<u32> = vec![0; n];
         for blk in &func.blocks {
             for idx in blk.inst_range.clone() {
-                if matches!(func.insts[idx as usize], Inst::Phi { .. }) {
+                if matches!(func.insts[idx as usize], Inst::Phi { .. }) || !reads_at(&reads, idx) {
                     continue;
                 }
                 super::reg_alloc::for_each_operand(&func.insts[idx as usize], |op| {
@@ -558,13 +597,19 @@ impl Liveness {
             }
         }
 
-        let blocks = BlockLiveness::compute(func);
+        let blocks = BlockLiveness::compute_reading(func, &reads);
 
         Self {
             blocks,
             block_of,
             last_use_pos,
+            reads,
         }
+    }
+
+    /// Whether instruction `v`'s operands are read.
+    pub(crate) fn reads(&self, v: ValueId) -> bool {
+        reads_at(&self.reads, v)
     }
 
     /// The block-level live-in / live-out sets this analysis solved, for
@@ -656,7 +701,7 @@ impl Liveness {
             return lup > y;
         }
         for idx in (y + 1)..blk.inst_range.end {
-            if matches!(func.insts[idx as usize], Inst::Phi { .. }) {
+            if matches!(func.insts[idx as usize], Inst::Phi { .. }) || !self.reads(idx) {
                 continue;
             }
             let mut found = false;
@@ -759,7 +804,7 @@ impl Liveness {
                     }
                     live.remove(idx, node_of);
                 }
-                if !matches!(inst, Inst::Phi { .. }) {
+                if !matches!(inst, Inst::Phi { .. }) && self.reads(idx) {
                     super::reg_alloc::for_each_operand(inst, |op| {
                         if op != NO_VALUE && (op as usize) < n {
                             live.insert(op, node_of);
@@ -853,7 +898,7 @@ impl Liveness {
                 if is_call {
                     live.for_each(|v| out[v as usize] = true);
                 }
-                if !matches!(inst, Inst::Phi { .. }) {
+                if !matches!(inst, Inst::Phi { .. }) && self.reads(idx) {
                     super::reg_alloc::for_each_operand(inst, |op| {
                         if op != NO_VALUE && (op as usize) < n {
                             live.set::<TRACK>(op);
@@ -908,7 +953,7 @@ impl Liveness {
                     vals.sort_unstable();
                     out.push((idx, vals));
                 }
-                if !matches!(inst, Inst::Phi { .. }) {
+                if !matches!(inst, Inst::Phi { .. }) && self.reads(idx) {
                     super::reg_alloc::for_each_operand(inst, |op| {
                         if op != NO_VALUE && (op as usize) < n {
                             live.insert(op);
@@ -1420,6 +1465,10 @@ mod tests {
             universe: dense.universe.clone(),
             live: LiveSets::Sparse(BlockLiveness::solve_sparse(
                 &func,
+                &super::super::reg_alloc::operands_read(
+                    &func,
+                    &super::super::reg_alloc::compute_use_counts(&func),
+                ),
                 &graph,
                 &dense.rank,
                 dense.universe.len(),
@@ -1593,6 +1642,130 @@ mod tests {
             !b.live_out(0, 1) && !b.live_out(0, 2),
             "neither operand is live before its own definition",
         );
+    }
+
+    fn local(off: i64) -> Inst {
+        Inst::LoadLocal {
+            off,
+            kind: LoadKind::I64,
+            volatile: false,
+        }
+    }
+
+    fn call() -> Inst {
+        Inst::Call {
+            target_pc: 0,
+            args: Vec::new(),
+            fixed_args: 0,
+            fp_return: false,
+            fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
+            arg_aggs: Vec::new(),
+            ret_agg: None,
+            ret_slot_local: 0,
+        }
+    }
+
+    /// v0 = load, v1 = call, v2 = load, v3 = v0 + v2, return v2: v3 is
+    /// unread, so no emitter lowers it, and its reads keep nothing live --
+    /// v0 dies at the call and interferes with neither v1 nor v2. With
+    /// `split`, v3 opens a second block, which v0 then does not reach.
+    fn read_only_by_a_skipped_instruction(split: bool) -> FunctionSsa {
+        let blocks = if split {
+            alloc::vec![
+                blk(0..3, Terminator::Jmp(1)),
+                blk(3..4, Terminator::Return(2)),
+            ]
+        } else {
+            alloc::vec![blk(0..4, Terminator::Return(2))]
+        };
+        let sum = Inst::Binop {
+            op: BinOp::Add,
+            lhs: 0,
+            rhs: 2,
+        };
+        func_with(alloc::vec![local(2), call(), local(3), sum], blocks)
+    }
+
+    /// Every walk skips the reads of the skipped instruction; counting
+    /// them, as every read counted before, gives the opposite answers.
+    #[test]
+    fn a_skipped_instruction_keeps_no_operand_live() {
+        for split in [false, true] {
+            let func = read_only_by_a_skipped_instruction(split);
+            let at_call =
+                |l: &Liveness| l.values_live_after(&func, &|i| matches!(i, Inst::Call { .. }));
+            let neighbors = |l: &Liveness| {
+                let mut nb = l.interference(&func, &identity(4)).neighbors(0).to_vec();
+                nb.sort_unstable();
+                nb
+            };
+            let live = Liveness::compute(&func);
+            assert!(!live.reads(3) && live.reads(2));
+            assert!(!live.values_live_across_calls(&func, false)[0], "{split}");
+            assert!(!live.block_liveness().live_out(0, 0), "{split}");
+            assert!(!live.interfere(&func, 0, 1) && !live.interfere(&func, 0, 2));
+            assert!(neighbors(&live).is_empty(), "{split}");
+            assert_eq!(at_call(&live), [(1, alloc::vec![])], "{split}");
+            let all = Liveness::compute_reading(&func, alloc::vec![true; 4]);
+            assert!(all.values_live_across_calls(&func, false)[0], "{split}");
+            assert_eq!(all.block_liveness().live_out(0, 0), split);
+            assert!(all.interfere(&func, 0, 1) && all.interfere(&func, 0, 2));
+            assert_eq!(neighbors(&all), [1, 2], "{split}");
+            assert_eq!(at_call(&all), [(1, alloc::vec![0])], "{split}");
+        }
+    }
+
+    /// b0 branches to b1, where only an unread sum reads v0, and to b2,
+    /// which returns v0 + v1: v0 crosses into b2 alone, in both forms of
+    /// the solution.
+    #[test]
+    fn a_crossing_value_is_not_live_where_only_a_skipped_instruction_reads_it() {
+        let sum = |lhs, rhs| Inst::Binop {
+            op: BinOp::Add,
+            lhs,
+            rhs,
+        };
+        let branch = Terminator::Bz {
+            cond: 1,
+            target: 2,
+            fall_through: 1,
+        };
+        let func = func_with(
+            alloc::vec![local(2), local(3), sum(0, 0), sum(0, 1)],
+            alloc::vec![
+                blk(0..2, branch),
+                blk(2..3, Terminator::Return(NO_VALUE)),
+                blk(3..4, Terminator::Return(3)),
+            ],
+        );
+        let counts = super::super::reg_alloc::compute_use_counts(&func);
+        let reads = super::super::reg_alloc::operands_read(&func, &counts);
+        let graph = super::super::mem2reg::SuccGraph::new(&func);
+        let dense = BlockLiveness::compute_reading(&func, &reads);
+        assert!(!dense.live_in(1, 0) && dense.live_in(2, 0));
+        let n = dense.universe.len();
+        let sparse = BlockLiveness::solve_sparse(&func, &reads, &graph, &dense.rank, n);
+        let r0 = dense.rank[0];
+        assert!(!sparse.in_row(1).contains(&r0) && sparse.in_row(2).contains(&r0));
+        let all = BlockLiveness::compute_reading(&func, &[true; 4]);
+        assert!(all.live_in(1, 0));
+    }
+
+    /// The dense and the sparse solutions read through the same mask: v0
+    /// leaves the universe of block-crossing values, and v2, returned from
+    /// b1, is the one value crossing into it.
+    #[test]
+    fn both_solutions_skip_the_reads_of_a_skipped_instruction() {
+        let func = read_only_by_a_skipped_instruction(true);
+        let counts = super::super::reg_alloc::compute_use_counts(&func);
+        let reads = super::super::reg_alloc::operands_read(&func, &counts);
+        let graph = super::super::mem2reg::SuccGraph::new(&func);
+        let dense = BlockLiveness::compute_reading(&func, &reads);
+        assert_eq!(dense.universe, [2]);
+        let sparse = BlockLiveness::solve_sparse(&func, &reads, &graph, &dense.rank, 1);
+        assert!(sparse.in_row(1) == [0] && sparse.out_row(0) == [0]);
+        let all = BlockLiveness::compute_reading(&func, &[true; 4]);
+        assert_eq!(all.universe, [0, 2]);
     }
 
     /// `block_has_use_after` (now table-driven) must still distinguish a

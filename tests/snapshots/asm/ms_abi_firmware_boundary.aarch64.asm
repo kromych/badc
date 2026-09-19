@@ -48,19 +48,17 @@ Disassembly of section .text:
                	mov	x27, x0
                	add	x0, x20, x23
                	bl	<addr>
-               	mov	x20, x0
                	add	x0, x21, x22
                	bl	<addr>
                	mov	x17, #0x3e8             // =1000
-               	mul	x1, x24, x17
+               	mul	x0, x24, x17
                	mov	x17, #0x64              // =100
-               	mul	x2, x25, x17
-               	add	x1, x1, x2
+               	mul	x1, x25, x17
+               	add	x0, x0, x1
                	mov	x17, #0xa               // =10
-               	mul	x2, x26, x17
-               	add	x1, x1, x2
-               	add	x1, x1, x27
-               	mov	x0, x1
+               	mul	x1, x26, x17
+               	add	x0, x0, x1
+               	add	x0, x0, x27
                	ldp	x29, x30, [sp, #0x40]
                	ldp	x26, x27, [sp, #0x30]
                	ldp	x24, x25, [sp, #0x20]

@@ -65,11 +65,11 @@ Disassembly of section .text:
                	movq	%rcx, 0x38(%rax)
                	movq	%rsi, %rcx
                	andq	$0x7, %rcx
-               	movq	(%rax,%rcx,8), %rdx
-               	leaq	0x5(%rsi), %rcx
-               	andq	$0x7, %rcx
-               	movq	(%rax,%rcx,8), %rax
-               	addq	%rdx, %rax
+               	movq	(%rax,%rcx,8), %rcx
+               	leaq	0x5(%rsi), %rdx
+               	andq	$0x7, %rdx
+               	movq	(%rax,%rdx,8), %rax
+               	addq	%rcx, %rax
                	leave
                	retq
 

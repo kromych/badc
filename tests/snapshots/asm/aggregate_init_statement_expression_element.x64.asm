@@ -67,10 +67,10 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	movl	0x8(%rax), %ecx
-               	leaq	(%rbx,%rbx,2), %rax
-               	addq	$0x6, %rax
-               	cmpl	%eax, %ecx
+               	movl	0x8(%rax), %eax
+               	leaq	(%rbx,%rbx,2), %rcx
+               	addq	$0x6, %rcx
+               	cmpl	%ecx, %eax
                	je	<addr>
                	movl	$0x9, %eax
                	popq	%rbx
@@ -159,11 +159,11 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x2, %eax
                	jmp	<addr>
-               	movl	0x8(%rax), %ecx
+               	movl	0x8(%rax), %eax
                	cmpl	$0x100, %ebx            # imm = 0x100
                	jle	<addr>
-               	leaq	0x30(%rbx), %rax
-               	cmpl	%eax, %ecx
+               	leaq	0x30(%rbx), %rcx
+               	cmpl	%ecx, %eax
                	je	<addr>
                	movl	$0x3, %eax
                	jmp	<addr>

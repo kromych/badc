@@ -122,15 +122,15 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x0                // =0
                	mov	x20, x0
-               	lsl	x2, x0, #4
-               	add	x1, x23, x2
-               	ldr	w1, [x1]
-               	eor	x1, x1, #0x1
-               	cbnz	w1, <addr>
-               	sub	x3, x29, #0x20
-               	add	x1, x3, x2
-               	ldr	x4, [x1, #0x8]
-               	cmp	x4, x21
+               	lsl	x1, x0, #4
+               	add	x2, x23, x1
+               	ldr	w2, [x2]
+               	eor	x2, x2, #0x1
+               	cbnz	w2, <addr>
+               	sub	x2, x29, #0x20
+               	add	x1, x2, x1
+               	ldr	x2, [x1, #0x8]
+               	cmp	x2, x21
                	b.ne	<addr>
                	orr	x20, x20, #0x1
                	b	<addr>

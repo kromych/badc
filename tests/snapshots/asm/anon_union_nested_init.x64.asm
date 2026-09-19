@@ -62,11 +62,11 @@ Disassembly of section .text:
                	andq	$0xff, %rdx
                	cmpl	%edx, %ecx
                	jne	<addr>
-               	movzbq	0x3(%rax), %rcx
-               	movq	%rbx, %rax
-               	imulq	%r12, %rax
-               	andq	$0xff, %rax
-               	cmpl	%eax, %ecx
+               	movzbq	0x3(%rax), %rax
+               	movq	%rbx, %rcx
+               	imulq	%r12, %rcx
+               	andq	$0xff, %rcx
+               	cmpl	%ecx, %eax
                	je	<addr>
                	movl	$0xa, %eax
                	popq	%rbx
@@ -109,8 +109,7 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	callq	<addr>
-               	movq	%rax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	testq	%rax, %rax
                	je	<addr>
                	leave

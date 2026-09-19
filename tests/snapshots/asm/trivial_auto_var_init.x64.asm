@@ -277,12 +277,11 @@ Disassembly of section .text:
                	retq
 
 <loop_block>:
-               	xorl	%ecx, %ecx
-               	movq	%rcx, %rax
-               	incq	%rax
-               	cmpl	$0x2, %eax
+               	xorl	%eax, %eax
+               	movq	%rax, %rcx
+               	incq	%rcx
+               	cmpl	$0x2, %ecx
                	jl	<addr>
-               	movq	%rcx, %rax
                	retq
 
 <addressed_int>:
@@ -303,61 +302,61 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	pushq	%r12
                	pushq	%rbx
-               	xorl	%r12d, %r12d
+               	xorl	%ebx, %ebx
                	callq	<addr>
                	callq	<addr>
-               	movq	%rax, %rbx
+               	movq	%rax, %r12
                	callq	<addr>
                	callq	<addr>
-               	addq	%rax, %rbx
+               	addq	%rax, %r12
                	callq	<addr>
                	callq	<addr>
-               	addq	%rax, %rbx
+               	addq	%rax, %r12
                	callq	<addr>
                	callq	<addr>
-               	addq	%rax, %rbx
+               	addq	%rax, %r12
                	callq	<addr>
                	callq	<addr>
-               	addq	%rax, %rbx
+               	addq	%rax, %r12
                	callq	<addr>
                	callq	<addr>
-               	addq	%rax, %rbx
+               	addq	%rax, %r12
                	callq	<addr>
                	callq	<addr>
-               	addq	%rax, %rbx
+               	addq	%rax, %r12
                	callq	<addr>
                	callq	<addr>
-               	addq	%rax, %rbx
+               	addq	%rax, %r12
                	callq	<addr>
                	callq	<addr>
-               	addq	%rax, %rbx
+               	addq	%rax, %r12
                	callq	<addr>
                	callq	<addr>
-               	addq	%rax, %rbx
+               	addq	%rax, %r12
                	callq	<addr>
                	callq	<addr>
-               	addq	%rax, %rbx
+               	addq	%rax, %r12
                	callq	<addr>
                	callq	<addr>
-               	addq	%rax, %rbx
+               	addq	%rax, %r12
                	callq	<addr>
                	callq	<addr>
-               	addq	%rax, %rbx
+               	addq	%rax, %r12
                	callq	<addr>
                	callq	<addr>
-               	addq	%rax, %rbx
+               	addq	%rax, %r12
                	callq	<addr>
                	movl	$0x25, %edi
                	callq	<addr>
-               	addq	%rax, %rbx
+               	addq	%rax, %r12
                	callq	<addr>
                	movl	$0x5, %edi
                	callq	<addr>
-               	addq	%rax, %rbx
+               	addq	%rax, %r12
                	callq	<addr>
-               	movq	%r12, %rdi
+               	movq	%rbx, %rdi
                	callq	<addr>
-               	addq	%rax, %rbx
+               	leaq	(%r12,%rax), %rbx
                	callq	<addr>
                	callq	<addr>
                	addq	%rax, %rbx

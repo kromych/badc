@@ -26,11 +26,10 @@ Disassembly of section .text:
                	int3
 
 <sink_op>:
-               	xorl	%edx, %edx
-               	movsbq	(%rsi), %rax
-               	addq	%rcx, %rax
-               	movl	%eax, (%r8)
-               	movq	%rdx, %rax
+               	xorl	%eax, %eax
+               	movsbq	(%rsi), %rdx
+               	addq	%rdx, %rcx
+               	movl	%ecx, (%r8)
                	retq
 
 <main>:

@@ -100,14 +100,14 @@ fn ent_pc=10 n_params=0 variadic=false locals=1
     terminator Return(v67)   (exit_acc=v67)
   block 14  start_pc=0
     v68  ImmData(112)                                     -> x1
-    v69  Load { addr=v17, disp=0, kind=I64, volatile }    -> x2
+    v69  Load { addr=v17, disp=0, kind=I64, volatile }    -> x1
     v70  ImmData(8)                                       -> x1
-    v71  Load { addr=v70, disp=0, kind=I64, volatile }    -> x6
+    v71  Load { addr=v70, disp=0, kind=I64, volatile }    -> x2
     v72  Binop { op=add, lhs=v69, rhs=v71 }               -> x2
     v73  SegLoad { addr=v72, kind=I64, seg=Gs }           -> x2
     v74  Load { addr=v70, disp=0, kind=I64, volatile }    -> x2
-    v75  Imm(23)                                          -> x6
-    v76  Imm(23)                                          -> x6
+    v75  Imm(23)                                          -> x2
+    v76  Imm(23)                                          -> x2
     v77  BinopI { op=add, lhs=v74, rhs_imm=23 }           -> x2
     v78  SegLoad { addr=v77, kind=U8, seg=Gs }            -> x2
     v79  BinopI { op=and, lhs=v78, rhs_imm=255 }          -> x2

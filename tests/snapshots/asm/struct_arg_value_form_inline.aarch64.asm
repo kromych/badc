@@ -30,10 +30,10 @@ Disassembly of section .text:
                	sub	sp, sp, #0x10
                	stur	x0, [x29, #-0x8]
                	sub	x0, x29, #0x8
-               	ldrb	w2, [x0]
-               	ldrb	w1, [x0, #0x1]
-               	lsl	x1, x1, #8
-               	orr	x1, x2, x1
+               	ldrb	w1, [x0]
+               	ldrb	w2, [x0, #0x1]
+               	lsl	x2, x2, #8
+               	orr	x1, x1, x2
                	ldrb	w0, [x0, #0x2]
                	lsl	x0, x0, #16
                	orr	x0, x1, x0

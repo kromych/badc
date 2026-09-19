@@ -105,12 +105,11 @@ Disassembly of section .text:
                	leaq	-0x8(%rbp), %rsi
                	movl	$0x2a, %edx
                	callq	<addr>
-               	movq	%rax, %rcx
-               	leaq	<rip>, %rax
-               	movq	(%rax), %rax
-               	cmpq	$0x2a, %rax
+               	leaq	<rip>, %rcx
+               	movq	(%rcx), %rcx
+               	cmpq	$0x2a, %rcx
                	jne	<addr>
-               	movslq	(%rcx), %rax
+               	movslq	(%rax), %rax
                	cmpl	$0x5, %eax
                	je	<addr>
                	movl	$0x1, %eax

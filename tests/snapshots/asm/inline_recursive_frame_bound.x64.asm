@@ -40,12 +40,12 @@ Disassembly of section .text:
                	pushq	%r12
                	pushq	%rbx
                	movq	%rdi, %r14
-               	movslq	%esi, %r13
+               	movslq	%esi, %r12
                	xorl	%ebx, %ebx
-               	leaq	-0x100(%rbp), %r12
-               	leaq	(%r13,%rbx), %rdi
+               	leaq	-0x100(%rbp), %r13
+               	leaq	(%r12,%rbx), %rdi
                	callq	<addr>
-               	movl	%eax, (%r12,%rbx,4)
+               	movl	%eax, (%r13,%rbx,4)
                	incq	%rbx
                	cmpl	$0x40, %ebx
                	jl	<addr>
@@ -58,7 +58,7 @@ Disassembly of section .text:
                	cmpl	$0x40, %eax
                	jl	<addr>
                	movl	%ebx, (%r14)
-               	testl	%r13d, %r13d
+               	testl	%r12d, %r12d
                	jg	<addr>
                	movslq	%ebx, %rax
                	popq	%rbx
@@ -67,7 +67,7 @@ Disassembly of section .text:
                	popq	%r14
                	leave
                	retq
-               	leaq	-0x1(%r13), %rsi
+               	leaq	-0x1(%r12), %rsi
                	movq	%r14, %rdi
                	callq	<addr>
                	addq	%rbx, %rax

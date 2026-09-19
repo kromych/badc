@@ -390,22 +390,22 @@ Disassembly of section .text:
                	movb	$0x6a, 0xf(%rcx)
                	movb	$-0x47, 0xf(%rdx)
                	leaq	-0xd0(%rbp), %rsi
-               	leaq	-0xf0(%rbp), %rdi
-               	leaq	-0xe0(%rbp), %rax
-               	movq	(%rdi), %r8
-               	movq	0x8(%rdi), %rdi
-               	movq	(%rax), %r9
-               	xorq	%r9, %r8
+               	leaq	-0xf0(%rbp), %rax
+               	leaq	-0xe0(%rbp), %rdi
+               	movq	(%rax), %r8
                	movq	0x8(%rax), %rax
+               	movq	(%rdi), %r9
+               	xorq	%r9, %r8
+               	movq	0x8(%rdi), %rdi
                	xorq	%rdi, %rax
                	movq	%r8, (%rsi)
                	movq	%rax, 0x8(%rsi)
                	xorl	%eax, %eax
-               	movzbq	(%rsi,%rax), %r8
-               	movzbq	(%rcx,%rax), %rdi
+               	movzbq	(%rsi,%rax), %rdi
+               	movzbq	(%rcx,%rax), %r8
                	movzbq	(%rdx,%rax), %r9
-               	xorq	%r9, %rdi
-               	cmpl	%edi, %r8d
+               	xorq	%r9, %r8
+               	cmpl	%r8d, %edi
                	jne	<addr>
                	incq	%rax
                	cmpl	$0x10, %eax

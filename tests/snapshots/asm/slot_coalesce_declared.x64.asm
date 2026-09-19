@@ -74,15 +74,15 @@ Disassembly of section .text:
                	cmpl	$0x32, %eax
                	jl	<addr>
                	cmpq	%rdx, %rcx
-               	sete	%al
-               	movzbq	%al, %rax
+               	sete	%cl
+               	movzbq	%cl, %rcx
                	movq	$0x1234abcd, -0x48(%rbp) # imm = 0x1234ABCD
-               	leaq	-0x48(%rbp), %rcx
-               	movq	(%rcx), %rdx
+               	leaq	-0x48(%rbp), %rax
+               	movq	(%rax), %rdx
                	xorq	$0xfeed, %rdx           # imm = 0xFEED
-               	movq	%rdx, (%rcx)
+               	movq	%rdx, (%rax)
                	xorl	%ebx, %ebx
-               	testq	%rax, %rax
+               	testq	%rcx, %rcx
                	je	<addr>
                	movq	-0x48(%rbp), %rax
                	cmpq	$0x12345520, %rax       # imm = 0x12345520

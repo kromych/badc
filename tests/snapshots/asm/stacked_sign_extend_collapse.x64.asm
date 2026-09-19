@@ -33,8 +33,8 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x1, %eax
                	retq
-               	movswq	%ax, %rdx
-               	cmpl	$0xffffcdef, %edx       # imm = 0xFFFFCDEF
+               	movswq	%ax, %rax
+               	cmpl	$0xffffcdef, %eax       # imm = 0xFFFFCDEF
                	je	<addr>
                	movl	$0x2, %eax
                	retq
@@ -42,7 +42,7 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x3, %eax
                	retq
-               	cmpl	$0xffffcdef, %edx       # imm = 0xFFFFCDEF
+               	cmpl	$0xffffcdef, %eax       # imm = 0xFFFFCDEF
                	je	<addr>
                	movl	$0x4, %eax
                	retq

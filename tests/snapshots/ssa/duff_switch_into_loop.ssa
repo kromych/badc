@@ -199,11 +199,11 @@ fn ent_pc=1 n_params=0 variadic=false locals=10
     v32  LocalAddr(-5)                                    -> x1
     v33  Extend { value=v26, kind=I32 }                   -> x1
     v34  Binop { op=add, lhs=v20, rhs=v26 }               -> x1
-    v35  LoadIndexed { base=v20, index=v26, scale=1, kind=I8 } -> x2
-    v36  LocalAddr(-10)                                   -> x1
+    v35  LoadIndexed { base=v20, index=v26, scale=1, kind=I8 } -> x1
+    v36  LocalAddr(-10)                                   -> x2
     v37  Extend { value=v26, kind=I32 }                   -> x6
     v38  Binop { op=add, lhs=v36, rhs=v26 }               -> x6
-    v39  LoadIndexed { base=v36, index=v26, scale=1, kind=I8 } -> x1
+    v39  LoadIndexed { base=v36, index=v26, scale=1, kind=I8 } -> x2
     v40  Binop { op=ne, lhs=v35, rhs=v39 }                -> x1
     terminator Bz { cond=v40, target=b5, fall=b8 }   (exit_acc=v40)
   block 5  start_pc=0

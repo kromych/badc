@@ -66,33 +66,31 @@ Disassembly of section .text:
                	orq	$0x40000, %rdi          # imm = 0x40000
                	movl	%esi, %esi
                	callq	<addr>
-               	movq	%rax, %rcx
-               	testq	%rcx, %rcx
+               	testq	%rax, %rax
                	je	<addr>
-               	leaq	0x18(%rcx), %rax
-               	movq	(%rax), %rax
-               	testb	$0x4, %al
+               	leaq	0x18(%rax), %rcx
+               	movq	(%rcx), %rcx
+               	testb	$0x4, %cl
                	je	<addr>
-               	movq	%rcx, %rax
                	popq	%rbp
                	retq
-               	leaq	0x10(%rcx), %rax
-               	movq	(%rax), %rax
-               	testb	$0x2, %al
+               	leaq	0x10(%rax), %rcx
+               	movq	(%rcx), %rcx
+               	testb	$0x2, %cl
                	je	<addr>
-               	movl	$0x1, %eax
+               	movl	$0x1, %ecx
                	jmp	<addr>
-               	leaq	0x8(%rcx), %rax
-               	movq	(%rax), %rax
-               	testb	$0x1, %al
+               	leaq	0x8(%rax), %rcx
+               	movq	(%rcx), %rcx
+               	testb	$0x1, %cl
                	je	<addr>
-               	xorl	%eax, %eax
+               	xorl	%ecx, %ecx
                	jmp	<addr>
-               	movq	(%rcx), %rax
-               	andq	$0x40, %rax
-               	testl	%eax, %eax
-               	setne	%al
-               	movzbq	%al, %rax
+               	movq	(%rax), %rcx
+               	andq	$0x40, %rcx
+               	testl	%ecx, %ecx
+               	setne	%cl
+               	movzbq	%cl, %rcx
                	jmp	<addr>
 
 <main>:

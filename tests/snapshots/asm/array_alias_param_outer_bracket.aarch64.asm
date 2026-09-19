@@ -17,33 +17,33 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x60
-               	sub	x2, x29, #0x60
+               	sub	x3, x29, #0x60
                	mov	x0, #0x1                // =1
-               	str	x0, [x2]
+               	str	x0, [x3]
                	mov	x0, #0x2                // =2
-               	str	x0, [x2, #0x18]
+               	str	x0, [x3, #0x18]
                	mov	x0, #0xb                // =11
-               	str	x0, [x2, #0x20]
-               	add	x0, x2, #0x20
+               	str	x0, [x3, #0x20]
+               	add	x0, x3, #0x20
                	mov	x1, #0xc                // =12
                	str	x1, [x0, #0x18]
                	mov	x0, #0x15               // =21
-               	str	x0, [x2, #0x40]
-               	add	x0, x2, #0x40
+               	str	x0, [x3, #0x40]
+               	add	x0, x3, #0x40
                	mov	x1, #0x16               // =22
                	str	x1, [x0, #0x18]
                	mov	x0, #0x0                // =0
-               	mov	x3, x0
-               	lsl	x1, x0, #5
-               	add	x1, x2, x1
-               	ldr	x4, [x1]
-               	ldr	x1, [x1, #0x18]
-               	add	x1, x4, x1
-               	add	x3, x3, x1
+               	mov	x1, x0
+               	lsl	x2, x0, #5
+               	add	x2, x3, x2
+               	ldr	x4, [x2]
+               	ldr	x2, [x2, #0x18]
+               	add	x2, x4, x2
+               	add	x1, x1, x2
                	add	x0, x0, #0x1
                	cmp	w0, #0x3
                	b.lo	<addr>
-               	cmp	x3, #0x45
+               	cmp	x1, #0x45
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x60
@@ -71,17 +71,17 @@ Disassembly of section .text:
                	add	sp, sp, #0x60
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x2, x0
-               	lsl	x1, x0, #5
-               	add	x1, x3, x1
-               	ldr	x4, [x1]
-               	ldr	x1, [x1, #0x18]
-               	add	x1, x4, x1
-               	add	x2, x2, x1
+               	mov	x1, x0
+               	lsl	x2, x0, #5
+               	add	x2, x3, x2
+               	ldr	x4, [x2]
+               	ldr	x2, [x2, #0x18]
+               	add	x2, x4, x2
+               	add	x1, x1, x2
                	add	x0, x0, #0x1
                	cmp	w0, #0x3
                	b.lo	<addr>
-               	cmp	x2, #0x2e
+               	cmp	x1, #0x2e
                	b.eq	<addr>
                	mov	x0, #0x5                // =5
                	add	sp, sp, #0x60

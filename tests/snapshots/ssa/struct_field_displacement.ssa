@@ -58,21 +58,21 @@ fn ent_pc=9 n_params=0 variadic=false locals=4
     v52  Imm(5)                                           -> x1
     v53  Imm(6)                                           -> x1
     v54  Store { addr=v3, disp=18, value=v53, kind=I8 }   -> -
-    v55  Imm(0)                                           -> x1
-    v56  BinopI { op=add, lhs=v3, rhs_imm=4 }             -> x1
-    v57  Imm(100)                                         -> x1
-    v58  Imm(100)                                         -> x1
-    v59  Imm(0)                                           -> x1
-    v60  Imm(0)                                           -> x1
-    v61  BinopI { op=add, lhs=v3, rhs_imm=8 }             -> x1
-    v62  Imm(787)                                         -> x1
-    v63  Imm(0)                                           -> x1
-    v64  Imm(0)                                           -> x1
-    v65  BinopI { op=add, lhs=v3, rhs_imm=16 }            -> x1
-    v66  Imm(44)                                          -> x1
-    v67  Imm(44)                                          -> x1
-    v68  Imm(0)                                           -> x1
-    v69  Imm(0)                                           -> x1
+    v55  Imm(0)                                           -> x0
+    v56  BinopI { op=add, lhs=v3, rhs_imm=4 }             -> x0
+    v57  Imm(100)                                         -> x0
+    v58  Imm(100)                                         -> x0
+    v59  Imm(0)                                           -> x0
+    v60  Imm(0)                                           -> x0
+    v61  BinopI { op=add, lhs=v3, rhs_imm=8 }             -> x0
+    v62  Imm(787)                                         -> x0
+    v63  Imm(0)                                           -> x0
+    v64  Imm(0)                                           -> x0
+    v65  BinopI { op=add, lhs=v3, rhs_imm=16 }            -> x0
+    v66  Imm(44)                                          -> x0
+    v67  Imm(44)                                          -> x0
+    v68  Imm(0)                                           -> x0
+    v69  Imm(0)                                           -> x0
     v70  BinopI { op=add, lhs=v3, rhs_imm=18 }            -> x0
     v71  Imm(6)                                           -> x0
     v72  Imm(6)                                           -> x0

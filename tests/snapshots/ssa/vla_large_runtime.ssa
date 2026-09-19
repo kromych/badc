@@ -7,37 +7,37 @@ fn ent_pc=0 n_params=0 variadic=false locals=2
     v1   Imm(1)                                           -> x0
     v2   StoreLocal { off=-2, value=v1, kind=I32, volatile } -> -
     v3   LoadLocal { off=-2, kind=I32, volatile }         -> x0
-    v4   BinopI { op=shl, lhs=v3, rhs_imm=18 }            -> x2
+    v4   BinopI { op=shl, lhs=v3, rhs_imm=18 }            -> x1
     v5   Imm(0)                                           -> x0
     v6   Imm(0)                                           -> x0
     v7   BinopI { op=shl, lhs=v4, rhs_imm=2 }             -> x0
-    v8   Imm(0)                                           -> x1
-    v9   Intrinsic { kind=Alloca, args=[v7] }             -> x1
+    v8   Imm(0)                                           -> x2
+    v9   Intrinsic { kind=Alloca, args=[v7] }             -> x6
     v10  Imm(0)                                           -> x0
     v11  Imm(0)                                           -> x0
-    v12  Imm(0)                                           -> x6
+    v12  Imm(0)                                           -> x2
     terminator Jmp(b2)   (exit_acc=v11)
   block 1  start_pc=0
-    v17  Imm(0)                                           -> x6
-    v18  Imm(0)                                           -> x6
-    v19  BinopI { op=shl, lhs=v13, rhs_imm=2 }            -> x6
-    v20  Binop { op=add, lhs=v9, rhs=v19 }                -> x6
-    v21  Imm(1)                                           -> x6
+    v17  Imm(0)                                           -> x2
+    v18  Imm(0)                                           -> x2
+    v19  BinopI { op=shl, lhs=v13, rhs_imm=2 }            -> x2
+    v20  Binop { op=add, lhs=v9, rhs=v19 }                -> x2
+    v21  Imm(1)                                           -> x2
     v22  StoreIndexed { base=v9, index=v13, scale=4, value=v21, kind=I32 } -> -
-    v23  Imm(0)                                           -> x6
+    v23  Imm(0)                                           -> x2
     v24  BinopI { op=add, lhs=v13, rhs_imm=1 }            -> x0
-    v25  Imm(0)                                           -> x6
+    v25  Imm(0)                                           -> x2
     terminator Jmp(b2)   (exit_acc=v24)
   block 2  start_pc=0
     v13  Phi { incoming=[b0:v11, b1:v24], kind=I64 }      -> x0
-    v14  Imm(0)                                           -> x6
-    v15  Imm(0)                                           -> x6
-    v16  Binop { op=lt, lhs=v13, rhs=v4 }                 -> x6
+    v14  Imm(0)                                           -> x2
+    v15  Imm(0)                                           -> x2
+    v16  Binop { op=lt, lhs=v13, rhs=v4 }                 -> x2
     terminator Bz { cond=v16, target=b3, fall=b1 }   (exit_acc=v16)
   block 3  start_pc=0
     v26  Imm(0)                                           -> x0
-    v27  Imm(0)                                           -> x6
-    v28  Imm(0)                                           -> x6
+    v27  Imm(0)                                           -> x2
+    v28  Imm(0)                                           -> x2
     terminator Jmp(b5)   (exit_acc=v26)
   block 4  start_pc=0
     v34  Imm(0)                                           -> x7
@@ -46,7 +46,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=2
     v37  BinopI { op=shl, lhs=v29, rhs_imm=2 }            -> x7
     v38  Binop { op=add, lhs=v9, rhs=v37 }                -> x7
     v39  LoadIndexed { base=v9, index=v29, scale=4, kind=I32 } -> x7
-    v40  Binop { op=add, lhs=v30, rhs=v39 }               -> x6
+    v40  Binop { op=add, lhs=v30, rhs=v39 }               -> x2
     v41  Imm(0)                                           -> x7
     v42  Imm(0)                                           -> x7
     v43  BinopI { op=add, lhs=v29, rhs_imm=1 }            -> x0
@@ -54,7 +54,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=2
     terminator Jmp(b5)   (exit_acc=v43)
   block 5  start_pc=0
     v29  Phi { incoming=[b3:v26, b4:v43], kind=I64 }      -> x0
-    v30  Phi { incoming=[b3:v26, b4:v40], kind=I64 }      -> x6
+    v30  Phi { incoming=[b3:v26, b4:v40], kind=I64 }      -> x2
     v31  Imm(0)                                           -> x7
     v32  Imm(0)                                           -> x7
     v33  Binop { op=lt, lhs=v29, rhs=v4 }                 -> x7

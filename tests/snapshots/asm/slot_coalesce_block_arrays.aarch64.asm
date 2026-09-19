@@ -42,14 +42,14 @@ Disassembly of section .text:
                	b.lt	<addr>
                	cmp	w1, #0x4
                	b.lt	<addr>
-               	mov	x4, #0x3                // =3
+               	mov	x1, #0x3                // =3
                	cmp	w0, w2
                	b.ge	<addr>
-               	sub	x1, x29, #0x200
-               	mul	x3, x0, x4
-               	sxtw	x3, w3
-               	add	x3, x3, #0x3e8
-               	str	x3, [x1, x0, lsl #3]
+               	sub	x3, x29, #0x200
+               	mul	x4, x0, x1
+               	sxtw	x4, w4
+               	add	x4, x4, #0x3e8
+               	str	x4, [x3, x0, lsl #3]
                	add	x0, x0, #0x1
                	cmp	w0, w2
                	b.lt	<addr>
@@ -174,20 +174,20 @@ Disassembly of section .text:
                	bl	<addr>
                	add	x4, x23, x0
                	mov	x0, #0x0                // =0
-               	mov	x2, #0x3                // =3
+               	mov	x1, #0x3                // =3
                	cmp	w0, w22
                	b.ge	<addr>
-               	add	x1, x0, #0x3e8
-               	madd	x1, x20, x0, x1
+               	add	x2, x0, #0x3e8
+               	madd	x2, x20, x0, x2
                	sub	x3, x20, x0
-               	add	x1, x1, x3
+               	add	x2, x2, x3
                	eor	x3, x20, x0
-               	add	x3, x1, x3
-               	mul	x1, x0, x2
-               	sxtw	x1, w1
-               	add	x1, x1, #0x3e8
-               	add	x1, x3, x1
-               	add	x21, x21, x1
+               	add	x2, x2, x3
+               	mul	x3, x0, x1
+               	sxtw	x3, w3
+               	add	x3, x3, #0x3e8
+               	add	x2, x2, x3
+               	add	x21, x21, x2
                	add	x0, x0, #0x1
                	cmp	w0, w22
                	b.lt	<addr>

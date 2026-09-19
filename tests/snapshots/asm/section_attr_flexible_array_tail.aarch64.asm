@@ -20,23 +20,22 @@ Disassembly of section .text:
                	ret
 
 <main>:
-               	adrp	x3, <page>
-               	add	x3, x3, <lo12>
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	mov	x0, x3
-               	ldrb	w4, [x0]
-               	cbz	x4, <addr>
-               	ldrb	w4, [x0]
-               	ldrb	w5, [x1]
-               	cmp	w4, w5
+               	ldrb	w3, [x0]
+               	cbz	x3, <addr>
+               	ldrb	w3, [x0]
+               	ldrb	w4, [x1]
+               	cmp	w3, w4
                	b.ne	<addr>
                	add	x0, x0, #0x1
                	add	x1, x1, #0x1
-               	ldrb	w4, [x0]
-               	cbnz	x4, <addr>
+               	ldrb	w3, [x0]
+               	cbnz	x3, <addr>
                	ldrb	w0, [x0]
                	ldrb	w1, [x1]
                	cmp	w0, w1

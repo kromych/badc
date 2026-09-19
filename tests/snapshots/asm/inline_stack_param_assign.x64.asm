@@ -28,9 +28,6 @@ Disassembly of section .text:
 <mash_outline>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x8, %rsp
-               	pushq	%rbx
-               	movq	%rcx, %rbx
                	movswq	%r8w, %r8
                	movq	%r8, %rax
                	subq	%rsi, %rax
@@ -38,8 +35,8 @@ Disassembly of section .text:
                	movq	%r9, %rax
                	andq	$0xff, %rax
                	addq	$0x3, %rax
-               	movq	%rax, %rcx
-               	andq	$0xff, %rcx
+               	movq	%rax, %r8
+               	andq	$0xff, %r8
                	movzwq	0x18(%rbp), %rax
                	shlq	%rax
                	andq	$0xffff, %rax           # imm = 0xFFFF
@@ -56,17 +53,16 @@ Disassembly of section .text:
                	addq	%rdx, %rax
                	movq	%rax, 0x28(%rbp)
                	movl	0x30(%rbp), %edx
-               	addq	%rsi, %rcx
-               	movzwq	0x18(%rbp), %rsi
-               	addq	%rsi, %rcx
-               	movslq	0x20(%rbp), %rsi
-               	addq	%rsi, %rcx
-               	addq	%rcx, %rax
+               	addq	%r8, %rsi
+               	movzwq	0x18(%rbp), %rdi
+               	addq	%rdi, %rsi
+               	movslq	0x20(%rbp), %rdi
+               	addq	%rdi, %rsi
+               	addq	%rsi, %rax
                	addq	%rdx, %rax
-               	movl	%ebx, %ecx
+               	movl	%ecx, %ecx
                	addq	%rcx, %rax
-               	popq	%rbx
-               	leave
+               	popq	%rbp
                	retq
 
 <main>:
@@ -85,20 +81,20 @@ Disassembly of section .text:
                	movq	%rax, -0x10(%rbp)
                	movq	$0x186a0, -0x18(%rbp)   # imm = 0x186A0
                	movq	%rdx, -0x8(%rbp)
-               	leaq	0x9(%rdi), %rsi
+               	leaq	0x9(%rdi), %rdx
                	leaq	-0x18(%rbp), %rcx
-               	movq	(%rcx), %rdx
-               	subq	$0x12c, %rdx            # imm = 0x12C
-               	movq	%rdx, (%rcx)
+               	movq	(%rcx), %rsi
+               	subq	$0x12c, %rsi            # imm = 0x12C
+               	movq	%rsi, (%rcx)
                	movq	-0x18(%rbp), %rcx
-               	movsbq	-0x10(%rbp), %rdx
-               	addq	%rdx, %rcx
-               	movq	%rcx, -0x18(%rbp)
-               	movl	-0x8(%rbp), %edx
-               	movslq	%esi, %rsi
-               	addq	$0x64b, %rsi            # imm = 0x64B
+               	movsbq	-0x10(%rbp), %rsi
                	addq	%rsi, %rcx
+               	movq	%rcx, -0x18(%rbp)
+               	movl	-0x8(%rbp), %esi
+               	movslq	%edx, %rdx
+               	addq	$0x64b, %rdx            # imm = 0x64B
                	addq	%rdx, %rcx
+               	addq	%rsi, %rcx
                	addq	$0x9c40, %rcx           # imm = 0x9C40
                	movl	$0xb2d28602, %r11d      # imm = 0xB2D28602
                	cmpq	%r11, %rcx

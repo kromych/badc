@@ -16,37 +16,37 @@ Disassembly of section .text:
 <run>:
                	mov	x2, #0x0                // =0
                	mov	x1, #0x1                // =1
-               	mov	x4, #0x64               // =100
-               	mul	x0, x1, x4
+               	mov	x3, #0x64               // =100
+               	mul	x0, x1, x3
                	add	x2, x2, x0
-               	add	x3, x0, #0x1
-               	add	x2, x2, x3
-               	add	x3, x0, #0x2
-               	add	x2, x2, x3
-               	add	x3, x0, #0x3
-               	add	x2, x2, x3
-               	add	x3, x0, #0x4
-               	add	x2, x2, x3
-               	add	x3, x0, #0x5
-               	add	x2, x2, x3
-               	add	x3, x0, #0x6
-               	add	x2, x2, x3
-               	add	x3, x0, #0x7
-               	add	x2, x2, x3
-               	add	x3, x0, #0x8
-               	add	x2, x2, x3
-               	add	x3, x0, #0x9
-               	add	x2, x2, x3
-               	add	x3, x0, #0xa
-               	add	x2, x2, x3
-               	add	x3, x0, #0xb
-               	add	x2, x2, x3
-               	add	x3, x0, #0xc
-               	add	x2, x2, x3
-               	add	x3, x0, #0xd
-               	add	x2, x2, x3
-               	add	x3, x0, #0xe
-               	add	x2, x2, x3
+               	add	x4, x0, #0x1
+               	add	x2, x2, x4
+               	add	x4, x0, #0x2
+               	add	x2, x2, x4
+               	add	x4, x0, #0x3
+               	add	x2, x2, x4
+               	add	x4, x0, #0x4
+               	add	x2, x2, x4
+               	add	x4, x0, #0x5
+               	add	x2, x2, x4
+               	add	x4, x0, #0x6
+               	add	x2, x2, x4
+               	add	x4, x0, #0x7
+               	add	x2, x2, x4
+               	add	x4, x0, #0x8
+               	add	x2, x2, x4
+               	add	x4, x0, #0x9
+               	add	x2, x2, x4
+               	add	x4, x0, #0xa
+               	add	x2, x2, x4
+               	add	x4, x0, #0xb
+               	add	x2, x2, x4
+               	add	x4, x0, #0xc
+               	add	x2, x2, x4
+               	add	x4, x0, #0xd
+               	add	x2, x2, x4
+               	add	x4, x0, #0xe
+               	add	x2, x2, x4
                	add	x0, x0, #0xf
                	add	x2, x2, x0
                	add	x1, x1, #0x1

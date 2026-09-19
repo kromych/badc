@@ -23,13 +23,13 @@ fn ent_pc=0 n_params=1 variadic=false locals=0
     v17  BinopI { op=shru, lhs=v16, rhs_imm=1 }           -> x0
     v18  Binop { op=add, lhs=v17, rhs=v15 }               -> x0
     v19  BinopI { op=shru, lhs=v18, rhs_imm=2 }           -> x0
-    v20  BinopI { op=mul, lhs=v19, rhs_imm=7 }            -> x2
-    v21  Binop { op=sub, lhs=v4, rhs=v20 }                -> x0
-    v22  Imm(0)                                           -> x1
-    v23  BinopI { op=shl, lhs=v21, rhs_imm=32 }           -> x1
-    v24  Extend { value=v21, kind=I32 }                   -> x1
-    v25  Extend { value=v8, kind=I32 }                    -> x1
-    v26  BinopI { op=mul, lhs=v8, rhs_imm=100 }           -> x1
+    v20  BinopI { op=mul, lhs=v19, rhs_imm=7 }            -> x0
+    v21  Binop { op=sub, lhs=v4, rhs=v20 }                -> x1
+    v22  Imm(0)                                           -> x0
+    v23  BinopI { op=shl, lhs=v21, rhs_imm=32 }           -> x0
+    v24  Extend { value=v21, kind=I32 }                   -> x0
+    v25  Extend { value=v8, kind=I32 }                    -> x0
+    v26  BinopI { op=mul, lhs=v8, rhs_imm=100 }           -> x0
     v27  BinopI { op=shl, lhs=v26, rhs_imm=32 }           -> x2
     v28  Extend { value=v26, kind=I32 }                   -> x2
     v29  Extend { value=v21, kind=I32 }                   -> x2

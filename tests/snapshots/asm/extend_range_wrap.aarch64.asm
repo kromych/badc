@@ -106,25 +106,26 @@ Disassembly of section .text:
                	ret
 
 <two_back_edges>:
-               	mov	x4, x1
+               	mov	x2, x0
                	mov	x5, x3
-               	mov	x1, #0x0                // =0
-               	mov	x2, x1
-               	cmp	w0, w4
+               	mov	x4, x1
+               	mov	x0, #0x0                // =0
+               	mov	x1, x0
+               	cmp	w2, w4
                	b.ge	<addr>
-               	add	x1, x1, #0x1
-               	cmp	w1, #0x5
-               	b.eq	<addr>
-               	tbz	w1, #0x0, <addr>
                	add	x0, x0, #0x1
+               	cmp	w0, #0x5
+               	b.eq	<addr>
+               	tbz	w0, #0x0, <addr>
+               	add	x2, x2, #0x1
                	b	<addr>
-               	sxtw	x0, w0
-               	add	x2, x2, x0
-               	add	x0, x0, #0x2
-               	cmp	w0, w4
+               	sxtw	x2, w2
+               	add	x1, x1, x2
+               	add	x2, x2, #0x2
+               	cmp	w2, w4
                	b.lt	<addr>
-               	str	w0, [x5]
-               	mov	x0, x2
+               	str	w2, [x5]
+               	mov	x0, x1
                	ret
 
 <other_guard>:

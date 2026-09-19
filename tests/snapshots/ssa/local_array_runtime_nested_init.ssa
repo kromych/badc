@@ -93,18 +93,18 @@ fn ent_pc=0 n_params=0 variadic=false locals=4
     v77  Imm(0)                                           -> x0
     v78  Imm(0)                                           -> x0
     v79  LocalAddr(-2)                                    -> x0
-    v80  Imm(0)                                           -> x1
-    v81  Imm(0)                                           -> x1
-    v82  Imm(0)                                           -> x1
-    v83  LocalAddr(-1)                                    -> x1
-    v84  Imm(0)                                           -> x2
-    v85  Imm(0)                                           -> x2
-    v86  Imm(0)                                           -> x2
-    v87  Imm(0)                                           -> x2
-    v88  Imm(16)                                          -> x2
-    v89  Imm(0)                                           -> x2
-    v90  Imm(0)                                           -> x2
-    v91  Imm(0)                                           -> x2
+    v80  Imm(0)                                           -> x0
+    v81  Imm(0)                                           -> x0
+    v82  Imm(0)                                           -> x0
+    v83  LocalAddr(-1)                                    -> x0
+    v84  Imm(0)                                           -> x0
+    v85  Imm(0)                                           -> x0
+    v86  Imm(0)                                           -> x0
+    v87  Imm(0)                                           -> x0
+    v88  Imm(16)                                          -> x0
+    v89  Imm(0)                                           -> x0
+    v90  Imm(0)                                           -> x0
+    v91  Imm(0)                                           -> x0
     v92  Load { addr=v79, disp=0, kind=I32 }              -> x0
     v93  Imm(0)                                           -> x0
     v94  Imm(0)                                           -> x0
@@ -129,34 +129,34 @@ fn ent_pc=0 n_params=0 variadic=false locals=4
     v113 Imm(0)                                           -> x0
     v114 Imm(0)                                           -> x0
     v115 LocalAddr(-3)                                    -> x0
-    v116 Imm(0)                                           -> x1
-    v117 Imm(0)                                           -> x1
-    v118 Imm(0)                                           -> x1
-    v119 Imm(0)                                           -> x1
-    v120 Imm(8)                                           -> x1
-    v121 Imm(0)                                           -> x1
-    v122 Imm(0)                                           -> x1
-    v123 Imm(0)                                           -> x1
-    v124 Imm(1)                                           -> x1
-    v125 Imm(0)                                           -> x1
-    v126 Imm(0)                                           -> x1
-    v127 Imm(0)                                           -> x1
-    v128 Imm(16)                                          -> x1
-    v129 Imm(0)                                           -> x1
-    v130 Imm(0)                                           -> x1
-    v131 Imm(0)                                           -> x1
-    v132 Imm(0)                                           -> x1
-    v133 Imm(0)                                           -> x1
-    v134 Imm(0)                                           -> x1
-    v135 Imm(0)                                           -> x1
-    v136 Imm(1)                                           -> x1
-    v137 Imm(0)                                           -> x1
-    v138 Imm(0)                                           -> x1
-    v139 Imm(24)                                          -> x1
-    v140 Imm(0)                                           -> x1
-    v141 Imm(8)                                           -> x1
-    v142 Imm(0)                                           -> x1
-    v143 Imm(0)                                           -> x1
+    v116 Imm(0)                                           -> x0
+    v117 Imm(0)                                           -> x0
+    v118 Imm(0)                                           -> x0
+    v119 Imm(0)                                           -> x0
+    v120 Imm(8)                                           -> x0
+    v121 Imm(0)                                           -> x0
+    v122 Imm(0)                                           -> x0
+    v123 Imm(0)                                           -> x0
+    v124 Imm(1)                                           -> x0
+    v125 Imm(0)                                           -> x0
+    v126 Imm(0)                                           -> x0
+    v127 Imm(0)                                           -> x0
+    v128 Imm(16)                                          -> x0
+    v129 Imm(0)                                           -> x0
+    v130 Imm(0)                                           -> x0
+    v131 Imm(0)                                           -> x0
+    v132 Imm(0)                                           -> x0
+    v133 Imm(0)                                           -> x0
+    v134 Imm(0)                                           -> x0
+    v135 Imm(0)                                           -> x0
+    v136 Imm(1)                                           -> x0
+    v137 Imm(0)                                           -> x0
+    v138 Imm(0)                                           -> x0
+    v139 Imm(24)                                          -> x0
+    v140 Imm(0)                                           -> x0
+    v141 Imm(8)                                           -> x0
+    v142 Imm(0)                                           -> x0
+    v143 Imm(0)                                           -> x0
     v144 Load { addr=v115, disp=0, kind=I32 }             -> x0
     v145 Imm(0)                                           -> x0
     v146 Imm(0)                                           -> x0

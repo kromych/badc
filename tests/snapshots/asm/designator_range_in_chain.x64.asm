@@ -49,12 +49,12 @@ Disassembly of section .text:
                	retq
                	xorl	%eax, %eax
                	leaq	<rip>, %rdx
-               	leaq	0x4(%rdx), %rsi
-               	movq	%rax, %rdi
-               	shlq	$0x3, %rdi
-               	leaq	(%rsi,%rdi), %rcx
-               	movslq	(%rcx), %r8
-               	cmpl	$0x7, %r8d
+               	leaq	0x4(%rdx), %rcx
+               	movq	%rax, %rsi
+               	shlq	$0x3, %rsi
+               	addq	%rsi, %rcx
+               	movslq	(%rcx), %rsi
+               	cmpl	$0x7, %esi
                	jne	<addr>
                	movslq	0x4(%rcx), %rcx
                	cmpl	$0x8, %ecx

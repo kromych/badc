@@ -21,17 +21,17 @@ Disassembly of section .text:
                	mov	x1, #0x5                // =5
                	bl	<addr>
                	stur	x0, [x29, #-0x8]
-               	sub	x1, x29, #0x8
-               	ldr	w0, [x1]
-               	ldr	w1, [x1, #0x4]
-               	add	x2, x0, x1
+               	sub	x0, x29, #0x8
+               	ldr	w1, [x0]
+               	ldr	w0, [x0, #0x4]
+               	add	x2, x1, x0
                	cmp	w2, #0x5
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mul	x0, x0, x1
+               	mul	x0, x1, x0
                	cmp	w0, #0x6
                	b.eq	<addr>
                	mov	x0, #0x2                // =2

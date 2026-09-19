@@ -233,10 +233,10 @@ fn ent_pc=11 n_params=2 variadic=false locals=0
     v3   ParamRef(1, kind=I64)                            -> x6
     v4   Imm(0)                                           -> x0
     v5   Imm(0)                                           -> x0
-    v6   Load { addr=v1, disp=0, kind=I8 }                -> x0
-    v7   Imm(0)                                           -> x1
-    v8   Imm(0)                                           -> x1
-    v9   Imm(0)                                           -> x1
+    v6   Load { addr=v1, disp=0, kind=I8 }                -> x1
+    v7   Imm(0)                                           -> x0
+    v8   Imm(0)                                           -> x0
+    v9   Imm(0)                                           -> x0
     v10  Store { addr=v3, disp=0, value=v9, kind=I8 }     -> -
     v11  Extend { value=v6, kind=I8 }                     -> x2
     terminator Bz { cond=v6, target=b2, fall=b1 }   (exit_acc=v6)
@@ -244,7 +244,7 @@ fn ent_pc=11 n_params=2 variadic=false locals=0
     v12  Imm(1)                                           -> x0
     terminator Return(v12)   (exit_acc=v12)
   block 2  start_pc=0
-    v13  Imm(0)                                           -> x0
+    v13  Imm(0)                                           -> x1
     terminator Return(v9)   (exit_acc=v9)
 ; --- SSA dump (ok=true) ent_pc=15 ---
 ; name=main
@@ -369,7 +369,7 @@ fn ent_pc=15 n_params=0 variadic=false locals=28
     terminator Bnz { cond=v89, target=b62, fall=b11 }   (exit_acc=v90)
   block 11  start_pc=0
     v96  LocalAddr(-23)                                   -> x0
-    v97  Imm(32)                                          -> x1
+    v97  Imm(32)                                          -> x0
     v98  BinopI { op=add, lhs=v96, rhs_imm=32 }           -> x0
     v99  Imm(0)                                           -> x0
     v100 Imm(0)                                           -> x0
@@ -630,7 +630,7 @@ fn ent_pc=15 n_params=0 variadic=false locals=28
     terminator Bnz { cond=v258, target=b58, fall=b35 }   (low word)   (exit_acc=v259)
   block 35  start_pc=0
     v266 LocalAddr(-13)                                   -> x0
-    v267 Imm(4)                                           -> x1
+    v267 Imm(4)                                           -> x0
     v268 BinopI { op=add, lhs=v266, rhs_imm=4 }           -> x0
     v269 Imm(1)                                           -> x0
     v270 Imm(0)                                           -> x0
@@ -643,7 +643,7 @@ fn ent_pc=15 n_params=0 variadic=false locals=28
     v277 Imm(1)                                           -> x0
     v278 Imm(0)                                           -> x0
     v279 LocalAddr(-13)                                   -> x0
-    v280 Imm(12)                                          -> x1
+    v280 Imm(12)                                          -> x0
     v281 BinopI { op=add, lhs=v279, rhs_imm=12 }          -> x0
     v282 Imm(1)                                           -> x0
     v283 Imm(0)                                           -> x0
@@ -655,7 +655,7 @@ fn ent_pc=15 n_params=0 variadic=false locals=28
     v289 Imm(0)                                           -> x0
     v290 Imm(0)                                           -> x0
     v291 LocalAddr(-13)                                   -> x0
-    v292 Imm(20)                                          -> x1
+    v292 Imm(20)                                          -> x0
     v293 BinopI { op=add, lhs=v291, rhs_imm=20 }          -> x0
     v294 Imm(1)                                           -> x0
     v295 Imm(0)                                           -> x0

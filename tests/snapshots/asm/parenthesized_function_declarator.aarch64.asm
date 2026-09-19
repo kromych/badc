@@ -19,11 +19,11 @@ Disassembly of section .text:
                	ret
 
 <two>:
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	lsl	x0, x0, #1
-               	str	w0, [x1]
-               	mov	x0, x1
+               	mov	x1, x0
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	lsl	x1, x1, #1
+               	str	w1, [x0]
                	ret
 
 <main>:

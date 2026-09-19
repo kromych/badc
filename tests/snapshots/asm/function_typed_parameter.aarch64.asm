@@ -66,8 +66,8 @@ Disassembly of section .text:
 <main>:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	add	x1, x0, #0xc
-               	cmp	x1, x1
+               	add	x0, x0, #0xc
+               	cmp	x0, x0
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ret

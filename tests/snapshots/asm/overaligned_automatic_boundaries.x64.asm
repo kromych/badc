@@ -215,14 +215,15 @@ Disassembly of section .text:
                	subq	$0xa0, %rsp
                	subq	$0x80, %rsp
                	andq	$-0x20, %rsp
-               	leaq	(%rsp), %rcx
-               	leaq	<rip>, %rax
-               	movq	%rcx, (%rax)
-               	xorl	%eax, %eax
-               	movw	$0x4, (%rcx)
-               	testb	$0x1f, %cl
+               	leaq	(%rsp), %rax
+               	leaq	<rip>, %rcx
+               	movq	%rax, (%rcx)
+               	xorl	%ecx, %ecx
+               	movw	$0x4, (%rax)
+               	testb	$0x1f, %al
                	jne	<addr>
-               	movl	$0x1, %eax
+               	movl	$0x1, %ecx
+               	movq	%rcx, %rax
                	leaq	-0xa0(%rbp), %rsp
                	leave
                	retq

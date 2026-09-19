@@ -27,104 +27,104 @@ Disassembly of section .text:
                	str	x22, [sp, #0x10]
                	stp	x29, x30, [sp, #0x20]
                	add	x29, sp, #0x20
-               	mov	x1, x0
+               	mov	x7, x0
                	mov	x0, #0x0                // =0
-               	ldr	x2, [x1]
-               	add	x2, x2, #0x1
-               	ldr	x3, [x1, #0x8]
-               	add	x3, x3, #0x2
-               	ldr	x4, [x1, #0x10]
-               	add	x4, x4, #0x3
-               	ldr	x5, [x1, #0x18]
-               	add	x5, x5, #0x4
-               	ldr	x6, [x1, #0x20]
-               	add	x6, x6, #0x5
-               	ldr	x7, [x1, #0x28]
-               	add	x7, x7, #0x6
-               	ldr	x8, [x1, #0x30]
+               	ldr	x1, [x7]
+               	add	x1, x1, #0x1
+               	ldr	x2, [x7, #0x8]
+               	add	x2, x2, #0x2
+               	ldr	x3, [x7, #0x10]
+               	add	x3, x3, #0x3
+               	ldr	x4, [x7, #0x18]
+               	add	x4, x4, #0x4
+               	ldr	x5, [x7, #0x20]
+               	add	x5, x5, #0x5
+               	ldr	x6, [x7, #0x28]
+               	add	x6, x6, #0x6
+               	ldr	x8, [x7, #0x30]
                	add	x9, x8, #0x7
-               	ldr	x8, [x1, #0x38]
+               	ldr	x8, [x7, #0x38]
                	add	x10, x8, #0x8
-               	ldr	x11, [x1]
-               	ldr	x12, [x1, #0x18]
+               	ldr	x11, [x7]
+               	ldr	x12, [x7, #0x18]
                	eor	x11, x11, x12
-               	ldr	x12, [x1, #0x8]
-               	ldr	x13, [x1, #0x28]
+               	ldr	x12, [x7, #0x8]
+               	ldr	x13, [x7, #0x28]
                	eor	x12, x12, x13
-               	ldr	x13, [x1, #0x10]
-               	ldr	x14, [x1, #0x30]
+               	ldr	x13, [x7, #0x10]
+               	ldr	x14, [x7, #0x30]
                	eor	x13, x13, x14
-               	ldr	x14, [x1, #0x18]
+               	ldr	x14, [x7, #0x18]
                	eor	x14, x14, x8
-               	ldr	x8, [x1, #0x20]
-               	ldr	x15, [x1]
+               	ldr	x8, [x7, #0x20]
+               	ldr	x15, [x7]
                	add	x15, x8, x15
-               	ldr	x8, [x1, #0x28]
-               	ldr	x20, [x1, #0x8]
+               	ldr	x8, [x7, #0x28]
+               	ldr	x20, [x7, #0x8]
                	add	x20, x8, x20
-               	ldr	x8, [x1, #0x30]
-               	ldr	x21, [x1, #0x10]
+               	ldr	x8, [x7, #0x30]
+               	ldr	x21, [x7, #0x10]
                	add	x21, x8, x21
-               	ldr	x8, [x1, #0x38]
-               	ldr	x1, [x1, #0x18]
-               	add	x22, x8, x1
-               	mov	x1, x0
+               	ldr	x8, [x7, #0x38]
+               	ldr	x7, [x7, #0x18]
+               	add	x22, x8, x7
+               	mov	x7, x0
+               	add	x8, x1, x0
+               	eor	x7, x7, x8
+               	mov	x17, #0x3               // =3
+               	mul	x8, x1, x17
+               	add	x7, x7, x8
+               	lsr	x8, x7, #3
+               	eor	x8, x1, x8
+               	sub	x7, x7, x8
                	add	x8, x2, x0
-               	eor	x1, x1, x8
+               	eor	x7, x7, x8
                	mov	x17, #0x3               // =3
                	mul	x8, x2, x17
-               	add	x1, x1, x8
-               	lsr	x8, x1, #3
+               	add	x7, x7, x8
+               	lsr	x8, x7, #3
                	eor	x8, x2, x8
-               	sub	x1, x1, x8
+               	sub	x7, x7, x8
                	add	x8, x3, x0
-               	eor	x1, x1, x8
+               	eor	x7, x7, x8
                	mov	x17, #0x3               // =3
                	mul	x8, x3, x17
-               	add	x1, x1, x8
-               	lsr	x8, x1, #3
+               	add	x7, x7, x8
+               	lsr	x8, x7, #3
                	eor	x8, x3, x8
-               	sub	x1, x1, x8
+               	sub	x7, x7, x8
                	add	x8, x4, x0
-               	eor	x1, x1, x8
+               	eor	x7, x7, x8
                	mov	x17, #0x3               // =3
                	mul	x8, x4, x17
-               	add	x1, x1, x8
-               	lsr	x8, x1, #3
+               	add	x7, x7, x8
+               	lsr	x8, x7, #3
                	eor	x8, x4, x8
-               	sub	x1, x1, x8
+               	sub	x7, x7, x8
                	add	x8, x5, x0
-               	eor	x1, x1, x8
+               	eor	x7, x7, x8
                	mov	x17, #0x3               // =3
                	mul	x8, x5, x17
-               	add	x1, x1, x8
-               	lsr	x8, x1, #3
+               	add	x7, x7, x8
+               	lsr	x8, x7, #3
                	eor	x8, x5, x8
-               	sub	x1, x1, x8
+               	sub	x7, x7, x8
                	add	x8, x6, x0
-               	eor	x1, x1, x8
+               	eor	x7, x7, x8
                	mov	x17, #0x3               // =3
                	mul	x8, x6, x17
-               	add	x1, x1, x8
-               	lsr	x8, x1, #3
+               	add	x7, x7, x8
+               	lsr	x8, x7, #3
                	eor	x8, x6, x8
-               	sub	x1, x1, x8
-               	add	x8, x7, x0
-               	eor	x1, x1, x8
-               	mov	x17, #0x3               // =3
-               	mul	x8, x7, x17
-               	add	x1, x1, x8
-               	lsr	x8, x1, #3
-               	eor	x8, x7, x8
-               	sub	x1, x1, x8
+               	sub	x7, x7, x8
                	add	x0, x0, #0x1
                	cmp	w0, #0x64
                	b.lo	<addr>
-               	eor	x0, x2, x3
+               	eor	x0, x1, x2
+               	eor	x0, x0, x3
                	eor	x0, x0, x4
                	eor	x0, x0, x5
                	eor	x0, x0, x6
-               	eor	x0, x0, x7
                	eor	x0, x0, x9
                	eor	x0, x0, x10
                	eor	x0, x0, x11
@@ -135,7 +135,7 @@ Disassembly of section .text:
                	eor	x0, x0, x20
                	eor	x0, x0, x21
                	eor	x0, x0, x22
-               	eor	x0, x1, x0
+               	eor	x0, x7, x0
                	ldp	x29, x30, [sp, #0x20]
                	ldr	x22, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x30
@@ -352,16 +352,16 @@ Disassembly of section .text:
                	sub	x0, x29, #0x40
                	mov	x1, #0x28               // =40
                	bl	<addr>
-               	eor	x1, x20, x0
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x0, [x0]
-               	cbz	x0, <addr>
+               	eor	x0, x20, x0
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	ldr	x1, [x1]
+               	cbz	x1, <addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp, #0x50]
                	ldr	x20, [sp], #0x60
                	ret
-               	and	x0, x1, #0xff
+               	and	x0, x0, #0xff
                	ldp	x29, x30, [sp, #0x50]
                	ldr	x20, [sp], #0x60
                	ret

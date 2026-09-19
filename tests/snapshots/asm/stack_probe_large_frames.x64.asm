@@ -30,13 +30,13 @@ Disassembly of section .text:
                	movq	%rsi, %rax
                	shrq	%rax
                	movb	$0x2, (%rdi,%rax)
-               	leaq	-0x1(%rsi), %rcx
-               	movl	$0x3, %edx
-               	movb	%dl, (%rdi,%rcx)
-               	movsbq	(%rdi), %r8
+               	leaq	-0x1(%rsi), %rdx
+               	movl	$0x3, %ecx
+               	movb	%cl, (%rdi,%rdx)
+               	movsbq	(%rdi), %rdx
                	movsbq	(%rdi,%rax), %rax
-               	addq	%r8, %rax
-               	movsbq	%dl, %rcx
+               	addq	%rdx, %rax
+               	movsbq	%cl, %rcx
                	addq	%rcx, %rax
                	retq
 

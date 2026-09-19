@@ -77,8 +77,8 @@ Disassembly of section .text:
                	fcvtzs	x3, d16
                	and	x3, x3, #0xf
                	and	x1, x1, #0xfffffffffffffe1f
-               	lsl	x4, x3, #5
-               	orr	x1, x1, x4
+               	lsl	x3, x3, #5
+               	orr	x1, x1, x3
                	str	w1, [x0]
                	mov	w3, w1
                	asr	x3, x3, #5
@@ -257,13 +257,13 @@ Disassembly of section .text:
                	ret
                	str	wzr, [x0]
                	strb	w2, [x0]
-               	mov	x4, #0x2                // =2
-               	strb	w4, [x0]
-               	ldr	w1, [x0]
-               	and	x1, x1, #0xffffffffffffffe3
-               	str	w1, [x0]
-               	and	x1, x1, #0xfffffffffffffe1f
-               	str	w1, [x0]
+               	mov	x1, #0x2                // =2
+               	strb	w1, [x0]
+               	ldr	w3, [x0]
+               	and	x3, x3, #0xffffffffffffffe3
+               	str	w3, [x0]
+               	and	x3, x3, #0xfffffffffffffe1f
+               	str	w3, [x0]
                	ldrb	w0, [x0]
                	asr	x0, x0, #1
                	and	x0, x0, #0x1
@@ -275,7 +275,7 @@ Disassembly of section .text:
                	ret
                	sub	x0, x29, #0x10
                	stp	xzr, xzr, [x0]
-               	strb	w4, [x0, #0x8]
+               	strb	w1, [x0, #0x8]
                	ldrb	w1, [x0, #0x8]
                	and	x1, x1, #0xfffffffffffffffd
                	strb	w1, [x0, #0x8]

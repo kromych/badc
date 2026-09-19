@@ -147,14 +147,14 @@ Disassembly of section .text:
                	retq
                	xorl	%eax, %eax
                	movq	%rax, %rbx
-               	leaq	-0x18(%rbp), %rsi
+               	leaq	-0x18(%rbp), %rdx
                	imulq	$0xc, %rax, %rcx
-               	leaq	(%rsi,%rcx), %rdi
-               	movl	(%rdi), %edx
-               	xorq	$0x1, %rdx
-               	testl	%edx, %edx
+               	addq	%rcx, %rdx
+               	movl	(%rdx), %esi
+               	xorq	$0x1, %rsi
+               	testl	%esi, %esi
                	jne	<addr>
-               	leaq	0x4(%rdi), %rdx
+               	addq	$0x4, %rdx
                	movq	(%rdx), %rdx
                	cmpq	%r12, %rdx
                	jne	<addr>

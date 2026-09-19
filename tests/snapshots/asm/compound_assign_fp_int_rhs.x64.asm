@@ -40,11 +40,11 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x1, %eax
                	retq
-               	movabsq	$0x4000000000000000, %rdx # imm = 0x4000000000000000
-               	movq	%rdx, %xmm15
+               	movabsq	$0x4000000000000000, %rcx # imm = 0x4000000000000000
+               	movq	%rcx, %xmm15
                	mulsd	%xmm15, %xmm0
-               	movabsq	$0x4008000000000000, %rax # imm = 0x4008000000000000
-               	movq	%rax, %xmm1
+               	movabsq	$0x4008000000000000, %rdx # imm = 0x4008000000000000
+               	movq	%rdx, %xmm1
                	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
                	movq	%r10, %xmm15
                	xorpd	%xmm15, %xmm1
@@ -53,10 +53,10 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x1, %eax
                	retq
-               	movabsq	$0x3ff0000000000000, %rcx # imm = 0x3FF0000000000000
-               	movq	%rcx, %xmm15
+               	movabsq	$0x3ff0000000000000, %rax # imm = 0x3FF0000000000000
+               	movq	%rax, %xmm15
                	addsd	%xmm15, %xmm0
-               	movq	%rdx, %xmm2
+               	movq	%rcx, %xmm2
                	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
                	movq	%r10, %xmm15
                	xorpd	%xmm15, %xmm2
@@ -65,16 +65,16 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x1, %eax
                	retq
-               	movq	%rcx, %xmm15
+               	movq	%rax, %xmm15
                	subsd	%xmm15, %xmm0
                	ucomisd	%xmm1, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x1, %eax
                	retq
-               	movq	%rax, %xmm15
+               	movq	%rdx, %xmm15
                	divsd	%xmm15, %xmm0
-               	movq	%rcx, %xmm1
+               	movq	%rax, %xmm1
                	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
                	movq	%r10, %xmm15
                	xorpd	%xmm15, %xmm1

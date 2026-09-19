@@ -261,26 +261,26 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     v121 Imm(3)                                           -> x7
     v122 Call { target_pc=0, args=[v121], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x13
     v123 Imm(4)                                           -> x7
-    v124 Call { target_pc=0, args=[v123], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x1
-    v125 Extend { value=v122, kind=I32 }                  -> x0
-    v126 Extend { value=v124, kind=I32 }                  -> x0
-    v127 Imm(0)                                           -> x0
-    v128 Imm(0)                                           -> x0
-    v129 Imm(0)                                           -> x0
-    v130 Imm(0)                                           -> x0
-    v131 Imm(0)                                           -> x0
-    v132 Imm(0)                                           -> x0
-    v133 Imm(0)                                           -> x0
-    v134 Imm(0)                                           -> x0
-    v135 Imm(0)                                           -> x0
-    v136 Imm(0)                                           -> x0
-    v137 Imm(0)                                           -> x0
-    v138 Imm(0)                                           -> x0
-    v139 Imm(0)                                           -> x0
-    v140 Extend { value=v109, kind=I32 }                  -> x0
-    v141 Imm(0)                                           -> x0
-    v142 Extend { value=v122, kind=I32 }                  -> x0
-    v143 Binop { op=add, lhs=v109, rhs=v122 }             -> x0
+    v124 Call { target_pc=0, args=[v123], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v125 Extend { value=v122, kind=I32 }                  -> x1
+    v126 Extend { value=v124, kind=I32 }                  -> x1
+    v127 Imm(0)                                           -> x1
+    v128 Imm(0)                                           -> x1
+    v129 Imm(0)                                           -> x1
+    v130 Imm(0)                                           -> x1
+    v131 Imm(0)                                           -> x1
+    v132 Imm(0)                                           -> x1
+    v133 Imm(0)                                           -> x1
+    v134 Imm(0)                                           -> x1
+    v135 Imm(0)                                           -> x1
+    v136 Imm(0)                                           -> x1
+    v137 Imm(0)                                           -> x1
+    v138 Imm(0)                                           -> x1
+    v139 Imm(0)                                           -> x1
+    v140 Extend { value=v109, kind=I32 }                  -> x1
+    v141 Imm(0)                                           -> x1
+    v142 Extend { value=v122, kind=I32 }                  -> x1
+    v143 Binop { op=add, lhs=v109, rhs=v122 }             -> x1
     v144 Extend { value=v143, kind=I32 }                  -> x2
     v145 Imm(0)                                           -> x2
     v146 Imm(0)                                           -> x2
@@ -291,7 +291,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     v151 Imm(0)                                           -> x2
     v152 Imm(0)                                           -> x2
     v153 Extend { value=v124, kind=I32 }                  -> x2
-    v154 Binop { op=add, lhs=v111, rhs=v124 }             -> x1
+    v154 Binop { op=add, lhs=v111, rhs=v124 }             -> x0
     v155 Extend { value=v154, kind=I32 }                  -> x2
     v156 Imm(0)                                           -> x2
     v157 Imm(0)                                           -> x2
@@ -304,15 +304,15 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     v164 Imm(0)                                           -> x2
     v165 Imm(0)                                           -> x2
     v166 Extend { value=v143, kind=I32 }                  -> x2
-    v167 BinopI { op=ne, lhs=v143, rhs_imm=4 }            -> x0
+    v167 BinopI { op=ne, lhs=v143, rhs_imm=4 }            -> x1
     terminator Bz { cond=v167, target=b20, fall=b19 }   (exit_acc=v167)
   block 19  start_pc=0
     v168 Imm(9)                                           -> x0
     terminator Return(v168)   (exit_acc=v168)
   block 20  start_pc=0
-    v169 Imm(0)                                           -> x0
-    v170 Imm(0)                                           -> x0
-    v171 Extend { value=v154, kind=I32 }                  -> x0
+    v169 Imm(0)                                           -> x1
+    v170 Imm(0)                                           -> x1
+    v171 Extend { value=v154, kind=I32 }                  -> x1
     v172 BinopI { op=ne, lhs=v154, rhs_imm=6 }            -> x0
     terminator Bz { cond=v172, target=b22, fall=b21 }   (exit_acc=v172)
   block 21  start_pc=0

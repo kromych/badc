@@ -32,15 +32,14 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rax
                	leaq	<rip>, %rdx
                	leaq	<rip>, %rcx
-               	movq	%rsi, %rax
                	cmpb	$0x0, (%rax)
                	je	<addr>
-               	movsbq	(%rax), %rdi
-               	movsbq	(%rcx), %r8
-               	cmpl	%r8d, %edi
+               	movsbq	(%rax), %rsi
+               	movsbq	(%rcx), %rdi
+               	cmpl	%edi, %esi
                	jne	<addr>
                	incq	%rax
                	incq	%rcx

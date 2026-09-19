@@ -277,28 +277,28 @@ Disassembly of section .text:
                	movk	x3, #0x89ab, lsl #16
                	movk	x3, #0x4567, lsl #32
                	movk	x3, #0x123, lsl #48
-               	mov	x5, #0xff00             // =65280
-               	movk	x5, #0xddee, lsl #16
-               	movk	x5, #0xbbcc, lsl #32
-               	movk	x5, #0x99aa, lsl #48
+               	mov	x4, #0xff00             // =65280
+               	movk	x4, #0xddee, lsl #16
+               	movk	x4, #0xbbcc, lsl #32
+               	movk	x4, #0x99aa, lsl #48
                	sub	x1, x29, #0x100
                	sub	x2, x29, #0xf0
                	mov	x0, #0x0                // =0
                	str	x0, [x1]
                	str	x0, [x2]
-               	lsr	x4, x5, x0
-               	tbz	w4, #0x0, <addr>
-               	ldr	x4, [x1]
+               	lsr	x5, x4, x0
+               	tbz	w5, #0x0, <addr>
+               	ldr	x5, [x1]
                	lsl	x6, x3, x0
-               	eor	x4, x4, x6
-               	str	x4, [x1]
+               	eor	x5, x5, x6
+               	str	x5, [x1]
                	cbz	x0, <addr>
-               	ldr	x6, [x2]
-               	mov	x4, #0x40               // =64
-               	sub	x4, x4, x0
-               	lsr	x4, x3, x4
-               	eor	x4, x6, x4
-               	str	x4, [x2]
+               	ldr	x5, [x2]
+               	mov	x6, #0x40               // =64
+               	sub	x6, x6, x0
+               	lsr	x6, x3, x6
+               	eor	x5, x5, x6
+               	str	x5, [x2]
                	add	x0, x0, #0x1
                	cmp	w0, #0x40
                	b.lt	<addr>

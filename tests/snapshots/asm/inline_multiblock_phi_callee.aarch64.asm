@@ -16,249 +16,249 @@ Disassembly of section .text:
 <main>:
                	mov	x3, #0x0                // =0
                	mov	x0, #-0x4               // =-4
-               	mov	x5, #-0x3               // =-3
-               	mov	x6, #-0x2               // =-2
+               	mov	x4, #-0x3               // =-3
+               	mov	x5, #-0x2               // =-2
                	mov	x1, #-0x1               // =-1
-               	mov	x7, #0x0                // =0
-               	mov	x8, #0x3                // =3
+               	mov	x6, #0x0                // =0
+               	mov	x7, #0x3                // =3
                	sub	x2, x0, #0x3
                	cmp	w2, #0x0
                	b.ge	<addr>
                	mul	x2, x2, x1
-               	lsl	x4, x2, #1
+               	lsl	x8, x2, #1
                	and	x2, x2, #0x1
-               	add	x2, x4, x2
+               	add	x2, x8, x2
                	sxtw	x2, w2
-               	add	x4, x3, x2
+               	add	x3, x3, x2
                	add	x2, x0, #0x3
                	cmp	w2, #0x0
                	b.ge	<addr>
                	mul	x2, x2, x1
-               	lsl	x3, x2, #1
+               	lsl	x8, x2, #1
                	and	x2, x2, #0x1
-               	add	x2, x3, x2
+               	add	x2, x8, x2
                	sxtw	x2, w2
-               	add	x4, x4, x2
-               	mul	x2, x0, x5
+               	add	x3, x3, x2
+               	mul	x2, x0, x4
                	cmp	w2, #0x0
                	b.ge	<addr>
                	mul	x2, x2, x1
-               	lsl	x3, x2, #1
+               	lsl	x8, x2, #1
                	and	x2, x2, #0x1
-               	add	x2, x3, x2
+               	add	x2, x8, x2
                	sxtw	x2, w2
-               	add	x4, x4, x2
+               	add	x3, x3, x2
                	eor	x2, x0, #0xfffffffffffffffd
                	cmp	w2, #0x0
                	b.ge	<addr>
                	mul	x2, x2, x1
-               	lsl	x3, x2, #1
+               	lsl	x8, x2, #1
                	and	x2, x2, #0x1
-               	add	x2, x3, x2
+               	add	x2, x8, x2
                	sxtw	x2, w2
-               	add	x4, x4, x2
+               	add	x3, x3, x2
                	sub	x2, x0, #0x2
                	cmp	w2, #0x0
                	b.ge	<addr>
                	mul	x2, x2, x1
-               	lsl	x3, x2, #1
+               	lsl	x8, x2, #1
                	and	x2, x2, #0x1
-               	add	x2, x3, x2
+               	add	x2, x8, x2
                	sxtw	x2, w2
-               	add	x4, x4, x2
+               	add	x3, x3, x2
                	add	x2, x0, #0x2
                	cmp	w2, #0x0
                	b.ge	<addr>
                	mul	x2, x2, x1
-               	lsl	x3, x2, #1
+               	lsl	x8, x2, #1
                	and	x2, x2, #0x1
-               	add	x2, x3, x2
+               	add	x2, x8, x2
                	sxtw	x2, w2
-               	add	x4, x4, x2
-               	mul	x2, x0, x6
+               	add	x3, x3, x2
+               	mul	x2, x0, x5
                	cmp	w2, #0x0
                	b.ge	<addr>
                	mul	x2, x2, x1
-               	lsl	x3, x2, #1
+               	lsl	x8, x2, #1
                	and	x2, x2, #0x1
-               	add	x2, x3, x2
+               	add	x2, x8, x2
                	sxtw	x2, w2
-               	add	x4, x4, x2
+               	add	x3, x3, x2
                	eor	x2, x0, #0xfffffffffffffffe
                	cmp	w2, #0x0
                	b.ge	<addr>
                	mul	x2, x2, x1
-               	lsl	x3, x2, #1
+               	lsl	x8, x2, #1
                	and	x2, x2, #0x1
-               	add	x2, x3, x2
+               	add	x2, x8, x2
                	sxtw	x2, w2
-               	add	x4, x4, x2
+               	add	x3, x3, x2
                	sub	x2, x0, #0x1
                	cmp	w2, #0x0
                	b.ge	<addr>
                	mul	x2, x2, x1
-               	lsl	x3, x2, #1
+               	lsl	x8, x2, #1
                	and	x2, x2, #0x1
-               	add	x2, x3, x2
+               	add	x2, x8, x2
                	sxtw	x2, w2
-               	add	x4, x4, x2
+               	add	x3, x3, x2
                	add	x2, x0, #0x1
                	cmp	w2, #0x0
                	b.ge	<addr>
                	mul	x2, x2, x1
-               	lsl	x3, x2, #1
+               	lsl	x8, x2, #1
                	and	x2, x2, #0x1
-               	add	x2, x3, x2
+               	add	x2, x8, x2
                	sxtw	x2, w2
-               	add	x9, x4, x2
+               	add	x8, x3, x2
                	mul	x2, x0, x1
                	cmp	w2, #0x0
                	b.ge	<addr>
                	mul	x3, x2, x1
-               	lsl	x4, x3, #1
+               	lsl	x9, x3, #1
                	and	x3, x3, #0x1
-               	add	x3, x4, x3
+               	add	x3, x9, x3
                	sxtw	x3, w3
-               	add	x9, x9, x3
+               	add	x8, x8, x3
                	mvn	x3, x0
                	cmp	w3, #0x0
                	b.ge	<addr>
                	mul	x3, x3, x1
-               	lsl	x4, x3, #1
+               	lsl	x9, x3, #1
                	and	x3, x3, #0x1
-               	add	x3, x4, x3
+               	add	x3, x9, x3
                	sxtw	x3, w3
-               	add	x9, x9, x3
+               	add	x8, x8, x3
                	cmp	w0, #0x0
                	b.ge	<addr>
                	mov	x3, x2
-               	lsl	x4, x3, #1
+               	lsl	x9, x3, #1
                	and	x3, x3, #0x1
-               	add	x3, x4, x3
+               	add	x3, x9, x3
                	sxtw	x3, w3
-               	add	x9, x9, x3
+               	add	x8, x8, x3
                	cmp	w0, #0x0
                	b.ge	<addr>
                	mov	x3, x2
-               	lsl	x4, x3, #1
+               	lsl	x9, x3, #1
                	and	x3, x3, #0x1
-               	add	x3, x4, x3
+               	add	x3, x9, x3
                	sxtw	x3, w3
-               	add	x9, x9, x3
-               	mul	x3, x0, x7
+               	add	x8, x8, x3
+               	mul	x3, x0, x6
                	cmp	w3, #0x0
                	b.ge	<addr>
                	mul	x3, x3, x1
-               	lsl	x4, x3, #1
+               	lsl	x9, x3, #1
                	and	x3, x3, #0x1
-               	add	x3, x4, x3
+               	add	x3, x9, x3
                	sxtw	x3, w3
-               	add	x9, x9, x3
+               	add	x8, x8, x3
                	cmp	w0, #0x0
                	b.ge	<addr>
                	mov	x3, x2
-               	lsl	x4, x3, #1
+               	lsl	x9, x3, #1
                	and	x3, x3, #0x1
-               	add	x3, x4, x3
+               	add	x3, x9, x3
                	sxtw	x3, w3
-               	add	x9, x9, x3
+               	add	x8, x8, x3
                	add	x3, x0, #0x1
                	cmp	w3, #0x0
                	b.ge	<addr>
                	mul	x3, x3, x1
-               	lsl	x4, x3, #1
+               	lsl	x9, x3, #1
                	and	x3, x3, #0x1
-               	add	x3, x4, x3
+               	add	x3, x9, x3
                	sxtw	x3, w3
-               	add	x9, x9, x3
+               	add	x8, x8, x3
                	sub	x3, x0, #0x1
                	cmp	w3, #0x0
                	b.ge	<addr>
                	mul	x3, x3, x1
-               	lsl	x4, x3, #1
+               	lsl	x9, x3, #1
                	and	x3, x3, #0x1
-               	add	x3, x4, x3
+               	add	x3, x9, x3
                	sxtw	x3, w3
-               	add	x4, x9, x3
+               	add	x3, x8, x3
                	cmp	w0, #0x0
                	b.ge	<addr>
-               	lsl	x3, x2, #1
+               	lsl	x8, x2, #1
                	and	x2, x2, #0x1
-               	add	x2, x3, x2
+               	add	x2, x8, x2
                	sxtw	x2, w2
-               	add	x4, x4, x2
+               	add	x3, x3, x2
                	eor	x2, x0, #0x1
                	cmp	w2, #0x0
                	b.ge	<addr>
                	mul	x2, x2, x1
-               	lsl	x3, x2, #1
+               	lsl	x8, x2, #1
                	and	x2, x2, #0x1
-               	add	x2, x3, x2
+               	add	x2, x8, x2
                	sxtw	x2, w2
-               	add	x4, x4, x2
+               	add	x3, x3, x2
                	add	x2, x0, #0x2
                	cmp	w2, #0x0
                	b.ge	<addr>
                	mul	x2, x2, x1
-               	lsl	x3, x2, #1
+               	lsl	x8, x2, #1
                	and	x2, x2, #0x1
-               	add	x2, x3, x2
+               	add	x2, x8, x2
                	sxtw	x2, w2
-               	add	x4, x4, x2
+               	add	x3, x3, x2
                	sub	x2, x0, #0x2
                	cmp	w2, #0x0
                	b.ge	<addr>
                	mul	x2, x2, x1
-               	lsl	x3, x2, #1
+               	lsl	x8, x2, #1
                	and	x2, x2, #0x1
-               	add	x2, x3, x2
+               	add	x2, x8, x2
                	sxtw	x2, w2
-               	add	x4, x4, x2
+               	add	x3, x3, x2
                	lsl	x2, x0, #1
                	cmp	w2, #0x0
                	b.ge	<addr>
                	mul	x2, x2, x1
-               	lsl	x3, x2, #1
+               	lsl	x8, x2, #1
                	and	x2, x2, #0x1
-               	add	x2, x3, x2
+               	add	x2, x8, x2
                	sxtw	x2, w2
-               	add	x4, x4, x2
+               	add	x3, x3, x2
                	eor	x2, x0, #0x2
                	cmp	w2, #0x0
                	b.ge	<addr>
                	mul	x2, x2, x1
-               	lsl	x3, x2, #1
+               	lsl	x8, x2, #1
                	and	x2, x2, #0x1
-               	add	x2, x3, x2
+               	add	x2, x8, x2
                	sxtw	x2, w2
-               	add	x4, x4, x2
+               	add	x3, x3, x2
                	add	x2, x0, #0x3
                	cmp	w2, #0x0
                	b.ge	<addr>
                	mul	x2, x2, x1
-               	lsl	x3, x2, #1
+               	lsl	x8, x2, #1
                	and	x2, x2, #0x1
-               	add	x2, x3, x2
+               	add	x2, x8, x2
                	sxtw	x2, w2
-               	add	x4, x4, x2
+               	add	x3, x3, x2
                	sub	x2, x0, #0x3
                	cmp	w2, #0x0
                	b.ge	<addr>
                	mul	x2, x2, x1
-               	lsl	x3, x2, #1
+               	lsl	x8, x2, #1
                	and	x2, x2, #0x1
-               	add	x2, x3, x2
+               	add	x2, x8, x2
                	sxtw	x2, w2
-               	add	x4, x4, x2
-               	mul	x2, x0, x8
+               	add	x3, x3, x2
+               	mul	x2, x0, x7
                	cmp	w2, #0x0
                	b.ge	<addr>
                	mul	x2, x2, x1
-               	lsl	x3, x2, #1
+               	lsl	x8, x2, #1
                	and	x2, x2, #0x1
-               	add	x2, x3, x2
+               	add	x2, x8, x2
                	sxtw	x2, w2
-               	add	x4, x4, x2
+               	add	x3, x3, x2
                	eor	x2, x0, #0x3
                	cmp	w2, #0x0
                	b.ge	<addr>
@@ -274,11 +274,11 @@ Disassembly of section .text:
                	b	<addr>
                	mov	x3, x2
                	b	<addr>
-               	lsl	x3, x2, #1
+               	lsl	x8, x2, #1
                	and	x2, x2, #0x1
-               	add	x2, x3, x2
+               	add	x2, x8, x2
                	sxtw	x2, w2
-               	add	x3, x4, x2
+               	add	x3, x3, x2
                	add	x0, x0, #0x1
                	cmp	w0, #0x4
                	b.le	<addr>

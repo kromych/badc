@@ -45,7 +45,7 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	movl	$0xa5, %esi
+               	movl	$0xa5, %edx
                	movl	$0xffffffff, -0x20(%rbp) # imm = 0xFFFFFFFF
                	movl	-0x20(%rbp), %eax
                	movl	$0xa5, %ebx
@@ -53,17 +53,17 @@ Disassembly of section .text:
                	movl	%eax, -0x20(%rbp)
                	movl	-0x20(%rbp), %r9d
                	movl	$0xffffffff, %eax       # imm = 0xFFFFFFFF
-               	movl	$0x82f63b78, %edi       # imm = 0x82F63B78
+               	movl	$0x82f63b78, %esi       # imm = 0x82F63B78
                	xorl	%ecx, %ecx
-               	movq	%rsi, %rdx
-               	shrq	%cl, %rdx
-               	andq	$0x1, %rdx
+               	movq	%rdx, %rdi
+               	shrq	%cl, %rdi
+               	andq	$0x1, %rdi
                	movl	%eax, %eax
                	movq	%rax, %r8
                	shrq	%r8
-               	xorq	%rdx, %rax
+               	xorq	%rdi, %rax
                	andq	$0x1, %rax
-               	imulq	%rdi, %rax
+               	imulq	%rsi, %rax
                	xorq	%r8, %rax
                	incq	%rcx
                	cmpl	$0x8, %ecx
@@ -79,19 +79,19 @@ Disassembly of section .text:
                	crc32b	<rip>, %eax
                	movl	%eax, -0x20(%rbp)
                	movl	-0x20(%rbp), %r9d
-               	movl	$0xa5, %esi
+               	movl	$0xa5, %edx
                	movl	$0xffffffff, %eax       # imm = 0xFFFFFFFF
-               	movl	$0x82f63b78, %edi       # imm = 0x82F63B78
+               	movl	$0x82f63b78, %esi       # imm = 0x82F63B78
                	xorl	%ecx, %ecx
-               	movq	%rsi, %rdx
-               	shrq	%cl, %rdx
-               	andq	$0x1, %rdx
+               	movq	%rdx, %rdi
+               	shrq	%cl, %rdi
+               	andq	$0x1, %rdi
                	movl	%eax, %eax
                	movq	%rax, %r8
                	shrq	%r8
-               	xorq	%rdx, %rax
+               	xorq	%rdi, %rax
                	andq	$0x1, %rax
-               	imulq	%rdi, %rax
+               	imulq	%rsi, %rax
                	xorq	%r8, %rax
                	incq	%rcx
                	cmpl	$0x8, %ecx
@@ -102,7 +102,7 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	movl	$0x1234, %esi           # imm = 0x1234
+               	movl	$0x1234, %edx           # imm = 0x1234
                	movl	$0xffffffff, -0x20(%rbp) # imm = 0xFFFFFFFF
                	movl	-0x20(%rbp), %eax
                	movl	$0x1234, %ebx           # imm = 0x1234
@@ -110,17 +110,17 @@ Disassembly of section .text:
                	movl	%eax, -0x20(%rbp)
                	movl	-0x20(%rbp), %r9d
                	movl	$0xffffffff, %eax       # imm = 0xFFFFFFFF
-               	movl	$0x82f63b78, %edi       # imm = 0x82F63B78
+               	movl	$0x82f63b78, %esi       # imm = 0x82F63B78
                	xorl	%ecx, %ecx
-               	movq	%rsi, %rdx
-               	shrq	%cl, %rdx
-               	andq	$0x1, %rdx
+               	movq	%rdx, %rdi
+               	shrq	%cl, %rdi
+               	andq	$0x1, %rdi
                	movl	%eax, %eax
                	movq	%rax, %r8
                	shrq	%r8
-               	xorq	%rdx, %rax
+               	xorq	%rdi, %rax
                	andq	$0x1, %rax
-               	imulq	%rdi, %rax
+               	imulq	%rsi, %rax
                	xorq	%r8, %rax
                	incq	%rcx
                	cmpl	$0x10, %ecx
@@ -131,7 +131,7 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	movl	$0xdeadbeef, %esi       # imm = 0xDEADBEEF
+               	movl	$0xdeadbeef, %edx       # imm = 0xDEADBEEF
                	movl	$0xffffffff, -0x20(%rbp) # imm = 0xFFFFFFFF
                	movl	-0x20(%rbp), %eax
                	movl	$0xdeadbeef, %ebx       # imm = 0xDEADBEEF
@@ -139,17 +139,17 @@ Disassembly of section .text:
                	movl	%eax, -0x20(%rbp)
                	movl	-0x20(%rbp), %r9d
                	movl	$0xffffffff, %eax       # imm = 0xFFFFFFFF
-               	movl	$0x82f63b78, %edi       # imm = 0x82F63B78
+               	movl	$0x82f63b78, %esi       # imm = 0x82F63B78
                	xorl	%ecx, %ecx
-               	movq	%rsi, %rdx
-               	shrq	%cl, %rdx
-               	andq	$0x1, %rdx
+               	movq	%rdx, %rdi
+               	shrq	%cl, %rdi
+               	andq	$0x1, %rdi
                	movl	%eax, %eax
                	movq	%rax, %r8
                	shrq	%r8
-               	xorq	%rdx, %rax
+               	xorq	%rdi, %rax
                	andq	$0x1, %rax
-               	imulq	%rdi, %rax
+               	imulq	%rsi, %rax
                	xorq	%r8, %rax
                	incq	%rcx
                	cmpl	$0x20, %ecx
@@ -167,19 +167,19 @@ Disassembly of section .text:
                	crc32q	%rbx, %rax
                	movq	%rax, -0x20(%rbp)
                	movq	-0x20(%rbp), %r9
-               	movabsq	$0x123456789abcdef, %rsi # imm = 0x123456789ABCDEF
+               	movabsq	$0x123456789abcdef, %rdx # imm = 0x123456789ABCDEF
                	movl	$0xffffffff, %eax       # imm = 0xFFFFFFFF
-               	movl	$0x82f63b78, %edi       # imm = 0x82F63B78
+               	movl	$0x82f63b78, %esi       # imm = 0x82F63B78
                	xorl	%ecx, %ecx
-               	movq	%rsi, %rdx
-               	shrq	%cl, %rdx
-               	andq	$0x1, %rdx
+               	movq	%rdx, %rdi
+               	shrq	%cl, %rdi
+               	andq	$0x1, %rdi
                	movl	%eax, %eax
                	movq	%rax, %r8
                	shrq	%r8
-               	xorq	%rdx, %rax
+               	xorq	%rdi, %rax
                	andq	$0x1, %rax
-               	imulq	%rdi, %rax
+               	imulq	%rsi, %rax
                	xorq	%r8, %rax
                	incq	%rcx
                	cmpl	$0x40, %ecx
@@ -197,19 +197,19 @@ Disassembly of section .text:
                	crc32q	<rip>, %rax
                	movq	%rax, -0x20(%rbp)
                	movq	-0x20(%rbp), %r9
-               	movabsq	$0x123456789abcdef, %rsi # imm = 0x123456789ABCDEF
+               	movabsq	$0x123456789abcdef, %rdx # imm = 0x123456789ABCDEF
                	movl	$0xffffffff, %eax       # imm = 0xFFFFFFFF
-               	movl	$0x82f63b78, %edi       # imm = 0x82F63B78
+               	movl	$0x82f63b78, %esi       # imm = 0x82F63B78
                	xorl	%ecx, %ecx
-               	movq	%rsi, %rdx
-               	shrq	%cl, %rdx
-               	andq	$0x1, %rdx
+               	movq	%rdx, %rdi
+               	shrq	%cl, %rdi
+               	andq	$0x1, %rdi
                	movl	%eax, %eax
                	movq	%rax, %r8
                	shrq	%r8
-               	xorq	%rdx, %rax
+               	xorq	%rdi, %rax
                	andq	$0x1, %rax
-               	imulq	%rdi, %rax
+               	imulq	%rsi, %rax
                	xorq	%r8, %rax
                	incq	%rcx
                	cmpl	$0x40, %ecx
@@ -221,7 +221,7 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	movl	$0xa5, %esi
+               	movl	$0xa5, %edx
                	movl	$0xffffffff, -0x20(%rbp) # imm = 0xFFFFFFFF
                	movl	-0x20(%rbp), %eax
                	movl	$0xa5, %ebx
@@ -229,17 +229,17 @@ Disassembly of section .text:
                	movl	%eax, -0x20(%rbp)
                	movl	-0x20(%rbp), %r9d
                	movl	$0xffffffff, %eax       # imm = 0xFFFFFFFF
-               	movl	$0x82f63b78, %edi       # imm = 0x82F63B78
+               	movl	$0x82f63b78, %esi       # imm = 0x82F63B78
                	xorl	%ecx, %ecx
-               	movq	%rsi, %rdx
-               	shrq	%cl, %rdx
-               	andq	$0x1, %rdx
+               	movq	%rdx, %rdi
+               	shrq	%cl, %rdi
+               	andq	$0x1, %rdi
                	movl	%eax, %eax
                	movq	%rax, %r8
                	shrq	%r8
-               	xorq	%rdx, %rax
+               	xorq	%rdi, %rax
                	andq	$0x1, %rax
-               	imulq	%rdi, %rax
+               	imulq	%rsi, %rax
                	xorq	%r8, %rax
                	incq	%rcx
                	cmpl	$0x8, %ecx
@@ -250,7 +250,7 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	movl	$0x1234, %esi           # imm = 0x1234
+               	movl	$0x1234, %edx           # imm = 0x1234
                	movl	$0xffffffff, -0x20(%rbp) # imm = 0xFFFFFFFF
                	movl	-0x20(%rbp), %eax
                	movl	$0x1234, %ebx           # imm = 0x1234
@@ -258,17 +258,17 @@ Disassembly of section .text:
                	movl	%eax, -0x20(%rbp)
                	movl	-0x20(%rbp), %r9d
                	movl	$0xffffffff, %eax       # imm = 0xFFFFFFFF
-               	movl	$0x82f63b78, %edi       # imm = 0x82F63B78
+               	movl	$0x82f63b78, %esi       # imm = 0x82F63B78
                	xorl	%ecx, %ecx
-               	movq	%rsi, %rdx
-               	shrq	%cl, %rdx
-               	andq	$0x1, %rdx
+               	movq	%rdx, %rdi
+               	shrq	%cl, %rdi
+               	andq	$0x1, %rdi
                	movl	%eax, %eax
                	movq	%rax, %r8
                	shrq	%r8
-               	xorq	%rdx, %rax
+               	xorq	%rdi, %rax
                	andq	$0x1, %rax
-               	imulq	%rdi, %rax
+               	imulq	%rsi, %rax
                	xorq	%r8, %rax
                	incq	%rcx
                	cmpl	$0x10, %ecx
@@ -279,7 +279,7 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	movl	$0xdeadbeef, %esi       # imm = 0xDEADBEEF
+               	movl	$0xdeadbeef, %edx       # imm = 0xDEADBEEF
                	movl	$0xffffffff, -0x20(%rbp) # imm = 0xFFFFFFFF
                	movl	-0x20(%rbp), %eax
                	movl	$0xdeadbeef, %ebx       # imm = 0xDEADBEEF
@@ -287,17 +287,17 @@ Disassembly of section .text:
                	movl	%eax, -0x20(%rbp)
                	movl	-0x20(%rbp), %r9d
                	movl	$0xffffffff, %eax       # imm = 0xFFFFFFFF
-               	movl	$0x82f63b78, %edi       # imm = 0x82F63B78
+               	movl	$0x82f63b78, %esi       # imm = 0x82F63B78
                	xorl	%ecx, %ecx
-               	movq	%rsi, %rdx
-               	shrq	%cl, %rdx
-               	andq	$0x1, %rdx
+               	movq	%rdx, %rdi
+               	shrq	%cl, %rdi
+               	andq	$0x1, %rdi
                	movl	%eax, %eax
                	movq	%rax, %r8
                	shrq	%r8
-               	xorq	%rdx, %rax
+               	xorq	%rdi, %rax
                	andq	$0x1, %rax
-               	imulq	%rdi, %rax
+               	imulq	%rsi, %rax
                	xorq	%r8, %rax
                	incq	%rcx
                	cmpl	$0x20, %ecx
@@ -315,19 +315,19 @@ Disassembly of section .text:
                	crc32q	%rbx, %rax
                	movq	%rax, -0x20(%rbp)
                	movq	-0x20(%rbp), %r9
-               	movabsq	$0x123456789abcdef, %rsi # imm = 0x123456789ABCDEF
+               	movabsq	$0x123456789abcdef, %rdx # imm = 0x123456789ABCDEF
                	movl	$0xffffffff, %eax       # imm = 0xFFFFFFFF
-               	movl	$0x82f63b78, %edi       # imm = 0x82F63B78
+               	movl	$0x82f63b78, %esi       # imm = 0x82F63B78
                	xorl	%ecx, %ecx
-               	movq	%rsi, %rdx
-               	shrq	%cl, %rdx
-               	andq	$0x1, %rdx
+               	movq	%rdx, %rdi
+               	shrq	%cl, %rdi
+               	andq	$0x1, %rdi
                	movl	%eax, %eax
                	movq	%rax, %r8
                	shrq	%r8
-               	xorq	%rdx, %rax
+               	xorq	%rdi, %rax
                	andq	$0x1, %rax
-               	imulq	%rdi, %rax
+               	imulq	%rsi, %rax
                	xorq	%r8, %rax
                	incq	%rcx
                	cmpl	$0x40, %ecx
@@ -362,14 +362,14 @@ Disassembly of section .text:
                	movl	$0x11, %ebx
                	crc32b	%bl, %eax
                	movl	%eax, -0x20(%rbp)
-               	movl	-0x20(%rbp), %ecx
+               	movl	-0x20(%rbp), %edx
                	movl	$0xffffffff, -0x20(%rbp) # imm = 0xFFFFFFFF
                	movl	-0x20(%rbp), %eax
                	movl	$0x11223344, %ebx       # imm = 0x11223344
                	crc32l	%ebx, %eax
                	movl	%eax, -0x20(%rbp)
                	movl	-0x20(%rbp), %eax
-               	cmpl	%eax, %ecx
+               	cmpl	%eax, %edx
                	je	<addr>
                	movl	$0x7, %eax
                	popq	%rbx

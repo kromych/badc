@@ -19,15 +19,15 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #0x20]
                	add	x29, sp, #0x20
                	sxtw	x20, w0
-               	mov	x22, x2
+               	mov	x21, x2
                	mov	x9, x1
                	mov	x0, x20
                	blr	x9
-               	add	x21, x20, x0
-               	mov	x9, x22
+               	add	x22, x20, x0
+               	mov	x9, x21
                	mov	x0, x20
                	blr	x9
-               	add	x0, x21, x0
+               	add	x0, x22, x0
                	sxtw	x0, w0
                	ldp	x29, x30, [sp, #0x20]
                	ldr	x22, [sp, #0x10]

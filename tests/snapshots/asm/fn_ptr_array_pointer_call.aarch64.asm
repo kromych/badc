@@ -14,14 +14,13 @@ Disassembly of section .text:
                	brk	#0x1
 
 <sel>:
-               	mov	x2, x1
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
+               	mov	x2, x0
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
                	mov	x17, #0xa               // =10
-               	mul	x0, x0, x17
-               	add	x0, x0, x2
-               	str	w0, [x1]
-               	mov	x0, x1
+               	mul	x2, x2, x17
+               	add	x1, x2, x1
+               	str	w1, [x0]
                	ret
 
 <g>:

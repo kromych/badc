@@ -38,17 +38,16 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	leave
                	retq
-               	xorl	%ecx, %ecx
-               	movl	%ecx, -0x8(%rbp)
-               	movslq	-0x8(%rbp), %rax
-               	testl	%eax, %eax
+               	xorl	%eax, %eax
+               	movl	%eax, -0x8(%rbp)
+               	movslq	-0x8(%rbp), %rcx
+               	testl	%ecx, %ecx
                	jl	<addr>
-               	testl	%eax, %eax
+               	testl	%ecx, %ecx
                	je	<addr>
                	movl	$0x2, %eax
                	leave
                	retq
-               	movq	%rcx, %rax
                	leave
                	retq
                	ud2

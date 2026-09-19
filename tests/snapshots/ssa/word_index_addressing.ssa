@@ -213,10 +213,10 @@ fn ent_pc=12 n_params=3 variadic=false locals=0
     v2   Imm(0)                                           -> x0
     v3   ParamRef(1, kind=I64)                            -> x6
     v4   Imm(0)                                           -> x0
-    v5   Imm(33)                                          -> x1
-    v6   Imm(0)                                           -> x0
-    v7   Imm(0)                                           -> x0
-    v8   BinopI { op=and, lhs=v3, rhs_imm=4294967295 }    -> x0
+    v5   Imm(33)                                          -> x0
+    v6   Imm(0)                                           -> x1
+    v7   Imm(0)                                           -> x1
+    v8   BinopI { op=and, lhs=v3, rhs_imm=4294967295 }    -> x1
     v9   BinopI { op=shl, lhs=v8, rhs_imm=3 }             -> x2
     v10  Binop { op=add, lhs=v1, rhs=v9 }                 -> x2
     v11  Imm(0)                                           -> x2
@@ -907,13 +907,13 @@ fn ent_pc=19 n_params=0 variadic=false locals=0
   block 43  start_pc=0
     v402 ImmData(120)                                     -> x7
     v403 Imm(-1)                                          -> x0
-    v404 ImmData(192)                                     -> x1
-    v405 Load { addr=v404, disp=0, kind=I32, volatile }   -> x0
-    v406 BinopI { op=add, lhs=v405, rhs_imm=-1 }          -> x0
+    v404 ImmData(192)                                     -> x0
+    v405 Load { addr=v404, disp=0, kind=I32, volatile }   -> x1
+    v406 BinopI { op=add, lhs=v405, rhs_imm=-1 }          -> x1
     v407 BinopI { op=shl, lhs=v406, rhs_imm=32 }          -> x2
     v408 Extend { value=v406, kind=I32 }                  -> x2
     v409 BinopI { op=and, lhs=v406, rhs_imm=4294967295 }  -> x6
-    v410 Imm(3)                                           -> x0
+    v410 Imm(3)                                           -> x1
     v411 Load { addr=v404, disp=0, kind=I32, volatile }   -> x0
     v412 BinopI { op=add, lhs=v411, rhs_imm=3 }           -> x0
     v413 BinopI { op=shl, lhs=v412, rhs_imm=32 }          -> x1

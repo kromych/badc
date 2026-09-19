@@ -134,7 +134,10 @@ fn plan(func: &FunctionSsa, alloc: &Allocation) -> Vec<Run> {
                 run_id = run_id.wrapping_add(1);
                 continue;
             }
-            if matches!(inst, Inst::Phi { .. }) {
+            // A skipped instruction reads nothing (`spill_traffic` alike).
+            if matches!(inst, Inst::Phi { .. })
+                || super::emit_common::is_dead_pure_counts(inst, idx, &alloc.use_counts)
+            {
                 continue;
             }
             super::reg_alloc::for_each_operand(inst, |op| {
@@ -415,6 +418,25 @@ mod tests {
         assert_eq!(runs.len(), 1);
         assert_eq!((runs[0].src, runs[0].first, runs[0].last), (0, 1, 2));
         assert!(!runs[0].is_fp);
+    }
+
+    /// A read by an instruction no emitter lowers is no use: with the sum
+    /// unread, one read remains and no run is planned.
+    #[test]
+    fn a_skipped_instruction_reads_nothing() {
+        let sum = Inst::Binop {
+            op: crate::c5::ir::BinOp::Add,
+            lhs: 0,
+            rhs: 0,
+        };
+        let f = func_with(
+            vec![load(), store_of(0), sum],
+            vec![block(0..3, Terminator::Return(NO_VALUE))],
+        );
+        let mut alloc = alloc_spilling_v0(3);
+        assert_eq!(plan(&f, &alloc).len(), 1);
+        alloc.use_counts[2] = 0;
+        assert!(plan(&f, &alloc).is_empty());
     }
 
     #[test]

@@ -149,14 +149,12 @@ Disassembly of section .text:
                	movabsq	$0x4000000000000000, %rax # imm = 0x4000000000000000
                	movsd	0x38(%rsp), %xmm14
                	movq	%rax, %xmm15
-               	movapd	%xmm1, %xmm2
-               	vfmadd231sd	%xmm15, %xmm14, %xmm2 # xmm2 = (xmm14 * xmm15) + xmm2
-               	xorps	%xmm1, %xmm1
-               	cvtsi2sd	%r12, %xmm1
+               	vfmadd231sd	%xmm15, %xmm14, %xmm1 # xmm1 = (xmm14 * xmm15) + xmm1
+               	xorps	%xmm2, %xmm2
+               	cvtsi2sd	%r12, %xmm2
                	movabsq	$0x4008000000000000, %rax # imm = 0x4008000000000000
-               	movapd	%xmm1, %xmm14
+               	movapd	%xmm2, %xmm14
                	movq	%rax, %xmm15
-               	movapd	%xmm2, %xmm1
                	vfmadd231sd	%xmm15, %xmm14, %xmm1 # xmm1 = (xmm14 * xmm15) + xmm1
                	movabsq	$0x4010000000000000, %rax # imm = 0x4010000000000000
                	movapd	%xmm0, %xmm14
@@ -317,17 +315,16 @@ Disassembly of section .text:
                	movq	%rax, %r15
                	movl	$0x5, %edi
                	callq	<addr>
-               	movq	%rax, %rdx
-               	imulq	$0xa, %r15, %rax
-               	addq	%r14, %rax
-               	imulq	$0x64, %rbx, %rcx
-               	addq	%rcx, %rax
-               	imulq	$0x3e8, %r12, %rcx      # imm = 0x3E8
-               	addq	%rcx, %rax
-               	imulq	$0x2710, %r13, %rcx     # imm = 0x2710
-               	addq	%rcx, %rax
-               	movslq	%eax, %rax
-               	imulq	$0x186a0, %rdx, %rcx    # imm = 0x186A0
+               	imulq	$0xa, %r15, %rcx
+               	addq	%r14, %rcx
+               	imulq	$0x64, %rbx, %rdx
+               	addq	%rdx, %rcx
+               	imulq	$0x3e8, %r12, %rdx      # imm = 0x3E8
+               	addq	%rdx, %rcx
+               	imulq	$0x2710, %r13, %rdx     # imm = 0x2710
+               	addq	%rdx, %rcx
+               	movslq	%ecx, %rcx
+               	imulq	$0x186a0, %rax, %rax    # imm = 0x186A0
                	addq	%rcx, %rax
                	cmpq	$0x89c13, %rax          # imm = 0x89C13
                	je	<addr>

@@ -44,12 +44,12 @@ Disassembly of section .text:
                	sub	x0, x29, #0x20
                	ldrb	w1, [x0]
                	ldrb	w2, [x0, #0x7]
-               	ldrb	w3, [x0, #0xf]
-               	eor	x0, x1, #0x1
-               	cbnz	w0, <addr>
-               	eor	x0, x2, #0x8
-               	cbnz	w0, <addr>
-               	eor	x0, x3, #0x10
+               	ldrb	w0, [x0, #0xf]
+               	eor	x1, x1, #0x1
+               	cbnz	w1, <addr>
+               	eor	x1, x2, #0x8
+               	cbnz	w1, <addr>
+               	eor	x0, x0, #0x10
                	cbz	w0, <addr>
                	mov	x0, #0x6                // =6
                	add	sp, sp, #0x90
@@ -57,10 +57,10 @@ Disassembly of section .text:
                	ret
                	sub	x0, x29, #0x90
                	ldrb	w1, [x0]
-               	ldrb	w2, [x0, #0xf]
-               	eor	x0, x1, #0x1
-               	cbnz	w0, <addr>
-               	eor	x0, x2, #0x10
+               	ldrb	w0, [x0, #0xf]
+               	eor	x1, x1, #0x1
+               	cbnz	w1, <addr>
+               	eor	x0, x0, #0x10
                	cbz	w0, <addr>
                	mov	x0, #0x8                // =8
                	add	sp, sp, #0x90

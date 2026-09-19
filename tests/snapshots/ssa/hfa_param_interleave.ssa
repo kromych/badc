@@ -64,7 +64,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=4
     v58  Imm(0)                                           -> x0
     v59  Imm(4)                                           -> x0
     v60  Imm(10)                                          -> x0
-    v61  Imm(10)                                          -> x1
+    v61  Imm(10)                                          -> x0
     v62  FpCast { kind=IntToFp, value=v61 }               -> d0 [f32]
     v63  Binop { op=fadd, lhs=v48, rhs=v62 }              -> d1 [f32]
     v64  Imm(1113456640)                                  -> x0 [f32]
@@ -76,33 +76,33 @@ fn ent_pc=1 n_params=0 variadic=false locals=4
   block 2  start_pc=0
     v67  Imm(0)                                           -> x0
     v68  Imm(0)                                           -> x0 [f32]
-    v69  Imm(0)                                           -> x2
-    v70  Imm(0)                                           -> x2 [f32]
-    v71  Imm(0)                                           -> x2
-    v72  Imm(0)                                           -> x2
-    v73  Imm(0)                                           -> x2
-    v74  Imm(0)                                           -> x2
-    v75  Imm(0)                                           -> x2
-    v76  Imm(1048576000)                                  -> x2 [f32]
-    v77  Imm(0)                                           -> x6
-    v78  Imm(0)                                           -> x6 [f32]
-    v79  Imm(0)                                           -> x6
-    v80  Imm(0)                                           -> x6 [f32]
+    v69  Imm(0)                                           -> x1
+    v70  Imm(0)                                           -> x1 [f32]
+    v71  Imm(0)                                           -> x1
+    v72  Imm(0)                                           -> x1
+    v73  Imm(0)                                           -> x1
+    v74  Imm(0)                                           -> x1
+    v75  Imm(0)                                           -> x1
+    v76  Imm(1048576000)                                  -> x1 [f32]
+    v77  Imm(0)                                           -> x2
+    v78  Imm(0)                                           -> x2 [f32]
+    v79  Imm(0)                                           -> x2
+    v80  Imm(0)                                           -> x2 [f32]
     v81  Binop { op=fadd, lhs=v68, rhs=v68 }              -> d1 [f32]
-    v82  Imm(0)                                           -> x6 [f32]
+    v82  Imm(0)                                           -> x2 [f32]
     v83  Binop { op=fadd, lhs=v81, rhs=v68 }              -> d1 [f32]
-    v84  Imm(0)                                           -> x6
-    v85  Imm(0)                                           -> x6 [f32]
+    v84  Imm(0)                                           -> x2
+    v85  Imm(0)                                           -> x2 [f32]
     v86  Binop { op=fadd, lhs=v83, rhs=v68 }              -> d1 [f32]
-    v87  Imm(0)                                           -> x6 [f32]
+    v87  Imm(0)                                           -> x2 [f32]
     v88  Binop { op=fadd, lhs=v86, rhs=v68 }              -> d1 [f32]
-    v89  Imm(0)                                           -> x6
-    v90  Imm(0)                                           -> x6 [f32]
+    v89  Imm(0)                                           -> x2
+    v90  Imm(0)                                           -> x2 [f32]
     v91  Binop { op=fadd, lhs=v88, rhs=v68 }              -> d1 [f32]
-    v92  Imm(0)                                           -> x6 [f32]
+    v92  Imm(0)                                           -> x2 [f32]
     v93  Binop { op=fadd, lhs=v91, rhs=v68 }              -> d1 [f32]
-    v94  Imm(0)                                           -> x6
-    v95  Imm(0)                                           -> x6 [f32]
+    v94  Imm(0)                                           -> x2
+    v95  Imm(0)                                           -> x2 [f32]
     v96  Binop { op=fadd, lhs=v93, rhs=v68 }              -> d1 [f32]
     v97  Binop { op=fadd, lhs=v96, rhs=v76 }              -> d1 [f32]
     v98  Imm(1)                                           -> x0

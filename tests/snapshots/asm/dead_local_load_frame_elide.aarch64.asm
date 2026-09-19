@@ -14,8 +14,8 @@ Disassembly of section .text:
                	brk	#0x1
 
 <fold>:
-               	ldr	x1, [x0]
-               	rev	x0, x1
+               	ldr	x0, [x0]
+               	rev	x0, x0
                	ret
 
 <vol_keep>:

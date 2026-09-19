@@ -97,13 +97,12 @@ Disassembly of section .text:
                	sub	x1, x29, #0x8
                	mov	x2, #0x2a               // =42
                	bl	<addr>
-               	mov	x1, x0
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x0, [x0]
-               	cmp	x0, #0x2a
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	ldr	x1, [x1]
+               	cmp	x1, #0x2a
                	b.ne	<addr>
-               	ldrsw	x0, [x1]
+               	ldrsw	x0, [x0]
                	cmp	w0, #0x5
                	b.eq	<addr>
                	mov	x0, #0x1                // =1

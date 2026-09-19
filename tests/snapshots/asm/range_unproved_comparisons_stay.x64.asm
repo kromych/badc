@@ -47,12 +47,12 @@ Disassembly of section .text:
                	movq	%rcx, %rax
                	leave
                	retq
-               	movq	(%rdx), %rdx
-               	movq	%rdx, %rcx
-               	xorq	$0x2, %rcx
-               	testl	%ecx, %ecx
+               	movq	(%rdx), %rcx
+               	movq	%rcx, %rdx
+               	xorq	$0x2, %rdx
+               	testl	%edx, %edx
                	je	<addr>
-               	cmpq	$0x2, %rdx
+               	cmpq	$0x2, %rcx
                	ja	<addr>
                	movl	$0x2, %eax
                	testl	%eax, %eax

@@ -26,30 +26,31 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	xorl	%edx, %edx
+               	xorl	%ecx, %ecx
                	leaq	<rip>, %rax
-               	movl	%edx, (%rax)
-               	movq	%fs:0x0, %rcx
-               	addq	$-0x10, %rcx
-               	movslq	(%rcx), %rax
-               	cmpl	$0x7, %eax
+               	movl	%ecx, (%rax)
+               	movq	%fs:0x0, %rax
+               	addq	$-0x10, %rax
+               	movslq	(%rax), %rdx
+               	cmpl	$0x7, %edx
                	je	<addr>
                	movl	$0x1, %eax
                	retq
-               	movq	%fs:0x0, %rax
-               	addq	$-0x8, %rax
-               	movslq	(%rax), %rsi
+               	movq	%fs:0x0, %rdx
+               	addq	$-0x8, %rdx
+               	movslq	(%rdx), %rsi
                	cmpl	$-0x3, %esi
                	je	<addr>
                	movl	$0x2, %eax
                	retq
-               	movslq	(%rcx), %rsi
-               	movslq	(%rax), %rax
-               	addq	%rsi, %rax
-               	movl	%eax, (%rcx)
+               	movslq	(%rax), %rsi
+               	movslq	(%rdx), %rdx
+               	addq	%rsi, %rdx
+               	movl	%edx, (%rax)
+               	movq	%rdx, %rax
                	cmpl	$0x4, %eax
                	je	<addr>
                	movl	$0x3, %eax
                	retq
-               	movq	%rdx, %rax
+               	movq	%rcx, %rax
                	retq

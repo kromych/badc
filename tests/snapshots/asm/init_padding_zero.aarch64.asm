@@ -30,20 +30,19 @@ Disassembly of section .text:
                	ret
 
 <or_bytes>:
-               	mov	x4, x0
-               	mov	x3, x1
-               	mov	x1, #0x0                // =0
-               	mov	x0, x1
-               	cmp	w0, w2
+               	mov	x3, x0
+               	mov	x4, x1
+               	mov	x0, #0x0                // =0
+               	mov	x1, x0
+               	cmp	w1, w2
                	b.hs	<addr>
-               	ldrb	w5, [x3, x0]
-               	add	x5, x4, x5
+               	ldrb	w5, [x4, x1]
+               	add	x5, x3, x5
                	ldrb	w5, [x5]
-               	orr	x1, x1, x5
-               	add	x0, x0, #0x1
-               	cmp	w0, w2
+               	orr	x0, x0, x5
+               	add	x1, x1, #0x1
+               	cmp	w1, w2
                	b.lo	<addr>
-               	mov	x0, x1
                	ret
 
 <struct_const>:

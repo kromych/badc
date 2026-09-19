@@ -20,13 +20,13 @@ Disassembly of section .text:
                	mov	x1, #0x0                // =0
                	stur	w1, [x29, #-0x8]
                	lsl	x0, x0, #1
-               	sub	x2, x29, #0x8
-               	str	w0, [x2]
-               	mov	x1, x0
-               	add	x1, x1, x0
-               	str	w1, [x2]
-               	add	x0, x1, x0
-               	str	w0, [x2]
+               	sub	x1, x29, #0x8
+               	str	w0, [x1]
+               	mov	x2, x0
+               	add	x2, x2, x0
+               	str	w2, [x1]
+               	add	x0, x2, x0
+               	str	w0, [x1]
                	ldursw	x0, [x29, #-0x8]
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10

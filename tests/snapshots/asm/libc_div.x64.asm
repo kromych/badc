@@ -68,13 +68,12 @@ Disassembly of section .text:
                	cqto
                	idivq	%rsi
                	movq	%rax, %rdi
-               	movq	%rdi, %rdx
-               	imulq	%rsi, %rdx
-               	movq	%rcx, %rax
-               	subq	%rdx, %rax
+               	movq	%rdi, %rax
+               	imulq	%rsi, %rax
+               	subq	%rax, %rcx
                	cmpl	$0x3, %edi
                	jne	<addr>
-               	cmpl	$0x2, %eax
+               	cmpl	$0x2, %ecx
                	je	<addr>
                	movl	$0x1, %eax
                	popq	%rbx

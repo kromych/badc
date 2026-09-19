@@ -181,15 +181,15 @@ Disassembly of section .text:
                	movabsq	$0x405427ae147ae148, %rax # imm = 0x405427AE147AE148
                	movq	%rax, %xmm15
                	subsd	%xmm15, %xmm0
-               	xorl	%ecx, %ecx
-               	movq	%rcx, %xmm15
+               	xorl	%eax, %eax
+               	movq	%rax, %xmm15
                	ucomisd	%xmm0, %xmm15
                	jbe	<addr>
                	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
                	movq	%r10, %xmm15
                	xorpd	%xmm15, %xmm0
-               	movabsq	$0x3f50624dd2f1a9fc, %rax # imm = 0x3F50624DD2F1A9FC
-               	movq	%rax, %xmm15
+               	movabsq	$0x3f50624dd2f1a9fc, %rcx # imm = 0x3F50624DD2F1A9FC
+               	movq	%rcx, %xmm15
                	ucomisd	%xmm0, %xmm15
                	ja	<addr>
                	movl	$0x4, %eax
@@ -198,7 +198,6 @@ Disassembly of section .text:
                	popq	%r13
                	leave
                	retq
-               	movq	%rcx, %rax
                	popq	%rbx
                	popq	%r12
                	popq	%r13

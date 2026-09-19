@@ -60,31 +60,31 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x3, %eax
                	retq
-               	leaq	0x10(%rax), %rdx
-               	leaq	0x8(%rdx), %rcx
+               	leaq	0x10(%rax), %rcx
+               	addq	$0x8, %rcx
                	movq	$0x5, (%rcx)
-               	movq	(%rcx), %rsi
-               	addq	$0x5, %rsi
-               	movq	%rsi, (%rcx)
+               	movq	(%rcx), %rdx
+               	addq	$0x5, %rdx
+               	movq	%rdx, (%rcx)
                	movq	(%rcx), %rcx
                	cmpq	$0xa, %rcx
                	je	<addr>
                	movl	$0x4, %eax
                	retq
-               	leaq	0x20(%rax), %rcx
-               	movl	(%rcx), %edx
+               	addq	$0x20, %rax
+               	movl	(%rax), %ecx
+               	andq	$-0x20, %rcx
+               	orq	$0x9, %rcx
+               	movl	%ecx, (%rax)
+               	movl	(%rax), %ecx
+               	andq	$0x1f, %rcx
+               	incq	%rcx
+               	andq	$0x1f, %rcx
+               	movl	(%rax), %edx
                	andq	$-0x20, %rdx
-               	orq	$0x9, %rdx
-               	movl	%edx, (%rcx)
-               	movl	(%rcx), %edx
-               	andq	$0x1f, %rdx
-               	incq	%rdx
-               	andq	$0x1f, %rdx
-               	movl	(%rcx), %esi
-               	andq	$-0x20, %rsi
-               	orq	%rsi, %rdx
-               	movl	%edx, (%rcx)
-               	movl	(%rcx), %eax
+               	orq	%rdx, %rcx
+               	movl	%ecx, (%rax)
+               	movl	(%rax), %eax
                	andq	$0x1f, %rax
                	xorq	$0xa, %rax
                	testl	%eax, %eax

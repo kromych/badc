@@ -140,11 +140,11 @@ Disassembly of section .text:
                	scvtf	d1, x20
                	mov	x0, #0x4000000000000000 // =4611686018427387904
                	fmov	d17, x0
-               	fmadd	d2, d8, d17, d1
-               	scvtf	d1, x21
+               	fmadd	d1, d8, d17, d1
+               	scvtf	d2, x21
                	mov	x0, #0x4008000000000000 // =4613937818241073152
                	fmov	d17, x0
-               	fmadd	d1, d1, d17, d2
+               	fmadd	d1, d2, d17, d1
                	mov	x0, #0x4010000000000000 // =4616189618054758400
                	fmov	d17, x0
                	fmadd	d0, d0, d17, d1
@@ -290,24 +290,23 @@ Disassembly of section .text:
                	mov	x24, x0
                	mov	x0, #0x5                // =5
                	bl	<addr>
-               	mov	x2, x0
                	mov	x17, #0xa               // =10
-               	mul	x0, x24, x17
-               	add	x0, x23, x0
+               	mul	x1, x24, x17
+               	add	x1, x23, x1
                	mov	x17, #0x64              // =100
-               	mul	x1, x20, x17
-               	add	x0, x0, x1
+               	mul	x2, x20, x17
+               	add	x1, x1, x2
                	mov	x17, #0x3e8             // =1000
-               	mul	x1, x21, x17
-               	add	x0, x0, x1
+               	mul	x2, x21, x17
+               	add	x1, x1, x2
                	mov	x17, #0x2710            // =10000
-               	mul	x1, x22, x17
-               	add	x0, x0, x1
-               	sxtw	x0, w0
+               	mul	x2, x22, x17
+               	add	x1, x1, x2
+               	sxtw	x1, w1
                	mov	x17, #0x86a0            // =34464
                	movk	x17, #0x1, lsl #16
-               	mul	x1, x2, x17
-               	add	x0, x0, x1
+               	mul	x0, x0, x17
+               	add	x0, x1, x0
                	mov	x17, #0x9c13            // =39955
                	movk	x17, #0x8, lsl #16
                	cmp	x0, x17

@@ -182,19 +182,19 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
     v128 Imm(16)                                          -> x1
     v129 Imm(16)                                          -> x1
     v130 Imm(15)                                          -> x1
-    v131 BinopI { op=and, lhs=v122, rhs_imm=15 }          -> x1
-    v132 BinopI { op=ne, lhs=v131, rhs_imm=0 }            -> x2
-    v133 Extend { value=v132, kind=I32 }                  -> x2
+    v131 BinopI { op=and, lhs=v122, rhs_imm=15 }          -> x0
+    v132 BinopI { op=ne, lhs=v131, rhs_imm=0 }            -> x1
+    v133 Extend { value=v132, kind=I32 }                  -> x1
     terminator Bz { cond=v131, target=b26, fall=b25 }   (low word)   (exit_acc=v132)
   block 25  start_pc=0
     v134 Imm(10)                                          -> x0
     terminator Return(v134)   (exit_acc=v134)
   block 26  start_pc=0
-    v135 Imm(0)                                           -> x1
-    v136 Imm(10)                                          -> x1
-    v137 Imm(0)                                           -> x1
-    v138 Imm(0)                                           -> x1
-    v139 Imm(0)                                           -> x1
+    v135 Imm(0)                                           -> x0
+    v136 Imm(10)                                          -> x0
+    v137 Imm(0)                                           -> x0
+    v138 Imm(0)                                           -> x0
+    v139 Imm(0)                                           -> x0
     v140 BinopI { op=add, lhs=v122, rhs_imm=8 }           -> x0
     v141 Imm(11)                                          -> x0
     v142 Imm(0)                                           -> x0

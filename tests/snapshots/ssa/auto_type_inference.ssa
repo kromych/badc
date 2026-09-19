@@ -6,11 +6,11 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(7)                                           -> x0
     v2   Imm(0)                                           -> x0
-    v3   Imm(4609434218613702656)                         -> x1
-    v4   Imm(0)                                           -> x0
-    v5   Imm(3)                                           -> x0
-    v6   Imm(0)                                           -> x0
-    v7   ImmData(8)                                       -> x0
+    v3   Imm(4609434218613702656)                         -> x0
+    v4   Imm(0)                                           -> x1
+    v5   Imm(3)                                           -> x1
+    v6   Imm(0)                                           -> x1
+    v7   ImmData(8)                                       -> x1
     v8   Imm(0)                                           -> x2
     v9   Imm(65)                                          -> x2
     v10  Imm(4683743612465315840)                         -> x2
@@ -25,16 +25,16 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v19  Imm(0)                                           -> x2
     v20  Imm(4)                                           -> x2
     v21  BinopI { op=add, lhs=v7, rhs_imm=4 }             -> x2
-    v22  Load { addr=v7, disp=4, kind=I32 }               -> x0
-    v23  BinopI { op=ne, lhs=v22, rhs_imm=2 }             -> x0
+    v22  Load { addr=v7, disp=4, kind=I32 }               -> x1
+    v23  BinopI { op=ne, lhs=v22, rhs_imm=2 }             -> x1
     terminator Bz { cond=v23, target=b2, fall=b1 }   (exit_acc=v23)
   block 1  start_pc=0
     v24  Imm(5)                                           -> x0
     terminator Return(v24)   (exit_acc=v24)
   block 2  start_pc=0
-    v25  Imm(0)                                           -> x0
-    v26  Imm(2)                                           -> x0
-    v27  Imm(4611686018427387904)                         -> x0
+    v25  Imm(0)                                           -> x1
+    v26  Imm(2)                                           -> x1
+    v27  Imm(4611686018427387904)                         -> x1
     v28  Binop { op=fmul, lhs=v3, rhs=v27 }               -> d0
     v29  Imm(0)                                           -> x0
     v30  Imm(0)                                           -> x0

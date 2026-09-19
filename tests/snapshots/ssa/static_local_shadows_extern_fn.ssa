@@ -33,7 +33,7 @@ fn ent_pc=1 n_params=1 variadic=false locals=0
     terminator Jmp(b3)
   block 7  start_pc=0
     v11  Imm(0)                                           -> x0
-    v12  Imm(17)                                          -> x1
+    v12  Imm(17)                                          -> x0
     v13  BinopI { op=add, lhs=v11, rhs_imm=1 }            -> x0
     v14  Imm(25)                                          -> x0
     v15  Imm(42)                                          -> x0
@@ -53,7 +53,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v4   Imm(1)                                           -> x0
     v5   Imm(1)                                           -> x0
     v6   Imm(0)                                           -> x0
-    v7   Imm(17)                                          -> x1
+    v7   Imm(17)                                          -> x0
     v8   BinopI { op=add, lhs=v6, rhs_imm=1 }             -> x0
     v9   Imm(25)                                          -> x0
     v10  Imm(42)                                          -> x0

@@ -14,27 +14,27 @@ Disassembly of section .text:
                	brk	#0x1
 
 <use_pair>:
-               	ldr	d1, [x0]
-               	ldr	d0, [x0, #0x8]
+               	ldr	d0, [x0]
+               	ldr	d1, [x0, #0x8]
                	mov	x0, #0x4000000000000000 // =4611686018427387904
                	fmov	d17, x0
-               	fmadd	d0, d0, d17, d1
+               	fmadd	d0, d1, d17, d0
                	ret
 
 <use_quad>:
-               	ldr	d1, [x0]
-               	ldr	d0, [x0, #0x8]
+               	ldr	d0, [x0]
+               	ldr	d1, [x0, #0x8]
                	mov	x1, #0x4000000000000000 // =4611686018427387904
                	fmov	d17, x1
-               	fmadd	d1, d0, d17, d1
-               	ldr	d0, [x0, #0x10]
+               	fmadd	d0, d1, d17, d0
+               	ldr	d1, [x0, #0x10]
                	mov	x1, #0x4010000000000000 // =4616189618054758400
                	fmov	d17, x1
-               	fmadd	d1, d0, d17, d1
-               	ldr	d0, [x0, #0x18]
+               	fmadd	d0, d1, d17, d0
+               	ldr	d1, [x0, #0x18]
                	mov	x0, #0x4020000000000000 // =4620693217682128896
                	fmov	d17, x0
-               	fmadd	d0, d0, d17, d1
+               	fmadd	d0, d1, d17, d0
                	ret
 
 <use_mixed>:

@@ -44,19 +44,18 @@ Disassembly of section .text:
                	ret
 
 <count>:
-               	mov	x1, x0
-               	mov	x0, #0x0                // =0
-               	cmp	w1, #0x1
+               	mov	x1, #0x0                // =0
+               	cmp	w0, #0x1
                	b.ge	<addr>
-               	cmp	w1, #0x4
+               	cmp	w0, #0x4
                	b.eq	<addr>
                	mov	x0, #-0x1               // =-1
                	ret
-               	add	x0, x0, #0x1
+               	add	x0, x1, #0x1
                	b	<addr>
-               	cmp	w1, #0x3
+               	cmp	w0, #0x3
                	b.gt	<addr>
-               	mov	x0, #0xa                // =10
+               	mov	x1, #0xa                // =10
                	b	<addr>
 
 <main>:

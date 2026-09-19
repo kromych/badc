@@ -10,9 +10,9 @@ fn ent_pc=2 n_params=0 variadic=false locals=1
     v4   Imm(65)                                          -> x0
     v5   Imm(65)                                          -> x0
     v6   Imm(0)                                           -> x0
-    v7   Imm(3)                                           -> x1
-    v8   Imm(1)                                           -> x1
-    v9   Imm(8)                                           -> x1
+    v7   Imm(3)                                           -> x0
+    v8   Imm(1)                                           -> x0
+    v9   Imm(8)                                           -> x0
     v10  BinopI { op=add, lhs=v6, rhs_imm=8 }             -> x0
     v11  Imm(1)                                           -> x0
     v12  Imm(1)                                           -> x0
@@ -21,9 +21,9 @@ fn ent_pc=2 n_params=0 variadic=false locals=1
     v15  Imm(65)                                          -> x0
     v16  Imm(65)                                          -> x0
     v17  Imm(0)                                           -> x0
-    v18  Imm(6)                                           -> x1
-    v19  Imm(3)                                           -> x1
-    v20  Imm(24)                                          -> x1
+    v18  Imm(6)                                           -> x0
+    v19  Imm(3)                                           -> x0
+    v20  Imm(24)                                          -> x0
     v21  BinopI { op=add, lhs=v17, rhs_imm=24 }           -> x0
     v22  Imm(65)                                          -> x0
     v23  Imm(65)                                          -> x0

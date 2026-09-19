@@ -52,9 +52,9 @@ Disassembly of section .text:
                	movl	$0xd, 0xc(%rax)
                	movl	$0x11, %esi
                	movl	%esi, 0x4(%rcx)
-               	movslq	(%rax), %rdi
+               	movslq	(%rax), %rcx
                	movslq	0xc(%rax), %rax
-               	addq	%rdi, %rax
+               	addq	%rcx, %rax
                	movq	%rsi, %rcx
                	addq	%rcx, %rax
                	cmpl	$0x29, %eax

@@ -243,30 +243,30 @@ Disassembly of section .text:
                	incq	%rbx
                	cmpl	$0x10, %ebx
                	jl	<addr>
-               	xorl	%edx, %edx
+               	xorl	%ecx, %ecx
                	leaq	<rip>, %rsi
                	leaq	<rip>, %rdi
-               	movq	%rdx, %rax
-               	leaq	0x1(%rax), %rcx
-               	movb	%cl, (%rdi,%rax)
-               	movb	%dl, (%rsi,%rax)
                	movq	%rcx, %rax
+               	leaq	0x1(%rax), %rdx
+               	movb	%dl, (%rdi,%rax)
+               	movb	%cl, (%rsi,%rax)
+               	movq	%rdx, %rax
                	cmpl	$0x40, %eax
                	jl	<addr>
                	movl	$0x28, %edi
                	callq	<addr>
-               	xorl	%edx, %edx
+               	xorl	%ecx, %ecx
                	leaq	<rip>, %rsi
-               	movq	%rdx, %rax
+               	movq	%rcx, %rax
                	movsbq	(%rsi,%rax), %rdi
                	cmpl	$0x28, %eax
                	jge	<addr>
-               	leaq	0x1(%rax), %rcx
-               	cmpl	%ecx, %edi
+               	leaq	0x1(%rax), %rdx
+               	cmpl	%edx, %edi
                	je	<addr>
                	jmp	<addr>
-               	movq	%rdx, %rcx
-               	cmpl	%ecx, %edi
+               	movq	%rcx, %rdx
+               	cmpl	%edx, %edi
                	jne	<addr>
                	incq	%rax
                	cmpl	$0x40, %eax

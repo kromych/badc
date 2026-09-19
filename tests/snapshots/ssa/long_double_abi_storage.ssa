@@ -76,11 +76,11 @@ fn ent_pc=4 n_params=0 variadic=false locals=8
     v63  Imm(0)                                           -> x1
     v64  Imm(0)                                           -> x1
     v65  Imm(33600)                                       -> x1
-    v66  BinopI { op=add, lhs=v62, rhs_imm=33600 }        -> x1
-    v67  Imm(4613937818241073152)                         -> x2
+    v66  BinopI { op=add, lhs=v62, rhs_imm=33600 }        -> x0
+    v67  Imm(4613937818241073152)                         -> x1
     v68  Store { addr=v66, disp=0, value=v67, kind=F80 }  -> -
-    v69  Imm(0)                                           -> x6
-    v70  BinopI { op=add, lhs=v62, rhs_imm=33600 }        -> x0
+    v69  Imm(0)                                           -> x2
+    v70  BinopI { op=add, lhs=v62, rhs_imm=33600 }        -> x2
     v71  Load { addr=v66, disp=0, kind=F80 }              -> d0
     v72  Binop { op=fne, lhs=v71, rhs=v67 }               -> x0
     terminator Bz { cond=v72, target=b10, fall=b9 }   (exit_acc=v72)

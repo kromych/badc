@@ -28,9 +28,9 @@ Disassembly of section .text:
                	mov	x0, #0x1                // =1
                	ret
                	fcvt	s1, d0
-               	mov	x2, #0xb1e6             // =45542
-               	movk	x2, #0x7f61, lsl #16
-               	fmov	s17, w2
+               	mov	x1, #0xb1e6             // =45542
+               	movk	x1, #0x7f61, lsl #16
+               	fmov	s17, w1
                	fcmp	s1, s17
                	b.gt	<addr>
                	mov	x0, #0x2                // =2

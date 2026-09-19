@@ -14,19 +14,18 @@ Disassembly of section .text:
                	brk	#0x1
 
 <classify>:
-               	mov	x1, x0
-               	mov	x0, #0x0                // =0
-               	cmp	w1, #0x2
+               	mov	x1, #0x0                // =0
+               	cmp	w0, #0x2
                	b.lt	<addr>
-               	cmp	w1, #0x2
+               	cmp	w0, #0x2
                	b.eq	<addr>
                	mov	x0, #-0x1               // =-1
                	ret
-               	add	x0, x0, #0x1
+               	add	x0, x1, #0x1
                	b	<addr>
-               	cmp	w1, #0x1
+               	cmp	w0, #0x1
                	b.ne	<addr>
-               	mov	x0, #0xa                // =10
+               	mov	x1, #0xa                // =10
                	b	<addr>
 
 <main>:

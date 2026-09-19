@@ -34,12 +34,10 @@ Disassembly of section .text:
                	pushq	%r13
                	pushq	%r12
                	pushq	%rbx
-               	movq	%rdi, %rbx
-               	movq	%r8, %r15
-               	movq	%rcx, %rdi
-               	movq	%rdx, %r14
+               	movq	%rdx, %rbx
+               	movq	%rcx, %r12
                	leaq	<rip>, %rax
-               	movq	%rbx, (%rax)
+               	movq	%rdi, (%rax)
                	leaq	<rip>, %rcx
                	movq	%rsi, (%rcx)
                	movq	(%rax), %rax
@@ -49,17 +47,17 @@ Disassembly of section .text:
                	xorl	%edx, %edx
                	movq	%rdx, 0x8(%rcx)
                	orq	%rdx, %rsi
-               	xorl	%r8d, %r8d
+               	xorl	%edi, %edi
                	testq	%rax, %rax
-               	setne	%bl
-               	movzbq	%bl, %rbx
+               	setne	%r13b
+               	movzbq	%r13b, %r13
                	movq	%rax, %rcx
                	shrq	$0x20, %rcx
                	testl	%ecx, %ecx
                	setne	%cl
                	movzbq	%cl, %rcx
                	shlq	$0x5, %rcx
-               	leaq	0x1(%rcx), %r12
+               	leaq	0x1(%rcx), %r14
                	movq	%rax, %rdx
                	shrq	%cl, %rdx
                	movq	%rdx, %rcx
@@ -68,7 +66,7 @@ Disassembly of section .text:
                	setne	%cl
                	movzbq	%cl, %rcx
                	shlq	$0x4, %rcx
-               	addq	%rcx, %r12
+               	addq	%rcx, %r14
                	shrq	%cl, %rdx
                	movq	%rdx, %rcx
                	shrq	$0x8, %rcx
@@ -76,7 +74,7 @@ Disassembly of section .text:
                	setne	%cl
                	movzbq	%cl, %rcx
                	shlq	$0x3, %rcx
-               	addq	%rcx, %r12
+               	addq	%rcx, %r14
                	shrq	%cl, %rdx
                	movq	%rdx, %rcx
                	shrq	$0x4, %rcx
@@ -84,7 +82,7 @@ Disassembly of section .text:
                	setne	%cl
                	movzbq	%cl, %rcx
                	shlq	$0x2, %rcx
-               	addq	%rcx, %r12
+               	addq	%rcx, %r14
                	shrq	%cl, %rdx
                	movq	%rdx, %rcx
                	shrq	$0x2, %rcx
@@ -92,62 +90,57 @@ Disassembly of section .text:
                	setne	%cl
                	movzbq	%cl, %rcx
                	shlq	%rcx
-               	addq	%rcx, %r12
+               	addq	%rcx, %r14
                	shrq	%cl, %rdx
                	movq	%rdx, %rcx
                	shrq	%rcx
                	testq	%rcx, %rcx
                	setne	%cl
                	movzbq	%cl, %rcx
-               	addq	%rcx, %r12
-               	movq	%r12, %rdx
-               	imulq	%rbx, %rdx
+               	leaq	(%r14,%rcx), %rdx
+               	imulq	%r13, %rdx
                	movl	$0x40, %ecx
                	subq	%rdx, %rcx
                	andq	$0x3f, %rcx
-               	movq	$-0x1, %rbx
+               	movq	$-0x1, %r13
                	movq	%rcx, %r10
-               	movq	%rbx, %r11
+               	movq	%r13, %r11
                	movq	%r10, %rcx
                	shrq	%cl, %r11
                	movq	%r11, %rcx
                	testq	%rdx, %rdx
-               	setne	%bl
-               	movzbq	%bl, %rbx
-               	imulq	%rbx, %rcx
+               	setne	%r13b
+               	movzbq	%r13b, %r13
+               	imulq	%r13, %rcx
                	andq	%rsi, %rcx
                	testq	%rcx, %rcx
-               	setne	%r10b
-               	movzbq	%r10b, %r10
-               	movq	%r10, 0x38(%rsp)
-               	movq	%rdx, %rbx
-               	andq	$0x7f, %rbx
+               	setne	%r13b
+               	movzbq	%r13b, %r13
+               	movq	%rdx, %r14
+               	andq	$0x7f, %r14
                	movq	%rdx, %rcx
                	andq	$0x3f, %rcx
-               	movl	$0x3f, %r12d
-               	movq	%r12, %r10
-               	subq	%rcx, %r10
-               	movq	%r10, 0x30(%rsp)
-               	shrq	$0x6, %rbx
-               	negq	%rbx
-               	addq	%r8, %rbx
-               	movq	%rbx, %r12
-               	xorq	$-0x1, %r12
-               	movq	%rax, %r13
-               	shrq	%cl, %r13
-               	movq	0x30(%rsp), %r10
+               	movl	$0x3f, %r15d
+               	subq	%rcx, %r15
+               	shrq	$0x6, %r14
+               	subq	%r14, %rdi
+               	movq	%rdi, %r14
+               	xorq	$-0x1, %r14
+               	movq	%rax, %r10
+               	shrq	%cl, %r10
+               	movq	%r10, 0x38(%rsp)
                	pushq	%rcx
-               	movq	%r10, %rcx
+               	movq	%r15, %rcx
                	shlq	%cl, %rax
                	popq	%rcx
                	shlq	%rax
                	shrq	%cl, %rsi
                	orq	%rsi, %rax
-               	andq	%r12, %rax
-               	movq	%r13, %rcx
-               	andq	%rbx, %rcx
+               	andq	%r14, %rax
+               	movq	0x38(%rsp), %rcx
+               	andq	%rdi, %rcx
                	orq	%rcx, %rax
-               	orq	0x38(%rsp), %rax
+               	orq	%r13, %rax
                	xorps	%xmm0, %xmm0
                	movq	%rax, %r10
                	testq	%r10, %r10
@@ -167,7 +160,7 @@ Disassembly of section .text:
                	mulsd	%xmm1, %xmm0
                	movsd	%xmm0, -0x8(%rbp,%riz)
                	movq	-0x8(%rbp), %rax
-               	cmpq	%r14, %rax
+               	cmpq	%rbx, %rax
                	je	<addr>
                	movslq	0x10(%rbp), %rax
                	popq	%rbx
@@ -185,8 +178,8 @@ Disassembly of section .text:
                	movq	%rax, (%rcx)
                	xorl	%esi, %esi
                	movq	%rsi, 0x8(%rcx)
-               	movq	%rsi, %r8
-               	orq	%rdx, %r8
+               	movq	%rsi, %rdi
+               	orq	%rdx, %rdi
                	testq	%rax, %rax
                	setne	%bl
                	movzbq	%bl, %rbx
@@ -196,7 +189,7 @@ Disassembly of section .text:
                	setne	%cl
                	movzbq	%cl, %rcx
                	shlq	$0x5, %rcx
-               	leaq	0x1(%rcx), %r12
+               	leaq	0x1(%rcx), %r13
                	movq	%rax, %rdx
                	shrq	%cl, %rdx
                	movq	%rdx, %rcx
@@ -205,7 +198,7 @@ Disassembly of section .text:
                	setne	%cl
                	movzbq	%cl, %rcx
                	shlq	$0x4, %rcx
-               	addq	%rcx, %r12
+               	addq	%rcx, %r13
                	shrq	%cl, %rdx
                	movq	%rdx, %rcx
                	shrq	$0x8, %rcx
@@ -213,7 +206,7 @@ Disassembly of section .text:
                	setne	%cl
                	movzbq	%cl, %rcx
                	shlq	$0x3, %rcx
-               	addq	%rcx, %r12
+               	addq	%rcx, %r13
                	shrq	%cl, %rdx
                	movq	%rdx, %rcx
                	shrq	$0x4, %rcx
@@ -221,7 +214,7 @@ Disassembly of section .text:
                	setne	%cl
                	movzbq	%cl, %rcx
                	shlq	$0x2, %rcx
-               	addq	%rcx, %r12
+               	addq	%rcx, %r13
                	shrq	%cl, %rdx
                	movq	%rdx, %rcx
                	shrq	$0x2, %rcx
@@ -229,15 +222,14 @@ Disassembly of section .text:
                	setne	%cl
                	movzbq	%cl, %rcx
                	shlq	%rcx
-               	addq	%rcx, %r12
+               	addq	%rcx, %r13
                	shrq	%cl, %rdx
                	movq	%rdx, %rcx
                	shrq	%rcx
                	testq	%rcx, %rcx
                	setne	%cl
                	movzbq	%cl, %rcx
-               	addq	%rcx, %r12
-               	movq	%r12, %rdx
+               	leaq	(%r13,%rcx), %rdx
                	imulq	%rbx, %rdx
                	movl	$0x40, %ecx
                	subq	%rdx, %rcx
@@ -252,38 +244,34 @@ Disassembly of section .text:
                	setne	%bl
                	movzbq	%bl, %rbx
                	imulq	%rbx, %rcx
-               	andq	%r8, %rcx
+               	andq	%rdi, %rcx
                	testq	%rcx, %rcx
-               	setne	%r14b
-               	movzbq	%r14b, %r14
-               	movq	%rdx, %rbx
-               	andq	$0x7f, %rbx
+               	setne	%bl
+               	movzbq	%bl, %rbx
+               	movq	%rdx, %r13
+               	andq	$0x7f, %r13
                	movq	%rdx, %rcx
                	andq	$0x3f, %rcx
-               	movl	$0x3f, %r12d
-               	movq	%r12, %r10
-               	subq	%rcx, %r10
-               	movq	%r10, 0x38(%rsp)
-               	shrq	$0x6, %rbx
-               	negq	%rbx
-               	addq	%rsi, %rbx
-               	movq	%rbx, %r12
-               	xorq	$-0x1, %r12
-               	movq	%rax, %r13
-               	shrq	%cl, %r13
-               	movq	0x38(%rsp), %r10
+               	movl	$0x3f, %r14d
+               	subq	%rcx, %r14
+               	shrq	$0x6, %r13
+               	subq	%r13, %rsi
+               	movq	%rsi, %r13
+               	xorq	$-0x1, %r13
+               	movq	%rax, %r15
+               	shrq	%cl, %r15
                	pushq	%rcx
-               	movq	%r10, %rcx
+               	movq	%r14, %rcx
                	shlq	%cl, %rax
                	popq	%rcx
                	shlq	%rax
-               	shrq	%cl, %r8
-               	orq	%r8, %rax
-               	andq	%r12, %rax
-               	movq	%r13, %rcx
-               	andq	%rbx, %rcx
+               	shrq	%cl, %rdi
+               	orq	%rdi, %rax
+               	andq	%r13, %rax
+               	movq	%r15, %rcx
+               	andq	%rsi, %rcx
                	orq	%rcx, %rax
-               	orq	%r14, %rax
+               	orq	%rbx, %rax
                	xorps	%xmm0, %xmm0
                	movq	%rax, %r10
                	testq	%r10, %r10
@@ -306,7 +294,7 @@ Disassembly of section .text:
                	leaq	-0x10(%rbp), %rax
                	movss	%xmm0, (%rax,%riz)
                	movl	(%rax), %ecx
-               	cmpl	%edi, %ecx
+               	cmpl	%r12d, %ecx
                	je	<addr>
                	movslq	0x10(%rbp), %rax
                	incq	%rax
@@ -338,8 +326,8 @@ Disassembly of section .text:
                	subq	%rax, %rcx
                	movq	%rcx, %rdx
                	subq	%rdi, %rdx
-               	movabsq	$-0x8000000000000000, %r12 # imm = 0x8000000000000000
-               	andq	%rax, %r12
+               	movabsq	$-0x8000000000000000, %rbx # imm = 0x8000000000000000
+               	andq	%rax, %rbx
                	testq	%rdx, %rdx
                	setne	%dil
                	movzbq	%dil, %rdi
@@ -350,7 +338,7 @@ Disassembly of section .text:
                	movzbq	%al, %rax
                	movq	%rax, %rcx
                	shlq	$0x5, %rcx
-               	leaq	0x1(%rcx), %r8
+               	leaq	0x1(%rcx), %r12
                	movq	%rdx, %rax
                	shrq	%cl, %rax
                	movq	%rax, %rcx
@@ -359,7 +347,7 @@ Disassembly of section .text:
                	setne	%cl
                	movzbq	%cl, %rcx
                	shlq	$0x4, %rcx
-               	addq	%rcx, %r8
+               	addq	%rcx, %r12
                	shrq	%cl, %rax
                	movq	%rax, %rcx
                	shrq	$0x8, %rcx
@@ -367,7 +355,7 @@ Disassembly of section .text:
                	setne	%cl
                	movzbq	%cl, %rcx
                	shlq	$0x3, %rcx
-               	addq	%rcx, %r8
+               	addq	%rcx, %r12
                	shrq	%cl, %rax
                	movq	%rax, %rcx
                	shrq	$0x4, %rcx
@@ -375,7 +363,7 @@ Disassembly of section .text:
                	setne	%cl
                	movzbq	%cl, %rcx
                	shlq	$0x2, %rcx
-               	addq	%rcx, %r8
+               	addq	%rcx, %r12
                	shrq	%cl, %rax
                	movq	%rax, %rcx
                	shrq	$0x2, %rcx
@@ -383,15 +371,13 @@ Disassembly of section .text:
                	setne	%cl
                	movzbq	%cl, %rcx
                	shlq	%rcx
-               	addq	%rcx, %r8
+               	addq	%rcx, %r12
                	shrq	%cl, %rax
-               	movq	%rax, %rcx
-               	shrq	%rcx
-               	testq	%rcx, %rcx
+               	shrq	%rax
+               	testq	%rax, %rax
                	setne	%cl
                	movzbq	%cl, %rcx
-               	addq	%rcx, %r8
-               	movq	%r8, %rax
+               	leaq	(%r12,%rcx), %rax
                	imulq	%rdi, %rax
                	movl	$0x40, %ecx
                	subq	%rax, %rcx
@@ -404,36 +390,35 @@ Disassembly of section .text:
                	imulq	%rdi, %rcx
                	andq	%rsi, %rcx
                	testq	%rcx, %rcx
-               	setne	%r13b
-               	movzbq	%r13b, %r13
+               	setne	%r12b
+               	movzbq	%r12b, %r12
                	movq	%rax, %rdi
                	andq	$0x7f, %rdi
                	movq	%rax, %rcx
                	andq	$0x3f, %rcx
-               	movl	$0x3f, %r8d
-               	movq	%r8, %r14
-               	subq	%rcx, %r14
-               	movq	%rdi, %r8
-               	shrq	$0x6, %r8
-               	xorl	%edi, %edi
-               	subq	%r8, %rdi
-               	movq	%rdi, %r8
-               	xorq	$-0x1, %r8
-               	movq	%rdx, %rbx
-               	shrq	%cl, %rbx
+               	movl	$0x3f, %r13d
+               	subq	%rcx, %r13
+               	shrq	$0x6, %rdi
+               	xorl	%r14d, %r14d
+               	negq	%rdi
+               	addq	%r14, %rdi
+               	movq	%rdi, %r14
+               	xorq	$-0x1, %r14
+               	movq	%rdx, %r15
+               	shrq	%cl, %r15
                	pushq	%rcx
-               	movq	%r14, %rcx
+               	movq	%r13, %rcx
                	shlq	%cl, %rdx
                	popq	%rcx
                	shlq	%rdx
                	shrq	%cl, %rsi
                	movq	%rsi, %rcx
                	orq	%rdx, %rcx
-               	andq	%r8, %rcx
-               	movq	%rbx, %rdx
+               	andq	%r14, %rcx
+               	movq	%r15, %rdx
                	andq	%rdi, %rdx
                	orq	%rdx, %rcx
-               	orq	%r13, %rcx
+               	orq	%r12, %rcx
                	xorps	%xmm0, %xmm0
                	movq	%rcx, %r10
                	testq	%r10, %r10
@@ -448,13 +433,13 @@ Disassembly of section .text:
                	addsd	%xmm0, %xmm0
                	addq	$0x3ff, %rax            # imm = 0x3FF
                	shlq	$0x34, %rax
-               	orq	%r12, %rax
+               	orq	%rbx, %rax
                	movq	%rax, -0x18(%rbp)
                	movsd	-0x18(%rbp,%riz), %xmm1
                	mulsd	%xmm1, %xmm0
                	movsd	%xmm0, -0x8(%rbp,%riz)
                	movq	-0x8(%rbp), %rax
-               	cmpq	%r15, %rax
+               	cmpq	%r8, %rax
                	je	<addr>
                	movslq	0x10(%rbp), %rax
                	addq	$0x2, %rax
@@ -487,8 +472,8 @@ Disassembly of section .text:
                	subq	%rax, %rcx
                	movq	%rcx, %rdx
                	subq	%rdi, %rdx
-               	movabsq	$-0x8000000000000000, %r12 # imm = 0x8000000000000000
-               	andq	%rax, %r12
+               	movabsq	$-0x8000000000000000, %r8 # imm = 0x8000000000000000
+               	andq	%rax, %r8
                	testq	%rdx, %rdx
                	setne	%dil
                	movzbq	%dil, %rdi
@@ -499,7 +484,7 @@ Disassembly of section .text:
                	movzbq	%al, %rax
                	movq	%rax, %rcx
                	shlq	$0x5, %rcx
-               	leaq	0x1(%rcx), %r8
+               	leaq	0x1(%rcx), %rbx
                	movq	%rdx, %rax
                	shrq	%cl, %rax
                	movq	%rax, %rcx
@@ -508,7 +493,7 @@ Disassembly of section .text:
                	setne	%cl
                	movzbq	%cl, %rcx
                	shlq	$0x4, %rcx
-               	addq	%rcx, %r8
+               	addq	%rcx, %rbx
                	shrq	%cl, %rax
                	movq	%rax, %rcx
                	shrq	$0x8, %rcx
@@ -516,7 +501,7 @@ Disassembly of section .text:
                	setne	%cl
                	movzbq	%cl, %rcx
                	shlq	$0x3, %rcx
-               	addq	%rcx, %r8
+               	addq	%rcx, %rbx
                	shrq	%cl, %rax
                	movq	%rax, %rcx
                	shrq	$0x4, %rcx
@@ -524,7 +509,7 @@ Disassembly of section .text:
                	setne	%cl
                	movzbq	%cl, %rcx
                	shlq	$0x2, %rcx
-               	addq	%rcx, %r8
+               	addq	%rcx, %rbx
                	shrq	%cl, %rax
                	movq	%rax, %rcx
                	shrq	$0x2, %rcx
@@ -532,15 +517,13 @@ Disassembly of section .text:
                	setne	%cl
                	movzbq	%cl, %rcx
                	shlq	%rcx
-               	addq	%rcx, %r8
+               	addq	%rcx, %rbx
                	shrq	%cl, %rax
-               	movq	%rax, %rcx
-               	shrq	%rcx
-               	testq	%rcx, %rcx
+               	shrq	%rax
+               	testq	%rax, %rax
                	setne	%cl
                	movzbq	%cl, %rcx
-               	addq	%rcx, %r8
-               	movq	%r8, %rax
+               	leaq	(%rbx,%rcx), %rax
                	imulq	%rdi, %rax
                	movl	$0x40, %ecx
                	subq	%rax, %rcx
@@ -553,36 +536,35 @@ Disassembly of section .text:
                	imulq	%rdi, %rcx
                	andq	%rsi, %rcx
                	testq	%rcx, %rcx
-               	setne	%r13b
-               	movzbq	%r13b, %r13
+               	setne	%bl
+               	movzbq	%bl, %rbx
                	movq	%rax, %rdi
                	andq	$0x7f, %rdi
                	movq	%rax, %rcx
                	andq	$0x3f, %rcx
-               	movl	$0x3f, %r8d
-               	movq	%r8, %r14
-               	subq	%rcx, %r14
-               	movq	%rdi, %r8
-               	shrq	$0x6, %r8
-               	xorl	%edi, %edi
-               	subq	%r8, %rdi
-               	movq	%rdi, %r8
-               	xorq	$-0x1, %r8
-               	movq	%rdx, %rbx
-               	shrq	%cl, %rbx
+               	movl	$0x3f, %r12d
+               	subq	%rcx, %r12
+               	shrq	$0x6, %rdi
+               	xorl	%r13d, %r13d
+               	negq	%rdi
+               	addq	%r13, %rdi
+               	movq	%rdi, %r13
+               	xorq	$-0x1, %r13
+               	movq	%rdx, %r14
+               	shrq	%cl, %r14
                	pushq	%rcx
-               	movq	%r14, %rcx
+               	movq	%r12, %rcx
                	shlq	%cl, %rdx
                	popq	%rcx
                	shlq	%rdx
                	shrq	%cl, %rsi
                	movq	%rsi, %rcx
                	orq	%rdx, %rcx
-               	andq	%r8, %rcx
-               	movq	%rbx, %rdx
+               	andq	%r13, %rcx
+               	movq	%r14, %rdx
                	andq	%rdi, %rdx
                	orq	%rdx, %rcx
-               	orq	%r13, %rcx
+               	orq	%rbx, %rcx
                	xorps	%xmm0, %xmm0
                	movq	%rcx, %r10
                	testq	%r10, %r10
@@ -598,7 +580,7 @@ Disassembly of section .text:
                	cvtss2sd	%xmm0, %xmm0
                	addq	$0x3ff, %rax            # imm = 0x3FF
                	shlq	$0x34, %rax
-               	orq	%r12, %rax
+               	orq	%r8, %rax
                	movq	%rax, -0x18(%rbp)
                	movsd	-0x18(%rbp,%riz), %xmm1
                	mulsd	%xmm1, %xmm0
@@ -630,15 +612,15 @@ Disassembly of section .text:
 <chk_from_fp>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x48, %rsp
+               	subq	$0x38, %rsp
                	pushq	%r15
                	pushq	%r14
                	pushq	%r13
                	pushq	%r12
                	pushq	%rbx
-               	movq	%rdi, %r12
-               	movslq	%edx, %rdi
-               	movq	%rsi, %r13
+               	movq	%rdi, %rbx
+               	movslq	%edx, %r13
+               	movq	%rsi, %r12
                	leaq	<rip>, %rax
                	movsd	%xmm0, (%rax,%riz)
                	movsd	(%rax,%riz), %xmm0
@@ -650,11 +632,11 @@ Disassembly of section .text:
                	movabsq	$0x7fffffffffffffff, %rcx # imm = 0x7FFFFFFFFFFFFFFF
                	andq	%rax, %rcx
                	shrq	$0x34, %rcx
-               	leaq	-0x3ff(%rcx), %rbx
+               	leaq	-0x3ff(%rcx), %r9
                	movabsq	$0xfffffffffffff, %r11  # imm = 0xFFFFFFFFFFFFF
                	andq	%r11, %rax
-               	movabsq	$0x10000000000000, %r8  # imm = 0x10000000000000
-               	orq	%rax, %r8
+               	movabsq	$0x10000000000000, %rdi # imm = 0x10000000000000
+               	orq	%rax, %rdi
                	subq	$0x433, %rcx            # imm = 0x433
                	movq	%rcx, %rax
                	sarq	$0x3f, %rax
@@ -664,38 +646,38 @@ Disassembly of section .text:
                	movq	%rcx, %rsi
                	andq	$0x7f, %rsi
                	andq	$0x3f, %rcx
-               	movl	$0x3f, %r9d
-               	movq	%r9, %r14
+               	movl	$0x3f, %r8d
+               	movq	%r8, %r14
                	subq	%rcx, %r14
                	shrq	$0x6, %rsi
-               	movq	%rdx, %r9
-               	subq	%rsi, %r9
-               	movq	%r9, %rsi
+               	movq	%rdx, %r8
+               	subq	%rsi, %r8
+               	movq	%r8, %rsi
                	xorq	$-0x1, %rsi
-               	movq	%r8, %r15
+               	movq	%rdi, %r15
                	shlq	%cl, %r15
-               	movq	%r8, %r10
+               	movq	%rdi, %r10
                	pushq	%rcx
                	movq	%r14, %rcx
                	shrq	%cl, %r10
                	popq	%rcx
-               	movq	%r10, 0x58(%rsp)
-               	movq	0x58(%rsp), %r10
+               	movq	%r10, 0x40(%rsp)
+               	movq	0x40(%rsp), %r10
                	shrq	%r10
-               	movq	%r10, 0x58(%rsp)
+               	movq	%r10, 0x40(%rsp)
                	movq	%rdx, %r10
                	shlq	%cl, %r10
-               	movq	%r10, 0x50(%rsp)
-               	movq	0x50(%rsp), %r10
-               	orq	0x58(%rsp), %r10
+               	movq	%r10, 0x38(%rsp)
+               	movq	0x38(%rsp), %r10
+               	orq	0x40(%rsp), %r10
                	movq	%r10, 0x40(%rsp)
                	movq	%r15, %r10
                	andq	%rsi, %r10
-               	movq	%r10, 0x58(%rsp)
+               	movq	%r10, 0x38(%rsp)
                	movq	0x40(%rsp), %r10
                	andq	%rsi, %r10
                	movq	%r10, 0x40(%rsp)
-               	andq	%r9, %r15
+               	andq	%r8, %r15
                	movq	0x40(%rsp), %r10
                	orq	%r15, %r10
                	movq	%r10, 0x40(%rsp)
@@ -708,35 +690,33 @@ Disassembly of section .text:
                	shlq	%cl, %r14
                	popq	%rcx
                	shlq	%r14
-               	shrq	%cl, %r8
-               	movq	%r8, %rcx
+               	shrq	%cl, %rdi
+               	movq	%rdi, %rcx
                	orq	%r14, %rcx
                	andq	%rsi, %rcx
-               	movq	%r15, %r8
-               	andq	%r9, %r8
-               	orq	%rcx, %r8
-               	movq	%r15, %rcx
-               	andq	%rsi, %rcx
-               	movq	%rax, %rsi
-               	xorq	$-0x1, %rsi
-               	movq	0x58(%rsp), %r9
-               	andq	%rsi, %r9
-               	andq	%rax, %r8
-               	orq	%r9, %r8
-               	movq	%rsi, %r10
-               	movq	0x40(%rsp), %rsi
-               	andq	%r10, %rsi
-               	andq	%rcx, %rax
-               	movq	%rsi, %rcx
+               	movq	%r15, %rdi
+               	andq	%r8, %rdi
+               	orq	%rcx, %rdi
+               	andq	%r15, %rsi
+               	movq	%rax, %rcx
+               	xorq	$-0x1, %rcx
+               	movq	0x38(%rsp), %r8
+               	andq	%rcx, %r8
+               	andq	%rax, %rdi
+               	orq	%r8, %rdi
+               	movq	%rcx, %r10
+               	movq	0x40(%rsp), %rcx
+               	andq	%r10, %rcx
+               	andq	%rsi, %rax
                	orq	%rax, %rcx
-               	movq	%rbx, %rax
+               	movq	%r9, %rax
                	sarq	$0x3f, %rax
                	xorq	$-0x1, %rax
-               	movq	%r8, %rsi
+               	movq	%rdi, %rsi
                	andq	%rax, %rsi
-               	movq	%rcx, %r8
-               	andq	%rax, %r8
-               	cmpl	$0x80, %ebx
+               	movq	%rcx, %rdi
+               	andq	%rax, %rdi
+               	cmpl	$0x80, %r9d
                	setge	%cl
                	movzbq	%cl, %rcx
                	movq	%rdx, %rax
@@ -746,17 +726,17 @@ Disassembly of section .text:
                	movq	%rsi, %rdx
                	andq	%rcx, %rdx
                	orq	%rax, %rdx
-               	andq	%r8, %rcx
+               	andq	%rdi, %rcx
                	orq	%rax, %rcx
                	movq	0x48(%rsp), %rax
                	xorq	$-0x1, %rax
                	andq	%rax, %rdx
                	andq	%rcx, %rax
-               	cmpq	%r12, %rax
+               	cmpq	%rbx, %rax
                	jne	<addr>
-               	cmpq	%r13, %rdx
+               	cmpq	%r12, %rdx
                	je	<addr>
-               	movq	%rdi, %rax
+               	movq	%r13, %rax
                	popq	%rbx
                	popq	%r12
                	popq	%r13
@@ -776,58 +756,58 @@ Disassembly of section .text:
                	leaq	-0x3ff(%rdx), %r14
                	movabsq	$0xfffffffffffff, %r11  # imm = 0xFFFFFFFFFFFFF
                	andq	%r11, %rcx
-               	movabsq	$0x10000000000000, %r9  # imm = 0x10000000000000
-               	orq	%rcx, %r9
+               	movabsq	$0x10000000000000, %r8  # imm = 0x10000000000000
+               	orq	%rcx, %r8
                	leaq	-0x433(%rdx), %rcx
                	movq	%rcx, %rdx
                	sarq	$0x3f, %rdx
                	xorq	%rdx, %rcx
                	subq	%rdx, %rcx
                	xorl	%esi, %esi
-               	movq	%rcx, %r8
-               	andq	$0x7f, %r8
+               	movq	%rcx, %rdi
+               	andq	$0x7f, %rdi
                	andq	$0x3f, %rcx
-               	movl	$0x3f, %ebx
-               	movq	%rbx, %r15
+               	movl	$0x3f, %r9d
+               	movq	%r9, %r15
                	subq	%rcx, %r15
-               	shrq	$0x6, %r8
-               	movq	%rsi, %rbx
-               	subq	%r8, %rbx
-               	movq	%rbx, %r8
-               	xorq	$-0x1, %r8
-               	movq	%r9, %r10
+               	shrq	$0x6, %rdi
+               	movq	%rsi, %r9
+               	subq	%rdi, %r9
+               	movq	%r9, %rdi
+               	xorq	$-0x1, %rdi
+               	movq	%r8, %r10
                	shlq	%cl, %r10
-               	movq	%r10, 0x58(%rsp)
-               	movq	%r9, %r10
+               	movq	%r10, 0x48(%rsp)
+               	movq	%r8, %r10
                	pushq	%rcx
                	movq	%r15, %rcx
                	shrq	%cl, %r10
                	popq	%rcx
-               	movq	%r10, 0x50(%rsp)
-               	movq	0x50(%rsp), %r10
+               	movq	%r10, 0x40(%rsp)
+               	movq	0x40(%rsp), %r10
                	shrq	%r10
-               	movq	%r10, 0x50(%rsp)
+               	movq	%r10, 0x40(%rsp)
                	movq	%rsi, %r10
                	shlq	%cl, %r10
-               	movq	%r10, 0x48(%rsp)
+               	movq	%r10, 0x38(%rsp)
+               	movq	0x38(%rsp), %r10
+               	orq	0x40(%rsp), %r10
+               	movq	%r10, 0x40(%rsp)
                	movq	0x48(%rsp), %r10
-               	orq	0x50(%rsp), %r10
-               	movq	%r10, 0x40(%rsp)
-               	movq	0x58(%rsp), %r10
-               	andq	%r8, %r10
-               	movq	%r10, 0x50(%rsp)
+               	andq	%rdi, %r10
+               	movq	%r10, 0x38(%rsp)
                	movq	0x40(%rsp), %r10
-               	andq	%r8, %r10
+               	andq	%rdi, %r10
                	movq	%r10, 0x40(%rsp)
-               	movq	0x58(%rsp), %r10
-               	andq	%rbx, %r10
-               	movq	%r10, 0x58(%rsp)
+               	movq	0x48(%rsp), %r10
+               	andq	%r9, %r10
+               	movq	%r10, 0x48(%rsp)
                	movq	0x40(%rsp), %r10
-               	orq	0x58(%rsp), %r10
+               	orq	0x48(%rsp), %r10
                	movq	%r10, 0x40(%rsp)
                	movq	%rsi, %r10
                	shrq	%cl, %r10
-               	movq	%r10, 0x58(%rsp)
+               	movq	%r10, 0x48(%rsp)
                	movq	%r15, %r10
                	movq	%rsi, %r15
                	pushq	%rcx
@@ -835,66 +815,66 @@ Disassembly of section .text:
                	shlq	%cl, %r15
                	popq	%rcx
                	shlq	%r15
-               	shrq	%cl, %r9
-               	movq	%r9, %rcx
+               	shrq	%cl, %r8
+               	movq	%r8, %rcx
                	orq	%r15, %rcx
-               	andq	%r8, %rcx
-               	movq	0x58(%rsp), %r9
-               	andq	%rbx, %r9
-               	orq	%rcx, %r9
-               	movq	0x58(%rsp), %rcx
-               	andq	%r8, %rcx
-               	movq	%rdx, %r8
-               	xorq	$-0x1, %r8
-               	movq	0x50(%rsp), %rbx
-               	andq	%r8, %rbx
-               	andq	%rdx, %r9
-               	orq	%rbx, %r9
-               	movq	%r8, %r10
-               	movq	0x40(%rsp), %r8
-               	andq	%r10, %r8
-               	andq	%rdx, %rcx
-               	movq	%r8, %rdx
+               	andq	%rdi, %rcx
+               	movq	0x48(%rsp), %r8
+               	andq	%r9, %r8
+               	orq	%rcx, %r8
+               	movq	%rdi, %r10
+               	movq	0x48(%rsp), %rdi
+               	andq	%r10, %rdi
+               	movq	%rdx, %rcx
+               	xorq	$-0x1, %rcx
+               	movq	0x38(%rsp), %r9
+               	andq	%rcx, %r9
+               	andq	%rdx, %r8
+               	orq	%r9, %r8
+               	movq	%rcx, %r10
+               	movq	0x40(%rsp), %rcx
+               	andq	%r10, %rcx
+               	andq	%rdi, %rdx
                	orq	%rcx, %rdx
                	movq	%r14, %rcx
                	sarq	$0x3f, %rcx
                	xorq	$-0x1, %rcx
-               	movq	%r9, %r8
+               	movq	%r8, %rdi
+               	andq	%rcx, %rdi
+               	movq	%rdx, %r8
                	andq	%rcx, %r8
-               	movq	%rdx, %r9
-               	andq	%rcx, %r9
                	cmpl	$0x80, %r14d
                	setge	%dl
                	movzbq	%dl, %rdx
                	movq	%rsi, %rcx
                	subq	%rdx, %rcx
-               	movq	%r8, %rdx
+               	movq	%rdi, %rdx
                	xorq	%rax, %rdx
-               	movq	%r9, %rsi
+               	movq	%r8, %rsi
                	xorq	%rax, %rsi
                	cmpq	%rax, %rdx
-               	setb	%r8b
-               	movzbq	%r8b, %r8
+               	setb	%dil
+               	movzbq	%dil, %rdi
                	subq	%rax, %rdx
                	subq	%rax, %rsi
-               	subq	%r8, %rsi
-               	movq	%rax, %r8
-               	xorq	$-0x1, %r8
-               	movabsq	$0x7fffffffffffffff, %r9 # imm = 0x7FFFFFFFFFFFFFFF
-               	xorq	%rax, %r9
+               	subq	%rdi, %rsi
+               	movq	%rax, %rdi
+               	xorq	$-0x1, %rdi
+               	movabsq	$0x7fffffffffffffff, %r8 # imm = 0x7FFFFFFFFFFFFFFF
+               	xorq	%rax, %r8
                	movq	%rcx, %rax
                	xorq	$-0x1, %rax
                	andq	%rax, %rdx
-               	andq	%rcx, %r8
-               	orq	%r8, %rdx
+               	andq	%rcx, %rdi
+               	orq	%rdi, %rdx
                	andq	%rsi, %rax
-               	andq	%r9, %rcx
+               	andq	%r8, %rcx
                	orq	%rcx, %rax
-               	cmpq	%r12, %rax
+               	cmpq	%rbx, %rax
                	jne	<addr>
-               	cmpq	%r13, %rdx
+               	cmpq	%r12, %rdx
                	je	<addr>
-               	leaq	0x1(%rdi), %rax
+               	leaq	0x1(%r13), %rax
                	movslq	%eax, %rax
                	popq	%rbx
                	popq	%r12
@@ -915,15 +895,16 @@ Disassembly of section .text:
 <chk_from_fp_neg>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x48, %rsp
+               	subq	$0x38, %rsp
                	pushq	%r15
                	pushq	%r14
                	pushq	%r13
                	pushq	%r12
                	pushq	%rbx
-               	movq	%rdi, 0x50(%rsp)
-               	movslq	%edx, %r8
-               	movq	%rsi, 0x48(%rsp)
+               	movq	%rdi, %r14
+               	movslq	%edx, %r11
+               	movq	%r11, 0x48(%rsp)
+               	movq	%rsi, %r15
                	leaq	<rip>, %rax
                	movsd	%xmm0, (%rax,%riz)
                	movsd	(%rax,%riz), %xmm0
@@ -934,11 +915,11 @@ Disassembly of section .text:
                	movabsq	$0x7fffffffffffffff, %rdx # imm = 0x7FFFFFFFFFFFFFFF
                	andq	%rcx, %rdx
                	shrq	$0x34, %rdx
-               	leaq	-0x3ff(%rdx), %r12
+               	leaq	-0x3ff(%rdx), %rbx
                	movabsq	$0xfffffffffffff, %r11  # imm = 0xFFFFFFFFFFFFF
                	andq	%r11, %rcx
-               	movabsq	$0x10000000000000, %r9  # imm = 0x10000000000000
-               	orq	%rcx, %r9
+               	movabsq	$0x10000000000000, %r8  # imm = 0x10000000000000
+               	orq	%rcx, %r8
                	leaq	-0x433(%rdx), %rcx
                	movq	%rcx, %rdx
                	sarq	$0x3f, %rdx
@@ -948,82 +929,84 @@ Disassembly of section .text:
                	movq	%rcx, %rdi
                	andq	$0x7f, %rdi
                	andq	$0x3f, %rcx
-               	movl	$0x3f, %ebx
-               	movq	%rbx, %r13
-               	subq	%rcx, %r13
+               	movl	$0x3f, %r9d
+               	movq	%r9, %r12
+               	subq	%rcx, %r12
                	shrq	$0x6, %rdi
-               	movq	%rsi, %rbx
-               	subq	%rdi, %rbx
-               	movq	%rbx, %rdi
+               	movq	%rsi, %r9
+               	subq	%rdi, %r9
+               	movq	%r9, %rdi
                	xorq	$-0x1, %rdi
-               	movq	%r9, %r14
-               	shlq	%cl, %r14
-               	movq	%r9, %r15
+               	movq	%r8, %r13
+               	shlq	%cl, %r13
+               	movq	%r8, %r10
                	pushq	%rcx
-               	movq	%r13, %rcx
-               	shrq	%cl, %r15
+               	movq	%r12, %rcx
+               	shrq	%cl, %r10
                	popq	%rcx
-               	shrq	%r15
+               	movq	%r10, 0x40(%rsp)
+               	movq	0x40(%rsp), %r10
+               	shrq	%r10
+               	movq	%r10, 0x40(%rsp)
                	movq	%rsi, %r10
                	shlq	%cl, %r10
-               	movq	%r10, 0x58(%rsp)
-               	movq	0x58(%rsp), %r10
-               	orq	%r15, %r10
+               	movq	%r10, 0x38(%rsp)
+               	movq	0x38(%rsp), %r10
+               	orq	0x40(%rsp), %r10
                	movq	%r10, 0x40(%rsp)
-               	movq	%r14, %r15
-               	andq	%rdi, %r15
+               	movq	%r13, %r10
+               	andq	%rdi, %r10
+               	movq	%r10, 0x38(%rsp)
                	movq	0x40(%rsp), %r10
                	andq	%rdi, %r10
                	movq	%r10, 0x40(%rsp)
-               	andq	%rbx, %r14
+               	andq	%r9, %r13
                	movq	0x40(%rsp), %r10
-               	orq	%r14, %r10
+               	orq	%r13, %r10
                	movq	%r10, 0x40(%rsp)
-               	movq	%rsi, %r14
-               	shrq	%cl, %r14
-               	movq	%r13, %r10
                	movq	%rsi, %r13
+               	shrq	%cl, %r13
+               	movq	%r12, %r10
+               	movq	%rsi, %r12
                	pushq	%rcx
                	movq	%r10, %rcx
-               	shlq	%cl, %r13
+               	shlq	%cl, %r12
                	popq	%rcx
-               	shlq	%r13
-               	shrq	%cl, %r9
-               	movq	%r9, %rcx
-               	orq	%r13, %rcx
+               	shlq	%r12
+               	shrq	%cl, %r8
+               	movq	%r8, %rcx
+               	orq	%r12, %rcx
                	andq	%rdi, %rcx
-               	movq	%r14, %r9
-               	andq	%rbx, %r9
-               	orq	%rcx, %r9
-               	movq	%r14, %rcx
-               	andq	%rdi, %rcx
-               	movq	%rdx, %rdi
-               	xorq	$-0x1, %rdi
-               	movq	%r15, %rbx
-               	andq	%rdi, %rbx
-               	andq	%rdx, %r9
-               	orq	%rbx, %r9
-               	movq	%rdi, %r10
-               	movq	0x40(%rsp), %rdi
-               	andq	%r10, %rdi
-               	andq	%rdx, %rcx
-               	movq	%rdi, %rdx
+               	movq	%r13, %r8
+               	andq	%r9, %r8
+               	orq	%rcx, %r8
+               	andq	%r13, %rdi
+               	movq	%rdx, %rcx
+               	xorq	$-0x1, %rcx
+               	movq	0x38(%rsp), %r9
+               	andq	%rcx, %r9
+               	andq	%rdx, %r8
+               	orq	%r9, %r8
+               	movq	%rcx, %r10
+               	movq	0x40(%rsp), %rcx
+               	andq	%r10, %rcx
+               	andq	%rdi, %rdx
                	orq	%rcx, %rdx
-               	movq	%r12, %rcx
+               	movq	%rbx, %rcx
                	sarq	$0x3f, %rcx
                	xorq	$-0x1, %rcx
-               	movq	%r9, %rdi
+               	movq	%r8, %rdi
                	andq	%rcx, %rdi
-               	movq	%rdx, %r9
-               	andq	%rcx, %r9
-               	cmpl	$0x80, %r12d
+               	movq	%rdx, %r8
+               	andq	%rcx, %r8
+               	cmpl	$0x80, %ebx
                	setge	%dl
                	movzbq	%dl, %rdx
                	movq	%rsi, %rcx
                	subq	%rdx, %rcx
                	movq	%rdi, %rdx
                	xorq	%rax, %rdx
-               	movq	%r9, %rsi
+               	movq	%r8, %rsi
                	xorq	%rax, %rsi
                	cmpq	%rax, %rdx
                	setb	%dil
@@ -1033,21 +1016,21 @@ Disassembly of section .text:
                	subq	%rdi, %rsi
                	movq	%rax, %rdi
                	xorq	$-0x1, %rdi
-               	movabsq	$0x7fffffffffffffff, %r9 # imm = 0x7FFFFFFFFFFFFFFF
-               	xorq	%rax, %r9
+               	movabsq	$0x7fffffffffffffff, %r8 # imm = 0x7FFFFFFFFFFFFFFF
+               	xorq	%rax, %r8
                	movq	%rcx, %rax
                	xorq	$-0x1, %rax
                	andq	%rax, %rdx
                	andq	%rcx, %rdi
                	orq	%rdi, %rdx
                	andq	%rsi, %rax
-               	andq	%r9, %rcx
+               	andq	%r8, %rcx
                	orq	%rcx, %rax
-               	cmpq	0x50(%rsp), %rax
+               	cmpq	%r14, %rax
                	jne	<addr>
-               	cmpq	0x48(%rsp), %rdx
+               	cmpq	%r15, %rdx
                	je	<addr>
-               	movq	%r8, %rax
+               	movq	0x48(%rsp), %rax
                	popq	%rbx
                	popq	%r12
                	popq	%r13
@@ -1067,7 +1050,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x48, %rsp
+               	subq	$0x38, %rsp
                	pushq	%r15
                	pushq	%r14
                	pushq	%r13
@@ -1567,12 +1550,12 @@ Disassembly of section .text:
                	cvtss2sd	%xmm0, %xmm0
                	movsd	%xmm0, -0x8(%rbp,%riz)
                	movq	-0x8(%rbp), %rax
-               	movq	%rax, %r15
-               	sarq	$0x3f, %r15
+               	movq	%rax, %rbx
+               	sarq	$0x3f, %rbx
                	movabsq	$0x7fffffffffffffff, %rcx # imm = 0x7FFFFFFFFFFFFFFF
                	andq	%rax, %rcx
                	shrq	$0x34, %rcx
-               	leaq	-0x3ff(%rcx), %r9
+               	leaq	-0x3ff(%rcx), %rsi
                	movabsq	$0xfffffffffffff, %r11  # imm = 0xFFFFFFFFFFFFF
                	andq	%r11, %rax
                	movabsq	$0x10000000000000, %rdi # imm = 0x10000000000000
@@ -1583,74 +1566,71 @@ Disassembly of section .text:
                	xorq	%rax, %rcx
                	subq	%rax, %rcx
                	xorl	%edx, %edx
-               	movq	%rcx, %rsi
-               	andq	$0x7f, %rsi
+               	movq	%rcx, %r8
+               	andq	$0x7f, %r8
                	andq	$0x3f, %rcx
-               	movl	$0x3f, %r8d
-               	movq	%r8, %rbx
-               	subq	%rcx, %rbx
-               	shrq	$0x6, %rsi
+               	movl	$0x3f, %r9d
+               	movq	%r9, %r12
+               	subq	%rcx, %r12
+               	movq	%r8, %r9
+               	shrq	$0x6, %r9
                	movq	%rdx, %r8
-               	subq	%rsi, %r8
-               	movq	%r8, %rsi
-               	xorq	$-0x1, %rsi
-               	movq	%rdi, %r12
-               	shlq	%cl, %r12
-               	movq	%r12, %r13
-               	andq	%rsi, %r13
+               	subq	%r9, %r8
+               	movq	%r8, %r9
+               	xorq	$-0x1, %r9
+               	movq	%rdi, %r13
+               	shlq	%cl, %r13
+               	andq	%r9, %r13
+               	movq	%rdx, %r14
+               	shrq	%cl, %r14
+               	movq	%r12, %r10
                	movq	%rdx, %r12
-               	shrq	%cl, %r12
-               	movq	%rbx, %r10
-               	movq	%rdx, %rbx
                	pushq	%rcx
                	movq	%r10, %rcx
-               	shlq	%cl, %rbx
+               	shlq	%cl, %r12
                	popq	%rcx
-               	shlq	%rbx
+               	shlq	%r12
                	shrq	%cl, %rdi
                	movq	%rdi, %rcx
-               	orq	%rbx, %rcx
-               	andq	%rsi, %rcx
-               	movq	%r12, %rdi
+               	orq	%r12, %rcx
+               	andq	%r9, %rcx
+               	movq	%r14, %rdi
                	andq	%r8, %rdi
-               	orq	%rcx, %rdi
-               	movq	%rax, %rsi
-               	xorq	$-0x1, %rsi
-               	movq	%r13, %r8
-               	andq	%rsi, %r8
-               	andq	%rax, %rdi
-               	orq	%r8, %rdi
-               	movq	%r9, %rax
-               	sarq	$0x3f, %rax
-               	xorq	$-0x1, %rax
-               	movq	%rdi, %rsi
-               	andq	%rax, %rsi
-               	cmpl	$0x80, %r9d
-               	setge	%cl
-               	movzbq	%cl, %rcx
-               	movq	%rdx, %rax
-               	subq	%rcx, %rax
-               	movq	%rax, %rcx
+               	orq	%rdi, %rcx
+               	movq	%rax, %rdi
+               	xorq	$-0x1, %rdi
+               	andq	%r13, %rdi
+               	andq	%rcx, %rax
+               	orq	%rdi, %rax
+               	movq	%rsi, %rcx
+               	sarq	$0x3f, %rcx
                	xorq	$-0x1, %rcx
-               	movq	%rsi, %rdx
-               	andq	%rcx, %rdx
-               	orq	%rax, %rdx
-               	movq	%r15, %rax
-               	xorq	$-0x1, %rax
-               	andq	%rax, %rdx
-               	cmpq	$0x2, %rdx
+               	andq	%rax, %rcx
+               	cmpl	$0x80, %esi
+               	setge	%sil
+               	movzbq	%sil, %rsi
+               	movq	%rdx, %rax
+               	subq	%rsi, %rax
+               	movq	%rax, %rdx
+               	xorq	$-0x1, %rdx
+               	andq	%rdx, %rcx
+               	orq	%rcx, %rax
+               	movq	%rbx, %rcx
+               	xorq	$-0x1, %rcx
+               	andq	%rcx, %rax
+               	cmpq	$0x2, %rax
                	jne	<addr>
                	leaq	<rip>, %rax
                	movss	(%rax,%riz), %xmm0
                	cvtss2sd	%xmm0, %xmm0
                	movsd	%xmm0, -0x8(%rbp,%riz)
                	movq	-0x8(%rbp), %rax
-               	movq	%rax, %r15
-               	sarq	$0x3f, %r15
+               	movq	%rax, %rbx
+               	sarq	$0x3f, %rbx
                	movabsq	$0x7fffffffffffffff, %rcx # imm = 0x7FFFFFFFFFFFFFFF
                	andq	%rax, %rcx
                	shrq	$0x34, %rcx
-               	leaq	-0x3ff(%rcx), %r9
+               	leaq	-0x3ff(%rcx), %rsi
                	movabsq	$0xfffffffffffff, %r11  # imm = 0xFFFFFFFFFFFFF
                	andq	%r11, %rax
                	movabsq	$0x10000000000000, %rdi # imm = 0x10000000000000
@@ -1661,65 +1641,55 @@ Disassembly of section .text:
                	xorq	%rax, %rcx
                	subq	%rax, %rcx
                	xorl	%edx, %edx
-               	movq	%rcx, %rsi
-               	andq	$0x7f, %rsi
+               	movq	%rcx, %r8
+               	andq	$0x7f, %r8
                	andq	$0x3f, %rcx
-               	movl	$0x3f, %r8d
-               	movq	%r8, %rbx
-               	subq	%rcx, %rbx
-               	shrq	$0x6, %rsi
+               	movl	$0x3f, %r9d
+               	movq	%r9, %r12
+               	subq	%rcx, %r12
+               	movq	%r8, %r9
+               	shrq	$0x6, %r9
                	movq	%rdx, %r8
-               	subq	%rsi, %r8
-               	movq	%r8, %rsi
-               	xorq	$-0x1, %rsi
-               	movq	%rdi, %r12
-               	shlq	%cl, %r12
+               	subq	%r9, %r8
+               	movq	%r8, %r9
+               	xorq	$-0x1, %r9
                	movq	%rdi, %r13
+               	shlq	%cl, %r13
                	pushq	%rcx
-               	movq	%rbx, %rcx
-               	shrq	%cl, %r13
-               	popq	%rcx
-               	shrq	%r13
-               	movq	%rdx, %r14
-               	shlq	%cl, %r14
-               	movq	%r14, %r10
-               	orq	%r13, %r10
-               	movq	%r10, 0x48(%rsp)
-               	movq	0x48(%rsp), %r10
-               	andq	%rsi, %r10
-               	movq	%r10, 0x48(%rsp)
-               	andq	%r8, %r12
-               	movq	0x48(%rsp), %r10
-               	orq	%r12, %r10
-               	movq	%r10, 0x48(%rsp)
-               	movq	%rdx, %r12
-               	shrq	%cl, %r12
                	movq	%r12, %rcx
-               	andq	%rsi, %rcx
-               	movq	%rax, %rsi
-               	xorq	$-0x1, %rsi
-               	movq	%rsi, %r10
-               	movq	0x48(%rsp), %rsi
-               	andq	%r10, %rsi
+               	shrq	%cl, %rdi
+               	popq	%rcx
+               	shrq	%rdi
+               	movq	%rdx, %r12
+               	shlq	%cl, %r12
+               	orq	%r12, %rdi
+               	andq	%r9, %rdi
+               	andq	%r13, %r8
+               	orq	%r8, %rdi
+               	movq	%rdx, %r8
+               	shrq	%cl, %r8
+               	movq	%r8, %rcx
+               	andq	%r9, %rcx
+               	movq	%rax, %r8
+               	xorq	$-0x1, %r8
+               	andq	%r8, %rdi
                	andq	%rcx, %rax
+               	orq	%rdi, %rax
                	movq	%rsi, %rcx
-               	orq	%rax, %rcx
-               	movq	%r9, %rax
-               	sarq	$0x3f, %rax
-               	xorq	$-0x1, %rax
-               	movq	%rcx, %rdi
-               	andq	%rax, %rdi
-               	cmpl	$0x80, %r9d
-               	setge	%cl
-               	movzbq	%cl, %rcx
-               	movq	%rdx, %rax
-               	subq	%rcx, %rax
-               	movq	%rax, %rcx
+               	sarq	$0x3f, %rcx
                	xorq	$-0x1, %rcx
-               	andq	%rdi, %rcx
-               	orq	%rax, %rcx
-               	movq	%r15, %rax
-               	xorq	$-0x1, %rax
+               	andq	%rax, %rcx
+               	cmpl	$0x80, %esi
+               	setge	%sil
+               	movzbq	%sil, %rsi
+               	movq	%rdx, %rax
+               	subq	%rsi, %rax
+               	movq	%rax, %rdx
+               	xorq	$-0x1, %rdx
+               	andq	%rdx, %rcx
+               	orq	%rcx, %rax
+               	movq	%rbx, %rcx
+               	xorq	$-0x1, %rcx
                	andq	%rcx, %rax
                	testq	%rax, %rax
                	je	<addr>
@@ -1741,42 +1711,41 @@ Disassembly of section .text:
                	movss	(%rax,%riz), %xmm0
                	cvtss2sd	%xmm0, %xmm0
                	movsd	%xmm0, -0x8(%rbp,%riz)
-               	movq	-0x8(%rbp), %rcx
+               	movq	-0x8(%rbp), %rax
+               	movq	%rax, %rsi
+               	sarq	$0x3f, %rsi
+               	movabsq	$0x7fffffffffffffff, %rcx # imm = 0x7FFFFFFFFFFFFFFF
+               	andq	%rax, %rcx
+               	shrq	$0x34, %rcx
+               	leaq	-0x3ff(%rcx), %rdi
+               	movabsq	$0xfffffffffffff, %r11  # imm = 0xFFFFFFFFFFFFF
+               	andq	%r11, %rax
+               	movabsq	$0x10000000000000, %r8  # imm = 0x10000000000000
+               	orq	%rax, %r8
+               	subq	$0x433, %rcx            # imm = 0x433
                	movq	%rcx, %rax
                	sarq	$0x3f, %rax
-               	movabsq	$0x7fffffffffffffff, %rdx # imm = 0x7FFFFFFFFFFFFFFF
-               	andq	%rcx, %rdx
-               	shrq	$0x34, %rdx
-               	leaq	-0x3ff(%rdx), %rbx
-               	movabsq	$0xfffffffffffff, %r11  # imm = 0xFFFFFFFFFFFFF
-               	andq	%r11, %rcx
-               	movabsq	$0x10000000000000, %r8  # imm = 0x10000000000000
-               	orq	%rcx, %r8
-               	leaq	-0x433(%rdx), %rcx
-               	movq	%rcx, %rdx
-               	sarq	$0x3f, %rdx
-               	xorq	%rdx, %rcx
-               	subq	%rdx, %rcx
-               	xorl	%esi, %esi
-               	movq	%rcx, %rdi
-               	andq	$0x7f, %rdi
+               	xorq	%rax, %rcx
+               	subq	%rax, %rcx
+               	xorl	%edx, %edx
+               	movq	%rcx, %r9
+               	andq	$0x7f, %r9
                	andq	$0x3f, %rcx
-               	movl	$0x3f, %r9d
-               	movq	%r9, %r12
+               	movl	$0x3f, %ebx
+               	movq	%rbx, %r12
                	subq	%rcx, %r12
-               	shrq	$0x6, %rdi
-               	movq	%rsi, %r9
-               	subq	%rdi, %r9
-               	movq	%r9, %rdi
-               	xorq	$-0x1, %rdi
+               	shrq	$0x6, %r9
+               	negq	%r9
+               	addq	%rdx, %r9
+               	movq	%r9, %rbx
+               	xorq	$-0x1, %rbx
                	movq	%r8, %r13
                	shlq	%cl, %r13
-               	movq	%r13, %r14
-               	andq	%rdi, %r14
-               	movq	%rsi, %r13
-               	shrq	%cl, %r13
+               	andq	%rbx, %r13
+               	movq	%rdx, %r14
+               	shrq	%cl, %r14
                	movq	%r12, %r10
-               	movq	%rsi, %r12
+               	movq	%rdx, %r12
                	pushq	%rcx
                	movq	%r10, %rcx
                	shlq	%cl, %r12
@@ -1785,37 +1754,34 @@ Disassembly of section .text:
                	shrq	%cl, %r8
                	movq	%r8, %rcx
                	orq	%r12, %rcx
-               	andq	%rdi, %rcx
-               	movq	%r13, %r8
+               	andq	%rbx, %rcx
+               	movq	%r14, %r8
                	andq	%r9, %r8
-               	orq	%rcx, %r8
-               	movq	%rdx, %rdi
-               	xorq	$-0x1, %rdi
-               	movq	%r14, %r9
-               	andq	%rdi, %r9
-               	andq	%rdx, %r8
-               	orq	%r9, %r8
-               	movq	%rbx, %rcx
+               	orq	%r8, %rcx
+               	movq	%rax, %r8
+               	xorq	$-0x1, %r8
+               	andq	%r13, %r8
+               	andq	%rcx, %rax
+               	orq	%r8, %rax
+               	movq	%rdi, %rcx
                	sarq	$0x3f, %rcx
                	xorq	$-0x1, %rcx
-               	movq	%r8, %rdi
-               	andq	%rcx, %rdi
-               	cmpl	$0x80, %ebx
-               	setge	%dl
-               	movzbq	%dl, %rdx
-               	movq	%rsi, %rcx
-               	subq	%rdx, %rcx
-               	movq	%rdi, %rdx
-               	xorq	%rax, %rdx
-               	subq	%rax, %rdx
-               	movq	%rax, %rdi
-               	xorq	$-0x1, %rdi
-               	movq	%rcx, %rax
-               	xorq	$-0x1, %rax
-               	andq	%rax, %rdx
-               	andq	%rcx, %rdi
-               	orq	%rdi, %rdx
-               	cmpq	$-0x3, %rdx
+               	andq	%rax, %rcx
+               	cmpl	$0x80, %edi
+               	setge	%dil
+               	movzbq	%dil, %rdi
+               	movq	%rdx, %rax
+               	subq	%rdi, %rax
+               	xorq	%rsi, %rcx
+               	subq	%rsi, %rcx
+               	movq	%rsi, %rdx
+               	xorq	$-0x1, %rdx
+               	movq	%rax, %rsi
+               	xorq	$-0x1, %rsi
+               	andq	%rsi, %rcx
+               	andq	%rdx, %rax
+               	orq	%rcx, %rax
+               	cmpq	$-0x3, %rax
                	jne	<addr>
                	leaq	<rip>, %rax
                	movss	(%rax,%riz), %xmm0
@@ -1859,18 +1825,12 @@ Disassembly of section .text:
                	shrq	%r14
                	movq	%rsi, %r15
                	shlq	%cl, %r15
-               	movq	%r15, %r10
-               	orq	%r14, %r10
-               	movq	%r10, 0x48(%rsp)
-               	movq	%r13, %r14
+               	orq	%r15, %r14
+               	movq	%r13, %r15
+               	andq	%rdi, %r15
                	andq	%rdi, %r14
-               	movq	0x48(%rsp), %r10
-               	andq	%rdi, %r10
-               	movq	%r10, 0x48(%rsp)
                	andq	%r9, %r13
-               	movq	0x48(%rsp), %r10
-               	orq	%r13, %r10
-               	movq	%r10, 0x48(%rsp)
+               	orq	%r13, %r14
                	movq	%rsi, %r13
                	shrq	%cl, %r13
                	movq	%r12, %r10
@@ -1887,48 +1847,42 @@ Disassembly of section .text:
                	movq	%r13, %r8
                	andq	%r9, %r8
                	orq	%rcx, %r8
-               	movq	%r13, %rcx
-               	andq	%rdi, %rcx
-               	movq	%rdx, %rdi
-               	xorq	$-0x1, %rdi
-               	movq	%r14, %r9
-               	andq	%rdi, %r9
+               	andq	%r13, %rdi
+               	movq	%rdx, %rcx
+               	xorq	$-0x1, %rcx
+               	movq	%r15, %r9
+               	andq	%rcx, %r9
                	andq	%rdx, %r8
                	orq	%r9, %r8
-               	movq	%rdi, %r10
-               	movq	0x48(%rsp), %rdi
-               	andq	%r10, %rdi
-               	andq	%rdx, %rcx
-               	movq	%rdi, %rdx
+               	andq	%r14, %rcx
+               	andq	%rdi, %rdx
                	orq	%rcx, %rdx
                	movq	%rbx, %rcx
                	sarq	$0x3f, %rcx
                	xorq	$-0x1, %rcx
                	movq	%r8, %rdi
                	andq	%rcx, %rdi
-               	movq	%rdx, %r8
-               	andq	%rcx, %r8
+               	andq	%rcx, %rdx
                	cmpl	$0x80, %ebx
-               	setge	%dl
-               	movzbq	%dl, %rdx
+               	setge	%r8b
+               	movzbq	%r8b, %r8
                	movq	%rsi, %rcx
-               	subq	%rdx, %rcx
-               	movq	%rdi, %rdx
-               	xorq	%rax, %rdx
-               	movq	%r8, %rsi
+               	subq	%r8, %rcx
+               	movq	%rdi, %rsi
                	xorq	%rax, %rsi
-               	cmpq	%rax, %rdx
-               	setb	%dil
-               	movzbq	%dil, %rdi
-               	subq	%rax, %rsi
-               	subq	%rdi, %rsi
-               	movabsq	$0x7fffffffffffffff, %r8 # imm = 0x7FFFFFFFFFFFFFFF
-               	xorq	%rax, %r8
-               	movq	%rcx, %rax
-               	xorq	$-0x1, %rax
-               	andq	%rsi, %rax
-               	andq	%r8, %rcx
-               	orq	%rcx, %rax
+               	xorq	%rax, %rdx
+               	cmpq	%rax, %rsi
+               	setb	%sil
+               	movzbq	%sil, %rsi
+               	subq	%rax, %rdx
+               	subq	%rsi, %rdx
+               	movabsq	$0x7fffffffffffffff, %r11 # imm = 0x7FFFFFFFFFFFFFFF
+               	xorq	%r11, %rax
+               	movq	%rcx, %rsi
+               	xorq	$-0x1, %rsi
+               	andq	%rsi, %rdx
+               	andq	%rcx, %rax
+               	orq	%rdx, %rax
                	cmpq	$-0x1, %rax
                	je	<addr>
                	movl	$0x54, %eax
@@ -1996,50 +1950,49 @@ Disassembly of section .text:
                	testq	%rcx, %rcx
                	setne	%cl
                	movzbq	%cl, %rcx
-               	addq	%rcx, %r9
-               	movq	%r9, %rsi
+               	leaq	(%r9,%rcx), %rsi
                	imulq	%r8, %rsi
                	movl	$0x40, %ecx
                	subq	%rsi, %rcx
                	andq	$0x3f, %rcx
-               	movq	$-0x1, %r9
-               	movq	%r9, %r8
-               	shrq	%cl, %r8
+               	movq	$-0x1, %r8
+               	movq	%r8, %r9
+               	shrq	%cl, %r9
                	testq	%rsi, %rsi
                	setne	%cl
                	movzbq	%cl, %rcx
-               	imulq	%r8, %rcx
+               	imulq	%r9, %rcx
                	andq	%rdi, %rcx
                	testq	%rcx, %rcx
-               	setne	%r14b
-               	movzbq	%r14b, %r14
+               	setne	%r12b
+               	movzbq	%r12b, %r12
                	movq	%rsi, %rbx
                	andq	$0x7f, %rbx
                	movq	%rsi, %rcx
                	andq	$0x3f, %rcx
-               	movl	$0x3f, %r8d
-               	movq	%r8, %r15
-               	subq	%rcx, %r15
+               	movl	$0x3f, %r9d
+               	movq	%r9, %r13
+               	subq	%rcx, %r13
                	shrq	$0x6, %rbx
                	negq	%rbx
                	addq	%rax, %rbx
-               	movq	%rbx, %r12
-               	xorq	$-0x1, %r12
-               	movq	%rdx, %r13
-               	shrq	%cl, %r13
+               	movq	%rbx, %r14
+               	xorq	$-0x1, %r14
+               	movq	%rdx, %r15
+               	shrq	%cl, %r15
                	pushq	%rcx
-               	movq	%r15, %rcx
+               	movq	%r13, %rcx
                	shlq	%cl, %rdx
                	popq	%rcx
                	shlq	%rdx
                	shrq	%cl, %rdi
                	movq	%rdi, %rcx
                	orq	%rdx, %rcx
-               	andq	%r12, %rcx
-               	movq	%r13, %rdx
+               	andq	%r14, %rcx
+               	movq	%r15, %rdx
                	andq	%rbx, %rdx
                	orq	%rdx, %rcx
-               	orq	%r14, %rcx
+               	orq	%r12, %rcx
                	xorps	%xmm0, %xmm0
                	movq	%rcx, %r10
                	testq	%r10, %r10
@@ -2059,13 +2012,12 @@ Disassembly of section .text:
                	mulsd	%xmm1, %xmm0
                	movsd	%xmm0, -0x8(%rbp,%riz)
                	movq	-0x8(%rbp), %rcx
-               	movq	%rcx, %r10
-               	sarq	$0x3f, %r10
-               	movq	%r10, 0x48(%rsp)
+               	movq	%rcx, %r12
+               	sarq	$0x3f, %r12
                	movabsq	$0x7fffffffffffffff, %rdx # imm = 0x7FFFFFFFFFFFFFFF
                	andq	%rcx, %rdx
                	shrq	$0x34, %rdx
-               	leaq	-0x3ff(%rdx), %rbx
+               	leaq	-0x3ff(%rdx), %rsi
                	movabsq	$0xfffffffffffff, %r11  # imm = 0xFFFFFFFFFFFFF
                	andq	%r11, %rcx
                	movabsq	$0x10000000000000, %rdi # imm = 0x10000000000000
@@ -2075,63 +2027,59 @@ Disassembly of section .text:
                	sarq	$0x3f, %rdx
                	xorq	%rdx, %rcx
                	subq	%rdx, %rcx
-               	movq	%rcx, %rsi
-               	andq	$0x7f, %rsi
+               	movq	%rcx, %rbx
+               	andq	$0x7f, %rbx
                	andq	$0x3f, %rcx
-               	movq	%r8, %r12
-               	subq	%rcx, %r12
-               	shrq	$0x6, %rsi
-               	movq	%rax, %r8
-               	subq	%rsi, %r8
-               	movq	%r8, %rsi
-               	xorq	$-0x1, %rsi
-               	movq	%rdi, %r13
-               	shlq	%cl, %r13
-               	movq	%r13, %r14
-               	andq	%rsi, %r14
+               	movq	%r9, %r13
+               	subq	%rcx, %r13
+               	movq	%rbx, %r9
+               	shrq	$0x6, %r9
+               	negq	%r9
+               	addq	%rax, %r9
+               	movq	%r9, %rbx
+               	xorq	$-0x1, %rbx
+               	movq	%rdi, %r14
+               	shlq	%cl, %r14
+               	andq	%rbx, %r14
+               	movq	%rax, %r15
+               	shrq	%cl, %r15
+               	movq	%r13, %r10
                	movq	%rax, %r13
-               	shrq	%cl, %r13
-               	movq	%r12, %r10
-               	movq	%rax, %r12
                	pushq	%rcx
                	movq	%r10, %rcx
-               	shlq	%cl, %r12
+               	shlq	%cl, %r13
                	popq	%rcx
-               	shlq	%r12
+               	shlq	%r13
                	shrq	%cl, %rdi
                	movq	%rdi, %rcx
-               	orq	%r12, %rcx
-               	andq	%rsi, %rcx
-               	movq	%r13, %rdi
-               	andq	%r8, %rdi
-               	orq	%rcx, %rdi
-               	movq	%rdx, %rsi
-               	xorq	$-0x1, %rsi
-               	movq	%r14, %r8
-               	andq	%rsi, %r8
-               	andq	%rdx, %rdi
-               	orq	%r8, %rdi
-               	movq	%rbx, %rcx
-               	sarq	$0x3f, %rcx
-               	xorq	$-0x1, %rcx
-               	movq	%rdi, %rsi
-               	andq	%rcx, %rsi
-               	cmpl	$0x80, %ebx
-               	setge	%cl
-               	movzbq	%cl, %rcx
-               	subq	%rcx, %rax
-               	movq	%rax, %rcx
-               	xorq	$-0x1, %rcx
-               	andq	%rcx, %rsi
-               	andq	%r9, %rax
-               	orq	%rax, %rsi
-               	movq	0x48(%rsp), %rax
-               	xorq	$-0x1, %rax
+               	orq	%r13, %rcx
+               	andq	%rbx, %rcx
+               	movq	%r15, %rdi
+               	andq	%r9, %rdi
+               	orq	%rdi, %rcx
+               	movq	%rdx, %rdi
+               	xorq	$-0x1, %rdi
+               	andq	%r14, %rdi
+               	andq	%rdx, %rcx
+               	orq	%rdi, %rcx
                	movq	%rsi, %rdx
-               	andq	%rax, %rdx
+               	sarq	$0x3f, %rdx
+               	xorq	$-0x1, %rdx
+               	andq	%rdx, %rcx
+               	cmpl	$0x80, %esi
+               	setge	%dl
+               	movzbq	%dl, %rdx
+               	subq	%rdx, %rax
+               	movq	%rax, %rdx
+               	xorq	$-0x1, %rdx
+               	andq	%rdx, %rcx
+               	andq	%r8, %rax
+               	orq	%rcx, %rax
+               	movq	%r12, %rcx
+               	xorq	$-0x1, %rcx
+               	andq	%rcx, %rax
                	movabsq	$0x10000000000000, %r11 # imm = 0x10000000000000
-               	movq	%rdx, %rax
-               	cmpq	%r11, %rdx
+               	cmpq	%r11, %rax
                	je	<addr>
                	movl	$0x55, %eax
                	popq	%rbx
@@ -2197,50 +2145,49 @@ Disassembly of section .text:
                	testq	%rcx, %rcx
                	setne	%cl
                	movzbq	%cl, %rcx
-               	addq	%rcx, %r9
-               	movq	%r9, %rsi
+               	leaq	(%r9,%rcx), %rsi
                	imulq	%r8, %rsi
                	movl	$0x40, %ecx
                	subq	%rsi, %rcx
                	andq	$0x3f, %rcx
-               	movq	$-0x1, %r9
-               	movq	%r9, %r8
-               	shrq	%cl, %r8
+               	movq	$-0x1, %r8
+               	movq	%r8, %r9
+               	shrq	%cl, %r9
                	testq	%rsi, %rsi
                	setne	%cl
                	movzbq	%cl, %rcx
-               	imulq	%r8, %rcx
+               	imulq	%r9, %rcx
                	andq	%rdi, %rcx
                	testq	%rcx, %rcx
-               	setne	%r14b
-               	movzbq	%r14b, %r14
+               	setne	%r12b
+               	movzbq	%r12b, %r12
                	movq	%rsi, %rbx
                	andq	$0x7f, %rbx
                	movq	%rsi, %rcx
                	andq	$0x3f, %rcx
-               	movl	$0x3f, %r8d
-               	movq	%r8, %r15
-               	subq	%rcx, %r15
+               	movl	$0x3f, %r9d
+               	movq	%r9, %r13
+               	subq	%rcx, %r13
                	shrq	$0x6, %rbx
                	negq	%rbx
                	addq	%rax, %rbx
-               	movq	%rbx, %r12
-               	xorq	$-0x1, %r12
-               	movq	%rdx, %r13
-               	shrq	%cl, %r13
+               	movq	%rbx, %r14
+               	xorq	$-0x1, %r14
+               	movq	%rdx, %r15
+               	shrq	%cl, %r15
                	pushq	%rcx
-               	movq	%r15, %rcx
+               	movq	%r13, %rcx
                	shlq	%cl, %rdx
                	popq	%rcx
                	shlq	%rdx
                	shrq	%cl, %rdi
                	movq	%rdi, %rcx
                	orq	%rdx, %rcx
-               	andq	%r12, %rcx
-               	movq	%r13, %rdx
+               	andq	%r14, %rcx
+               	movq	%r15, %rdx
                	andq	%rbx, %rdx
                	orq	%rdx, %rcx
-               	orq	%r14, %rcx
+               	orq	%r12, %rcx
                	xorps	%xmm0, %xmm0
                	movq	%rcx, %r10
                	testq	%r10, %r10
@@ -2260,13 +2207,12 @@ Disassembly of section .text:
                	mulsd	%xmm1, %xmm0
                	movsd	%xmm0, -0x8(%rbp,%riz)
                	movq	-0x8(%rbp), %rcx
-               	movq	%rcx, %r10
-               	sarq	$0x3f, %r10
-               	movq	%r10, 0x48(%rsp)
+               	movq	%rcx, %r12
+               	sarq	$0x3f, %r12
                	movabsq	$0x7fffffffffffffff, %rdx # imm = 0x7FFFFFFFFFFFFFFF
                	andq	%rcx, %rdx
                	shrq	$0x34, %rdx
-               	leaq	-0x3ff(%rdx), %rbx
+               	leaq	-0x3ff(%rdx), %rsi
                	movabsq	$0xfffffffffffff, %r11  # imm = 0xFFFFFFFFFFFFF
                	andq	%r11, %rcx
                	movabsq	$0x10000000000000, %rdi # imm = 0x10000000000000
@@ -2276,63 +2222,54 @@ Disassembly of section .text:
                	sarq	$0x3f, %rdx
                	xorq	%rdx, %rcx
                	subq	%rdx, %rcx
-               	movq	%rcx, %rsi
-               	andq	$0x7f, %rsi
+               	movq	%rcx, %rbx
+               	andq	$0x7f, %rbx
                	andq	$0x3f, %rcx
-               	movq	%r8, %r12
-               	subq	%rcx, %r12
-               	shrq	$0x6, %rsi
-               	movq	%rax, %r8
-               	subq	%rsi, %r8
-               	movq	%r8, %rsi
-               	xorq	$-0x1, %rsi
-               	movq	%rdi, %r13
-               	shlq	%cl, %r13
+               	movq	%r9, %r13
+               	subq	%rcx, %r13
+               	movq	%rbx, %r9
+               	shrq	$0x6, %r9
+               	negq	%r9
+               	addq	%rax, %r9
+               	movq	%r9, %rbx
+               	xorq	$-0x1, %rbx
                	movq	%rdi, %r14
+               	shlq	%cl, %r14
                	pushq	%rcx
-               	movq	%r12, %rcx
-               	shrq	%cl, %r14
-               	popq	%rcx
-               	shrq	%r14
-               	movq	%rax, %r15
-               	shlq	%cl, %r15
-               	movq	%r15, %r10
-               	orq	%r14, %r10
-               	movq	%r10, 0x40(%rsp)
-               	movq	0x40(%rsp), %r10
-               	andq	%rsi, %r10
-               	movq	%r10, 0x40(%rsp)
-               	andq	%r8, %r13
-               	movq	0x40(%rsp), %r10
-               	orq	%r13, %r10
-               	movq	%r10, 0x40(%rsp)
-               	movq	%rax, %r13
-               	shrq	%cl, %r13
                	movq	%r13, %rcx
-               	andq	%rsi, %rcx
-               	movq	%rdx, %rsi
-               	xorq	$-0x1, %rsi
-               	movq	%rsi, %r10
-               	movq	0x40(%rsp), %rsi
-               	andq	%r10, %rsi
+               	shrq	%cl, %rdi
+               	popq	%rcx
+               	shrq	%rdi
+               	movq	%rax, %r13
+               	shlq	%cl, %r13
+               	orq	%r13, %rdi
+               	andq	%rbx, %rdi
+               	andq	%r14, %r9
+               	orq	%r9, %rdi
+               	movq	%rax, %r9
+               	shrq	%cl, %r9
+               	movq	%r9, %rcx
+               	andq	%rbx, %rcx
+               	movq	%rdx, %r9
+               	xorq	$-0x1, %r9
+               	andq	%r9, %rdi
                	andq	%rdx, %rcx
+               	orq	%rdi, %rcx
                	movq	%rsi, %rdx
-               	orq	%rcx, %rdx
-               	movq	%rbx, %rcx
-               	sarq	$0x3f, %rcx
-               	xorq	$-0x1, %rcx
-               	andq	%rcx, %rdx
-               	cmpl	$0x80, %ebx
-               	setge	%cl
-               	movzbq	%cl, %rcx
-               	subq	%rcx, %rax
-               	movq	%rax, %rcx
-               	xorq	$-0x1, %rcx
-               	andq	%r9, %rax
+               	sarq	$0x3f, %rdx
+               	xorq	$-0x1, %rdx
                	andq	%rdx, %rcx
-               	orq	%rax, %rcx
-               	movq	0x48(%rsp), %rax
-               	xorq	$-0x1, %rax
+               	cmpl	$0x80, %esi
+               	setge	%dl
+               	movzbq	%dl, %rdx
+               	subq	%rdx, %rax
+               	movq	%rax, %rdx
+               	xorq	$-0x1, %rdx
+               	andq	%r8, %rax
+               	andq	%rdx, %rcx
+               	orq	%rcx, %rax
+               	movq	%r12, %rcx
+               	xorq	$-0x1, %rcx
                	andq	%rcx, %rax
                	cmpq	$0x5, %rax
                	je	<addr>
@@ -2349,12 +2286,12 @@ Disassembly of section .text:
                	movq	%rsi, (%rax)
                	leaq	<rip>, %rcx
                	movq	$0x3, (%rcx)
-               	leaq	<rip>, %r8
+               	leaq	<rip>, %rdi
                	movabsq	$0x3ff8000000000000, %rdx # imm = 0x3FF8000000000000
                	movq	%rdx, %xmm14
-               	movsd	%xmm14, (%r8,%riz)
+               	movsd	%xmm14, (%rdi,%riz)
                	movq	(%rax), %rax
-               	movq	(%rcx), %rdi
+               	movq	(%rcx), %r8
                	testq	%rax, %rax
                	setne	%r9b
                	movzbq	%r9b, %r9
@@ -2404,8 +2341,7 @@ Disassembly of section .text:
                	testq	%rcx, %rcx
                	setne	%cl
                	movzbq	%cl, %rcx
-               	addq	%rcx, %rbx
-               	movq	%rbx, %rdx
+               	leaq	(%rbx,%rcx), %rdx
                	imulq	%r9, %rdx
                	movl	$0x40, %ecx
                	subq	%rdx, %rcx
@@ -2416,36 +2352,34 @@ Disassembly of section .text:
                	setne	%cl
                	movzbq	%cl, %rcx
                	imulq	%r9, %rcx
-               	andq	%rdi, %rcx
+               	andq	%r8, %rcx
                	testq	%rcx, %rcx
-               	setne	%r13b
-               	movzbq	%r13b, %r13
-               	movq	%rdx, %r9
-               	andq	$0x7f, %r9
+               	setne	%r9b
+               	movzbq	%r9b, %r9
+               	movq	%rdx, %rbx
+               	andq	$0x7f, %rbx
                	movq	%rdx, %rcx
                	andq	$0x3f, %rcx
-               	movl	$0x3f, %ebx
-               	movq	%rbx, %r14
-               	subq	%rcx, %r14
-               	shrq	$0x6, %r9
-               	negq	%r9
-               	addq	%rsi, %r9
-               	movq	%r9, %rbx
+               	movl	$0x3f, %r12d
+               	subq	%rcx, %r12
+               	shrq	$0x6, %rbx
+               	subq	%rbx, %rsi
+               	movq	%rsi, %rbx
                	xorq	$-0x1, %rbx
-               	movq	%rax, %r12
-               	shrq	%cl, %r12
+               	movq	%rax, %r13
+               	shrq	%cl, %r13
                	pushq	%rcx
-               	movq	%r14, %rcx
+               	movq	%r12, %rcx
                	shlq	%cl, %rax
                	popq	%rcx
                	shlq	%rax
-               	shrq	%cl, %rdi
-               	orq	%rdi, %rax
+               	shrq	%cl, %r8
+               	orq	%r8, %rax
                	andq	%rbx, %rax
-               	movq	%r12, %rcx
-               	andq	%r9, %rcx
+               	movq	%r13, %rcx
+               	andq	%rsi, %rcx
                	orq	%rcx, %rax
-               	orq	%r13, %rax
+               	orq	%r9, %rax
                	xorps	%xmm0, %xmm0
                	movq	%rax, %r10
                	testq	%r10, %r10
@@ -2462,7 +2396,7 @@ Disassembly of section .text:
                	shlq	$0x34, %rax
                	movq	%rax, -0x8(%rbp)
                	movsd	-0x8(%rbp,%riz), %xmm1
-               	movsd	(%r8,%riz), %xmm2
+               	movsd	(%rdi,%riz), %xmm2
                	movapd	%xmm0, %xmm14
                	movapd	%xmm1, %xmm15
                	movapd	%xmm2, %xmm0
@@ -2496,8 +2430,8 @@ Disassembly of section .text:
                	subq	%rax, %rcx
                	movq	%rcx, %rdx
                	subq	%rdi, %rdx
-               	movabsq	$-0x8000000000000000, %rbx # imm = 0x8000000000000000
-               	andq	%rax, %rbx
+               	movabsq	$-0x8000000000000000, %r8 # imm = 0x8000000000000000
+               	andq	%rax, %r8
                	testq	%rdx, %rdx
                	setne	%dil
                	movzbq	%dil, %rdi
@@ -2508,7 +2442,7 @@ Disassembly of section .text:
                	movzbq	%al, %rax
                	movq	%rax, %rcx
                	shlq	$0x5, %rcx
-               	leaq	0x1(%rcx), %r8
+               	leaq	0x1(%rcx), %r9
                	movq	%rdx, %rax
                	shrq	%cl, %rax
                	movq	%rax, %rcx
@@ -2517,7 +2451,7 @@ Disassembly of section .text:
                	setne	%cl
                	movzbq	%cl, %rcx
                	shlq	$0x4, %rcx
-               	addq	%rcx, %r8
+               	addq	%rcx, %r9
                	shrq	%cl, %rax
                	movq	%rax, %rcx
                	shrq	$0x8, %rcx
@@ -2525,7 +2459,7 @@ Disassembly of section .text:
                	setne	%cl
                	movzbq	%cl, %rcx
                	shlq	$0x3, %rcx
-               	addq	%rcx, %r8
+               	addq	%rcx, %r9
                	shrq	%cl, %rax
                	movq	%rax, %rcx
                	shrq	$0x4, %rcx
@@ -2533,7 +2467,7 @@ Disassembly of section .text:
                	setne	%cl
                	movzbq	%cl, %rcx
                	shlq	$0x2, %rcx
-               	addq	%rcx, %r8
+               	addq	%rcx, %r9
                	shrq	%cl, %rax
                	movq	%rax, %rcx
                	shrq	$0x2, %rcx
@@ -2541,15 +2475,13 @@ Disassembly of section .text:
                	setne	%cl
                	movzbq	%cl, %rcx
                	shlq	%rcx
-               	addq	%rcx, %r8
+               	addq	%rcx, %r9
                	shrq	%cl, %rax
-               	movq	%rax, %rcx
-               	shrq	%rcx
-               	testq	%rcx, %rcx
+               	shrq	%rax
+               	testq	%rax, %rax
                	setne	%cl
                	movzbq	%cl, %rcx
-               	addq	%rcx, %r8
-               	movq	%r8, %rax
+               	leaq	(%r9,%rcx), %rax
                	imulq	%rdi, %rax
                	movl	$0x40, %ecx
                	subq	%rax, %rcx
@@ -2562,36 +2494,35 @@ Disassembly of section .text:
                	imulq	%rdi, %rcx
                	andq	%rsi, %rcx
                	testq	%rcx, %rcx
-               	setne	%r12b
-               	movzbq	%r12b, %r12
+               	setne	%r9b
+               	movzbq	%r9b, %r9
                	movq	%rax, %rdi
                	andq	$0x7f, %rdi
                	movq	%rax, %rcx
                	andq	$0x3f, %rcx
-               	movl	$0x3f, %r8d
-               	movq	%r8, %r13
-               	subq	%rcx, %r13
-               	movq	%rdi, %r8
-               	shrq	$0x6, %r8
-               	xorl	%edi, %edi
-               	subq	%r8, %rdi
-               	movq	%rdi, %r8
-               	xorq	$-0x1, %r8
-               	movq	%rdx, %r9
-               	shrq	%cl, %r9
+               	movl	$0x3f, %ebx
+               	subq	%rcx, %rbx
+               	shrq	$0x6, %rdi
+               	xorl	%r12d, %r12d
+               	negq	%rdi
+               	addq	%r12, %rdi
+               	movq	%rdi, %r12
+               	xorq	$-0x1, %r12
+               	movq	%rdx, %r13
+               	shrq	%cl, %r13
                	pushq	%rcx
-               	movq	%r13, %rcx
+               	movq	%rbx, %rcx
                	shlq	%cl, %rdx
                	popq	%rcx
                	shlq	%rdx
                	shrq	%cl, %rsi
                	movq	%rsi, %rcx
                	orq	%rdx, %rcx
-               	andq	%r8, %rcx
-               	movq	%r9, %rdx
+               	andq	%r12, %rcx
+               	movq	%r13, %rdx
                	andq	%rdi, %rdx
                	orq	%rdx, %rcx
-               	orq	%r12, %rcx
+               	orq	%r9, %rcx
                	xorps	%xmm0, %xmm0
                	movq	%rcx, %r10
                	testq	%r10, %r10
@@ -2606,7 +2537,7 @@ Disassembly of section .text:
                	addsd	%xmm0, %xmm0
                	addq	$0x3ff, %rax            # imm = 0x3FF
                	shlq	$0x34, %rax
-               	orq	%rbx, %rax
+               	orq	%r8, %rax
                	movq	%rax, -0x18(%rbp)
                	movsd	-0x18(%rbp,%riz), %xmm1
                	mulsd	%xmm1, %xmm0

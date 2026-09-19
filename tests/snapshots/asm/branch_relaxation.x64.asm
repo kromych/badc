@@ -26,52 +26,49 @@ Disassembly of section .text:
                	int3
 
 <classify>:
-               	movq	%rdi, %r9
-               	xorl	%eax, %eax
-               	movq	%rax, %rcx
-               	cmpl	%r9d, %eax
+               	xorl	%ecx, %ecx
+               	movq	%rcx, %rax
+               	cmpl	%edi, %ecx
                	jge	<addr>
-               	imulq	$0x55555556, %rax, %rsi # imm = 0x55555556
-               	movq	%rsi, %rdi
-               	shrq	$0x20, %rdi
-               	leaq	(%rdi,%rdi,2), %r8
-               	movq	%rax, %rdx
-               	subq	%r8, %rdx
+               	imulq	$0x55555556, %rcx, %rdx # imm = 0x55555556
+               	shrq	$0x20, %rdx
+               	leaq	(%rdx,%rdx,2), %rsi
+               	movq	%rcx, %rdx
+               	subq	%rsi, %rdx
                	testl	%edx, %edx
                	jne	<addr>
-               	addq	%rax, %rcx
+               	addq	%rcx, %rax
                	jmp	<addr>
                	cmpl	$0x1, %edx
                	jne	<addr>
-               	decq	%rcx
+               	decq	%rax
                	jmp	<addr>
-               	addq	$0x2, %rcx
-               	incq	%rax
-               	cmpl	%r9d, %eax
+               	addq	$0x2, %rax
+               	incq	%rcx
+               	cmpl	%edi, %ecx
                	jl	<addr>
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	retq
 
 <main>:
-               	xorl	%eax, %eax
-               	movq	%rax, %rcx
-               	imulq	$0x55555556, %rax, %rsi # imm = 0x55555556
-               	movq	%rsi, %rdi
-               	shrq	$0x20, %rdi
-               	leaq	(%rdi,%rdi,2), %r8
-               	movq	%rax, %rdx
-               	subq	%r8, %rdx
+               	xorl	%ecx, %ecx
+               	movq	%rcx, %rax
+               	imulq	$0x55555556, %rcx, %rdx # imm = 0x55555556
+               	shrq	$0x20, %rdx
+               	leaq	(%rdx,%rdx,2), %rsi
+               	movq	%rcx, %rdx
+               	subq	%rsi, %rdx
                	testl	%edx, %edx
                	jne	<addr>
-               	addq	%rax, %rcx
+               	addq	%rcx, %rax
                	jmp	<addr>
                	cmpl	$0x1, %edx
                	jne	<addr>
-               	decq	%rcx
+               	decq	%rax
                	jmp	<addr>
-               	addq	$0x2, %rcx
-               	incq	%rax
-               	cmpl	$0xa, %eax
+               	addq	$0x2, %rax
+               	incq	%rcx
+               	cmpl	$0xa, %ecx
                	jl	<addr>
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	retq

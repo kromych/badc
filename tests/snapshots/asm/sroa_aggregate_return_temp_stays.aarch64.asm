@@ -78,35 +78,34 @@ Disassembly of section .text:
                	ldr	x0, [x0]
                	bl	<addr>
                	stur	x0, [x29, #-0x10]
-               	sub	x1, x29, #0x10
-               	ldr	w0, [x1]
-               	ldr	w1, [x1, #0x4]
-               	lsl	x2, x0, #7
-               	lsr	x3, x1, #25
-               	orr	x2, x2, x3
+               	sub	x0, x29, #0x10
+               	ldr	w1, [x0]
+               	ldr	w0, [x0, #0x4]
+               	lsl	x2, x1, #7
                	lsr	x3, x0, #25
-               	lsl	x0, x1, #7
-               	orr	x0, x3, x0
-               	sub	x1, x29, #0x18
-               	str	w2, [x1]
-               	str	w0, [x1, #0x4]
-               	mov	x0, x1
+               	orr	x2, x2, x3
+               	lsr	x1, x1, #25
+               	lsl	x0, x0, #7
+               	orr	x1, x1, x0
+               	sub	x0, x29, #0x18
+               	str	w2, [x0]
+               	str	w1, [x0, #0x4]
                	ldr	x0, [x0]
                	bl	<addr>
                	stur	x0, [x29, #-0x10]
                	sub	x0, x29, #0x10
-               	sub	x5, x29, #0x8
+               	sub	x3, x29, #0x8
                	str	x10, [sp, #-0x10]!
                	ldr	x10, [x0]
-               	str	x10, [x5]
+               	str	x10, [x3]
                	ldr	x10, [sp], #0x10
                	add	x2, x20, #0x8
                	ldr	w1, [x2]
                	ldr	w0, [x2, #0x4]
                	lsl	x1, x1, #17
-               	lsr	x3, x0, #15
-               	orr	x4, x1, x3
-               	lsl	x3, x0, #17
+               	lsr	x4, x0, #15
+               	orr	x4, x1, x4
+               	lsl	x5, x0, #17
                	add	x0, x20, #0x10
                	ldr	w1, [x20]
                	ldr	w6, [x20, #0x4]
@@ -145,19 +144,19 @@ Disassembly of section .text:
                	eor	x2, x2, x4
                	str	w2, [x0]
                	ldr	w2, [x0, #0x4]
-               	eor	x2, x2, x3
+               	eor	x2, x2, x5
                	str	w2, [x0, #0x4]
                	ldr	w0, [x1]
                	ldr	w2, [x1, #0x4]
                	lsr	x4, x0, #19
-               	lsl	x3, x2, #13
-               	orr	x3, x4, x3
+               	lsl	x5, x2, #13
+               	orr	x4, x4, x5
                	lsl	x0, x0, #13
                	lsr	x2, x2, #19
                	orr	x0, x0, x2
-               	str	w3, [x1]
+               	str	w4, [x1]
                	str	w0, [x1, #0x4]
-               	mov	x16, x5
+               	mov	x16, x3
                	ldr	x0, [x16]
                	ldp	x29, x30, [sp, #0x30]
                	ldr	x20, [sp], #0x40

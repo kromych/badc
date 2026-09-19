@@ -46,13 +46,13 @@ Disassembly of section .text:
                	movl	%eax, -0x8(%rbp)
                	movslq	-0x8(%rbp), %rax
                	testl	%eax, %eax
-               	setge	%cl
-               	movzbq	%cl, %rcx
-               	movslq	-0x8(%rbp), %rax
-               	cmpl	$0x1ff, %eax            # imm = 0x1FF
-               	setle	%al
+               	setge	%al
                	movzbq	%al, %rax
-               	shlq	%rax
+               	movslq	-0x8(%rbp), %rcx
+               	cmpl	$0x1ff, %ecx            # imm = 0x1FF
+               	setle	%cl
+               	movzbq	%cl, %rcx
+               	shlq	%rcx
                	addq	%rcx, %rax
                	leave
                	retq
@@ -74,15 +74,15 @@ Disassembly of section .text:
                	movl	%ecx, -0x18(%rbp)
                	movslq	(%rax), %rcx
                	andq	$0x1ff, %rcx            # imm = 0x1FF
-               	movsbq	%cl, %rdx
-               	testl	%edx, %edx
-               	setl	%sil
-               	movzbq	%sil, %rsi
-               	cmpl	$-0x38, %edx
+               	movsbq	%cl, %rcx
+               	testl	%ecx, %ecx
+               	setl	%dl
+               	movzbq	%dl, %rdx
+               	cmpl	$-0x38, %ecx
                	sete	%cl
                	movzbq	%cl, %rcx
                	shlq	%rcx
-               	addq	%rsi, %rcx
+               	addq	%rdx, %rcx
                	cmpl	$0x3, %ecx
                	je	<addr>
                	movl	$0x2, %ebx
@@ -101,15 +101,15 @@ Disassembly of section .text:
                	movslq	(%rax), %rcx
                	andq	$0x1ff, %rcx            # imm = 0x1FF
                	imulq	$0xc8, %rcx, %rcx
-               	movswq	%cx, %rdx
-               	testl	%edx, %edx
-               	setl	%sil
-               	movzbq	%sil, %rsi
-               	cmpl	$0xffff9c40, %edx       # imm = 0xFFFF9C40
+               	movswq	%cx, %rcx
+               	testl	%ecx, %ecx
+               	setl	%dl
+               	movzbq	%dl, %rdx
+               	cmpl	$0xffff9c40, %ecx       # imm = 0xFFFF9C40
                	sete	%cl
                	movzbq	%cl, %rcx
                	shlq	%rcx
-               	addq	%rsi, %rcx
+               	addq	%rdx, %rcx
                	cmpl	$0x3, %ecx
                	je	<addr>
                	orq	$0x8, %rbx

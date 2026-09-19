@@ -63,18 +63,16 @@ Disassembly of section .text:
                	movq	%rax, 0x48(%rsp)
                	leaq	(%rbx,%r14), %rdi
                	callq	<addr>
-               	movq	%rax, %rbx
                	leaq	(%r12,%r13), %rdi
                	callq	<addr>
-               	imulq	$0x3e8, %r15, %rcx      # imm = 0x3E8
-               	movq	0x58(%rsp), %rdx
-               	imulq	$0x64, %rdx, %rdx
-               	addq	%rdx, %rcx
-               	movq	0x50(%rsp), %rdx
-               	imulq	$0xa, %rdx, %rdx
-               	addq	%rdx, %rcx
-               	addq	0x48(%rsp), %rcx
-               	movq	%rcx, %rax
+               	imulq	$0x3e8, %r15, %rax      # imm = 0x3E8
+               	movq	0x58(%rsp), %rcx
+               	imulq	$0x64, %rcx, %rcx
+               	addq	%rcx, %rax
+               	movq	0x50(%rsp), %rcx
+               	imulq	$0xa, %rcx, %rcx
+               	addq	%rcx, %rax
+               	addq	0x48(%rsp), %rax
                	popq	%rbx
                	popq	%rdi
                	popq	%r12

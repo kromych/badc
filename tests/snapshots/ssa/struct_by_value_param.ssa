@@ -11,10 +11,10 @@ fn ent_pc=0 n_params=1 variadic=false locals=1
     v5   Load { addr=v1, disp=4, kind=I32 }               -> x2
     v6   Binop { op=add, lhs=v2, rhs=v5 }                 -> x1
     v7   BinopI { op=shl, lhs=v6, rhs_imm=32 }            -> x2
-    v8   Extend { value=v6, kind=I32 }                    -> x1
-    v9   Imm(0)                                           -> x2
-    v10  LocalAddr(-1)                                    -> x2
-    v11  Imm(-1)                                          -> x2
+    v8   Extend { value=v6, kind=I32 }                    -> x2
+    v9   Imm(0)                                           -> x1
+    v10  LocalAddr(-1)                                    -> x1
+    v11  Imm(-1)                                          -> x1
     v12  Store { addr=v1, disp=0, value=v11, kind=I32 }   -> -
     v13  LocalAddr(-1)                                    -> x6
     v14  BinopI { op=add, lhs=v1, rhs_imm=4 }             -> x6

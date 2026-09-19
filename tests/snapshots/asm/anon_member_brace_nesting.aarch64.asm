@@ -73,35 +73,35 @@ Disassembly of section .text:
                	cbnz	w1, <addr>
                	mov	x0, #0x2                // =2
                	ret
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	ldrb	w2, [x0]
-               	ldrb	w3, [x1]
-               	cmp	w2, w3
-               	mov	x2, #0x0                // =0
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
+               	ldrb	w0, [x1]
+               	ldrb	w3, [x2]
+               	cmp	w0, w3
+               	mov	x0, #0x0                // =0
                	b.ne	<addr>
-               	ldrb	w3, [x0, #0x4]
-               	ldrb	w4, [x1, #0x4]
+               	ldrb	w3, [x1, #0x4]
+               	ldrb	w4, [x2, #0x4]
                	cmp	w3, w4
                	cset	x3, eq
                	cbz	x3, <addr>
-               	ldrb	w3, [x0, #0x8]
-               	ldrb	w4, [x1, #0x8]
+               	ldrb	w3, [x1, #0x8]
+               	ldrb	w4, [x2, #0x8]
                	cmp	w3, w4
                	cset	x3, eq
                	cbz	x3, <addr>
-               	ldrsw	x3, [x0, #0xc]
-               	ldrsw	x4, [x1, #0xc]
+               	ldrsw	x3, [x1, #0xc]
+               	ldrsw	x4, [x2, #0xc]
                	cmp	w3, w4
                	cset	x3, eq
                	cbz	x3, <addr>
-               	ldrb	w0, [x0, #0x10]
-               	ldrb	w1, [x1, #0x10]
+               	ldrb	w0, [x1, #0x10]
+               	ldrb	w1, [x2, #0x10]
                	cmp	w0, w1
-               	cset	x2, eq
-               	cbnz	w2, <addr>
+               	cset	x0, eq
+               	cbnz	w0, <addr>
                	mov	x0, #0x3                // =3
                	ret
                	adrp	x0, <page>
@@ -180,11 +180,11 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x0                // =0
                	ret
-               	mov	x3, x2
+               	mov	x3, x0
                	b	<addr>
-               	mov	x3, x2
+               	mov	x3, x0
                	b	<addr>
-               	mov	x3, x2
+               	mov	x3, x0
                	b	<addr>
                	mov	x3, x1
                	b	<addr>

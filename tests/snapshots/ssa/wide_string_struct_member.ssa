@@ -58,10 +58,10 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v44  BinopI { op=add, lhs=v1, rhs_imm=16 }            -> x1
     v45  Load { addr=v1, disp=16, kind=I32 }              -> x0
     v46  BinopI { op=eq, lhs=v45, rhs_imm=0 }             -> x1
-    v47  BinopI { op=ne, lhs=v46, rhs_imm=0 }             -> x2
-    v48  Imm(0)                                           -> x2
-    v49  Imm(0)                                           -> x2
-    v50  Imm(0)                                           -> x2
+    v47  BinopI { op=ne, lhs=v46, rhs_imm=0 }             -> x1
+    v48  Imm(0)                                           -> x1
+    v49  Imm(0)                                           -> x1
+    v50  Imm(0)                                           -> x1
     v51  BinopI { op=eq, lhs=v46, rhs_imm=0 }             -> x1
     terminator Bz { cond=v45, target=b6, fall=b5 }   (low word)   (exit_acc=v51)
   block 5  start_pc=0

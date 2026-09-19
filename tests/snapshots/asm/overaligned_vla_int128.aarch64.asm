@@ -17,20 +17,20 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x30
-               	mov	x2, #0x3                // =3
+               	mov	x1, #0x3                // =3
                	mov	x0, #0xc                // =12
                	add	x17, x0, #0xf
                	and	x17, x17, #0xfffffffffffffff0
-               	mov	x1, sp
-               	sub	x1, x1, x17
+               	mov	x2, sp
+               	sub	x2, x2, x17
                	lsr	x17, x17, #12
                	cbz	x17, <addr>
                	sub	sp, sp, #0x1, lsl #12   // =0x1000
                	str	xzr, [sp]
                	subs	x17, x17, #0x1
                	b.ne	<addr>
-               	mov	sp, x1
-               	stur	x2, [x29, #-0x20]
+               	mov	sp, x2
+               	stur	x1, [x29, #-0x20]
                	ldur	x3, [x29, #-0x20]
                	asr	x4, x3, #63
                	sub	x0, x29, #0x30
@@ -43,9 +43,9 @@ Disassembly of section .text:
                	ldrsw	x4, [x3]
                	orr	x4, x4, #0x1
                	str	w4, [x3]
-               	str	w2, [x1]
-               	mov	x2, #0x6                // =6
-               	str	w2, [x1, #0x8]
+               	str	w1, [x2]
+               	mov	x1, #0x6                // =6
+               	str	w1, [x2, #0x8]
                	ldr	x2, [x0]
                	ldr	x3, [x0, #0x8]
                	add	x1, x2, #0x9
@@ -64,7 +64,7 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	mov	x3, #0x2                // =2
+               	mov	x2, #0x2                // =2
                	mov	x0, #0x20               // =32
                	add	x17, x0, #0xf
                	and	x17, x17, #0xfffffffffffffff0
@@ -81,16 +81,16 @@ Disassembly of section .text:
                	cbz	x1, <addr>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	ldrsw	x2, [x1]
-               	orr	x2, x2, #0x2
-               	str	w2, [x1]
+               	ldrsw	x3, [x1]
+               	orr	x3, x3, #0x2
+               	str	w3, [x1]
                	mov	x1, #0x0                // =0
-               	str	x3, [x0]
+               	str	x2, [x0]
                	str	x1, [x0, #0x8]
-               	add	x2, x0, #0x10
-               	mov	x3, #0x6                // =6
-               	str	x3, [x2]
-               	str	x1, [x2, #0x8]
+               	add	x0, x0, #0x10
+               	mov	x2, #0x6                // =6
+               	str	x2, [x0]
+               	str	x1, [x0, #0x8]
                	mov	x0, #0x8                // =8
                	sub	sp, x29, #0x10
                	add	sp, sp, #0x10

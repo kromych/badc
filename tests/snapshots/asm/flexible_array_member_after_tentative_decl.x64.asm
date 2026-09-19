@@ -30,49 +30,49 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	leaq	<rip>, %rcx
-               	movq	0x8(%rcx), %rax
-               	cmpq	$0x1, %rax
+               	leaq	<rip>, %rax
+               	movq	0x8(%rax), %rcx
+               	cmpq	$0x1, %rcx
                	je	<addr>
                	movl	$0x4, %eax
                	retq
-               	leaq	<rip>, %rax
-               	movq	0x8(%rax), %rax
-               	cmpq	$0x5a5a5a5a, %rax       # imm = 0x5A5A5A5A
+               	leaq	<rip>, %rcx
+               	movq	0x8(%rcx), %rcx
+               	cmpq	$0x5a5a5a5a, %rcx       # imm = 0x5A5A5A5A
                	je	<addr>
                	movl	$0x1, %eax
                	retq
-               	leaq	0x10(%rcx), %rax
-               	movq	(%rax), %rdx
-               	cmpq	$0xa, %rdx
+               	addq	$0x10, %rax
+               	movq	(%rax), %rcx
+               	cmpq	$0xa, %rcx
                	je	<addr>
                	movl	$0x2, %eax
                	retq
-               	movq	0x8(%rax), %rdx
-               	cmpq	$0xb, %rdx
+               	movq	0x8(%rax), %rcx
+               	cmpq	$0xb, %rcx
                	jne	<addr>
-               	movq	0x10(%rax), %rdx
-               	cmpq	$0xc, %rdx
+               	movq	0x10(%rax), %rcx
+               	cmpq	$0xc, %rcx
                	jne	<addr>
-               	movq	0x18(%rax), %rdx
-               	cmpq	$0xd, %rdx
+               	movq	0x18(%rax), %rcx
+               	cmpq	$0xd, %rcx
                	jne	<addr>
                	movq	0x20(%rax), %rax
                	cmpq	$0xe, %rax
                	jne	<addr>
-               	leaq	<rip>, %rcx
-               	leaq	0x10(%rcx), %rax
-               	movq	0x28(%rax), %rdx
-               	cmpq	$0xf, %rdx
+               	leaq	<rip>, %rax
+               	addq	$0x10, %rax
+               	movq	0x28(%rax), %rcx
+               	cmpq	$0xf, %rcx
                	jne	<addr>
-               	movq	0x30(%rax), %rdx
-               	cmpq	$0x10, %rdx
+               	movq	0x30(%rax), %rcx
+               	cmpq	$0x10, %rcx
                	jne	<addr>
-               	movq	0x38(%rax), %rdx
-               	cmpq	$0x11, %rdx
+               	movq	0x38(%rax), %rcx
+               	cmpq	$0x11, %rcx
                	jne	<addr>
-               	movq	0x40(%rax), %rdx
-               	cmpq	$0x12, %rdx
+               	movq	0x40(%rax), %rcx
+               	cmpq	$0x12, %rcx
                	jne	<addr>
                	movq	0x48(%rax), %rax
                	cmpq	$0x13, %rax

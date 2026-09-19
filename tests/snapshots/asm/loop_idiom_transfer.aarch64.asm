@@ -228,34 +228,34 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, #0x10
                	b.lt	<addr>
-               	mov	x2, #0x0                // =0
+               	mov	x1, #0x0                // =0
                	adrp	x3, <page>
                	add	x3, x3, <lo12>
                	adrp	x4, <page>
                	add	x4, x4, <lo12>
-               	mov	x0, x2
-               	add	x1, x0, #0x1
-               	strb	w1, [x4, x0]
-               	strb	w2, [x3, x0]
                	mov	x0, x1
+               	add	x2, x0, #0x1
+               	strb	w2, [x4, x0]
+               	strb	w1, [x3, x0]
+               	mov	x0, x2
                	cmp	w0, #0x40
                	b.lt	<addr>
                	mov	x0, #0x28               // =40
                	bl	<addr>
-               	mov	x2, #0x0                // =0
+               	mov	x1, #0x0                // =0
                	adrp	x3, <page>
                	add	x3, x3, <lo12>
-               	mov	x0, x2
+               	mov	x0, x1
                	ldrb	w4, [x3, x0]
                	cmp	w0, #0x28
                	b.ge	<addr>
-               	add	x1, x0, #0x1
-               	eor	x1, x4, x1
-               	cbz	w1, <addr>
+               	add	x2, x0, #0x1
+               	eor	x2, x4, x2
+               	cbz	w2, <addr>
                	b	<addr>
-               	mov	x1, x2
-               	eor	x1, x4, x1
-               	cbnz	w1, <addr>
+               	mov	x2, x1
+               	eor	x2, x4, x2
+               	cbnz	w2, <addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x40
                	b.lt	<addr>

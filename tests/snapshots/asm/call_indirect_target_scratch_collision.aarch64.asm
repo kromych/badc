@@ -14,11 +14,10 @@ Disassembly of section .text:
                	brk	#0x1
 
 <sink_op>:
-               	mov	x2, #0x0                // =0
-               	ldrb	w0, [x1]
-               	add	x0, x3, x0
-               	str	w0, [x4]
-               	mov	x0, x2
+               	mov	x0, #0x0                // =0
+               	ldrb	w1, [x1]
+               	add	x1, x3, x1
+               	str	w1, [x4]
                	ret
 
 <main>:

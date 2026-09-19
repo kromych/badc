@@ -99,9 +99,9 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x5, %eax
                	retq
-               	movl	$0x40e80000, %eax       # imm = 0x40E80000
-               	movl	$0x3e000000, %ecx       # imm = 0x3E000000
-               	movq	%rax, %xmm0
+               	movl	$0x40e80000, %ecx       # imm = 0x40E80000
+               	movl	$0x3e000000, %eax       # imm = 0x3E000000
+               	movq	%rcx, %xmm0
                	movl	$0x80000000, %r10d      # imm = 0x80000000
                	movq	%r10, %xmm15
                	xorpd	%xmm15, %xmm0
@@ -110,7 +110,7 @@ Disassembly of section .text:
                	movapd	%xmm1, %xmm15
                	movapd	%xmm0, %xmm1
                	addss	%xmm15, %xmm1
-               	movq	%rcx, %xmm15
+               	movq	%rax, %xmm15
                	addss	%xmm15, %xmm0
                	ucomiss	%xmm0, %xmm1
                	jp	<addr>

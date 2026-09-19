@@ -30,101 +30,100 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	movl	$0xff00ff, -0x10(%rbp)  # imm = 0xFF00FF
-               	movl	-0x10(%rbp), %eax
-               	movq	%rax, %rdx
+               	movl	-0x10(%rbp), %ecx
+               	movq	%rcx, %rdx
                	shrq	%rdx
                	andq	$0x55555555, %rdx       # imm = 0x55555555
-               	subq	%rdx, %rax
-               	movq	%rax, %rdx
+               	subq	%rdx, %rcx
+               	movq	%rcx, %rdx
                	andq	$0x33333333, %rdx       # imm = 0x33333333
-               	shrq	$0x2, %rax
-               	andq	$0x33333333, %rax       # imm = 0x33333333
-               	addq	%rdx, %rax
-               	movq	%rax, %rdx
+               	shrq	$0x2, %rcx
+               	andq	$0x33333333, %rcx       # imm = 0x33333333
+               	addq	%rdx, %rcx
+               	movq	%rcx, %rdx
                	shrq	$0x4, %rdx
-               	addq	%rdx, %rax
-               	andq	$0xf0f0f0f, %rax        # imm = 0xF0F0F0F
-               	movq	%rax, %rdx
+               	addq	%rdx, %rcx
+               	andq	$0xf0f0f0f, %rcx        # imm = 0xF0F0F0F
+               	movq	%rcx, %rdx
                	shrq	$0x8, %rdx
-               	addq	%rdx, %rax
-               	movq	%rax, %rdx
+               	addq	%rdx, %rcx
+               	movq	%rcx, %rdx
                	shrq	$0x10, %rdx
-               	addq	%rdx, %rax
-               	andq	$0x7f, %rax
-               	cmpl	$0x10, %eax
+               	addq	%rdx, %rcx
+               	andq	$0x7f, %rcx
+               	cmpl	$0x10, %ecx
                	je	<addr>
                	movl	$0x15, %eax
                	leave
                	retq
-               	movl	-0x10(%rbp), %eax
-               	movq	%rax, %rdx
+               	movl	-0x10(%rbp), %ecx
+               	movq	%rcx, %rdx
                	shrq	%rdx
-               	orq	%rdx, %rax
-               	movq	%rax, %rdx
+               	orq	%rdx, %rcx
+               	movq	%rcx, %rdx
                	shrq	$0x2, %rdx
-               	orq	%rdx, %rax
-               	movq	%rax, %rdx
+               	orq	%rdx, %rcx
+               	movq	%rcx, %rdx
                	shrq	$0x4, %rdx
-               	orq	%rdx, %rax
-               	movq	%rax, %rdx
+               	orq	%rdx, %rcx
+               	movq	%rcx, %rdx
                	shrq	$0x8, %rdx
-               	orq	%rdx, %rax
-               	movq	%rax, %rdx
+               	orq	%rdx, %rcx
+               	movq	%rcx, %rdx
                	shrq	$0x10, %rdx
-               	orq	%rdx, %rax
-               	movq	%rax, %rdx
+               	orq	%rdx, %rcx
+               	movq	%rcx, %rdx
                	shrq	%rdx
                	andq	$0x55555555, %rdx       # imm = 0x55555555
-               	subq	%rdx, %rax
-               	movq	%rax, %rdx
+               	subq	%rdx, %rcx
+               	movq	%rcx, %rdx
                	andq	$0x33333333, %rdx       # imm = 0x33333333
-               	shrq	$0x2, %rax
-               	andq	$0x33333333, %rax       # imm = 0x33333333
-               	addq	%rdx, %rax
-               	movq	%rax, %rdx
+               	shrq	$0x2, %rcx
+               	andq	$0x33333333, %rcx       # imm = 0x33333333
+               	addq	%rdx, %rcx
+               	movq	%rcx, %rdx
                	shrq	$0x4, %rdx
-               	addq	%rdx, %rax
-               	andq	$0xf0f0f0f, %rax        # imm = 0xF0F0F0F
-               	movq	%rax, %rdx
+               	addq	%rdx, %rcx
+               	andq	$0xf0f0f0f, %rcx        # imm = 0xF0F0F0F
+               	movq	%rcx, %rdx
                	shrq	$0x8, %rdx
-               	addq	%rdx, %rax
-               	movq	%rax, %rdx
+               	addq	%rdx, %rcx
+               	movq	%rcx, %rdx
                	shrq	$0x10, %rdx
-               	addq	%rdx, %rax
-               	movq	%rax, %rdx
-               	andq	$0x7f, %rdx
-               	movl	$0x20, %eax
-               	subq	%rdx, %rax
-               	cmpl	$0x8, %eax
+               	addq	%rdx, %rcx
+               	andq	$0x7f, %rcx
+               	movl	$0x20, %edx
+               	subq	%rcx, %rdx
+               	cmpl	$0x8, %edx
                	je	<addr>
                	movl	$0x16, %eax
                	leave
                	retq
-               	movl	-0x10(%rbp), %eax
-               	leaq	-0x1(%rax), %rdx
-               	xorq	$-0x1, %rax
-               	andq	%rdx, %rax
-               	movl	%eax, %eax
-               	movq	%rax, %rdx
+               	movl	-0x10(%rbp), %ecx
+               	leaq	-0x1(%rcx), %rdx
+               	xorq	$-0x1, %rcx
+               	andq	%rdx, %rcx
+               	movl	%ecx, %ecx
+               	movq	%rcx, %rdx
                	shrq	%rdx
                	andq	$0x55555555, %rdx       # imm = 0x55555555
-               	subq	%rdx, %rax
-               	movq	%rax, %rdx
+               	subq	%rdx, %rcx
+               	movq	%rcx, %rdx
                	andq	$0x33333333, %rdx       # imm = 0x33333333
-               	shrq	$0x2, %rax
-               	andq	$0x33333333, %rax       # imm = 0x33333333
-               	addq	%rdx, %rax
-               	movq	%rax, %rdx
+               	shrq	$0x2, %rcx
+               	andq	$0x33333333, %rcx       # imm = 0x33333333
+               	addq	%rdx, %rcx
+               	movq	%rcx, %rdx
                	shrq	$0x4, %rdx
-               	addq	%rdx, %rax
-               	andq	$0xf0f0f0f, %rax        # imm = 0xF0F0F0F
-               	movq	%rax, %rdx
+               	addq	%rdx, %rcx
+               	andq	$0xf0f0f0f, %rcx        # imm = 0xF0F0F0F
+               	movq	%rcx, %rdx
                	shrq	$0x8, %rdx
-               	addq	%rdx, %rax
-               	movq	%rax, %rdx
+               	addq	%rdx, %rcx
+               	movq	%rcx, %rdx
                	shrq	$0x10, %rdx
-               	addq	%rdx, %rax
-               	testb	$0x7f, %al
+               	addq	%rdx, %rcx
+               	testb	$0x7f, %cl
                	je	<addr>
                	movl	$0x17, %eax
                	leave

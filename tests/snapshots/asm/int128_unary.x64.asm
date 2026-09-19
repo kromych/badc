@@ -45,11 +45,12 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	leave
                	retq
-               	movq	0x8(%rcx), %rsi
-               	movq	%rax, %rdx
-               	subq	%rsi, %rdx
+               	movq	0x8(%rcx), %rdx
+               	movq	%rax, %rsi
+               	subq	%rdx, %rsi
                	movabsq	$-0x1000000000, %r11    # imm = 0xFFFFFFF000000000
-               	cmpq	%r11, %rdx
+               	movq	%rsi, %rdx
+               	cmpq	%r11, %rsi
                	je	<addr>
                	movl	$0x3, %eax
                	testq	%rax, %rax
@@ -94,54 +95,54 @@ Disassembly of section .text:
                	movq	%rcx, %rax
                	leave
                	retq
-               	movq	(%rdx), %rcx
-               	xorl	%edx, %edx
-               	testq	%rcx, %rcx
-               	seta	%r8b
-               	movzbq	%r8b, %r8
-               	movq	%rdx, %rdi
-               	subq	%rcx, %rdi
-               	movq	%rdx, %rsi
-               	subq	%r8, %rsi
-               	movq	%rsi, %r8
+               	movq	(%rdx), %rdx
+               	xorl	%ecx, %ecx
+               	testq	%rdx, %rdx
+               	seta	%sil
+               	movzbq	%sil, %rsi
+               	movq	%rcx, %rdi
+               	subq	%rdx, %rdi
+               	movq	%rcx, %rdx
+               	subq	%rsi, %rdx
+               	movq	%rdx, %r8
                	sarq	$0x4, %r8
-               	movq	%rdi, %rcx
-               	shrq	$0x4, %rcx
-               	movq	%rsi, %r9
+               	movq	%rdi, %rsi
+               	shrq	$0x4, %rsi
+               	movq	%rdx, %r9
                	shlq	$0x3c, %r9
-               	orq	%rcx, %r9
-               	movq	$-0x1, %rcx
-               	cmpq	%rcx, %r9
+               	orq	%rsi, %r9
+               	movq	$-0x1, %rsi
+               	cmpq	%rsi, %r9
                	jne	<addr>
-               	cmpl	%ecx, %r8d
+               	cmpl	%esi, %r8d
                	je	<addr>
-               	movl	$0x9, %ecx
-               	testq	%rcx, %rcx
+               	movl	$0x9, %esi
+               	testq	%rsi, %rsi
                	je	<addr>
-               	movq	%rcx, %rax
+               	movq	%rsi, %rax
                	leave
                	retq
                	movq	0x8(%rax), %rax
-               	cmpq	%rsi, %rax
-               	setb	%cl
-               	movzbq	%cl, %rcx
-               	cmpq	%rsi, %rax
+               	cmpq	%rdx, %rax
+               	setb	%sil
+               	movzbq	%sil, %rsi
+               	cmpq	%rdx, %rax
                	sete	%al
                	movzbq	%al, %rax
                	testq	%rdi, %rdi
-               	seta	%sil
-               	movzbq	%sil, %rsi
-               	andq	%rsi, %rax
-               	orq	%rcx, %rax
+               	seta	%dl
+               	movzbq	%dl, %rdx
+               	andq	%rdx, %rax
+               	orq	%rsi, %rax
                	testl	%eax, %eax
                	jne	<addr>
                	movl	$0xa, %eax
                	leave
                	retq
-               	movq	%rdx, %rax
+               	movq	%rcx, %rax
                	leave
                	retq
-               	movq	%rdx, %rcx
+               	movq	%rcx, %rsi
                	jmp	<addr>
                	xorl	%ecx, %ecx
                	jmp	<addr>

@@ -55,16 +55,16 @@ Disassembly of section .text:
                	movl	$0x1, %edi
                	movq	%rbx, %rax
                	callq	*%rax
-               	movl	$0x3, %r13d
-               	movq	%r13, %rdi
+               	movl	$0x3, %r12d
+               	movq	%r12, %rdi
                	callq	*%rax
-               	movq	%rax, %r12
+               	movq	%rax, %r13
                	xorl	%edi, %edi
                	movq	%rbx, %rax
                	callq	*%rax
-               	movq	%r13, %rdi
+               	movq	%r12, %rdi
                	callq	*%rax
-               	addq	%r12, %rax
+               	addq	%r13, %rax
                	movslq	%eax, %rax
                	popq	%rbx
                	popq	%r12

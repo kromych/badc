@@ -22,22 +22,22 @@ fn ent_pc=0 n_params=2 variadic=false locals=0
     v16  Imm(144115188075855872)                          -> x1
     v17  Imm(0)                                           -> x1
     v18  Imm(0)                                           -> x1
-    v19  BinopI { op=sub, lhs=v3, rhs_imm=1 }             -> x1
-    v20  Binop { op=add, lhs=v1, rhs=v19 }                -> x2
-    v21  Imm(3)                                           -> x2
+    v19  BinopI { op=sub, lhs=v3, rhs_imm=1 }             -> x2
+    v20  Binop { op=add, lhs=v1, rhs=v19 }                -> x1
+    v21  Imm(3)                                           -> x1
     v22  StoreIndexed { base=v1, index=v19, scale=1, value=v21, kind=I8 } -> -
-    v23  Imm(216172782113783808)                          -> x8
-    v24  Imm(0)                                           -> x8
-    v25  Load { addr=v1, disp=0, kind=I8 }                -> x8
-    v26  Imm(0)                                           -> x9
-    v27  Imm(0)                                           -> x9
-    v28  Binop { op=add, lhs=v1, rhs=v13 }                -> x9
+    v23  Imm(216172782113783808)                          -> x2
+    v24  Imm(0)                                           -> x2
+    v25  Load { addr=v1, disp=0, kind=I8 }                -> x2
+    v26  Imm(0)                                           -> x6
+    v27  Imm(0)                                           -> x6
+    v28  Binop { op=add, lhs=v1, rhs=v13 }                -> x6
     v29  LoadIndexed { base=v1, index=v13, scale=1, kind=I8 } -> x0
     v30  Binop { op=add, lhs=v25, rhs=v29 }               -> x0
-    v31  BinopI { op=shl, lhs=v30, rhs_imm=32 }           -> x8
-    v32  Extend { value=v30, kind=I32 }                   -> x8
-    v33  BinopI { op=sub, lhs=v3, rhs_imm=1 }             -> x6
-    v34  Binop { op=add, lhs=v1, rhs=v19 }                -> x1
+    v31  BinopI { op=shl, lhs=v30, rhs_imm=32 }           -> x2
+    v32  Extend { value=v30, kind=I32 }                   -> x2
+    v33  BinopI { op=sub, lhs=v3, rhs_imm=1 }             -> x2
+    v34  Binop { op=add, lhs=v1, rhs=v19 }                -> x2
     v35  Extend { value=v21, kind=I8 }                    -> x1
     v36  Binop { op=add, lhs=v30, rhs=v35 }               -> x0
     v37  BinopI { op=shl, lhs=v36, rhs_imm=32 }           -> x1

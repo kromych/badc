@@ -49,7 +49,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     terminator Return(v8)   (exit_acc=v8)
   block 2  start_pc=0
     v9   Imm(0)                                           -> x0
-    v10  Imm(8)                                           -> x1
+    v10  Imm(8)                                           -> x0
     v11  BinopI { op=add, lhs=v9, rhs_imm=8 }             -> x0
     v12  ImmCode(ent_pc=1)                                -> x0
     v13  Call { target_pc=1, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
@@ -62,7 +62,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     terminator Return(v17)   (exit_acc=v17)
   block 4  start_pc=0
     v18  Imm(0)                                           -> x0
-    v19  Imm(16)                                          -> x1
+    v19  Imm(16)                                          -> x0
     v20  BinopI { op=add, lhs=v18, rhs_imm=16 }           -> x0
     v21  ImmCode(ent_pc=2)                                -> x0
     v22  Call { target_pc=2, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
@@ -75,7 +75,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     terminator Return(v26)   (exit_acc=v26)
   block 6  start_pc=0
     v27  Imm(0)                                           -> x0
-    v28  Imm(40)                                          -> x1
+    v28  Imm(40)                                          -> x0
     v29  BinopI { op=add, lhs=v27, rhs_imm=40 }           -> x0
     v30  ImmCode(ent_pc=3)                                -> x0
     v31  Call { target_pc=3, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
@@ -88,13 +88,13 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     terminator Return(v35)   (exit_acc=v35)
   block 8  start_pc=0
     v36  Imm(0)                                           -> x0
-    v37  Imm(24)                                          -> x1
+    v37  Imm(24)                                          -> x0
     v38  BinopI { op=add, lhs=v36, rhs_imm=24 }           -> x0
     v39  Imm(0)                                           -> x0
     v40  Imm(0)                                           -> x0
     v41  Imm(0)                                           -> x0
     v42  Imm(0)                                           -> x0
-    v43  Imm(32)                                          -> x1
+    v43  Imm(32)                                          -> x0
     v44  BinopI { op=add, lhs=v42, rhs_imm=32 }           -> x0
     v45  Imm(0)                                           -> x0
     v46  Imm(0)                                           -> x0

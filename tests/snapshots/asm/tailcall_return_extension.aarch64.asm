@@ -24,10 +24,10 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x20, [sp], #0x20
                	ret
-               	ldrb	w3, [x0, w1, sxtw]
-               	lsl	x2, x1, #3
-               	sxtw	x2, w2
-               	lsl	x20, x3, x2
+               	ldrb	w2, [x0, w1, sxtw]
+               	lsl	x3, x1, #3
+               	sxtw	x3, w3
+               	lsl	x20, x2, x3
                	add	x1, x1, #0x1
                	bl	<addr>
                	orr	x0, x20, x0

@@ -31,9 +31,9 @@ Disassembly of section .text:
                	subq	$0x18, %rsp
                	pushq	%rbx
                	xorl	%eax, %eax
-               	leaq	<rip>, %rdx
-               	leaq	0x1000(%rax), %rcx
-               	movq	%rcx, (%rdx,%rax,8)
+               	leaq	<rip>, %rcx
+               	leaq	0x1000(%rax), %rdx
+               	movq	%rdx, (%rcx,%rax,8)
                	incq	%rax
                	cmpl	$0x40, %eax
                	jl	<addr>

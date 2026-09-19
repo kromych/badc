@@ -40,18 +40,17 @@ Disassembly of section .text:
                	retq
 
 <or_bytes>:
-               	xorl	%ecx, %ecx
-               	movq	%rcx, %rax
-               	cmpl	%edx, %eax
+               	xorl	%eax, %eax
+               	movq	%rax, %rcx
+               	cmpl	%edx, %ecx
                	jae	<addr>
-               	movzbq	(%rsi,%rax), %r8
+               	movzbq	(%rsi,%rcx), %r8
                	addq	%rdi, %r8
                	movzbq	(%r8), %r8
-               	orq	%r8, %rcx
-               	incq	%rax
-               	cmpl	%edx, %eax
+               	orq	%r8, %rax
+               	incq	%rcx
+               	cmpl	%edx, %ecx
                	jb	<addr>
-               	movq	%rcx, %rax
                	retq
 
 <struct_const>:

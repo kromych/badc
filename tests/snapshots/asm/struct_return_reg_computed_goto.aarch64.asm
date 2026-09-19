@@ -32,26 +32,26 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x30
-               	stur	w0, [x29, #-0x30]
-               	mov	x1, #0x0                // =0
-               	stur	w1, [x29, #-0x18]
-               	cbz	w0, <addr>
-               	adr	x0, <addr>
-               	stur	x0, [x29, #-0x18]
+               	mov	x1, x0
+               	stur	w1, [x29, #-0x30]
+               	mov	x0, #0x0                // =0
+               	stur	w0, [x29, #-0x18]
+               	cbz	w1, <addr>
+               	adr	x1, <addr>
+               	stur	x1, [x29, #-0x18]
                	b	<addr>
-               	adr	x0, <addr>
-               	stur	x0, [x29, #-0x18]
-               	ldur	x0, [x29, #-0x18]
-               	br	x0
+               	adr	x1, <addr>
+               	stur	x1, [x29, #-0x18]
+               	ldur	x1, [x29, #-0x18]
+               	br	x1
                	mov	x0, #0x1                // =1
                	stur	w0, [x29, #-0x18]
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x2                // =2
-               	stur	w0, [x29, #-0x18]
-               	stur	x1, [x29, #-0x18]
-               	mov	x0, x1
+               	mov	x1, #0x2                // =2
+               	stur	w1, [x29, #-0x18]
+               	stur	x0, [x29, #-0x18]
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret

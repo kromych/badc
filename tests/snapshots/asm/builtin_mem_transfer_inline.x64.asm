@@ -491,10 +491,10 @@ Disassembly of section .text:
                	testl	%eax, %eax
                	jne	<addr>
                	xorl	%eax, %eax
-               	leaq	-0x400(%rbp), %rdx
-               	leaq	(%rax,%rax,2), %rcx
-               	andq	$0xff, %rcx
-               	movb	%cl, (%rdx,%rax)
+               	leaq	-0x400(%rbp), %rcx
+               	leaq	(%rax,%rax,2), %rdx
+               	andq	$0xff, %rdx
+               	movb	%dl, (%rcx,%rax)
                	incq	%rax
                	cmpl	$0x200, %eax            # imm = 0x200
                	jl	<addr>
@@ -505,10 +505,10 @@ Disassembly of section .text:
                	callq	<addr>
                	xorl	%eax, %eax
                	leaq	-0x200(%rbp), %rcx
-               	movzbq	(%rcx,%rax), %rdx
-               	leaq	(%rax,%rax,2), %rcx
-               	andq	$0xff, %rcx
-               	cmpl	%ecx, %edx
+               	movzbq	(%rcx,%rax), %rcx
+               	leaq	(%rax,%rax,2), %rdx
+               	andq	$0xff, %rdx
+               	cmpl	%edx, %ecx
                	jne	<addr>
                	incq	%rax
                	cmpl	$0x200, %eax            # imm = 0x200

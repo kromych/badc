@@ -22,7 +22,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=2
     v12  Imm(2)                                           -> x0
     terminator Return(v12)   (exit_acc=v12)
   block 3  start_pc=0
-    v13  ImmData(16)                                      -> x2
+    v13  ImmData(16)                                      -> x1
     v14  Load { addr=v13, disp=0, kind=I32 }              -> x0
     v15  BinopI { op=ne, lhs=v14, rhs_imm=5 }             -> x0
     terminator Bz { cond=v15, target=b5, fall=b4 }   (exit_acc=v15)
@@ -31,20 +31,20 @@ fn ent_pc=0 n_params=0 variadic=false locals=2
     terminator Return(v16)   (exit_acc=v16)
   block 5  start_pc=0
     v17  ImmData(24)                                      -> x0
-    v18  Imm(0)                                           -> x1
-    v19  Load { addr=v17, disp=0, kind=I32 }              -> x1
+    v18  Imm(0)                                           -> x2
+    v19  Load { addr=v17, disp=0, kind=I32 }              -> x2
     v20  Imm(4)                                           -> x6
     v21  BinopI { op=add, lhs=v17, rhs_imm=4 }            -> x6
     v22  Load { addr=v17, disp=4, kind=I32 }              -> x6
-    v23  Binop { op=add, lhs=v19, rhs=v22 }               -> x1
+    v23  Binop { op=add, lhs=v19, rhs=v22 }               -> x2
     v24  BinopI { op=shl, lhs=v23, rhs_imm=32 }           -> x6
     v25  Extend { value=v23, kind=I32 }                   -> x6
     v26  Imm(8)                                           -> x6
     v27  BinopI { op=add, lhs=v17, rhs_imm=8 }            -> x6
     v28  Load { addr=v17, disp=8, kind=I32 }              -> x0
     v29  Binop { op=add, lhs=v23, rhs=v28 }               -> x0
-    v30  BinopI { op=shl, lhs=v29, rhs_imm=32 }           -> x1
-    v31  Extend { value=v29, kind=I32 }                   -> x1
+    v30  BinopI { op=shl, lhs=v29, rhs_imm=32 }           -> x2
+    v31  Extend { value=v29, kind=I32 }                   -> x2
     v32  BinopI { op=ne, lhs=v29, rhs_imm=60 }            -> x0
     terminator Bz { cond=v32, target=b7, fall=b6 }   (exit_acc=v32)
   block 6  start_pc=0

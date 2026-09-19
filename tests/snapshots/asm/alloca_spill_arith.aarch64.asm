@@ -49,19 +49,19 @@ Disassembly of section .text:
                	ldrb	w2, [x2]
                	strb	w2, [x0, #0x5]
                	mov	x17, #0xffff            // =65535
-               	add	x13, x0, x17
+               	add	x12, x0, x17
                	add	x1, x1, #0x6
                	ldrb	w1, [x1]
-               	strb	w1, [x13]
-               	ldrb	w11, [x0]
-               	ldrb	w7, [x0, #0x1]
-               	ldrb	w8, [x0, #0x2]
-               	ldrb	w9, [x0, #0x3]
-               	ldrb	w10, [x0, #0x4]
-               	ldrb	w12, [x0, #0x5]
-               	add	x1, x11, x7
-               	add	x2, x8, x9
-               	add	x3, x10, x12
+               	strb	w1, [x12]
+               	ldrb	w13, [x0]
+               	ldrb	w10, [x0, #0x1]
+               	ldrb	w7, [x0, #0x2]
+               	ldrb	w8, [x0, #0x3]
+               	ldrb	w9, [x0, #0x4]
+               	ldrb	w11, [x0, #0x5]
+               	add	x1, x13, x10
+               	add	x2, x7, x8
+               	add	x3, x9, x11
                	mov	x17, #0x3               // =3
                	mul	x4, x1, x17
                	mov	x17, #0x5               // =5
@@ -77,10 +77,10 @@ Disassembly of section .text:
                	cmp	w3, w1
                	b.ge	<addr>
                	mov	x20, x6
-               	add	x21, x1, x8
+               	add	x21, x1, x7
+               	add	x21, x21, x8
                	add	x21, x21, x9
-               	add	x21, x21, x10
-               	add	x21, x21, x12
+               	add	x21, x21, x11
                	add	x21, x21, x1
                	add	x21, x21, x2
                	add	x21, x21, x3
@@ -90,18 +90,18 @@ Disassembly of section .text:
                	add	x14, x21, x14
                	add	x14, x14, x15
                	add	x14, x14, x20
-               	cmp	w11, w7
-               	cset	x11, lt
+               	cmp	w13, w10
+               	cset	x13, lt
+               	cmp	w10, w7
+               	cset	x10, lt
+               	add	x10, x13, x10
                	cmp	w7, w8
                	cset	x7, lt
-               	add	x7, x11, x7
+               	add	x7, x10, x7
                	cmp	w8, w9
                	cset	x8, lt
                	add	x7, x7, x8
-               	cmp	w9, w10
-               	cset	x8, lt
-               	add	x7, x7, x8
-               	cmp	w10, w12
+               	cmp	w9, w11
                	cset	x8, lt
                	add	x7, x7, x8
                	cmp	w1, w2
@@ -121,16 +121,16 @@ Disassembly of section .text:
                	add	x1, x1, x2
                	add	x1, x14, x1
                	ldrb	w2, [x0]
-               	ldrb	w3, [x13]
+               	ldrb	w3, [x12]
                	add	x2, x2, x3
                	ldrb	w3, [x0, #0x2]
                	ldrb	w0, [x0, #0x3]
-               	add	x3, x3, x0
+               	add	x0, x3, x0
                	cmp	x1, #0xe0
                	b.ne	<addr>
                	cmp	w2, #0x8
                	b.ne	<addr>
-               	cmp	w3, #0x7
+               	cmp	w0, #0x7
                	b.ne	<addr>
                	mov	x0, #0x2a               // =42
                	sub	sp, x29, #0x20

@@ -112,14 +112,13 @@ Disassembly of section .text:
                	retq
 
 <read_then_clear>:
-               	movsbq	(%rdi), %rax
-               	xorl	%ecx, %ecx
-               	movb	%cl, (%rsi)
-               	testq	%rax, %rax
+               	movsbq	(%rdi), %rcx
+               	xorl	%eax, %eax
+               	movb	%al, (%rsi)
+               	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x1, %eax
                	retq
-               	movq	%rcx, %rax
                	retq
 
 <main>:

@@ -38,11 +38,11 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	xorl	%ecx, %ecx
-               	movq	%rcx, %rax
-               	addq	%rax, %rcx
-               	incq	%rax
-               	cmpl	$0xa, %eax
+               	xorl	%eax, %eax
+               	movq	%rax, %rcx
+               	addq	%rcx, %rax
+               	incq	%rcx
+               	cmpl	$0xa, %ecx
                	jl	<addr>
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	retq

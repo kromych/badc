@@ -55,18 +55,18 @@ Disassembly of section .text:
                	add	x0, x0, x4
                	add	x0, x0, x5
                	add	x0, x0, x6
-               	add	x2, x0, x7
+               	add	x1, x0, x7
                	sub	x0, x29, #0x10
-               	ldrsw	x1, [x0]
+               	ldrsw	x2, [x0]
                	mov	x17, #0x64              // =100
-               	mul	x1, x1, x17
-               	sxtw	x1, w1
-               	add	x2, x2, x1
-               	ldrsw	x1, [x0, #0x4]
+               	mul	x2, x2, x17
+               	sxtw	x2, w2
+               	add	x1, x1, x2
+               	ldrsw	x2, [x0, #0x4]
                	mov	x17, #0xa               // =10
-               	mul	x1, x1, x17
-               	sxtw	x1, w1
-               	add	x1, x2, x1
+               	mul	x2, x2, x17
+               	sxtw	x2, w2
+               	add	x1, x1, x2
                	ldrsw	x0, [x0, #0x8]
                	add	x0, x1, x0
                	add	sp, sp, #0x10

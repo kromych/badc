@@ -16,14 +16,12 @@ Disassembly of section .text:
 <relay_out_of_line>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	mov	x8, x2
-               	mov	x9, x7
-               	sxtb	x6, w6
                	sxth	x4, w4
-               	and	x2, x5, #0xff
-               	ldrsw	x5, [x29, #0x10]
-               	ldr	x10, [x29, #0x18]
-               	ldr	x7, [x29, #0x20]
+               	sxtb	x6, w6
+               	and	x5, x5, #0xff
+               	ldrsw	x8, [x29, #0x10]
+               	ldr	x9, [x29, #0x18]
+               	ldr	x10, [x29, #0x20]
                	adrp	x11, <page>
                	add	x11, x11, <lo12>
                	ldrsw	x11, [x11]
@@ -46,7 +44,7 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	x0, [x0]
-               	cmp	x8, x0
+               	cmp	x2, x0
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	b	<addr>
@@ -67,7 +65,7 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrb	w0, [x0]
-               	cmp	w2, w0
+               	cmp	w5, w0
                	b.eq	<addr>
                	mov	x0, #0x6                // =6
                	b	<addr>
@@ -78,7 +76,7 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x7                // =7
                	b	<addr>
-               	and	x0, x9, #0xffff
+               	and	x0, x7, #0xffff
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	ldrh	w1, [x1]
@@ -89,21 +87,21 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrsw	x0, [x0]
-               	cmp	w5, w0
+               	cmp	w8, w0
                	b.eq	<addr>
                	mov	x0, #0x9                // =9
                	b	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	x0, [x0]
-               	cmp	x10, x0
+               	cmp	x9, x0
                	b.eq	<addr>
                	mov	x0, #0xa                // =10
                	b	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	w0, [x0]
-               	cmp	w7, w0
+               	cmp	w10, w0
                	b.eq	<addr>
                	mov	x0, #0xb                // =11
                	b	<addr>

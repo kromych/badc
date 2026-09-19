@@ -2906,9 +2906,9 @@ Disassembly of section .text:
                	pushq	%rbx
                	xorl	%eax, %eax
                	leaq	<rip>, %rdx
-               	movq	%rax, %rsi
-               	shlq	$0x4, %rsi
-               	leaq	(%rdx,%rsi), %rcx
+               	movq	%rax, %rcx
+               	shlq	$0x4, %rcx
+               	addq	%rdx, %rcx
                	movq	%rax, (%rcx)
                	movq	%rax, %rsi
                	shlq	%rsi

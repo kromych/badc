@@ -64,8 +64,8 @@ Disassembly of section .text:
                	movb	%al, 0xb(%rcx)
                	popq	%rax
                	movb	%dl, (%rcx)
-               	movslq	0x4(%rcx), %rsi
-               	cmpl	$0xf, %esi
+               	movslq	0x4(%rcx), %rcx
+               	cmpl	$0xf, %ecx
                	je	<addr>
                	movl	$0x2, %eax
                	retq

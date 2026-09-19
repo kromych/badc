@@ -322,35 +322,35 @@ fn ent_pc=8 n_params=1 variadic=false locals=19
     v1   Imm(1)                                           -> x0
     v2   Imm(0)                                           -> x0
     v3   Imm(0)                                           -> x0
-    v4   LocalAddr(-16)                                   -> x1
-    v5   ImmData(16)                                      -> x0
+    v4   LocalAddr(-16)                                   -> x0
+    v5   ImmData(16)                                      -> x1
     v6   Store { addr=v5, disp=0, value=v4, kind=I64 }    -> -
-    v7   LocalAddr(-16)                                   -> x0
-    v8   Imm(0)                                           -> x0
+    v7   LocalAddr(-16)                                   -> x1
+    v8   Imm(0)                                           -> x1
     v9   Imm(4)                                           -> x2
     v10  Store { addr=v4, disp=0, value=v9, kind=I16 }    -> -
     v11  Imm(1125899906842624)                            -> x2
     v12  LocalAddr(-16)                                   -> x2
     v13  Imm(32)                                          -> x2
     v14  Imm(31)                                          -> x2
-    v15  BinopI { op=and, lhs=v4, rhs_imm=31 }            -> x1
+    v15  BinopI { op=and, lhs=v4, rhs_imm=31 }            -> x0
     v16  BinopI { op=eq, lhs=v15, rhs_imm=0 }             -> x2
     v17  Extend { value=v16, kind=I32 }                   -> x2
     v18  Imm(0)                                           -> x2
     terminator Bnz { cond=v15, target=b3, fall=b1 }   (low word)   (exit_acc=v16)
   block 1  start_pc=0
     v20  LocalAddr(-16)                                   -> x0
-    v21  Imm(0)                                           -> x1
+    v21  Imm(0)                                           -> x0
     v22  Load { addr=v20, disp=0, kind=I16 }              -> x0
-    v23  Imm(1)                                           -> x0
-    v24  Imm(1)                                           -> x1
-    v25  Imm(0)                                           -> x1
+    v23  Imm(1)                                           -> x1
+    v24  Imm(1)                                           -> x0
+    v25  Imm(0)                                           -> x0
     terminator Jmp(b2)   (exit_acc=v23)
   block 2  start_pc=0
-    v26  Phi { incoming=[b3:v8, b1:v23], kind=I64 }       -> x0
-    v27  Imm(0)                                           -> x1
-    v28  BinopI { op=shl, lhs=v26, rhs_imm=32 }           -> x1
-    v29  Extend { value=v26, kind=I32 }                   -> x1
+    v26  Phi { incoming=[b3:v8, b1:v23], kind=I64 }       -> x1
+    v27  Imm(0)                                           -> x0
+    v28  BinopI { op=shl, lhs=v26, rhs_imm=32 }           -> x0
+    v29  Extend { value=v26, kind=I32 }                   -> x0
     terminator Return(v26)   (exit_acc=v26)
   block 3  start_pc=0
     terminator Jmp(b2)

@@ -27,11 +27,11 @@ Disassembly of section .text:
                	str	x10, [x0, #0x8]
                	ldr	x10, [sp], #0x10
                	mov	x1, #0x3                // =3
-               	scvtf	d1, x1
-               	ldr	d0, [x0, #0x8]
+               	scvtf	d0, x1
+               	ldr	d1, [x0, #0x8]
                	mov	x1, #0x4000000000000000 // =4611686018427387904
                	fmov	d17, x1
-               	fmadd	d0, d0, d17, d1
+               	fmadd	d0, d1, d17, d0
                	fcvtzs	x1, d0
                	add	x1, x1, #0x2
                	cmp	x1, #0xe

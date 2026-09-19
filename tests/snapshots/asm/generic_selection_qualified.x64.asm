@@ -46,10 +46,10 @@ Disassembly of section .text:
                	leaq	-0x20(%rbp), %rax
                	movq	%rax, %rdx
                	subq	%rax, %rdx
-               	movq	%rdx, %r8
-               	sarq	$0x3f, %r8
-               	shrq	$0x3e, %r8
-               	addq	%r8, %rdx
+               	movq	%rdx, %rsi
+               	sarq	$0x3f, %rsi
+               	shrq	$0x3e, %rsi
+               	addq	%rsi, %rdx
                	sarq	$0x2, %rdx
                	testq	%rdx, %rdx
                	jne	<addr>

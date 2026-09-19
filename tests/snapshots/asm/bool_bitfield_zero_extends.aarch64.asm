@@ -51,11 +51,11 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x3, #0x40               // =64
-               	ldrb	w2, [x0, #0x1]
-               	and	x2, x2, #0x1
-               	lsl	x2, x2, #3
-               	sub	x2, x3, x2
+               	mov	x2, #0x40               // =64
+               	ldrb	w3, [x0, #0x1]
+               	and	x3, x3, #0x1
+               	lsl	x3, x3, #3
+               	sub	x2, x2, x3
                	cmp	w2, #0x38
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
@@ -68,9 +68,9 @@ Disassembly of section .text:
                	asr	x0, x0, #1
                	tbnz	w0, #0x0, <addr>
                	mov	w0, w1
-               	asr	x2, x0, #11
-               	and	x2, x2, #0x1
-               	cmp	w2, #0x1
+               	asr	x1, x0, #11
+               	and	x1, x1, #0x1
+               	cmp	w1, #0x1
                	b.eq	<addr>
                	mov	x0, #0x5                // =5
                	add	sp, sp, #0x10

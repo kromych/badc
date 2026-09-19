@@ -45,18 +45,18 @@ Disassembly of section .text:
                	movslq	(%rcx), %rcx
                	movq	(%rax,%rcx,8), %rcx
                	jmpq	*%rcx
-               	movq	-0x28(%rbp), %r8
-               	movq	-0x40(%rbp), %rsi
+               	movq	-0x28(%rbp), %rdi
+               	movq	-0x40(%rbp), %r8
                	movq	-0x50(%rbp), %rcx
                	movslq	-0x20(%rbp), %rdx
-               	leaq	0x1(%rdx), %rdi
-               	movl	%edi, -0x20(%rbp)
+               	leaq	0x1(%rdx), %rsi
+               	movl	%esi, -0x20(%rbp)
                	movslq	(%rcx,%rdx,4), %rdx
-               	movq	(%rsi,%rdx,8), %rdx
+               	movq	(%r8,%rdx,8), %rdx
                	andq	$-0x4, %rdx
-               	addq	%r8, %rdx
+               	addq	%rdi, %rdx
                	movq	%rdx, -0x28(%rbp)
-               	movslq	%edi, %rdx
+               	movslq	%esi, %rdx
                	leaq	0x1(%rdx), %rsi
                	movl	%esi, -0x20(%rbp)
                	movslq	(%rcx,%rdx,4), %rcx

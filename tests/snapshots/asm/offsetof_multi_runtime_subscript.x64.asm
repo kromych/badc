@@ -29,8 +29,6 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x8, %rsp
-               	pushq	%r13
-               	pushq	%r12
                	pushq	%rbx
                	xorl	%eax, %eax
                	imulq	$0x7, %rax, %rcx
@@ -89,19 +87,18 @@ Disassembly of section .text:
                	jl	<addr>
                	xorl	%ecx, %ecx
                	xorl	%eax, %eax
-               	leaq	(%rcx,%rcx,2), %rdi
-               	leaq	(%rdi,%rax), %r8
-               	movq	%r8, %rdx
+               	leaq	(%rcx,%rcx,2), %rdx
+               	addq	%rax, %rdx
                	shlq	%rdx
                	movq	%rdx, %rsi
                	shlq	$0x2, %rsi
-               	leaq	0x48(%rsi), %r12
-               	imulq	$0x18, %rcx, %r9
-               	movq	%rax, %rbx
-               	shlq	$0x3, %rbx
-               	leaq	(%r9,%rbx), %rsi
-               	leaq	0x48(%rsi), %r13
-               	cmpq	%r12, %r13
+               	leaq	0x48(%rsi), %rdi
+               	imulq	$0x18, %rcx, %rsi
+               	movq	%rax, %r8
+               	shlq	$0x3, %r8
+               	addq	%r8, %rsi
+               	leaq	0x48(%rsi), %r8
+               	cmpq	%rdi, %r8
                	jne	<addr>
                	incq	%rdx
                	shlq	$0x2, %rdx
@@ -135,70 +132,60 @@ Disassembly of section .text:
                	incq	%rax
                	cmpl	$0x4, %eax
                	jl	<addr>
-               	xorl	%edx, %edx
+               	xorl	%r8d, %r8d
                	xorl	%eax, %eax
-               	imulq	$0x34, %rdx, %rcx
-               	leaq	0xac(%rcx), %r8
+               	imulq	$0x34, %r8, %rcx
+               	leaq	0xac(%rcx), %rdx
                	leaq	(%rax,%rax,2), %rsi
                	movq	%rsi, %rdi
                	shlq	$0x2, %rdi
-               	leaq	(%r8,%rdi), %rbx
-               	imulq	$0xc, %rax, %r9
-               	leaq	(%rcx,%r9), %rdi
-               	leaq	0xac(%rdi), %r12
-               	cmpq	%rbx, %r12
+               	leaq	(%rdx,%rdi), %r9
+               	imulq	$0xc, %rax, %rdi
+               	addq	%rcx, %rdi
+               	leaq	0xac(%rdi), %rbx
+               	cmpq	%r9, %rbx
                	jne	<addr>
                	incq	%rsi
                	shlq	$0x2, %rsi
-               	addq	%r8, %rsi
-               	addq	$0x4, %rdi
-               	addq	$0xac, %rdi
-               	cmpq	%rsi, %rdi
+               	addq	%rsi, %rdx
+               	leaq	0x4(%rdi), %rsi
+               	addq	$0xac, %rsi
+               	cmpq	%rdx, %rsi
                	jne	<addr>
-               	leaq	0xac(%rcx), %rsi
-               	leaq	(%rax,%rax,2), %rdi
-               	addq	$0x2, %rdi
-               	shlq	$0x2, %rdi
-               	addq	%rdi, %rsi
-               	imulq	$0xc, %rax, %rdi
-               	addq	%rdi, %rcx
+               	leaq	0xac(%rcx), %rdx
+               	leaq	(%rax,%rax,2), %rsi
+               	addq	$0x2, %rsi
+               	shlq	$0x2, %rsi
+               	addq	%rsi, %rdx
+               	imulq	$0xc, %rax, %rsi
+               	addq	%rsi, %rcx
                	addq	$0x8, %rcx
                	addq	$0xac, %rcx
-               	cmpq	%rsi, %rcx
+               	cmpq	%rdx, %rcx
                	jne	<addr>
                	incq	%rax
                	cmpl	$0x4, %eax
                	jl	<addr>
-               	incq	%rdx
-               	cmpl	$0x3, %edx
+               	incq	%r8
+               	cmpl	$0x3, %r8d
                	jl	<addr>
                	xorl	%eax, %eax
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
                	leave
                	retq
                	movl	$0x6, %eax
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
                	leave
                	retq
                	movl	$0x5, %eax
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
                	leave
                	retq
                	movl	$0x2, %eax
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
                	leave
                	retq
                	movl	$0x1, %eax
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
                	leave
                	retq

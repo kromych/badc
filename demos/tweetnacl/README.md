@@ -9,7 +9,7 @@ a host-supplied `randombytes(u8 *, u64)`.
 
 Pinned at upstream's `20140427` release (the only canonical
 release; no later snapshot exists). Pulled through the badc
-vendor-deps mirror -- see [`setup.py`](setup.py).
+vendor-deps mirror -- see `setup.py`.
 
 ## Vendored surface
 
@@ -24,7 +24,7 @@ runs and platforms.
 
 ## Smoke scenarios
 
-[`smoke.py`](smoke.py) builds tweetnacl + the driver through
+`smoke.py` builds tweetnacl + the driver through
 badc in four flavours (amalgamation + separate-TU compile, each
 at `-O` and no-`-O`), plus an archive flavour, and runs each
 binary. Five scenarios:

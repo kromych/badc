@@ -1,0 +1,90 @@
+name: pages
+
+# badc.dev, built from this branch's own markdown, so the site cannot carry a
+# different text from the one the tests and the reviews see. Deploy-from-a-
+# branch publishes the repository root or `/docs` and nothing else, which is
+# why the site was a `gh-pages` copy of the whole tree; an artifact deployment
+# publishes any layout, so `doc/` keeps its name and no branch mirrors the
+# source.
+#
+# The artifact is the documentation and nothing else: README.md as the landing
+# page, LICENSE, `doc/` under its own name, and every markdown file under
+# `demos/` at its own path, which is what the landing page and `doc/` link to.
+# The build is the Jekyll one Pages runs itself, so the relative links between
+# these files resolve as they do on GitHub, and the markdown is copied in
+# beside the rendered pages because the links spell the `.md` names. The custom
+# domain is read from the deployed site, so `CNAME` goes into the artifact.
+
+on:
+  push:
+    branches: [master, 'debt/release-*']
+    paths:
+      - README.md
+      - LICENSE
+      - doc/**
+      # `**` matches characters, not path segments, so the two demo patterns
+      # do not fold into one.
+      - demos/*.md
+      - demos/**/*.md
+      - .github/workflows/pages.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deployment at a time, and never cancel one in flight: the live site is
+# whatever finished last.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+      - name: stage the documentation
+        run: |
+          mkdir -p _src
+          # The legacy build took these from the repository's metadata; an
+          # artifact build has no such injection, so the theme, the title and
+          # the tagline the site carries are named here.
+          printf '%s\n' 'theme: jekyll-theme-primer' 'title: badc' \
+              'description: Former bad C compiler' > _src/_config.yml
+          cp README.md _src/index.md
+          cp README.md _src/README.md
+          cp LICENSE _src/LICENSE
+          cp -R doc _src/doc
+          find demos -name '*.md' -not -path '*/.cache/*' | while read -r f
+          do
+            mkdir -p "_src/$(dirname "$f")"
+            cp "$f" "_src/$f"
+          done
+      - uses: actions/jekyll-build-pages@v1
+        with:
+          source: ./_src
+          destination: ./_site
+      - name: the markdown keeps the URLs the links spell
+        run: |
+          (cd _src && find . -name '*.md' ! -name index.md) | while read -r f
+          do
+            mkdir -p "_site/$(dirname "$f")"
+            cp "_src/$f" "_site/$f"
+          done
+          echo badc.dev > _site/CNAME
+      - uses: actions/upload-pages-artifact@v3
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

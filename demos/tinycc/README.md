@@ -11,7 +11,7 @@ Source is pinned at the upstream `mob` branch HEAD
 2017) predates years of PE / AArch64 / Mach-O fixes that the
 cross-platform self-host requires, so the bringup follows `mob`
 the same way distros do. Pulled through the badc vendor-deps
-mirror -- see [`setup.py`](setup.py).
+mirror -- see `setup.py`.
 
 ## Vendored surface
 

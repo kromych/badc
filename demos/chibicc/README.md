@@ -9,7 +9,7 @@ Source is pinned at the project's last `main`-branch commit
 (2020-12-07, `90d1f7f`); chibicc is a research project with no
 versioned releases and no recent activity, so the pin is stable.
 Pulled through the badc vendor-deps mirror -- see
-[`setup.py`](setup.py).
+`setup.py`.
 
 ## Bringup status
 

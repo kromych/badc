@@ -3336,6 +3336,15 @@ fn const_pointer_object_fold() {
 }
 
 #[test]
+fn const_object_member_fold() {
+    // A static initializer folds a scalar that a `[i]` / `.field` chain
+    // reaches in a `const` object with static storage, as GCC does, instead
+    // of taking the element's address; a chain that stops at a row still
+    // decays to the row's address.
+    assert_eq!(run_fixture("const_object_member_fold.c"), 0);
+}
+
+#[test]
 fn block_scope_thread_local() {
     // C11 6.7.1: a block-scope `static _Thread_local` / `static __thread`
     // object has thread storage duration -- placed in the TLS block, one per

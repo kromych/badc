@@ -36,8 +36,9 @@ use super::super::token::{Token, Ty};
 use super::Compiler;
 use super::diag::Category;
 use super::types::{
-    UNSIGNED_BIT, integer_promote, is_floating_ty, is_pointer_ty, is_struct_ty, is_struct_value_ty,
-    is_unsigned_ty, narrow_const_int, pointee_ty, strip_unsigned, struct_id_of, struct_ptr_depth,
+    UNSIGNED_BIT, integer_promote, is_floating_ty, is_long_double_ty, is_pointer_ty, is_struct_ty,
+    is_struct_value_ty, is_unsigned_ty, narrow_const_int, pointee_ty, strip_unsigned, struct_id_of,
+    struct_ptr_depth,
 };
 
 /// Compile-time arithmetic value of a constant expression. Integer
@@ -2131,29 +2132,134 @@ impl Compiler {
                 "compound-literal subscript out of range",
             ));
         }
-        let (lo, hi) = (at as u64, (at as usize + size) as u64);
-        let hit = |o: u64| o >= lo && o < hi;
-        if self.data_relocs.iter().any(|r| hit(r.data_offset))
-            || self.code_relocs.iter().any(|r| hit(r.data_offset))
-            || self.extern_data_relocs.iter().any(|r| hit(r.data_offset))
-        {
+        if self.data_range_relocated(at as usize, size) {
             return Err(self.compile_err(
                 Code::CONSTANT_EXPRESSION,
                 "relocated compound-literal element is not an integer constant expression",
             ));
         }
+        Ok(ConstVal::Int {
+            val: self.read_data_int(at as usize, size, elem_ty) as i128,
+            ty: elem_ty,
+        })
+    }
+
+    /// Whether a relocation patches any byte of `data[at..at + size]`: its
+    /// value is then an address known only at link time.
+    fn data_range_relocated(&self, at: usize, size: usize) -> bool {
+        let hit = |o: u64| o >= at as u64 && o < (at + size) as u64;
+        self.data_relocs.iter().any(|r| hit(r.data_offset))
+            || self.code_relocs.iter().any(|r| hit(r.data_offset))
+            || self.extern_data_relocs.iter().any(|r| hit(r.data_offset))
+            || self.pending_label_relocs.iter().any(|r| hit(r.data_offset))
+    }
+
+    /// The little-endian integer of type `ty` stored at `data[at..at + size]`,
+    /// sign-extended from `size` bytes when `ty` is signed.
+    fn read_data_int(&self, at: usize, size: usize, ty: i64) -> i64 {
         let mut v: i64 = 0;
         for k in 0..size.min(8) {
-            v |= (self.data[at as usize + k] as i64) << (k * 8);
+            v |= (self.data[at + k] as i64) << (k * 8);
         }
-        if !is_unsigned_ty(elem_ty) && size < 8 {
+        if !is_unsigned_ty(ty) && size < 8 {
             let sign = 1i64 << (size * 8 - 1);
             v = (v ^ sign).wrapping_sub(sign);
         }
-        Ok(ConstVal::Int {
-            val: v as i128,
-            ty: elem_ty,
-        })
+        v
+    }
+
+    /// Fold a read of a scalar sub-object of a `const` object with static
+    /// storage duration, reached by a `[i]` / `.field` chain from its name
+    /// (`tab[i].addr` over `static const struct { ... } tab[]`), as GCC and
+    /// Clang do under C99 6.6p10: the initializer has already written the
+    /// value into the object's `.data` bytes. The cursor is on the name.
+    /// `None`, with the cursor restored, for any other shape: no chain, a
+    /// chain ending at an array, aggregate, pointer, `long double` or
+    /// bitfield, an index outside the object, or bytes a relocation patches.
+    fn try_fold_const_object_read(&mut self) -> Result<Option<ConstVal>, C5Error> {
+        let idx = self.lex.curr_id_idx;
+        let s = &self.symbols[idx];
+        // A block-scope static is complete at its declaration; a file-scope
+        // object without an initializer yet may still receive one.
+        let initialized = s.has_initializer || s.static_local_record.is_some();
+        if s.class != Token::Glo as i64
+            || !s.storage_is_const
+            || !initialized
+            || s.runtime_initialized
+            || s.is_extern_decl
+        {
+            return Ok(None);
+        }
+        let dims_of = |dims: &[i64], size: i64| match (dims.is_empty(), size) {
+            (false, _) => dims.to_vec(),
+            (true, 0) => alloc::vec::Vec::new(),
+            (true, n) => alloc::vec![n],
+        };
+        let (mut off, mut ty) = (s.val, s.type_);
+        let mut dims = dims_of(&s.array_dims, s.array_size);
+        let cp = self.init_checkpoint();
+        self.next()?;
+        let mut steps = 0;
+        loop {
+            if self.lex.tk == Token::Brak && !dims.is_empty() {
+                self.next()?;
+                let n = self.parse_const_expr_cond_val()?.as_int();
+                if self.lex.tk != ']' || n < 0 || n >= dims[0] {
+                    self.restore_init_checkpoint(cp);
+                    return Ok(None);
+                }
+                self.next()?;
+                let row: i64 = dims[1..].iter().product();
+                off += n * row * self.size_of_type(ty) as i64;
+                dims.remove(0);
+            } else if self.lex.tk == Token::Dot && dims.is_empty() && is_struct_value_ty(ty) {
+                self.next()?;
+                let field = if self.lex.tk == Token::Id {
+                    let name = &self.symbols[self.lex.curr_id_idx].name;
+                    self.structs[struct_id_of(ty)]
+                        .fields
+                        .iter()
+                        .find(|f| &f.name == name)
+                } else {
+                    None
+                };
+                let field = field
+                    .filter(|f| f.bit_width == 0)
+                    .map(|f| (f.offset as i64, f.ty, dims_of(&f.array_dims, f.array_size)));
+                let Some((f_off, f_ty, f_dims)) = field else {
+                    self.restore_init_checkpoint(cp);
+                    return Ok(None);
+                };
+                (off, ty, dims) = (off + f_off, f_ty, f_dims);
+                self.next()?;
+            } else {
+                break;
+            }
+            steps += 1;
+        }
+        let size = self.size_of_type(ty);
+        let scalar = !is_pointer_ty(ty) && !is_struct_ty(ty) && !is_long_double_ty(ty);
+        if steps == 0
+            || !dims.is_empty()
+            || !scalar
+            || !(1..=8).contains(&size)
+            || off < 0
+            || off as usize + size > self.data.len()
+            || self.data_range_relocated(off as usize, size)
+        {
+            self.restore_init_checkpoint(cp);
+            return Ok(None);
+        }
+        self.symbols[idx].was_referenced = true;
+        let bits = self.read_data_int(off as usize, size, ty);
+        Ok(Some(match (is_floating_ty(ty), size) {
+            (true, 4) => ConstVal::Float(f32::from_bits(bits as u32) as f64),
+            (true, _) => ConstVal::Float(f64::from_bits(bits as u64)),
+            (false, _) => ConstVal::Int {
+                val: bits as i128,
+                ty,
+            },
+        }))
     }
 
     /// Resolve the current identifier as a field of `struct_ty` and return
@@ -2489,6 +2595,13 @@ impl Compiler {
                     return Ok(ConstVal::Int { val: v as i128, ty });
                 }
             }
+        }
+        // The same holds for a scalar a `[i]` / `.field` chain reaches in a
+        // `const` array or aggregate (`tab[i].addr`).
+        if self.lex.tk == Token::Id
+            && let Some(v) = self.try_fold_const_object_read()?
+        {
+            return Ok(v);
         }
         // A function designator or an array object decays to its address
         // (C99 6.3.2.1p3/p4): a non-null symbol-relative address constant.

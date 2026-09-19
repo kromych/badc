@@ -2056,15 +2056,15 @@ impl Compiler {
             }
             // C99 6.3.2.1p3 array decay: the value is the array's
             // data-segment offset plus a DataReloc.
+            let cp = self.init_checkpoint();
             let mut off = self.symbols[idx].val;
             let array_size = self.symbols[idx].array_size;
             let inner_dim = self.symbols[idx].inner_array_size;
             let elem_ty = self.symbols[idx].type_;
+            let rank = self.symbols[idx].array_dims.len().max(1);
             self.next()?;
-            // A trailing `[N]` run takes the address of that element:
-            // C99 6.3.2.1p3 makes `arr[N]` in a constant initializer the
-            // same as `&arr[N]`, and a chain of them descends a
-            // multi-dimensional array first.
+            // A trailing `[N]` run that stops at a row of a
+            // multi-dimensional array decays to that row's address.
             //
             // TODO: a symbol records only the second dimension of `T
             // name[A][B]`, so there is no stride for a third index. A
@@ -2072,6 +2072,12 @@ impl Compiler {
             // address unchanged; a non-zero one is rejected.
             let mut depth: usize = 0;
             while self.lex.tk == Token::Brak {
+                // One that reaches an element designates its value (C99
+                // 6.3.2.1p2), which only the evaluator folds or rejects.
+                if depth + 1 >= rank {
+                    self.restore_init_checkpoint(cp);
+                    return self.parse_constant_init_scalar();
+                }
                 self.next()?;
                 let n = self.parse_constant_int_folding_const_objects()?;
                 if self.lex.tk != ']' {
@@ -2113,6 +2119,10 @@ impl Compiler {
                 };
                 off += n * stride;
                 depth += 1;
+            }
+            if self.lex.tk == Token::Dot || self.lex.tk == Token::Arrow {
+                self.restore_init_checkpoint(cp);
+                return self.parse_constant_init_scalar();
             }
             return Ok((off as i128, InitElemReloc::Data(Some(idx))));
         }

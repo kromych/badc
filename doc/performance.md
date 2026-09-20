@@ -27,7 +27,8 @@ repository serves the runs as files.</noscript>
 #perf .runs { margin-bottom: 1rem; }
 #perf .note { color: #57606a; font-size: 85%; margin: .3rem 0 1rem; }
 #perf .pick { font-size: 90%; margin: 0 0 1.2rem; }
-#perf .pick select, #perf .pick button { font: inherit; margin: .15rem .35rem .15rem 0; }
+#perf .pick select, #perf .pick button { font: inherit;
+  margin: .15rem .35rem .15rem 0; }
 #perf .pick select { max-width: 24rem; }
 #perf h4.where { font-size: 90%; margin: 1.2rem 0 .5rem; color: #57606a;
   font-weight: 600; }
@@ -125,7 +126,9 @@ repository serves the runs as files.</noscript>
     return /^[0-9a-f]{7,40}$/i.test(String(sha)) ? String(sha) : null;
   }
 
-  function web(url) { return /^https:\/\//.test(String(url)) ? String(url) : null; }
+  function web(url) {
+    return /^https:\/\//.test(String(url)) ? String(url) : null;
+  }
 
   function when(taken) {
     return taken ? String(taken).slice(0, 16).replace("T", " ") : "";
@@ -150,14 +153,19 @@ repository serves the runs as files.</noscript>
 
   function group(names, rows, key) {
     var order = [], by = {};
-    (names || []).forEach(function (n) { push(order, n); by[n] = by[n] || []; });
+    (names || []).forEach(function (n) {
+      push(order, n);
+      by[n] = by[n] || [];
+    });
     (rows || []).forEach(function (r) {
       var n = r && r[key];
       if (!n) return;
       if (!by[n]) { by[n] = []; push(order, n); }
       by[n].push(r);
     });
-    return order.map(function (n) { return { title: n, records: by[n] || [] }; });
+    return order.map(function (n) {
+      return { title: n, records: by[n] || [] };
+    });
   }
 
   function compilers(run) {
@@ -196,7 +204,8 @@ repository serves the runs as files.</noscript>
     var rows = [];
     records.forEach(function (r) {
       if (num(r[metric.key])) {
-        rows.push({ compiler: r.compiler || "", value: r[metric.key] / metric.scale });
+        rows.push({ compiler: r.compiler || "",
+                    value: r[metric.key] / metric.scale });
       }
     });
     if (!rows.length) return null;
@@ -220,7 +229,8 @@ repository serves the runs as files.</noscript>
       bars.appendChild(el("span", "val", r.value.toFixed(metric.digits)));
       var times = base > 0 ? (r.value / base).toFixed(2) + "x" : "\u2014";
       if (r === ref.row) {
-        bars.appendChild(el("span", "ratio ref", ref.named ? times : times + " ref"));
+        bars.appendChild(el("span", "ratio ref",
+          ref.named ? times : times + " ref"));
       } else {
         bars.appendChild(el("span", "ratio", times));
       }
@@ -258,7 +268,8 @@ repository serves the runs as files.</noscript>
     var source = p.source || (entry && entry.source);
     if (source) {
       line.appendChild(txt(DOT));
-      var what = source === "measured" ? "measured" : "recovered from " + source;
+      var what = source === "measured" ? "measured"
+        : "recovered from " + source;
       var url = web(p.url);
       line.appendChild(url ? anchor(what, url) : txt(what));
     }
@@ -270,14 +281,16 @@ repository serves the runs as files.</noscript>
   function latest(root, runs, total) {
     var head = el("div", "runs");
     runs.forEach(function (r) { head.appendChild(runLine(r.run, r.entry)); });
-    head.appendChild(el("div", "note", total + " run" + (total === 1 ? "" : "s") +
+    head.appendChild(el("div", "note", total + " run" +
+      (total === 1 ? "" : "s") +
       " published, newest first in the picker above."));
     root.appendChild(head);
 
     METRICS.forEach(function (metric) {
       var body = el("div");
       runs.forEach(function (r) {
-        var sha = commit((r.run.commit && r.run.commit.sha) || (r.entry && r.entry.sha));
+        var sha = commit((r.run.commit && r.run.commit.sha) ||
+          (r.entry && r.entry.sha));
         corpora(r.run).forEach(function (c) {
           var grid = el("div", "grid");
           c.charts.forEach(function (ch) {
@@ -288,7 +301,8 @@ repository serves the runs as files.</noscript>
           });
           if (!grid.children.length) return;
           body.appendChild(el("h4", "where",
-            [arch(r.run), runner(r.entry, r.run), c.name].filter(Boolean).join(DOT)));
+            [arch(r.run), runner(r.entry, r.run), c.name]
+              .filter(Boolean).join(DOT)));
           body.appendChild(grid);
         });
       });
@@ -342,8 +356,10 @@ repository serves the runs as files.</noscript>
         var row = el("tr");
         row.appendChild(el("td", "who", title));
         row.appendChild(el("td", "who", compiler));
-        row.appendChild(el("td", null, num(a) ? a.toFixed(metric.digits) : "\u2014"));
-        row.appendChild(el("td", null, num(b) ? b.toFixed(metric.digits) : "\u2014"));
+        row.appendChild(el("td", null,
+          num(a) ? a.toFixed(metric.digits) : "\u2014"));
+        row.appendChild(el("td", null,
+          num(b) ? b.toFixed(metric.digits) : "\u2014"));
         row.appendChild(change(a, b));
         body.appendChild(row);
         if (num(a) && num(b) && a !== 0) {
@@ -380,7 +396,8 @@ repository serves the runs as files.</noscript>
       head.appendChild(line);
     });
     head.appendChild(el("div", "note", "The change column is B as a multiple " +
-      "of A. Lower is better in every metric, and a green arrow marks B below A." +
+      "of A. Lower is better in every metric, and a green arrow marks B " +
+      "below A." +
       (runner(a.entry, a.run) === runner(b.entry, b.run) ? "" :
         " A and B ran on different machines, so the column holds two hosts " +
         "apart and not two commits.")));
@@ -390,11 +407,14 @@ repository serves the runs as files.</noscript>
     compilers(b.run).forEach(function (c) { push(who, c); });
 
     METRICS.forEach(function (metric) {
-      var body = el("div"), names = [], ca = corpora(a.run), cb = corpora(b.run);
+      var body = el("div"), names = [];
+      var ca = corpora(a.run), cb = corpora(b.run);
       ca.concat(cb).forEach(function (c) { push(names, c.name); });
       names.forEach(function (name) {
         function pick(list) {
-          return list.filter(function (c) { return c.name === name; })[0] || null;
+          return list.filter(function (c) {
+            return c.name === name;
+          })[0] || null;
         }
         var c = pick(ca) || pick(cb);
         var t = table(pick(ca), pick(cb), metric, who,
@@ -473,14 +493,19 @@ repository serves the runs as files.</noscript>
     go.addEventListener("click", function () {
       // The separator is a fragment character of its own: escaping it would
       // only make the link harder to read and to write by hand.
-      function part(v) { return String(v).split("/").map(encodeURIComponent).join("/"); }
-      window.location.hash = "a=" + part(left.value) + "&b=" + part(right.value);
+      function part(v) {
+        return String(v).split("/").map(encodeURIComponent).join("/");
+      }
+      window.location.hash = "a=" + part(left.value) +
+        "&b=" + part(right.value);
     });
     box.appendChild(go);
 
     var now = el("button", null, "Latest runs");
     now.type = "button";
-    now.addEventListener("click", function () { window.location.hash = "latest"; });
+    now.addEventListener("click", function () {
+      window.location.hash = "latest";
+    });
     box.appendChild(now);
     return box;
   }
@@ -556,7 +581,9 @@ repository serves the runs as files.</noscript>
     var entries = newest((index && index.runs) || []);
     if (!entries.length) return fail("No runs published yet.");
     window.addEventListener("hashchange", function () {
-      draw(entries).catch(function (e) { fail("that run did not load: " + e); });
+      draw(entries).catch(function (e) {
+        fail("that run did not load: " + e);
+      });
     });
     return draw(entries);
   }).catch(function (e) { fail("the published runs did not load: " + e); });

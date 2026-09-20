@@ -334,7 +334,7 @@ fn ent_pc=13 n_params=2 variadic=false locals=6
     v61  Binop { op=or, lhs=v57, rhs=v60 }                -> x0
     v62  BinopI { op=xor, lhs=v61, rhs_imm=1 }            -> x0
     v63  Imm(0)                                           -> x3
-    v64  Binop { op=sub, lhs=v63, rhs=v62 }               -> x3
+    v64  Neg(v62)                                         -> x3
     v65  Binop { op=and, lhs=v6, rhs=v64 }                -> x12
     v66  Binop { op=and, lhs=v8, rhs=v64 }                -> x3
     v67  Binop { op=ult, lhs=v52, rhs=v65 }               -> x14

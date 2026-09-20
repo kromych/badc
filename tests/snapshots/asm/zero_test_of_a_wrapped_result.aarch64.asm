@@ -54,8 +54,7 @@ Disassembly of section .text:
                	ret
 
 <neg_nz>:
-               	mov	x17, #-0x1              // =-1
-               	mul	x0, x0, x17
+               	neg	x0, x0
                	cbz	w0, <addr>
                	mov	x0, #0x1                // =1
                	ret

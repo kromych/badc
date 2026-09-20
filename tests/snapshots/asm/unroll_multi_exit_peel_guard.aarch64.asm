@@ -120,9 +120,7 @@ Disassembly of section .text:
                	ldr	x3, [x1]
                	cmp	x3, #0x0
                	b.ge	<addr>
-               	mov	x17, #-0x1              // =-1
-               	mul	x0, x0, x17
-               	sub	x0, x0, #0x1
+               	mvn	x0, x0
                	ret
                	ldr	x0, [x1]
                	adrp	x3, <page>
@@ -988,51 +986,27 @@ Disassembly of section .text:
                	ldp	x22, x23, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x30
                	ret
-               	mov	x17, #-0x1              // =-1
-               	mul	x1, x3, x17
-               	sub	x3, x1, #0x1
+               	mvn	x3, x3
                	b	<addr>
-               	mov	x17, #-0x1              // =-1
-               	mul	x1, x3, x17
-               	sub	x3, x1, #0x1
+               	mvn	x3, x3
                	b	<addr>
-               	mov	x17, #-0x1              // =-1
-               	mul	x1, x3, x17
-               	sub	x3, x1, #0x1
+               	mvn	x3, x3
                	b	<addr>
-               	mov	x17, #-0x1              // =-1
-               	mul	x1, x3, x17
-               	sub	x3, x1, #0x1
+               	mvn	x3, x3
                	b	<addr>
-               	mov	x17, #-0x1              // =-1
-               	mul	x1, x3, x17
-               	sub	x3, x1, #0x1
+               	mvn	x3, x3
                	b	<addr>
-               	mov	x17, #-0x1              // =-1
-               	mul	x1, x3, x17
-               	sub	x3, x1, #0x1
+               	mvn	x3, x3
                	b	<addr>
-               	mov	x17, #-0x1              // =-1
-               	mul	x1, x3, x17
-               	sub	x3, x1, #0x1
+               	mvn	x3, x3
                	b	<addr>
-               	mov	x17, #-0x1              // =-1
-               	mul	x1, x3, x17
-               	sub	x3, x1, #0x1
+               	mvn	x3, x3
                	b	<addr>
-               	mov	x17, #-0x1              // =-1
-               	mul	x1, x3, x17
-               	sub	x3, x1, #0x1
+               	mvn	x3, x3
                	b	<addr>
-               	mov	x17, #-0x1              // =-1
-               	mul	x1, x3, x17
-               	sub	x3, x1, #0x1
+               	mvn	x3, x3
                	b	<addr>
-               	mov	x17, #-0x1              // =-1
-               	mul	x1, x3, x17
-               	sub	x3, x1, #0x1
+               	mvn	x3, x3
                	b	<addr>
-               	mov	x17, #-0x1              // =-1
-               	mul	x1, x3, x17
-               	sub	x3, x1, #0x1
+               	mvn	x3, x3
                	b	<addr>

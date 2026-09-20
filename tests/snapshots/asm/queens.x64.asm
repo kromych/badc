@@ -55,7 +55,7 @@ Disassembly of section .text:
                	subq	%rsi, %rcx
                	testl	%ecx, %ecx
                	jge	<addr>
-               	imulq	$-0x1, %rcx, %rcx
+               	negq	%rcx
                	movslq	(%r13,%rax,4), %rsi
                	cmpl	%ebx, %esi
                	je	<addr>

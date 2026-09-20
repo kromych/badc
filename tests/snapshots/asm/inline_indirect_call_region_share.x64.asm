@@ -33,7 +33,7 @@ Disassembly of section .text:
 
 <negate>:
                	movq	(%rdi), %rax
-               	imulq	$-0x1, %rax, %rax
+               	negq	%rax
                	movq	%rax, (%rdi)
                	retq
 

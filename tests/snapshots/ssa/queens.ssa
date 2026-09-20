@@ -39,7 +39,7 @@ fn ent_pc=1 n_params=2 variadic=false locals=0
     v44  BinopI { op=lt, lhs=v42, rhs_imm=0 }             -> x6
     terminator Bz { cond=v44, target=b8, fall=b5 }   (exit_acc=v44)
   block 5  start_pc=0
-    v63  BinopI { op=mul, lhs=v42, rhs_imm=-1 }           -> x1
+    v63  Neg(v42)                                         -> x1
     v64  Extend { value=v63, kind=I32 }                   -> x6
     terminator Jmp(b6)   (exit_acc=v63)
   block 6  start_pc=0

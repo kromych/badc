@@ -204,6 +204,9 @@ fn compute_high_observed_through(func: &FunctionSsa, collapsing: &[bool]) -> Vec
                 }
             }
             Inst::FpCast { value, .. } => observe(&mut hi, &mut work, *value),
+            // Negation is exact modulo 2^64, so the result's low bytes
+            // need only the operand's, as `Sub` does.
+            Inst::Neg(_) => {}
             Inst::Fneg(v) => observe(&mut hi, &mut work, *v),
             Inst::Fma { a, b, c, .. } => {
                 observe(&mut hi, &mut work, *a);
@@ -281,6 +284,7 @@ fn compute_high_observed_through(func: &FunctionSsa, collapsing: &[bool]) -> Vec
                 observe(&mut hi, &mut work, *lhs);
                 observe(&mut hi, &mut work, *rhs);
             }
+            Inst::Neg(v) => observe(&mut hi, &mut work, *v),
             Inst::Binop {
                 op: BinOp::Shl,
                 lhs,

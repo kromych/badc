@@ -1125,6 +1125,7 @@ fn is_inline_candidate(
             | Inst::Extend { .. }
             | Inst::Bswap { .. }
             | Inst::BitCount { .. }
+            | Inst::Neg(_)
             | Inst::Fneg(_)
             | Inst::Fma { .. }
             | Inst::MulAdd { .. }
@@ -2082,6 +2083,7 @@ fn needs_param_agg_copy(c: &FunctionSsa) -> bool {
         | Inst::SegLoad { .. }
         | Inst::Binop { .. }
         | Inst::BinopI { .. }
+        | Inst::Neg(_)
         | Inst::Fneg(_)
         | Inst::Fma { .. }
         | Inst::MulAdd { .. }

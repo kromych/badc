@@ -604,6 +604,7 @@ pub(crate) fn asm_operand_form(func: &FunctionSsa, arg: u32) -> alloc::string::S
             Some(
                 Inst::Binop { .. }
                 | Inst::BinopI { .. }
+                | Inst::Neg(_)
                 | Inst::Bswap { .. }
                 | Inst::BitCount { .. },
             ) => "an arithmetic result",

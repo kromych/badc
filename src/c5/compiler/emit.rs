@@ -247,9 +247,10 @@ impl Compiler {
         self.ast_apply_binop(binop);
     }
 
-    /// Apply unary floating-point negation to the accumulator
-    /// (C99 6.5.3.3p3, result type IEEE-754 negated input).
-    pub(super) fn ast_fneg(&mut self) {
+    /// Apply unary negation to the accumulator (C99 6.5.3.3p3). The
+    /// walker picks the integer or the IEEE-754 form from the node's
+    /// type; `self.ty` must already hold the result type.
+    pub(super) fn ast_neg(&mut self) {
         self.pending.fn_ptr_chain_depth = -1;
         self.pending.fn_ptr_depth_is_array_elem = false;
         self.pending.value_is_fn_designator = false;

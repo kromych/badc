@@ -354,6 +354,7 @@ fn operand_files(func: &FunctionSsa, inst: &Inst, f: &mut impl FnMut(ValueId, bo
             f(*lhs, fp);
             f(*rhs, fp);
         }
+        Inst::Neg(v) => f(*v, false),
         Inst::Fneg(v) => f(*v, true),
         Inst::Fma { a, b, c, .. } => {
             f(*a, true);
@@ -1081,6 +1082,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             | Inst::BitCount { .. }
             | Inst::Copy { .. }
             | Inst::FpCast { .. }
+            | Inst::Neg(_)
             | Inst::Fneg(_)
             | Inst::Fma { .. }
             | Inst::Load { .. }
@@ -1256,7 +1258,9 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             Inst::FpCast { kind, .. } => {
                 !(is_x86 && matches!(kind, FpCastKind::UFpToInt | FpCastKind::UIntToFp))
             }
-            Inst::BitCount { .. } => !is_x86,
+            // x86-64 `neg` sets the flags; the aarch64 `sub Xd,XZR,Xn` it
+            // lowers to does not.
+            Inst::Neg(_) | Inst::BitCount { .. } => !is_x86,
             Inst::Binop { op, .. } | Inst::BinopI { op, .. } => {
                 if is_x86 {
                     matches!(op, BinOp::Fadd | BinOp::Fsub | BinOp::Fmul | BinOp::Fdiv)
@@ -2586,6 +2590,7 @@ fn result_kind(inst: &Inst) -> ResultKind {
             // FP comparisons return an integer 0/1.
             _ => ResultKind::Int,
         },
+        Neg(_) => ResultKind::Int,
         Fneg(_) => ResultKind::Fp,
         Fma { .. } => ResultKind::Fp,
         MulAdd { .. } => ResultKind::Int,

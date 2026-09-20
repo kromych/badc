@@ -97,6 +97,34 @@ NOINLINE static int both(int a, int b) {
 
 NOINLINE static long square_at(const int *a, int i) { return (long)a[i] * a[i]; }
 
+NOINLINE static int negi(int n) { return -n; }
+
+NOINLINE static long negl(long n) { return -n; }
+
+NOINLINE static unsigned negu(unsigned n) { return -n; }
+
+NOINLINE static int negneg(int n) { return -(-n); }
+
+NOINLINE static long sub_of_neg(long a, long b) { return a - (-b); }
+
+NOINLINE static long add_of_neg(long a, long b) { return a + (-b); }
+
+NOINLINE static long neg_minus_one(long n) { return -n - 1; }
+
+NOINLINE static long zero_minus(long n) { return 0 - n; }
+
+NOINLINE static long times_minus_one(long n) { return n * -1; }
+
+NOINLINE static int pos(int n) { return +n; }
+
+// A live negation between the comparison and the branch that reads it:
+// the x86-64 negate writes the flags the branch would otherwise fuse.
+NOINLINE static long guarded_negate(long a, long b) {
+    long c = (a > 0);
+    long d = -b;
+    return c ? d : 0;
+}
+
 int main(void) {
     static char flags[1000];
     char zeros[8] = {0, 1, 0, 0, 2, 0, 3, 0};
@@ -125,5 +153,23 @@ int main(void) {
     if (mid(-3, -4) != -3 || mid(3, 4) != 3 || mid(2147483647, -1) != 1073741823) return 11;
     if (both(2, 6) != 1 || both(2, 7) != 0 || both(3, 6) != 0) return 12;
     if (square_at(a, 0) != (long)a[0] * a[0] || square_at(a, 8) != (long)a[8] * a[8]) return 13;
+
+    // Negation wraps at the type minimum, as every other signed
+    // operation in this compiler does.
+    if (negi(-2147483647 - 1) != -2147483647 - 1) return 14;
+    if (negl(-9223372036854775807L - 1) != -9223372036854775807L - 1) return 15;
+    if (negi(0) != 0 || negi(7) != -7 || negi(-7) != 7) return 16;
+    if (negl(0) != 0 || negl(7) != -7 || negl(-7) != 7) return 17;
+    if (negu(0u) != 0u || negu(1u) != 4294967295u || negu(2147483648u) != 2147483648u)
+        return 18;
+    if (negneg(-2147483647 - 1) != -2147483647 - 1 || negneg(5) != 5) return 19;
+    if (sub_of_neg(3, 4) != 7 || add_of_neg(3, 4) != -1) return 20;
+    if (neg_minus_one(5) != ~5L || neg_minus_one(-1) != 0) return 21;
+    if (zero_minus(5) != -5 || times_minus_one(5) != -5) return 22;
+    if (zero_minus(-9223372036854775807L - 1) != -9223372036854775807L - 1) return 23;
+    if (times_minus_one(-9223372036854775807L - 1) != -9223372036854775807L - 1) return 24;
+    if (pos(-7) != -7 || pos(0) != 0) return 25;
+    if (guarded_negate(1, 1) != -1 || guarded_negate(-1, 1) != 0) return 26;
+    if (guarded_negate(1, -5) != 5 || guarded_negate(0, 9) != 0) return 27;
     return 0;
 }

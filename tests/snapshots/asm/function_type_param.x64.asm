@@ -64,7 +64,8 @@ Disassembly of section .text:
                	retq
 
 <neg>:
-               	imulq	$-0x1, %rdi, %rax
+               	movq	%rdi, %rax
+               	negq	%rax
                	movslq	%eax, %rax
                	retq
 

@@ -79,52 +79,48 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	retq
-               	leaq	<rip>, %rdi
-               	movq	(%rdi), %rsi
-               	xorl	%eax, %eax
+               	leaq	<rip>, %rsi
+               	movq	(%rsi), %rax
                	testq	%rcx, %rcx
-               	seta	%r8b
-               	movzbq	%r8b, %r8
-               	movq	%rax, %r9
-               	subq	%rcx, %r9
-               	subq	%rdx, %rsi
-               	subq	%r8, %rsi
-               	movabsq	$-0x11223344556677, %r11 # imm = 0xFFEEDDCCBBAA9989
-               	cmpq	%r11, %r9
-               	jne	<addr>
-               	movabsq	$0x7766554433221101, %r11 # imm = 0x7766554433221101
-               	cmpq	%r11, %rsi
-               	je	<addr>
-               	movl	$0x4, %esi
-               	testq	%rsi, %rsi
-               	je	<addr>
-               	movq	%rsi, %rax
-               	retq
-               	movq	(%rdi), %rsi
-               	testq	%rsi, %rsi
                	seta	%dil
                	movzbq	%dil, %rdi
-               	movq	%rax, %r9
-               	subq	%rsi, %r9
-               	xorl	%eax, %eax
-               	negq	%rdi
-               	addq	%rax, %rdi
-               	movq	$-0x1, %rsi
-               	cmpq	%rsi, %r9
-               	jne	<addr>
-               	cmpl	%esi, %edi
-               	je	<addr>
-               	movl	$0x5, %esi
-               	testq	%rsi, %rsi
-               	je	<addr>
-               	movq	%rsi, %rax
-               	retq
-               	movq	%rax, %rsi
-               	subq	%rcx, %rsi
+               	movq	%rcx, %r8
+               	negq	%r8
                	subq	%rdx, %rax
-               	subq	%r8, %rax
+               	subq	%rdi, %rax
                	movabsq	$-0x11223344556677, %r11 # imm = 0xFFEEDDCCBBAA9989
-               	cmpq	%r11, %rsi
+               	movq	%r8, %r9
+               	cmpq	%r11, %r8
+               	jne	<addr>
+               	movabsq	$0x7766554433221101, %r11 # imm = 0x7766554433221101
+               	cmpq	%r11, %rax
+               	je	<addr>
+               	movl	$0x4, %eax
+               	testq	%rax, %rax
+               	je	<addr>
+               	retq
+               	movq	(%rsi), %rax
+               	testq	%rax, %rax
+               	seta	%sil
+               	movzbq	%sil, %rsi
+               	movq	%rax, %r9
+               	negq	%r9
+               	negq	%rsi
+               	movq	$-0x1, %rax
+               	cmpq	%rax, %r9
+               	jne	<addr>
+               	cmpl	%eax, %esi
+               	je	<addr>
+               	movl	$0x5, %eax
+               	testq	%rax, %rax
+               	je	<addr>
+               	retq
+               	movq	%rdx, %rax
+               	negq	%rax
+               	subq	%rdi, %rax
+               	movabsq	$-0x11223344556677, %r11 # imm = 0xFFEEDDCCBBAA9989
+               	movq	%r8, %rsi
+               	cmpq	%r11, %r8
                	jne	<addr>
                	movabsq	$0x7766554433221100, %r11 # imm = 0x7766554433221100
                	cmpq	%r11, %rax
@@ -292,9 +288,9 @@ Disassembly of section .text:
                	jmp	<addr>
                	xorl	%eax, %eax
                	jmp	<addr>
-               	movq	%rax, %rsi
+               	xorl	%eax, %eax
                	jmp	<addr>
-               	movq	%rax, %rsi
+               	xorl	%eax, %eax
                	jmp	<addr>
                	xorl	%eax, %eax
                	jmp	<addr>

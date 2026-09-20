@@ -1249,6 +1249,10 @@ fn run_inst<H: Host>(
             frame.regs[v as usize] = round_if_f32(res, frame.func.f32_values.get(v as usize));
             return Ok(());
         }
+        Inst::Neg(src) => {
+            frame.regs[v as usize] = frame.regs[*src as usize].wrapping_neg();
+            return Ok(());
+        }
         Inst::Fneg(src) => {
             let raw = frame.regs[*src as usize];
             let neg = eval::eval_fneg(raw);

@@ -215,7 +215,7 @@ Disassembly of section .text:
                	popq	%rdx
                	leaq	0x8(%rax), %rdi
                	movq	-0xd8(%rbp), %rax
-               	imulq	$-0x1, %rax, %rax
+               	negq	%rax
                	leaq	0x2(%rax), %rsi
                	callq	<addr>
                	leaq	-0x88(%rbp), %rax

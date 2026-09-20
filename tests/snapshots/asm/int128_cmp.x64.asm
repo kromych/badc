@@ -32,27 +32,27 @@ Disassembly of section .text:
                	pushq	%r13
                	pushq	%r12
                	pushq	%rbx
-               	leaq	<rip>, %rsi
-               	movq	(%rsi), %rax
-               	xorl	%edx, %edx
+               	leaq	<rip>, %rdx
+               	movq	(%rdx), %rax
+               	xorl	%esi, %esi
                	leaq	<rip>, %r8
                	movq	(%r8), %rcx
-               	orq	%rdx, %rcx
-               	movq	(%rsi), %rdi
-               	movq	(%r8), %rsi
+               	orq	%rsi, %rcx
+               	movq	(%rdx), %rdi
+               	movq	(%r8), %rdx
                	leaq	<rip>, %r9
                	movq	(%r9), %r8
-               	addq	%r8, %rsi
-               	movq	%rdx, %rbx
-               	orq	%rsi, %rbx
-               	movq	(%r9), %rsi
-               	testq	%rsi, %rsi
-               	seta	%r12b
-               	movzbq	%r12b, %r12
+               	addq	%r8, %rdx
+               	movq	%rsi, %rbx
+               	orq	%rdx, %rbx
+               	movq	(%r9), %rdx
+               	testq	%rdx, %rdx
+               	seta	%sil
+               	movzbq	%sil, %rsi
                	movq	%rdx, %r8
-               	subq	%rsi, %r8
-               	xorl	%edx, %edx
-               	subq	%r12, %rdx
+               	negq	%r8
+               	movq	%rsi, %rdx
+               	negq	%rdx
                	movq	(%r9), %rsi
                	shlq	$0x3f, %rsi
                	movq	(%r9), %r9

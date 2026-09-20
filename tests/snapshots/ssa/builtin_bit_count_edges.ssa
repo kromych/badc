@@ -1443,8 +1443,8 @@ fn ent_pc=10 n_params=0 variadic=false locals=0
     terminator Bnz { cond=v37, target=b39, fall=b23 }   (low word)   (exit_acc=v39)
   block 23  start_pc=0
     v40  Imm(0)                                           -> x0
-    v41  Imm(0)                                           -> x1
-    v42  Binop { op=sub, lhs=v40, rhs=v19 }               -> x13
+    v41  Imm(0)                                           -> x0
+    v42  Neg(v19)                                         -> x13
     v43  Call { target_pc=6, args=[v42], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v44  Extend { value=v43, kind=I32 }                   -> x1
     v45  BinopI { op=eq, lhs=v43, rhs_imm=0 }             -> x1

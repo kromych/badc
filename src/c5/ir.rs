@@ -199,6 +199,12 @@ pub(crate) enum Inst {
         lhs: ValueId,
         rhs_imm: i64,
     },
+    /// Two's-complement integer negation of the full 64-bit operand,
+    /// `0 - value` modulo 2^64 (C99 6.5.3.3p3 over the promoted operand;
+    /// the negation of the type minimum wraps to itself). Lowers to one
+    /// `neg`. A narrow result is renormalized by the `Extend` the walker
+    /// emits after it, as it is for the other width-preserving binops.
+    Neg(ValueId),
     /// Unary floating-point negation.
     Fneg(ValueId),
     /// Fused multiply-add computed with a single rounding (C99 6.5p8,
@@ -550,6 +556,7 @@ impl Inst {
                 | Inst::LoadIndexed { .. }
                 | Inst::Binop { .. }
                 | Inst::BinopI { .. }
+                | Inst::Neg(_)
                 | Inst::Fneg(_)
                 | Inst::Fma { .. }
                 | Inst::MulAdd { .. }
@@ -582,6 +589,7 @@ impl Inst {
             Inst::StoreIndexed { .. } => "StoreIndexed",
             Inst::Binop { .. } => "Binop",
             Inst::BinopI { .. } => "BinopI",
+            Inst::Neg(_) => "Neg",
             Inst::Fneg(_) => "Fneg",
             Inst::Fma { .. } => "Fma",
             Inst::MulAdd { .. } => "MulAdd",
@@ -656,7 +664,7 @@ impl Inst {
                 f(*rhs);
             }
             Inst::BinopI { lhs, .. } => f(*lhs),
-            Inst::Fneg(v) => f(*v),
+            Inst::Neg(v) | Inst::Fneg(v) => f(*v),
             Inst::Fma { a, b, c, .. } | Inst::MulAdd { a, b, c, .. } => {
                 f(*a);
                 f(*b);
@@ -759,7 +767,7 @@ impl Inst {
                 f(rhs);
             }
             Inst::BinopI { lhs, .. } => f(lhs),
-            Inst::Fneg(v) => f(v),
+            Inst::Neg(v) | Inst::Fneg(v) => f(v),
             Inst::Fma { a, b, c, .. } | Inst::MulAdd { a, b, c, .. } => {
                 f(a);
                 f(b);
@@ -2036,6 +2044,7 @@ impl crate::c5::layout::DataOffsets for Inst {
             | Inst::SegStore { .. }
             | Inst::Binop { .. }
             | Inst::BinopI { .. }
+            | Inst::Neg { .. }
             | Inst::Fneg { .. }
             | Inst::Fma { .. }
             | Inst::MulAdd { .. }

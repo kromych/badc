@@ -821,9 +821,8 @@ Disassembly of section .text:
                	callq	<addr>
                	testl	%eax, %eax
                	jne	<addr>
-               	xorl	%eax, %eax
-               	movq	%rax, %r13
-               	subq	%rbx, %r13
+               	movq	%rbx, %r13
+               	negq	%r13
                	movq	%r13, %rdi
                	callq	<addr>
                	testl	%eax, %eax

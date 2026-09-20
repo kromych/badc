@@ -31,27 +31,25 @@ Disassembly of section .text:
                	leaq	-0x3(%rax), %rcx
                	testl	%ecx, %ecx
                	jge	<addr>
-               	imulq	$-0x1, %rcx, %rcx
+               	negq	%rcx
                	movq	%rcx, %rsi
                	shlq	%rsi
                	andq	$0x1, %rcx
                	addq	%rsi, %rcx
-               	movslq	%ecx, %rcx
                	addq	%rcx, %rdx
                	leaq	0x3(%rax), %rcx
                	testl	%ecx, %ecx
                	jge	<addr>
-               	imulq	$-0x1, %rcx, %rcx
+               	negq	%rcx
                	movq	%rcx, %rsi
                	shlq	%rsi
                	andq	$0x1, %rcx
                	addq	%rsi, %rcx
-               	movslq	%ecx, %rcx
                	addq	%rcx, %rdx
                	imulq	$-0x3, %rax, %rcx
                	testl	%ecx, %ecx
                	jge	<addr>
-               	imulq	$-0x1, %rcx, %rcx
+               	negq	%rcx
                	movq	%rcx, %rsi
                	shlq	%rsi
                	andq	$0x1, %rcx
@@ -62,7 +60,7 @@ Disassembly of section .text:
                	xorq	$-0x3, %rcx
                	testl	%ecx, %ecx
                	jge	<addr>
-               	imulq	$-0x1, %rcx, %rcx
+               	negq	%rcx
                	movq	%rcx, %rsi
                	shlq	%rsi
                	andq	$0x1, %rcx
@@ -72,27 +70,25 @@ Disassembly of section .text:
                	leaq	-0x2(%rax), %rcx
                	testl	%ecx, %ecx
                	jge	<addr>
-               	imulq	$-0x1, %rcx, %rcx
+               	negq	%rcx
                	movq	%rcx, %rsi
                	shlq	%rsi
                	andq	$0x1, %rcx
                	addq	%rsi, %rcx
-               	movslq	%ecx, %rcx
                	addq	%rcx, %rdx
                	leaq	0x2(%rax), %rcx
                	testl	%ecx, %ecx
                	jge	<addr>
-               	imulq	$-0x1, %rcx, %rcx
+               	negq	%rcx
                	movq	%rcx, %rsi
                	shlq	%rsi
                	andq	$0x1, %rcx
                	addq	%rsi, %rcx
-               	movslq	%ecx, %rcx
                	addq	%rcx, %rdx
                	imulq	$-0x2, %rax, %rcx
                	testl	%ecx, %ecx
                	jge	<addr>
-               	imulq	$-0x1, %rcx, %rcx
+               	negq	%rcx
                	movq	%rcx, %rsi
                	shlq	%rsi
                	andq	$0x1, %rcx
@@ -103,7 +99,7 @@ Disassembly of section .text:
                	xorq	$-0x2, %rcx
                	testl	%ecx, %ecx
                	jge	<addr>
-               	imulq	$-0x1, %rcx, %rcx
+               	negq	%rcx
                	movq	%rcx, %rsi
                	shlq	%rsi
                	andq	$0x1, %rcx
@@ -113,38 +109,37 @@ Disassembly of section .text:
                	leaq	-0x1(%rax), %rcx
                	testl	%ecx, %ecx
                	jge	<addr>
-               	imulq	$-0x1, %rcx, %rcx
+               	negq	%rcx
                	movq	%rcx, %rsi
                	shlq	%rsi
                	andq	$0x1, %rcx
                	addq	%rsi, %rcx
-               	movslq	%ecx, %rcx
                	addq	%rcx, %rdx
                	leaq	0x1(%rax), %rcx
                	testl	%ecx, %ecx
                	jge	<addr>
-               	imulq	$-0x1, %rcx, %rcx
+               	negq	%rcx
                	movq	%rcx, %rsi
                	shlq	%rsi
                	andq	$0x1, %rcx
                	addq	%rsi, %rcx
-               	movslq	%ecx, %rcx
                	leaq	(%rdx,%rcx), %rsi
-               	imulq	$-0x1, %rax, %rcx
+               	movq	%rax, %rcx
+               	negq	%rcx
                	testl	%ecx, %ecx
                	jge	<addr>
-               	imulq	$-0x1, %rcx, %rdx
+               	movq	%rcx, %rdx
+               	negq	%rdx
                	movq	%rdx, %rdi
                	shlq	%rdi
                	andq	$0x1, %rdx
                	addq	%rdi, %rdx
-               	movslq	%edx, %rdx
                	addq	%rdx, %rsi
                	movq	%rax, %rdx
                	xorq	$-0x1, %rdx
                	testl	%edx, %edx
                	jge	<addr>
-               	imulq	$-0x1, %rdx, %rdx
+               	negq	%rdx
                	movq	%rdx, %rdi
                	shlq	%rdi
                	andq	$0x1, %rdx
@@ -158,7 +153,6 @@ Disassembly of section .text:
                	shlq	%rdi
                	andq	$0x1, %rdx
                	addq	%rdi, %rdx
-               	movslq	%edx, %rdx
                	addq	%rdx, %rsi
                	testl	%eax, %eax
                	jge	<addr>
@@ -167,12 +161,11 @@ Disassembly of section .text:
                	shlq	%rdi
                	andq	$0x1, %rdx
                	addq	%rdi, %rdx
-               	movslq	%edx, %rdx
                	addq	%rdx, %rsi
                	imulq	$0x0, %rax, %rdx
                	testl	%edx, %edx
                	jge	<addr>
-               	imulq	$-0x1, %rdx, %rdx
+               	negq	%rdx
                	movq	%rdx, %rdi
                	shlq	%rdi
                	andq	$0x1, %rdx
@@ -186,27 +179,24 @@ Disassembly of section .text:
                	shlq	%rdi
                	andq	$0x1, %rdx
                	addq	%rdi, %rdx
-               	movslq	%edx, %rdx
                	addq	%rdx, %rsi
                	leaq	0x1(%rax), %rdx
                	testl	%edx, %edx
                	jge	<addr>
-               	imulq	$-0x1, %rdx, %rdx
+               	negq	%rdx
                	movq	%rdx, %rdi
                	shlq	%rdi
                	andq	$0x1, %rdx
                	addq	%rdi, %rdx
-               	movslq	%edx, %rdx
                	addq	%rdx, %rsi
                	leaq	-0x1(%rax), %rdx
                	testl	%edx, %edx
                	jge	<addr>
-               	imulq	$-0x1, %rdx, %rdx
+               	negq	%rdx
                	movq	%rdx, %rdi
                	shlq	%rdi
                	andq	$0x1, %rdx
                	addq	%rdi, %rdx
-               	movslq	%edx, %rdx
                	addq	%rsi, %rdx
                	testl	%eax, %eax
                	jge	<addr>
@@ -214,13 +204,12 @@ Disassembly of section .text:
                	shlq	%rsi
                	andq	$0x1, %rcx
                	addq	%rsi, %rcx
-               	movslq	%ecx, %rcx
                	addq	%rcx, %rdx
                	movq	%rax, %rcx
                	xorq	$0x1, %rcx
                	testl	%ecx, %ecx
                	jge	<addr>
-               	imulq	$-0x1, %rcx, %rcx
+               	negq	%rcx
                	movq	%rcx, %rsi
                	shlq	%rsi
                	andq	$0x1, %rcx
@@ -230,28 +219,26 @@ Disassembly of section .text:
                	leaq	0x2(%rax), %rcx
                	testl	%ecx, %ecx
                	jge	<addr>
-               	imulq	$-0x1, %rcx, %rcx
+               	negq	%rcx
                	movq	%rcx, %rsi
                	shlq	%rsi
                	andq	$0x1, %rcx
                	addq	%rsi, %rcx
-               	movslq	%ecx, %rcx
                	addq	%rcx, %rdx
                	leaq	-0x2(%rax), %rcx
                	testl	%ecx, %ecx
                	jge	<addr>
-               	imulq	$-0x1, %rcx, %rcx
+               	negq	%rcx
                	movq	%rcx, %rsi
                	shlq	%rsi
                	andq	$0x1, %rcx
                	addq	%rsi, %rcx
-               	movslq	%ecx, %rcx
                	addq	%rcx, %rdx
                	movq	%rax, %rcx
                	shlq	%rcx
                	testl	%ecx, %ecx
                	jge	<addr>
-               	imulq	$-0x1, %rcx, %rcx
+               	negq	%rcx
                	movq	%rcx, %rsi
                	shlq	%rsi
                	andq	$0x1, %rcx
@@ -262,7 +249,7 @@ Disassembly of section .text:
                	xorq	$0x2, %rcx
                	testl	%ecx, %ecx
                	jge	<addr>
-               	imulq	$-0x1, %rcx, %rcx
+               	negq	%rcx
                	movq	%rcx, %rsi
                	shlq	%rsi
                	andq	$0x1, %rcx
@@ -272,27 +259,25 @@ Disassembly of section .text:
                	leaq	0x3(%rax), %rcx
                	testl	%ecx, %ecx
                	jge	<addr>
-               	imulq	$-0x1, %rcx, %rcx
+               	negq	%rcx
                	movq	%rcx, %rsi
                	shlq	%rsi
                	andq	$0x1, %rcx
                	addq	%rsi, %rcx
-               	movslq	%ecx, %rcx
                	addq	%rcx, %rdx
                	leaq	-0x3(%rax), %rcx
                	testl	%ecx, %ecx
                	jge	<addr>
-               	imulq	$-0x1, %rcx, %rcx
+               	negq	%rcx
                	movq	%rcx, %rsi
                	shlq	%rsi
                	andq	$0x1, %rcx
                	addq	%rsi, %rcx
-               	movslq	%ecx, %rcx
                	addq	%rcx, %rdx
                	leaq	(%rax,%rax,2), %rcx
                	testl	%ecx, %ecx
                	jge	<addr>
-               	imulq	$-0x1, %rcx, %rcx
+               	negq	%rcx
                	movq	%rcx, %rsi
                	shlq	%rsi
                	andq	$0x1, %rcx
@@ -303,7 +288,7 @@ Disassembly of section .text:
                	xorq	$0x3, %rcx
                	testl	%ecx, %ecx
                	jge	<addr>
-               	imulq	$-0x1, %rcx, %rcx
+               	negq	%rcx
                	jmp	<addr>
                	movq	%rax, %rcx
                	jmp	<addr>

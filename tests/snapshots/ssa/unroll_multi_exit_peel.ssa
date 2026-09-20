@@ -160,7 +160,7 @@ fn ent_pc=2 n_params=1 variadic=false locals=0
     v128 Imm(0)                                           -> x2
     v129 Imm(0)                                           -> x2
     v130 Imm(0)                                           -> x2
-    v131 BinopI { op=mul, lhs=v127, rhs_imm=-1 }          -> x0
+    v131 Neg(v127)                                        -> x0
     v132 Extend { value=v126, kind=I32 }                  -> x2
     v133 Binop { op=sub, lhs=v131, rhs=v126 }             -> x0
     v134 BinopI { op=sub, lhs=v133, rhs_imm=1 }           -> x0
@@ -1487,7 +1487,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=0
   block 94  start_pc=0
     terminator Jmp(b92)
   block 95  start_pc=0
-    v1000 BinopI { op=mul, lhs=v969, rhs_imm=-1 }          -> x2
+    v1000 Neg(v969)                                        -> x2
     v1001 Extend { value=v968, kind=I32 }                  -> x6
     v1002 Binop { op=sub, lhs=v1000, rhs=v968 }            -> x2
     v1003 BinopI { op=sub, lhs=v1002, rhs_imm=1 }          -> x1
@@ -1495,7 +1495,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=0
   block 96  start_pc=0
     terminator Jmp(b84)
   block 97  start_pc=0
-    v962 BinopI { op=mul, lhs=v931, rhs_imm=-1 }          -> x2
+    v962 Neg(v931)                                        -> x2
     v963 Extend { value=v930, kind=I32 }                  -> x6
     v964 Binop { op=sub, lhs=v962, rhs=v930 }             -> x2
     v965 BinopI { op=sub, lhs=v964, rhs_imm=1 }           -> x1
@@ -1503,7 +1503,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=0
   block 98  start_pc=0
     terminator Jmp(b76)
   block 99  start_pc=0
-    v924 BinopI { op=mul, lhs=v893, rhs_imm=-1 }          -> x2
+    v924 Neg(v893)                                        -> x2
     v925 Extend { value=v892, kind=I32 }                  -> x6
     v926 Binop { op=sub, lhs=v924, rhs=v892 }             -> x2
     v927 BinopI { op=sub, lhs=v926, rhs_imm=1 }           -> x1
@@ -1511,7 +1511,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=0
   block 100  start_pc=0
     terminator Jmp(b68)
   block 101  start_pc=0
-    v886 BinopI { op=mul, lhs=v855, rhs_imm=-1 }          -> x2
+    v886 Neg(v855)                                        -> x2
     v887 Extend { value=v854, kind=I32 }                  -> x6
     v888 Binop { op=sub, lhs=v886, rhs=v854 }             -> x2
     v889 BinopI { op=sub, lhs=v888, rhs_imm=1 }           -> x1

@@ -28,7 +28,8 @@ Disassembly of section .text:
 <from_value>:
                	testl	%edi, %edi
                	jge	<addr>
-               	imulq	$-0x1, %rdi, %rax
+               	movq	%rdi, %rax
+               	negq	%rax
                	movslq	%eax, %rax
                	retq
                	leaq	0x1(%rdi), %rax

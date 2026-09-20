@@ -225,6 +225,69 @@ Disassembly of section .text:
                	imulq	%rax, %rax
                	retq
 
+<negi>:
+               	movq	%rdi, %rax
+               	negq	%rax
+               	movslq	%eax, %rax
+               	retq
+
+<negl>:
+               	movq	%rdi, %rax
+               	negq	%rax
+               	retq
+
+<negu>:
+               	movq	%rdi, %rax
+               	negq	%rax
+               	movl	%eax, %eax
+               	retq
+
+<negneg>:
+               	movslq	%edi, %rdi
+               	movq	%rdi, %rax
+               	negq	%rax
+               	negq	%rax
+               	retq
+
+<sub_of_neg>:
+               	movl	$0x7, %eax
+               	retq
+
+<add_of_neg>:
+               	movq	$-0x1, %rax
+               	retq
+
+<neg_minus_one>:
+               	movq	%rdi, %rax
+               	xorq	$-0x1, %rax
+               	retq
+
+<zero_minus>:
+               	movq	%rdi, %rax
+               	negq	%rax
+               	retq
+
+<times_minus_one>:
+               	movq	%rdi, %rax
+               	negq	%rax
+               	retq
+
+<pos>:
+               	movslq	%edi, %rax
+               	retq
+
+<guarded_negate>:
+               	testq	%rdi, %rdi
+               	setg	%cl
+               	movzbq	%cl, %rcx
+               	movq	%rsi, %rax
+               	negq	%rax
+               	testq	%rcx, %rcx
+               	je	<addr>
+               	retq
+               	xorl	%eax, %eax
+               	jmp	<addr>
+
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
@@ -441,6 +504,181 @@ Disassembly of section .text:
                	cmpq	%rcx, %rax
                	je	<addr>
                	movl	$0xd, %eax
+               	popq	%rbx
+               	leave
+               	retq
+               	movq	$-0x80000000, %rdi      # imm = 0x80000000
+               	callq	<addr>
+               	cmpq	$-0x80000000, %rax      # imm = 0x80000000
+               	je	<addr>
+               	movl	$0xe, %eax
+               	popq	%rbx
+               	leave
+               	retq
+               	movabsq	$-0x8000000000000000, %rdi # imm = 0x8000000000000000
+               	callq	<addr>
+               	movabsq	$-0x8000000000000000, %r11 # imm = 0x8000000000000000
+               	cmpq	%r11, %rax
+               	je	<addr>
+               	movl	$0xf, %eax
+               	popq	%rbx
+               	leave
+               	retq
+               	xorl	%edi, %edi
+               	callq	<addr>
+               	testq	%rax, %rax
+               	jne	<addr>
+               	movl	$0x7, %edi
+               	callq	<addr>
+               	cmpq	$-0x7, %rax
+               	jne	<addr>
+               	movq	$-0x7, %rdi
+               	callq	<addr>
+               	cmpq	$0x7, %rax
+               	je	<addr>
+               	movl	$0x10, %eax
+               	popq	%rbx
+               	leave
+               	retq
+               	xorl	%edi, %edi
+               	callq	<addr>
+               	testq	%rax, %rax
+               	jne	<addr>
+               	movl	$0x7, %edi
+               	callq	<addr>
+               	cmpq	$-0x7, %rax
+               	jne	<addr>
+               	movq	$-0x7, %rdi
+               	callq	<addr>
+               	cmpq	$0x7, %rax
+               	je	<addr>
+               	movl	$0x11, %eax
+               	popq	%rbx
+               	leave
+               	retq
+               	xorl	%edi, %edi
+               	callq	<addr>
+               	testq	%rax, %rax
+               	jne	<addr>
+               	movl	$0x1, %edi
+               	callq	<addr>
+               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
+               	cmpq	%r11, %rax
+               	jne	<addr>
+               	movl	$0x80000000, %edi       # imm = 0x80000000
+               	callq	<addr>
+               	movl	$0x80000000, %r11d      # imm = 0x80000000
+               	cmpq	%r11, %rax
+               	je	<addr>
+               	movl	$0x12, %eax
+               	popq	%rbx
+               	leave
+               	retq
+               	movq	$-0x80000000, %rdi      # imm = 0x80000000
+               	callq	<addr>
+               	cmpq	$-0x80000000, %rax      # imm = 0x80000000
+               	jne	<addr>
+               	movl	$0x5, %edi
+               	callq	<addr>
+               	cmpq	$0x5, %rax
+               	je	<addr>
+               	movl	$0x13, %eax
+               	popq	%rbx
+               	leave
+               	retq
+               	movl	$0x3, %edi
+               	movl	$0x4, %esi
+               	callq	<addr>
+               	cmpq	$0x7, %rax
+               	jne	<addr>
+               	movl	$0x3, %edi
+               	movl	$0x4, %esi
+               	callq	<addr>
+               	cmpq	$-0x1, %rax
+               	je	<addr>
+               	movl	$0x14, %eax
+               	popq	%rbx
+               	leave
+               	retq
+               	movl	$0x5, %edi
+               	callq	<addr>
+               	cmpq	$-0x6, %rax
+               	jne	<addr>
+               	movq	$-0x1, %rdi
+               	callq	<addr>
+               	testq	%rax, %rax
+               	je	<addr>
+               	movl	$0x15, %eax
+               	popq	%rbx
+               	leave
+               	retq
+               	movl	$0x5, %edi
+               	callq	<addr>
+               	cmpq	$-0x5, %rax
+               	jne	<addr>
+               	movl	$0x5, %edi
+               	callq	<addr>
+               	cmpq	$-0x5, %rax
+               	je	<addr>
+               	movl	$0x16, %eax
+               	popq	%rbx
+               	leave
+               	retq
+               	movabsq	$-0x8000000000000000, %rdi # imm = 0x8000000000000000
+               	callq	<addr>
+               	movabsq	$-0x8000000000000000, %r11 # imm = 0x8000000000000000
+               	cmpq	%r11, %rax
+               	je	<addr>
+               	movl	$0x17, %eax
+               	popq	%rbx
+               	leave
+               	retq
+               	movabsq	$-0x8000000000000000, %rdi # imm = 0x8000000000000000
+               	callq	<addr>
+               	movabsq	$-0x8000000000000000, %r11 # imm = 0x8000000000000000
+               	cmpq	%r11, %rax
+               	je	<addr>
+               	movl	$0x18, %eax
+               	popq	%rbx
+               	leave
+               	retq
+               	movq	$-0x7, %rdi
+               	callq	<addr>
+               	cmpq	$-0x7, %rax
+               	jne	<addr>
+               	xorl	%edi, %edi
+               	callq	<addr>
+               	testq	%rax, %rax
+               	je	<addr>
+               	movl	$0x19, %eax
+               	popq	%rbx
+               	leave
+               	retq
+               	movl	$0x1, %edi
+               	movq	%rdi, %rsi
+               	callq	<addr>
+               	cmpq	$-0x1, %rax
+               	jne	<addr>
+               	movq	$-0x1, %rdi
+               	movl	$0x1, %esi
+               	callq	<addr>
+               	testq	%rax, %rax
+               	je	<addr>
+               	movl	$0x1a, %eax
+               	popq	%rbx
+               	leave
+               	retq
+               	movl	$0x1, %edi
+               	movq	$-0x5, %rsi
+               	callq	<addr>
+               	cmpq	$0x5, %rax
+               	jne	<addr>
+               	xorl	%edi, %edi
+               	movl	$0x9, %esi
+               	callq	<addr>
+               	testq	%rax, %rax
+               	je	<addr>
+               	movl	$0x1b, %eax
                	popq	%rbx
                	leave
                	retq

@@ -2127,8 +2127,7 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	x0, [x0]
-               	mov	x17, #-0x1              // =-1
-               	mul	x0, x0, x17
+               	neg	x0, x0
                	str	x0, [x1]
                	bl	<addr>
                	adrp	x0, <page>

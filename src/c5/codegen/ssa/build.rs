@@ -82,6 +82,7 @@ enum PureKey {
         lhs: ValueId,
         rhs_imm: i64,
     },
+    Neg(ValueId),
     Fneg(ValueId),
     FpCast {
         kind: FpCastKind,
@@ -1127,6 +1128,24 @@ impl SsaBuilder {
             neg_product,
             neg_addend,
         })
+    }
+
+    /// `Inst::Neg` -- two's-complement negation of the full 64-bit
+    /// value, wrapping. A constant operand folds the same way.
+    /// CSE-eligible.
+    pub(crate) fn neg(&mut self, v: ValueId) -> ValueId {
+        if let Some(k) = self.peek_imm(v)
+            && !self.is_f32(v)
+        {
+            return self.imm(k.wrapping_neg());
+        }
+        let key = PureKey::Neg(v);
+        if let Some(cached) = self.lookup_pure(key) {
+            return cached;
+        }
+        let id = self.push(Inst::Neg(v));
+        self.pure_cache.insert(key, id);
+        id
     }
 
     /// `Inst::Fneg`. Pure value; same input -> same output bit

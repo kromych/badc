@@ -76,12 +76,11 @@ Disassembly of section .text:
                	ret
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
-               	mov	x3, #-0x1               // =-1
                	mov	x0, #0x0                // =0
                	mov	x1, x0
-               	ldrsw	x4, [x2, x0, lsl #2]
-               	mul	x4, x4, x3
-               	add	x1, x1, x4
+               	ldrsw	x3, [x2, x0, lsl #2]
+               	neg	x3, x3
+               	add	x1, x1, x3
                	add	x0, x0, #0x1
                	cmp	w0, #0x5
                	b.lt	<addr>

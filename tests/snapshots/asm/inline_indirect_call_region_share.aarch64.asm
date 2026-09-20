@@ -21,8 +21,7 @@ Disassembly of section .text:
 
 <negate>:
                	ldr	x1, [x0]
-               	mov	x17, #-0x1              // =-1
-               	mul	x1, x1, x17
+               	neg	x1, x1
                	str	x1, [x0]
                	ret
 

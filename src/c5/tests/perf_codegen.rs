@@ -2442,6 +2442,238 @@ fn x64_bit_counts_take_the_base_instructions() {
     m.finish();
 }
 
+/// One function per negation shape, then the shapes the rewrite must
+/// leave alone: unary plus, a multiply by a constant that is not -1, a
+/// subtraction from a non-zero constant, and a floating negation.
+const NEGATES: &str = "int negi(int n) { return -n; }\n\
+long negl(long n) { return -n; }\n\
+unsigned negu(unsigned n) { return -n; }\n\
+long zero_minus(long n) { return 0 - n; }\n\
+long times_minus_one(long n) { return n * -1; }\n\
+long sub_of_neg(long a, long b) { return a - (-b); }\n\
+long neg_minus_one(long n) { return -n - 1; }\n\
+long negneg(long n) { return -(-n); }\n\
+int posi(int n) { return +n; }\n\
+long posl(long n) { return +n; }\n\
+long times_minus_two(long n) { return n * -2; }\n\
+long const_minus(long n) { return 5 - n; }\n\
+double negd(double x) { return -x; }\n";
+
+/// The same source with `+` in place of the unary minus, to compare the
+/// two against each other rather than against a shape written down here.
+const PLUSES: &str = "int posi(int n) { return +n; }\n\
+long posl(long n) { return +n; }\n\
+int idi(int n) { return n; }\n\
+long idl(long n) { return n; }\n";
+
+/// The walker lowers integer `-x` to one `Inst::Neg`: no multiply, no
+/// subtraction, no constant to materialise. C99 6.5.3.3p2 makes unary
+/// plus the promoted operand, so `+n` emits what `n` alone emits, and a
+/// floating operand keeps `Inst::Fneg` (6.5.3.3p3).
+#[test]
+fn integer_negation_lowers_to_one_negate() {
+    use crate::c5::ir::{BinOp, Inst};
+    let target = Target::LinuxX64;
+    let funcs = |src: &str| {
+        let program = crate::Compiler::with_options(
+            src.to_string(),
+            target,
+            crate::CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .expect("compile");
+        crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+            .expect("produce_ssa_funcs")
+    };
+    let negates = funcs(NEGATES);
+    let count = |name: &str, pick: fn(&Inst) -> bool| {
+        negates
+            .iter()
+            .find(|f| f.name == name)
+            .unwrap_or_else(|| panic!("{name}"))
+            .insts
+            .iter()
+            .filter(|i| pick(i))
+            .count()
+    };
+    let negs = |i: &Inst| matches!(i, Inst::Neg(_));
+    let muls = |i: &Inst| {
+        matches!(
+            i,
+            Inst::Binop { op: BinOp::Mul, .. } | Inst::BinopI { op: BinOp::Mul, .. }
+        )
+    };
+    let subs = |i: &Inst| {
+        matches!(
+            i,
+            Inst::Binop { op: BinOp::Sub, .. } | Inst::BinopI { op: BinOp::Sub, .. }
+        )
+    };
+    let mut m = Misses::default();
+    for name in ["negi", "negl", "negu"] {
+        m.expect(
+            count(name, negs) == 1 && count(name, muls) == 0 && count(name, subs) == 0,
+            || format!("{name}: not one negate and nothing else"),
+        );
+    }
+    // The negative side: neither a multiply by another constant nor a
+    // subtraction from a non-zero one is a negation, and the walker
+    // leaves both alone.
+    m.expect(
+        count("times_minus_two", negs) == 0 && count("times_minus_two", muls) == 1,
+        || "times_minus_two: the multiply is gone".to_string(),
+    );
+    m.expect(
+        count("const_minus", negs) == 0 && count("const_minus", subs) == 1,
+        || "const_minus: the subtraction is gone".to_string(),
+    );
+    m.expect(
+        count("negd", negs) == 0 && count("negd", |i| matches!(i, Inst::Fneg(_))) == 1,
+        || "negd: not a floating negation".to_string(),
+    );
+    // C99 6.5.3.3p2: `+n` is the promoted operand, nothing more.
+    let pluses = funcs(PLUSES);
+    let body = |name: &str| {
+        pluses
+            .iter()
+            .find(|f| f.name == name)
+            .unwrap_or_else(|| panic!("{name}"))
+            .insts
+            .iter()
+            .map(Inst::variant_name)
+            .collect::<Vec<_>>()
+    };
+    m.expect(
+        body("posi") == body("idi") && body("posl") == body("idl"),
+        || {
+            format!(
+                "unary plus emits {:?} where the operand alone emits {:?}",
+                body("posi"),
+                body("idi")
+            )
+        },
+    );
+    m.finish();
+}
+
+/// `NEG <Xd>, <Xm>`, the `SUB Xd, XZR, Xm` alias with no shift.
+fn a64_neg(w: u32) -> bool {
+    w & 0xFFE0_FFE0 == 0xCB00_03E0
+}
+
+/// `MUL <Xd>, <Xn>, <Xm>` (`MADD` with `Ra = XZR`), either width.
+fn a64_mul(w: u32) -> bool {
+    w & 0x7FE0_FC00 == 0x1B00_7C00
+}
+
+/// AArch64 negates with one `neg`: no constant register, no multiply.
+/// The folds that reach the same instruction -- `0 - x`, `x * -1` -- land
+/// there too, and the ones that cancel it leave nothing behind.
+#[test]
+fn a64_negation_takes_one_neg() {
+    let mut m = Misses::default();
+    // `neg x0, x0` then `ret`; the narrow forms renormalize after it.
+    for (name, len) in [
+        ("negl", 2),
+        ("zero_minus", 2),
+        ("times_minus_one", 2),
+        ("negi", 3),
+        ("negu", 3),
+    ] {
+        let ws = a64(NEGATES, name);
+        m.expect(
+            ws.len() == len && a64_neg(ws[0]) && !ws.iter().any(|&w| a64_mul(w)),
+            || format!("{name}: not one neg: {ws:08x?}"),
+        );
+    }
+    // `-(-x)` is `x`: the body is the return alone.
+    let ws = a64(NEGATES, "negneg");
+    m.expect(ws.len() == 1, || {
+        format!("negneg: not just a return: {ws:08x?}")
+    });
+    // `a - -b` is `add`, `-x - 1` is `mvn`: neither keeps a negate.
+    let ws = a64(NEGATES, "sub_of_neg");
+    let a64_add = |w: u32| w & 0xFFE0_FC00 == 0x8B00_0000;
+    m.expect(ws.len() == 2 && a64_add(ws[0]), || {
+        format!("sub_of_neg: not one add: {ws:08x?}")
+    });
+    let ws = a64(NEGATES, "neg_minus_one");
+    let a64_mvn = |w: u32| w & 0xFFE0_FFE0 == 0xAA20_03E0;
+    m.expect(ws.len() == 2 && a64_mvn(ws[0]), || {
+        format!("neg_minus_one: not one mvn: {ws:08x?}")
+    });
+    // The negative side keeps its multiply and its subtraction.
+    let ws = a64(NEGATES, "times_minus_two");
+    m.expect(
+        ws.iter().any(|&w| a64_mul(w)) && !ws.iter().any(|&w| a64_neg(w)),
+        || format!("times_minus_two: not a multiply: {ws:08x?}"),
+    );
+    let ws = a64(NEGATES, "const_minus");
+    m.expect(!ws.iter().any(|&w| a64_neg(w)), || {
+        format!("const_minus: a negate: {ws:08x?}")
+    });
+    m.finish();
+}
+
+/// A live negation between a comparison and the branch that reads it:
+/// x86-64 `neg` writes the flags, so the comparison cannot be folded
+/// into the branch across it.
+const NEG_IN_FLAG_WINDOW: &str = "long guard(long a, long b) {\n\
+long c = (a > 0);\n\
+long d = -b;\n\
+return c ? d : 0;\n}\n";
+
+/// The comparison materializes through `setcc` and the branch tests that
+/// value: fusing it into the branch would read the flags the intervening
+/// `negq` left.
+#[test]
+fn x64_negation_does_not_fuse_a_comparison_into_the_branch() {
+    let insns = x64(NEG_IN_FLAG_WINDOW, "guard");
+    let jcc = insns
+        .iter()
+        .position(X64Insn::is_jcc)
+        .expect("no conditional branch");
+    let before = insns[jcc - 1];
+    // `85 /r` TEST r/m, r and the CMP forms: the flags the branch reads
+    // must come from one of them, not from the negate.
+    let mut m = Misses::default();
+    m.expect(
+        matches!(before.op, 0x85 | 0x39 | 0x3B | 0x81 | 0x83) && before.op != 0xF7,
+        || format!("the branch reads the flags of {before:x?}: {insns:x?}"),
+    );
+    m.finish();
+}
+
+/// x86-64 negates with `neg`, never the three-operand `imul` by -1.
+#[test]
+fn x64_negation_takes_neg() {
+    // `F7 /3` is NEG r/m; `69` / `6B` / `0F AF` are the IMUL forms.
+    let neg = |i: &X64Insn| i.op == 0xF7 && i.modrm.is_some_and(|m| (m >> 3) & 7 == 3);
+    let imul = |i: &X64Insn| matches!(i.op, 0x69 | 0x6B | 0x0FAF);
+    let mut m = Misses::default();
+    for name in ["negi", "negl", "negu", "zero_minus", "times_minus_one"] {
+        let insns = x64(NEGATES, name);
+        m.expect(
+            insns.iter().filter(|i| neg(i)).count() == 1
+                && !insns.iter().any(imul)
+                && insns.len() <= 4,
+            || format!("{name}: not one neg: {insns:x?}"),
+        );
+    }
+    for name in ["negneg", "sub_of_neg", "neg_minus_one", "const_minus"] {
+        let insns = x64(NEGATES, name);
+        m.expect(!insns.iter().any(&neg), || {
+            format!("{name}: a negate the folds should have removed: {insns:x?}")
+        });
+    }
+    let insns = x64(NEGATES, "times_minus_two");
+    m.expect(
+        insns.iter().any(imul) && !insns.iter().any(neg),
+        || format!("times_minus_two: not a multiply: {insns:x?}"),
+    );
+    m.finish();
+}
+
 /// `-mgeneral-regs-only` keeps the AArch64 population count off the SIMD
 /// registers: the general-register reduction, at both widths. `-mno-sse`
 /// leaves x86-64 its `popcnt`, a general-register instruction.

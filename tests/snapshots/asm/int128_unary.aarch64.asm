@@ -34,7 +34,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldr	x4, [x1, #0x8]
-               	sub	x4, x0, x4
+               	neg	x4, x4
                	mov	x17, #-0x1000000000     // =-68719476736
                	cmp	x4, x17
                	b.eq	<addr>
@@ -78,8 +78,8 @@ Disassembly of section .text:
                	ldr	x2, [x3]
                	cmp	x2, #0x0
                	cset	x3, hi
-               	sub	x4, x0, x2
-               	sub	x2, x0, x3
+               	neg	x4, x2
+               	neg	x2, x3
                	asr	x5, x2, #4
                	lsr	x3, x4, #4
                	lsl	x6, x2, #60

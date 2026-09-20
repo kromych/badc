@@ -111,6 +111,27 @@ pub(super) fn emit_copy(
     Ok(())
 }
 
+/// `Inst::Neg`: `neg Xd, Xn` (the `sub Xd, XZR, Xn` alias).
+pub(super) fn emit_neg(
+    code: &mut Vec<u8>,
+    dst: Place,
+    value: u32,
+    alloc: &Allocation,
+    frame: Frame,
+    scratch: &ScratchPool,
+) -> Emit {
+    let src_place = place_of(alloc, value);
+    let Some(rn) = materialize_int(code, src_place, scratch.primary, frame) else {
+        return fail("Neg: value not int reg / spill");
+    };
+    let Some(rd) = int_or_spill_scratch(dst, scratch) else {
+        return fail("Neg: dst not int reg / spill");
+    };
+    emit(code, super::encode::enc_neg(rd, rn));
+    store_spilled_int(code, frame, dst, rd);
+    Ok(())
+}
+
 /// `Inst::Bswap`: reverse the low `width` bytes, zero-extended: `rev Xd`,
 /// `rev Wd` (zero-extending), or `rev Wd` then `lsr Wd, #16`, which
 /// drops the reversed upper halfword.

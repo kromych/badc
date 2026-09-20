@@ -128,8 +128,7 @@ Disassembly of section .text:
                	movq	(%rcx), %rdx
                	testq	%rdx, %rdx
                	jge	<addr>
-               	imulq	$-0x1, %rax, %rax
-               	decq	%rax
+               	xorq	$-0x1, %rax
                	retq
                	movq	(%rcx), %rax
                	leaq	<rip>, %rdx
@@ -900,39 +899,27 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	imulq	$-0x1, %rsi, %rcx
-               	leaq	-0x1(%rcx), %rsi
+               	xorq	$-0x1, %rsi
                	jmp	<addr>
-               	imulq	$-0x1, %rsi, %rcx
-               	leaq	-0x1(%rcx), %rsi
+               	xorq	$-0x1, %rsi
                	jmp	<addr>
-               	imulq	$-0x1, %rsi, %rcx
-               	leaq	-0x1(%rcx), %rsi
+               	xorq	$-0x1, %rsi
                	jmp	<addr>
-               	imulq	$-0x1, %rsi, %rcx
-               	leaq	-0x1(%rcx), %rsi
+               	xorq	$-0x1, %rsi
                	jmp	<addr>
-               	imulq	$-0x1, %rsi, %rcx
-               	leaq	-0x1(%rcx), %rsi
+               	xorq	$-0x1, %rsi
                	jmp	<addr>
-               	imulq	$-0x1, %rsi, %rcx
-               	leaq	-0x1(%rcx), %rsi
+               	xorq	$-0x1, %rsi
                	jmp	<addr>
-               	imulq	$-0x1, %rsi, %rcx
-               	leaq	-0x1(%rcx), %rsi
+               	xorq	$-0x1, %rsi
                	jmp	<addr>
-               	imulq	$-0x1, %rsi, %rcx
-               	leaq	-0x1(%rcx), %rsi
+               	xorq	$-0x1, %rsi
                	jmp	<addr>
-               	imulq	$-0x1, %rsi, %rcx
-               	leaq	-0x1(%rcx), %rsi
+               	xorq	$-0x1, %rsi
                	jmp	<addr>
-               	imulq	$-0x1, %rsi, %rcx
-               	leaq	-0x1(%rcx), %rsi
+               	xorq	$-0x1, %rsi
                	jmp	<addr>
-               	imulq	$-0x1, %rsi, %rcx
-               	leaq	-0x1(%rcx), %rsi
+               	xorq	$-0x1, %rsi
                	jmp	<addr>
-               	imulq	$-0x1, %rsi, %rcx
-               	leaq	-0x1(%rcx), %rsi
+               	xorq	$-0x1, %rsi
                	jmp	<addr>

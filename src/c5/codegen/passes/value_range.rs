@@ -932,6 +932,9 @@ fn eval(inst: &Inst, params: &[Range], mut range_of: impl FnMut(ValueId) -> Rang
             },
             _ => UNIVERSE,
         },
+        // Wrapping: the negation of the type minimum is itself, which
+        // `arith` reports as unbounded rather than as a positive value.
+        Inst::Neg(value) => arith(Range::exact(0), range_of(*value), true),
         Inst::BitCount { width, .. } => Range {
             lo: 0,
             hi: 8 * i128::from(*width),

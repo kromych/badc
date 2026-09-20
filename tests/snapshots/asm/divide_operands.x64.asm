@@ -227,8 +227,8 @@ Disassembly of section .text:
                	andq	%r12, %rbx
                	orq	%rbx, %rax
                	xorq	$0x1, %rax
-               	xorl	%ebx, %ebx
-               	subq	%rax, %rbx
+               	movq	%rax, %rbx
+               	negq	%rbx
                	movq	%r9, %r12
                	andq	%rbx, %r12
                	andq	%r8, %rbx

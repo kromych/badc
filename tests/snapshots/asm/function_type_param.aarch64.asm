@@ -49,8 +49,7 @@ Disassembly of section .text:
                	ret
 
 <neg>:
-               	mov	x17, #-0x1              // =-1
-               	mul	x0, x0, x17
+               	neg	x0, x0
                	sxtw	x0, w0
                	ret
 

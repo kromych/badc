@@ -361,6 +361,7 @@ pub(super) fn emit_inst(
         Inst::Intrinsic { kind, args } => {
             emit_intrinsic(code, func, abi, *kind, args, dst, v, alloc, frame, scratch)
         }
+        Inst::Neg(value) => emit_neg(code, dst, *value, alloc, frame, scratch),
         Inst::Fneg(src) => emit_fneg(code, *src, v, dst, alloc, frame),
         Inst::Fma {
             a,

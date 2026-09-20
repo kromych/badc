@@ -76,8 +76,8 @@ Disassembly of section .text:
                	andq	0x48(%rsp), %r14
                	orq	%r14, %rbx
                	xorq	$0x1, %rbx
-               	xorl	%r14d, %r14d
-               	subq	%rbx, %r14
+               	movq	%rbx, %r14
+               	negq	%r14
                	andq	%r13, %r14
                	cmpq	%r14, %r12
                	setb	%r10b
@@ -138,8 +138,8 @@ Disassembly of section .text:
                	andq	%r14, %r12
                	orq	%r12, %rdi
                	xorq	$0x1, %rdi
-               	xorl	%r12d, %r12d
-               	subq	%rdi, %r12
+               	movq	%rdi, %r12
+               	negq	%r12
                	andq	%rbx, %r12
                	cmpq	%r12, %r9
                	setb	%r14b
@@ -201,8 +201,8 @@ Disassembly of section .text:
                	andq	%r14, %r13
                	orq	%r13, %r9
                	xorq	$0x1, %r9
-               	xorl	%r13d, %r13d
-               	subq	%r9, %r13
+               	movq	%r9, %r13
+               	negq	%r13
                	movq	%rdi, %r14
                	andq	%r13, %r14
                	andq	%r8, %r13
@@ -268,8 +268,8 @@ Disassembly of section .text:
                	andq	%r14, %r13
                	orq	%r13, %rbx
                	xorq	$0x1, %rbx
-               	xorl	%r13d, %r13d
-               	subq	%rbx, %r13
+               	movq	%rbx, %r13
+               	negq	%r13
                	movq	%rdi, %r14
                	andq	%r13, %r14
                	andq	%r8, %r13
@@ -332,8 +332,8 @@ Disassembly of section .text:
                	andq	%r14, %r13
                	orq	%r13, %rdx
                	xorq	$0x1, %rdx
-               	xorl	%r13d, %r13d
-               	subq	%rdx, %r13
+               	movq	%rdx, %r13
+               	negq	%r13
                	movq	%rdi, %r14
                	andq	%r13, %r14
                	andq	%r8, %r13
@@ -394,8 +394,8 @@ Disassembly of section .text:
                	andq	%r14, %r13
                	orq	%r13, %r9
                	xorq	$0x1, %r9
-               	xorl	%r13d, %r13d
-               	subq	%r9, %r13
+               	movq	%r9, %r13
+               	negq	%r13
                	movq	%rdi, %r14
                	andq	%r13, %r14
                	andq	%r8, %r13
@@ -459,8 +459,8 @@ Disassembly of section .text:
                	andq	%r15, %r13
                	orq	%r13, %rdx
                	xorq	$0x1, %rdx
-               	xorl	%r13d, %r13d
-               	subq	%rdx, %r13
+               	movq	%rdx, %r13
+               	negq	%r13
                	andq	$0x7, %r13
                	cmpq	%r13, %r12
                	setb	%r15b
@@ -528,8 +528,8 @@ Disassembly of section .text:
                	andq	%r15, %r13
                	orq	%r13, %rbx
                	xorq	$0x1, %rbx
-               	xorl	%r13d, %r13d
-               	subq	%rbx, %r13
+               	movq	%rbx, %r13
+               	negq	%r13
                	andq	$0x7, %r13
                	cmpq	%r13, %r12
                	setb	%r15b
@@ -596,8 +596,8 @@ Disassembly of section .text:
                	andq	%r15, %r14
                	orq	%r14, %rdx
                	xorq	$0x1, %rdx
-               	xorl	%r14d, %r14d
-               	subq	%rdx, %r14
+               	movq	%rdx, %r14
+               	negq	%r14
                	andq	$0x40, %r14
                	testq	%rax, %rax
                	setb	%r15b
@@ -659,8 +659,8 @@ Disassembly of section .text:
                	andq	%r15, %r14
                	orq	%r14, %r12
                	xorq	$0x1, %r12
-               	xorl	%r14d, %r14d
-               	subq	%r12, %r14
+               	movq	%r12, %r14
+               	negq	%r14
                	andq	$0x40, %r14
                	testq	%rax, %rax
                	setb	%r15b
@@ -724,8 +724,8 @@ Disassembly of section .text:
                	andq	%r15, %r14
                	orq	%r14, %r9
                	xorq	$0x1, %r9
-               	xorl	%r14d, %r14d
-               	subq	%r9, %r14
+               	movq	%r9, %r14
+               	negq	%r14
                	andq	$0x40, %r14
                	testq	%rax, %rax
                	setb	%r15b
@@ -791,8 +791,8 @@ Disassembly of section .text:
                	andq	%r15, %r14
                	orq	%r14, %r12
                	xorq	$0x1, %r12
-               	xorl	%r14d, %r14d
-               	subq	%r12, %r14
+               	movq	%r12, %r14
+               	negq	%r14
                	andq	$0x40, %r14
                	testq	%rax, %rax
                	setb	%r15b
@@ -857,8 +857,8 @@ Disassembly of section .text:
                	andq	0x48(%rsp), %r14
                	orq	%r14, %rax
                	xorq	$0x1, %rax
-               	xorl	%r14d, %r14d
-               	subq	%rax, %r14
+               	movq	%rax, %r14
+               	negq	%r14
                	andq	%r13, %r14
                	cmpq	%r14, %rbx
                	setb	%r10b
@@ -940,8 +940,8 @@ Disassembly of section .text:
                	andq	0x48(%rsp), %r14
                	orq	%r14, %rbx
                	xorq	$0x1, %rbx
-               	xorl	%r14d, %r14d
-               	subq	%rbx, %r14
+               	movq	%rbx, %r14
+               	negq	%r14
                	andq	%r13, %r14
                	cmpq	%r14, %rax
                	setb	%r10b
@@ -1006,8 +1006,8 @@ Disassembly of section .text:
                	andq	%r15, %r14
                	orq	%r14, %rdx
                	xorq	$0x1, %rdx
-               	xorl	%r14d, %r14d
-               	subq	%rdx, %r14
+               	movq	%rdx, %r14
+               	negq	%r14
                	andq	$0x40, %r14
                	testq	%rax, %rax
                	setb	%r15b
@@ -1081,8 +1081,8 @@ Disassembly of section .text:
                	andq	%r15, %r14
                	orq	%r14, %r12
                	xorq	$0x1, %r12
-               	xorl	%r14d, %r14d
-               	subq	%r12, %r14
+               	movq	%r12, %r14
+               	negq	%r14
                	andq	$0x40, %r14
                	testq	%rax, %rax
                	setb	%r15b
@@ -1159,8 +1159,8 @@ Disassembly of section .text:
                	andq	%r14, %r12
                	orq	%r12, %r9
                	xorq	$0x1, %r9
-               	xorl	%r12d, %r12d
-               	subq	%r9, %r12
+               	movq	%r9, %r12
+               	negq	%r12
                	andq	%rbx, %r12
                	cmpq	%r12, %rsi
                	setb	%r14b
@@ -1206,8 +1206,8 @@ Disassembly of section .text:
                	andq	%r12, %rbx
                	orq	%rbx, %r9
                	xorq	$0x1, %r9
-               	xorl	%ebx, %ebx
-               	subq	%r9, %rbx
+               	movq	%r9, %rbx
+               	negq	%rbx
                	movq	%rdi, %r12
                	andq	%rbx, %r12
                	andq	%r8, %rbx

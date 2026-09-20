@@ -3032,12 +3032,11 @@ impl Compiler {
                 // result keeps the vector type (no promotion).
                 self.ast_apply_unary(super::super::ast::UnOp::Neg);
             } else if is_floating_scalar(self.ty) {
-                self.ast_fneg();
+                self.ast_neg();
             } else {
                 // C99 6.5.3.3p3: the result has the promoted operand type.
-                let operand_ty = self.ty;
-                self.emit_binop_with_imm(crate::c5::ir::BinOp::Mul, -1);
-                self.ty = integer_promote(operand_ty);
+                self.ty = integer_promote(self.ty);
+                self.ast_neg();
                 // Negating the type minimum overflows the width, so a 32-bit
                 // result is renormalized for a later 64-bit read.
                 if self.size_of_type(self.ty) == 4 {

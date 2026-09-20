@@ -16,8 +16,7 @@ Disassembly of section .text:
 <from_value>:
                	cmp	w0, #0x0
                	b.ge	<addr>
-               	mov	x17, #-0x1              // =-1
-               	mul	x0, x0, x17
+               	neg	x0, x0
                	sxtw	x0, w0
                	ret
                	add	x0, x0, #0x1

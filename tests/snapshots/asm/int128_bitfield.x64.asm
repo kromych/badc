@@ -548,8 +548,8 @@ Disassembly of section .text:
                	andq	%r12, %r8
                	orq	%r8, %rcx
                	xorq	$0x1, %rcx
-               	xorl	%r8d, %r8d
-               	subq	%rcx, %r8
+               	movq	%rcx, %r8
+               	negq	%r8
                	andq	%r9, %r8
                	cmpq	%r8, %rax
                	setb	%r12b
@@ -620,8 +620,8 @@ Disassembly of section .text:
                	andq	%r12, %r9
                	orq	%r9, %rdi
                	xorq	$0x1, %rdi
-               	xorl	%r9d, %r9d
-               	subq	%rdi, %r9
+               	movq	%rdi, %r9
+               	negq	%r9
                	andq	%r8, %r9
                	cmpq	%r9, %rcx
                	setb	%r12b

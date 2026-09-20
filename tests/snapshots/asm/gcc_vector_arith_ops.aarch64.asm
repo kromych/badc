@@ -5654,52 +5654,52 @@ Disassembly of section .text:
                	sub	x2, x29, #0x8e0
                	ldrb	w3, [x1]
                	mov	x0, #0x0                // =0
-               	sub	x3, x0, x3
+               	neg	x3, x3
                	strb	w3, [x2]
                	ldrb	w3, [x1, #0x1]
-               	sub	x3, x0, x3
+               	neg	x3, x3
                	strb	w3, [x2, #0x1]
                	ldrb	w3, [x1, #0x2]
-               	sub	x3, x0, x3
+               	neg	x3, x3
                	strb	w3, [x2, #0x2]
                	ldrb	w3, [x1, #0x3]
-               	sub	x3, x0, x3
+               	neg	x3, x3
                	strb	w3, [x2, #0x3]
                	ldrb	w3, [x1, #0x4]
-               	sub	x3, x0, x3
+               	neg	x3, x3
                	strb	w3, [x2, #0x4]
                	ldrb	w3, [x1, #0x5]
-               	sub	x3, x0, x3
+               	neg	x3, x3
                	strb	w3, [x2, #0x5]
                	ldrb	w3, [x1, #0x6]
-               	sub	x3, x0, x3
+               	neg	x3, x3
                	strb	w3, [x2, #0x6]
                	ldrb	w3, [x1, #0x7]
-               	sub	x3, x0, x3
+               	neg	x3, x3
                	strb	w3, [x2, #0x7]
                	ldrb	w3, [x1, #0x8]
-               	sub	x3, x0, x3
+               	neg	x3, x3
                	strb	w3, [x2, #0x8]
                	ldrb	w3, [x1, #0x9]
-               	sub	x3, x0, x3
+               	neg	x3, x3
                	strb	w3, [x2, #0x9]
                	ldrb	w3, [x1, #0xa]
-               	sub	x3, x0, x3
+               	neg	x3, x3
                	strb	w3, [x2, #0xa]
                	ldrb	w3, [x1, #0xb]
-               	sub	x3, x0, x3
+               	neg	x3, x3
                	strb	w3, [x2, #0xb]
                	ldrb	w3, [x1, #0xc]
-               	sub	x3, x0, x3
+               	neg	x3, x3
                	strb	w3, [x2, #0xc]
                	ldrb	w3, [x1, #0xd]
-               	sub	x3, x0, x3
+               	neg	x3, x3
                	strb	w3, [x2, #0xd]
                	ldrb	w3, [x1, #0xe]
-               	sub	x3, x0, x3
+               	neg	x3, x3
                	strb	w3, [x2, #0xe]
                	ldrb	w3, [x1, #0xf]
-               	sub	x3, x0, x3
+               	neg	x3, x3
                	strb	w3, [x2, #0xf]
                	sub	x3, x29, #0xba0
                	str	x10, [sp, #-0x10]!
@@ -5708,10 +5708,9 @@ Disassembly of section .text:
                	ldr	x10, [x2, #0x8]
                	str	x10, [x3, #0x8]
                	ldr	x10, [sp], #0x10
-               	mov	x4, #-0x1               // =-1
                	sub	x2, x29, #0x8e0
                	ldrb	w3, [x1, x0]
-               	mul	x3, x3, x4
+               	neg	x3, x3
                	and	x3, x3, #0xff
                	strb	w3, [x2, x0]
                	add	x0, x0, #0x1
@@ -5732,52 +5731,52 @@ Disassembly of section .text:
                	sub	x2, x29, #0x8e0
                	ldrsb	x3, [x1]
                	mov	x0, #0x0                // =0
-               	sub	x3, x0, x3
+               	neg	x3, x3
                	strb	w3, [x2]
                	ldrsb	x3, [x1, #0x1]
-               	sub	x3, x0, x3
+               	neg	x3, x3
                	strb	w3, [x2, #0x1]
                	ldrsb	x3, [x1, #0x2]
-               	sub	x3, x0, x3
+               	neg	x3, x3
                	strb	w3, [x2, #0x2]
                	ldrsb	x3, [x1, #0x3]
-               	sub	x3, x0, x3
+               	neg	x3, x3
                	strb	w3, [x2, #0x3]
                	ldrsb	x3, [x1, #0x4]
-               	sub	x3, x0, x3
+               	neg	x3, x3
                	strb	w3, [x2, #0x4]
                	ldrsb	x3, [x1, #0x5]
-               	sub	x3, x0, x3
+               	neg	x3, x3
                	strb	w3, [x2, #0x5]
                	ldrsb	x3, [x1, #0x6]
-               	sub	x3, x0, x3
+               	neg	x3, x3
                	strb	w3, [x2, #0x6]
                	ldrsb	x3, [x1, #0x7]
-               	sub	x3, x0, x3
+               	neg	x3, x3
                	strb	w3, [x2, #0x7]
                	ldrsb	x3, [x1, #0x8]
-               	sub	x3, x0, x3
+               	neg	x3, x3
                	strb	w3, [x2, #0x8]
                	ldrsb	x3, [x1, #0x9]
-               	sub	x3, x0, x3
+               	neg	x3, x3
                	strb	w3, [x2, #0x9]
                	ldrsb	x3, [x1, #0xa]
-               	sub	x3, x0, x3
+               	neg	x3, x3
                	strb	w3, [x2, #0xa]
                	ldrsb	x3, [x1, #0xb]
-               	sub	x3, x0, x3
+               	neg	x3, x3
                	strb	w3, [x2, #0xb]
                	ldrsb	x3, [x1, #0xc]
-               	sub	x3, x0, x3
+               	neg	x3, x3
                	strb	w3, [x2, #0xc]
                	ldrsb	x3, [x1, #0xd]
-               	sub	x3, x0, x3
+               	neg	x3, x3
                	strb	w3, [x2, #0xd]
                	ldrsb	x3, [x1, #0xe]
-               	sub	x3, x0, x3
+               	neg	x3, x3
                	strb	w3, [x2, #0xe]
                	ldrsb	x3, [x1, #0xf]
-               	sub	x3, x0, x3
+               	neg	x3, x3
                	strb	w3, [x2, #0xf]
                	sub	x3, x29, #0xb90
                	str	x10, [sp, #-0x10]!
@@ -5786,10 +5785,9 @@ Disassembly of section .text:
                	ldr	x10, [x2, #0x8]
                	str	x10, [x3, #0x8]
                	ldr	x10, [sp], #0x10
-               	mov	x4, #-0x1               // =-1
                	sub	x2, x29, #0x8e0
                	ldrsb	x3, [x1, x0]
-               	mul	x3, x3, x4
+               	neg	x3, x3
                	strb	w3, [x2, x0]
                	add	x0, x0, #0x1
                	cmp	w0, #0x10
@@ -5808,24 +5806,23 @@ Disassembly of section .text:
                	sub	x3, x3, #0x150
                	ldrsw	x2, [x3]
                	mov	x0, #0x0                // =0
-               	sub	x4, x0, x2
+               	neg	x4, x2
                	ldrsw	x2, [x3, #0x4]
-               	sub	x5, x0, x2
+               	neg	x5, x2
                	ldrsw	x2, [x3, #0x8]
-               	sub	x6, x0, x2
+               	neg	x6, x2
                	ldrsw	x2, [x3, #0xc]
-               	sub	x7, x0, x2
+               	neg	x7, x2
                	sub	x2, x29, #0xb80
                	str	w4, [x2]
                	str	w5, [x2, #0x4]
                	str	w6, [x2, #0x8]
                	str	w7, [x2, #0xc]
-               	mov	x5, #-0x1               // =-1
                	lsl	x2, x0, #2
                	add	x4, x1, x2
                	add	x2, x3, x2
                	ldrsw	x2, [x2]
-               	mul	x2, x2, x5
+               	neg	x2, x2
                	str	w2, [x4]
                	add	x0, x0, #0x1
                	cmp	w0, #0x4
@@ -7882,10 +7879,10 @@ Disassembly of section .text:
                	lsr	x6, x0, #63
                	add	x6, x0, x6
                	mov	x0, #0x0                // =0
-               	sub	x1, x0, x1
-               	sub	x3, x0, x3
-               	sub	x7, x0, x5
-               	sub	x6, x0, x6
+               	neg	x1, x1
+               	neg	x3, x3
+               	neg	x7, x5
+               	neg	x6, x6
                	sub	x5, x29, #0x1, lsl #12  // =0x1000
                	sub	x5, x5, #0x140
                	ldrsw	x8, [x5]
@@ -7901,18 +7898,17 @@ Disassembly of section .text:
                	str	w3, [x1, #0x4]
                	str	w7, [x1, #0x8]
                	str	w6, [x1, #0xc]
-               	mov	x8, #-0x1               // =-1
-               	mov	x9, #0x5556             // =21846
-               	movk	x9, #0x5555, lsl #16
+               	mov	x8, #0x5556             // =21846
+               	movk	x8, #0x5555, lsl #16
                	lsl	x1, x0, #2
                	add	x6, x2, x1
                	add	x3, x4, x1
                	ldrsw	x3, [x3]
-               	mul	x3, x3, x9
+               	mul	x3, x3, x8
                	asr	x3, x3, #32
                	lsr	x7, x3, #63
                	add	x3, x3, x7
-               	mul	x3, x3, x8
+               	neg	x3, x3
                	add	x1, x5, x1
                	ldrsw	x1, [x1]
                	add	x1, x3, x1

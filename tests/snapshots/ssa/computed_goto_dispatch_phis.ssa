@@ -849,7 +849,7 @@ fn ent_pc=2 n_params=2 variadic=false locals=4
     v54  Imm(0)                                           -> [spill 4]
     v55  Imm(0)                                           -> [spill 4]
     v56  Imm(0)                                           -> [spill 4]
-    v57  BinopI { op=add, lhs=v1, rhs_imm=0 }             -> [spill 4]
+    v57  BinopI { op=sub, lhs=v1, rhs_imm=0 }             -> [spill 4]
     v58  Load { addr=v1, disp=0, kind=U8 }                -> [spill 4]
     v59  BinopI { op=shl, lhs=v58, rhs_imm=3 }            -> [spill 5]
     v60  Binop { op=add, lhs=v48, rhs=v59 }               -> [spill 5]

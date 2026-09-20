@@ -37,8 +37,7 @@ Disassembly of section .text:
                	sub	x3, x20, x1
                	cmp	w3, #0x0
                	b.ge	<addr>
-               	mov	x17, #-0x1              // =-1
-               	mul	x3, x3, x17
+               	neg	x3, x3
                	ldrsw	x1, [x22, x2, lsl #2]
                	cmp	w1, w20
                	b.eq	<addr>

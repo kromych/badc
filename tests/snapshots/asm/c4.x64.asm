@@ -1885,7 +1885,7 @@ Disassembly of section .text:
                	movq	%rcx, (%rax)
                	leaq	<rip>, %rax
                	movq	(%rax), %rax
-               	imulq	$-0x1, %rax, %rax
+               	negq	%rax
                	movq	%rax, (%rcx)
                	callq	<addr>
                	leaq	<rip>, %rax

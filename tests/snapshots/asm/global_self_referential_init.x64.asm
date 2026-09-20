@@ -26,7 +26,8 @@ Disassembly of section .text:
                	int3
 
 <drop>:
-               	imulq	$-0x1, %rdi, %rax
+               	movq	%rdi, %rax
+               	negq	%rax
                	movslq	%eax, %rax
                	retq
 

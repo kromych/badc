@@ -140,8 +140,7 @@ Disassembly of section .text:
                	ldp	x22, x23, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x50
                	ret
-               	mov	x17, #-0x1              // =-1
-               	mul	x0, x20, x17
+               	neg	x0, x20
                	mov	x1, x21
                	mov	x2, x22
                	bl	<addr>

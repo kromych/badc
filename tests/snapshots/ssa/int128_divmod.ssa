@@ -92,7 +92,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v119 Binop { op=or, lhs=v115, rhs=v118 }              -> x3
     v120 BinopI { op=xor, lhs=v119, rhs_imm=1 }           -> x3
     v121 Imm(0)                                           -> x14
-    v122 Binop { op=sub, lhs=v121, rhs=v120 }             -> x14
+    v122 Neg(v120)                                        -> x14
     v123 Binop { op=and, lhs=v57, rhs=v122 }              -> x14
     v124 Imm(0)                                           -> [spill 0]
     v125 Binop { op=ult, lhs=v110, rhs=v123 }             -> [spill 0]
@@ -202,7 +202,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v207 Binop { op=or, lhs=v203, rhs=v206 }              -> x7
     v208 BinopI { op=xor, lhs=v207, rhs_imm=1 }           -> x7
     v209 Imm(0)                                           -> x12
-    v210 Binop { op=sub, lhs=v209, rhs=v208 }             -> x12
+    v210 Neg(v208)                                        -> x12
     v211 Binop { op=and, lhs=v144, rhs=v210 }             -> x12
     v212 Imm(0)                                           -> x14
     v213 Binop { op=ult, lhs=v198, rhs=v211 }             -> x14
@@ -341,7 +341,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v324 Binop { op=or, lhs=v320, rhs=v323 }              -> x9
     v325 BinopI { op=xor, lhs=v324, rhs_imm=1 }           -> x9
     v326 Imm(0)                                           -> x13
-    v327 Binop { op=sub, lhs=v326, rhs=v325 }             -> x13
+    v327 Neg(v325)                                        -> x13
     v328 Binop { op=and, lhs=v243, rhs=v327 }             -> x14
     v329 Binop { op=and, lhs=v246, rhs=v327 }             -> x13
     v330 Binop { op=ult, lhs=v315, rhs=v328 }             -> [spill 0]
@@ -456,7 +456,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v415 Binop { op=or, lhs=v411, rhs=v414 }              -> x3
     v416 BinopI { op=xor, lhs=v415, rhs_imm=1 }           -> x3
     v417 Imm(0)                                           -> x13
-    v418 Binop { op=sub, lhs=v417, rhs=v416 }             -> x13
+    v418 Neg(v416)                                        -> x13
     v419 Binop { op=and, lhs=v243, rhs=v418 }             -> x14
     v420 Binop { op=and, lhs=v246, rhs=v418 }             -> x13
     v421 Binop { op=ult, lhs=v406, rhs=v419 }             -> [spill 0]
@@ -574,7 +574,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v508 Binop { op=or, lhs=v504, rhs=v507 }              -> x2
     v509 BinopI { op=xor, lhs=v508, rhs_imm=1 }           -> x2
     v510 Imm(0)                                           -> x13
-    v511 Binop { op=sub, lhs=v510, rhs=v509 }             -> x13
+    v511 Neg(v509)                                        -> x13
     v512 Binop { op=and, lhs=v243, rhs=v511 }             -> x14
     v513 Binop { op=and, lhs=v246, rhs=v511 }             -> x13
     v514 Binop { op=ult, lhs=v499, rhs=v512 }             -> [spill 0]
@@ -689,7 +689,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v603 Binop { op=or, lhs=v599, rhs=v602 }              -> x9
     v604 BinopI { op=xor, lhs=v603, rhs_imm=1 }           -> x9
     v605 Imm(0)                                           -> x13
-    v606 Binop { op=sub, lhs=v605, rhs=v604 }             -> x13
+    v606 Neg(v604)                                        -> x13
     v607 Binop { op=and, lhs=v243, rhs=v606 }             -> x14
     v608 Binop { op=and, lhs=v246, rhs=v606 }             -> x13
     v609 Binop { op=ult, lhs=v594, rhs=v607 }             -> [spill 0]
@@ -848,7 +848,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v752 Binop { op=or, lhs=v748, rhs=v751 }              -> x2
     v753 BinopI { op=xor, lhs=v752, rhs_imm=1 }           -> x2
     v754 Imm(0)                                           -> x13
-    v755 Binop { op=sub, lhs=v754, rhs=v753 }             -> x13
+    v755 Neg(v753)                                        -> x13
     v756 BinopI { op=and, lhs=v755, rhs_imm=7 }           -> x13
     v757 Imm(0)                                           -> x15
     v758 Binop { op=ult, lhs=v743, rhs=v756 }             -> x15
@@ -983,7 +983,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v865 Binop { op=or, lhs=v861, rhs=v864 }              -> x3
     v866 BinopI { op=xor, lhs=v865, rhs_imm=1 }           -> x3
     v867 Imm(0)                                           -> x13
-    v868 Binop { op=sub, lhs=v867, rhs=v866 }             -> x13
+    v868 Neg(v866)                                        -> x13
     v869 BinopI { op=and, lhs=v868, rhs_imm=7 }           -> x13
     v870 Imm(0)                                           -> x15
     v871 Binop { op=ult, lhs=v856, rhs=v869 }             -> x15
@@ -1147,7 +1147,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v1007 Binop { op=or, lhs=v1003, rhs=v1006 }            -> x2
     v1008 BinopI { op=xor, lhs=v1007, rhs_imm=1 }          -> x2
     v1009 Imm(0)                                           -> x14
-    v1010 Binop { op=sub, lhs=v1009, rhs=v1008 }           -> x14
+    v1010 Neg(v1008)                                       -> x14
     v1011 Imm(0)                                           -> x15
     v1012 BinopI { op=and, lhs=v1010, rhs_imm=64 }         -> x14
     v1013 BinopI { op=ult, lhs=v998, rhs_imm=0 }           -> x15
@@ -1285,7 +1285,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v1123 Binop { op=or, lhs=v1119, rhs=v1122 }            -> x12
     v1124 BinopI { op=xor, lhs=v1123, rhs_imm=1 }          -> x12
     v1125 Imm(0)                                           -> x14
-    v1126 Binop { op=sub, lhs=v1125, rhs=v1124 }           -> x14
+    v1126 Neg(v1124)                                       -> x14
     v1127 Imm(0)                                           -> x15
     v1128 BinopI { op=and, lhs=v1126, rhs_imm=64 }         -> x14
     v1129 BinopI { op=ult, lhs=v1114, rhs_imm=0 }          -> x15
@@ -1434,7 +1434,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v1250 Binop { op=or, lhs=v1246, rhs=v1249 }            -> x9
     v1251 BinopI { op=xor, lhs=v1250, rhs_imm=1 }          -> x9
     v1252 Imm(0)                                           -> x14
-    v1253 Binop { op=sub, lhs=v1252, rhs=v1251 }           -> x14
+    v1253 Neg(v1251)                                       -> x14
     v1254 Imm(0)                                           -> x15
     v1255 BinopI { op=and, lhs=v1253, rhs_imm=64 }         -> x14
     v1256 BinopI { op=ult, lhs=v1241, rhs_imm=0 }          -> x15
@@ -1583,7 +1583,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v1377 Binop { op=or, lhs=v1373, rhs=v1376 }            -> x12
     v1378 BinopI { op=xor, lhs=v1377, rhs_imm=1 }          -> x12
     v1379 Imm(0)                                           -> x14
-    v1380 Binop { op=sub, lhs=v1379, rhs=v1378 }           -> x14
+    v1380 Neg(v1378)                                       -> x14
     v1381 Imm(0)                                           -> x15
     v1382 BinopI { op=and, lhs=v1380, rhs_imm=64 }         -> x14
     v1383 BinopI { op=ult, lhs=v1368, rhs_imm=0 }          -> x15
@@ -1712,7 +1712,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v1498 Binop { op=or, lhs=v1494, rhs=v1497 }            -> x0
     v1499 BinopI { op=xor, lhs=v1498, rhs_imm=1 }          -> x0
     v1500 Imm(0)                                           -> x14
-    v1501 Binop { op=sub, lhs=v1500, rhs=v1499 }           -> x14
+    v1501 Neg(v1499)                                       -> x14
     v1502 Binop { op=and, lhs=v1406, rhs=v1501 }           -> x14
     v1503 Imm(0)                                           -> [spill 0]
     v1504 Binop { op=ult, lhs=v1489, rhs=v1502 }           -> [spill 0]
@@ -1820,7 +1820,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v1583 Binop { op=or, lhs=v1579, rhs=v1582 }            -> x3
     v1584 BinopI { op=xor, lhs=v1583, rhs_imm=1 }          -> x3
     v1585 Imm(0)                                           -> x14
-    v1586 Binop { op=sub, lhs=v1585, rhs=v1584 }           -> x14
+    v1586 Neg(v1584)                                       -> x14
     v1587 Binop { op=and, lhs=v1472, rhs=v1586 }           -> x14
     v1588 Imm(0)                                           -> [spill 0]
     v1589 Binop { op=ult, lhs=v1574, rhs=v1587 }           -> [spill 0]
@@ -1937,7 +1937,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v1756 Binop { op=or, lhs=v1752, rhs=v1755 }            -> x2
     v1757 BinopI { op=xor, lhs=v1756, rhs_imm=1 }          -> x2
     v1758 Imm(0)                                           -> x14
-    v1759 Binop { op=sub, lhs=v1758, rhs=v1757 }           -> x14
+    v1759 Neg(v1757)                                       -> x14
     v1760 Imm(0)                                           -> x15
     v1761 BinopI { op=and, lhs=v1759, rhs_imm=64 }         -> x14
     v1762 BinopI { op=ult, lhs=v1747, rhs_imm=0 }          -> x15
@@ -2073,7 +2073,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v1847 Binop { op=or, lhs=v1843, rhs=v1846 }            -> x12
     v1848 BinopI { op=xor, lhs=v1847, rhs_imm=1 }          -> x12
     v1849 Imm(0)                                           -> x14
-    v1850 Binop { op=sub, lhs=v1849, rhs=v1848 }           -> x14
+    v1850 Neg(v1848)                                       -> x14
     v1851 Imm(0)                                           -> x15
     v1852 BinopI { op=and, lhs=v1850, rhs_imm=64 }         -> x14
     v1853 BinopI { op=ult, lhs=v1838, rhs_imm=0 }          -> x15
@@ -2187,7 +2187,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v1935 Binop { op=or, lhs=v1931, rhs=v1934 }            -> x9
     v1936 BinopI { op=xor, lhs=v1935, rhs_imm=1 }          -> x9
     v1937 Imm(0)                                           -> x12
-    v1938 Binop { op=sub, lhs=v1937, rhs=v1936 }           -> x12
+    v1938 Neg(v1936)                                       -> x12
     v1939 Binop { op=and, lhs=v1873, rhs=v1938 }           -> x12
     v1940 Imm(0)                                           -> x14
     v1941 Binop { op=ult, lhs=v1926, rhs=v1939 }           -> x14
@@ -2265,7 +2265,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v2014 Binop { op=or, lhs=v2010, rhs=v2013 }            -> x9
     v2015 BinopI { op=xor, lhs=v2014, rhs_imm=1 }          -> x9
     v2016 Imm(0)                                           -> x3
-    v2017 Binop { op=sub, lhs=v2016, rhs=v2015 }           -> x3
+    v2017 Neg(v2015)                                       -> x3
     v2018 Binop { op=and, lhs=v243, rhs=v2017 }            -> x12
     v2019 Binop { op=and, lhs=v246, rhs=v2017 }            -> x3
     v2020 Binop { op=ult, lhs=v2005, rhs=v2018 }           -> x14

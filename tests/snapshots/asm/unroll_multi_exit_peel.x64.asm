@@ -80,7 +80,7 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	jge	<addr>
                	movq	%rcx, %rax
-               	imulq	$-0x1, %rax, %rax
+               	negq	%rax
                	subq	%rcx, %rax
                	decq	%rax
                	retq
@@ -791,19 +791,23 @@ Disassembly of section .text:
                	cmpq	%rcx, %rax
                	je	<addr>
                	jmp	<addr>
-               	imulq	$-0x1, %rsi, %rdx
+               	movq	%rsi, %rdx
+               	negq	%rdx
                	subq	%rcx, %rdx
                	leaq	-0x1(%rdx), %rcx
                	jmp	<addr>
-               	imulq	$-0x1, %rsi, %rdx
+               	movq	%rsi, %rdx
+               	negq	%rdx
                	subq	%rcx, %rdx
                	leaq	-0x1(%rdx), %rcx
                	jmp	<addr>
-               	imulq	$-0x1, %rsi, %rdx
+               	movq	%rsi, %rdx
+               	negq	%rdx
                	subq	%rcx, %rdx
                	leaq	-0x1(%rdx), %rcx
                	jmp	<addr>
-               	imulq	$-0x1, %rsi, %rdx
+               	movq	%rsi, %rdx
+               	negq	%rdx
                	subq	%rcx, %rdx
                	leaq	-0x1(%rdx), %rcx
                	jmp	<addr>

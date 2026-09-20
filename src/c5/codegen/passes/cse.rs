@@ -70,6 +70,7 @@ enum Key {
     Extend(ValueId, LoadKind, bool),
     Bswap(ValueId, u8, bool),
     BitCount(BitCountOp, ValueId, u8, bool),
+    Neg(ValueId),
     Fneg(ValueId, bool),
     FpCast(FpCastKind, ValueId, bool),
     Fma(ValueId, ValueId, ValueId, bool, bool, bool),
@@ -576,6 +577,7 @@ fn key_of(inst: &Inst, vn: &[ValueId], is_f32: bool, sym: u32) -> Option<Key> {
         Inst::Extend { value, kind } => Some(Key::Extend(r(*value), *kind, is_f32)),
         Inst::Bswap { value, width } => Some(Key::Bswap(r(*value), *width, is_f32)),
         Inst::BitCount { op, value, width } => Some(Key::BitCount(*op, r(*value), *width, is_f32)),
+        Inst::Neg(v) => Some(Key::Neg(r(*v))),
         Inst::Fneg(v) => Some(Key::Fneg(r(*v), is_f32)),
         Inst::FpCast { kind, value } => Some(Key::FpCast(*kind, r(*value), is_f32)),
         Inst::Fma {

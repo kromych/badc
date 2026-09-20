@@ -11,7 +11,7 @@ fn ent_pc=0 n_params=1 variadic=false locals=0
     terminator Bz { cond=v4, target=b2, fall=b1 }   (exit_acc=v4)
   block 1  start_pc=0
     v5   Imm(0)                                           -> x0
-    v6   BinopI { op=mul, lhs=v1, rhs_imm=-1 }            -> x0
+    v6   Neg(v1)                                          -> x0
     v7   BinopI { op=shl, lhs=v6, rhs_imm=32 }            -> x1
     v8   Extend { value=v6, kind=I32 }                    -> x0
     v9   BinopI { op=shl, lhs=v8, rhs_imm=32 }            -> x1

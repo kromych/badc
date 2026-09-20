@@ -462,6 +462,13 @@ pub(crate) fn enc_sub_reg(rd: Reg, rn: Reg, rm: Reg) -> u32 {
     enc_rrr(0xCB00_0000, rd, rn, rm)
 }
 
+/// `NEG <Xd>, <Xm>` (`SUB Xd, XZR, Xm`) -- two's-complement negate.
+/// `Rn` is baked to XZR (31); the shifted-register SUB reads 31 as the
+/// zero register, not SP.
+pub(crate) fn enc_neg(rd: Reg, rm: Reg) -> u32 {
+    enc_rrr(0xCB00_0000, rd, Reg::SP, rm)
+}
+
 /// `AND <Xd>, <Xn>, <Xm>` -- bitwise and.
 pub(crate) fn enc_and_reg(rd: Reg, rn: Reg, rm: Reg) -> u32 {
     enc_rrr(0x8A00_0000, rd, rn, rm)

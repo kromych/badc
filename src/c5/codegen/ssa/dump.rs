@@ -197,6 +197,7 @@ fn fmt_inst(inst: &Inst) -> String {
             "BinopI {{ op={}, lhs=v{lhs}, rhs_imm={rhs_imm} }}",
             fmt_binop(*op),
         ),
+        Neg(v) => format!("Neg(v{v})"),
         Fneg(v) => format!("Fneg(v{v})"),
         Fma {
             a,

@@ -74,7 +74,8 @@ Disassembly of section .text:
                	retq
 
 <neg_nz>:
-               	imulq	$-0x1, %rdi, %rax
+               	movq	%rdi, %rax
+               	negq	%rax
                	testl	%eax, %eax
                	je	<addr>
                	movl	$0x1, %eax

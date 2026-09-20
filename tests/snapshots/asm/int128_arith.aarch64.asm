@@ -73,7 +73,7 @@ Disassembly of section .text:
                	ldr	x4, [x3]
                	cmp	x1, #0x0
                	cset	x5, hi
-               	sub	x6, x0, x1
+               	neg	x6, x1
                	sub	x4, x4, x2
                	sub	x4, x4, x5
                	mov	x17, #0x9989            // =39305
@@ -95,18 +95,17 @@ Disassembly of section .text:
                	ldr	x3, [x3]
                	cmp	x3, #0x0
                	cset	x4, hi
-               	sub	x7, x0, x3
-               	sub	x4, x0, x4
+               	neg	x7, x3
+               	neg	x4, x4
                	mov	x3, #-0x1               // =-1
                	cmp	x7, x3
                	b.ne	<addr>
                	cmp	w4, w3
                	b.eq	<addr>
-               	mov	x3, #0x5                // =5
-               	cbz	x3, <addr>
-               	mov	x0, x3
+               	mov	x0, #0x5                // =5
+               	cbz	x0, <addr>
                	ret
-               	sub	x0, x0, x2
+               	neg	x0, x2
                	sub	x0, x0, x5
                	mov	x17, #0x9989            // =39305
                	movk	x17, #0xbbaa, lsl #16
@@ -291,8 +290,6 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	b	<addr>
                	mov	x0, #0x0                // =0
-               	b	<addr>
-               	mov	x3, x0
                	b	<addr>
                	mov	x4, x0
                	b	<addr>

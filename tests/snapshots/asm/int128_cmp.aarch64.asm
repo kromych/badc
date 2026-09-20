@@ -29,11 +29,11 @@ Disassembly of section .text:
                	ldr	x5, [x1]
                	add	x4, x4, x5
                	orr	x9, x3, x4
-               	ldr	x4, [x1]
-               	cmp	x4, #0x0
-               	cset	x8, hi
-               	sub	x5, x3, x4
-               	sub	x3, x3, x8
+               	ldr	x3, [x1]
+               	cmp	x3, #0x0
+               	cset	x4, hi
+               	neg	x5, x3
+               	neg	x3, x4
                	ldr	x4, [x1]
                	lsl	x4, x4, #63
                	ldr	x8, [x1]

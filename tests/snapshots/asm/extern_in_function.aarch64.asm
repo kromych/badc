@@ -14,8 +14,7 @@ Disassembly of section .text:
                	brk	#0x1
 
 <negate>:
-               	mov	x17, #-0x1              // =-1
-               	mul	x0, x0, x17
+               	neg	x0, x0
                	sxtw	x0, w0
                	ret
 

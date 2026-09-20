@@ -285,8 +285,7 @@ Disassembly of section .text:
                	add	x2, x22, #0x64
                	cmp	w1, #0x0
                	cset	x1, ne
-               	mov	x17, #-0x1              // =-1
-               	mul	x1, x1, x17
+               	neg	x1, x1
                	and	x2, x1, x2
                	mvn	x1, x1
                	orr	x1, x2, x1
@@ -306,8 +305,7 @@ Disassembly of section .text:
                	add	x2, x21, #0xc8
                	cmp	w1, #0x0
                	cset	x1, ne
-               	mov	x17, #-0x1              // =-1
-               	mul	x1, x1, x17
+               	neg	x1, x1
                	and	x2, x1, x2
                	mvn	x1, x1
                	and	x1, x1, #0xfffffffffffffffe
@@ -327,8 +325,7 @@ Disassembly of section .text:
                	add	x2, x0, x21
                	cmp	w1, #0x0
                	cset	x1, ne
-               	mov	x17, #-0x1              // =-1
-               	mul	x1, x1, x17
+               	neg	x1, x1
                	and	x2, x1, x2
                	mvn	x1, x1
                	and	x0, x1, x0
@@ -365,24 +362,21 @@ Disassembly of section .text:
                	bl	<addr>
                	cmp	w23, #0x0
                	cset	x1, ne
-               	mov	x17, #-0x1              // =-1
-               	mul	x1, x1, x17
+               	neg	x1, x1
                	and	x2, x1, #0x1
                	mvn	x1, x1
                	and	x1, x1, #0x2
                	orr	x2, x2, x1
                	cmp	w21, #0x0
                	cset	x1, ne
-               	mov	x17, #-0x1              // =-1
-               	mul	x1, x1, x17
+               	neg	x1, x1
                	and	x3, x1, #0x3
                	mvn	x1, x1
                	and	x1, x1, #0x4
                	orr	x3, x3, x1
                	cmp	w22, #0x0
                	cset	x1, ne
-               	mov	x17, #-0x1              // =-1
-               	mul	x1, x1, x17
+               	neg	x1, x1
                	and	x2, x1, x2
                	mvn	x1, x1
                	and	x1, x1, x3
@@ -399,8 +393,7 @@ Disassembly of section .text:
                	add	x1, x21, #0xa
                	cmp	w0, #0x0
                	cset	x0, ne
-               	mov	x17, #-0x1              // =-1
-               	mul	x0, x0, x17
+               	neg	x0, x0
                	and	x1, x0, x1
                	mvn	x0, x0
                	mov	x17, #0x13              // =19
@@ -418,8 +411,7 @@ Disassembly of section .text:
                	and	x1, x1, x2
                	cmp	w1, #0x0
                	cset	x1, ne
-               	mov	x17, #-0x1              // =-1
-               	mul	x1, x1, x17
+               	neg	x1, x1
                	and	x1, x1, x24
                	add	x1, x1, x22
                	cmp	x0, x1
@@ -612,8 +604,7 @@ Disassembly of section .text:
                	add	x4, x0, #0x4
                	cmp	w3, #0x0
                	cset	x1, ne
-               	mov	x17, #-0x1              // =-1
-               	mul	x1, x1, x17
+               	neg	x1, x1
                	and	x4, x1, x4
                	add	x2, x2, x4
                	add	x2, x2, #0x4
@@ -625,14 +616,12 @@ Disassembly of section .text:
                	and	x1, x1, x4
                	add	x1, x2, x1
                	add	x1, x1, #0x6
-               	mov	x17, #-0x1              // =-1
-               	mul	x2, x3, x17
+               	neg	x2, x3
                	and	x2, x2, #0x7
                	add	x2, x1, x2
                	cmp	w0, #0x3
                	cset	x1, lt
-               	mov	x17, #-0x1              // =-1
-               	mul	x1, x1, x17
+               	neg	x1, x1
                	and	x3, x1, #0x8
                	add	x2, x2, x3
                	mov	x17, #0x9               // =9

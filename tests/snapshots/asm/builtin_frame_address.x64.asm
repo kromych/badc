@@ -45,7 +45,7 @@ Disassembly of section .text:
                	subq	%rcx, %rax
                	testq	%rax, %rax
                	jge	<addr>
-               	imulq	$-0x1, %rax, %rax
+               	negq	%rax
                	cmpq	$0x100000, %rax         # imm = 0x100000
                	jle	<addr>
                	movl	$0x3, %eax

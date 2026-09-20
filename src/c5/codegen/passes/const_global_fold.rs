@@ -634,6 +634,7 @@ fn walk_block(
             | Inst::SegLoad { .. }
             | Inst::Binop { .. }
             | Inst::BinopI { .. }
+            | Inst::Neg(_)
             | Inst::Fneg(_)
             | Inst::Fma { .. }
             | Inst::MulAdd { .. }

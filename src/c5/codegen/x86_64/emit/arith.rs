@@ -195,6 +195,30 @@ pub(super) fn emit_copy(
     Ok(())
 }
 
+/// `Inst::Neg { value }` -- `negq dst`, after moving the operand into
+/// `dst` when it is not already there.
+pub(super) fn emit_neg(
+    code: &mut Vec<u8>,
+    dst: Place,
+    value: u32,
+    alloc: &Allocation,
+    frame: Frame,
+) -> Emit {
+    let src_place = place_of(alloc, value);
+    let Some(rd) = int_or_spill_dst(dst) else {
+        return fail("Neg: dst not int reg / spill");
+    };
+    let Some(rn) = materialize_int(code, src_place, rd, frame) else {
+        return fail("Neg: value not int reg / spill");
+    };
+    if rd != rn {
+        emit_mov_rr(code, rd, rn);
+    }
+    emit_unary_r(code, Mnem::Neg, 8, rd);
+    spill_dst_to_slot(code, dst, rd, frame);
+    Ok(())
+}
+
 /// `Inst::Bswap { value, width }` -- reverse the low `width` bytes,
 /// zero-extended. 64-bit: `bswap r64`. 32-bit: `bswap r32` (reads the
 /// low dword, zero-extends). 16-bit: `movzx` clears the upper bits the

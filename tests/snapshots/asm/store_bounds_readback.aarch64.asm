@@ -103,8 +103,7 @@ Disassembly of section .text:
                	ldrsw	x0, [x0]
                	and	x0, x0, #0x1ff
                	and	x0, x0, #0x7
-               	mov	x17, #-0x1              // =-1
-               	mul	x0, x0, x17
+               	neg	x0, x0
                	sub	x0, x0, #0x1
                	mov	x17, #0x7fffffff        // =2147483647
                	cmp	w0, w17

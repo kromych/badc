@@ -634,8 +634,7 @@ Disassembly of section .text:
                	mov	x0, x22
                	bl	<addr>
                	cbnz	w0, <addr>
-               	mov	x0, #0x0                // =0
-               	sub	x22, x0, x20
+               	neg	x22, x20
                	mov	x0, x22
                	bl	<addr>
                	cbnz	w0, <addr>

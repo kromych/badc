@@ -425,6 +425,7 @@ pub(super) fn emit_inst(
         }
         Inst::X86Simd { op, imm, args } => emit_x86_simd(code, *op, *imm, args, alloc, frame),
         Inst::InlineAsm { asm, args } => emit_inline_asm(out, asm, args, v, fcx, None),
+        Inst::Neg(value) => emit_neg(code, dst, *value, alloc, frame),
         Inst::Fneg(value) => emit_fneg(code, dst, v, *value, alloc, frame),
         Inst::Fma {
             a,

@@ -72,7 +72,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v70  Binop { op=sub, lhs=v69, rhs=v68 }               -> x14
     v71  BinopI { op=shru, lhs=v67, rhs_imm=6 }           -> x0
     v72  Imm(0)                                           -> x3
-    v73  Binop { op=sub, lhs=v72, rhs=v71 }               -> x0
+    v73  Neg(v71)                                         -> x0
     v74  BinopI { op=xor, lhs=v73, rhs_imm=-1 }           -> x3
     v75  Binop { op=shl, lhs=v19, rhs=v68 }               -> x12
     v76  Binop { op=shru, lhs=v19, rhs=v70 }              -> x14
@@ -140,7 +140,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v139 Binop { op=sub, lhs=v138, rhs=v137 }             -> x14
     v140 BinopI { op=shru, lhs=v136, rhs_imm=6 }          -> x0
     v141 Imm(0)                                           -> x3
-    v142 Binop { op=sub, lhs=v141, rhs=v140 }             -> x0
+    v142 Neg(v140)                                        -> x0
     v143 BinopI { op=xor, lhs=v142, rhs_imm=-1 }          -> x3
     v144 Binop { op=shru, lhs=v2, rhs=v137 }              -> x12
     v145 Binop { op=shl, lhs=v2, rhs=v139 }               -> x14
@@ -206,9 +206,9 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v186 BinopI { op=and, lhs=v60, rhs_imm=63 }           -> x1
     v187 Imm(63)                                          -> x6
     v188 Binop { op=sub, lhs=v187, rhs=v186 }             -> x12
-    v189 BinopI { op=shru, lhs=v185, rhs_imm=6 }          -> x6
-    v190 Imm(0)                                           -> x0
-    v191 Binop { op=sub, lhs=v190, rhs=v189 }             -> x0
+    v189 BinopI { op=shru, lhs=v185, rhs_imm=6 }          -> x0
+    v190 Imm(0)                                           -> x6
+    v191 Neg(v189)                                        -> x0
     v192 BinopI { op=xor, lhs=v191, rhs_imm=-1 }          -> x6
     v193 Binop { op=shr, lhs=v27, rhs=v186 }              -> x3
     v194 Binop { op=shl, lhs=v27, rhs=v188 }              -> x12
@@ -880,8 +880,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v629 BinopI { op=and, lhs=v627, rhs_imm=63 }          -> x1
     v630 Imm(63)                                          -> x6
     v631 Binop { op=sub, lhs=v630, rhs=v629 }             -> x9
-    v632 BinopI { op=shru, lhs=v628, rhs_imm=6 }          -> x6
-    v633 Binop { op=sub, lhs=v617, rhs=v632 }             -> x2
+    v632 BinopI { op=shru, lhs=v628, rhs_imm=6 }          -> x2
+    v633 Neg(v632)                                        -> x2
     v634 BinopI { op=xor, lhs=v633, rhs_imm=-1 }          -> x6
     v635 Binop { op=shru, lhs=v19, rhs=v629 }             -> x8
     v636 Binop { op=shl, lhs=v19, rhs=v631 }              -> x7

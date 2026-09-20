@@ -15,7 +15,10 @@
 //!     materialisation or the `Imm` def has no other use;
 //!   * `Binop { lhs = Imm }` -> the rhs-imm form via commutation or
 //!     compare mirroring, then the rule above;
-//!   * `Fneg { Imm }` -> `Imm` with the sign bit flipped.
+//!   * `Fneg { Imm }` -> `Imm` with the sign bit flipped;
+//!   * `Neg { Imm }` -> the negated `Imm`, and `x * -1` / `0 - x` ->
+//!     `Neg { x }`, which takes one instruction where the multiply
+//!     takes three and needs no constant register.
 //!
 //! Save for that sign flip, only a plain integer `Inst::Imm` whose
 //! `f32_values` flag is clear participates: `ImmData` / `ImmCode` /
@@ -136,13 +139,35 @@ fn forwarded_operand(func: &FunctionSsa, idx: usize) -> Option<ValueId> {
     identity.then_some(lhs)
 }
 
+/// The operand of `v`'s definition when that definition is a negate.
+fn negated_value(func: &FunctionSsa, v: ValueId) -> Option<ValueId> {
+    match func.insts.get(v as usize) {
+        Some(Inst::Neg(x)) => Some(*x),
+        _ => None,
+    }
+}
+
+/// The operand of a doubly-applied negation: `-(-x)` is `x` for every
+/// two's-complement value, the type minimum included.
+fn double_negate_operand(func: &FunctionSsa, idx: usize) -> Option<ValueId> {
+    let Inst::Neg(v) = func.insts[idx] else {
+        return None;
+    };
+    match func.insts.get(v as usize) {
+        Some(Inst::Neg(inner)) => Some(*inner),
+        _ => None,
+    }
+}
+
 /// Redirect every consumer of an instruction [`forwarded_operand`]
 /// answers to that operand, leaving the instruction dead. The operand
 /// dominates each redirected use, since it dominates the instruction.
 /// Returns whether any operand actually changed.
 fn forward_identities(func: &mut FunctionSsa) -> bool {
     let n = func.insts.len();
-    let redirect: Vec<Option<ValueId>> = (0..n).map(|i| forwarded_operand(func, i)).collect();
+    let redirect: Vec<Option<ValueId>> = (0..n)
+        .map(|i| forwarded_operand(func, i).or_else(|| double_negate_operand(func, i)))
+        .collect();
     let any = redirect.iter().any(Option::is_some);
     if !any {
         return false;
@@ -795,6 +820,82 @@ fn fold_round(func: &mut FunctionSsa) -> bool {
                     _ => None,
                 },
             },
+            Inst::Neg(value) => imm_of(func, *value).map(|k| Inst::Imm(k.wrapping_neg())),
+            // `a + -b` is `a - b` and `a - -b` is `a + b`, exact modulo
+            // 2^64 either way; the negate goes dead when this was its
+            // only use.
+            Inst::Binop {
+                op: op @ (BinOp::Add | BinOp::Sub),
+                lhs,
+                rhs,
+            } if negated_value(func, *rhs).is_some() => {
+                negated_value(func, *rhs).map(|x| Inst::Binop {
+                    op: if *op == BinOp::Add {
+                        BinOp::Sub
+                    } else {
+                        BinOp::Add
+                    },
+                    lhs: *lhs,
+                    rhs: x,
+                })
+            }
+            Inst::Binop {
+                op: BinOp::Add,
+                lhs,
+                rhs,
+            } if negated_value(func, *lhs).is_some() => {
+                negated_value(func, *lhs).map(|x| Inst::Binop {
+                    op: BinOp::Sub,
+                    lhs: *rhs,
+                    rhs: x,
+                })
+            }
+            // `-x - 1` is `~x` for every two's-complement value.
+            Inst::BinopI {
+                op: BinOp::Add,
+                lhs,
+                rhs_imm: -1,
+            }
+            | Inst::BinopI {
+                op: BinOp::Sub,
+                lhs,
+                rhs_imm: 1,
+            } if negated_value(func, *lhs).is_some() => {
+                negated_value(func, *lhs).map(|x| Inst::BinopI {
+                    op: BinOp::Xor,
+                    lhs: x,
+                    rhs_imm: -1,
+                })
+            }
+            // `x * -1` is `-x` and `0 - x` is `-x`, for every value:
+            // two's-complement multiply and subtract are exact modulo
+            // 2^64, and so is the negate they become.
+            Inst::BinopI {
+                op: BinOp::Mul,
+                lhs,
+                rhs_imm: -1,
+            } => Some(Inst::Neg(*lhs)),
+            Inst::Binop {
+                op: BinOp::Mul,
+                lhs,
+                rhs,
+            } if imm_of(func, *rhs) == Some(-1) && imm_of(func, *lhs).is_none() => {
+                Some(Inst::Neg(*lhs))
+            }
+            Inst::Binop {
+                op: BinOp::Mul,
+                lhs,
+                rhs,
+            } if imm_of(func, *lhs) == Some(-1) && imm_of(func, *rhs).is_none() => {
+                Some(Inst::Neg(*rhs))
+            }
+            Inst::Binop {
+                op: BinOp::Sub,
+                lhs,
+                rhs,
+            } if imm_of(func, *lhs) == Some(0) && imm_of(func, *rhs).is_none() => {
+                Some(Inst::Neg(*rhs))
+            }
             Inst::BinopI { op, lhs, rhs_imm } => imm_of(func, *lhs)
                 .and_then(|l| eval::fold_binop(*op, l, *rhs_imm))
                 .map(Inst::Imm),

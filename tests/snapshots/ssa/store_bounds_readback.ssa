@@ -184,7 +184,7 @@ fn ent_pc=12 n_params=0 variadic=false locals=5
     v109 BinopI { op=and, lhs=v108, rhs_imm=511 }         -> x0
     v110 Extend { value=v109, kind=I32 }                  -> x1
     v111 BinopI { op=and, lhs=v109, rhs_imm=7 }           -> x0
-    v112 BinopI { op=mul, lhs=v111, rhs_imm=-1 }          -> x0
+    v112 Neg(v111)                                        -> x0
     v113 Extend { value=v112, kind=I32 }                  -> x1
     v114 BinopI { op=sub, lhs=v112, rhs_imm=1 }           -> x0
     v115 Extend { value=v114, kind=I32 }                  -> x1

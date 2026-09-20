@@ -162,7 +162,8 @@ Disassembly of section .text:
                	popq	%r15
                	leave
                	retq
-               	imulq	$-0x1, %rbx, %rdi
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	movq	%r12, %rsi
                	movq	%r13, %rdx
                	callq	<addr>

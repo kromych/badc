@@ -111,7 +111,7 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	movq	%rax, %rcx
                	movslq	(%rdx,%rax,4), %rsi
-               	imulq	$-0x1, %rsi, %rsi
+               	negq	%rsi
                	addq	%rsi, %rcx
                	incq	%rax
                	cmpl	$0x5, %eax

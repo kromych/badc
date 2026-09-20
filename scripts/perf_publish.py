@@ -102,9 +102,14 @@ def main(argv: list[str] | None = None) -> int:
     if not git(args.repo, "status", "--porcelain"):
         print("nothing to commit")
         return 0
+    # A record the harness wrote carries no provenance; one recovered from
+    # elsewhere names its source, and the subject says so.
+    subject = (f"{args.sha[:12]} {args.runner}: perf run from "
+               f"{data.get('taken', '')}")
+    if data.get("provenance"):
+        subject += " (recovered)"
     git(args.repo, "-c", "user.name=badc perf", "-c", "user.email=perf@badc.dev",
-        "commit", "-q", "-m",
-        f"{args.sha[:12]} {args.runner}: perf run from {data.get('taken', '')}")
+        "commit", "-q", "-m", subject)
     print(f"committed {rel} ({len(runs)} runs in the index)")
     return 0
 

@@ -77,30 +77,35 @@ a new run appears without rebuilding the site.
     var where = el("div", "run");
     where.appendChild(document.createTextNode(
       [m.cpu, m.system, m.arch].filter(Boolean).join(", ") +
-      " · " + data.taken + " · median of " +
-      data.runs_per_fixture + " runs · " + names.join("; ") + " · "));
+      " \u00b7 " + data.taken + " \u00b7 median of " +
+      data.runs_per_fixture + " runs \u00b7 " + names.join("; ") + " \u00b7 "));
     if (data.commit) {
       var link = el("a", null, data.commit.slice(0, 12));
       link.href = "https://github.com/kromych/badc/commit/" + data.commit;
       where.appendChild(link);
       where.appendChild(document.createTextNode(
-        " on " + data.branch + " · " + data.total_runs + " run" +
+        " on " + data.branch + " \u00b7 " + data.total_runs + " run" +
         (data.total_runs === 1 ? "" : "s") + " published"));
     }
     root.appendChild(where);
 
     METRICS.forEach(function (metric) {
-      root.appendChild(el("h3", null, metric.label));
       var grid = el("div", "grid");
       (data.fixtures || []).forEach(function (fixture) {
         var rows = (data.results || [])
           .filter(function (r) { return r.fixture === fixture; })
           .map(function (r) {
             return { compiler: r.compiler, value: r[metric.key] / metric.scale };
-          });
+          })
+          .filter(function (r) { return isFinite(r.value); });
         if (rows.length) grid.appendChild(chart(fixture, rows, metric));
       });
-      root.appendChild(grid);
+      // A run that predates a metric carries none of it -- the compile time
+      // of a run recovered from a job log, say -- and gets no heading.
+      if (grid.children.length) {
+        root.appendChild(el("h3", null, metric.label));
+        root.appendChild(grid);
+      }
     });
   }
 

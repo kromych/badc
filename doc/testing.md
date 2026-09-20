@@ -89,16 +89,18 @@ a defect in one of the compilers. Without csmith the script says so and exits 0,
 as the assembler fuzz tests do; on Debian and Ubuntu it comes from the `csmith`
 and `libcsmith-dev` packages.
 
-The reference (`clang -O2`, else `gcc -O2`, else `cc -O2`) is both the oracle
-and the gate. It is the gate because 13% of the generated programs do not
-terminate -- a loop control variable can be a global that a callee writes, and
-no generation knob removes that -- while every terminating one runs in under
-5 ms at `clang -O2`, measured over 120 programs under the bounds the script
-sets. A case the reference cannot compile, or cannot finish in a second, is
-skipped before badc sees it. It is the oracle because two badc configurations
-that agree can both be wrong; a runtime finding is confirmed by rebuilding the
-case with the reference at `-O0`, and a reference that disagrees with itself
-drops the case. With no reference compiler on the host the two badc
+The reference (`clang`, else `gcc`, else `cc`) is both the oracle and the gate.
+It is the gate because 12.5% of the generated programs do not terminate -- a
+loop control variable can be a global that a callee writes, and no generation
+knob removes that -- while every terminating one runs in under 5 ms
+unoptimised, measured over 120 programs under the bounds the script sets. A
+case the reference cannot compile, or cannot finish in a second, is skipped
+before badc sees it. The gate build is unoptimised on purpose: a csmith loop
+that never ends has no side effects, so `clang -O2` deletes it and that binary
+exits at once while every honest build runs forever. It is the oracle because
+two badc configurations that agree can both be wrong; a runtime finding is
+confirmed by rebuilding the case at `-O2`, and a reference that disagrees with
+itself drops the case. With no reference compiler on the host the two badc
 configurations are compared against each other, which cannot see a miscompile
 they share; the run's summary says which oracle it had.
 

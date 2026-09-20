@@ -7,15 +7,15 @@ run, and the checksum the program prints is compared. csmith's contract is that
 the program is free of undefined behaviour, so any disagreement, crash or
 compile failure is a defect in one of the compilers.
 
-The oracle is the reference compiler (`clang -O2`, else `gcc -O2`, else
-`cc -O2`), for three reasons the trial in the tree's history measured: it
-separates "badc aborted" from "the generated program is simply slow", it
-catches the case where both badc configurations agree and are wrong, and its
-own success is the cheapest gate on the programs that do not terminate. A case
-is skipped, not reported, unless the reference compiles it, exits 0 and prints
-a checksum. Before a runtime finding is filed the reference is rebuilt at `-O0`
-and rerun: a program on which the reference disagrees with itself is the
-reference's own affair and is dropped.
+The oracle is the reference compiler (`clang`, else `gcc`, else `cc`), for
+three reasons the trial in the tree's history measured: it separates "badc
+aborted" from "the generated program is simply slow", it catches the case where
+both badc configurations agree and are wrong, and its own success is the
+cheapest gate on the programs that do not terminate. A case is skipped, not
+reported, unless the reference compiles it unoptimised, exits 0 within a second
+and prints a checksum. Before a runtime finding is filed the reference is
+rebuilt at `-O2` and rerun: a program on which the reference disagrees with
+itself is the reference's own affair and is dropped.
 
 Without a reference compiler the two badc configurations are compared against
 each other. That is a weaker oracle -- it cannot see a miscompile both
@@ -70,6 +70,16 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 # The badc configurations under test. `--interp` is out: the trial measured the
 # SSA interpreter at minutes per case on programs of this size.
 CONFIGS = ("-O0", "-O")
+
+# The reference builds the case twice: once to gate and answer, once to confirm
+# a runtime finding. The gate is unoptimised because the question it settles is
+# whether the program terminates at all, and an optimiser answers a different
+# one: a csmith program whose loop never ends is side-effect free, so `clang
+# -O2` deletes the loop and the binary exits at once while every honest build
+# of it runs forever. One such program reached a `run-timeout` finding against
+# an `-O2` gate here before this was measured.
+REFERENCE_GATE = "-O0"
+REFERENCE_CONFIRM = "-O2"
 
 # csmith bounds. Measured over 40 seeds on an aarch64 host: the defaults give
 # 106 to 3160 lines (median 1461), these give 97 to 1465 (median 652), and the
@@ -415,7 +425,7 @@ def run_case(
     if reference is not None:
         gate = build_and_run(
             reference.binary,
-            "-O2",
+            REFERENCE_GATE,
             workdir,
             csmith.include,
             limits,
@@ -689,9 +699,9 @@ def confirm(
     expected: str | None,
     steps: list[Step],
 ) -> bool:
-    """Drop a runtime finding the reference cannot reproduce at `-O0`.
+    """Drop a runtime finding the reference cannot reproduce at `-O2`.
 
-    A reference that disagrees with itself between `-O0` and `-O2` is either
+    A reference that disagrees with itself between the two levels is either
     optimising a program csmith did not keep free of undefined behaviour or
     wrong itself; either way the case says nothing about badc.
     """
@@ -699,7 +709,7 @@ def confirm(
         return True
     again = build_and_run(
         reference.binary,
-        "-O0",
+        REFERENCE_CONFIRM,
         workdir,
         csmith.include,
         limits,
@@ -707,12 +717,14 @@ def confirm(
     )
     steps.extend(again.steps)
     if again.checksum is None:
-        finding.detail += f" (dropped: {reference.name} -O0 {again.skip})"
+        finding.detail += (
+            f" (dropped: {reference.name} {REFERENCE_CONFIRM} {again.skip})"
+        )
         return False
     if expected is not None and again.checksum != expected:
         finding.detail += (
-            f" (dropped: {reference.name} -O0 = {again.checksum},"
-            f" -O2 = {expected})"
+            f" (dropped: {reference.name} {REFERENCE_CONFIRM} = {again.checksum},"
+            f" {REFERENCE_GATE} = {expected})"
         )
         return False
     return True
@@ -1380,8 +1392,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--compile-timeout", type=float, default=60.0)
     parser.add_argument("--run-timeout", type=float, default=10.0)
     # Over 120 bounded programs on an aarch64 host, every one that terminates
-    # runs in under 5 ms at `clang -O2` and 13% do not terminate at all. A one
-    # second cap clears the slowest measured case by 200x and is what the
+    # under `clang -O0` runs in under 5 ms and 12.5% do not terminate at all. A
+    # one second cap clears the slowest measured case by 200x and is what the
     # budget spends on each non-terminating program.
     parser.add_argument("--reference-run-timeout", type=float, default=1.0)
     parser.add_argument("--generate-timeout", type=float, default=30.0)
@@ -1414,7 +1426,11 @@ def main(argv: list[str] | None = None) -> int:
         started=dt.datetime.now(dt.timezone.utc),
         csmith=csmith.version,
         badc=tool_version(badc),
-        reference=reference.version if reference else "none (badc -O0 vs -O only)",
+        reference=(
+            f"{reference.version} at {REFERENCE_GATE}"
+            if reference
+            else "none (badc -O0 vs -O only)"
+        ),
         bounds=" ".join(GENERATION_BOUNDS),
     )
     limits = Limits(

@@ -17,7 +17,7 @@ name: pages
 
 on:
   push:
-    branches: [master, 'debt/release-*']
+    branches: [master]
     paths:
       - README.md
       - LICENSE

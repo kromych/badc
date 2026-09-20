@@ -10,7 +10,8 @@
 `badc` is a small cross-platform optimizing C compiler, and a
 compiler-as-library, that emits native binaries for five targets from any host.
 It carries its own linker, DWARF emitter, inline-asm encoder, in-process JIT,
-and SSA interpreter.
+and SSA interpreter. To ensure correctness, CI runs over 80 jobs and a few
+thousand tests, and fuzzing jobs run daily.
 
 > * `badc` used to be bad when the project started out, and the name stuck.
 > * There is some compiler-building jargon in this document here and there. You

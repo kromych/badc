@@ -75,6 +75,64 @@ an inline `#[cfg(test)]` module count with their file. `--check PCT` fails below
 a line-coverage floor, `--clean` drops the profiles and the instrumented build.
 `llvm-profdata` and `llvm-cov` come from `rustup component add llvm-tools`.
 
+## Fuzzing
+
+```sh
+python3 scripts/csmith_fuzz.py --minutes 5 --badc target/release/badc
+```
+
+`scripts/csmith_fuzz.py` generates one C translation unit per recorded seed
+with `csmith`, builds it with `badc -O0`, `badc -O` and a reference compiler,
+runs all three and compares the checksum the program prints. csmith's output is
+free of undefined behaviour, so a disagreement, a crash or a compile failure is
+a defect in one of the compilers. Without csmith the script says so and exits 0,
+as the assembler fuzz tests do; on Debian and Ubuntu it comes from the `csmith`
+and `libcsmith-dev` packages.
+
+The reference (`clang -O2`, else `gcc -O2`, else `cc -O2`) is both the oracle
+and the gate. It is the gate because 13% of the generated programs do not
+terminate -- a loop control variable can be a global that a callee writes, and
+no generation knob removes that -- while every terminating one runs in under
+5 ms at `clang -O2`, measured over 120 programs under the bounds the script
+sets. A case the reference cannot compile, or cannot finish in a second, is
+skipped before badc sees it. It is the oracle because two badc configurations
+that agree can both be wrong; a runtime finding is confirmed by rebuilding the
+case with the reference at `-O0`, and a reference that disagrees with itself
+drops the case. With no reference compiler on the host the two badc
+configurations are compared against each other, which cannot see a miscompile
+they share; the run's summary says which oracle it had.
+
+Findings are keyed by signature -- a panic's site and the shape of its message,
+or the verdict with the configuration -- so one defect is reported once rather
+than once per case that reaches it. Every badc invocation runs under
+`RUST_BACKTRACE=1` and the backtrace is kept. `--case <seed>` reruns one case,
+`--publish` files what was found, and without it the plan, the issue body and
+every comment are printed and nothing is written.
+
+`.github/workflows/csmith-fuzz.yml` runs five minutes of it daily at 03:41 UTC
+on `ubuntu-latest` and `ubuntu-24.04-arm` -- one lane at a time, so the week's
+issue is opened once rather than twice. Findings are appended as comments to the
+issue `compiler fuzzing, <Monday>...<Sunday>` for the run's ISO week, opened
+when it does not exist, and each comment links the offending source, kept
+unreduced as an asset of the `fuzz-cases-v1` release. A seed reproduces only
+against the same generator, so every report names its csmith version. A run
+with no new signature files nothing; the job summary carries the counts either
+way.
+
+```sh
+python3 scripts/c_reduce.py case.c -o small.c -- \
+    badc -O0 -w -I /usr/include/csmith -o /dev/null {}
+```
+
+`scripts/c_reduce.py` shrinks a filed case: it deletes a brace-balanced region,
+keeps the deletion while the command still fails the way it did on the
+original, and repeats to a fixpoint. It took the case the harness files today
+from 348 lines to 9. `cvise` and `creduce` do this better where they are
+installed; neither is in Homebrew under those names.
+
+`.github/workflows/asm-fuzz.yml` is the other fuzz lane: it runs the
+differential encoder tests against the system assembler nightly on macOS.
+
 ## CI
 
 CI runs the matrix on `ubuntu-latest`, `ubuntu-24.04-arm`, `macos-latest`,

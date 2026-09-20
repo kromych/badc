@@ -169,8 +169,8 @@ def include_candidates(binary: Path, version: str) -> list[Path]:
     """Where csmith's runtime headers sit, in probe order.
 
     Homebrew puts them under the cellar's `include/csmith-<v>`, Debian and
-    Ubuntu under `/usr/include/csmith-<v>`, a source build under the prefix
-    given to `configure`.
+    Ubuntu in `libcsmith-dev` at `/usr/include/csmith`, a source build under
+    the prefix given to `configure`.
     """
     stamp = version.split()[-1] if version.split() else ""
     prefix = binary.resolve().parent.parent
@@ -193,6 +193,24 @@ def find_csmith(binary: str | None, include: str | None) -> Csmith | None:
         if (candidate / "csmith.h").is_file():
             return Csmith(path, version, candidate)
     return None
+
+
+def missing_csmith(explicit: str | None, include: str | None = None) -> str:
+    """Say which half is missing: the generator or its runtime headers."""
+    found = explicit or shutil.which("csmith")
+    if not found or not Path(found).exists():
+        return "csmith not found (Debian and Ubuntu: the `csmith` package)"
+    path = Path(found).resolve()
+    named = include or os.environ.get("CSMITH_INCLUDE")
+    probe = (
+        [Path(named)] if named else include_candidates(path, csmith_version(path))
+    )
+    looked = ", ".join(str(p) for p in probe)
+    return (
+        f"{path} has no csmith.h beside it (Debian and Ubuntu: the "
+        f"`libcsmith-dev` package; --csmith-include or $CSMITH_INCLUDE names "
+        f"the directory). Looked in: {looked}"
+    )
 
 
 def find_badc(explicit: str | None) -> Path | None:
@@ -1378,7 +1396,7 @@ def main(argv: list[str] | None = None) -> int:
 
     csmith = find_csmith(args.csmith, args.csmith_include)
     if csmith is None:
-        message = "csmith (or its runtime headers) not found"
+        message = missing_csmith(args.csmith, args.csmith_include)
         if args.require_csmith:
             print(f"error: {message}", file=sys.stderr)
             return 2
@@ -1430,7 +1448,6 @@ def main(argv: list[str] | None = None) -> int:
             args.case or None,
         )
         cases = Path(args.out_dir) if args.out_dir else root / "store"
-        cases.mkdir(parents=True, exist_ok=True)
         repo = detect_repo(args.repo)
         gh = Gh(repo, args.publish)
         filed = 0

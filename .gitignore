@@ -309,3 +309,10 @@ demos/qemu/*
 demos/linux/.cache/
 demos/linux/.work/
 .badc-provenance
+
+# csmith fuzzing -- the paths the CI job passes `scripts/csmith_fuzz.py` for
+# the offending sources and its report. `platform.info`, which csmith drops
+# into whatever directory it runs in, is deliberately not listed: nothing may
+# run the generator from the tree, and an untracked file is how that shows.
+/fuzz-cases/
+/fuzz-report.json

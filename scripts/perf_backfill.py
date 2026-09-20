@@ -15,6 +15,10 @@ no CPU model, and no compiler versions. The page skips a metric a run does not
 have. Each record carries `provenance` naming the job log it came from, so a
 reader tells a recovered run from a measured one.
 
+The same log carries the CPython build comparison, whose benchmark column
+becomes the record's `benches`; its sizes and compile seconds are rounded in
+print and no record states them.
+
 The walk is resumable: listings and logs land under `--cache`, and a commit
 already filed in the data repository is skipped unless `--force` says
 otherwise.
@@ -197,24 +201,32 @@ def pick(jobs: list[dict]) -> list[dict]:
     return list(best.values())
 
 
-def parse_log(text: str) -> dict | None:
-    """The perf table as data: `taken`, `image`, `fixtures`, `results`.
+def log_lines(text: str) -> list[tuple[str, str]]:
+    """The log as (timestamp, body) pairs, with the runner's colouring
+    removed and lines the runner did not stamp dropped."""
+    out: list[tuple[str, str]] = []
+    for raw in text.splitlines():
+        m = TIMESTAMPED.match(raw)
+        if m:
+            out.append((m.group(1), ANSI.sub("", m.group(2)).strip()))
+    return out
 
-    The job prints three tables; only this one is per fixture and per
-    compiler. The CPython and QuickJS comparisons that follow measure four
-    builds of one program with section sizes and a single-shot benchmark,
-    which is not what a record holds, so they stay out.
+
+def parse_log(text: str) -> dict | None:
+    """The job's tables as data: `taken`, `image`, `fixtures`, `results` from
+    the perf table, and `benches` from the CPython comparison that follows it.
+
+    The perf table is the only one that is per fixture and per compiler; the
+    QuickJS comparison in the same log reports nanoseconds per operation and a
+    KiB-rounded size, neither of which a record states, so it stays out.
     """
+    lines = log_lines(text)
     taken = image = ""
     fixture = ""
     in_table = False
     rows: list[dict] = []
     fixtures: list[str] = []
-    for raw in text.splitlines():
-        m = TIMESTAMPED.match(raw)
-        if not m:
-            continue
-        stamp, body = m.group(1), ANSI.sub("", m.group(2)).strip()
+    for stamp, body in lines:
         if not image:
             m = IMAGE.match(body)
             if m:
@@ -225,7 +237,8 @@ def parse_log(text: str) -> dict | None:
         if not in_table:
             continue
         if body.startswith("##[") or body.startswith("## "):
-            break
+            in_table = False
+            continue
         if body.startswith("### "):
             fixture = body[4:].strip()
             fixtures.append(fixture)
@@ -244,12 +257,14 @@ def parse_log(text: str) -> dict | None:
             })
     if not rows:
         return None
+    cpython = perf_publish.parse_cpython(body for _, body in lines)
     return {
         "taken": taken[:19] + "Z",
         "image": image,
         "fixtures": [f for f in fixtures if any(r["fixture"] == f
                                                 for r in rows)],
         "results": rows,
+        "cpython": cpython,
     }
 
 
@@ -267,26 +282,22 @@ def runs_per_fixture(sha: str) -> int | None:
 
 def record(job: Job, table: dict, reps: int | None) -> dict:
     """The run as `run.py --json` writes it, without the fields the log does
-    not carry."""
+    not carry. `perf_publish.stamp` adds the schema-2 envelope from here."""
     order = []
     for r in table["results"]:
         if r["compiler"] not in order:
             order.append(r["compiler"])
+    arch = RUNNERS[job.runner]
     doc: dict = {
         "taken": table["taken"],
-        "machine": {"system": "Linux", "arch": RUNNERS[job.runner],
-                    "runner": job.runner},
+        "machine": {"system": "Linux", "arch": arch, "runner": job.runner},
         "compilers": [{"name": c} for c in order],
         "fixtures": table["fixtures"],
         "results": table["results"],
         "provenance": {
             "source": "github-actions-job-log",
-            "repo": REPO,
-            "workflow": WORKFLOW,
-            "job": JOB_NAME.format(runner=job.runner),
             "run_id": job.run_id,
             "job_id": job.job_id,
-            "conclusion": job.conclusion,
             "url": (f"https://github.com/{REPO}/actions/runs/"
                     f"{job.run_id}/job/{job.job_id}"),
         },
@@ -295,6 +306,10 @@ def record(job: Job, table: dict, reps: int | None) -> dict:
         doc["machine"]["image"] = table["image"]
     if reps is not None:
         doc["runs_per_fixture"] = reps
+    cpython = table.get("cpython")
+    if cpython and cpython["benches"] and \
+            perf_publish.TARGET_ARCH.get(cpython["target"]) == arch:
+        doc["benches"] = cpython["benches"]
     return doc
 
 
@@ -302,8 +317,8 @@ SAMPLE = ROOT / "tests" / "perf" / "ci_log_sample.txt"
 
 
 def self_test() -> int:
-    """Parse the captured excerpt: the perf table is taken, the two tables
-    that follow it are not."""
+    """Parse the captured excerpt: the perf table and the CPython comparison
+    are taken, the QuickJS tables between them are not."""
     table = parse_log(SAMPLE.read_text())
     assert table is not None, "the excerpt holds a perf table"
     assert table["taken"] == "2026-09-19T23:57:48Z", table["taken"]
@@ -322,17 +337,53 @@ def self_test() -> int:
     assert not any(r["compiler"].endswith("no-O") for r in table["results"])
     assert not any(r["fixture"].endswith(".js") for r in table["results"])
 
-    job = Job("0" * 40, "master", "ubuntu-24.04-arm", 1, 2, "success", "")
-    doc = record(job, table, 3)
+    # The CPython comparison of the same log, with its labels mapped onto the
+    # perf table's and its KiB columns left behind.
+    cp = table["cpython"]
+    assert cp["target"] == "linux-x64" and cp["unmeasured"] == 0, cp
+    assert cp["benches"] == [
+        {"suite": "cpython", "name": "microbench", "compiler": "badc",
+         "run_ms": 1197.808},
+        {"suite": "cpython", "name": "microbench", "compiler": "badc -O",
+         "run_ms": 70.821},
+        {"suite": "cpython", "name": "microbench", "compiler": "clang -O0",
+         "run_ms": 1036.238},
+        {"suite": "cpython", "name": "microbench", "compiler": "clang -O2",
+         "run_ms": 42.999},
+    ], cp["benches"]
+    # The QuickJS microbench in the same log counts nanoseconds per
+    # operation, which is not a run time; none of it is filed.
+    assert "empty_loop" not in json.dumps(table)
+
+    arm = Job("0" * 40, "master", "ubuntu-24.04-arm", 1, 2, "success", "")
+    doc = record(arm, table, 3)
     assert doc["machine"]["arch"] == "aarch64", doc["machine"]
     assert doc["provenance"]["job_id"] == 2, doc["provenance"]
+    assert set(doc["provenance"]) == {"source", "run_id", "job_id", "url"}
     assert doc["runs_per_fixture"] == 3
     assert doc["compilers"][0] == {"name": "badc"}
     assert "compile_ms" not in json.dumps(doc)
+    # The excerpt's CPython table was built for linux-x64; it is not the arm
+    # job's measurement.
+    assert "benches" not in doc, doc["benches"]
+    x64 = Job("0" * 40, "master", "ubuntu-latest", 1, 2, "success", "")
+    doc = record(x64, table, 3)
+    assert doc["benches"] == cp["benches"], doc.get("benches")
+    # No bench record states a size: the comparison prints KiB.
+    assert all(set(b) == {"suite", "name", "compiler", "run_ms"}
+               for b in doc["benches"])
+
+    filed = perf_publish.stamp(doc, "1" * 40, "master", x64.runner)
+    assert filed["schema"] == 2, filed["schema"]
+    assert filed["commit"] == {"sha": "1" * 40, "branch": "master"}
+    assert filed["provenance"]["source"] == "github-actions-job-log"
+    assert filed["machine"]["image"] == "ubuntu-24.04"
+    assert "cpu" not in filed["machine"], filed["machine"]
 
     truncated = SAMPLE.read_text().split("### qsort.c")[0]
     part = parse_log(truncated)
     assert part is not None and part["fixtures"] == ["fib.c"], part
+    assert part["cpython"] is None, part["cpython"]
     assert parse_log("2026-01-01T00:00:00.0Z nothing here") is None
 
     # The runner colours what it echoes; a heading or a row can carry it.
@@ -400,7 +451,9 @@ def main(argv: list[str] | None = None) -> int:
         logs = list(pool.map(lambda j: f.job_log(j.job_id), todo))
 
     reps: dict[str, int | None] = {}
-    counts = {"filed": 0, "expired": 0, "no table": 0}
+    counts = {"filed": 0, "expired": 0, "no table": 0, "no cpython table": 0,
+              "cpython rows dropped": 0, "cpython arch mismatch": 0,
+              "bench records": 0}
     mute: list[int] = []
     for job, text in zip(todo, logs):
         if text is None:
@@ -414,6 +467,14 @@ def main(argv: list[str] | None = None) -> int:
         if job.sha not in reps:
             reps[job.sha] = runs_per_fixture(job.sha)
         doc = record(job, table, reps[job.sha])
+        cpython = table.get("cpython")
+        if cpython is None:
+            counts["no cpython table"] += 1
+        else:
+            counts["cpython rows dropped"] += cpython["unmeasured"]
+            if cpython["benches"] and "benches" not in doc:
+                counts["cpython arch mismatch"] += 1
+        counts["bench records"] += len(doc.get("benches", []))
         counts["filed"] += 1
         if args.dry_run:
             continue
@@ -428,6 +489,10 @@ def main(argv: list[str] | None = None) -> int:
 
     print(f"{counts['filed']} filed, {counts['expired']} logs past retention, "
           f"{counts['no table']} without a table; "
+          f"{counts['bench records']} bench records from "
+          f"{counts['filed'] - counts['no cpython table']} CPython tables "
+          f"({counts['cpython rows dropped']} rows without a benchmark, "
+          f"{counts['cpython arch mismatch']} for another architecture); "
           f"{f.calls} API calls, {f.bytes / 1e6:.1f} MB")
     if mute:
         print("no table in jobs: " + " ".join(str(j) for j in mute[:20]))

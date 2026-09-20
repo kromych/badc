@@ -211,9 +211,7 @@ impl<'a> Walker<'a> {
             let needs_extend =
                 target_size < source_size || (target_size == source_size && source_unsigned);
             if needs_extend {
-                let bits = 64i64 - (target_size as i64) * 8;
-                let shifted = b.binop_imm(BinOp::Shl, v, bits);
-                b.binop_imm(BinOp::Shr, shifted, bits)
+                b.extend(v, super::types::sign_extend_kind(target_size))
             } else {
                 v
             }

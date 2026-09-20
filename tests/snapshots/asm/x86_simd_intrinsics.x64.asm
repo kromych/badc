@@ -2393,29 +2393,74 @@ Disassembly of section .text:
                	movq	0x8(%rax), %rcx
                	movq	%rcx, 0x8(%rbx)
                	popq	%rcx
-               	leaq	-0x718(%rbp), %rcx
-               	xorl	%eax, %eax
-               	movq	%rax, (%rcx)
-               	movq	%rax, 0x8(%rcx)
-               	leaq	-0x7b0(%rbp), %rsi
-               	leaq	-0x770(%rbp), %rdx
+               	leaq	-0x718(%rbp), %rax
+               	movq	$0x0, (%rax)
+               	movq	$0x0, 0x8(%rax)
+               	leaq	-0x7b0(%rbp), %rdx
+               	leaq	-0x770(%rbp), %rcx
                	pushq	%rax
-               	movq	(%rsi), %rax
-               	movq	%rax, (%rdx)
-               	movq	0x8(%rsi), %rax
-               	movq	%rax, 0x8(%rdx)
+               	movq	(%rdx), %rax
+               	movq	%rax, (%rcx)
+               	movq	0x8(%rdx), %rax
+               	movq	%rax, 0x8(%rcx)
                	popq	%rax
-               	movdqu	(%rdx), %xmm15
-               	movdqu	%xmm15, (%rcx)
-               	movzbq	(%rcx,%rax), %rdx
-               	imulq	$0x7, %rax, %rsi
-               	incq	%rsi
-               	andq	$0xff, %rsi
-               	cmpl	%esi, %edx
+               	movdqu	(%rcx), %xmm15
+               	movdqu	%xmm15, (%rax)
+               	movzbq	(%rax), %rcx
+               	cmpl	$0x1, %ecx
+               	je	<addr>
+               	movl	$0x1f, %eax
+               	popq	%rbx
+               	popq	%r12
+               	leave
+               	retq
+               	movzbq	0x1(%rax), %rcx
+               	cmpl	$0x8, %ecx
                	jne	<addr>
-               	incq	%rax
-               	cmpl	$0x10, %eax
-               	jl	<addr>
+               	movzbq	0x2(%rax), %rcx
+               	cmpl	$0xf, %ecx
+               	jne	<addr>
+               	movzbq	0x3(%rax), %rax
+               	cmpl	$0x16, %eax
+               	jne	<addr>
+               	leaq	-0x718(%rbp), %rax
+               	movzbq	0x4(%rax), %rcx
+               	cmpl	$0x1d, %ecx
+               	jne	<addr>
+               	movzbq	0x5(%rax), %rcx
+               	cmpl	$0x24, %ecx
+               	jne	<addr>
+               	movzbq	0x6(%rax), %rcx
+               	cmpl	$0x2b, %ecx
+               	jne	<addr>
+               	movzbq	0x7(%rax), %rcx
+               	cmpl	$0x32, %ecx
+               	jne	<addr>
+               	movzbq	0x8(%rax), %rcx
+               	cmpl	$0x39, %ecx
+               	jne	<addr>
+               	movzbq	0x9(%rax), %rcx
+               	cmpl	$0x40, %ecx
+               	jne	<addr>
+               	movzbq	0xa(%rax), %rcx
+               	cmpl	$0x47, %ecx
+               	jne	<addr>
+               	movzbq	0xb(%rax), %rax
+               	cmpl	$0x4e, %eax
+               	jne	<addr>
+               	leaq	-0x718(%rbp), %rax
+               	movzbq	0xc(%rax), %rcx
+               	cmpl	$0x55, %ecx
+               	jne	<addr>
+               	movzbq	0xd(%rax), %rcx
+               	cmpl	$0x5c, %ecx
+               	jne	<addr>
+               	movzbq	0xe(%rax), %rcx
+               	cmpl	$0x63, %ecx
+               	jne	<addr>
+               	movzbq	0xf(%rax), %rax
+               	cmpl	$0x6a, %eax
+               	jne	<addr>
                	leaq	-0x728(%rbp), %rax
                	xorps	%xmm14, %xmm14
                	movups	%xmm14, (%rax)
@@ -4402,11 +4447,6 @@ Disassembly of section .text:
                	leave
                	retq
                	xorl	%eax, %eax
-               	popq	%rbx
-               	popq	%r12
-               	leave
-               	retq
-               	movl	$0x1f, %eax
                	popq	%rbx
                	popq	%r12
                	leave

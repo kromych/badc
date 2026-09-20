@@ -217,6 +217,13 @@ impl<'a> Walker<'a> {
             let rv = self.walk_expr_rvalue(b, rhs)?;
             return Ok(self.walk_fp_binop(b, op, lv, rv));
         }
+        // The signed renormalization the parser spells as `Shl K; Shr K`
+        // is one `Inst::Extend`, which the builder would otherwise reach
+        // only after materializing the shift, leaving it behind as a
+        // dead instruction the later passes still walk.
+        if let Some(v) = self.walk_sign_narrow_pair(b, op, lhs, rhs)? {
+            return Ok(v);
+        }
         // C99 6.6: a constant expression evaluates at translation time.
         // The parser leaves the synthesised pointer-arithmetic scaling
         // unfolded (`arr[K]` lowers to `arr + (K * sizeof(*arr))`).
@@ -232,6 +239,41 @@ impl<'a> Walker<'a> {
         // `Shl K; Shr K` pair) as further `Expr::Binary` nodes, so
         // repeating it here would apply it twice.
         self.walk_int_binop(b, op, lv, lhs, rhs, ty)
+    }
+
+    /// `(x << K) >> K` with `K` one of 32 / 48 / 56 -- the signed
+    /// narrowing `convert::renormalize_to_width` and the cast lowering
+    /// emit -- read straight off the AST as `Inst::Extend` over `x`.
+    fn walk_sign_narrow_pair(
+        &mut self,
+        b: &mut SsaBuilder,
+        op: BinOp,
+        lhs: ExprId,
+        rhs: ExprId,
+    ) -> Result<Option<ValueId>, WalkError> {
+        if op != BinOp::Shr {
+            return Ok(None);
+        }
+        let Expr::IntLit { val: k, .. } = *self.ast.expr(rhs) else {
+            return Ok(None);
+        };
+        let Some(kind) = crate::c5::codegen::ssa::build::sign_narrow_kind(k) else {
+            return Ok(None);
+        };
+        let Expr::Binary {
+            op: BinOp::Shl,
+            lhs: inner,
+            rhs: inner_k,
+            ..
+        } = *self.ast.expr(lhs)
+        else {
+            return Ok(None);
+        };
+        if !matches!(*self.ast.expr(inner_k), Expr::IntLit { val, .. } if val == k) {
+            return Ok(None);
+        }
+        let v = self.walk_expr_rvalue(b, inner)?;
+        Ok(Some(b.extend(v, kind)))
     }
 
     /// Integer `lv op rhs` over a walked left operand; `walk_binary` and

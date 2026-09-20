@@ -119,9 +119,18 @@ pub(super) fn extend_scalar_call_result(
         };
         b.binop_imm(BinOp::And, v, mask)
     } else {
-        let bits = 64i64 - (rs as i64) * 8;
-        let shifted = b.binop_imm(BinOp::Shl, v, bits);
-        b.binop_imm(BinOp::Shr, shifted, bits)
+        b.extend(v, sign_extend_kind(rs))
+    }
+}
+
+/// The `Inst::Extend` kind that sign-extends a `rs`-byte value.
+/// Callers gate on `rs` being 1, 2 or 4.
+pub(super) fn sign_extend_kind(rs: usize) -> crate::c5::ir::LoadKind {
+    use crate::c5::ir::LoadKind;
+    match rs {
+        1 => LoadKind::I8,
+        2 => LoadKind::I16,
+        _ => LoadKind::I32,
     }
 }
 

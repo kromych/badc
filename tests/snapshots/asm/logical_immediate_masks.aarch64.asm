@@ -571,15 +571,14 @@ Disassembly of section .text:
                	ldp	x22, x23, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x60
                	ret
-               	ldr	w2, [x1]
-               	and	x3, x2, #0x7
-               	asr	x4, x2, #3
-               	and	x4, x4, #0x1f
-               	add	x3, x3, x4
-               	asr	x2, x2, #8
-               	and	x2, x2, #0xff
-               	add	x2, x3, x2
                	ldr	w1, [x1]
+               	and	x2, x1, #0x7
+               	asr	x3, x1, #3
+               	and	x3, x3, #0x1f
+               	add	x2, x2, x3
+               	asr	x3, x1, #8
+               	and	x3, x3, #0xff
+               	add	x2, x2, x3
                	asr	x1, x1, #16
                	add	x1, x2, x1
                	eor	x0, x0, x1

@@ -583,8 +583,7 @@ impl<'a> Walker<'a> {
             } else if unsigned {
                 v = b.binop_imm(BinOp::And, v, mask);
             } else {
-                let shifted = b.binop_imm(BinOp::Shl, v, bits);
-                v = b.binop_imm(BinOp::Shr, shifted, bits);
+                v = b.extend(v, super::types::sign_extend_kind(rs));
             }
         }
         b.return_(v);

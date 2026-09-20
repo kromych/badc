@@ -218,11 +218,11 @@ Disassembly of section .text:
                	sub	x0, x29, #0x80
                	mov	x1, #-0x80              // =-128
                	strb	w1, [x0, #0x1]
+               	mov	x1, #-0x8000            // =-32768
+               	strh	w1, [x0, #0x6]
+               	mov	x1, #-0x80000000        // =-2147483648
+               	str	w1, [x0, #0x10]
                	mov	x1, #-0x8000000000000000 // =-9223372036854775808
-               	mov	x2, #-0x8000            // =-32768
-               	strh	w2, [x0, #0x6]
-               	mov	x2, #-0x80000000        // =-2147483648
-               	str	w2, [x0, #0x10]
                	str	x1, [x0, #0x28]
                	bl	<addr>
                	cbz	x0, <addr>

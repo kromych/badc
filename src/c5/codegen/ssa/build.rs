@@ -1699,7 +1699,7 @@ impl SsaBuilder {
 /// width_bits`, so 32 -> I32, 48 -> I16, 56 -> I8. Other amounts are
 /// genuine shifts (or sub-word bitfield extractions) and are left
 /// alone.
-fn sign_narrow_kind(k: i64) -> Option<LoadKind> {
+pub(crate) fn sign_narrow_kind(k: i64) -> Option<LoadKind> {
     match k {
         32 => Some(LoadKind::I32),
         48 => Some(LoadKind::I16),

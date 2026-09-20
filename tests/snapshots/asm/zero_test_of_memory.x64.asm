@@ -234,9 +234,9 @@ Disassembly of section .text:
                	retq
                	leaq	-0x80(%rbp), %rdi
                	movb	$-0x80, 0x1(%rdi)
-               	movabsq	$-0x8000000000000000, %rax # imm = 0x8000000000000000
                	movw	$0x8000, 0x6(%rdi)      # imm = 0x8000
                	movl	$0x80000000, 0x10(%rdi) # imm = 0x80000000
+               	movabsq	$-0x8000000000000000, %rax # imm = 0x8000000000000000
                	movq	%rax, 0x28(%rdi)
                	callq	<addr>
                	testq	%rax, %rax

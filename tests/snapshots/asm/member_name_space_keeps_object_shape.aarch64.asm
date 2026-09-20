@@ -93,11 +93,9 @@ Disassembly of section .text:
                	str	w4, [x2, #0x8]
                	mov	x4, #0x17               // =23
                	str	w4, [x2, #0xc]
-               	ldrsw	x1, [x1, #0x1c]
-               	cmp	w1, #0x17
+               	ldrsw	x2, [x1, #0x1c]
+               	cmp	w2, #0x17
                	b.ne	<addr>
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
                	ldrsw	x1, [x1, #0x4]
                	cmp	w1, #0x1
                	b.eq	<addr>

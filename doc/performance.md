@@ -44,8 +44,11 @@ repository serves the runs as files.</noscript>
   font-variant-numeric: tabular-nums; }
 #perf .ratio { color: #57606a; }
 #perf .ratio.ref { color: inherit; }
-#perf table.cmp { border-collapse: collapse; font-size: 85%; margin: 0 0 .4rem; }
-#perf table.cmp th, #perf table.cmp td { padding: .1rem 1rem .1rem 0;
+/* The site's stylesheet gives a markdown table a border, a padding and a
+   block display of its own; these are the numbers, not a document table. */
+#perf table.cmp { display: table; width: auto; border-collapse: collapse;
+  font-size: 85%; margin: 0 0 .4rem; }
+#perf table.cmp th, #perf table.cmp td { border: 0; padding: .1rem 1rem .1rem 0;
   text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 #perf table.cmp th { border-bottom: 1px solid #d0d7de; font-weight: 600; }
 #perf table.cmp .who { text-align: left; font-family: monospace; }
@@ -114,6 +117,14 @@ repository serves the runs as files.</noscript>
   function arch(run) { return machine(run).arch || ""; }
 
   function short(sha) { return sha ? String(sha).slice(0, 12) : ""; }
+
+  // The page builds links out of a record it does not own, so what goes into
+  // a URL is checked to be what it claims.
+  function commit(sha) {
+    return /^[0-9a-f]{7,40}$/i.test(String(sha)) ? String(sha) : null;
+  }
+
+  function web(url) { return /^https:\/\//.test(String(url)) ? String(url) : null; }
 
   function when(taken) {
     return taken ? String(taken).slice(0, 16).replace("T", " ") : "";
@@ -233,7 +244,7 @@ repository serves the runs as files.</noscript>
     if (names.length) bits.push(names.join("; "));
     line.appendChild(txt(bits.join(DOT)));
 
-    var sha = (run.commit && run.commit.sha) || (entry && entry.sha);
+    var sha = commit((run.commit && run.commit.sha) || (entry && entry.sha));
     if (sha) {
       line.appendChild(txt(DOT));
       line.appendChild(anchor(short(sha),
@@ -247,7 +258,8 @@ repository serves the runs as files.</noscript>
     if (source) {
       line.appendChild(txt(DOT));
       var what = source === "measured" ? "measured" : "recovered from " + source;
-      line.appendChild(p.url ? anchor(what, p.url) : txt(what));
+      var url = web(p.url);
+      line.appendChild(url ? anchor(what, url) : txt(what));
     }
     return line;
   }
@@ -266,11 +278,12 @@ repository serves the runs as files.</noscript>
     METRICS.forEach(function (metric) {
       var body = el("div");
       runs.forEach(function (r) {
-        var sha = (r.run.commit && r.run.commit.sha) || (r.entry && r.entry.sha);
+        var sha = commit((r.run.commit && r.run.commit.sha) || (r.entry && r.entry.sha));
         corpora(r.run).forEach(function (c) {
           var grid = el("div", "grid");
           c.charts.forEach(function (ch) {
-            var href = c.code && sha ? CODE + sha + "/" + FIXTURES + "/" + ch.title : null;
+            var href = c.code && sha ? CODE + sha + "/" + FIXTURES + "/" +
+              encodeURIComponent(ch.title) : null;
             var box = chart(ch.title, href, ch.records, metric);
             if (box) grid.appendChild(box);
           });
@@ -314,7 +327,7 @@ repository serves the runs as files.</noscript>
     return n % 2 ? s[(n - 1) / 2] : (s[n / 2 - 1] + s[n / 2]) / 2;
   }
 
-  function table(ca, cb, metric, who) {
+  function table(ca, cb, metric, who, what) {
     var va = values(ca ? ca.charts : [], metric);
     var vb = values(cb ? cb.charts : [], metric);
     var titles = [], ratios = [], lower = 0, higher = 0;
@@ -345,8 +358,8 @@ repository serves the runs as files.</noscript>
 
     var node = el("table", "cmp");
     var head = el("tr");
-    ["", "compiler", "A", "B", "change"].forEach(function (h) {
-      head.appendChild(el("th", h === "" || h === "compiler" ? "who" : null, h));
+    [what, "compiler", "A", "B", "change"].forEach(function (h, i) {
+      head.appendChild(el("th", i < 2 ? "who" : null, h));
     });
     var header = el("thead");
     header.appendChild(head);
@@ -384,7 +397,9 @@ repository serves the runs as files.</noscript>
         function pick(list) {
           return list.filter(function (c) { return c.name === name; })[0] || null;
         }
-        var t = table(pick(ca), pick(cb), metric, who);
+        var c = pick(ca) || pick(cb);
+        var t = table(pick(ca), pick(cb), metric, who,
+          c && c.code ? "fixture" : "bench");
         if (!t) return;
         body.appendChild(el("h4", "where", name));
         body.appendChild(t.node);
@@ -471,7 +486,7 @@ repository serves the runs as files.</noscript>
     return box;
   }
 
-  var pending = {};
+  var pending = {}, shown = null;
 
   function get(path) {
     if (!pending[path]) {
@@ -486,6 +501,7 @@ repository serves the runs as files.</noscript>
   function fail(what) {
     var root = document.getElementById("perf");
     if (root) root.textContent = what;
+    shown = null;
   }
 
   function newest(entries) {
@@ -493,8 +509,6 @@ repository serves the runs as files.</noscript>
       return String(y.taken || "").localeCompare(String(x.taken || ""));
     });
   }
-
-  var shown = null;
 
   function draw(entries) {
     var sel = selection();

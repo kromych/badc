@@ -1,4 +1,10 @@
-# Performance
+---
+title: Performance
+---
+
+<!--
+The page shows the controls, a block per machine and the charts, and no prose:
+what the text below said is kept here, where it is read with the code.
 
 Each fixture under `tests/perf/` is compiled by every compiler present on the
 machine and run three times; a bar is the median of the three. Shorter is
@@ -6,30 +12,48 @@ better in each chart. A bar carries its measured value and its multiple of
 `badc -O` in the same chart, the column `tests/perf/run.py` prints as
 `vs badc -O`; a chart that has no `badc -O` row takes its smallest bar as the
 reference and marks it `ref`. A chart holds one machine, so the numbers carry
-within a chart and not between machines: CI measures the same commit on both
-runners and the page draws each of them.
+within a chart and not between machines: CI measures the same commit on every
+runner and the page draws each of them, with the machine named above its
+charts.
 
 The runs live in [badc-perf-data](https://github.com/kromych/badc-perf-data),
 keyed by the commit they measured, and this page reads them where they are, so
 a new run appears without rebuilding the site.
 
-Two runs compare in place: pick them above the charts. The selection is the URL
+Two runs compare in place: pick them in the two lists. The selection is the URL
 fragment `#a=<sha>/<runner>&b=<sha>/<runner>`, so a comparison can be linked.
 
-<div id="perf">Loading the published runs.</div>
+The charts are drawn in the browser out of the published JSON, so with
+JavaScript off this page carries no numbers of its own; the data repository
+serves the runs as files.
+-->
 
-<noscript>The charts are drawn in the browser out of the published JSON, so
-with JavaScript off this page carries no numbers of its own; the data
-repository serves the runs as files.</noscript>
+<div id="perf"></div>
+
+<noscript>The charts are drawn in the browser from published JSON.</noscript>
 
 <style>
-#perf .run { color: #57606a; font-size: 90%; }
 #perf .runs { margin-bottom: 1rem; }
+#perf p.run { margin: 0 0 .3rem; }
+#perf p.run pre { margin: 0; padding: .4rem .6rem; font-size: 85%;
+  line-height: 1.5; background: #f6f8fa; border-radius: 6px;
+  white-space: pre-wrap; overflow-wrap: break-word; }
 #perf .note { color: #57606a; font-size: 85%; margin: .3rem 0 1rem; }
-#perf .pick { font-size: 90%; margin: 0 0 1.2rem; }
-#perf .pick select, #perf .pick button { font: inherit;
-  margin: .15rem .35rem .15rem 0; }
+/* The site's stylesheet leaves a control at the engine's own defaults, which
+   is a different widget in each browser; these are the site's own colours. */
+#perf .pick { display: flex; flex-wrap: wrap; gap: .4rem .5rem;
+  align-items: center; margin: 0 0 1.2rem; }
+#perf .pick select, #perf .pick button { font: inherit; font-size: 90%;
+  line-height: 1.5; color: #24292f; background: #fff;
+  border: 1px solid #d0d7de; border-radius: 6px; padding: .25rem .5rem; }
 #perf .pick select { max-width: 24rem; }
+#perf .pick button { -webkit-appearance: none; appearance: none;
+  background: #f6f8fa; font-weight: 600; cursor: pointer;
+  padding: .25rem .75rem; }
+#perf .pick button:hover { background: #eef1f4; border-color: #b6bec7; }
+#perf .pick button:active { background: #e4e9ee; }
+#perf .pick select:focus-visible, #perf .pick button:focus-visible {
+  outline: 2px solid #0969da; outline-offset: 1px; }
 #perf h4.where { font-size: 90%; margin: 1.2rem 0 .5rem; color: #57606a;
   font-weight: 600; }
 #perf .grid { display: grid; gap: 1rem 2rem;
@@ -57,17 +81,6 @@ repository serves the runs as files.</noscript>
 #perf .dn { color: #1a7f37; }
 #perf .up { color: #cf222e; }
 #perf .eq { color: #57606a; }
-@media (prefers-color-scheme: dark) {
-  #perf .run, #perf .note, #perf h4.where, #perf .eq,
-  #perf .ratio { color: #8b949e; }
-  #perf .ratio.ref { color: inherit; }
-  #perf .track { background: #21262d; }
-  #perf .bar { background: #6e7681; }
-  #perf .bar.badc { background: #388bfd; }
-  #perf table.cmp th { border-bottom-color: #30363d; }
-  #perf .dn { color: #3fb950; }
-  #perf .up { color: #f85149; }
-}
 </style>
 
 <script>
@@ -138,6 +151,14 @@ repository serves the runs as files.</noscript>
     return taken ? String(taken).slice(0, 16).replace("T", " ") : "";
   }
 
+  function compilers(run) {
+    var out = [];
+    (run.compilers || []).forEach(function (c) { if (c) push(out, c.name); });
+    (run.results || []).forEach(function (r) { if (r) push(out, r.compiler); });
+    (run.benches || []).forEach(function (b) { if (b) push(out, b.compiler); });
+    return out;
+  }
+
   // A run is drawn as a list of corpora: the fixture table first, then one
   // list per `benches` suite. They share the metrics and the compilers, so
   // they share the chart code; only the fixture names carry a link to source.
@@ -155,9 +176,9 @@ repository serves the runs as files.</noscript>
     return out;
   }
 
-  function group(names, rows, key) {
+  function group(names_, rows, key) {
     var order = [], by = {};
-    (names || []).forEach(function (n) {
+    (names_ || []).forEach(function (n) {
       push(order, n);
       by[n] = by[n] || [];
     });
@@ -170,14 +191,6 @@ repository serves the runs as files.</noscript>
     return order.map(function (n) {
       return { title: n, records: by[n] || [] };
     });
-  }
-
-  function compilers(run) {
-    var out = [];
-    (run.compilers || []).forEach(function (c) { if (c) push(out, c.name); });
-    (run.results || []).forEach(function (r) { if (r) push(out, r.compiler); });
-    (run.benches || []).forEach(function (b) { if (b) push(out, b.compiler); });
-    return out;
   }
 
   function values(charts, metric) {
@@ -243,8 +256,11 @@ repository serves the runs as files.</noscript>
     return box;
   }
 
-  function runLine(run, entry) {
-    var m = machine(run), line = el("div", "run"), bits = [];
+  // One block per machine on screen, so a comparison says on sight which two
+  // it holds.
+  function runBlock(run, entry, side) {
+    var m = machine(run), pre = el("pre"), bits = [];
+    if (side) bits.push(side);
     push(bits, [m.arch, m.system].filter(Boolean).join(" "));
     push(bits, runner(entry, run));
     push(bits, m.cpu);
@@ -253,49 +269,51 @@ repository serves the runs as files.</noscript>
     if (num(run.runs_per_fixture)) {
       bits.push("median of " + run.runs_per_fixture + " runs");
     }
-    var names = (run.compilers || []).map(function (c) {
+    var named = (run.compilers || []).map(function (c) {
       return c.version ? c.name + " (" + c.version + ")" : c.name;
     }).filter(Boolean);
-    if (names.length) bits.push(names.join("; "));
-    line.appendChild(txt(bits.join(DOT)));
+    if (named.length) bits.push(named.join("; "));
+    pre.appendChild(txt(bits.join(DOT)));
 
     var sha = commit((run.commit && run.commit.sha) || (entry && entry.sha));
     if (sha) {
-      line.appendChild(txt(DOT));
-      line.appendChild(anchor(short(sha),
+      pre.appendChild(txt(DOT));
+      pre.appendChild(anchor(short(sha),
         "https://github.com/kromych/badc/commit/" + sha));
       var branch = (run.commit && run.commit.branch) || (entry && entry.branch);
-      if (branch) line.appendChild(txt(" on " + branch));
+      if (branch) pre.appendChild(txt(" on " + branch));
     }
 
     var p = run.provenance || {};
     var source = p.source || (entry && entry.source);
     if (source) {
-      line.appendChild(txt(DOT));
+      pre.appendChild(txt(DOT));
       var what = source === "measured" ? "measured"
         : "recovered from " + source;
       var url = web(p.url);
-      line.appendChild(url ? anchor(what, url) : txt(what));
+      pre.appendChild(url ? anchor(what, url) : txt(what));
     }
-    return line;
+
+    var box = el("p", "run");
+    box.appendChild(pre);
+    return box;
   }
 
-  // Both runners of one commit, each with its own chart grids: a bar is only
+  // Every runner of one commit, each with its own chart grids: a bar is only
   // ever scaled against bars measured on the same host.
-  function latest(root, runs, total) {
+  function latest(root, shown) {
     var head = el("div", "runs");
-    runs.forEach(function (r) { head.appendChild(runLine(r.run, r.entry)); });
-    head.appendChild(el("div", "note", total + " run" +
-      (total === 1 ? "" : "s") +
-      " published, newest first in the picker above."));
+    shown.forEach(function (s) {
+      head.appendChild(runBlock(s.run, s.entry));
+    });
     root.appendChild(head);
 
     METRICS.forEach(function (metric) {
       var body = el("div");
-      runs.forEach(function (r) {
-        var sha = commit((r.run.commit && r.run.commit.sha) ||
-          (r.entry && r.entry.sha));
-        corpora(r.run).forEach(function (c) {
+      shown.forEach(function (s) {
+        var sha = commit((s.run.commit && s.run.commit.sha) ||
+          (s.entry && s.entry.sha));
+        corpora(s.run).forEach(function (c) {
           var grid = el("div", "grid");
           c.charts.forEach(function (ch) {
             var href = c.code && sha ? CODE + sha + "/" + FIXTURES + "/" +
@@ -305,7 +323,7 @@ repository serves the runs as files.</noscript>
           });
           if (!grid.children.length) return;
           body.appendChild(el("h4", "where",
-            [arch(r.run), runner(r.entry, r.run), c.name]
+            [arch(s.run), runner(s.entry, s.run), c.name]
               .filter(Boolean).join(DOT)));
           body.appendChild(grid);
         });
@@ -394,27 +412,18 @@ repository serves the runs as files.</noscript>
 
   function compare(root, a, b) {
     var head = el("div", "runs");
-    [["A", a], ["B", b]].forEach(function (side) {
-      var line = runLine(side[1].run, side[1].entry);
-      line.insertBefore(txt(side[0] + DOT), line.firstChild);
-      head.appendChild(line);
-    });
-    head.appendChild(el("div", "note", "The change column is B as a multiple " +
-      "of A. Lower is better in every metric, and a green arrow marks B " +
-      "below A." +
-      (runner(a.entry, a.run) === runner(b.entry, b.run) ? "" :
-        " A and B ran on different machines, so the column holds two hosts " +
-        "apart and not two commits.")));
+    head.appendChild(runBlock(a.run, a.entry, "A"));
+    head.appendChild(runBlock(b.run, b.entry, "B"));
     root.appendChild(head);
 
     var who = compilers(a.run);
     compilers(b.run).forEach(function (c) { push(who, c); });
 
     METRICS.forEach(function (metric) {
-      var body = el("div"), names = [];
+      var body = el("div"), suites = [];
       var ca = corpora(a.run), cb = corpora(b.run);
-      ca.concat(cb).forEach(function (c) { push(names, c.name); });
-      names.forEach(function (name) {
+      ca.concat(cb).forEach(function (c) { push(suites, c.name); });
+      suites.forEach(function (name) {
         function pick(list) {
           return list.filter(function (c) {
             return c.name === name;
@@ -508,9 +517,7 @@ repository serves the runs as files.</noscript>
   function picker(entries, a, b) {
     var box = el("div", "pick");
     var left = chooser("A", entries, a), right = chooser("B", entries, b);
-    box.appendChild(txt("Compare "));
     box.appendChild(left);
-    box.appendChild(txt(" with "));
     box.appendChild(right);
 
     var go = el("button", null, "Show the change");
@@ -600,8 +607,7 @@ repository serves the runs as files.</noscript>
       var got = pick.map(function (e, i) {
         return { entry: e, run: runs[i] };
       });
-      if (a && b) compare(root, got[0], got[1]);
-      else latest(root, got, entries.length);
+      if (a && b) compare(root, got[0], got[1]); else latest(root, got);
     });
   }
 
@@ -618,11 +624,14 @@ repository serves the runs as files.</noscript>
 }());
 </script>
 
-The measurements come from `tests/perf/run.py --json`, which compiles each
-fixture, runs it three times and records the median wall-clock, the compile
-wall-clock and the size of the binary; the `benches` section beside it holds
+<!--
+The measurements come from the JSON mode of `tests/perf/run.py`, which
+compiles each fixture, runs it three times and records the median
+wall-clock, the compile wall-clock and the size of the binary; the
+`benches` section beside it holds
 what the demo comparisons measure, CPython first. `scripts/perf_publish.py`
 files a run under `runs/<sha[0:2]>/<sha[2:4]>/<sha>/<runner>.json` in the data
 repository, points `branches/<name>` at it and adds it to `index.json`.
 `tests/perf/*.c` states what each fixture exercises, and why the shape it takes
 suits a code generator rather than an application.
+-->

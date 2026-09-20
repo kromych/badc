@@ -341,9 +341,42 @@ def cpu_model() -> str:
                 for key in ("model name", "Model"):
                     if line.startswith(key):
                         return line.split(":", 1)[1].strip()
+            # AArch64 kernels print the implementer and part numbers instead
+            # of a name; lscpu carries the table that decodes them.
+            out = subprocess.run(["lscpu"], capture_output=True, text=True)
+            for line in out.stdout.splitlines():
+                if line.startswith("Model name:"):
+                    return line.split(":", 1)[1].strip()
     except OSError:
         pass
     return ""
+
+
+IMAGE_DATA = Path("/imagegeneration/imagedata.json")
+OS_RELEASE = Path("/etc/os-release")
+
+
+def runner_image(image_data: Path = IMAGE_DATA,
+                 os_release: Path = OS_RELEASE) -> str:
+    """The image the machine booted, as it names itself. A GitHub runner
+    publishes its image data where the job log's `Image:` line comes from;
+    any other Linux host names its own release. Empty when neither says."""
+    try:
+        data = json.loads(image_data.read_text())
+        for entry in data if isinstance(data, list) else []:
+            for line in str(entry.get("detail", "")).splitlines():
+                if line.startswith("Image:"):
+                    return line.split(":", 1)[1].strip()
+    except (OSError, ValueError, AttributeError):
+        pass
+    try:
+        fields = dict(line.split("=", 1) for line
+                      in os_release.read_text().splitlines() if "=" in line)
+    except OSError:
+        return ""
+    name = fields.get("ID", "").strip('"')
+    version = fields.get("VERSION_ID", "").strip('"')
+    return f"{name}-{version}" if name and version else ""
 
 
 def compiler_version(c: Compiler) -> str:
@@ -358,21 +391,35 @@ def compiler_version(c: Compiler) -> str:
     return text[0] if text else ""
 
 
+def named_compiler(c: Compiler) -> dict:
+    version = compiler_version(c)
+    return {"name": c.name, "version": version} if version else {"name": c.name}
+
+
 def write_json(path: Path, compilers: list[Compiler], fixtures: list[str],
                results: list[Result]) -> None:
     """The run as data, for the page that charts it: what ran where, and one
-    record per (fixture, compiler) with the three measurements."""
+    record per (fixture, compiler) with the three measurements.
+
+    This is the part of the schema-2 record the harness knows. The commit,
+    the CI runner label and the runner image are the publisher's to add, and
+    `scripts/perf_publish.py` stamps them; a field the host does not report is
+    left out rather than written empty."""
+    machine = {
+        "system": platform.system(),
+        "release": platform.release(),
+        "arch": platform.machine(),
+        "cpu": cpu_model(),
+        "image": runner_image(),
+        # The CI step overrides this with the runner's label.
+        "runner": "local",
+    }
     doc = {
+        "schema": 2,
         "taken": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-        "machine": {
-            "system": platform.system(),
-            "release": platform.release(),
-            "arch": platform.machine(),
-            "cpu": cpu_model(),
-        },
+        "machine": {k: v for k, v in machine.items() if v},
         "runs_per_fixture": RUNS_PER_FIXTURE,
-        "compilers": [{"name": c.name, "version": compiler_version(c)}
-                      for c in compilers],
+        "compilers": [named_compiler(c) for c in compilers],
         "fixtures": fixtures,
         "results": [
             {
@@ -389,13 +436,57 @@ def write_json(path: Path, compilers: list[Compiler], fixtures: list[str],
     path.write_text(json.dumps(doc, indent=1) + "\n")
 
 
+def self_test() -> int:
+    """The parts of the record that do not need a compiler: where the image
+    name comes from, and the shape `--json` writes."""
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmp:
+        d = Path(tmp)
+        (d / "imagedata.json").write_text(json.dumps([
+            {"group": "Operating System", "detail": "Ubuntu\n24.04.3\nLTS"},
+            {"group": "Runner Image",
+             "detail": "Image: ubuntu-24.04-arm\nVersion: 20260907.300.1\n"},
+        ]))
+        (d / "os-release").write_text(
+            'PRETTY_NAME="Ubuntu 24.04.3 LTS"\nID=ubuntu\n'
+            'VERSION_ID="24.04"\n')
+        assert runner_image(d / "imagedata.json",
+                            d / "os-release") == "ubuntu-24.04-arm"
+        # Without the runner's image data the host names its own release.
+        assert runner_image(d / "absent.json",
+                            d / "os-release") == "ubuntu-24.04"
+        assert runner_image(d / "absent.json", d / "absent") == ""
+        (d / "empty.json").write_text("[]")
+        assert runner_image(d / "empty.json", d / "absent") == ""
+
+        out = d / "perf.json"
+        write_json(out, [], ["fib.c"],
+                   [Result(compiler="badc -O", fixture="fib.c",
+                           binary_bytes=18224, median_ms=103.04,
+                           compile_ms=32.21)])
+        doc = json.loads(out.read_text())
+        assert doc["schema"] == 2, doc["schema"]
+        assert doc["machine"]["runner"] == "local", doc["machine"]
+        assert "" not in doc["machine"].values(), doc["machine"]
+        assert doc["results"] == [
+            {"fixture": "fib.c", "compiler": "badc -O", "run_ms": 103.04,
+             "compile_ms": 32.2, "binary_bytes": 18224}], doc["results"]
+    print("[perf run] self-test OK")
+    return 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--json", type=Path, metavar="PATH",
                     help="also write the run as JSON, for the performance page")
     ap.add_argument("--only", metavar="A.c,B.c",
                     help="run these fixtures instead of the whole set")
+    ap.add_argument("--self-test", action="store_true",
+                    help="check the record shape; compile nothing")
     args = ap.parse_args()
+    if args.self_test:
+        return self_test()
 
     compilers = probe_compilers()
     if not compilers:

@@ -74,6 +74,8 @@ jobs:
           python3 demos/kernel/smoke.py --self-test
           python3 scripts/snapshots.py --self-test
           python3 scripts/validate_local_boxes.py --self-test
+          python3 tests/perf/run.py --self-test
+          python3 scripts/perf_publish.py --self-test
           python3 scripts/perf_backfill.py --self-test
       # Sources and docs are ASCII-only. Smart quotes / em dashes /
       # arrows tend to sneak in via copy-paste and rendered editor
@@ -1083,6 +1085,17 @@ jobs:
             echo ""
             cat /tmp/perf.md
           } >> "$GITHUB_STEP_SUMMARY"
+      - name: cpython build comparison (badc/clang, -O0/-O)
+        # Builds the interpreter four times (badc and clang, each at -O0 and
+        # -O) and reports per-binary section sizes plus a runtime
+        # microbenchmark. Its benchmark column is the `benches` section of the
+        # record published below, so it runs before that step.
+        # continue-on-error so a build/bench hiccup leaves the fib/qsort table
+        # intact in the summary and still publishes the run.
+        continue-on-error: true
+        run: |
+          python3 demos/python/compare_compilers.py | tee /tmp/cpython_cmp.md
+          cat /tmp/cpython_cmp.md >> "$GITHUB_STEP_SUMMARY"
       - name: publish the run to badc-perf-data
         # The page at badc.dev/performance reads the runs where they live, so
         # a run reaches it by landing in that repository. A push, or a pull
@@ -1105,6 +1118,12 @@ jobs:
           export GIT_SSH_COMMAND="ssh -i ~/.ssh/perf_data -o IdentitiesOnly=yes"
           repo="$RUNNER_TEMP/perf-data"
           git clone --depth 1 git@github.com:kromych/badc-perf-data.git "$repo"
+          # The CPython comparison ran in the step above when it could; its
+          # benchmark column becomes the record's `benches`.
+          benches=""
+          if [ -s /tmp/cpython_cmp.md ]; then
+            benches="--benches /tmp/cpython_cmp.md"
+          fi
           # Both lanes of the matrix publish to the same branch: on a
           # rejected push, take the tip the other lane wrote and file again.
           for attempt in 1 2 3 4 5; do
@@ -1114,22 +1133,13 @@ jobs:
             python3 scripts/perf_publish.py --data /tmp/perf.json --repo "$repo" \
               --sha "${{ github.event.pull_request.head.sha || github.sha }}" \
               --branch "${{ github.head_ref || github.ref_name }}" \
-              --runner "${{ matrix.os }}" --run-id "$GITHUB_RUN_ID"
+              --runner "${{ matrix.os }}" $benches --run-id "$GITHUB_RUN_ID"
             if git -C "$repo" push origin HEAD:main; then exit 0; fi
             git -C "$repo" fetch --depth 1 origin main
             git -C "$repo" reset --hard FETCH_HEAD
           done
           echo "the run did not publish in five attempts" >&2
           exit 1
-      - name: cpython build comparison (badc/clang, -O0/-O)
-        # Builds the interpreter four times (badc and clang, each at -O0 and
-        # -O) and reports per-binary section sizes plus a runtime
-        # microbenchmark. continue-on-error so a build/bench hiccup leaves the
-        # fib/qsort table intact in the summary.
-        continue-on-error: true
-        run: |
-          python3 demos/python/compare_compilers.py | tee /tmp/cpython_cmp.md
-          cat /tmp/cpython_cmp.md >> "$GITHUB_STEP_SUMMARY"
       - name: quickjs engine comparison (badc/clang, -O0/-O)
         # Builds the engine four times from the smoke's recipe and runs a
         # bounded subset of QuickJS's own microbench through each, so the

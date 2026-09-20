@@ -1084,10 +1084,13 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
       - name: publish the run to badc-perf-data
         # The page at badc.dev/performance reads the runs where they live, so
-        # a run reaches it by landing in that repository. Only on a push: a
-        # pull request from a fork receives no secret, and a run of a branch
-        # nobody merged measures a commit the history does not carry.
-        if: ${{ github.event_name == 'push' }}
+        # a run reaches it by landing in that repository. A push, or a pull
+        # request whose head is in this repository: a fork's pull request is
+        # handed no secret, and the work on a release branch reaches CI as a
+        # pull request, which is where most of the history was measured.
+        if: >-
+          ${{ github.event_name == 'push'
+              || github.event.pull_request.head.repo.full_name == github.repository }}
         env:
           DEPLOY_KEY: ${{ secrets.PERF_DATA_DEPLOY_KEY }}
         run: |
@@ -1104,8 +1107,12 @@ jobs:
           # Both lanes of the matrix publish to the same branch: on a
           # rejected push, take the tip the other lane wrote and file again.
           for attempt in 1 2 3 4 5; do
+            # On a pull request the checkout is the merge commit and the ref
+            # name is `<number>/merge`; the record keys the head commit and
+            # the branch the work is on.
             python3 scripts/perf_publish.py --data /tmp/perf.json --repo "$repo" \
-              --sha "$GITHUB_SHA" --branch "$GITHUB_REF_NAME" \
+              --sha "${{ github.event.pull_request.head.sha || github.sha }}" \
+              --branch "${{ github.head_ref || github.ref_name }}" \
               --runner "${{ matrix.os }}" --run-id "$GITHUB_RUN_ID"
             if git -C "$repo" push origin HEAD:main; then exit 0; fi
             git -C "$repo" fetch --depth 1 origin main

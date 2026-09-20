@@ -4,9 +4,10 @@ Each fixture under `tests/perf/` is compiled by every compiler present on the
 machine and run three times; a bar is the median of the three. Shorter is
 better in each chart. A bar carries its measured value and its multiple of
 `badc -O` in the same chart, the column `tests/perf/run.py` prints as
-`vs badc -O`. A chart holds one machine, so the numbers carry within a chart
-and not between machines: CI measures the same commit on both runners and the
-page draws each of them.
+`vs badc -O`; a chart that has no `badc -O` row takes its smallest bar as the
+reference and marks it `ref`. A chart holds one machine, so the numbers carry
+within a chart and not between machines: CI measures the same commit on both
+runners and the page draws each of them.
 
 The runs live in [badc-perf-data](https://github.com/kromych/badc-perf-data),
 keyed by the commit they measured, and this page reads them where they are, so
@@ -269,10 +270,8 @@ repository serves the runs as files.</noscript>
   function latest(root, runs, total) {
     var head = el("div", "runs");
     runs.forEach(function (r) { head.appendChild(runLine(r.run, r.entry)); });
-    head.appendChild(el("div", "note", "A bar gives its value and its multiple of " +
-      REFERENCE + " in the same chart; a chart without that row takes its " +
-      "smallest bar as the reference and marks it. " + total + " run" +
-      (total === 1 ? "" : "s") + " published, newest first in the picker above."));
+    head.appendChild(el("div", "note", total + " run" + (total === 1 ? "" : "s") +
+      " published, newest first in the picker above."));
     root.appendChild(head);
 
     METRICS.forEach(function (metric) {

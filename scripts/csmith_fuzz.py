@@ -1432,7 +1432,14 @@ def main(argv: list[str] | None = None) -> int:
             if not gh.available and args.publish:
                 print("error: gh not found; cannot file findings", file=sys.stderr)
                 return 2
-            filed = publish(run, gh, day, run_location(), csmith, cases)
+            try:
+                filed = publish(run, gh, day, run_location(), csmith, cases)
+            except RuntimeError as error:
+                # The findings are in the summary and the report either way;
+                # what failed is the filing, and it has to be visible.
+                print(f"error: {error}", file=sys.stderr)
+                print(summary_markdown(run, "not filed"))
+                return 2
         mode = "filed" if args.publish else "dry run"
         summary = summary_markdown(run, f"{mode}, {filed} new signature(s)")
         print(summary)

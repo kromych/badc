@@ -22,6 +22,13 @@ run -- so a reduction that trades one panic for another is rejected.
 The reduced source is not compilable C in general: a reduction that keeps the
 failure is what is wanted, not one that keeps the program meaningful. Check
 what comes out before filing it.
+
+That matters most when the failure is a wrong answer rather than a crash.
+Deleting a `return` or an initialiser gives the program undefined behaviour,
+and two compilers are then free to disagree about it, so the reduction happily
+walks to a case that proves nothing. Make the test reject such a candidate --
+build the reference with `-Werror=return-type -Werror=uninitialized` and treat
+a build failure as uninteresting -- or keep the unreduced case as the evidence.
 """
 
 from __future__ import annotations

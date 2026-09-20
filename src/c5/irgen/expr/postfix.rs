@@ -204,6 +204,12 @@ impl<'a> Walker<'a> {
         mut args: CallArgs<'a>,
     ) -> Result<ValueId, WalkError> {
         let (conv, ty, fp_mask) = (args.conv, args.ty, args.fp_mask.clone());
+        // A returns-twice callee reached through a declaration of its own
+        // rather than through the header binding (`call_binding`) marks
+        // the caller just the same: the frame is re-entered either way.
+        if crate::c5::ir::returns_twice_fn_name(&self.symbols[sym as usize].name) {
+            b.mark_returns_twice();
+        }
         let callee_variadic = self.fun_is_variadic(sym);
         let abi = self.target.abi_for(conv);
         // `Symbol::params` records the pre-ellipsis parameters, so the

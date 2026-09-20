@@ -3549,19 +3549,35 @@ fn an_over_aligned_object_does_not_share_storage() {
 /// objects share storage however disjoint their scopes.
 #[test]
 fn a_returns_twice_call_bars_scope_sharing() {
-    let src = r#"
-        #include <setjmp.h>
+    let body = |decl: &str| {
+        alloc::format!(
+            r#"
+        {decl}
         void sink(unsigned *p);
         jmp_buf env;
         void twice(void)
-        {
+        {{
             if (setjmp(env)) return;
-            { unsigned a = 1; sink(&a); }
-            { unsigned b = 2; sink(&b); }
-        }
-        int main(void) { return 0; }
-    "#;
-    assert_eq!(coalesced_locals(src, "twice", true), 2);
+            {{ unsigned a = 1; sink(&a); }}
+            {{ unsigned b = 2; sink(&b); }}
+        }}
+        int main(void) {{ return 0; }}
+    "#
+        )
+    };
+    assert_eq!(
+        coalesced_locals(&body("#include <setjmp.h>"), "twice", true),
+        2
+    );
+    assert_eq!(
+        coalesced_locals(
+            &body("typedef long jmp_buf[32];\nint setjmp(jmp_buf env);"),
+            "twice",
+            true
+        ),
+        2,
+        "a callee declared in the unit rather than through the header counts too"
+    );
 }
 
 /// The declarations a `for` initializer and a variable-length array block

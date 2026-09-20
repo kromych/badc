@@ -365,15 +365,23 @@ fn store_kind_width(kind: super::super::ir::StoreKind) -> u32 {
     }
 }
 
+/// Bytes the prologue writes into a register-carried parameter's cell: the
+/// argument register, whole, at every declared width. The rest of the cell
+/// it never writes.
+const PARAM_HOME_BYTES: u32 = 8;
+
 /// `mask[i]`: the body's first access to parameter `i`'s frame cell is a
-/// store in the entry block, wide enough for every surviving load of the
-/// cell, and nothing takes the cell's address. The entry block dominates
-/// the function, so that store precedes every read and the incoming value
-/// the prologue would put there has no reader (C99 6.2.4p2). It is the
-/// `-O0` shape: the walker seeds each parameter's cell from its `ParamRef`
-/// and the body reads it back at the declared width. The cell stays
-/// observed, so a caller sizing the cell region reads
-/// [`scan_param_slot_usage`] instead.
+/// store in the entry block that covers every byte a reader can see. The
+/// entry block dominates the function and runs once, so that store
+/// precedes every read -- including one through an address the body takes
+/// later, since taking it is itself an access this scan orders -- and the
+/// incoming value the prologue would put there has no reader (C99
+/// 6.2.4p2). It is the `-O0` shape: the walker seeds each parameter's cell
+/// from its `ParamRef` and the body reads it back at the declared width.
+/// Coverage is the widest surviving `LoadLocal`, and [`PARAM_HOME_BYTES`]
+/// besides once the address is taken: a read through an address names no
+/// width here. The cell stays observed, so a caller sizing the cell region
+/// reads [`scan_param_slot_usage`] instead.
 pub(crate) fn param_cell_written_first(
     func: &super::super::ir::FunctionSsa,
     alloc: &super::reg_alloc::Allocation,
@@ -417,7 +425,14 @@ pub(crate) fn param_cell_written_first(
         }
     }
     (0..n_params)
-        .map(|c| !escapes[c] && written[c] > 0 && written[c] >= widest_load[c])
+        .map(|c| {
+            let covers = if escapes[c] {
+                widest_load[c].max(PARAM_HOME_BYTES)
+            } else {
+                widest_load[c]
+            };
+            written[c] > 0 && written[c] >= covers
+        })
         .collect()
 }
 

@@ -2994,39 +2994,6 @@ fn x64_is_store(i: &X64Insn) -> bool {
 
 const RBP: u8 = 5;
 
-/// A parameter read wider than the body's own store of it: the prologue's
-/// home store keeps a reader, so it is the store under test below.
-const WIDE: &str = "long double wide(double d) { return *(long double *)&d; }\n";
-
-/// The prologue stores a floating parameter out of its own register bank;
-/// the general bank is not a stop on the way to the cell.
-#[test]
-fn a_floating_parameter_homes_from_its_own_bank() {
-    let mut m = Misses::default();
-    let ws = a64(WIDE, "wide");
-    let home = ws
-        .iter()
-        .position(|&w| a64_mem_imm(w).is_some_and(|(rn, st, _)| rn == 29 && st));
-    m.expect(
-        match home {
-            Some(h) => {
-                a64_mem_imm(ws[h]).is_some_and(|(_, _, fp)| fp)
-                    && !ws[..h].iter().any(|&w| a64_fmov_d_to_x(w))
-            }
-            None => false,
-        },
-        || format!("aarch64 wide: the home store crosses banks: {ws:08x?}"),
-    );
-    let insns = x64(WIDE, "wide");
-    let home = insns
-        .iter()
-        .find(|i| x64_is_store(i) && i.mem_base() == Some(RBP));
-    m.expect(home.is_some_and(|i| i.op == 0x0F11), || {
-        format!("x86-64 wide: the home store crosses banks: {insns:x?}")
-    });
-    m.finish();
-}
-
 /// Type punning through the address of a parameter (#1159's shape): one
 /// store of the incoming register into the slot and one read of it back.
 const BITS: &str = "unsigned long long bits(double d) { return *(unsigned long long *)&d; }\n";
@@ -3064,6 +3031,83 @@ fn a_load_through_a_local_address_folds_the_frame_offset() {
             .any(|i| i.op == 0x8D && i.mem_base() == Some(RBP)),
         || format!("x86-64 keep: the escaping address is gone: {insns:x?}"),
     );
+    m.finish();
+}
+
+/// An address-taken parameter whose slot the body writes first is stored
+/// once: the prologue's home store has no reader and is dropped.
+#[test]
+fn an_address_taken_parameter_is_homed_once() {
+    let mut m = Misses::default();
+    let ws = a64(BITS, "bits");
+    let stores = ws
+        .iter()
+        .filter(|&&w| a64_mem_imm(w).is_some_and(|(rn, st, _)| rn == 29 && st))
+        .count();
+    m.expect(stores == 1, || {
+        format!("aarch64 bits: {stores} stores into the frame: {ws:08x?}")
+    });
+    let insns = x64(BITS, "bits");
+    let stores = insns
+        .iter()
+        .filter(|i| x64_is_store(i) && i.mem_base() == Some(RBP))
+        .count();
+    m.expect(stores == 1, || {
+        format!("x86-64 bits: {stores} stores into the frame: {insns:x?}")
+    });
+    // The escaping address leaves the body no store of its own, so the
+    // prologue's home store is the one that survives.
+    let ws = a64(KEEP, "keep");
+    let stores = ws
+        .iter()
+        .filter(|&&w| a64_mem_imm(w).is_some_and(|(rn, st, _)| rn == 29 && st))
+        .count();
+    m.expect(stores == 1, || {
+        format!("aarch64 keep: {stores} stores into the frame: {ws:08x?}")
+    });
+    // A body store narrower than the read past it leaves the prologue's
+    // bytes observable, so both stores stand.
+    let insns = x64(WIDE, "wide");
+    let stores = insns
+        .iter()
+        .filter(|i| x64_is_store(i) && i.mem_base() == Some(RBP))
+        .count();
+    m.expect(stores == 2, || {
+        format!("x86-64 wide: {stores} stores into the frame: {insns:x?}")
+    });
+    m.finish();
+}
+
+/// A parameter read wider than the body's own store of it: the prologue's
+/// home store keeps a reader, so it is the store under test below.
+const WIDE: &str = "long double wide(double d) { return *(long double *)&d; }\n";
+
+/// The prologue stores a floating parameter out of its own register bank;
+/// the general bank is not a stop on the way to the cell.
+#[test]
+fn a_floating_parameter_homes_from_its_own_bank() {
+    let mut m = Misses::default();
+    let ws = a64(WIDE, "wide");
+    let home = ws
+        .iter()
+        .position(|&w| a64_mem_imm(w).is_some_and(|(rn, st, _)| rn == 29 && st));
+    m.expect(
+        match home {
+            Some(h) => {
+                a64_mem_imm(ws[h]).is_some_and(|(_, _, fp)| fp)
+                    && !ws[..h].iter().any(|&w| a64_fmov_d_to_x(w))
+            }
+            None => false,
+        },
+        || format!("aarch64 wide: the home store crosses banks: {ws:08x?}"),
+    );
+    let insns = x64(WIDE, "wide");
+    let home = insns
+        .iter()
+        .find(|i| x64_is_store(i) && i.mem_base() == Some(RBP));
+    m.expect(home.is_some_and(|i| i.op == 0x0F11), || {
+        format!("x86-64 wide: the home store crosses banks: {insns:x?}")
+    });
     m.finish();
 }
 

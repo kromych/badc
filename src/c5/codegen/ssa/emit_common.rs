@@ -2063,6 +2063,13 @@ pub(crate) fn lower_unit<B: LowerTarget>(
                 }
             }
         });
+        // An aggregate built in a frame temporary and copied once is
+        // built in the destination instead. Runs after sroa, whose
+        // register budget leaves the wider objects in memory, and
+        // before the frame is packed, so the temporary's cells go.
+        time_pass_arch("passes::copy_elide::run", B::ARCH, || {
+            super::super::passes::copy_elide::run(&mut ssa_funcs);
+        });
         // Rotate idiom recognition: collapses `(x >> c) | (x << (W -
         // c))` chains to `BinopI(Ror, x, c)`. Runs after the inliner
         // so post-inline parameter substitutions expose the constant

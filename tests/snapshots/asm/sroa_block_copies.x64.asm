@@ -427,76 +427,26 @@ Disassembly of section .text:
                	retq
 
 <array_member_copy>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	leaq	-0x10(%rbp), %rax
                	xorps	%xmm14, %xmm14
-               	movups	%xmm14, (%rax)
-               	movq	%rsi, (%rax)
-               	leaq	0x5(%rsi), %rcx
-               	movq	%rcx, 0x8(%rax)
-               	pushq	%rcx
-               	movq	(%rax), %rcx
-               	movq	%rcx, (%rdi)
-               	movq	0x8(%rax), %rcx
-               	movq	%rcx, 0x8(%rdi)
-               	popq	%rcx
-               	leave
+               	movups	%xmm14, (%rdi)
+               	movq	%rsi, (%rdi)
+               	leaq	0x5(%rsi), %rax
+               	movq	%rax, 0x8(%rdi)
                	retq
 
 <wide_copy>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x80, %rsp
-               	leaq	-0x80(%rbp), %rax
                	xorps	%xmm14, %xmm14
-               	movups	%xmm14, (%rax)
-               	movups	%xmm14, 0x10(%rax)
-               	movups	%xmm14, 0x20(%rax)
-               	movups	%xmm14, 0x30(%rax)
-               	movups	%xmm14, 0x40(%rax)
-               	movups	%xmm14, 0x50(%rax)
-               	movups	%xmm14, 0x60(%rax)
-               	movups	%xmm14, 0x70(%rax)
-               	movq	%rsi, (%rax)
-               	leaq	0x1(%rsi), %rcx
-               	movq	%rcx, 0x78(%rax)
-               	pushq	%rcx
-               	movq	(%rax), %rcx
-               	movq	%rcx, (%rdi)
-               	movq	0x8(%rax), %rcx
-               	movq	%rcx, 0x8(%rdi)
-               	movq	0x10(%rax), %rcx
-               	movq	%rcx, 0x10(%rdi)
-               	movq	0x18(%rax), %rcx
-               	movq	%rcx, 0x18(%rdi)
-               	movq	0x20(%rax), %rcx
-               	movq	%rcx, 0x20(%rdi)
-               	movq	0x28(%rax), %rcx
-               	movq	%rcx, 0x28(%rdi)
-               	movq	0x30(%rax), %rcx
-               	movq	%rcx, 0x30(%rdi)
-               	movq	0x38(%rax), %rcx
-               	movq	%rcx, 0x38(%rdi)
-               	movq	0x40(%rax), %rcx
-               	movq	%rcx, 0x40(%rdi)
-               	movq	0x48(%rax), %rcx
-               	movq	%rcx, 0x48(%rdi)
-               	movq	0x50(%rax), %rcx
-               	movq	%rcx, 0x50(%rdi)
-               	movq	0x58(%rax), %rcx
-               	movq	%rcx, 0x58(%rdi)
-               	movq	0x60(%rax), %rcx
-               	movq	%rcx, 0x60(%rdi)
-               	movq	0x68(%rax), %rcx
-               	movq	%rcx, 0x68(%rdi)
-               	movq	0x70(%rax), %rcx
-               	movq	%rcx, 0x70(%rdi)
-               	movq	0x78(%rax), %rcx
-               	movq	%rcx, 0x78(%rdi)
-               	popq	%rcx
-               	leave
+               	movups	%xmm14, (%rdi)
+               	movups	%xmm14, 0x10(%rdi)
+               	movups	%xmm14, 0x20(%rdi)
+               	movups	%xmm14, 0x30(%rdi)
+               	movups	%xmm14, 0x40(%rdi)
+               	movups	%xmm14, 0x50(%rdi)
+               	movups	%xmm14, 0x60(%rdi)
+               	movups	%xmm14, 0x70(%rdi)
+               	movq	%rsi, (%rdi)
+               	leaq	0x1(%rsi), %rax
+               	movq	%rax, 0x78(%rdi)
                	retq
 
 <fp_copy>:

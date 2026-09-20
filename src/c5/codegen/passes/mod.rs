@@ -6,6 +6,7 @@ pub(crate) mod byteload;
 pub(crate) mod const_global_fold;
 pub(crate) mod constfold;
 pub(crate) mod constfold_branch;
+pub(crate) mod copy_elide;
 pub(crate) mod cse;
 pub(crate) mod divmod_const;
 pub(crate) mod divmod_pair;

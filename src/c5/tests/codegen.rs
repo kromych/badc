@@ -8672,10 +8672,13 @@ fn copy_between_two_locals_keeps_neither_in_memory() {
     }
 }
 
-/// An aggregate holding an array, or of more cells than the usable GPR file
-/// on either target, keeps its block copy out.
+/// An aggregate holding an array, or of more cells than the usable GPR
+/// file on either target, stays in memory: the field splitter declines
+/// it and its initializer keeps writing memory. The initializer writes
+/// the destination and no copy follows, since the temporary the walker
+/// staged is written whole in the block that copied it.
 #[test]
-fn size_bound_keeps_block_copies_out() {
+fn size_bound_keeps_the_object_in_memory() {
     const SRC: &str = "struct arr { long a[2]; };\n\
         struct q4 { long a, b, c, d; };\n\
         struct wide { struct q4 a, b, c, d, e, f, g, h; };\n\
@@ -8695,10 +8698,16 @@ fn size_bound_keeps_block_copies_out() {
                 .find(|(_, i)| i.starts_with("ParamRef(0"))
                 .map(|(id, _)| *id)
                 .expect("the pointer");
-            let copy = alloc::format!("Mcpy {{ dst=v{param}, ");
             assert!(
-                insts.iter().any(|(_, i)| i.starts_with(&copy)),
-                "{target:?}: {name} keeps its block copy: {body}"
+                !insts.iter().any(|(_, i)| i.starts_with("Mcpy {")),
+                "{target:?}: {name} keeps a copy: {body}"
+            );
+            let writes = alloc::format!("v{param},");
+            assert!(
+                insts.iter().any(|(_, i)| {
+                    (i.starts_with("Store {") || i.starts_with("Mzero {")) && i.contains(&writes)
+                }),
+                "{target:?}: {name} writes the destination: {body}"
             );
         }
     }
@@ -9113,17 +9122,25 @@ fn split_object_is_reported_for_the_debug_location_drop() {
     }
 }
 
+/// A compound literal holding an array is an object of its own (C99
+/// 6.5.2.5p5) that the field splitter declines, so its initializer
+/// stays in memory -- and writes the destination, since nothing between
+/// the writes and the copy can reach it.
 #[test]
-fn literal_holding_an_array_keeps_its_block_copy() {
+fn literal_holding_an_array_is_built_in_place() {
     const SRC: &str = "struct arr { long a[2]; };\n\
         void literal(struct arr *out, long x) { *out = (struct arr){{x, x + 5}}; }\n";
     for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
         let (body, insts) = optimized_function_full_pool(SRC, "literal", target);
         let out = inst_id(&insts, "ParamRef(0", &body);
-        let copy = alloc::format!("Mcpy {{ dst=v{out}, ");
         assert!(
-            has_inst(&insts, &[copy.as_str()]) && stores_through(&insts, out).is_empty(),
-            "{target:?}: the literal is copied whole: {body}"
+            !insts.iter().any(|(_, i)| i.starts_with("Mcpy {")),
+            "{target:?}: the literal is still copied: {body}"
+        );
+        assert_eq!(
+            stores_through(&insts, out).len(),
+            2,
+            "{target:?}: both elements are written through the parameter: {body}"
         );
     }
 }

@@ -16,6 +16,11 @@ within a chart and not between machines: CI measures the same commit on every
 runner and the page draws each of them, with the machine named above its
 charts.
 
+A record lists the compilers that ran on its machine, so the set differs by
+platform: gcc where gcc exists, a `-march` baseline leg where the compiler
+takes one, `cl` on a Windows runner. The page draws what a record carries,
+badc first.
+
 The runs live in [badc-perf-data](https://github.com/kromych/badc-perf-data),
 keyed by the commit they measured, and this page reads them where they are, so
 a new run appears without rebuilding the site.
@@ -65,6 +70,7 @@ serves the runs as files.
 #perf .name { font-size: 85%; white-space: nowrap; }
 #perf .track { background: #eaeef2; border-radius: 2px; }
 #perf .bar { height: .75rem; border-radius: 2px; background: #8c959f; }
+#perf .bar.level { background: #57606a; }
 #perf .bar.badc { background: #0969da; }
 #perf .val, #perf .ratio { font-size: 85%; white-space: nowrap;
   font-variant-numeric: tabular-nums; }
@@ -102,6 +108,10 @@ serves the runs as files.
     { key: "compile_ms", label: "Compile time (ms)", scale: 1, digits: 0 },
     { key: "binary_bytes", label: "Binary size (KiB)", scale: 1024, digits: 1 }
   ];
+
+  // Draw order for the compilers of a record, whichever ones it lists: badc
+  // first, then the reference compilers, then what a runner adds of its own.
+  var FAMILIES = ["badc", "tcc", "clang", "gcc", "cl"];
 
   function el(tag, cls, text) {
     var n = document.createElement(tag);
@@ -151,12 +161,49 @@ serves the runs as files.
     return taken ? String(taken).slice(0, 16).replace("T", " ") : "";
   }
 
-  function compilers(run) {
+  function names(run) {
     var out = [];
-    (run.compilers || []).forEach(function (c) { if (c) push(out, c.name); });
-    (run.results || []).forEach(function (r) { if (r) push(out, r.compiler); });
-    (run.benches || []).forEach(function (b) { if (b) push(out, b.compiler); });
+    ((run && run.compilers) || []).forEach(function (c) {
+      if (c) push(out, c.name);
+    });
+    ((run && run.results) || []).forEach(function (r) {
+      if (r) push(out, r.compiler);
+    });
+    ((run && run.benches) || []).forEach(function (b) {
+      if (b) push(out, b.compiler);
+    });
     return out;
+  }
+
+  function family(name) {
+    var i = FAMILIES.indexOf(String(name).split(" ")[0]);
+    return i < 0 ? FAMILIES.length : i;
+  }
+
+  // One view of the compilers behind the runs on screen: the order their
+  // bars take, and what a record says about each of them. `results` may list
+  // them in any order and two records need not list the same set, so the
+  // order is the page's and not the file's.
+  function legsOf(runs) {
+    var pos = {}, info = {}, n = 0;
+    runs.forEach(function (run) {
+      ((run && run.compilers) || []).forEach(function (c) {
+        if (!c || !c.name) return;
+        if (pos[c.name] === undefined) { pos[c.name] = n; n += 1; }
+        if (!info[c.name]) info[c.name] = c;
+      });
+    });
+    function cmp(x, y) {
+      var px = pos[x], py = pos[y];
+      return family(x) - family(y) ||
+        (px === undefined ? 1e6 : px) - (py === undefined ? 1e6 : py) ||
+        (x < y ? -1 : x > y ? 1 : 0);
+    }
+    return {
+      cmp: cmp,
+      info: function (name) { return info[name] || null; },
+      sort: function (list) { return list.slice().sort(cmp); }
+    };
   }
 
   // A run is drawn as a list of corpora: the fixture table first, then one
@@ -217,7 +264,7 @@ serves the runs as files.
     return { row: named || best, named: !!named };
   }
 
-  function chart(title, href, records, metric) {
+  function chart(title, href, records, metric, legs) {
     var rows = [];
     records.forEach(function (r) {
       if (num(r[metric.key])) {
@@ -226,6 +273,7 @@ serves the runs as files.
       }
     });
     if (!rows.length) return null;
+    rows.sort(function (p, q) { return legs.cmp(p.compiler, q.compiler); });
 
     var box = el("div", "chart");
     var head = el("h4");
@@ -239,7 +287,9 @@ serves the runs as files.
     rows.forEach(function (r) {
       bars.appendChild(el("span", "name", r.compiler));
       var track = el("div", "track");
-      var bar = el("div", "bar" + (/^badc/.test(r.compiler) ? " badc" : ""));
+      var leg = legs.info(r.compiler);
+      var bar = el("div", "bar" + (/^badc/.test(r.compiler) ? " badc" : "") +
+        (leg && leg.level ? " level" : ""));
       bar.style.width = (max > 0 ? (100 * r.value / max) : 0) + "%";
       track.appendChild(bar);
       bars.appendChild(track);
@@ -256,9 +306,26 @@ serves the runs as files.
     return box;
   }
 
+  // The toolchain that produced the bars, one line per version a record
+  // gives. A record that names no version adds no line: the chart labels
+  // already carry the compiler names.
+  function toolchain(run, legs) {
+    var order = [], by = {}, any = false;
+    legs.sort(names(run)).forEach(function (n) {
+      var c = legs.info(n), v = (c && c.version) || "";
+      if (v) any = true;
+      if (!by[v]) { by[v] = []; order.push(v); }
+      by[v].push(n);
+    });
+    if (!any) return [];
+    return order.map(function (v) {
+      return by[v].join(", ") + (v ? DOT + v : "");
+    });
+  }
+
   // One block per machine on screen, so a comparison says on sight which two
   // it holds.
-  function runBlock(run, entry, side) {
+  function runBlock(run, entry, legs, side) {
     var m = machine(run), pre = el("pre"), bits = [];
     if (side) bits.push(side);
     push(bits, [m.arch, m.system].filter(Boolean).join(" "));
@@ -269,10 +336,6 @@ serves the runs as files.
     if (num(run.runs_per_fixture)) {
       bits.push("median of " + run.runs_per_fixture + " runs");
     }
-    var named = (run.compilers || []).map(function (c) {
-      return c.version ? c.name + " (" + c.version + ")" : c.name;
-    }).filter(Boolean);
-    if (named.length) bits.push(named.join("; "));
     pre.appendChild(txt(bits.join(DOT)));
 
     var sha = commit((run.commit && run.commit.sha) || (entry && entry.sha));
@@ -294,6 +357,9 @@ serves the runs as files.
       pre.appendChild(url ? anchor(what, url) : txt(what));
     }
 
+    toolchain(run, legs).forEach(function (line) {
+      pre.appendChild(txt("\n  " + line));
+    });
     var box = el("p", "run");
     box.appendChild(pre);
     return box;
@@ -302,9 +368,10 @@ serves the runs as files.
   // Every runner of one commit, each with its own chart grids: a bar is only
   // ever scaled against bars measured on the same host.
   function latest(root, shown) {
+    var legs = legsOf(shown.map(function (s) { return s.run; }));
     var head = el("div", "runs");
     shown.forEach(function (s) {
-      head.appendChild(runBlock(s.run, s.entry));
+      head.appendChild(runBlock(s.run, s.entry, legs));
     });
     root.appendChild(head);
 
@@ -318,7 +385,7 @@ serves the runs as files.
           c.charts.forEach(function (ch) {
             var href = c.code && sha ? CODE + sha + "/" + FIXTURES + "/" +
               encodeURIComponent(ch.title) : null;
-            var box = chart(ch.title, href, ch.records, metric);
+            var box = chart(ch.title, href, ch.records, metric, legs);
             if (box) grid.appendChild(box);
           });
           if (!grid.children.length) return;
@@ -411,13 +478,14 @@ serves the runs as files.
   }
 
   function compare(root, a, b) {
+    var legs = legsOf([a.run, b.run]);
     var head = el("div", "runs");
-    head.appendChild(runBlock(a.run, a.entry, "A"));
-    head.appendChild(runBlock(b.run, b.entry, "B"));
+    head.appendChild(runBlock(a.run, a.entry, legs, "A"));
+    head.appendChild(runBlock(b.run, b.entry, legs, "B"));
     root.appendChild(head);
 
-    var who = compilers(a.run);
-    compilers(b.run).forEach(function (c) { push(who, c); });
+    var who = legs.sort(names(a.run).concat(names(b.run)).filter(
+      function (n, i, all) { return all.indexOf(n) === i; }));
 
     METRICS.forEach(function (metric) {
       var body = el("div"), suites = [];

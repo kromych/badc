@@ -1503,6 +1503,7 @@ fn store_indexed_spilled_operands_precompute_address() {
     let mut code = Vec::new();
     let ok = emit_store_indexed(
         &mut code,
+        0,
         Place::None,
         base,
         (index, IndexExt::None),
@@ -1651,6 +1652,7 @@ fn byte_indexed_access_is_unscaled() {
         let mut code = Vec::new();
         emit_store_indexed(
             &mut code,
+            0,
             Place::None,
             base,
             (index, IndexExt::None),
@@ -1752,6 +1754,7 @@ fn word_index_widens_in_the_access() {
             let mut code = Vec::new();
             emit_store_indexed(
                 &mut code,
+                0,
                 Place::None,
                 base,
                 (index, ext),
@@ -1828,6 +1831,7 @@ fn fp_store_keeps_its_spilled_address_across_the_value_reload() {
         let kind = want;
         emit_store(
             &mut code,
+            0,
             Place::None,
             addr,
             disp,

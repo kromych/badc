@@ -148,6 +148,7 @@ pub(super) fn emit_inst(
             ..
         } => emit_store(
             code,
+            v,
             dst,
             *addr,
             *disp,
@@ -170,7 +171,9 @@ pub(super) fn emit_inst(
         ),
         Inst::StoreLocal {
             off, value, kind, ..
-        } => emit_store_local(code, dst, *off, *value, *kind, alloc, func, frame, scratch),
+        } => emit_store_local(
+            code, v, dst, *off, *value, *kind, alloc, func, frame, scratch,
+        ),
         Inst::LoadIndexed {
             base,
             index,
@@ -197,6 +200,7 @@ pub(super) fn emit_inst(
             kind,
         } => emit_store_indexed(
             code,
+            v,
             dst,
             *base,
             (*index, *index_ext),

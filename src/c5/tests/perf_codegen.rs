@@ -3177,3 +3177,94 @@ fn a_local_access_folds_only_where_the_slot_form_says_the_same_thing() {
     );
     m.finish();
 }
+
+/// `fmov <Dd>, <Xn>` / `fmov <Sd>, <Wn>`: the general-to-vector transfers.
+fn a64_fmov_x_to_d(w: u32) -> bool {
+    matches!(w & 0xFFFE_0000, 0x9E67_0000 | 0x1E27_0000)
+}
+
+/// `mov <Xd>, #0` in either of the forms the emit builds a zero with.
+fn a64_builds_zero(w: u32) -> bool {
+    // `movz Rd, #0` and `orr Rd, xzr, #0`-style `mov Rd, #imm`.
+    (w & 0x7F80_0000 == 0x5280_0000 && (w >> 5) & 0xFFFF == 0)
+        || (w & 0x7F80_0000 == 0x1280_0000 && (w >> 5) & 0xFFFF == 0)
+}
+
+/// Stores of a zero at every integer width and at `double`, beside a
+/// non-zero constant the same shape has to keep in a register.
+const ZEROS: &str = "struct s { long a; int b; short c; char d; };\n\
+    void zero(struct s *p) { p->a = 0; p->b = 0; p->c = 0; p->d = 0; }\n\
+    void zerod(double *p) { *p = 0.0; }\n\
+    void one(long *p) { *p = 1; }\n";
+
+/// A `double` store whose value the allocator put in the general bank: an
+/// integer reader of the same constant keeps it out of the FP file.
+const GPR_FP_STORE: &str = "long via_gpr(double *p, long n) { *p = 0.0; return n ? 0 : 1; }\n";
+
+/// A store of zero writes the zero register: no constant is built, and
+/// every width has a form that reads xzr / wzr.
+#[test]
+fn a_store_of_zero_reads_the_zero_register() {
+    let mut m = Misses::default();
+    for name in ["zero", "zerod"] {
+        let ws = a64(ZEROS, name);
+        let stores: Vec<u32> = ws
+            .iter()
+            .filter(|&&w| a64_mem_imm(w).is_some_and(|(_, st, _)| st))
+            .map(|&w| w & 31)
+            .collect();
+        m.expect(
+            stores.len() == if name == "zero" { 4 } else { 1 }
+                && stores.iter().all(|&rt| rt == 31)
+                && !ws.iter().any(|&w| a64_builds_zero(w)),
+            || format!("aarch64 {name}: the zero is built in a register: {ws:08x?}"),
+        );
+    }
+    // A constant with no register-free form still takes one.
+    let ws = a64(ZEROS, "one");
+    m.expect(
+        ws.iter()
+            .any(|&w| a64_mem_imm(w).is_some_and(|(_, st, _)| st) && w & 31 != 31),
+        || format!("aarch64 one: a non-zero constant reads xzr: {ws:08x?}"),
+    );
+    // x86-64 writes any constant from the instruction and is unchanged.
+    let insns = x64(ZEROS, "zero");
+    m.expect(
+        insns
+            .iter()
+            .filter(|i| matches!(i.op, 0xC6 | 0xC7) && i.mem_base().is_some())
+            .count()
+            == 4,
+        || format!("x86-64 zero: not four immediate stores: {insns:x?}"),
+    );
+    m.finish();
+}
+
+/// An FP-typed store of a value the allocator placed in the general bank
+/// issues from it: `str x` writes the bits `fmov` into a V register and
+/// `str d` would.
+#[test]
+fn a_floating_store_of_a_general_register_value_stays_in_the_bank() {
+    let mut m = Misses::default();
+    let ws = a64(GPR_FP_STORE, "via_gpr");
+    m.expect(
+        !ws.iter().any(|&w| a64_fmov_x_to_d(w))
+            && ws
+                .iter()
+                .any(|&w| a64_mem_imm(w).is_some_and(|(_, st, fp)| st && !fp)),
+        || format!("aarch64 via_gpr: the value crosses banks: {ws:08x?}"),
+    );
+    // A constant every reader takes in an FP register stays there, and a
+    // `double` narrowed to `float` needs the FP file for the conversion.
+    const FP: &str = "void setd(double *p) { *p = 3.5; }\n\
+        void narrow(float *p, double d) { *p = (float)d; }\n";
+    for name in ["setd", "narrow"] {
+        let ws = a64(FP, name);
+        m.expect(
+            ws.iter()
+                .any(|&w| a64_mem_imm(w).is_some_and(|(_, st, fp)| st && fp)),
+            || format!("aarch64 {name}: no floating store: {ws:08x?}"),
+        );
+    }
+    m.finish();
+}

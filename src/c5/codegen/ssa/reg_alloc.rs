@@ -278,11 +278,13 @@ fn zero_testable_load(inst: &Inst) -> bool {
     )
 }
 
-/// The `Imm` a store can write from its own encoding on `target` instead
-/// of a register: x86-64 has `mov mem, imm` at 1, 2, 4 and 8 bytes, which
-/// stores the constant's low bytes; the quadword form sign-extends 32 bits.
-/// A floating store qualifies when it writes the constant's own bits, not
-/// a conversion of them to the other width.
+/// The `Imm` a store can write without materializing it into a register
+/// on `target`: x86-64 has `mov mem, imm` at 1, 2, 4 and 8 bytes, which
+/// stores the constant's low bytes, the quadword form sign-extending 32
+/// bits; AArch64 has no store immediate but reads zero out of xzr / wzr,
+/// so it takes the zero constant alone. A floating store qualifies when it
+/// writes the constant's own bits, not a conversion of them to the other
+/// width.
 fn store_immediate(func: &FunctionSsa, inst: &Inst, target: Target) -> Option<ValueId> {
     let (value, kind) = match inst {
         Inst::Store { value, kind, .. }
@@ -299,14 +301,22 @@ fn store_immediate(func: &FunctionSsa, inst: &Inst, target: Target) -> Option<Va
         .get(value as usize)
         .copied()
         .unwrap_or(false);
+    // What the sub-word and the full-width forms reach on this target.
+    let (narrow, wide) = if target.is_x86_64() {
+        (true, i32::try_from(*k).is_ok())
+    } else if target.is_aarch64() {
+        (*k == 0, *k == 0)
+    } else {
+        (false, false)
+    };
     let fits = match kind {
-        StoreKind::I8 | StoreKind::I16 | StoreKind::I32 => true,
-        StoreKind::F32 => is_f32,
-        StoreKind::I64 => i32::try_from(*k).is_ok(),
-        StoreKind::F64 => !is_f32 && i32::try_from(*k).is_ok(),
+        StoreKind::I8 | StoreKind::I16 | StoreKind::I32 => narrow,
+        StoreKind::F32 => is_f32 && narrow,
+        StoreKind::I64 => wide,
+        StoreKind::F64 => !is_f32 && wide,
         StoreKind::F80 | StoreKind::F128 | StoreKind::V128 => false,
     };
-    (target.is_x86_64() && fits).then_some(value)
+    fits.then_some(value)
 }
 
 /// Per value: an `Imm` each reader of which takes in an FP register, where
@@ -5217,8 +5227,18 @@ int main(void) { return 0; }
             assert!(x64.is_unread(imm), "v{imm}");
         }
         assert!(x64.imm_store[15]);
+        // AArch64 has no store immediate, but reads zero out of xzr / wzr,
+        // so the F64 store of `Imm(0)` is the one store it marks.
         let a64 = allocate(&build(), Target::LinuxAarch64);
-        assert!(a64.imm_store.iter().all(|&m| !m));
+        let marked: alloc::vec::Vec<usize> = a64
+            .imm_store
+            .iter()
+            .enumerate()
+            .filter(|&(_, &m)| m)
+            .map(|(i, _)| i)
+            .collect();
+        assert_eq!(marked, [12]);
+        assert!(a64.is_unread(11));
         assert_eq!(a64.use_counts[13], 2);
     }
 
@@ -5260,6 +5280,13 @@ int main(void) { return 0; }
         }
         for imm in [1, 3, 5, 7, 9, 11, 13, 15, 17] {
             assert!(!x64.is_unread(imm), "v{imm}");
+        }
+        // The same on AArch64, where only zero has a register-free form:
+        // the F32 store of `Imm(0)` is not f32-marked and the F80 store has
+        // no single-register form at all.
+        let a64 = allocate(&f, Target::LinuxAarch64);
+        for store in [2, 4, 6, 8, 10, 12, 14, 16, 18, 19] {
+            assert!(!a64.imm_store[store], "store v{store}");
         }
     }
 

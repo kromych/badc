@@ -874,6 +874,72 @@ fn int_store_op(kind: StoreKind) -> Option<MemOp> {
     })
 }
 
+/// [`int_store_op`] at a floating kind's width: the general-register form
+/// that writes the same bytes.
+fn int_store_op_any_kind(kind: StoreKind) -> Option<MemOp> {
+    match kind {
+        StoreKind::F64 => Some(STR_X),
+        StoreKind::F32 => Some(STR_W),
+        k => int_store_op(k),
+    }
+}
+
+/// The general register a store issues from in place of its value's own
+/// place, with the form that writes the value's width.
+///
+/// Zero comes out of xzr / wzr: the allocator marks such a store and
+/// leaves the constant unmaterialized (`Allocation::imm_store`), so this
+/// is the only source it has. A floating store whose value already sits
+/// in the general bank issues from it too -- `str x` / `str w` writes the
+/// bit pattern that `fmov` into a V register and `str d` / `str s` would
+/// -- unless the store's own result is read, which wants the value in an
+/// FP register anyway (C99 6.5.16p3), or the value is a `double` the
+/// store narrows to `float`.
+fn int_store_source(
+    v: super::super::ir::ValueId,
+    kind: StoreKind,
+    value: u32,
+    dst: Place,
+    alloc: &Allocation,
+) -> Option<(MemOp, Reg)> {
+    let op = int_store_op_any_kind(kind)?;
+    if alloc.imm_store.get(v as usize).copied().unwrap_or(false) {
+        return Some((op, Reg(31)));
+    }
+    if dst != Place::None {
+        return None;
+    }
+    match (kind, place_of(alloc, value)) {
+        (StoreKind::F64, Place::IntReg(r)) => Some((op, Reg(r))),
+        (StoreKind::F32, Place::IntReg(r)) if alloc.is_f32(value) => Some((op, Reg(r))),
+        _ => None,
+    }
+}
+
+/// Store the low bytes of `rs` at `[rn + disp]` through `op`, in aligned
+/// pieces under `bound`.
+fn emit_int_store(
+    code: &mut Vec<u8>,
+    op: MemOp,
+    rs: Reg,
+    rn: Reg,
+    disp: i64,
+    bound: Option<u32>,
+    scratch: &ScratchPool,
+) {
+    let t = scratch_other(scratch, rn);
+    match bound {
+        Some(a) => {
+            let (base, off) = bound_base(code, rn, disp, op.size(), op.size(), a, t);
+            emit_narrow_store(code, rs, base, off, op.size(), a);
+        }
+        None => {
+            let (base, off) = mem_base(code, op, rn, disp, t);
+            emit(code, enc_mem(op, rs.0, base, off));
+        }
+    }
+}
+
 /// `Inst::Load`; `bound` is the address alignment proven under `-mstrict-align`.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_load(
@@ -1031,6 +1097,7 @@ pub(super) fn emit_load_local(
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_store_local(
     code: &mut Vec<u8>,
+    v: super::super::ir::ValueId,
     dst: Place,
     off: i64,
     value: u32,
@@ -1043,6 +1110,10 @@ pub(super) fn emit_store_local(
     let (base, disp) = local_slot_base(off, func, frame);
     let t = scratch.secondary;
     let value_place = place_of(alloc, value);
+    if let Some((op, rs)) = int_store_source(v, kind, value, dst, alloc) {
+        emit_mem(code, op, rs.0, base, disp, t);
+        return propagate_int(code, frame, dst, rs);
+    }
     if matches!(kind, StoreKind::F32) {
         return emit_store_local_f32(
             code,
@@ -1255,6 +1326,7 @@ pub(super) fn emit_load_indexed(
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_store_indexed(
     code: &mut Vec<u8>,
+    v: super::super::ir::ValueId,
     dst: Place,
     base: u32,
     (index, ext): (u32, IndexExt),
@@ -1314,7 +1386,9 @@ pub(super) fn emit_store_indexed(
         addr_reg = Some(scratch.primary);
         vscratch = scratch.secondary;
     }
-    let rv = if let StoreKind::I64 = kind
+    let rv = if let Some((_, rs)) = int_store_source(v, kind, value, dst, alloc) {
+        rs
+    } else if let StoreKind::I64 = kind
         && let Place::FpReg(dr) = value_place
     {
         emit(code, super::encode::enc_fmov_d_to_x(vscratch, dr));
@@ -1348,6 +1422,7 @@ pub(super) fn emit_store_indexed(
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_store(
     code: &mut Vec<u8>,
+    v: super::super::ir::ValueId,
     dst: Place,
     addr: u32,
     disp: i32,
@@ -1365,6 +1440,10 @@ pub(super) fn emit_store(
     let Some(rn) = materialize_int(code, place_of(alloc, addr), scratch.primary, frame) else {
         return fail("Store: addr not int reg / spill");
     };
+    if let Some((op, rs)) = int_store_source(v, kind, value, dst, alloc) {
+        emit_int_store(code, op, rs, rn, disp, bound, scratch);
+        return propagate_int(code, frame, dst, rs);
+    }
     let fp_value = |code: &mut Vec<u8>, single: bool| {
         reload_fp(
             code,

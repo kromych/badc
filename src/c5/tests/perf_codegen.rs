@@ -2271,6 +2271,8 @@ return v0 * v1 + v2 * v3 + v4 * v5 + v6 * v7 + v8 * v9 + v10 * v11;\n}\n";
 
 /// One function per count and width.
 const COUNTS: &str = "int clz32(unsigned x) { return __builtin_clz(x); }\n\
+int cls32(int x) { return __builtin_clrsb(x); }\n\
+int cls64(long long x) { return __builtin_clrsbll(x); }\n\
 int clz64(unsigned long long x) { return __builtin_clzll(x); }\n\
 int ctz32(unsigned x) { return __builtin_ctz(x); }\n\
 int ctz64(unsigned long long x) { return __builtin_ctzll(x); }\n\
@@ -2280,6 +2282,11 @@ int pop64(unsigned long long x) { return __builtin_popcountll(x); }\n";
 /// `clz Wd, Wn`, or `clz Xd, Xn` when `is64`.
 fn a64_clz(w: u32, is64: bool) -> bool {
     w & 0xFFFF_FC00 == if is64 { 0xDAC0_1000 } else { 0x5AC0_1000 }
+}
+
+/// `cls Wd, Wn`, or `cls Xd, Xn` when `is64`.
+fn a64_cls(w: u32, is64: bool) -> bool {
+    w & 0xFFFF_FC00 == if is64 { 0xDAC0_1400 } else { 0x5AC0_1400 }
 }
 
 /// `rbit Wd, Wn`, or `rbit Xd, Xn` when `is64`.
@@ -2329,8 +2336,8 @@ int l(unsigned long long x) { return __builtin_parityll(x); }\n";
         ("d", (BitCountOp::Ctz, 8)),
         ("e", (BitCountOp::Popcount, 4)),
         ("f", (BitCountOp::Popcount, 8)),
-        ("g", (BitCountOp::Clz, 4)),
-        ("h", (BitCountOp::Clz, 8)),
+        ("g", (BitCountOp::Clrsb, 4)),
+        ("h", (BitCountOp::Clrsb, 8)),
         ("i", (BitCountOp::Ctz, 4)),
         ("j", (BitCountOp::Ctz, 8)),
         ("k", (BitCountOp::Popcount, 4)),
@@ -2362,6 +2369,13 @@ fn a64_bit_counts_take_the_count_instructions() {
         let ws = a64(COUNTS, name);
         m.expect(ws.len() == 2 && a64_clz(ws[0], is64), || {
             format!("{name}: not one clz: {ws:08x?}")
+        });
+    }
+    // `__builtin_clrsb` is `cls`, one instruction at both widths.
+    for (name, is64) in [("cls32", false), ("cls64", true)] {
+        let ws = a64(COUNTS, name);
+        m.expect(ws.len() == 2 && a64_cls(ws[0], is64), || {
+            format!("{name}: not one cls: {ws:08x?}")
         });
     }
     for (name, is64) in [("ctz32", false), ("ctz64", true)] {
@@ -2437,6 +2451,18 @@ fn x64_bit_counts_take_the_base_instructions() {
                 && bytes[insns[0].at] == 0xF3
                 && insns[0].rex_w() == wide,
             || format!("{name}: not one popcnt: {insns:x?}"),
+        );
+    }
+    // `clrsb` keeps the `clz((x ^ (x << 1)) | 1)` expansion -- x86-64 has
+    // no leading-sign-bit count -- but the `or` makes the operand
+    // non-zero, so no `cmovz` guards the scan.
+    for (name, wide) in [("cls32", false), ("cls64", true)] {
+        let insns = x64_insns(&function_bytes(&obj, name));
+        m.expect(
+            insns.iter().any(|i| i.op == 0x0FBD && i.rex_w() == wide)
+                && !insns.iter().any(|i| i.op == 0x0F44)
+                && insns.len() <= 7,
+            || format!("{name}: not the unguarded expansion: {insns:x?}"),
         );
     }
     m.finish();
@@ -2667,10 +2693,9 @@ fn x64_negation_takes_neg() {
         });
     }
     let insns = x64(NEGATES, "times_minus_two");
-    m.expect(
-        insns.iter().any(imul) && !insns.iter().any(neg),
-        || format!("times_minus_two: not a multiply: {insns:x?}"),
-    );
+    m.expect(insns.iter().any(imul) && !insns.iter().any(neg), || {
+        format!("times_minus_two: not a multiply: {insns:x?}")
+    });
     m.finish();
 }
 

@@ -1095,6 +1095,11 @@ pub(crate) enum BitCountOp {
     Clz,
     Ctz,
     Popcount,
+    /// Leading redundant sign bits: the number of bits below the sign bit
+    /// that repeat it, `w - 1` for 0 and -1 (`__builtin_clrsb`). Equals
+    /// `clz((x ^ (x << 1)) | 1)` over the same width, which is the
+    /// x86-64 lowering; AArch64 has `cls`.
+    Clrsb,
 }
 
 /// Operator for an atomic read-modify-write (C11 7.17.7.2-7.17.7.5).

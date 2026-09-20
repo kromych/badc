@@ -168,9 +168,9 @@ pub(super) fn emit_bswap(
 }
 
 /// `Inst::BitCount` over the low `width` bytes, in the `W` forms for 4:
-/// `clz`; `rbit` + `clz` for the trailing count; `cnt` + `addv` through
-/// [`Frame::count_fp`] for the set bits, or the general-register reduction
-/// when there is none.
+/// `clz`; `cls` for the leading sign bits; `rbit` + `clz` for the trailing
+/// count; `cnt` + `addv` through [`Frame::count_fp`] for the set bits, or
+/// the general-register reduction when there is none.
 pub(super) fn emit_bit_count(
     code: &mut Vec<u8>,
     dst: Place,
@@ -181,7 +181,7 @@ pub(super) fn emit_bit_count(
     frame: Frame,
     scratch: &ScratchPool,
 ) -> Emit {
-    use super::encode::{enc_clz, enc_clz32, enc_rbit32, enc_rbit64};
+    use super::encode::{enc_cls, enc_cls32, enc_clz, enc_clz32, enc_rbit32, enc_rbit64};
     let src_place = place_of(alloc, value);
     let Some(rn) = materialize_int(code, src_place, scratch.primary, frame) else {
         return fail("BitCount: value not int reg / spill");
@@ -191,13 +191,14 @@ pub(super) fn emit_bit_count(
     };
     let is64 = width == 8;
     type Enc = fn(Reg, Reg) -> u32;
-    let (clz, rbit): (Enc, Enc) = if is64 {
-        (enc_clz, enc_rbit64)
+    let (clz, rbit, cls): (Enc, Enc, Enc) = if is64 {
+        (enc_clz, enc_rbit64, enc_cls)
     } else {
-        (enc_clz32, enc_rbit32)
+        (enc_clz32, enc_rbit32, enc_cls32)
     };
     match op {
         BitCountOp::Clz => emit(code, clz(rd, rn)),
+        BitCountOp::Clrsb => emit(code, cls(rd, rn)),
         BitCountOp::Ctz => {
             emit(code, rbit(rd, rn));
             emit(code, clz(rd, rd));

@@ -5,79 +5,48 @@ fn ent_pc=0 n_params=0 variadic=false locals=2
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(0)                                           -> x0
-    v2   Imm(0)                                           -> x0
-    v3   Imm(1)                                           -> x0
+    v2   Imm(31)                                          -> x0
+    v3   Imm(-1)                                          -> x0
     v4   Imm(31)                                          -> x0
     v5   Imm(0)                                           -> x0
-    v6   Imm(-1)                                          -> x0
-    v7   Imm(-2)                                          -> x0
-    v8   Imm(1)                                           -> x0
-    v9   Imm(1)                                           -> x0
-    v10  Imm(31)                                          -> x0
-    v11  Imm(0)                                           -> x0
-    v12  Imm(1)                                           -> x0
-    v13  Imm(2)                                           -> x0
-    v14  Imm(3)                                           -> x0
-    v15  Imm(3)                                           -> x0
-    v16  Imm(30)                                          -> x0
-    v17  Imm(0)                                           -> x0
-    v18  Imm(1073741824)                                  -> x0
-    v19  Imm(2147483648)                                  -> x0
-    v20  Imm(3221225472)                                  -> x0
-    v21  Imm(3221225473)                                  -> x0
-    v22  Imm(0)                                           -> x0
-    v23  Imm(0)                                           -> x0
-    v24  Imm(16777215)                                    -> x0
-    v25  Imm(33554430)                                    -> x0
-    v26  Imm(16777217)                                    -> x0
-    v27  Imm(16777217)                                    -> x0
-    v28  Imm(7)                                           -> x0
-    v29  Imm(0)                                           -> x0
-    v30  Imm(0)                                           -> x0
-    v31  Imm(0)                                           -> x0
-    v32  Imm(1)                                           -> x0
-    v33  Imm(63)                                          -> x0
-    v34  Imm(0)                                           -> x0
-    v35  Imm(-1)                                          -> x0
-    v36  Imm(-2)                                          -> x0
-    v37  Imm(1)                                           -> x0
-    v38  Imm(1)                                           -> x0
-    v39  Imm(63)                                          -> x0
-    v40  Imm(0)                                           -> x0
-    v41  Imm(1)                                           -> x0
-    v42  Imm(2)                                           -> x0
-    v43  Imm(3)                                           -> x0
-    v44  Imm(3)                                           -> x0
-    v45  Imm(62)                                          -> x0
-    v46  Imm(0)                                           -> x0
-    v47  Imm(255)                                         -> x0
-    v48  StoreLocal { off=-1, value=v47, kind=I32, volatile } -> -
-    v49  Imm(-1024)                                       -> x0
-    v50  StoreLocal { off=-2, value=v49, kind=I64, volatile } -> -
-    v51  LoadLocal { off=-1, kind=I32, volatile }         -> x0
-    v52  BinopI { op=shl, lhs=v51, rhs_imm=1 }            -> x1
-    v53  Binop { op=xor, lhs=v51, rhs=v52 }               -> x0
-    v54  BinopI { op=or, lhs=v53, rhs_imm=1 }             -> x0
-    v55  BitCount { op=Clz, value=v54, width=4 }          -> x0
-    v56  BinopI { op=ne, lhs=v55, rhs_imm=23 }            -> x0
-    terminator Bz { cond=v56, target=b2, fall=b1 }   (exit_acc=v56)
+    v6   Imm(1)                                           -> x0
+    v7   Imm(30)                                          -> x0
+    v8   Imm(0)                                           -> x0
+    v9   Imm(1073741824)                                  -> x0
+    v10  Imm(0)                                           -> x0
+    v11  Imm(16777215)                                    -> x0
+    v12  Imm(7)                                           -> x0
+    v13  Imm(0)                                           -> x0
+    v14  Imm(0)                                           -> x0
+    v15  Imm(63)                                          -> x0
+    v16  Imm(-1)                                          -> x0
+    v17  Imm(63)                                          -> x0
+    v18  Imm(0)                                           -> x0
+    v19  Imm(1)                                           -> x0
+    v20  Imm(62)                                          -> x0
+    v21  Imm(0)                                           -> x0
+    v22  Imm(255)                                         -> x0
+    v23  StoreLocal { off=-1, value=v22, kind=I32, volatile } -> -
+    v24  Imm(-1024)                                       -> x0
+    v25  StoreLocal { off=-2, value=v24, kind=I64, volatile } -> -
+    v26  LoadLocal { off=-1, kind=I32, volatile }         -> x0
+    v27  BitCount { op=Clrsb, value=v26, width=4 }        -> x0
+    v28  BinopI { op=ne, lhs=v27, rhs_imm=23 }            -> x0
+    terminator Bz { cond=v28, target=b2, fall=b1 }   (exit_acc=v28)
   block 1  start_pc=0
-    v65  Imm(12)                                          -> x0
-    terminator Return(v65)   (exit_acc=v65)
+    v37  Imm(12)                                          -> x0
+    terminator Return(v37)   (exit_acc=v37)
   block 2  start_pc=0
-    v66  LoadLocal { off=-2, kind=I64, volatile }         -> x0
-    v67  BinopI { op=shl, lhs=v66, rhs_imm=1 }            -> x1
-    v68  Binop { op=xor, lhs=v66, rhs=v67 }               -> x0
-    v69  BinopI { op=or, lhs=v68, rhs_imm=1 }             -> x0
-    v70  BitCount { op=Clz, value=v69, width=8 }          -> x0
-    v71  BinopI { op=ne, lhs=v70, rhs_imm=53 }            -> x0
-    terminator Bz { cond=v71, target=b4, fall=b3 }   (exit_acc=v71)
+    v38  LoadLocal { off=-2, kind=I64, volatile }         -> x0
+    v39  BitCount { op=Clrsb, value=v38, width=8 }        -> x0
+    v40  BinopI { op=ne, lhs=v39, rhs_imm=53 }            -> x0
+    terminator Bz { cond=v40, target=b4, fall=b3 }   (exit_acc=v40)
   block 3  start_pc=0
-    v72  Imm(13)                                          -> x0
-    terminator Return(v72)   (exit_acc=v72)
+    v41  Imm(13)                                          -> x0
+    terminator Return(v41)   (exit_acc=v41)
   block 4  start_pc=0
-    v73  Imm(0)                                           -> x0
-    terminator Return(v73)   (exit_acc=v73)
+    v42  Imm(0)                                           -> x0
+    terminator Return(v42)   (exit_acc=v42)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

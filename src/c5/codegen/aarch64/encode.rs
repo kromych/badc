@@ -684,6 +684,18 @@ pub(crate) fn enc_clz32(rd: Reg, rn: Reg) -> u32 {
     0x5AC0_1000 | ((rn.0 as u32) << 5) | (rd.0 as u32)
 }
 
+/// `CLS <Xd>, <Xn>` -- count leading sign bits: the bits below the sign
+/// bit that repeat it, 63 for 0 and -1.
+pub(crate) fn enc_cls(rd: Reg, rn: Reg) -> u32 {
+    0xDAC0_1400 | ((rn.0 as u32) << 5) | (rd.0 as u32)
+}
+
+/// `CLS <Wd>, <Wn>` -- the low word's leading sign bits; the 32-bit write
+/// zero-extends into `Xd`.
+pub(crate) fn enc_cls32(rd: Reg, rn: Reg) -> u32 {
+    0x5AC0_1400 | ((rn.0 as u32) << 5) | (rd.0 as u32)
+}
+
 /// `RBIT <Xd>, <Xn>` -- reverse the bit order.
 pub(crate) fn enc_rbit64(rd: Reg, rn: Reg) -> u32 {
     0xDAC0_0000 | ((rn.0 as u32) << 5) | (rd.0 as u32)

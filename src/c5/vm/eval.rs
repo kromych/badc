@@ -151,6 +151,7 @@ pub(crate) fn eval_bit_count(op: BitCountOp, raw: i64, width: u8) -> i64 {
             BitCountOp::Clz => x.leading_zeros(),
             BitCountOp::Ctz => x.trailing_zeros(),
             BitCountOp::Popcount => x.count_ones(),
+            BitCountOp::Clrsb => ((x ^ (x << 1)) | 1).leading_zeros(),
         }
     } else {
         let x = raw as u64;
@@ -158,6 +159,7 @@ pub(crate) fn eval_bit_count(op: BitCountOp, raw: i64, width: u8) -> i64 {
             BitCountOp::Clz => x.leading_zeros(),
             BitCountOp::Ctz => x.trailing_zeros(),
             BitCountOp::Popcount => x.count_ones(),
+            BitCountOp::Clrsb => ((x ^ (x << 1)) | 1).leading_zeros(),
         }
     };
     i64::from(n)

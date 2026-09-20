@@ -62,10 +62,7 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ret
-               	lsl	x2, x6, #1
-               	eor	x2, x6, x2
-               	orr	x2, x2, #0x1
-               	clz	w7, w2
+               	cls	w7, w6
                	lsr	x3, x1, #31
                	mov	x2, #0x0                // =0
                	mov	x5, #0x1e               // =30
@@ -320,10 +317,7 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0xd                // =13
                	ret
-               	lsl	x1, x5, #1
-               	eor	x1, x5, x1
-               	orr	x1, x1, #0x1
-               	clz	x6, x1
+               	cls	x6, x5
                	lsr	x2, x0, #63
                	mov	x1, #0x0                // =0
                	mov	x4, #0x3e               // =62
@@ -524,10 +518,7 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x14               // =20
                	ret
-               	lsl	x1, x5, #1
-               	eor	x1, x5, x1
-               	orr	x1, x1, #0x1
-               	clz	x6, x1
+               	cls	x6, x5
                	lsr	x2, x0, #63
                	mov	x1, #0x0                // =0
                	mov	x3, #0x3e               // =62

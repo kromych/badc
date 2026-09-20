@@ -410,7 +410,7 @@ impl<'a> Walker<'a> {
             return Ok(match i {
                 I::Clz | I::Clzll => b.bit_count(BitCountOp::Clz, x, width),
                 I::Ctz | I::Ctzll => b.bit_count(BitCountOp::Ctz, x, width),
-                I::Clrsb | I::Clrsbll => lower_clrsb(b, x, width),
+                I::Clrsb | I::Clrsbll => b.bit_count(BitCountOp::Clrsb, x, width),
                 I::Ffs | I::Ffsll => lower_ffs(b, x, width),
                 I::Parity | I::Parityll => {
                     let pc = b.bit_count(BitCountOp::Popcount, x, width);
@@ -459,17 +459,6 @@ impl<'a> Walker<'a> {
         }
         Ok(b.inline_asm(alloc::boxed::Box::new(asm.block), args))
     }
-}
-
-/// Count leading redundant sign bits: `clz((x ^ (x << 1)) | 1)`. Bit `i` of
-/// `x ^ (x << 1)` is set where bit `i` of `x` differs from bit `i - 1`, so its
-/// leading zeros are the bits below the sign bit that repeat it; the `| 1`
-/// stops the count at `w - 1` for 0. Only the low `w` bits of `x` take part.
-fn lower_clrsb(b: &mut SsaBuilder, x: ValueId, width: u8) -> ValueId {
-    let shifted = b.binop_imm(BinOp::Shl, x, 1);
-    let edges = b.binop(BinOp::Xor, x, shifted);
-    let edges = b.binop_imm(BinOp::Or, edges, 1);
-    b.bit_count(BitCountOp::Clz, edges, width)
 }
 
 /// POSIX / GCC `ffs`: one plus the index of the least-significant set bit, 0

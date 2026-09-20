@@ -292,6 +292,21 @@ pub(super) fn emit_bit_count(
             emit_rr(code, Mnem::Cmovz, 4, rd, SCRATCH_R11);
             emit_ri(code, Mnem::Xor, 4, rd, bits - 1);
         }
+        // x86-64 has no leading-sign-bit count: `clz((x ^ (x << 1)) | 1)`
+        // over the same width. The `or` leaves the operand non-zero, so
+        // `bsr` needs no zero guard.
+        BitCountOp::Clrsb => {
+            if width == 4 {
+                super::encode::emit_mov_r32_r32(code, SCRATCH_R11, rn);
+            } else {
+                emit_mov_rr(code, SCRATCH_R11, rn);
+            }
+            emit_shift_ri(code, Mnem::Shl, width, SCRATCH_R11, 1);
+            emit_rr(code, Mnem::Xor, width, SCRATCH_R11, rn);
+            emit_ri(code, Mnem::Or, width, SCRATCH_R11, 1);
+            emit_rr(code, Mnem::Bsr, width, rd, SCRATCH_R11);
+            emit_ri(code, Mnem::Xor, 4, rd, bits - 1);
+        }
     }
     spill_dst_to_slot(code, dst, rd, frame);
     Ok(())

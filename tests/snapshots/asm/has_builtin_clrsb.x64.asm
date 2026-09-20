@@ -32,13 +32,11 @@ Disassembly of section .text:
                	movl	$0xff, -0x8(%rbp)
                	movq	$-0x400, -0x10(%rbp)    # imm = 0xFC00
                	movslq	-0x8(%rbp), %rax
-               	movq	%rax, %rcx
-               	shlq	%rcx
-               	xorq	%rcx, %rax
-               	orq	$0x1, %rax
-               	movl	$0x3f, %r11d
-               	bsrl	%eax, %eax
-               	cmovel	%r11d, %eax
+               	movl	%eax, %r11d
+               	shll	%r11d
+               	xorl	%eax, %r11d
+               	orl	$0x1, %r11d
+               	bsrl	%r11d, %eax
                	xorl	$0x1f, %eax
                	cmpl	$0x17, %eax
                	je	<addr>
@@ -46,13 +44,11 @@ Disassembly of section .text:
                	leave
                	retq
                	movq	-0x10(%rbp), %rax
-               	movq	%rax, %rcx
-               	shlq	%rcx
-               	xorq	%rcx, %rax
-               	orq	$0x1, %rax
-               	movl	$0x7f, %r11d
-               	bsrq	%rax, %rax
-               	cmovel	%r11d, %eax
+               	movq	%rax, %r11
+               	shlq	%r11
+               	xorq	%rax, %r11
+               	orq	$0x1, %r11
+               	bsrq	%r11, %rax
                	xorl	$0x3f, %eax
                	cmpl	$0x35, %eax
                	je	<addr>

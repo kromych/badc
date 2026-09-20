@@ -92,13 +92,11 @@ Disassembly of section .text:
                	popq	%r12
                	popq	%rbp
                	retq
-               	movq	%rbx, %rcx
-               	shlq	%rcx
-               	xorq	%rbx, %rcx
-               	orq	$0x1, %rcx
-               	movl	$0x3f, %r11d
-               	bsrl	%ecx, %r12d
-               	cmovel	%r11d, %r12d
+               	movl	%ebx, %r11d
+               	shll	%r11d
+               	xorl	%ebx, %r11d
+               	orl	$0x1, %r11d
+               	bsrl	%r11d, %r12d
                	xorl	$0x1f, %r12d
                	movq	%rax, %r8
                	shrq	$0x1f, %r8
@@ -424,13 +422,11 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	movq	%r9, %rax
-               	shlq	%rax
-               	xorq	%r9, %rax
-               	orq	$0x1, %rax
-               	movl	$0x7f, %r11d
-               	bsrq	%rax, %rbx
-               	cmovel	%r11d, %ebx
+               	movq	%r9, %r11
+               	shlq	%r11
+               	xorq	%r9, %r11
+               	orq	$0x1, %r11
+               	bsrq	%r11, %rbx
                	xorl	$0x3f, %ebx
                	movq	%rdi, %rsi
                	shrq	$0x3f, %rsi
@@ -677,13 +673,11 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	movq	%r9, %rax
-               	shlq	%rax
-               	xorq	%r9, %rax
-               	orq	$0x1, %rax
-               	movl	$0x7f, %r11d
-               	bsrq	%rax, %rbx
-               	cmovel	%r11d, %ebx
+               	movq	%r9, %r11
+               	shlq	%r11
+               	xorq	%r9, %r11
+               	orq	$0x1, %r11
+               	bsrq	%r11, %rbx
                	xorl	$0x3f, %ebx
                	movq	%rdi, %rdx
                	shrq	$0x3f, %rdx

@@ -282,13 +282,18 @@ def runs_per_fixture(sha: str) -> int | None:
 
 def record(job: Job, table: dict, reps: int | None) -> dict:
     """The run as `run.py --json` writes it, without the fields the log does
-    not carry. `perf_publish.stamp` adds the schema-2 envelope from here."""
+    not carry. `perf_publish.stamp` adds the envelope from here.
+
+    A log names each leg and nothing else about it, so a recovered record
+    states schema 2: the flags and the instruction-set level schema 3 adds
+    are not in the text, and this tool does not infer them."""
     order = []
     for r in table["results"]:
         if r["compiler"] not in order:
             order.append(r["compiler"])
     arch = RUNNERS[job.runner]
     doc: dict = {
+        "schema": 2,
         "taken": table["taken"],
         "machine": {"system": "Linux", "arch": arch, "runner": job.runner},
         "compilers": [{"name": c} for c in order],
@@ -363,6 +368,8 @@ def self_test() -> int:
     assert doc["runs_per_fixture"] == 3
     assert doc["compilers"][0] == {"name": "badc"}
     assert "compile_ms" not in json.dumps(doc)
+    # The log states no flags, so no compiler entry claims any.
+    assert all(set(c) == {"name"} for c in doc["compilers"]), doc["compilers"]
     # The excerpt's CPython table was built for linux-x64; it is not the arm
     # job's measurement.
     assert "benches" not in doc, doc["benches"]
@@ -375,6 +382,7 @@ def self_test() -> int:
 
     filed = perf_publish.stamp(doc, "1" * 40, "master", x64.runner)
     assert filed["schema"] == 2, filed["schema"]
+    assert filed["schema"] < perf_publish.RECORD_SCHEMA
     assert filed["commit"] == {"sha": "1" * 40, "branch": "master"}
     assert filed["provenance"]["source"] == "github-actions-job-log"
     assert filed["machine"]["image"] == "ubuntu-24.04"

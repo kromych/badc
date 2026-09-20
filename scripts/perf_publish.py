@@ -22,10 +22,15 @@ symlink as its target path, so that is one extra fetch), and reads
 `index.json` for the series. Committing is this tool's job; pushing is the
 caller's.
 
-This is the one place the schema-2 envelope is written -- `schema`, `commit`,
+This is the one place the record envelope is written -- `schema`, `commit`,
 `machine.runner`, `machine.image`, `provenance` -- so a measured run and a run
 recovered by `perf_backfill.py` cannot drift apart in shape. A field whose
 value the caller does not supply is left out rather than written empty.
+
+The record states the contract its producer filled: 3 where the harness
+measured the run and stated each leg's flags, 2 where a recovered run carries
+compiler names alone. A record lists the compilers that ran on that machine
+and no others.
 """
 
 from __future__ import annotations
@@ -40,7 +45,11 @@ import tempfile
 from pathlib import Path
 
 INDEX = "index.json"
-SCHEMA = 2
+# What a record a producer hands over without a schema of its own is filed
+# as. The index keeps its own number: 3 changed the compiler entries of a
+# record and nothing in the index's entries.
+RECORD_SCHEMA = 3
+INDEX_SCHEMA = 2
 REPO = "kromych/badc"
 
 # `demos/python/compare_compilers.py` builds CPython four times and prints one
@@ -82,11 +91,38 @@ def run_path(sha: str, runner: str) -> str:
     return f"runs/{sha[0:2]}/{sha[2:4]}/{sha}/{runner}.json"
 
 
-def git(repo: Path, *args: str) -> str:
-    r = subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True)
+def git(repo: Path, *args: str, stdin: str = "") -> str:
+    r = subprocess.run(["git", "-C", str(repo), *args], capture_output=True,
+                       text=True, input=stdin)
     if r.returncode != 0:
         sys.exit(f"git {' '.join(args)}: {r.stderr.strip()}")
     return r.stdout.strip()
+
+
+def make_symlink(link: Path, target: str) -> None:
+    link.symlink_to(target)
+
+
+def link_branch(repo: Path, branch: str, target: Path) -> str:
+    """Point `branches/<branch>` at a run directory and return the path to
+    stage, empty when this staged it already. A host that refuses to create a
+    symlink -- Windows without the privilege it takes -- gets the same entry
+    written through git, since the repository has to hold a symlink either
+    way."""
+    link = repo / "branches" / branch
+    link.parent.mkdir(parents=True, exist_ok=True)
+    rel = os.path.relpath(target, link.parent).replace(os.sep, "/")
+    if link.is_symlink() or link.exists():
+        link.unlink()
+    try:
+        make_symlink(link, rel)
+        return f"branches/{branch}"
+    except OSError as e:
+        print(f"branches/{branch}: {e}; staging the link through git")
+        blob = git(repo, "hash-object", "-w", "--stdin", stdin=rel)
+        git(repo, "update-index", "--add", "--cacheinfo",
+            f"120000,{blob},branches/{branch}")
+        return ""
 
 
 def load_index(repo: Path) -> list[dict]:
@@ -172,9 +208,10 @@ def benches_from(source, arch: str = "") -> tuple[list[dict], str]:
 
 def stamp(data: dict, sha: str, branch: str, runner: str, image: str = "",
           run_id: str = "") -> dict:
-    """The record as schema 2 files it: what the harness measured, plus what
-    only the publisher knows -- the commit, the runner label and image, and,
-    for a run this tool did not recover, that it was measured here."""
+    """The record as it is filed: what the harness measured, plus what only
+    the publisher knows -- the commit, the runner label and image, and, for a
+    run this tool did not recover, that it was measured here. The schema is
+    the producer's own where it states one."""
     machine = dict(data.get("machine") or {})
     machine["runner"] = runner
     if image:
@@ -192,7 +229,7 @@ def stamp(data: dict, sha: str, branch: str, runner: str, image: str = "",
         if key in provenance:
             provenance[key] = str(provenance[key])
     doc = {
-        "schema": SCHEMA,
+        "schema": int(data.get("schema") or RECORD_SCHEMA),
         "taken": data.get("taken", ""),
         "commit": {"sha": sha, "branch": branch},
         "machine": machine,
@@ -250,11 +287,7 @@ def main(argv: list[str] | None = None) -> int:
 
     # The branch points at the run directory rather than one runner's file, so
     # a reader finds every runner of that run through one link.
-    link = args.repo / "branches" / args.branch
-    link.parent.mkdir(parents=True, exist_ok=True)
-    if link.is_symlink() or link.exists():
-        link.unlink()
-    link.symlink_to(os.path.relpath(dst.parent, link.parent))
+    staged = link_branch(args.repo, args.branch, dst.parent)
 
     runs = [r for r in load_index(args.repo)
             if not (r.get("sha") == args.sha and r.get("runner") == args.runner)]
@@ -273,9 +306,9 @@ def main(argv: list[str] | None = None) -> int:
     runs.sort(key=lambda r: (r.get("taken", ""), r.get("sha", ""),
                              r.get("runner", "")), reverse=True)
     (args.repo / INDEX).write_text(
-        json.dumps({"schema": SCHEMA, "runs": runs}, indent=1) + "\n")
+        json.dumps({"schema": INDEX_SCHEMA, "runs": runs}, indent=1) + "\n")
 
-    git(args.repo, "add", "-A", rel, INDEX, f"branches/{args.branch}")
+    git(args.repo, "add", "-A", rel, INDEX, *([staged] if staged else []))
     if not git(args.repo, "status", "--porcelain"):
         print("nothing to commit")
         return 0
@@ -327,11 +360,20 @@ def self_test() -> int:
                          "| compiler | bench (ms) |\n") is None
 
     measured = {
+        "schema": 3,
         "taken": "2026-09-19T23:57:48Z",
         "machine": {"system": "Linux", "arch": "x86_64", "cpu": "",
                     "runner": "local"},
         "runs_per_fixture": 3,
-        "compilers": [{"name": "badc -O"}],
+        "compilers": [
+            {"name": "badc -O", "flags": ["-O"]},
+            {"name": "gcc -O2", "version": "gcc (Ubuntu 13.3.0) 13.3.0",
+             "flags": ["-O2", "-DNDEBUG"]},
+            {"name": "gcc -O2 -march=x86-64-v3",
+             "version": "gcc (Ubuntu 13.3.0) 13.3.0",
+             "flags": ["-O2", "-DNDEBUG", "-march=x86-64-v3"],
+             "level": "x86-64-v3"},
+        ],
         "fixtures": ["fib.c"],
         "results": [{"fixture": "fib.c", "compiler": "badc -O",
                      "run_ms": 103.0, "compile_ms": 32.2,
@@ -339,7 +381,10 @@ def self_test() -> int:
     }
     doc = stamp(measured, "a" * 40, "master", "ubuntu-latest",
                 "ubuntu-24.04", "42")
-    assert doc["schema"] == 2
+    assert doc["schema"] == 3
+    # Two legs of one compiler are two entries; the envelope carries the
+    # compiler list through whatever it holds.
+    assert doc["compilers"] == measured["compilers"], doc["compilers"]
     assert doc["commit"] == {"sha": "a" * 40, "branch": "master"}
     assert doc["machine"] == {"system": "Linux", "arch": "x86_64",
                               "runner": "ubuntu-latest",
@@ -358,6 +403,13 @@ def self_test() -> int:
     assert kept["provenance"]["run_id"] == "12", kept["provenance"]
     assert kept["provenance"]["job_id"] == "34", kept["provenance"]
     assert "image" not in kept["machine"]
+    # A producer that states no schema is filed as the current one; one that
+    # states 2 -- a run recovered from a log, whose compilers are names alone
+    # -- keeps saying 2.
+    assert kept["schema"] == RECORD_SCHEMA, kept["schema"]
+    assert stamp({"schema": 2, "taken": "t", "machine": {},
+                  "compilers": [{"name": "clang -O2"}]},
+                 "b" * 40, "master", "r")["schema"] == 2
 
     with tempfile.TemporaryDirectory() as tmp:
         repo = Path(tmp) / "data"
@@ -378,8 +430,11 @@ def self_test() -> int:
             assert rc == 0, rc
         filed = json.loads(
             (repo / run_path("c" * 40, "ubuntu-latest")).read_text())
-        assert filed["schema"] == 2 and filed["commit"]["branch"] == "topic"
+        assert filed["schema"] == 3 and filed["commit"]["branch"] == "topic"
         assert filed["benches"][0]["suite"] == "cpython", filed["benches"]
+        assert [c["name"] for c in filed["compilers"]] == [
+            "badc -O", "gcc -O2", "gcc -O2 -march=x86-64-v3"], \
+            filed["compilers"]
         # The arm run measured on aarch64 takes no x86-64 CPython table.
         arm = json.loads(
             (repo / run_path("c" * 40, "ubuntu-24.04-arm")).read_text())
@@ -405,6 +460,27 @@ def self_test() -> int:
         index = json.loads((repo / INDEX).read_text())
         assert len(index["runs"]) == 3, index["runs"]
         assert len(git(repo, "log", "--oneline").splitlines()) == 4
+
+        # A host that will not create a symlink -- Windows without the
+        # privilege it takes -- files the same entry through git, so the
+        # repository holds a symlink wherever the run was published from.
+        def refuse(link: Path, target: str) -> None:
+            raise OSError("operation not permitted")
+
+        global make_symlink
+        real, make_symlink = make_symlink, refuse
+        try:
+            rc = main(["--data", str(data), "--repo", str(repo),
+                       "--sha", "e" * 40, "--branch", "topic",
+                       "--runner", "ubuntu-latest"])
+        finally:
+            make_symlink = real
+        assert rc == 0, rc
+        entry = git(repo, "ls-files", "-s", "branches/topic").split()
+        assert entry[0] == "120000", entry
+        assert git(repo, "cat-file", "-p", entry[1]) == \
+            f"../runs/ee/ee/{'e' * 40}", entry
+        assert not (repo / "branches" / "topic").exists()
     print("[perf_publish] self-test OK")
     return 0
 

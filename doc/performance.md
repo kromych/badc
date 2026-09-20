@@ -79,6 +79,10 @@ repository serves the runs as files.</noscript>
   var FIXTURES = "tests/perf";
   var REFERENCE = "badc -O";
   var DOT = " \u00b7 ";
+  // The index lists every run ever published, and a list of them all costs
+  // more to build than the charts do; a picker starts at the newest and is
+  // completed when it is opened.
+  var SEED = 20;
 
   var METRICS = [
     { key: "run_ms", label: "Run time (ms)", scale: 1, digits: 1 },
@@ -469,20 +473,41 @@ repository serves the runs as files.</noscript>
       params.a !== undefined || params.b !== undefined };
   }
 
+  function option(entry) {
+    var opt = el("option", null, label(entry));
+    opt.value = key(entry);
+    return opt;
+  }
+
+  // The newest runs, and the selected one wherever it sits; the rest of the
+  // index is built into the list the first time it is opened.
+  function chooser(side, entries, current) {
+    var sel = el("select"), seed = [], i;
+    sel.setAttribute("aria-label", "run " + side);
+    for (i = 0; i < SEED && i < entries.length; i += 1) seed.push(entries[i]);
+    if (current && seed.indexOf(current) < 0) seed.push(current);
+    seed.forEach(function (e) { sel.appendChild(option(e)); });
+    if (current) sel.value = key(current);
+
+    var full = seed.length === entries.length;
+    function fill() {
+      if (full) return;
+      full = true;
+      var value = sel.value, all = document.createDocumentFragment();
+      entries.forEach(function (e) { all.appendChild(option(e)); });
+      sel.textContent = "";
+      sel.appendChild(all);
+      sel.value = value;
+    }
+    ["focus", "pointerdown", "keydown"].forEach(function (type) {
+      sel.addEventListener(type, fill);
+    });
+    return sel;
+  }
+
   function picker(entries, a, b) {
     var box = el("div", "pick");
-    function choose(side, current) {
-      var sel = el("select");
-      sel.setAttribute("aria-label", "run " + side);
-      entries.forEach(function (e) {
-        var opt = el("option", null, label(e));
-        opt.value = key(e);
-        sel.appendChild(opt);
-      });
-      if (current) sel.value = key(current);
-      return sel;
-    }
-    var left = choose("A", a), right = choose("B", b);
+    var left = chooser("A", entries, a), right = chooser("B", entries, b);
     box.appendChild(txt("Compare "));
     box.appendChild(left);
     box.appendChild(txt(" with "));
@@ -534,6 +559,18 @@ repository serves the runs as files.</noscript>
     });
   }
 
+  // Every runner of the newest commit, rather than whichever finished last.
+  function newestRun(entries) {
+    var sha = entries[0].sha, seen = {}, pick = [];
+    entries.forEach(function (e) {
+      var r = e.runner || "";
+      if (e.sha === sha && !seen[r]) { seen[r] = 1; pick.push(e); }
+    });
+    return pick.sort(function (x, y) {
+      return String(x.runner || "").localeCompare(String(y.runner || ""));
+    });
+  }
+
   function draw(entries) {
     var sel = selection();
     if (!sel.mine && shown !== null) return Promise.resolve();
@@ -543,9 +580,14 @@ repository serves the runs as files.</noscript>
     var want = a && b ? key(a) + DOT + key(b) : "latest";
     if (want === shown) return Promise.resolve();
     shown = want;
+
+    // The run files are asked for before anything is built, so the fetch and
+    // the controls overlap rather than queue.
+    var pick = a && b ? [a, b] : newestRun(entries);
+    var loading = Promise.all(pick.map(function (e) { return get(e.path); }));
+
     var root = document.getElementById("perf");
     root.textContent = "";
-
     // The default pair the picker offers: the newest run against the one
     // before it on the same runner.
     var same = entries.filter(function (e) {
@@ -554,27 +596,13 @@ repository serves the runs as files.</noscript>
     root.appendChild(picker(entries, a || same[1] || entries[1] || entries[0],
       b || same[0] || entries[0]));
 
-    if (a && b) {
-      return Promise.all([get(a.path), get(b.path)]).then(function (runs) {
-        compare(root, { entry: a, run: runs[0] }, { entry: b, run: runs[1] });
+    return loading.then(function (runs) {
+      var got = pick.map(function (e, i) {
+        return { entry: e, run: runs[i] };
       });
-    }
-
-    // Both runners of the newest commit, rather than whichever finished last.
-    var sha = entries[0].sha, seen = {}, pick = [];
-    entries.forEach(function (e) {
-      var r = e.runner || "";
-      if (e.sha === sha && !seen[r]) { seen[r] = 1; pick.push(e); }
+      if (a && b) compare(root, got[0], got[1]);
+      else latest(root, got, entries.length);
     });
-    pick.sort(function (x, y) {
-      return String(x.runner || "").localeCompare(String(y.runner || ""));
-    });
-    return Promise.all(pick.map(function (e) { return get(e.path); }))
-      .then(function (runs) {
-        latest(root, pick.map(function (e, i) {
-          return { entry: e, run: runs[i] };
-        }), entries.length);
-      });
   }
 
   get("index.json").then(function (index) {

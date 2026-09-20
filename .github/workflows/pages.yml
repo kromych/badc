@@ -27,6 +27,7 @@ on:
       - demos/*.md
       - demos/**/*.md
       - .github/workflows/pages.yml
+      - .github/pages/**
   workflow_dispatch:
 
 permissions:
@@ -55,6 +56,12 @@ jobs:
           # the tagline the site carries are named here.
           printf '%s\n' 'theme: jekyll-theme-primer' 'title: badc' \
               'description: Former bad C compiler' > _src/_config.yml
+          # The theme's own layout ends every page with an edit link built
+          # from the staged path, which exists in no branch of this
+          # repository; this one carries the theme's styling and says
+          # nothing it cannot back.
+          mkdir -p _src/_layouts
+          cp .github/pages/layout.html _src/_layouts/default.html
           # The landing page's title is the site's own, so the theme adds no
           # heading of its own above it and the browser title stays
           # `<title> | <description>`; the page's first heading is the

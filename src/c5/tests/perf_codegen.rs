@@ -2972,6 +2972,13 @@ fn a64_mem_imm(w: u32) -> Option<(u32, bool, bool)> {
     Some(((w >> 5) & 31, opc == 0 || (fp && opc == 2), fp))
 }
 
+/// `add` / `sub` of an immediate off x29 into a general register: a frame
+/// address materialized instead of folded into the access that reads it.
+/// `sp` as the destination is the frame mechanism, not an access address.
+fn a64_frame_address(w: u32) -> bool {
+    matches!(w & 0xFF80_0000, 0x9100_0000 | 0xD100_0000) && (w >> 5) & 31 == 29 && w & 31 != 31
+}
+
 /// `fmov <Xd>, <Dn>`: the 64-bit vector-to-general transfer.
 fn a64_fmov_d_to_x(w: u32) -> bool {
     w & 0xFFFE_0000 == 0x9E66_0000
@@ -3017,5 +3024,112 @@ fn a_floating_parameter_homes_from_its_own_bank() {
     m.expect(home.is_some_and(|i| i.op == 0x0F11), || {
         format!("x86-64 wide: the home store crosses banks: {insns:x?}")
     });
+    m.finish();
+}
+
+/// Type punning through the address of a parameter (#1159's shape): one
+/// store of the incoming register into the slot and one read of it back.
+const BITS: &str = "unsigned long long bits(double d) { return *(unsigned long long *)&d; }\n";
+
+/// The address of a parameter escaping into a call: the home store and the
+/// address materialization both have to survive.
+const KEEP: &str = "void sink(double *);\n\
+    double keep(double d) { sink(&d); return d; }\n";
+
+/// A load through the address of a local slot reads the slot directly: the
+/// frame offset folds into the load, so no address is materialized.
+#[test]
+fn a_load_through_a_local_address_folds_the_frame_offset() {
+    let mut m = Misses::default();
+    let ws = a64(BITS, "bits");
+    m.expect(!ws.iter().any(|&w| a64_frame_address(w)), || {
+        format!("aarch64 bits: a frame address is materialized: {ws:08x?}")
+    });
+    let insns = x64(BITS, "bits");
+    m.expect(
+        !insns
+            .iter()
+            .any(|i| i.op == 0x8D && i.mem_base() == Some(RBP)),
+        || format!("x86-64 bits: a frame address is materialized: {insns:x?}"),
+    );
+    // The address the call takes is not an access, so it still materializes.
+    let ws = a64(KEEP, "keep");
+    m.expect(ws.iter().any(|&w| a64_frame_address(w)), || {
+        format!("aarch64 keep: the escaping address is gone: {ws:08x?}")
+    });
+    let insns = x64(KEEP, "keep");
+    m.expect(
+        insns
+            .iter()
+            .any(|i| i.op == 0x8D && i.mem_base() == Some(RBP)),
+        || format!("x86-64 keep: the escaping address is gone: {insns:x?}"),
+    );
+    m.finish();
+}
+
+/// The cases the frame-offset fold and the home-store elision must leave
+/// alone: a store narrower than the cell the prologue fills, a volatile
+/// access, and an object whose alignment puts it in the realigned region.
+#[test]
+fn a_local_access_folds_only_where_the_slot_form_says_the_same_thing() {
+    // `p`'s address escapes and the body writes 4 of the 8 bytes the
+    // prologue homes, so the prologue's store keeps its reader.
+    const NARROW: &str = "void sinki(int *);\n\
+        long narrow(int p) { sinki(&p); return p; }\n";
+    // Each volatile access is performed once, in its own instruction.
+    const VOL: &str = "int vol(int x) { volatile int v = x; return v + v; }\n";
+    // The object lives in the over-aligned region, not at its slot.
+    const OVER: &str = "unsigned long long over(double x) {\n\
+        _Alignas(32) double d = x;\n\
+        return *(unsigned long long *)&d;\n}\n";
+    let mut m = Misses::default();
+
+    let ws = a64(NARROW, "narrow");
+    let stores = ws
+        .iter()
+        .filter(|&&w| a64_mem_imm(w).is_some_and(|(rn, st, _)| rn == 29 && st))
+        .count();
+    m.expect(stores == 2, || {
+        format!("aarch64 narrow: {stores} stores into the frame: {ws:08x?}")
+    });
+    let insns = x64(NARROW, "narrow");
+    let stores = insns
+        .iter()
+        .filter(|i| x64_is_store(i) && i.mem_base() == Some(RBP))
+        .count();
+    m.expect(stores == 2, || {
+        format!("x86-64 narrow: {stores} stores into the frame: {insns:x?}")
+    });
+
+    let ws = a64(VOL, "vol");
+    let (stores, loads) = ws.iter().fold((0, 0), |(s, l), &w| match a64_mem_imm(w) {
+        Some((29, true, _)) => (s + 1, l),
+        Some((29, false, _)) => (s, l + 1),
+        _ => (s, l),
+    });
+    m.expect((stores, loads) == (1, 2), || {
+        format!("aarch64 vol: {stores} stores, {loads} loads: {ws:08x?}")
+    });
+    let insns = x64(VOL, "vol");
+    let frame = |i: &&X64Insn| i.mem_base() == Some(RBP);
+    let stores = insns.iter().filter(|i| x64_is_store(i) && frame(i)).count();
+    let loads = insns
+        .iter()
+        .filter(|i| !x64_is_store(i) && frame(i))
+        .count();
+    m.expect((stores, loads) == (1, 2), || {
+        format!("x86-64 vol: {stores} stores, {loads} loads: {insns:x?}")
+    });
+
+    // Both accesses reach the realigned region off sp, neither off x29.
+    let ws = a64(OVER, "over");
+    let region = ws
+        .iter()
+        .filter(|&&w| a64_mem_imm(w).is_some_and(|(rn, _, _)| rn == 31))
+        .count();
+    m.expect(
+        region == 2 && !ws.iter().any(|&w| a64_frame_address(w)),
+        || format!("aarch64 over: {region} accesses off sp: {ws:08x?}"),
+    );
     m.finish();
 }

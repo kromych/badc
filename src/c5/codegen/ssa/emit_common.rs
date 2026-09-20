@@ -2153,6 +2153,13 @@ pub(crate) fn lower_unit<B: LowerTarget>(
             let caps = super::reg_alloc::bank_capacity(target, native.fixed_regs);
             super::super::passes::cse::run(&mut ssa_funcs, caps);
         });
+        // Fold a frame address into the one access that consumes it.
+        // After the value numbering, which merges the per-access
+        // `LocalAddr` duplicates the builder emits, so the use count
+        // tells a sole consumer from a shared base.
+        time_pass_arch("passes::index_fold::fold_slot_addresses", B::ARCH, || {
+            super::super::passes::index_fold::fold_slot_addresses(&mut ssa_funcs);
+        });
         // Rebuild the single modulo where the builder's split quotient
         // found no division to share with. After the value numbering,
         // which is what can still supply that second consumer.

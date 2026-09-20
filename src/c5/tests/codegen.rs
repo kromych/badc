@@ -8986,11 +8986,14 @@ fn volatile_parameter_entry_copy_stores_volatile() {
                 .filter(|(_, i)| i.starts_with(head) && (!volatile || i.contains(", volatile")))
                 .count()
         };
+        // A read of the copy's own slot folds the frame offset into the
+        // load, so it carries its volatile mark in `LoadLocal` form.
+        let volatile_loads = count("Load {", true) + count("LoadLocal {", true);
         assert!(
             !has_inst(&insts, &["Mcpy"])
                 && count("Store {", false) == stores
                 && count("Store {", true) == stores
-                && count("Load {", true) >= 2,
+                && volatile_loads >= 2,
             "{target:?}: the parameter is copied and read through volatile accesses: {body}"
         );
     }

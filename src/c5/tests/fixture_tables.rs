@@ -326,6 +326,7 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("straight_line_block_merge.c", 0),
     ("block_plan_edges.c", 42),
     ("extend_range_wrap.c", 0),
+    ("return_low_word.c", 0),
     ("param_home_width.c", 0),
     ("param_entry_conversion.c", 0),
     ("zero_test_of_a_wrapped_result.c", 0),
@@ -1281,6 +1282,7 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("straight_line_block_merge.c", 0),
     ("block_plan_edges.c", 42),
     ("extend_range_wrap.c", 0),
+    ("return_low_word.c", 0),
     ("param_home_width.c", 0),
     ("param_entry_conversion.c", 0),
     ("zero_test_of_a_wrapped_result.c", 0),
@@ -2076,6 +2078,7 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("straight_line_block_merge.c", 0),
     ("block_plan_edges.c", 42),
     ("extend_range_wrap.c", 0),
+    ("return_low_word.c", 0),
     ("param_home_width.c", 0),
     ("param_entry_conversion.c", 0),
     ("zero_test_of_a_wrapped_result.c", 0),
@@ -3413,6 +3416,7 @@ pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("param_home_single_store.c", 42),
     ("narrow_phi_reads.c", 42),
     ("mul_add_wide_result.c", 42),
+    ("return_low_word.c", 0),
 ];
 
 /// Same fixture set as `native_pe_x64`, since the Windows-flavored
@@ -3944,6 +3948,7 @@ pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("param_home_single_store.c", 42),
     ("narrow_phi_reads.c", 42),
     ("mul_add_wide_result.c", 42),
+    ("return_low_word.c", 0),
 ];
 
 pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
@@ -4078,6 +4083,7 @@ pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
     ("straight_line_block_merge.c", 0),
     ("block_plan_edges.c", 42),
     ("extend_range_wrap.c", 0),
+    ("return_low_word.c", 0),
     ("param_home_width.c", 0),
     ("param_entry_conversion.c", 0),
     ("zero_test_of_a_wrapped_result.c", 0),

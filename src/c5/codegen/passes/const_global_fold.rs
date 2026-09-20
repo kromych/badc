@@ -643,6 +643,7 @@ fn walk_block(
             | Inst::BitCount { .. }
             | Inst::FpCast { .. }
             | Inst::ParamRef { .. }
+            | Inst::LifetimeEnd(_)
             | Inst::Phi { .. } => {}
             // Calls, atomics, asm, indexed / segment stores,
             // intrinsics, alloca bookkeeping: may write memory the

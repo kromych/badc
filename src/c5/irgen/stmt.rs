@@ -171,6 +171,15 @@ impl<'a> Walker<'a> {
                 b.intrinsic(Intrinsic::AllocaRestore as i64, alloc::vec![saved]);
                 Ok(false)
             }
+            // C99 6.2.4p2: reaching the end of the block ends the
+            // lifetime of every object it declared, whatever their
+            // addresses reached.
+            Stmt::ScopeEnd(slots) => {
+                for &slot in slots.iter() {
+                    b.lifetime_end(slot);
+                }
+                Ok(false)
+            }
         }
     }
 

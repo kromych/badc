@@ -311,6 +311,10 @@ pub(super) fn emit_inst(
             let _ = slot;
             Ok(())
         }
+        // A lifetime marker states a fact about storage the frame
+        // already holds; `ssa::slot_coalesce` reads it and no code
+        // follows from it.
+        Inst::LifetimeEnd(_) => Ok(()),
         Inst::ParamRef { idx, kind } => emit_param_ref(code, *idx, *kind, dst, v, fcx),
         Inst::Imm(value) => {
             let Some(rd) = int_or_spill_dst(dst) else {

@@ -15,7 +15,8 @@ fn ent_pc=2 n_params=1 variadic=false locals=1
     v9   StoreLocal { off=-1, value=v7, kind=I8 }         -> -
     v10  Imm(0)                                           -> x0
     v11  LoadLocal { off=-1, kind=U8 }                    -> x0
-    v12  Extend { value=v11, kind=I32 }                   -> x1
+    v12  LifetimeEnd(-1)                                  -> -
+    v13  Extend { value=v11, kind=I32 }                   -> x1
     terminator Return(v11)   (exit_acc=v11)
 ; --- SSA dump (ok=true) ent_pc=3 ---
 ; name=main

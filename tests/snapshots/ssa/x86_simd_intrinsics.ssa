@@ -7392,16 +7392,18 @@ fn ent_pc=93 n_params=0 variadic=false locals=229
     v5734 Imm(82)                                          -> x0
     terminator Return(v5734)   (exit_acc=v5734)
   block 291  start_pc=0
-    v5735 Call { target_pc=92, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v5736 Extend { value=v5735, kind=I32 }                 -> x1
-    v5737 BinopI { op=eq, lhs=v5735, rhs_imm=0 }           -> x1
-    terminator Bnz { cond=v5735, target=b293, fall=b292 }   (low word)   (exit_acc=v5737)
+    v5735 LifetimeEnd(-215)                                -> -
+    v5736 LifetimeEnd(-217)                                -> -
+    v5737 Call { target_pc=92, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v5738 Extend { value=v5737, kind=I32 }                 -> x1
+    v5739 BinopI { op=eq, lhs=v5737, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v5737, target=b293, fall=b292 }   (low word)   (exit_acc=v5739)
   block 292  start_pc=0
-    v5738 Imm(83)                                          -> x0
-    terminator Return(v5738)   (exit_acc=v5738)
+    v5740 Imm(83)                                          -> x0
+    terminator Return(v5740)   (exit_acc=v5740)
   block 293  start_pc=0
-    v5739 Imm(0)                                           -> x0
-    terminator Return(v5739)   (exit_acc=v5739)
+    v5741 Imm(0)                                           -> x0
+    terminator Return(v5741)   (exit_acc=v5741)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

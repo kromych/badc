@@ -32,21 +32,21 @@ Disassembly of section .text:
                	pushq	%rbx
                	testl	%edi, %edi
                	jge	<addr>
-               	leaq	-0x40(%rbp), %rax
+               	leaq	-0x18(%rbp), %rax
                	xorps	%xmm14, %xmm14
                	movups	%xmm14, (%rax)
-               	leaq	-0x30(%rbp), %rax
-               	movq	$0x0, (%rax)
-               	movq	$0x0, -0x28(%rbp)
-               	movl	$0x0, -0x20(%rbp)
                	leaq	-0x40(%rbp), %rax
+               	movq	$0x0, (%rax)
+               	movq	$0x0, -0x38(%rbp)
+               	movl	$0x0, -0x30(%rbp)
+               	leaq	-0x18(%rbp), %rax
                	xorl	%ebx, %ebx
                	invpcid	(%rax), %rbx
-               	leaq	-0x40(%rbp), %rax
+               	leaq	-0x18(%rbp), %rax
                	xorl	%ebx, %ebx
                	invvpid	(%rax), %rbx
-               	movl	$0x0, -0x18(%rbp)
-               	leaq	-0x10(%rbp), %rax
+               	movl	$0x0, -0x28(%rbp)
+               	leaq	-0x20(%rbp), %rax
                	leaq	<rip>, %rcx
                	pushq	%rdx
                	movzbq	(%rcx), %rdx
@@ -58,11 +58,11 @@ Disassembly of section .text:
                	movzbq	0x3(%rcx), %rdx
                	movb	%dl, 0x3(%rax)
                	popq	%rdx
-               	leaq	-0x40(%rbp), %rax
+               	leaq	-0x18(%rbp), %rax
                	xorl	%ebx, %ebx
                	invept	(%rax), %rbx
-               	leaq	-0x18(%rbp), %rax
-               	leaq	-0x28(%rbp), %rbx
+               	leaq	-0x28(%rbp), %rax
+               	leaq	-0x38(%rbp), %rbx
                	fnclex
                	fldl	(%rbx)
                	fdivl	(%rbx)
@@ -72,7 +72,7 @@ Disassembly of section .text:
                	fistpl	(%rax)
                	wait
                	fninit
-               	leaq	-0x10(%rbp), %rbx
+               	leaq	-0x20(%rbp), %rbx
                	movl	$0x1, %ecx
                	movzbl	(%rbx,%rcx), %eax
                	movsbq	(%rbx), %rax
@@ -82,22 +82,22 @@ Disassembly of section .text:
                	xorl	%ecx, %ecx
                	xorl	%eax, %eax
                	invlpga
-               	leaq	-0x40(%rbp), %rsi
+               	leaq	-0x18(%rbp), %rsi
                	xorl	%eax, %eax
                	xorl	%edx, %edx
                	xorl	%ebx, %ebx
                	xorl	%ecx, %ecx
                	lock
                	cmpxchg16b	(%rsi)
-               	leaq	-0x28(%rbp), %rax
+               	leaq	-0x38(%rbp), %rax
                	fldl	(%rax)
-               	leaq	-0x28(%rbp), %rax
+               	leaq	-0x38(%rbp), %rax
                	fstpl	(%rax)
-               	leaq	-0x20(%rbp), %rax
-               	ldmxcsr	(%rax)
-               	leaq	-0x20(%rbp), %rax
-               	stmxcsr	(%rax)
                	leaq	-0x30(%rbp), %rax
+               	ldmxcsr	(%rax)
+               	leaq	-0x30(%rbp), %rax
+               	stmxcsr	(%rax)
+               	leaq	-0x40(%rbp), %rax
                	ljmpl	*(%rax)
                	pushw	%fs
                	pushw	%gs

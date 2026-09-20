@@ -106,6 +106,27 @@ fn is_int_store(kind: StoreKind) -> bool {
 /// reload.
 const MAX_FORWARD_DISTANCE: u32 = 16;
 
+/// Distance between two instruction indices in emitted instructions:
+/// the bound above is about the live range the forward extends, and a
+/// lifetime marker adds none. Returns a closure over a prefix count so
+/// each query is O(1).
+fn emitted_span(func: &FunctionSsa) -> impl Fn(u32, usize) -> u32 + use<> {
+    let mut prefix: Vec<u32> = Vec::with_capacity(func.insts.len() + 1);
+    let mut n = 0u32;
+    for inst in &func.insts {
+        prefix.push(n);
+        n += u32::from(!inst.is_lifetime_marker());
+    }
+    prefix.push(n);
+    move |from: u32, to: usize| {
+        let (a, b) = (
+            prefix.get(from as usize).copied().unwrap_or(0),
+            prefix.get(to).copied().unwrap_or(0),
+        );
+        b.saturating_sub(a)
+    }
+}
+
 /// A known-available memory value within the current block.
 #[derive(Clone, Copy)]
 struct Entry {
@@ -299,6 +320,7 @@ fn run_one(func: &mut FunctionSsa) {
     let mut any = false;
     let slots = forwardable_slots(func);
     let exposed = exposed_slots(func, &slots);
+    let span = emitted_span(func);
 
     for block in &func.blocks {
         let mut table: Vec<Entry> = Vec::new();
@@ -332,8 +354,7 @@ fn run_one(func: &mut FunctionSsa) {
                         .copied();
                     // Only forward when the source is within the
                     // live-range-extension bound; a farther reuse reloads.
-                    let hit = hit
-                        .filter(|e| (i as u32).saturating_sub(e.src_idx) <= MAX_FORWARD_DISTANCE);
+                    let hit = hit.filter(|e| span(e.src_idx, i) <= MAX_FORWARD_DISTANCE);
                     if let Some(e) = hit {
                         any |= take(&mut redirect, &mut rewrites, i, e.value, e.load_kind, kind);
                     }
@@ -409,7 +430,7 @@ fn run_one(func: &mut FunctionSsa) {
                         .iter()
                         .find(|e| e.off == off && e.width == w)
                         .copied()
-                        .filter(|e| (i as u32).saturating_sub(e.src_idx) <= MAX_FORWARD_DISTANCE);
+                        .filter(|e| span(e.src_idx, i) <= MAX_FORWARD_DISTANCE);
                     if let Some(e) = hit {
                         any |= take(&mut redirect, &mut rewrites, i, e.value, e.load_kind, kind);
                     }
@@ -467,6 +488,7 @@ fn run_one(func: &mut FunctionSsa) {
                 | Inst::BlockAddr(_)
                 | Inst::LocalAddr(_)
                 | Inst::TlsAddr(_)
+                | Inst::LifetimeEnd(_)
                 | Inst::Binop { .. }
                 | Inst::BinopI { .. }
                 | Inst::Neg(_)
@@ -494,10 +516,11 @@ fn run_one(func: &mut FunctionSsa) {
                         (e.base, e.index, e.index_ext, e.scale, e.width)
                             == (base, index, ext, scale, w)
                     };
-                    let hit =
-                        indexed.iter().find(|e| same(e)).copied().filter(|e| {
-                            (i as u32).saturating_sub(e.src_idx) <= MAX_FORWARD_DISTANCE
-                        });
+                    let hit = indexed
+                        .iter()
+                        .find(|e| same(e))
+                        .copied()
+                        .filter(|e| span(e.src_idx, i) <= MAX_FORWARD_DISTANCE);
                     if let Some(e) = hit {
                         any |= take(&mut redirect, &mut rewrites, i, e.value, e.load_kind, kind);
                     }
@@ -832,6 +855,7 @@ pub(crate) fn fold_const_loads(func: &mut FunctionSsa) -> bool {
                 | Inst::BlockAddr(_)
                 | Inst::LocalAddr(_)
                 | Inst::TlsAddr(_)
+                | Inst::LifetimeEnd(_)
                 | Inst::Binop { .. }
                 | Inst::BinopI { .. }
                 | Inst::Neg(_)

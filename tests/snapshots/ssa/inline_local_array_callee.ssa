@@ -1197,9 +1197,10 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     v977 Imm(0)                                           -> x0
     v978 Imm(12)                                          -> x0
     v979 Imm(0)                                           -> x0
-    v980 Extend { value=v148, kind=I32 }                  -> x0
-    v981 BinopI { op=add, lhs=v148, rhs_imm=1 }           -> x0
-    v982 Imm(0)                                           -> x0
+    v980 LifetimeEnd(0)                                   -> -
+    v981 Extend { value=v148, kind=I32 }                  -> x0
+    v982 BinopI { op=add, lhs=v148, rhs_imm=1 }           -> x0
+    v983 Imm(0)                                           -> x0
     terminator Jmp(b8)   (exit_acc=v797)
   block 8  start_pc=0
     v148 Phi { incoming=[b6:v144, b7:v797], kind=I64 }    -> x0
@@ -1208,16 +1209,16 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     v151 BinopI { op=le, lhs=v148, rhs_imm=4 }            -> x2
     terminator Bz { cond=v151, target=b9, fall=b7 }   (exit_acc=v151)
   block 9  start_pc=0
-    v983 Imm(0)                                           -> x0
-    v984 BinopI { op=and, lhs=v149, rhs_imm=4294967295 }  -> x0
-    v985 BinopI { op=ne, lhs=v149, rhs_imm=871889112 }    -> x0
-    terminator Bz { cond=v985, target=b11, fall=b10 }   (exit_acc=v985)
+    v984 Imm(0)                                           -> x0
+    v985 BinopI { op=and, lhs=v149, rhs_imm=4294967295 }  -> x0
+    v986 BinopI { op=ne, lhs=v149, rhs_imm=871889112 }    -> x0
+    terminator Bz { cond=v986, target=b11, fall=b10 }   (exit_acc=v986)
   block 10  start_pc=0
-    v986 Imm(6)                                           -> x0
-    terminator Return(v986)   (exit_acc=v986)
-  block 11  start_pc=0
-    v987 Imm(0)                                           -> x0
+    v987 Imm(6)                                           -> x0
     terminator Return(v987)   (exit_acc=v987)
+  block 11  start_pc=0
+    v988 Imm(0)                                           -> x0
+    terminator Return(v988)   (exit_acc=v988)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

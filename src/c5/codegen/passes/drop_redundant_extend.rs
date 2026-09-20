@@ -121,6 +121,7 @@ fn compute_high_observed_through(func: &FunctionSsa, collapsing: &[bool]) -> Vec
             | Inst::LoadLocal { .. }
             | Inst::TailExt(_)
             | Inst::AllocaInit(_)
+            | Inst::LifetimeEnd(_)
             | Inst::ParamRef { .. }
             | Inst::Extend { .. } => {}
             Inst::Copy { value, .. } => observe(&mut hi, &mut work, *value),

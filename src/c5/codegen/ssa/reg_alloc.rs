@@ -2666,7 +2666,7 @@ fn result_kind(inst: &Inst) -> ResultKind {
                 ResultKind::Int
             }
         }
-        AllocaInit(_) => ResultKind::None,
+        AllocaInit(_) | LifetimeEnd(_) => ResultKind::None,
         // A value output is the one register value an asm statement defines.
         InlineAsm { asm, .. } => {
             if asm.operands.iter().any(|o| o.value && o.is_output) {

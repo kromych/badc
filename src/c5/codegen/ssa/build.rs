@@ -624,6 +624,12 @@ impl SsaBuilder {
         self.push(Inst::AllocaInit(slot))
     }
 
+    /// `Inst::LifetimeEnd` -- the end of the automatic object at `slot`
+    /// (C99 6.2.4p2). No value, no code; `ssa::slot_coalesce` reads it.
+    pub(crate) fn lifetime_end(&mut self, slot: i64) -> ValueId {
+        self.push(Inst::LifetimeEnd(slot))
+    }
+
     /// `Inst::ParamRef`. The value is the i-th declared parameter
     /// as it sits in the host-ABI argument register at function
     /// entry, sign-extended from its declared width to 64 bits.

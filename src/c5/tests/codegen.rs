@@ -3329,9 +3329,11 @@ fn zero_local_aggregate_emits_no_writable_template() {
 
 /// Block-scoped arrays with disjoint lifetimes share one frame block
 /// (the interpreter-loop shape); an array whose address escapes into a
-/// call argument keeps dedicated whole-function storage. Variable
-/// bounds keep the subscripts non-constant so the arrays stay
-/// memory-resident.
+/// call argument and whose block is left by `break` -- so no end-of-
+/// lifetime marker is reached -- keeps dedicated whole-function storage.
+/// Variable bounds keep the subscripts non-constant so the arrays stay
+/// memory-resident. The `-O0` mode is the one under test: the lifetime
+/// bound is the repack mode's.
 #[test]
 fn block_scoped_arrays_share_frame_slots() {
     use crate::Target;
@@ -3388,6 +3390,199 @@ fn block_scoped_arrays_share_frame_slots() {
     assert!(
         after >= 16,
         "the escaped arm keeps its own 8-cell block ({after})"
+    );
+}
+
+/// Slots of `name` after the repack, which is where an object's lifetime
+/// bounds its storage. `-O0` (`compact == false`) keeps every declared
+/// object's own cell, so the two modes are reported separately.
+#[cfg(test)]
+fn coalesced_locals(src: &str, name: &str, compact: bool) -> i64 {
+    use crate::Target;
+    let program = super::compile_str(src);
+    let mut funcs =
+        crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, Target::host(), compact, true)
+            .expect("ssa");
+    crate::c5::codegen::ssa::slot_coalesce::run(
+        &mut funcs,
+        compact,
+        crate::c5::codegen::StackProtect::OFF,
+    );
+    funcs
+        .iter()
+        .find(|f| f.name == name)
+        .unwrap_or_else(|| panic!("no function {name}"))
+        .locals
+}
+
+/// C99 6.2.4p2: an automatic object is dead once its block's execution
+/// ends, whatever its address reached, so objects declared in disjoint
+/// blocks share one cell however far their addresses escaped. Without the
+/// bound each escaped object pinned a cell for the whole function.
+#[test]
+fn escaped_objects_in_disjoint_blocks_share_one_cell() {
+    let src = r#"
+        void sink(unsigned *p);
+        void many(void)
+        {
+            { unsigned a = 1; sink(&a); }
+            { unsigned b = 2; sink(&b); }
+            { unsigned c = 3; sink(&c); }
+            { unsigned d = 4; sink(&d); }
+        }
+        int main(void) { return 0; }
+    "#;
+    assert_eq!(coalesced_locals(src, "many", true), 1);
+    assert_eq!(
+        coalesced_locals(src, "many", false),
+        5,
+        "-O0 keeps each object's own cell and its debug location"
+    );
+}
+
+/// The lifetimes overlap when one block encloses the other, so the two
+/// objects keep their own cells: the inner object's address may still be
+/// written through while the outer one is live.
+#[test]
+fn an_object_live_across_an_inner_block_keeps_its_own_cell() {
+    let src = r#"
+        void sink(unsigned *p);
+        void nested(void)
+        {
+            { unsigned outer = 1; sink(&outer);
+              { unsigned inner = 2; sink(&inner); }
+              sink(&outer); }
+        }
+        int main(void) { return 0; }
+    "#;
+    assert_eq!(coalesced_locals(src, "nested", true), 2);
+}
+
+/// Two objects of one block are alive at the same time, so they keep
+/// distinct storage even though each is written and read only once.
+#[test]
+fn two_escaped_objects_of_one_block_keep_distinct_cells() {
+    let src = r#"
+        void sink(unsigned *p);
+        void together(void)
+        {
+            { unsigned a = 1; unsigned b = 2; sink(&a); sink(&b); }
+        }
+        int main(void) { return 0; }
+    "#;
+    assert_eq!(coalesced_locals(src, "together", true), 2);
+}
+
+/// An object no instruction reads or writes is observable only through a
+/// comparison of its address, which needs both objects alive; the pair in
+/// one scope therefore keeps distinct cells while successive scopes share
+/// them. This is the kernel's `typecheck()` shape.
+#[test]
+fn address_compared_dummies_share_across_scopes_only() {
+    let checks = |scopes: &str| {
+        alloc::format!(
+            r#"
+        int use(int x);
+        int checks(int v)
+        {{
+            int r = 0;
+            {scopes}
+            return use(r);
+        }}
+        int main(void) {{ return 0; }}
+    "#
+        )
+    };
+    let one = coalesced_locals(
+        &checks("r += ({ int d1; int d2; (void)(&d1 == &d2); v; });"),
+        "checks",
+        true,
+    );
+    let three = coalesced_locals(
+        &checks(
+            "r += ({ int d1; int d2; (void)(&d1 == &d2); v; });\n\
+             r += ({ int e1; int e2; (void)(&e1 == &e2); v; });\n\
+             r += ({ int f1; int f2; (void)(&f1 == &f2); v; });",
+        ),
+        "checks",
+        true,
+    );
+    assert_eq!(one, 3, "one scope: two dummy cells beside the accumulator");
+    assert_eq!(three, one, "three scopes cost what one does");
+}
+
+/// A `volatile` object keeps its own storage: its accesses are not the
+/// pass's to account for, and a lifetime bound does not change that.
+#[test]
+fn a_volatile_object_does_not_share_storage() {
+    let src = r#"
+        void sink(volatile unsigned *p);
+        void vols(void)
+        {
+            { volatile unsigned a = 1; sink(&a); a = 2; }
+            { volatile unsigned b = 3; sink(&b); b = 4; }
+        }
+        int main(void) { return 0; }
+    "#;
+    assert_eq!(coalesced_locals(src, "vols", true), 2);
+}
+
+/// An over-aligned object is a member of the realigned region, which is
+/// addressed by its own offset; sharing a member's slot would misplace the
+/// partner, so the bound does not reach it.
+#[test]
+fn an_over_aligned_object_does_not_share_storage() {
+    let src = r#"
+        void sink(unsigned *p);
+        void aligned16(void)
+        {
+            { _Alignas(16) unsigned a = 1; sink(&a); }
+            { _Alignas(16) unsigned b = 2; sink(&b); }
+        }
+        int main(void) { return 0; }
+    "#;
+    assert_eq!(coalesced_locals(src, "aligned16", true), 2);
+}
+
+/// A body that may be re-entered after its first return does not have its
+/// lifetimes bounded by control flow at all (C99 7.13.2.1p3), so no two
+/// objects share storage however disjoint their scopes.
+#[test]
+fn a_returns_twice_call_bars_scope_sharing() {
+    let src = r#"
+        #include <setjmp.h>
+        void sink(unsigned *p);
+        jmp_buf env;
+        void twice(void)
+        {
+            if (setjmp(env)) return;
+            { unsigned a = 1; sink(&a); }
+            { unsigned b = 2; sink(&b); }
+        }
+        int main(void) { return 0; }
+    "#;
+    assert_eq!(coalesced_locals(src, "twice", true), 2);
+}
+
+/// The declarations a `for` initializer and a variable-length array block
+/// own are not stated as ending, so their storage keeps the whole
+/// function: a VLA's bytes are sp-carved and reclaimed by the block's own
+/// bracket, and the `for` scope closes outside `parse_block_stmt`.
+#[test]
+fn a_vla_block_keeps_its_own_storage() {
+    let src = r#"
+        void sink(unsigned *p);
+        void vla(int n)
+        {
+            { unsigned a[8]; sink(a); }
+            { unsigned b[n]; sink(b); }
+        }
+        int main(void) { return 0; }
+    "#;
+    assert_eq!(
+        coalesced_locals(src, "vla", true),
+        7,
+        "the fixed array's four cells stay beside the VLA's bookkeeping"
     );
 }
 

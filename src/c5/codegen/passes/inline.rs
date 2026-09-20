@@ -1120,6 +1120,9 @@ fn is_inline_candidate(
             | Inst::ImmExtCode(_)
             | Inst::ParamRef { .. }
             | Inst::AllocaInit(_)
+            // The splice drops a lifetime marker rather than relocating
+            // it, so it constrains nothing the body must reproduce.
+            | Inst::LifetimeEnd(_)
             | Inst::Binop { .. }
             | Inst::BinopI { .. }
             | Inst::Extend { .. }
@@ -1874,7 +1877,12 @@ fn live_inst_mask(func: &FunctionSsa) -> Vec<bool> {
 /// plus one control transfer per block. The arena holds no branches, so
 /// counting values alone under-measures a branchy body by its blocks.
 fn emitted_inst_count(func: &FunctionSsa) -> usize {
-    live_inst_mask(func).iter().filter(|b| **b).count() + func.blocks.len()
+    live_inst_mask(func)
+        .iter()
+        .enumerate()
+        .filter(|&(i, &live)| live && !func.insts[i].is_lifetime_marker())
+        .count()
+        + func.blocks.len()
 }
 
 /// Code the emit issues for each function once this pass has spliced
@@ -2092,6 +2100,7 @@ fn needs_param_agg_copy(c: &FunctionSsa) -> bool {
         | Inst::BitCount { .. }
         | Inst::FpCast { .. }
         | Inst::AllocaInit(_)
+        | Inst::LifetimeEnd(_)
         | Inst::ParamRef { .. }
         | Inst::Phi { .. } => false,
     })
@@ -2655,7 +2664,16 @@ fn splice_multi_block(
                         callee_remap[ce_pc as usize] = at;
                         at += 1;
                     }
-                    Inst::LoadLocal { .. } | Inst::StoreLocal { .. } | Inst::AllocaInit(_) => {
+                    // A spliced body's objects live in a region the caller
+                    // may reuse for another splice, so the callee's own
+                    // lifetime markers are dropped: the region's single-
+                    // activation rule already bounds them, and a marker
+                    // relocated onto shared region cells would speak for
+                    // another callee's object too.
+                    Inst::LoadLocal { .. }
+                    | Inst::StoreLocal { .. }
+                    | Inst::AllocaInit(_)
+                    | Inst::LifetimeEnd(_) => {
                         callee_remap[ce_pc as usize] = NO_VALUE;
                     }
                     _ => {
@@ -3056,7 +3074,10 @@ fn splice_multi_block(
                         new_f32.push(false);
                         continue;
                     }
-                    Inst::LoadLocal { .. } | Inst::StoreLocal { .. } | Inst::AllocaInit(_) => {
+                    Inst::LoadLocal { .. }
+                    | Inst::StoreLocal { .. }
+                    | Inst::AllocaInit(_)
+                    | Inst::LifetimeEnd(_) => {
                         callee_remap[ce_pc as usize] = NO_VALUE;
                         continue;
                     }
@@ -3765,7 +3786,8 @@ fn inline_caller(
                             // them entirely.
                             Inst::LoadLocal { .. }
                             | Inst::StoreLocal { .. }
-                            | Inst::AllocaInit(_) => {
+                            | Inst::AllocaInit(_)
+                            | Inst::LifetimeEnd(_) => {
                                 callee_remap[ce_pc as usize] = NO_VALUE;
                                 continue;
                             }

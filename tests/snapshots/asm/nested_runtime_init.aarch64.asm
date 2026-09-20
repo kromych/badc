@@ -29,12 +29,12 @@ Disassembly of section .text:
                	add	x2, x0, #0x5
                	cmp	w2, w2
                	b.ne	<addr>
-               	add	x2, x0, #0x2
+               	add	x0, x0, #0x2
                	cmp	w1, w1
                	b.ne	<addr>
-               	cmp	w2, w2
+               	cmp	w0, w0
                	b.ne	<addr>
-               	add	x0, x0, #0x1
+               	mov	x0, x1
                	cmp	w0, #0x14
                	b.lt	<addr>
                	mov	x0, #0x0                // =0

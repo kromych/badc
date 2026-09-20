@@ -483,6 +483,16 @@ pub(crate) enum Inst {
     /// at runtime, so the codegen switches spill addressing to the
     /// frame pointer. Zero means no alloca. Produces no SSA value.
     AllocaInit(i64),
+    /// End of the lifetime of the automatic object based at this frame
+    /// slot (C99 6.2.4p2): control has left the block the object was
+    /// declared in, so no access to its storage is defined from here,
+    /// whatever its address reached. Emitted by the walker at each block
+    /// exit; read by `ssa::slot_coalesce`, which bounds an escaped
+    /// object's storage lifetime with it. Produces no SSA value and no
+    /// code. Dropping a marker is conservative -- it leaves the object
+    /// live to the end of the function -- so a pass may delete one, but
+    /// a pass that renumbers slot offsets must carry it.
+    LifetimeEnd(i64),
     /// The i-th declared parameter's incoming value, tagged with
     /// the parameter's natural load width. The walker emits one
     /// per non-relocated integer parameter on a non-variadic,
@@ -568,6 +578,13 @@ impl Inst {
         )
     }
 
+    /// True for the end-of-lifetime marker, which states a fact about
+    /// frame storage and issues no code: every size budget measured in
+    /// emitted instructions leaves it out.
+    pub(crate) fn is_lifetime_marker(&self) -> bool {
+        matches!(self, Inst::LifetimeEnd(_))
+    }
+
     /// Variant name for diagnostics. Exhaustive so a new variant is
     /// named rather than reported as an unknown.
     pub(crate) fn variant_name(&self) -> &'static str {
@@ -612,6 +629,7 @@ impl Inst {
             Inst::X86Simd { .. } => "X86Simd",
             Inst::InlineAsm { .. } => "InlineAsm",
             Inst::AllocaInit(_) => "AllocaInit",
+            Inst::LifetimeEnd(_) => "LifetimeEnd",
             Inst::ParamRef { .. } => "ParamRef",
             Inst::Phi { .. } => "Phi",
         }
@@ -636,6 +654,7 @@ impl Inst {
             | Inst::LoadLocal { .. }
             | Inst::TailExt(_)
             | Inst::AllocaInit(_)
+            | Inst::LifetimeEnd(_)
             | Inst::ParamRef { .. } => {}
             Inst::Load { addr, .. } => f(*addr),
             Inst::Store { addr, value, .. } => {
@@ -739,6 +758,7 @@ impl Inst {
             | Inst::LoadLocal { .. }
             | Inst::TailExt(_)
             | Inst::AllocaInit(_)
+            | Inst::LifetimeEnd(_)
             | Inst::ParamRef { .. } => {}
             Inst::Load { addr, .. } => f(addr),
             Inst::Store { addr, value, .. } => {
@@ -2072,6 +2092,7 @@ impl crate::c5::layout::DataOffsets for Inst {
             | Inst::X86Simd { .. }
             | Inst::InlineAsm { .. }
             | Inst::AllocaInit { .. }
+            | Inst::LifetimeEnd { .. }
             | Inst::ParamRef { .. }
             | Inst::Phi { .. } => {}
         }

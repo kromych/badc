@@ -79,21 +79,22 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v54  Binop { op=add, lhs=v33, rhs=v52 }               -> x0
     v55  Imm(0)                                           -> x1
     v56  Extend { value=v54, kind=I32 }                   -> x1
-    v57  BinopI { op=eq, lhs=v54, rhs_imm=410 }           -> x0
-    terminator Bz { cond=v57, target=b6, fall=b4 }   (exit_acc=v57)
+    v57  LifetimeEnd(-1)                                  -> -
+    v58  BinopI { op=eq, lhs=v54, rhs_imm=410 }           -> x0
+    terminator Bz { cond=v58, target=b6, fall=b4 }   (exit_acc=v58)
   block 4  start_pc=0
-    v58  Imm(0)                                           -> x0
-    v59  Imm(0)                                           -> x1
-    terminator Jmp(b5)   (exit_acc=v58)
+    v59  Imm(0)                                           -> x0
+    v60  Imm(0)                                           -> x1
+    terminator Jmp(b5)   (exit_acc=v59)
   block 5  start_pc=0
-    v62  Phi { incoming=[b4:v58, b6:v60], kind=I64 }      -> x0
-    v63  Imm(0)                                           -> x1
-    v64  Extend { value=v62, kind=I32 }                   -> x1
-    terminator Return(v62)   (exit_acc=v62)
+    v63  Phi { incoming=[b4:v59, b6:v61], kind=I64 }      -> x0
+    v64  Imm(0)                                           -> x1
+    v65  Extend { value=v63, kind=I32 }                   -> x1
+    terminator Return(v63)   (exit_acc=v63)
   block 6  start_pc=0
-    v60  Imm(2)                                           -> x0
-    v61  Imm(0)                                           -> x1
-    terminator Jmp(b5)   (exit_acc=v60)
+    v61  Imm(2)                                           -> x0
+    v62  Imm(0)                                           -> x1
+    terminator Jmp(b5)   (exit_acc=v61)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

@@ -65,10 +65,11 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v62  Imm(0)                                           -> x0
     v63  Imm(1)                                           -> x0
     v64  Imm(0)                                           -> x0
-    v65  Imm(0)                                           -> x0
-    v66  Imm(1)                                           -> x0
-    v67  Imm(0)                                           -> x0
-    terminator Return(v67)   (exit_acc=v67)
+    v65  LifetimeEnd(0)                                   -> -
+    v66  Imm(0)                                           -> x0
+    v67  Imm(1)                                           -> x0
+    v68  Imm(0)                                           -> x0
+    terminator Return(v68)   (exit_acc=v68)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

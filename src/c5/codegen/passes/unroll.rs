@@ -118,7 +118,7 @@ fn run_one(func: &mut FunctionSsa) {
         return;
     }
     for _ in 0..MAX_LOOPS_PER_FUNC {
-        if func.insts.len() > MAX_FUNC_INSTS {
+        if emitted_insts(func) > MAX_FUNC_INSTS {
             return;
         }
         let Some(plan) = find_unrollable(func) else {
@@ -212,10 +212,22 @@ fn find_unrollable(func: &FunctionSsa) -> Option<Expansion> {
 fn shape_inst_count(func: &FunctionSsa, s: &LoopShape) -> usize {
     s.blocks()
         .map(|b| {
-            let r = &func.blocks[b as usize].inst_range;
-            (r.end - r.start) as usize
+            let r = func.blocks[b as usize].inst_range.clone();
+            func.insts[r.start as usize..r.end as usize]
+                .iter()
+                .filter(|i| !i.is_lifetime_marker())
+                .count()
         })
         .sum()
+}
+
+/// Instructions the emit issues for `func`. The budgets above are in
+/// those, so the lifetime markers -- which issue none -- are left out.
+fn emitted_insts(func: &FunctionSsa) -> usize {
+    func.insts
+        .iter()
+        .filter(|i| !i.is_lifetime_marker())
+        .count()
 }
 
 fn try_shape(

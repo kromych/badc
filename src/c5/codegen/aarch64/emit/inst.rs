@@ -63,8 +63,10 @@ pub(super) fn emit_inst(
     } = *fcx;
     let code = &mut *cx.code;
     match inst {
-        // `Frame::dynamic_sp` carries the alloca fact; no code.
-        Inst::AllocaInit(_) => Ok(()),
+        // `Frame::dynamic_sp` carries the alloca fact; no code. A
+        // lifetime marker states a fact about storage the frame already
+        // holds, so it emits nothing either.
+        Inst::AllocaInit(_) | Inst::LifetimeEnd(_) => Ok(()),
         Inst::ParamRef { idx, kind } => {
             emit_param_ref(code, *idx, *kind, v, dst, param_plan, alloc, frame, scratch)
         }

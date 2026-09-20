@@ -42,12 +42,12 @@ Disassembly of section .text:
                	leaq	0x5(%rax), %rdx
                	cmpl	%edx, %edx
                	jne	<addr>
-               	leaq	0x2(%rax), %rdx
+               	addq	$0x2, %rax
                	cmpl	%ecx, %ecx
                	jne	<addr>
-               	cmpl	%edx, %edx
+               	cmpl	%eax, %eax
                	jne	<addr>
-               	incq	%rax
+               	movq	%rcx, %rax
                	cmpl	$0x14, %eax
                	jl	<addr>
                	xorl	%eax, %eax

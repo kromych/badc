@@ -211,6 +211,9 @@ fn resolve(
 const READ: u8 = 1;
 const WRITE: u8 = 2;
 const START: u8 = 4;
+/// End of the object's lifetime (`Inst::LifetimeEnd`). Not a read: it
+/// closes a scoped group's busy range instead of extending it.
+const END: u8 = 8;
 
 fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64, Option<i64>> {
     // A returns-twice call (setjmp family / vfork) re-enters the frame after
@@ -280,6 +283,10 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
     let mut state = alloc::vec![0u8; ni];
     let mut memo = alloc::vec![Ref::Other; ni];
     let mut escaped: BTreeSet<i64> = BTreeSet::new();
+    // Slots no lifetime bound may unpin: a volatile object must keep its
+    // own storage across the control transfers the CFG does not model
+    // (C99 5.1.2.3p2).
+    let mut sole: BTreeSet<i64> = BTreeSet::new();
     for v in 0..ni {
         resolve(
             &f.insts,
@@ -319,6 +326,8 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
     // (pc, base_or_slot, kind); direct slot events carry the cell offset
     // and are mapped to their group after group formation.
     let mut raw_events: Vec<(u32, i64, u8)> = Vec::new();
+    // (pc, base) per `Inst::LifetimeEnd`, in tape order.
+    let mut end_events: Vec<(u32, i64)> = Vec::new();
     {
         // Constant access at `base+off..+width`: extend the extent; a range
         // reaching below the base leaves the object and escapes it.
@@ -386,7 +395,7 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
                         // A volatile object must keep its own storage across
                         // control transfers the CFG does not model.
                         if *volatile {
-                            escaped.insert(base);
+                            sole.insert(base);
                         } else if touch(
                             &mut extent,
                             &mut escaped,
@@ -408,7 +417,7 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
                 } => {
                     if let Some((base, off)) = base_of(*addr) {
                         if *volatile {
-                            escaped.insert(base);
+                            sole.insert(base);
                         } else if touch(
                             &mut extent,
                             &mut escaped,
@@ -518,13 +527,16 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
                 Inst::LocalAddr(base) if movable(*base) => {
                     raw_events.push((pc, *base, START));
                 }
+                // The front end states where the object's lifetime ends.
+                // Whether the group takes it as an event is decided once
+                // the groups are formed, below.
+                Inst::LifetimeEnd(off) if movable(*off) => {
+                    end_events.push((pc, *off));
+                }
                 Inst::LoadLocal { off, volatile, .. } if movable(*off) => {
+                    raw_events.push((pc, *off, READ));
                     if *volatile {
-                        // Group membership is not known yet; recheck below.
-                        raw_events.push((pc, *off, READ));
-                        escaped.insert(*off);
-                    } else {
-                        raw_events.push((pc, *off, READ));
+                        sole.insert(*off);
                     }
                 }
                 Inst::StoreLocal {
@@ -535,7 +547,7 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
                 } if movable(*off) => {
                     raw_events.push((pc, *off, WRITE));
                     if *volatile {
-                        escaped.insert(*off);
+                        sole.insert(*off);
                     }
                     if let Some((base, _)) = base_of(*value) {
                         escaped.insert(base);
@@ -629,6 +641,26 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
     // lockstep with `over_aligned` below.
     let region_slots: BTreeSet<i64> = f.over_aligned.iter().map(|&(s, _)| s).collect();
 
+    // Cells whose object states the end of its lifetime (C99 6.2.4p2).
+    // The object's footprint is what the pass already derived for it: its
+    // recorded cell count and the extent its own accesses reach, both of
+    // which stay inside the object -- an access below the base escapes it
+    // and one past the recorded size widened the group the same way.
+    let mut bounded_cells: BTreeSet<i64> = BTreeSet::new();
+    for &(_, base) in &end_events {
+        let cells = recorded
+            .get(&base)
+            .copied()
+            .unwrap_or(0)
+            .max(extent.get(&base).map_or(0, |&b| (b + 7) / 8))
+            .max(1);
+        for off in base..base + cells {
+            if movable(off) {
+                bounded_cells.insert(off);
+            }
+        }
+    }
+
     // Split the groups: a group is shareable only when nothing pins it and
     // its every access is on the event tape. An event-free group (all
     // accesses promoted or pruned) is reserved so the compact repack can
@@ -636,20 +668,59 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
     let ng = groups.len();
     let mut shareable = alloc::vec![false; ng];
     let mut has_events = alloc::vec![false; ng];
+    // A group whose address no live value names is storage the emit
+    // reaches only through the cells the events already account for; it
+    // takes no lifetime marker, so the repack can still drop it whole.
+    let mut has_addr = alloc::vec![false; ng];
     for &(_, base, kind) in &raw_events {
-        if kind != START
-            && let Some(g) = group_of(base)
-        {
-            has_events[g] = true;
+        if let Some(g) = group_of(base) {
+            has_events[g] |= kind != START;
+            has_addr[g] |= kind == START;
         }
     }
+    // Which groups the markers may speak for, and which need them. A
+    // group whose every access is on the tape is already bounded by
+    // those accesses; giving it the marker as well would only stretch
+    // its range to the end of its block.
+    let mut bounded = alloc::vec![false; ng];
+    let mut needs_bound = alloc::vec![false; ng];
     for (g, &(lo, hi)) in groups.iter().enumerate() {
+        // Sharing storage between two objects costs both their debug
+        // locations, since no single frame address holds either for its
+        // whole scope and badc's DWARF has no lexical-block DIE to place
+        // them in. At -O0 the declared objects keep their locations and
+        // the frame keeps their slots; the repack mode takes the frame.
+        bounded[g] = compact && (lo..=hi).all(|off| bounded_cells.contains(&off));
+        needs_bound[g] =
+            has_addr[g] && (!has_events[g] || (lo..=hi).any(|off| escaped.contains(&off)));
+    }
+    for (g, &(lo, hi)) in groups.iter().enumerate() {
+        if needs_bound[g] && bounded[g] {
+            has_events[g] = true;
+        }
         let pinned = dedicated
             || !has_events[g]
+            || (needs_bound[g] && !bounded[g])
             || (lo..=hi).any(|off| {
-                escaped.contains(&off) || field_slots.contains(&off) || region_slots.contains(&off)
+                sole.contains(&off) || field_slots.contains(&off) || region_slots.contains(&off)
             });
         shareable[g] = !pinned;
+    }
+    // An escaped object is accessed through addresses this pass does not
+    // follow, so nothing bounds its storage but the end of its lifetime:
+    // take each marker as a read of the group, which runs its busy range
+    // from its first event to the marker. Two groups whose ranges overlap
+    // then always put one range's endpoint event inside the other's, which
+    // is what the interference walk below marks on.
+    let mut scoped = alloc::vec![false; ng];
+    for &(pc, base) in &end_events {
+        if let Some(g) = group_of(base)
+            && shareable[g]
+            && needs_bound[g]
+        {
+            scoped[g] = true;
+            raw_events.push((pc, base, END));
+        }
     }
 
     // Reserved single slots and scalar candidates over the remaining
@@ -860,11 +931,61 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
     }
     let mut g_read = alloc::vec![0u64; nb * gwords];
     let mut g_event = alloc::vec![0u64; nb * gwords];
+    // Per block: the scoped groups whose lifetime ends in it.
+    let mut g_end = alloc::vec![0u64; nb * gwords];
+    // The scoped groups, as a mask over the shareable index space.
+    let mut scoped_mask = alloc::vec![0u64; gwords];
+    for (i, &g) in sidx.iter().enumerate() {
+        if scoped[g] {
+            scoped_mask[i / 64] |= 1u64 << (i % 64);
+        }
+    }
     for (b, evs) in block_events.iter().enumerate() {
         for &(_, sg, kind) in evs {
             g_event[b * gwords + sg / 64] |= 1u64 << (sg % 64);
             if kind & READ != 0 {
                 g_read[b * gwords + sg / 64] |= 1u64 << (sg % 64);
+            }
+            if kind & END != 0 {
+                g_end[b * gwords + sg / 64] |= 1u64 << (sg % 64);
+            }
+        }
+    }
+    // A scoped group's storage is reached through addresses this pass
+    // does not follow, so only the end of the object's lifetime bounds
+    // it. `ended_in[b]` is the must-relation "every path from entry to
+    // `b` has run this group's end marker": the group is busy wherever
+    // an event has reached and no marker has yet run on every path.
+    // Least-fixed-point from the top, over a worklist; a block the entry
+    // does not reach keeps the top, which executes nothing.
+    let mut ended_in = alloc::vec![u64::MAX; nb * gwords];
+    if nb > 0 {
+        ended_in[..gwords].fill(0);
+        let mut work: Vec<usize> = (1..nb).collect();
+        let mut queued = alloc::vec![true; nb];
+        queued[0] = false;
+        while let Some(b) = work.pop() {
+            queued[b] = false;
+            let mut shrank = false;
+            for w in 0..gwords {
+                let mut v = u64::MAX;
+                for &p in graph.preds_of(b as BlockId) {
+                    let p = p as usize;
+                    v &= ended_in[p * gwords + w] | g_end[p * gwords + w];
+                }
+                if v != ended_in[b * gwords + w] {
+                    ended_in[b * gwords + w] = v;
+                    shrank = true;
+                }
+            }
+            if shrank {
+                for &t in graph.of(b as BlockId) {
+                    let t = t as usize;
+                    if t != 0 && !queued[t] {
+                        queued[t] = true;
+                        work.push(t);
+                    }
+                }
             }
         }
     }
@@ -943,10 +1064,12 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
         }
     }
     // Group interference: walk each block's events backward; `live` holds
-    // the groups a later read still reaches, `first_ev` the pc of each
-    // group's first in-block event. An access of g at pc interferes with
-    // every other live group already started at pc; two groups accessed by
-    // the same instruction interfere directly.
+    // the groups still busy at the pc -- a later read reaches them, or,
+    // for a scoped group, their end marker has not run yet -- and
+    // `first_ev` the pc of each group's first in-block event. An access
+    // of g at pc interferes with every other live group already started
+    // at pc; two groups accessed by the same instruction interfere
+    // directly.
     let mut g_interfere = alloc::vec![0u64; nsg * gwords];
     let mark = |a: usize, b: usize, gi: &mut Vec<u64>| {
         gi[a * gwords + b / 64] |= 1u64 << (b % 64);
@@ -961,6 +1084,11 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
             first_ev.entry(sg).or_insert(pc);
         }
         let mut live = r_out[b * gwords..(b + 1) * gwords].to_vec();
+        // A scoped group is busy at the block's exit unless a marker has
+        // run on every path through it.
+        for w in 0..gwords {
+            live[w] |= scoped_mask[w] & !(ended_in[b * gwords + w] | g_end[b * gwords + w]);
+        }
         let mut i = evs.len();
         while i > 0 {
             let hi = i;
@@ -996,6 +1124,11 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
             }
             for &(_, sg, kind) in at_pc {
                 if kind & READ != 0 {
+                    live[sg / 64] |= 1u64 << (sg % 64);
+                }
+                // Before its marker the scoped group is busy, unless a
+                // marker already ran on every path into this block.
+                if kind & END != 0 && ended_in[b * gwords + sg / 64] & (1u64 << (sg % 64)) == 0 {
                     live[sg / 64] |= 1u64 << (sg % 64);
                 }
             }
@@ -1194,6 +1327,14 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
             | Inst::StoreLocal { off, .. } => {
                 if let Some(&nn) = new_off.get(off) {
                     *off = nn;
+                }
+            }
+            // A marker follows its storage. One whose storage the repack
+            // dropped names slot 0, which is outside the movable frame and
+            // so speaks for no object.
+            Inst::LifetimeEnd(off) => {
+                if movable(*off) {
+                    *off = new_off.get(off).copied().unwrap_or(0);
                 }
             }
             Inst::Call { ret_slot_local, .. }

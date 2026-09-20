@@ -1410,6 +1410,11 @@ fn run_inst<H: Host>(
             run_inline_asm(mem, frame, asm, args)?;
             return Ok(());
         }
+        Inst::LifetimeEnd(_) => {
+            // A lifetime marker names no storage the interpreter
+            // reclaims: the frame cell stays until the call returns.
+            return Ok(());
+        }
         Inst::AllocaInit(_) => {
             // No-op for v0 == AllocaInit(0); the SSA-VM does not
             // expose alloca yet -- callers requesting a real

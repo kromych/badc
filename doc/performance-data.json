@@ -1,0 +1,206 @@
+{
+ "taken": "2026-09-19T23:58:44Z",
+ "machine": {
+  "system": "Darwin",
+  "release": "27.0.0",
+  "arch": "arm64",
+  "cpu": "Apple M1 Ultra"
+ },
+ "runs_per_fixture": 3,
+ "compilers": [
+  {
+   "name": "badc",
+   "version": "badc 0.4.4 (gcc-compatible, GNU C 4.3.0, git 140f17afabae)"
+  },
+  {
+   "name": "badc -O",
+   "version": "badc 0.4.4 (gcc-compatible, GNU C 4.3.0, git 140f17afabae)"
+  },
+  {
+   "name": "clang -O0",
+   "version": "Apple clang version 21.0.0 (clang-2100.3.34.2)"
+  },
+  {
+   "name": "clang -O2",
+   "version": "Apple clang version 21.0.0 (clang-2100.3.34.2)"
+  }
+ ],
+ "fixtures": [
+  "fib.c",
+  "qsort.c",
+  "sieve.c",
+  "munchausen.c",
+  "crypto.c",
+  "compress.c"
+ ],
+ "results": [
+  {
+   "fixture": "fib.c",
+   "compiler": "badc",
+   "run_ms": 147.7,
+   "compile_ms": 32.2,
+   "binary_bytes": 33824
+  },
+  {
+   "fixture": "fib.c",
+   "compiler": "badc -O",
+   "run_ms": 105.25,
+   "compile_ms": 22.7,
+   "binary_bytes": 33824
+  },
+  {
+   "fixture": "fib.c",
+   "compiler": "clang -O0",
+   "run_ms": 207.3,
+   "compile_ms": 57.4,
+   "binary_bytes": 33456
+  },
+  {
+   "fixture": "fib.c",
+   "compiler": "clang -O2",
+   "run_ms": 117.74,
+   "compile_ms": 58.1,
+   "binary_bytes": 33504
+  },
+  {
+   "fixture": "qsort.c",
+   "compiler": "badc",
+   "run_ms": 252.62,
+   "compile_ms": 22.6,
+   "binary_bytes": 33936
+  },
+  {
+   "fixture": "qsort.c",
+   "compiler": "badc -O",
+   "run_ms": 127.61,
+   "compile_ms": 23.6,
+   "binary_bytes": 33936
+  },
+  {
+   "fixture": "qsort.c",
+   "compiler": "clang -O0",
+   "run_ms": 210.71,
+   "compile_ms": 64.4,
+   "binary_bytes": 33568
+  },
+  {
+   "fixture": "qsort.c",
+   "compiler": "clang -O2",
+   "run_ms": 130.77,
+   "compile_ms": 72.9,
+   "binary_bytes": 33568
+  },
+  {
+   "fixture": "sieve.c",
+   "compiler": "badc",
+   "run_ms": 242.21,
+   "compile_ms": 122.6,
+   "binary_bytes": 33824
+  },
+  {
+   "fixture": "sieve.c",
+   "compiler": "badc -O",
+   "run_ms": 85.72,
+   "compile_ms": 119.3,
+   "binary_bytes": 33824
+  },
+  {
+   "fixture": "sieve.c",
+   "compiler": "clang -O0",
+   "run_ms": 145.22,
+   "compile_ms": 55.3,
+   "binary_bytes": 33488
+  },
+  {
+   "fixture": "sieve.c",
+   "compiler": "clang -O2",
+   "run_ms": 54.35,
+   "compile_ms": 65.7,
+   "binary_bytes": 33536
+  },
+  {
+   "fixture": "munchausen.c",
+   "compiler": "badc",
+   "run_ms": 795.13,
+   "compile_ms": 22.1,
+   "binary_bytes": 34032
+  },
+  {
+   "fixture": "munchausen.c",
+   "compiler": "badc -O",
+   "run_ms": 145.85,
+   "compile_ms": 23.8,
+   "binary_bytes": 34032
+  },
+  {
+   "fixture": "munchausen.c",
+   "compiler": "clang -O0",
+   "run_ms": 647.5,
+   "compile_ms": 59.2,
+   "binary_bytes": 33632
+  },
+  {
+   "fixture": "munchausen.c",
+   "compiler": "clang -O2",
+   "run_ms": 146.06,
+   "compile_ms": 63.1,
+   "binary_bytes": 33632
+  },
+  {
+   "fixture": "crypto.c",
+   "compiler": "badc",
+   "run_ms": 2060.56,
+   "compile_ms": 29.9,
+   "binary_bytes": 52208
+  },
+  {
+   "fixture": "crypto.c",
+   "compiler": "badc -O",
+   "run_ms": 161.02,
+   "compile_ms": 78.7,
+   "binary_bytes": 52208
+  },
+  {
+   "fixture": "crypto.c",
+   "compiler": "clang -O0",
+   "run_ms": 1534.94,
+   "compile_ms": 104.6,
+   "binary_bytes": 53200
+  },
+  {
+   "fixture": "crypto.c",
+   "compiler": "clang -O2",
+   "run_ms": 187.04,
+   "compile_ms": 450.0,
+   "binary_bytes": 52560
+  },
+  {
+   "fixture": "compress.c",
+   "compiler": "badc",
+   "run_ms": 880.72,
+   "compile_ms": 73.5,
+   "binary_bytes": 102496
+  },
+  {
+   "fixture": "compress.c",
+   "compiler": "badc -O",
+   "run_ms": 255.12,
+   "compile_ms": 95.6,
+   "binary_bytes": 86096
+  },
+  {
+   "fixture": "compress.c",
+   "compiler": "clang -O0",
+   "run_ms": 576.65,
+   "compile_ms": 105.3,
+   "binary_bytes": 103712
+  },
+  {
+   "fixture": "compress.c",
+   "compiler": "clang -O2",
+   "run_ms": 210.67,
+   "compile_ms": 428.5,
+   "binary_bytes": 70368
+  }
+ ]
+}

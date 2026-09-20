@@ -28,6 +28,8 @@ Override the badc binary via $BADC; override the tcc binary via $TCC.
 
 from __future__ import annotations
 
+import argparse
+import json
 import os
 import platform
 import re
@@ -35,6 +37,7 @@ import shutil
 import statistics
 import subprocess
 import sys
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -142,6 +145,7 @@ class Result:
     fixture: str
     binary_bytes: int
     median_ms: float
+    compile_ms: float
 
 
 def probe_compilers() -> list[Compiler]:
@@ -233,7 +237,9 @@ def probe_compilers() -> list[Compiler]:
     return found
 
 
-def compile_one(c: Compiler, src: Path, out: Path) -> bool:
+def compile_one(c: Compiler, src: Path, out: Path) -> float | None:
+    """Compile `src` with `c`, returning the wall-clock in milliseconds, or
+    `None` when the compiler failed or produced nothing."""
     extra = list(FIXTURE_FLAGS.get(src.name, []))
     if c.name.startswith("badc"):
         extra += BADC_FIXTURE_FLAGS.get(src.name, [])
@@ -241,7 +247,9 @@ def compile_one(c: Compiler, src: Path, out: Path) -> bool:
         argv = [*c.cmd, *extra, "-o", str(out), str(src), *c.trailing]
     else:
         argv = [*c.cmd, *extra, f"/Fe:{out}", str(src), *c.trailing]
+    t0 = time.monotonic()
     r = subprocess.run(argv, capture_output=True, text=True)
+    compile_ms = (time.monotonic() - t0) * 1000.0
     if r.returncode != 0:
         print(
             f"compile fail: {c.name} {src.name} -> exit {r.returncode}",
@@ -249,18 +257,18 @@ def compile_one(c: Compiler, src: Path, out: Path) -> bool:
         )
         if r.stderr:
             print(r.stderr, file=sys.stderr)
-        return False
+        return None
     if not out.is_file() or out.stat().st_size == 0:
         print(
             f"compile fail: {c.name} {src.name} -> empty output {out}",
             file=sys.stderr,
         )
-        return False
+        return None
     # macOS sometimes refuses unsigned binaries with SIGKILL; sign with
     # the ad-hoc identity if we just produced an aarch64 binary.
     if sys.platform == "darwin" and platform.machine() == "arm64":
         subprocess.run(["codesign", "-s", "-", str(out)], check=False)
-    return True
+    return compile_ms
 
 
 def run_one(out: Path) -> float | None:
@@ -319,7 +327,76 @@ def render_table(fixtures: list[str], results: list[Result]) -> str:
     return "\n".join(out)
 
 
+def cpu_model() -> str:
+    """The machine's processor, as the host reports it; empty when it does
+    not say. The figures are comparable within one run only, so the page
+    that publishes them names the machine each run landed on."""
+    try:
+        if sys.platform == "darwin":
+            out = subprocess.run(["sysctl", "-n", "machdep.cpu.brand_string"],
+                                 capture_output=True, text=True)
+            return out.stdout.strip()
+        if sys.platform.startswith("linux"):
+            for line in Path("/proc/cpuinfo").read_text().splitlines():
+                for key in ("model name", "Model"):
+                    if line.startswith(key):
+                        return line.split(":", 1)[1].strip()
+    except OSError:
+        pass
+    return ""
+
+
+def compiler_version(c: Compiler) -> str:
+    """The first line of the compiler's own version output."""
+    flag = "--version" if c.output_dash_o else ""
+    argv = [*c.cmd[:1], flag] if flag else c.cmd[:1]
+    try:
+        r = subprocess.run(argv, capture_output=True, text=True)
+    except OSError:
+        return ""
+    text = (r.stdout or r.stderr).strip().splitlines()
+    return text[0] if text else ""
+
+
+def write_json(path: Path, compilers: list[Compiler], fixtures: list[str],
+               results: list[Result]) -> None:
+    """The run as data, for the page that charts it: what ran where, and one
+    record per (fixture, compiler) with the three measurements."""
+    doc = {
+        "taken": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "machine": {
+            "system": platform.system(),
+            "release": platform.release(),
+            "arch": platform.machine(),
+            "cpu": cpu_model(),
+        },
+        "runs_per_fixture": RUNS_PER_FIXTURE,
+        "compilers": [{"name": c.name, "version": compiler_version(c)}
+                      for c in compilers],
+        "fixtures": fixtures,
+        "results": [
+            {
+                "fixture": r.fixture,
+                "compiler": r.compiler,
+                "run_ms": round(r.median_ms, 2),
+                "compile_ms": round(r.compile_ms, 1),
+                "binary_bytes": r.binary_bytes,
+            }
+            for r in results
+        ],
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(doc, indent=1) + "\n")
+
+
 def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--json", type=Path, metavar="PATH",
+                    help="also write the run as JSON, for the performance page")
+    ap.add_argument("--only", metavar="A.c,B.c",
+                    help="run these fixtures instead of the whole set")
+    args = ap.parse_args()
+
     compilers = probe_compilers()
     if not compilers:
         print("error: no compilers found", file=sys.stderr)
@@ -341,6 +418,13 @@ def main() -> int:
         "sqlite_bench.c",
         "quickjs_bench.c",
     ]
+    if args.only:
+        want = [f.strip() for f in args.only.split(",") if f.strip()]
+        missing = [f for f in want if f not in fixtures]
+        if missing:
+            print(f"error: unknown fixture(s): {', '.join(missing)}", file=sys.stderr)
+            return 1
+        fixtures = want
     results: list[Result] = []
     any_fail = False
 
@@ -357,7 +441,8 @@ def main() -> int:
             if c.name in FIXTURE_SKIP_COMPILERS.get(fix, set()):
                 continue
             out = out_dir / f"{src.stem}-{c.name.replace(' ', '_').replace('/', '_')}{EXE}"
-            if not compile_one(c, src, out):
+            compile_ms = compile_one(c, src, out)
+            if compile_ms is None:
                 any_fail = True
                 continue
             t = run_one(out)
@@ -370,12 +455,16 @@ def main() -> int:
                     fixture=fix,
                     binary_bytes=out.stat().st_size,
                     median_ms=t,
+                    compile_ms=compile_ms,
                 )
             )
 
     print("## perf comparison")
     print()
     print(render_table(fixtures, results))
+    if args.json:
+        write_json(args.json, compilers, fixtures, results)
+        print(f"\nwrote {args.json}")
     return 1 if any_fail else 0
 
 

@@ -137,11 +137,9 @@ def reduce_source(
     lines = text.splitlines(keepends=True)
     for round_index in range(passes):
         before = len(lines)
-        for start, end in sorted(
-            top_level_regions(lines), key=lambda r: r[1] - r[0], reverse=True
-        ):
-            if end > len(lines):
-                continue
+        # Last region first: deleting one shifts only what follows it, so the
+        # offsets of the regions still to try stay valid through the pass.
+        for start, end in sorted(top_level_regions(lines), reverse=True):
             candidate = lines[:start] + lines[end:]
             if candidate and interesting(
                 "".join(candidate), command, workdir, expect, status, timeout

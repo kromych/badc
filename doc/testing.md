@@ -128,8 +128,12 @@ python3 scripts/c_reduce.py case.c -o small.c -- \
 
 `scripts/c_reduce.py` shrinks a filed case: it deletes a brace-balanced region,
 keeps the deletion while the command still fails the way it did on the
-original, and repeats to a fixpoint. It took the case the harness files today
-from 348 lines to 9. `cvise` and `creduce` do this better where they are
+original, and repeats to a fixpoint. It took one of the cases this job files
+from 348 lines to 9. Reducing a wrong answer rather than a crash needs care --
+deleting a `return` or an initialiser gives the program undefined behaviour, on
+which two compilers may disagree legitimately -- so build the reference inside
+the test with `-Werror=return-type -Werror=uninitialized` and treat its failure
+as uninteresting. `cvise` and `creduce` do this better where they are
 installed; neither is in Homebrew under those names.
 
 `.github/workflows/asm-fuzz.yml` is the other fuzz lane: it runs the

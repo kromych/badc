@@ -1246,6 +1246,26 @@ def self_test() -> int:
     )
     check("dry run holds no token", "token" not in " ".join(gh.planned).lower(), True)
 
+    class StubGh(Gh):
+        def read(self, argv: list[str]) -> str | None:
+            if argv[:2] == ["issue", "list"]:
+                return json.dumps(
+                    [
+                        {"number": 12, "title": "compiler fuzzing, 2026-09-07...2026-09-13"},
+                        {"number": 34, "title": weekly_title(dt.date(2026, 9, 17))},
+                    ]
+                )
+            return json.dumps({"body": "", "comments": [{"body": f"signature: {key}"}]})
+
+    stub = StubGh("kromych/badc", publish=False)
+    check("the week's issue is found by title", open_weekly_issue(stub, weekly_title(dt.date(2026, 9, 17))), 34)
+    check(
+        "another week's issue is not",
+        open_weekly_issue(stub, weekly_title(dt.date(2026, 9, 24))),
+        None,
+    )
+    check("a signature already on the issue is known", issue_signatures(stub, 34), {key})
+
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp).resolve()
         headers = root / "include" / "csmith-2.3.0"

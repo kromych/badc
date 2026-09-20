@@ -3440,6 +3440,29 @@ fn escaped_objects_in_disjoint_blocks_share_one_cell() {
     );
 }
 
+/// A block left by `break` runs no end-of-lifetime marker on that path,
+/// so the object it declared is not bounded and keeps its own cell: what
+/// an escaped address may still reach is then unbounded.
+#[test]
+fn a_block_whose_marker_no_path_reaches_keeps_its_own_cell() {
+    let src = r#"
+        void sink(unsigned *p);
+        void looped(int n)
+        {
+            for (int i = 0; i < n; i++) {
+                { unsigned a = 1; sink(&a); break; }
+            }
+            { unsigned b = 2; sink(&b); }
+        }
+        int main(void) { return 0; }
+    "#;
+    assert_eq!(
+        coalesced_locals(src, "looped", true),
+        3,
+        "each object keeps a cell, beside the loop counter's"
+    );
+}
+
 /// The lifetimes overlap when one block encloses the other, so the two
 /// objects keep their own cells: the inner object's address may still be
 /// written through while the outer one is live.

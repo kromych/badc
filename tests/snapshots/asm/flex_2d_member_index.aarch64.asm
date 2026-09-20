@@ -90,17 +90,16 @@ Disassembly of section .text:
                	ret
                	mov	x2, #0x77               // =119
                	strb	w2, [x0, #0x4]
-               	mov	x0, #0x0                // =0
-               	strh	w0, [x1]
-               	strh	w0, [x1, #0x2]
-               	strh	w0, [x1, #0x4]
-               	strh	w0, [x1, #0x6]
-               	strh	w0, [x1, #0x8]
-               	strh	w0, [x1, #0xa]
-               	strh	w0, [x1, #0xc]
-               	strh	w0, [x1, #0xe]
-               	strh	w0, [x1, #0x10]
-               	strh	w0, [x1, #0x12]
+               	strh	wzr, [x1]
+               	strh	wzr, [x1, #0x2]
+               	strh	wzr, [x1, #0x4]
+               	strh	wzr, [x1, #0x6]
+               	strh	wzr, [x1, #0x8]
+               	strh	wzr, [x1, #0xa]
+               	strh	wzr, [x1, #0xc]
+               	strh	wzr, [x1, #0xe]
+               	strh	wzr, [x1, #0x10]
+               	strh	wzr, [x1, #0x12]
                	sub	x2, x29, #0x20
                	mov	x0, #0x0                // =0
                	strh	w0, [x2, #0x14]

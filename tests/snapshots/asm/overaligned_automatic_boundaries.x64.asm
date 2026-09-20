@@ -95,16 +95,14 @@ Disassembly of section .text:
                	movzbq	%al, %rax
                	testq	%rax, %rax
                	je	<addr>
-               	leaq	0x40(%rsp), %rax
-               	movsbq	(%rax), %rax
+               	movsbq	0x40(%rsp), %rax
                	cmpl	$0x2, %eax
                	sete	%cl
                	movzbq	%cl, %rcx
                	xorl	%eax, %eax
                	testq	%rcx, %rcx
                	je	<addr>
-               	leaq	(%rsp), %rax
-               	movsbq	(%rax), %rax
+               	movsbq	(%rsp), %rax
                	cmpl	$0x3, %eax
                	sete	%al
                	movzbq	%al, %rax

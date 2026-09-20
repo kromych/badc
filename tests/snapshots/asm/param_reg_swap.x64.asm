@@ -71,7 +71,6 @@ Disassembly of section .text:
                	leaq	-0x20(%rbp), %rdx
                	leaq	<rip>, %rcx
                	callq	<addr>
-               	leaq	-0x38(%rbp), %rax
-               	movzbq	(%rax), %rax
+               	movzbq	-0x38(%rbp), %rax
                	leave
                	retq

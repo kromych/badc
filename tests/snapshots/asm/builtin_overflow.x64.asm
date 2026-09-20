@@ -221,9 +221,8 @@ Disassembly of section .text:
                	leave
                	retq
                	movq	$0x0, (%rax)
-               	leaq	-0x10(%rbp), %rax
-               	movq	$0x2, (%rax)
-               	movq	-0x10(%rbp), %rax
+               	movl	$0x2, %eax
+               	movq	%rax, -0x10(%rbp)
                	cmpq	$0x2, %rax
                	je	<addr>
                	movl	$0x23, %eax

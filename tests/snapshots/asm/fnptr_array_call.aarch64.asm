@@ -83,8 +83,7 @@ Disassembly of section .text:
                	ldr	x0, [x0, #0x8]
                	blr	x0
                	stur	x0, [x29, #-0x8]
-               	sub	x0, x29, #0x8
-               	ldr	x0, [x0]
+               	ldur	x0, [x29, #-0x8]
                	ldr	w0, [x0]
                	mov	x17, #0x9               // =9
                	eor	x0, x0, x17
@@ -98,8 +97,7 @@ Disassembly of section .text:
                	ldr	x0, [x0]
                	blr	x0
                	stur	x0, [x29, #-0x8]
-               	sub	x0, x29, #0x8
-               	ldr	x0, [x0]
+               	ldur	x0, [x29, #-0x8]
                	ldr	w0, [x0]
                	eor	x0, x0, #0x7
                	cbz	w0, <addr>

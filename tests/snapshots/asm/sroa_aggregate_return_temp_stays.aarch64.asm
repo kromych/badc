@@ -167,20 +167,19 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x30
                	sub	x0, x29, #0x20
-               	mov	x1, #0x0                // =0
                	mov	x2, #0x3ef              // =1007
-               	str	w1, [x0]
+               	str	wzr, [x0]
                	str	w2, [x0, #0x4]
                	add	x2, x0, #0x8
                	mov	x3, #0xff               // =255
-               	str	w1, [x2]
+               	str	wzr, [x2]
                	str	w3, [x2, #0x4]
                	add	x2, x0, #0x10
-               	str	w1, [x2]
-               	str	w1, [x2, #0x4]
+               	str	wzr, [x2]
+               	str	wzr, [x2, #0x4]
                	add	x2, x0, #0x18
-               	str	w1, [x2]
-               	str	w1, [x2, #0x4]
+               	str	wzr, [x2]
+               	str	wzr, [x2, #0x4]
                	bl	<addr>
                	stur	x0, [x29, #-0x28]
                	sub	x0, x29, #0x20

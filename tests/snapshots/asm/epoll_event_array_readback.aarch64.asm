@@ -57,8 +57,7 @@ Disassembly of section .text:
                	str	w1, [x3]
                	str	x21, [x3, #0x8]
                	sxtw	x0, w24
-               	sub	x2, x29, #0x40
-               	ldrsw	x2, [x2]
+               	ldursw	x2, [x29, #-0x40]
                	bl	<addr>
                	sxtw	x0, w0
                	cbz	x0, <addr>
@@ -72,8 +71,7 @@ Disassembly of section .text:
                	str	x22, [x3, #0x8]
                	sxtw	x0, w24
                	mov	x1, #0x1                // =1
-               	sub	x2, x29, #0x38
-               	ldrsw	x2, [x2]
+               	ldursw	x2, [x29, #-0x38]
                	bl	<addr>
                	sxtw	x0, w0
                	cbz	x0, <addr>
@@ -143,14 +141,12 @@ Disassembly of section .text:
                	b.lt	<addr>
                	sxtw	x0, w24
                	bl	<addr>
-               	sub	x0, x29, #0x40
-               	ldrsw	x0, [x0]
+               	ldursw	x0, [x29, #-0x40]
                	bl	<addr>
                	sub	x0, x29, #0x40
                	ldrsw	x0, [x0, #0x4]
                	bl	<addr>
-               	sub	x0, x29, #0x38
-               	ldrsw	x0, [x0]
+               	ldursw	x0, [x29, #-0x38]
                	bl	<addr>
                	sub	x0, x29, #0x38
                	ldrsw	x0, [x0, #0x4]

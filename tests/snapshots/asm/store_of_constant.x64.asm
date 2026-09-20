@@ -218,8 +218,7 @@ Disassembly of section .text:
                	negq	%rax
                	leaq	0x2(%rax), %rsi
                	callq	<addr>
-               	leaq	-0x88(%rbp), %rax
-               	movslq	(%rax), %rax
+               	movslq	-0x88(%rbp), %rax
                	cmpl	$0x1, %eax
                	jne	<addr>
                	leaq	-0x88(%rbp), %rax

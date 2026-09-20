@@ -368,11 +368,8 @@ Disassembly of section .text:
                	movl	$0xa, %r8d
                	movl	$0xb, %esi
                	movl	$0xc, %edx
-               	leaq	-0x20(%rbp), %rcx
-               	leaq	<rip>, %r10        # <addr>
-               	movq	%r10, 0x60(%rsp)
-               	movq	0x60(%rsp), %r11
-               	movq	%r11, (%rcx)
+               	leaq	<rip>, %rcx        # <addr>
+               	movq	%rcx, -0x20(%rbp)
                	leaq	-0x20(%rbp), %rcx
                	leaq	<rip>, %r10       # <addr>
                	movq	%r10, 0x60(%rsp)

@@ -3951,10 +3951,9 @@ Disassembly of section .text:
                	sub	x0, x29, #0x450
                	mov	x1, #-0x1               // =-1
                	str	w1, [x0]
-               	mov	x2, #0x0                // =0
-               	str	w2, [x0, #0x4]
+               	str	wzr, [x0, #0x4]
                	str	w1, [x0, #0x8]
-               	str	w2, [x0, #0xc]
+               	str	wzr, [x0, #0xc]
                	ldr	x3, [x0]
                	ldr	x4, [x0, #0x8]
                	mov	x17, #0x1               // =1
@@ -3963,10 +3962,10 @@ Disassembly of section .text:
                	mov	x17, #0x3               // =3
                	movk	x17, #0x9, lsl #32
                	and	x4, x4, x17
-               	str	w2, [x0]
+               	str	wzr, [x0]
                	str	w1, [x0, #0x4]
                	add	x3, x0, #0x8
-               	str	w2, [x3]
+               	str	wzr, [x3]
                	str	w1, [x0, #0xc]
                	ldr	x1, [x0]
                	mov	x17, #0x2               // =2

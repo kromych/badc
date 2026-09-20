@@ -172,8 +172,7 @@ Disassembly of section .text:
                	mov	x1, x2
                	cmp	x1, x3
                	b.hs	<addr>
-               	mov	x4, #0x0                // =0
-               	str	x4, [x1]
+               	str	xzr, [x1]
                	add	x1, x1, #0x8
                	cmp	x1, x3
                	b.lo	<addr>

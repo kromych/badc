@@ -100,8 +100,8 @@ fn ent_pc=12 n_params=0 variadic=false locals=46
     terminator Return(v41)   (exit_acc=v41)
   block 12  start_pc=0
     v42  LocalAddr(-45)                                   -> x0
-    v43  Imm(0)                                           -> x1
-    v44  Load { addr=v42, disp=0, kind=I8 }               -> x0
+    v43  Imm(0)                                           -> x0
+    v44  LoadLocal { off=-45, kind=I8 }                   -> x0
     v45  BinopI { op=ne, lhs=v44, rhs_imm=122 }           -> x0
     terminator Bz { cond=v45, target=b14, fall=b13 }   (exit_acc=v45)
   block 13  start_pc=0

@@ -145,8 +145,7 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	leaq	-0x8(%rbp), %rax
-               	movq	(%rax), %rax
+               	movq	-0x8(%rbp), %rax
                	movl	$0x3, %edi
                	callq	*%rax
                	cmpl	$0x67, %eax

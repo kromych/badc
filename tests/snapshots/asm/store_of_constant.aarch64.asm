@@ -27,14 +27,13 @@ Disassembly of section .text:
                	ret
 
 <put_q>:
-               	mov	x1, #0x0                // =0
                	mov	x2, #0x7fffffff         // =2147483647
                	str	x2, [x0]
                	mov	x2, #0x80000000         // =2147483648
                	str	x2, [x0, #0x8]
                	mov	x2, #-0x80000001        // =-2147483649
                	str	x2, [x0, #0x10]
-               	str	x1, [x0, #0x18]
+               	str	xzr, [x0, #0x18]
                	ret
 
 <put_at>:
@@ -57,11 +56,10 @@ Disassembly of section .text:
                	ret
 
 <put_volatile>:
-               	mov	x1, #0x0                // =0
                	mov	x2, #0xbeef             // =48879
                	movk	x2, #0xdead, lsl #16
                	str	w2, [x0]
-               	str	w1, [x0, #0x10]
+               	str	wzr, [x0, #0x10]
                	ret
 
 <put_packed>:
@@ -73,13 +71,12 @@ Disassembly of section .text:
                	ret
 
 <put_float>:
-               	movi	d0, #0000000000000000
                	fmov	s1, #1.50000000
                	str	s1, [x0]
                	mov	x16, #0x80000000        // =2147483648
                	fmov	s1, w16
                	str	s1, [x0, #0x4]
-               	str	d0, [x1]
+               	str	xzr, [x1]
                	mov	x16, #-0x8000000000000000 // =-9223372036854775808
                	fmov	d0, x16
                	str	d0, [x1, #0x8]
@@ -238,8 +235,7 @@ Disassembly of section .text:
                	neg	x1, x1
                	add	x1, x1, #0x2
                	bl	<addr>
-               	sub	x0, x29, #0x88
-               	ldrsw	x0, [x0]
+               	ldursw	x0, [x29, #-0x88]
                	cmp	w0, #0x1
                	b.ne	<addr>
                	sub	x0, x29, #0x88
@@ -425,9 +421,8 @@ Disassembly of section .text:
                	add	sp, sp, #0xe0
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x0                // =0
-               	stur	x0, [x29, #-0x18]
-               	stur	x0, [x29, #-0x10]
+               	stur	xzr, [x29, #-0x18]
+               	stur	xzr, [x29, #-0x10]
                	sub	x0, x29, #0x18
                	sub	x1, x29, #0x10
                	bl	<addr>

@@ -322,8 +322,8 @@ fn ent_pc=10 n_params=0 variadic=false locals=2
     v234 LocalAddr(-2)                                    -> x0
     v235 CallExt { binding_idx=87, args=[v220, v230], fp_arg_mask=0x0 } -> x0
     v236 LocalAddr(-2)                                    -> x0
-    v237 Imm(0)                                           -> x1
-    v238 Load { addr=v236, disp=0, kind=I8 }              -> x0
+    v237 Imm(0)                                           -> x0
+    v238 LoadLocal { off=-2, kind=I8 }                    -> x0
     v239 BinopI { op=ne, lhs=v238, rhs_imm=121 }          -> x0
     terminator Bz { cond=v239, target=b43, fall=b42 }   (exit_acc=v239)
   block 42  start_pc=0

@@ -1697,7 +1697,7 @@ fn ent_pc=93 n_params=0 variadic=false locals=229
     v541 Mzero { dst=v540, size=16, align=8 }             -> -
     v542 Imm(0)                                           -> x3
     v543 LocalAddr(-229)                                  -> x12
-    v544 Store { addr=v543, disp=0, value=v542, kind=I8 } -> -
+    v544 StoreLocal { off=-229, value=v542, kind=I8 }     -> -
     v545 Imm(1)                                           -> x3
     v546 LocalAddr(-229)                                  -> x12
     v547 BinopI { op=add, lhs=v546, rhs_imm=1 }           -> x13
@@ -2132,7 +2132,7 @@ fn ent_pc=93 n_params=0 variadic=false locals=229
     v924 Mzero { dst=v923, size=16, align=8 }             -> -
     v925 Imm(0)                                           -> x3
     v926 LocalAddr(-229)                                  -> x12
-    v927 Store { addr=v926, disp=0, value=v925, kind=I8 } -> -
+    v927 StoreLocal { off=-229, value=v925, kind=I8 }     -> -
     v928 Imm(1)                                           -> x3
     v929 LocalAddr(-229)                                  -> x12
     v930 BinopI { op=add, lhs=v929, rhs_imm=1 }           -> x13
@@ -2219,7 +2219,7 @@ fn ent_pc=93 n_params=0 variadic=false locals=229
     v1011 Mzero { dst=v1010, size=16, align=8 }            -> -
     v1012 Imm(15)                                          -> x3
     v1013 LocalAddr(-229)                                  -> x12
-    v1014 Store { addr=v1013, disp=0, value=v1012, kind=I8 } -> -
+    v1014 StoreLocal { off=-229, value=v1012, kind=I8 }    -> -
     v1015 Imm(14)                                          -> x3
     v1016 LocalAddr(-229)                                  -> x12
     v1017 BinopI { op=add, lhs=v1016, rhs_imm=1 }          -> x13
@@ -3302,7 +3302,7 @@ fn ent_pc=93 n_params=0 variadic=false locals=229
     v2007 Mzero { dst=v2006, size=16, align=8 }            -> -
     v2008 Imm(7)                                           -> x0
     v2009 LocalAddr(-229)                                  -> x3
-    v2010 Store { addr=v2009, disp=0, value=v2008, kind=I16 } -> -
+    v2010 StoreLocal { off=-229, value=v2008, kind=I16 }   -> -
     v2011 Imm(6)                                           -> x0
     v2012 LocalAddr(-229)                                  -> x3
     v2013 BinopI { op=add, lhs=v2012, rhs_imm=2 }          -> x12
@@ -3452,7 +3452,7 @@ fn ent_pc=93 n_params=0 variadic=false locals=229
     v2149 Mzero { dst=v2148, size=16, align=8 }            -> -
     v2150 Imm(15)                                          -> x0
     v2151 LocalAddr(-229)                                  -> x3
-    v2152 Store { addr=v2151, disp=0, value=v2150, kind=I8 } -> -
+    v2152 StoreLocal { off=-229, value=v2150, kind=I8 }    -> -
     v2153 Imm(14)                                          -> x0
     v2154 LocalAddr(-229)                                  -> x3
     v2155 BinopI { op=add, lhs=v2154, rhs_imm=1 }          -> x12
@@ -3982,8 +3982,8 @@ fn ent_pc=93 n_params=0 variadic=false locals=229
     v2637 LocalAddr(-5)                                    -> x1
     v2638 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v2602, v2637] } -> -
     v2639 LocalAddr(-225)                                  -> x0
-    v2640 Imm(0)                                           -> x1
-    v2641 Load { addr=v2639, disp=0, kind=U32 }            -> x0
+    v2640 Imm(0)                                           -> x0
+    v2641 LoadLocal { off=-225, kind=U32 }                 -> x0
     v2642 BinopI { op=ne, lhs=v2641, rhs_imm=4294967295 }  -> x0
     terminator Bz { cond=v2642, target=b136, fall=b135 }   (exit_acc=v2642)
   block 135  start_pc=0
@@ -4388,8 +4388,8 @@ fn ent_pc=93 n_params=0 variadic=false locals=229
     v3019 LocalAddr(-5)                                    -> x0
     v3020 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v2950, v3017] } -> -
     v3021 LocalAddr(-225)                                  -> x0
-    v3022 Imm(0)                                           -> x1
-    v3023 Load { addr=v3021, disp=0, kind=U32 }            -> x0
+    v3022 Imm(0)                                           -> x0
+    v3023 LoadLocal { off=-225, kind=U32 }                 -> x0
     v3024 BinopI { op=ne, lhs=v3023, rhs_imm=65537 }       -> x0
     terminator Bz { cond=v3024, target=b148, fall=b147 }   (exit_acc=v3024)
   block 147  start_pc=0
@@ -4414,7 +4414,7 @@ fn ent_pc=93 n_params=0 variadic=false locals=229
     v3041 LocalAddr(-229)                                  -> x3
     v3042 Mzero { dst=v3041, size=16, align=8 }            -> -
     v3043 LocalAddr(-229)                                  -> x3
-    v3044 Store { addr=v3043, disp=0, value=v3035, kind=I16 } -> -
+    v3044 StoreLocal { off=-229, value=v3035, kind=I16 }   -> -
     v3045 LocalAddr(-229)                                  -> x0
     v3046 BinopI { op=add, lhs=v3045, rhs_imm=2 }          -> x3
     v3047 Store { addr=v3045, disp=2, value=v3036, kind=I16 } -> -
@@ -4859,7 +4859,7 @@ fn ent_pc=93 n_params=0 variadic=false locals=229
     v3450 LocalAddr(-229)                                  -> x3
     v3451 Mzero { dst=v3450, size=16, align=8 }            -> -
     v3452 LocalAddr(-229)                                  -> x3
-    v3453 Store { addr=v3452, disp=0, value=v3444, kind=I8 } -> -
+    v3453 StoreLocal { off=-229, value=v3444, kind=I8 }    -> -
     v3454 LocalAddr(-229)                                  -> x0
     v3455 BinopI { op=add, lhs=v3454, rhs_imm=1 }          -> x3
     v3456 Store { addr=v3454, disp=1, value=v3445, kind=I8 } -> -
@@ -5619,8 +5619,8 @@ fn ent_pc=93 n_params=0 variadic=false locals=229
     v4124 LocalAddr(-5)                                    -> x0
     v4125 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v4094, v4122] } -> -
     v4126 LocalAddr(-225)                                  -> x0
-    v4127 Imm(0)                                           -> x1
-    v4128 Load { addr=v4126, disp=0, kind=U32 }            -> x0
+    v4127 Imm(0)                                           -> x0
+    v4128 LoadLocal { off=-225, kind=U32 }                 -> x0
     v4129 BinopI { op=ne, lhs=v4128, rhs_imm=4294967288 }  -> x0
     terminator Bz { cond=v4129, target=b211, fall=b210 }   (exit_acc=v4129)
   block 210  start_pc=0
@@ -5653,7 +5653,7 @@ fn ent_pc=93 n_params=0 variadic=false locals=229
     v4154 LocalAddr(-229)                                  -> x3
     v4155 Mzero { dst=v4154, size=16, align=8 }            -> -
     v4156 LocalAddr(-229)                                  -> x3
-    v4157 Store { addr=v4156, disp=0, value=v4148, kind=I8 } -> -
+    v4157 StoreLocal { off=-229, value=v4148, kind=I8 }    -> -
     v4158 LocalAddr(-229)                                  -> x0
     v4159 BinopI { op=add, lhs=v4158, rhs_imm=1 }          -> x3
     v4160 Store { addr=v4158, disp=1, value=v4149, kind=I8 } -> -
@@ -6376,8 +6376,8 @@ fn ent_pc=93 n_params=0 variadic=false locals=229
     v4825 LocalAddr(-5)                                    -> x1
     v4826 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v4780, v4823] } -> -
     v4827 LocalAddr(-225)                                  -> x0
-    v4828 Imm(0)                                           -> x1
-    v4829 Load { addr=v4827, disp=0, kind=U32 }            -> x0
+    v4828 Imm(0)                                           -> x0
+    v4829 LoadLocal { off=-225, kind=U32 }                 -> x0
     v4830 BinopI { op=ne, lhs=v4829, rhs_imm=4294967295 }  -> x0
     terminator Bz { cond=v4830, target=b239, fall=b238 }   (exit_acc=v4830)
   block 238  start_pc=0

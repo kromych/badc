@@ -67,8 +67,7 @@ Disassembly of section .text:
 <store_all>:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	movi	d0, #0000000000000000
-               	str	d0, [x0]
+               	str	xzr, [x0]
                	mov	x16, #-0x8000000000000000 // =-9223372036854775808
                	fmov	d0, x16
                	str	d0, [x0, #0x8]
@@ -79,8 +78,7 @@ Disassembly of section .text:
                	str	d0, [x0, #0x18]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	movi	d0, #0000000000000000
-               	str	s0, [x0]
+               	str	wzr, [x0]
                	fmov	s0, #-2.50000000
                	str	s0, [x0, #0x4]
                	adrp	x16, <page>

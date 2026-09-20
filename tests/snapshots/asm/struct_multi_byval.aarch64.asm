@@ -47,8 +47,7 @@ Disassembly of section .text:
                	add	x3, x3, x4
                	ldrsw	x1, [x1, #0x8]
                	add	x1, x3, x1
-               	sub	x3, x29, #0x20
-               	ldrsw	x3, [x3]
+               	ldursw	x3, [x29, #-0x20]
                	add	x3, x1, x3
                	sub	x1, x29, #0x30
                	ldrsw	x4, [x1]

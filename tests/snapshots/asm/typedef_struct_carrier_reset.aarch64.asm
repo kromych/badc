@@ -14,8 +14,7 @@ Disassembly of section .text:
                	brk	#0x1
 
 <zero_and_sum>:
-               	mov	x1, #0x0                // =0
-               	str	w1, [x0]
+               	str	wzr, [x0]
                	add	x1, x0, #0x28
                	mov	x2, #0x1                // =1
                	str	w2, [x1]

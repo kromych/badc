@@ -50,7 +50,7 @@ fn ent_pc=18 n_params=0 variadic=false locals=59
     v36  LocalAddr(-58)                                   -> x0
     v37  InlineAsm { template="movdqu %1, %%xmm0\n\tmovdqu %%xmm0, %0", ops=2, args=[v35, v22] } -> -
     v38  LocalAddr(-56)                                   -> x0
-    v39  Load { addr=v38, disp=0, kind=I32 }              -> x0
+    v39  LoadLocal { off=-56, kind=I32 }                  -> x0
     v40  Extend { value=v39, kind=I32 }                   -> x1
     v41  Extend { value=v39, kind=I32 }                   -> x1
     v42  BinopI { op=ne, lhs=v39, rhs_imm=42 }            -> x0
@@ -100,7 +100,7 @@ fn ent_pc=18 n_params=0 variadic=false locals=59
     v80  ImmData(32)                                      -> x0
     v81  InlineAsm { template="movdqu %1, %%xmm0\n\tcvtdq2ps %%xmm0, %%xmm0\n\tcvtps2dq %%xmm0, %%xmm0\n\tshufps $0x1b, %%xmm0, %%xmm0\n\tmovdqu %%xmm0, %0", ops=2, args=[v79, v80] } -> -
     v82  LocalAddr(-58)                                   -> x0
-    v83  Load { addr=v82, disp=0, kind=I32 }              -> x0
+    v83  LoadLocal { off=-58, kind=I32 }                  -> x0
     v84  Extend { value=v83, kind=I32 }                   -> x1
     v85  Extend { value=v83, kind=I32 }                   -> x1
     v86  BinopI { op=ne, lhs=v83, rhs_imm=42 }            -> x0
@@ -242,7 +242,7 @@ fn ent_pc=18 n_params=0 variadic=false locals=59
     v196 LocalAddr(-32)                                   -> x0
     v197 InlineAsm { template="vpshufd $0x1b, %1, %0", ops=2, args=[v196, v195] } -> -
     v198 LocalAddr(-32)                                   -> x0
-    v199 Load { addr=v198, disp=0, kind=I32 }             -> x0
+    v199 LoadLocal { off=-32, kind=I32 }                  -> x0
     v200 Imm(0)                                           -> x1
     v201 Extend { value=v199, kind=I32 }                  -> x1
     v202 Extend { value=v199, kind=I32 }                  -> x1

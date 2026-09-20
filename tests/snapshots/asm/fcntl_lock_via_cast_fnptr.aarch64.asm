@@ -48,8 +48,7 @@ Disassembly of section .text:
                	sub	x2, x29, #0x20
                	mov	x0, #0x1                // =1
                	strh	w0, [x2]
-               	mov	x0, #0x0                // =0
-               	strh	w0, [x2, #0x2]
+               	strh	wzr, [x2, #0x2]
                	sxtw	x0, w20
                	mov	x1, #0x6                // =6
                	bl	<addr>

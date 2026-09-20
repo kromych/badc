@@ -352,8 +352,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x50]
                	ldr	x20, [sp], #0x60
                	ret
-               	mov	x0, #0x0                // =0
-               	stur	x0, [x29, #-0x8]
+               	stur	xzr, [x29, #-0x8]
                	mov	x0, #0xfa0              // =4000
                	sub	x1, x29, #0x8
                	bl	<addr>

@@ -35,8 +35,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x0, x29, #0x8
-               	ldrsw	x0, [x0]
+               	ldursw	x0, [x29, #-0x8]
                	bl	<addr>
                	sub	x0, x29, #0x8
                	ldrsw	x0, [x0, #0x4]

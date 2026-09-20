@@ -25,10 +25,10 @@ fn ent_pc=0 n_params=0 variadic=false locals=1
     v19  Imm(0)                                           -> x0
     v20  Imm(227)                                         -> x0
     v21  StoreLocal { off=-1, value=v20, kind=I8 }        -> -
-    v22  LocalAddr(-1)                                    -> x0
+    v22  LocalAddr(-1)                                    -> x1
     v23  Imm(0)                                           -> x1
     v24  Imm(0)                                           -> x1
-    v25  Load { addr=v22, disp=0, kind=I8 }               -> x0
+    v25  Extend { value=v20, kind=I8 }                    -> x0
     v26  BinopI { op=ne, lhs=v25, rhs_imm=-29 }           -> x0
     terminator Bz { cond=v26, target=b2, fall=b1 }   (exit_acc=v26)
   block 1  start_pc=0

@@ -42,13 +42,12 @@ Disassembly of section .text:
                	strb	w1, [x0, #0x6]
                	mov	x1, #0x61               // =97
                	strb	w1, [x0, #0x7]
-               	mov	x1, #0x0                // =0
-               	strb	w1, [x0, #0x8]
-               	strb	w1, [x0, #0x9]
-               	strb	w1, [x0, #0xa]
-               	strb	w1, [x0, #0xb]
-               	strb	w1, [x0, #0xc]
-               	strb	w1, [x0, #0xd]
+               	strb	wzr, [x0, #0x8]
+               	strb	wzr, [x0, #0x9]
+               	strb	wzr, [x0, #0xa]
+               	strb	wzr, [x0, #0xb]
+               	strb	wzr, [x0, #0xc]
+               	strb	wzr, [x0, #0xd]
                	str	x2, [x0, #0x10]
                	bl	<addr>
                	ldrsw	x1, [x0]

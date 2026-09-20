@@ -50,8 +50,7 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	leave
                	retq
-               	leaq	-0x10(%rbp), %rax
-               	movslq	(%rax), %rdi
+               	movslq	-0x10(%rbp), %rdi
                	movl	$0x541b, %esi           # imm = 0x541B
                	leaq	-0x8(%rbp), %rdx
                	movb	$0x0, %al
@@ -68,8 +67,7 @@ Disassembly of section .text:
                	movl	$0x4, %eax
                	leave
                	retq
-               	leaq	-0x10(%rbp), %rax
-               	movslq	(%rax), %rdi
+               	movslq	-0x10(%rbp), %rdi
                	xorl	%eax, %eax
                	callq	<addr>
                	leaq	-0x10(%rbp), %rax

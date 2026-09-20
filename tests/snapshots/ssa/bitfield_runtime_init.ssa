@@ -123,7 +123,7 @@ fn ent_pc=0 n_params=4 variadic=false locals=0
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=build_mixed
 fn ent_pc=1 n_params=5 variadic=false locals=2
-  spill_count=0 gpr_used=[3, 12] fp_used=[]
+  spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I32)                            -> x7
@@ -150,13 +150,13 @@ fn ent_pc=1 n_params=5 variadic=false locals=2
     v22  Binop { op=or, lhs=v20, rhs=v21 }                -> x9
     v23  Store { addr=v11, disp=0, value=v22, kind=I32 }  -> -
     v24  Imm(0)                                           -> x0
-    v25  LocalAddr(-2)                                    -> x12
+    v25  LocalAddr(-2)                                    -> x0
     v26  BinopI { op=and, lhs=v5, rhs_imm=1023 }          -> x3
     v27  BinopI { op=and, lhs=v22, rhs_imm=4294967295 }   -> x0
     v28  BinopI { op=and, lhs=v22, rhs_imm=-536346625 }   -> x0
     v29  BinopI { op=shl, lhs=v26, rhs_imm=19 }           -> x2
     v30  Binop { op=or, lhs=v28, rhs=v29 }                -> x0
-    v31  Store { addr=v25, disp=0, value=v30, kind=I32 }  -> -
+    v31  StoreLocal { off=-2, value=v30, kind=I32 }       -> -
     v32  Imm(0)                                           -> x2
     v33  LocalAddr(-2)                                    -> x2
     v34  BinopI { op=add, lhs=v33, rhs_imm=4 }            -> x9
@@ -170,7 +170,7 @@ fn ent_pc=1 n_params=5 variadic=false locals=2
     v42  BinopI { op=add, lhs=v41, rhs_imm=8 }            -> x12
     v43  Store { addr=v41, disp=8, value=v9, kind=I32 }   -> -
     v44  LocalAddr(-2)                                    -> x2
-    v45  Load { addr=v44, disp=0, kind=U16 }              -> x2
+    v45  LoadLocal { off=-2, kind=U16 }                   -> x2
     v46  Imm(0)                                           -> x12
     v47  BinopI { op=and, lhs=v1, rhs_imm=65535 }         -> x7
     v48  Binop { op=eq, lhs=v45, rhs=v47 }                -> x7

@@ -57,8 +57,7 @@ Disassembly of section .text:
                	str	w1, [x0]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	mov	x1, #0x0                // =0
-               	str	w1, [x0]
+               	str	wzr, [x0]
                	bl	<addr>
                	cmp	x0, #0x7
                	b.eq	<addr>
@@ -81,8 +80,7 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	mov	x2, #0x9                // =9
                	str	w2, [x1]
-               	mov	x1, #0x0                // =0
-               	str	w1, [x0]
+               	str	wzr, [x0]
                	bl	<addr>
                	cmp	x0, #0x9
                	b.eq	<addr>

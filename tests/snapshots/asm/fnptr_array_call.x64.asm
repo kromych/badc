@@ -86,8 +86,7 @@ Disassembly of section .text:
                	movq	0x8(%rax), %rax
                	callq	*%rax
                	movq	%rax, -0x8(%rbp)
-               	leaq	-0x8(%rbp), %rax
-               	movq	(%rax), %rax
+               	movq	-0x8(%rbp), %rax
                	movl	(%rax), %eax
                	xorq	$0x9, %rax
                	testl	%eax, %eax
@@ -99,8 +98,7 @@ Disassembly of section .text:
                	movq	(%rax), %rax
                	callq	*%rax
                	movq	%rax, -0x8(%rbp)
-               	leaq	-0x8(%rbp), %rax
-               	movq	(%rax), %rax
+               	movq	-0x8(%rbp), %rax
                	movl	(%rax), %eax
                	xorq	$0x7, %rax
                	testl	%eax, %eax

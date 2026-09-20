@@ -39,9 +39,8 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0xbad2             // =47826
                	ret
-               	mov	x2, #0x0                // =0
-               	str	x2, [x1]
-               	str	x2, [x0]
+               	str	xzr, [x1]
+               	str	xzr, [x0]
                	mov	x0, #0x63               // =99
                	ret
 

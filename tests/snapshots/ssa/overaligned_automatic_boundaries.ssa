@@ -133,8 +133,8 @@ fn ent_pc=5 n_params=0 variadic=false locals=19
     terminator Bz { cond=v55, target=b12, fall=b7 }   (exit_acc=v55)
   block 7  start_pc=0
     v59  LocalAddr(-12)                                   -> x0
-    v60  Imm(0)                                           -> x1
-    v61  Load { addr=v59, disp=0, kind=I8 }               -> x0
+    v60  Imm(0)                                           -> x0
+    v61  LoadLocal { off=-12, kind=I8 }                   -> x0
     v62  BinopI { op=eq, lhs=v61, rhs_imm=2 }             -> x1
     v63  BinopI { op=ne, lhs=v62, rhs_imm=0 }             -> x0
     v64  Imm(0)                                           -> x0
@@ -147,8 +147,8 @@ fn ent_pc=5 n_params=0 variadic=false locals=19
     terminator Bz { cond=v65, target=b11, fall=b9 }   (exit_acc=v65)
   block 9  start_pc=0
     v69  LocalAddr(-8)                                    -> x0
-    v70  Imm(0)                                           -> x1
-    v71  Load { addr=v69, disp=0, kind=I8 }               -> x0
+    v70  Imm(0)                                           -> x0
+    v71  LoadLocal { off=-8, kind=I8 }                    -> x0
     v72  BinopI { op=eq, lhs=v71, rhs_imm=3 }             -> x0
     v73  BinopI { op=ne, lhs=v72, rhs_imm=0 }             -> x1
     v74  Imm(0)                                           -> x1
@@ -345,7 +345,7 @@ fn ent_pc=8 n_params=1 variadic=false locals=19
   block 1  start_pc=0
     v21  LocalAddr(-16)                                   -> x0
     v22  Imm(0)                                           -> x0
-    v23  Load { addr=v21, disp=0, kind=I16 }              -> x0
+    v23  LoadLocal { off=-16, kind=I16 }                  -> x0
     v24  Imm(1)                                           -> x0
     v25  Imm(1)                                           -> x1
     v26  Imm(0)                                           -> x1

@@ -47,10 +47,10 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	leaq	<rip>, %rcx        # <addr>
-               	leaq	-0x8(%rbp), %rdx
                	movl	$0x9, -0x8(%rbp)
-               	movl	$0xa, (%rdx)
-               	movslq	-0x8(%rbp), %rax
+               	movl	$0xa, %eax
+               	movl	%eax, -0x8(%rbp)
+               	movslq	%eax, %rax
                	jmpq	*%rcx
                	leave
                	retq

@@ -32,12 +32,9 @@ Disassembly of section .text:
                	movl	$0x0, -0x18(%rbp)
                	movl	$0x0, -0x10(%rbp)
                	movl	$0x0, -0x8(%rbp)
-               	leaq	-0x18(%rbp), %rax
-               	movl	$0x11223344, (%rax)     # imm = 0x11223344
-               	leaq	-0x10(%rbp), %rax
-               	movw	$0x3344, (%rax)         # imm = 0x3344
-               	leaq	-0x8(%rbp), %rax
-               	movb	$0x44, (%rax)
+               	movl	$0x11223344, -0x18(%rbp) # imm = 0x11223344
+               	movw	$0x3344, -0x10(%rbp)    # imm = 0x3344
+               	movb	$0x44, -0x8(%rbp)
                	movl	-0x18(%rbp), %eax
                	xorq	$0x11223344, %rax       # imm = 0x11223344
                	movl	-0x10(%rbp), %ecx

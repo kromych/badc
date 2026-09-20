@@ -19,8 +19,7 @@ Disassembly of section .text:
                	sub	sp, sp, #0x10
                	add	x0, x0, #0x38
                	ldarb	w0, [x0]
-               	sub	x1, x29, #0x8
-               	strb	w0, [x1]
+               	sturb	w0, [x29, #-0x8]
                	ldurb	w0, [x29, #-0x8]
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10

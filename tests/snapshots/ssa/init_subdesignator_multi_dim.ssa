@@ -198,7 +198,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=40
     v18  Imm(0)                                           -> x3
     v19  BinopI { op=and, lhs=v3, rhs_imm=65535 }         -> x3
     v20  LocalAddr(-40)                                   -> x3
-    v21  Store { addr=v20, disp=0, value=v3, kind=I16 }   -> -
+    v21  StoreLocal { off=-40, value=v3, kind=I16 }       -> -
     v22  Imm(0)                                           -> x0
     v23  Imm(2)                                           -> x0
     v24  Imm(0)                                           -> x0

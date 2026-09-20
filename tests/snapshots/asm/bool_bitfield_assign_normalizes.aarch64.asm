@@ -20,8 +20,7 @@ Disassembly of section .text:
                	sub	x0, x29, #0x8
                	str	wzr, [x0]
                	fmov	d0, #0.50000000
-               	mov	x3, #0x0                // =0
-               	strb	w3, [x0]
+               	strb	wzr, [x0]
                	mov	x4, #0x2                // =2
                	strb	w4, [x0]
                	mov	x1, #0x3                // =3
@@ -31,7 +30,7 @@ Disassembly of section .text:
                	strb	w1, [x0]
                	strb	w1, [x0]
                	strb	w2, [x0]
-               	strb	w3, [x0]
+               	strb	wzr, [x0]
                	strb	w2, [x0]
                	strb	w1, [x0]
                	strb	w1, [x0]

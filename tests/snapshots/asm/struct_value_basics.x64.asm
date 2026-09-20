@@ -56,10 +56,9 @@ Disassembly of section .text:
                	leaq	-0x8(%rbp), %rdi
                	callq	<addr>
                	movq	%rax, %r13
-               	leaq	-0x10(%rbp), %rbx
                	movl	$0x3, %edi
                	callq	<addr>
-               	movl	%eax, (%rbx)
+               	movl	%eax, -0x10(%rbp)
                	leaq	-0x10(%rbp), %rbx
                	movl	$0x4, %edi
                	callq	<addr>
@@ -108,10 +107,9 @@ Disassembly of section .text:
                	popq	%r13
                	leave
                	retq
-               	leaq	-0x8(%rbp), %rbx
                	movl	$0x64, %edi
                	callq	<addr>
-               	movl	%eax, (%rbx)
+               	movl	%eax, -0x8(%rbp)
                	leaq	-0x8(%rbp), %rbx
                	movl	$0xc8, %edi
                	callq	<addr>

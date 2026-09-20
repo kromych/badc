@@ -9,39 +9,39 @@ fn ent_pc=5 n_params=0 variadic=false locals=3
     v3   StoreLocal { off=-2, value=v1, kind=I32 }        -> -
     v4   StoreLocal { off=-1, value=v1, kind=I32 }        -> -
     v5   LocalAddr(-3)                                    -> x0
-    v6   Imm(4)                                           -> x1
-    v7   Imm(287454020)                                   -> x1
-    v8   Imm(4)                                           -> x1
-    v9   Imm(287454020)                                   -> x1
-    v10  Imm(0)                                           -> x1
-    v11  Imm(0)                                           -> x1
-    v12  Imm(1)                                           -> x1
-    v13  Imm(287454020)                                   -> x1
-    v14  Imm(287454020)                                   -> x1
-    v15  Store { addr=v5, disp=0, value=v14, kind=I32 }   -> -
+    v6   Imm(4)                                           -> x0
+    v7   Imm(287454020)                                   -> x0
+    v8   Imm(4)                                           -> x0
+    v9   Imm(287454020)                                   -> x0
+    v10  Imm(0)                                           -> x0
+    v11  Imm(0)                                           -> x0
+    v12  Imm(1)                                           -> x0
+    v13  Imm(287454020)                                   -> x0
+    v14  Imm(287454020)                                   -> x0
+    v15  StoreLocal { off=-3, value=v14, kind=I32 }       -> -
     v16  LocalAddr(-2)                                    -> x0
-    v17  Imm(2)                                           -> x1
-    v18  Imm(287454020)                                   -> x1
-    v19  Imm(2)                                           -> x1
-    v20  Imm(287454020)                                   -> x1
-    v21  Imm(0)                                           -> x1
-    v22  Imm(1)                                           -> x1
-    v23  Imm(1)                                           -> x1
-    v24  Imm(287454020)                                   -> x1
-    v25  Imm(287454020)                                   -> x1
-    v26  Imm(13124)                                       -> x1
-    v27  Store { addr=v16, disp=0, value=v26, kind=I16 }  -> -
+    v17  Imm(2)                                           -> x0
+    v18  Imm(287454020)                                   -> x0
+    v19  Imm(2)                                           -> x0
+    v20  Imm(287454020)                                   -> x0
+    v21  Imm(0)                                           -> x0
+    v22  Imm(1)                                           -> x0
+    v23  Imm(1)                                           -> x0
+    v24  Imm(287454020)                                   -> x0
+    v25  Imm(287454020)                                   -> x0
+    v26  Imm(13124)                                       -> x0
+    v27  StoreLocal { off=-2, value=v26, kind=I16 }       -> -
     v28  LocalAddr(-1)                                    -> x0
-    v29  Imm(1)                                           -> x1
-    v30  Imm(287454020)                                   -> x1
-    v31  Imm(1)                                           -> x1
-    v32  Imm(287454020)                                   -> x1
-    v33  Imm(1)                                           -> x1
-    v34  Imm(1)                                           -> x1
-    v35  Imm(287454020)                                   -> x1
-    v36  Imm(287454020)                                   -> x1
-    v37  Imm(68)                                          -> x1
-    v38  Store { addr=v28, disp=0, value=v37, kind=I8 }   -> -
+    v29  Imm(1)                                           -> x0
+    v30  Imm(287454020)                                   -> x0
+    v31  Imm(1)                                           -> x0
+    v32  Imm(287454020)                                   -> x0
+    v33  Imm(1)                                           -> x0
+    v34  Imm(1)                                           -> x0
+    v35  Imm(287454020)                                   -> x0
+    v36  Imm(287454020)                                   -> x0
+    v37  Imm(68)                                          -> x0
+    v38  StoreLocal { off=-1, value=v37, kind=I8 }        -> -
     v39  LoadLocal { off=-3, kind=U32 }                   -> x0
     v40  BinopI { op=xor, lhs=v39, rhs_imm=287454020 }    -> x0
     v41  LoadLocal { off=-2, kind=U32 }                   -> x1

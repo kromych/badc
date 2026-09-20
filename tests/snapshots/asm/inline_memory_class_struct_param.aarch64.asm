@@ -61,8 +61,7 @@ Disassembly of section .text:
                	str	x10, [x0, #0x20]
                	ldr	x10, [sp], #0x10
                	bl	<addr>
-               	sub	x1, x29, #0x28
-               	ldr	x1, [x1]
+               	ldur	x1, [x29, #-0x28]
                	add	x0, x0, x1
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10

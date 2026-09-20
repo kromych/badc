@@ -139,8 +139,7 @@ Disassembly of section .text:
                	incq	%rax
                	cmpl	$0x3, %eax
                	jb	<addr>
-               	leaq	-0x10(%rbp), %rax
-               	movzbq	(%rax), %rax
+               	movzbq	-0x10(%rbp), %rax
                	xorq	$0x11, %rax
                	testl	%eax, %eax
                	jne	<addr>

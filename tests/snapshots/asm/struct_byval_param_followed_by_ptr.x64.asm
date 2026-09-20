@@ -32,10 +32,9 @@ Disassembly of section .text:
                	pushq	%rbx
                	xorl	%ebx, %ebx
                	movl	%ebx, -0x8(%rbp)
-               	leaq	-0x8(%rbp), %rcx
                	leaq	<rip>, %rax
-               	movslq	(%rax), %rdx
-               	cmpl	$0x2a, %edx
+               	movslq	(%rax), %rcx
+               	cmpl	$0x2a, %ecx
                	je	<addr>
                	movl	$0x1e, %ebx
                	testl	%ebx, %ebx
@@ -68,5 +67,5 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	movl	$0x1, (%rcx)
+               	movl	$0x1, -0x8(%rbp)
                	jmp	<addr>

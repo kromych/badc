@@ -912,7 +912,7 @@ fn ent_pc=30 n_params=0 variadic=false locals=6
     v281 BinopI { op=shl, lhs=v280, rhs_imm=32 }          -> x2
     v282 Extend { value=v280, kind=I32 }                  -> x2
     v283 LocalAddr(-1)                                    -> x2
-    v284 Load { addr=v283, disp=0, kind=U32 }             -> x2
+    v284 LoadLocal { off=-1, kind=U32 }                   -> x2
     v285 BinopI { op=shr, lhs=v284, rhs_imm=16 }          -> x2
     v286 BinopI { op=and, lhs=v285, rhs_imm=65535 }       -> x6
     v287 Binop { op=add, lhs=v280, rhs=v285 }             -> x1

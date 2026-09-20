@@ -53,8 +53,7 @@ Disassembly of section .text:
                	sub	x2, x29, #0x10
                	mov	x0, #0x1                // =1
                	str	x0, [x2]
-               	mov	x0, #0x0                // =0
-               	str	x0, [x2, #0x8]
+               	str	xzr, [x2, #0x8]
                	sub	x0, x29, #0x40
                	sub	x1, x29, #0x70
                	bl	<addr>

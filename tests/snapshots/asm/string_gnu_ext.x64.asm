@@ -285,8 +285,7 @@ Disassembly of section .text:
                	movb	$0x79, (%rdi)
                	xorl	%eax, %eax
                	callq	<addr>
-               	leaq	-0x10(%rbp), %rax
-               	movsbq	(%rax), %rax
+               	movsbq	-0x10(%rbp), %rax
                	cmpl	$0x79, %eax
                	je	<addr>
                	movl	$0x10, %eax

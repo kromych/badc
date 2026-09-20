@@ -180,8 +180,7 @@ Disassembly of section .text:
                	strb	w0, [x1, #0xd]
                	mov	x0, #0x1                // =1
                	strb	w0, [x1, #0xe]
-               	mov	x0, #0x0                // =0
-               	strb	w0, [x1, #0xf]
+               	strb	wzr, [x1, #0xf]
                	sub	x16, x29, #0x10
                	str	x16, [sp]
                	ldr	x0, [sp]

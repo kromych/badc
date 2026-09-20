@@ -13,18 +13,18 @@ fn ent_pc=2 n_params=0 variadic=false locals=1
     v7   Imm(0)                                           -> x0
     v8   Imm(0)                                           -> x3
     v9   StoreLocal { off=-1, value=v8, kind=I32 }        -> -
-    v10  LocalAddr(-1)                                    -> x1
+    v10  LocalAddr(-1)                                    -> x0
     v11  Imm(0)                                           -> x0
     v12  ImmData(80)                                      -> x0
-    v13  Imm(0)                                           -> x2
-    v14  Imm(0)                                           -> x2
-    v15  Imm(0)                                           -> x2
-    v16  Imm(0)                                           -> x2
-    v17  Imm(7)                                           -> x2
-    v18  Imm(0)                                           -> x2
-    v19  Imm(0)                                           -> x2
-    v20  Load { addr=v12, disp=0, kind=I32 }              -> x2
-    v21  BinopI { op=ne, lhs=v20, rhs_imm=42 }            -> x2
+    v13  Imm(0)                                           -> x1
+    v14  Imm(0)                                           -> x1
+    v15  Imm(0)                                           -> x1
+    v16  Imm(0)                                           -> x1
+    v17  Imm(7)                                           -> x1
+    v18  Imm(0)                                           -> x1
+    v19  Imm(0)                                           -> x1
+    v20  Load { addr=v12, disp=0, kind=I32 }              -> x1
+    v21  BinopI { op=ne, lhs=v20, rhs_imm=42 }            -> x1
     terminator Bz { cond=v21, target=b7, fall=b1 }   (exit_acc=v21)
   block 1  start_pc=0
     v42  Imm(30)                                          -> x3
@@ -62,8 +62,8 @@ fn ent_pc=2 n_params=0 variadic=false locals=1
     v39  Imm(0)                                           -> x0
     terminator Return(v39)   (exit_acc=v39)
   block 7  start_pc=0
-    v43  Imm(1)                                           -> x2
-    v44  Store { addr=v10, disp=0, value=v43, kind=I32 }  -> -
+    v43  Imm(1)                                           -> x1
+    v44  StoreLocal { off=-1, value=v43, kind=I32 }       -> -
     v45  Imm(0)                                           -> x1
     terminator Jmp(b2)   (exit_acc=v8)
 ; --- SSA dump (ok=true) ent_pc=0 ---

@@ -42,8 +42,7 @@ Disassembly of section .text:
                	jle	<addr>
                	decq	%rdi
                	callq	<addr>
-               	leaq	-0x100(%rbp), %rax
-               	movsbq	(%rax), %rax
+               	movsbq	-0x100(%rbp), %rax
                	leave
                	retq
 

@@ -58,13 +58,12 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	mov	x0, #0x0                // =0
-               	sturh	w0, [x29, #-0x8]
+               	sturh	wzr, [x29, #-0x8]
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	mov	x2, #-0x8000000000000000 // =-9223372036854775808
                	str	x2, [x1]
-               	str	w0, [x1, #0x8]
+               	str	wzr, [x1, #0x8]
                	sub	x0, x29, #0x8
                	bl	<addr>
                	eor	x0, x0, #0x1e

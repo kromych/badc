@@ -73,8 +73,7 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x40
                	sub	x0, x29, #0x40
-               	mov	x1, #0x0                // =0
-               	str	x1, [x0]
+               	str	xzr, [x0]
                	mov	x1, #0x1                // =1
                	str	x1, [x0, #0x8]
                	mov	x1, #0x2                // =2

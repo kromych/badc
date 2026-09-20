@@ -117,9 +117,8 @@ Disassembly of section .text:
                	retq
                	leaq	-<rip>, %rax       # <addr>
                	movq	%rax, -0x10(%rbp)
-               	leaq	-0x10(%rbp), %rax
                	movl	$0x3, %edi
-               	movq	(%rax), %rax
+               	movq	-0x10(%rbp), %rax
                	callq	*%rax
                	cmpl	$0x4, %eax
                	je	<addr>

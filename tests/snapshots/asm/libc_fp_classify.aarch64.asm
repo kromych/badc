@@ -99,8 +99,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x0                // =0
-               	fmov	d16, x0
-               	stur	d16, [x29, #-0x10]
+               	stur	x0, [x29, #-0x10]
                	stur	d0, [x29, #-0x10]
                	ldur	x1, [x29, #-0x10]
                	lsr	x2, x1, #52

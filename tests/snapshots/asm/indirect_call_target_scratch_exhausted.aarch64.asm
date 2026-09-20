@@ -171,11 +171,10 @@ Disassembly of section .text:
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	mov	x1, #0x0                // =0
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	str	x1, [x0]
-               	str	x1, [x0, #0x8]
+               	str	xzr, [x0]
+               	str	xzr, [x0, #0x8]
                	mov	x1, #0x1                // =1
                	str	x1, [x0, #0x10]
                	add	x2, x0, #0x10

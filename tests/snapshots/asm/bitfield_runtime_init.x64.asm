@@ -78,8 +78,7 @@ Disassembly of section .text:
 <build_mixed>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	pushq	%r12
+               	subq	$0x18, %rsp
                	pushq	%rbx
                	leaq	-0x10(%rbp), %rax
                	movq	$0x0, (%rax)
@@ -92,7 +91,6 @@ Disassembly of section .text:
                	shlq	$0x10, %rbx
                	orq	%rbx, %r9
                	movl	%r9d, (%rax)
-               	leaq	-0x10(%rbp), %r12
                	movq	%rdx, %rbx
                	andq	$0x3ff, %rbx            # imm = 0x3FF
                	movq	%r9, %rax
@@ -100,15 +98,14 @@ Disassembly of section .text:
                	movq	%rbx, %rdx
                	shlq	$0x13, %rdx
                	orq	%rdx, %rax
-               	movl	%eax, (%r12)
+               	movl	%eax, -0x10(%rbp)
                	leaq	-0x10(%rbp), %rdx
                	movq	%rcx, %r9
                	andq	$0x7ffff, %r9           # imm = 0x7FFFF
                	movl	%r9d, 0x4(%rdx)
                	leaq	-0x10(%rbp), %rdx
                	movl	%r8d, 0x8(%rdx)
-               	leaq	-0x10(%rbp), %rdx
-               	movzwq	(%rdx), %rdx
+               	movzwq	-0x10(%rbp), %rdx
                	andq	$0xffff, %rdi           # imm = 0xFFFF
                	cmpl	%edi, %edx
                	sete	%dil
@@ -147,7 +144,6 @@ Disassembly of section .text:
                	sete	%al
                	movzbq	%al, %rax
                	popq	%rbx
-               	popq	%r12
                	leave
                	retq
                	movq	%rax, %rcx

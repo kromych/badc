@@ -85,10 +85,9 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x1                // =1
                	bl	<addr>
-               	mov	x2, #0x0                // =0
                	sub	x1, x29, #0x10
                	stp	xzr, xzr, [x1]
-               	str	x2, [x1]
+               	str	xzr, [x1]
                	str	x0, [x1, #0x8]
                	cmp	x0, #0x1
                	b.eq	<addr>

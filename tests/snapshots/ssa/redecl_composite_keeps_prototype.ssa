@@ -5,7 +5,7 @@ fn ent_pc=0 n_params=1 variadic=false locals=1
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   LocalAddr(-1)                                    -> x0
-    v2   Load { addr=v1, disp=0, kind=U32 }               -> x0
+    v2   LoadLocal { off=-1, kind=U32 }                   -> x0
     v3   BinopI { op=add, lhs=v2, rhs_imm=1 }             -> x0
     v4   BinopI { op=and, lhs=v3, rhs_imm=4294967295 }    -> x0
     terminator Return(v4)   (exit_acc=v4)
@@ -16,7 +16,7 @@ fn ent_pc=1 n_params=1 variadic=false locals=1
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   LocalAddr(-1)                                    -> x0
-    v2   Load { addr=v1, disp=0, kind=U32 }               -> x0
+    v2   LoadLocal { off=-1, kind=U32 }                   -> x0
     v3   BinopI { op=add, lhs=v2, rhs_imm=2 }             -> x0
     v4   BinopI { op=and, lhs=v3, rhs_imm=4294967295 }    -> x0
     terminator Return(v4)   (exit_acc=v4)
@@ -27,7 +27,7 @@ fn ent_pc=2 n_params=1 variadic=false locals=1
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   LocalAddr(-1)                                    -> x0
-    v2   Load { addr=v1, disp=0, kind=U32 }               -> x0
+    v2   LoadLocal { off=-1, kind=U32 }                   -> x0
     v3   BinopI { op=add, lhs=v2, rhs_imm=3 }             -> x0
     v4   BinopI { op=and, lhs=v3, rhs_imm=4294967295 }    -> x0
     terminator Return(v4)   (exit_acc=v4)

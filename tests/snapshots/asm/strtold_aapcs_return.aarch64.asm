@@ -529,8 +529,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x0, x29, #0x20
-               	ldrb	w0, [x0]
+               	ldurb	w0, [x29, #-0x20]
                	mov	x17, #0x34              // =52
                	eor	x0, x0, x17
                	cbz	w0, <addr>

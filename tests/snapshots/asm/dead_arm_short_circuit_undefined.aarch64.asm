@@ -35,15 +35,14 @@ Disassembly of section .text:
                	ldr	x10, [x1, #0x8]
                	str	x10, [x0, #0x8]
                	ldr	x10, [sp], #0x10
-               	mov	x2, #0x0                // =0
-               	str	x2, [x0]
-               	str	x2, [x0, #0x8]
+               	str	xzr, [x0]
+               	str	xzr, [x0, #0x8]
                	mov	x1, #0x1                // =1
                	str	x1, [x0]
                	str	x1, [x0, #0x8]
                	ldr	x3, [x0]
                	tbnz	w3, #0x0, <addr>
-               	str	x2, [x0]
+               	str	xzr, [x0]
                	mov	x3, #0x2                // =2
                	str	x3, [x0, #0x8]
                	str	x1, [x0]
@@ -52,7 +51,7 @@ Disassembly of section .text:
                	tbnz	w1, #0x0, <addr>
                	ldr	x3, [x0]
                	tbnz	w3, #0x0, <addr>
-               	str	x2, [x0]
+               	str	xzr, [x0]
                	mov	x2, #0x4                // =4
                	str	x2, [x0, #0x8]
                	str	x1, [x0]

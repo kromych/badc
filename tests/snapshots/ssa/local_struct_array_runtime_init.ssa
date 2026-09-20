@@ -22,26 +22,26 @@ fn ent_pc=0 n_params=0 variadic=false locals=2
     v16  Imm(0)                                           -> x1
     v17  Imm(0)                                           -> x1
     v18  LocalAddr(-1)                                    -> x1
-    v19  Imm(0)                                           -> x2
-    v20  Imm(0)                                           -> x2
-    v21  Imm(0)                                           -> x2
-    v22  Imm(0)                                           -> x2
-    v23  Imm(0)                                           -> x2
-    v24  Imm(0)                                           -> x2
-    v25  Imm(0)                                           -> x2
-    v26  Load { addr=v10, disp=0, kind=I32 }              -> x2
-    v27  BinopI { op=ne, lhs=v26, rhs_imm=7 }             -> x2
+    v19  Imm(0)                                           -> x1
+    v20  Imm(0)                                           -> x1
+    v21  Imm(0)                                           -> x1
+    v22  Imm(0)                                           -> x1
+    v23  Imm(0)                                           -> x1
+    v24  Imm(0)                                           -> x1
+    v25  Imm(0)                                           -> x1
+    v26  Load { addr=v10, disp=0, kind=I32 }              -> x1
+    v27  BinopI { op=ne, lhs=v26, rhs_imm=7 }             -> x1
     terminator Bz { cond=v27, target=b2, fall=b1 }   (exit_acc=v27)
   block 1  start_pc=0
     v28  Imm(1)                                           -> x0
     terminator Return(v28)   (exit_acc=v28)
   block 2  start_pc=0
-    v29  Imm(0)                                           -> x2
-    v30  Imm(16)                                          -> x2
-    v31  Imm(0)                                           -> x2
-    v32  Imm(0)                                           -> x2
-    v33  Imm(0)                                           -> x2
-    v34  Load { addr=v18, disp=0, kind=I32 }              -> x1
+    v29  Imm(0)                                           -> x1
+    v30  Imm(16)                                          -> x1
+    v31  Imm(0)                                           -> x1
+    v32  Imm(0)                                           -> x1
+    v33  Imm(0)                                           -> x1
+    v34  LoadLocal { off=-1, kind=I32 }                   -> x1
     v35  BinopI { op=ne, lhs=v34, rhs_imm=9 }             -> x1
     terminator Bz { cond=v35, target=b4, fall=b3 }   (exit_acc=v35)
   block 3  start_pc=0

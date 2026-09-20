@@ -249,8 +249,7 @@ Disassembly of section .text:
                	ldr	q2, [x0]
                	bl	<addr>
                	stur	q0, [x29, #-0xd8]
-               	sub	x0, x29, #0xd8
-               	ldr	q0, [x0]
+               	ldur	q0, [x29, #-0xd8]
                	sub	x16, x29, #0x78
                	str	x16, [sp, #0x150]
                	add	x16, sp, #0x158
@@ -553,8 +552,8 @@ Disassembly of section .text:
                	eor	x1, x2, x1
                	str	x0, [x3]
                	str	x1, [x3, #0x8]
-               	sub	x0, x29, #0x200
-               	ldr	q0, [x0]
+               	sub	x16, x29, #0x200
+               	ldr	q0, [x16]
                	sub	x16, x29, #0x58
                	str	x16, [sp, #0x150]
                	add	x16, sp, #0x158

@@ -130,9 +130,8 @@ Disassembly of section .text:
                	sub	x7, x29, #0x20
                	stp	xzr, xzr, [x7]
                	stp	xzr, xzr, [x7, #0x10]
-               	movi	d0, #0000000000000000
-               	str	d0, [x7]
-               	str	d0, [x7, #0x8]
+               	str	xzr, [x7]
+               	str	xzr, [x7, #0x8]
                	scvtf	d0, x20
                	str	d0, [x7, #0x10]
                	scvtf	d0, x21

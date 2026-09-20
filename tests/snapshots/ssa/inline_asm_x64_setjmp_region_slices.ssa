@@ -42,8 +42,8 @@ fn ent_pc=1 n_params=1 variadic=false locals=32
     terminator Jmp(b5)   (exit_acc=v27)
   block 5  start_pc=0
     v28  LocalAddr(-32)                                   -> x0
-    v29  Imm(0)                                           -> x1
-    v30  Load { addr=v28, disp=0, kind=I8, volatile }     -> x0
+    v29  Imm(0)                                           -> x0
+    v30  LoadLocal { off=-32, kind=I8, volatile }         -> x0
     terminator Return
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=main

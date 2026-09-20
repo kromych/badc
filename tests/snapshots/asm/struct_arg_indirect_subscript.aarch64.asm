@@ -18,12 +18,11 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0xb0
                	sub	x0, x29, #0x88
-               	mov	x2, #0x0                // =0
-               	str	x2, [x0]
+               	str	xzr, [x0]
                	add	x1, x0, #0x8
                	mov	x0, #0x1                // =1
                	str	x0, [x1]
-               	str	x2, [x1, #0x8]
+               	str	xzr, [x1, #0x8]
                	mov	x2, #0x2                // =2
                	str	x2, [x1, #0x10]
                	add	x3, x1, #0x10

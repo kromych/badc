@@ -73,8 +73,8 @@ fn ent_pc=4 n_params=0 variadic=false locals=1
     v31  Imm(-7)                                          -> x0
     v32  Imm(-7)                                          -> x0
     v33  StoreLocal { off=-1, value=v32, kind=I32 }       -> -
-    v34  LocalAddr(-1)                                    -> x0
-    v35  Load { addr=v34, disp=0, kind=I32 }              -> x0
+    v34  LocalAddr(-1)                                    -> x1
+    v35  Extend { value=v32, kind=I32 }                   -> x0
     v36  BinopI { op=mul, lhs=v35, rhs_imm=3 }            -> x0
     v37  BinopI { op=ne, lhs=v36, rhs_imm=-21 }           -> x0
     terminator Bz { cond=v37, target=b4, fall=b3 }   (exit_acc=v37)

@@ -67,8 +67,7 @@ Disassembly of section .text:
                	leaq	-0x1d0(%rbp), %rbx
                	movdqu	(%rbx), %xmm0
                	movdqu	%xmm0, (%rax)
-               	leaq	-0x1c0(%rbp), %rax
-               	movslq	(%rax), %rax
+               	movslq	-0x1c0(%rbp), %rax
                	cmpl	$0x2a, %eax
                	je	<addr>
                	movl	$0x3, %eax
@@ -119,8 +118,7 @@ Disassembly of section .text:
                	cvtps2dq	%xmm0, %xmm0
                	shufps	$0x1b, %xmm0, %xmm0     # xmm0 = xmm0[3,2,1,0]
                	movdqu	%xmm0, (%rax)
-               	leaq	-0x1d0(%rbp), %rax
-               	movslq	(%rax), %rax
+               	movslq	-0x1d0(%rbp), %rax
                	cmpl	$0x2a, %eax
                	je	<addr>
                	movl	$0x7, %eax
@@ -268,8 +266,7 @@ Disassembly of section .text:
                	movapd	%xmm0, %xmm1
                	vpshufd	$0x1b, %xmm1, %xmm0     # xmm0 = xmm1[3,2,1,0]
                	movups	%xmm0, -0x2a0(%rbp)
-               	leaq	-0x2a0(%rbp), %rax
-               	movslq	(%rax), %rax
+               	movslq	-0x2a0(%rbp), %rax
                	cmpl	$0x2a, %eax
                	je	<addr>
                	movl	$0xb, %eax

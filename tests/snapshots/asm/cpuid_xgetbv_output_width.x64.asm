@@ -136,8 +136,6 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x38, %rsp
                	pushq	%rbx
-               	leaq	-0x10(%rbp), %rsi
-               	leaq	-0x8(%rbp), %rdi
                	movl	$0x1, %eax
                	xorl	%ecx, %ecx
                	cpuid
@@ -153,8 +151,8 @@ Disassembly of section .text:
                	leave
                	retq
                	movabsq	$-0x2152411021524111, %rax # imm = 0xDEADBEEFDEADBEEF
-               	movq	%rax, (%rsi)
-               	movq	%rax, (%rdi)
+               	movq	%rax, -0x10(%rbp)
+               	movq	%rax, -0x8(%rbp)
                	xorl	%esi, %esi
                	xorl	%ecx, %ecx
                	xgetbv

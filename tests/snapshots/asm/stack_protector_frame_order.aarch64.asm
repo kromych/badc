@@ -24,9 +24,7 @@ Disassembly of section .text:
                	mov	x16, #0x0               // =0
                	mov	x0, #0x3                // =3
                	stur	w0, [x29, #-0x28]
-               	sub	x0, x29, #0x28
                	sub	x1, x29, #0x20
-               	ldrsw	x0, [x0]
                	and	x2, x0, #0xff
                	mov	x0, #0x0                // =0
                	strb	w2, [x1, x0]

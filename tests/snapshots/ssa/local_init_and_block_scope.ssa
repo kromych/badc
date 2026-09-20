@@ -85,9 +85,9 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v79  Imm(6)                                           -> x0
     v80  Imm(0)                                           -> x0
     v81  LocalAddr(-1)                                    -> x0
-    v82  Imm(0)                                           -> x1
-    v83  Imm(0)                                           -> x1
-    v84  Load { addr=v81, disp=0, kind=I32 }              -> x0
+    v82  Imm(0)                                           -> x0
+    v83  Imm(0)                                           -> x0
+    v84  LoadLocal { off=-1, kind=I32 }                   -> x0
     v85  BinopI { op=ne, lhs=v84, rhs_imm=1 }             -> x0
     terminator Bz { cond=v85, target=b2, fall=b1 }   (exit_acc=v85)
   block 1  start_pc=0

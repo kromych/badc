@@ -672,16 +672,16 @@ fn ent_pc=0 n_params=0 variadic=false locals=2
     v584 Imm(5)                                           -> x0
     v585 Imm(3)                                           -> x0
     v586 LocalAddr(-2)                                    -> x0
-    v587 Imm(2)                                           -> x1
-    v588 Store { addr=v586, disp=0, value=v587, kind=I64 } -> -
-    v589 Imm(6)                                           -> x0
-    v590 Imm(7)                                           -> x0
-    v591 Imm(6)                                           -> x0
-    v592 Imm(0)                                           -> x0
-    v593 Imm(0)                                           -> x0
-    v594 Imm(0)                                           -> x0
-    v595 LoadLocal { off=-2, kind=I64 }                   -> x0
-    v596 BinopI { op=ne, lhs=v595, rhs_imm=2 }            -> x0
+    v587 Imm(2)                                           -> x0
+    v588 StoreLocal { off=-2, value=v587, kind=I64 }      -> -
+    v589 Imm(6)                                           -> x1
+    v590 Imm(7)                                           -> x1
+    v591 Imm(6)                                           -> x1
+    v592 Imm(0)                                           -> x1
+    v593 Imm(0)                                           -> x1
+    v594 Imm(0)                                           -> x1
+    v595 LoadLocal { off=-2, kind=I64 }                   -> x1
+    v596 BinopI { op=ne, lhs=v587, rhs_imm=2 }            -> x0
     v597 Imm(0)                                           -> x1
     v598 Imm(0)                                           -> x1
     terminator Bz { cond=v596, target=b48, fall=b47 }   (exit_acc=v596)

@@ -21,13 +21,12 @@ Disassembly of section .text:
                	adrp	x3, <page>
                	add	x3, x3, <lo12>
                	mov	x1, x0
-               	sub	x4, x29, #0x8
                	cmp	w0, #0x4
                	cset	x2, eq
                	cbnz	w2, <addr>
-               	and	x5, x0, #0x7
-               	ldrb	w5, [x3, x5]
-               	strb	w5, [x4]
+               	and	x4, x0, #0x7
+               	ldrb	w4, [x3, x4]
+               	sturb	w4, [x29, #-0x8]
                	add	x0, x0, #0x1
                	cbnz	w2, <addr>
                	sub	x4, x29, #0x10

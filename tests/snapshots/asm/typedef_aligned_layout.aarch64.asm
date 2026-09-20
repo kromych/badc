@@ -125,10 +125,9 @@ Disassembly of section .text:
                	fmov	d0, #2.00000000
                	fmov	d1, #3.00000000
                	stur	d1, [x29, #-0x20]
-               	sub	x1, x29, #0x10
-               	sub	x2, x29, #0x20
-               	and	x2, x2, #0xf
-               	cbz	w2, <addr>
+               	sub	x1, x29, #0x20
+               	and	x1, x1, #0xf
+               	cbz	w1, <addr>
                	mov	x0, #0x35               // =53
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
@@ -139,7 +138,7 @@ Disassembly of section .text:
                	fadd	d0, d0, d1
                	fcvtzs	x0, d0
                	sub	x0, x0, #0x6
-               	ldrsw	x1, [x1]
+               	ldursw	x1, [x29, #-0x10]
                	sub	x1, x1, #0x1
                	add	x0, x0, x1
                	sxtw	x0, w0

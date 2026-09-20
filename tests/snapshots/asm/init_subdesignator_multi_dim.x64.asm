@@ -119,8 +119,7 @@ Disassembly of section .text:
                	movups	%xmm14, 0x80(%rbx)
                	movq	$0x0, 0x90(%rbx)
                	movl	$0x0, 0x98(%rbx)
-               	leaq	-0x140(%rbp), %rbx
-               	movw	%ax, (%rbx)
+               	movw	%ax, -0x140(%rbp)
                	leaq	-0x140(%rbp), %rax
                	movw	%cx, 0x2(%rax)
                	movw	%dx, 0xa(%rax)

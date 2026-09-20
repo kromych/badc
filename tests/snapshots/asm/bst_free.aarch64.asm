@@ -41,10 +41,9 @@ Disassembly of section .text:
                	cbnz	x20, <addr>
                	mov	x0, #0x18               // =24
                	bl	<addr>
-               	mov	x1, #0x0                // =0
                	str	x21, [x0]
-               	str	x1, [x0, #0x8]
-               	str	x1, [x0, #0x10]
+               	str	xzr, [x0, #0x8]
+               	str	xzr, [x0, #0x10]
                	ldp	x29, x30, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x20
                	ret

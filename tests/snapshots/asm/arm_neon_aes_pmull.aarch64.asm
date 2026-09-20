@@ -292,8 +292,7 @@ Disassembly of section .text:
                	strb	w1, [x2, #0xe]
                	mov	x1, #0x30               // =48
                	strb	w1, [x0, #0xf]
-               	mov	x1, #0x0                // =0
-               	strb	w1, [x2, #0xf]
+               	strb	wzr, [x2, #0xf]
                	sub	x1, x29, #0x40
                	ldrb	w3, [x0]
                	ldrb	w4, [x2]
@@ -505,7 +504,6 @@ Disassembly of section .text:
                	add	sp, sp, #0x180
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x0, x29, #0x150
                	sub	x16, x29, #0x170
                	str	x16, [sp, #0xd0]
                	ldr	x16, [sp, #0xd0]
@@ -514,7 +512,8 @@ Disassembly of section .text:
                	str	q0, [sp, #0xd0]
                	ldr	q1, [sp, #0xd0]
                	aesimc	v0.16b, v1.16b
-               	str	q0, [x0]
+               	sub	x17, x29, #0x150
+               	str	q0, [x17]
                	sub	x0, x29, #0x150
                	sub	x1, x29, #0x170
                	mov	x2, #0x10               // =16
@@ -526,13 +525,13 @@ Disassembly of section .text:
                	add	sp, sp, #0x180
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x0, x29, #0x150
                	sub	x16, x29, #0x170
                	str	x16, [sp, #0xd0]
                	ldr	x16, [sp, #0xd0]
                	ldr	q1, [x16]
                	aesmc	v0.16b, v1.16b
-               	str	q0, [x0]
+               	sub	x17, x29, #0x150
+               	str	q0, [x17]
                	sub	x0, x29, #0x170
                	ldrb	w0, [x0]
                	mov	x2, #0x2                // =2
@@ -753,7 +752,6 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, #0x40
                	b.lt	<addr>
-               	sub	x0, x29, #0x120
                	mov	x16, #0xbeef            // =48879
                	movk	x16, #0xdead, lsl #16
                	movk	x16, #0xface, lsl #32
@@ -767,7 +765,8 @@ Disassembly of section .text:
                	ldr	d1, [sp, #0xd0]
                	ldr	d2, [sp, #0xd8]
                	pmull	v0.1q, v1.1d, v2.1d
-               	str	q0, [x0]
+               	sub	x17, x29, #0x120
+               	str	q0, [x17]
                	sub	x0, x29, #0x120
                	ldr	x3, [x0]
                	cmp	x3, x2

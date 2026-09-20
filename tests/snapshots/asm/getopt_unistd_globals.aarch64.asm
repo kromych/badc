@@ -22,8 +22,7 @@ Disassembly of section .text:
                	str	w0, [x1]
                	adrp	x1, <page>
                	ldr	x1, [x1, <lo12>]
-               	mov	x2, #0x0                // =0
-               	str	w2, [x1]
+               	str	wzr, [x1]
                	adrp	x1, <page>
                	ldr	x1, [x1, <lo12>]
                	ldr	x1, [x1]

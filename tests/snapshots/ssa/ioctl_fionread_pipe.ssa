@@ -28,8 +28,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=2
     terminator Return(v15)   (exit_acc=v15)
   block 4  start_pc=0
     v16  LocalAddr(-2)                                    -> x0
-    v17  Imm(0)                                           -> x1
-    v18  Load { addr=v16, disp=0, kind=I32 }              -> x7
+    v17  Imm(0)                                           -> x0
+    v18  LoadLocal { off=-2, kind=I32 }                   -> x7
     v19  Imm(21531)                                       -> x6
     v20  LocalAddr(-1)                                    -> x2
     v21  CallExt { binding_idx=0, args=[v18, v19, v20], fp_arg_mask=0x0 } -> x0
@@ -47,8 +47,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=2
     terminator Return(v26)   (exit_acc=v26)
   block 8  start_pc=0
     v27  LocalAddr(-2)                                    -> x0
-    v28  Imm(0)                                           -> x1
-    v29  Load { addr=v27, disp=0, kind=I32 }              -> x7
+    v28  Imm(0)                                           -> x0
+    v29  LoadLocal { off=-2, kind=I32 }                   -> x7
     v30  CallExt { binding_idx=37, args=[v29], fp_arg_mask=0x0 } -> x0
     v31  LocalAddr(-2)                                    -> x0
     v32  Imm(4)                                           -> x1

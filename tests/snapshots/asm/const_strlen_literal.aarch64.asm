@@ -74,10 +74,9 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x60]
                	ldp	x20, x21, [sp], #0x70
                	ret
-               	mov	x1, #0x0                // =0
                	mov	x2, #0x78               // =120
                	strb	w2, [x0]
-               	strb	w1, [x0, #0x1]
+               	strb	wzr, [x0, #0x1]
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	ldrb	w2, [x0]

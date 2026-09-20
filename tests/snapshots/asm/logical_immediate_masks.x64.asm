@@ -581,8 +581,7 @@ Disassembly of section .text:
                	sarq	$0x8, %rcx
                	andq	$0xff, %rcx
                	addq	%rdx, %rcx
-               	leaq	-0x8(%rbp), %rdx
-               	movl	(%rdx), %edx
+               	movl	-0x8(%rbp), %edx
                	sarq	$0x10, %rdx
                	addq	%rdx, %rcx
                	xorq	%rcx, %rax

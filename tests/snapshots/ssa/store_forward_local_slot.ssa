@@ -57,15 +57,15 @@ fn ent_pc=2 n_params=1 variadic=false locals=1
     v3   BlockAddr(block=1)                               -> x1
     v4   Imm(0)                                           -> x2
     v5   LocalAddr(-1)                                    -> x2
-    v6   Imm(0)                                           -> x6
-    v7   Imm(0)                                           -> x6
+    v6   Imm(0)                                           -> x2
+    v7   Imm(0)                                           -> x2
     v8   StoreLocal { off=-1, value=v1, kind=I32 }        -> -
     v9   Imm(0)                                           -> x0
     v10  Imm(10)                                          -> x0
     v11  Imm(42949672960)                                 -> x0
     v12  Imm(10)                                          -> x0
-    v13  Store { addr=v5, disp=0, value=v12, kind=I32 }   -> -
-    v14  LoadLocal { off=-1, kind=I32 }                   -> x0
+    v13  StoreLocal { off=-1, value=v12, kind=I32 }       -> -
+    v14  Extend { value=v12, kind=I32 }                   -> x0
     v15  Imm(0)                                           -> x2
     v16  Imm(0)                                           -> x2
     terminator GotoIndirect(v3)   (exit_acc=v3)

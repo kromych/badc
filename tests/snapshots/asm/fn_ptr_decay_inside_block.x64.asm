@@ -47,10 +47,8 @@ Disassembly of section .text:
                	jne	<addr>
                	leaq	-<rip>, %rax       # <addr>
                	movq	%rax, -0x8(%rbp)
-               	leaq	-0x8(%rbp), %rax
-               	movq	(%rax), %rax
                	movl	$0x4, %edi
-               	callq	*%rax
+               	callq	<addr>
                	addq	%rbx, %rax
                	cmpl	$0x19a, %eax            # imm = 0x19A
                	jne	<addr>

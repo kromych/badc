@@ -39,8 +39,7 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	leave
                	retq
-               	leaq	-0x68(%rbp), %rax
-               	movq	(%rax), %rax
+               	movq	-0x68(%rbp), %rax
                	cmpq	$0x6553f100, %rax       # imm = 0x6553F100
                	jge	<addr>
                	movl	$0x2, %eax
@@ -67,9 +66,8 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	-0x50(%rbp), %rdi
-               	leaq	-0x58(%rbp), %rax
-               	movslq	(%rax), %rax
-               	movl	%eax, (%rdi)
+               	movslq	-0x58(%rbp), %rcx
+               	movl	%ecx, (%rdi)
                	movl	$0x1, %esi
                	movw	%si, 0x4(%rdi)
                	movw	$0x0, 0x6(%rdi)
@@ -88,8 +86,7 @@ Disassembly of section .text:
                	movl	$0x6, %eax
                	leave
                	retq
-               	leaq	-0x58(%rbp), %rax
-               	movslq	(%rax), %rdi
+               	movslq	-0x58(%rbp), %rdi
                	xorl	%eax, %eax
                	callq	<addr>
                	leaq	-0x58(%rbp), %rax

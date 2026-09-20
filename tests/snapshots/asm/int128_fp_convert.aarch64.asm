@@ -386,8 +386,7 @@ Disassembly of section .text:
                	fmul	d0, d0, d1
                	fcvt	s0, d0
                	str	s0, [x1]
-               	sub	x1, x29, #0x10
-               	ldr	w1, [x1]
+               	ldur	w1, [x29, #-0x10]
                	cmp	w1, w5
                	b.eq	<addr>
                	add	x0, x0, #0x3

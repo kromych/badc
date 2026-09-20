@@ -438,7 +438,7 @@ fn ent_pc=10 n_params=11 variadic=false locals=2
     v15  Load { addr=v13, disp=8, kind=I64 }              -> x0
     v16  BinopI { op=mul, lhs=v15, rhs_imm=1000 }         -> x0
     v17  LocalAddr(-2)                                    -> x3
-    v18  Load { addr=v17, disp=0, kind=I64 }              -> x3
+    v18  LoadLocal { off=-2, kind=I64 }                   -> x3
     v19  Binop { op=add, lhs=v16, rhs=v18 }               -> x0
     v20  LoadLocal { off=12, kind=I64 }                   -> x3
     v21  BinopI { op=mul, lhs=v20, rhs_imm=7 }            -> x3

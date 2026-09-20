@@ -269,9 +269,8 @@ Disassembly of section .text:
                	stur	w0, [x29, #-0x28]
                	mov	x0, #0x80000000         // =2147483648
                	stur	w0, [x29, #-0x20]
-               	mov	x0, #0x0                // =0
-               	stur	w0, [x29, #-0x18]
-               	stur	w0, [x29, #-0x10]
+               	stur	wzr, [x29, #-0x18]
+               	stur	wzr, [x29, #-0x10]
                	ldursw	x0, [x29, #-0x38]
                	sub	x0, x0, #0x2
                	sub	x1, x29, #0x18

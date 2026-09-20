@@ -64,9 +64,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x180
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x0                // =0
                	sub	x17, x29, #0x170
-               	str	w0, [x17]
+               	str	wzr, [x17]
                	sub	x0, x29, #0x170
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
@@ -100,8 +99,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x180
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x0, x29, #0x168
-               	ldrb	w0, [x0]
+               	sub	x16, x29, #0x168
+               	ldrb	w0, [x16]
                	mov	x17, #0x7a              // =122
                	eor	x0, x0, x17
                	cbz	w0, <addr>

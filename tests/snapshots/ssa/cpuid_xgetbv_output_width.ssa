@@ -152,9 +152,9 @@ fn ent_pc=2 n_params=0 variadic=false locals=6
   spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   LocalAddr(-2)                                    -> x6
+    v1   LocalAddr(-2)                                    -> x0
     v2   Imm(0)                                           -> x0
-    v3   LocalAddr(-1)                                    -> x7
+    v3   LocalAddr(-1)                                    -> x0
     v4   Imm(0)                                           -> x0
     v5   LocalAddr(-6)                                    -> x0
     v6   LocalAddr(-5)                                    -> x0
@@ -174,9 +174,9 @@ fn ent_pc=2 n_params=0 variadic=false locals=6
   block 2  start_pc=0
     v17  Imm(0)                                           -> x0
     v18  Imm(-2401053088876216593)                        -> x0
-    v19  Store { addr=v1, disp=0, value=v18, kind=I64, volatile } -> -
+    v19  StoreLocal { off=-2, value=v18, kind=I64, volatile } -> -
     v20  Imm(0)                                           -> x1
-    v21  Store { addr=v3, disp=0, value=v18, kind=I64, volatile } -> -
+    v21  StoreLocal { off=-1, value=v18, kind=I64, volatile } -> -
     v22  LocalAddr(-2)                                    -> x0
     v23  LocalAddr(-1)                                    -> x0
     v24  Imm(0)                                           -> x6

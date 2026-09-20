@@ -34,8 +34,7 @@ Disassembly of section .text:
                	movk	x17, #0xf, lsl #16
                	cmp	x0, x17
                	b.ge	<addr>
-               	sub	x0, x29, #0x10
-               	ldr	x0, [x0]
+               	ldur	x0, [x29, #-0x10]
                	cmp	x0, #0x0
                	b.le	<addr>
                	add	x20, x20, #0x1

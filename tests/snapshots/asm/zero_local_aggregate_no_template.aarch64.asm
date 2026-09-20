@@ -121,8 +121,7 @@ Disassembly of section .text:
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	str	x1, [x0]
-               	mov	x1, #0x0                // =0
-               	str	w1, [x0, #0x8]
+               	str	wzr, [x0, #0x8]
                	bl	<addr>
                	cmp	w0, #0x7
                	b.ne	<addr>

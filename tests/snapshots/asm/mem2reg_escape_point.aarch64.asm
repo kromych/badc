@@ -77,9 +77,7 @@ Disassembly of section .text:
                	mov	x0, #0xa                // =10
                	stur	w0, [x29, #-0x18]
                	bl	<addr>
-               	sub	x1, x29, #0x18
-               	str	w0, [x1]
-               	ldursw	x0, [x29, #-0x18]
+               	stur	w0, [x29, #-0x18]
                	sub	x0, x0, #0xa
                	cmp	w0, #0x14
                	b.eq	<addr>

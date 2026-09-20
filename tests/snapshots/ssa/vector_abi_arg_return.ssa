@@ -1139,10 +1139,10 @@ fn ent_pc=5 n_params=4 variadic=false locals=4
     v3   ParamRef(3, kind=F64)                            -> d3
     v4   Imm(0)                                           -> x0
     v5   LocalAddr(-2)                                    -> x0
-    v6   Imm(0)                                           -> x1
-    v7   Load { addr=v5, disp=0, kind=U8 }                -> x0
+    v6   Imm(0)                                           -> x0
+    v7   LoadLocal { off=-2, kind=U8 }                    -> x0
     v8   LocalAddr(-4)                                    -> x1
-    v9   Load { addr=v8, disp=0, kind=U8 }                -> x1
+    v9   LoadLocal { off=-4, kind=U8 }                    -> x1
     v10  Binop { op=sub, lhs=v7, rhs=v9 }                 -> x0
     v11  BinopI { op=shl, lhs=v10, rhs_imm=32 }           -> x1
     v12  Extend { value=v10, kind=I32 }                   -> x1
@@ -1626,7 +1626,7 @@ fn ent_pc=7 n_params=1 variadic=false locals=2
 ; --- SSA dump (ok=true) ent_pc=8 ---
 ; name=main
 fn ent_pc=8 n_params=0 variadic=false locals=97
-  spill_count=0 gpr_used=[3, 12] fp_used=[]
+  spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(1)                                           -> x7
@@ -2421,16 +2421,16 @@ fn ent_pc=8 n_params=0 variadic=false locals=97
   block 39  start_pc=0
     v714 Imm(50)                                          -> x7
     v715 Call { target_pc=7, args=[v714], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v716 LocalAddr(-81)                                   -> x3
-    v717 Imm(4613937818241073152)                         -> x12
+    v716 LocalAddr(-81)                                   -> x0
+    v717 Imm(4613937818241073152)                         -> x3
     v718 Imm(10)                                          -> x7
     v719 Call { target_pc=7, args=[v718], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v720 LocalAddr(-83)                                   -> x0
-    v721 Imm(4616189618054758400)                         -> x1
-    v722 Load { addr=v716, disp=0, kind=U8 }              -> x2
-    v723 Load { addr=v720, disp=0, kind=U8 }              -> x0
-    v724 Binop { op=sub, lhs=v722, rhs=v723 }             -> x2
-    v725 Extend { value=v724, kind=I32 }                  -> x0
+    v721 Imm(4616189618054758400)                         -> x0
+    v722 LoadLocal { off=-81, kind=U8 }                   -> x1
+    v723 LoadLocal { off=-83, kind=U8 }                   -> x2
+    v724 Binop { op=sub, lhs=v722, rhs=v723 }             -> x1
+    v725 Extend { value=v724, kind=I32 }                  -> x2
     v726 FpCast { kind=IntToFp, value=v724 }              -> d0
     v727 Binop { op=fmul, lhs=v717, rhs=v721 }            -> d1
     v728 Fma { a=v717, b=v721, c=v726, neg_product=false, neg_addend=false } -> d0

@@ -32,8 +32,7 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	str	x0, [x20]
-               	mov	x0, #0x0                // =0
-               	str	w0, [x20, #0x8]
+               	str	wzr, [x20, #0x8]
                	mov	x0, #0xa                // =10
                	bl	<addr>
                	mov	x21, x0

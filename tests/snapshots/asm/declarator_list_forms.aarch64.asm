@@ -29,7 +29,6 @@ Disassembly of section .text:
                	sub	sp, sp, #0x10
                	mov	x0, #0x1                // =1
                	stur	w0, [x29, #-0x8]
-               	sub	x4, x29, #0x8
                	mov	x1, #0x2                // =2
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
@@ -133,8 +132,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldursw	x0, [x29, #-0x8]
-               	ldrsw	x1, [x4]
-               	add	x0, x0, x1
+               	add	x0, x0, x0
                	add	x0, x0, #0x1
                	add	x0, x0, #0x2
                	cmp	w0, #0x5

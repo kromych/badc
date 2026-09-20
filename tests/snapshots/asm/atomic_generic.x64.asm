@@ -84,9 +84,7 @@ Disassembly of section .text:
                	movq	%rax, -0x30(%rbp)
                	leaq	-0x8(%rbp), %rcx
                	movq	(%rcx), %rcx
-               	leaq	-0x30(%rbp), %rdx
-               	movq	%rcx, (%rdx)
-               	movq	-0x30(%rbp), %rcx
+               	movq	%rcx, -0x30(%rbp)
                	cmpq	$0x1000, %rcx           # imm = 0x1000
                	je	<addr>
                	movl	$0x5, %eax

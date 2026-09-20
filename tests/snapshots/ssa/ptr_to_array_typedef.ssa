@@ -269,15 +269,15 @@ fn ent_pc=4 n_params=0 variadic=false locals=1
     v263 Imm(0)                                           -> x0
     v264 Imm(3)                                           -> x0
     v265 Imm(0)                                           -> x0
-    v266 LocalAddr(-1)                                    -> x1
+    v266 LocalAddr(-1)                                    -> x0
     v267 ImmData(16)                                      -> x0
-    v268 BinopI { op=add, lhs=v267, rhs_imm=24 }          -> x2
-    v269 Imm(2)                                           -> x2
+    v268 BinopI { op=add, lhs=v267, rhs_imm=24 }          -> x1
+    v269 Imm(2)                                           -> x1
     v270 Store { addr=v267, disp=24, value=v269, kind=I64 } -> -
-    v271 Store { addr=v266, disp=0, value=v267, kind=I64 } -> -
-    v272 LoadLocal { off=-1, kind=I64 }                   -> x0
-    v273 BinopI { op=eq, lhs=v272, rhs_imm=0 }            -> x1
-    terminator Bnz { cond=v272, target=b2, fall=b1 }   (exit_acc=v273)
+    v271 StoreLocal { off=-1, value=v267, kind=I64 }      -> -
+    v272 LoadLocal { off=-1, kind=I64 }                   -> x1
+    v273 BinopI { op=eq, lhs=v267, rhs_imm=0 }            -> x1
+    terminator Bnz { cond=v267, target=b2, fall=b1 }   (exit_acc=v273)
   block 1  start_pc=0
     v274 Imm(1)                                           -> x0
     terminator Return(v274)   (exit_acc=v274)

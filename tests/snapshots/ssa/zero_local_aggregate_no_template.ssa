@@ -177,7 +177,7 @@ fn ent_pc=9 n_params=0 variadic=false locals=64
     v155 BinopI { op=add, lhs=v116, rhs_imm=8 }           -> x2
     v156 Store { addr=v116, disp=8, value=v153, kind=I32 } -> -
     v157 LocalAddr(-2)                                    -> x0
-    v158 Load { addr=v157, disp=0, kind=I64 }             -> x0
+    v158 LoadLocal { off=-2, kind=I64 }                   -> x0
     v159 Call { target_pc=6, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
     v160 Extend { value=v159, kind=I32 }                  -> x1
     v161 BinopI { op=eq, lhs=v159, rhs_imm=7 }            -> x0

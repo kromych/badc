@@ -25,9 +25,8 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x210
-               	mov	x0, #0x0                // =0
                	sub	x17, x29, #0x210
-               	str	w0, [x17]
+               	str	wzr, [x17]
                	sub	x0, x29, #0x208
                	bl	<addr>
                	cbnz	w0, <addr>

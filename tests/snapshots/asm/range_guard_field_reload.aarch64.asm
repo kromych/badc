@@ -24,8 +24,7 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	ldr	w1, [x1]
                	str	w1, [x0, #0x10]
-               	mov	x1, #0x0                // =0
-               	str	w1, [x0, #0x14]
+               	str	wzr, [x0, #0x14]
                	ret
 
 <main>:

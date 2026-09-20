@@ -223,8 +223,7 @@ Disassembly of section .text:
                	strb	w2, [x1, #0x7]
                	mov	x2, #0x8                // =8
                	strb	w2, [x0, #0x8]
-               	mov	x2, #0x0                // =0
-               	strb	w2, [x1, #0x8]
+               	strb	wzr, [x1, #0x8]
                	mov	x2, #0x19               // =25
                	strb	w2, [x0, #0x9]
                	mov	x0, #0x11               // =17
@@ -713,8 +712,7 @@ Disassembly of section .text:
                	ldr	x22, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x50
                	ret
-               	mov	x0, #0x0                // =0
-               	stur	w0, [x29, #-0x8]
+               	stur	wzr, [x29, #-0x8]
                	sub	x0, x29, #0x8
                	mov	x1, #0x3c               // =60
                	strb	w1, [x0, #0x1]

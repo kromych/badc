@@ -204,8 +204,7 @@ Disassembly of section .text:
                	cmp	w0, w2
                	b.lt	<addr>
                	sub	x0, x29, #0x30
-               	sub	x0, x29, #0x48
-               	ldrb	w0, [x0]
+               	ldurb	w0, [x29, #-0x48]
                	add	x0, x20, x0
                	sxtw	x0, w0
                	adrp	x16, <page>
@@ -299,8 +298,7 @@ Disassembly of section .text:
                	mov	x1, #0x10               // =16
                	mov	x2, #0x7                // =7
                	bl	<addr>
-               	sub	x0, x29, #0x20
-               	ldrb	w0, [x0]
+               	ldurb	w0, [x29, #-0x20]
                	add	x0, x0, #0x2
                	cmp	w0, #0x9
                	b.eq	<addr>

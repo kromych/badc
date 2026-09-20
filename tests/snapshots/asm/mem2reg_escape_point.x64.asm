@@ -83,9 +83,7 @@ Disassembly of section .text:
                	movl	$0xa, %edi
                	movl	%edi, -0x18(%rbp)
                	callq	<addr>
-               	leaq	-0x18(%rbp), %rcx
-               	movl	%eax, (%rcx)
-               	movslq	-0x18(%rbp), %rax
+               	movl	%eax, -0x18(%rbp)
                	subq	$0xa, %rax
                	cmpl	$0x14, %eax
                	je	<addr>

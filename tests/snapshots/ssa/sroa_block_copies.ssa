@@ -1180,7 +1180,7 @@ fn ent_pc=34 n_params=0 variadic=false locals=85
     terminator Bnz { cond=v114, target=b18, fall=b17 }   (exit_acc=v114)
   block 17  start_pc=0
     v116 LocalAddr(-75)                                   -> x0
-    v117 Load { addr=v116, disp=0, kind=I32 }             -> x0
+    v117 LoadLocal { off=-75, kind=I32 }                  -> x0
     v118 BinopI { op=ne, lhs=v117, rhs_imm=5 }            -> x0
     v119 Imm(0)                                           -> x1
     v120 Imm(0)                                           -> x1

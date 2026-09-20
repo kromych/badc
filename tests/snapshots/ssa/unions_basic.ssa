@@ -17,11 +17,11 @@ fn ent_pc=0 n_params=0 variadic=false locals=1
     v11  ImmData(8)                                       -> x2
     v12  Store { addr=v1, disp=0, value=v11, kind=I64 }   -> -
     v13  LocalAddr(-1)                                    -> x2
-    v14  Load { addr=v13, disp=0, kind=I64 }              -> x2
+    v14  LoadLocal { off=-1, kind=I64 }                   -> x2
     v15  Imm(104)                                         -> x2
     v16  Imm(0)                                           -> x2
     v17  LocalAddr(-1)                                    -> x2
-    v18  Load { addr=v17, disp=0, kind=I64 }              -> x2
+    v18  LoadLocal { off=-1, kind=I64 }                   -> x2
     v19  Imm(1)                                           -> x2
     v20  BinopI { op=add, lhs=v11, rhs_imm=1 }            -> x2
     v21  Imm(105)                                         -> x2

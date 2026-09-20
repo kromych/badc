@@ -2825,12 +2825,10 @@ Disassembly of section .text:
                	sarq	$0x35, %rsi
                	cmpl	%esi, %edx
                	jne	<addr>
-               	leaq	-0x90(%rbp), %rdx
-               	movl	(%rdx), %edx
+               	movl	-0x90(%rbp), %edx
                	sarq	$0xb, %rdx
                	andq	$0x1fff, %rdx           # imm = 0x1FFF
-               	leaq	-0x30(%rbp), %rsi
-               	movl	(%rsi), %esi
+               	movl	-0x30(%rbp), %esi
                	sarq	$0xb, %rsi
                	andq	$0x1fff, %rsi           # imm = 0x1FFF
                	cmpl	%esi, %edx

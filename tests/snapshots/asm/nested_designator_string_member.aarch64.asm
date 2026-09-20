@@ -70,11 +70,10 @@ Disassembly of section .text:
                	strb	w2, [x1, #0x6]
                	mov	x2, #0x7a               // =122
                	strb	w2, [x1, #0x7]
-               	mov	x2, #0x0                // =0
-               	strb	w2, [x1, #0x8]
-               	strb	w2, [x1, #0x9]
-               	strb	w2, [x1, #0xa]
-               	strb	w2, [x1, #0xb]
+               	strb	wzr, [x1, #0x8]
+               	strb	wzr, [x1, #0x9]
+               	strb	wzr, [x1, #0xa]
+               	strb	wzr, [x1, #0xb]
                	add	x2, x0, #0x6
                	str	w2, [x1, #0xc]
                	add	x2, x0, #0x4

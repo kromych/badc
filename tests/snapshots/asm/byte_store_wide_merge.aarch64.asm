@@ -142,8 +142,7 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, #0x3
                	b.lo	<addr>
-               	sub	x0, x29, #0x10
-               	ldrb	w0, [x0]
+               	ldurb	w0, [x29, #-0x10]
                	mov	x17, #0x11              // =17
                	eor	x0, x0, x17
                	cbnz	w0, <addr>

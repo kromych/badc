@@ -54,8 +54,7 @@ Disassembly of section .text:
                	bl	<addr>
                	stur	x0, [x29, #-0x10]
                	stur	x1, [x29, #-0x8]
-               	sub	x0, x29, #0x10
-               	ldr	x0, [x0]
+               	ldur	x0, [x29, #-0x10]
                	cmp	x0, #0x5
                	b.ne	<addr>
                	mov	x0, #0x5                // =5

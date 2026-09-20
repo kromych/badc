@@ -99,8 +99,7 @@ Disassembly of section .text:
                	sub	x3, x29, #0x28
                	sub	x4, x29, #0x20
                	bl	<addr>
-               	sub	x0, x29, #0x68
-               	ldrb	w0, [x0]
+               	ldurb	w0, [x29, #-0x68]
                	mov	x17, #0x4d              // =77
                	eor	x0, x0, x17
                	cbnz	w0, <addr>

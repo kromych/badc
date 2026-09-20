@@ -43,8 +43,7 @@ Disassembly of section .text:
                	str	x1, [x4, #0x10]
                	mov	x3, #0x5                // =5
                	mov	x5, #0x9                // =9
-               	mov	x1, #0x0                // =0
-               	stur	w1, [x29, #-0x8]
+               	stur	wzr, [x29, #-0x8]
                	ldr	x6, [x0]
                	sub	x1, x29, #0x8
                	add	x2, x2, #0x10

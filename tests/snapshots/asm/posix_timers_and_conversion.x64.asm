@@ -102,8 +102,7 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	leaq	-0x168(%rbp), %rax
-               	movsbq	(%rax), %rax
+               	movsbq	-0x168(%rbp), %rax
                	cmpl	$0x7a, %eax
                	je	<addr>
                	movl	$0x7, %eax

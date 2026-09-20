@@ -112,9 +112,8 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	stur	x0, [x29, #-0x10]
-               	sub	x1, x29, #0x10
                	mov	x0, #0x3                // =3
-               	ldr	x1, [x1]
+               	ldur	x1, [x29, #-0x10]
                	blr	x1
                	cmp	w0, #0x4
                	b.eq	<addr>

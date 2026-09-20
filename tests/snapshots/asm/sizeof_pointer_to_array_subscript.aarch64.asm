@@ -96,8 +96,7 @@ Disassembly of section .text:
                	strh	w1, [x0, #0xc]
                	mov	x1, #0x3ef              // =1007
                	strh	w1, [x0, #0xe]
-               	mov	x0, #0x0                // =0
-               	str	w0, [x4]
+               	str	wzr, [x4]
                	mov	x0, #0x1                // =1
                	str	w0, [x4, #0x4]
                	mov	x0, #0x2                // =2

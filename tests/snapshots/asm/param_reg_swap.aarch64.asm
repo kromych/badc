@@ -73,8 +73,7 @@ Disassembly of section .text:
                	adrp	x3, <page>
                	add	x3, x3, <lo12>
                	bl	<addr>
-               	sub	x0, x29, #0x38
-               	ldrb	w0, [x0]
+               	ldurb	w0, [x29, #-0x38]
                	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
                	ret

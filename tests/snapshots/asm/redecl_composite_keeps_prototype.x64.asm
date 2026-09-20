@@ -30,8 +30,7 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	movq	%rdi, -0x8(%rbp)
-               	leaq	-0x8(%rbp), %rax
-               	movl	(%rax), %eax
+               	movl	-0x8(%rbp), %eax
                	incq	%rax
                	movl	%eax, %eax
                	leave
@@ -42,8 +41,7 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	movq	%rdi, -0x8(%rbp)
-               	leaq	-0x8(%rbp), %rax
-               	movl	(%rax), %eax
+               	movl	-0x8(%rbp), %eax
                	addq	$0x2, %rax
                	movl	%eax, %eax
                	leave
@@ -54,8 +52,7 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	movq	%rdi, -0x8(%rbp)
-               	leaq	-0x8(%rbp), %rax
-               	movl	(%rax), %eax
+               	movl	-0x8(%rbp), %eax
                	addq	$0x3, %rax
                	movl	%eax, %eax
                	leave

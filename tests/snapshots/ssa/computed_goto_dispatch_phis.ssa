@@ -824,8 +824,8 @@ fn ent_pc=2 n_params=2 variadic=false locals=4
     v29  Imm(0)                                           -> x1
     v30  Imm(0)                                           -> x1
     v31  LocalAddr(-4)                                    -> x1
-    v32  BlockAddr(block=2)                               -> [spill 1]
-    v33  Store { addr=v31, disp=0, value=v32, kind=I64 }  -> -
+    v32  BlockAddr(block=2)                               -> x1
+    v33  StoreLocal { off=-4, value=v32, kind=I64 }       -> -
     v34  LocalAddr(-4)                                    -> x1
     v35  BinopI { op=add, lhs=v34, rhs_imm=8 }            -> [spill 1]
     v36  BlockAddr(block=3)                               -> [spill 1]

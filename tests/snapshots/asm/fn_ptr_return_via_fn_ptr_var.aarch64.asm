@@ -136,8 +136,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x20]
                	ldr	x20, [sp], #0x30
                	ret
-               	sub	x0, x29, #0x8
-               	ldr	x1, [x0]
+               	ldur	x1, [x29, #-0x8]
                	mov	x0, #0x3                // =3
                	blr	x1
                	cmp	w0, #0x67

@@ -17,57 +17,55 @@ Disassembly of section .text:
                	mov	x2, #0x1                // =1
                	str	w2, [x0]
                	str	x1, [x0, #0x20]
-               	mov	x3, #0x0                // =0
-               	str	w3, [x0, #0x4]
-               	str	x3, [x0, #0x28]
+               	str	wzr, [x0, #0x4]
+               	str	xzr, [x0, #0x28]
                	str	w2, [x0, #0x30]
                	add	x4, x0, #0x30
                	str	x1, [x4, #0x20]
                	str	w2, [x4, #0x4]
-               	str	x3, [x4, #0x28]
+               	str	xzr, [x4, #0x28]
                	str	w2, [x0, #0x60]
                	add	x4, x0, #0x60
                	str	x1, [x4, #0x20]
                	mov	x5, #0x2                // =2
                	str	w5, [x4, #0x4]
-               	str	x3, [x4, #0x28]
+               	str	xzr, [x4, #0x28]
                	str	w2, [x0, #0x90]
                	add	x4, x0, #0x90
                	str	x1, [x4, #0x20]
                	mov	x6, #0x3                // =3
                	str	w6, [x4, #0x4]
-               	str	x3, [x4, #0x28]
+               	str	xzr, [x4, #0x28]
                	str	w2, [x0, #0xc0]
                	add	x4, x0, #0xc0
                	str	x1, [x4, #0x20]
                	mov	x6, #0x4                // =4
                	str	w6, [x4, #0x4]
-               	str	x3, [x4, #0x28]
+               	str	xzr, [x4, #0x28]
                	str	w2, [x0, #0xf0]
                	add	x4, x0, #0xf0
                	str	x1, [x4, #0x20]
                	mov	x6, #0x5                // =5
                	str	w6, [x4, #0x4]
-               	str	x3, [x4, #0x28]
+               	str	xzr, [x4, #0x28]
                	str	w2, [x0, #0x120]
                	add	x4, x0, #0x120
                	str	x1, [x4, #0x20]
                	mov	x6, #0x6                // =6
                	str	w6, [x4, #0x4]
-               	str	x3, [x4, #0x28]
+               	str	xzr, [x4, #0x28]
                	str	w2, [x0, #0x150]
                	add	x2, x0, #0x150
                	str	x1, [x2, #0x20]
                	mov	x4, #0x7                // =7
                	str	w4, [x2, #0x4]
-               	str	x3, [x2, #0x28]
+               	str	xzr, [x2, #0x28]
                	add	x0, x0, #0x180
                	str	w5, [x0]
                	str	x1, [x0, #0x20]
                	mov	x2, #0x20               // =32
                	str	w2, [x0, #0x4]
-               	mov	x3, #0x0                // =0
-               	str	x3, [x0, #0x28]
+               	str	xzr, [x0, #0x28]
                	mov	x2, #0xb00              // =2816
                	str	x2, [x0, #0x10]
                	str	w5, [x0, #0x30]
@@ -75,7 +73,7 @@ Disassembly of section .text:
                	str	x1, [x2, #0x20]
                	mov	x4, #0x21               // =33
                	str	w4, [x2, #0x4]
-               	str	x3, [x2, #0x28]
+               	str	xzr, [x2, #0x28]
                	mov	x4, #0x1600             // =5632
                	str	x4, [x2, #0x10]
                	mov	x2, #0x2                // =2
@@ -84,7 +82,7 @@ Disassembly of section .text:
                	str	x1, [x0, #0x20]
                	mov	x1, #0x22               // =34
                	str	w1, [x0, #0x4]
-               	str	x3, [x0, #0x28]
+               	str	xzr, [x0, #0x28]
                	mov	x1, #0x2100             // =8448
                	str	x1, [x0, #0x10]
                	ret

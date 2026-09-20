@@ -83,13 +83,12 @@ Disassembly of section .text:
                	ldrsw	x3, [x1]
                	orr	x3, x3, #0x2
                	str	w3, [x1]
-               	mov	x1, #0x0                // =0
                	str	x2, [x0]
-               	str	x1, [x0, #0x8]
+               	str	xzr, [x0, #0x8]
                	add	x0, x0, #0x10
                	mov	x2, #0x6                // =6
                	str	x2, [x0]
-               	str	x1, [x0, #0x8]
+               	str	xzr, [x0, #0x8]
                	mov	x0, #0x8                // =8
                	sub	sp, x29, #0x10
                	add	sp, sp, #0x10

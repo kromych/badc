@@ -130,8 +130,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x20]
                	ldr	x20, [sp], #0x30
                	ret
-               	mov	x0, #0x0                // =0
-               	stur	x0, [x29, #-0x8]
+               	stur	xzr, [x29, #-0x8]
                	mov	x0, #0x4                // =4
                	mov	x1, #0x5                // =5
                	sub	x2, x29, #0x8
@@ -182,8 +181,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x20]
                	ldr	x20, [sp], #0x30
                	ret
-               	mov	x0, #0x0                // =0
-               	stur	x0, [x29, #-0x8]
+               	stur	xzr, [x29, #-0x8]
                	mov	x0, #0x2                // =2
                	sub	x2, x29, #0x8
                	mov	x1, x0

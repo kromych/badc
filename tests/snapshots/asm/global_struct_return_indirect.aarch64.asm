@@ -63,8 +63,7 @@ Disassembly of section .text:
                	ret
                	sub	x8, x29, #0x18
                	bl	<addr>
-               	sub	x0, x29, #0x18
-               	ldr	w20, [x0]
+               	ldur	w20, [x29, #-0x18]
                	sub	x8, x29, #0x18
                	bl	<addr>
                	sub	x0, x29, #0x18

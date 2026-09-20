@@ -369,8 +369,7 @@ Disassembly of section .text:
                	ldr	q2, [x0]
                	bl	<addr>
                	stur	q0, [x29, #-0x70]
-               	sub	x0, x29, #0x70
-               	ldr	q0, [x0]
+               	ldur	q0, [x29, #-0x70]
                	sub	x16, x29, #0x10
                	str	x16, [sp, #0x20]
                	stur	q0, [sp, #0x28]

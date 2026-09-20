@@ -21,8 +21,6 @@ Disassembly of section .text:
                	stur	w0, [x29, #-0x8]
                	sub	x0, x29, #0x8
                	stur	x0, [x29, #-0x10]
-               	sub	x0, x29, #0x10
-               	ldr	x0, [x0]
                	mov	x1, #0x2a               // =42
                	str	w1, [x0]
                	ldursw	x0, [x29, #-0x8]

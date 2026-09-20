@@ -28,13 +28,11 @@ Disassembly of section .text:
                	mov	x0, x21
                	bl	<addr>
                	mov	x2, #0x9                // =9
-               	mov	x0, #0x0                // =0
-               	strb	w0, [x21, #0x9]
+               	strb	wzr, [x21, #0x9]
                	mov	x1, #0x41               // =65
                	mov	x0, x20
                	bl	<addr>
-               	mov	x0, #0x0                // =0
-               	strb	w0, [x20, #0x9]
+               	strb	wzr, [x20, #0x9]
                	mov	x2, #0xa                // =10
                	mov	x0, x21
                	mov	x1, x20

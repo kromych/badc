@@ -145,10 +145,9 @@ Disassembly of section .text:
                	add	x0, x1, x0
                	cmp	w0, #0x2
                	b.ne	<addr>
-               	mov	x1, #0x0                // =0
                	sub	x0, x29, #0x40
                	stp	xzr, xzr, [x0]
-               	str	x1, [x0]
+               	str	xzr, [x0]
                	mov	x1, #0x2                // =2
                	str	x1, [x0, #0x8]
                	mov	x16, #0x0               // =0
@@ -163,8 +162,7 @@ Disassembly of section .text:
                	add	x0, x1, x0
                	cmp	w0, #0x2
                	b.ne	<addr>
-               	mov	x0, #0x0                // =0
-               	stur	w0, [x29, #-0x18]
+               	stur	wzr, [x29, #-0x18]
                	sub	x16, x29, #0x18
                	str	x16, [sp, #0x10]
                	mov	x16, #0x6               // =6
@@ -182,8 +180,7 @@ Disassembly of section .text:
                	ldursw	x0, [x29, #-0x18]
                	cmp	w0, #0x8
                	b.ne	<addr>
-               	mov	x0, #0x0                // =0
-               	stur	w0, [x29, #-0x18]
+               	stur	wzr, [x29, #-0x18]
                	sub	x16, x29, #0x18
                	str	x16, [sp, #0x10]
                	mov	x16, #0x0               // =0

@@ -83,25 +83,23 @@ Disassembly of section .text:
                	ret
 
 <bitfield_copy>:
-               	mov	x2, #0x0                // =0
                	and	x3, x1, #0xfff
                	lsl	x3, x3, #8
                	mov	x17, #0x8d              // =141
                	orr	x3, x3, x17
                	str	w3, [x0]
-               	str	w2, [x0, #0x4]
+               	str	wzr, [x0, #0x4]
                	str	x1, [x0, #0x8]
                	ret
 
 <padded_copy>:
-               	mov	x2, #0x0                // =0
                	and	x3, x1, #0xff
                	mov	x17, #0x3               // =3
                	mul	x1, x1, x17
                	strb	w3, [x0]
-               	strb	w2, [x0, #0x1]
-               	strh	w2, [x0, #0x2]
-               	str	w2, [x0, #0x4]
+               	strb	wzr, [x0, #0x1]
+               	strh	wzr, [x0, #0x2]
+               	str	wzr, [x0, #0x4]
                	str	x1, [x0, #0x8]
                	ret
 
@@ -152,9 +150,8 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x10
                	sub	x2, x29, #0x10
-               	mov	x3, #0x0                // =0
-               	str	x3, [x2]
-               	str	x3, [x2, #0x8]
+               	str	xzr, [x2]
+               	str	xzr, [x2, #0x8]
                	str	x1, [x2]
                	add	x1, x1, #0x1
                	str	x1, [x2, #0x8]
@@ -462,23 +459,22 @@ Disassembly of section .text:
                	ret
 
 <wide_copy>:
-               	mov	x2, #0x0                // =0
                	add	x3, x1, #0x1
                	str	x1, [x0]
-               	str	x2, [x0, #0x8]
-               	str	x2, [x0, #0x10]
-               	str	x2, [x0, #0x18]
-               	str	x2, [x0, #0x20]
-               	str	x2, [x0, #0x28]
-               	str	x2, [x0, #0x30]
-               	str	x2, [x0, #0x38]
-               	str	x2, [x0, #0x40]
-               	str	x2, [x0, #0x48]
-               	str	x2, [x0, #0x50]
-               	str	x2, [x0, #0x58]
-               	str	x2, [x0, #0x60]
-               	str	x2, [x0, #0x68]
-               	str	x2, [x0, #0x70]
+               	str	xzr, [x0, #0x8]
+               	str	xzr, [x0, #0x10]
+               	str	xzr, [x0, #0x18]
+               	str	xzr, [x0, #0x20]
+               	str	xzr, [x0, #0x28]
+               	str	xzr, [x0, #0x30]
+               	str	xzr, [x0, #0x38]
+               	str	xzr, [x0, #0x40]
+               	str	xzr, [x0, #0x48]
+               	str	xzr, [x0, #0x50]
+               	str	xzr, [x0, #0x58]
+               	str	xzr, [x0, #0x60]
+               	str	xzr, [x0, #0x68]
+               	str	xzr, [x0, #0x70]
                	str	x3, [x0, #0x78]
                	ret
 
@@ -504,8 +500,7 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	mov	x1, #0x0                // =0
-               	stur	w1, [x29, #-0x8]
+               	stur	wzr, [x29, #-0x8]
                	sub	x1, x29, #0x8
                	and	x2, x0, #0xff
                	str	w2, [x1]
@@ -640,8 +635,8 @@ Disassembly of section .text:
                	bl	<addr>
                	cmp	x0, #0x5
                	b.ne	<addr>
-               	sub	x0, x29, #0x240
-               	ldrsw	x0, [x0]
+               	sub	x16, x29, #0x240
+               	ldrsw	x0, [x16]
                	cmp	w0, #0x5
                	b.eq	<addr>
                	mov	x0, #0x8                // =8

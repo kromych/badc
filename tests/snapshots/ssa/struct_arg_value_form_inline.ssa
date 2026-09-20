@@ -5,7 +5,7 @@ fn ent_pc=1 n_params=1 variadic=false locals=1
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   LocalAddr(-1)                                    -> x0
-    v2   Load { addr=v1, disp=0, kind=U32 }               -> x0
+    v2   LoadLocal { off=-1, kind=U32 }                   -> x0
     v3   BinopI { op=and, lhs=v2, rhs_imm=4294967295 }    -> x1
     terminator Return(v2)   (exit_acc=v2)
 ; --- SSA dump (ok=true) ent_pc=2 ---

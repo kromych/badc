@@ -34,8 +34,7 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	bl	<addr>
                	mov	x20, x0
-               	mov	x0, #0x0                // =0
-               	stur	x0, [x29, #-0x8]
+               	stur	xzr, [x29, #-0x8]
                	sub	x0, x29, #0x8
                	bl	<addr>
                	mov	x17, #0xcd00            // =52480

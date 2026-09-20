@@ -66,8 +66,7 @@ Disassembly of section .text:
                	callq	<addr>
                	movq	%rax, -0x10(%rbp)
                	movq	%rdx, -0x8(%rbp)
-               	leaq	-0x10(%rbp), %rax
-               	movq	(%rax), %rax
+               	movq	-0x10(%rbp), %rax
                	cmpq	$0x5, %rax
                	jne	<addr>
                	movl	$0x5, %edi

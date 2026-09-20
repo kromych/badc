@@ -1106,10 +1106,10 @@ fn ent_pc=6 n_params=0 variadic=false locals=20
     v618 Imm(3)                                           -> x8
     v619 Imm(0)                                           -> x8
     v620 LocalAddr(-1)                                    -> x8
-    v621 Imm(3)                                           -> x3
-    v622 Imm(3)                                           -> x3
-    v623 Imm(3)                                           -> x3
-    v624 Store { addr=v620, disp=0, value=v623, kind=I8 } -> -
+    v621 Imm(3)                                           -> x8
+    v622 Imm(3)                                           -> x8
+    v623 Imm(3)                                           -> x8
+    v624 StoreLocal { off=-1, value=v623, kind=I8 }       -> -
     v625 LocalAddr(-1)                                    -> x8
     v626 BinopI { op=add, lhs=v625, rhs_imm=1 }           -> x3
     v627 Imm(3)                                           -> x3
@@ -1161,18 +1161,18 @@ fn ent_pc=6 n_params=0 variadic=false locals=20
     v673 Store { addr=v667, disp=7, value=v672, kind=I8 } -> -
     v674 Imm(0)                                           -> x8
     v675 LocalAddr(-1)                                    -> x8
-    v676 LocalAddr(-9)                                    -> x3
-    v677 Load { addr=v675, disp=0, kind=I64 }             -> x8
-    v678 Store { addr=v676, disp=0, value=v677, kind=I64 } -> -
+    v676 LocalAddr(-9)                                    -> x8
+    v677 LoadLocal { off=-1, kind=I64 }                   -> x8
+    v678 StoreLocal { off=-9, value=v677, kind=I64 }      -> -
     v679 LocalAddr(-9)                                    -> x8
     v680 Imm(4607182418800017408)                         -> x3
     v681 Imm(4)                                           -> x12
     v682 Imm(0)                                           -> x12
     v683 LocalAddr(-1)                                    -> x12
-    v684 Imm(4)                                           -> x13
-    v685 Imm(4)                                           -> x13
-    v686 Imm(4)                                           -> x13
-    v687 Store { addr=v683, disp=0, value=v686, kind=I8 } -> -
+    v684 Imm(4)                                           -> x12
+    v685 Imm(4)                                           -> x12
+    v686 Imm(4)                                           -> x12
+    v687 StoreLocal { off=-1, value=v686, kind=I8 }       -> -
     v688 LocalAddr(-1)                                    -> x12
     v689 BinopI { op=add, lhs=v688, rhs_imm=1 }           -> x13
     v690 Imm(4)                                           -> x13
@@ -1224,18 +1224,18 @@ fn ent_pc=6 n_params=0 variadic=false locals=20
     v736 Store { addr=v730, disp=7, value=v735, kind=I8 } -> -
     v737 Imm(0)                                           -> x12
     v738 LocalAddr(-1)                                    -> x12
-    v739 LocalAddr(-7)                                    -> x13
-    v740 Load { addr=v738, disp=0, kind=I64 }             -> x12
-    v741 Store { addr=v739, disp=0, value=v740, kind=I64 } -> -
+    v739 LocalAddr(-7)                                    -> x12
+    v740 LoadLocal { off=-1, kind=I64 }                   -> x12
+    v741 StoreLocal { off=-7, value=v740, kind=I64 }      -> -
     v742 LocalAddr(-7)                                    -> x12
     v743 Imm(4608308318706860032)                         -> x13
     v744 Imm(5)                                           -> x14
     v745 Imm(0)                                           -> x14
     v746 LocalAddr(-1)                                    -> x14
-    v747 Imm(5)                                           -> x15
-    v748 Imm(5)                                           -> x15
-    v749 Imm(5)                                           -> x15
-    v750 Store { addr=v746, disp=0, value=v749, kind=I8 } -> -
+    v747 Imm(5)                                           -> x14
+    v748 Imm(5)                                           -> x14
+    v749 Imm(5)                                           -> x14
+    v750 StoreLocal { off=-1, value=v749, kind=I8 }       -> -
     v751 LocalAddr(-1)                                    -> x14
     v752 BinopI { op=add, lhs=v751, rhs_imm=1 }           -> x15
     v753 Imm(5)                                           -> x15
@@ -1287,18 +1287,18 @@ fn ent_pc=6 n_params=0 variadic=false locals=20
     v799 Store { addr=v793, disp=7, value=v798, kind=I8 } -> -
     v800 Imm(0)                                           -> x14
     v801 LocalAddr(-1)                                    -> x14
-    v802 LocalAddr(-5)                                    -> x15
-    v803 Load { addr=v801, disp=0, kind=I64 }             -> x14
-    v804 Store { addr=v802, disp=0, value=v803, kind=I64 } -> -
+    v802 LocalAddr(-5)                                    -> x14
+    v803 LoadLocal { off=-1, kind=I64 }                   -> x14
+    v804 StoreLocal { off=-5, value=v803, kind=I64 }      -> -
     v805 LocalAddr(-5)                                    -> x14
     v806 Imm(4609434218613702656)                         -> x15
     v807 Imm(6)                                           -> [spill 1]
     v808 Imm(0)                                           -> [spill 1]
     v809 LocalAddr(-1)                                    -> [spill 1]
-    v810 Imm(6)                                           -> [spill 2]
-    v811 Imm(6)                                           -> [spill 2]
-    v812 Imm(6)                                           -> [spill 2]
-    v813 Store { addr=v809, disp=0, value=v812, kind=I8 } -> -
+    v810 Imm(6)                                           -> [spill 1]
+    v811 Imm(6)                                           -> [spill 1]
+    v812 Imm(6)                                           -> [spill 1]
+    v813 StoreLocal { off=-1, value=v812, kind=I8 }       -> -
     v814 LocalAddr(-1)                                    -> [spill 1]
     v815 BinopI { op=add, lhs=v814, rhs_imm=1 }           -> [spill 2]
     v816 Imm(6)                                           -> [spill 2]
@@ -1350,9 +1350,9 @@ fn ent_pc=6 n_params=0 variadic=false locals=20
     v862 Store { addr=v856, disp=7, value=v861, kind=I8 } -> -
     v863 Imm(0)                                           -> [spill 1]
     v864 LocalAddr(-1)                                    -> [spill 1]
-    v865 LocalAddr(-3)                                    -> [spill 2]
-    v866 Load { addr=v864, disp=0, kind=I64 }             -> [spill 1]
-    v867 Store { addr=v865, disp=0, value=v866, kind=I64 } -> -
+    v865 LocalAddr(-3)                                    -> [spill 1]
+    v866 LoadLocal { off=-1, kind=I64 }                   -> [spill 1]
+    v867 StoreLocal { off=-3, value=v866, kind=I64 }      -> -
     v868 LocalAddr(-3)                                    -> [spill 1]
     v869 Call { target_pc=3, args=[v469, v491, v550, v554, v613, v617, v679, v680, v742, v743, v805, v806, v868], fixed_args=1, fp_return=true, fp_arg_mask=0xaaa } -> d0
     v870 Imm(0)                                           -> x0

@@ -18,8 +18,7 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x10
                	stur	x0, [x29, #-0x8]
-               	sub	x0, x29, #0x8
-               	ldrsw	x0, [x0]
+               	ldursw	x0, [x29, #-0x8]
                	mov	x17, #-0x1              // =-1
                	cmp	w0, w17
                	cset	x0, ne
@@ -32,8 +31,7 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x10
                	stur	x0, [x29, #-0x8]
-               	sub	x0, x29, #0x8
-               	ldrsw	x0, [x0]
+               	ldursw	x0, [x29, #-0x8]
                	mov	x17, #-0x1              // =-1
                	cmp	w0, w17
                	cset	x0, eq
@@ -46,8 +44,7 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x10
                	stur	x0, [x29, #-0x8]
-               	sub	x0, x29, #0x8
-               	ldrsw	x0, [x0]
+               	ldursw	x0, [x29, #-0x8]
                	sub	x0, x0, #0x1
                	sxtw	x0, w0
                	add	sp, sp, #0x10
@@ -59,8 +56,7 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x10
                	stur	x0, [x29, #-0x8]
-               	sub	x0, x29, #0x8
-               	ldrsw	x0, [x0]
+               	ldursw	x0, [x29, #-0x8]
                	mov	x17, #-0x1              // =-1
                	cmp	w0, w17
                	cset	x0, ne

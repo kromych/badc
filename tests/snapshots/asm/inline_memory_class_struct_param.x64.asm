@@ -94,8 +94,7 @@ Disassembly of section .text:
                	movq	%rax, %rdi
                	callq	<addr>
                	addq	$0x30, %rsp
-               	leaq	-0x28(%rbp), %rcx
-               	movq	(%rcx), %rcx
+               	movq	-0x28(%rbp), %rcx
                	addq	%rcx, %rax
                	leave
                	retq

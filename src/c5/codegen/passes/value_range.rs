@@ -43,7 +43,9 @@
 use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 
-use crate::c5::ir::{BinOp, BlockId, FunctionSsa, Inst, LoadKind, StoreKind, Terminator, ValueId};
+use crate::c5::ir::{
+    BinOp, BitCountOp, BlockId, FunctionSsa, Inst, LoadKind, StoreKind, Terminator, ValueId,
+};
 
 /// Inclusive bounds on a value's 64-bit register contents, read as a
 /// signed integer. `i128` so intersection and the +-1 steps below cannot
@@ -1291,6 +1293,104 @@ const EXACT_STEPS_OFF_PHI: u8 = 48;
 /// [`Ranges::def`].
 pub(crate) fn def_ranges(func: &FunctionSsa, params: &[Range]) -> Vec<Range> {
     Ranges::compute(func, params).into_def()
+}
+
+/// Producer depth [`known_set_bits`] walks.
+const SET_BITS_DEPTH: u32 = 4;
+
+/// Bits of `v` that are 1 in every execution. Zero where nothing is
+/// known, which is the safe answer: a caller may only conclude from the
+/// bits the mask does set. An `or` contributes both sides' bits, a left
+/// shift by a constant moves them, and a constant states its own.
+fn known_set_bits(func: &FunctionSsa, v: ValueId, depth: u32) -> u64 {
+    if depth == 0 {
+        return 0;
+    }
+    match func.insts.get(v as usize) {
+        Some(Inst::Imm(k)) => *k as u64,
+        Some(Inst::BinopI {
+            op: BinOp::Or,
+            lhs,
+            rhs_imm,
+        }) => known_set_bits(func, *lhs, depth - 1) | *rhs_imm as u64,
+        Some(Inst::Binop {
+            op: BinOp::Or,
+            lhs,
+            rhs,
+        }) => known_set_bits(func, *lhs, depth - 1) | known_set_bits(func, *rhs, depth - 1),
+        Some(Inst::BinopI {
+            op: BinOp::Shl,
+            lhs,
+            rhs_imm,
+        }) if (0..64).contains(rhs_imm) => known_set_bits(func, *lhs, depth - 1) << *rhs_imm,
+        Some(Inst::Copy { value, .. }) => known_set_bits(func, *value, depth - 1),
+        _ => 0,
+    }
+}
+
+/// Per-value table: true at an `Inst::BitCount` whose leading- or
+/// trailing-zero count reads an operand that cannot be zero in the low
+/// `width` bytes, where the count reads it. A lowering that guards the
+/// undefined zero case (x86-64's `cmovz` of the width) drops the guard
+/// there. Empty -- read as all-false -- when the function has no such
+/// count, so a function without one pays no range analysis.
+pub(crate) fn counts_over_nonzero(func: &FunctionSsa) -> Vec<bool> {
+    let guarded = |i: &Inst| {
+        matches!(
+            i,
+            Inst::BitCount {
+                op: BitCountOp::Clz | BitCountOp::Ctz,
+                ..
+            }
+        )
+    };
+    if !func.insts.iter().any(guarded) {
+        return Vec::new();
+    }
+    let ranges = Ranges::compute(func, &[]);
+    let mut block_of = alloc::vec![BlockId::MAX; func.insts.len()];
+    for (b, block) in func.blocks.iter().enumerate() {
+        for idx in block.inst_range.clone() {
+            if let Some(slot) = block_of.get_mut(idx as usize) {
+                *slot = b as BlockId;
+            }
+        }
+    }
+    func.insts
+        .iter()
+        .enumerate()
+        .map(|(i, inst)| {
+            let Inst::BitCount {
+                op: BitCountOp::Clz | BitCountOp::Ctz,
+                value,
+                width,
+            } = inst
+            else {
+                return false;
+            };
+            let b = block_of[i];
+            if b == BlockId::MAX {
+                return false;
+            }
+            let mask = if *width == 8 {
+                u64::MAX
+            } else {
+                u32::MAX as u64
+            };
+            if known_set_bits(func, *value, SET_BITS_DEPTH) & mask != 0 {
+                return true;
+            }
+            let (lo, hi) = ranges.at(b, *value).bounds();
+            if *width == 8 {
+                // Every value in the range is non-zero.
+                lo > 0 || hi < 0
+            } else {
+                // The count reads the low word, so the range must also
+                // exclude the multiples of 2^32 whose low word is zero.
+                (lo >= 1 && hi <= 0xffff_ffff) || (hi <= -1 && lo >= -(1i128 << 31))
+            }
+        })
+        .collect()
 }
 
 /// The definition ranges: a phi takes the hull of what reaches it over

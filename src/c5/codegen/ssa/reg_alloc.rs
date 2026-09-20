@@ -184,6 +184,11 @@ pub(crate) struct Allocation {
     /// issues in the 32-bit register form. Empty or out-of-range
     /// entries default to the 64-bit form.
     pub cmp32: Vec<bool>,
+    /// Per value: an `Inst::BitCount` whose operand cannot be zero in the
+    /// counted bytes, so the lowering's guard for the undefined zero case
+    /// is dead. Filled on x86-64, the only target whose count
+    /// instructions need one; empty entries read as false.
+    pub count_nonzero: Vec<bool>,
     /// Per value: a 128-bit vector ([`wide_values`]).
     pub wide: Vec<bool>,
     /// Registers an `Inst::InlineAsm` statement must preserve around its
@@ -199,6 +204,12 @@ impl Allocation {
     /// Out-of-range / unmarked values are double-precision.
     pub(crate) fn is_f32(&self, v: ValueId) -> bool {
         self.f32_values.get(v as usize).copied().unwrap_or(false)
+    }
+
+    /// True when the `Inst::BitCount` at `v` reads an operand that cannot
+    /// be zero, so the lowering may drop its zero guard.
+    pub(crate) fn count_nonzero(&self, v: ValueId) -> bool {
+        self.count_nonzero.get(v as usize).copied().unwrap_or(false)
     }
 
     pub(crate) fn is_wide(&self, v: ValueId) -> bool {
@@ -904,6 +915,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             high_observed: Vec::new(),
             high_clear: Vec::new(),
             cmp32: Vec::new(),
+            count_nonzero: Vec::new(),
             wide: Vec::new(),
             asm_preserve: (u32::MAX, u32::MAX),
         };
@@ -1530,6 +1542,11 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
         ),
         high_clear: crate::c5::codegen::passes::drop_redundant_extend::compute_high_clear(func),
         cmp32: func.cmp32.clone(),
+        count_nonzero: if target.is_x86_64() {
+            crate::c5::codegen::passes::value_range::counts_over_nonzero(func)
+        } else {
+            Vec::new()
+        },
         wide,
         asm_preserve,
     }

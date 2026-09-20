@@ -2699,6 +2699,59 @@ fn x64_negation_takes_neg() {
     m.finish();
 }
 
+/// Counts whose operand carries a set bit in the counted width, and the
+/// same counts over an operand that may be zero.
+const COUNT_GUARDS: &str = "int ctz_set(unsigned x) { return __builtin_ctz(x | 1u); }\n\
+int clz_set(unsigned x) { return __builtin_clz(x | 1u); }\n\
+int ctz64_set(unsigned long long x) { return __builtin_ctzll(x | 1ull); }\n\
+int ctz_any(unsigned x) { return __builtin_ctz(x); }\n\
+int clz_any(unsigned x) { return __builtin_clz(x); }\n";
+
+/// The x86-64 zero guard -- the width constant and the `cmovz` that takes
+/// it when `bsf` / `bsr` leave the destination undefined -- is emitted
+/// only where the operand can be zero.
+#[test]
+fn x64_count_drops_the_zero_guard_over_a_nonzero_operand() {
+    let obj = object_at(COUNT_GUARDS, Target::LinuxX64, true);
+    let cmovz = |i: &X64Insn| i.op == 0x0F44;
+    let mov_imm = |i: &X64Insn| (0xB8..=0xBF).contains(&i.op);
+    let mut m = Misses::default();
+    for name in ["ctz_set", "clz_set", "ctz64_set"] {
+        let insns = x64_insns(&function_bytes(&obj, name));
+        m.expect(
+            !insns.iter().any(cmovz) && !insns.iter().any(mov_imm),
+            || format!("{name}: the guard is still emitted: {insns:x?}"),
+        );
+    }
+    for name in ["ctz_any", "clz_any"] {
+        let insns = x64_insns(&function_bytes(&obj, name));
+        m.expect(insns.iter().any(cmovz) && insns.iter().any(mov_imm), || {
+            format!("{name}: the guard is gone over an operand that can be zero: {insns:x?}")
+        });
+    }
+    m.finish();
+}
+
+/// AArch64's `clz` / `rbit` + `clz` are total, so the non-zero fact
+/// changes nothing there: both operand shapes take the same count.
+#[test]
+fn a64_counts_are_the_same_over_a_nonzero_operand() {
+    let mut m = Misses::default();
+    for (set, any, is64) in [("ctz_set", "ctz_any", false), ("clz_set", "clz_any", false)] {
+        let a = a64(COUNT_GUARDS, set);
+        let b = a64(COUNT_GUARDS, any);
+        let counts = |ws: &[u32]| {
+            ws.iter()
+                .filter(|&&w| a64_clz(w, is64) || a64_rbit(w, is64))
+                .count()
+        };
+        m.expect(counts(&a) == counts(&b), || {
+            format!("{set} {a:08x?} vs {any} {b:08x?}")
+        });
+    }
+    m.finish();
+}
+
 /// `-mgeneral-regs-only` keeps the AArch64 population count off the SIMD
 /// registers: the general-register reduction, at both widths. `-mno-sse`
 /// leaves x86-64 its `popcnt`, a general-register instruction.

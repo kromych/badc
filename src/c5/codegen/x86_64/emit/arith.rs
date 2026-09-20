@@ -261,13 +261,16 @@ pub(super) fn emit_bswap(
 /// `Inst::BitCount` over the low `width` bytes, the 32-bit forms for 4:
 /// `popcnt`; `bsf`, then `cmovz` of the bit width where ZF marks a zero
 /// operand, whose destination the SDM leaves undefined; `bsr`, `cmovz` of
-/// `2 * bits - 1`, then `xor bits - 1`, which takes index `i` to `bits - 1 - i`.
+/// `2 * bits - 1`, then `xor bits - 1`, which takes index `i` to
+/// `bits - 1 - i`. `nonzero` states that the operand cannot be zero, which
+/// leaves the guard's constant and `cmovz` dead.
 pub(super) fn emit_bit_count(
     code: &mut Vec<u8>,
     dst: Place,
     op: BitCountOp,
     value: u32,
     width: u8,
+    nonzero: bool,
     alloc: &Allocation,
     frame: Frame,
 ) -> Emit {
@@ -282,14 +285,22 @@ pub(super) fn emit_bit_count(
     match op {
         BitCountOp::Popcount => emit_rr(code, Mnem::Popcnt, width, rd, rn),
         BitCountOp::Ctz => {
-            emit_mov_r_imm64(code, SCRATCH_R11, i64::from(bits));
+            if !nonzero {
+                emit_mov_r_imm64(code, SCRATCH_R11, i64::from(bits));
+            }
             emit_rr(code, Mnem::Bsf, width, rd, rn);
-            emit_rr(code, Mnem::Cmovz, 4, rd, SCRATCH_R11);
+            if !nonzero {
+                emit_rr(code, Mnem::Cmovz, 4, rd, SCRATCH_R11);
+            }
         }
         BitCountOp::Clz => {
-            emit_mov_r_imm64(code, SCRATCH_R11, i64::from(2 * bits - 1));
+            if !nonzero {
+                emit_mov_r_imm64(code, SCRATCH_R11, i64::from(2 * bits - 1));
+            }
             emit_rr(code, Mnem::Bsr, width, rd, rn);
-            emit_rr(code, Mnem::Cmovz, 4, rd, SCRATCH_R11);
+            if !nonzero {
+                emit_rr(code, Mnem::Cmovz, 4, rd, SCRATCH_R11);
+            }
             emit_ri(code, Mnem::Xor, 4, rd, bits - 1);
         }
         // x86-64 has no leading-sign-bit count: `clz((x ^ (x << 1)) | 1)`

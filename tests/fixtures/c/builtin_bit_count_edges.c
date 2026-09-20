@@ -183,6 +183,21 @@ int main(void) {
         r = check(patterns[i]);
     if (r != 0)
         return r;
+    // An operand with a bit set in the counted width: the x86-64
+    // lowering drops its zero guard there, so the guarded and unguarded
+    // forms must agree.
+    for (int k = 0; k < 64; k++) {
+        unsigned long long v = opaque(1ull << k);
+        unsigned u = (unsigned)v;
+        if (__builtin_ctz(u | 1u) != ref_ctz((u | 1u), 32))
+            return 25;
+        if (__builtin_clz(u | 1u) != ref_clz((u | 1u), 32))
+            return 26;
+        if (__builtin_ctzll(v | 1ull) != ref_ctz(v | 1ull, 64))
+            return 27;
+        if (__builtin_clzll(v | 1ull) != ref_clz(v | 1ull, 64))
+            return 28;
+    }
     // A count inside a loop, its operand and running total in registers.
     unsigned long long total = 0;
     for (int k = 0; k < 64; k++)

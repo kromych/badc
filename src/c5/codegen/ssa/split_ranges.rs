@@ -386,6 +386,7 @@ mod tests {
             use_counts: vec![1; n],
             last_use: vec![0; n],
             cmp32: vec![false; n],
+            count_nonzero: vec![false; n],
             sxtw_source: vec![NO_VALUE; n],
             sxtw_k: vec![0; n],
             branch_fused: vec![false; n],

@@ -1018,11 +1018,12 @@ jobs:
           - ubuntu-latest
           - ubuntu-24.04-arm
     runs-on: ${{ matrix.os }}
-    # quickjs_bench builds the full engine four times (badc, badc -O,
-    # clang -O0, clang -O2), the quickjs engine comparison four more and
-    # runs a microbench subset through each, and the CPython comparison
-    # builds the interpreter four more times; allow headroom over the
-    # lighter fixtures.
+    # quickjs_bench builds the full engine once per leg the harness
+    # probes -- badc and badc -O, then clang and gcc at -O0, at -O2 and
+    # at -O2 -march=<the level badc assumes> -- the quickjs engine
+    # comparison four more and runs a microbench subset through each,
+    # and the CPython comparison builds the interpreter four more times;
+    # allow headroom over the lighter fixtures.
     timeout-minutes: 30
     # The comparison tables are absolute seconds against a reference
     # compiler on whatever runner the job landed on; they surface in the
@@ -1078,10 +1079,14 @@ jobs:
       - name: build tcc for the host
         run: bash tests/perf/build_tcc.sh
       - name: run perf harness + write to job summary
+        # The harness names its own legs: whichever of tcc, clang and gcc
+        # the runner carries, each at the levels it takes. The heading
+        # states no compiler set, so a runner with a different one needs
+        # no edit here.
         run: |
           python3 tests/perf/run.py --json /tmp/perf.json | tee /tmp/perf.md
           {
-            echo "## badc vs tcc / clang on fib + qsort (${{ matrix.os }})"
+            echo "## badc against the reference compilers (${{ matrix.os }})"
             echo ""
             cat /tmp/perf.md
           } >> "$GITHUB_STEP_SUMMARY"

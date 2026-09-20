@@ -122,7 +122,8 @@ SIGNATURE_RE = re.compile(r"signature[^0-9a-f]{0,16}([0-9a-f]{12})\b")
 ARCH_ALIASES = {"arm64": "aarch64", "amd64": "x86_64", "x64": "x86_64"}
 
 # Verdicts that describe how the generated program behaved, rather than how it
-# compiled: each is confirmed against the reference at -O0 before it is filed.
+# compiled: each is confirmed against the reference's other level before it is
+# filed.
 RUNTIME_VERDICTS = ("checksum-mismatch", "checksum-missing", "run-signal", "run-exit")
 
 
@@ -512,141 +513,115 @@ def classify(
     source: Path,
     lines: int,
 ) -> list[Finding]:
+    """Every way a case can be a defect, with the signature each is keyed by."""
     findings: list[Finding] = []
+
+    def record(
+        verdict: str,
+        config: str,
+        parts: list[str],
+        detail: str,
+        step: Step | None = None,
+    ) -> None:
+        key, human = signature_of(arch, parts)
+        findings.append(
+            Finding(
+                verdict,
+                config,
+                seed,
+                detail,
+                evidence_of(step) if step else "",
+                key,
+                human,
+                source,
+                lines,
+            )
+        )
+
     for config, outcome in outcomes.items():
         built = outcome.compile_step
         if built.timed_out:
-            key, human = signature_of(arch, ["compile-timeout", config])
-            findings.append(
-                make_finding(
-                    "compile-timeout",
-                    config,
-                    seed,
-                    f"did not finish compiling in {built.seconds:.0f}s",
-                    evidence_of(built),
-                    key,
-                    human,
-                    source,
-                    lines,
-                )
+            record(
+                "compile-timeout",
+                config,
+                ["compile-timeout", config],
+                f"did not finish compiling in {built.seconds:.0f}s",
+                built,
             )
             continue
         if not built.ok:
             panic = panic_site(built.stderr)
             if panic:
                 location, message = panic
-                key, human = signature_of(
-                    arch, ["panic", location, normalize_message(message)]
+                record(
+                    "compile-panic",
+                    config,
+                    ["panic", location, normalize_message(message)],
+                    f"panicked: {message}",
+                    built,
                 )
-                verdict, detail = "compile-panic", f"panicked: {message}"
             else:
                 code = diagnostic_code(built.stderr + built.stdout) or "no-code"
-                key, human = signature_of(arch, ["compile-error", code])
-                verdict = "compile-error"
-                detail = f"rejected the program ({code})"
-            findings.append(
-                make_finding(
-                    verdict,
+                record(
+                    "compile-error",
                     config,
-                    seed,
-                    detail,
-                    evidence_of(built),
-                    key,
-                    human,
-                    source,
-                    lines,
+                    ["compile-error", code],
+                    f"rejected the program ({code})",
+                    built,
                 )
-            )
             continue
 
         ran = outcome.run_step
         assert ran is not None
-        if ran.timed_out:
-            key, human = signature_of(arch, ["run-timeout", config])
-            findings.append(
-                make_finding(
-                    "run-timeout",
-                    config,
-                    seed,
-                    f"the binary did not finish in {ran.seconds:.0f}s",
-                    evidence_of(ran),
-                    key,
-                    human,
-                    source,
-                    lines,
-                )
-            )
-            continue
         status = ran.status or 0
-        if status < 0:
-            key, human = signature_of(arch, ["run-signal", str(-status), config])
-            findings.append(
-                make_finding(
-                    "run-signal",
-                    config,
-                    seed,
-                    f"the binary died on signal {-status}",
-                    evidence_of(ran),
-                    key,
-                    human,
-                    source,
-                    lines,
-                )
+        if ran.timed_out:
+            record(
+                "run-timeout",
+                config,
+                ["run-timeout", config],
+                f"the binary did not finish in {ran.seconds:.0f}s",
+                ran,
             )
-            continue
-        if status != 0:
-            key, human = signature_of(arch, ["run-exit", str(status), config])
-            findings.append(
-                make_finding(
-                    "run-exit",
-                    config,
-                    seed,
-                    f"the binary exited {status}",
-                    evidence_of(ran),
-                    key,
-                    human,
-                    source,
-                    lines,
-                )
+        elif status < 0:
+            record(
+                "run-signal",
+                config,
+                ["run-signal", str(-status), config],
+                f"the binary died on signal {-status}",
+                ran,
             )
-            continue
-        if outcome.checksum is None:
-            key, human = signature_of(arch, ["checksum-missing", config])
-            findings.append(
-                make_finding(
-                    "checksum-missing",
-                    config,
-                    seed,
-                    f"the binary printed no checksum",
-                    evidence_of(ran),
-                    key,
-                    human,
-                    source,
-                    lines,
-                )
+        elif status != 0:
+            record(
+                "run-exit",
+                config,
+                ["run-exit", str(status), config],
+                f"the binary exited {status}",
+                ran,
+            )
+        elif outcome.checksum is None:
+            record(
+                "checksum-missing",
+                config,
+                ["checksum-missing", config],
+                "the binary printed no checksum",
+                ran,
             )
 
     if expected is not None:
+        # One finding per set of configurations that disagree: that `-O` alone
+        # is wrong and that both are wrong are different defects.
         wrong = sorted(
             c
             for c, o in outcomes.items()
             if o.checksum is not None and o.checksum != expected
         )
         if wrong:
-            key, human = signature_of(arch, ["checksum-mismatch", ",".join(wrong)])
             got = ", ".join(f"{c} = {outcomes[c].checksum}" for c in wrong)
-            findings.append(
-                make_finding(
-                    "checksum-mismatch",
-                    ",".join(wrong),
-                    seed,
-                    f"checksum {got}, expected {expected}",
-                    "",
-                    key,
-                    human,
-                    source,
-                    lines,
-                )
+            record(
+                "checksum-mismatch",
+                ",".join(wrong),
+                ["checksum-mismatch", ",".join(wrong)],
+                f"checksum {got}, expected {expected}",
             )
     return findings
 
@@ -666,20 +641,6 @@ def merge_by_signature(findings: list[Finding]) -> list[Finding]:
         configs = first.config.split(",") + finding.config.split(",")
         first.config = ",".join(dict.fromkeys(configs))
     return list(merged.values())
-
-
-def make_finding(
-    verdict: str,
-    config: str,
-    seed: int,
-    detail: str,
-    evidence: str,
-    key: str,
-    human: str,
-    source: Path,
-    lines: int,
-) -> Finding:
-    return Finding(verdict, config, seed, detail, evidence, key, human, source, lines)
 
 
 def evidence_of(step: Step) -> str:
@@ -1220,11 +1181,11 @@ def self_test() -> int:
         reference="clang 21.0.0",
         bounds=" ".join(GENERATION_BOUNDS),
     )
-    finding = make_finding(
+    finding = Finding(
         "compile-panic",
         "-O0",
         4177298122,
-        "badc -O0 panicked: index out of bounds",
+        "panicked: index out of bounds",
         "thread 'main' panicked at src/c5/front/init.rs:812:37:",
         key,
         human,

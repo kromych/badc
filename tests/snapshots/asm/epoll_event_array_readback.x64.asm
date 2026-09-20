@@ -211,6 +211,5 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	callq	<addr>
-               	movslq	%eax, %rax
                	popq	%rbp
                	retq

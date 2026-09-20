@@ -179,7 +179,6 @@ Disassembly of section .text:
                	ldrsw	x0, [x1]
                	ldrsw	x1, [x1, #0xff0]
                	add	x0, x0, x1
-               	sxtw	x0, w0
                	add	sp, sp, #0x1, lsl #12   // =0x1000
                	ldp	x29, x30, [sp], #0x10
                	ret
@@ -284,6 +283,5 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	ldrsw	x1, [x1, #0xff0]
                	add	x0, x0, x1
-               	sxtw	x0, w0
                	ldp	x29, x30, [sp], #0x10
                	ret

@@ -30,7 +30,6 @@ Disassembly of section .text:
                	jge	<addr>
                	movl	$0x1, %eax
                	subq	%rdi, %rax
-               	movslq	%eax, %rax
                	retq
                	leaq	0x1(%rdi), %rax
                	jmp	<addr>

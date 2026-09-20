@@ -50,6 +50,5 @@ Disassembly of section .text:
                	retq
                	callq	<addr>
                	incq	%rax
-               	movslq	%eax, %rax
                	popq	%rbp
                	retq

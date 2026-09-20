@@ -43,7 +43,7 @@ Disassembly of section .text:
 
 <trap_then_return>:
                	endbr64
-               	movslq	%edi, %rax
+               	movq	%rdi, %rax
                	testl	%eax, %eax
                	jge	<addr>
                	ud2

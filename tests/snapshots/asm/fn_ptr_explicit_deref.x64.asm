@@ -27,7 +27,6 @@ Disassembly of section .text:
 
 <real_fn>:
                	leaq	0x1(%rdi), %rax
-               	movslq	%eax, %rax
                	retq
 
 <main>:

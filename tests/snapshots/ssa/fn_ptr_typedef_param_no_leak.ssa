@@ -31,17 +31,18 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     v25  Imm(8)                                           -> x1
     v26  Imm(8)                                           -> x1
     v27  Imm(8)                                           -> x1
-    v28  Imm(0)                                           -> x1
-    v29  ImmData(16)                                      -> x1
-    v30  Extend { value=v21, kind=I32 }                   -> x0
-    v31  BinopI { op=ne, lhs=v30, rhs_imm=5 }             -> x0
-    terminator Bz { cond=v31, target=b2, fall=b1 }   (exit_acc=v31)
+    v28  Imm(8)                                           -> x1
+    v29  Imm(0)                                           -> x1
+    v30  ImmData(16)                                      -> x1
+    v31  Extend { value=v21, kind=I32 }                   -> x0
+    v32  BinopI { op=ne, lhs=v31, rhs_imm=5 }             -> x0
+    terminator Bz { cond=v32, target=b2, fall=b1 }   (exit_acc=v32)
   block 1  start_pc=0
-    v34  Imm(3)                                           -> x0
-    terminator Return(v34)   (exit_acc=v34)
-  block 2  start_pc=0
-    v35  Imm(0)                                           -> x0
+    v35  Imm(3)                                           -> x0
     terminator Return(v35)   (exit_acc=v35)
+  block 2  start_pc=0
+    v36  Imm(0)                                           -> x0
+    terminator Return(v36)   (exit_acc=v36)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

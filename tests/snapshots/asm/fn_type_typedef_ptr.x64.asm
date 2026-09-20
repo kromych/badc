@@ -38,7 +38,6 @@ Disassembly of section .text:
 
 <inc>:
                	leaq	0x1(%rdi), %rax
-               	movslq	%eax, %rax
                	retq
 
 <apply>:
@@ -48,7 +47,6 @@ Disassembly of section .text:
                	movq	%rdi, %rax
                	movq	%rsi, %rdi
                	callq	*%rax
-               	movslq	%eax, %rax
                	popq	%rbp
                	retq
 
@@ -59,7 +57,6 @@ Disassembly of section .text:
                	movq	%rdi, %rax
                	movq	%rsi, %rdi
                	callq	*%rax
-               	movslq	%eax, %rax
                	popq	%rbp
                	retq
 
@@ -70,7 +67,6 @@ Disassembly of section .text:
                	movq	(%rdi), %rax
                	movq	%rsi, %rdi
                	callq	*%rax
-               	movslq	%eax, %rax
                	popq	%rbp
                	retq
 
@@ -81,7 +77,6 @@ Disassembly of section .text:
                	movq	%rdi, %rax
                	movq	%rsi, %rdi
                	callq	*%rax
-               	movslq	%eax, %rax
                	popq	%rbp
                	retq
 
@@ -92,7 +87,6 @@ Disassembly of section .text:
                	movq	%rdi, %rax
                	movq	%rsi, %rdi
                	callq	*%rax
-               	movslq	%eax, %rax
                	popq	%rbp
                	retq
 

@@ -69,14 +69,14 @@ Disassembly of section .text:
                	movabsq	$0x123456789a, %rcx     # imm = 0x123456789A
                	movq	%rcx, (%rax)
                	callq	<addr>
-               	cmpq	$0x2a, %rax
+               	cmpl	$0x2a, %eax
                	je	<addr>
                	movl	$0x1, %eax
                	popq	%rbp
                	retq
                	leaq	<rip>, %rdi
                	callq	<addr>
-               	cmpq	$0x1237, %rax           # imm = 0x1237
+               	cmpl	$0x1237, %eax           # imm = 0x1237
                	je	<addr>
                	movl	$0x2, %eax
                	popq	%rbp

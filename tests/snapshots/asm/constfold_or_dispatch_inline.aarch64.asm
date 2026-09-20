@@ -16,28 +16,24 @@ Disassembly of section .text:
 <c0>:
                	add	x0, x0, #0x1
                	lsl	x0, x0, #1
-               	sxtw	x0, w0
                	ret
 
 <c1>:
                	add	x0, x0, #0x2
                	lsl	x0, x0, #1
                	add	x0, x0, #0x1
-               	sxtw	x0, w0
                	ret
 
 <c2>:
                	add	x0, x0, #0x1
                	lsl	x0, x0, #1
                	add	x0, x0, #0x2
-               	sxtw	x0, w0
                	ret
 
 <c3>:
                	add	x0, x0, #0x4
                	lsl	x0, x0, #1
                	add	x0, x0, #0x3
-               	sxtw	x0, w0
                	ret
 
 <main>:

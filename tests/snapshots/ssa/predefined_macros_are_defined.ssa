@@ -8,11 +8,11 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v2   ImmData(57)                                      -> x1
     terminator Jmp(b3)   (exit_acc=v2)
   block 1  start_pc=0
-    v29  Load { addr=v19, disp=0, kind=I8 }               -> x2
-    v30  Load { addr=v20, disp=0, kind=I8 }               -> x6
-    v31  Binop { op=eq, lhs=v29, rhs=v30 }                -> x2
-    v32  Imm(0)                                           -> x6
-    terminator Bz { cond=v31, target=b4, fall=b2 }   (exit_acc=v31)
+    v30  Load { addr=v19, disp=0, kind=I8 }               -> x2
+    v31  Load { addr=v20, disp=0, kind=I8 }               -> x6
+    v32  Binop { op=eq, lhs=v30, rhs=v31 }                -> x2
+    v33  Imm(0)                                           -> x6
+    terminator Bz { cond=v32, target=b4, fall=b2 }   (exit_acc=v32)
   block 2  start_pc=0
     v22  BinopI { op=add, lhs=v19, rhs_imm=1 }            -> x0
     v23  BinopI { op=add, lhs=v20, rhs_imm=1 }            -> x1
@@ -27,8 +27,9 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v25  Load { addr=v20, disp=0, kind=I8 }               -> x1
     v26  Binop { op=eq, lhs=v24, rhs=v25 }                -> x0
     v27  Extend { value=v26, kind=I32 }                   -> x1
-    v28  BinopI { op=eq, lhs=v26, rhs_imm=0 }             -> x1
-    terminator Bnz { cond=v26, target=b6, fall=b5 }   (low word)   (exit_acc=v28)
+    v28  Extend { value=v26, kind=I32 }                   -> x1
+    v29  BinopI { op=eq, lhs=v26, rhs_imm=0 }             -> x1
+    terminator Bnz { cond=v26, target=b6, fall=b5 }   (low word)   (exit_acc=v29)
   block 5  start_pc=0
     v3   Imm(1)                                           -> x0
     terminator Return(v3)   (exit_acc=v3)

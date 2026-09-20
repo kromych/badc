@@ -440,16 +440,17 @@ fn ent_pc=10 n_params=0 variadic=false locals=2
     v392 Imm(0)                                           -> x2
     terminator Bz { cond=v391, target=b19, fall=b16 }   (exit_acc=v391)
   block 16  start_pc=0
-    v555 Imm(0)                                           -> x1
-    v556 Imm(0)                                           -> x1
     v557 Imm(0)                                           -> x1
     v558 Imm(0)                                           -> x1
-    v559 Binop { op=eq, lhs=v43, rhs=v379 }               -> x0
+    v559 Imm(0)                                           -> x1
     v560 Imm(0)                                           -> x1
-    v561 BinopI { op=eq, lhs=v559, rhs_imm=0 }            -> x1
-    v562 Imm(1)                                           -> x1
-    v563 Imm(0)                                           -> x1
-    terminator Bz { cond=v559, target=b19, fall=b17 }   (low word)   (exit_acc=v561)
+    v561 Binop { op=eq, lhs=v43, rhs=v379 }               -> x0
+    v562 Imm(0)                                           -> x1
+    v563 BinopI { op=and, lhs=v561, rhs_imm=255 }         -> x1
+    v564 BinopI { op=eq, lhs=v561, rhs_imm=0 }            -> x1
+    v565 Imm(1)                                           -> x1
+    v566 Imm(0)                                           -> x1
+    terminator Bz { cond=v561, target=b19, fall=b17 }   (low word)   (exit_acc=v564)
   block 17  start_pc=0
     v393 Imm(5)                                           -> x7
     v394 Call { target_pc=9, args=[v393], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x3
@@ -492,17 +493,17 @@ fn ent_pc=10 n_params=0 variadic=false locals=2
     v431 Binop { op=ult, lhs=v394, rhs=v406 }             -> x0
     v432 Imm(0)                                           -> x1
     v433 Imm(0)                                           -> x1
-    v434 BinopI { op=eq, lhs=v431, rhs_imm=0 }            -> x1
-    v435 BinopI { op=ne, lhs=v434, rhs_imm=0 }            -> x1
-    v436 Imm(0)                                           -> x1
+    v434 BinopI { op=and, lhs=v431, rhs_imm=255 }         -> x1
+    v435 BinopI { op=eq, lhs=v431, rhs_imm=0 }            -> x1
+    v436 BinopI { op=ne, lhs=v435, rhs_imm=0 }            -> x1
     v437 Imm(0)                                           -> x1
     v438 Imm(0)                                           -> x1
     v439 Imm(0)                                           -> x1
-    terminator Bz { cond=v431, target=b19, fall=b18 }   (low word)   (exit_acc=v434)
+    v440 Imm(0)                                           -> x1
+    terminator Bz { cond=v431, target=b19, fall=b18 }   (low word)   (exit_acc=v435)
   block 18  start_pc=0
-    v440 Imm(9)                                           -> x7
-    v441 Call { target_pc=9, args=[v440], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x3
-    v442 Imm(0)                                           -> x0
+    v441 Imm(9)                                           -> x7
+    v442 Call { target_pc=9, args=[v441], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x3
     v443 Imm(0)                                           -> x0
     v444 Imm(0)                                           -> x0
     v445 Imm(0)                                           -> x0
@@ -512,9 +513,9 @@ fn ent_pc=10 n_params=0 variadic=false locals=2
     v449 Imm(0)                                           -> x0
     v450 Imm(0)                                           -> x0
     v451 Imm(0)                                           -> x0
-    v452 Imm(5)                                           -> x7
-    v453 Call { target_pc=9, args=[v452], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v454 Imm(0)                                           -> x1
+    v452 Imm(0)                                           -> x0
+    v453 Imm(5)                                           -> x7
+    v454 Call { target_pc=9, args=[v453], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v455 Imm(0)                                           -> x1
     v456 Imm(0)                                           -> x1
     v457 Imm(0)                                           -> x1
@@ -529,28 +530,30 @@ fn ent_pc=10 n_params=0 variadic=false locals=2
     v466 Imm(0)                                           -> x1
     v467 Imm(0)                                           -> x1
     v468 Imm(0)                                           -> x1
-    v469 Imm(1)                                           -> x1
-    v470 Imm(0)                                           -> x1
+    v469 Imm(0)                                           -> x1
+    v470 Imm(1)                                           -> x1
     v471 Imm(0)                                           -> x1
     v472 Imm(0)                                           -> x1
     v473 Imm(0)                                           -> x1
-    v474 Imm(1)                                           -> x1
-    v475 Imm(0)                                           -> x1
+    v474 Imm(0)                                           -> x1
+    v475 Imm(1)                                           -> x1
     v476 Imm(0)                                           -> x1
     v477 Imm(0)                                           -> x1
-    v478 Binop { op=ult, lhs=v441, rhs=v453 }             -> x0
-    v479 Imm(0)                                           -> x1
+    v478 Imm(0)                                           -> x1
+    v479 Binop { op=ult, lhs=v442, rhs=v454 }             -> x0
     v480 Imm(0)                                           -> x1
     v481 Imm(0)                                           -> x1
-    v482 Imm(0)                                           -> x1
+    v482 BinopI { op=and, lhs=v479, rhs_imm=255 }         -> x1
     v483 Imm(0)                                           -> x1
-    terminator Bz { cond=v478, target=b20, fall=b19 }   (exit_acc=v478)
+    v484 Imm(0)                                           -> x1
+    v485 Imm(0)                                           -> x1
+    terminator Bz { cond=v479, target=b20, fall=b19 }   (exit_acc=v479)
   block 19  start_pc=0
-    v484 Imm(7)                                           -> x0
-    terminator Return(v484)   (exit_acc=v484)
+    v486 Imm(7)                                           -> x0
+    terminator Return(v486)   (exit_acc=v486)
   block 20  start_pc=0
-    v485 Imm(0)                                           -> x0
-    terminator Return(v485)   (exit_acc=v485)
+    v487 Imm(0)                                           -> x0
+    terminator Return(v487)   (exit_acc=v487)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

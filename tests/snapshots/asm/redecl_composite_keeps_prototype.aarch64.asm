@@ -20,7 +20,6 @@ Disassembly of section .text:
                	stur	x0, [x29, #-0x8]
                	ldur	w0, [x29, #-0x8]
                	add	x0, x0, #0x1
-               	mov	w0, w0
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
@@ -32,7 +31,6 @@ Disassembly of section .text:
                	stur	x0, [x29, #-0x8]
                	ldur	w0, [x29, #-0x8]
                	add	x0, x0, #0x2
-               	mov	w0, w0
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
@@ -44,7 +42,6 @@ Disassembly of section .text:
                	stur	x0, [x29, #-0x8]
                	ldur	w0, [x29, #-0x8]
                	add	x0, x0, #0x3
-               	mov	w0, w0
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
@@ -65,7 +62,6 @@ Disassembly of section .text:
 
 <add2>:
                	add	x0, x0, x1
-               	mov	w0, w0
                	ret
 
 <main>:

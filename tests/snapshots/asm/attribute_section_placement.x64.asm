@@ -39,11 +39,9 @@ Disassembly of section .text:
                	movslq	(%rcx), %rcx
                	addq	%rcx, %rax
                	subq	$0x2a, %rax
-               	movslq	%eax, %rax
                	popq	%rbp
                	retq
-		...
-               	addb	%al, (%rax)
+               	addb	%bh, 0x7(%rax)
 
 <boot>:
                	movl	$0x7, %eax

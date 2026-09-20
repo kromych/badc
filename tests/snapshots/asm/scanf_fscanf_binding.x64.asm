@@ -70,6 +70,5 @@ Disassembly of section .text:
                	movslq	-0x10(%rbp), %rax
                	movslq	-0x8(%rbp), %rcx
                	addq	%rcx, %rax
-               	movslq	%eax, %rax
                	leave
                	retq

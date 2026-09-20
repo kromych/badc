@@ -26,7 +26,7 @@ Disassembly of section .text:
                	int3
 
 <use>:
-               	movslq	%esi, %rax
+               	movq	%rsi, %rax
                	retq
 
 <probe>:

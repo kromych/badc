@@ -94,7 +94,7 @@ Disassembly of section .text:
                	b	<addr>
                	mov	x0, #0x3                // =3
                	bl	<addr>
-               	cmp	x0, #0x1
+               	cmp	w0, #0x1
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	add	sp, sp, #0x40
@@ -114,7 +114,7 @@ Disassembly of section .text:
                	b	<addr>
                	mov	x0, #0x9                // =9
                	bl	<addr>
-               	cmp	x0, #0x10
+               	cmp	w0, #0x10
                	b.eq	<addr>
                	mov	x0, #0x5                // =5
                	add	sp, sp, #0x40

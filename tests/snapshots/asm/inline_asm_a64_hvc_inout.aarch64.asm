@@ -84,7 +84,6 @@ Disassembly of section .text:
                	ldr	x16, [sp, #0x18]
                	str	x3, [x16]
                	ldur	x0, [x29, #-0x40]
-               	sxtw	x0, w0
                	add	sp, sp, #0xa0
                	ldp	x29, x30, [sp], #0x10
                	ret

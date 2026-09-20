@@ -45,7 +45,6 @@ Disassembly of section .text:
                	sub	x1, x29, #0x8
                	blr	x20
                	ldur	x0, [x29, #-0x8]
-               	sxtw	x0, w0
                	ldp	x29, x30, [sp, #0x20]
                	ldp	x20, x21, [sp], #0x30
                	ret

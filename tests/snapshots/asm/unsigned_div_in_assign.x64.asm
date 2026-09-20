@@ -44,7 +44,6 @@ Disassembly of section .text:
                	subq	%rax, %rcx
                	imulq	$0x64, %rsi, %rax
                	addq	%rcx, %rax
-               	movslq	%eax, %rax
                	retq
 
 <main>:

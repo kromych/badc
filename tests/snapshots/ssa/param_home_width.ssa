@@ -101,7 +101,7 @@ fn ent_pc=2 n_params=2 variadic=false locals=0
     terminator Bz { cond=v11, target=b3, fall=b1 }   (exit_acc=v11)
   block 3  start_pc=0
     v21  BinopI { op=and, lhs=v8, rhs_imm=4294967295 }    -> x0
-    terminator Return(v21)   (exit_acc=v21)
+    terminator Return(v8)   (exit_acc=v8)
 ; --- SSA dump (ok=true) ent_pc=3 ---
 ; name=step_i8
 fn ent_pc=3 n_params=2 variadic=false locals=0
@@ -201,8 +201,8 @@ fn ent_pc=5 n_params=2 variadic=false locals=0
     terminator Bz { cond=v11, target=b3, fall=b1 }   (exit_acc=v11)
   block 3  start_pc=0
     v19  Extend { value=v8, kind=I32 }                    -> x0
-    v20  Extend { value=v19, kind=I32 }                   -> x1
-    terminator Return(v19)   (exit_acc=v19)
+    v20  Extend { value=v8, kind=I32 }                    -> x0
+    terminator Return(v8)   (exit_acc=v8)
 ; --- SSA dump (ok=true) ent_pc=6 ---
 ; name=step_long
 fn ent_pc=6 n_params=2 variadic=false locals=0
@@ -297,7 +297,7 @@ fn ent_pc=8 n_params=2 variadic=false locals=0
     terminator Bz { cond=v11, target=b3, fall=b1 }   (exit_acc=v11)
   block 3  start_pc=0
     v19  BinopI { op=and, lhs=v8, rhs_imm=4294967295 }    -> x0
-    terminator Return(v19)   (exit_acc=v19)
+    terminator Return(v8)   (exit_acc=v8)
 ; --- SSA dump (ok=true) ent_pc=9 ---
 ; name=widen_u32
 fn ent_pc=9 n_params=1 variadic=false locals=0

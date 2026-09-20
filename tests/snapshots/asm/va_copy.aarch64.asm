@@ -90,7 +90,7 @@ Disassembly of section .text:
                	b.lt	<addr>
                	sub	x0, x29, #0x20
                	sub	x0, x29, #0x40
-               	sxtw	x0, w1
+               	mov	x0, x1
                	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
                	add	sp, sp, #0xc0
@@ -105,7 +105,7 @@ Disassembly of section .text:
                	mov	x3, #0x1e               // =30
                	mov	x4, #0x28               // =40
                	bl	<addr>
-               	cmp	x0, #0x64
+               	cmp	w0, #0x64
                	b.eq	<addr>
                	mov	x0, #0xb                // =11
                	ldp	x29, x30, [sp], #0x10

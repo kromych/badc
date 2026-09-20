@@ -20,9 +20,9 @@ fn ent_pc=0 n_params=3 variadic=false locals=0
     terminator Jmp(b2)   (exit_acc=v9)
   block 2  start_pc=0
     v12  Phi { incoming=[b1:v9, b3:v16], kind=I64 }       -> x0
-    v13  Extend { value=v12, kind=I32 }                   -> x0
-    v14  Extend { value=v13, kind=I32 }                   -> x1
-    terminator Return(v13)   (exit_acc=v13)
+    v13  Extend { value=v12, kind=I32 }                   -> x1
+    v14  Extend { value=v12, kind=I32 }                   -> x1
+    terminator Return(v12)   (exit_acc=v12)
   block 3  start_pc=0
     v15  Imm(0)                                           -> x0
     v16  BinopI { op=sub, lhs=v5, rhs_imm=1 }             -> x0
@@ -46,24 +46,26 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v9   Imm(0)                                           -> x0
     v10  Imm(11)                                          -> x0
     v11  Imm(11)                                          -> x0
-    v12  Imm(0)                                           -> x0
+    v12  Imm(11)                                          -> x0
     v13  Imm(0)                                           -> x0
-    v14  Imm(20)                                          -> x0
-    v15  Imm(0)                                           -> x0
+    v14  Imm(0)                                           -> x0
+    v15  Imm(20)                                          -> x0
     v16  Imm(0)                                           -> x0
-    v17  Imm(20)                                          -> x0
-    v18  Imm(19)                                          -> x0
+    v17  Imm(0)                                           -> x0
+    v18  Imm(20)                                          -> x0
     v19  Imm(19)                                          -> x0
-    v20  Imm(0)                                           -> x0
-    v21  Imm(19)                                          -> x0
+    v20  Imm(19)                                          -> x0
+    v21  Imm(0)                                           -> x0
     v22  Imm(19)                                          -> x0
-    v23  Imm(0)                                           -> x0
-    v24  Imm(11)                                          -> x0
-    v25  Imm(19)                                          -> x0
-    v26  Imm(30)                                          -> x0
-    v27  Imm(30)                                          -> x0
+    v23  Imm(19)                                          -> x0
+    v24  Imm(19)                                          -> x0
+    v25  Imm(0)                                           -> x0
+    v26  Imm(0)                                           -> x0
+    v27  Imm(0)                                           -> x0
     v28  Imm(30)                                          -> x0
-    terminator Return(v28)   (exit_acc=v28)
+    v29  Imm(30)                                          -> x0
+    v30  Imm(30)                                          -> x0
+    terminator Return(v30)   (exit_acc=v30)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

@@ -18,20 +18,22 @@ fn ent_pc=9 n_params=0 variadic=false locals=0
     v4   BinopI { op=add, lhs=v2, rhs_imm=1 }             -> x1
     v5   Extend { value=v4, kind=I32 }                    -> x2
     v6   Extend { value=v4, kind=I32 }                    -> x2
-    v7   Imm(3)                                           -> x2
-    v8   BinopI { op=add, lhs=v4, rhs_imm=3 }             -> x1
-    v9   Extend { value=v8, kind=I32 }                    -> x2
-    v10  Store { addr=v1, disp=0, value=v8, kind=I32 }    -> -
-    v11  TlsAddr(0)                                       -> x0
-    v12  Extend { value=v8, kind=I32 }                    -> x0
-    v13  BinopI { op=ne, lhs=v12, rhs_imm=11 }            -> x0
-    terminator Bz { cond=v13, target=b2, fall=b1 }   (exit_acc=v13)
+    v7   Extend { value=v4, kind=I32 }                    -> x2
+    v8   Imm(3)                                           -> x2
+    v9   Imm(3)                                           -> x2
+    v10  BinopI { op=add, lhs=v4, rhs_imm=3 }             -> x1
+    v11  Extend { value=v10, kind=I32 }                   -> x2
+    v12  Store { addr=v1, disp=0, value=v10, kind=I32 }   -> -
+    v13  TlsAddr(0)                                       -> x0
+    v14  Extend { value=v10, kind=I32 }                   -> x0
+    v15  BinopI { op=ne, lhs=v14, rhs_imm=11 }            -> x0
+    terminator Bz { cond=v15, target=b2, fall=b1 }   (exit_acc=v15)
   block 1  start_pc=0
-    v15  Imm(1)                                           -> x0
+    v17  Imm(1)                                           -> x0
     terminator Jmp(b1)
   block 2  start_pc=0
-    v14  Imm(0)                                           -> x0
-    terminator Return(v14)   (exit_acc=v14)
+    v16  Imm(0)                                           -> x0
+    terminator Return(v16)   (exit_acc=v16)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

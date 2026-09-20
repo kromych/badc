@@ -30,7 +30,6 @@ Disassembly of section .text:
                	testq	%rdi, %rdi
                	je	<addr>
                	leaq	0x1(%rsi), %rax
-               	movslq	%eax, %rax
                	retq
                	leaq	-0x1(%rdx), %rax
                	jmp	<addr>

@@ -254,32 +254,32 @@ Disassembly of section .text:
                	cmpq	$0x7, %rax
                	jne	<addr>
                	callq	<addr>
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	jne	<addr>
                	movl	$0x3, %eax
                	leave
                	retq
                	callq	<addr>
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	jne	<addr>
                	movl	$0x4, %eax
                	leave
                	retq
                	callq	<addr>
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	jne	<addr>
                	movl	$0x5, %eax
                	leave
                	retq
                	callq	<addr>
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	jne	<addr>
                	movl	$0x6, %eax
                	leave
                	retq
                	movl	$0x1, %edi
                	callq	<addr>
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	jne	<addr>
                	movl	$0x7, %eax
                	leave

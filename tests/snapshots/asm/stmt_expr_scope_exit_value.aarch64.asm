@@ -112,7 +112,7 @@ Disassembly of section .text:
                	str	wzr, [x1]
                	mov	x0, #0x4                // =4
                	bl	<addr>
-               	cmp	x0, #0x2a
+               	cmp	w0, #0x2a
                	b.eq	<addr>
                	mov	x0, #0x5                // =5
                	add	sp, sp, #0x10
@@ -120,7 +120,7 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x3                // =3
                	bl	<addr>
-               	cmp	x0, #0x7
+               	cmp	w0, #0x7
                	b.eq	<addr>
                	mov	x0, #0x6                // =6
                	add	sp, sp, #0x10

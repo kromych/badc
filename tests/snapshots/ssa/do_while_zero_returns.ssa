@@ -12,15 +12,15 @@ fn ent_pc=0 n_params=1 variadic=false locals=0
   block 1  start_pc=0
     v5   Imm(0)                                           -> x0
     v6   Neg(v1)                                          -> x0
-    v7   Extend { value=v6, kind=I32 }                    -> x0
-    v8   Extend { value=v7, kind=I32 }                    -> x1
-    terminator Return(v7)   (exit_acc=v7)
+    v7   Extend { value=v6, kind=I32 }                    -> x1
+    v8   Extend { value=v6, kind=I32 }                    -> x1
+    terminator Return(v6)   (exit_acc=v6)
   block 2  start_pc=0
     v9   Imm(0)                                           -> x0
     v10  BinopI { op=add, lhs=v1, rhs_imm=1 }             -> x0
-    v11  Extend { value=v10, kind=I32 }                   -> x0
-    v12  Extend { value=v11, kind=I32 }                   -> x1
-    terminator Return(v11)   (exit_acc=v11)
+    v11  Extend { value=v10, kind=I32 }                   -> x1
+    v12  Extend { value=v10, kind=I32 }                   -> x1
+    terminator Return(v10)   (exit_acc=v10)
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=classify
 fn ent_pc=1 n_params=1 variadic=false locals=1
@@ -82,18 +82,20 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v22  Imm(0)                                           -> x0
     v23  Imm(1)                                           -> x0
     v24  Imm(0)                                           -> x0
-    v25  Imm(0)                                           -> x0
-    v26  Imm(-9)                                          -> x0
+    v25  Imm(1)                                           -> x0
+    v26  Imm(0)                                           -> x0
     v27  Imm(-9)                                          -> x0
-    v28  Imm(0)                                           -> x0
+    v28  Imm(-9)                                          -> x0
     v29  Imm(0)                                           -> x0
-    v30  Imm(-1)                                          -> x0
-    v31  Imm(0)                                           -> x0
-    v32  Imm(-1)                                          -> x0
-    v33  Imm(0)                                           -> x0
+    v30  Imm(0)                                           -> x0
+    v31  Imm(-1)                                          -> x0
+    v32  Imm(0)                                           -> x0
+    v33  Imm(-1)                                          -> x0
     v34  Imm(0)                                           -> x0
-    v35  Imm(0)                                           -> x0
-    terminator Return(v35)   (exit_acc=v35)
+    v35  Imm(-1)                                          -> x0
+    v36  Imm(0)                                           -> x0
+    v37  Imm(0)                                           -> x0
+    terminator Return(v37)   (exit_acc=v37)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

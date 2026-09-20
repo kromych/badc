@@ -157,9 +157,9 @@ fn ent_pc=5 n_params=0 variadic=false locals=9
     v63  Binop { op=add, lhs=v52, rhs=v62 }               -> x0
     v64  Imm(0)                                           -> x1
     v65  Imm(0)                                           -> x1
-    v66  Extend { value=v63, kind=I32 }                   -> x0
-    v67  Extend { value=v66, kind=I32 }                   -> x1
-    terminator Return(v66)   (exit_acc=v66)
+    v66  Extend { value=v63, kind=I32 }                   -> x1
+    v67  Extend { value=v63, kind=I32 }                   -> x1
+    terminator Return(v63)   (exit_acc=v63)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

@@ -48,7 +48,6 @@ Disassembly of section .text:
 
 <clobber>:
                	leaq	0x121589(%rdi), %rax
-               	movslq	%eax, %rax
                	retq
 
 <sum_pair_pair>:

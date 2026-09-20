@@ -64,7 +64,7 @@ Disassembly of section .text:
                	incq	%rax
                	cmpl	%esi, %eax
                	jl	<addr>
-               	movl	%edi, %eax
+               	movq	%rdi, %rax
                	retq
 
 <step_i8>:
@@ -101,7 +101,7 @@ Disassembly of section .text:
                	incq	%rax
                	cmpl	%esi, %eax
                	jl	<addr>
-               	movslq	%edi, %rax
+               	movq	%rdi, %rax
                	retq
 
 <step_long>:
@@ -139,7 +139,7 @@ Disassembly of section .text:
                	incq	%rax
                	cmpl	%esi, %eax
                	jl	<addr>
-               	movl	%edi, %eax
+               	movq	%rdi, %rax
                	retq
 
 <widen_u32>:

@@ -28,7 +28,6 @@ Disassembly of section .text:
 <sum>:
                	leaq	(%rdi,%rsi), %rax
                	addq	%rdx, %rax
-               	movslq	%eax, %rax
                	retq
 
 <main>:

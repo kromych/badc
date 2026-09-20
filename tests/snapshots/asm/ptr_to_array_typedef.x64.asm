@@ -54,6 +54,5 @@ Disassembly of section .text:
                	addq	$0x1e, %rax
                	addq	$0x11, %rax
                	subq	$0x7, %rax
-               	movslq	%eax, %rax
                	leave
                	retq

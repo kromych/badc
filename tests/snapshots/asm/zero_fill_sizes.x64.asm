@@ -190,7 +190,6 @@ Disassembly of section .text:
                	movslq	(%rcx), %rax
                	movslq	0xff0(%rcx), %rcx
                	addq	%rcx, %rax
-               	movslq	%eax, %rax
                	leave
                	retq
 
@@ -289,6 +288,5 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx
                	movslq	0xff0(%rcx), %rcx
                	addq	%rcx, %rax
-               	movslq	%eax, %rax
                	popq	%rbp
                	retq

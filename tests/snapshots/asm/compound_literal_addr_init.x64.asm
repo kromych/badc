@@ -77,6 +77,5 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	callq	<addr>
-               	movslq	%eax, %rax
                	popq	%rbp
                	retq

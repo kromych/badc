@@ -115,5 +115,4 @@ Disassembly of section .text:
                	movq	%rax, %xmm15
                	vfmadd231ss	%xmm15, %xmm14, %xmm0 # xmm0 = (xmm14 * xmm15) + xmm0
                	cvttss2si	%xmm0, %rax
-               	movslq	%eax, %rax
                	retq

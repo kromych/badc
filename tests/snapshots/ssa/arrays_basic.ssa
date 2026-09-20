@@ -98,8 +98,9 @@ fn ent_pc=1 n_params=0 variadic=false locals=3
   block 3  start_pc=0
     v655 Extend { value=v643, kind=I32 }                  -> x0
     v656 Extend { value=v643, kind=I32 }                  -> x0
-    v657 BinopI { op=ne, lhs=v643, rhs_imm=15 }           -> x0
-    terminator Bz { cond=v657, target=b5, fall=b4 }   (exit_acc=v657)
+    v657 Extend { value=v643, kind=I32 }                  -> x0
+    v658 BinopI { op=ne, lhs=v643, rhs_imm=15 }           -> x0
+    terminator Bz { cond=v658, target=b5, fall=b4 }   (exit_acc=v658)
   block 4  start_pc=0
     v74  Imm(1)                                           -> x0
     terminator Return(v74)   (exit_acc=v74)

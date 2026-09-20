@@ -69,7 +69,7 @@ Disassembly of section .text:
                	b	<addr>
                	b	<addr>
                	b	<addr>
-               	sxtw	x0, w2
+               	mov	x0, x2
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret

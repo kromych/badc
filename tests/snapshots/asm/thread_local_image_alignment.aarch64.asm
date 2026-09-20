@@ -20,7 +20,6 @@ Disassembly of section .text:
                	and	x2, x1, #0xf
                	cbz	w2, <addr>
                	add	x0, x0, #0x1
-               	sxtw	x0, w0
                	ret
                	mov	x2, #0x3                // =3
                	str	x2, [x1]
@@ -42,7 +41,6 @@ Disassembly of section .text:
                	cmp	x1, #0x7
                	b.eq	<addr>
                	add	x0, x0, #0x2
-               	sxtw	x0, w0
                	ret
                	ldrb	w1, [x2]
                	ldrb	w2, [x3]
@@ -50,7 +48,6 @@ Disassembly of section .text:
                	cmp	w1, #0x3
                	b.eq	<addr>
                	add	x0, x0, #0x3
-               	sxtw	x0, w0
                	ret
                	mov	x0, #0x0                // =0
                	ret
@@ -60,6 +57,7 @@ Disassembly of section .text:
                	mov	x29, sp
                	mov	x0, #0xa                // =10
                	bl	<addr>
+               	sxtw	x0, w0
                	ldp	x29, x30, [sp], #0x10
                	ret
 
@@ -105,6 +103,5 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	bl	<addr>
-               	sxtw	x0, w0
                	ldp	x29, x30, [sp], #0x10
                	ret

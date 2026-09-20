@@ -55,5 +55,4 @@ Disassembly of section .text:
                	movslq	(%rcx), %rcx
                	addq	%rcx, %rax
                	subq	$0x64, %rax
-               	movslq	%eax, %rax
                	retq

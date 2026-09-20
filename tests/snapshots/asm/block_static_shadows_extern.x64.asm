@@ -36,7 +36,7 @@ Disassembly of section .text:
                	incq	%rax
                	cmpl	%esi, %eax
                	jl	<addr>
-               	movslq	%ecx, %rax
+               	movq	%rcx, %rax
                	retq
 
 <main>:

@@ -217,8 +217,9 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Call { target_pc=0, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v2   Extend { value=v1, kind=I32 }                    -> x0
-    terminator Return(v2)   (exit_acc=v2)
+    v2   Extend { value=v1, kind=I32 }                    -> x1
+    v3   Extend { value=v1, kind=I32 }                    -> x1
+    terminator Return(v1)   (exit_acc=v1)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

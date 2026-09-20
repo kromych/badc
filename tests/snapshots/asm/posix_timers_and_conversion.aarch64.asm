@@ -15,12 +15,10 @@ Disassembly of section .text:
 
 <doubled>:
                	add	x0, x0, x0
-               	sxtw	x0, w0
                	ret
 
 <declared_only>:
                	add	x0, x0, #0x1
-               	sxtw	x0, w0
                	ret
 
 <main>:

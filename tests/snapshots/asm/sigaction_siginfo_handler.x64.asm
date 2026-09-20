@@ -137,6 +137,5 @@ Disassembly of section .text:
                	leaq	-0x8(%rbp), %rcx
                	movq	%rcx, (%rax)
                	callq	<addr>
-               	movslq	%eax, %rax
                	leave
                	retq

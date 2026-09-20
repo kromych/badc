@@ -43,11 +43,11 @@ Disassembly of section .text:
                	mov	x29, sp
                	mov	x0, #0x0                // =0
                	bl	<addr>
-               	cmp	x0, #0xd
+               	cmp	w0, #0xd
                	b.ne	<addr>
                	mov	x0, #0x1                // =1
                	bl	<addr>
-               	cmp	x0, #0x17
+               	cmp	w0, #0x17
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ldp	x29, x30, [sp], #0x10

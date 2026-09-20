@@ -794,15 +794,13 @@ Disassembly of section .text:
 
 <single>:
                	movslq	%edi, %rdi
-               	movslq	%esi, %rsi
                	testq	%rdi, %rdi
                	je	<addr>
-               	leaq	<rip>, %rax        # <addr>
+               	leaq	<rip>, %rax         # <addr>
                	cmpl	$0x64, %esi
                	jle	<addr>
                	shlq	%rsi
                	leaq	0x2(%rsi), %rax
-               	movslq	%eax, %rax
                	retq
                	jmpq	*%rax
                	leaq	0x1(%rsi), %rax
@@ -919,17 +917,17 @@ Disassembly of section .text:
                	movl	$0x1, %edi
                	movl	$0x5, %esi
                	callq	<addr>
-               	cmpq	$0x6, %rax
+               	cmpl	$0x6, %eax
                	jne	<addr>
                	xorl	%edi, %edi
                	movl	$0x5, %esi
                	callq	<addr>
-               	cmpq	$0x7, %rax
+               	cmpl	$0x7, %eax
                	jne	<addr>
                	movl	$0x1, %edi
                	movl	$0xc8, %esi
                	callq	<addr>
-               	cmpq	$0x192, %rax            # imm = 0x192
+               	cmpl	$0x192, %eax            # imm = 0x192
                	je	<addr>
                	movl	$0x8, %eax
                	popq	%rbx

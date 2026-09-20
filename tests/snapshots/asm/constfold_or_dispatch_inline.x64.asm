@@ -28,28 +28,24 @@ Disassembly of section .text:
 <c0>:
                	leaq	0x1(%rdi), %rax
                	shlq	%rax
-               	movslq	%eax, %rax
                	retq
 
 <c1>:
                	leaq	0x2(%rdi), %rax
                	shlq	%rax
                	incq	%rax
-               	movslq	%eax, %rax
                	retq
 
 <c2>:
                	leaq	0x1(%rdi), %rax
                	shlq	%rax
                	addq	$0x2, %rax
-               	movslq	%eax, %rax
                	retq
 
 <c3>:
                	leaq	0x4(%rdi), %rax
                	shlq	%rax
                	addq	$0x3, %rax
-               	movslq	%eax, %rax
                	retq
 
 <main>:

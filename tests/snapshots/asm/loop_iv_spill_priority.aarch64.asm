@@ -50,7 +50,6 @@ Disassembly of section .text:
                	eor	x0, x0, x10
                	eor	x0, x0, x11
                	eor	x0, x0, x12
-               	mov	w0, w0
                	ret
 
 <main>:

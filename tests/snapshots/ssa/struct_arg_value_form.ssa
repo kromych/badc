@@ -49,34 +49,36 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     v11  Imm(0)                                           -> x0
     v12  Imm(0)                                           -> x0
     v13  Imm(3735928559)                                  -> x0
-    v14  Imm(0)                                           -> x0
+    v14  Imm(3735928559)                                  -> x0
     v15  Imm(0)                                           -> x0
     v16  Imm(0)                                           -> x0
     v17  Imm(0)                                           -> x0
-    v18  Imm(1432778632)                                  -> x0
-    v19  Imm(6153737366847619072)                         -> x0
-    v20  Imm(287454020)                                   -> x0
-    v21  Imm(6153737367135073092)                         -> x0
-    v22  Imm(0)                                           -> x0
+    v18  Imm(0)                                           -> x0
+    v19  Imm(1432778632)                                  -> x0
+    v20  Imm(6153737366847619072)                         -> x0
+    v21  Imm(287454020)                                   -> x0
+    v22  Imm(6153737367135073092)                         -> x0
     v23  Imm(0)                                           -> x0
-    v24  Imm(3735928559)                                  -> x0
-    v25  Imm(0)                                           -> x0
-    v26  Imm(0)                                           -> x0
-    v27  Imm(3735928559)                                  -> x0
+    v24  Imm(0)                                           -> x0
+    v25  Imm(3735928559)                                  -> x0
+    v26  Imm(3735928559)                                  -> x0
+    v27  Imm(0)                                           -> x0
     v28  Imm(0)                                           -> x0
-    v29  Imm(0)                                           -> x0
-    v30  Imm(287454020)                                   -> x0
+    v29  Imm(3735928559)                                  -> x0
+    v30  Imm(0)                                           -> x0
     v31  Imm(0)                                           -> x0
-    v32  Imm(0)                                           -> x0
+    v32  Imm(287454020)                                   -> x0
     v33  Imm(0)                                           -> x0
     v34  Imm(0)                                           -> x0
-    v35  Imm(1432778632)                                  -> x0
+    v35  Imm(0)                                           -> x0
     v36  Imm(0)                                           -> x0
-    v37  Imm(0)                                           -> x0
+    v37  Imm(1432778632)                                  -> x0
     v38  Imm(0)                                           -> x0
     v39  Imm(0)                                           -> x0
     v40  Imm(0)                                           -> x0
-    terminator Return(v40)   (exit_acc=v40)
+    v41  Imm(0)                                           -> x0
+    v42  Imm(0)                                           -> x0
+    terminator Return(v42)   (exit_acc=v42)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

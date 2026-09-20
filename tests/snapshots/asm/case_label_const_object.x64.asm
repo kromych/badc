@@ -68,7 +68,7 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	callq	<addr>
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	jne	<addr>
                	movl	$0xb, %eax
                	popq	%rbp

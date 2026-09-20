@@ -94,7 +94,7 @@ Disassembly of section .text:
                	jne	<addr>
                	movl	$0x3, %edi
                	callq	<addr>
-               	cmpq	$0x1, %rax
+               	cmpl	$0x1, %eax
                	je	<addr>
                	movl	$0x3, %eax
                	popq	%rbx
@@ -108,7 +108,7 @@ Disassembly of section .text:
                	jne	<addr>
                	movl	$0x9, %edi
                	callq	<addr>
-               	cmpq	$0x10, %rax
+               	cmpl	$0x10, %eax
                	je	<addr>
                	movl	$0x5, %eax
                	popq	%rbx

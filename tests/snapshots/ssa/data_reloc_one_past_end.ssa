@@ -36,9 +36,9 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v24  Binop { op=add, lhs=v6, rhs=v23 }                -> x0
     v25  Imm(0)                                           -> x1
     v26  Imm(0)                                           -> x1
-    v27  Extend { value=v24, kind=I32 }                   -> x0
-    v28  Extend { value=v27, kind=I32 }                   -> x1
-    terminator Return(v27)   (exit_acc=v27)
+    v27  Extend { value=v24, kind=I32 }                   -> x1
+    v28  Extend { value=v24, kind=I32 }                   -> x1
+    terminator Return(v24)   (exit_acc=v24)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

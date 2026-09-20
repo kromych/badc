@@ -59,7 +59,7 @@ Disassembly of section .text:
                	xorl	%esi, %esi
                	movq	%rbx, %rdi
                	callq	<addr>
-               	cmpq	$0x1, %rax
+               	cmpl	$0x1, %eax
                	je	<addr>
                	movl	$0x1, %eax
                	popq	%rbx
@@ -69,7 +69,7 @@ Disassembly of section .text:
                	xorl	%edi, %edi
                	movl	$0x5, %esi
                	callq	<addr>
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	je	<addr>
                	movl	$0x2, %eax
                	popq	%rbx
@@ -79,7 +79,7 @@ Disassembly of section .text:
                	xorl	%edi, %edi
                	movq	%rbx, %rsi
                	callq	<addr>
-               	cmpq	$0x1, %rax
+               	cmpl	$0x1, %eax
                	je	<addr>
                	movl	$0x3, %eax
                	popq	%rbx
@@ -89,7 +89,7 @@ Disassembly of section .text:
                	movl	$0x5, %edi
                	movl	$0x7, %esi
                	callq	<addr>
-               	cmpq	$0x1, %rax
+               	cmpl	$0x1, %eax
                	je	<addr>
                	movl	$0x4, %eax
                	popq	%rbx
@@ -99,7 +99,7 @@ Disassembly of section .text:
                	movl	$0x5, %edi
                	xorl	%esi, %esi
                	callq	<addr>
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	je	<addr>
                	movl	$0x5, %eax
                	popq	%rbx
@@ -115,6 +115,7 @@ Disassembly of section .text:
                	xorl	%esi, %esi
                	movq	%rbx, %rdi
                	callq	<addr>
+               	movslq	%eax, %rax
                	movslq	(%r12,%rax,4), %rax
                	cmpl	$0x14, %eax
                	je	<addr>
@@ -127,6 +128,7 @@ Disassembly of section .text:
                	xorl	%edi, %edi
                	movl	$0x9, %esi
                	callq	<addr>
+               	movslq	%eax, %rax
                	movslq	(%r12,%rax,4), %rax
                	cmpl	$0xa, %eax
                	je	<addr>

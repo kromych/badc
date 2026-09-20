@@ -28,11 +28,10 @@ Disassembly of section .text:
 <add3>:
                	leaq	(%rdi,%rsi), %rax
                	addq	%rdx, %rax
-               	movslq	%eax, %rax
                	retq
 
 <id>:
-               	movslq	%edi, %rax
+               	movq	%rdi, %rax
                	retq
 
 <main>:

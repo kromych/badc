@@ -81,17 +81,19 @@ fn observe(hi: &mut [bool], work: &mut Vec<ValueId>, v: ValueId) {
 /// arithmetic), and a `Phi` selects one operand, so these forward the consumer's
 /// observation to their operands and are transparent to the low word. A right
 /// shift, divide/modulo, rotate, ordered/equality compare, 64-bit store, address
-/// operand, call argument, FP cast, atomic, return, or branch condition reads the
-/// full register, so it observes the upper bits directly. `Inst::Extend` reads
-/// only the low `kind`-width bits, so it never observes its source's upper bits.
-/// An `And` with a constant whose high word is clear forwards none: its result's
-/// high word is clear whatever the other operand holds.
+/// operand, call argument, FP cast, atomic, or branch condition reads the full
+/// register, so it observes the upper bits directly. `Inst::Extend` reads only the
+/// low `kind`-width bits, so it never observes its source's upper bits. An `And`
+/// with a constant whose high word is clear forwards none: its result's high word
+/// is clear whatever the other operand holds. A return observes the full register
+/// unless the declared return type is narrower than it on every target
+/// (`return_is_low_word`), in which case the result rides the low word and the
+/// reading side widens it.
 /// Anything not positively classified as low-word-only is treated as observing,
 /// so the result is a conservative over-approximation. Shared with the allocator,
 /// which consults it to skip a `ParamRef` entry sign-extension whose result is
 /// never read above bit 31 (the parameter's low word already holds the C99
-/// 6.5.2.2p4-converted value; the return boundary stays conservative, so a value
-/// feeding the return keeps its canonicalization).
+/// 6.5.2.2p4-converted value).
 pub(crate) fn compute_high_observed(func: &FunctionSsa) -> Vec<bool> {
     compute_high_observed_through(func, &[])
 }
@@ -252,10 +254,16 @@ fn compute_high_observed_through(func: &FunctionSsa, collapsing: &[bool]) -> Vec
         }
     }
     // A terminator reads its operand at full width, except a zero test
-    // that reads the low word (`low_word_tests`). `Block::exit_acc` names a
-    // value and reads none.
+    // that reads the low word (`low_word_tests`) and a return whose
+    // declared type is narrower than the return register, which carries
+    // the result in its low word alone. `Block::exit_acc` names a value
+    // and reads none.
+    let ret_low_word = crate::c5::codegen::return_is_low_word(func.ret_type_tag);
     for (b, block) in func.blocks.iter().enumerate() {
         if func.low_word_tests.get(b).copied().unwrap_or(false) {
+            continue;
+        }
+        if ret_low_word && matches!(block.terminator, Terminator::Return(_)) {
             continue;
         }
         block

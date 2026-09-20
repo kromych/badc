@@ -30,7 +30,6 @@ Disassembly of section .text:
                	movq	%rdi, %rax
                	subq	%rdx, %rax
                	addq	%rsi, %rax
-               	movslq	%eax, %rax
                	retq
 
 <first>:

@@ -97,7 +97,6 @@ Disassembly of section .text:
                	imulq	$0xa, %rcx, %rcx
                	addq	%rcx, %rax
                	addq	%rdx, %rax
-               	movslq	%eax, %rax
                	leave
                	retq
 
@@ -110,7 +109,7 @@ Disassembly of section .text:
                	movl	$0x3, %ecx
                	movb	$0x0, %al
                	callq	<addr>
-               	cmpq	$0x23a3, %rax           # imm = 0x23A3
+               	cmpl	$0x23a3, %eax           # imm = 0x23A3
                	je	<addr>
                	movl	$0xb, %eax
                	popq	%rbp

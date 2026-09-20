@@ -14,7 +14,6 @@ Disassembly of section .text:
                	brk	#0x1
 
 <by_param>:
-               	sxtw	x0, w0
                	ret
 
 <by_local>:
@@ -40,17 +39,14 @@ Disassembly of section .text:
                	ret
 
 <use_m>:
-               	sxtw	x0, w0
                	ret
 
 <use_n>:
                	add	x0, x0, x1
-               	sxtw	x0, w0
                	ret
 
 <use_n2>:
                	add	x0, x0, x1
-               	sxtw	x0, w0
                	ret
 
 <main>:

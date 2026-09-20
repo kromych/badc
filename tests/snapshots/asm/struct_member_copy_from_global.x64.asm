@@ -42,7 +42,7 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	callq	<addr>
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	jge	<addr>
                	movl	$0x2, %eax
                	popq	%rbp

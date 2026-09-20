@@ -29,7 +29,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx
                	movl	$0x5, %eax
                	movl	%eax, (%rcx)
-               	movslq	%eax, %rax
                	retq
 
 <main>:
@@ -37,7 +36,7 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	movl	$0x1, %edi
                	callq	<addr>
-               	cmpq	$0x5, %rax
+               	cmpl	$0x5, %eax
                	je	<addr>
                	movl	$0x1, %eax
                	popq	%rbp

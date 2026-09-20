@@ -19,7 +19,6 @@ Disassembly of section .text:
                	mov	x17, #0x64              // =100
                	mul	x1, x1, x17
                	add	x0, x1, x0
-               	sxtw	x0, w0
                	ret
 
 <f2>:
@@ -29,7 +28,6 @@ Disassembly of section .text:
                	mov	x17, #0x64              // =100
                	mul	x0, x0, x17
                	add	x0, x0, x1
-               	sxtw	x0, w0
                	ret
 
 <f3>:
@@ -38,7 +36,6 @@ Disassembly of section .text:
                	mov	x17, #0x64              // =100
                	mul	x1, x1, x17
                	add	x0, x1, x0
-               	sxtw	x0, w0
                	ret
 
 <main>:
@@ -47,21 +44,21 @@ Disassembly of section .text:
                	mov	x0, #0xa                // =10
                	bl	<addr>
                	mov	x17, #-0x3de            // =-990
-               	cmp	x0, x17
+               	cmp	w0, w17
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0xa                // =10
                	bl	<addr>
-               	cmp	x0, #0xc27
+               	cmp	w0, #0xc27
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0xa                // =10
                	bl	<addr>
-               	cmp	x0, #0x8a3
+               	cmp	w0, #0x8a3
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ldp	x29, x30, [sp], #0x10

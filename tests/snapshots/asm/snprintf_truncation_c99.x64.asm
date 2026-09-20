@@ -60,7 +60,6 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	leaq	-0x18(%rbp), %rcx
-               	movslq	%eax, %rax
                	leave
                	retq
 
@@ -118,7 +117,7 @@ Disassembly of section .text:
                	movl	$0xf1206, %ecx          # imm = 0xF1206
                	movb	$0x0, %al
                	callq	<addr>
-               	cmpq	$0x6, %rax
+               	cmpl	$0x6, %eax
                	je	<addr>
                	movl	$0x4, %eax
                	leave

@@ -132,7 +132,6 @@ Disassembly of section .text:
                	sub	x1, x29, #0x8
                	str	x1, [x0]
                	bl	<addr>
-               	sxtw	x0, w0
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret

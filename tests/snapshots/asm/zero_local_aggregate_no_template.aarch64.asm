@@ -127,7 +127,7 @@ Disassembly of section .text:
                	b.ne	<addr>
                	mov	x0, #0x0                // =0
                	bl	<addr>
-               	cmp	x0, #0xa
+               	cmp	w0, #0xa
                	b.eq	<addr>
                	mov	x0, #0x8                // =8
                	add	sp, sp, #0x200
@@ -135,7 +135,7 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x1                // =1
                	bl	<addr>
-               	cmp	x0, #0x14
+               	cmp	w0, #0x14
                	b.eq	<addr>
                	mov	x0, #0x9                // =9
                	add	sp, sp, #0x200

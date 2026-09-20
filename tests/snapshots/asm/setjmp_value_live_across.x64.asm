@@ -40,8 +40,7 @@ Disassembly of section .text:
                	subq	$0x8, %rsp
                	pushq	%rbx
                	imulq	$0x7, %rdi, %rax
-               	addq	%rsi, %rax
-               	movslq	%eax, %rbx
+               	leaq	(%rax,%rsi), %rbx
                	leaq	<rip>, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
@@ -64,7 +63,7 @@ Disassembly of section .text:
                	movl	$0x5, %edi
                	movl	$0x7, %esi
                	callq	<addr>
-               	cmpq	$0x2a, %rax
+               	cmpl	$0x2a, %eax
                	jne	<addr>
                	xorl	%eax, %eax
                	popq	%rbp

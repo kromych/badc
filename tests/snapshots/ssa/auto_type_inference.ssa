@@ -53,20 +53,21 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v39  Imm(2)                                           -> x0
     v40  Imm(2)                                           -> x0
     v41  Imm(2)                                           -> x0
-    v42  Imm(0)                                           -> x0
-    v43  ImmData(24)                                      -> x0
-    v44  Load { addr=v43, disp=0, kind=I32 }              -> x0
-    v45  BinopI { op=ne, lhs=v44, rhs_imm=42 }            -> x0
-    terminator Bz { cond=v45, target=b6, fall=b5 }   (exit_acc=v45)
+    v42  Imm(2)                                           -> x0
+    v43  Imm(0)                                           -> x0
+    v44  ImmData(24)                                      -> x0
+    v45  Load { addr=v44, disp=0, kind=I32 }              -> x0
+    v46  BinopI { op=ne, lhs=v45, rhs_imm=42 }            -> x0
+    terminator Bz { cond=v46, target=b6, fall=b5 }   (exit_acc=v46)
   block 5  start_pc=0
-    v47  Imm(9)                                           -> x0
-    terminator Return(v47)   (exit_acc=v47)
+    v48  Imm(9)                                           -> x0
+    terminator Return(v48)   (exit_acc=v48)
   block 6  start_pc=0
-    v48  Imm(0)                                           -> x0
     v49  Imm(0)                                           -> x0
     v50  Imm(0)                                           -> x0
     v51  Imm(0)                                           -> x0
-    terminator Return(v51)   (exit_acc=v51)
+    v52  Imm(0)                                           -> x0
+    terminator Return(v52)   (exit_acc=v52)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

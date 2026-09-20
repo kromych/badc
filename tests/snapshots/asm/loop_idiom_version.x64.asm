@@ -290,14 +290,14 @@ Disassembly of section .text:
                	movq	%rbx, %rcx
                	movq	%r12, %rdx
                	callq	<addr>
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	je	<addr>
                	leaq	-<rip>, %rdi      # <addr>
                	movq	%r13, %rsi
                	movq	%rbx, %rcx
                	movq	%r12, %rdx
                	callq	<addr>
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	je	<addr>
                	incq	%rbx
                	cmpl	$0x14, %ebx

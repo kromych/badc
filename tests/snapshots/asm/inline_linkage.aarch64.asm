@@ -15,7 +15,6 @@ Disassembly of section .text:
 
 <einl>:
                	add	x0, x0, #0x3
-               	sxtw	x0, w0
                	ret
 
 <main>:

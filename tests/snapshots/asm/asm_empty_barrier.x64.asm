@@ -72,6 +72,5 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	subq	$0x2a, %rax
-               	movslq	%eax, %rax
                	leave
                	retq

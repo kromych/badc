@@ -6,8 +6,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v0   AllocaInit(0)                                    -> -
     v1   ImmData(16)                                      -> x0
     v2   Load { addr=v1, disp=0, kind=I64 }               -> x0
-    v3   Extend { value=v2, kind=I32 }                    -> x0
-    terminator Return(v3)   (exit_acc=v3)
+    v3   Extend { value=v2, kind=I32 }                    -> x1
+    terminator Return(v2)   (exit_acc=v2)
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=ret_int_as_ptr
 fn ent_pc=1 n_params=1 variadic=false locals=0

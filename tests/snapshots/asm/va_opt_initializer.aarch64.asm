@@ -61,5 +61,4 @@ Disassembly of section .text:
                	cbnz	x2, <addr>
                	add	x0, x0, #0x27
                	sub	x0, x0, #0x2
-               	sxtw	x0, w0
                	ret

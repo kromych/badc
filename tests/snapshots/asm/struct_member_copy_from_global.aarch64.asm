@@ -33,7 +33,7 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	bl	<addr>
-               	cmp	x0, #0x0
+               	cmp	w0, #0x0
                	b.ge	<addr>
                	mov	x0, #0x2                // =2
                	ldp	x29, x30, [sp], #0x10

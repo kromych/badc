@@ -266,7 +266,7 @@ Disassembly of section .text:
                	sub	x0, x29, #0x40
                	mov	x1, #0x9                // =9
                	bl	<addr>
-               	cmp	x0, #0x9
+               	cmp	w0, #0x9
                	b.eq	<addr>
                	mov	x0, #0x8                // =8
                	ldp	x29, x30, [sp, #0x50]
@@ -290,7 +290,7 @@ Disassembly of section .text:
                	sub	x0, x29, #0x40
                	mov	x1, #-0x1               // =-1
                	bl	<addr>
-               	cbz	x0, <addr>
+               	cbz	w0, <addr>
                	mov	x0, #0xa                // =10
                	ldp	x29, x30, [sp, #0x50]
                	ldr	x20, [sp], #0x60

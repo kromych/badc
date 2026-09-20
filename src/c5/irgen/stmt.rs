@@ -549,12 +549,14 @@ impl<'a> Walker<'a> {
             return Ok(true);
         }
         let mut v = self.walk_copy_operand(b, e)?;
-        // C99 6.8.6.4 / 6.3.1.1: the value is converted to the
-        // declared return type. A body evaluated in 64-bit registers can
-        // leave bits set above the type width, and a same-unit caller
-        // reads the result register without re-narrowing, so a narrow
-        // integer return is extended to its declared width here.
-        // `_Bool` is excluded, 6.3.1.2 having normalized it to 0/1.
+        // C99 6.8.6.4 / 6.3.1.1: the value is converted to the declared
+        // return type. A body evaluated in 64-bit registers can leave
+        // bits set above the type width, so a narrow integer return is
+        // extended to its declared width here; the bits above the width
+        // are no part of the result, and
+        // `drop_redundant_extend::compute_high_observed` drops the
+        // extension when that is all it produces. `_Bool` is excluded,
+        // 6.3.1.2 having normalized it to 0/1.
         let stripped = strip_unsigned(self.scalar_return_ty);
         let rs = type_size_bytes(self.scalar_return_ty, self.target);
         if !is_floating_scalar(self.scalar_return_ty)

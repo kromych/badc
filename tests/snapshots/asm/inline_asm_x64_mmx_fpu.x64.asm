@@ -47,6 +47,5 @@ Disassembly of section .text:
                	wait
                	emms
                	movq	-0x10(%rbp), %rax
-               	movslq	%eax, %rax
                	leave
                	retq

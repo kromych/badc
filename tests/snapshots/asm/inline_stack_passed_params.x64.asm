@@ -168,7 +168,6 @@ Disassembly of section .text:
                	movq	%r14, 0x20(%rsp)
                	callq	*%r15
                	addq	$0x30, %rsp
-               	movslq	%eax, %rax
                	testl	%eax, %eax
                	je	<addr>
                	popq	%rbx

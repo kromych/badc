@@ -33,7 +33,6 @@ Disassembly of section .text:
                	cmpl	$0x7, %eax
                	jl	<addr>
                	imulq	$0x6, %rcx, %rax
-               	movslq	%eax, %rax
                	retq
 
 <main>:
@@ -44,5 +43,4 @@ Disassembly of section .text:
                	cmpl	$0x7, %eax
                	jl	<addr>
                	imulq	$0x6, %rcx, %rax
-               	movslq	%eax, %rax
                	retq

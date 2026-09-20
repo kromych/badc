@@ -63,7 +63,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx
                	movl	%eax, (%rcx)
                	incq	%rax
-               	movslq	%eax, %rax
                	popq	%rbp
                	retq
 
@@ -77,7 +76,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx
                	movl	%eax, (%rcx)
                	incq	%rax
-               	movslq	%eax, %rax
                	popq	%rbp
                	retq
 
@@ -88,7 +86,7 @@ Disassembly of section .text:
                	movq	%rbp, %rcx
                	movq	%rcx, (%rax)
                	callq	<addr>
-               	cmpq	$0x3, %rax
+               	cmpl	$0x3, %eax
                	je	<addr>
                	movl	$0x1, %eax
                	popq	%rbp

@@ -41,5 +41,4 @@ Disassembly of section .text:
                	movslq	(%rax), %rax
                	movslq	(%rcx), %rcx
                	addq	%rcx, %rax
-               	movslq	%eax, %rax
                	retq

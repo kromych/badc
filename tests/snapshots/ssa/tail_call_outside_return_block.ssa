@@ -137,10 +137,13 @@ fn ent_pc=6 n_params=5 variadic=false locals=0
     v33  Extend { value=v32, kind=I32 }                   -> x2
     v34  Imm(0)                                           -> x2
     v35  Extend { value=v32, kind=I32 }                   -> x2
-    v36  Imm(0)                                           -> x2
-    v37  Extend { value=v32, kind=I32 }                   -> x2
-    v38  Imm(0)                                           -> x2
-    v39  Imm(0)                                           -> x2
+    v36  Extend { value=v32, kind=I32 }                   -> x2
+    v37  Imm(0)                                           -> x2
+    v38  Extend { value=v32, kind=I32 }                   -> x2
+    v39  Extend { value=v32, kind=I32 }                   -> x2
+    v40  Imm(0)                                           -> x2
+    v41  Extend { value=v32, kind=I32 }                   -> x2
+    v42  Imm(0)                                           -> x2
     terminator Bz { cond=v31, target=b3, fall=b3 }   (low word)   (exit_acc=v32)
 ; --- SSA dump (ok=true) ent_pc=7 ---
 ; name=main

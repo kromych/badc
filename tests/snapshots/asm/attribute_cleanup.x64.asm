@@ -219,7 +219,7 @@ Disassembly of section .text:
                	movl	$0x0, (%rcx)
                	movl	$0x1, %edi
                	callq	<addr>
-               	cmpq	$0x3e7, %rax            # imm = 0x3E7
+               	cmpl	$0x3e7, %eax            # imm = 0x3E7
                	je	<addr>
                	movl	$0x6, %eax
                	leave
@@ -244,7 +244,7 @@ Disassembly of section .text:
                	xorl	%edi, %edi
                	movl	%edi, (%rcx)
                	callq	<addr>
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	je	<addr>
                	movl	$0x8, %eax
                	leave

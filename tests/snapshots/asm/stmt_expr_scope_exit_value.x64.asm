@@ -115,14 +115,14 @@ Disassembly of section .text:
                	movl	$0x0, (%rcx)
                	movl	$0x4, %edi
                	callq	<addr>
-               	cmpq	$0x2a, %rax
+               	cmpl	$0x2a, %eax
                	je	<addr>
                	movl	$0x5, %eax
                	leave
                	retq
                	movl	$0x3, %edi
                	callq	<addr>
-               	cmpq	$0x7, %rax
+               	cmpl	$0x7, %eax
                	je	<addr>
                	movl	$0x6, %eax
                	leave

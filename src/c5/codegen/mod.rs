@@ -1161,6 +1161,30 @@ pub(crate) fn return_extension(return_type_tag: i64, target: Target) -> ReturnEx
     ReturnExt::None
 }
 
+/// True when `return_type_tag` is an integer type that is narrower than
+/// the return register on every target, so the result occupies the low
+/// word and bits 32..63 carry none of it (SysV AMD64 3.2.3, AAPCS64 6.9,
+/// Win64: a sub-register return leaves the rest of the register
+/// unspecified). A caller reading such a result above the type's width
+/// extends it itself.
+///
+/// `long` is excluded because its width is per-target (4 bytes on LLP64,
+/// 8 on LP64) and the mid-end asks this before the target is fixed. Tag
+/// 0 -- no recorded prototype, which `Ty::Char` also encodes -- is
+/// excluded for the same reason [`return_extension`] excludes it.
+pub(crate) fn return_is_low_word(return_type_tag: i64) -> bool {
+    use crate::c5::compiler::types as ty_helpers;
+    use crate::c5::token::Ty;
+    if return_type_tag == 0 || ty_helpers::is_void_ty(return_type_tag) {
+        return false;
+    }
+    let bare = ty_helpers::strip_unsigned(return_type_tag);
+    if ty_helpers::is_pointer_ty(bare) {
+        return false;
+    }
+    bare == Ty::Bool as i64 || bare == Ty::Short as i64 || bare == Ty::Int as i64
+}
+
 /// One resolved external import: a binding the program reaches
 /// for via `Inst::CallExt`, plus everything the codegen and
 /// writer need to wire it up. Built once per compilation by

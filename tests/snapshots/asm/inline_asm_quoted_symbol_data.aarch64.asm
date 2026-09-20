@@ -15,7 +15,6 @@ Disassembly of section .text:
 
 <record>:
                	add	x0, x0, #0x1
-               	sxtw	x0, w0
                	ret
 
 <main>:

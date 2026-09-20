@@ -2178,15 +2178,15 @@ fn dense_switch_lowers_to_jump_table_sparse_keeps_tree() {
 /// C99 6.3.1.8 + 6.5p5: the post-binop sign-narrow that renormalizes an
 /// `int` result is built as `Inst::Extend { kind: I32 }`, which the
 /// aarch64 emit lowers to `SXTW Xd, Wn` (`SBFM Xd, Xn, #0, #31`) and the
-/// x86_64 emit to `movsxd r64, r32`. The product feeds a return, whose
-/// upper bits are observed, so the extension is kept. Verify the encoded
-/// byte sequence shows up and the pre-canonicalization shift pair (a
-/// `movz xN, #32` feeding an `lsl`) does not.
+/// x86_64 emit to `movsxd r64, r32`. The product is returned as `long`,
+/// which observes its upper bits, so the extension is kept. Verify the
+/// encoded byte sequence shows up and the pre-canonicalization shift
+/// pair (a `movz xN, #32` feeding an `lsl`) does not.
 #[test]
 fn sxtw_fold_collapses_int_mul_sign_narrow() {
     use crate::{NativeOptions, Target, emit_native_with_options};
     let program = super::compile_str(
-        "int product(int a, int b) { return a * b; } int main() { return product(7, 6); }",
+        "long product(int a, int b) { return a * b; } int main() { return (int)product(7, 6); }",
     );
     let bytes_arm =
         emit_native_with_options(&program, Target::MacOSAarch64, NativeOptions::default())

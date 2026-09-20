@@ -322,7 +322,6 @@ Disassembly of section .text:
                	lsl	x0, x0, #2
                	add	x0, x1, x0
                	add	x0, x0, x6
-               	sxtw	x0, w0
                	ret
                	mov	x6, x9
                	b	<addr>
@@ -335,7 +334,6 @@ Disassembly of section .text:
                	lsl	x0, x0, #2
                	add	x0, x1, x0
                	add	x0, x0, x6
-               	sxtw	x0, w0
                	ret
                	mov	x6, x9
                	b	<addr>
@@ -346,7 +344,6 @@ Disassembly of section .text:
                	mul	x0, x0, x17
                	add	x0, x0, #0x3c
                	add	x0, x0, x5
-               	sxtw	x0, w0
                	ret
                	mov	x5, x10
                	b	<addr>
@@ -359,7 +356,6 @@ Disassembly of section .text:
                	mul	x0, x0, x17
                	add	x0, x0, #0x28
                	add	x0, x0, x5
-               	sxtw	x0, w0
                	ret
                	mov	x5, x10
                	b	<addr>

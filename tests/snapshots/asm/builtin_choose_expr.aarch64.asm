@@ -46,7 +46,7 @@ Disassembly of section .text:
                	b.lt	<addr>
                	sub	x0, x29, #0xc0
                	bl	<addr>
-               	cbz	x0, <addr>
+               	cbz	w0, <addr>
                	mov	x0, #0x7                // =7
                	add	sp, sp, #0xc0
                	ldp	x29, x30, [sp], #0x10
@@ -55,7 +55,7 @@ Disassembly of section .text:
                	mov	x1, #0x1                // =1
                	strb	w1, [x0, #0x38]
                	bl	<addr>
-               	cmp	x0, #0x1
+               	cmp	w0, #0x1
                	b.eq	<addr>
                	mov	x0, #0x8                // =8
                	add	sp, sp, #0xc0

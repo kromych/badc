@@ -15,12 +15,10 @@ Disassembly of section .text:
 
 <real_double>:
                	lsl	x0, x0, #1
-               	sxtw	x0, w0
                	ret
 
 <real_negate>:
                	neg	x0, x0
-               	sxtw	x0, w0
                	ret
 
 <main>:

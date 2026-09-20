@@ -48,6 +48,5 @@ Disassembly of section .text:
                	callq	<addr>
                	addq	$0x3, %rax
                	subq	$0x7, %rax
-               	movslq	%eax, %rax
                	leave
                	retq

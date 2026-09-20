@@ -38,10 +38,9 @@ Disassembly of section .text:
                	cmp	w1, w2
                	b.lt	<addr>
                	add	x1, x3, #0x1
-               	sxtw	x1, w1
-               	ldrsw	x3, [x0, x1, lsl #2]
+               	ldrsw	x3, [x0, w1, sxtw #2]
                	ldrsw	x4, [x0, w2, sxtw #2]
-               	str	w4, [x0, x1, lsl #2]
+               	str	w4, [x0, w1, sxtw #2]
                	str	w3, [x0, w2, sxtw #2]
                	mov	x0, x1
                	ret

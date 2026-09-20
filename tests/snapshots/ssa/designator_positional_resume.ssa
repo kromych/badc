@@ -98,30 +98,30 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
     v87  Imm(0)                                           -> x0
     terminator Jmp(b7)   (exit_acc=v87)
   block 5  start_pc=0
-    v97  Extend { value=v92, kind=I32 }                   -> x6
-    v98  Binop { op=add, lhs=v79, rhs=v92 }               -> x6
-    v99  LoadIndexed { base=v79, index=v92, scale=1, kind=I8 } -> x6
-    v100 Binop { op=add, lhs=v84, rhs=v92 }               -> x7
-    v101 LoadIndexed { base=v84, index=v92, scale=1, kind=I8 } -> x7
-    v102 Binop { op=ne, lhs=v99, rhs=v101 }               -> x6
-    terminator Bz { cond=v102, target=b6, fall=b9 }   (exit_acc=v102)
+    v98  Extend { value=v93, kind=I32 }                   -> x6
+    v99  Binop { op=add, lhs=v79, rhs=v93 }               -> x6
+    v100 LoadIndexed { base=v79, index=v93, scale=1, kind=I8 } -> x6
+    v101 Binop { op=add, lhs=v84, rhs=v93 }               -> x7
+    v102 LoadIndexed { base=v84, index=v93, scale=1, kind=I8 } -> x7
+    v103 Binop { op=ne, lhs=v100, rhs=v102 }              -> x6
+    terminator Bz { cond=v103, target=b6, fall=b9 }   (exit_acc=v103)
   block 6  start_pc=0
-    v95  Extend { value=v92, kind=I32 }                   -> x6
-    v96  BinopI { op=add, lhs=v92, rhs_imm=1 }            -> x0
-    terminator Jmp(b7)   (exit_acc=v96)
+    v96  Extend { value=v93, kind=I32 }                   -> x6
+    v97  BinopI { op=add, lhs=v93, rhs_imm=1 }            -> x0
+    terminator Jmp(b7)   (exit_acc=v97)
   block 7  start_pc=0
-    v92  Phi { incoming=[b4:v87, b6:v96], kind=I64 }      -> x0
-    v93  Extend { value=v92, kind=I32 }                   -> x6
-    v94  BinopI { op=lt, lhs=v92, rhs_imm=12 }            -> x6
-    terminator Bz { cond=v94, target=b8, fall=b5 }   (exit_acc=v94)
+    v93  Phi { incoming=[b4:v87, b6:v97], kind=I64 }      -> x0
+    v94  Extend { value=v93, kind=I32 }                   -> x6
+    v95  BinopI { op=lt, lhs=v93, rhs_imm=12 }            -> x6
+    terminator Bz { cond=v95, target=b8, fall=b5 }   (exit_acc=v95)
   block 8  start_pc=0
-    v103 Imm(1)                                           -> x0
-    v104 Imm(0)                                           -> x0
-    terminator Return(v104)   (exit_acc=v104)
-  block 9  start_pc=0
+    v104 Imm(1)                                           -> x0
     v105 Imm(0)                                           -> x0
-    v106 Imm(6)                                           -> x0
-    terminator Return(v106)   (exit_acc=v106)
+    terminator Return(v105)   (exit_acc=v105)
+  block 9  start_pc=0
+    v106 Imm(0)                                           -> x0
+    v107 Imm(6)                                           -> x0
+    terminator Return(v107)   (exit_acc=v107)
   block 10  start_pc=0
     v88  Imm(0)                                           -> x0
     v89  Imm(2)                                           -> x0

@@ -178,7 +178,7 @@ Disassembly of section .text:
                	movb	%dl, 0x9b(%rax)
                	popq	%rdx
                	callq	<addr>
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	jne	<addr>
                	movl	$0x1, %eax
                	popq	%rbx
@@ -186,7 +186,7 @@ Disassembly of section .text:
                	retq
                	leaq	-0x140(%rbp), %rdi
                	callq	<addr>
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	jne	<addr>
                	movl	$0x2, %eax
                	popq	%rbx
@@ -194,7 +194,7 @@ Disassembly of section .text:
                	retq
                	leaq	-0xa0(%rbp), %rdi
                	callq	<addr>
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	jne	<addr>
                	movl	$0x3, %eax
                	popq	%rbx

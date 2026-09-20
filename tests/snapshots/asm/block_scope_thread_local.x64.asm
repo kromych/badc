@@ -31,7 +31,7 @@ Disassembly of section .text:
                	movslq	(%rax), %rcx
                	incq	%rcx
                	movl	%ecx, (%rax)
-               	movslq	%ecx, %rax
+               	movq	%rcx, %rax
                	retq
 
 <array_and_struct>:
@@ -62,19 +62,19 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	callq	<addr>
-               	cmpq	$0x1, %rax
+               	cmpl	$0x1, %eax
                	je	<addr>
                	movl	$0x1, %eax
                	popq	%rbp
                	retq
                	callq	<addr>
-               	cmpq	$0x2, %rax
+               	cmpl	$0x2, %eax
                	je	<addr>
                	movl	$0x2, %eax
                	popq	%rbp
                	retq
                	callq	<addr>
-               	cmpq	$0x3, %rax
+               	cmpl	$0x3, %eax
                	je	<addr>
                	movl	$0x3, %eax
                	popq	%rbp
@@ -86,13 +86,13 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	callq	<addr>
-               	cmpq	$0x1, %rax
+               	cmpl	$0x1, %eax
                	je	<addr>
                	movl	$0x5, %eax
                	popq	%rbp
                	retq
                	callq	<addr>
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	je	<addr>
                	movl	$0x6, %eax
                	popq	%rbp

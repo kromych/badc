@@ -378,7 +378,6 @@ Disassembly of section .text:
                	shlq	$0x2, %rcx
                	addq	%rcx, %rax
                	addq	%r9, %rax
-               	movslq	%eax, %rax
                	popq	%rbx
                	popq	%r12
                	popq	%r13
@@ -394,7 +393,6 @@ Disassembly of section .text:
                	shlq	$0x2, %rcx
                	addq	%rcx, %rax
                	addq	%r9, %rax
-               	movslq	%eax, %rax
                	popq	%rbx
                	popq	%r12
                	popq	%r13
@@ -408,7 +406,6 @@ Disassembly of section .text:
                	leaq	(%rdx,%rdx,4), %rax
                	addq	$0x3c, %rax
                	addq	%r9, %rax
-               	movslq	%eax, %rax
                	popq	%rbx
                	popq	%r12
                	popq	%r13
@@ -424,7 +421,6 @@ Disassembly of section .text:
                	leaq	(%rdx,%rdx,4), %rax
                	addq	$0x28, %rax
                	addq	%r9, %rax
-               	movslq	%eax, %rax
                	popq	%rbx
                	popq	%r12
                	popq	%r13

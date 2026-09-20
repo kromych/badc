@@ -28,7 +28,6 @@ Disassembly of section .text:
 <twice>:
                	movq	%rdi, %rax
                	shlq	%rax
-               	movslq	%eax, %rax
                	retq
 
 <main>:

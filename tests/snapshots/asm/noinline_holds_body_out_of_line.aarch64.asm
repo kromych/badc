@@ -41,7 +41,7 @@ Disassembly of section .text:
                	mov	x0, #0x2                // =2
                	mov	x1, #0x3                // =3
                	bl	<addr>
-               	cmp	x0, #0x5
+               	cmp	w0, #0x5
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ldp	x29, x30, [sp], #0x10

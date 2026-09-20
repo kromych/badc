@@ -28,24 +28,25 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v22  LoadLocal { off=-1, kind=I32 }                   -> x1
     v23  Extend { value=v22, kind=I32 }                   -> x2
     v24  Extend { value=v22, kind=I32 }                   -> x2
-    v25  StoreLocal { off=-1, value=v22, kind=I32 }       -> -
-    v26  Imm(0)                                           -> x1
-    v27  LoadLocal { off=-1, kind=F32 }                   -> d0 [f32]
-    v28  Imm(1109917696)                                  -> x1 [f32]
-    v29  Binop { op=feq, lhs=v27, rhs=v28 }               -> x1
-    terminator Bz { cond=v29, target=b3, fall=b1 }   (exit_acc=v29)
+    v25  Extend { value=v22, kind=I32 }                   -> x2
+    v26  StoreLocal { off=-1, value=v22, kind=I32 }       -> -
+    v27  Imm(0)                                           -> x1
+    v28  LoadLocal { off=-1, kind=F32 }                   -> d0 [f32]
+    v29  Imm(1109917696)                                  -> x1 [f32]
+    v30  Binop { op=feq, lhs=v28, rhs=v29 }               -> x1
+    terminator Bz { cond=v30, target=b3, fall=b1 }   (exit_acc=v30)
   block 1  start_pc=0
-    v30  Imm(42)                                          -> x0
-    v31  Imm(0)                                           -> x1
-    terminator Jmp(b2)   (exit_acc=v30)
-  block 2  start_pc=0
-    v34  Phi { incoming=[b1:v30, b3:v10], kind=I64 }      -> x0
-    v35  Imm(0)                                           -> x1
-    v36  Extend { value=v34, kind=I32 }                   -> x1
-    terminator Return(v34)   (exit_acc=v34)
-  block 3  start_pc=0
+    v31  Imm(42)                                          -> x0
     v32  Imm(0)                                           -> x1
+    terminator Jmp(b2)   (exit_acc=v31)
+  block 2  start_pc=0
+    v35  Phi { incoming=[b1:v31, b3:v10], kind=I64 }      -> x0
+    v36  Imm(0)                                           -> x1
+    v37  Extend { value=v35, kind=I32 }                   -> x1
+    terminator Return(v35)   (exit_acc=v35)
+  block 3  start_pc=0
     v33  Imm(0)                                           -> x1
+    v34  Imm(0)                                           -> x1
     terminator Jmp(b2)   (exit_acc=v10)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit

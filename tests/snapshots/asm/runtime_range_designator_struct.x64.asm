@@ -298,23 +298,23 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	movl	$0xd, %edi
                	callq	<addr>
+               	movslq	%eax, %rax
                	testq	%rax, %rax
                	je	<addr>
-               	movslq	%eax, %rax
                	popq	%rbp
                	retq
                	movl	$0x11, %edi
                	callq	<addr>
+               	movslq	%eax, %rax
                	testq	%rax, %rax
                	je	<addr>
-               	movslq	%eax, %rax
                	popq	%rbp
                	retq
                	movl	$0x1d, %edi
                	callq	<addr>
+               	movslq	%eax, %rax
                	testq	%rax, %rax
                	je	<addr>
-               	movslq	%eax, %rax
                	popq	%rbp
                	retq
                	xorl	%eax, %eax

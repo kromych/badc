@@ -100,6 +100,5 @@ Disassembly of section .text:
                	movl	$0x7, %edx
                	movb	$0x0, %al
                	callq	<addr>
-               	movslq	%eax, %rax
                	popq	%rbp
                	retq

@@ -15,7 +15,6 @@ Disassembly of section .text:
 
 <negate>:
                	neg	x0, x0
-               	sxtw	x0, w0
                	ret
 
 <main>:

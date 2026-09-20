@@ -69,7 +69,7 @@ Disassembly of section .text:
                	movq	0x8(%rax), %rax
                	testq	%rax, %rax
                	jne	<addr>
-               	movslq	%ebx, %rax
+               	movq	%rbx, %rax
                	popq	%rbx
                	popq	%r12
                	popq	%r13

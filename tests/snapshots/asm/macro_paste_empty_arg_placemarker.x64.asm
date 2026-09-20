@@ -27,12 +27,10 @@ Disassembly of section .text:
 
 <int32_to_x>:
                	leaq	0x1(%rdi), %rax
-               	movslq	%eax, %rax
                	retq
 
 <uint32_to_x>:
                	leaq	0x2(%rdi), %rax
-               	movslq	%eax, %rax
                	retq
 
 <main>:

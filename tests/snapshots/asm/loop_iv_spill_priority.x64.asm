@@ -75,7 +75,6 @@ Disassembly of section .text:
                	xorq	%r14, %rax
                	xorq	%r15, %rax
                	xorq	0x38(%rsp), %rax
-               	movl	%eax, %eax
                	popq	%rbx
                	popq	%r12
                	popq	%r13

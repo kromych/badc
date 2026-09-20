@@ -164,7 +164,7 @@ Disassembly of section .text:
                	b.eq	<addr>
                	orr	x20, x20, #0x40
                	bl	<addr>
-               	cmp	x0, #0x3
+               	cmp	w0, #0x3
                	b.eq	<addr>
                	orr	x20, x20, #0x80
                	mov	x0, x20

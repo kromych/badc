@@ -34,7 +34,7 @@ Disassembly of section .text:
                	retq
 
 <g_generate>:
-               	movslq	%edx, %rax
+               	movq	%rdx, %rax
                	movslq	0x8(%rdi), %rcx
                	addq	$0x64, %rcx
                	movl	%ecx, (%rsi)

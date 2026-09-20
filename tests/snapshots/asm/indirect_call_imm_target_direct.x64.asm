@@ -34,7 +34,6 @@ Disassembly of section .text:
                	cmpl	$0x2, %ebx
                	jge	<addr>
                	movl	$0x1, %eax
-               	movslq	%eax, %rax
                	popq	%rbx
                	leave
                	retq

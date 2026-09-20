@@ -46,7 +46,6 @@ Disassembly of section .text:
                	incq	%rsi
                	callq	<addr>
                	orq	%rbx, %rax
-               	movslq	%eax, %rax
                	popq	%rbx
                	leave
                	retq
@@ -56,7 +55,6 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	xorl	%esi, %esi
                	callq	<addr>
-               	movl	%eax, %eax
                	popq	%rbp
                	retq
 
@@ -74,7 +72,6 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	xorl	%esi, %esi
                	callq	<addr>
-               	movslq	%eax, %rax
                	popq	%rbp
                	retq
 

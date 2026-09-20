@@ -28,7 +28,6 @@ Disassembly of section .text:
 <rd_direct>:
                	leaq	<rip>, %rax
                	movslq	%gs:(%rax), %rax
-               	movslq	%eax, %rax
                	retq
 
 <wr_direct>:
@@ -68,7 +67,6 @@ Disassembly of section .text:
                	shlq	$0x2, %rax
                	addq	%rdi, %rax
                	movl	%gs:(%rax), %eax
-               	movl	%eax, %eax
                	retq
 
 <wr_index>:
@@ -82,7 +80,6 @@ Disassembly of section .text:
 <rd_index_const>:
                	leaq	0x8(%rdi), %rax
                	movl	%gs:(%rax), %eax
-               	movl	%eax, %eax
                	retq
 
 <bf_rmw>:

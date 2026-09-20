@@ -88,7 +88,6 @@ Disassembly of section .text:
                	cmp	x2, x0
                	cset	x0, ne
                	add	x0, x1, x0
-               	sxtw	x0, w0
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret

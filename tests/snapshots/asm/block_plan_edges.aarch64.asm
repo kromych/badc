@@ -77,19 +77,19 @@ Disassembly of section .text:
                	ret
 
 <wraps>:
-               	mov	x1, #0x0                // =0
-               	mov	x2, #0xfffffffe         // =4294967294
+               	mov	x2, x0
+               	mov	x0, #0x0                // =0
+               	mov	x1, #0xfffffffe         // =4294967294
                	mov	x3, #0x7                // =7
-               	tbz	w2, #0x0, <addr>
-               	lsl	x4, x0, #1
-               	add	x1, x1, x4
+               	tbz	w1, #0x0, <addr>
+               	lsl	x4, x2, #1
+               	add	x0, x0, x4
                	b	<addr>
-               	mul	x4, x0, x3
-               	add	x1, x1, x4
-               	add	x2, x2, #0x1
-               	eor	x4, x2, #0x1
+               	mul	x4, x2, x3
+               	add	x0, x0, x4
+               	add	x1, x1, #0x1
+               	eor	x4, x1, #0x1
                	cbnz	w4, <addr>
-               	mov	w0, w1
                	ret
 
 <after_skip>:
@@ -351,7 +351,7 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	mov	x1, #0x5                // =5
                	bl	<addr>
-               	cmp	x0, #0x6
+               	cmp	w0, #0x6
                	b.eq	<addr>
                	mov	x0, #0x20               // =32
                	ldp	x29, x30, [sp, #0x10]
@@ -361,7 +361,7 @@ Disassembly of section .text:
                	mov	x1, #0x5                // =5
                	mov	x0, x20
                	bl	<addr>
-               	cmp	x0, #0x5
+               	cmp	w0, #0x5
                	b.eq	<addr>
                	mov	x0, #0x21               // =33
                	ldp	x29, x30, [sp, #0x10]
@@ -370,7 +370,7 @@ Disassembly of section .text:
                	mov	x0, #0x2                // =2
                	mov	x1, #0x5                // =5
                	bl	<addr>
-               	cmp	x0, #0xa
+               	cmp	w0, #0xa
                	b.eq	<addr>
                	mov	x0, #0x22               // =34
                	ldp	x29, x30, [sp, #0x10]
@@ -379,7 +379,7 @@ Disassembly of section .text:
                	mov	x0, #0x3                // =3
                	mov	x1, #0x5                // =5
                	bl	<addr>
-               	cmp	x0, #0x5
+               	cmp	w0, #0x5
                	b.eq	<addr>
                	mov	x0, #0x23               // =35
                	ldp	x29, x30, [sp, #0x10]

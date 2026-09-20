@@ -410,7 +410,6 @@ Disassembly of section .text:
                	and	x0, x0, x17
                	lsr	x0, x0, #6
                	orr	x0, x1, x0
-               	mov	w0, w0
                	ldp	x29, x30, [sp, #0xb0]
                	ldr	x28, [sp, #0x40]
                	ldp	x26, x27, [sp, #0x30]

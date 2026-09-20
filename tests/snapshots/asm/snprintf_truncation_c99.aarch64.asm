@@ -53,7 +53,6 @@ Disassembly of section .text:
                	sub	x3, x29, #0x20
                	bl	<addr>
                	sub	x1, x29, #0x20
-               	sxtw	x0, w0
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	add	sp, sp, #0xc0
@@ -116,7 +115,7 @@ Disassembly of section .text:
                	mov	x3, #0x1206             // =4614
                	movk	x3, #0xf, lsl #16
                	bl	<addr>
-               	cmp	x0, #0x6
+               	cmp	w0, #0x6
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	add	sp, sp, #0x10

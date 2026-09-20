@@ -83,7 +83,6 @@ Disassembly of section .text:
                	movq	0x50(%rsp), %rcx
                	shlq	$0x2, %rcx
                	addq	%rcx, %rax
-               	movslq	%eax, %rax
                	popq	%rbx
                	popq	%r12
                	popq	%r13
@@ -100,9 +99,9 @@ Disassembly of section .text:
                	movl	$0xa, -0x8(%rbp)
                	movslq	-0x8(%rbp), %rdi
                	callq	<addr>
-               	movq	%rax, %rbx
+               	movslq	%eax, %rbx
                	leaq	<rip>, %rdi
-               	movslq	%ebx, %rsi
+               	movq	%rbx, %rsi
                	movb	$0x0, %al
                	callq	<addr>
                	cmpl	$0xbf, %ebx

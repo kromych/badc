@@ -40,9 +40,9 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v7   BinopI { op=lt, lhs=v5, rhs_imm=10 }             -> x2
     terminator Bz { cond=v7, target=b7, fall=b1 }   (exit_acc=v7)
   block 7  start_pc=0
-    v14  Extend { value=v4, kind=I32 }                    -> x0
-    v15  Extend { value=v14, kind=I32 }                   -> x1
-    terminator Return(v14)   (exit_acc=v14)
+    v14  Extend { value=v4, kind=I32 }                    -> x1
+    v15  Extend { value=v4, kind=I32 }                    -> x1
+    terminator Return(v4)   (exit_acc=v4)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

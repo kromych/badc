@@ -44,7 +44,6 @@ Disassembly of section .text:
                	fmov	s1, w16
                	fmadd	s0, s20, s1, s0
                	fcvtzs	x0, s0
-               	sxtw	x0, w0
                	ldp	x29, x30, [sp], #0x10
                	ret
 

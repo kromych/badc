@@ -46,7 +46,6 @@ Disassembly of section .text:
                	retq
                	movslq	-0x8(%rbp), %rax
                	addq	$0x64, %rax
-               	movslq	%eax, %rax
                	popq	%rbx
                	leave
                	retq

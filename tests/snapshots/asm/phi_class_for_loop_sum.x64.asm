@@ -34,7 +34,6 @@ Disassembly of section .text:
                	incq	%rcx
                	cmpl	%edi, %ecx
                	jl	<addr>
-               	movslq	%eax, %rax
                	retq
 
 <main>:
@@ -44,5 +43,4 @@ Disassembly of section .text:
                	incq	%rcx
                	cmpl	$0xa, %ecx
                	jl	<addr>
-               	movslq	%eax, %rax
                	retq

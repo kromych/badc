@@ -15,7 +15,6 @@ Disassembly of section .text:
 
 <doer>:
                	mul	x0, x0, x1
-               	sxtw	x0, w0
                	ret
 
 <main>:

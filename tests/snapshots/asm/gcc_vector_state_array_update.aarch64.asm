@@ -528,19 +528,8 @@ Disassembly of section .text:
                	eor	x3, x3, x17
                	and	x3, x3, #0xff
                	eor	x14, x4, x3
-               	ldrb	w4, [x1, #0x8]
-               	ldrb	w3, [x2, #0x8]
-               	lsl	x5, x3, #1
-               	lsr	x3, x3, #7
-               	mov	x17, #0x1b              // =27
-               	mul	x3, x3, x17
-               	eor	x3, x5, x3
-               	mov	x17, #0x63              // =99
-               	eor	x3, x3, x17
-               	and	x3, x3, #0xff
-               	eor	x15, x4, x3
-               	ldrb	w3, [x1, #0x9]
-               	ldrb	w2, [x2, #0x9]
+               	ldrb	w3, [x1, #0x8]
+               	ldrb	w2, [x2, #0x8]
                	lsl	x4, x2, #1
                	lsr	x2, x2, #7
                	mov	x17, #0x1b              // =27
@@ -549,9 +538,20 @@ Disassembly of section .text:
                	mov	x17, #0x63              // =99
                	eor	x2, x2, x17
                	and	x2, x2, #0xff
-               	eor	x20, x3, x2
-               	ldrb	w4, [x1, #0xa]
+               	eor	x15, x3, x2
+               	ldrb	w4, [x1, #0x9]
                	add	x2, x0, #0x40
+               	ldrb	w3, [x2, #0x9]
+               	lsl	x5, x3, #1
+               	lsr	x3, x3, #7
+               	mov	x17, #0x1b              // =27
+               	mul	x3, x3, x17
+               	eor	x3, x5, x3
+               	mov	x17, #0x63              // =99
+               	eor	x3, x3, x17
+               	and	x3, x3, #0xff
+               	eor	x20, x4, x3
+               	ldrb	w4, [x1, #0xa]
                	ldrb	w3, [x2, #0xa]
                	lsl	x5, x3, #1
                	lsr	x3, x3, #7

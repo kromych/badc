@@ -15,12 +15,10 @@ Disassembly of section .text:
 
 <g>:
                	add	x0, x0, #0x64
-               	sxtw	x0, w0
                	ret
 
 <h>:
                	add	x0, x0, #0xc8
-               	sxtw	x0, w0
                	ret
 
 <f>:
@@ -52,7 +50,6 @@ Disassembly of section .text:
                	mov	x0, x1
                	blr	x9
                	add	x0, x21, x0
-               	sxtw	x0, w0
                	ldp	x29, x30, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x20
                	ret

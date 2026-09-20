@@ -1002,7 +1002,7 @@ Disassembly of section .text:
                	orr	x1, x1, x2
                	orr	x20, x1, #0x10000
                	bl	<addr>
-               	cmp	x0, x20
+               	cmp	w0, w20
                	b.eq	<addr>
                	mov	x0, #0x1c               // =28
                	ldr	x20, [sp]

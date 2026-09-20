@@ -31,61 +31,62 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     v308 Imm(1)                                           -> x6
     terminator JumpTable { idx=v307, table=1 }   [b5, b7, b8, b9, b10, b11, b12, b13, b14, b15, b16, b17, b18, b19, b20, b21, b22]   (exit_acc=v307)
   block 5  start_pc=0
-    v343 Imm(1)                                           -> x0
-    terminator Jmp(b6)   (exit_acc=v343)
-  block 6  start_pc=0
-    v360 Phi { incoming=[b5:v343, b7:v344, b8:v345, b9:v346, b10:v347, b11:v348, b12:v349, b13:v350, b14:v351, b15:v352, b16:v353, b17:v354, b19:v355, b20:v356, b21:v357, b22:v358, b18:v359], kind=I64 } -> x0
-    v361 Extend { value=v302, kind=I32 }                  -> x6
-    v362 Binop { op=ne, lhs=v360, rhs=v302 }              -> x0
-    terminator Bz { cond=v362, target=b24, fall=b27 }   (exit_acc=v362)
-  block 7  start_pc=0
-    v344 Imm(2)                                           -> x0
+    v344 Imm(1)                                           -> x0
     terminator Jmp(b6)   (exit_acc=v344)
-  block 8  start_pc=0
-    v345 Imm(3)                                           -> x0
+  block 6  start_pc=0
+    v361 Phi { incoming=[b5:v344, b7:v345, b8:v346, b9:v347, b10:v348, b11:v349, b12:v350, b13:v351, b14:v352, b15:v353, b16:v354, b17:v355, b19:v356, b20:v357, b21:v358, b22:v359, b18:v360], kind=I64 } -> x0
+    v362 Extend { value=v361, kind=I32 }                  -> x6
+    v363 Extend { value=v302, kind=I32 }                  -> x6
+    v364 Binop { op=ne, lhs=v361, rhs=v302 }              -> x0
+    terminator Bz { cond=v364, target=b24, fall=b27 }   (exit_acc=v364)
+  block 7  start_pc=0
+    v345 Imm(2)                                           -> x0
     terminator Jmp(b6)   (exit_acc=v345)
-  block 9  start_pc=0
-    v346 Imm(4)                                           -> x0
+  block 8  start_pc=0
+    v346 Imm(3)                                           -> x0
     terminator Jmp(b6)   (exit_acc=v346)
-  block 10  start_pc=0
-    v347 Imm(5)                                           -> x0
+  block 9  start_pc=0
+    v347 Imm(4)                                           -> x0
     terminator Jmp(b6)   (exit_acc=v347)
-  block 11  start_pc=0
-    v348 Imm(6)                                           -> x0
+  block 10  start_pc=0
+    v348 Imm(5)                                           -> x0
     terminator Jmp(b6)   (exit_acc=v348)
-  block 12  start_pc=0
-    v349 Imm(7)                                           -> x0
+  block 11  start_pc=0
+    v349 Imm(6)                                           -> x0
     terminator Jmp(b6)   (exit_acc=v349)
-  block 13  start_pc=0
-    v350 Imm(8)                                           -> x0
+  block 12  start_pc=0
+    v350 Imm(7)                                           -> x0
     terminator Jmp(b6)   (exit_acc=v350)
-  block 14  start_pc=0
-    v351 Imm(9)                                           -> x0
+  block 13  start_pc=0
+    v351 Imm(8)                                           -> x0
     terminator Jmp(b6)   (exit_acc=v351)
-  block 15  start_pc=0
-    v352 Imm(10)                                          -> x0
+  block 14  start_pc=0
+    v352 Imm(9)                                           -> x0
     terminator Jmp(b6)   (exit_acc=v352)
-  block 16  start_pc=0
-    v353 Imm(11)                                          -> x0
+  block 15  start_pc=0
+    v353 Imm(10)                                          -> x0
     terminator Jmp(b6)   (exit_acc=v353)
-  block 17  start_pc=0
-    v354 Imm(12)                                          -> x0
+  block 16  start_pc=0
+    v354 Imm(11)                                          -> x0
     terminator Jmp(b6)   (exit_acc=v354)
-  block 18  start_pc=0
-    v359 Imm(-1)                                          -> x0
-    terminator Jmp(b6)   (exit_acc=v359)
-  block 19  start_pc=0
-    v355 Imm(13)                                          -> x0
+  block 17  start_pc=0
+    v355 Imm(12)                                          -> x0
     terminator Jmp(b6)   (exit_acc=v355)
-  block 20  start_pc=0
-    v356 Imm(14)                                          -> x0
+  block 18  start_pc=0
+    v360 Imm(-1)                                          -> x0
+    terminator Jmp(b6)   (exit_acc=v360)
+  block 19  start_pc=0
+    v356 Imm(13)                                          -> x0
     terminator Jmp(b6)   (exit_acc=v356)
-  block 21  start_pc=0
-    v357 Imm(15)                                          -> x0
+  block 20  start_pc=0
+    v357 Imm(14)                                          -> x0
     terminator Jmp(b6)   (exit_acc=v357)
-  block 22  start_pc=0
-    v358 Imm(16)                                          -> x0
+  block 21  start_pc=0
+    v358 Imm(15)                                          -> x0
     terminator Jmp(b6)   (exit_acc=v358)
+  block 22  start_pc=0
+    v359 Imm(16)                                          -> x0
+    terminator Jmp(b6)   (exit_acc=v359)
   block 23  start_pc=0
     v298 Extend { value=v3, kind=I32 }                    -> x0
     v299 BinopI { op=sub, lhs=v3, rhs_imm=3 }             -> x2

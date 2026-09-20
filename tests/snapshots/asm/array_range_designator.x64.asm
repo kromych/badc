@@ -143,35 +143,35 @@ Disassembly of section .text:
                	retq
                	xorl	%edi, %edi
                	callq	<addr>
-               	cmpq	$0x64, %rax
+               	cmpl	$0x64, %eax
                	je	<addr>
                	movl	$0xa, %eax
                	popq	%rbp
                	retq
                	movl	$0x1, %edi
                	callq	<addr>
-               	cmpq	$0xc8, %rax
+               	cmpl	$0xc8, %eax
                	je	<addr>
                	movl	$0xb, %eax
                	popq	%rbp
                	retq
                	movl	$0x2, %edi
                	callq	<addr>
-               	cmpq	$0x3e7, %rax            # imm = 0x3E7
+               	cmpl	$0x3e7, %eax            # imm = 0x3E7
                	je	<addr>
                	movl	$0xc, %eax
                	popq	%rbp
                	retq
                	movl	$0x5, %edi
                	callq	<addr>
-               	cmpq	$0x3e7, %rax            # imm = 0x3E7
+               	cmpl	$0x3e7, %eax            # imm = 0x3E7
                	je	<addr>
                	movl	$0xd, %eax
                	popq	%rbp
                	retq
                	movl	$0x7, %edi
                	callq	<addr>
-               	cmpq	$0x3e7, %rax            # imm = 0x3E7
+               	cmpl	$0x3e7, %eax            # imm = 0x3E7
                	je	<addr>
                	movl	$0xe, %eax
                	popq	%rbp

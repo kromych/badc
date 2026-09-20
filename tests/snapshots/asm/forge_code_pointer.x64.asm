@@ -31,6 +31,5 @@ Disassembly of section .text:
                	movl	$0x2a, %eax
                	xorl	%edi, %edi
                	callq	*%rax
-               	movslq	%eax, %rax
                	popq	%rbp
                	retq

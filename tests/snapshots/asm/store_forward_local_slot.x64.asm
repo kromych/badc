@@ -50,7 +50,6 @@ Disassembly of section .text:
                	movl	$0x9, -0x8(%rbp)
                	movl	$0xa, %eax
                	movl	%eax, -0x8(%rbp)
-               	movslq	%eax, %rax
                	jmpq	*%rcx
                	leave
                	retq
@@ -66,28 +65,28 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	movl	$0x5, %edi
                	callq	<addr>
-               	cmpq	$0x1e, %rax
+               	cmpl	$0x1e, %eax
                	je	<addr>
                	movl	$0x1, %eax
                	popq	%rbp
                	retq
                	movl	$0x7, %edi
                	callq	<addr>
-               	cmpq	$0x7, %rax
+               	cmpl	$0x7, %eax
                	je	<addr>
                	movl	$0x2, %eax
                	popq	%rbp
                	retq
                	movl	$0x9, %edi
                	callq	<addr>
-               	cmpq	$0xa, %rax
+               	cmpl	$0xa, %eax
                	je	<addr>
                	movl	$0x3, %eax
                	popq	%rbp
                	retq
                	movl	$0x6, %edi
                	callq	<addr>
-               	cmpq	$0xc, %rax
+               	cmpl	$0xc, %eax
                	je	<addr>
                	movl	$0x4, %eax
                	popq	%rbp

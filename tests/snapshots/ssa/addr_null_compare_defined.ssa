@@ -22,24 +22,25 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v16  BinopI { op=add, lhs=v15, rhs_imm=2 }            -> x0
     v17  Extend { value=v16, kind=I32 }                   -> x1
     v18  Extend { value=v16, kind=I32 }                   -> x1
-    v19  BinopI { op=ne, lhs=v16, rhs_imm=3 }             -> x0
-    terminator Bz { cond=v19, target=b2, fall=b1 }   (exit_acc=v19)
+    v19  Extend { value=v16, kind=I32 }                   -> x1
+    v20  BinopI { op=ne, lhs=v16, rhs_imm=3 }             -> x0
+    terminator Bz { cond=v20, target=b2, fall=b1 }   (exit_acc=v20)
   block 1  start_pc=0
-    v22  Imm(3)                                           -> x0
-    terminator Return(v22)   (exit_acc=v22)
+    v23  Imm(3)                                           -> x0
+    terminator Return(v23)   (exit_acc=v23)
   block 2  start_pc=0
-    v23  ImmData(16)                                      -> x0
-    v24  Imm(4)                                           -> x1
-    v25  BinopI { op=add, lhs=v23, rhs_imm=4 }            -> x1
-    v26  Load { addr=v23, disp=4, kind=I32 }              -> x0
-    v27  BinopI { op=ne, lhs=v26, rhs_imm=2 }             -> x0
-    terminator Bz { cond=v27, target=b4, fall=b3 }   (exit_acc=v27)
+    v24  ImmData(16)                                      -> x0
+    v25  Imm(4)                                           -> x1
+    v26  BinopI { op=add, lhs=v24, rhs_imm=4 }            -> x1
+    v27  Load { addr=v24, disp=4, kind=I32 }              -> x0
+    v28  BinopI { op=ne, lhs=v27, rhs_imm=2 }             -> x0
+    terminator Bz { cond=v28, target=b4, fall=b3 }   (exit_acc=v28)
   block 3  start_pc=0
-    v28  Imm(4)                                           -> x0
-    terminator Return(v28)   (exit_acc=v28)
-  block 4  start_pc=0
-    v29  Imm(0)                                           -> x0
+    v29  Imm(4)                                           -> x0
     terminator Return(v29)   (exit_acc=v29)
+  block 4  start_pc=0
+    v30  Imm(0)                                           -> x0
+    terminator Return(v30)   (exit_acc=v30)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

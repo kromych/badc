@@ -20,39 +20,41 @@ fn ent_pc=6 n_params=0 variadic=false locals=1
     v2   LocalAddr(-1)                                    -> x0
     v3   InlineAsm { template="ds movl %1, %0", ops=2, args=[v2, v1] } -> -
     v4   LoadLocal { off=-1, kind=U32 }                   -> x0
-    v5   BinopI { op=ne, lhs=v4, rhs_imm=2779096485 }     -> x0
-    terminator Bz { cond=v5, target=b2, fall=b1 }   (exit_acc=v5)
+    v5   BinopI { op=and, lhs=v4, rhs_imm=4294967295 }    -> x1
+    v6   BinopI { op=ne, lhs=v4, rhs_imm=2779096485 }     -> x0
+    terminator Bz { cond=v6, target=b2, fall=b1 }   (exit_acc=v6)
   block 1  start_pc=0
-    v6   Imm(1)                                           -> x0
-    terminator Return(v6)   (exit_acc=v6)
+    v7   Imm(1)                                           -> x0
+    terminator Return(v7)   (exit_acc=v7)
   block 2  start_pc=0
-    v7   ImmData(8)                                       -> x0
-    v8   InlineAsm { template="ds clflush %0", ops=1, args=[v7] } -> -
-    v9   ImmData(8)                                       -> x0
-    v10  Load { addr=v9, disp=0, kind=U32 }               -> x0
-    v11  BinopI { op=ne, lhs=v10, rhs_imm=2779096485 }    -> x0
-    terminator Bz { cond=v11, target=b4, fall=b3 }   (exit_acc=v11)
+    v8   ImmData(8)                                       -> x0
+    v9   InlineAsm { template="ds clflush %0", ops=1, args=[v8] } -> -
+    v10  ImmData(8)                                       -> x0
+    v11  Load { addr=v10, disp=0, kind=U32 }              -> x0
+    v12  BinopI { op=ne, lhs=v11, rhs_imm=2779096485 }    -> x0
+    terminator Bz { cond=v12, target=b4, fall=b3 }   (exit_acc=v12)
   block 3  start_pc=0
-    v12  Imm(2)                                           -> x0
-    terminator Return(v12)   (exit_acc=v12)
-  block 4  start_pc=0
-    v15  InlineAsm { template="cs nop", ops=0, args=[] }  -> -
-    v16  InlineAsm { template="fs nop", ops=0, args=[] }  -> -
-    v17  InlineAsm { template="gs nop", ops=0, args=[] }  -> -
-    v18  ImmData(8)                                       -> x0
-    v19  Imm(305419896)                                   -> x1
-    v20  Store { addr=v18, disp=0, value=v19, kind=I32 }  -> -
-    v21  LocalAddr(-1)                                    -> x0
-    v22  InlineAsm { template="ds movl %1, %0", ops=2, args=[v21, v18] } -> -
-    v23  LoadLocal { off=-1, kind=U32 }                   -> x0
-    v24  BinopI { op=ne, lhs=v23, rhs_imm=305419896 }     -> x0
-    terminator Bz { cond=v24, target=b6, fall=b5 }   (exit_acc=v24)
-  block 5  start_pc=0
-    v13  Imm(3)                                           -> x0
+    v13  Imm(2)                                           -> x0
     terminator Return(v13)   (exit_acc=v13)
-  block 6  start_pc=0
-    v14  Imm(42)                                          -> x0
+  block 4  start_pc=0
+    v16  InlineAsm { template="cs nop", ops=0, args=[] }  -> -
+    v17  InlineAsm { template="fs nop", ops=0, args=[] }  -> -
+    v18  InlineAsm { template="gs nop", ops=0, args=[] }  -> -
+    v19  ImmData(8)                                       -> x0
+    v20  Imm(305419896)                                   -> x1
+    v21  Store { addr=v19, disp=0, value=v20, kind=I32 }  -> -
+    v22  LocalAddr(-1)                                    -> x0
+    v23  InlineAsm { template="ds movl %1, %0", ops=2, args=[v22, v19] } -> -
+    v24  LoadLocal { off=-1, kind=U32 }                   -> x0
+    v25  BinopI { op=and, lhs=v24, rhs_imm=4294967295 }   -> x1
+    v26  BinopI { op=ne, lhs=v24, rhs_imm=305419896 }     -> x0
+    terminator Bz { cond=v26, target=b6, fall=b5 }   (exit_acc=v26)
+  block 5  start_pc=0
+    v14  Imm(3)                                           -> x0
     terminator Return(v14)   (exit_acc=v14)
+  block 6  start_pc=0
+    v15  Imm(42)                                          -> x0
+    terminator Return(v15)   (exit_acc=v15)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

@@ -69,7 +69,6 @@ Disassembly of section .text:
                	bl	<addr>
                	cmp	x0, #0x63
                	b.eq	<addr>
-               	sxtw	x0, w0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mrs	x0, TPIDR_EL0

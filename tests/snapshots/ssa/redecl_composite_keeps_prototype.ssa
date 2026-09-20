@@ -7,8 +7,8 @@ fn ent_pc=0 n_params=1 variadic=false locals=1
     v1   LocalAddr(-1)                                    -> x0
     v2   LoadLocal { off=-1, kind=U32 }                   -> x0
     v3   BinopI { op=add, lhs=v2, rhs_imm=1 }             -> x0
-    v4   BinopI { op=and, lhs=v3, rhs_imm=4294967295 }    -> x0
-    terminator Return(v4)   (exit_acc=v4)
+    v4   BinopI { op=and, lhs=v3, rhs_imm=4294967295 }    -> x1
+    terminator Return(v3)   (exit_acc=v3)
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=take_wrap2
 fn ent_pc=1 n_params=1 variadic=false locals=1
@@ -18,8 +18,8 @@ fn ent_pc=1 n_params=1 variadic=false locals=1
     v1   LocalAddr(-1)                                    -> x0
     v2   LoadLocal { off=-1, kind=U32 }                   -> x0
     v3   BinopI { op=add, lhs=v2, rhs_imm=2 }             -> x0
-    v4   BinopI { op=and, lhs=v3, rhs_imm=4294967295 }    -> x0
-    terminator Return(v4)   (exit_acc=v4)
+    v4   BinopI { op=and, lhs=v3, rhs_imm=4294967295 }    -> x1
+    terminator Return(v3)   (exit_acc=v3)
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=take_wrap3
 fn ent_pc=2 n_params=1 variadic=false locals=1
@@ -29,8 +29,8 @@ fn ent_pc=2 n_params=1 variadic=false locals=1
     v1   LocalAddr(-1)                                    -> x0
     v2   LoadLocal { off=-1, kind=U32 }                   -> x0
     v3   BinopI { op=add, lhs=v2, rhs_imm=3 }             -> x0
-    v4   BinopI { op=and, lhs=v3, rhs_imm=4294967295 }    -> x0
-    terminator Return(v4)   (exit_acc=v4)
+    v4   BinopI { op=and, lhs=v3, rhs_imm=4294967295 }    -> x1
+    terminator Return(v3)   (exit_acc=v3)
 ; --- SSA dump (ok=true) ent_pc=3 ---
 ; name=take_pairw
 fn ent_pc=3 n_params=1 variadic=false locals=1
@@ -58,8 +58,8 @@ fn ent_pc=4 n_params=2 variadic=false locals=0
     v5   BinopI { op=and, lhs=v1, rhs_imm=4294967295 }    -> x0
     v6   BinopI { op=and, lhs=v3, rhs_imm=4294967295 }    -> x0
     v7   Binop { op=add, lhs=v1, rhs=v3 }                 -> x0
-    v8   BinopI { op=and, lhs=v7, rhs_imm=4294967295 }    -> x0
-    terminator Return(v8)   (exit_acc=v8)
+    v8   BinopI { op=and, lhs=v7, rhs_imm=4294967295 }    -> x1
+    terminator Return(v7)   (exit_acc=v7)
 ; --- SSA dump (ok=true) ent_pc=5 ---
 ; name=main
 fn ent_pc=5 n_params=0 variadic=false locals=0
@@ -73,48 +73,53 @@ fn ent_pc=5 n_params=0 variadic=false locals=0
     v5   Imm(41)                                          -> x0
     v6   Imm(42)                                          -> x0
     v7   Imm(42)                                          -> x0
-    v8   Imm(0)                                           -> x0
+    v8   Imm(42)                                          -> x0
     v9   Imm(0)                                           -> x0
-    v10  Imm(41)                                          -> x0
-    v11  Imm(43)                                          -> x0
+    v10  Imm(0)                                           -> x0
+    v11  Imm(41)                                          -> x0
     v12  Imm(43)                                          -> x0
-    v13  Imm(0)                                           -> x0
-    v14  Imm(0)                                           -> x0
-    v15  Imm(41)                                          -> x0
-    v16  Imm(44)                                          -> x0
-    v17  Imm(44)                                          -> x0
-    v18  Imm(0)                                           -> x0
-    v19  Imm(0)                                           -> x0
-    v20  Imm(0)                                           -> x0
+    v13  Imm(43)                                          -> x0
+    v14  Imm(43)                                          -> x0
+    v15  Imm(0)                                           -> x0
+    v16  Imm(0)                                           -> x0
+    v17  Imm(41)                                          -> x0
+    v18  Imm(44)                                          -> x0
+    v19  Imm(44)                                          -> x0
+    v20  Imm(44)                                          -> x0
     v21  Imm(0)                                           -> x0
     v22  Imm(0)                                           -> x0
     v23  Imm(0)                                           -> x0
-    v24  Imm(1)                                           -> x0
-    v25  Imm(1)                                           -> x0
+    v24  Imm(0)                                           -> x0
+    v25  Imm(0)                                           -> x0
     v26  Imm(0)                                           -> x0
-    v27  Imm(0)                                           -> x0
-    v28  Imm(19088743)                                    -> x0
-    v29  Imm(0)                                           -> x0
+    v27  Imm(1)                                           -> x0
+    v28  Imm(1)                                           -> x0
+    v29  Imm(1)                                           -> x0
     v30  Imm(0)                                           -> x0
     v31  Imm(0)                                           -> x0
-    v32  Imm(2309737967)                                  -> x0
+    v32  Imm(19088743)                                    -> x0
     v33  Imm(0)                                           -> x0
     v34  Imm(0)                                           -> x0
     v35  Imm(0)                                           -> x0
     v36  Imm(2309737967)                                  -> x0
-    v37  Imm(-8526495043115024384)                        -> x0
-    v38  Imm(19088743)                                    -> x0
-    v39  Imm(-8526495043095935641)                        -> x0
-    v40  Imm(0)                                           -> x0
-    v41  Imm(20)                                          -> x0
-    v42  Imm(22)                                          -> x0
-    v43  Imm(20)                                          -> x0
-    v44  Imm(22)                                          -> x0
-    v45  Imm(42)                                          -> x0
-    v46  Imm(42)                                          -> x0
-    v47  Imm(0)                                           -> x0
-    v48  Imm(0)                                           -> x0
-    terminator Return(v48)   (exit_acc=v48)
+    v37  Imm(0)                                           -> x0
+    v38  Imm(0)                                           -> x0
+    v39  Imm(0)                                           -> x0
+    v40  Imm(2309737967)                                  -> x0
+    v41  Imm(-8526495043115024384)                        -> x0
+    v42  Imm(19088743)                                    -> x0
+    v43  Imm(-8526495043095935641)                        -> x0
+    v44  Imm(0)                                           -> x0
+    v45  Imm(20)                                          -> x0
+    v46  Imm(22)                                          -> x0
+    v47  Imm(20)                                          -> x0
+    v48  Imm(22)                                          -> x0
+    v49  Imm(42)                                          -> x0
+    v50  Imm(42)                                          -> x0
+    v51  Imm(42)                                          -> x0
+    v52  Imm(0)                                           -> x0
+    v53  Imm(0)                                           -> x0
+    terminator Return(v53)   (exit_acc=v53)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

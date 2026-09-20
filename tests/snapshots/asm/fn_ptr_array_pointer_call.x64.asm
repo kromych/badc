@@ -35,7 +35,6 @@ Disassembly of section .text:
 <g>:
                	imulq	$0xa, %rdi, %rax
                	addq	%rsi, %rax
-               	movslq	%eax, %rax
                	retq
 
 <main>:

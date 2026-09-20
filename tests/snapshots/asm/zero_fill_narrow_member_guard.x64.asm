@@ -65,7 +65,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movl	$0x0, (%rax)
                	callq	<addr>
-               	cmpq	$0x7, %rax
+               	cmpl	$0x7, %eax
                	je	<addr>
                	movl	$0x1, %eax
                	popq	%rbp
@@ -83,7 +83,7 @@ Disassembly of section .text:
                	movl	$0x9, (%rcx)
                	movl	$0x0, (%rax)
                	callq	<addr>
-               	cmpq	$0x9, %rax
+               	cmpl	$0x9, %eax
                	je	<addr>
                	movl	$0x3, %eax
                	popq	%rbp

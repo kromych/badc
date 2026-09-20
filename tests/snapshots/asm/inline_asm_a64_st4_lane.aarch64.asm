@@ -99,7 +99,7 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0xc0
                	bl	<addr>
-               	cbz	x0, <addr>
+               	cbz	w0, <addr>
                	sub	x0, x29, #0x20
                	adrp	x1, <page>
                	add	x1, x1, <lo12>

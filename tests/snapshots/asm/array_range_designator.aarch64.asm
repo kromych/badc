@@ -129,35 +129,35 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x0                // =0
                	bl	<addr>
-               	cmp	x0, #0x64
+               	cmp	w0, #0x64
                	b.eq	<addr>
                	mov	x0, #0xa                // =10
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x1                // =1
                	bl	<addr>
-               	cmp	x0, #0xc8
+               	cmp	w0, #0xc8
                	b.eq	<addr>
                	mov	x0, #0xb                // =11
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x2                // =2
                	bl	<addr>
-               	cmp	x0, #0x3e7
+               	cmp	w0, #0x3e7
                	b.eq	<addr>
                	mov	x0, #0xc                // =12
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x5                // =5
                	bl	<addr>
-               	cmp	x0, #0x3e7
+               	cmp	w0, #0x3e7
                	b.eq	<addr>
                	mov	x0, #0xd                // =13
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x7                // =7
                	bl	<addr>
-               	cmp	x0, #0x3e7
+               	cmp	w0, #0x3e7
                	b.eq	<addr>
                	mov	x0, #0xe                // =14
                	ldp	x29, x30, [sp], #0x10

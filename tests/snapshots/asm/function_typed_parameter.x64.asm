@@ -32,7 +32,6 @@ Disassembly of section .text:
                	movq	%rdi, %rax
                	movq	%rsi, %rdi
                	callq	*%rax
-               	movslq	%eax, %rax
                	popq	%rbp
                	retq
 
@@ -43,7 +42,6 @@ Disassembly of section .text:
                	movq	%rdi, %rax
                	movq	%rsi, %rdi
                	callq	*%rax
-               	movslq	%eax, %rax
                	popq	%rbp
                	retq
 
@@ -60,7 +58,6 @@ Disassembly of section .text:
 <doubler>:
                	movq	%rdi, %rax
                	shlq	%rax
-               	movslq	%eax, %rax
                	retq
 
 <take_slot>:
@@ -73,7 +70,6 @@ Disassembly of section .text:
 
 <plain_func>:
                	leaq	0x1(%rdi), %rax
-               	movslq	%eax, %rax
                	retq
 
 <main>:

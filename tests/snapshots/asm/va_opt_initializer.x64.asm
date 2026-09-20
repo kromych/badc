@@ -78,5 +78,4 @@ Disassembly of section .text:
                	jne	<addr>
                	addq	$0x27, %rax
                	subq	$0x2, %rax
-               	movslq	%eax, %rax
                	retq

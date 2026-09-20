@@ -72,7 +72,7 @@ Disassembly of section .text:
                	incq	%rbx
                	cmpl	$0x8, %ebx
                	jl	<addr>
-               	movslq	%r14d, %rax
+               	movq	%r14, %rax
                	popq	%rbx
                	popq	%r12
                	popq	%r13

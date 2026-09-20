@@ -15,7 +15,6 @@ Disassembly of section .text:
 
 <fn>:
                	add	x0, x0, #0x64
-               	sxtw	x0, w0
                	ret
 
 <check>:
@@ -384,7 +383,6 @@ Disassembly of section .text:
                	ret
                	bl	<addr>
                	cbz	w0, <addr>
-               	sxtw	x0, w0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x0                // =0

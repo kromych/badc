@@ -22,7 +22,6 @@ Disassembly of section .text:
                	ldrsw	x0, [x1]
                	ldrsw	x2, [x1, #0x4]
                	add	x0, x0, x2
-               	sxtw	x0, w0
                	mov	x2, #-0x1               // =-1
                	str	w2, [x1]
                	str	w2, [x1, #0x4]

@@ -265,14 +265,14 @@ Disassembly of section .text:
                	mov	x3, x20
                	mov	x2, x21
                	bl	<addr>
-               	cbz	x0, <addr>
+               	cbz	w0, <addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	mov	x1, x22
                	mov	x3, x20
                	mov	x2, x21
                	bl	<addr>
-               	cbz	x0, <addr>
+               	cbz	w0, <addr>
                	add	x20, x20, #0x1
                	cmp	w20, #0x14
                	b.ls	<addr>

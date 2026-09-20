@@ -20,7 +20,6 @@ Disassembly of section .text:
                	add	x0, x0, x0
                	add	x0, x2, x0
                	add	x0, x0, x1
-               	sxtw	x0, w0
                	ret
 
 <main>:

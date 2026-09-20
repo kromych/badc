@@ -22,7 +22,6 @@ Disassembly of section .text:
 <noise>:
                	mov	x17, #0x3               // =3
                	mul	x0, x0, x17
-               	sxtw	x0, w0
                	ret
 
 <main>:

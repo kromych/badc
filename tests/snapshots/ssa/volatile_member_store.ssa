@@ -99,16 +99,17 @@ fn ent_pc=5 n_params=0 variadic=false locals=0
     v77  BinopI { op=add, lhs=v1, rhs_imm=32 }            -> x2
     v78  Load { addr=v1, disp=32, kind=U32, volatile }    -> x1
     v79  BinopI { op=and, lhs=v78, rhs_imm=31 }           -> x1
-    v80  BinopI { op=xor, lhs=v79, rhs_imm=10 }           -> x1
-    v81  BinopI { op=and, lhs=v80, rhs_imm=4294967295 }   -> x2
-    v82  BinopI { op=ne, lhs=v80, rhs_imm=0 }             -> x2
-    terminator Bz { cond=v80, target=b10, fall=b9 }   (low word)   (exit_acc=v82)
+    v80  BinopI { op=and, lhs=v79, rhs_imm=4294967295 }   -> x2
+    v81  BinopI { op=xor, lhs=v79, rhs_imm=10 }           -> x1
+    v82  BinopI { op=and, lhs=v81, rhs_imm=4294967295 }   -> x2
+    v83  BinopI { op=ne, lhs=v81, rhs_imm=0 }             -> x2
+    terminator Bz { cond=v81, target=b10, fall=b9 }   (low word)   (exit_acc=v83)
   block 9  start_pc=0
-    v83  Imm(5)                                           -> x1
+    v84  Imm(5)                                           -> x1
     terminator Return(v41)   (exit_acc=v41)
   block 10  start_pc=0
-    v84  Imm(0)                                           -> x0
-    terminator Return(v84)   (exit_acc=v84)
+    v85  Imm(0)                                           -> x0
+    terminator Return(v85)   (exit_acc=v85)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

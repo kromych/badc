@@ -571,18 +571,19 @@ fn ent_pc=1 n_params=0 variadic=false locals=8
     v576 Phi { incoming=[b3:v574, b8:v575], kind=I64 }    -> x1
     v577 Binop { op=xor, lhs=v561, rhs=v576 }             -> x1
     v578 BinopI { op=and, lhs=v577, rhs_imm=255 }         -> x8
-    v579 LocalAddr(-4)                                    -> x1
-    v580 Extend { value=v519, kind=I32 }                  -> x1
-    v581 Binop { op=add, lhs=v556, rhs=v519 }             -> x1
-    v582 LoadIndexed { base=v556, index=v519, scale=1, kind=U8 } -> x1
-    v583 BinopI { op=shl, lhs=v582, rhs_imm=1 }           -> x6
-    v584 Extend { value=v583, kind=I32 }                  -> x9
-    v585 LocalAddr(-4)                                    -> x9
-    v586 Extend { value=v519, kind=I32 }                  -> x9
-    v587 Binop { op=add, lhs=v556, rhs=v519 }             -> x9
-    v588 LoadIndexed { base=v556, index=v519, scale=1, kind=U8 } -> x9
-    v589 BinopI { op=and, lhs=v582, rhs_imm=128 }         -> x1
-    terminator Bz { cond=v589, target=b7, fall=b5 }   (exit_acc=v589)
+    v579 BinopI { op=and, lhs=v578, rhs_imm=255 }         -> x1
+    v580 LocalAddr(-4)                                    -> x1
+    v581 Extend { value=v519, kind=I32 }                  -> x1
+    v582 Binop { op=add, lhs=v556, rhs=v519 }             -> x1
+    v583 LoadIndexed { base=v556, index=v519, scale=1, kind=U8 } -> x1
+    v584 BinopI { op=shl, lhs=v583, rhs_imm=1 }           -> x6
+    v585 Extend { value=v584, kind=I32 }                  -> x9
+    v586 LocalAddr(-4)                                    -> x9
+    v587 Extend { value=v519, kind=I32 }                  -> x9
+    v588 Binop { op=add, lhs=v556, rhs=v519 }             -> x9
+    v589 LoadIndexed { base=v556, index=v519, scale=1, kind=U8 } -> x9
+    v590 BinopI { op=and, lhs=v583, rhs_imm=128 }         -> x1
+    terminator Bz { cond=v590, target=b7, fall=b5 }   (exit_acc=v590)
   block 5  start_pc=0
     v564 Imm(29)                                          -> x1
     v565 Imm(0)                                           -> x9
@@ -590,7 +591,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=8
   block 6  start_pc=0
     v568 Phi { incoming=[b5:v564, b7:v566], kind=I64 }    -> x1
     v569 Imm(0)                                           -> x9
-    v570 Binop { op=xor, lhs=v583, rhs=v568 }             -> x1
+    v570 Binop { op=xor, lhs=v584, rhs=v568 }             -> x1
     v571 BinopI { op=and, lhs=v570, rhs_imm=255 }         -> x1
     v572 Binop { op=ne, lhs=v578, rhs=v571 }              -> x1
     terminator Bz { cond=v572, target=b9, fall=b12 }   (exit_acc=v572)

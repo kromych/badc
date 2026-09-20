@@ -51,7 +51,6 @@ Disassembly of section .text:
                	add	x2, x2, #0x1
                	cmp	w2, w1
                	b.lt	<addr>
-               	mov	w0, w0
                	ret
 
 <step_i8>:
@@ -88,7 +87,6 @@ Disassembly of section .text:
                	add	x2, x2, #0x1
                	cmp	w2, w1
                	b.lt	<addr>
-               	sxtw	x0, w0
                	ret
 
 <step_long>:
@@ -122,7 +120,6 @@ Disassembly of section .text:
                	add	x2, x2, #0x1
                	cmp	w2, w1
                	b.lt	<addr>
-               	mov	w0, w0
                	ret
 
 <widen_u32>:

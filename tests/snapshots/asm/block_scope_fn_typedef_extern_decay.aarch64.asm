@@ -16,7 +16,6 @@ Disassembly of section .text:
 <scale>:
                	lsl	x0, x0, #1
                	add	x0, x0, #0x1
-               	sxtw	x0, w0
                	ret
 
 <main>:

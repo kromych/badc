@@ -126,8 +126,7 @@ Disassembly of section .text:
                	stur	w0, [x29, #-0x28]
                	ldursw	x0, [x29, #-0x28]
                	bl	<addr>
-               	cbz	x0, <addr>
-               	sxtw	x0, w0
+               	cbz	w0, <addr>
                	ldp	x29, x30, [sp, #0x40]
                	ldr	x20, [sp], #0x50
                	ret

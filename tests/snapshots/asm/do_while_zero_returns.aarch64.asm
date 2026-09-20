@@ -17,10 +17,8 @@ Disassembly of section .text:
                	cmp	w0, #0x0
                	b.ge	<addr>
                	neg	x0, x0
-               	sxtw	x0, w0
                	ret
                	add	x0, x0, #0x1
-               	sxtw	x0, w0
                	ret
 
 <classify>:

@@ -26,7 +26,6 @@ Disassembly of section .text:
                	mov	x0, x20
                	blr	x21
                	add	x0, x22, x0
-               	sxtw	x0, w0
                	ldp	x29, x30, [sp, #0x20]
                	ldr	x22, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x30
@@ -39,18 +38,15 @@ Disassembly of section .text:
                	mov	x9, x0
                	mov	x0, x1
                	blr	x9
-               	sxtw	x0, w0
                	ldp	x29, x30, [sp], #0x10
                	ret
 
 <inc>:
                	add	x0, x0, #0x1
-               	sxtw	x0, w0
                	ret
 
 <neg>:
                	neg	x0, x0
-               	sxtw	x0, w0
                	ret
 
 <main>:

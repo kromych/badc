@@ -32,7 +32,6 @@ Disassembly of section .text:
                	subq	%rax, %rcx
                	imulq	$0x64, %rcx, %rax
                	addq	%rdi, %rax
-               	movslq	%eax, %rax
                	retq
 
 <f2>:
@@ -42,7 +41,6 @@ Disassembly of section .text:
                	addq	%rax, %rcx
                	imulq	$0x64, %rcx, %rcx
                	addq	%rcx, %rax
-               	movslq	%eax, %rax
                	retq
 
 <f3>:
@@ -51,7 +49,6 @@ Disassembly of section .text:
                	shlq	%rcx
                	imulq	$0x64, %rcx, %rcx
                	addq	%rcx, %rax
-               	movslq	%eax, %rax
                	retq
 
 <main>:
@@ -59,21 +56,21 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	movl	$0xa, %edi
                	callq	<addr>
-               	cmpq	$-0x3de, %rax           # imm = 0xFC22
+               	cmpl	$0xfffffc22, %eax       # imm = 0xFFFFFC22
                	je	<addr>
                	movl	$0x1, %eax
                	popq	%rbp
                	retq
                	movl	$0xa, %edi
                	callq	<addr>
-               	cmpq	$0xc27, %rax            # imm = 0xC27
+               	cmpl	$0xc27, %eax            # imm = 0xC27
                	je	<addr>
                	movl	$0x2, %eax
                	popq	%rbp
                	retq
                	movl	$0xa, %edi
                	callq	<addr>
-               	cmpq	$0x8a3, %rax            # imm = 0x8A3
+               	cmpl	$0x8a3, %eax            # imm = 0x8A3
                	je	<addr>
                	movl	$0x3, %eax
                	popq	%rbp

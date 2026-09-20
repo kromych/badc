@@ -27,17 +27,14 @@ Disassembly of section .text:
 
 <add_two>:
                	leaq	0x2(%rdi), %rax
-               	movslq	%eax, %rax
                	retq
 
 <times_three>:
                	leaq	(%rdi,%rdi,2), %rax
-               	movslq	%eax, %rax
                	retq
 
 <minus_seven>:
                	leaq	-0x7(%rdi), %rax
-               	movslq	%eax, %rax
                	retq
 
 <main>:

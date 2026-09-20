@@ -36,7 +36,6 @@ Disassembly of section .text:
 
 <add2>:
                	leaq	(%rdi,%rsi), %rax
-               	movl	%eax, %eax
                	retq
 
 <main>:

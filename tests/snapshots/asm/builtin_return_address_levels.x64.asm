@@ -69,7 +69,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	incq	%rax
-               	movslq	%eax, %rax
                	popq	%rbx
                	leave
                	retq
@@ -94,7 +93,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	incq	%rax
-               	movslq	%eax, %rax
                	popq	%rbx
                	leave
                	retq

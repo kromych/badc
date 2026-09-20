@@ -38,7 +38,6 @@ Disassembly of section .text:
                	cmpl	%edx, %esi
                	jle	<addr>
                	addq	%r8, %rax
-               	movslq	%eax, %rax
                	retq
 
 <main>:
@@ -61,6 +60,5 @@ Disassembly of section .text:
                	cmpl	$0x4, %ecx
                	jle	<addr>
                	addq	%rdi, %rax
-               	movslq	%eax, %rax
                	leave
                	retq

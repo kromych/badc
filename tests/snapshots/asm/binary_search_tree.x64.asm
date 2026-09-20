@@ -81,12 +81,10 @@ Disassembly of section .text:
                	jge	<addr>
                	movq	0x8(%rdi), %rdi
                	callq	<addr>
-               	movslq	%eax, %rax
                	popq	%rbp
                	retq
                	movq	0x10(%rdi), %rdi
                	callq	<addr>
-               	movslq	%eax, %rax
                	popq	%rbp
                	retq
 
@@ -114,7 +112,7 @@ Disassembly of section .text:
                	movl	$0x14, %esi
                	movq	%rbx, %rdi
                	callq	<addr>
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	jne	<addr>
                	movl	$0x1, %eax
                	popq	%rbx
@@ -123,7 +121,7 @@ Disassembly of section .text:
                	movl	$0x28, %esi
                	movq	%rbx, %rdi
                	callq	<addr>
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	jne	<addr>
                	movl	$0x2, %eax
                	popq	%rbx
@@ -132,7 +130,7 @@ Disassembly of section .text:
                	movl	$0x63, %esi
                	movq	%rbx, %rdi
                	callq	<addr>
-               	cmpq	$0x1, %rax
+               	cmpl	$0x1, %eax
                	jne	<addr>
                	movl	$0x3, %eax
                	popq	%rbx

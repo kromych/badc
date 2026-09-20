@@ -52,7 +52,7 @@ Disassembly of section .text:
                	add	x20, x20, x1
                	ldr	x0, [x0, #0x8]
                	cbnz	x0, <addr>
-               	sxtw	x0, w20
+               	mov	x0, x20
                	ldp	x29, x30, [sp, #0x20]
                	ldr	x22, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x30

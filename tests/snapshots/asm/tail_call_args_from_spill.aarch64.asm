@@ -51,7 +51,6 @@ Disassembly of section .text:
                	add	x0, x0, x1
                	lsl	x1, x13, #2
                	add	x0, x0, x1
-               	sxtw	x0, w0
                	ret
 
 <main>:
@@ -62,10 +61,10 @@ Disassembly of section .text:
                	stur	w0, [x29, #-0x8]
                	ldursw	x0, [x29, #-0x8]
                	bl	<addr>
-               	mov	x20, x0
+               	sxtw	x20, w0
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	sxtw	x1, w20
+               	mov	x1, x20
                	bl	<addr>
                	cmp	w20, #0xbf
                	b.ne	<addr>

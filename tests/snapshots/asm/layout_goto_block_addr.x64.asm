@@ -49,7 +49,7 @@ Disassembly of section .text:
                	incq	%rax
                	cmpl	%edi, %eax
                	jl	<addr>
-               	movslq	%ecx, %rax
+               	movq	%rcx, %rax
                	leave
                	retq
 
@@ -73,7 +73,6 @@ Disassembly of section .text:
                	movl	$0x4, %edi
                	callq	<addr>
                	addq	%rbx, %rax
-               	movslq	%eax, %rax
                	popq	%rbx
                	leave
                	retq

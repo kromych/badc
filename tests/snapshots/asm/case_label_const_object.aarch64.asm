@@ -60,7 +60,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	bl	<addr>
-               	cbnz	x0, <addr>
+               	cbnz	w0, <addr>
                	mov	x0, #0xb                // =11
                	ldp	x29, x30, [sp], #0x10
                	ret

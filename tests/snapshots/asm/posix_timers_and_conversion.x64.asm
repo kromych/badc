@@ -27,12 +27,10 @@ Disassembly of section .text:
 
 <doubled>:
                	leaq	(%rdi,%rdi), %rax
-               	movslq	%eax, %rax
                	retq
 
 <declared_only>:
                	leaq	0x1(%rdi), %rax
-               	movslq	%eax, %rax
                	retq
 
 <main>:

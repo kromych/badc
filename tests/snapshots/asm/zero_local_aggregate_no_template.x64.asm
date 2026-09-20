@@ -135,14 +135,14 @@ Disassembly of section .text:
                	jne	<addr>
                	xorl	%edi, %edi
                	callq	<addr>
-               	cmpq	$0xa, %rax
+               	cmpl	$0xa, %eax
                	je	<addr>
                	movl	$0x8, %eax
                	leave
                	retq
                	movl	$0x1, %edi
                	callq	<addr>
-               	cmpq	$0x14, %rax
+               	cmpl	$0x14, %eax
                	je	<addr>
                	movl	$0x9, %eax
                	leave

@@ -150,21 +150,21 @@ Disassembly of section .text:
                	strb	w10, [x1, #0x9b]
                	ldr	x10, [sp], #0x10
                	bl	<addr>
-               	cbnz	x0, <addr>
+               	cbnz	w0, <addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x140
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x0, x29, #0x140
                	bl	<addr>
-               	cbnz	x0, <addr>
+               	cbnz	w0, <addr>
                	mov	x0, #0x2                // =2
                	add	sp, sp, #0x140
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x0, x29, #0xa0
                	bl	<addr>
-               	cbnz	x0, <addr>
+               	cbnz	w0, <addr>
                	mov	x0, #0x3                // =3
                	add	sp, sp, #0x140
                	ldp	x29, x30, [sp], #0x10

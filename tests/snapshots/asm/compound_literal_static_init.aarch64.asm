@@ -49,5 +49,4 @@ Disassembly of section .text:
                	ldrsw	x1, [x1]
                	add	x0, x0, x1
                	sub	x0, x0, #0x64
-               	sxtw	x0, w0
                	ret

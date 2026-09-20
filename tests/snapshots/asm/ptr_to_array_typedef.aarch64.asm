@@ -45,7 +45,6 @@ Disassembly of section .text:
                	add	x0, x0, #0x1e
                	add	x0, x0, #0x11
                	sub	x0, x0, #0x7
-               	sxtw	x0, w0
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret

@@ -60,7 +60,7 @@ Disassembly of section .text:
                	incq	%rax
                	cmpl	%edi, %eax
                	jl	<addr>
-               	movslq	%ecx, %rax
+               	movq	%rcx, %rax
                	leaq	-0x10(%rbp), %rsp
                	leave
                	retq
@@ -70,14 +70,14 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	movl	$0xa, %edi
                	callq	<addr>
-               	cmpq	$0x37, %rax
+               	cmpl	$0x37, %eax
                	je	<addr>
                	movl	$0x1, %eax
                	popq	%rbp
                	retq
                	movl	$0x4, %edi
                	callq	<addr>
-               	cmpq	$0xa, %rax
+               	cmpl	$0xa, %eax
                	je	<addr>
                	movl	$0x2, %eax
                	popq	%rbp

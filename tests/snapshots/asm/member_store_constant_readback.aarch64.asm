@@ -41,7 +41,7 @@ Disassembly of section .text:
                	mov	x1, #0x20               // =32
                	strb	w1, [x0, #0x1]
                	bl	<addr>
-               	cbz	x0, <addr>
+               	cbz	w0, <addr>
                	mov	x20, #0x2               // =2
                	adrp	x0, <page>
                	add	x0, x0, <lo12>

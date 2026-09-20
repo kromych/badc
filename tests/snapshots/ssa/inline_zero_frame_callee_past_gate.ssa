@@ -148,6 +148,7 @@ fn ent_pc=8 n_params=1 variadic=false locals=360
     v98  Store { addr=v91, disp=0, value=v97, kind=I64 }  -> -
     v99  Imm(0)                                           -> x0
     v100 Imm(0)                                           -> x0
+    v101 Imm(0)                                           -> x0
     terminator Return
 ; --- SSA dump (ok=true) ent_pc=9 ---
 ; name=main

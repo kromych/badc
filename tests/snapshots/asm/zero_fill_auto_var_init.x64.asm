@@ -216,7 +216,6 @@ Disassembly of section .text:
                	movl	$0x3, %esi
                	callq	<addr>
                	addq	%rbx, %rax
-               	movslq	%eax, %rax
                	popq	%rbx
                	leave
                	retq

@@ -1837,9 +1837,9 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v1763 Extend { value=v1762, kind=I32 }                 -> x1
     v1764 Extend { value=v1752, kind=I32 }                 -> x1
     v1765 Binop { op=add, lhs=v1762, rhs=v1752 }           -> x0
-    v1766 Extend { value=v1765, kind=I32 }                 -> x0
-    v1767 Extend { value=v1766, kind=I32 }                 -> x1
-    terminator Return(v1766)   (exit_acc=v1766)
+    v1766 Extend { value=v1765, kind=I32 }                 -> x1
+    v1767 Extend { value=v1765, kind=I32 }                 -> x1
+    terminator Return(v1765)   (exit_acc=v1765)
   block 60  start_pc=0
     terminator Jmp(b59)
   block 61  start_pc=0
@@ -1863,9 +1863,9 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v1628 Extend { value=v1627, kind=I32 }                 -> x1
     v1629 Extend { value=v1617, kind=I32 }                 -> x1
     v1630 Binop { op=add, lhs=v1627, rhs=v1617 }           -> x0
-    v1631 Extend { value=v1630, kind=I32 }                 -> x0
-    v1632 Extend { value=v1631, kind=I32 }                 -> x1
-    terminator Return(v1631)   (exit_acc=v1631)
+    v1631 Extend { value=v1630, kind=I32 }                 -> x1
+    v1632 Extend { value=v1630, kind=I32 }                 -> x1
+    terminator Return(v1630)   (exit_acc=v1630)
   block 65  start_pc=0
     terminator Jmp(b64)
   block 66  start_pc=0
@@ -1884,9 +1884,9 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v1149 Extend { value=v1148, kind=I32 }                 -> x1
     v1150 Extend { value=v1143, kind=I32 }                 -> x1
     v1151 Binop { op=add, lhs=v1148, rhs=v1143 }           -> x0
-    v1152 Extend { value=v1151, kind=I32 }                 -> x0
-    v1153 Extend { value=v1152, kind=I32 }                 -> x1
-    terminator Return(v1152)   (exit_acc=v1152)
+    v1152 Extend { value=v1151, kind=I32 }                 -> x1
+    v1153 Extend { value=v1151, kind=I32 }                 -> x1
+    terminator Return(v1151)   (exit_acc=v1151)
   block 70  start_pc=0
     terminator Jmp(b69)
   block 71  start_pc=0
@@ -1907,9 +1907,9 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v1026 Extend { value=v1025, kind=I32 }                 -> x1
     v1027 Extend { value=v1020, kind=I32 }                 -> x1
     v1028 Binop { op=add, lhs=v1025, rhs=v1020 }           -> x0
-    v1029 Extend { value=v1028, kind=I32 }                 -> x0
-    v1030 Extend { value=v1029, kind=I32 }                 -> x1
-    terminator Return(v1029)   (exit_acc=v1029)
+    v1029 Extend { value=v1028, kind=I32 }                 -> x1
+    v1030 Extend { value=v1028, kind=I32 }                 -> x1
+    terminator Return(v1028)   (exit_acc=v1028)
   block 76  start_pc=0
     terminator Jmp(b75)
   block 77  start_pc=0

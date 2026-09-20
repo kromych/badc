@@ -29,14 +29,12 @@ Disassembly of section .text:
                	nop
                	nop
                	leaq	0x1(%rdi), %rax
-               	movslq	%eax, %rax
                	retq
 
 <fixup_style>:
                	nop
                	nop
                	leaq	0x1(%rdi), %rax
-               	movslq	%eax, %rax
                	retq
 
 <main>:

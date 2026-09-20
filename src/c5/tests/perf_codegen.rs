@@ -1287,6 +1287,30 @@ fn void_binding_asks_for_no_extension() {
     }
 }
 
+/// `long` is 4 bytes on LLP64 and 8 on LP64, and `return_is_low_word` is
+/// asked before the target is fixed, so it answers for the types that are
+/// narrow on every target and for no others. `char` shares tag 0 with "no
+/// prototype recorded", which is why it is out as well.
+#[test]
+fn only_target_independent_narrow_returns_ride_the_low_word() {
+    use crate::c5::codegen::return_is_low_word;
+    use crate::c5::compiler::types::{UNSIGNED_BIT, void_ty};
+    use crate::c5::token::Ty;
+    for ty in [Ty::Bool, Ty::Short, Ty::Int] {
+        assert!(return_is_low_word(ty as i64), "{ty:?}");
+        assert!(
+            return_is_low_word(ty as i64 | UNSIGNED_BIT),
+            "unsigned {ty:?}"
+        );
+        assert!(!return_is_low_word(ty as i64 + Ty::Ptr as i64), "{ty:?} *");
+    }
+    for ty in [Ty::Char, Ty::Long, Ty::LongLong, Ty::Float, Ty::Double] {
+        assert!(!return_is_low_word(ty as i64), "{ty:?}");
+    }
+    assert!(!return_is_low_word(void_ty()));
+    assert!(!return_is_low_word(0));
+}
+
 /// Imports returning each narrow integer type, read (`read_*`) and called for
 /// effect (`drop_*`).
 const NARROW_RESULTS: &str = "#pragma dylib(libc, \"libc.so.6\")\n\
@@ -1352,6 +1376,81 @@ fn unread_narrow_external_result_is_not_extended() {
         m.expect(!insns.iter().any(extends), || {
             format!("x86-64 {name}: {op:#x} on rax: {insns:x?}")
         });
+    }
+    m.finish();
+}
+
+/// One function per return width, plus a callee defined here and the three
+/// ways a caller reads its result: at 32 bits, at 64, and as a zero test.
+const RETURN_WIDTHS: &str = "int ret_int(int n) { return n * 3; }\n\
+    unsigned ret_uint(unsigned n) { return n * 3u; }\n\
+    long ret_long(long n) { return n * 3; }\n\
+    long widen_int(int n) { return n * 3; }\n\
+    short ret_short(short n) { return (short)(n * 3); }\n\
+    signed char ret_char(signed char n) { return (signed char)(n * 3); }\n\
+    __attribute__((noinline)) static int callee(int n) { return n + 1; }\n\
+    int caller_low(int n) { return callee(n) + 1; }\n\
+    long caller_wide(int n) { return callee(n); }\n\
+    int caller_test(int n) { if (callee(n)) return 7; return 9; }\n";
+
+/// An `int` / `unsigned` result occupies the low word of the return
+/// register and bits 32..63 carry none of it, so the epilogue renormalizes
+/// nothing. A `long` return reads the whole register and keeps its
+/// extension, and a `short` / `char` return keeps the narrowing to its own
+/// width -- that width is part of the result.
+#[test]
+fn a_low_word_return_is_not_renormalized() {
+    let mut m = Misses::default();
+    // `sxth x0, w0` / `sxtb x0, w0`, and `movsx rax, ax` / `movsx rax, al`.
+    for (name, extended, word, op) in [
+        ("ret_int", false, 0x9340_7C00u32, 0x63u16),
+        ("ret_uint", false, 0x2A00_03E0, 0x89),
+        ("ret_long", false, 0x9340_7C00, 0x63),
+        ("widen_int", true, 0x9340_7C00, 0x63),
+        ("ret_short", true, 0x9340_3C00, 0x0FBF),
+        ("ret_char", true, 0x9340_1C00, 0x0FBE),
+    ] {
+        let ws = a64(RETURN_WIDTHS, name);
+        // Every shape here extends the return register, so the word is exact.
+        let a64_has = ws.contains(&word);
+        m.expect(a64_has == extended, || {
+            format!("aarch64 {name}: {word:08x} present={a64_has}: {ws:08x?}")
+        });
+        let insns = x64(RETURN_WIDTHS, name);
+        let x64_has = insns
+            .iter()
+            .any(|i| i.op == op && i.modrm == Some(0xC0) && (op == 0x89 || i.rex_w()));
+        m.expect(x64_has == extended, || {
+            format!("x86-64 {name}: {op:#x} present={x64_has}: {insns:x?}")
+        });
+    }
+    m.finish();
+}
+
+/// The reading side widens the result instead: a caller that reads a
+/// same-unit `int` call at 64 bits extends it, one that reads its low word
+/// or tests it against zero does not.
+#[test]
+fn a_call_result_is_extended_where_it_is_read_wide() {
+    let mut m = Misses::default();
+    for (name, extended) in [
+        ("caller_low", false),
+        ("caller_wide", true),
+        ("caller_test", false),
+    ] {
+        let ws = a64(RETURN_WIDTHS, name);
+        // The argument's own entry extension sits ahead of the `bl`.
+        let after_call = ws.iter().position(|&w| w & 0xFC00_0000 == 0x9400_0000);
+        let tail = &ws[after_call.map_or(0, |i| i + 1)..];
+        m.expect(tail.iter().any(|&w| a64_is_sxtw(w)) == extended, || {
+            format!("aarch64 {name}: sxtw after the call != {extended}: {ws:08x?}")
+        });
+        let insns = x64(RETURN_WIDTHS, name);
+        let after = insns.iter().position(|i| i.op == 0xE8).map_or(0, |i| i + 1);
+        m.expect(
+            insns[after..].iter().any(X64Insn::is_movsxd_rr) == extended,
+            || format!("x86-64 {name}: movslq after the call != {extended}: {insns:x?}"),
+        );
     }
     m.finish();
 }
@@ -2609,17 +2708,13 @@ fn a64_mul(w: u32) -> bool {
 #[test]
 fn a64_negation_takes_one_neg() {
     let mut m = Misses::default();
-    // `neg x0, x0` then `ret`; the narrow forms renormalize after it.
-    for (name, len) in [
-        ("negl", 2),
-        ("zero_minus", 2),
-        ("times_minus_one", 2),
-        ("negi", 3),
-        ("negu", 3),
-    ] {
+    // `neg x0, x0` then `ret`. An `int` / `unsigned` result rides the
+    // low word of the return register, so the narrow forms renormalize
+    // no more than the wide ones.
+    for name in ["negl", "zero_minus", "times_minus_one", "negi", "negu"] {
         let ws = a64(NEGATES, name);
         m.expect(
-            ws.len() == len && a64_neg(ws[0]) && !ws.iter().any(|&w| a64_mul(w)),
+            ws.len() == 2 && a64_neg(ws[0]) && !ws.iter().any(|&w| a64_mul(w)),
             || format!("{name}: not one neg: {ws:08x?}"),
         );
     }

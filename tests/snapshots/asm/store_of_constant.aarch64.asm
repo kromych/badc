@@ -451,7 +451,7 @@ Disassembly of section .text:
                	sub	x0, x29, #0x8
                	mov	x1, x0
                	bl	<addr>
-               	cbz	x0, <addr>
+               	cbz	w0, <addr>
                	ldurb	w0, [x29, #-0x8]
                	cbz	w0, <addr>
                	mov	x0, #0x10               // =16
@@ -461,7 +461,7 @@ Disassembly of section .text:
                	sub	x0, x29, #0x8
                	mov	x1, x0
                	bl	<addr>
-               	cbz	x0, <addr>
+               	cbz	w0, <addr>
                	mov	x0, #0x11               // =17
                	add	sp, sp, #0xe0
                	ldp	x29, x30, [sp], #0x10

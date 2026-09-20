@@ -20,7 +20,6 @@ Disassembly of section .text:
 <twice>:
                	ldrsw	x0, [x0]
                	lsl	x0, x0, #1
-               	sxtw	x0, w0
                	ret
 
 <main>:

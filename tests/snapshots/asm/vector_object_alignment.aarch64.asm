@@ -459,7 +459,6 @@ Disassembly of section .text:
                	mov	x0, #0x1                // =1
                	ldr	q0, [x7]
                	bl	<addr>
-               	sxtw	x0, w0
                	add	sp, sp, #0xa0
                	ldp	x29, x30, [sp], #0x10
                	ret

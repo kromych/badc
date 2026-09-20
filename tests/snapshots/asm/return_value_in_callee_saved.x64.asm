@@ -26,7 +26,7 @@ Disassembly of section .text:
                	int3
 
 <hop_return_n>:
-               	movslq	%edi, %rax
+               	movq	%rdi, %rax
                	cmpl	$0x2, %eax
                	jge	<addr>
                	retq
@@ -34,7 +34,6 @@ Disassembly of section .text:
 
 <hop>:
                	leaq	0x1(%rdi), %rax
-               	movslq	%eax, %rax
                	retq
 
 <main>:

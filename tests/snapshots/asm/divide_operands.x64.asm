@@ -57,7 +57,6 @@ Disassembly of section .text:
                	movq	%rdi, %rax
                	cqto
                	idivq	%rsi
-               	movslq	%eax, %rax
                	retq
 
 <rem32>:
@@ -66,7 +65,7 @@ Disassembly of section .text:
                	movq	%rdi, %rax
                	cqto
                	idivq	%rsi
-               	movslq	%edx, %rax
+               	movq	%rdx, %rax
                	retq
 
 <uquot32>:
@@ -366,12 +365,12 @@ Disassembly of section .text:
                	movq	%r13, %rdi
                	movq	%r14, %rsi
                	callq	<addr>
-               	cmpq	$-0x3, %rax
+               	cmpl	$-0x3, %eax
                	jne	<addr>
                	movq	%r12, %rdi
                	movq	%rbx, %rsi
                	callq	<addr>
-               	cmpq	$-0x2, %rax
+               	cmpl	$-0x2, %eax
                	je	<addr>
                	movl	$0x6, %eax
                	popq	%rbx
@@ -425,7 +424,7 @@ Disassembly of section .text:
                	movq	0x8(%rax), %rax
                	movl	%eax, %esi
                	callq	<addr>
-               	cmpq	$0x55555555, %rax       # imm = 0x55555555
+               	cmpl	$0x55555555, %eax       # imm = 0x55555555
                	jne	<addr>
                	movl	$0xffffffff, %edi       # imm = 0xFFFFFFFF
                	movl	$0xa, %esi

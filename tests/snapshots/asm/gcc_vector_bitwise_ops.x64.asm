@@ -157,7 +157,7 @@ Disassembly of section .text:
                	movq	%r9, %r10
                	movups	(%r10), %xmm0
                	callq	<addr>
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	jne	<addr>
                	movl	$0x1, %eax
                	popq	%rbx
@@ -178,7 +178,7 @@ Disassembly of section .text:
                	movq	%r9, %r10
                	movups	(%r10), %xmm0
                	callq	<addr>
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	jne	<addr>
                	movl	$0x2, %eax
                	popq	%rbx
@@ -199,7 +199,7 @@ Disassembly of section .text:
                	movq	%r9, %r10
                	movups	(%r10), %xmm0
                	callq	<addr>
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	jne	<addr>
                	movl	$0x3, %eax
                	popq	%rbx
@@ -223,7 +223,7 @@ Disassembly of section .text:
                	movups	(%r10), %xmm0
                	movq	%rbx, %rdi
                	callq	<addr>
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	jne	<addr>
                	movl	$0x4, %eax
                	popq	%rbx
@@ -250,7 +250,7 @@ Disassembly of section .text:
                	movq	%r9, %r10
                	movups	(%r10), %xmm0
                	callq	<addr>
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	jne	<addr>
                	movl	$0x5, %eax
                	popq	%rbx
@@ -277,7 +277,7 @@ Disassembly of section .text:
                	movq	%r9, %r10
                	movups	(%r10), %xmm0
                	callq	<addr>
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	jne	<addr>
                	movl	$0x6, %eax
                	popq	%rbx
@@ -304,7 +304,7 @@ Disassembly of section .text:
                	movq	%r9, %r10
                	movups	(%r10), %xmm0
                	callq	<addr>
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	jne	<addr>
                	movl	$0x7, %eax
                	popq	%rbx
@@ -325,7 +325,7 @@ Disassembly of section .text:
                	movq	%r9, %r10
                	movups	(%r10), %xmm0
                	callq	<addr>
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	jne	<addr>
                	movl	$0x8, %eax
                	popq	%rbx

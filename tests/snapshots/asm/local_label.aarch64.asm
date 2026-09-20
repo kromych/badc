@@ -28,14 +28,14 @@ Disassembly of section .text:
                	mov	x29, sp
                	mov	x0, #0x1                // =1
                	bl	<addr>
-               	cmp	x0, #0x8
+               	cmp	w0, #0x8
                	b.eq	<addr>
                	mov	x0, #0x9                // =9
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x0                // =0
                	bl	<addr>
-               	cmp	x0, #0x7
+               	cmp	w0, #0x7
                	b.eq	<addr>
                	mov	x0, #0xa                // =10
                	ldp	x29, x30, [sp], #0x10

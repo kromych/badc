@@ -16,22 +16,22 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v13  Binop { op=fge, lhs=v11, rhs=v2 }                -> x1
     terminator Bz { cond=v13, target=b5, fall=b2 }   (exit_acc=v13)
   block 2  start_pc=0
-    v18  Imm(1)                                           -> x1
-    terminator Jmp(b3)   (exit_acc=v18)
+    v19  Imm(1)                                           -> x1
+    terminator Jmp(b3)   (exit_acc=v19)
   block 3  start_pc=0
     v4   Imm(0)                                           -> x1
     v5   Imm(0)                                           -> x1
     terminator Jmp(b4)   (exit_acc=v2)
   block 4  start_pc=0
-    v6   Phi { incoming=[b5:v20, b3:v2], kind=I64 }       -> x0
+    v6   Phi { incoming=[b5:v21, b3:v2], kind=I64 }       -> x0
     v7   Imm(0)                                           -> x1
     v8   Extend { value=v6, kind=I32 }                    -> x1
     terminator Return(v6)   (exit_acc=v6)
   block 5  start_pc=0
-    v19  Imm(0)                                           -> x0
-    v20  Imm(42)                                          -> x0
-    v21  Imm(0)                                           -> x1
-    terminator Jmp(b4)   (exit_acc=v20)
+    v20  Imm(0)                                           -> x0
+    v21  Imm(42)                                          -> x0
+    v22  Imm(0)                                           -> x1
+    terminator Jmp(b4)   (exit_acc=v21)
   block 6  start_pc=0
     v14  Imm(0)                                           -> x1
     terminator Jmp(b3)   (exit_acc=v14)

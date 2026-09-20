@@ -83,14 +83,15 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v73  BinopI { op=add, lhs=v71, rhs_imm=7 }            -> x0
     v74  Extend { value=v73, kind=I32 }                   -> x1
     v75  Extend { value=v73, kind=I32 }                   -> x1
-    v76  Binop { op=ne, lhs=v37, rhs=v73 }                -> x0
-    terminator Bz { cond=v76, target=b4, fall=b3 }   (exit_acc=v76)
+    v76  Extend { value=v73, kind=I32 }                   -> x1
+    v77  Binop { op=ne, lhs=v37, rhs=v73 }                -> x0
+    terminator Bz { cond=v77, target=b4, fall=b3 }   (exit_acc=v77)
   block 3  start_pc=0
-    v77  Imm(2)                                           -> x0
-    terminator Return(v77)   (exit_acc=v77)
-  block 4  start_pc=0
-    v78  Imm(0)                                           -> x0
+    v78  Imm(2)                                           -> x0
     terminator Return(v78)   (exit_acc=v78)
+  block 4  start_pc=0
+    v79  Imm(0)                                           -> x0
+    terminator Return(v79)   (exit_acc=v79)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

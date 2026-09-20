@@ -28,13 +28,11 @@ Disassembly of section .text:
 <test>:
                	movq	%rdi, %rax
                	shlq	%rax
-               	movslq	%eax, %rax
                	leaq	(%rdi,%rdi), %rcx
                	cmpl	$0x3, %edi
                	jle	<addr>
                	retq
                	addq	%rcx, %rax
-               	movslq	%eax, %rax
                	retq
 
 <main>:

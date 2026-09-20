@@ -58,7 +58,7 @@ Disassembly of section .text:
                	jl	<addr>
                	leaq	-0xc0(%rbp), %rdi
                	callq	<addr>
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	je	<addr>
                	movl	$0x7, %eax
                	leave
@@ -66,7 +66,7 @@ Disassembly of section .text:
                	leaq	-0xc0(%rbp), %rdi
                	movb	$0x1, 0x38(%rdi)
                	callq	<addr>
-               	cmpq	$0x1, %rax
+               	cmpl	$0x1, %eax
                	je	<addr>
                	movl	$0x8, %eax
                	leave

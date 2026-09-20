@@ -175,7 +175,7 @@ Disassembly of section .text:
                	je	<addr>
                	orq	$0x40, %rbx
                	callq	<addr>
-               	cmpq	$0x3, %rax
+               	cmpl	$0x3, %eax
                	je	<addr>
                	orq	$0x80, %rbx
                	movq	%rbx, %rax

@@ -194,7 +194,6 @@ Disassembly of section .text:
                	mul	x2, x0, x17
                	lsr	x2, x2, #34
                	msub	x0, x2, x1, x0
-               	mov	w0, w0
                	ret
 
 <less64>:
@@ -490,7 +489,7 @@ Disassembly of section .text:
                	mov	x1, #0x2                // =2
                	mov	x2, x1
                	bl	<addr>
-               	cmp	x0, #0x1
+               	cmp	w0, #0x1
                	b.eq	<addr>
                	mov	x0, #0x16               // =22
                	add	sp, sp, #0x40
@@ -542,7 +541,7 @@ Disassembly of section .text:
                	ldursw	x0, [x29, #-0x30]
                	ldursw	x1, [x29, #-0x30]
                	bl	<addr>
-               	cbz	x0, <addr>
+               	cbz	w0, <addr>
                	mov	x0, #0x1b               // =27
                	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
@@ -550,7 +549,7 @@ Disassembly of section .text:
                	ldursw	x0, [x29, #-0x38]
                	mov	x1, #0x1                // =1
                	bl	<addr>
-               	cmp	x0, #0x1
+               	cmp	w0, #0x1
                	b.eq	<addr>
                	mov	x0, #0x1c               // =28
                	add	sp, sp, #0x40
@@ -559,7 +558,7 @@ Disassembly of section .text:
                	ldur	w0, [x29, #-0x20]
                	ldur	w1, [x29, #-0x20]
                	bl	<addr>
-               	cbz	x0, <addr>
+               	cbz	w0, <addr>
                	mov	x0, #0x1d               // =29
                	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
@@ -567,7 +566,7 @@ Disassembly of section .text:
                	ldur	w0, [x29, #-0x20]
                	mov	x1, #0x1                // =1
                	bl	<addr>
-               	cmp	x0, #0x1
+               	cmp	w0, #0x1
                	b.eq	<addr>
                	mov	x0, #0x1e               // =30
                	add	sp, sp, #0x40
@@ -576,12 +575,12 @@ Disassembly of section .text:
                	ldursw	x0, [x29, #-0x30]
                	ldursw	x1, [x29, #-0x30]
                	bl	<addr>
-               	cmp	x0, #0x7
+               	cmp	w0, #0x7
                	b.ne	<addr>
                	ldursw	x0, [x29, #-0x30]
                	mov	x1, #0x0                // =0
                	bl	<addr>
-               	cmp	x0, #0x9
+               	cmp	w0, #0x9
                	b.eq	<addr>
                	mov	x0, #0x1f               // =31
                	add	sp, sp, #0x40

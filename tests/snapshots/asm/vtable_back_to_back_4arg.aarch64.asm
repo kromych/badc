@@ -23,7 +23,6 @@ Disassembly of section .text:
                	ret
 
 <g_generate>:
-               	sxtw	x2, w2
                	ldrsw	x0, [x0, #0x8]
                	add	x0, x0, #0x64
                	str	w0, [x1]

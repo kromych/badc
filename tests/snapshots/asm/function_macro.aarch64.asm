@@ -116,7 +116,6 @@ Disassembly of section .text:
                	mov	x29, sp
                	bl	<addr>
                	cbz	w0, <addr>
-               	sxtw	x0, w0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>

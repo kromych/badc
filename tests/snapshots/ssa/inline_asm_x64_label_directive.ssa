@@ -8,34 +8,37 @@ fn ent_pc=3 n_params=0 variadic=false locals=1
     v2   InlineAsm { template="1:  .irp num,0,1,2,3\n    .equ .L__xld\\num, (\\num * 3 + 1)\n    .endr\n    movl $(.L__xld0 + .L__xld1 + .L__xld2 + .L__xld3), %0\n", ops=1, args=[v1] } -> -
     v3   LoadLocal { off=-1, kind=I32 }                   -> x0
     v4   Extend { value=v3, kind=I32 }                    -> x1
-    v5   BinopI { op=ne, lhs=v3, rhs_imm=22 }             -> x0
-    terminator Bz { cond=v5, target=b2, fall=b1 }   (exit_acc=v5)
+    v5   Extend { value=v3, kind=I32 }                    -> x1
+    v6   BinopI { op=ne, lhs=v3, rhs_imm=22 }             -> x0
+    terminator Bz { cond=v6, target=b2, fall=b1 }   (exit_acc=v6)
   block 1  start_pc=0
-    v6   Imm(1)                                           -> x0
-    terminator Return(v6)   (exit_acc=v6)
-  block 2  start_pc=0
-    v10  LocalAddr(-1)                                    -> x0
-    v11  InlineAsm { template="2: 3:  .macro xld_set dst, val\n    movl $\\val, \\dst\n    .endm\n    xld_set %0, 77\n    .purgem xld_set\n", ops=1, args=[v10] } -> -
-    v12  LoadLocal { off=-1, kind=I32 }                   -> x0
-    v13  Extend { value=v12, kind=I32 }                   -> x1
-    v14  BinopI { op=ne, lhs=v12, rhs_imm=77 }            -> x0
-    terminator Bz { cond=v14, target=b4, fall=b3 }   (exit_acc=v14)
-  block 3  start_pc=0
-    v7   Imm(2)                                           -> x0
+    v7   Imm(1)                                           -> x0
     terminator Return(v7)   (exit_acc=v7)
-  block 4  start_pc=0
-    v15  LocalAddr(-1)                                    -> x0
-    v16  InlineAsm { template="4:  .equ .L__xlde, 5\n    movl $(.L__xlde * 3), %0\n    jmp 5f\n    movl $0, %0\n5:\n", ops=1, args=[v15] } -> -
-    v17  LoadLocal { off=-1, kind=I32 }                   -> x0
-    v18  Extend { value=v17, kind=I32 }                   -> x1
-    v19  BinopI { op=ne, lhs=v17, rhs_imm=15 }            -> x0
-    terminator Bz { cond=v19, target=b6, fall=b5 }   (exit_acc=v19)
-  block 5  start_pc=0
-    v8   Imm(3)                                           -> x0
+  block 2  start_pc=0
+    v11  LocalAddr(-1)                                    -> x0
+    v12  InlineAsm { template="2: 3:  .macro xld_set dst, val\n    movl $\\val, \\dst\n    .endm\n    xld_set %0, 77\n    .purgem xld_set\n", ops=1, args=[v11] } -> -
+    v13  LoadLocal { off=-1, kind=I32 }                   -> x0
+    v14  Extend { value=v13, kind=I32 }                   -> x1
+    v15  Extend { value=v13, kind=I32 }                   -> x1
+    v16  BinopI { op=ne, lhs=v13, rhs_imm=77 }            -> x0
+    terminator Bz { cond=v16, target=b4, fall=b3 }   (exit_acc=v16)
+  block 3  start_pc=0
+    v8   Imm(2)                                           -> x0
     terminator Return(v8)   (exit_acc=v8)
-  block 6  start_pc=0
-    v9   Imm(42)                                          -> x0
+  block 4  start_pc=0
+    v17  LocalAddr(-1)                                    -> x0
+    v18  InlineAsm { template="4:  .equ .L__xlde, 5\n    movl $(.L__xlde * 3), %0\n    jmp 5f\n    movl $0, %0\n5:\n", ops=1, args=[v17] } -> -
+    v19  LoadLocal { off=-1, kind=I32 }                   -> x0
+    v20  Extend { value=v19, kind=I32 }                   -> x1
+    v21  Extend { value=v19, kind=I32 }                   -> x1
+    v22  BinopI { op=ne, lhs=v19, rhs_imm=15 }            -> x0
+    terminator Bz { cond=v22, target=b6, fall=b5 }   (exit_acc=v22)
+  block 5  start_pc=0
+    v9   Imm(3)                                           -> x0
     terminator Return(v9)   (exit_acc=v9)
+  block 6  start_pc=0
+    v10  Imm(42)                                          -> x0
+    terminator Return(v10)   (exit_acc=v10)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

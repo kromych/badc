@@ -30,21 +30,20 @@ Disassembly of section .text:
                	add	x5, x5, #0x1
                	cmp	w5, w0
                	b.lt	<addr>
-               	sxtw	x0, w4
+               	mov	x0, x4
                	ret
 
 <main>:
-               	mov	x3, #0x0                // =0
-               	mov	x4, x3
                	mov	x0, #0x0                // =0
-               	mov	x1, x0
-               	add	x0, x0, #0x1
+               	mov	x4, x0
+               	mov	x1, #0x0                // =0
+               	mov	x2, x1
                	add	x1, x1, #0x1
-               	cmp	w1, #0x7
+               	add	x2, x2, #0x1
+               	cmp	w2, #0x7
                	b.lt	<addr>
-               	add	x3, x3, x0
+               	add	x0, x0, x1
                	add	x4, x4, #0x1
                	cmp	w4, #0x7
                	b.lt	<addr>
-               	sxtw	x0, w3
                	ret

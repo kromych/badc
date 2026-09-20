@@ -36,7 +36,6 @@ Disassembly of section .text:
                	mov	x17, #0x64              // =100
                	mul	x1, x2, x17
                	add	x0, x1, x0
-               	sxtw	x0, w0
                	ret
 
 <main>:

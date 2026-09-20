@@ -105,7 +105,6 @@ Disassembly of section .text:
                	xorq	$0x1, %rdx
                	testl	%edx, %edx
                	jne	<addr>
-               	movl	%eax, %eax
                	retq
 
 <after_skip>:
@@ -361,7 +360,7 @@ Disassembly of section .text:
                	xorl	%edi, %edi
                	movl	$0x5, %esi
                	callq	<addr>
-               	cmpq	$0x6, %rax
+               	cmpl	$0x6, %eax
                	je	<addr>
                	movl	$0x20, %eax
                	popq	%rbp
@@ -369,7 +368,7 @@ Disassembly of section .text:
                	movl	$0x1, %edi
                	movl	$0x5, %esi
                	callq	<addr>
-               	cmpq	$0x5, %rax
+               	cmpl	$0x5, %eax
                	je	<addr>
                	movl	$0x21, %eax
                	popq	%rbp
@@ -377,7 +376,7 @@ Disassembly of section .text:
                	movl	$0x2, %edi
                	movl	$0x5, %esi
                	callq	<addr>
-               	cmpq	$0xa, %rax
+               	cmpl	$0xa, %eax
                	je	<addr>
                	movl	$0x22, %eax
                	popq	%rbp
@@ -385,7 +384,7 @@ Disassembly of section .text:
                	movl	$0x3, %edi
                	movl	$0x5, %esi
                	callq	<addr>
-               	cmpq	$0x5, %rax
+               	cmpl	$0x5, %eax
                	je	<addr>
                	movl	$0x23, %eax
                	popq	%rbp

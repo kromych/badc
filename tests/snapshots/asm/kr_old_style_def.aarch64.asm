@@ -17,7 +17,6 @@ Disassembly of section .text:
                	sub	x0, x0, x2
                	and	x1, x1, #0xff
                	add	x0, x0, x1
-               	sxtw	x0, w0
                	ret
 
 <first>:

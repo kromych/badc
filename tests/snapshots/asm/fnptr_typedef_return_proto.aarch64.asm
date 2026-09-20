@@ -15,7 +15,6 @@ Disassembly of section .text:
 
 <add>:
                	add	x0, x0, x1
-               	sxtw	x0, w0
                	ret
 
 <pick>:

@@ -67,50 +67,53 @@ fn ent_pc=4 n_params=0 variadic=false locals=1
     v4   InlineAsm { template="mov %1, %0", ops=2, args=[v3, v2] } -> -
     v5   LoadLocal { off=-1, kind=I32 }                   -> x0
     v6   Extend { value=v5, kind=I32 }                    -> x1
-    v7   BinopI { op=ne, lhs=v5, rhs_imm=7 }              -> x0
-    terminator Bz { cond=v7, target=b2, fall=b1 }   (exit_acc=v7)
+    v7   Extend { value=v5, kind=I32 }                    -> x1
+    v8   BinopI { op=ne, lhs=v5, rhs_imm=7 }              -> x0
+    terminator Bz { cond=v8, target=b2, fall=b1 }   (exit_acc=v8)
   block 1  start_pc=0
-    v8   Imm(1)                                           -> x0
-    terminator Return(v8)   (exit_acc=v8)
+    v9   Imm(1)                                           -> x0
+    terminator Return(v9)   (exit_acc=v9)
   block 2  start_pc=0
-    v9   Imm(30)                                          -> x0
-    v10  Imm(12)                                          -> x0
-    v11  LocalAddr(-1)                                    -> x0
-    v12  InlineAsm { template="mov %1, %0; add %2, %0", ops=3, args=[v11, v9, v10] } -> -
-    v13  LoadLocal { off=-1, kind=I64 }                   -> x0
-    v14  BinopI { op=ne, lhs=v13, rhs_imm=42 }            -> x0
-    terminator Bz { cond=v14, target=b4, fall=b3 }   (exit_acc=v14)
+    v10  Imm(30)                                          -> x0
+    v11  Imm(12)                                          -> x0
+    v12  LocalAddr(-1)                                    -> x0
+    v13  InlineAsm { template="mov %1, %0; add %2, %0", ops=3, args=[v12, v10, v11] } -> -
+    v14  LoadLocal { off=-1, kind=I64 }                   -> x0
+    v15  BinopI { op=ne, lhs=v14, rhs_imm=42 }            -> x0
+    terminator Bz { cond=v15, target=b4, fall=b3 }   (exit_acc=v15)
   block 3  start_pc=0
-    v15  Imm(2)                                           -> x0
-    terminator Return(v15)   (exit_acc=v15)
+    v16  Imm(2)                                           -> x0
+    terminator Return(v16)   (exit_acc=v16)
   block 4  start_pc=0
-    v16  Imm(21)                                          -> x0
     v17  Imm(21)                                          -> x0
-    v18  LocalAddr(-1)                                    -> x0
-    v19  InlineAsm { template="movl %k1, %k0; addl %k1, %k0", ops=2, args=[v18, v17] } -> -
-    v20  LoadLocal { off=-1, kind=I32 }                   -> x0
-    v21  Extend { value=v20, kind=I32 }                   -> x1
-    v22  BinopI { op=ne, lhs=v20, rhs_imm=42 }            -> x0
-    terminator Bz { cond=v22, target=b6, fall=b5 }   (exit_acc=v22)
+    v18  Imm(21)                                          -> x0
+    v19  LocalAddr(-1)                                    -> x0
+    v20  InlineAsm { template="movl %k1, %k0; addl %k1, %k0", ops=2, args=[v19, v18] } -> -
+    v21  LoadLocal { off=-1, kind=I32 }                   -> x0
+    v22  Extend { value=v21, kind=I32 }                   -> x1
+    v23  Extend { value=v21, kind=I32 }                   -> x1
+    v24  BinopI { op=ne, lhs=v21, rhs_imm=42 }            -> x0
+    terminator Bz { cond=v24, target=b6, fall=b5 }   (exit_acc=v24)
   block 5  start_pc=0
-    v23  Imm(3)                                           -> x0
-    terminator Return(v23)   (exit_acc=v23)
+    v25  Imm(3)                                           -> x0
+    terminator Return(v25)   (exit_acc=v25)
   block 6  start_pc=0
-    v24  Imm(37)                                          -> x0
-    v25  Imm(37)                                          -> x0
-    v26  StoreLocal { off=-1, value=v25, kind=I32 }       -> -
-    v27  LocalAddr(-1)                                    -> x0
-    v28  InlineAsm { template="addl $5, %0", ops=1, args=[v27] } -> -
-    v29  LoadLocal { off=-1, kind=I32 }                   -> x0
-    v30  Extend { value=v29, kind=I32 }                   -> x1
-    v31  BinopI { op=ne, lhs=v29, rhs_imm=42 }            -> x0
-    terminator Bz { cond=v31, target=b8, fall=b7 }   (exit_acc=v31)
+    v26  Imm(37)                                          -> x0
+    v27  Imm(37)                                          -> x0
+    v28  StoreLocal { off=-1, value=v27, kind=I32 }       -> -
+    v29  LocalAddr(-1)                                    -> x0
+    v30  InlineAsm { template="addl $5, %0", ops=1, args=[v29] } -> -
+    v31  LoadLocal { off=-1, kind=I32 }                   -> x0
+    v32  Extend { value=v31, kind=I32 }                   -> x1
+    v33  Extend { value=v31, kind=I32 }                   -> x1
+    v34  BinopI { op=ne, lhs=v31, rhs_imm=42 }            -> x0
+    terminator Bz { cond=v34, target=b8, fall=b7 }   (exit_acc=v34)
   block 7  start_pc=0
-    v32  Imm(4)                                           -> x0
-    terminator Return(v32)   (exit_acc=v32)
+    v35  Imm(4)                                           -> x0
+    terminator Return(v35)   (exit_acc=v35)
   block 8  start_pc=0
-    v33  Imm(42)                                          -> x0
-    terminator Return(v33)   (exit_acc=v33)
+    v36  Imm(42)                                          -> x0
+    terminator Return(v36)   (exit_acc=v36)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

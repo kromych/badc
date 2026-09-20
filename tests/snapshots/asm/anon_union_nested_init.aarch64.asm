@@ -103,7 +103,6 @@ Disassembly of section .text:
                	ldursw	x0, [x29, #-0x10]
                	ldursw	x1, [x29, #-0x8]
                	bl	<addr>
-               	sxtw	x0, w0
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret

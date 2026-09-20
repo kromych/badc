@@ -15,18 +15,15 @@ Disassembly of section .text:
 
 <add_two>:
                	add	x0, x0, #0x2
-               	sxtw	x0, w0
                	ret
 
 <times_three>:
                	mov	x17, #0x3               // =3
                	mul	x0, x0, x17
-               	sxtw	x0, w0
                	ret
 
 <minus_seven>:
                	sub	x0, x0, #0x7
-               	sxtw	x0, w0
                	ret
 
 <main>:

@@ -15,12 +15,10 @@ Disassembly of section .text:
 
 <inc>:
                	add	x0, x0, #0x1
-               	sxtw	x0, w0
                	ret
 
 <dbl>:
                	lsl	x0, x0, #1
-               	sxtw	x0, w0
                	ret
 
 <main>:

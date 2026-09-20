@@ -60,7 +60,6 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	leaq	-0x18(%rbp), %rcx
-               	movslq	%eax, %rax
                	leave
                	retq
 

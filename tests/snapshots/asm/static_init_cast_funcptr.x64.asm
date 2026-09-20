@@ -28,13 +28,11 @@ Disassembly of section .text:
 <real_double>:
                	movq	%rdi, %rax
                	shlq	%rax
-               	movslq	%eax, %rax
                	retq
 
 <real_negate>:
                	movq	%rdi, %rax
                	negq	%rax
-               	movslq	%eax, %rax
                	retq
 
 <main>:

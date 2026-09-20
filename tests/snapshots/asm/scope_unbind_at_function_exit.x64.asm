@@ -26,7 +26,7 @@ Disassembly of section .text:
                	int3
 
 <by_param>:
-               	movslq	%edi, %rax
+               	movq	%rdi, %rax
                	retq
 
 <by_local>:
@@ -51,17 +51,15 @@ Disassembly of section .text:
                	retq
 
 <use_m>:
-               	movslq	%edi, %rax
+               	movq	%rdi, %rax
                	retq
 
 <use_n>:
                	leaq	(%rdi,%rsi), %rax
-               	movslq	%eax, %rax
                	retq
 
 <use_n2>:
                	leaq	(%rdi,%rsi), %rax
-               	movslq	%eax, %rax
                	retq
 
 <main>:

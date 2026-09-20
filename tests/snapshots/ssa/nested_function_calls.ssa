@@ -11,9 +11,9 @@ fn ent_pc=0 n_params=2 variadic=false locals=0
     v5   Imm(0)                                           -> x0
     v6   Imm(0)                                           -> x0
     v7   Binop { op=add, lhs=v1, rhs=v3 }                 -> x0
-    v8   Extend { value=v7, kind=I32 }                    -> x0
-    v9   Extend { value=v8, kind=I32 }                    -> x1
-    terminator Return(v8)   (exit_acc=v8)
+    v8   Extend { value=v7, kind=I32 }                    -> x1
+    v9   Extend { value=v7, kind=I32 }                    -> x1
+    terminator Return(v7)   (exit_acc=v7)
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=main
 fn ent_pc=1 n_params=0 variadic=false locals=0
@@ -28,19 +28,22 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v6   Imm(30)                                          -> x0
     v7   Imm(30)                                          -> x0
     v8   Imm(30)                                          -> x0
-    v9   Imm(40)                                          -> x0
-    v10  Imm(30)                                          -> x0
-    v11  Imm(40)                                          -> x0
-    v12  Imm(70)                                          -> x0
+    v9   Imm(30)                                          -> x0
+    v10  Imm(40)                                          -> x0
+    v11  Imm(30)                                          -> x0
+    v12  Imm(40)                                          -> x0
     v13  Imm(70)                                          -> x0
     v14  Imm(70)                                          -> x0
-    v15  Imm(30)                                          -> x0
+    v15  Imm(70)                                          -> x0
     v16  Imm(70)                                          -> x0
-    v17  Imm(100)                                         -> x0
-    v18  Imm(100)                                         -> x0
+    v17  Imm(30)                                          -> x0
+    v18  Imm(70)                                          -> x0
     v19  Imm(100)                                         -> x0
     v20  Imm(100)                                         -> x0
-    terminator Return(v20)   (exit_acc=v20)
+    v21  Imm(100)                                         -> x0
+    v22  Imm(100)                                         -> x0
+    v23  Imm(100)                                         -> x0
+    terminator Return(v23)   (exit_acc=v23)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

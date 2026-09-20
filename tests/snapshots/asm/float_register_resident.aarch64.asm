@@ -58,5 +58,4 @@ Disassembly of section .text:
                	fmul	s0, s3, s0
                	fmadd	s0, s0, s1, s2
                	fcvtzs	x0, s0
-               	sxtw	x0, w0
                	ret

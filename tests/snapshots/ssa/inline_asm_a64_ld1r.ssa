@@ -8,17 +8,19 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v2   Imm(42)                                          -> x0
     v3   Imm(42)                                          -> x0
     v4   Imm(42)                                          -> x0
-    v5   Imm(0)                                           -> x0
-    v6   Imm(19)                                          -> x0
-    v7   Imm(23)                                          -> x0
-    v8   Imm(19)                                          -> x0
-    v9   Imm(23)                                          -> x0
-    v10  Imm(42)                                          -> x0
+    v5   Imm(42)                                          -> x0
+    v6   Imm(0)                                           -> x0
+    v7   Imm(19)                                          -> x0
+    v8   Imm(23)                                          -> x0
+    v9   Imm(19)                                          -> x0
+    v10  Imm(23)                                          -> x0
     v11  Imm(42)                                          -> x0
     v12  Imm(42)                                          -> x0
-    v13  Imm(0)                                           -> x0
+    v13  Imm(42)                                          -> x0
     v14  Imm(42)                                          -> x0
-    terminator Return(v14)   (exit_acc=v14)
+    v15  Imm(0)                                           -> x0
+    v16  Imm(42)                                          -> x0
+    terminator Return(v16)   (exit_acc=v16)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

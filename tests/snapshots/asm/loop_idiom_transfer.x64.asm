@@ -280,7 +280,7 @@ Disassembly of section .text:
                	leaq	-0x40(%rbp), %rdi
                	movl	$0x9, %esi
                	callq	<addr>
-               	cmpq	$0x9, %rax
+               	cmpl	$0x9, %eax
                	je	<addr>
                	movl	$0x8, %eax
                	popq	%rbx
@@ -304,7 +304,7 @@ Disassembly of section .text:
                	leaq	-0x40(%rbp), %rdi
                	movq	$-0x1, %rsi
                	callq	<addr>
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	je	<addr>
                	movl	$0xa, %eax
                	popq	%rbx

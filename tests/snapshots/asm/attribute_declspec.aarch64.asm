@@ -19,7 +19,6 @@ Disassembly of section .text:
 
 <exported>:
                	add	x0, x0, #0x1
-               	sxtw	x0, w0
                	ret
 
 <main>:
@@ -27,7 +26,7 @@ Disassembly of section .text:
                	mov	x29, sp
                	mov	x0, #0x3                // =3
                	bl	<addr>
-               	cmp	x0, #0x6
+               	cmp	w0, #0x6
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ldp	x29, x30, [sp], #0x10

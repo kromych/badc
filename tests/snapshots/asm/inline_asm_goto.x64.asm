@@ -55,7 +55,7 @@ Disassembly of section .text:
                	jne	<addr>
                	jmp	<addr>
                	jmp	<addr>
-               	movslq	%ecx, %rax
+               	movq	%rcx, %rax
                	retq
 
 <same_target>:

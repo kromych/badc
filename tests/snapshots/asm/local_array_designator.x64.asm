@@ -45,6 +45,5 @@ Disassembly of section .text:
                	retq
                	movl	$0x7, %edi
                	callq	<addr>
-               	movslq	%eax, %rax
                	popq	%rbp
                	retq

@@ -14,12 +14,10 @@ Disassembly of section .text:
                	brk	#0x1
 
 <f>:
-               	sxtw	x0, w0
                	ret
 
 <g>:
                	lsl	x0, x0, #1
-               	sxtw	x0, w0
                	ret
 
 <main>:

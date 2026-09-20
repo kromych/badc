@@ -72,7 +72,6 @@ Disassembly of section .text:
                	movl	%esi, -0x8(%rbp)
                	movl	-0x8(%rbp), %eax
                	orq	%rdi, %rax
-               	movl	%eax, %eax
                	leave
                	retq
 
@@ -83,7 +82,6 @@ Disassembly of section .text:
                	movl	%esi, -0x8(%rbp)
                	movl	-0x8(%rbp), %eax
                	xorq	%rdi, %rax
-               	movl	%eax, %eax
                	leave
                	retq
 
@@ -145,31 +143,26 @@ Disassembly of section .text:
 <or32_top>:
                	movl	$0x80000000, %eax       # imm = 0x80000000
                	orq	%rdi, %rax
-               	movl	%eax, %eax
                	retq
 
 <xor32_e16>:
                	movq	%rdi, %rax
                	xorq	$0xff00ff, %rax         # imm = 0xFF00FF
-               	movl	%eax, %eax
                	retq
 
 <and32_neg>:
                	movq	%rdi, %rax
                	andq	$-0x100, %rax
-               	movslq	%eax, %rax
                	retq
 
 <xor32_e2>:
                	movq	%rdi, %rax
                	xorq	$0x55555555, %rax       # imm = 0x55555555
-               	movslq	%eax, %rax
                	retq
 
 <or32_e4>:
                	movq	%rdi, %rax
                	orq	$0x33333333, %rax       # imm = 0x33333333
-               	movslq	%eax, %rax
                	retq
 
 <and_plain>:
@@ -354,7 +347,7 @@ Disassembly of section .text:
                	movl	%ebx, %edi
                	movl	$0xf0f0f0f, %esi        # imm = 0xF0F0F0F
                	callq	<addr>
-               	cmpq	%rax, %r13
+               	cmpl	%eax, %r13d
                	jne	<addr>
                	movl	%ebx, %edi
                	callq	<addr>
@@ -362,7 +355,7 @@ Disassembly of section .text:
                	movl	%ebx, %edi
                	movl	$0x80000000, %esi       # imm = 0x80000000
                	callq	<addr>
-               	cmpq	%rax, %r13
+               	cmpl	%eax, %r13d
                	jne	<addr>
                	movl	%ebx, %edi
                	callq	<addr>
@@ -370,7 +363,7 @@ Disassembly of section .text:
                	movl	%ebx, %edi
                	movl	$0xff00ff, %esi         # imm = 0xFF00FF
                	callq	<addr>
-               	cmpq	%rax, %r13
+               	cmpl	%eax, %r13d
                	jne	<addr>
                	movq	%rbx, %rdi
                	callq	<addr>
@@ -378,8 +371,7 @@ Disassembly of section .text:
                	movl	%ebx, %edi
                	movl	$0xffffff00, %esi       # imm = 0xFFFFFF00
                	callq	<addr>
-               	movslq	%eax, %rax
-               	cmpq	%rax, %r13
+               	cmpl	%eax, %r13d
                	jne	<addr>
                	movq	%rbx, %rdi
                	callq	<addr>
@@ -387,8 +379,7 @@ Disassembly of section .text:
                	movl	%ebx, %edi
                	movl	$0x55555555, %esi       # imm = 0x55555555
                	callq	<addr>
-               	movslq	%eax, %rax
-               	cmpq	%rax, %r13
+               	cmpl	%eax, %r13d
                	jne	<addr>
                	movq	%rbx, %rdi
                	callq	<addr>
@@ -396,8 +387,7 @@ Disassembly of section .text:
                	movl	%ebx, %edi
                	movl	$0x33333333, %esi       # imm = 0x33333333
                	callq	<addr>
-               	movslq	%eax, %rax
-               	cmpq	%rax, %r13
+               	cmpl	%eax, %r13d
                	jne	<addr>
                	movq	%rbx, %rdi
                	callq	<addr>
@@ -452,7 +442,7 @@ Disassembly of section .text:
                	testq	%rdx, %rdx
                	je	<addr>
                	orq	$0x8, %rcx
-               	cmpq	%rcx, %rax
+               	cmpl	%ecx, %eax
                	jne	<addr>
                	incq	%r12
                	cmpl	$0x8, %r12d
@@ -523,7 +513,7 @@ Disassembly of section .text:
                	retq
                	movl	$0x89abcdef, %edi       # imm = 0x89ABCDEF
                	callq	<addr>
-               	cmpq	$0x90b0d0f, %rax        # imm = 0x90B0D0F
+               	cmpl	$0x90b0d0f, %eax        # imm = 0x90B0D0F
                	je	<addr>
                	movl	$0x19, %eax
                	popq	%rbx

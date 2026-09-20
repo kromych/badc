@@ -40,7 +40,6 @@ Disassembly of section .text:
                	leaq	-0x1(%rbx), %rdi
                	callq	<addr>
                	imulq	%rbx, %rax
-               	movslq	%eax, %rax
                	popq	%rbx
                	leave
                	retq
@@ -50,6 +49,5 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	movl	$0x5, %edi
                	callq	<addr>
-               	movslq	%eax, %rax
                	popq	%rbp
                	retq

@@ -1114,7 +1114,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	addq	$0x64, %rax
-               	movslq	%eax, %rax
                	leave
                	retq
                	leaq	<rip>, %rax
@@ -1124,7 +1123,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	addq	$0x64, %rax
-               	movslq	%eax, %rax
                	leave
                	retq
                	leaq	<rip>, %rax
@@ -1134,7 +1132,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	addq	$0x64, %rax
-               	movslq	%eax, %rax
                	leave
                	retq
                	leaq	<rip>, %rax
@@ -1144,7 +1141,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	addq	$0x64, %rax
-               	movslq	%eax, %rax
                	leave
                	retq
                	leaq	<rip>, %rax
@@ -1154,7 +1150,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	addq	$0x64, %rax
-               	movslq	%eax, %rax
                	leave
                	retq
                	leaq	<rip>, %rax
@@ -1164,7 +1159,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	addq	$0x64, %rax
-               	movslq	%eax, %rax
                	leave
                	retq
                	leaq	<rip>, %rax
@@ -1174,7 +1168,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	addq	$0x64, %rax
-               	movslq	%eax, %rax
                	leave
                	retq
                	leaq	<rip>, %rax
@@ -1184,7 +1177,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	addq	$0x64, %rax
-               	movslq	%eax, %rax
                	leave
                	retq
                	leaq	<rip>, %rax
@@ -1194,7 +1186,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	addq	$0x64, %rax
-               	movslq	%eax, %rax
                	leave
                	retq
                	leaq	<rip>, %rax
@@ -1204,7 +1195,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	addq	$0x64, %rax
-               	movslq	%eax, %rax
                	leave
                	retq
                	leaq	<rip>, %rax
@@ -1214,7 +1204,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	addq	$0x64, %rax
-               	movslq	%eax, %rax
                	leave
                	retq
                	leaq	<rip>, %rax
@@ -1224,7 +1213,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	addq	$0x64, %rax
-               	movslq	%eax, %rax
                	leave
                	retq
                	leaq	<rip>, %rax
@@ -1234,7 +1222,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	addq	$0x64, %rax
-               	movslq	%eax, %rax
                	leave
                	retq
                	leaq	<rip>, %rax
@@ -1244,7 +1231,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	addq	$0x64, %rax
-               	movslq	%eax, %rax
                	leave
                	retq
                	leaq	<rip>, %rax
@@ -1254,7 +1240,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	addq	$0x64, %rax
-               	movslq	%eax, %rax
                	leave
                	retq
                	leaq	<rip>, %rax
@@ -1264,7 +1249,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	addq	$0x64, %rax
-               	movslq	%eax, %rax
                	leave
                	retq
                	leaq	<rip>, %rax
@@ -1274,7 +1258,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	addq	$0x64, %rax
-               	movslq	%eax, %rax
                	leave
                	retq
                	leaq	<rip>, %rax
@@ -1284,7 +1267,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	addq	$0x64, %rax
-               	movslq	%eax, %rax
                	leave
                	retq
                	leaq	<rip>, %rax
@@ -1294,7 +1276,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	addq	$0x64, %rax
-               	movslq	%eax, %rax
                	leave
                	retq
                	leaq	<rip>, %rax
@@ -1304,7 +1285,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	addq	$0x64, %rax
-               	movslq	%eax, %rax
                	leave
                	retq
                	leaq	<rip>, %rax
@@ -1314,7 +1294,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	addq	$0x64, %rax
-               	movslq	%eax, %rax
                	leave
                	retq
                	leaq	<rip>, %rax
@@ -1324,7 +1303,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	addq	$0x64, %rax
-               	movslq	%eax, %rax
                	leave
                	retq
                	leaq	<rip>, %rax
@@ -1334,7 +1312,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	addq	$0x64, %rax
-               	movslq	%eax, %rax
                	leave
                	retq
                	leaq	<rip>, %rax
@@ -1344,7 +1321,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	addq	$0x64, %rax
-               	movslq	%eax, %rax
                	leave
                	retq
                	leaq	<rip>, %rax
@@ -1354,7 +1330,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	addq	$0x64, %rax
-               	movslq	%eax, %rax
                	leave
                	retq
                	leaq	<rip>, %rax
@@ -1364,7 +1339,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	addq	$0x64, %rax
-               	movslq	%eax, %rax
                	leave
                	retq
                	leaq	<rip>, %rax
@@ -1374,7 +1348,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	addq	$0x64, %rax
-               	movslq	%eax, %rax
                	leave
                	retq
                	leaq	<rip>, %rax
@@ -1384,7 +1357,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	addq	$0x64, %rax
-               	movslq	%eax, %rax
                	leave
                	retq
                	leaq	<rip>, %rax
@@ -2164,7 +2136,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	addq	$0x64, %rax
-               	movslq	%eax, %rax
                	leave
                	retq
                	leaq	<rip>, %rax
@@ -2174,7 +2145,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	addq	$0x64, %rax
-               	movslq	%eax, %rax
                	leave
                	retq
                	leaq	<rip>, %rax
@@ -2184,7 +2154,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	addq	$0x64, %rax
-               	movslq	%eax, %rax
                	leave
                	retq
                	leaq	<rip>, %rax
@@ -2194,7 +2163,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	addq	$0x64, %rax
-               	movslq	%eax, %rax
                	leave
                	retq
                	leaq	<rip>, %rax
@@ -2204,7 +2172,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	addq	$0x64, %rax
-               	movslq	%eax, %rax
                	leave
                	retq
                	leaq	<rip>, %rax
@@ -2214,7 +2181,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	addq	$0x64, %rax
-               	movslq	%eax, %rax
                	leave
                	retq
                	leaq	<rip>, %rax
@@ -2224,7 +2190,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	addq	$0x64, %rax
-               	movslq	%eax, %rax
                	leave
                	retq
                	leaq	<rip>, %rax
@@ -2234,7 +2199,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	addq	$0x64, %rax
-               	movslq	%eax, %rax
                	leave
                	retq
                	leaq	<rip>, %rax
@@ -2244,7 +2208,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	addq	$0x64, %rax
-               	movslq	%eax, %rax
                	leave
                	retq
                	leaq	<rip>, %rax
@@ -2254,7 +2217,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	addq	$0x64, %rax
-               	movslq	%eax, %rax
                	leave
                	retq
                	leaq	<rip>, %rax
@@ -2264,7 +2226,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	addq	$0x64, %rax
-               	movslq	%eax, %rax
                	leave
                	retq
                	leaq	<rip>, %rax
@@ -2274,7 +2235,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	addq	$0x64, %rax
-               	movslq	%eax, %rax
                	leave
                	retq
                	leaq	<rip>, %rax
@@ -2284,7 +2244,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	addq	$0x64, %rax
-               	movslq	%eax, %rax
                	leave
                	retq
                	leaq	<rip>, %rax
@@ -2294,7 +2253,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	addq	$0x64, %rax
-               	movslq	%eax, %rax
                	leave
                	retq
                	leaq	<rip>, %rax
@@ -2304,7 +2262,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	addq	$0x64, %rax
-               	movslq	%eax, %rax
                	leave
                	retq
                	leaq	<rip>, %rax
@@ -2314,7 +2271,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	addq	$0x64, %rax
-               	movslq	%eax, %rax
                	leave
                	retq
                	leaq	<rip>, %rax
@@ -2324,7 +2280,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	addq	$0x64, %rax
-               	movslq	%eax, %rax
                	leave
                	retq
                	leaq	<rip>, %rax
@@ -2334,7 +2289,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	addq	$0x64, %rax
-               	movslq	%eax, %rax
                	leave
                	retq
                	leaq	<rip>, %rax
@@ -2344,7 +2298,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	addq	$0x64, %rax
-               	movslq	%eax, %rax
                	leave
                	retq
                	leaq	<rip>, %rax
@@ -2354,7 +2307,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	addq	$0x64, %rax
-               	movslq	%eax, %rax
                	leave
                	retq
                	leaq	<rip>, %rax
@@ -2364,7 +2316,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	addq	$0x64, %rax
-               	movslq	%eax, %rax
                	leave
                	retq
                	leaq	<rip>, %rax
@@ -2856,7 +2807,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	addq	$0x64, %rax
-               	movslq	%eax, %rax
                	popq	%rbx
                	leave
                	retq
@@ -2868,7 +2818,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	addq	$0x64, %rax
-               	movslq	%eax, %rax
                	popq	%rbx
                	leave
                	retq
@@ -2885,7 +2834,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	addq	$0x64, %rax
-               	movslq	%eax, %rax
                	popq	%rbx
                	leave
                	retq
@@ -2900,18 +2848,15 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	callq	<addr>
                	callq	<addr>
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	je	<addr>
-               	movslq	%eax, %rax
                	popq	%rbp
                	retq
                	callq	<addr>
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	je	<addr>
-               	movslq	%eax, %rax
                	popq	%rbp
                	retq
                	callq	<addr>
-               	movslq	%eax, %rax
                	popq	%rbp
                	retq

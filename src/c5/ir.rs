@@ -1822,11 +1822,11 @@ pub(crate) struct FunctionSsa {
     /// integer immediate in a GPR.
     pub ret_is_fp: bool,
     /// Declared return type tag (`Ty` encoding, unsigned bit OR'd in;
-    /// 0 when not recorded). A function's epilogue extends a sub-word
-    /// integer return to 64 bits per this type, and a caller reading
-    /// the accumulator relies on that; the emit-time tail-call
-    /// conversion compares the caller's and callee's recipes and
-    /// keeps the regular call-then-extend path when they differ.
+    /// 0 when not recorded). A sub-word integer return occupies the low
+    /// bits of the return register and the caller widens it
+    /// (`irgen::types::extend_scalar_call_result`); the emit-time
+    /// tail-call conversion compares the caller's and callee's recipes
+    /// and keeps the regular call-then-extend path when they differ.
     pub ret_type_tag: i64,
     /// Negative frame slot holding the caller-supplied indirect-result
     /// address (AAPCS64 x8) for a function returning an aggregate

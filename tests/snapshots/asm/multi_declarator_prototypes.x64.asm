@@ -26,13 +26,12 @@ Disassembly of section .text:
                	int3
 
 <f>:
-               	movslq	%edi, %rax
+               	movq	%rdi, %rax
                	retq
 
 <g>:
                	movq	%rdi, %rax
                	shlq	%rax
-               	movslq	%eax, %rax
                	retq
 
 <main>:

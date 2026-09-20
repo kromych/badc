@@ -285,33 +285,35 @@ fn ent_pc=4 n_params=0 variadic=false locals=1
     v269 Imm(0)                                           -> x0
     v270 Imm(15)                                          -> x0
     v271 Imm(15)                                          -> x0
-    v272 Imm(0)                                           -> x0
+    v272 Imm(15)                                          -> x0
     v273 Imm(0)                                           -> x0
     v274 Imm(0)                                           -> x0
-    v275 Imm(15)                                          -> x0
+    v275 Imm(0)                                           -> x0
     v276 Imm(15)                                          -> x0
-    v277 Imm(30)                                          -> x0
-    v278 Imm(30)                                          -> x0
-    v279 LoadLocal { off=-1, kind=I64 }                   -> x0
-    v280 Imm(24)                                          -> x1
-    v281 BinopI { op=add, lhs=v279, rhs_imm=24 }          -> x1
-    v282 Load { addr=v279, disp=24, kind=I64 }            -> x0
-    v283 Extend { value=v282, kind=I32 }                  -> x1
-    v284 BinopI { op=add, lhs=v282, rhs_imm=30 }          -> x0
+    v277 Imm(15)                                          -> x0
+    v278 Imm(15)                                          -> x0
+    v279 Imm(30)                                          -> x0
+    v280 Imm(30)                                          -> x0
+    v281 LoadLocal { off=-1, kind=I64 }                   -> x0
+    v282 Imm(24)                                          -> x1
+    v283 BinopI { op=add, lhs=v281, rhs_imm=24 }          -> x1
+    v284 Load { addr=v281, disp=24, kind=I64 }            -> x0
     v285 Extend { value=v284, kind=I32 }                  -> x1
-    v286 Imm(0)                                           -> x1
-    v287 Imm(0)                                           -> x1
+    v286 BinopI { op=add, lhs=v284, rhs_imm=30 }          -> x0
+    v287 Extend { value=v286, kind=I32 }                  -> x1
     v288 Imm(0)                                           -> x1
     v289 Imm(0)                                           -> x1
     v290 Imm(0)                                           -> x1
-    v291 Imm(17)                                          -> x1
-    v292 Imm(17)                                          -> x1
-    v293 BinopI { op=add, lhs=v284, rhs_imm=17 }          -> x0
-    v294 Extend { value=v293, kind=I32 }                  -> x1
-    v295 BinopI { op=sub, lhs=v293, rhs_imm=7 }           -> x0
-    v296 Extend { value=v295, kind=I32 }                  -> x0
-    v297 Extend { value=v296, kind=I32 }                  -> x1
-    terminator Return(v296)   (exit_acc=v296)
+    v291 Imm(0)                                           -> x1
+    v292 Imm(0)                                           -> x1
+    v293 Imm(17)                                          -> x1
+    v294 Imm(17)                                          -> x1
+    v295 BinopI { op=add, lhs=v286, rhs_imm=17 }          -> x0
+    v296 Extend { value=v295, kind=I32 }                  -> x1
+    v297 BinopI { op=sub, lhs=v295, rhs_imm=7 }           -> x0
+    v298 Extend { value=v297, kind=I32 }                  -> x1
+    v299 Extend { value=v297, kind=I32 }                  -> x1
+    terminator Return(v297)   (exit_acc=v297)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

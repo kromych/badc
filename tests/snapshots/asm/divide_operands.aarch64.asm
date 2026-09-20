@@ -35,7 +35,6 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	sxtw	x1, w1
                	sdiv	x0, x0, x1
-               	sxtw	x0, w0
                	ret
 
 <rem32>:
@@ -43,7 +42,6 @@ Disassembly of section .text:
                	sxtw	x1, w1
                	sdiv	x17, x0, x1
                	msub	x0, x17, x1, x0
-               	sxtw	x0, w0
                	ret
 
 <uquot32>:
@@ -299,13 +297,13 @@ Disassembly of section .text:
                	mov	x1, x23
                	bl	<addr>
                	mov	x17, #-0x3              // =-3
-               	cmp	x0, x17
+               	cmp	w0, w17
                	b.ne	<addr>
                	mov	x0, x21
                	mov	x1, x20
                	bl	<addr>
                	mov	x17, #-0x2              // =-2
-               	cmp	x0, x17
+               	cmp	w0, w17
                	b.eq	<addr>
                	mov	x0, #0x6                // =6
                	ldp	x29, x30, [sp, #0x70]
@@ -363,7 +361,7 @@ Disassembly of section .text:
                	bl	<addr>
                	mov	x17, #0x5555            // =21845
                	movk	x17, #0x5555, lsl #16
-               	cmp	x0, x17
+               	cmp	w0, w17
                	b.ne	<addr>
                	mov	x0, #0xffffffff         // =4294967295
                	mov	x1, #0xa                // =10

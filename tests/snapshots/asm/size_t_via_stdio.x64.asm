@@ -34,5 +34,5 @@ Disassembly of section .text:
                	movl	%ecx, (%rax)
                	incq	%rcx
                	movl	%ecx, (%rax)
-               	movslq	%ecx, %rax
+               	movq	%rcx, %rax
                	retq

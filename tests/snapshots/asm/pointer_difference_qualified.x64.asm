@@ -113,6 +113,5 @@ Disassembly of section .text:
                	setne	%al
                	movzbq	%al, %rax
                	addq	%rcx, %rax
-               	movslq	%eax, %rax
                	leave
                	retq

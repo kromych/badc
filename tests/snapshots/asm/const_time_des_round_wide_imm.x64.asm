@@ -466,7 +466,6 @@ Disassembly of section .text:
                	andq	$0x442000, %rax         # imm = 0x442000
                	shrq	$0x6, %rax
                	orq	%rcx, %rax
-               	movl	%eax, %eax
                	popq	%rbx
                	popq	%r12
                	popq	%r13

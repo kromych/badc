@@ -28,7 +28,6 @@ Disassembly of section .text:
 <negate>:
                	movq	%rdi, %rax
                	negq	%rax
-               	movslq	%eax, %rax
                	retq
 
 <main>:

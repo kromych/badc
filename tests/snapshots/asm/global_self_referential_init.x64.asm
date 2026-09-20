@@ -28,7 +28,6 @@ Disassembly of section .text:
 <drop>:
                	movq	%rdi, %rax
                	negq	%rax
-               	movslq	%eax, %rax
                	retq
 
 <main>:

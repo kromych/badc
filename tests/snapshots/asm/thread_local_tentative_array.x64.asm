@@ -81,7 +81,6 @@ Disassembly of section .text:
                	callq	<addr>
                	cmpq	$0x63, %rax
                	je	<addr>
-               	movslq	%eax, %rax
                	popq	%rbp
                	retq
                	movq	%fs:0x0, %rax

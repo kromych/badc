@@ -59,7 +59,6 @@ Disassembly of section .text:
                	leaq	-0x8(%rbp), %rsi
                	callq	*%rbx
                	movq	-0x8(%rbp), %rax
-               	movslq	%eax, %rax
                	popq	%rbx
                	popq	%r12
                	leave

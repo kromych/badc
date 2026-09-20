@@ -25,7 +25,6 @@ Disassembly of section .text:
 
 <add2>:
                	add	x0, x0, x1
-               	mov	w0, w0
                	ret
 
 <main>:

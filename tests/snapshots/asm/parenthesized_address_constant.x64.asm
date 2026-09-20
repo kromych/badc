@@ -27,7 +27,6 @@ Disassembly of section .text:
 
 <fn>:
                	leaq	0x64(%rdi), %rax
-               	movslq	%eax, %rax
                	retq
 
 <check>:
@@ -355,7 +354,6 @@ Disassembly of section .text:
                	callq	<addr>
                	testl	%eax, %eax
                	je	<addr>
-               	movslq	%eax, %rax
                	popq	%rbp
                	retq
                	xorl	%eax, %eax

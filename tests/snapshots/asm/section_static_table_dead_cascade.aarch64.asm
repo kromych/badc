@@ -16,12 +16,10 @@ Disassembly of section .text:
 <used_setup>:
                	mov	x17, #0x3               // =3
                	mul	x0, x0, x17
-               	sxtw	x0, w0
                	ret
 
 <live_setup>:
                	add	x0, x0, #0x7
-               	sxtw	x0, w0
                	ret
 
 <main>:

@@ -127,7 +127,6 @@ Disassembly of section .text:
                	cmpq	$0x24, %rax
                	jne	<addr>
                	xorl	%eax, %eax
-               	movslq	%eax, %rax
                	popq	%rbx
                	leave
                	retq

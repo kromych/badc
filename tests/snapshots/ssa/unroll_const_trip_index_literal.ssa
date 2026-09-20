@@ -304,8 +304,8 @@ fn ent_pc=2 n_params=2 variadic=false locals=0
     v298 Imm(0)                                           -> x1
     v299 Imm(32)                                          -> x1
     v300 Imm(32)                                          -> x1
-    v301 Store { addr=v270, disp=4, value=v300, kind=I32 } -> -
-    v302 Imm(32)                                          -> x1
+    v301 Imm(32)                                          -> x1
+    v302 Store { addr=v270, disp=4, value=v301, kind=I32 } -> -
     v303 Imm(0)                                           -> x1
     v304 BinopI { op=add, lhs=v1, rhs_imm=384 }           -> x1
     v305 Imm(0)                                           -> x1
@@ -370,8 +370,8 @@ fn ent_pc=2 n_params=2 variadic=false locals=0
     v364 Imm(1)                                           -> x8
     v365 Imm(33)                                          -> x8
     v366 Imm(33)                                          -> x8
-    v367 Store { addr=v354, disp=4, value=v366, kind=I32 } -> -
-    v368 Imm(33)                                          -> x8
+    v367 Imm(33)                                          -> x8
+    v368 Store { addr=v354, disp=4, value=v367, kind=I32 } -> -
     v369 Imm(0)                                           -> x8
     v370 BinopI { op=add, lhs=v1, rhs_imm=384 }           -> x8
     v371 Imm(1)                                           -> x8
@@ -436,8 +436,8 @@ fn ent_pc=2 n_params=2 variadic=false locals=0
     v430 Imm(2)                                           -> x1
     v431 Imm(34)                                          -> x1
     v432 Imm(34)                                          -> x1
-    v433 Store { addr=v412, disp=4, value=v432, kind=I32 } -> -
-    v434 Imm(34)                                          -> x1
+    v433 Imm(34)                                          -> x1
+    v434 Store { addr=v412, disp=4, value=v433, kind=I32 } -> -
     v435 Imm(0)                                           -> x1
     v436 BinopI { op=add, lhs=v1, rhs_imm=384 }           -> x1
     v437 Imm(2)                                           -> x1

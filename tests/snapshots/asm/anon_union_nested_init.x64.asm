@@ -119,6 +119,5 @@ Disassembly of section .text:
                	movslq	-0x10(%rbp), %rdi
                	movslq	-0x8(%rbp), %rsi
                	callq	<addr>
-               	movslq	%eax, %rax
                	leave
                	retq

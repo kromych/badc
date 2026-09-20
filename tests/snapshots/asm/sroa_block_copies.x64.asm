@@ -997,7 +997,7 @@ Disassembly of section .text:
                	movq	%rax, %rbx
                	orq	$0x10000, %rbx          # imm = 0x10000
                	callq	<addr>
-               	cmpq	%rbx, %rax
+               	cmpl	%ebx, %eax
                	je	<addr>
                	movl	$0x1c, %eax
                	popq	%rbx

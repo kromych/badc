@@ -1277,7 +1277,7 @@ Disassembly of section .text:
                	movq	%r9, %r10
                	movups	(%r10), %xmm0
                	callq	<addr>
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	jne	<addr>
                	xorl	%eax, %eax
                	leave
@@ -1341,7 +1341,6 @@ Disassembly of section .text:
                	movq	%r9, %r10
                	movups	(%r10), %xmm0
                	callq	<addr>
-               	movslq	%eax, %rax
                	leave
                	retq
 
@@ -2478,7 +2477,7 @@ Disassembly of section .text:
                	movq	%r9, %r10
                	movups	(%r10), %xmm0
                	callq	<addr>
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	jne	<addr>
                	movl	$0x21, %eax
                	popq	%rbx
@@ -2504,7 +2503,7 @@ Disassembly of section .text:
                	movq	%r9, %r10
                	movups	(%r10), %xmm0
                	callq	<addr>
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	jne	<addr>
                	movl	$0x22, %eax
                	popq	%rbx
@@ -2537,7 +2536,7 @@ Disassembly of section .text:
                	movq	%r9, %r10
                	movups	(%r10), %xmm0
                	callq	<addr>
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	jne	<addr>
                	movl	$0x23, %eax
                	popq	%rbx
@@ -2579,7 +2578,7 @@ Disassembly of section .text:
                	movq	%r9, %r10
                	movups	(%r10), %xmm0
                	callq	<addr>
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	jne	<addr>
                	movl	$0x24, %eax
                	popq	%rbx
@@ -4439,7 +4438,7 @@ Disassembly of section .text:
                	leave
                	retq
                	callq	<addr>
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	jne	<addr>
                	movl	$0x53, %eax
                	popq	%rbx

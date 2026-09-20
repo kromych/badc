@@ -116,7 +116,6 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldur	x0, [x29, #-0x58]
-               	sxtw	x0, w0
                	add	sp, sp, #0x70
                	ldp	x29, x30, [sp], #0x10
                	ret

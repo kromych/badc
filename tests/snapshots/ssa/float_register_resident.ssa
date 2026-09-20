@@ -172,8 +172,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v166 Imm(0)                                           -> x0
     v167 Imm(0)                                           -> x0 [f32]
     v168 FpCast { kind=FpToInt, value=v160 }              -> x0
-    v169 Extend { value=v168, kind=I32 }                  -> x0
-    terminator Return(v169)   (exit_acc=v169)
+    v169 Extend { value=v168, kind=I32 }                  -> x1
+    terminator Return(v168)   (exit_acc=v168)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

@@ -137,7 +137,7 @@ Disassembly of section .text:
                	addq	$0x10, %rbx
                	cmpl	$0x30, %ebx
                	jl	<addr>
-               	movl	%r13d, %eax
+               	movq	%r13, %rax
                	popq	%rbx
                	popq	%r12
                	popq	%r13

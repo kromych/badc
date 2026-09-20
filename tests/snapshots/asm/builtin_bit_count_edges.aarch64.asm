@@ -664,7 +664,6 @@ Disassembly of section .text:
                	add	x20, x20, #0x1
                	cbz	w0, <addr>
                	cbz	w0, <addr>
-               	sxtw	x0, w0
                	ldp	x29, x30, [sp, #0x20]
                	ldr	x22, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x30

@@ -22,7 +22,6 @@ Disassembly of section .text:
                	b.lt	<addr>
                	mov	x17, #0x6               // =6
                	mul	x0, x1, x17
-               	sxtw	x0, w0
                	ret
 
 <main>:
@@ -34,5 +33,4 @@ Disassembly of section .text:
                	b.lt	<addr>
                	mov	x17, #0x6               // =6
                	mul	x0, x1, x17
-               	sxtw	x0, w0
                	ret

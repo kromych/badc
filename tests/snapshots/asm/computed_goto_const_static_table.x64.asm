@@ -57,7 +57,6 @@ Disassembly of section .text:
                	movzbq	(%rdi,%rdx), %rdx
                	movq	(%rsi,%rdx,8), %rdx
                	jmpq	*%rdx
-               	movslq	%eax, %rax
                	retq
 
 <interp_decl_const>:
@@ -92,7 +91,6 @@ Disassembly of section .text:
                	movzbq	(%rdi,%rdx), %rdx
                	movq	(%rsi,%rdx,8), %rdx
                	jmpq	*%rdx
-               	movslq	%eax, %rax
                	retq
 
 <interp_long>:
@@ -127,7 +125,6 @@ Disassembly of section .text:
                	movzbq	(%rdi,%rdx), %rdx
                	movq	(%rsi,%rdx,8), %rdx
                	jmpq	*%rdx
-               	movslq	%eax, %rax
                	retq
 
 <main>:
@@ -135,49 +132,49 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	leaq	<rip>, %rdi
                	callq	<addr>
-               	cmpq	$0x7, %rax
+               	cmpl	$0x7, %eax
                	je	<addr>
                	movl	$0x1, %eax
                	popq	%rbp
                	retq
                	leaq	<rip>, %rdi
                	callq	<addr>
-               	cmpq	$0xa, %rax
+               	cmpl	$0xa, %eax
                	je	<addr>
                	movl	$0x2, %eax
                	popq	%rbp
                	retq
                	leaq	<rip>, %rdi
                	callq	<addr>
-               	cmpq	$0x7, %rax
+               	cmpl	$0x7, %eax
                	je	<addr>
                	movl	$0x3, %eax
                	popq	%rbp
                	retq
                	leaq	<rip>, %rdi
                	callq	<addr>
-               	cmpq	$0x7, %rax
+               	cmpl	$0x7, %eax
                	je	<addr>
                	movl	$0x4, %eax
                	popq	%rbp
                	retq
                	leaq	<rip>, %rdi
                	callq	<addr>
-               	cmpq	$0xa, %rax
+               	cmpl	$0xa, %eax
                	je	<addr>
                	movl	$0x5, %eax
                	popq	%rbp
                	retq
                	leaq	<rip>, %rdi
                	callq	<addr>
-               	cmpq	$0x7, %rax
+               	cmpl	$0x7, %eax
                	je	<addr>
                	movl	$0x6, %eax
                	popq	%rbp
                	retq
                	leaq	<rip>, %rdi
                	callq	<addr>
-               	cmpq	$0xa, %rax
+               	cmpl	$0xa, %eax
                	je	<addr>
                	movl	$0x7, %eax
                	popq	%rbp

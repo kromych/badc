@@ -30,7 +30,6 @@ Disassembly of section .text:
                	sub	x0, x20, #0x2
                	bl	<addr>
                	add	x0, x21, x0
-               	sxtw	x0, w0
                	ldp	x29, x30, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x20
                	ret
@@ -42,7 +41,7 @@ Disassembly of section .text:
                	mov	x0, #0x14               // =20
                	bl	<addr>
                	mov	x17, #0x1a6d            // =6765
-               	cmp	x0, x17
+               	cmp	w0, w17
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	add	sp, sp, #0x10

@@ -23,5 +23,5 @@ Disassembly of section .text:
                	str	w1, [x0]
                	add	x1, x1, #0x1
                	str	w1, [x0]
-               	sxtw	x0, w1
+               	mov	x0, x1
                	ret

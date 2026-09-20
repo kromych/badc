@@ -363,44 +363,44 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v269 BinopI { op=lt, lhs=v7, rhs_imm=-5 }             -> x0
     terminator Bz { cond=v269, target=b53, fall=b51 }   (exit_acc=v269)
   block 51  start_pc=0
-    v286 Imm(-1)                                          -> x0
-    terminator Jmp(b52)   (exit_acc=v286)
+    v288 Imm(-1)                                          -> x0
+    terminator Jmp(b52)   (exit_acc=v288)
   block 52  start_pc=0
     v272 Imm(38)                                          -> x0
     terminator Return(v272)   (exit_acc=v272)
   block 53  start_pc=0
-    v287 BinopI { op=gt, lhs=v7, rhs_imm=5 }              -> x0
-    terminator Bz { cond=v287, target=b55, fall=b54 }   (exit_acc=v287)
+    v289 BinopI { op=gt, lhs=v7, rhs_imm=5 }              -> x0
+    terminator Bz { cond=v289, target=b55, fall=b54 }   (exit_acc=v289)
   block 54  start_pc=0
-    v288 Imm(1)                                           -> x0
-    v289 Imm(2147483649)                                  -> x0
-    v290 Imm(-2147483647)                                 -> x0
-    v291 Imm(0)                                           -> x0
-    v292 Imm(100)                                         -> x0
-    v293 Imm(-2147483647)                                 -> x0
-    v294 Imm(0)                                           -> x0
-    v295 Imm(100)                                         -> x0
-    v296 Imm(1)                                           -> x0
-    v297 Imm(-1)                                          -> x0
-    v298 Imm(0)                                           -> x0
-    v299 Imm(0)                                           -> x0
+    v290 Imm(1)                                           -> x0
+    v291 Imm(2147483649)                                  -> x0
+    v292 Imm(-2147483647)                                 -> x0
+    v293 Imm(0)                                           -> x0
+    v294 Imm(100)                                         -> x0
+    v295 Imm(-2147483647)                                 -> x0
+    v296 Imm(0)                                           -> x0
+    v297 Imm(100)                                         -> x0
+    v298 Imm(1)                                           -> x0
+    v299 Imm(-1)                                          -> x0
     v300 Imm(0)                                           -> x0
     v301 Imm(0)                                           -> x0
     v302 Imm(0)                                           -> x0
     v303 Imm(0)                                           -> x0
-    v304 Imm(1)                                           -> x0
+    v304 Imm(0)                                           -> x0
     v305 Imm(0)                                           -> x0
-    v306 Imm(0)                                           -> x0
+    v306 Imm(1)                                           -> x0
     v307 Imm(0)                                           -> x0
     v308 Imm(0)                                           -> x0
-    v309 Imm(7)                                           -> x0
-    v310 Imm(-306783378)                                  -> x0
-    v311 Imm(0)                                           -> x0
-    v312 Imm(0)                                           -> x0
-    terminator Return(v312)   (exit_acc=v312)
-  block 55  start_pc=0
+    v309 Imm(0)                                           -> x0
+    v310 Imm(0)                                           -> x0
+    v311 Imm(7)                                           -> x0
+    v312 Imm(-306783378)                                  -> x0
     v313 Imm(0)                                           -> x0
-    terminator Jmp(b52)   (exit_acc=v313)
+    v314 Imm(0)                                           -> x0
+    terminator Return(v314)   (exit_acc=v314)
+  block 55  start_pc=0
+    v315 Imm(0)                                           -> x0
+    terminator Jmp(b52)   (exit_acc=v315)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

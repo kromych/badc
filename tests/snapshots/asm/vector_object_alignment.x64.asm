@@ -440,7 +440,6 @@ Disassembly of section .text:
                	movups	(%r10), %xmm0
                	callq	<addr>
                	addq	$0x40, %rsp
-               	movslq	%eax, %rax
                	leaq	-0x70(%rbp), %rsp
                	leave
                	retq
@@ -467,6 +466,5 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	callq	<addr>
-               	movslq	%eax, %rax
                	popq	%rbp
                	retq

@@ -168,12 +168,13 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     terminator Jmp(b36)   (exit_acc=v94)
   block 36  start_pc=0
     v104 Phi { incoming=[b35:v94, b40:v98, b42:v102, b43:v6], kind=I64 } -> x0
-    v105 Imm(0)                                           -> x2
-    v106 Extend { value=v104, kind=I32 }                  -> x2
-    v107 BinopI { op=ne, lhs=v104, rhs_imm=0 }            -> x2
-    terminator Bz { cond=v104, target=b38, fall=b37 }   (low word)   (exit_acc=v107)
+    v105 Extend { value=v104, kind=I32 }                  -> x2
+    v106 Imm(0)                                           -> x2
+    v107 Imm(0)                                           -> x2
+    v108 BinopI { op=ne, lhs=v104, rhs_imm=0 }            -> x2
+    terminator Bz { cond=v104, target=b38, fall=b37 }   (low word)   (exit_acc=v108)
   block 37  start_pc=0
-    v88  Extend { value=v104, kind=I32 }                  -> x1
+    v88  Imm(0)                                           -> x1
     v89  Extend { value=v104, kind=I32 }                  -> x1
     terminator Return(v104)   (exit_acc=v104)
   block 38  start_pc=0

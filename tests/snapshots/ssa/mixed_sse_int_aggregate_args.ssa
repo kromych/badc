@@ -35,6 +35,7 @@ fn ent_pc=1 n_params=5 variadic=false locals=0
   block 3  start_pc=0
     v47  Phi { incoming=[b2:v23, b5:v25, b8:v33, b10:v36, b13:v45, b14:v46], kind=I64 } -> x0
     v48  Extend { value=v47, kind=I32 }                   -> x1
+    v49  Extend { value=v47, kind=I32 }                   -> x1
     terminator Return(v47)   (exit_acc=v47)
   block 4  start_pc=0
     v24  BinopI { op=ne, lhs=v1, rhs_imm=4 }              -> x0
@@ -138,6 +139,8 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v58  Phi { incoming=[b10:v42, b2:v44, b5:v47, b8:v56, b9:v57], kind=I64 } -> x0
     v59  Extend { value=v58, kind=I32 }                   -> x1
     v60  Extend { value=v58, kind=I32 }                   -> x1
+    v61  Extend { value=v58, kind=I32 }                   -> x1
+    v62  Extend { value=v58, kind=I32 }                   -> x1
     terminator Return(v58)   (exit_acc=v58)
   block 4  start_pc=0
     v45  Imm(4608308318706860032)                         -> x0

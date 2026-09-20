@@ -15,7 +15,6 @@ Disassembly of section .text:
 
 <sub>:
                	sub	x0, x0, x1
-               	sxtw	x0, w0
                	ret
 
 <pick>:

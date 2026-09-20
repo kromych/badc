@@ -59,19 +59,19 @@ Disassembly of section .text:
                	pushq	%rbx
                	movl	$0x11, %edi
                	callq	<addr>
-               	movq	%rax, %rbx
+               	movslq	%eax, %rbx
                	movl	$0x5, %edi
                	callq	<addr>
-               	movslq	%ebx, %rcx
-               	movslq	%eax, %rsi
-               	movq	%rcx, %rax
+               	movslq	%eax, %rcx
+               	movq	%rbx, %rax
                	cqto
-               	idivq	%rsi
-               	movq	%rax, %rdi
-               	movq	%rdi, %rax
-               	imulq	%rsi, %rax
+               	idivq	%rcx
+               	movq	%rax, %rsi
+               	movq	%rsi, %rax
+               	imulq	%rcx, %rax
+               	movq	%rbx, %rcx
                	subq	%rax, %rcx
-               	cmpl	$0x3, %edi
+               	cmpl	$0x3, %esi
                	jne	<addr>
                	cmpl	$0x2, %ecx
                	je	<addr>
@@ -81,18 +81,17 @@ Disassembly of section .text:
                	retq
                	movq	$-0x11, %rdi
                	callq	<addr>
-               	movq	%rax, %rbx
+               	movslq	%eax, %rbx
                	movl	$0x5, %edi
                	callq	<addr>
-               	movslq	%ebx, %rsi
-               	movslq	%eax, %rdi
-               	movq	%rsi, %rax
+               	movslq	%eax, %rsi
+               	movq	%rbx, %rax
                	cqto
-               	idivq	%rdi
+               	idivq	%rsi
                	movq	%rax, %rcx
                	movq	%rcx, %rdx
-               	imulq	%rdi, %rdx
-               	movq	%rsi, %rax
+               	imulq	%rsi, %rdx
+               	movq	%rbx, %rax
                	subq	%rdx, %rax
                	cmpl	$-0x3, %ecx
                	jne	<addr>

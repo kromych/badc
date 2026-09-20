@@ -131,9 +131,8 @@ Disassembly of section .text:
                	movl	$0x9, -0x28(%rbp)
                	movslq	-0x28(%rbp), %rdi
                	callq	<addr>
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	je	<addr>
-               	movslq	%eax, %rax
                	popq	%rbx
                	leave
                	retq

@@ -233,8 +233,7 @@ impl<'a> Walker<'a> {
                 b.set_call_arg_aggs(call, arg_aggs);
             }
             let ret_temp = self.call_ret_temp(b, conv, ty);
-            let extend = !self.symbols[sym as usize].defined_here;
-            return Ok(self.call_result(b, call, ret_temp, ty, extend));
+            return Ok(self.call_result(b, call, ret_temp, ty, true));
         }
         // A variadic callee reaching here is on a `variadic_int_only`
         // host (the Microsoft conventions), where every argument rides
@@ -265,8 +264,7 @@ impl<'a> Walker<'a> {
         if !arg_aggs.is_empty() {
             b.set_call_arg_aggs(call, arg_aggs);
         }
-        let extend = !self.symbols[sym as usize].defined_here;
-        Ok(self.call_result(b, call, ret_temp, ty, extend))
+        Ok(self.call_result(b, call, ret_temp, ty, true))
     }
 
     /// Tag each by-value aggregate argument with its host-ABI layout, so the

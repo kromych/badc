@@ -18,7 +18,6 @@ Disassembly of section .text:
                	b.ge	<addr>
                	mov	x1, #0x1                // =1
                	sub	x0, x1, x0
-               	sxtw	x0, w0
                	ret
                	add	x0, x0, #0x1
                	b	<addr>

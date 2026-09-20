@@ -37,7 +37,6 @@ Disassembly of section .text:
                	ret
                	ldursw	x0, [x29, #-0x8]
                	add	x0, x0, #0x64
-               	sxtw	x0, w0
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret

@@ -29,7 +29,6 @@ Disassembly of section .text:
                	movq	%rdi, %rax
                	shlq	%rax
                	incq	%rax
-               	movslq	%eax, %rax
                	retq
 
 <main>:

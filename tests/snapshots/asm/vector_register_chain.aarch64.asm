@@ -176,7 +176,7 @@ Disassembly of section .text:
                	add	x20, x20, #0x10
                	cmp	w20, #0x30
                	b.lt	<addr>
-               	mov	w0, w22
+               	mov	x0, x22
                	ldp	x29, x30, [sp, #0x90]
                	ldr	x24, [sp, #0x20]
                	ldp	x22, x23, [sp, #0x10]

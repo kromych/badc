@@ -68,12 +68,10 @@ Disassembly of section .text:
 <sum3>:
                	leaq	(%rdi,%rsi), %rax
                	addq	%rdx, %rax
-               	movslq	%eax, %rax
                	retq
 
 <add>:
                	leaq	(%rdi,%rsi), %rax
-               	movslq	%eax, %rax
                	retq
 
 <label>:

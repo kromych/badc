@@ -254,32 +254,32 @@ Disassembly of section .text:
                	cmp	x0, #0x7
                	b.ne	<addr>
                	bl	<addr>
-               	cbnz	x0, <addr>
+               	cbnz	w0, <addr>
                	mov	x0, #0x3                // =3
                	add	sp, sp, #0x140
                	ldp	x29, x30, [sp], #0x10
                	ret
                	bl	<addr>
-               	cbnz	x0, <addr>
+               	cbnz	w0, <addr>
                	mov	x0, #0x4                // =4
                	add	sp, sp, #0x140
                	ldp	x29, x30, [sp], #0x10
                	ret
                	bl	<addr>
-               	cbnz	x0, <addr>
+               	cbnz	w0, <addr>
                	mov	x0, #0x5                // =5
                	add	sp, sp, #0x140
                	ldp	x29, x30, [sp], #0x10
                	ret
                	bl	<addr>
-               	cbnz	x0, <addr>
+               	cbnz	w0, <addr>
                	mov	x0, #0x6                // =6
                	add	sp, sp, #0x140
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x1                // =1
                	bl	<addr>
-               	cbnz	x0, <addr>
+               	cbnz	w0, <addr>
                	mov	x0, #0x7                // =7
                	add	sp, sp, #0x140
                	ldp	x29, x30, [sp], #0x10

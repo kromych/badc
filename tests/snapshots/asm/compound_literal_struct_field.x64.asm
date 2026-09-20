@@ -50,6 +50,5 @@ Disassembly of section .text:
                	movl	$0xb, %edi
                	movl	$0x16, %esi
                	callq	<addr>
-               	movslq	%eax, %rax
                	leave
                	retq

@@ -129,7 +129,6 @@ Disassembly of section .text:
                	movq	%rdi, %rax
                	imulq	%rsi, %rax
                	incq	%rax
-               	movslq	%eax, %rax
                	retq
 
 <main>:

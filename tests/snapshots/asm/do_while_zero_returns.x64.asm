@@ -30,10 +30,8 @@ Disassembly of section .text:
                	jge	<addr>
                	movq	%rdi, %rax
                	negq	%rax
-               	movslq	%eax, %rax
                	retq
                	leaq	0x1(%rdi), %rax
-               	movslq	%eax, %rax
                	retq
 
 <classify>:

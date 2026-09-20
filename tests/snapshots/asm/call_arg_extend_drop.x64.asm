@@ -44,7 +44,6 @@ Disassembly of section .text:
                	leaq	-0x2(%rbx), %rdi
                	callq	<addr>
                	addq	%r12, %rax
-               	movslq	%eax, %rax
                	popq	%rbx
                	popq	%r12
                	popq	%rbp
@@ -56,7 +55,7 @@ Disassembly of section .text:
                	subq	$0x10, %rsp
                	movl	$0x14, %edi
                	callq	<addr>
-               	cmpq	$0x1a6d, %rax           # imm = 0x1A6D
+               	cmpl	$0x1a6d, %eax           # imm = 0x1A6D
                	je	<addr>
                	movl	$0x2, %eax
                	leave

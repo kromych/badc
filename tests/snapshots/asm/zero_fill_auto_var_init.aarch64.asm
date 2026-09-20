@@ -200,7 +200,6 @@ Disassembly of section .text:
                	mov	x1, #0x3                // =3
                	bl	<addr>
                	add	x0, x20, x0
-               	sxtw	x0, w0
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x20, [sp], #0x20
                	ret

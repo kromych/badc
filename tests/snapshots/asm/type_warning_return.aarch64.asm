@@ -17,7 +17,6 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	x0, [x0]
-               	sxtw	x0, w0
                	ret
 
 <ret_int_as_ptr>:
@@ -29,7 +28,6 @@ Disassembly of section .text:
                	ret
 
 <ret_ok>:
-               	sxtw	x0, w0
                	ret
 
 <main>:

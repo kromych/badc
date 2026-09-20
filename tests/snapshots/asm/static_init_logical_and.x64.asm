@@ -55,11 +55,11 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	xorl	%edi, %edi
                	callq	<addr>
-               	cmpq	$0xd, %rax
+               	cmpl	$0xd, %eax
                	jne	<addr>
                	movl	$0x1, %edi
                	callq	<addr>
-               	cmpq	$0x17, %rax
+               	cmpl	$0x17, %eax
                	je	<addr>
                	movl	$0x3, %eax
                	popq	%rbp

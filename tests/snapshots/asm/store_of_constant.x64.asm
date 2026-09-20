@@ -412,7 +412,7 @@ Disassembly of section .text:
                	leaq	-0x8(%rbp), %rdi
                	movq	%rdi, %rsi
                	callq	<addr>
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	je	<addr>
                	cmpb	$0x0, -0x8(%rbp)
                	je	<addr>
@@ -422,7 +422,7 @@ Disassembly of section .text:
                	leaq	-0x8(%rbp), %rdi
                	movq	%rdi, %rsi
                	callq	<addr>
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	je	<addr>
                	movl	$0x11, %eax
                	leave

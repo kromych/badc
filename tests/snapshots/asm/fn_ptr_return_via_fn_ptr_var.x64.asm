@@ -27,12 +27,10 @@ Disassembly of section .text:
 
 <g>:
                	leaq	0x64(%rdi), %rax
-               	movslq	%eax, %rax
                	retq
 
 <h>:
                	leaq	0xc8(%rdi), %rax
-               	movslq	%eax, %rax
                	retq
 
 <f>:
@@ -60,7 +58,6 @@ Disassembly of section .text:
                	movl	$0x3, %edi
                	callq	*%rax
                	addq	%r12, %rax
-               	movslq	%eax, %rax
                	popq	%rbx
                	popq	%r12
                	popq	%rbp

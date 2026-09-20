@@ -47,7 +47,7 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	callq	<addr>
-               	cmpq	$0x2, %rax
+               	cmpl	$0x2, %eax
                	je	<addr>
                	movl	$0x3, %eax
                	popq	%rbp

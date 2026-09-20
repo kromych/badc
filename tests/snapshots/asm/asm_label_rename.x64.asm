@@ -41,13 +41,13 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	callq	<addr>
-               	cmpq	$0x21, %rax
+               	cmpl	$0x21, %eax
                	je	<addr>
                	movl	$0x3, %eax
                	popq	%rbp
                	retq
                	callq	<addr>
-               	cmpq	$0x58, %rax
+               	cmpl	$0x58, %eax
                	je	<addr>
                	movl	$0xc, %eax
                	popq	%rbp
@@ -97,8 +97,6 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	popq	%rbp
                	retq
-		...
-               	addb	%al, (%rax)
 
 <badc_real_sect>:
                	movl	$0x58, %eax

@@ -16,11 +16,9 @@ Disassembly of section .text:
 <add3>:
                	add	x0, x0, x1
                	add	x0, x0, x2
-               	sxtw	x0, w0
                	ret
 
 <id>:
-               	sxtw	x0, w0
                	ret
 
 <main>:

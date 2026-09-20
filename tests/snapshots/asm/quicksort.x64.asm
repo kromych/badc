@@ -56,11 +56,11 @@ Disassembly of section .text:
                	cmpl	%edx, %esi
                	jl	<addr>
                	incq	%rax
-               	movslq	%eax, %rax
-               	movslq	(%rdi,%rax,4), %rcx
-               	movslq	(%rdi,%rdx,4), %rsi
-               	movl	%esi, (%rdi,%rax,4)
-               	movl	%ecx, (%rdi,%rdx,4)
+               	movslq	%eax, %rcx
+               	movslq	(%rdi,%rcx,4), %rsi
+               	movslq	(%rdi,%rdx,4), %r8
+               	movl	%r8d, (%rdi,%rcx,4)
+               	movl	%esi, (%rdi,%rdx,4)
                	popq	%rbx
                	leave
                	retq

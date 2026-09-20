@@ -60,41 +60,44 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v9   Imm(101)                                         -> x0
     v10  Imm(101)                                         -> x0
     v11  Imm(0)                                           -> x0
-    v12  Imm(0)                                           -> x0
-    v13  Imm(2)                                           -> x0
+    v12  Imm(101)                                         -> x0
+    v13  Imm(0)                                           -> x0
     v14  Imm(2)                                           -> x0
-    v15  Imm(0)                                           -> x0
-    v16  Imm(1)                                           -> x0
+    v15  Imm(2)                                           -> x0
+    v16  Imm(0)                                           -> x0
     v17  Imm(1)                                           -> x0
-    v18  Imm(2)                                           -> x0
-    v19  Imm(0)                                           -> x0
-    v20  Imm(2)                                           -> x0
-    v21  Imm(102)                                         -> x0
+    v18  Imm(1)                                           -> x0
+    v19  Imm(2)                                           -> x0
+    v20  Imm(0)                                           -> x0
+    v21  Imm(2)                                           -> x0
     v22  Imm(102)                                         -> x0
     v23  Imm(102)                                         -> x0
-    v24  Imm(0)                                           -> x0
+    v24  Imm(102)                                         -> x0
     v25  Imm(0)                                           -> x0
-    v26  Imm(3)                                           -> x0
-    v27  Imm(3)                                           -> x0
-    v28  Imm(0)                                           -> x0
-    v29  Imm(0)                                           -> x0
-    v30  Imm(1)                                           -> x0
-    v31  Imm(3)                                           -> x0
-    v32  Imm(0)                                           -> x0
+    v26  Imm(102)                                         -> x0
+    v27  Imm(0)                                           -> x0
+    v28  Imm(3)                                           -> x0
+    v29  Imm(3)                                           -> x0
+    v30  Imm(0)                                           -> x0
+    v31  Imm(0)                                           -> x0
+    v32  Imm(1)                                           -> x0
     v33  Imm(3)                                           -> x0
-    v34  Imm(103)                                         -> x0
-    v35  Imm(103)                                         -> x0
+    v34  Imm(0)                                           -> x0
+    v35  Imm(3)                                           -> x0
     v36  Imm(103)                                         -> x0
-    v37  Imm(0)                                           -> x0
-    v38  Imm(0)                                           -> x0
-    v39  Imm(99)                                          -> x0
-    v40  Imm(99)                                          -> x0
+    v37  Imm(103)                                         -> x0
+    v38  Imm(103)                                         -> x0
+    v39  Imm(0)                                           -> x0
+    v40  Imm(103)                                         -> x0
     v41  Imm(0)                                           -> x0
-    v42  Imm(0)                                           -> x0
-    v43  Imm(0)                                           -> x0
-    v44  Imm(-1)                                          -> x0
+    v42  Imm(99)                                          -> x0
+    v43  Imm(99)                                          -> x0
+    v44  Imm(0)                                           -> x0
     v45  Imm(0)                                           -> x0
-    terminator Return(v45)   (exit_acc=v45)
+    v46  Imm(0)                                           -> x0
+    v47  Imm(-1)                                          -> x0
+    v48  Imm(0)                                           -> x0
+    terminator Return(v48)   (exit_acc=v48)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

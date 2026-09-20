@@ -27,13 +27,11 @@ Disassembly of section .text:
 
 <do_add>:
                	leaq	(%rdi,%rsi), %rax
-               	movslq	%eax, %rax
                	retq
 
 <do_sub>:
                	movq	%rdi, %rax
                	subq	%rsi, %rax
-               	movslq	%eax, %rax
                	retq
 
 <main>:

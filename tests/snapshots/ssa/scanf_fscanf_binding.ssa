@@ -90,9 +90,9 @@ fn ent_pc=1 n_params=2 variadic=false locals=2
     v19  LoadLocal { off=-2, kind=I32 }                   -> x0
     v20  LoadLocal { off=-1, kind=I32 }                   -> x1
     v21  Binop { op=add, lhs=v19, rhs=v20 }               -> x0
-    v22  Extend { value=v21, kind=I32 }                   -> x0
-    v23  Extend { value=v22, kind=I32 }                   -> x1
-    terminator Return(v22)   (exit_acc=v22)
+    v22  Extend { value=v21, kind=I32 }                   -> x1
+    v23  Extend { value=v21, kind=I32 }                   -> x1
+    terminator Return(v21)   (exit_acc=v21)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

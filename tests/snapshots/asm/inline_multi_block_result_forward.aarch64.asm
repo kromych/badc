@@ -15,14 +15,12 @@ Disassembly of section .text:
 
 <test>:
                	lsl	x1, x0, #1
-               	sxtw	x1, w1
                	add	x2, x0, x0
                	cmp	w0, #0x3
                	b.le	<addr>
                	mov	x0, x1
                	ret
                	add	x0, x1, x2
-               	sxtw	x0, w0
                	ret
 
 <main>:

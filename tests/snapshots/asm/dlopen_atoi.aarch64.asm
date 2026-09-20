@@ -42,7 +42,7 @@ Disassembly of section .text:
                	mov	x9, x0
                	mov	x0, x1
                	blr	x9
-               	sxtw	x21, w0
+               	mov	x21, x0
                	mov	x0, x20
                	bl	<addr>
                	mov	x0, x21

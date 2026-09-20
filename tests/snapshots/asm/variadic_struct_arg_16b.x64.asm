@@ -125,6 +125,5 @@ Disassembly of section .text:
                	movb	$0x0, %al
                	callq	<addr>
                	addq	$0x10, %rsp
-               	movslq	%eax, %rax
                	leave
                	retq

@@ -864,7 +864,6 @@ Disassembly of section .text:
                	je	<addr>
                	testl	%eax, %eax
                	je	<addr>
-               	movslq	%eax, %rax
                	popq	%rbx
                	popq	%r12
                	popq	%r13

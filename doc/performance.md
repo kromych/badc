@@ -3,10 +3,13 @@
 Each fixture under `tests/perf/` is compiled by every compiler present on the
 machine and run three times; a bar is the median of the three. Shorter is
 better in each chart. One run compares compilers on one machine, so the numbers
-carry within a chart and not between machines; the per-commit series CI takes
-will be published here as it lands.
+carry within a chart and not between machines.
 
-<div id="perf">Loading <a href="data.json">data.json</a>.</div>
+The runs live in [badc-perf-data](https://github.com/kromych/badc-perf-data),
+keyed by the commit they measured, and this page reads them where they are, so
+a new run appears without rebuilding the site.
+
+<div id="perf">Loading the published runs.</div>
 
 <style>
 #perf .run { color: #57606a; font-size: 90%; margin-bottom: 1.5rem; }
@@ -71,10 +74,20 @@ will be published here as it lands.
     var names = (data.compilers || []).map(function (c) {
       return c.version ? c.name + " (" + c.version + ")" : c.name;
     });
-    root.appendChild(el("div", "run",
+    var where = el("div", "run");
+    where.appendChild(document.createTextNode(
       [m.cpu, m.system, m.arch].filter(Boolean).join(", ") +
       " · " + data.taken + " · median of " +
-      data.runs_per_fixture + " runs · " + names.join("; ")));
+      data.runs_per_fixture + " runs · " + names.join("; ") + " · "));
+    if (data.commit) {
+      var link = el("a", null, data.commit.slice(0, 12));
+      link.href = "https://github.com/kromych/badc/commit/" + data.commit;
+      where.appendChild(link);
+      where.appendChild(document.createTextNode(
+        " on " + data.branch + " · " + data.total_runs + " run" +
+        (data.total_runs === 1 ? "" : "s") + " published"));
+    }
+    root.appendChild(where);
 
     METRICS.forEach(function (metric) {
       root.appendChild(el("h3", null, metric.label));
@@ -91,16 +104,36 @@ will be published here as it lands.
     });
   }
 
-  fetch("data.json").then(function (r) { return r.json(); }).then(render)
-    .catch(function (e) {
-      document.getElementById("perf").textContent =
-        "data.json did not load: " + e;
+  // The data repository, read where it lives: raw serves any ref with
+  // `access-control-allow-origin: *`, so the site keeps no copy.
+  var BASE = "https://raw.githubusercontent.com/kromych/badc-perf-data/main/";
+
+  function fail(what) { document.getElementById("perf").textContent = what; }
+
+  function get(path) {
+    return fetch(BASE + path).then(function (r) {
+      if (!r.ok) throw new Error(path + ": " + r.status);
+      return r.json();
     });
+  }
+
+  get("index.json").then(function (index) {
+    var runs = index.runs || [];
+    if (!runs.length) return fail("No runs published yet.");
+    return get(runs[0].path).then(function (data) {
+      data.commit = runs[0].sha;
+      data.branch = runs[0].branch;
+      data.total_runs = runs.length;
+      render(data);
+    });
+  }).catch(function (e) { fail("the published runs did not load: " + e); });
 }());
 </script>
 
 The measurements come from `tests/perf/run.py --json`, which compiles each
 fixture, runs it three times and records the median wall-clock, the compile
-wall-clock and the size of the binary. `tests/perf/*.c` states what each
-fixture exercises, and why the shape it takes suits a code generator rather
-than an application.
+wall-clock and the size of the binary; `scripts/perf_publish.py` files it under
+`runs/<sha[0:2]>/<sha[2:4]>/<sha>/<runner>.json` in the data repository, points
+`branches/<name>` at it and adds it to `index.json`. `tests/perf/*.c` states
+what each fixture exercises, and why the shape it takes suits a code generator
+rather than an application.

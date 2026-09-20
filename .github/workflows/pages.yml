@@ -67,7 +67,6 @@ jobs:
           # /performance/ is where the measurement pages land; one stub today.
           mkdir -p _src/performance
           mv _src/doc/performance.md _src/performance/index.md
-          mv _src/doc/performance-data.json _src/performance/data.json
           find demos -name '*.md' -not -path '*/.cache/*' | while read -r f
           do
             mkdir -p "_src/$(dirname "$f")"

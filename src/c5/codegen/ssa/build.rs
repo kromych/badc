@@ -55,12 +55,9 @@ struct LocalCacheEntry {
 /// ImmCode produce no side effects and read no memory, so the
 /// cache only needs `switch_to` invalidation. The intra-block
 /// dominance an SSA function requires holds for repeats inside
-/// the same block. `LocalAddr` is deliberately excluded -- the
-/// per-arch emit pattern-matches `LocalAddr` immediately
-/// followed by `Load` / `Store` and fuses the pair into a
-/// single-instruction addressing mode; CSE'ing the LocalAddr
-/// breaks that adjacency and falls into the "op outside the
-/// implemented subset" branch.
+/// the same block. `LocalAddr` stays out: one address per access
+/// is what `index_fold::fold_slot_addresses` folds into the
+/// access, and it takes an address a single access consumes.
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 enum PureKey {
     Imm(i64),

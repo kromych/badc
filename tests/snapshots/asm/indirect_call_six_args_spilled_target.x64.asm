@@ -26,8 +26,7 @@ Disassembly of section .text:
                	int3
 
 <do_cmp>:
-               	movl	$0x1, %eax
-               	movl	%eax, (%rsi)
+               	movl	$0x1, (%rsi)
                	movq	(%rdx), %rax
                	imulq	$0x3e8, %rax, %rax      # imm = 0x3E8
                	movq	(%r8), %rdx
@@ -45,24 +44,19 @@ Disassembly of section .text:
                	leaq	-<rip>, %rax       # <addr>
                	movq	%rax, (%rdi)
                	leaq	-0x48(%rbp), %rax
-               	movl	$0x3, %ecx
-               	movq	%rcx, 0x10(%rax)
-               	leaq	-0x28(%rbp), %rcx
-               	movl	$0x7, %edx
-               	movq	%rdx, 0x10(%rcx)
-               	movl	$0x5, %esi
+               	movq	$0x3, 0x10(%rax)
+               	leaq	-0x28(%rbp), %r8
+               	movq	$0x7, 0x10(%r8)
+               	movl	$0x5, %ecx
                	movl	$0x9, %r9d
-               	xorq	%rdx, %rdx
-               	movl	%edx, -0x8(%rbp)
+               	movl	$0x0, -0x8(%rbp)
                	movq	(%rdi), %rdx
-               	leaq	-0x8(%rbp), %r8
+               	leaq	-0x8(%rbp), %rsi
                	addq	$0x10, %rax
-               	addq	$0x10, %rcx
+               	addq	$0x10, %r8
                	subq	$0x10, %rsp
                	movq	%rdx, (%rsp)
                	movq	%rax, %rdx
-               	xchgq	%r8, %rsi
-               	xchgq	%r8, %rcx
                	movq	(%rsp), %r10
                	callq	*%r10
                	addq	$0x10, %rsp
@@ -70,8 +64,7 @@ Disassembly of section .text:
                	addq	%rcx, %rax
                	cmpq	$0xc0d, %rax            # imm = 0xC0D
                	jne	<addr>
-               	xorq	%rax, %rax
-               	movslq	%eax, %rax
+               	xorl	%eax, %eax
                	leave
                	retq
                	movl	$0x1, %eax

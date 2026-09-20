@@ -41,13 +41,13 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	callq	<addr>
-               	cmpq	$0x21, %rax
+               	cmpl	$0x21, %eax
                	je	<addr>
                	movl	$0x3, %eax
                	popq	%rbp
                	retq
                	callq	<addr>
-               	cmpq	$0x58, %rax
+               	cmpl	$0x58, %eax
                	je	<addr>
                	movl	$0xc, %eax
                	popq	%rbp
@@ -60,29 +60,20 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	leaq	<rip>, %rax
-               	movslq	(%rax), %rax
-               	cmpl	$0x1, %eax
+               	movslq	(%rax), %rcx
+               	cmpl	$0x1, %ecx
                	jne	<addr>
-               	leaq	<rip>, %rax
-               	movslq	0x4(%rax), %rax
-               	cmpl	$0x2, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
+               	movslq	0x4(%rax), %rcx
+               	cmpl	$0x2, %ecx
                	jne	<addr>
-               	leaq	<rip>, %rax
                	movslq	0x8(%rax), %rax
                	cmpl	$0x3, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x6, %eax
                	popq	%rbp
                	retq
                	leaq	<rip>, %rax
-               	movslq	(%rax), %rax
-               	testq	%rax, %rax
+               	cmpl	$0x0, (%rax)
                	je	<addr>
                	movl	$0x7, %eax
                	popq	%rbp
@@ -103,12 +94,9 @@ Disassembly of section .text:
                	movl	$0xb, %eax
                	popq	%rbp
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
-               	addb	%al, (%rax)
-               	addb	%al, (%rax)
 
 <badc_real_sect>:
                	movl	$0x58, %eax

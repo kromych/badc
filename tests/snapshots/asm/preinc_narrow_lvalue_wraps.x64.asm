@@ -28,50 +28,25 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	movq	%rbx, (%rsp)
-               	movl	$0x1, %eax
-               	movq	%rax, %rcx
-               	xorq	%rcx, %rcx
-               	movq	%rcx, %rdx
-               	movq	%rax, %rdx
-               	movq	%rcx, %rdx
-               	movq	%rax, %rdx
-               	movq	%rcx, %rdx
-               	movl	$0x1, %ecx
-               	movq	%rcx, %rax
-               	xorq	%rax, %rax
-               	movq	%rax, %rdx
-               	movl	$0xff, %edx
-               	movb	%dl, -0x8(%rbp)
-               	leaq	-0x8(%rbp), %rdx
-               	movzbq	(%rdx), %rsi
-               	incq	%rsi
-               	movb	%sil, (%rdx)
-               	movzbq	(%rdx), %rdx
-               	testq	%rdx, %rdx
+               	subq	$0x18, %rsp
+               	pushq	%rbx
+               	movb	$-0x1, -0x8(%rbp)
+               	leaq	-0x8(%rbp), %rax
+               	movzbq	(%rax), %rcx
+               	incq	%rcx
+               	movb	%cl, (%rax)
+               	cmpb	$0x0, (%rax)
                	jne	<addr>
-               	movq	%rcx, %rdx
-               	cmpl	$0x1, %edx
+               	cmpb	$0x0, -0x8(%rbp)
                	jne	<addr>
-               	movzbq	-0x8(%rbp), %rdx
-               	testl	%edx, %edx
-               	sete	%dl
-               	movzbq	%dl, %rdx
-               	testq	%rdx, %rdx
-               	je	<addr>
-               	movslq	%eax, %rax
-               	movq	%rax, %rbx
-               	orq	$0x0, %rbx
-               	movslq	%ebx, %rsi
+               	xorl	%ebx, %ebx
                	leaq	<rip>, %rdi
+               	movq	%rbx, %rsi
                	movb	$0x0, %al
                	callq	<addr>
-               	movslq	%ebx, %rax
-               	movq	(%rsp), %rbx
+               	movq	%rbx, %rax
+               	popq	%rbx
                	leave
                	retq
-               	movq	%rcx, %rax
-               	jmp	<addr>
-               	movq	%rax, %rdx
+               	movl	$0x1, %ebx
                	jmp	<addr>

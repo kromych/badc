@@ -1,11 +1,11 @@
 # qemu demo
 
-Builds the [QEMU](https://www.qemu.org/) 11.0.2 system emulator with badc and
-runs the result -- with badc's own linker, no system linker in the chain. badc
-self-compiles and self-links both `qemu-system-aarch64` and `qemu-system-x86_64`,
-end to end: it compiles every unit, its own linker lays out the emulator, and
-each boots a Linux kernel plus a busybox initramfs to an interactive userspace
-shell that powers off cleanly under TCG. Both boot the EFI-stub kernel *through*
+Builds the [QEMU](https://www.qemu.org/) 11.1.1 system emulator with badc and
+runs the result. badc compiles every unit of both `qemu-system-aarch64` and
+`qemu-system-x86_64` and its own linker lays each one out, with no system
+linker in the chain; each boots a Linux kernel plus a busybox initramfs to an
+interactive userspace shell that powers off cleanly under TCG. Both boot the
+EFI-stub kernel *through*
 UEFI firmware -- OVMF on x86_64, ArmVirtQemu/AAVMF on aarch64 (with `acpi=off` so
 the kernel probes the PL011 as `ttyAMA0`, plus `earlycon` for early-boot output).
 CI builds that firmware with badc too -- the `edk2` demo's
@@ -13,9 +13,10 @@ CI builds that firmware with badc too -- the `edk2` demo's
 so the gated boot runs a badc-built emulator on badc-built firmware end to end.
 
 QEMU is a large, portable C program: this demo compiles well over a thousand
-translation units per target with badc -- for aarch64, **1683 units** (1140
-emulator objects plus the 543 objects of its utility library); the x86_64
-emulator is a comparable **1466 units** -- covering device models, the TCG code
+translation units per target with badc -- for aarch64, **1722 units** (1151
+emulator objects, the 565 of its utility library and the 6 of its target stubs
+library); the x86_64 emulator is a comparable **1518 units** (950 + 565 + the 3
+of its vhost-user / vduse libraries) -- covering device models, the TCG code
 generator, the block layer, QAPI-generated marshalling, and the
 character/network back ends. It is the widest single exercise of badc's C front
 end and object emitter in the demo set.
@@ -37,13 +38,15 @@ without re-running meson, so the vendored asset captures it: for each target a
 `compile_commands.json`, the linker response files (`qemu-system-<arch>.rsp`,
 `libqemuutil.a.rsp`), and every generated header/source. The vendored QEMU
 source is trimmed of the git history, test suite, docs, ROM/firmware blobs, and
-meson subprojects -- none are compile inputs for the emulator.
+the berkeley float test data -- none are compile inputs for the emulator.
 
 The smoke reads the response files for the object list and
 `compile_commands.json` for each unit's flags, rewrites the gcc flag set to
 badc's, and substitutes the host glib include path via `pkg-config`. It then
-compiles every unit with badc and archives the utility library with badc's
-`--ar`.
+compiles every unit with badc and archives each in-tree library the link names
+(the utility library, the target stubs, the vhost-user / vduse subproject
+libraries) with badc's `--ar`; the link pulls their members on demand, as the
+system linker does in meson's build.
 
 badc has no `<arm_neon.h>`, so the handful of crypto units that would use it are
 retried with QEMU's portable scalar path selected instead of the
@@ -52,10 +55,8 @@ The result is a fully badc-compiled object set.
 
 ## Linking
 
-The demo does a **pure badc self-link**: badc's own linker lays out the final
-image over the 100%-badc object set, producing `qemu-system-<arch>` directly --
-no system linker anywhere in the chain. A self-link failure fails the demo, so
-full self-containment is a hard gate.
+badc's own linker lays out the final image over the badc-compiled object set,
+producing `qemu-system-<arch>` directly. A self-link failure fails the demo.
 
 The emulator resolves its remaining externals (glib, zlib, libfdt, libc) against
 the system shared libraries.
@@ -64,9 +65,9 @@ the system shared libraries.
 
 - badc compiles every translation unit of the target (a compile failure fails
   the demo);
-- badc archives the utility library with `--ar`;
-- badc's own linker self-links the emulator and it reports `QEMU emulator
-  version 11.0.2`.
+- badc archives the in-tree libraries with `--ar`;
+- badc's own linker self-links the emulator and it reports
+  `QEMU emulator version 11.1.1`.
 
 `$BADC_QEMU_OPT=1` also runs the `-O` lane; `$BADC_QEMU_JOBS` sets the compile
 parallelism.
@@ -75,16 +76,16 @@ parallelism.
 
 The smoke can boot the emulator it just built on a real kernel and require a
 full round trip: the kernel boots, reaches its init process / a busybox shell,
-faults nowhere, and the guest powers the machine off on request. The gate is
-the serial log showing a boot marker (`Linux version` / `Booting Linux`) and
-userspace (`Run /sbin/init`), no fault marker (`Kernel panic`, `Unable to
-handle`, `Oops`, ...), and a clean power-down (the smoke sends `poweroff -f`
-over the console and the guest exits rc 0). The boot runs with `-smp 16`,
-`-nographic`, a 60s timeout, and `-no-reboot`. aarch64 `-M virt` and x86_64
-`-M q35` boot the EFI-stub kernel through UEFI firmware when one is configured --
-AAVMF (aarch64, with `acpi=off` so the PL011 probes as `ttyAMA0`) and OVMF
-(x86_64) -- matching a real UEFI system; without a configured firmware aarch64
-falls back to `-M virt`'s legacy `-kernel` loader.
+faults nowhere, and the guest powers the machine off on request. The gate is the
+serial log showing a boot marker (`Linux version` / `Booting Linux`) and
+userspace (`Run /sbin/init`), no fault marker (`Kernel panic`,
+`Unable to handle`, `Oops`, ...), and a clean power-down (the smoke sends
+`poweroff -f` over the console and the guest exits rc 0). The boot runs with
+`-smp 16`, `-nographic`, a 60s timeout, and `-no-reboot`. aarch64 `-M virt` and
+x86_64 `-M q35` boot the EFI-stub kernel through UEFI firmware when one is
+configured -- AAVMF (aarch64, with `acpi=off` so the PL011 probes as `ttyAMA0`)
+and OVMF (x86_64) -- matching a real UEFI system; without a configured firmware
+aarch64 falls back to `-M virt`'s legacy `-kernel` loader.
 
 `$BADC_QEMU_BOOT` drives it:
 

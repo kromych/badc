@@ -27,34 +27,16 @@ Disassembly of section .text:
 
 <main>:
                	movabsq	$0x4008000000000000, %rcx # imm = 0x4008000000000000
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	movq	%rcx, %xmm14
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm14
                	jb	<addr>
-               	movl	$0x1, %edx
-               	movslq	%edx, %rdx
-               	testq	%rdx, %rdx
-               	je	<addr>
-               	movq	%rcx, %xmm0
-               	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm0
+               	movabsq	$-0x3ff8000000000000, %rcx # imm = 0xC008000000000000
+               	movq	%rcx, %xmm14
                	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm0
+               	ucomisd	%xmm15, %xmm14
                	jb	<addr>
-               	movl	$0x1, %eax
-               	movslq	%eax, %rax
-               	testl	%eax, %eax
-               	sete	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x2a, %eax
-               	movslq	%eax, %rax
                	retq
-               	xorq	%rax, %rax
-               	jmp	<addr>
-               	jmp	<addr>
-               	movq	%rax, %rdx
+               	movl	$0x2a, %eax
                	jmp	<addr>

@@ -37,14 +37,14 @@ Disassembly of section .text:
                	movq	%r9, -0xa8(%rbp)
                	testb	%al, %al
                	je	<addr>
-               	movups	%xmm0, -0xa0(%rbp,%riz)
-               	movups	%xmm1, -0x90(%rbp,%riz)
-               	movups	%xmm2, -0x80(%rbp,%riz)
-               	movups	%xmm3, -0x70(%rbp,%riz)
-               	movups	%xmm4, -0x60(%rbp,%riz)
-               	movups	%xmm5, -0x50(%rbp,%riz)
-               	movups	%xmm6, -0x40(%rbp,%riz)
-               	movups	%xmm7, -0x30(%rbp,%riz)
+               	movups	%xmm0, -0xa0(%rbp)
+               	movups	%xmm1, -0x90(%rbp)
+               	movups	%xmm2, -0x80(%rbp)
+               	movups	%xmm3, -0x70(%rbp)
+               	movups	%xmm4, -0x60(%rbp)
+               	movups	%xmm5, -0x50(%rbp)
+               	movups	%xmm6, -0x40(%rbp)
+               	movups	%xmm7, -0x30(%rbp)
                	leaq	-0x18(%rbp), %rax
                	leaq	-0xd0(%rbp), %rcx
                	movl	$0x8, (%rax)
@@ -88,7 +88,7 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	leave
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	leave
                	retq
 
@@ -100,6 +100,5 @@ Disassembly of section .text:
                	movl	$0x7, %edx
                	movb	$0x0, %al
                	callq	<addr>
-               	movslq	%eax, %rax
                	popq	%rbp
                	retq

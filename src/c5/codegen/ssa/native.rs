@@ -134,11 +134,13 @@ pub(crate) fn compile_function_to_bytes(
                     super::super::StackProtect::OFF,
                     super::super::FunctionEntry::default(),
                     super::super::FixedRegs::NONE,
+                    false,
                 )
             };
             if ok.is_err() {
                 return Err("ssa_native: emit_function bailed".to_string());
             }
+            rodata.place_literals();
             let outer = fixups.len()
                 + plt_call_fixups.len()
                 + data_fixups.len()
@@ -242,6 +244,7 @@ pub(crate) fn compile_function_to_bytes(
                     super::super::StackProtect::OFF,
                     super::super::FunctionEntry::default(),
                     super::super::FixedRegs::NONE,
+                    false,
                 )
             };
             if ok.is_err() {

@@ -14,48 +14,39 @@ Disassembly of section .text:
                	brk	#0x1
 
 <__c5_lazy_stream>:
-               	str	x20, [sp, #-0x30]!
-               	str	x19, [sp, #0x10]
-               	stp	x29, x30, [sp, #0x20]
-               	add	x29, sp, #0x20
-               	adrp	x20, <page>
-               	add	x20, x20, <lo12>
-               	add	x0, x20, #0x0
+               	stp	x29, x30, [sp, #-0x10]!
+               	mov	x29, sp
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
                	ldr	x1, [x0]
                	cbz	x1, <addr>
                	ldr	x0, [x0]
-               	ldp	x29, x30, [sp, #0x20]
-               	ldr	x19, [sp, #0x10]
-               	ldr	x20, [sp], #0x30
+               	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x0                // =0
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	bl	<addr>
                	cbz	x0, <addr>
-               	add	x1, x20, #0x0
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
                	ldr	x0, [x0]
                	str	x0, [x1]
-               	add	x0, x20, #0x0
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
                	ldr	x0, [x0]
-               	ldp	x29, x30, [sp, #0x20]
-               	ldr	x19, [sp, #0x10]
-               	ldr	x20, [sp], #0x30
+               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <main>:
-               	str	x19, [sp, #-0x30]!
-               	stp	x29, x30, [sp, #0x20]
-               	add	x29, sp, #0x20
-               	mov	x16, x0
-               	mov	x0, x1
-               	mov	x1, x16
-               	mov	x0, #0x0                // =0
-               	stur	w0, [x29, #-0x10]
-               	stur	w0, [x29, #-0x8]
+               	stp	x29, x30, [sp, #-0x10]!
+               	mov	x29, sp
+               	sub	sp, sp, #0x10
+               	stur	wzr, [x29, #-0x10]
+               	stur	wzr, [x29, #-0x8]
                	mov	x17, #0x869f            // =34463
                	movk	x17, #0x1, lsl #16
-               	cmp	w1, w17
+               	cmp	w0, w17
                	b.le	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
@@ -67,11 +58,9 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	sub	x2, x29, #0x8
                	bl	<addr>
-               	sxtw	x0, w0
                	ldursw	x0, [x29, #-0x10]
                	ldursw	x1, [x29, #-0x8]
                	add	x0, x0, x1
-               	sxtw	x0, w0
-               	ldp	x29, x30, [sp, #0x20]
-               	ldr	x19, [sp], #0x30
+               	add	sp, sp, #0x10
+               	ldp	x29, x30, [sp], #0x10
                	ret

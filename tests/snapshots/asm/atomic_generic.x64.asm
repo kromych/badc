@@ -31,8 +31,7 @@ Disassembly of section .text:
                	subq	$0x30, %rsp
                	movabsq	$0x1122334455667788, %rax # imm = 0x1122334455667788
                	movq	%rax, -0x28(%rbp)
-               	xorq	%rax, %rax
-               	movq	%rax, -0x30(%rbp)
+               	movq	$0x0, -0x30(%rbp)
                	leaq	-0x28(%rbp), %rcx
                	movq	(%rcx), %rdx
                	leaq	-0x30(%rbp), %rcx
@@ -44,7 +43,7 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	leave
                	retq
-               	movq	%rax, -0x20(%rbp)
+               	movq	$0x0, -0x20(%rbp)
                	movabsq	$0xdeadbeefcafe, %rdx   # imm = 0xDEADBEEFCAFE
                	movq	%rdx, -0x30(%rbp)
                	leaq	-0x20(%rbp), %rdx
@@ -58,9 +57,8 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	leave
                	retq
-               	movl	$0x2a, %edx
-               	movl	%edx, -0x18(%rbp)
-               	movl	%eax, -0x30(%rbp)
+               	movl	$0x2a, -0x18(%rbp)
+               	movl	$0x0, -0x30(%rbp)
                	leaq	-0x18(%rbp), %rdx
                	movl	(%rdx), %edx
                	movl	%edx, (%rcx)
@@ -70,9 +68,8 @@ Disassembly of section .text:
                	movl	$0x3, %eax
                	leave
                	retq
-               	movl	%eax, -0x10(%rbp)
-               	movabsq	$-0x7, %rax
-               	movl	%eax, -0x30(%rbp)
+               	movl	$0x0, -0x10(%rbp)
+               	movl	$0xfffffff9, -0x30(%rbp) # imm = 0xFFFFFFF9
                	leaq	-0x10(%rbp), %rax
                	movl	(%rcx), %ecx
                	movl	%ecx, (%rax)
@@ -82,15 +79,12 @@ Disassembly of section .text:
                	movl	$0x4, %eax
                	leave
                	retq
-               	movl	$0x1000, %eax           # imm = 0x1000
-               	movq	%rax, -0x8(%rbp)
-               	xorq	%rax, %rax
+               	movq	$0x1000, -0x8(%rbp)     # imm = 0x1000
+               	xorl	%eax, %eax
                	movq	%rax, -0x30(%rbp)
                	leaq	-0x8(%rbp), %rcx
                	movq	(%rcx), %rcx
-               	leaq	-0x30(%rbp), %rdx
-               	movq	%rcx, (%rdx)
-               	movq	-0x30(%rbp), %rcx
+               	movq	%rcx, -0x30(%rbp)
                	cmpq	$0x1000, %rcx           # imm = 0x1000
                	je	<addr>
                	movl	$0x5, %eax

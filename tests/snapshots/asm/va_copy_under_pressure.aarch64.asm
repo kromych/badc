@@ -31,10 +31,9 @@ Disassembly of section .text:
                	str	q5, [sp, #0x90]
                	str	q6, [sp, #0xa0]
                	str	q7, [sp, #0xb0]
-               	str	x20, [sp, #-0x70]!
-               	str	x19, [sp, #0x10]
-               	stp	x29, x30, [sp, #0x60]
-               	add	x29, sp, #0x60
+               	str	x20, [sp, #-0x60]!
+               	stp	x29, x30, [sp, #0x50]
+               	add	x29, sp, #0x50
                	ldr	x0, [x29, #0x10]
                	mov	x17, #0x3               // =3
                	mul	x1, x0, x17
@@ -138,9 +137,8 @@ Disassembly of section .text:
                	add	x0, x1, x0
                	add	x0, x0, x14
                	add	x0, x0, x15
-               	ldp	x29, x30, [sp, #0x60]
-               	ldr	x19, [sp, #0x10]
-               	ldr	x20, [sp], #0x70
+               	ldp	x29, x30, [sp, #0x50]
+               	ldr	x20, [sp], #0x60
                	add	sp, sp, #0xc0
                	ret
 
@@ -154,7 +152,6 @@ Disassembly of section .text:
                	cmp	x0, #0x160
                	b.ne	<addr>
                	mov	x0, #0x0                // =0
-               	sxtw	x0, w0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x1                // =1

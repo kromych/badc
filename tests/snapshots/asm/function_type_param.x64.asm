@@ -28,25 +28,21 @@ Disassembly of section .text:
 <mixed>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	movq	%rbx, (%rsp)
-               	movq	%r12, 0x8(%rsp)
-               	movq	%r13, 0x10(%rsp)
-               	movq	%rdi, %rbx
-               	movq	%rdx, %r13
-               	movslq	%ebx, %rbx
-               	movq	%rsi, %rax
+               	subq	$0x8, %rsp
+               	pushq	%r13
+               	pushq	%r12
+               	pushq	%rbx
+               	movslq	%edi, %rbx
+               	movq	%rdx, %r12
                	movq	%rbx, %rdi
-               	callq	*%rax
-               	leaq	(%rbx,%rax), %r12
-               	movq	%r13, %rax
+               	callq	*%rsi
+               	leaq	(%rbx,%rax), %r13
                	movq	%rbx, %rdi
-               	callq	*%rax
-               	addq	%r12, %rax
-               	movslq	%eax, %rax
-               	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
-               	movq	0x10(%rsp), %r13
+               	callq	*%r12
+               	addq	%r13, %rax
+               	popq	%rbx
+               	popq	%r12
+               	popq	%r13
                	leave
                	retq
 
@@ -57,20 +53,18 @@ Disassembly of section .text:
                	movq	%rdi, %rax
                	movq	%rsi, %rdi
                	callq	*%rax
-               	movslq	%eax, %rax
                	popq	%rbp
                	retq
 
 <inc>:
                	leaq	0x1(%rdi), %rax
-               	movslq	%eax, %rax
                	retq
 
 <neg>:
-               	imulq	$-0x1, %rdi, %rax
-               	movslq	%eax, %rax
+               	movq	%rdi, %rax
+               	negq	%rax
                	retq
 
 <main>:
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	retq

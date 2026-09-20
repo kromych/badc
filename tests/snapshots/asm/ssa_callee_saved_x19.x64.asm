@@ -27,25 +27,19 @@ Disassembly of section .text:
 
 <onExit>:
                	leaq	<rip>, %rax
-               	movslq	(%rax), %rcx
-               	testq	%rcx, %rcx
+               	cmpl	$0x0, (%rax)
                	je	<addr>
-               	movl	$0x2, %ecx
-               	movl	%ecx, (%rax)
+               	movl	$0x2, (%rax)
                	retq
 
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%rbx, (%rsp)
                	leaq	-<rip>, %rdi       # <addr>
-               	xorq	%rbx, %rbx
-               	movq	%rbx, %rsi
-               	movq	%rbx, %rdx
+               	xorl	%esi, %esi
+               	movq	%rsi, %rdx
                	xorl	%eax, %eax
                	callq	<addr>
-               	movq	%rbx, %rax
-               	movq	(%rsp), %rbx
-               	leave
+               	xorl	%eax, %eax
+               	popq	%rbp
                	retq

@@ -927,6 +927,8 @@ struct Layout {
     asm_placements: Vec<(usize, u64)>,
     gnu_property_note: Option<(usize, u64, Vec<u8>)>,
     jt_placement: Option<(usize, u64)>,
+    /// The entry and base of the 8-byte, then the 4-byte literal run.
+    literal_placements: [Option<(usize, u64)>; 2],
     /// A default section the unit leaves empty while a named entry claims
     /// its name is dropped, so the name is carried once.
     text_shadowed: bool,
@@ -1556,15 +1558,35 @@ impl<'a> RelocWriter<'a> {
             let base = self.place_in_entry(e, gnu_property_align, body.len() as u64);
             self.layout.gnu_property_note = Some((e, base, body));
         }
-        if !build.rodata.bytes.is_empty() {
+        let tables_len = build.rodata.tables_len();
+        if tables_len > 0 {
             let e = self
                 .layout
                 .carve
                 .table
                 .get_or_insert(".rodata.jump_tables", SHT_PROGBITS, SHF_ALLOC, 8)
                 .map_err(Self::internal)?;
-            let base = self.place_in_entry(e, 8, build.rodata.bytes.len() as u64);
+            let base = self.place_in_entry(e, 8, tables_len);
             self.layout.jt_placement = Some((e, base));
+        }
+        // Floating literals take GNU as's mergeable constant sections.
+        for (k, (name, width)) in [(".rodata.cst8", 8), (".rodata.cst4", 4)]
+            .into_iter()
+            .enumerate()
+        {
+            let (_, len) = build.rodata.literals.spans[k];
+            if len == 0 {
+                continue;
+            }
+            let e = self
+                .layout
+                .carve
+                .table
+                .get_or_insert(name, SHT_PROGBITS, SHF_ALLOC | SHF_MERGE, width)
+                .map_err(Self::internal)?;
+            self.layout.carve.table.entries[e].entsize = width;
+            let base = self.place_in_entry(e, width, len);
+            self.layout.literal_placements[k] = Some((e, base));
         }
         let layout = &mut self.layout;
         for k in 0..layout.carve.table.entries.len() {
@@ -2633,7 +2655,12 @@ impl<'a> RelocWriter<'a> {
             data_start(carve.shndx[k], text_end, attr.saturating_sub(text_end));
         }
         if let Some((e, base)) = layout.jt_placement {
-            data_start(carve.shndx[e], base, build.rodata.bytes.len() as u64);
+            data_start(carve.shndx[e], base, build.rodata.tables_len());
+        }
+        for (k, placed) in layout.literal_placements.iter().enumerate() {
+            if let Some((e, base)) = *placed {
+                data_start(carve.shndx[e], base, build.rodata.literals.spans[k].1);
+            }
         }
         for (&(e, base), s) in layout.asm_placements.iter().zip(build.asm_sections.iter()) {
             marks.extend(s.map.shifted(base as u32).map(|m| (carve.shndx[e], m)));
@@ -3067,17 +3094,35 @@ impl<'a> RelocWriter<'a> {
             )?;
         }
         for fx in &build.rodata.addr_fixups {
-            let (e, base) = self.layout.jt_placement.ok_or_else(|| {
+            let spans = build.rodata.literals.spans;
+            let within =
+                |k: usize| (spans[k].0..spans[k].0 + spans[k].1).contains(&fx.rodata_offset);
+            let (placed, from) = match (0..2).find(|&k| within(k)) {
+                Some(k) => (self.layout.literal_placements[k], spans[k].0),
+                None => (self.layout.jt_placement, 0),
+            };
+            let (e, base) = placed.ok_or_else(|| {
                 Self::internal(String::from(
-                    "elf_reloc: table fixup recorded without table bytes",
+                    "elf_reloc: read-only fixup recorded without its bytes",
                 ))
             })?;
+            let (sym, addend) = (
+                self.layout.carve.sym_idx[e],
+                (base + fx.rodata_offset - from) as i64,
+            );
+            // A literal load's in-page offset scales by its access size.
+            if matches!(machine, Machine::Aarch64)
+                && let Some(size) = a64_in_page_access(&build.text, fx.code_offset)
+            {
+                emit_page_load_relocs(&mut table, fx.code_offset as u64, sym, addend, size);
+                continue;
+            }
             emit_addr_fixup_relocs(
                 machine,
                 &mut table,
                 fx.code_offset as u64,
-                self.layout.carve.sym_idx[e],
-                base as i64 + fx.rodata_offset as i64,
+                sym,
+                addend,
                 AddrPart::Whole,
             )?;
         }
@@ -4054,7 +4099,15 @@ impl<'a> RelocWriter<'a> {
         // The table slots stay zero; the entry's relocations carry the
         // values.
         if let Some((e, base)) = layout.jt_placement {
-            append_at(&mut carve.table.entries[e], base, &build.rodata.bytes);
+            let tables = &build.rodata.bytes[..build.rodata.tables_len() as usize];
+            append_at(&mut carve.table.entries[e], base, tables);
+        }
+        for (k, placed) in layout.literal_placements.iter().enumerate() {
+            if let Some((e, base)) = *placed {
+                let (at, len) = build.rodata.literals.spans[k];
+                let run = &build.rodata.bytes[at as usize..(at + len) as usize];
+                append_at(&mut carve.table.entries[e], base, run);
+            }
         }
         if !layout.data_shadowed {
             let data_align = if data_body.is_empty() {
@@ -4826,6 +4879,26 @@ fn emit_addr_fixup_relocs(
         }
     }
     Ok(())
+}
+
+/// Access size of the load or store ending the aarch64 page pair at `at`.
+fn a64_in_page_access(text: &[u8], at: usize) -> Option<u8> {
+    let word = text.get(at + 4..at + 8)?.try_into().ok()?;
+    crate::c5::codegen::aarch64::patch::lo12_access_size(u32::from_le_bytes(word))
+}
+
+/// The page and scaled in-page relocations of an aarch64 `adrp` + load pair.
+fn emit_page_load_relocs(out: &mut Vec<u8>, at: u64, sym_idx: u64, addend: i64, size: u8) {
+    let lo12 = a64_insn_reloc_type(crate::c5::asm::AsmRelocKind::A64LdstLo12(size))
+        .expect("a load or store size names its relocation");
+    for (r_offset, rtype) in [(at, R_AARCH64_ADR_PREL_PG_HI21), (at + 4, lo12)] {
+        let rela = Elf64Rela {
+            r_offset,
+            r_info: (sym_idx << 32) | rtype as u64,
+            r_addend: addend,
+        };
+        write_struct(out, &rela);
+    }
 }
 
 /// Addressing form of a cross-TU address materialization in a relocatable

@@ -416,6 +416,9 @@ Compile knobs:
                            synonym. Without either flag the target ABI
                            decides: unsigned on AArch64 ELF, signed
                            elsewhere.
+  -fwrapv                  Accepted: signed arithmetic wraps in every
+  -fno-strict-overflow     build, and no optimization assumes it cannot
+                           overflow.
 
 VM-only knobs (require --interp):
   --track-pointers         Allocation tracking + use-after-free guard.

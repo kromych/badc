@@ -52,7 +52,7 @@ pub(super) fn emit_va_start_aapcs64(
     load_imm64(code, scratch.secondary, gr_offs as u64);
     emit(code, enc_str32_imm(scratch.secondary, ap, 24));
     // __vr_offs, or 0 when the prologue skipped the vector area: exhausted.
-    let vr_offs = if abi.no_fp_varargs {
+    let vr_offs = if abi.no_fp_regs {
         0
     } else {
         -(((8 - named_fp) * 16) as i64)
@@ -103,6 +103,31 @@ pub(super) fn emit_va_start_cursor(
     fail("VaStart: variadic callee not matched by a host-ABI branch")
 }
 
+/// The work register and the advance temporary of a cursor `va_arg`, both
+/// distinct from the cursor address `ap_r`; no advance temporary when the
+/// scratch pair is taken.
+fn va_arg_cursor_regs(ap_r: Reg, dst: Place, scratch: &ScratchPool) -> (Reg, Option<Reg>) {
+    let rd = match dst {
+        Place::IntReg(r) if r != ap_r.0 => Reg(r),
+        _ if scratch.secondary.0 != ap_r.0 => scratch.secondary,
+        _ => scratch.primary,
+    };
+    let adv = [scratch.primary, scratch.secondary]
+        .into_iter()
+        .find(|r| r.0 != ap_r.0 && r.0 != rd.0);
+    (rd, adv)
+}
+
+/// Whether `emit_va_arg_cursor` advances through [`ScratchPool::third`].
+pub(super) fn va_arg_cursor_takes_third_scratch(
+    ap: Place,
+    dst: Place,
+    scratch: &ScratchPool,
+) -> bool {
+    int_operand_reg(ap, scratch.primary)
+        .is_some_and(|ap_r| va_arg_cursor_regs(ap_r, dst, scratch).1.is_none())
+}
+
 /// `__builtin_va_arg(&ap)` for the cursor models (macOS and Windows
 /// arm64, 8-byte stride): return `*ap` and advance it by the argument's
 /// eightbyte span. The stride is the target's `va_list` layout, not the
@@ -132,21 +157,8 @@ pub(super) fn emit_va_arg_cursor(
     let Some(ap_r) = materialize_int(code, place_of(alloc, args[0]), scratch.primary, frame) else {
         return fail("VaArg: ap not int reg / spill");
     };
-    // The work register and the advance temporary must both differ from
-    // the cursor address `ap_r`.
-    let rd = match dst {
-        Place::IntReg(r) if r != ap_r.0 => Reg(r),
-        _ if scratch.secondary.0 != ap_r.0 => scratch.secondary,
-        _ => scratch.primary,
-    };
-    let adv = if scratch.primary.0 != ap_r.0 && scratch.primary.0 != rd.0 {
-        scratch.primary
-    } else if scratch.secondary.0 != ap_r.0 && scratch.secondary.0 != rd.0 {
-        scratch.secondary
-    } else {
-        // x19 is reserved by the prologue for a function with an intrinsic.
-        Reg(19)
-    };
+    let (rd, adv) = va_arg_cursor_regs(ap_r, dst, scratch);
+    let adv = adv.unwrap_or_else(|| scratch.third(frame));
     emit(code, enc_ldr_imm(rd, ap_r, 0));
     // Both cursor areas start 16-aligned, so rounding aligns the slot too.
     if desc.align > 8 {
@@ -508,12 +520,8 @@ pub(super) fn emit_call_ext(
     if imp.returns_long_double {
         emit(code, enc_fmov_d_to_x(Reg(0), 0));
     } else {
-        // The 32-bit widenings write only bits 32..63, as the `ParamRef`
-        // entry conversion does on the incoming side of the same boundary.
-        let ext = super::return_extension(return_type_tag, target);
-        if !(ext.high_word_only() && alloc.high_dead(v)) {
-            emit_extend_x0_for_return(code, ext);
-        }
+        let ext = super::call_result_extension(return_type_tag, target, alloc, v);
+        emit_extend_x0_for_return(code, ext);
     }
     if let Some(rd) = int_reg(dst) {
         if rd.0 != 0 {
@@ -777,18 +785,30 @@ pub(super) fn emit_call_indirect(
             arg_source_regs.push(*r);
         }
     }
-    const TARGET_SCRATCH_CANDIDATES: &[u8] = &[9, 10, 11, 12, 13, 14, 15];
-    let free_target_reg = TARGET_SCRATCH_CANDIDATES
-        .iter()
-        .copied()
-        .find(|&r| !arg_source_regs.contains(&r) && !abi.fixed_regs.has_gpr(r))
-        .map(Reg);
     // The same placement `emit_call` uses for a direct call; a non-variadic
     // call plans every argument as fixed, which also serves a prototype the
     // walker could not recover.
     let plan_fixed = super::named_args(abi, callee_variadic, fixed_args, args.len());
     let mut plan =
         super::plan_call_args_aggs(args.len(), plan_fixed, fp_arg_mask, abi, &aggs, false);
+    // A target in a register the marshal does not write is called where it
+    // is: no argument lands in it, and it is neither the scratch pair, x19,
+    // which a lowering may take as a third scratch, nor x8, which carries an
+    // indirect result's address.
+    let in_place = match target_place {
+        Place::IntReg(r) if !matches!(r, 8 | 16 | 17 | 19) && !plan.int_regs().any(|p| p == r) => {
+            Some(Reg(r))
+        }
+        _ => None,
+    };
+    const TARGET_SCRATCH_CANDIDATES: &[u8] = &[9, 10, 11, 12, 13, 14, 15];
+    let free_target_reg = in_place.or_else(|| {
+        TARGET_SCRATCH_CANDIDATES
+            .iter()
+            .copied()
+            .find(|&r| !arg_source_regs.contains(&r) && !abi.fixed_regs.has_gpr(r))
+            .map(Reg)
+    });
     let staged_off = match free_target_reg {
         Some(_) => None,
         None => {

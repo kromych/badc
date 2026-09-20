@@ -23,8 +23,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v0   AllocaInit(0)                                    -> -
     v1   ImmData(0)                                       -> x0
     v2   Load { addr=v1, disp=0, kind=I32 }               -> x0
-    v3   BinopI { op=shl, lhs=v2, rhs_imm=32 }            -> x1
-    v4   Extend { value=v2, kind=I32 }                    -> x1
+    v3   Extend { value=v2, kind=I32 }                    -> x1
     terminator Return(v2)   (exit_acc=v2)
 ; --- SSA dump (ok=true) ent_pc=3 ---
 ; name=family
@@ -60,10 +59,9 @@ fn ent_pc=5 n_params=1 variadic=false locals=0
     v3   ImmData(0)                                       -> x0
     v4   Imm(0)                                           -> x1
     v5   BinopI { op=and, lhs=v1, rhs_imm=255 }           -> x1
-    v6   Binop { op=add, lhs=v3, rhs=v5 }                 -> x0
-    v7   Load { addr=v6, disp=0, kind=U8 }                -> x0
-    v8   BinopI { op=shl, lhs=v7, rhs_imm=32 }            -> x1
-    v9   Extend { value=v7, kind=I32 }                    -> x1
+    v6   Binop { op=add, lhs=v3, rhs=v5 }                 -> x2
+    v7   LoadIndexed { base=v3, index=v5, scale=1, kind=U8 } -> x0
+    v8   Extend { value=v7, kind=I32 }                    -> x1
     terminator Return(v7)   (exit_acc=v7)
 ; --- SSA dump (ok=true) ent_pc=6 ---
 ; name=cmp_fn

@@ -14,9 +14,5 @@ Disassembly of section .text:
                	brk	#0x1
 
 <main>:
-               	mov	x0, #0x14               // =20
-               	mov	x0, #0x110              // =272
-               	mov	x0, #0x3                // =3
-               	mov	x0, #0x1e               // =30
                	mov	x0, #0x0                // =0
                	ret

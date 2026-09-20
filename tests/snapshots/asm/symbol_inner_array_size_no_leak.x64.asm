@@ -29,34 +29,28 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	leaq	-0x10(%rbp), %rdx
-               	xorq	%rax, %rax
-               	jmp	<addr>
-               	movslq	%eax, %rcx
-               	leaq	(%rcx,%rcx,2), %rsi
-               	movw	%si, (%rdx,%rcx,2)
+               	leaq	-0x10(%rbp), %rcx
+               	xorl	%eax, %eax
+               	leaq	(%rax,%rax,2), %rdx
+               	movw	%dx, (%rcx,%rax,2)
                	incq	%rax
                	cmpl	$0x8, %eax
                	jl	<addr>
-               	movswq	0xe(%rdx), %rax
+               	movswq	0xe(%rcx), %rax
                	cmpl	$0x15, %eax
                	je	<addr>
                	movl	$0x1, %eax
                	leave
                	retq
                	leaq	-0x10(%rbp), %rax
-               	movswq	(%rax), %rcx
-               	testq	%rcx, %rcx
+               	cmpw	$0x0, (%rax)
                	jne	<addr>
                	movswq	0xe(%rax), %rax
                	cmpl	$0x15, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x2, %eax
                	leave
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	leave
                	retq

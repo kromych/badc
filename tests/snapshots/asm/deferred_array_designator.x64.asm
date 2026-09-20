@@ -32,104 +32,54 @@ Disassembly of section .text:
                	jne	<addr>
                	movslq	0x28(%rax), %rcx
                	cmpl	$0x3, %ecx
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
                	jne	<addr>
                	movslq	0xe0(%rax), %rcx
                	cmpl	$0x5, %ecx
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
                	jne	<addr>
                	movslq	0xe4(%rax), %rcx
                	cmpl	$0x6, %ecx
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
                	jne	<addr>
                	movslq	0x10(%rax), %rcx
                	cmpl	$0x7, %ecx
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x2, %eax
                	retq
-               	movslq	0x18(%rax), %rcx
-               	testq	%rcx, %rcx
+               	cmpl	$0x0, 0x18(%rax)
                	jne	<addr>
-               	movslq	0xdc(%rax), %rax
-               	testl	%eax, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
+               	cmpl	$0x0, 0xdc(%rax)
                	je	<addr>
                	movl	$0x3, %eax
                	retq
                	leaq	<rip>, %rax
-               	movslq	(%rax), %rax
-               	cmpl	$0xa, %eax
+               	movslq	(%rax), %rcx
+               	cmpl	$0xa, %ecx
                	jne	<addr>
-               	leaq	<rip>, %rax
-               	movslq	0x8(%rax), %rax
-               	cmpl	$0x64, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
+               	movslq	0x8(%rax), %rcx
+               	cmpl	$0x64, %ecx
                	jne	<addr>
-               	leaq	<rip>, %rax
-               	movslq	0x18(%rax), %rax
-               	cmpl	$0x1e, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
+               	movslq	0x18(%rax), %rcx
+               	cmpl	$0x1e, %ecx
                	jne	<addr>
-               	leaq	<rip>, %rax
-               	movslq	0x20(%rax), %rax
-               	cmpl	$0x28, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
+               	movslq	0x20(%rax), %rcx
+               	cmpl	$0x28, %ecx
                	jne	<addr>
-               	leaq	<rip>, %rax
-               	movslq	0x10(%rax), %rax
-               	testl	%eax, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
+               	cmpl	$0x0, 0x10(%rax)
                	je	<addr>
                	movl	$0x5, %eax
                	retq
                	leaq	<rip>, %rax
-               	movsbq	(%rax), %rax
-               	cmpl	$0x61, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
+               	movsbq	(%rax), %rcx
+               	cmpl	$0x61, %ecx
                	jne	<addr>
-               	leaq	<rip>, %rax
-               	movsbq	0x2(%rax), %rax
-               	cmpl	$0x63, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
+               	movsbq	0x2(%rax), %rcx
+               	cmpl	$0x63, %ecx
                	jne	<addr>
-               	leaq	<rip>, %rax
-               	movsbq	0x4(%rax), %rax
-               	cmpl	$0x65, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
+               	movsbq	0x4(%rax), %rcx
+               	cmpl	$0x65, %ecx
                	jne	<addr>
-               	leaq	<rip>, %rax
-               	movsbq	0x1(%rax), %rax
-               	testl	%eax, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
+               	cmpb	$0x0, 0x1(%rax)
                	je	<addr>
                	movl	$0x6, %eax
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	retq

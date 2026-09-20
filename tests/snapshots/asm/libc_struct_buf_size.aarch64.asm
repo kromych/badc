@@ -14,27 +14,24 @@ Disassembly of section .text:
                	brk	#0x1
 
 <main>:
-               	str	x19, [sp, #-0xa0]!
-               	stp	x29, x30, [sp, #0x90]
-               	add	x29, sp, #0x90
+               	stp	x29, x30, [sp, #-0x10]!
+               	mov	x29, sp
+               	sub	sp, sp, #0x80
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	sub	x1, x29, #0x80
                	bl	<addr>
-               	sxtw	x0, w0
-               	cbz	x0, <addr>
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	sxtw	x0, w0
-               	mov	x16, x1
-               	mov	x1, x0
-               	mov	x0, x16
+               	cbz	w0, <addr>
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
+               	sxtw	x1, w0
+               	mov	x0, x2
                	bl	<addr>
                	mov	x0, #0x1                // =1
-               	ldp	x29, x30, [sp, #0x90]
-               	ldr	x19, [sp], #0xa0
+               	add	sp, sp, #0x80
+               	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x2a               // =42
-               	ldp	x29, x30, [sp, #0x90]
-               	ldr	x19, [sp], #0xa0
+               	add	sp, sp, #0x80
+               	ldp	x29, x30, [sp], #0x10
                	ret

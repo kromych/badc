@@ -17,14 +17,12 @@ Disassembly of section .text:
                	and	x0, x0, #0xff
                	mov	x17, #0x2c              // =44
                	eor	x0, x0, x17
-               	cbnz	x0, <addr>
+               	cbnz	w0, <addr>
                	mov	x0, #0x0                // =0
-               	sxtw	x0, w0
                	ret
                	mov	x0, #0x1                // =1
                	b	<addr>
 
 <main>:
-               	mov	x0, #0x0                // =0
                	mov	x0, #0x0                // =0
                	ret

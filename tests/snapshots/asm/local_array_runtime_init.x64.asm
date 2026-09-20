@@ -27,21 +27,16 @@ Disassembly of section .text:
 
 <main>:
                	leaq	<rip>, %rax
-               	movl	$0x1234, %ecx           # imm = 0x1234
-               	movw	%cx, 0xa(%rax)
+               	movw	$0x1234, 0xa(%rax)      # imm = 0x1234
                	leaq	<rip>, %rcx
-               	movl	$0x5678, %edx           # imm = 0x5678
-               	movw	%dx, 0xa(%rcx)
+               	movw	$0x5678, 0xa(%rcx)      # imm = 0x5678
                	movzwq	0xa(%rax), %rax
                	movzwq	0xa(%rcx), %rcx
                	imulq	$0x3e8, %rax, %rax      # imm = 0x3E8
                	addq	%rcx, %rax
-               	movslq	%eax, %rax
                	cmpl	$0x477198, %eax         # imm = 0x477198
                	je	<addr>
                	movl	$0x1, %eax
                	retq
-               	xorq	%rax, %rax
-               	movq	%rax, %rcx
-               	movq	%rax, %rcx
+               	xorl	%eax, %eax
                	retq

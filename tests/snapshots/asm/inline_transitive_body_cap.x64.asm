@@ -129,32 +129,32 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%rbx, (%rsp)
-               	movq	%r12, 0x8(%rsp)
-               	leaq	<rip>, %rbx
-               	movq	(%rbx), %rdi
+               	subq	$0x8, %rsp
+               	pushq	%rbx
+               	leaq	<rip>, %rax
+               	movq	(%rax), %rdi
                	callq	<addr>
-               	movq	%rax, %r12
-               	movq	(%rbx), %rax
+               	movq	%rax, %rbx
+               	leaq	<rip>, %rax
+               	movq	(%rax), %rax
                	leaq	0x1(%rax), %rdi
                	callq	<addr>
-               	addq	%rax, %r12
-               	movq	(%rbx), %rax
+               	addq	%rax, %rbx
+               	leaq	<rip>, %rax
+               	movq	(%rax), %rax
                	leaq	0x2(%rax), %rdi
                	callq	<addr>
-               	addq	%rax, %r12
-               	movq	(%rbx), %rax
+               	addq	%rax, %rbx
+               	leaq	<rip>, %rax
+               	movq	(%rax), %rax
                	leaq	0x3(%rax), %rdi
                	callq	<addr>
-               	addq	%r12, %rax
+               	addq	%rbx, %rax
                	movabsq	$0x1ac628adc, %r11      # imm = 0x1AC628ADC
                	cmpq	%r11, %rax
                	jne	<addr>
-               	xorq	%rax, %rax
-               	movslq	%eax, %rax
-               	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
+               	xorl	%eax, %eax
+               	popq	%rbx
                	leave
                	retq
                	movl	$0x1, %eax

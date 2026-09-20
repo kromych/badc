@@ -24,24 +24,18 @@ Disassembly of section .text:
                	mov	x16, #0x0               // =0
                	mov	x0, #0x3                // =3
                	stur	w0, [x29, #-0x28]
-               	sub	x0, x29, #0x28
-               	sub	x3, x29, #0x20
-               	ldrsw	x0, [x0]
-               	and	x1, x0, #0xff
+               	sub	x1, x29, #0x20
+               	and	x2, x0, #0xff
                	mov	x0, #0x0                // =0
-               	b	<addr>
-               	sxtw	x2, w0
-               	add	x4, x3, x2
-               	strb	w1, [x4]
-               	add	x0, x2, #0x1
+               	strb	w2, [x1, x0]
+               	add	x0, x0, #0x1
                	cmp	w0, #0x10
                	b.lt	<addr>
                	sub	x0, x29, #0x20
                	ldrb	w1, [x0]
-               	ldrb	w2, [x0, #0xf]
-               	add	x1, x1, x2
-               	sxtw	x1, w1
-               	cmp	w1, #0x6
+               	ldrb	w0, [x0, #0xf]
+               	add	x0, x1, x0
+               	cmp	w0, #0x6
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	adrp	x16, <page>
@@ -56,23 +50,20 @@ Disassembly of section .text:
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	sub	x0, x29, #0x20
                	mov	x1, #0x9                // =9
                	str	w1, [x0]
-               	add	x2, x0, #0x4
+               	add	x1, x0, #0x4
                	mov	x0, #0x0                // =0
-               	b	<addr>
-               	sxtw	x1, w0
-               	add	x3, x2, x1
-               	mov	x4, #0x4                // =4
-               	strb	w4, [x3]
-               	add	x0, x1, #0x1
+               	mov	x2, #0x4                // =4
+               	strb	w2, [x1, x0]
+               	add	x0, x0, #0x1
                	cmp	w0, #0x8
                	b.lt	<addr>
                	sub	x0, x29, #0x20
                	ldrsw	x1, [x0]
                	ldrb	w0, [x0, #0xb]
                	add	x0, x1, x0
-               	sxtw	x0, w0
                	cmp	w0, #0xd
                	b.eq	<addr>
                	mov	x0, #0x2                // =2

@@ -42,12 +42,7 @@ Disassembly of section .text:
                	movq	%rcx, %xmm14
                	movq	%rcx, %xmm15
                	ucomisd	%xmm15, %xmm14
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	setp	%r10b
-               	movzbq	%r10b, %r10
-               	orq	%r10, %rcx
-               	testq	%rcx, %rcx
+               	jp	<addr>
                	je	<addr>
                	movl	$0x1, %eax
                	retq
@@ -57,7 +52,6 @@ Disassembly of section .text:
                	ucomisd	%xmm15, %xmm14
                	jp	<addr>
                	jne	<addr>
-               	xorq	%rax, %rax
-               	movq	%rax, %rcx
+               	xorl	%eax, %eax
                	retq
                	retq

@@ -47,5 +47,5 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0xe, %eax
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	retq

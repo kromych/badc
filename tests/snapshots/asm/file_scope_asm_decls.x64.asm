@@ -27,7 +27,6 @@ Disassembly of section .text:
 
 <export_me>:
                	leaq	0x2(%rdi), %rax
-               	movslq	%eax, %rax
                	retq
 
 <main>:
@@ -36,43 +35,34 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movslq	0x8(%rax), %rax
                	cmpl	$0x3, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x1, %eax
                	popq	%rbp
                	retq
                	movq	%rsp, %rax
                	movq	%rsp, %rcx
-               	movq	%rbp, %rsi
+               	movq	%rbp, %rdx
                	testq	%rax, %rax
                	je	<addr>
                	testq	%rcx, %rcx
-               	sete	%dl
-               	movzbq	%dl, %rdx
+               	je	<addr>
                	testq	%rdx, %rdx
                	jne	<addr>
-               	testq	%rsi, %rsi
-               	sete	%dl
-               	movzbq	%dl, %rdx
-               	testq	%rdx, %rdx
-               	je	<addr>
                	movl	$0x2, %eax
                	popq	%rbp
                	retq
                	cmpq	%rcx, %rax
                	jbe	<addr>
-               	subq	%rcx, %rax
-               	cmpq	$0x10000, %rax          # imm = 0x10000
+               	movq	%rax, %rdx
+               	subq	%rcx, %rdx
+               	cmpq	$0x10000, %rdx          # imm = 0x10000
                	jbe	<addr>
                	movl	$0x3, %eax
                	popq	%rbp
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	popq	%rbp
                	retq
-               	movq	%rax, %r10
-               	movq	%rcx, %rax
-               	subq	%r10, %rax
+               	movq	%rcx, %rdx
+               	subq	%rax, %rdx
                	jmp	<addr>

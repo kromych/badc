@@ -180,7 +180,29 @@ pub(super) fn fused_branch_cc(
         return None;
     }
     let op = match func.insts.get(cond as usize)? {
+        // `emit_binop_imm` tested the mask: `bt` leaves the bit in CF,
+        // `test` the zero test in ZF.
+        Inst::BinopI {
+            op: BinOp::And,
+            rhs_imm,
+            ..
+        } => {
+            let cc = match (
+                crate::c5::codegen::ssa::reg_alloc::x86_mask_takes_bt(*rhs_imm),
+                negate,
+            ) {
+                (true, true) => Cc::Ae,
+                (true, false) => Cc::B,
+                (false, true) => Cc::E,
+                (false, false) => Cc::Ne,
+            };
+            return Some(FusedBranch::Jcc(cc));
+        }
         Inst::Binop { op, .. } | Inst::BinopI { op, .. } => *op,
+        // `emit_zero_test_of_load` compared the memory operand with zero.
+        Inst::Load { .. } | Inst::LoadLocal { .. } | Inst::LoadIndexed { .. } => {
+            return Some(FusedBranch::Jcc(if negate { Cc::E } else { Cc::Ne }));
+        }
         _ => return None,
     };
     if let Some(positive) = int_cmp_cc(op) {
@@ -289,6 +311,10 @@ pub(super) fn emit_inst(
             let _ = slot;
             Ok(())
         }
+        // A lifetime marker states a fact about storage the frame
+        // already holds; `ssa::slot_coalesce` reads it and no code
+        // follows from it.
+        Inst::LifetimeEnd(_) => Ok(()),
         Inst::ParamRef { idx, kind } => emit_param_ref(code, *idx, *kind, dst, v, fcx),
         Inst::Imm(value) => {
             let Some(rd) = int_or_spill_dst(dst) else {
@@ -403,6 +429,7 @@ pub(super) fn emit_inst(
         }
         Inst::X86Simd { op, imm, args } => emit_x86_simd(code, *op, *imm, args, alloc, frame),
         Inst::InlineAsm { asm, args } => emit_inline_asm(out, asm, args, v, fcx, None),
+        Inst::Neg(value) => emit_neg(code, dst, *value, alloc, frame),
         Inst::Fneg(value) => emit_fneg(code, dst, v, *value, alloc, frame),
         Inst::Fma {
             a,
@@ -430,6 +457,16 @@ pub(super) fn emit_inst(
         } => emit_mul_add(code, dst, v, *a, *b, *c, *neg_product, alloc, frame),
         Inst::Extend { value, kind } => emit_extend(code, dst, v, *value, *kind, alloc, frame),
         Inst::Bswap { value, width } => emit_bswap(code, dst, *value, *width, alloc, frame),
+        Inst::BitCount { op, value, width } => emit_bit_count(
+            code,
+            dst,
+            *op,
+            *value,
+            *width,
+            alloc.count_nonzero(v),
+            alloc,
+            frame,
+        ),
         Inst::Copy { value, is_fp } => emit_copy(code, dst, *value, *is_fp, alloc, frame),
         Inst::FpCast { kind, value } => emit_fp_cast(code, dst, v, *kind, *value, alloc, frame),
         Inst::TlsAddr(offset) => emit_tls_addr(
@@ -474,6 +511,12 @@ fn emit_mem_inst(
         abi,
         ..
     } = *fcx;
+    if alloc.branch_fused.get(v as usize).copied().unwrap_or(false) {
+        return emit_zero_test_of_load(code, inst, fcx);
+    }
+    if alloc.imm_store.get(v as usize).copied().unwrap_or(false) {
+        return emit_store_of_imm(code, inst, func, alloc, frame, abi);
+    }
     match inst {
         Inst::Load {
             addr,
@@ -555,17 +598,36 @@ fn emit_mem_inst(
         Inst::LoadIndexed {
             base,
             index,
+            index_ext,
             scale,
             kind,
-        } => emit_load_indexed(code, dst, *base, *index, *scale, *kind, alloc, frame),
+        } => emit_load_indexed(
+            code,
+            dst,
+            *base,
+            (*index, *index_ext),
+            *scale,
+            *kind,
+            alloc,
+            frame,
+        ),
         Inst::StoreIndexed {
             base,
             index,
+            index_ext,
             scale,
             value,
             kind,
         } => emit_store_indexed(
-            code, dst, *base, *index, *scale, *value, *kind, alloc, frame,
+            code,
+            dst,
+            *base,
+            (*index, *index_ext),
+            *scale,
+            *value,
+            *kind,
+            alloc,
+            frame,
         ),
         _ => unreachable!(),
     }
@@ -762,27 +824,23 @@ fn emit_param_ref(
         _ if from_home => Reg(0),
         _ => return fail("ParamRef: int param has no incoming integer register"),
     };
-    // The caller passes the raw 64-bit value, so an I8/I16 conversion
-    // always runs; an I32 extend touches only bits 32..63 and is skipped
-    // when no consumer reads them.
-    let high_dead = alloc.high_dead(v);
+    let ext = param_entry_ext(kind, v, alloc);
     let materialize = |code: &mut Vec<u8>, rd: Reg| {
         if from_home {
-            match kind {
-                LoadKind::I8 => super::encode::emit_movsx_r_mem8(code, rd, Reg::RBP, home_off),
-                LoadKind::I16 => super::encode::emit_movsx_r_mem16(code, rd, Reg::RBP, home_off),
-                LoadKind::I32 if !high_dead => {
+            match ext {
+                Some(LoadKind::I8) => {
+                    super::encode::emit_movsx_r_mem8(code, rd, Reg::RBP, home_off)
+                }
+                Some(LoadKind::I16) => {
+                    super::encode::emit_movsx_r_mem16(code, rd, Reg::RBP, home_off)
+                }
+                Some(LoadKind::I32) => {
                     super::encode::emit_movsxd_r_mem(code, rd, Reg::RBP, home_off)
                 }
                 _ => emit_mov_r_mem(code, rd, Reg::RBP, home_off),
             }
         } else {
-            match kind {
-                LoadKind::I8 => super::encode::emit_movsx_r_r8(code, rd, arg_reg),
-                LoadKind::I16 => super::encode::emit_movsx_r_r16(code, rd, arg_reg),
-                LoadKind::I32 if !high_dead => super::encode::emit_movsxd_r_r(code, rd, arg_reg),
-                _ => emit_mov_rr(code, rd, arg_reg),
-            }
+            emit_sign_extend(code, rd, arg_reg, ext.unwrap_or(LoadKind::I64));
         }
     };
     match dst {

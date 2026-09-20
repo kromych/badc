@@ -210,6 +210,64 @@ impl Compiler {
         }
     }
 
+    /// The frame slots of the automatic objects a closing block owns,
+    /// for its `Stmt::ScopeEnd`. Only an object whose storage is a
+    /// frame cell the block itself reserved qualifies: a parameter
+    /// (a non-negative slot), a `static` or `extern` local (no frame
+    /// storage), and a variable-length array (sp-carved, reclaimed by
+    /// the `VlaScopeExit` bracket) are all left out.
+    ///
+    /// So is an object no expression takes the address of: slot
+    /// coalescing bounds such a slot by its exact live range already,
+    /// and a marker it cannot use would still cost an instruction in
+    /// every body-size budget and a value id in the allocator's order.
+    /// An aggregate is addressed whatever the source writes.
+    ///
+    /// A statement expression whose value is an aggregate yields the
+    /// address of the object holding it, which the enclosing expression
+    /// copies from after the block's items have run; such a block states
+    /// no lifetime end at all, since the object outlives its own block
+    /// as far as the emitted code is concerned.
+    fn block_lifetime_slots(
+        &self,
+        scope: &[BlockShadow],
+        items: &[super::super::ast::StmtId],
+        value_item: Option<usize>,
+    ) -> alloc::vec::Vec<i64> {
+        if let Some(i) = value_item
+            && items
+                .get(i)
+                .is_some_and(|&s| self.stmt_value_is_aggregate(s))
+        {
+            return alloc::vec::Vec::new();
+        }
+        scope
+            .iter()
+            .filter_map(|b| {
+                let sym = &self.symbols[b.idx];
+                let addressed = sym.address_escaped
+                    || sym.array_size != 0
+                    || super::types::is_struct_value_ty(sym.type_);
+                (sym.class == Token::Loc as i64 && sym.val < 0 && !sym.is_vla && addressed)
+                    .then_some(sym.val)
+            })
+            .collect()
+    }
+
+    /// True when statement `s` is an expression statement whose value is
+    /// an aggregate (a struct, union or array), labels stripped.
+    fn stmt_value_is_aggregate(&self, s: super::super::ast::StmtId) -> bool {
+        use super::super::ast::Stmt;
+        let mut last = s;
+        while let Stmt::Labeled { body, .. } = self.ast.stmt(last) {
+            last = *body;
+        }
+        let Stmt::Expr(e) = self.ast.stmt(last) else {
+            return false;
+        };
+        super::types::is_struct_value_ty(self.ast.expr_value_ty(*e))
+    }
+
     /// `for (init; cond; step) body`. The body is emitted between the
     /// condition (which falls through to it) and the step (which the
     /// body's tail jumps back to). `continue` patches into the step
@@ -258,6 +316,7 @@ impl Compiler {
     }
 
     pub(super) fn parse_for_stmt(&mut self) -> Result<(), C5Error> {
+        let for_pos = self.ast_src_pos();
         self.next()?;
         self.consume(b'(', "open paren expected")?;
 
@@ -382,7 +441,7 @@ impl Compiler {
         // bubble up to the enclosing function as a sibling stmt
         // with no loop_ctx.
         let for_stmt_start = self.ast.stmts.len();
-        self.ast_emit_for(init_ast, cond_ast, post_ast, body_s);
+        self.ast_emit_for(init_ast, cond_ast, post_ast, body_s, for_pos);
 
         // Run the for-init scope's cleanups after the loop: control
         // reaches here on both normal exit and `break` (both land in the
@@ -871,7 +930,7 @@ impl Compiler {
                 // C11 6.7.10 allows `static_assert` anywhere a
                 // declaration may appear -- including block scope.
                 self.parse_static_assert()?;
-            } else if self.lex_is_type_start() {
+            } else if self.lex_is_block_decl_start() {
                 let item_before = self.ast_stmts_snapshot();
                 let vla_before = self.func_vla_decls;
                 self.parse_local_decl(leading_maybe_unused)?;
@@ -955,6 +1014,23 @@ impl Compiler {
             top_level_ids = bracketed;
             value_item = value_item.map(|i| i + 1);
         }
+        let block_symbols = self.block_scopes.pop().unwrap();
+        // C99 6.2.4p2: every automatic object this block declared is
+        // dead once the block's execution ends, whatever its address
+        // reached. State that as the block's last item so slot
+        // coalescing can bound the storage's lifetime. The function body
+        // is parsed elsewhere, so every block reaching here is nested and
+        // holds no parameter binding (C99 6.2.1p4).
+        {
+            let slots = self.block_lifetime_slots(&block_symbols, &top_level_ids, value_item);
+            if !slots.is_empty() {
+                let pos = self.ast_src_pos();
+                let end = self
+                    .ast
+                    .push_stmt(super::super::ast::Stmt::ScopeEnd(slots), pos);
+                top_level_ids.push(end);
+            }
+        }
         // Wrap the collected top-level stmt ids into a
         // `Stmt::Compound`. Only this Compound references the
         // top-level stmts -- inner wrappers are dead AST entries
@@ -972,7 +1048,6 @@ impl Compiler {
         // `{ ... }` block; their diagnostic is emitted at function
         // exit. Names starting with `_` are suppressed (gcc /
         // clang `-Wunused` convention).
-        let block_symbols = self.block_scopes.pop().unwrap();
         for b in &block_symbols {
             let sym = &self.symbols[b.idx];
             if sym.class != Token::Loc as i64
@@ -2959,6 +3034,7 @@ impl Compiler {
                 self.ast_emit_if(cond, then_s, else_s, if_pos);
             }
         } else if self.lex.tk == Token::While {
+            let while_pos = self.ast_src_pos();
             self.next()?;
             self.consume(b'(', "open paren expected")?;
             self.parse_controlling_expr("while", Category::Scalar)?;
@@ -2976,7 +3052,7 @@ impl Compiler {
 
             self.close_loop_breaks();
             if let Some(cond) = cond_id {
-                self.ast_emit_while(cond, body_s);
+                self.ast_emit_while(cond, body_s, while_pos);
             }
         } else if self.lex.tk == Token::Do {
             self.next()?;
@@ -2986,6 +3062,7 @@ impl Compiler {
             self.stmt()?;
             let body_s = self.ast_wrap_stmts_since(body_before);
 
+            let while_pos = self.ast_src_pos();
             if self.lex.tk == Token::While {
                 self.next()?;
             } else {
@@ -3005,7 +3082,7 @@ impl Compiler {
 
             self.close_loop_breaks();
             if let Some(cond) = cond_id {
-                self.ast_emit_do_while(body_s, cond);
+                self.ast_emit_do_while(body_s, cond, while_pos);
             }
         } else if self.lex.tk == Token::For {
             self.parse_for_stmt()?;
@@ -3071,7 +3148,7 @@ impl Compiler {
                 || self.lex.tk == Token::StaticAssert
                 || self.lex.tk == Token::Case
                 || self.lex.tk == Token::Default
-                || self.lex_is_type_start())
+                || self.lex_is_block_decl_start())
             {
                 self.stmt()?;
             }
@@ -3108,7 +3185,7 @@ impl Compiler {
                 || self.lex.tk == Token::StaticAssert
                 || self.lex.tk == Token::Case
                 || self.lex.tk == Token::Default
-                || self.lex_is_type_start())
+                || self.lex_is_block_decl_start())
             {
                 self.stmt()?;
             }

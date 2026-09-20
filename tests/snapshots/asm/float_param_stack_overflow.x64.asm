@@ -28,20 +28,15 @@ Disassembly of section .text:
 <wsum>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	movsd	%xmm1, 0x10(%rsp)
-               	movss	0x10(%rbp,%riz), %xmm1
-               	movss	0x18(%rbp,%riz), %xmm14
-               	movsd	%xmm14, 0x18(%rsp)
+               	movss	0x10(%rbp), %xmm8
+               	movss	0x18(%rbp), %xmm9
                	movl	$0x3f800000, %eax       # imm = 0x3F800000
                	movl	$0x40000000, %ecx       # imm = 0x40000000
                	movq	%rcx, %xmm15
-               	movsd	0x10(%rsp), %xmm14
-               	mulss	%xmm15, %xmm14
-               	movsd	%xmm14, 0x10(%rsp)
+               	mulss	%xmm15, %xmm1
                	movapd	%xmm0, %xmm14
                	movq	%rax, %xmm15
-               	movsd	0x10(%rsp), %xmm0
+               	movapd	%xmm1, %xmm0
                	vfmadd231ss	%xmm15, %xmm14, %xmm0 # xmm0 = (xmm14 * xmm15) + xmm0
                	movl	$0x40800000, %eax       # imm = 0x40800000
                	movapd	%xmm2, %xmm14
@@ -68,16 +63,15 @@ Disassembly of section .text:
                	movq	%rax, %xmm15
                	vfmadd231ss	%xmm15, %xmm14, %xmm0 # xmm0 = (xmm14 * xmm15) + xmm0
                	movl	$0x43800000, %eax       # imm = 0x43800000
-               	movapd	%xmm1, %xmm14
+               	movapd	%xmm8, %xmm14
                	movq	%rax, %xmm15
                	vfmadd231ss	%xmm15, %xmm14, %xmm0 # xmm0 = (xmm14 * xmm15) + xmm0
                	movl	$0x44000000, %eax       # imm = 0x44000000
-               	movsd	0x18(%rsp), %xmm14
+               	movapd	%xmm9, %xmm14
                	movq	%rax, %xmm15
                	vfmadd231ss	%xmm15, %xmm14, %xmm0 # xmm0 = (xmm14 * xmm15) + xmm0
                	cvttss2si	%xmm0, %rax
-               	movslq	%eax, %rax
-               	leave
+               	popq	%rbp
                	retq
 
 <main>:
@@ -85,7 +79,7 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	leaq	<rip>, %rax
-               	movss	(%rax,%riz), %xmm14
+               	movss	(%rax), %xmm14
                	movsd	%xmm14, 0x8(%rsp)
                	subq	$0x10, %rsp
                	movq	0x18(%rsp), %r10
@@ -127,6 +121,6 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	leave
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	leave
                	retq

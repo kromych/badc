@@ -30,7 +30,6 @@ Disassembly of section .text:
                	ret
 
 <driver>:
-               	sxtw	x0, w0
                	cmp	w0, #0x1
                	b.lt	<addr>
                	cmp	w0, #0x2
@@ -38,17 +37,15 @@ Disassembly of section .text:
                	cmp	w0, #0x2
                	b.eq	<addr>
                	mov	x0, #0x190              // =400
-               	sxtw	x0, w0
                	ret
                	mov	x0, #0x12c              // =300
                	b	<addr>
                	mov	x0, #0xc8               // =200
                	b	<addr>
-               	cbnz	x0, <addr>
+               	cbnz	w0, <addr>
                	mov	x0, #0x64               // =100
                	b	<addr>
 
 <main>:
-               	mov	x0, #0x12c              // =300
                	mov	x0, #0x12c              // =300
                	ret

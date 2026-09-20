@@ -30,12 +30,10 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	movq	%rdi, -0x8(%rbp)
-               	leaq	-0x8(%rbp), %rax
-               	movslq	(%rax), %rax
+               	movslq	-0x8(%rbp), %rax
                	cmpl	$-0x1, %eax
                	setne	%al
                	movzbq	%al, %rax
-               	movslq	%eax, %rax
                	leave
                	retq
 
@@ -44,12 +42,10 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	movq	%rdi, -0x8(%rbp)
-               	leaq	-0x8(%rbp), %rax
-               	movslq	(%rax), %rax
+               	movslq	-0x8(%rbp), %rax
                	cmpl	$-0x1, %eax
                	sete	%al
                	movzbq	%al, %rax
-               	movslq	%eax, %rax
                	leave
                	retq
 
@@ -58,10 +54,8 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	movq	%rdi, -0x8(%rbp)
-               	leaq	-0x8(%rbp), %rax
-               	movslq	(%rax), %rax
+               	movslq	-0x8(%rbp), %rax
                	decq	%rax
-               	movslq	%eax, %rax
                	leave
                	retq
 
@@ -70,15 +64,13 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	movq	%rdi, -0x8(%rbp)
-               	leaq	-0x8(%rbp), %rax
-               	movslq	(%rax), %rax
+               	movslq	-0x8(%rbp), %rax
                	cmpl	$-0x1, %eax
                	setne	%al
                	movzbq	%al, %rax
-               	movslq	%eax, %rax
                	leave
                	retq
 
 <main>:
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	retq

@@ -33,7 +33,7 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	x0, [x0]
-               	b	<addr>
+               	cbz	x0, <addr>
                	ldrsw	x2, [x0]
                	add	x1, x1, x2
                	ldr	x0, [x0, #0x8]

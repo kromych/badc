@@ -42,16 +42,12 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	setne	%al
                	movzbq	%al, %rax
-               	leaq	0x14(%rax), %rdx
-               	cmpq	$0xb, %rcx
+               	addq	$0x14, %rax
+               	cmpl	$0xb, %ecx
                	jne	<addr>
-               	cmpq	$0x15, %rdx
-               	sete	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	xorq	%rax, %rax
-               	movslq	%eax, %rax
+               	cmpl	$0x15, %eax
+               	jne	<addr>
+               	xorl	%eax, %eax
                	leave
                	retq
                	movl	$0x1, %eax

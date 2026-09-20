@@ -16,14 +16,14 @@ Disassembly of section .text:
 <sum_to>:
                	sxtb	x0, w0
                	mov	x1, #0x0                // =0
-               	b	<addr>
+               	cmp	w0, #0x0
+               	b.le	<addr>
                	sub	x2, x0, #0x1
-               	sxtb	x2, w2
                	add	x1, x1, x0
                	mov	x0, x2
-               	cmp	x0, #0x0
+               	cmp	w0, #0x0
                	b.gt	<addr>
-               	add	x0, x1, #0x0
+               	mov	x0, x1
                	ret
 
 <main>:
@@ -35,7 +35,6 @@ Disassembly of section .text:
                	cmp	x0, x17
                	b.ne	<addr>
                	mov	x0, #0x0                // =0
-               	sxtw	x0, w0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x1                // =1

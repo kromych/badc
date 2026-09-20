@@ -1,6 +1,6 @@
 # tinycc
 
-Fabrice Bellard's TCC vendored as a real cross-platform exerciser
+Fabrice Bellard's TCC vendored as a cross-platform exerciser
 for badc: multi-TU compile + link of the tcc-the-binary sources
 against badc's supported targets (x86_64 + aarch64 across ELF /
 Mach-O / PE), followed by a self-host fixed point once every TU
@@ -11,13 +11,13 @@ Source is pinned at the upstream `mob` branch HEAD
 2017) predates years of PE / AArch64 / Mach-O fixes that the
 cross-platform self-host requires, so the bringup follows `mob`
 the same way distros do. Pulled through the badc vendor-deps
-mirror -- see [`setup.py`](setup.py).
+mirror -- see `setup.py`.
 
 ## Vendored surface
 
 A multi-TU build of tcc-the-binary against the targets badc
-supports. Backends and output-formats outside that scope are
-dropped to keep the surface focused:
+supports. Backends and output formats outside that scope are
+dropped:
 
 * **Core (every host)** -- `tcc.c`, `libtcc.c`, `tccpp.c`,
   `tccgen.c`, `tccelf.c`, `tccasm.c`, `tccdbg.c`, `tccrun.c`,
@@ -36,9 +36,9 @@ dropped to keep the surface focused:
 Dropped: `i386-gen.c` / `i386-link.c` (32-bit x86 -- not a
 badc target), `arm-*.c` (32-bit ARM -- not a badc target),
 `riscv64-*.c`, `c67-*.c` / `tcccoff.c` (TI C67), `il-*.c`
-(orphaned IL backend). `ONE_SOURCE` is deliberately NOT
-defined so each `.c` is its own TU -- that is exactly the
-shape that exercises badc's cross-TU linker.
+(orphaned IL backend). `ONE_SOURCE` is not defined, so each
+`.c` is its own TU, which is the shape that exercises badc's
+cross-TU linker.
 
 `include/` carries tinycc's shipped system headers (`float.h`,
 `stdarg.h`, `stdatomic.h`, `tccdefs.h`, ...). They are not
@@ -99,7 +99,7 @@ Already-closed gaps that the bringup surfaced:
   8 bytes).
 * Bitwise `&` / `^` / `|` result type follows the usual
   arithmetic conversions per C99 6.5.10 / 6.5.11 / 6.5.12; a
-  downstream arithmetic op no longer narrows a 64-bit operand
+  downstream arithmetic op does not narrow a 64-bit operand
   through a sign-extend from bit 31.
 
 ## config.h
@@ -135,8 +135,8 @@ the upstream default pulls in `<dispatch/dispatch.h>` on macOS,
 `<semaphore.h>` on Linux, and `CRITICAL_SECTION` on Windows --
 none of which c5 ships today. tinycc uses the lock only to
 serialize libtcc state across threads; the bringup compile +
-self-host fixed point is single-threaded, so the lock is dead
-weight here.
+self-host fixed point is single-threaded, so the lock is unused
+here.
 
 ## Layout
 

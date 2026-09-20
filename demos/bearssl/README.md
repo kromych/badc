@@ -10,11 +10,11 @@ TLS record-layer state machines, and an X.509 minimal
 validator.
 
 Pinned at upstream's `0.6` release. Pulled through the badc
-vendor-deps mirror -- see [`setup.py`](setup.py).
+vendor-deps mirror -- see `setup.py`.
 
 ## Smoke scenarios
 
-[`smoke.py`](smoke.py) builds the focused BearSSL set + a
+`smoke.py` builds the focused BearSSL set + a
 hand-written driver through badc in four flavours (amalgamation
 + separate-TU compile, each at `-O` and no-`-O`), plus an
 archive flavour, and runs each binary. Four scenarios:

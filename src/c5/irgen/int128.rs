@@ -107,7 +107,7 @@ impl<'a> Walker<'a> {
     }
 
     /// 128-bit two's-complement negation (`0 - a`).
-    fn int128_neg(b: &mut SsaBuilder, a: Halves) -> Halves {
+    pub(super) fn int128_neg(b: &mut SsaBuilder, a: Halves) -> Halves {
         let zero = b.imm(0);
         Self::int128_sub(b, (zero, zero), a)
     }
@@ -693,8 +693,8 @@ impl<'a> Walker<'a> {
                 Ok((lo, hi))
             }
             BinOp::Mul => {
-                // The parser spells unary minus as `x * -1`; negation
-                // is three ops where the full product is seventeen.
+                // `x * -1` is the negation, three ops where the full
+                // product is seventeen.
                 if let Expr::IntLit { val: -1, .. } = self.ast.expr(rhs) {
                     return Ok(Self::int128_neg(b, a));
                 }

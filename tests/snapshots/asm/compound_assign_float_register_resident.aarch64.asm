@@ -14,106 +14,80 @@ Disassembly of section .text:
                	brk	#0x1
 
 <main>:
-               	mov	x1, #0x42c80000         // =1120403456
-               	mov	x2, #0x3f800000         // =1065353216
-               	mov	x0, #0x40000000         // =1073741824
-               	fmov	s16, w1
-               	fmov	s17, w0
-               	fsub	s0, s16, s17
-               	fmov	s17, w2
-               	fadd	s1, s0, s17
-               	mov	x1, #0x3ff0000000000000 // =4607182418800017408
-               	fmov	s16, w2
-               	fcvt	d0, s16
-               	fmov	d17, x1
-               	fadd	d0, d0, d17
-               	fcvt	s0, d0
-               	fmov	s17, w0
-               	fsub	s1, s1, s17
-               	fadd	s1, s1, s0
-               	fcvt	d0, s0
-               	fmov	d17, x1
-               	fadd	d0, d0, d17
-               	fcvt	s0, d0
-               	fmov	s17, w0
-               	fsub	s1, s1, s17
-               	fadd	s1, s1, s0
-               	fcvt	d0, s0
-               	fmov	d17, x1
-               	fadd	d0, d0, d17
-               	fcvt	s0, d0
-               	fmov	s17, w0
-               	fsub	s1, s1, s17
-               	fadd	s1, s1, s0
-               	fcvt	d0, s0
-               	fmov	d17, x1
-               	fadd	d0, d0, d17
-               	fcvt	s0, d0
-               	fmov	s17, w0
-               	fsub	s1, s1, s17
-               	fadd	s1, s1, s0
-               	fcvt	d0, s0
-               	fmov	d17, x1
-               	fadd	d0, d0, d17
-               	fcvt	s0, d0
-               	fmov	s17, w0
-               	fsub	s1, s1, s17
-               	fadd	s1, s1, s0
-               	fcvt	d0, s0
-               	fmov	d17, x1
-               	fadd	d0, d0, d17
-               	fcvt	s0, d0
-               	fmov	s17, w0
-               	fsub	s1, s1, s17
-               	fadd	s1, s1, s0
-               	fcvt	d0, s0
-               	fmov	d17, x1
-               	fadd	d0, d0, d17
-               	fcvt	s0, d0
-               	fmov	s17, w0
-               	fsub	s1, s1, s17
-               	fadd	s1, s1, s0
-               	fcvt	d0, s0
-               	fmov	d17, x1
-               	fadd	d0, d0, d17
-               	fcvt	s0, d0
-               	mov	x1, #0x42f00000         // =1123024896
-               	fmov	s17, w1
-               	fcmp	s1, s17
+               	mov	x16, #0x42c80000        // =1120403456
+               	fmov	s1, w16
+               	fmov	s2, #1.00000000
+               	fmov	s0, #2.00000000
+               	fsub	s1, s1, s0
+               	fadd	s3, s1, s2
+               	fmov	d1, #1.00000000
+               	fcvt	d2, s2
+               	fadd	d2, d2, d1
+               	fcvt	s2, d2
+               	fsub	s3, s3, s0
+               	fadd	s3, s3, s2
+               	fcvt	d2, s2
+               	fadd	d2, d2, d1
+               	fcvt	s2, d2
+               	fsub	s3, s3, s0
+               	fadd	s3, s3, s2
+               	fcvt	d2, s2
+               	fadd	d2, d2, d1
+               	fcvt	s2, d2
+               	fsub	s3, s3, s0
+               	fadd	s3, s3, s2
+               	fcvt	d2, s2
+               	fadd	d2, d2, d1
+               	fcvt	s2, d2
+               	fsub	s3, s3, s0
+               	fadd	s3, s3, s2
+               	fcvt	d2, s2
+               	fadd	d2, d2, d1
+               	fcvt	s2, d2
+               	fsub	s3, s3, s0
+               	fadd	s3, s3, s2
+               	fcvt	d2, s2
+               	fadd	d2, d2, d1
+               	fcvt	s2, d2
+               	fsub	s3, s3, s0
+               	fadd	s3, s3, s2
+               	fcvt	d2, s2
+               	fadd	d2, d2, d1
+               	fcvt	s2, d2
+               	fsub	s3, s3, s0
+               	fadd	s3, s3, s2
+               	fcvt	d2, s2
+               	fadd	d1, d2, d1
+               	fcvt	s1, d1
+               	mov	x16, #0x42f00000        // =1123024896
+               	fmov	s2, w16
+               	fcmp	s3, s2
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ret
-               	mov	x1, #0x41100000         // =1091567616
-               	fmov	s17, w1
-               	fcmp	s0, s17
+               	fmov	s2, #9.00000000
+               	fcmp	s1, s2
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ret
-               	mov	x1, #0x3f000000         // =1056964608
-               	mov	x2, #-0x4010000000000000 // =-4616189618054758400
-               	fmov	s16, w1
-               	fcvt	d0, s16
-               	fmov	d17, x2
-               	fadd	d0, d0, d17
-               	fcvt	s0, d0
-               	fmov	s16, w1
-               	fneg	s1, s16
-               	fcmp	s0, s1
+               	fmov	s1, #0.50000000
+               	fmov	d2, #-1.00000000
+               	fcvt	d1, s1
+               	fadd	d1, d1, d2
+               	fcvt	s1, d1
+               	fmov	s2, #-0.50000000
+               	fcmp	s1, s2
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ret
-               	mov	x1, #0x40400000         // =1077936128
-               	mov	x2, #0x4010000000000000 // =4616189618054758400
-               	fmov	s16, w1
-               	fcvt	d0, s16
-               	fmov	d17, x2
-               	fmul	d0, d0, d17
-               	fcvt	s0, d0
-               	fmov	s17, w0
-               	fdiv	s0, s0, s17
-               	mov	x0, #0x40c00000         // =1086324736
-               	fmov	s17, w0
-               	fcmp	s0, s17
+               	fmov	s1, #3.00000000
+               	fmov	d2, #4.00000000
+               	fcvt	d1, s1
+               	fmul	d1, d1, d2
+               	fcvt	s1, d1
+               	fdiv	s0, s1, s0
+               	fmov	s1, #6.00000000
+               	fcmp	s0, s1
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	ret

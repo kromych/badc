@@ -26,36 +26,26 @@ Disassembly of section .text:
                	int3
 
 <from_value>:
-               	movslq	%edi, %rdi
                	testl	%edi, %edi
                	jge	<addr>
-               	imulq	$-0x1, %rdi, %rax
-               	movslq	%eax, %rax
+               	movq	%rdi, %rax
+               	negq	%rax
                	retq
                	leaq	0x1(%rdi), %rax
-               	movslq	%eax, %rax
                	retq
 
 <classify>:
-               	movslq	%edi, %rdi
-               	testq	%rdi, %rdi
+               	testl	%edi, %edi
                	jne	<addr>
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	retq
                	testl	%edi, %edi
                	jle	<addr>
                	movl	$0x1, %eax
-               	movslq	%eax, %rax
                	retq
-               	movabsq	$-0x1, %rax
+               	movq	$-0x1, %rax
                	jmp	<addr>
 
 <main>:
-               	movl	$0x2a, %eax
-               	movl	$0x5, %eax
-               	movl	$0x1, %eax
-               	movq	%rax, %rcx
-               	movabsq	$-0x1, %rax
-               	movq	%rax, %rcx
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	retq

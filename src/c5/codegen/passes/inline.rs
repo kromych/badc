@@ -88,13 +88,14 @@ fn body_cap(func: &FunctionSsa, cap: u32) -> usize {
     }
 }
 
-/// Instruction count past which a caller stops absorbing size-driven
-/// candidates. The per-callee body cap bounds each inlined fragment, but
-/// across the candidacy fixpoint many small fragments otherwise compound
-/// into a function that is large in both code and stack frame. Once a
-/// caller reaches this size only callees the source explicitly marked
-/// `inline` are still inlined into it. Mirrors gcc's
-/// large-function-growth limit.
+/// Instructions splices may add to a caller before it stops absorbing
+/// size-driven candidates. The per-callee body cap bounds each inlined
+/// fragment, but across the candidacy fixpoint many small fragments
+/// otherwise compound into a function that is large in both code and
+/// stack frame. Once a caller has grown by this much only callees the
+/// source explicitly marked `inline` are still inlined into it; a caller
+/// that is large on its own still absorbs small helpers up to it. Mirrors
+/// gcc's large-function-growth limit.
 const CALLER_INST_BUDGET: usize = 2048;
 
 /// Local-slot count past which a *self-recursive* caller stops absorbing
@@ -120,8 +121,11 @@ const CALLER_FRAME_SLOTS: i64 = 256;
 /// Relative growth bound for the caller frame gate.
 const FRAME_GROWTH_FACTOR: i64 = 4;
 
-/// Local-slot count (one 4 KiB page, at 8 bytes per slot) a caller's
-/// relocated-slot region may not cross to absorb a size-driven callee.
+/// Local slots (one 4 KiB page, at 8 bytes per slot) splices may add to a
+/// caller's frame to absorb size-driven callees. Each splice is charged
+/// the slots it adds -- none when it reuses a shared region (see
+/// `CallerRegions`) -- so a caller whose own frame is large still absorbs
+/// helpers whose slots it already holds or that add little.
 /// The `CALLER_FRAME_SLOTS` / `FRAME_GROWTH_FACTOR` pair is relative, so a
 /// caller that already declares a large frame may still multiply it, and
 /// neither bounds the frame itself; a frame that spans a page costs a
@@ -166,6 +170,8 @@ struct SlotPlacement<'a> {
     regions: &'a mut CallerRegions,
     cyclic: &'a BTreeSet<usize>,
     sp_tainted: &'a BTreeSet<usize>,
+    /// The caller's frame before this pass spliced into it.
+    orig_locals: i64,
 }
 
 #[derive(Default)]
@@ -195,6 +201,28 @@ struct CallerRegions {
 /// accessing the setjmp family other than through its macro name is
 /// undefined, C99 7.13.1.1p5.) Read by the splice and by the frame
 /// budget, which charges an appending callee once per site.
+/// `region_key` for the splice of `callee` at a site passing `call_args`
+/// in `caller_insts`: a copy that may gain a direct call through the
+/// devirt sweep must not share the pool (see `splice_may_gain_direct_call`).
+fn splice_region_key(
+    caller_pc: usize,
+    callee: &FunctionSsa,
+    cyclic: &BTreeSet<usize>,
+    sp_tainted: &BTreeSet<usize>,
+    call_args: &[ValueId],
+    caller_insts: &[Inst],
+) -> Option<RegionKey> {
+    region_key(caller_pc, callee, cyclic, sp_tainted).map(|k| {
+        if matches!(k, RegionKey::Pool)
+            && splice_may_gain_direct_call(callee, call_args, caller_insts)
+        {
+            RegionKey::Callee(callee.ent_pc)
+        } else {
+            k
+        }
+    })
+}
+
 fn region_key(
     caller_pc: usize,
     callee: &FunctionSsa,
@@ -254,6 +282,20 @@ impl CallerRegions {
     /// `locals = locals.max(base + needed)`; records never overlap each
     /// other or the caller's own slots because every record is carved at
     /// the top of the locals region current at its creation.
+    /// Slots `place` adds to a frame of `locals` for the same request.
+    fn growth(&self, key: Option<RegionKey>, needed: i64, locals: i64) -> i64 {
+        let rec = match key {
+            None => None,
+            Some(RegionKey::Pool) => self.pool,
+            Some(RegionKey::Callee(pc)) => self.per_callee.get(&pc).copied().flatten(),
+        };
+        match rec {
+            Some((_, size)) if needed <= size => 0,
+            Some((base, size)) if base + size == locals => needed - size,
+            _ => needed,
+        }
+    }
+
     fn place(&mut self, key: Option<RegionKey>, needed: i64, locals: i64) -> i64 {
         let rec: &mut Option<(i64, i64)> = match key {
             None => return locals,
@@ -1078,10 +1120,15 @@ fn is_inline_candidate(
             | Inst::ImmExtCode(_)
             | Inst::ParamRef { .. }
             | Inst::AllocaInit(_)
+            // The splice drops a lifetime marker rather than relocating
+            // it, so it constrains nothing the body must reproduce.
+            | Inst::LifetimeEnd(_)
             | Inst::Binop { .. }
             | Inst::BinopI { .. }
             | Inst::Extend { .. }
             | Inst::Bswap { .. }
+            | Inst::BitCount { .. }
+            | Inst::Neg(_)
             | Inst::Fneg(_)
             | Inst::Fma { .. }
             | Inst::MulAdd { .. }
@@ -1830,7 +1877,12 @@ fn live_inst_mask(func: &FunctionSsa) -> Vec<bool> {
 /// plus one control transfer per block. The arena holds no branches, so
 /// counting values alone under-measures a branchy body by its blocks.
 fn emitted_inst_count(func: &FunctionSsa) -> usize {
-    live_inst_mask(func).iter().filter(|b| **b).count() + func.blocks.len()
+    live_inst_mask(func)
+        .iter()
+        .enumerate()
+        .filter(|&(i, &live)| live && !func.insts[i].is_lifetime_marker())
+        .count()
+        + func.blocks.len()
 }
 
 /// Code the emit issues for each function once this pass has spliced
@@ -2039,13 +2091,16 @@ fn needs_param_agg_copy(c: &FunctionSsa) -> bool {
         | Inst::SegLoad { .. }
         | Inst::Binop { .. }
         | Inst::BinopI { .. }
+        | Inst::Neg(_)
         | Inst::Fneg(_)
         | Inst::Fma { .. }
         | Inst::MulAdd { .. }
         | Inst::Extend { .. }
         | Inst::Bswap { .. }
+        | Inst::BitCount { .. }
         | Inst::FpCast { .. }
         | Inst::AllocaInit(_)
+        | Inst::LifetimeEnd(_)
         | Inst::ParamRef { .. }
         | Inst::Phi { .. } => false,
     })
@@ -2292,6 +2347,7 @@ fn splice_multi_block(
         regions,
         cyclic,
         sp_tainted,
+        ..
     } = placement;
     let n_caller = caller.blocks.len();
     let n_callee = callee.blocks.len();
@@ -2442,17 +2498,14 @@ fn splice_multi_block(
     // the caller proceeds to further sites, so no two sites may share.
     let needed = callee.locals + param_cells.len() as i64;
     let region_base = if needed > 0 {
-        // A copy that may gain a direct call through the devirt sweep
-        // must not share the pool (see `splice_may_gain_direct_call`).
-        let key = region_key(original.ent_pc, callee, cyclic, sp_tainted).map(|k| {
-            if matches!(k, RegionKey::Pool)
-                && splice_may_gain_direct_call(callee, call_args, &original.insts)
-            {
-                RegionKey::Callee(callee.ent_pc)
-            } else {
-                k
-            }
-        });
+        let key = splice_region_key(
+            original.ent_pc,
+            callee,
+            cyclic,
+            sp_tainted,
+            call_args,
+            &original.insts,
+        );
         regions.place(key, needed, original.locals)
     } else {
         original.locals
@@ -2611,7 +2664,16 @@ fn splice_multi_block(
                         callee_remap[ce_pc as usize] = at;
                         at += 1;
                     }
-                    Inst::LoadLocal { .. } | Inst::StoreLocal { .. } | Inst::AllocaInit(_) => {
+                    // A spliced body's objects live in a region the caller
+                    // may reuse for another splice, so the callee's own
+                    // lifetime markers are dropped: the region's single-
+                    // activation rule already bounds them, and a marker
+                    // relocated onto shared region cells would speak for
+                    // another callee's object too.
+                    Inst::LoadLocal { .. }
+                    | Inst::StoreLocal { .. }
+                    | Inst::AllocaInit(_)
+                    | Inst::LifetimeEnd(_) => {
                         callee_remap[ce_pc as usize] = NO_VALUE;
                     }
                     _ => {
@@ -3012,7 +3074,10 @@ fn splice_multi_block(
                         new_f32.push(false);
                         continue;
                     }
-                    Inst::LoadLocal { .. } | Inst::StoreLocal { .. } | Inst::AllocaInit(_) => {
+                    Inst::LoadLocal { .. }
+                    | Inst::StoreLocal { .. }
+                    | Inst::AllocaInit(_)
+                    | Inst::LifetimeEnd(_) => {
                         callee_remap[ce_pc as usize] = NO_VALUE;
                         continue;
                     }
@@ -3169,6 +3234,9 @@ fn splice_multi_block(
             }
         }
     };
+    // The spliced call maps to the callee's return value, which is not a
+    // call: its own entry goes with it.
+    original.extern_call_refs.retain(|&(vid, _)| vid != call_pc);
     let mut call_refs = Vec::new();
     carry(&original.extern_call_refs, &remap, &mut call_refs);
     carry(&callee.extern_call_refs, &callee_remap, &mut call_refs);
@@ -3281,6 +3349,7 @@ fn splice_multi_block(
         f32_values: new_f32,
         // Rebuilt by `passes::narrow` after the pipeline settles.
         cmp32: Vec::new(),
+        low_word_tests: Vec::new(),
         param_fp_mask: original.param_fp_mask,
         // The caller's own layouts, plus the callee's (merged above so a
         // spliced call's `arg_aggs` can name them).
@@ -3717,7 +3786,8 @@ fn inline_caller(
                             // them entirely.
                             Inst::LoadLocal { .. }
                             | Inst::StoreLocal { .. }
-                            | Inst::AllocaInit(_) => {
+                            | Inst::AllocaInit(_)
+                            | Inst::LifetimeEnd(_) => {
                                 callee_remap[ce_pc as usize] = NO_VALUE;
                                 continue;
                             }
@@ -3950,9 +4020,21 @@ fn inline_caller(
                     } else {
                         facts[target_pc].frame_cost
                     };
+                    // What the splice adds to the frame: nothing when its
+                    // region is already large enough.
+                    let needed = c.locals + facts[target_pc].relocated.len() as i64;
+                    let key = splice_region_key(
+                        caller.ent_pc,
+                        c,
+                        placement.cyclic,
+                        placement.sp_tainted,
+                        args,
+                        &caller.insts,
+                    );
+                    let charge = cost.min(placement.regions.growth(key, needed, caller.locals));
                     if !c.is_always_inline
-                        && cost > 0
-                        && caller.locals + cost > CALLER_FRAME_ABS_SLOTS
+                        && charge > 0
+                        && caller.locals - placement.orig_locals + charge > CALLER_FRAME_ABS_SLOTS
                     {
                         unaffordable.insert(*target_pc);
                         continue;
@@ -4038,6 +4120,7 @@ pub(crate) fn run(
     // and the devirt sweep admits no edge that reaches stack-pointer asm
     // or closes a cycle.
     let orig_locals: Vec<i64> = funcs.iter().map(|f| f.locals).collect();
+    let orig_insts: Vec<usize> = funcs.iter().map(emitted_inst_count).collect();
     let sccs = call_graph_sccs(funcs);
     let cyclic = &sccs.cyclic;
     let mut regions: BTreeMap<usize, CallerRegions> = BTreeMap::new();
@@ -4124,8 +4207,8 @@ pub(crate) fn run(
                 .iter()
                 .any(|i| matches!(i, Inst::Call { target_pc, .. } if *target_pc == caller.ent_pc));
             let only_marked = (recursive && caller.locals > RECURSIVE_FRAME_SLOTS)
-                || (caller.insts.len() + caller.blocks.len() > CALLER_INST_BUDGET
-                    && emitted_inst_count(caller) > CALLER_INST_BUDGET);
+                || (caller.insts.len() + caller.blocks.len() > orig_insts[fi] + CALLER_INST_BUDGET
+                    && emitted_inst_count(caller) > orig_insts[fi] + CALLER_INST_BUDGET);
             // Once a caller's frame has grown past CALLER_FRAME_SLOTS and
             // multiplied its pre-inline size, keep a mandatory request and
             // any candidate whose splice relocates no frame slots -- the
@@ -4160,6 +4243,7 @@ pub(crate) fn run(
                     regions: regions.entry(caller.ent_pc).or_default(),
                     cyclic,
                     sp_tainted: &sp_tainted,
+                    orig_locals: orig_locals[fi],
                 },
             );
             if spliced {
@@ -4779,6 +4863,124 @@ mod tests {
         assert_eq!(callee_facts(&calling_callee(500, 6, 600)).frame_cost, 6);
     }
 
+    fn calls_to(f: &FunctionSsa, pc: usize) -> usize {
+        f.insts
+            .iter()
+            .filter(|i| matches!(i, Inst::Call { target_pc, .. } if *target_pc == pc))
+            .count()
+    }
+
+    /// The frame budget caps what splices add: a caller whose own frame is
+    /// already past one page still takes a callee that adds a few slots.
+    #[test]
+    fn a_large_caller_absorbs_a_small_callee() {
+        let abi = Target::LinuxX64.abi();
+        let mut funcs = alloc::vec![
+            multi_call_caller(1, CALLER_FRAME_ABS_SLOTS + 88, 500, 1),
+            calling_callee(500, 4, 600),
+            leaf(600),
+        ];
+        run(&mut funcs, 32, abi, &BTreeMap::new());
+        assert_eq!(calls_to(&funcs[0], 500), 0, "the small callee is spliced");
+    }
+
+    /// The instruction budget caps what splices add: a caller past it on
+    /// its own still takes a small callee the source did not mark `inline`.
+    #[test]
+    fn a_long_caller_absorbs_a_small_unmarked_callee() {
+        let abi = Target::LinuxX64.abi();
+        let mut caller = multi_call_caller(1, 1, 500, 1);
+        let body: Vec<Inst> = (0..CALLER_INST_BUDGET + 64)
+            .flat_map(|_| {
+                [
+                    Inst::Imm(3),
+                    Inst::StoreLocal {
+                        off: -1,
+                        value: 0,
+                        kind: StoreKind::I64,
+                        volatile: true,
+                    },
+                ]
+            })
+            .collect();
+        let n = body.len() as u32;
+        for inst in caller.insts.iter_mut() {
+            inst.for_each_operand_mut(|v| *v += n);
+        }
+        let mut insts = body;
+        for (i, inst) in insts.iter_mut().enumerate() {
+            if let Inst::StoreLocal { value, .. } = inst {
+                *value = i as u32 - 1;
+            }
+        }
+        insts.append(&mut caller.insts);
+        caller.insts = insts;
+        let total = caller.insts.len() as u32;
+        caller.inst_src = alloc::vec![(0, 0); total as usize];
+        caller.f32_values = alloc::vec![false; total as usize];
+        caller.blocks[0].inst_range = 0..total;
+        caller.blocks[0].terminator = Terminator::Return(total - 1);
+        caller.blocks[0].exit_acc = total - 1;
+        assert!(emitted_inst_count(&caller) > CALLER_INST_BUDGET);
+        let mut funcs = alloc::vec![caller, calling_callee(500, 4, 600), leaf(600)];
+        run(&mut funcs, 32, abi, &BTreeMap::new());
+        assert_eq!(calls_to(&funcs[0], 500), 0, "the small callee is spliced");
+    }
+
+    /// Splices are charged against one budget per caller: two callees whose
+    /// slots together pass it take the first and leave the second.
+    #[test]
+    fn splices_past_the_frame_budget_stay_out_of_line() {
+        let abi = Target::LinuxX64.abi();
+        let half = CALLER_FRAME_ABS_SLOTS / 2 + 44;
+        let mut caller = multi_call_caller(1, 0, 500, 1);
+        caller.insts.insert(1, call_to(501));
+        caller.inst_src.push((0, 0));
+        caller.f32_values.push(false);
+        caller.blocks[0].inst_range = 0..3;
+        caller.blocks[0].terminator = Terminator::Return(2);
+        caller.blocks[0].exit_acc = 2;
+        let wide = |pc: usize| {
+            let mut c = calling_callee(pc, half, 600);
+            // One object spans the whole frame, so the splice keeps every cell.
+            c.multi_cell_slots = alloc::vec![(-half, half)];
+            c
+        };
+        let mut funcs = alloc::vec![caller, wide(500), wide(501), leaf(600)];
+        run(&mut funcs, 32, abi, &BTreeMap::new());
+        assert_eq!(
+            calls_to(&funcs[0], 500) + calls_to(&funcs[0], 501),
+            1,
+            "exactly one of the two fits the budget"
+        );
+    }
+
+    /// `growth` is what `place` adds to the frame for the same request:
+    /// nothing for a region that holds the request, the difference for
+    /// the region on top of the frame, the whole request otherwise.
+    #[test]
+    fn region_growth_matches_placement() {
+        for (pool, needed, locals) in [
+            (Some((10, 4)), 3, 20),
+            (Some((10, 4)), 6, 14),
+            (Some((10, 4)), 6, 20),
+            (None, 5, 20),
+        ] {
+            let mut r = CallerRegions {
+                pool,
+                ..Default::default()
+            };
+            let grows = r.growth(Some(RegionKey::Pool), needed, locals);
+            let base = r.place(Some(RegionKey::Pool), needed, locals);
+            assert_eq!(
+                grows,
+                (base + needed).max(locals) - locals,
+                "{pool:?} {needed} {locals}"
+            );
+        }
+        assert_eq!(CallerRegions::default().growth(None, 5, 20), 5);
+    }
+
     /// The absolute frame bound: a callee whose relocated slots would
     /// carry the caller's region past one page is not spliced, even though
     /// the caller's frame has not grown relative to its pre-inline size,
@@ -5315,6 +5517,7 @@ mod tests {
                 terminator: Terminator::Return(1),
                 exit_acc: 1,
             }],
+            extern_call_refs: alloc::vec![(1, 9)],
             ..Default::default()
         };
         let mut funcs = alloc::vec![callee, caller];
@@ -5323,6 +5526,11 @@ mod tests {
         assert!(
             !out.insts.iter().any(|i| matches!(i, Inst::Call { .. })),
             "the call must have been spliced"
+        );
+        assert!(
+            out.extern_call_refs.is_empty(),
+            "the spliced call's symbol reference names no call: {:?}",
+            out.extern_call_refs
         );
         let arena = out.insts.len() as ValueId;
         for (i, inst) in out.insts.iter().enumerate() {

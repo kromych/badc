@@ -26,17 +26,15 @@ Disassembly of section .text:
                	int3
 
 <pc_relative>:
-               	movq	(%rsi), %rax
-               	movq	%rax, %r10
+               	movq	(%rsi), %rcx
                	movq	%rdi, %rax
-               	subq	%r10, %rax
+               	subq	%rcx, %rax
                	movq	%rax, %rcx
                	sarq	$0x3f, %rcx
                	shrq	$0x3e, %rcx
                	addq	%rcx, %rax
                	sarq	$0x2, %rax
                	decq	%rax
-               	movslq	%eax, %rax
                	retq
 
 <unqualified_left>:
@@ -65,11 +63,10 @@ Disassembly of section .text:
                	retq
 
 <back>:
-               	movq	%rsi, %rax
-               	shlq	$0x2, %rax
-               	movq	%rax, %r10
+               	movq	%rsi, %rcx
+               	shlq	$0x2, %rcx
                	movq	%rdi, %rax
-               	subq	%r10, %rax
+               	subq	%rcx, %rax
                	retq
 
 <main>:
@@ -97,29 +94,24 @@ Disassembly of section .text:
                	addq	%rcx, %rdx
                	leaq	-0x8(%rbp), %rcx
                	leaq	0x5(%rcx), %rsi
-               	movq	%rcx, %r10
-               	movq	%rsi, %rcx
-               	subq	%r10, %rcx
-               	subq	$0x5, %rcx
-               	addq	%rcx, %rdx
+               	subq	%rcx, %rsi
+               	leaq	-0x5(%rsi), %rcx
+               	leaq	(%rdx,%rcx), %rsi
                	leaq	-0x28(%rbp), %rcx
-               	leaq	0x10(%rcx), %rsi
-               	movq	%rcx, %r10
-               	movq	%rsi, %rcx
-               	subq	%r10, %rcx
-               	movq	%rcx, %rsi
-               	sarq	$0x3f, %rsi
-               	shrq	$0x3d, %rsi
-               	addq	%rsi, %rcx
+               	leaq	0x10(%rcx), %rdx
+               	subq	%rcx, %rdx
+               	movq	%rdx, %rcx
+               	sarq	$0x3f, %rcx
+               	shrq	$0x3d, %rcx
+               	addq	%rdx, %rcx
                	sarq	$0x3, %rcx
                	subq	$0x2, %rcx
-               	addq	%rdx, %rcx
+               	addq	%rsi, %rcx
                	leaq	0x10(%rax), %rdx
                	subq	$0x10, %rdx
                	cmpq	%rax, %rdx
                	setne	%al
                	movzbq	%al, %rax
                	addq	%rcx, %rax
-               	movslq	%eax, %rax
                	leave
                	retq

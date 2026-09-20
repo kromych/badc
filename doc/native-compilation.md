@@ -20,6 +20,22 @@ unless it binds a shared-library symbol, which the driver reports
 read-write, as `ld` lays out a static executable. EFI images are supported
 through the PE subsystem selector.
 
+## Instruction-set baseline
+
+On x86_64 badc assumes x86-64-v3: AVX, AVX2, FMA3, BMI1, BMI2, LZCNT, MOVBE and
+F16C on top of SSE4.2 and POPCNT, as in Intel Haswell, AMD Zen and later. On
+AArch64 it assumes what the Apple M1 implements, less Apple's own extensions:
+ARMv8.4-A with FP16, DotProd, FHM, AES, PMULL, SHA3 and SHA512, plus FRINTTS,
+FlagM2, SB and SSBS from ARMv8.5-A, without BTI, BF16 or I8MM. The emitted code
+may use any instruction of the set at any optimization level, and a processor
+that lacks one is not a target. `-mno-sse` / `-mgeneral-regs-only` take the
+floating-point and vector registers out of the set ([Hardening and code-model
+knobs](#hardening-and-code-model-knobs)); nothing else narrows it, and the
+driver refuses `-march=` and `-mtune=`. No instruction-set feature macro
+(`__SSE2__`, `__AVX2__`, `__ARM_NEON`, ...) is predefined but
+`__ARM_FEATURE_AES`, `__ARM_FEATURE_SHA2` and `__ARM_FEATURE_CRYPTO`, which
+`-mcpu=`'s `+aes`, `+sha2` and `+crypto` modifiers define.
+
 
 ## Multiple translation units
 
@@ -45,8 +61,8 @@ through the GOT, so a badc `-c` object links into a PIE produced by the system
 toolchain. Archives are ar(5) with a SysV-style symbol index.
 
 The `full` cargo feature gates the entire pipeline; library consumers that do
-not need multi-TU artifacts can opt out via `default-features = false, features
-= ["std"]` to keep the footprint slim.
+not need multi-TU artifacts can opt out via
+`default-features = false, features = ["std"]`.
 
 `-l<name>` is resolved in the `-L` directories, then in the standard library
 directories under `--sysroot=<dir>` (`usr/lib`, `lib`, their 64-bit and
@@ -131,9 +147,9 @@ swaps the header and the bindings change with it -- `printf` lands on bare
 `printf` from `libc.so.6` on Linux, `printf` from `msvcrt.dll` on Windows.
 
 Validation runs at codegen entry: every intrinsic the program *references*
-must have a matching binding for the chosen target. Unused bindings cost
-nothing -- they describe the surface without forcing you to pull in everything
-they name. A library a bundled header declares reaches the image only when an
+must have a matching binding for the chosen target. An unused binding describes
+the surface without pulling in what it names. A library a bundled header
+declares reaches the image only when an
 import binds through it, so including `<math.h>` without calling into it leaves
 no `DT_NEEDED` behind, which is what `ld --as-needed` does. A `#pragma dylib`
 in your own source is a load-time dependency and is recorded whether or not a
@@ -196,22 +212,23 @@ int main() {
 `dlopen(NULL, RTLD_NOW)` returns the calling process's symbol scope -- libc on
 POSIX, the loaded set on Windows.
 
-For a flavour of what is reachable from each system:
+What is reachable from each system:
 
 * **macOS** -- `dlsym(h, "objc_msgSend")` gives the Objective-C runtime entry
   point. The CoreFoundation / AppKit / Foundation surfaces are one
   `dlopen("/System/Library/.../X.framework/X")` away.
 * **Linux** -- `clock_gettime`, `nanosleep`, `pipe2`, the entire `pthread_*`
   family. Anything in `/usr/lib`'s sonames if you spell the path.
-* **Windows** -- `dlopen` resolves to `LoadLibraryA`, so `dlopen("user32.dll",
-  0)` plus `dlsym(h, "MessageBoxA")` gives a callable Win32 API entry point.
+* **Windows** -- `dlopen` resolves to `LoadLibraryA`, so
+  `dlopen("user32.dll", 0)` plus `dlsym(h, "MessageBoxA")` gives a callable
+  Win32 API entry point.
 
 ## In-process JIT (`--jit`)
 
 Same encoder and relocations as the AOT path. badc mmaps the result
 executable, resolves libc through a runtime-built fake GOT, and calls `main`
-directly via a transmuted function pointer. No subprocess, no on-disk binary --
-parse, lower and exec all happen inside the badc process:
+directly via a transmuted function pointer. Parse, lower and exec happen inside
+the badc process, with no subprocess and no on-disk binary:
 
 ```sh
 badc --jit tests/fixtures/c/c4.c hello.c       # JIT'd c4 self-hosts hello.c
@@ -250,9 +267,8 @@ spellings, which all select the same single level) runs mem2reg, inlining,
 rotate and branch const-folding, and immediate dedup, and predefines `NDEBUG=1`
 and `__OPTIMIZE__=1`.
 
-Optimized binaries run on any modern ARM64 processor, and on x86_64 processors
-not older than Intel Haswell and AMD Zen (circa 2013 -- the optimizer emits
-FMA3).
+`-O` contracts `a*b+c` into one fused multiply-add on both architectures, an
+instruction of the [baseline](#instruction-set-baseline).
 
 `examples/bench.rs` runs a few pure-computation workloads (`fib32`,
 `quicksort-50k`, `matmul-50`) through the VM and the in-process JIT and reports
@@ -263,8 +279,7 @@ cargo run --release --example bench -- --iter 10
 ```
 
 Assembly and SSA snapshots of the test fixtures live under
-[`tests/snapshots/`](../tests/snapshots/), where a codegen change shows up as a
-reviewable diff.
+`tests/snapshots/`, where a codegen change shows up as a reviewable diff.
 
 ## Hardening and code-model knobs
 
@@ -304,17 +319,17 @@ and every return path -- including a tail call's teardown -- reloads it,
 compares, and calls `__stack_chk_fail` on a mismatch.
 
 `-mstack-protector-guard=global|tls|sysreg` says where the guard value comes
-from, with `-mstack-protector-guard-reg=`, `-mstack-protector-guard-offset=`
-and `-mstack-protector-guard-symbol=` as its operands. The default follows
-the target: `%fs:0x28` on Linux/x86-64, the C library's `__stack_chk_guard`
-object elsewhere. `tls` is the x86-64 segment-relative form the kernel
-selects (`-mstack-protector-guard=tls -mstack-protector-guard-reg=gs
--mstack-protector-guard-symbol=__ref_stack_chk_guard`); `sysreg` is the
+from, with `-mstack-protector-guard-reg=`, `-mstack-protector-guard-offset=` and
+`-mstack-protector-guard-symbol=` as its operands. The default follows the
+target: `%fs:0x28` on Linux/x86-64, the C library's `__stack_chk_guard` object
+elsewhere. `tls` is the x86-64 segment-relative form the kernel selects
+(`-mstack-protector-guard=tls`, `-mstack-protector-guard-reg=gs`,
+`-mstack-protector-guard-symbol=__ref_stack_chk_guard`); `sysreg` is the
 aarch64 form that reads a per-task offset above a system register
-(`-mstack-protector-guard-reg=sp_el0 -mstack-protector-guard-offset=N`).
-The family needs relocatable output -- the failure branch is a relocation
-against `__stack_chk_fail` -- so `--jit` and `--interp` reject it, as do the
-Windows targets, whose C library exports neither symbol.
+(`-mstack-protector-guard-reg=sp_el0`, `-mstack-protector-guard-offset=N`). The
+family needs relocatable output -- the failure branch is a relocation against
+`__stack_chk_fail` -- so `--jit` and `--interp` reject it, as do the Windows
+targets, whose C library exports neither symbol.
 
 `-ftrivial-auto-var-init=uninitialized|zero|pattern` (the kernel's
 `CONFIG_INIT_STACK_ALL_ZERO` passes `zero`) initializes every automatic
@@ -346,8 +361,8 @@ kernel passes `CONFIG_FRAME_WARN` through it.
 `pac-ret` signs the return address of every function that stores the link
 register: `paciasp` ahead of the prologue, `autiasp` after the last teardown
 instruction of each epilogue, where sp -- the signing modifier -- holds its
-function-entry value again. A frameless leaf never stores the link register and
-is left alone. `standard` is `bti+pac-ret`; a signed function opens with
+function-entry value again. A frameless leaf stores no link register and is
+left alone. `standard` is `bti+pac-ret`; a signed function opens with
 `paciasp`, which is itself a landing pad for the branch types a function entry
 is reached with, so it takes no separate `BTI C`. An aarch64 object built with
 either claims the matching bits in a `.note.gnu.property`

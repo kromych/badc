@@ -20,17 +20,14 @@ Disassembly of section .text:
                	b.lt	<addr>
                	cmp	w1, #0x2
                	b.eq	<addr>
-               	sxtw	x0, w0
                	ret
                	mov	x0, #-0x1               // =-1
                	b	<addr>
                	cmp	w1, #0x1
-               	b.eq	<addr>
-               	b	<addr>
+               	b.ne	<addr>
                	mov	x0, #0x2a               // =42
                	b	<addr>
 
 <main>:
-               	mov	x0, #0x2a               // =42
                	mov	x0, #0x2a               // =42
                	ret

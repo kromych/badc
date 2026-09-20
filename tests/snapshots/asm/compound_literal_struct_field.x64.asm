@@ -26,10 +26,7 @@ Disassembly of section .text:
                	int3
 
 <check>:
-               	xorq	%rax, %rax
-               	movq	%rax, %rdx
-               	movq	%rax, %rdx
-               	movq	%rax, %rcx
+               	xorl	%eax, %eax
                	retq
 
 <main>:
@@ -53,6 +50,5 @@ Disassembly of section .text:
                	movl	$0xb, %edi
                	movl	$0x16, %esi
                	callq	<addr>
-               	movslq	%eax, %rax
                	leave
                	retq

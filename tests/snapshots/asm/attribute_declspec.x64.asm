@@ -31,7 +31,6 @@ Disassembly of section .text:
 
 <exported>:
                	leaq	0x1(%rdi), %rax
-               	movslq	%eax, %rax
                	retq
 
 <main>:
@@ -39,11 +38,11 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	movl	$0x3, %edi
                	callq	<addr>
-               	cmpq	$0x6, %rax
+               	cmpl	$0x6, %eax
                	je	<addr>
                	movl	$0x2, %eax
                	popq	%rbp
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	popq	%rbp
                	retq

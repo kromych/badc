@@ -7,14 +7,14 @@ Disassembly of section .text:
                	endbr64
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%rbx, (%rsp)
+               	subq	$0x8, %rsp
+               	pushq	%rbx
                	leaq	0x8(%rdi), %rax
                	movabsq	$0x7ffffffff000, %r11   # imm = 0x7FFFFFFFF000
                	cmpq	%r11, %rax
                	jbe	<addr>
-               	movabsq	$-0xe, %rax
-               	movq	(%rsp), %rbx
+               	movq	$-0xe, %rax
+               	popq	%rbx
                	leave
                	jmp	<addr>
 		R_X86_64_PLT32	__x86_return_thunk-0x4
@@ -23,8 +23,8 @@ Disassembly of section .text:
                	movq	%rsi, %rbx
                	movq	%rbx, (%rax)
                	clac
-               	xorq	%rax, %rax
-               	movq	(%rsp), %rbx
+               	xorl	%eax, %eax
+               	popq	%rbx
                	leave
                	jmp	<addr>
 		R_X86_64_PLT32	__x86_return_thunk-0x4
@@ -33,14 +33,14 @@ Disassembly of section .text:
                	endbr64
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%rbx, (%rsp)
+               	subq	$0x8, %rsp
+               	pushq	%rbx
                	leaq	0x10(%rdi), %rax
                	movabsq	$0x7ffffffff000, %r11   # imm = 0x7FFFFFFFF000
                	cmpq	%r11, %rax
                	jbe	<addr>
-               	movabsq	$-0xe, %rax
-               	movq	(%rsp), %rbx
+               	movq	$-0xe, %rax
+               	popq	%rbx
                	leave
                	jmp	<addr>
 		R_X86_64_PLT32	__x86_return_thunk-0x4
@@ -53,14 +53,14 @@ Disassembly of section .text:
                	movq	%rdx, %rax
                	movq	%rax, (%rbx)
                	clac
-               	xorq	%rax, %rax
-               	movq	(%rsp), %rbx
+               	xorl	%eax, %eax
+               	popq	%rbx
                	leave
                	jmp	<addr>
 		R_X86_64_PLT32	__x86_return_thunk-0x4
                	clac
-               	movabsq	$-0xe, %rax
-               	movq	(%rsp), %rbx
+               	movq	$-0xe, %rax
+               	popq	%rbx
                	leave
                	jmp	<addr>
 		R_X86_64_PLT32	__x86_return_thunk-0x4

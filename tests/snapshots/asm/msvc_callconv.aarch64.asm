@@ -19,12 +19,10 @@ Disassembly of section .text:
                	ldrsw	x1, [x0]
                	add	x1, x1, #0x33
                	str	w1, [x0]
-               	ldrsw	x0, [x0]
+               	mov	x0, x1
                	cmp	w0, #0x33
-               	cset	x0, eq
-               	cbz	x0, <addr>
+               	b.ne	<addr>
                	mov	x0, #0x0                // =0
-               	sxtw	x0, w0
                	ret
                	mov	x0, #0x1                // =1
                	b	<addr>

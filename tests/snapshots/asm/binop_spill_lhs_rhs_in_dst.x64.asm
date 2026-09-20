@@ -26,20 +26,18 @@ Disassembly of section .text:
                	int3
 
 <sum_at_high>:
-               	movslq	%esi, %rsi
                	movslq	%edx, %rdx
-               	movslq	(%rdi,%rdx,4), %r9
-               	xorq	%rax, %rax
-               	jmp	<addr>
+               	movslq	(%rdi,%rdx,4), %r8
+               	xorl	%eax, %eax
+               	cmpl	%edx, %esi
+               	jg	<addr>
                	movslq	%esi, %rcx
-               	movslq	(%rdi,%rcx,4), %r8
-               	addq	%r8, %rax
-               	movslq	%eax, %rax
-               	leaq	0x1(%rcx), %rsi
+               	movslq	(%rdi,%rcx,4), %rcx
+               	addq	%rcx, %rax
+               	incq	%rsi
                	cmpl	%edx, %esi
                	jle	<addr>
-               	addq	%r9, %rax
-               	movslq	%eax, %rax
+               	addq	%r8, %rax
                	retq
 
 <main>:
@@ -47,28 +45,20 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
                	leaq	-0x18(%rbp), %rdx
-               	movl	$0xc, %eax
-               	movl	%eax, (%rdx)
-               	movl	$0x7, %eax
-               	movl	%eax, 0x4(%rdx)
-               	movl	$0xf, %eax
-               	movl	%eax, 0x8(%rdx)
-               	movl	$0x5, %eax
-               	movl	%eax, 0xc(%rdx)
-               	movl	$0xa, %eax
-               	movl	%eax, 0x10(%rdx)
-               	xorq	%rax, %rax
-               	movslq	0x10(%rdx), %r8
+               	movl	$0xc, (%rdx)
+               	movl	$0x7, 0x4(%rdx)
+               	movl	$0xf, 0x8(%rdx)
+               	movl	$0x5, 0xc(%rdx)
+               	movl	$0xa, %ecx
+               	movl	%ecx, 0x10(%rdx)
+               	xorl	%eax, %eax
+               	movq	%rcx, %rdi
                	movq	%rax, %rcx
-               	jmp	<addr>
-               	movslq	%ecx, %rsi
-               	movslq	(%rdx,%rsi,4), %rdi
-               	addq	%rdi, %rax
-               	movslq	%eax, %rax
-               	leaq	0x1(%rsi), %rcx
+               	movslq	(%rdx,%rcx,4), %rsi
+               	addq	%rsi, %rax
+               	incq	%rcx
                	cmpl	$0x4, %ecx
                	jle	<addr>
-               	addq	%r8, %rax
-               	movslq	%eax, %rax
+               	addq	%rdi, %rax
                	leave
                	retq

@@ -22,79 +22,16 @@ Disassembly of section .text:
                	mov	x0, #-0x400             // =-1024
                	stur	x0, [x29, #-0x10]
                	ldursw	x0, [x29, #-0x8]
-               	asr	x1, x0, #31
-               	eor	x0, x0, x1
-               	lsr	x1, x0, #1
-               	orr	x0, x0, x1
-               	lsr	x1, x0, #2
-               	orr	x0, x0, x1
-               	lsr	x1, x0, #4
-               	orr	x0, x0, x1
-               	lsr	x1, x0, #8
-               	orr	x0, x0, x1
-               	lsr	x1, x0, #16
-               	orr	x0, x0, x1
-               	mov	w0, w0
-               	lsr	x1, x0, #1
-               	and	w1, w1, #0x55555555
-               	sub	x0, x0, x1
-               	and	w1, w0, #0x33333333
-               	lsr	x0, x0, #2
-               	and	w0, w0, #0x33333333
-               	add	x0, x1, x0
-               	lsr	x1, x0, #4
-               	add	x0, x0, x1
-               	and	w0, w0, #0xf0f0f0f
-               	lsr	x1, x0, #8
-               	add	x0, x0, x1
-               	lsr	x1, x0, #16
-               	add	x0, x0, x1
-               	and	x0, x0, #0x7f
-               	mov	x1, #0x20               // =32
-               	sub	x0, x1, x0
-               	sub	x0, x0, #0x1
-               	cmp	x0, #0x17
+               	cls	w0, w0
+               	cmp	w0, #0x17
                	b.eq	<addr>
                	mov	x0, #0xc                // =12
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldur	x0, [x29, #-0x10]
-               	asr	x1, x0, #63
-               	eor	x0, x0, x1
-               	lsr	x1, x0, #1
-               	orr	x0, x0, x1
-               	lsr	x1, x0, #2
-               	orr	x0, x0, x1
-               	lsr	x1, x0, #4
-               	orr	x0, x0, x1
-               	lsr	x1, x0, #8
-               	orr	x0, x0, x1
-               	lsr	x1, x0, #16
-               	orr	x0, x0, x1
-               	lsr	x1, x0, #32
-               	orr	x0, x0, x1
-               	lsr	x1, x0, #1
-               	and	x1, x1, #0x5555555555555555
-               	sub	x0, x0, x1
-               	and	x1, x0, #0x3333333333333333
-               	lsr	x0, x0, #2
-               	and	x0, x0, #0x3333333333333333
-               	add	x0, x1, x0
-               	lsr	x1, x0, #4
-               	add	x0, x0, x1
-               	and	x0, x0, #0xf0f0f0f0f0f0f0f
-               	lsr	x1, x0, #8
-               	add	x0, x0, x1
-               	lsr	x1, x0, #16
-               	add	x0, x0, x1
-               	lsr	x1, x0, #32
-               	add	x0, x0, x1
-               	and	x0, x0, #0x7f
-               	mov	x1, #0x40               // =64
-               	sub	x0, x1, x0
-               	sub	x0, x0, #0x1
-               	cmp	x0, #0x35
+               	cls	x0, x0
+               	cmp	w0, #0x35
                	b.eq	<addr>
                	mov	x0, #0xd                // =13
                	add	sp, sp, #0x10

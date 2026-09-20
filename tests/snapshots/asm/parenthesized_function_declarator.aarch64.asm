@@ -15,15 +15,14 @@ Disassembly of section .text:
 
 <one>:
                	add	x0, x0, #0x1
-               	sxtw	x0, w0
                	ret
 
 <two>:
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	lsl	x0, x0, #1
-               	str	w0, [x1]
-               	mov	x0, x1
+               	mov	x1, x0
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	lsl	x1, x1, #1
+               	str	w1, [x0]
                	ret
 
 <main>:
@@ -32,5 +31,4 @@ Disassembly of section .text:
                	mov	x1, #0xa                // =10
                	str	w1, [x0]
                	mov	x0, #0x0                // =0
-               	mov	x1, x0
                	ret

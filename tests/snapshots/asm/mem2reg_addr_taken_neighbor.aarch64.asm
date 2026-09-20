@@ -17,16 +17,15 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	mov	x1, #0x0                // =0
-               	stur	w1, [x29, #-0x8]
+               	stur	wzr, [x29, #-0x8]
                	lsl	x0, x0, #1
-               	sub	x2, x29, #0x8
-               	add	x1, x0, #0x0
-               	str	w1, [x2]
-               	add	x1, x1, x0
-               	str	w1, [x2]
-               	add	x0, x1, x0
-               	str	w0, [x2]
+               	sub	x1, x29, #0x8
+               	str	w0, [x1]
+               	mov	x2, x0
+               	add	x2, x2, x0
+               	str	w2, [x1]
+               	add	x0, x2, x0
+               	str	w0, [x1]
                	ldursw	x0, [x29, #-0x8]
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
@@ -36,8 +35,7 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	mov	x1, #0x0                // =0
-               	stur	w1, [x29, #-0x8]
+               	stur	wzr, [x29, #-0x8]
                	sub	x0, x29, #0x8
                	mov	x1, #0xe                // =14
                	str	w1, [x0]

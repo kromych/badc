@@ -20,53 +20,41 @@ Disassembly of section .text:
                	sub	x2, x29, #0x80
                	mov	x1, #0x0                // =0
                	mov	x0, x1
-               	b	<addr>
-               	sxtw	x3, w0
-               	add	x3, x2, x3
-               	strb	w1, [x3]
+               	strb	w1, [x2, x0]
                	add	x0, x0, #0x1
-               	sxtw	x0, w0
                	cmp	w0, #0x80
                	b.lt	<addr>
                	sub	x0, x29, #0x80
-               	add	x1, x0, #0x0
-               	ldrb	w2, [x1]
-               	orr	x2, x2, #0x8
-               	strb	w2, [x1]
-               	ldrb	w2, [x0, #0x5]
-               	orr	x2, x2, #0x1
-               	strb	w2, [x0, #0x5]
-               	ldrb	w2, [x1]
-               	and	x2, x2, #0x8
-               	cbz	x2, <addr>
-               	ldrb	w2, [x0, #0x5]
-               	and	x2, x2, #0x1
-               	cmp	w2, #0x0
-               	cset	x2, eq
-               	cbz	x2, <addr>
+               	ldrb	w1, [x0]
+               	orr	x1, x1, #0x8
+               	strb	w1, [x0]
+               	ldrb	w1, [x0, #0x5]
+               	orr	x1, x1, #0x1
+               	strb	w1, [x0, #0x5]
+               	ldrb	w1, [x0]
+               	tbz	w1, #0x3, <addr>
+               	ldrb	w1, [x0, #0x5]
+               	tbnz	w1, #0x0, <addr>
                	mov	x0, #0x2                // =2
                	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldrb	w2, [x1]
-               	and	x2, x2, #0x10
-               	cbz	x2, <addr>
+               	ldrb	w1, [x0]
+               	tbz	w1, #0x4, <addr>
                	mov	x0, #0x3                // =3
                	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldrb	w2, [x1]
-               	and	x3, x2, #0xfffffffffffffff7
-               	strb	w3, [x1]
-               	ldrb	w0, [x1]
-               	and	x0, x0, #0x8
-               	cbz	x0, <addr>
+               	ldrb	w1, [x0]
+               	and	x1, x1, #0xfffffffffffffff7
+               	strb	w1, [x0]
+               	ldrb	w0, [x0]
+               	tbz	w0, #0x3, <addr>
                	mov	x0, #0x4                // =4
                	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x0                // =0
-               	mov	x1, x0
                	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10
                	ret

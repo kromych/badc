@@ -17,181 +17,85 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	mov	x0, #0xa                // =10
-               	mov	x0, #0x3                // =3
-               	mov	x0, #0x6                // =6
-               	mov	x0, #0x74               // =116
-               	mov	x0, #0x5                // =5
-               	mov	x0, #0xf                // =15
-               	mov	x5, #0x0                // =0
-               	mov	x0, x5
-               	sub	x2, x29, #0x10
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
+               	sub	x0, x29, #0x10
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
                	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x0]
-               	str	x10, [x2]
-               	ldr	x10, [x0, #0x8]
-               	str	x10, [x2, #0x8]
+               	ldr	x10, [x1]
+               	str	x10, [x0]
+               	ldr	x10, [x1, #0x8]
+               	str	x10, [x0, #0x8]
                	ldr	x10, [sp], #0x10
-               	mov	x4, #0x64               // =100
-               	mov	x0, #0x11               // =17
-               	movk	x0, #0x8000, lsl #48
-               	mov	x3, x5
-               	b	<addr>
-               	add	x1, x3, #0x1
-               	lsl	x0, x1, #6
-               	cmp	x0, #0x64
+               	mov	x2, #0x0                // =0
+               	mov	x4, x2
+               	mov	x6, x2
+               	mov	x5, x2
+               	cmp	w4, #0xc8
                	b.hs	<addr>
-               	ldr	x0, [x2, x1, lsl #3]
-               	mov	x3, x1
-               	cbz	x0, <addr>
-               	lsl	x1, x3, #6
-               	sub	x2, x0, #0x1
-               	mvn	x0, x0
-               	and	x0, x2, x0
-               	lsr	x2, x0, #1
-               	and	x2, x2, #0x5555555555555555
-               	sub	x0, x0, x2
-               	and	x2, x0, #0x3333333333333333
-               	lsr	x0, x0, #2
-               	and	x0, x0, #0x3333333333333333
-               	add	x0, x2, x0
-               	lsr	x2, x0, #4
-               	add	x0, x0, x2
-               	and	x0, x0, #0xf0f0f0f0f0f0f0f
-               	lsr	x2, x0, #8
-               	add	x0, x0, x2
-               	lsr	x2, x0, #16
-               	add	x0, x0, x2
-               	lsr	x2, x0, #32
-               	add	x0, x0, x2
-               	and	x0, x0, #0x7f
-               	add	x0, x1, x0
-               	cmp	x0, #0x64
-               	b.ls	<addr>
-               	mov	x6, x5
-               	mov	x7, x5
-               	b	<addr>
-               	cmp	x5, #0xc8
-               	cset	x0, lo
-               	cbz	x0, <addr>
-               	add	x7, x7, #0x1
-               	add	x6, x6, x4
+               	add	x6, x6, #0x1
+               	add	x5, x5, x2
                	sub	x3, x29, #0x10
-               	add	x0, x4, #0x1
-               	mov	x4, #0x64               // =100
-               	cmp	x0, #0x64
-               	b.lo	<addr>
-               	b	<addr>
-               	lsr	x2, x0, #6
-               	ldr	x1, [x3, x2, lsl #3]
-               	mov	x8, #-0x1               // =-1
-               	and	x0, x0, #0x3f
-               	lsl	x0, x8, x0
-               	and	x0, x1, x0
-               	b	<addr>
                	add	x1, x2, #0x1
-               	lsl	x0, x1, #6
-               	cmp	x0, #0x64
+               	mov	x2, #0x64               // =100
+               	cmp	w1, #0x64
                	b.hs	<addr>
-               	ldr	x0, [x3, x1, lsl #3]
-               	mov	x2, x1
-               	cbz	x0, <addr>
-               	lsl	x1, x2, #6
-               	sub	x2, x0, #0x1
-               	mvn	x0, x0
-               	and	x0, x2, x0
-               	lsr	x2, x0, #1
-               	and	x2, x2, #0x5555555555555555
-               	sub	x0, x0, x2
-               	and	x2, x0, #0x3333333333333333
-               	lsr	x0, x0, #2
-               	and	x0, x0, #0x3333333333333333
-               	add	x0, x2, x0
-               	lsr	x2, x0, #4
-               	add	x0, x0, x2
-               	and	x0, x0, #0xf0f0f0f0f0f0f0f
-               	lsr	x2, x0, #8
-               	add	x0, x0, x2
-               	lsr	x2, x0, #16
-               	add	x0, x0, x2
-               	lsr	x2, x0, #32
-               	add	x0, x0, x2
-               	and	x0, x0, #0x7f
-               	add	x0, x1, x0
+               	lsr	x0, x1, #6
+               	ldr	x7, [x3, x0, lsl #3]
+               	mov	x8, #-0x1               // =-1
+               	and	x1, x1, #0x3f
+               	lsl	x1, x8, x1
+               	and	x1, x7, x1
+               	cbnz	x1, <addr>
+               	add	x0, x0, #0x1
+               	lsl	x1, x0, #6
+               	cmp	x1, #0x64
+               	b.hs	<addr>
+               	ldr	x1, [x3, x0, lsl #3]
+               	cbz	x1, <addr>
+               	lsl	x0, x0, #6
+               	rbit	x1, x1
+               	clz	x1, x1
+               	add	x0, x0, x1
                	cmp	x0, #0x64
-               	b.ls	<addr>
-               	b	<addr>
-               	mov	x4, x0
-               	b	<addr>
-               	b	<addr>
-               	add	x5, x5, #0x1
-               	cmp	x4, #0x64
+               	b.hi	<addr>
+               	mov	x2, x0
+               	add	x4, x4, #0x1
+               	cmp	w2, #0x64
                	b.lo	<addr>
-               	cmp	x7, #0x5
+               	cmp	x6, #0x5
                	b.eq	<addr>
                	mov	x0, #0x7                // =7
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	cmp	x6, #0xcb
+               	cmp	x5, #0xcb
                	b.eq	<addr>
                	mov	x0, #0x8                // =8
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x4, #0x64               // =100
-               	mov	x0, x4
-               	mov	x0, x4
-               	sub	x3, x29, #0x10
-               	mov	x2, #0x1                // =1
-               	mov	x0, #0x0                // =0
-               	b	<addr>
-               	add	x1, x2, #0x1
-               	lsl	x0, x1, #6
-               	cmp	x0, #0x64
+               	sub	x2, x29, #0x10
+               	mov	x0, #0x1                // =1
+               	mov	x1, #0x0                // =0
+               	add	x0, x0, #0x1
+               	lsl	x1, x0, #6
+               	cmp	x1, #0x64
                	b.hs	<addr>
-               	ldr	x0, [x3, x1, lsl #3]
-               	mov	x2, x1
-               	cbz	x0, <addr>
-               	lsl	x1, x2, #6
-               	sub	x2, x0, #0x1
-               	mvn	x0, x0
-               	and	x0, x2, x0
-               	lsr	x2, x0, #1
-               	and	x2, x2, #0x5555555555555555
-               	sub	x0, x0, x2
-               	and	x2, x0, #0x3333333333333333
-               	lsr	x0, x0, #2
-               	and	x0, x0, #0x3333333333333333
-               	add	x0, x2, x0
-               	lsr	x2, x0, #4
-               	add	x0, x0, x2
-               	and	x0, x0, #0xf0f0f0f0f0f0f0f
-               	lsr	x2, x0, #8
-               	add	x0, x0, x2
-               	lsr	x2, x0, #16
-               	add	x0, x0, x2
-               	lsr	x2, x0, #32
-               	add	x0, x0, x2
-               	and	x0, x0, #0x7f
-               	add	x0, x1, x0
+               	ldr	x1, [x2, x0, lsl #3]
+               	cbz	x1, <addr>
+               	lsl	x0, x0, #6
+               	rbit	x1, x1
+               	clz	x1, x1
+               	add	x0, x0, x1
                	cmp	x0, #0x64
                	b.ls	<addr>
-               	cmp	x4, #0x64
+               	mov	x0, #0x0                // =0
+               	add	sp, sp, #0x10
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	cmp	w0, #0x64
                	b.eq	<addr>
                	mov	x0, #0xb                // =11
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x0                // =0
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	mov	x4, x0
-               	b	<addr>
-               	b	<addr>
-               	mov	x4, x0
-               	b	<addr>
-               	b	<addr>

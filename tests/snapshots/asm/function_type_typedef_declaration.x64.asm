@@ -28,9 +28,8 @@ Disassembly of section .text:
 <sub>:
                	movq	%rdi, %rax
                	subq	%rsi, %rax
-               	movslq	%eax, %rax
                	retq
 
 <main>:
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	retq

@@ -15,7 +15,6 @@ Disassembly of section .text:
 
 <add>:
                	add	x0, x0, x1
-               	sxtw	x0, w0
                	ret
 
 <pick>:
@@ -25,5 +24,4 @@ Disassembly of section .text:
 
 <main>:
                	mov	x0, #0x0                // =0
-               	mov	x1, x0
                	ret

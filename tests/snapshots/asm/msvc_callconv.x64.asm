@@ -30,14 +30,10 @@ Disassembly of section .text:
                	movslq	(%rax), %rcx
                	addq	$0x33, %rcx
                	movl	%ecx, (%rax)
-               	movslq	(%rax), %rax
+               	movq	%rcx, %rax
                	cmpl	$0x33, %eax
-               	sete	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	xorq	%rax, %rax
-               	movslq	%eax, %rax
+               	jne	<addr>
+               	xorl	%eax, %eax
                	retq
                	movl	$0x1, %eax
                	jmp	<addr>

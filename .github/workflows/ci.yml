@@ -74,6 +74,11 @@ jobs:
           python3 demos/kernel/smoke.py --self-test
           python3 scripts/snapshots.py --self-test
           python3 scripts/validate_local_boxes.py --self-test
+          python3 tests/perf/run.py --self-test
+          python3 scripts/perf_publish.py --self-test
+          python3 scripts/perf_backfill.py --self-test
+          python3 scripts/csmith_fuzz.py --self-test
+          python3 scripts/c_reduce.py --self-test
       # Sources and docs are ASCII-only. Smart quotes / em dashes /
       # arrows tend to sneak in via copy-paste and rendered editor
       # autocorrect; keep them out at the gate. A fixture that exercises
@@ -1015,11 +1020,12 @@ jobs:
           - ubuntu-latest
           - ubuntu-24.04-arm
     runs-on: ${{ matrix.os }}
-    # quickjs_bench builds the full engine four times (badc, badc -O,
-    # clang -O0, clang -O2), the quickjs engine comparison four more and
-    # runs a microbench subset through each, and the CPython comparison
-    # builds the interpreter four more times; allow headroom over the
-    # lighter fixtures.
+    # quickjs_bench builds the full engine once per leg the harness
+    # probes -- badc and badc -O, then clang and gcc at -O0, at -O2 and
+    # at -O2 -march=<the level badc assumes> -- the quickjs engine
+    # comparison four more and runs a microbench subset through each,
+    # and the CPython comparison builds the interpreter four more times;
+    # allow headroom over the lighter fixtures.
     timeout-minutes: 30
     # The comparison tables are absolute seconds against a reference
     # compiler on whatever runner the job landed on; they surface in the
@@ -1075,22 +1081,72 @@ jobs:
       - name: build tcc for the host
         run: bash tests/perf/build_tcc.sh
       - name: run perf harness + write to job summary
+        # The harness names its own legs: whichever of tcc, clang and gcc
+        # the runner carries, each at the levels it takes. The heading
+        # states no compiler set, so a runner with a different one needs
+        # no edit here.
         run: |
-          python3 tests/perf/run.py | tee /tmp/perf.md
+          python3 tests/perf/run.py --json /tmp/perf.json | tee /tmp/perf.md
           {
-            echo "## badc vs tcc / clang on fib + qsort (${{ matrix.os }})"
+            echo "## badc against the reference compilers (${{ matrix.os }})"
             echo ""
             cat /tmp/perf.md
           } >> "$GITHUB_STEP_SUMMARY"
       - name: cpython build comparison (badc/clang, -O0/-O)
         # Builds the interpreter four times (badc and clang, each at -O0 and
         # -O) and reports per-binary section sizes plus a runtime
-        # microbenchmark. continue-on-error so a build/bench hiccup leaves the
-        # fib/qsort table intact in the summary.
+        # microbenchmark. Its benchmark column is the `benches` section of the
+        # record published below, so it runs before that step.
+        # continue-on-error so a build/bench hiccup leaves the fib/qsort table
+        # intact in the summary and still publishes the run.
         continue-on-error: true
         run: |
           python3 demos/python/compare_compilers.py | tee /tmp/cpython_cmp.md
           cat /tmp/cpython_cmp.md >> "$GITHUB_STEP_SUMMARY"
+      - name: publish the run to badc-perf-data
+        # The page at badc.dev/performance reads the runs where they live, so
+        # a run reaches it by landing in that repository. A push, or a pull
+        # request whose head is in this repository: a fork's pull request is
+        # handed no secret, and the work on a release branch reaches CI as a
+        # pull request, which is where most of the history was measured.
+        if: >-
+          ${{ github.event_name == 'push'
+              || github.event.pull_request.head.repo.full_name == github.repository }}
+        env:
+          DEPLOY_KEY: ${{ secrets.PERF_DATA_DEPLOY_KEY }}
+        run: |
+          set -eu
+          [ -n "${DEPLOY_KEY:-}" ] || { echo "no deploy key configured"; exit 0; }
+          [ -f /tmp/perf.json ] || { echo "the harness wrote no json"; exit 1; }
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/perf_data
+          chmod 600 ~/.ssh/perf_data
+          ssh-keyscan -t ed25519 github.com >> ~/.ssh/known_hosts 2>/dev/null
+          export GIT_SSH_COMMAND="ssh -i ~/.ssh/perf_data -o IdentitiesOnly=yes"
+          repo="$RUNNER_TEMP/perf-data"
+          git clone --depth 1 git@github.com:kromych/badc-perf-data.git "$repo"
+          # The CPython comparison ran in the step above when it could; its
+          # benchmark column becomes the record's `benches`.
+          benches=""
+          if [ -s /tmp/cpython_cmp.md ]; then
+            benches="--benches /tmp/cpython_cmp.md"
+          fi
+          # Both lanes of the matrix publish to the same branch: on a
+          # rejected push, take the tip the other lane wrote and file again.
+          for attempt in 1 2 3 4 5; do
+            # On a pull request the checkout is the merge commit and the ref
+            # name is `<number>/merge`; the record keys the head commit and
+            # the branch the work is on.
+            python3 scripts/perf_publish.py --data /tmp/perf.json --repo "$repo" \
+              --sha "${{ github.event.pull_request.head.sha || github.sha }}" \
+              --branch "${{ github.head_ref || github.ref_name }}" \
+              --runner "${{ matrix.os }}" $benches --run-id "$GITHUB_RUN_ID"
+            if git -C "$repo" push origin HEAD:main; then exit 0; fi
+            git -C "$repo" fetch --depth 1 origin main
+            git -C "$repo" reset --hard FETCH_HEAD
+          done
+          echo "the run did not publish in five attempts" >&2
+          exit 1
       - name: quickjs engine comparison (badc/clang, -O0/-O)
         # Builds the engine four times from the smoke's recipe and runs a
         # bounded subset of QuickJS's own microbench through each, so the

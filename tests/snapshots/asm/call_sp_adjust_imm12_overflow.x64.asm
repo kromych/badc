@@ -1072,8 +1072,7 @@ Disassembly of section .text:
                	leaq	-0x1050(%rbp), %rax
                	movq	(%rax), %rcx
                	movq	0x8(%rax), %rax
-               	addq	%rcx, %rax
-               	leaq	(%rax), %rcx
+               	addq	%rax, %rcx
                	leaq	-0x1040(%rbp), %rax
                	movq	(%rax), %rdx
                	movq	0x8(%rax), %rax
@@ -2380,8 +2379,7 @@ Disassembly of section .text:
 <sum_longs>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	leaq	(%rdi), %rax
-               	addq	%rsi, %rax
+               	leaq	(%rdi,%rsi), %rax
                	addq	%rdx, %rax
                	addq	%rcx, %rax
                	addq	%r8, %rax
@@ -2900,24 +2898,23 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x800, %rsp            # imm = 0x800
-               	movq	%rbx, (%rsp)
-               	movq	%r12, 0x8(%rsp)
-               	movq	%r13, 0x10(%rsp)
-               	movq	%r14, 0x18(%rsp)
-               	movq	%r15, 0x20(%rsp)
-               	xorq	%rax, %rax
+               	subq	$0x7d8, %rsp            # imm = 0x7D8
+               	pushq	%r15
+               	pushq	%r14
+               	pushq	%r13
+               	pushq	%r12
+               	pushq	%rbx
+               	xorl	%eax, %eax
                	leaq	<rip>, %rdx
-               	jmp	<addr>
-               	movq	%rax, %rsi
-               	shlq	$0x4, %rsi
-               	leaq	(%rdx,%rsi), %rcx
+               	movq	%rax, %rcx
+               	shlq	$0x4, %rcx
+               	addq	%rdx, %rcx
                	movq	%rax, (%rcx)
                	movq	%rax, %rsi
                	shlq	%rsi
                	movq	%rsi, 0x8(%rcx)
                	incq	%rax
-               	cmpq	$0x105, %rax            # imm = 0x105
+               	cmpl	$0x105, %eax            # imm = 0x105
                	jl	<addr>
                	leaq	<rip>, %rdi
                	leaq	0x10(%rdi), %rdx
@@ -4733,11 +4730,11 @@ Disassembly of section .text:
                	cmpq	$0x18d9e, %rax          # imm = 0x18D9E
                	je	<addr>
                	movl	$0x1, %eax
-               	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
-               	movq	0x10(%rsp), %r13
-               	movq	0x18(%rsp), %r14
-               	movq	0x20(%rsp), %r15
+               	popq	%rbx
+               	popq	%r12
+               	popq	%r13
+               	popq	%r14
+               	popq	%r15
                	leave
                	retq
                	movl	$0x1, %edi
@@ -5756,11 +5753,11 @@ Disassembly of section .text:
                	cmpq	$0x848a, %rax           # imm = 0x848A
                	je	<addr>
                	movl	$0x2, %eax
-               	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
-               	movq	0x10(%rsp), %r13
-               	movq	0x18(%rsp), %r14
-               	movq	0x20(%rsp), %r15
+               	popq	%rbx
+               	popq	%r12
+               	popq	%r13
+               	popq	%r14
+               	popq	%r15
                	leave
                	retq
                	leaq	<rip>, %rdi
@@ -7577,18 +7574,18 @@ Disassembly of section .text:
                	cmpq	$0x18d9e, %rax          # imm = 0x18D9E
                	je	<addr>
                	movl	$0x3, %eax
-               	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
-               	movq	0x10(%rsp), %r13
-               	movq	0x18(%rsp), %r14
-               	movq	0x20(%rsp), %r15
+               	popq	%rbx
+               	popq	%r12
+               	popq	%r13
+               	popq	%r14
+               	popq	%r15
                	leave
                	retq
-               	xorq	%rax, %rax
-               	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
-               	movq	0x10(%rsp), %r13
-               	movq	0x18(%rsp), %r14
-               	movq	0x20(%rsp), %r15
+               	xorl	%eax, %eax
+               	popq	%rbx
+               	popq	%r12
+               	popq	%r13
+               	popq	%r14
+               	popq	%r15
                	leave
                	retq

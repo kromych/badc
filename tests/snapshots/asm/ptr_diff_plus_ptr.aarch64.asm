@@ -37,21 +37,21 @@ Disassembly of section .text:
                	add	x1, x0, #0x20
                	sub	x2, x1, x0
                	asr	x3, x2, #63
-               	lsr	x4, x3, #60
-               	add	x5, x2, x4
-               	asr	x6, x5, #4
-               	lsl	x7, x6, #4
-               	add	x8, x7, x0
-               	cmp	x8, x1
+               	lsr	x3, x3, #60
+               	add	x2, x2, x3
+               	asr	x2, x2, #4
+               	lsl	x2, x2, #4
+               	add	x3, x2, x0
+               	cmp	x3, x1
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	add	x2, x0, #0x10
-               	add	x2, x7, x2
-               	add	x3, x0, #0x30
-               	cmp	x2, x3
+               	add	x3, x0, #0x10
+               	add	x2, x2, x3
+               	add	x0, x0, #0x30
+               	cmp	x2, x0
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	add	sp, sp, #0x30

@@ -14,36 +14,24 @@ Disassembly of section .text:
                	brk	#0x1
 
 <from_value>:
-               	sxtw	x0, w0
                	cmp	w0, #0x0
                	b.ge	<addr>
-               	mov	x17, #-0x1              // =-1
-               	mul	x0, x0, x17
-               	sxtw	x0, w0
+               	neg	x0, x0
                	ret
                	add	x0, x0, #0x1
-               	sxtw	x0, w0
                	ret
 
 <classify>:
-               	sxtw	x0, w0
-               	cbnz	x0, <addr>
+               	cbnz	w0, <addr>
                	mov	x0, #0x0                // =0
                	ret
                	cmp	w0, #0x0
                	b.le	<addr>
                	mov	x0, #0x1                // =1
-               	sxtw	x0, w0
                	ret
                	mov	x0, #-0x1               // =-1
                	b	<addr>
 
 <main>:
-               	mov	x0, #0x2a               // =42
-               	mov	x0, #0x5                // =5
-               	mov	x0, #0x1                // =1
-               	mov	x1, x0
-               	mov	x0, #-0x1               // =-1
-               	mov	x1, x0
                	mov	x0, #0x0                // =0
                	ret

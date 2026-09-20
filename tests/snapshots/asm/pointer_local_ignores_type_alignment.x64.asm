@@ -29,16 +29,14 @@ Disassembly of section .text:
                	movslq	(%rdi), %rax
                	movslq	0x4(%rdi), %rcx
                	addq	%rcx, %rax
-               	movslq	%eax, %rax
                	retq
 
 <via_scalar_pointer>:
                	movslq	(%rdi), %rax
                	movslq	0xc(%rdi), %rcx
                	addq	%rcx, %rax
-               	movslq	%eax, %rax
                	retq
 
 <main>:
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	retq

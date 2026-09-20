@@ -124,17 +124,20 @@ fn plan(func: &FunctionSsa, alloc: &Allocation) -> Vec<Run> {
         });
         prev = Some(b);
         if !chains {
-            close_run(&mut out, &mut touched, &count, &first, &last, func);
+            close_run(&mut out, &mut touched, &count, &first, &last, func, alloc);
             run_id = run_id.wrapping_add(1);
         }
         for idx in block.inst_range.clone() {
             let inst = &func.insts[idx as usize];
             if is_barrier(inst) {
-                close_run(&mut out, &mut touched, &count, &first, &last, func);
+                close_run(&mut out, &mut touched, &count, &first, &last, func, alloc);
                 run_id = run_id.wrapping_add(1);
                 continue;
             }
-            if matches!(inst, Inst::Phi { .. }) {
+            // A skipped instruction reads nothing (`spill_traffic` alike).
+            if matches!(inst, Inst::Phi { .. })
+                || super::emit_common::is_dead_pure_counts(inst, idx, &alloc.use_counts)
+            {
                 continue;
             }
             super::reg_alloc::for_each_operand(inst, |op| {
@@ -153,7 +156,7 @@ fn plan(func: &FunctionSsa, alloc: &Allocation) -> Vec<Run> {
             });
         }
     }
-    close_run(&mut out, &mut touched, &count, &first, &last, func);
+    close_run(&mut out, &mut touched, &count, &first, &last, func, alloc);
     out
 }
 
@@ -166,6 +169,7 @@ fn close_run(
     first: &[ValueId],
     last: &[ValueId],
     func: &FunctionSsa,
+    alloc: &Allocation,
 ) {
     for &v in touched.iter() {
         let o = v as usize;
@@ -174,7 +178,7 @@ fn close_run(
         }
         out.push(Run {
             src: v,
-            is_fp: super::reg_alloc::produces_fp_result(&func.insts[o]),
+            is_fp: alloc.is_fp_value(&func.insts[o], v),
             first: first[o],
             last: last[o],
         });
@@ -382,9 +386,13 @@ mod tests {
             use_counts: vec![1; n],
             last_use: vec![0; n],
             cmp32: vec![false; n],
+            count_nonzero: vec![false; n],
             sxtw_source: vec![NO_VALUE; n],
             sxtw_k: vec![0; n],
             branch_fused: vec![false; n],
+            imm_store: vec![false; n],
+            fp_const: vec![false; n],
+            implicit_live: Vec::new(),
             hints: vec![None; n],
             f32_values: vec![false; n],
             high_observed: Vec::new(),
@@ -413,6 +421,25 @@ mod tests {
         assert_eq!(runs.len(), 1);
         assert_eq!((runs[0].src, runs[0].first, runs[0].last), (0, 1, 2));
         assert!(!runs[0].is_fp);
+    }
+
+    /// A read by an instruction no emitter lowers is no use: with the sum
+    /// unread, one read remains and no run is planned.
+    #[test]
+    fn a_skipped_instruction_reads_nothing() {
+        let sum = Inst::Binop {
+            op: crate::c5::ir::BinOp::Add,
+            lhs: 0,
+            rhs: 0,
+        };
+        let f = func_with(
+            vec![load(), store_of(0), sum],
+            vec![block(0..3, Terminator::Return(NO_VALUE))],
+        );
+        let mut alloc = alloc_spilling_v0(3);
+        assert_eq!(plan(&f, &alloc).len(), 1);
+        alloc.use_counts[2] = 0;
+        assert!(plan(&f, &alloc).is_empty());
     }
 
     #[test]

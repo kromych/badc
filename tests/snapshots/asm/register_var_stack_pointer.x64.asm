@@ -29,19 +29,16 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	movq	%rsp, %rax
-               	movq	%rsp, %rsi
+               	movq	%rsp, %rdx
                	movq	%rbp, %rcx
                	testq	%rax, %rax
                	je	<addr>
                	testq	%rcx, %rcx
-               	sete	%dl
-               	movzbq	%dl, %rdx
-               	testq	%rdx, %rdx
-               	je	<addr>
+               	jne	<addr>
                	movl	$0x1, %eax
                	popq	%rbp
                	retq
-               	cmpq	%rsi, %rax
+               	cmpq	%rdx, %rax
                	je	<addr>
                	movl	$0x2, %eax
                	popq	%rbp
@@ -51,6 +48,6 @@ Disassembly of section .text:
                	movl	$0x3, %eax
                	popq	%rbp
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	popq	%rbp
                	retq

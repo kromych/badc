@@ -18,9 +18,8 @@ The multi-source library demos (miniz, kissfft, bzip2, tweetnacl,
 monocypher, bearssl) each build their smoke harness three different
 ways at both `-O0` and `-O`:
 
-1. **Amalgamation** -- one combined source file straight through
-   `badc`. The classic single-TU path; same shape `sqlite3.c +
-   shell.c` already exercises.
+1. **Amalgamation** -- one combined source file straight through `badc`. The
+   single-TU path, the same shape `sqlite3.c + shell.c` already exercises.
 2. **Translation units** -- `badc -c` on each `.c` file (emitting
    native ELF64 ET_REL `.o` files with machine code, `.symtab`,
    and `.rela.text` relocs), then `badc -o app *.o` to link them.
@@ -105,13 +104,12 @@ file-backed scenarios at both -O and noO. See
 
 ## lua/
 
-End-to-end of the upstream Lua 5.5.0 interpreter. Pinned release,
-fetched on demand by `demos/lua/setup.py`; builds the interpreter
-with badc at both -O and noO and runs a curated subset of the
-upstream test suite (`bitwise / calls / closure / constructs /
-coroutine / cstack / errors / events / goto / literals / locals /
-math / nextvar / pm / sort / strings / tpack / utf8 / vararg`)
-against each lane. See [`lua/README.md`](./lua/README.md).
+End-to-end of the upstream Lua 5.5.0 interpreter. Pinned release, fetched on
+demand by `demos/lua/setup.py`; builds the interpreter with badc at both -O and
+noO and runs a curated subset of the upstream test suite (`bitwise`, `calls`,
+`closure`, `constructs`, `coroutine`, `cstack`, `errors`, `events`, `goto`,
+`literals`, `locals`, `math`, `nextvar`, `pm`, `sort`, `strings`, `tpack`,
+`utf8`, `vararg`) against each lane. See [`lua/README.md`](./lua/README.md).
 
 ## miniz/
 
@@ -219,6 +217,16 @@ standalone build + headless run is wired for macOS today (the X11
 / Win32 header surface for the Linux / Windows ports is pending).
 See [`raylib/README.md`](./raylib/README.md).
 
+## stb/
+
+badc builds `smoke_main.c` -- the curated `stb_*.h` set with their
+`STB_*_IMPLEMENTATION` macros, plus `stb_vorbis.c`, as one translation unit --
+at both -O and noO, runs it, and pins each scenario's stdout: `sprintf`,
+`perlin`, `image`, `jpg`, `bmp`, `ds`, `rect_pack`, `c_lexer`,
+`connected_components`, `divide`, `dxt`, `easy_font`, `hexwave`, `leakcheck`,
+`truetype`, `herringbone_wang`, `vorbis`, `voxel_render`, `textedit` and
+`include`.
+
 ## curl/
 
 badc compiles the curl 8.11.1 library (HTTP + `file://` + WebSocket,
@@ -237,7 +245,7 @@ Builds the NASM 2.16.03 assembler (84 translation units) with badc and
 runs NASM's own `travis/nasm-t.py` golden suite against it: each fixture
 is assembled with the produced `nasm` and its object bytes, listings, and
 diagnostics are compared to committed goldens, so a codegen defect surfaces
-as a byte mismatch -- a self-validating oracle needing no reference build.
+as a byte mismatch and no reference build is needed.
 Runs on all five targets, native Windows included, with no `make` or
 `./configure`. See [`nasm/README.md`](./nasm/README.md).
 
@@ -252,12 +260,12 @@ assembler is then compiled from. See [`yasm/README.md`](./yasm/README.md).
 
 ## qemu/
 
-Builds the [QEMU](https://www.qemu.org/) 11.0.2 system emulator with badc --
+Builds the [QEMU](https://www.qemu.org/) 11.1.1 system emulator with badc --
 well over a thousand translation units per target (device models, the TCG code
 generator, the block layer, the QAPI-generated marshallers, the character /
 network back ends), the widest single exercise of the C front end and object
-emitter in the demo set. badc compiles every unit, archives the utility
-library with `--ar`, and self-links the emulator with its own linker -- no
+emitter in the demo set. badc compiles every unit, archives the in-tree
+libraries with `--ar`, and self-links the emulator with its own linker -- no
 system linker in the chain. Both self-compiled, self-linked `qemu-system-aarch64`
 and `qemu-system-x86_64` boot a Linux kernel plus a busybox initramfs to an
 interactive userspace shell and power off cleanly under TCG (aarch64 loads a raw
@@ -320,9 +328,7 @@ test-signing on the target. Same compiler plumbing as
 
 ## nt_loader/
 
-Launches user-mode NT-native programs (e.g. `nt_hello`)
-through a transacted `SEC_IMAGE` section and waits up to two
-seconds on a named event the child signals. Builds in both
-UNICODE (`wmain`, `__wgetmainargs`) and ANSI (`main`,
-`__getmainargs`) modes from the same source; `#define
-USE_UNICODE` selects.
+Launches user-mode NT-native programs (e.g. `nt_hello`) through a transacted
+`SEC_IMAGE` section and waits up to two seconds on a named event the child
+signals. Builds in both UNICODE (`wmain`, `__wgetmainargs`) and ANSI (`main`,
+`__getmainargs`) modes from the same source; `#define USE_UNICODE` selects.

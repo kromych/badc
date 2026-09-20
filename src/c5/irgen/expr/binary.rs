@@ -3,13 +3,11 @@
 
 use super::super::access::{seg_copy_bytes, store_kind_for, store_kind_width, store_place};
 use super::super::atomic::RmwOpen;
-use super::super::types::{
-    fold_int_binop, is_floating_scalar, is_fp_arith_op, type_size_bytes, unsigned_narrow_mask,
-};
+use super::super::types::{fold_int_binop, is_floating_scalar, is_fp_arith_op, type_size_bytes};
 use super::super::*;
 use super::postfix::MemberRef;
 use crate::c5::ast::expr_ty;
-use crate::c5::ir::{imm_safe_binop, is_comparison_op, is_fp_comparison_op, is_imm_arith_op};
+use crate::c5::ir::{imm_safe_binop, is_comparison_op, is_fp_comparison_op};
 impl<'a> Walker<'a> {
     /// Lower `&&` / `||` (C99 6.5.13 / 6.5.14): evaluate lhs, skip rhs
     /// when it decides the result, and merge through a synthetic local
@@ -214,14 +212,91 @@ impl<'a> Walker<'a> {
             return self.walk_int128_binary(b, op, lhs, rhs);
         }
         let op = self.fp_comparison_for_operands(op, lhs, rhs);
-        // C99 6.3.1.3 + 6.3.1.8: unsigned divide / modulo at a common
+        if is_fp_arith_op(op) || is_fp_comparison_op(op) {
+            let lv = self.walk_expr_rvalue(b, lhs)?;
+            let rv = self.walk_expr_rvalue(b, rhs)?;
+            return Ok(self.walk_fp_binop(b, op, lv, rv));
+        }
+        // The signed renormalization the parser spells as `Shl K; Shr K`
+        // is one `Inst::Extend`, which the builder would otherwise reach
+        // only after materializing the shift, leaving it behind as a
+        // dead instruction the later passes still walk.
+        if let Some(v) = self.walk_sign_narrow_pair(b, op, lhs, rhs)? {
+            return Ok(v);
+        }
+        // C99 6.6: a constant expression evaluates at translation time.
+        // The parser leaves the synthesised pointer-arithmetic scaling
+        // unfolded (`arr[K]` lowers to `arr + (K * sizeof(*arr))`).
+        if imm_safe_binop(op)
+            && let Expr::IntLit { val: lv_imm, .. } = *self.ast.expr(lhs)
+            && let Expr::IntLit { val: rv_imm, .. } = *self.ast.expr(rhs)
+            && self.unsigned_cmp_mask(op, lhs, rhs) == 0
+        {
+            return Ok(b.imm(fold_int_binop(op, lv_imm, rv_imm)));
+        }
+        let lv = self.walk_expr_rvalue(b, lhs)?;
+        // The parser already pushes the narrowing (a mask, or a signed
+        // `Shl K; Shr K` pair) as further `Expr::Binary` nodes, so
+        // repeating it here would apply it twice.
+        self.walk_int_binop(b, op, lv, lhs, rhs, ty)
+    }
+
+    /// `(x << K) >> K` with `K` one of 32 / 48 / 56 -- the signed
+    /// narrowing `convert::renormalize_to_width` and the cast lowering
+    /// emit -- read straight off the AST as `Inst::Extend` over `x`.
+    fn walk_sign_narrow_pair(
+        &mut self,
+        b: &mut SsaBuilder,
+        op: BinOp,
+        lhs: ExprId,
+        rhs: ExprId,
+    ) -> Result<Option<ValueId>, WalkError> {
+        if op != BinOp::Shr {
+            return Ok(None);
+        }
+        let Expr::IntLit { val: k, .. } = *self.ast.expr(rhs) else {
+            return Ok(None);
+        };
+        let Some(kind) = crate::c5::codegen::ssa::build::sign_narrow_kind(k) else {
+            return Ok(None);
+        };
+        let Expr::Binary {
+            op: BinOp::Shl,
+            lhs: inner,
+            rhs: inner_k,
+            ..
+        } = *self.ast.expr(lhs)
+        else {
+            return Ok(None);
+        };
+        if !matches!(*self.ast.expr(inner_k), Expr::IntLit { val, .. } if val == k) {
+            return Ok(None);
+        }
+        let v = self.walk_expr_rvalue(b, inner)?;
+        Ok(Some(b.extend(v, kind)))
+    }
+
+    /// Integer `lv op rhs` over a walked left operand; `walk_binary` and
+    /// `walk_compound_assign` both end here. `lhs` is read for its type
+    /// and `ty` is the node's: the common type of a binary operator, the
+    /// left operand's type of a compound assignment.
+    fn walk_int_binop(
+        &mut self,
+        b: &mut SsaBuilder,
+        op: BinOp,
+        mut lv: ValueId,
+        lhs: ExprId,
+        rhs: ExprId,
+        ty: i64,
+    ) -> Result<ValueId, WalkError> {
+        let width = self.divmod_operand_width(op, ty, lhs, rhs);
+        // C99 6.3.1.3 + 6.3.1.8: an unsigned divide / modulo at a common
         // type narrower than the register masks each operand first, or
-        // `udiv` / `umod` see the sign-extended high half a promoted
+        // `udiv` / `umod` see the sign-extended high half a converted
         // signed operand carries.
-        let divmod_mask = if matches!(op, BinOp::Divu | BinOp::Modu) {
-            unsigned_narrow_mask(ty)
-        } else {
-            0
+        let divmod_mask = match (op, width) {
+            (BinOp::Divu | BinOp::Modu, Some(32)) => 0xffff_ffffi64,
+            _ => 0,
         };
         let cmp_mask = self.unsigned_cmp_mask(op, lhs, rhs);
         // An operand needing a mask takes the register path, since the
@@ -231,23 +306,10 @@ impl<'a> Walker<'a> {
             !(imm_safe_op && divmod_mask != 0),
             "imm_safe_binop should exclude Divu/Modu"
         );
-        // C99 6.6: a constant expression evaluates at translation time.
-        // The parser leaves the synthesised pointer-arithmetic scaling
-        // unfolded (`arr[K]` lowers to `arr + (K * sizeof(*arr))`).
-        if imm_safe_op
-            && let Expr::IntLit { val: lv_imm, .. } = *self.ast.expr(lhs)
-            && let Expr::IntLit { val: rv_imm, .. } = *self.ast.expr(rhs)
-        {
-            return Ok(b.imm(fold_int_binop(op, lv_imm, rv_imm)));
-        }
-        let mut lv = self.walk_expr_rvalue(b, lhs)?;
         if imm_safe_op && let Expr::IntLit { val, .. } = self.ast.expr(rhs) {
             return Ok(b.binop_imm(op, lv, *val));
         }
         let mut rv = self.walk_expr_rvalue(b, rhs)?;
-        if is_fp_arith_op(op) || is_fp_comparison_op(op) {
-            return Ok(self.walk_fp_binop(b, op, lv, rv));
-        }
         if imm_safe_op && let Some(v) = Self::binop_imm_form(b, op, lv, rv) {
             return Ok(v);
         }
@@ -260,17 +322,13 @@ impl<'a> Walker<'a> {
             lv = b.binop_imm(BinOp::And, lv, m);
             rv = b.binop_imm(BinOp::And, rv, m);
         }
-        // The only constant-divisor fast path: `imm_safe_binop` excludes
-        // Div / Mod because the per-arch `BinopI` emit does not lower
-        // them.
-        if let Some(w) = self.divmod_operand_width(op, ty, lhs, rhs)
+        // `imm_safe_binop` excludes Div / Mod: the per-arch `BinopI` emit
+        // does not lower them.
+        if let Some(w) = width
             && let Some(reduced) = b.divmod_const(op, lv, rv, w)
         {
             return Ok(reduced);
         }
-        // The parser already pushes the narrowing (a mask, or a signed
-        // `Shl K; Shr K` pair) as further `Expr::Binary` nodes, so
-        // repeating it here would apply it twice.
         Ok(b.binop(op, lv, rv))
     }
 
@@ -418,7 +476,6 @@ impl<'a> Walker<'a> {
             vol,
             old,
         } = self.rmw_open(b, lhs, ty)?;
-        let imm_safe = is_imm_arith_op(op);
         let new_val = if is_fp_arith_op(op) && !is_floating_scalar(ty) {
             // C99 6.5.16.2: an integer lvalue with a floating operand
             // computes in the floating common type and converts back to
@@ -451,31 +508,8 @@ impl<'a> Walker<'a> {
                     res
                 }
             }
-        } else if imm_safe && let Expr::IntLit { val, .. } = self.ast.expr(rhs) {
-            b.binop_imm(op, old, *val)
         } else {
-            let mut rhs_val = self.walk_expr_rvalue(b, rhs)?;
-            // The walked rhs can be an `Imm` even where the AST shape is
-            // not an `IntLit`.
-            if imm_safe && let Some(rk) = b.peek_imm(rhs_val) {
-                b.binop_imm(op, old, rk)
-            } else {
-                let mut lv = old;
-                // C99 6.3.1.3 + 6.3.1.8: unsigned divide / modulo at a
-                // narrower-than-register common type masks each operand
-                // first. Both operand types at most 4 bytes makes the
-                // common type 4 bytes, integer promotion flooring at
-                // `int`.
-                if matches!(op, BinOp::Divu | BinOp::Modu) {
-                    let rhs_sz =
-                        expr_ty(self.ast.expr(rhs)).map_or(8, |t| type_size_bytes(t, self.target));
-                    if type_size_bytes(ty, self.target) <= 4 && rhs_sz <= 4 {
-                        lv = b.binop_imm(BinOp::And, lv, 0xffff_ffff);
-                        rhs_val = b.binop_imm(BinOp::And, rhs_val, 0xffff_ffff);
-                    }
-                }
-                b.binop(op, lv, rhs_val)
-            }
+            self.walk_int_binop(b, op, old, lhs, rhs, ty)?
         };
         place.store(b, new_val, store_kind, vol);
         // C99 6.5.16.2p3: the value is the post-update value in E1's

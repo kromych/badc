@@ -1423,6 +1423,7 @@ fn emit_return_42() {
             super::super::StackProtect::OFF,
             super::super::FunctionEntry::default(),
             super::super::FixedRegs::NONE,
+            false,
         )
     };
     assert!(
@@ -1484,6 +1485,7 @@ fn store_indexed_spilled_operands_precompute_address() {
                 scale,
                 value,
                 kind,
+                ..
             } => Some((*base, *index, *value, *scale, *kind)),
             _ => None,
         })
@@ -1497,16 +1499,14 @@ fn store_indexed_spilled_operands_precompute_address() {
     // spill-offset computation underflows.
     alloc.spill_count = alloc.spill_count.max(3);
     let frame = compute_frame(&func, &alloc, target.abi(), target);
-    let scratch = ScratchPool {
-        primary: Reg(16),
-        secondary: Reg(17),
-    };
+    let scratch = ScratchPool::new();
     let mut code = Vec::new();
     let ok = emit_store_indexed(
         &mut code,
+        0,
         Place::None,
         base,
-        index,
+        (index, IndexExt::None),
         scale,
         value,
         kind,
@@ -1537,6 +1537,249 @@ fn store_indexed_spilled_operands_precompute_address() {
             let rn = (w >> 5) & 0x1f;
             assert_ne!(rt, rn, "store reuses base x{rn} as the value register");
         }
+    }
+}
+
+/// The function of `src` that holds an indexed access after the index
+/// fold, that access, and the function's allocation with `spill_count`
+/// raised to cover the slots a test pins.
+fn indexed_access(
+    src: &str,
+    target: Target,
+) -> (
+    FunctionSsa,
+    crate::c5::ir::Inst,
+    super::super::ssa::reg_alloc::Allocation,
+) {
+    use crate::c5::ir::Inst;
+    let program = Compiler::with_target(
+        alloc::format!("{src} int main(void){{ return 0; }}"),
+        target,
+    )
+    .compile()
+    .expect("compile");
+    let mut funcs =
+        crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+            .expect("ssa");
+    crate::c5::codegen::passes::index_fold::run(&mut funcs);
+    let indexed = |i: &Inst| matches!(i, Inst::LoadIndexed { .. } | Inst::StoreIndexed { .. });
+    let func = funcs
+        .into_iter()
+        .find(|f| f.insts.iter().any(indexed))
+        .expect("a function with an indexed access");
+    let access = func.insts.iter().find(|i| indexed(i)).unwrap().clone();
+    let mut alloc =
+        super::super::ssa::reg_alloc::allocate(&func, target, crate::c5::codegen::FixedRegs::NONE);
+    alloc.spill_count = alloc.spill_count.max(3);
+    (func, access, alloc)
+}
+
+fn words_of(code: &[u8]) -> Vec<u32> {
+    code.as_chunks::<4>()
+        .0
+        .iter()
+        .map(|c| u32::from_le_bytes(*c))
+        .collect()
+}
+
+/// A one-byte element takes the register-offset forms without a shift,
+/// and the spilled-operand store precomputes `base + index` unshifted.
+#[test]
+fn byte_indexed_access_is_unscaled() {
+    use crate::c5::ir::Inst;
+    let target = Target::LinuxAarch64;
+    let scratch = ScratchPool::new();
+    for (src, want) in [
+        (
+            "int get(signed char *a, long i){ return a[i]; }",
+            0x38A2_6820u32, // ldrsb x0, [x1, x2]
+        ),
+        (
+            "int get(unsigned char *a, long i){ return a[i]; }",
+            0x3862_6820, // ldrb w0, [x1, x2]
+        ),
+    ] {
+        let (func, access, mut alloc) = indexed_access(src, target);
+        let Inst::LoadIndexed {
+            base,
+            index,
+            scale,
+            kind,
+            ..
+        } = access
+        else {
+            panic!("{access:?}")
+        };
+        assert_eq!(scale, 1);
+        alloc.places[base as usize] = Place::IntReg(1);
+        alloc.places[index as usize] = Place::IntReg(2);
+        let frame = compute_frame(&func, &alloc, target.abi(), target);
+        let mut code = Vec::new();
+        emit_load_indexed(
+            &mut code,
+            Place::IntReg(0),
+            base,
+            (index, IndexExt::None),
+            scale,
+            kind,
+            &alloc,
+            frame,
+            &scratch,
+        )
+        .expect("emit_load_indexed");
+        assert_eq!(words_of(&code), [want], "{src}");
+    }
+
+    let (func, access, mut alloc) =
+        indexed_access("void put(char *a, long i, char v){ a[i] = v; }", target);
+    let Inst::StoreIndexed {
+        base,
+        index,
+        scale,
+        value,
+        kind,
+        ..
+    } = access
+    else {
+        panic!("{access:?}")
+    };
+    assert_eq!(scale, 1);
+    let mut store = |places: [Place; 3]| {
+        alloc.places[base as usize] = places[0];
+        alloc.places[index as usize] = places[1];
+        alloc.places[value as usize] = places[2];
+        let frame = compute_frame(&func, &alloc, target.abi(), target);
+        let mut code = Vec::new();
+        emit_store_indexed(
+            &mut code,
+            0,
+            Place::None,
+            base,
+            (index, IndexExt::None),
+            scale,
+            value,
+            kind,
+            &alloc,
+            frame,
+            &scratch,
+        )
+        .expect("emit_store_indexed");
+        words_of(&code)
+    };
+    // strb w3, [x1, x2]
+    assert_eq!(
+        store([Place::IntReg(1), Place::IntReg(2), Place::IntReg(3)]),
+        [0x3822_6823]
+    );
+    let spilled = store([Place::Spill(0), Place::Spill(1), Place::Spill(2)]);
+    // add x16, x16, x17 ; ... ; strb w17, [x16]
+    assert!(spilled.contains(&0x8B11_0210), "{spilled:08x?}");
+    assert_eq!(spilled.last(), Some(&0x3900_0211), "{spilled:08x?}");
+}
+
+/// A word index widens inside the access at every element size, and the
+/// spilled-operand store widens it in the precomputed address.
+#[test]
+fn word_index_widens_in_the_access() {
+    use crate::c5::ir::Inst;
+    let target = Target::LinuxAarch64;
+    let scratch = ScratchPool::new();
+    // Loads into x0 from `[x1, w2, <ext> #s]`.
+    for (ty, ext, want) in [
+        ("signed char", IndexExt::Sxtw, 0x38A2_C820u32),
+        ("unsigned char", IndexExt::Uxtw, 0x3862_4820),
+        ("short", IndexExt::Sxtw, 0x78A2_D820),
+        ("unsigned short", IndexExt::Uxtw, 0x7862_5820),
+        ("int", IndexExt::Sxtw, 0xB8A2_D820),
+        ("unsigned", IndexExt::Uxtw, 0xB862_5820),
+        ("long", IndexExt::Sxtw, 0xF862_D820),
+        ("long", IndexExt::Uxtw, 0xF862_5820),
+    ] {
+        let src = alloc::format!("long get({ty} *a, long i){{ return a[i]; }}");
+        let (func, access, mut alloc) = indexed_access(&src, target);
+        let Inst::LoadIndexed {
+            base,
+            index,
+            scale,
+            kind,
+            ..
+        } = access
+        else {
+            panic!("{access:?}")
+        };
+        alloc.places[base as usize] = Place::IntReg(1);
+        alloc.places[index as usize] = Place::IntReg(2);
+        let frame = compute_frame(&func, &alloc, target.abi(), target);
+        let mut code = Vec::new();
+        emit_load_indexed(
+            &mut code,
+            Place::IntReg(0),
+            base,
+            (index, ext),
+            scale,
+            kind,
+            &alloc,
+            frame,
+            &scratch,
+        )
+        .expect("emit_load_indexed");
+        assert_eq!(words_of(&code), [want], "{ty} {ext:?}");
+    }
+    // Stores of x3 to `[x1, w2, <ext> #s]`, then with all three operands
+    // spilled: `add x16, x16, w17, <ext> #s` ahead of a store to `[x16]`.
+    for (ty, ext, want, want_add) in [
+        ("char", IndexExt::Sxtw, 0x3822_C823u32, 0x8B31_C210u32),
+        ("short", IndexExt::Uxtw, 0x7822_5823, 0x8B31_4610),
+        ("int", IndexExt::Sxtw, 0xB822_D823, 0x8B31_CA10),
+        ("long", IndexExt::Uxtw, 0xF822_5823, 0x8B31_4E10),
+    ] {
+        let src = alloc::format!("void put({ty} *a, long i, {ty} v){{ a[i] = v; }}");
+        let (func, access, mut alloc) = indexed_access(&src, target);
+        let Inst::StoreIndexed {
+            base,
+            index,
+            scale,
+            value,
+            kind,
+            ..
+        } = access
+        else {
+            panic!("{access:?}")
+        };
+        let mut store = |places: [Place; 3]| {
+            alloc.places[base as usize] = places[0];
+            alloc.places[index as usize] = places[1];
+            alloc.places[value as usize] = places[2];
+            let frame = compute_frame(&func, &alloc, target.abi(), target);
+            let mut code = Vec::new();
+            emit_store_indexed(
+                &mut code,
+                0,
+                Place::None,
+                base,
+                (index, ext),
+                scale,
+                value,
+                kind,
+                &alloc,
+                frame,
+                &scratch,
+            )
+            .expect("emit_store_indexed");
+            words_of(&code)
+        };
+        assert_eq!(
+            store([Place::IntReg(1), Place::IntReg(2), Place::IntReg(3)]),
+            [want],
+            "{ty} {ext:?}"
+        );
+        let spilled = store([Place::Spill(0), Place::Spill(1), Place::Spill(2)]);
+        assert!(spilled.contains(&want_add), "{ty} {ext:?}: {spilled:08x?}");
+        // No register-offset store is left to read the unwidened index.
+        assert!(
+            spilled.iter().all(|w| w & 0x3B20_0C00 != 0x3820_0800),
+            "{ty} {ext:?}: {spilled:08x?}"
+        );
     }
 }
 
@@ -1588,6 +1831,7 @@ fn fp_store_keeps_its_spilled_address_across_the_value_reload() {
         let kind = want;
         emit_store(
             &mut code,
+            0,
             Place::None,
             addr,
             disp,
@@ -1685,10 +1929,7 @@ fn try_emit_spilled_mul_add(dst: Place) -> Result<Vec<u32>, Unsupported> {
     alloc.places[v as usize] = dst;
     alloc.spill_count = alloc.spill_count.max(4);
     let frame = compute_frame(&func, &alloc, target.abi(), target);
-    let scratch = ScratchPool {
-        primary: Reg(16),
-        secondary: Reg(17),
-    };
+    let scratch = ScratchPool::new();
     let mut code = Vec::new();
     emit_mul_add(&mut code, dst, a, b, c, true, &alloc, frame, &scratch)?;
     Ok(code
@@ -1749,6 +1990,198 @@ fn mul_add_spilled_result_falls_back_to_mul_sub() {
         .expect("a SUB word");
     assert_eq!((sub >> 16) & 0x1f, product, "subtracts the product");
     assert_ne!((sub >> 5) & 0x1f, product, "the addend is the left operand");
+}
+
+/// The first function of `src` holding an instruction `pick` accepts, its
+/// allocation over the full pool, and that instruction's value.
+fn func_with(
+    src: &str,
+    target: Target,
+    pick: impl Fn(&Inst) -> bool,
+) -> (FunctionSsa, Allocation, crate::c5::ir::ValueId) {
+    let program = Compiler::with_target(src.into(), target)
+        .compile()
+        .expect("compile");
+    let funcs = crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+        .expect("ssa");
+    let func = funcs
+        .into_iter()
+        .find(|f| f.insts.iter().any(&pick))
+        .expect("a function with the instruction");
+    let v = func.insts.iter().position(&pick).expect("the instruction");
+    let alloc =
+        super::super::ssa::reg_alloc::allocate(&func, target, crate::c5::codegen::FixedRegs::NONE);
+    (func, alloc, v as crate::c5::ir::ValueId)
+}
+
+fn le_words(code: &[u8]) -> Vec<u32> {
+    code.as_chunks::<4>()
+        .0
+        .iter()
+        .map(|c| u32::from_le_bytes(*c))
+        .collect()
+}
+
+/// `a % b` with the places the test forces on (result, dividend, divisor):
+/// whether the frame saves x19, and the emitted words.
+fn emit_forced_modulo(places: [Place; 3]) -> (bool, Vec<u32>) {
+    let target = Target::LinuxAarch64;
+    let (func, mut alloc, v) = func_with(
+        "long f(long a, long b){ return a % b; } int main(void){ return 0; }",
+        target,
+        |i| matches!(i, Inst::Binop { op: BinOp::Mod, .. }),
+    );
+    let Inst::Binop { lhs, rhs, .. } = func.insts[v as usize] else {
+        unreachable!()
+    };
+    for (value, place) in [v, lhs, rhs].into_iter().zip(places) {
+        alloc.places[value as usize] = place;
+    }
+    alloc.spill_count = alloc.spill_count.max(3);
+    let frame = compute_frame(&func, &alloc, target.abi(), target);
+    let mut code = Vec::new();
+    emit_binop(
+        &mut code,
+        BinOp::Mod,
+        v,
+        places[0],
+        lhs,
+        rhs,
+        &alloc,
+        frame,
+        &ScratchPool::new(),
+    )
+    .expect("emit_binop");
+    (frame.uses_x19, le_words(&code))
+}
+
+/// The quotient register of the `sdiv` in `words`.
+fn sdiv_rd(words: &[u32]) -> u32 {
+    words
+        .iter()
+        .find(|&&w| w & 0xFFE0_FC00 == 0x9AC0_0C00)
+        .expect("an SDIV word")
+        & 31
+}
+
+/// A modulo whose dividend, divisor and result all spill leaves neither
+/// scratch free for the quotient: it takes x19, and the frame saves it.
+#[test]
+fn modulo_with_every_place_spilled_takes_x19_and_the_frame_saves_it() {
+    let (saves, words) = emit_forced_modulo([Place::Spill(2), Place::Spill(0), Place::Spill(1)]);
+    assert_eq!(sdiv_rd(&words), 19, "{words:08x?}");
+    assert!(saves, "x19 is written, so the frame saves it");
+}
+
+/// One free register among the three is the quotient: no x19, no save.
+#[test]
+fn modulo_with_a_register_place_leaves_x19_alone() {
+    for places in [
+        [Place::IntReg(5), Place::Spill(0), Place::Spill(1)],
+        [Place::Spill(2), Place::IntReg(1), Place::Spill(1)],
+        [Place::Spill(2), Place::Spill(0), Place::IntReg(2)],
+    ] {
+        let (saves, words) = emit_forced_modulo(places);
+        assert_ne!(sdiv_rd(&words), 19, "{places:?}: {words:08x?}");
+        assert!(!saves, "{places:?}: x19 is not written");
+    }
+}
+
+/// The frame decision and the lowering read one allocation; a lowering that
+/// reaches x19 in a frame computed without the save is refused.
+#[test]
+#[should_panic(expected = "x19 taken in a frame that does not save it")]
+fn x19_taken_without_its_save_is_refused() {
+    let target = Target::LinuxAarch64;
+    let (func, mut alloc, v) = func_with(
+        "long f(long a, long b){ return a % b; } int main(void){ return 0; }",
+        target,
+        |i| matches!(i, Inst::Binop { op: BinOp::Mod, .. }),
+    );
+    let Inst::Binop { lhs, rhs, .. } = func.insts[v as usize] else {
+        unreachable!()
+    };
+    alloc.places[lhs as usize] = Place::Spill(0);
+    alloc.places[rhs as usize] = Place::Spill(1);
+    alloc.places[v as usize] = Place::IntReg(5);
+    alloc.spill_count = alloc.spill_count.max(3);
+    let frame = compute_frame(&func, &alloc, target.abi(), target);
+    assert!(!frame.uses_x19);
+    alloc.places[v as usize] = Place::Spill(2);
+    let mut code = Vec::new();
+    let _ = emit_binop(
+        &mut code,
+        BinOp::Mod,
+        v,
+        Place::Spill(2),
+        lhs,
+        rhs,
+        &alloc,
+        frame,
+        &ScratchPool::new(),
+    );
+}
+
+const VA_ARG_SRC: &str = "#include <stdarg.h>\n\
+    long f(int n, ...){ va_list ap; va_start(ap, n); long r = va_arg(ap, long); \
+    va_end(ap); return r + n; }\n\
+    int main(void){ return 0; }";
+
+/// `va_arg` with the places the test forces on (cursor address, result):
+/// the function, its allocation and the intrinsic's value.
+fn forced_va_arg(
+    target: Target,
+    ap_place: Place,
+    dst: Place,
+) -> (FunctionSsa, Allocation, crate::c5::ir::ValueId) {
+    let is_va_arg = |i: &Inst| matches!(i, Inst::Intrinsic { kind, .. } if *kind == crate::c5::op::Intrinsic::VaArg as i64);
+    let (func, mut alloc, v) = func_with(VA_ARG_SRC, target, is_va_arg);
+    let Inst::Intrinsic { args, .. } = &func.insts[v as usize] else {
+        unreachable!()
+    };
+    alloc.places[args[0] as usize] = ap_place;
+    alloc.places[v as usize] = dst;
+    alloc.spill_count = alloc.spill_count.max(2);
+    (func, alloc, v)
+}
+
+/// The cursor `va_arg` with a spilled cursor address and a spilled result
+/// holds both scratches, so the advance takes x19 and the frame saves it; a
+/// register result frees one.
+#[test]
+fn cursor_va_arg_takes_x19_only_with_both_places_spilled() {
+    let target = Target::MacOSAarch64;
+    for (dst, takes) in [(Place::Spill(1), true), (Place::IntReg(5), false)] {
+        let (func, alloc, v) = forced_va_arg(target, Place::Spill(0), dst);
+        let Inst::Intrinsic { args, .. } = &func.insts[v as usize] else {
+            unreachable!()
+        };
+        let frame = compute_frame(&func, &alloc, target.abi(), target);
+        assert_eq!(frame.uses_x19, takes, "{dst:?}");
+        let mut code = Vec::new();
+        emit_va_arg_cursor(
+            &mut code,
+            &func,
+            args,
+            dst,
+            &alloc,
+            frame,
+            &ScratchPool::new(),
+        )
+        .expect("emit_va_arg_cursor");
+        let words = le_words(&code);
+        // `add x19, xn, #imm`, the cursor advance.
+        let advances_x19 = words.iter().any(|&w| w & 0xFFC0_001F == 0x9100_0013);
+        assert_eq!(advances_x19, takes, "{dst:?}: {words:08x?}");
+    }
+}
+
+/// The AAPCS64 `va_list` lowering takes no third scratch, whatever spills.
+#[test]
+fn aapcs64_va_arg_leaves_x19_alone() {
+    let target = Target::LinuxAarch64;
+    let (func, alloc, _) = forced_va_arg(target, Place::Spill(0), Place::Spill(1));
+    assert!(!compute_frame(&func, &alloc, target.abi(), target).uses_x19);
 }
 
 /// `return 1 + 2;` exercises the Binop + BinopI handlers
@@ -1833,6 +2266,7 @@ fn emit_return_one_plus_two() {
             super::super::StackProtect::OFF,
             super::super::FunctionEntry::default(),
             super::super::FixedRegs::NONE,
+            false,
         )
     };
     assert!(ok.is_ok(), "binop handler should cover Add + Shl + Shr");
@@ -1928,6 +2362,7 @@ fn emit_if_else_returns() {
             super::super::StackProtect::OFF,
             super::super::FunctionEntry::default(),
             super::super::FixedRegs::NONE,
+            false,
         )
     };
     assert!(

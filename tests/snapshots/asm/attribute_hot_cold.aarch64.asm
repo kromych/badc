@@ -15,7 +15,6 @@ Disassembly of section .text:
 
 <fast_path>:
                	add	x0, x0, #0x1
-               	sxtw	x0, w0
                	ret
 
 <error_path>:
@@ -24,14 +23,13 @@ Disassembly of section .text:
 
 <hot_decl>:
                	lsl	x0, x0, #1
-               	sxtw	x0, w0
                	ret
 
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	bl	<addr>
-               	cmp	x0, #0x29
+               	cmp	w0, #0x29
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ldp	x29, x30, [sp], #0x10

@@ -26,31 +26,27 @@ Disassembly of section .text:
                	int3
 
 <g>:
-               	movq	%rdx, %r8
-               	movq	%rcx, %rdx
-               	xorq	%rax, %rax
-               	movq	%rax, %rcx
-               	jmp	<addr>
-               	leaq	(%rax,%rdx), %rcx
-               	movq	%rsi, %r9
-               	pushq	%rcx
-               	movq	%r8, %rcx
-               	shlq	%cl, %r9
-               	popq	%rcx
-               	addq	%r9, %rax
-               	cmpq	%rdi, %rcx
+               	movq	%rcx, %rax
+               	xorl	%r8d, %r8d
+               	movq	%r8, %r9
+               	cmpq	%rdi, %r9
+               	jge	<addr>
+               	leaq	(%r8,%rax), %r9
+               	movq	%rsi, %r11
+               	movq	%rdx, %rcx
+               	shlq	%cl, %r11
+               	movq	%r11, %rcx
+               	addq	%rcx, %r8
+               	cmpq	%rdi, %r9
                	jl	<addr>
-               	movq	%rdx, %rax
                	retq
 
 <main>:
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	movq	%rax, %rcx
-               	jmp	<addr>
                	leaq	0x1(%rax), %rcx
                	addq	$0x10, %rax
                	cmpq	$0x64, %rcx
                	jl	<addr>
-               	xorq	%rax, %rax
-               	movq	%rax, %rcx
+               	xorl	%eax, %eax
                	retq

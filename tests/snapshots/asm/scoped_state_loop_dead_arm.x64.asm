@@ -26,13 +26,12 @@ Disassembly of section .text:
                	int3
 
 <reader>:
-               	xorq	%rdx, %rdx
+               	xorl	%edx, %edx
                	movl	$0x3, %eax
                	leaq	<rip>, %r8
                	movq	(%r8), %rcx
                	leaq	<rip>, %rdi
                	movq	%rdx, %rsi
-               	jmp	<addr>
                	movq	(%rdi), %r9
                	addq	%rcx, %r9
                	movq	%r9, (%rdi)
@@ -49,9 +48,7 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	jmp	<addr>
                	movq	%rdx, %rax
-               	jmp	<addr>
-               	jmp	<addr>
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	jne	<addr>
                	movq	%rsi, %rax
                	retq
@@ -79,6 +76,6 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	popq	%rbp
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	popq	%rbp
                	retq

@@ -32,9 +32,6 @@ Disassembly of section .text:
                	jne	<addr>
                	movslq	0x4(%rax), %rcx
                	cmpl	$0x2, %ecx
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x1, %eax
                	retq
@@ -43,9 +40,6 @@ Disassembly of section .text:
                	jne	<addr>
                	movslq	0x8(%rax), %rcx
                	cmpl	$0x3, %ecx
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x2, %eax
                	retq
@@ -54,38 +48,23 @@ Disassembly of section .text:
                	jne	<addr>
                	movslq	0x10(%rax), %rax
                	cmpl	$0x5, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x3, %eax
                	retq
                	leaq	<rip>, %rax
-               	movslq	(%rax), %rax
-               	cmpl	$0xa, %eax
+               	movslq	(%rax), %rcx
+               	cmpl	$0xa, %ecx
                	jne	<addr>
-               	leaq	<rip>, %rax
-               	movslq	0x4(%rax), %rax
-               	cmpl	$0x14, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
+               	movslq	0x4(%rax), %rcx
+               	cmpl	$0x14, %ecx
                	jne	<addr>
-               	leaq	<rip>, %rax
-               	movslq	0x8(%rax), %rax
-               	cmpl	$0x1e, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
+               	movslq	0x8(%rax), %rcx
+               	cmpl	$0x1e, %ecx
                	jne	<addr>
-               	leaq	<rip>, %rax
                	movslq	0xc(%rax), %rax
                	cmpl	$0x28, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x4, %eax
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	retq

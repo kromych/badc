@@ -3032,12 +3032,11 @@ impl Compiler {
                 // result keeps the vector type (no promotion).
                 self.ast_apply_unary(super::super::ast::UnOp::Neg);
             } else if is_floating_scalar(self.ty) {
-                self.ast_fneg();
+                self.ast_neg();
             } else {
                 // C99 6.5.3.3p3: the result has the promoted operand type.
-                let operand_ty = self.ty;
-                self.emit_binop_with_imm(crate::c5::ir::BinOp::Mul, -1);
-                self.ty = integer_promote(operand_ty);
+                self.ty = integer_promote(self.ty);
+                self.ast_neg();
                 // Negating the type minimum overflows the width, so a 32-bit
                 // result is renormalized for a later 64-bit read.
                 if self.size_of_type(self.ty) == 4 {
@@ -4192,9 +4191,9 @@ impl Compiler {
         let mut carry_stride: i64 = 0;
         if is_pointer_ty(lhs_ty) && self.ptr_diff_compatible(lhs_ty, self.ty) {
             // C99 6.5.6p9: `ptr - ptr` is the element distance, the byte
-            // distance divided by the pointee size both operands share. The
-            // type is set before the node is built.
-            self.ty = Ty::Int as i64;
+            // distance divided by the pointee size both operands share, of
+            // type `ptrdiff_t`. The type is set before the node is built.
+            self.ty = self.ptrdiff_t_ty();
             self.ast_binop(crate::c5::ir::BinOp::Sub);
             if !fn_ptr_arith && self.is_ptr_scaling_nontrivial(lhs_ty) {
                 let scale = self.pointer_to_array_arith_stride(

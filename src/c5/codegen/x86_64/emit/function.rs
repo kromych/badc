@@ -29,14 +29,11 @@ fn emit_phi_predecessor_moves(
     )
 }
 
-/// Sequentialize a parallel copy over integer registers and spill slots:
-/// leaves (destinations no pending move reads) first; when only cycles
-/// remain, one cycle source is saved in `hold` and every move reading it
-/// redirected there, exposing a new leaf. `hold` and `stage` lie outside
-/// the allocator's bank. An FP or `None` operand is an `Err`.
+/// The shared parallel-copy scheduler over the x86-64 leaves; `hold` and
+/// `stage` lie outside the allocator's bank.
 fn schedule_place_moves(
     code: &mut Vec<u8>,
-    moves: &mut Vec<(Place, Place)>,
+    moves: &mut Vec<PlaceMove>,
     frame: Frame,
     hold: Reg,
     stage: Reg,
@@ -92,6 +89,13 @@ impl super::ssa::emit_common::EmitBackend for super::ssa::emit_common::X64Backen
     fn int_reg_mov(&self, code: &mut Vec<u8>, dst: u8, src: u8) {
         emit_mov_rr(code, Reg(dst), Reg(src));
     }
+    fn int_reg_ext(&self, code: &mut Vec<u8>, dst: u8, src: u8, kind: LoadKind) {
+        emit_sign_extend(code, Reg(dst), Reg(src), kind);
+    }
+    fn int_reg_xchg(&self, code: &mut Vec<u8>, a: u8, b: u8) -> bool {
+        emit_xchg_rr(code, Reg(a), Reg(b));
+        true
+    }
     fn int_spill_store(&self, code: &mut Vec<u8>, frame: Frame, slot: u32, src: u8, _base: u8) {
         let (sb, off) = spill_slot_addr(frame, slot);
         emit_mov_mem_r(code, sb, off, Reg(src));
@@ -100,72 +104,20 @@ impl super::ssa::emit_common::EmitBackend for super::ssa::emit_common::X64Backen
         let (sb, off) = spill_slot_addr(frame, slot);
         emit_mov_r_mem(code, Reg(dst), sb, off);
     }
-    fn int_spill_to_spill(
+    fn int_spill_store_staged(
         &self,
         code: &mut Vec<u8>,
         frame: Frame,
-        src: u32,
-        dst: u32,
+        slot: u32,
         stage: u8,
         _hold: u8,
     ) {
-        let (sb, src_off) = spill_slot_addr(frame, src);
-        let (_, dst_off) = spill_slot_addr(frame, dst);
-        emit_mov_r_mem(code, Reg(stage), sb, src_off);
-        emit_mov_mem_r(code, sb, dst_off, Reg(stage));
+        let (sb, off) = spill_slot_addr(frame, slot);
+        emit_mov_mem_r(code, sb, off, Reg(stage));
     }
     fn int_spill_store_auto(&self, code: &mut Vec<u8>, frame: Frame, slot: u32, src: u8) {
         let (sb, off) = spill_slot_addr(frame, slot);
         emit_mov_mem_r(code, sb, off, Reg(src));
-    }
-    fn break_place_cycle(
-        &self,
-        code: &mut Vec<u8>,
-        moves: &mut Vec<(Place, Place)>,
-        frame: Frame,
-        hold: u8,
-        stage: u8,
-    ) {
-        // A register-register edge breaks with `xchg`, which satisfies one move
-        // and leaves the displaced value in the source; an edge touching a spill
-        // slot routes one source through `hold`.
-        if let Some(i) = moves
-            .iter()
-            .position(|(s, t)| matches!(s, Place::IntReg(_)) && matches!(t, Place::IntReg(_)))
-        {
-            let (s, t) = moves[i];
-            let (Place::IntReg(sr), Place::IntReg(tr)) = (s, t) else {
-                unreachable!()
-            };
-            emit_xchg_rr(code, Reg(sr), Reg(tr));
-            moves.swap_remove(i);
-            for m in moves.iter_mut() {
-                if place_same_loc(m.0, t) {
-                    m.0 = s;
-                }
-            }
-            moves.retain(|(s, t)| !place_same_loc(*s, *t));
-        } else {
-            let cyc = moves
-                .iter()
-                .map(|(s, _)| *s)
-                .find(|s| !place_same_loc(*s, Place::IntReg(hold)))
-                .unwrap_or(moves[0].0);
-            super::ssa::emit_common::emit_place_move(
-                self,
-                code,
-                cyc,
-                Place::IntReg(hold),
-                frame,
-                stage,
-                hold,
-            );
-            for m in moves.iter_mut() {
-                if place_same_loc(m.0, cyc) {
-                    m.0 = Place::IntReg(hold);
-                }
-            }
-        }
     }
     fn int_reg_load_imm(&self, code: &mut Vec<u8>, dst: u8, bits: i64) {
         emit_mov_r_imm64(code, Reg(dst), bits);
@@ -245,10 +197,12 @@ pub(crate) fn emit_function(
     stack_protect: super::StackProtect,
     entry: super::FunctionEntry,
     fixed_regs: super::FixedRegs,
+    // `-O`: the block plan may repeat a small test in place of a jump to it.
+    repeat_tests: bool,
 ) -> Emit {
     let abi = {
         let mut a = target.abi_for(func.conv);
-        a.no_fp_varargs = no_fp_regs;
+        a.no_fp_regs = no_fp_regs;
         a.strict_align = strict_align;
         a.hardening = hardening;
         a.stack_protect = stack_protect;
@@ -259,7 +213,7 @@ pub(crate) fn emit_function(
     if let Some(bytes) = super::ssa::emit_common::locals_bytes_over_limit(func) {
         return fail(super::ssa::emit_common::frame_too_large_msg(bytes));
     }
-    let frame = compute_frame(func, alloc, abi);
+    let frame = compute_frame(func, alloc, abi, target);
     if let Some(why) = super::ssa::reg_alloc::fp_scratch_shortfall(func, frame.fp_scratch) {
         return fail(why);
     }
@@ -285,8 +239,8 @@ pub(crate) fn emit_function(
     let param_from_home = compute_param_from_home(func, alloc, abi);
     let param_plan = param_placements(func, abi);
     // `-mno-sse` bars the SSE registers, `-mstrict-align` a store wider than the alignment.
-    let zero_fill_fp = (!abi.no_fp_varargs && !abi.strict_align)
-        .then(|| super::ssa::reg_alloc::zero_fill_fp_register(func, alloc, target, abi.fixed_regs))
+    let zero_fill_fp = (!abi.no_fp_regs && !abi.strict_align)
+        .then(|| super::ssa::reg_alloc::free_fp_register(func, alloc, target, abi.fixed_regs))
         .flatten();
     let fcx = FnCtx {
         func,
@@ -306,8 +260,9 @@ pub(crate) fn emit_function(
         param_plan: &param_plan,
         name2entpc,
     };
+    let plan = super::ssa::block_plan::BlockPlan::build(func, alloc, repeat_tests);
     let endbr_targets = if abi.hardening.cf_protection_branch {
-        super::indirect_branch_target_blocks(func)
+        plan.landing_pads(func)
     } else {
         alloc::collections::BTreeSet::new()
     };
@@ -328,6 +283,7 @@ pub(crate) fn emit_function(
         abs_jump_tables,
         endbr_targets,
         param_prebatched: alloc::vec![false; func.insts.len()],
+        plan,
         block_offsets: alloc::vec![0; func.blocks.len()],
         branch_fixups: Vec::new(),
         branch_short: Vec::new(),
@@ -359,6 +315,10 @@ struct FnEmit<'a, 'b> {
     endbr_targets: alloc::collections::BTreeSet<super::super::ir::BlockId>,
     /// `ParamRef` values the entry parallel copy already placed.
     param_prebatched: Vec<bool>,
+    /// Which blocks are emitted and where each branch lands. Fixed before
+    /// the first pass: the short forms are keyed by emission index, so both
+    /// passes have to write the same branches.
+    plan: super::ssa::block_plan::BlockPlan,
     block_offsets: Vec<usize>,
     branch_fixups: Vec<BranchFixup>,
     /// Per recorded branch, whether the layout pass chose the rel8 form;
@@ -480,8 +440,7 @@ impl FnEmit<'_, '_> {
             ..
         } = self.fcx;
         let code = &mut *self.out.cx.code;
-        let mut moves: Vec<(Place, Place)> = Vec::new();
-        let mut exts: Vec<(Place, LoadKind)> = Vec::new();
+        let mut moves: Vec<PlaceMove> = Vec::new();
         let mut vids: Vec<usize> = Vec::new();
         let mut homes: Vec<Place> = Vec::new();
         for (vid, inst) in func.insts.iter().enumerate() {
@@ -490,8 +449,8 @@ impl FnEmit<'_, '_> {
             };
             // A dead `ParamRef` is skipped by the per-inst path; an FP home
             // stays on that path too.
-            if super::ssa::emit_common::is_dead_pure(inst, vid as super::super::ir::ValueId, alloc)
-            {
+            let v = vid as super::super::ir::ValueId;
+            if super::ssa::emit_common::is_dead_pure(inst, v, alloc) {
                 continue;
             }
             let dst = alloc.places.get(vid).copied().unwrap_or(Place::None);
@@ -505,17 +464,13 @@ impl FnEmit<'_, '_> {
             else {
                 continue;
             };
-            moves.push((Place::IntReg(src), dst));
+            moves.push(PlaceMove {
+                src: Place::IntReg(src),
+                dst,
+                ext: param_entry_ext(*kind, v, alloc),
+            });
             vids.push(vid);
             homes.push(dst);
-            // The callee performs the C99 6.5.2.2p4 conversion: an I8/I16
-            // extend always, an I32 extend only when bits 32..63 are read.
-            if matches!(kind, LoadKind::I8 | LoadKind::I16)
-                || (matches!(kind, LoadKind::I32)
-                    && !alloc.high_dead(vid as super::super::ir::ValueId))
-            {
-                exts.push((dst, *kind));
-            }
         }
         let homes_distinct = (0..homes.len())
             .all(|a| ((a + 1)..homes.len()).all(|b| !place_same_loc(homes[a], homes[b])));
@@ -525,24 +480,6 @@ impl FnEmit<'_, '_> {
         // r10 / r11 are never argument registers nor in the allocator's
         // bank, so they cannot collide with a pending source or target.
         schedule_place_moves(code, &mut moves, frame, SCRATCH_R10, SCRATCH_R11)?;
-        for (dst, kind) in exts {
-            let ext = |code: &mut Vec<u8>, r: Reg| match kind {
-                LoadKind::I8 => super::encode::emit_movsx_r_r8(code, r, r),
-                LoadKind::I16 => super::encode::emit_movsx_r_r16(code, r, r),
-                LoadKind::I32 => super::encode::emit_movsxd_r_r(code, r, r),
-                _ => {}
-            };
-            match dst {
-                Place::IntReg(r) => ext(code, Reg(r)),
-                Place::Spill(slot) => {
-                    let (sb, sp_off) = spill_slot_addr(frame, slot);
-                    emit_mov_r_mem(code, SCRATCH_R10, sb, sp_off);
-                    ext(code, SCRATCH_R10);
-                    emit_mov_mem_r(code, sb, sp_off, SCRATCH_R10);
-                }
-                Place::None | Place::FpReg(_) => {}
-            }
-        }
         for vid in vids {
             self.param_prebatched[vid] = true;
         }
@@ -559,7 +496,20 @@ impl FnEmit<'_, '_> {
             self.block_addr_fixups.clear();
             self.jump_table_fixups.clear();
             for block_idx in 0..self.fcx.func.blocks.len() {
+                if self.plan.is_skipped(block_idx) {
+                    #[cfg(debug_assertions)]
+                    self.assert_emits_nothing(block_idx)?;
+                    continue;
+                }
                 self.emit_block(block_idx)?;
+            }
+            // A block left out stands where its edges land, for every
+            // reader of the offsets.
+            for b in 0..self.fcx.func.blocks.len() {
+                if self.plan.is_skipped(b) {
+                    let lands = self.plan.resolve(b as super::super::ir::BlockId);
+                    self.block_offsets[b] = self.block_offsets[lands as usize];
+                }
             }
             if !self.branch_short.is_empty() {
                 break;
@@ -585,6 +535,33 @@ impl FnEmit<'_, '_> {
             self.branch_fixups.clear();
         }
         Ok(body)
+    }
+
+    /// A block the plan leaves out writes nothing when lowered: its
+    /// instructions, then the moves of its outgoing edge.
+    #[cfg(debug_assertions)]
+    fn assert_emits_nothing(&mut self, block_idx: usize) -> Emit {
+        let FnCtx {
+            func, alloc, frame, ..
+        } = self.fcx;
+        let block = &func.blocks[block_idx];
+        let (code, fixups) = (self.out.cx.code.len(), self.branch_fixups.len());
+        for v in block.inst_range.clone() {
+            self.emit_block_inst(block, v, None)?;
+        }
+        emit_phi_predecessor_moves(
+            self.out.cx.code,
+            block_idx as super::super::ir::BlockId,
+            func,
+            alloc,
+            frame,
+        )?;
+        assert!(
+            self.out.cx.code.len() == code && self.branch_fixups.len() == fixups,
+            "block {block_idx} of `{}` is left out of the code but lowers to bytes",
+            func.name
+        );
+        Ok(())
     }
 
     fn emit_block(&mut self, block_idx: usize) -> Emit {
@@ -656,7 +633,7 @@ impl FnEmit<'_, '_> {
         if func.is_naked && !matches!(inst, Inst::InlineAsm { .. }) {
             return Ok(());
         }
-        if super::ssa::emit_common::is_dead_pure(inst, v, alloc) {
+        if super::ssa::emit_common::inst_emits_nothing(inst, v, alloc) {
             return Ok(());
         }
         if self.param_prebatched[v as usize] {
@@ -776,31 +753,18 @@ impl FnEmit<'_, '_> {
                     Ok(())
                 }
             }
-            Terminator::Jmp(t) | Terminator::FallThrough(t) => {
-                self.jump_unless_next(block_idx, t);
-                Ok(())
-            }
+            Terminator::Jmp(t) | Terminator::FallThrough(t) => self.jump_unless_next(block_idx, t),
             Terminator::Bz {
                 cond,
                 target,
                 fall_through,
-            } => self.emit_cond_branch(block_idx, cond, target, fall_through, true),
+            } => self.emit_cond_branch(block_idx, block_idx, cond, target, fall_through, true),
             Terminator::Bnz {
                 cond,
                 target,
                 fall_through,
-            } => self.emit_cond_branch(block_idx, cond, target, fall_through, false),
-            // Computed goto: `jmp r64` through the address `Inst::BlockAddr`
-            // materialized.
-            Terminator::GotoIndirect { target } => {
-                let code = &mut *self.out.cx.code;
-                let tplace = place_of(alloc, target);
-                let Some(rt) = materialize_int(code, tplace, SCRATCH_R10, frame) else {
-                    return fail("GotoIndirect: target Place not int reg / spill");
-                };
-                emit_hardened_jmp_r(code, rt, abi, self.out.cx.asm_extern_call_sites);
-                Ok(())
-            }
+            } => self.emit_cond_branch(block_idx, block_idx, cond, target, fall_through, false),
+            Terminator::GotoIndirect { target } => self.emit_goto_indirect(target),
             // Table dispatch through the read-only blob; the preceding
             // bounds check proves the index in range. An image reads a
             // 32-bit table-relative entry and adds the base back; relocatable
@@ -829,8 +793,7 @@ impl FnEmit<'_, '_> {
             // only the fall-through edge (row entry 0) is emitted here.
             Terminator::AsmGoto { table } => {
                 let fall = func.jump_tables[table as usize][0];
-                self.jump_unless_next(block_idx, fall);
-                Ok(())
+                self.jump_unless_next(block_idx, fall)
             }
             // A sys-trampoline body: the indirect call already placed every
             // argument, so control forwards through the PLT slot and the
@@ -862,14 +825,28 @@ impl FnEmit<'_, '_> {
     fn emit_cond_branch(
         &mut self,
         block_idx: usize,
+        owner: usize,
         cond: super::super::ir::ValueId,
         target: super::super::ir::BlockId,
         fall_through: super::super::ir::BlockId,
         negate: bool,
     ) -> Emit {
+        use super::ssa::block_plan::CondShape;
         let FnCtx {
             func, alloc, frame, ..
         } = self.fcx;
+        let (target, fall_through, negate) =
+            match self
+                .plan
+                .cond_shape(block_idx, target, fall_through, negate)
+            {
+                CondShape::Jump(t) => return self.jump_unless_next(block_idx, t),
+                CondShape::Branch {
+                    taken,
+                    other,
+                    negate,
+                } => (taken, other, negate),
+            };
         if let Some(fused) = fused_branch_cc(func, alloc, cond, negate) {
             emit_fused_branch(
                 self.out.cx.code,
@@ -889,12 +866,12 @@ impl FnEmit<'_, '_> {
                     "Bnz: cond Place not int reg / spill / fp"
                 });
             };
-            super::encode::emit_rr(code, Mnem::Test, 8, rc, rc);
+            let low_word = func.low_word_tests.get(owner).copied().unwrap_or(false);
+            super::encode::emit_rr(code, Mnem::Test, if low_word { 4 } else { 8 }, rc, rc);
             let cc = if negate { Cc::E } else { Cc::Ne };
             self.emit_local(LocalBranchKind::Jcc(cc), target);
         }
-        self.jump_unless_next(block_idx, fall_through);
-        Ok(())
+        self.jump_unless_next(block_idx, fall_through)
     }
 
     fn emit_local(&mut self, kind: LocalBranchKind, target: super::super::ir::BlockId) {
@@ -907,10 +884,63 @@ impl FnEmit<'_, '_> {
         );
     }
 
-    /// A `jmp` to `t` unless it is the next block in layout.
-    fn jump_unless_next(&mut self, block_idx: usize, t: super::super::ir::BlockId) {
-        if t as usize != block_idx + 1 {
-            self.emit_local(LocalBranchKind::Jmp, t);
+    /// Reach where an edge to `t` lands from the end of `block_idx`:
+    /// nothing when its code runs into it, the plan's repeat of a small
+    /// test, else a `jmp`.
+    fn jump_unless_next(&mut self, block_idx: usize, t: super::super::ir::BlockId) -> Emit {
+        if self.plan.falls_into(block_idx, t) {
+            return Ok(());
+        }
+        if let Some(h) = self.plan.repeated_at(block_idx, t) {
+            return self.emit_repeat(block_idx, h);
+        }
+        let t = self.plan.resolve(t);
+        self.emit_local(LocalBranchKind::Jmp, t);
+        Ok(())
+    }
+
+    /// Computed goto: `jmp r64` through the address `Inst::BlockAddr`
+    /// materialized.
+    fn emit_goto_indirect(&mut self, target: super::super::ir::ValueId) -> Emit {
+        let FnCtx {
+            alloc, frame, abi, ..
+        } = self.fcx;
+        let code = &mut *self.out.cx.code;
+        let tplace = place_of(alloc, target);
+        let Some(rt) = materialize_int(code, tplace, SCRATCH_R10, frame) else {
+            return fail("GotoIndirect: target Place not int reg / spill");
+        };
+        emit_hardened_jmp_r(code, rt, abi, self.out.cx.asm_extern_call_sites);
+        Ok(())
+    }
+
+    /// The instructions of block `h` and its branch, as the end of
+    /// `block_idx`. A conditional's one arm is what this code runs into, so
+    /// the branch closes it. A decided test goes, with what only it reads.
+    fn emit_repeat(&mut self, block_idx: usize, h: super::super::ir::BlockId) -> Emit {
+        let block = &self.fcx.func.blocks[h as usize];
+        let decided = self.plan.decided_at(block_idx);
+        for v in block.inst_range.clone() {
+            if decided.is_none() || !self.plan.is_test_only(v) {
+                self.emit_block_inst(block, v, None)?;
+            }
+        }
+        if let Some(arm) = decided {
+            return self.jump_unless_next(block_idx, arm);
+        }
+        match block.terminator {
+            Terminator::Bz {
+                cond,
+                target,
+                fall_through,
+            } => self.emit_cond_branch(block_idx, h as usize, cond, target, fall_through, true),
+            Terminator::Bnz {
+                cond,
+                target,
+                fall_through,
+            } => self.emit_cond_branch(block_idx, h as usize, cond, target, fall_through, false),
+            Terminator::GotoIndirect { target } => self.emit_goto_indirect(target),
+            _ => unreachable!("the plan repeats a conditional or an indirect branch"),
         }
     }
 
@@ -935,6 +965,13 @@ impl FnEmit<'_, '_> {
         let code = &mut *self.out.cx.code;
         for fx in &self.branch_fixups {
             let target_off = self.block_offsets[fx.target as usize];
+            debug_assert!(
+                fx.pinned_long
+                    || fx.kind != LocalBranchKind::Jmp
+                    || target_off != fx.site + if fx.short { 1 } else { 4 },
+                "`{}`: a jmp to the next instruction",
+                self.fcx.func.name
+            );
             if fx.short {
                 let rel = (target_off as i64) - (fx.site as i64 + 1);
                 let Ok(imm) = i8::try_from(rel) else {
@@ -1064,7 +1101,7 @@ fn emit_realign_rsp(code: &mut Vec<u8>, frame: Frame) {
 /// loop.
 pub(super) fn emit_stack_alloc(code: &mut Vec<u8>, bytes: u32, scratch: Option<Reg>) {
     if bytes <= MAX_UNPROBED_STACK_STEP {
-        emit_sub_rsp_imm32(code, bytes);
+        emit_sub_rsp(code, bytes);
         return;
     }
     let steps = bytes / STACK_PROBE_PAGE;
@@ -1073,7 +1110,7 @@ pub(super) fn emit_stack_alloc(code: &mut Vec<u8>, bytes: u32, scratch: Option<R
         Some(counter) if steps > STACK_PROBE_UNROLL_MAX => {
             super::encode::emit_mov_r_imm64(code, counter, steps as i64);
             let loop_start = code.len();
-            emit_sub_rsp_imm32(code, STACK_PROBE_PAGE);
+            emit_sub_rsp(code, STACK_PROBE_PAGE);
             emit_stack_probe(code);
             super::encode::emit_ri(code, Mnem::Sub, 8, counter, 1);
             super::encode::emit_jcc_rel32(code, super::encode::Cc::Ne, 0);
@@ -1083,57 +1120,75 @@ pub(super) fn emit_stack_alloc(code: &mut Vec<u8>, bytes: u32, scratch: Option<R
         }
         _ => {
             for _ in 0..steps {
-                emit_sub_rsp_imm32(code, STACK_PROBE_PAGE);
+                emit_sub_rsp(code, STACK_PROBE_PAGE);
                 emit_stack_probe(code);
             }
         }
     }
     if residual > 0 {
-        emit_sub_rsp_imm32(code, residual);
+        emit_sub_rsp(code, residual);
         if residual > MAX_UNPROBED_STACK_STEP {
             emit_stack_probe(code);
         }
     }
 }
 
-/// Save the callee-saved registers the allocator reported: the non-volatile
-/// xmm scratch at the frame bottom (full 128-bit `movups`, the caller may
-/// use the upper lanes) and the callee-saved GPRs above it. The offsets
+/// Bytes the prologue's pushes of the callee-saved GPRs reserve, which the
+/// frame allocation leaves out.
+fn pushed_gpr_bytes(alloc: &Allocation) -> u32 {
+    alloc.gpr_used.len() as u32 * 8
+}
+
+/// rsp-relative offset of the first saved non-volatile xmm, above the GPR
+/// slots at the frame bottom.
+fn saved_xmm_off(alloc: &Allocation) -> i32 {
+    super::ssa::emit_common::slots16(alloc.gpr_used.len() as u32) as i32
+}
+
+/// Save the callee-saved registers the allocator reported, with rsp
+/// `pushed_gpr_bytes` above the frame bottom: the GPRs are pushed in
+/// descending index order, so `gpr_used[i]` lands at `[rsp + 8 * i]` of the
+/// completed frame, and the non-volatile xmm scratch is stored above them
+/// (full 128-bit `movups`, the caller may use the upper lanes). The offsets
 /// have one source, so the prologue and every return path agree.
-fn save_callee_saved(code: &mut Vec<u8>, alloc: &Allocation, frame: Frame) {
-    for (i, &r) in alloc.fp_used.iter().enumerate() {
-        emit_movups_mem_xmm(code, Reg::RSP, (i as i32) * 16, Reg(r));
+fn save_callee_saved(code: &mut Vec<u8>, alloc: &Allocation) {
+    for &r in alloc.gpr_used.iter().rev() {
+        emit_push_r(code, Reg(r));
     }
-    let saved_fpr_bytes = frame.saved_fpr_bytes as i32;
-    for (i, &r) in alloc.gpr_used.iter().enumerate() {
-        super::encode::emit_mov_mem_r(code, Reg::RSP, saved_fpr_bytes + (i as i32) * 8, Reg(r));
+    let base = saved_xmm_off(alloc);
+    for (i, &r) in alloc.fp_used.iter().enumerate() {
+        emit_movups_mem_xmm(code, Reg::RSP, base + (i as i32) * 16, Reg(r));
     }
 }
 
 /// Re-establish `rsp = rbp - frame_bytes` in a dynamic-sp frame before
 /// the epilogue's rsp-relative restores. No-op for static frames. Every
-/// return path calls this ahead of [`restore_callee_saved`].
-fn restore_dynamic_sp(code: &mut Vec<u8>, frame: Frame) {
+/// return path and the tail-call jump call this ahead of
+/// [`restore_callee_saved`].
+pub(super) fn restore_dynamic_sp(code: &mut Vec<u8>, frame: Frame) {
     if frame.dynamic_sp {
         emit_lea_r_mem(code, Reg::RSP, Reg::RBP, -(frame.frame_bytes as i32));
     }
 }
 
-/// Restore what [`save_callee_saved`] saved, in mirror order. Every return
-/// path routes through this so the saved-region offsets cannot drift.
-pub(super) fn restore_callee_saved(code: &mut Vec<u8>, alloc: &Allocation, frame: Frame) {
-    let saved_fpr_bytes = frame.saved_fpr_bytes as i32;
-    for (i, &r) in alloc.gpr_used.iter().enumerate() {
-        super::encode::emit_mov_r_mem(code, Reg(r), Reg::RSP, saved_fpr_bytes + (i as i32) * 8);
-    }
+/// Restore what [`save_callee_saved`] saved, with rsp at the frame bottom:
+/// the xmm loads, then the pops, which leave rsp `pushed_gpr_bytes` above it.
+/// No rsp-relative access may follow. Every return path routes through this
+/// so the saved-region offsets cannot drift.
+pub(super) fn restore_callee_saved(code: &mut Vec<u8>, alloc: &Allocation) {
+    let base = saved_xmm_off(alloc);
     for (i, &r) in alloc.fp_used.iter().enumerate() {
-        emit_movups_xmm_mem(code, Reg(r), Reg::RSP, (i as i32) * 16);
+        emit_movups_xmm_mem(code, Reg(r), Reg::RSP, base + (i as i32) * 16);
+    }
+    for &r in alloc.gpr_used.iter() {
+        emit_pop_r(code, Reg(r));
     }
 }
 
-/// The prologue: `push rbp; mov rbp, rsp; sub rsp, frame_bytes`, the
-/// register save areas, the callee-saved registers, the canary, the
-/// realignment, then the parameters homed from their argument registers.
+/// The prologue: `push rbp; mov rbp, rsp; sub rsp, N`, the register save
+/// areas, the callee-saved registers (pushed, which completes the frame:
+/// `N = frame_bytes - pushed_gpr_bytes`), the canary, the realignment, then
+/// the parameters homed from their argument registers.
 /// The return address stays where the caller pushed it, at `[rbp + 8]`
 /// once rbp is set, and rsp only descends. `func_start` is `code.len()`
 /// at entry; the returned [`super::FnUnwind`] records each frame
@@ -1148,10 +1203,7 @@ fn emit_prologue(
     func_start: usize,
     extern_data_refs: &mut Vec<super::UserExternDataRef>,
 ) -> super::FnUnwind {
-    let mut uw = super::FnUnwind {
-        frame_bytes: frame.frame_bytes,
-        ..super::FnUnwind::default()
-    };
+    let mut uw = super::FnUnwind::default();
     let rel = |code: &Vec<u8>| (code.len() - func_start) as u32;
     // A full leaf has no prologue work: it returns off the caller-pushed
     // return address with rsp unchanged.
@@ -1175,15 +1227,17 @@ fn emit_prologue(
             emit_mov_mem_r(code, Reg::RBP, home_off, Reg(reg));
         }
     }
-    if frame.frame_bytes > 0 {
+    let alloc_bytes = frame.frame_bytes - pushed_gpr_bytes(alloc);
+    if alloc_bytes > 0 {
         // A single `sub rsp, N` is describable with `UWOP_ALLOC`; a probed frame
         // stays undescribed (`frame_alloc_end == 0`), the frame-pointer rule
         // recovering rsp at any body fault.
-        let single_sub = frame.frame_bytes <= MAX_UNPROBED_STACK_STEP;
+        let single_sub = alloc_bytes <= MAX_UNPROBED_STACK_STEP;
         // r11 is caller-saved, is no target's argument register, and
         // carries no live value in the prologue.
-        emit_stack_alloc(code, frame.frame_bytes, Some(Reg::R11));
+        emit_stack_alloc(code, alloc_bytes, Some(Reg::R11));
         if single_sub {
+            uw.frame_bytes = alloc_bytes;
             uw.frame_alloc_end = rel(code);
         }
     }
@@ -1201,7 +1255,7 @@ fn emit_prologue(
         // Under `-mno-sse` the XMM save is omitted entirely: the target
         // environment faults on any XMM access and its callers do not
         // maintain the `al` count, so even the guarded form is unsafe.
-        if !abi.no_fp_varargs {
+        if !abi.no_fp_regs {
             // test al, al ; je past_fp_save
             super::encode::emit_test_al_al(code);
             super::encode::emit_jcc_rel32(code, Cc::E, 0);
@@ -1222,9 +1276,8 @@ fn emit_prologue(
         }
     }
     // The allocator never assigns a non-volatile xmm (`callee_fprs` is empty);
-    // `fp_used` lists the fixed FP scratch of a Win64 function doing FP work,
-    // saved at the frame bottom with the full 128-bit `movups`.
-    save_callee_saved(code, alloc, frame);
+    // `fp_used` lists the fixed FP scratch of a Win64 function doing FP work.
+    save_callee_saved(code, alloc);
     // The canary slot is rbp-relative, so it is stored before the realign.
     emit_canary_store(code, frame, abi, extern_data_refs);
     // C11 6.7.5: the over-aligned region below the static frame, after the
@@ -1412,8 +1465,9 @@ fn emit_return(
             }
             _ => {}
         }
+        emit_canary_check(code, frame, abi, extern_sites, extern_data_refs);
         restore_dynamic_sp(code, frame);
-        restore_callee_saved(code, alloc, frame);
+        restore_callee_saved(code, alloc);
         // Place each eightbyte in its bank: System V returns SSE eightbytes
         // in xmm0/xmm1 and INTEGER eightbytes in rax/rdx, each in order.
         let int_ret = [Reg::RAX, Reg::RDX];
@@ -1449,15 +1503,7 @@ fn emit_return(
             }
             off += width;
         }
-        emit_epilogue_ret(
-            code,
-            func,
-            frame,
-            alloc,
-            abi,
-            extern_sites,
-            extern_data_refs,
-        );
+        emit_epilogue_ret(code, func, frame, alloc, abi, extern_sites);
         return;
     }
     // An FP return rides xmm0 (C99 6.2.5p10); the declared type decides, since
@@ -1505,16 +1551,11 @@ fn emit_return(
             emit_movapd_xmm_xmm(code, Reg::XMM0, dn);
         }
     }
-    // Restore callee-saved GPRs and saved non-volatile xmm scratch
-    // (mirror of the prologue's saves: xmm at the bottom, GPRs above).
-    restore_dynamic_sp(code, frame);
-    restore_callee_saved(code, alloc, frame);
-    if staged_int {
-        emit_mov_rr(code, Reg::RAX, Reg::RCX);
-    } else if !needs_staging {
-        // No callee-saved restore to navigate around; place the
-        // return value into rax directly. A source that already
-        // lives in rax needs no instruction.
+    if !needs_staging {
+        // A source outside the callee-saved registers goes to rax ahead of
+        // the restore: rax is not restored, and a spill slot is addressed
+        // through rsp, which the pops move. A source already in rax needs
+        // no instruction.
         match return_place {
             Place::IntReg(r) if r != Reg::RAX.0 => {
                 emit_mov_rr(code, Reg::RAX, Reg(r));
@@ -1526,23 +1567,23 @@ fn emit_return(
             _ => {}
         }
     }
+    // The check calls out on a mismatch, so it runs while rsp is 16-aligned,
+    // ahead of the pops.
+    emit_canary_check(code, frame, abi, extern_sites, extern_data_refs);
+    restore_dynamic_sp(code, frame);
+    restore_callee_saved(code, alloc);
+    if staged_int {
+        emit_mov_rr(code, Reg::RAX, Reg::RCX);
+    }
     // A floating-point return value is delivered in xmm0 only (SysV
     // AMD64 / Win64: scalar floating returns in xmm0). The receiving
     // call site is FP-classed (`Inst::Call::fp_return`) and reads
     // xmm0, so no rax mirror is emitted.
-    emit_epilogue_ret(
-        code,
-        func,
-        frame,
-        alloc,
-        abi,
-        extern_sites,
-        extern_data_refs,
-    );
+    emit_epilogue_ret(code, func, frame, alloc, abi, extern_sites);
 }
 
-/// Frame teardown and `ret` after the callee-saved restores. A full leaf
-/// needs only the `ret`.
+/// Frame teardown and `ret` after the canary check and the callee-saved
+/// restores. A full leaf needs only the `ret`.
 fn emit_epilogue_ret(
     code: &mut Vec<u8>,
     func: &FunctionSsa,
@@ -1550,17 +1591,16 @@ fn emit_epilogue_ret(
     alloc: &Allocation,
     abi: super::Abi,
     extern_sites: &mut Vec<super::UserExternCallSite>,
-    extern_data_refs: &mut Vec<super::UserExternDataRef>,
 ) {
-    emit_canary_check(code, frame, abi, extern_sites, extern_data_refs);
     emit_frame_teardown(code, func, frame, alloc, abi);
     emit_hardened_ret(code, abi, extern_sites);
 }
 
-/// Drop the frame and restore rbp: `leave`, or `pop rbp` alone when the
-/// prologue allocated nothing. rsp only ascends and the return address
-/// stays where the caller pushed it. Every return path and the tail-call
-/// jump route through here.
+/// Drop the frame and restore rbp, after [`restore_callee_saved`]: `leave`,
+/// or `pop rbp` alone when the pops left rsp at rbp (the pushes were the
+/// whole frame). rsp only ascends and the return address stays where the
+/// caller pushed it. Every return path and the tail-call jump route through
+/// here.
 pub(super) fn emit_frame_teardown(
     code: &mut Vec<u8>,
     func: &FunctionSsa,
@@ -1571,7 +1611,7 @@ pub(super) fn emit_frame_teardown(
     if is_full_leaf(func, frame, alloc, abi) {
         return;
     }
-    if frame.frame_bytes > 0 {
+    if frame.frame_bytes > pushed_gpr_bytes(alloc) {
         super::encode::emit_leave(code);
     } else {
         emit_pop_r(code, Reg::RBP);
@@ -1659,7 +1699,7 @@ fn emit_canary_store(
         super::ssa::emit_common::CANARY_SLOT_OFF,
         CANARY_SCRATCH,
     );
-    emit_rr(code, Mnem::Xor, 8, CANARY_SCRATCH, CANARY_SCRATCH);
+    super::encode::emit_zero_r(code, CANARY_SCRATCH);
 }
 
 /// Epilogue half: compare the canary slot against the guard and call
@@ -1688,7 +1728,7 @@ pub(super) fn emit_canary_check(
     let rel8_at = code.len() - 1;
     emit_extern_branch(code, extern_sites, super::STACK_CHK_FAIL_SYMBOL, true);
     code[rel8_at] = (code.len() - rel8_at - 1) as u8;
-    emit_rr(code, Mnem::Xor, 8, CANARY_SCRATCH, CANARY_SCRATCH);
+    super::encode::emit_zero_r(code, CANARY_SCRATCH);
 }
 
 /// A branch to a symbol this unit does not define: `E8` / `E9 rel32` with

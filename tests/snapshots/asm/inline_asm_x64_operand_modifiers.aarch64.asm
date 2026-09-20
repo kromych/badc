@@ -26,7 +26,7 @@ Disassembly of section .text:
                	ldurh	w0, [x29, #-0x8]
                	mov	x17, #0x4001            // =16385
                	eor	x0, x0, x17
-               	cbz	x0, <addr>
+               	cbz	w0, <addr>
                	mov	x0, #0x5                // =5
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10

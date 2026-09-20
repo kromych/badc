@@ -28,79 +28,53 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x50, %rsp
-               	movq	%rbx, (%rsp)
-               	movq	%r12, 0x8(%rsp)
+               	subq	$0x48, %rsp
+               	pushq	%rbx
                	leaq	-0x40(%rbp), %rax
-               	leaq	(%rax), %rcx
-               	movl	$0x1, %edx
-               	movl	%edx, (%rcx)
+               	movl	$0x1, (%rax)
                	leaq	-0x20(%rbp), %rcx
-               	leaq	(%rcx), %rdx
-               	movl	$0xa, %esi
-               	movl	%esi, (%rdx)
-               	movl	$0x2, %edx
-               	movl	%edx, 0x4(%rax)
-               	movl	$0x14, %edx
-               	movl	%edx, 0x4(%rcx)
-               	movl	$0x3, %edx
-               	movl	%edx, 0x8(%rax)
-               	movl	$0x1e, %edx
-               	movl	%edx, 0x8(%rcx)
-               	movl	$0x4, %edx
-               	movl	%edx, 0xc(%rax)
-               	movl	$0x28, %eax
-               	movl	%eax, 0xc(%rcx)
+               	movl	$0xa, (%rcx)
+               	movl	$0x2, 0x4(%rax)
+               	movl	$0x14, 0x4(%rcx)
+               	movl	$0x3, 0x8(%rax)
+               	movl	$0x1e, 0x8(%rcx)
+               	movl	$0x4, 0xc(%rax)
+               	movl	$0x28, 0xc(%rcx)
                	leaq	-0x40(%rbp), %rax
-               	movl	$0x5, %ecx
-               	movl	%ecx, 0x10(%rax)
+               	movl	$0x5, 0x10(%rax)
                	leaq	-0x20(%rbp), %rcx
-               	movl	$0x32, %edx
-               	movl	%edx, 0x10(%rcx)
-               	movl	$0x6, %edx
-               	movl	%edx, 0x14(%rax)
-               	movl	$0x3c, %edx
-               	movl	%edx, 0x14(%rcx)
-               	movl	$0x7, %edx
-               	movl	%edx, 0x18(%rax)
-               	movl	$0x46, %edx
-               	movl	%edx, 0x18(%rcx)
-               	movl	$0x8, %edx
-               	movl	%edx, 0x1c(%rax)
-               	movl	$0x50, %eax
-               	movl	%eax, 0x1c(%rcx)
-               	leaq	-0x40(%rbp), %r9
+               	movl	$0x32, 0x10(%rcx)
+               	movl	$0x6, 0x14(%rax)
+               	movl	$0x3c, 0x14(%rcx)
+               	movl	$0x7, 0x18(%rax)
+               	movl	$0x46, 0x18(%rcx)
+               	movl	$0x8, 0x1c(%rax)
+               	movl	$0x50, 0x1c(%rcx)
+               	leaq	-0x40(%rbp), %r8
                	leaq	-0x20(%rbp), %rsi
-               	xorq	%rcx, %rcx
+               	xorl	%ecx, %ecx
                	movq	%rcx, %rax
-               	jmp	<addr>
-               	movslq	%eax, %rdx
-               	movq	%rdx, %rdi
+               	movq	%rax, %rdi
                	shlq	$0x2, %rdi
-               	leaq	(%r9,%rdi), %r8
-               	movslq	(%r8), %rbx
-               	addq	$0x3, %rbx
-               	leaq	(%rsi,%rdi), %r12
-               	movslq	(%r12), %r12
-               	subq	$0x3, %r12
-               	movl	%r12d, (%r8)
-               	movl	%ebx, (%rsi,%rdx,4)
-               	movslq	(%r8), %r8
+               	leaq	(%r8,%rdi), %rdx
+               	movslq	(%rdx), %r9
+               	addq	$0x3, %r9
                	addq	%rsi, %rdi
+               	movslq	(%rdi), %rbx
+               	subq	$0x3, %rbx
+               	movl	%ebx, (%rdx)
+               	movl	%r9d, (%rsi,%rax,4)
+               	movslq	(%rdx), %rdx
                	movslq	(%rdi), %rdi
-               	imulq	%r8, %rdi
-               	addq	%rdi, %rcx
-               	movslq	%ecx, %rcx
-               	leaq	0x1(%rdx), %rax
+               	imulq	%rdi, %rdx
+               	addq	%rdx, %rcx
+               	incq	%rax
                	cmpl	$0x8, %eax
                	jl	<addr>
-               	movslq	%ecx, %rax
-               	cmpl	$0xb7c, %eax            # imm = 0xB7C
+               	cmpl	$0xb7c, %ecx            # imm = 0xB7C
                	jne	<addr>
-               	xorq	%rax, %rax
-               	movslq	%eax, %rax
-               	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
+               	xorl	%eax, %eax
+               	popq	%rbx
                	leave
                	retq
                	movl	$0x1, %eax

@@ -27,21 +27,17 @@ Disassembly of section .text:
 
 <one>:
                	leaq	0x1(%rdi), %rax
-               	movslq	%eax, %rax
                	retq
 
 <two>:
-               	leaq	<rip>, %rcx
-               	movq	%rdi, %rax
-               	shlq	%rax
-               	movl	%eax, (%rcx)
-               	movq	%rcx, %rax
+               	leaq	<rip>, %rax
+               	movq	%rdi, %rcx
+               	shlq	%rcx
+               	movl	%ecx, (%rax)
                	retq
 
 <main>:
                	leaq	<rip>, %rax
-               	movl	$0xa, %ecx
-               	movl	%ecx, (%rax)
-               	xorq	%rax, %rax
-               	movq	%rax, %rcx
+               	movl	$0xa, (%rax)
+               	xorl	%eax, %eax
                	retq

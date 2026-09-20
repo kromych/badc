@@ -27,8 +27,7 @@ Disassembly of section .text:
 
 <main>:
                	leaq	<rip>, %rax
-               	movslq	0x10(%rax), %rcx
-               	testq	%rcx, %rcx
+               	cmpl	$0x0, 0x10(%rax)
                	je	<addr>
                	movl	$0x2, %eax
                	retq
@@ -37,20 +36,13 @@ Disassembly of section .text:
                	jne	<addr>
                	movslq	0x20(%rax), %rcx
                	cmpl	$0x6, %ecx
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
                	jne	<addr>
                	movslq	0x24(%rax), %rcx
                	cmpl	$0x7, %ecx
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x3, %eax
                	retq
-               	movslq	0x28(%rax), %rcx
-               	testq	%rcx, %rcx
+               	cmpl	$0x0, 0x28(%rax)
                	je	<addr>
                	movl	$0x4, %eax
                	retq
@@ -59,31 +51,24 @@ Disassembly of section .text:
                	jne	<addr>
                	movslq	0x40(%rax), %rcx
                	cmpl	$0x2, %ecx
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x5, %eax
                	retq
-               	movslq	0x60(%rax), %rcx
-               	cmpl	$0x7, %ecx
+               	movslq	0x60(%rax), %rax
+               	cmpl	$0x7, %eax
                	jne	<addr>
-               	movslq	0x50(%rax), %rcx
-               	testl	%ecx, %ecx
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
+               	leaq	<rip>, %rax
+               	cmpl	$0x0, 0x50(%rax)
                	je	<addr>
                	movl	$0x6, %eax
                	retq
                	leaq	<rip>, %rcx
-               	movslq	0x24(%rcx), %rcx
-               	movslq	0x24(%rax), %rdx
-               	cmpl	%edx, %ecx
+               	movslq	0x24(%rcx), %rdx
+               	movslq	0x24(%rax), %rsi
+               	cmpl	%esi, %edx
                	je	<addr>
                	movl	$0x7, %eax
                	retq
-               	leaq	<rip>, %rcx
                	movslq	0x60(%rcx), %rcx
                	movslq	0x60(%rax), %rax
                	cmpl	%eax, %ecx
@@ -91,43 +76,26 @@ Disassembly of section .text:
                	movl	$0x8, %eax
                	retq
                	leaq	<rip>, %rax
-               	movslq	(%rax), %rax
-               	cmpl	$0x1, %eax
+               	movslq	(%rax), %rcx
+               	cmpl	$0x1, %ecx
                	jne	<addr>
-               	leaq	<rip>, %rax
-               	movslq	0x4(%rax), %rax
-               	cmpl	$0x2, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
+               	movslq	0x4(%rax), %rcx
+               	cmpl	$0x2, %ecx
                	jne	<addr>
-               	leaq	<rip>, %rax
-               	movslq	0xc(%rax), %rax
-               	testl	%eax, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
+               	cmpl	$0x0, 0xc(%rax)
                	je	<addr>
                	movl	$0x9, %eax
                	retq
-               	leaq	<rip>, %rax
-               	movslq	0x18(%rax), %rax
-               	cmpl	$0x9, %eax
+               	movslq	0x18(%rax), %rcx
+               	cmpl	$0x9, %ecx
                	jne	<addr>
-               	leaq	<rip>, %rax
-               	movslq	0x10(%rax), %rax
-               	testl	%eax, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
+               	cmpl	$0x0, 0x10(%rax)
                	je	<addr>
                	movl	$0xa, %eax
                	retq
-               	leaq	<rip>, %rax
-               	movslq	0x20(%rax), %rax
-               	testq	%rax, %rax
+               	cmpl	$0x0, 0x20(%rax)
                	je	<addr>
                	movl	$0xb, %eax
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	retq

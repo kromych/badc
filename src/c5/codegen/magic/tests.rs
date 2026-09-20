@@ -335,6 +335,185 @@ fn promoted_narrow_operands_match_hardware() {
     }
 }
 
+/// Signed `n / +-2^k` and `n % +-2^k` for every `k` at both widths,
+/// against Rust's truncating division at that width. The numerators
+/// bracket each place the bias changes the result: zero, the sign
+/// change, the multiples of `2^k` and their neighbours, and the ends of
+/// the range. The step counts pin the single-shift bias.
+#[test]
+fn signed_power_of_two_matches_truncating_division() {
+    let mut rng = Rng(0x5EED_0006);
+    for w in [32u32, 64] {
+        let min = (1i64 << (w - 1)).wrapping_neg();
+        let max = (1i64 << (w - 1)).wrapping_sub(1);
+        for k in 1..w {
+            // `2^(w-1)` is representable only as the negative INT_MIN.
+            let pos = (k < w - 1).then(|| 1i64 << k);
+            let neg = (1i64 << k).wrapping_neg();
+            let mut ns: Vec<i64> = alloc::vec![0, 1, -1, 2, -2, min, min + 1, max, max - 1];
+            for j in 0..w {
+                let p = 1i64 << j;
+                for off in [-1i64, 0, 1] {
+                    ns.push(p.wrapping_add(off));
+                    ns.push(p.wrapping_neg().wrapping_add(off));
+                }
+            }
+            for m in [1i64, 2, 3, 5] {
+                let s = (1i64 << k).wrapping_mul(m);
+                for off in [-1i64, 0, 1] {
+                    ns.push(s.wrapping_add(off));
+                    ns.push(s.wrapping_neg().wrapping_add(off));
+                }
+            }
+            ns.extend((0..64).map(|_| rng.next() as i64));
+            for n in ns.iter_mut() {
+                *n = narrow(*n, w, true);
+            }
+            for d in pos.into_iter().chain([neg]) {
+                let div = Recorded::record(BinOp::Div, d, w).unwrap();
+                let rem = Recorded::record(BinOp::Mod, d, w).unwrap();
+                // Bias: one shift where the kept bits are sign copies,
+                // two otherwise. Then add + shift, or add + mask + sub;
+                // a negative divisor negates the quotient (`Imm`, `Sub`).
+                let bias = if k <= 65 - w { 1 } else { 2 };
+                let negate = if d < 0 { 2 } else { 0 };
+                assert_eq!(div.len(), bias + 2 + negate, "div w={w} d={d}");
+                assert_eq!(rem.len(), bias + 3, "mod w={w} d={d}");
+                for &n in &ns {
+                    let (q, r) = if w == 32 {
+                        let (n, d) = (n as i32, d as i32);
+                        (n.wrapping_div(d) as i64, n.wrapping_rem(d) as i64)
+                    } else {
+                        (n.wrapping_div(d), n.wrapping_rem(d))
+                    };
+                    assert_eq!(div.eval(n), q, "w={w} {n} / {d}");
+                    assert_eq!(rem.eval(n), r, "w={w} {n} % {d}");
+                }
+            }
+        }
+    }
+}
+
+/// A sink without peepholes -- the mid-end pass inserts what it is
+/// handed -- must receive no shift by zero, no multiply by 0 or 1 and no
+/// mask by 0 or -1, for any divisor including +-1.
+#[test]
+fn lowering_asks_for_no_identity_operation() {
+    for (op, w, signed) in [
+        (BinOp::Div, 32, true),
+        (BinOp::Mod, 32, true),
+        (BinOp::Div, 64, true),
+        (BinOp::Mod, 64, true),
+        (BinOp::Divu, 32, false),
+        (BinOp::Modu, 32, false),
+        (BinOp::Divu, 64, false),
+        (BinOp::Modu, 64, false),
+    ] {
+        for d in divisors(w, signed) {
+            let seq = Recorded::record(op, d, w).unwrap();
+            for step in &seq.steps {
+                let idle = match *step {
+                    Step::BinopImm(BinOp::Shr | BinOp::Shru | BinOp::Shl, _, k) => k == 0,
+                    Step::BinopImm(BinOp::Mul, _, k) => k == 0 || k == 1,
+                    Step::BinopImm(BinOp::And, _, k) => k == 0 || k == -1,
+                    Step::BinopImm(BinOp::Add | BinOp::Sub, _, k) => k == 0,
+                    _ => false,
+                };
+                assert!(!idle, "{op:?} w={w} d={d}");
+            }
+        }
+    }
+}
+
+/// The unsigned lowering over a numerator below `2^bits`: every divisor
+/// shape against the hardware divide, over the numerators at the ends of
+/// that range, around the multiples of the divisor and a sampled vector.
+/// A numerator narrower than the register never takes the add-back, so
+/// a quotient is at most a multiply and a shift (or the high multiply).
+#[test]
+fn bounded_numerator_lowering_matches_hardware() {
+    let mut rng = Rng(0x5EED_0007);
+    let mut pairs = 0u64;
+    for w in [32u32, 64] {
+        for bits in (1..=w).filter(|b| *b <= 12 || b % 7 == 0 || *b >= w - 2) {
+            let nmax = if bits == 64 {
+                u64::MAX
+            } else {
+                (1u64 << bits) - 1
+            };
+            let mut ds: Vec<u64> = (1..=40).collect();
+            for k in 1..bits.min(63) {
+                ds.extend([(1u64 << k) - 1, 1 << k, (1 << k) + 1]);
+            }
+            ds.extend([nmax, nmax - 1, nmax / 2, nmax / 3 + 1]);
+            ds.extend((0..24).map(|_| rng.next() % nmax + 1));
+            // A `w`-bit register holds the divisor; one above every
+            // numerator is covered by the divisor just past `nmax`.
+            ds.retain(|d| *d >= 1 && (w == 64 || *d <= u32::MAX as u64));
+            ds.push(nmax.saturating_add(1).max(1));
+            ds.retain(|d| w == 64 || *d <= u32::MAX as u64);
+            for d in ds {
+                for want_rem in [false, true] {
+                    let mut r = Recorder::default();
+                    let out = lower_udivmod(&mut r, want_rem, 0, d, w, bits).unwrap();
+                    let seq = Recorded {
+                        steps: r.steps,
+                        out,
+                    };
+                    let magic = d > 1 && !d.is_power_of_two() && d <= nmax;
+                    if bits < w && magic && d <= 1 << (w - 1) {
+                        let quotient = seq.len() - if want_rem { 2 } else { 0 };
+                        assert!(quotient <= 3, "w={w} bits={bits} d={d}: {quotient} steps");
+                    }
+                    let mut ns: Vec<u64> = alloc::vec![0, 1, 2, nmax, nmax - 1, nmax / 2];
+                    for m in [1u64, 2, 3, nmax / d.max(1)] {
+                        let s = d.wrapping_mul(m);
+                        ns.extend([s.wrapping_sub(1), s, s.wrapping_add(1)]);
+                    }
+                    ns.extend((0..16).map(|_| rng.next()));
+                    for n in ns {
+                        let n = (n & nmax) as i64;
+                        let op = if want_rem { BinOp::Modu } else { BinOp::Divu };
+                        let want = apply_binop(op, n, d as i64).unwrap();
+                        assert_eq!(seq.eval(n), want, "w={w} bits={bits} {n} {op:?} {d}");
+                        pairs += 1;
+                    }
+                }
+            }
+        }
+    }
+    assert!(pairs > 100_000, "coverage shrank: pairs={pairs}");
+}
+
+/// [`step_count`] is the length of the recorded lowering. The divisors
+/// it reports at most one step for are the ones the builder does not
+/// defer: 1, a remainder by -1, an unsigned power of two, and an unsigned
+/// quotient by a divisor above half the range, which is a comparison.
+#[test]
+fn step_count_is_the_recorded_length() {
+    for (op, w, signed) in [
+        (BinOp::Div, 32, true),
+        (BinOp::Mod, 64, true),
+        (BinOp::Divu, 32, false),
+        (BinOp::Modu, 64, false),
+    ] {
+        for d in divisors(w, signed) {
+            let len = Recorded::record(op, d, w).map(|r| r.len() as u32);
+            assert_eq!(step_count(op, d, w), len, "{op:?} w={w} d={d}");
+            let du = narrow(d, w, false) as u64;
+            let single = match op {
+                BinOp::Div => d == 1,
+                BinOp::Mod => d == 1 || d == -1,
+                BinOp::Divu => du.is_power_of_two() || du > 1 << (w - 1),
+                _ => du.is_power_of_two(),
+            };
+            assert_eq!(len.is_some_and(|n| n <= 1), single, "{op:?} w={w} d={d}");
+        }
+    }
+    assert_eq!(step_count(BinOp::Div, 0, 32), None);
+    assert_eq!(step_count(BinOp::Add, 3, 32), None);
+}
+
 /// A zero divisor is undefined (C99 6.5.5p5); the lowering declines it
 /// so the hardware divide's trap survives.
 #[test]

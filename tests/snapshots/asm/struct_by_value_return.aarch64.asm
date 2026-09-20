@@ -41,7 +41,6 @@ Disassembly of section .text:
                	mov	x17, #0x1589            // =5513
                	movk	x17, #0x12, lsl #16
                	add	x0, x0, x17
-               	sxtw	x0, w0
                	ret
 
 <sum_pair_pair>:
@@ -83,7 +82,7 @@ Disassembly of section .text:
                	mov	x17, #0x1589            // =5513
                	movk	x17, #0x12, lsl #16
                	add	x0, x0, x17
-               	cbnz	x0, <addr>
+               	cbnz	w0, <addr>
                	mov	x0, #0x63               // =99
                	ldp	x29, x30, [sp, #0x20]
                	ldr	x22, [sp, #0x10]
@@ -173,17 +172,15 @@ Disassembly of section .text:
                	mov	x0, #0x4                // =4
                	bl	<addr>
                	add	x1, x20, x22
-               	add	x2, x21, x0
-               	mov	w0, w1
-               	mov	w1, w2
-               	cmp	w0, #0x4
+               	add	x0, x21, x0
+               	cmp	w1, #0x4
                	b.eq	<addr>
                	mov	x0, #0x9                // =9
                	ldp	x29, x30, [sp, #0x20]
                	ldr	x22, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x30
                	ret
-               	cmp	w1, #0x6
+               	cmp	w0, #0x6
                	b.eq	<addr>
                	mov	x0, #0xa                // =10
                	ldp	x29, x30, [sp, #0x20]

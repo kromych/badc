@@ -204,6 +204,12 @@ impl<'a> Walker<'a> {
         mut args: CallArgs<'a>,
     ) -> Result<ValueId, WalkError> {
         let (conv, ty, fp_mask) = (args.conv, args.ty, args.fp_mask.clone());
+        // A returns-twice callee reached through a declaration of its own
+        // rather than through the header binding (`call_binding`) marks
+        // the caller just the same: the frame is re-entered either way.
+        if crate::c5::ir::returns_twice_fn_name(&self.symbols[sym as usize].name) {
+            b.mark_returns_twice();
+        }
         let callee_variadic = self.fun_is_variadic(sym);
         let abi = self.target.abi_for(conv);
         // `Symbol::params` records the pre-ellipsis parameters, so the
@@ -233,8 +239,7 @@ impl<'a> Walker<'a> {
                 b.set_call_arg_aggs(call, arg_aggs);
             }
             let ret_temp = self.call_ret_temp(b, conv, ty);
-            let extend = !self.symbols[sym as usize].defined_here;
-            return Ok(self.call_result(b, call, ret_temp, ty, extend));
+            return Ok(self.call_result(b, call, ret_temp, ty, true));
         }
         // A variadic callee reaching here is on a `variadic_int_only`
         // host (the Microsoft conventions), where every argument rides
@@ -265,8 +270,7 @@ impl<'a> Walker<'a> {
         if !arg_aggs.is_empty() {
             b.set_call_arg_aggs(call, arg_aggs);
         }
-        let extend = !self.symbols[sym as usize].defined_here;
-        Ok(self.call_result(b, call, ret_temp, ty, extend))
+        Ok(self.call_result(b, call, ret_temp, ty, true))
     }
 
     /// Tag each by-value aggregate argument with its host-ABI layout, so the

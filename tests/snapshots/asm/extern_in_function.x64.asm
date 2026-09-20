@@ -26,10 +26,10 @@ Disassembly of section .text:
                	int3
 
 <negate>:
-               	imulq	$-0x1, %rdi, %rax
-               	movslq	%eax, %rax
+               	movq	%rdi, %rax
+               	negq	%rax
                	retq
 
 <main>:
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	retq

@@ -30,13 +30,13 @@ Disassembly of section .text:
                	movq	%rax, (%rdi)
                	leaq	(%rdx,%rcx), %rax
                	movl	%eax, 0x8(%rdi)
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	retq
 
 <my_generate>:
-               	movslq	0x8(%rdi), %rax
-               	movl	%eax, (%rsi)
-               	movslq	%edx, %rax
+               	movq	%rdx, %rax
+               	movslq	0x8(%rdi), %rcx
+               	movl	%ecx, (%rsi)
                	retq
 
 <main>:

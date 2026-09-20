@@ -18,8 +18,7 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	ldr	x2, [x1]
                	ldr	x3, [x0]
-               	add	x0, x0, #0x2c8
-               	ldr	x0, [x0]
+               	ldr	x0, [x0, #0x2c8]
                	add	x0, x3, x0
                	add	x0, x2, x0
                	str	x0, [x1]
@@ -30,15 +29,11 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0xb40
                	mov	x0, #0x0                // =0
-               	b	<addr>
-               	sub	x2, x29, #0xb40
-               	sxtw	x1, w0
-               	lsl	x3, x1, #3
-               	add	x2, x2, x3
-               	add	x3, x1, #0x1
-               	sxtw	x3, w3
-               	str	x3, [x2]
-               	add	x0, x1, #0x1
+               	sub	x1, x29, #0xb40
+               	lsl	x2, x0, #3
+               	add	x1, x1, x2
+               	add	x0, x0, #0x1
+               	str	x0, [x1]
                	cmp	w0, #0x5a
                	b.lt	<addr>
                	sub	x0, x29, #0xb40
@@ -46,21 +41,17 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	ldr	x2, [x1]
                	ldr	x3, [x0]
-               	add	x0, x0, #0x2c8
-               	ldr	x0, [x0]
+               	ldr	x0, [x0, #0x2c8]
                	add	x0, x3, x0
                	add	x0, x2, x0
                	str	x0, [x1]
                	mov	x0, #0x0                // =0
-               	b	<addr>
-               	sub	x2, x29, #0x870
-               	sxtw	x1, w0
-               	lsl	x3, x1, #3
-               	add	x2, x2, x3
-               	add	x3, x1, #0x2
-               	sxtw	x3, w3
-               	str	x3, [x2]
-               	add	x0, x1, #0x1
+               	sub	x1, x29, #0x870
+               	lsl	x2, x0, #3
+               	add	x1, x1, x2
+               	add	x2, x0, #0x2
+               	str	x2, [x1]
+               	add	x0, x0, #0x1
                	cmp	w0, #0x5a
                	b.lt	<addr>
                	sub	x0, x29, #0x870
@@ -68,21 +59,17 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	ldr	x2, [x1]
                	ldr	x3, [x0]
-               	add	x0, x0, #0x2c8
-               	ldr	x0, [x0]
+               	ldr	x0, [x0, #0x2c8]
                	add	x0, x3, x0
                	add	x0, x2, x0
                	str	x0, [x1]
                	mov	x0, #0x0                // =0
-               	b	<addr>
-               	sub	x2, x29, #0x5a0
-               	sxtw	x1, w0
-               	lsl	x3, x1, #3
-               	add	x2, x2, x3
-               	add	x3, x1, #0x3
-               	sxtw	x3, w3
-               	str	x3, [x2]
-               	add	x0, x1, #0x1
+               	sub	x1, x29, #0x5a0
+               	lsl	x2, x0, #3
+               	add	x1, x1, x2
+               	add	x2, x0, #0x3
+               	str	x2, [x1]
+               	add	x0, x0, #0x1
                	cmp	w0, #0x5a
                	b.lt	<addr>
                	sub	x0, x29, #0x5a0
@@ -90,21 +77,17 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	ldr	x2, [x1]
                	ldr	x3, [x0]
-               	add	x0, x0, #0x2c8
-               	ldr	x0, [x0]
+               	ldr	x0, [x0, #0x2c8]
                	add	x0, x3, x0
                	add	x0, x2, x0
                	str	x0, [x1]
                	mov	x0, #0x0                // =0
-               	b	<addr>
-               	sub	x2, x29, #0x2d0
-               	sxtw	x1, w0
-               	lsl	x3, x1, #3
-               	add	x2, x2, x3
-               	add	x3, x1, #0x4
-               	sxtw	x3, w3
-               	str	x3, [x2]
-               	add	x0, x1, #0x1
+               	sub	x1, x29, #0x2d0
+               	lsl	x2, x0, #3
+               	add	x1, x1, x2
+               	add	x2, x0, #0x4
+               	str	x2, [x1]
+               	add	x0, x0, #0x1
                	cmp	w0, #0x5a
                	b.lt	<addr>
                	sub	x0, x29, #0x2d0
@@ -112,8 +95,7 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	ldr	x2, [x1]
                	ldr	x3, [x0]
-               	add	x0, x0, #0x2c8
-               	ldr	x0, [x0]
+               	ldr	x0, [x0, #0x2c8]
                	add	x0, x3, x0
                	add	x0, x2, x0
                	str	x0, [x1]

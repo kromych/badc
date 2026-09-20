@@ -33,9 +33,9 @@ boxes using `./scripts/validate_local_boxes.py`:
   * `cargo test --release` over all test targets (release exercises the JIT + native
     fixture-parity paths that debug builds skip; the integration suites under
     `tests/` are part of the gate)
-  * the same run again under the register-pressure caps (`BADC_MAX_GPR=2
-    BADC_MAX_FPR=2`, `--features "codegen_test full"`), as CI's pressure matrix
-    does -- on the Linux lanes, the only ones CI's matrix covers
+  * the same run again under the register-pressure caps
+    (`BADC_MAX_GPR=2 BADC_MAX_FPR=2`, `--features "codegen_test full"`), as CI's
+    pressure matrix does -- on the Linux lanes, the only ones CI's matrix covers
   * the gating demos, enumerated in `GATING_DEMOS` in the script -- sqlite3, lua,
     miniz, monocypher, stb, tweetnacl, quickjs, raylib, curl, libmill, libdill,
     coroutines, nasm, qemu, edk2, bearssl, bzip2, kissfft, gui_hello, nt_loader,

@@ -66,22 +66,12 @@ Disassembly of section .text:
                	movq	%rcx, %xmm14
                	movq	%rcx, %xmm15
                	ucomisd	%xmm15, %xmm14
-               	setne	%dl
-               	movzbq	%dl, %rdx
-               	setp	%r10b
-               	movzbq	%r10b, %r10
-               	orq	%r10, %rdx
-               	testq	%rdx, %rdx
+               	jp	<addr>
                	jne	<addr>
                	movq	%rax, %xmm14
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm14
-               	setne	%dl
-               	movzbq	%dl, %rdx
-               	setp	%r10b
-               	movzbq	%r10b, %r10
-               	orq	%r10, %rdx
-               	testq	%rdx, %rdx
+               	jp	<addr>
                	je	<addr>
                	movq	%rax, %xmm15
                	movq	%rcx, %xmm0
@@ -101,27 +91,17 @@ Disassembly of section .text:
                	movq	%rax, %xmm14
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm14
-               	setne	%dl
-               	movzbq	%dl, %rdx
-               	setp	%r10b
-               	movzbq	%r10b, %r10
-               	orq	%r10, %rdx
-               	testq	%rdx, %rdx
+               	jp	<addr>
                	jne	<addr>
                	movq	%rcx, %xmm14
                	movq	%rcx, %xmm15
                	ucomisd	%xmm15, %xmm14
-               	setne	%dl
-               	movzbq	%dl, %rdx
-               	setp	%r10b
-               	movzbq	%r10b, %r10
-               	orq	%r10, %rdx
-               	testq	%rdx, %rdx
+               	jp	<addr>
                	je	<addr>
                	movq	%rcx, %xmm15
                	movq	%rax, %xmm0
                	subsd	%xmm15, %xmm0
-               	xorq	%rcx, %rcx
+               	xorl	%ecx, %ecx
                	movq	%rcx, %xmm15
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>
@@ -136,15 +116,12 @@ Disassembly of section .text:
                	movq	%rax, %xmm14
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm14
-               	setne	%dl
-               	movzbq	%dl, %rdx
-               	setp	%r10b
-               	movzbq	%r10b, %r10
-               	orq	%r10, %rdx
-               	movq	%rdx, %rsi
-               	testq	%rsi, %rsi
+               	jp	<addr>
                	jne	<addr>
-               	testq	%rdx, %rdx
+               	movq	%rax, %xmm14
+               	movq	%rax, %xmm15
+               	ucomisd	%xmm15, %xmm14
+               	jp	<addr>
                	je	<addr>
                	movq	%rax, %xmm15
                	movq	%rax, %xmm0
@@ -169,7 +146,7 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	movabsq	$0x4008000000000000, %rax # imm = 0x4008000000000000
-               	movabsq	$-0x1, %rdi
+               	movq	$-0x1, %rdi
                	movq	%rax, %xmm0
                	callq	<addr>
                	movabsq	$0x3ff8000000000000, %rax # imm = 0x3FF8000000000000
@@ -213,20 +190,10 @@ Disassembly of section .text:
                	ucomisd	%xmm1, %xmm0
                	ja	<addr>
                	ucomisd	%xmm0, %xmm0
-               	setne	%al
-               	movzbq	%al, %rax
-               	setp	%r10b
-               	movzbq	%r10b, %r10
-               	orq	%r10, %rax
-               	testq	%rax, %rax
+               	jp	<addr>
                	jne	<addr>
                	ucomisd	%xmm1, %xmm1
-               	setne	%al
-               	movzbq	%al, %rax
-               	setp	%r10b
-               	movzbq	%r10b, %r10
-               	orq	%r10, %rax
-               	testq	%rax, %rax
+               	jp	<addr>
                	je	<addr>
                	subsd	%xmm1, %xmm0
                	cvtsd2ss	%xmm0, %xmm0
@@ -238,21 +205,18 @@ Disassembly of section .text:
                	movl	$0x8, %eax
                	popq	%rbp
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	popq	%rbp
                	retq
-               	xorq	%rax, %rax
-               	xorq	%r11, %r11
+               	xorl	%r11d, %r11d
                	movq	%r11, %xmm0
                	jmp	<addr>
-               	xorq	%r11, %r11
+               	xorl	%r11d, %r11d
                	movq	%r11, %xmm0
                	jmp	<addr>
-               	xorq	%rcx, %rcx
-               	xorq	%r11, %r11
+               	xorl	%r11d, %r11d
                	movq	%r11, %xmm0
                	jmp	<addr>
-               	xorq	%rdx, %rdx
-               	xorq	%r11, %r11
+               	xorl	%r11d, %r11d
                	movq	%r11, %xmm0
                	jmp	<addr>

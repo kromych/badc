@@ -23,13 +23,11 @@ Disassembly of section .text:
                	cmp	w0, #0x5
                	b.lt	<addr>
                	cmp	w0, #0x8
-               	cset	x0, le
-               	cbz	x0, <addr>
+               	b.gt	<addr>
                	mov	x0, #0x1e               // =30
                	ret
                	mov	x0, #0x0                // =0
                	ret
-               	b	<addr>
                	cmp	w0, #0x2
                	b.lt	<addr>
                	mov	x0, #0x14               // =20
@@ -40,16 +38,5 @@ Disassembly of section .text:
                	ret
 
 <main>:
-               	mov	x0, #0xa                // =10
-               	mov	x0, #0x14               // =20
-               	mov	x0, #0x1e               // =30
-               	mov	x1, x0
-               	mov	x1, x0
-               	mov	x1, #0x1                // =1
-               	mov	x2, x1
-               	mov	x0, #0x1e               // =30
-               	mov	x1, x0
-               	mov	x1, #0x1                // =1
-               	mov	x0, #0x0                // =0
                	mov	x0, #0x0                // =0
                	ret

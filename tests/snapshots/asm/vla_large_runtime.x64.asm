@@ -29,18 +29,17 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	movl	$0x1, %eax
-               	movl	%eax, -0x10(%rbp)
+               	movl	$0x1, -0x10(%rbp)
                	movslq	-0x10(%rbp), %rax
-               	movq	%rax, %rdx
-               	shlq	$0x12, %rdx
-               	movq	%rdx, %rax
+               	movq	%rax, %rcx
+               	shlq	$0x12, %rcx
+               	movq	%rcx, %rax
                	shlq	$0x2, %rax
                	movq	%rax, %r11
                	addq	$0xf, %r11
                	andq	$-0x10, %r11
-               	movq	%rsp, %rcx
-               	subq	%r11, %rcx
+               	movq	%rsp, %rsi
+               	subq	%r11, %rsi
                	shrq	$0xc, %r11
                	testq	%r11, %r11
                	je	<addr>
@@ -48,26 +47,26 @@ Disassembly of section .text:
                	movq	$0x0, (%rsp)
                	subq	$0x1, %r11
                	jne	<addr>
-               	movq	%rcx, %rsp
-               	xorq	%rax, %rax
-               	jmp	<addr>
-               	movl	$0x1, %esi
-               	movl	%esi, (%rcx,%rax,4)
+               	movq	%rsi, %rsp
+               	xorl	%eax, %eax
+               	cmpq	%rcx, %rax
+               	jge	<addr>
+               	movl	$0x1, (%rsi,%rax,4)
                	incq	%rax
-               	cmpq	%rdx, %rax
+               	cmpq	%rcx, %rax
                	jl	<addr>
-               	xorq	%rax, %rax
-               	movq	%rax, %rsi
-               	jmp	<addr>
-               	movslq	(%rcx,%rax,4), %rdi
-               	addq	%rdi, %rsi
+               	xorl	%eax, %eax
+               	movq	%rax, %rdx
+               	cmpq	%rcx, %rax
+               	jge	<addr>
+               	movslq	(%rsi,%rax,4), %rdi
+               	addq	%rdi, %rdx
                	incq	%rax
-               	cmpq	%rdx, %rax
+               	cmpq	%rcx, %rax
                	jl	<addr>
-               	cmpq	%rdx, %rsi
+               	cmpq	%rcx, %rdx
                	jne	<addr>
                	movl	$0x2a, %eax
-               	movslq	%eax, %rax
                	leaq	-0x10(%rbp), %rsp
                	leave
                	retq

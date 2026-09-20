@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html lang="{{ site.lang | default: 'en-US' }}">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    {% seo %}
+    <link rel="stylesheet" href="{{ '/assets/css/style.css' | relative_url }}">
+  </head>
+  <body>
+    <div class="container-lg px-3 my-5 markdown-body" id="top">
+      {{ content }}
+      <p class="to-top"><a href="#top">^ To the top</a></p>
+    </div>
+  </body>
+</html>

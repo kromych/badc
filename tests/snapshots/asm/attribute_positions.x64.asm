@@ -26,7 +26,7 @@ Disassembly of section .text:
                	int3
 
 <use>:
-               	movslq	%esi, %rax
+               	movq	%rsi, %rax
                	retq
 
 <probe>:
@@ -34,7 +34,7 @@ Disassembly of section .text:
                	retq
 
 <make>:
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	retq
 
 <main>:
@@ -44,6 +44,5 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x1, %eax
                	retq
-               	xorq	%rax, %rax
-               	movq	%rax, %rcx
+               	xorl	%eax, %eax
                	retq

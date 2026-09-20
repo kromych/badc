@@ -26,7 +26,7 @@ A C unit badc cannot compile fails the build rather than being handed to gcc:
 `buildcc.py`, the `CC=` shim, removes the partial object and exits nonzero. The
 one route to another compiler is `$BADC_FALLBACK`, which names units explicitly
 and marks the build impure in the manifest; the gate fails when that count is
-nonzero. Assembly units take the same route and no longer use it either.
+nonzero. Assembly units take the same route and do not use it either.
 
 **Boot.** Both kernels boot under qemu, checked by more than reaching
 userspace. The initramfs `/init` prints a marker, then mounts procfs and sysfs
@@ -72,10 +72,10 @@ byte-identical to GNU ld's. badc's `--version` reports
 `GNU ld (badc <version>) 2.30`, which `scripts/ld-version.sh` reads as a BFD
 linker at the kernel's own floor and deliberately no higher.
 
-Every link is badc's and only badc's: the `-r` merges, every `vmlinux` kallsyms
+`LD=badc` leaves nothing to GNU ld: the `-r` merges, every `vmlinux` kallsyms
 pass, the x86 boot decompressor, all three vDSOs, the `-m elf_i386` boot links
 (`arch/x86/boot/setup.elf`, `arch/x86/realmode/rm/realmode.elf`, `vdso32`) and
-the scriptless probes. `LD=badc` leaves nothing to GNU ld.
+the scriptless probes are badc's.
 
 The i386 links read ELF32 `EM_386` relocatables whose relocations are `SHT_REL`
 -- the addend lives in the field being relocated rather than in the relocation
@@ -94,7 +94,7 @@ REL/RELA/RELR tags -- plus `PT_DYNAMIC`. A link with no `-T` runs under a
 built-in default script per output kind, as GNU ld falls back on its internal
 one, which is what `scripts/tools-support-relr.sh` probes with.
 
-**Assembly.** All of it, now. `badc -c foo.S -o foo.o` assembles a unit
+**Assembly.** All of it. `badc -c foo.S -o foo.o` assembles a unit
 directly, and kbuild routes `.S` through `$(CC)`, so `buildcc.py` decides each
 assembly unit the same way it decides a C one. Over the four 7.1.10
 distribution configurations gas assembles nothing:
@@ -106,7 +106,7 @@ distribution configurations gas assembles nothing:
 | deb, x86_64 | Ubuntu 26.04 | 129 | 129 | 0 |
 | deb, aarch64 | Ubuntu 26.04 | 94 | 94 | 0 |
 
-measured with the fallback lists empty, so no unit was permitted to fall back.
+measured with the fallback lists empty.
 The last two holdouts were the GFNI affine instructions the three ARIA ciphers
 spell, and on aarch64 a lane-indexed register list, the widening multiply by
 element and the narrowing shift right, which one crypto unit needed together.
@@ -119,8 +119,8 @@ numbering. The class also picks the assembler's starting code mode, the way
 badc generates no i386 machine code, so a C source under either is refused by
 name and only the assembler reaches the 32-bit container.
 
-Assembling is not only accepted but agreed on. Against GNU as 2.46.1's object
-for the same source, byte for byte over every allocatable section plus the
+Against GNU as 2.46.1's object for the same source, byte for byte over every
+allocatable section plus the
 symbol table and the relocations, **all 72** of the `.S`-derived objects the
 7.1.10 `defconfig` builds under `arch/arm64/` and `lib/crypto/arm64/` are
 identical, setting aside the DWARF badc emits none of for an assembled unit
@@ -161,10 +161,9 @@ and it is several times defconfig's:
 | deb, x86_64 | Ubuntu 26.04 | 26227 | 129 | 15677 |
 | deb, aarch64 | Ubuntu 26.04 | 30555 | 94 | 19136 |
 
-Every count is badc's, with no fallback to another compiler, assembler or
-linker, and every one is measured with the fallback lists empty -- nothing was
-permitted to fall back, so these are results rather than allowances. All four
-packages are complete. The Ubuntu configurations set
+Every count is badc's, measured with the fallback lists empty: nothing fell
+back to another compiler, assembler or linker. All four packages are complete.
+The Ubuntu configurations set
 `CONFIG_BUILTIN_MODULE_RANGES`, which reads the map a relocatable link writes;
 that path wrote none until the linker was taught to, which is what had held
 those two lanes short of a package.
@@ -179,7 +178,7 @@ mode -- is recorded next to the verdict, so a hardware run is diffable against
 a VM run. A box with no remote power cut can only be recovered by its standing
 boot default and its watchdog, so the run refuses to start unless that default
 is a distribution kernel, selects the kernel under test for exactly one boot,
-and after a boot that never answers reports the stage the console reached and
+and after a boot that does not answer reports the stage the console reached and
 then waits for the machine to fall back. It is not in CI: it needs a bench
 machine.
 
@@ -190,7 +189,7 @@ lane is written up in [../demos/linux/micropc-testing.md](../demos/linux/micropc
 The other has neither a serial port nor a display, so nothing is observable
 until the network driver probes: there the console is netconsole over UDP,
 the post-mortem is `efi_pstore` read back on the next boot, and the early
-window is simply dark -- recovery rests entirely on the one-shot boot
+window is dark -- recovery rests entirely on the one-shot boot
 selection and a bounded `panic=`. That lane, and the four rollback layers it
 needs, are in
 [../demos/linux/xps8930-testing.md](../demos/linux/xps8930-testing.md).
@@ -232,6 +231,7 @@ dm-crypt and md raid1 -- because they route file data through the same kernel
 crypto and compression code, where a miscompile shows up as corrupted data
 rather than as a message in dmesg. The kunit suites run where the
 configuration builds them.
+
 **Self-host.** The optional `selfhost` phase turns the installed kernel into a
 build host: inside the VM running the badc kernel, badc builds the kernel
 again. Everything the build needs is staged before the reboot, so the badc

@@ -14,12 +14,9 @@ Disassembly of section .text:
                	brk	#0x1
 
 <main>:
-               	str	x20, [sp, #-0x30]!
-               	str	x19, [sp, #0x10]
-               	stp	x29, x30, [sp, #0x20]
-               	add	x29, sp, #0x20
-               	mov	x20, #0x10              // =16
-               	mov	x0, x20
+               	stp	x29, x30, [sp, #-0x10]!
+               	mov	x29, sp
+               	mov	x0, #0x10               // =16
                	bl	<addr>
                	mov	x1, x0
                	mov	x0, #0x1                // =1
@@ -29,10 +26,8 @@ Disassembly of section .text:
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	str	x2, [x1, #0x8]
-               	mov	x2, x20
+               	mov	x2, #0x10               // =16
                	bl	<addr>
-               	mov	x0, x20
-               	ldp	x29, x30, [sp, #0x20]
-               	ldr	x19, [sp, #0x10]
-               	ldr	x20, [sp], #0x30
+               	mov	x0, #0x10               // =16
+               	ldp	x29, x30, [sp], #0x10
                	ret

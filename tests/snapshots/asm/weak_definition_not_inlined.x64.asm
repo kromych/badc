@@ -32,21 +32,19 @@ Disassembly of section .text:
 <weak_scale>:
                	movq	%rdi, %rax
                	shlq	%rax
-               	movslq	%eax, %rax
                	retq
 
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%rbx, (%rsp)
+               	subq	$0x8, %rsp
+               	pushq	%rbx
                	callq	<addr>
                	movq	%rax, %rbx
                	movl	$0x14, %edi
                	callq	<addr>
                	addq	%rbx, %rax
                	incq	%rax
-               	movslq	%eax, %rax
-               	movq	(%rsp), %rbx
+               	popq	%rbx
                	leave
                	retq

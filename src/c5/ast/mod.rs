@@ -608,6 +608,12 @@ pub(crate) enum Stmt {
     VlaScopeEnter { save_slot: i64 },
     /// Restore the stack pointer from `save_slot` on block exit.
     VlaScopeExit { save_slot: i64 },
+    /// End of the lifetime of every automatic object the closing block
+    /// declared (C99 6.2.4p2), as the frame slots holding them. The
+    /// parser appends it as the block's last item; the walker turns each
+    /// slot into an `Inst::LifetimeEnd`, which bounds how long the
+    /// storage must stay the object's.
+    ScopeEnd(Vec<i64>),
 }
 
 /// Value source of one runtime-initializer element: an expression to

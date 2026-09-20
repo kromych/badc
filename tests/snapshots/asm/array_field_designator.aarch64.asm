@@ -22,7 +22,7 @@ Disassembly of section .text:
                	mov	x0, #0x1                // =1
                	ret
                	ldrsw	x1, [x0, #0x4]
-               	cbz	x1, <addr>
+               	cbz	w1, <addr>
                	mov	x0, #0x2                // =2
                	ret
                	ldrsw	x1, [x0, #0x8]
@@ -31,7 +31,7 @@ Disassembly of section .text:
                	mov	x0, #0x3                // =3
                	ret
                	ldrsw	x1, [x0, #0xc]
-               	cbz	x1, <addr>
+               	cbz	w1, <addr>
                	mov	x0, #0x4                // =4
                	ret
                	ldrsw	x0, [x0, #0x10]

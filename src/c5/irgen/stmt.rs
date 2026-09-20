@@ -171,6 +171,15 @@ impl<'a> Walker<'a> {
                 b.intrinsic(Intrinsic::AllocaRestore as i64, alloc::vec![saved]);
                 Ok(false)
             }
+            // C99 6.2.4p2: reaching the end of the block ends the
+            // lifetime of every object it declared, whatever their
+            // addresses reached.
+            Stmt::ScopeEnd(slots) => {
+                for &slot in slots.iter() {
+                    b.lifetime_end(slot);
+                }
+                Ok(false)
+            }
         }
     }
 
@@ -549,12 +558,14 @@ impl<'a> Walker<'a> {
             return Ok(true);
         }
         let mut v = self.walk_copy_operand(b, e)?;
-        // C99 6.8.6.4 / 6.3.1.1: the value is converted to the
-        // declared return type. A body evaluated in 64-bit registers can
-        // leave bits set above the type width, and a same-unit caller
-        // reads the result register without re-narrowing, so a narrow
-        // integer return is extended to its declared width here.
-        // `_Bool` is excluded, 6.3.1.2 having normalized it to 0/1.
+        // C99 6.8.6.4 / 6.3.1.1: the value is converted to the declared
+        // return type. A body evaluated in 64-bit registers can leave
+        // bits set above the type width, so a narrow integer return is
+        // extended to its declared width here; the bits above the width
+        // are no part of the result, and
+        // `drop_redundant_extend::compute_high_observed` drops the
+        // extension when that is all it produces. `_Bool` is excluded,
+        // 6.3.1.2 having normalized it to 0/1.
         let stripped = strip_unsigned(self.scalar_return_ty);
         let rs = type_size_bytes(self.scalar_return_ty, self.target);
         if !is_floating_scalar(self.scalar_return_ty)
@@ -583,8 +594,7 @@ impl<'a> Walker<'a> {
             } else if unsigned {
                 v = b.binop_imm(BinOp::And, v, mask);
             } else {
-                let shifted = b.binop_imm(BinOp::Shl, v, bits);
-                v = b.binop_imm(BinOp::Shr, shifted, bits);
+                v = b.extend(v, super::types::sign_extend_kind(rs));
             }
         }
         b.return_(v);
@@ -723,11 +733,20 @@ impl<'a> Walker<'a> {
         let after = b.new_block();
         b.jmp(header);
         b.switch_to(header);
+        self.stamp_expr(b, cond);
         let cond_v = self.walk_cond_value(b, cond)?;
         b.branch_zero(cond_v, after, body_blk);
         self.walk_loop_body(b, body_blk, body, header, after)?;
         b.switch_to(after);
         Ok(false)
+    }
+
+    /// Attribute what `e` emits to `e`'s own line: a loop's condition and
+    /// step are walked apart from the statement that holds them.
+    fn stamp_expr(&self, b: &mut SsaBuilder, e: ExprId) {
+        if let Some(src) = self.ast.expr_src.get(e as usize) {
+            b.set_src(src.line, src.file as u32);
+        }
     }
 
     /// C99 6.8.5.2 `do` loop.
@@ -743,6 +762,7 @@ impl<'a> Walker<'a> {
         b.jmp(body_blk);
         self.walk_loop_body(b, body_blk, body, cond_blk, after)?;
         b.switch_to(cond_blk);
+        self.stamp_expr(b, cond);
         let cond_v = self.walk_cond_value(b, cond)?;
         b.branch_nonzero(cond_v, body_blk, after);
         b.switch_to(after);
@@ -776,7 +796,10 @@ impl<'a> Walker<'a> {
         b.jmp(header);
         b.switch_to(header);
         let cond_v = match cond {
-            Some(c) => self.walk_cond_value(b, c)?,
+            Some(c) => {
+                self.stamp_expr(b, c);
+                self.walk_cond_value(b, c)?
+            }
             None => b.imm(1),
         };
         b.branch_zero(cond_v, after, body_blk);
@@ -787,6 +810,7 @@ impl<'a> Walker<'a> {
         // order either way.
         b.switch_to(post_blk);
         if let Some(p) = post {
+            self.stamp_expr(b, p);
             let _ = self.walk_expr_rvalue(b, p)?;
         }
         b.jmp(header);

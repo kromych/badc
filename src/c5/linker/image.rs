@@ -1447,7 +1447,9 @@ mod tests {
             "stub adjusts rsp before `call entry`; breaks SysV 3.4.1"
         );
         assert!(
-            !stub[..11].windows(3).any(|w| w == [0x48, 0x81, 0xec]),
+            !stub[..11]
+                .windows(3)
+                .any(|w| w == [0x48, 0x81, 0xec] || w == [0x48, 0x83, 0xec]),
             "stub `sub rsp` before `call entry`; breaks SysV 3.4.1"
         );
         // call entry rel32 follows immediately.

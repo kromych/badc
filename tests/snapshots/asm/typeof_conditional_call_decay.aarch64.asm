@@ -19,25 +19,22 @@ Disassembly of section .text:
                	ldrb	w0, [x0]
                	mov	x17, #0x68              // =104
                	eor	x0, x0, x17
-               	cbz	x0, <addr>
+               	cbz	w0, <addr>
                	mov	x0, #0x2                // =2
                	ret
-               	mov	x3, #0x3                // =3
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	mov	x0, #0x0                // =0
-               	b	<addr>
+               	ldrb	w2, [x1, x0]
+               	cbz	x2, <addr>
                	add	x0, x0, #0x1
-               	add	x2, x1, x0
-               	ldrb	w2, [x2]
+               	ldrb	w2, [x1, x0]
                	cbnz	x2, <addr>
                	cmp	x0, #0x3
                	b.hs	<addr>
-               	cmp	x3, #0x9
-               	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ret
+               	cmp	x0, #0x9
+               	b.ne	<addr>
                	mov	x0, #0x0                // =0
                	ret
-               	mov	x3, x0
-               	b	<addr>

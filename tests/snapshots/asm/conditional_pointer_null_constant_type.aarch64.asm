@@ -21,32 +21,8 @@ Disassembly of section .text:
                	mov	x1, #0x1                // =1
                	str	w1, [x0]
                	str	x1, [x0, #0x8]
-               	mov	x2, #0x2a               // =42
-               	str	w2, [x0, #0x10]
-               	mov	x2, x0
-               	ldrsw	x2, [x2, #0x10]
-               	cmp	w2, #0x2a
-               	b.eq	<addr>
-               	mov	x0, x1
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	mov	x1, x0
-               	ldrsw	x1, [x1, #0x10]
-               	cmp	w1, #0x2a
-               	b.eq	<addr>
-               	mov	x0, #0x2                // =2
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	mov	x1, x0
-               	ldrsw	x1, [x1, #0x10]
-               	cmp	w1, #0x2a
-               	b.eq	<addr>
-               	mov	x0, #0x3                // =3
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
-               	ret
+               	mov	x1, #0x2a               // =42
+               	str	w1, [x0, #0x10]
                	cbz	x0, <addr>
                	mov	x1, x0
                	ldrsw	x1, [x1, #0x10]

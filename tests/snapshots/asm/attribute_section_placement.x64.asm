@@ -29,8 +29,7 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	leaq	<rip>, %rax
-               	movslq	(%rax), %rax
-               	testq	%rax, %rax
+               	cmpl	$0x0, (%rax)
                	je	<addr>
                	movl	$0x1, %eax
                	popq	%rbp
@@ -40,11 +39,8 @@ Disassembly of section .text:
                	movslq	(%rcx), %rcx
                	addq	%rcx, %rax
                	subq	$0x2a, %rax
-               	movslq	%eax, %rax
                	popq	%rbp
                	retq
-		...
-               	addb	%al, (%rax)
                	addb	%bh, 0x7(%rax)
 
 <boot>:

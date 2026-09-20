@@ -37,8 +37,6 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	ldr	x1, [x1]
                	mvn	x1, x1
-               	mov	x17, #0x0               // =0
-               	orr	x1, x1, x17
                	cbz	x1, <addr>
                	mov	x0, #0x4                // =4
                	ret
@@ -51,8 +49,7 @@ Disassembly of section .text:
                	mov	x0, #0x6                // =6
                	ret
                	ldr	x0, [x0]
-               	add	x1, x0, #0x4
-               	sxtw	x0, w1
+               	add	x0, x0, #0x4
                	cmp	w0, #0x1
                	b.eq	<addr>
                	mov	x0, #0x8                // =8

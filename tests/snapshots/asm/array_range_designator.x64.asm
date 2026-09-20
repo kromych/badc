@@ -36,41 +36,28 @@ Disassembly of section .text:
 <check_struct>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	movq	%rbx, (%rsp)
-               	movq	%r12, 0x8(%rsp)
-               	movq	%r13, 0x10(%rsp)
-               	xorq	%rbx, %rbx
-               	jmp	<addr>
+               	pushq	%r12
+               	pushq	%rbx
+               	xorl	%ebx, %ebx
                	leaq	<rip>, %rax
-               	movslq	%ebx, %r12
-               	imulq	$0x18, %r12, %r13
-               	addq	%r13, %rax
+               	imulq	$0x18, %rbx, %r12
+               	addq	%r12, %rax
                	movq	(%rax), %rax
                	callq	*%rax
                	cmpl	$0xb, %eax
                	jne	<addr>
                	leaq	<rip>, %rax
-               	addq	%r13, %rax
+               	addq	%r12, %rax
                	movq	0x8(%rax), %rax
                	callq	*%rax
                	cmpl	$0x16, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	jne	<addr>
                	leaq	<rip>, %rax
-               	movslq	%ebx, %rcx
-               	imulq	$0x18, %rcx, %rcx
-               	addq	%rcx, %rax
+               	addq	%r12, %rax
                	movslq	0x10(%rax), %rax
                	cmpl	$0x7, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	jne	<addr>
-               	movslq	%ebx, %rax
-               	leaq	0x1(%rax), %rbx
+               	incq	%rbx
                	cmpl	$0x2, %ebx
                	jl	<addr>
                	callq	<addr>
@@ -78,86 +65,61 @@ Disassembly of section .text:
                	jne	<addr>
                	callq	<addr>
                	cmpl	$0xb, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	jne	<addr>
-               	xorq	%rax, %rax
                	callq	<addr>
                	cmpl	$0xb, %eax
                	jne	<addr>
                	callq	<addr>
                	cmpl	$0xb, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	jne	<addr>
-               	xorq	%rax, %rax
-               	movq	%rax, %rcx
-               	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
-               	movq	0x10(%rsp), %r13
-               	leave
+               	xorl	%eax, %eax
+               	popq	%rbx
+               	popq	%r12
+               	popq	%rbp
                	retq
                	movl	$0x17, %eax
-               	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
-               	movq	0x10(%rsp), %r13
-               	leave
+               	popq	%rbx
+               	popq	%r12
+               	popq	%rbp
                	retq
                	movl	$0x16, %eax
-               	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
-               	movq	0x10(%rsp), %r13
-               	leave
+               	popq	%rbx
+               	popq	%r12
+               	popq	%rbp
                	retq
                	leaq	0x14(%rbx), %rax
-               	movslq	%eax, %rax
-               	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
-               	movq	0x10(%rsp), %r13
-               	leave
+               	popq	%rbx
+               	popq	%r12
+               	popq	%rbp
                	retq
 
 <check_const>:
-               	xorq	%rax, %rax
-               	movq	%rax, %rcx
-               	movq	%rax, %rcx
-               	movq	%rax, %rcx
+               	xorl	%eax, %eax
                	retq
 
 <dispatch>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movl	%edi, -0x10(%rbp)
+               	movslq	%edi, %rdi
                	leaq	<rip>, %rax
-               	movslq	%edi, %rcx
-               	movq	(%rax,%rcx,8), %rax
+               	movq	(%rax,%rdi,8), %rax
                	jmpq	*%rax
                	movl	$0x64, %eax
-               	leave
                	retq
                	movl	$0xc8, %eax
-               	leave
                	retq
                	movl	$0x3e7, %eax            # imm = 0x3E7
-               	leave
                	retq
 
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	callq	<addr>
-               	movq	%rax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	testq	%rax, %rax
                	je	<addr>
                	popq	%rbp
                	retq
                	callq	<addr>
-               	movq	%rax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	testq	%rax, %rax
                	je	<addr>
                	popq	%rbp
@@ -167,64 +129,54 @@ Disassembly of section .text:
                	jne	<addr>
                	callq	<addr>
                	cmpl	$0x16, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	jne	<addr>
-               	xorq	%rax, %rax
                	callq	<addr>
                	cmpl	$0x16, %eax
                	jne	<addr>
                	callq	<addr>
                	cmpl	$0x16, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	jne	<addr>
-               	xorq	%rax, %rax
-               	movq	%rax, %rcx
-               	movslq	%eax, %rcx
-               	testq	%rcx, %rcx
+               	xorl	%eax, %eax
+               	testq	%rax, %rax
                	je	<addr>
-               	movq	%rcx, %rax
                	popq	%rbp
                	retq
-               	xorq	%rdi, %rdi
+               	xorl	%edi, %edi
                	callq	<addr>
-               	cmpq	$0x64, %rax
+               	cmpl	$0x64, %eax
                	je	<addr>
                	movl	$0xa, %eax
                	popq	%rbp
                	retq
                	movl	$0x1, %edi
                	callq	<addr>
-               	cmpq	$0xc8, %rax
+               	cmpl	$0xc8, %eax
                	je	<addr>
                	movl	$0xb, %eax
                	popq	%rbp
                	retq
                	movl	$0x2, %edi
                	callq	<addr>
-               	cmpq	$0x3e7, %rax            # imm = 0x3E7
+               	cmpl	$0x3e7, %eax            # imm = 0x3E7
                	je	<addr>
                	movl	$0xc, %eax
                	popq	%rbp
                	retq
                	movl	$0x5, %edi
                	callq	<addr>
-               	cmpq	$0x3e7, %rax            # imm = 0x3E7
+               	cmpl	$0x3e7, %eax            # imm = 0x3E7
                	je	<addr>
                	movl	$0xd, %eax
                	popq	%rbp
                	retq
                	movl	$0x7, %edi
                	callq	<addr>
-               	cmpq	$0x3e7, %rax            # imm = 0x3E7
+               	cmpl	$0x3e7, %eax            # imm = 0x3E7
                	je	<addr>
                	movl	$0xe, %eax
                	popq	%rbp
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	popq	%rbp
                	retq
                	movl	$0x1f, %eax

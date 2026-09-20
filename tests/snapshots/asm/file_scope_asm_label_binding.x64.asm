@@ -29,26 +29,24 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	xorq	%rax, %rax
-               	movl	%eax, -0x8(%rbp)
+               	movl	$0x0, -0x8(%rbp)
                	leaq	-0x8(%rbp), %rdi
                	callq	<addr>
                	movl	-0x8(%rbp), %eax
                	xorq	$0x1234, %rax           # imm = 0x1234
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	je	<addr>
                	movl	$0x1, %eax
                	leave
                	retq
                	leaq	<rip>, %rax        # <addr>
-               	movl	(%rax), %eax
-               	xorq	$0x5678, %rax           # imm = 0x5678
-               	testq	%rax, %rax
+               	movl	(%rax), %ecx
+               	xorq	$0x5678, %rcx           # imm = 0x5678
+               	testl	%ecx, %ecx
                	je	<addr>
                	movl	$0x2, %eax
                	leave
                	retq
-               	leaq	<rip>, %rax        # <addr>
                	leaq	<rip>, %rcx        # <addr>
                	subq	%rcx, %rax
                	leaq	<rip>, %rcx        # <addr>
@@ -64,6 +62,7 @@ Disassembly of section .text:
                	movl	$0x2a, %eax
                	leave
                	retq
+               	addb	%al, (%rax)
                	addb	%al, (%rax)
 
 <asm_store_magic>:

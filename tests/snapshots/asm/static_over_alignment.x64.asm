@@ -26,58 +26,45 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	leaq	<rip>, %rax
-               	movl	$0x3, %ecx
-               	movl	%ecx, (%rax)
-               	movq	%rax, %rdx
-               	andq	$0x3f, %rdx
-               	testq	%rdx, %rdx
+               	leaq	<rip>, %rcx
+               	movl	$0x3, %eax
+               	movl	%eax, (%rcx)
+               	testb	$0x3f, %cl
                	je	<addr>
                	movl	$0x1, %eax
                	retq
-               	movslq	(%rax), %rax
-               	cmpl	$0x3, %eax
+               	movslq	(%rcx), %rcx
+               	cmpl	$0x3, %ecx
                	je	<addr>
                	movl	$0x2, %eax
                	retq
-               	leaq	<rip>, %rax
-               	movl	$0x9, %edx
-               	movb	%dl, (%rax)
-               	andq	$0xfff, %rax            # imm = 0xFFF
-               	testq	%rax, %rax
+               	leaq	<rip>, %rcx
+               	movb	$0x9, (%rcx)
+               	testl	$0xfff, %ecx            # imm = 0xFFF
                	je	<addr>
-               	movq	%rcx, %rax
                	retq
-               	leaq	<rip>, %rax
-               	movsbq	(%rax), %rax
+               	movsbq	(%rcx), %rax
                	cmpl	$0x9, %eax
                	je	<addr>
                	movl	$0x4, %eax
                	retq
                	leaq	<rip>, %rax
-               	andq	$0x3f, %rax
-               	testq	%rax, %rax
+               	testb	$0x3f, %al
                	je	<addr>
                	movl	$0x5, %eax
                	retq
-               	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	cmpl	$0xb, %eax
                	je	<addr>
                	movl	$0x6, %eax
                	retq
                	leaq	<rip>, %rax
-               	andq	$0x7f, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	xorq	%rax, %rax
-               	cmpq	$0x7, %rax
+               	testb	$0x7f, %al
                	je	<addr>
                	movl	$0x7, %eax
                	retq
-               	xorq	%rax, %rax
-               	retq
-               	leaq	<rip>, %rax
                	movq	(%rax), %rax
-               	movslq	%eax, %rax
-               	jmp	<addr>
+               	cmpl	$0x7, %eax
+               	jne	<addr>
+               	xorl	%eax, %eax
+               	retq

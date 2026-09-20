@@ -28,19 +28,17 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%rbx, (%rsp)
+               	subq	$0x8, %rsp
+               	pushq	%rbx
                	movl	$0x8, %edi
                	xorl	%eax, %eax
                	callq	<addr>
                	movq	%rax, %rbx
-               	movl	$0x2a, %eax
-               	movl	%eax, (%rbx)
+               	movl	$0x2a, (%rbx)
                	movq	%rbx, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movzbq	%al, %rax
                	movslq	(%rbx), %rax
-               	movq	(%rsp), %rbx
+               	popq	%rbx
                	leave
                	retq

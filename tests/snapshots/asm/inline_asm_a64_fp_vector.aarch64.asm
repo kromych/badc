@@ -30,12 +30,11 @@ Disassembly of section .text:
                	ldursw	x0, [x29, #-0x8]
                	stur	w0, [x29, #-0x10]
                	ldur	s0, [x29, #-0x10]
-               	mov	x0, #0x42280000         // =1109917696
-               	fmov	s17, w0
-               	fcmp	s0, s17
+               	mov	x16, #0x42280000        // =1109917696
+               	fmov	s1, w16
+               	fcmp	s0, s1
                	b.ne	<addr>
                	mov	x0, #0x2a               // =42
-               	sxtw	x0, w0
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret

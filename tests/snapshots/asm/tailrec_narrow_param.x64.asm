@@ -27,15 +27,14 @@ Disassembly of section .text:
 
 <sum_to>:
                	movsbq	%dil, %rdi
-               	xorq	%rax, %rax
-               	jmp	<addr>
+               	xorl	%eax, %eax
+               	testl	%edi, %edi
+               	jle	<addr>
                	leaq	-0x1(%rdi), %rcx
-               	movsbq	%cl, %rcx
                	addq	%rdi, %rax
                	movq	%rcx, %rdi
-               	testq	%rdi, %rdi
+               	testl	%edi, %edi
                	jg	<addr>
-               	addq	$0x0, %rax
                	retq
 
 <main>:
@@ -45,8 +44,7 @@ Disassembly of section .text:
                	callq	<addr>
                	cmpq	$0x13ba, %rax           # imm = 0x13BA
                	jne	<addr>
-               	xorq	%rax, %rax
-               	movslq	%eax, %rax
+               	xorl	%eax, %eax
                	popq	%rbp
                	retq
                	movl	$0x1, %eax

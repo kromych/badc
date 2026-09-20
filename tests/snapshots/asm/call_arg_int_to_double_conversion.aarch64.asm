@@ -14,112 +14,75 @@ Disassembly of section .text:
                	brk	#0x1
 
 <main>:
-               	str	x20, [sp, #-0x30]!
-               	str	x19, [sp, #0x10]
-               	stp	x29, x30, [sp, #0x20]
-               	add	x29, sp, #0x20
-               	mov	x20, #0x4000000000000000 // =4611686018427387904
-               	mov	x0, #0x3ff0000000000000 // =4607182418800017408
-               	fmov	d0, x20
-               	fmov	d1, x0
+               	stp	x29, x30, [sp, #-0x10]!
+               	mov	x29, sp
+               	fmov	d0, #2.00000000
+               	fmov	d1, #1.00000000
                	bl	<addr>
-               	fmov	d17, x20
-               	fcmp	d0, d17
+               	fmov	d1, #2.00000000
+               	fcmp	d0, d1
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
-               	ldp	x29, x30, [sp, #0x20]
-               	ldr	x19, [sp, #0x10]
-               	ldr	x20, [sp], #0x30
+               	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x4000000000000000 // =4611686018427387904
-               	fmov	d0, x0
-               	fmov	d1, x0
+               	fmov	d0, d1
                	bl	<addr>
-               	mov	x0, #0x4010000000000000 // =4616189618054758400
-               	fmov	d17, x0
-               	fcmp	d0, d17
+               	fmov	d1, #4.00000000
+               	fcmp	d0, d1
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
-               	ldp	x29, x30, [sp, #0x20]
-               	ldr	x19, [sp, #0x10]
-               	ldr	x20, [sp], #0x30
+               	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x4000000000000000 // =4611686018427387904
-               	mov	x1, #0x4008000000000000 // =4613937818241073152
-               	fmov	d0, x0
-               	fmov	d1, x1
+               	fmov	d0, #2.00000000
+               	fmov	d1, #3.00000000
                	bl	<addr>
-               	mov	x0, #0x4020000000000000 // =4620693217682128896
-               	fmov	d17, x0
-               	fcmp	d0, d17
+               	fmov	d1, #8.00000000
+               	fcmp	d0, d1
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
-               	ldp	x29, x30, [sp, #0x20]
-               	ldr	x19, [sp, #0x10]
-               	ldr	x20, [sp], #0x30
+               	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x4000000000000000 // =4611686018427387904
-               	mov	x1, #0x4010000000000000 // =4616189618054758400
-               	fmov	d0, x0
-               	fmov	d1, x1
+               	fmov	d0, #2.00000000
+               	fmov	d1, #4.00000000
                	bl	<addr>
-               	mov	x0, #0x4030000000000000 // =4625196817309499392
-               	fmov	d17, x0
-               	fcmp	d0, d17
+               	fmov	d1, #16.00000000
+               	fcmp	d0, d1
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
-               	ldp	x29, x30, [sp, #0x20]
-               	ldr	x19, [sp, #0x10]
-               	ldr	x20, [sp], #0x30
+               	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x2                // =2
-               	mov	x1, #0x4000000000000000 // =4611686018427387904
-               	scvtf	d0, x0
-               	fmov	d1, d0
-               	fmov	d0, x1
+               	fmov	d0, #2.00000000
+               	scvtf	d1, x0
                	bl	<addr>
-               	mov	x0, #0x4010000000000000 // =4616189618054758400
-               	fmov	d17, x0
-               	fcmp	d0, d17
+               	fmov	d1, #4.00000000
+               	fcmp	d0, d1
                	b.eq	<addr>
                	mov	x0, #0x5                // =5
-               	ldp	x29, x30, [sp, #0x20]
-               	ldr	x19, [sp, #0x10]
-               	ldr	x20, [sp], #0x30
+               	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x3                // =3
-               	mov	x1, #0x4000000000000000 // =4611686018427387904
-               	scvtf	d0, x0
-               	fmov	d1, d0
-               	fmov	d0, x1
+               	fmov	d0, #2.00000000
+               	scvtf	d1, x0
                	bl	<addr>
-               	mov	x0, #0x4020000000000000 // =4620693217682128896
-               	fmov	d17, x0
-               	fcmp	d0, d17
+               	fmov	d1, #8.00000000
+               	fcmp	d0, d1
                	b.eq	<addr>
                	mov	x0, #0x6                // =6
-               	ldp	x29, x30, [sp, #0x20]
-               	ldr	x19, [sp, #0x10]
-               	ldr	x20, [sp], #0x30
+               	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x4000000000000000 // =4611686018427387904
-               	fmov	d0, x0
-               	fmov	d1, x0
+               	fmov	d0, #2.00000000
+               	fmov	d1, d0
                	bl	<addr>
-               	mov	x0, #0x4010000000000000 // =4616189618054758400
-               	fmov	d17, x0
-               	fcmp	d0, d17
+               	fmov	d1, #4.00000000
+               	fcmp	d0, d1
                	b.eq	<addr>
                	mov	x0, #0x7                // =7
-               	ldp	x29, x30, [sp, #0x20]
-               	ldr	x19, [sp, #0x10]
-               	ldr	x20, [sp], #0x30
+               	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	bl	<addr>
                	mov	x0, #0x0                // =0
-               	ldp	x29, x30, [sp, #0x20]
-               	ldr	x19, [sp, #0x10]
-               	ldr	x20, [sp], #0x30
+               	ldp	x29, x30, [sp], #0x10
                	ret

@@ -36,11 +36,7 @@ Disassembly of section .text:
                	movq	%gs:<rip>, %rax
                	movq	%rax, -0x10(%rbp)
                	incq	%gs:<rip>
-               	movq	-0x10(%rbp), %rax
-               	testq	%rax, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
+               	cmpq	$0x0, -0x10(%rbp)
                	je	<addr>
                	movl	$0x1, %eax
                	leave

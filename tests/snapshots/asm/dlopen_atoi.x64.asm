@@ -28,10 +28,9 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%rbx, (%rsp)
-               	movq	%r12, 0x8(%rsp)
-               	xorq	%rdi, %rdi
+               	pushq	%r12
+               	pushq	%rbx
+               	xorl	%edi, %edi
                	movl	$0x2, %esi
                	xorl	%eax, %eax
                	callq	<addr>
@@ -39,9 +38,9 @@ Disassembly of section .text:
                	testq	%rbx, %rbx
                	jne	<addr>
                	movl	$0x1, %eax
-               	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
-               	leave
+               	popq	%rbx
+               	popq	%r12
+               	popq	%rbp
                	retq
                	leaq	<rip>, %rsi
                	movq	%rbx, %rdi
@@ -53,18 +52,18 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	movl	$0x2, %eax
-               	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
-               	leave
+               	popq	%rbx
+               	popq	%r12
+               	popq	%rbp
                	retq
                	leaq	<rip>, %rdi
                	callq	*%rax
-               	movslq	%eax, %r12
+               	movq	%rax, %r12
                	movq	%rbx, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
                	movq	%r12, %rax
-               	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
-               	leave
+               	popq	%rbx
+               	popq	%r12
+               	popq	%rbp
                	retq

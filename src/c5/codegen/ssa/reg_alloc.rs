@@ -131,7 +131,8 @@ pub(crate) struct Allocation {
     /// can pick the right sign-extend width without re-walking the
     /// inst's operands.
     pub sxtw_k: Vec<i64>,
-    /// True for `Binop` / `BinopI` comparison insts (integer and FP)
+    /// True for `Binop` / `BinopI` comparison insts (integer and FP),
+    /// and on x86-64 for integer loads ([`zero_testable_load`]),
     /// that the allocator recognised as the source of a `Bz` / `Bnz`
     /// terminator's cond, with cond consumed only by that terminator
     /// and every instruction between the compare and the block's end
@@ -142,6 +143,18 @@ pub(crate) struct Allocation {
     /// x86_64 the destination register doubles as the operand-staging
     /// scratch, so its color stays in the used sets.
     pub branch_fused: Vec<bool>,
+    /// True for a store that writes its value, an `Imm`, from its own
+    /// encoding ([`store_immediate`]). Every reader of that `Imm` is such
+    /// a store, so its use count is zero and it is never materialized;
+    /// the store's own value is unread.
+    pub imm_store: Vec<bool>,
+    /// Per value: an `Imm` placed in the FP file ([`fp_constants`]).
+    pub fp_const: Vec<bool>,
+    /// Per x86-64 instruction that writes registers besides its result
+    /// ([`x86_implicit_writes`]): those of them that hold a value live
+    /// across it, a shift count left in rcx excepted, which the emitter
+    /// saves around it. Empty elsewhere.
+    pub implicit_live: Vec<u16>,
     /// Per-value coalescing hint: the physical register the
     /// allocator should prefer when one is set and free at the
     /// pick site. The pick-reg path honours the hint only when it
@@ -171,6 +184,11 @@ pub(crate) struct Allocation {
     /// issues in the 32-bit register form. Empty or out-of-range
     /// entries default to the 64-bit form.
     pub cmp32: Vec<bool>,
+    /// Per value: an `Inst::BitCount` whose operand cannot be zero in the
+    /// counted bytes, so the lowering's guard for the undefined zero case
+    /// is dead. Filled on x86-64, the only target whose count
+    /// instructions need one; empty entries read as false.
+    pub count_nonzero: Vec<bool>,
     /// Per value: a 128-bit vector ([`wide_values`]).
     pub wide: Vec<bool>,
     /// Registers an `Inst::InlineAsm` statement must preserve around its
@@ -188,8 +206,19 @@ impl Allocation {
         self.f32_values.get(v as usize).copied().unwrap_or(false)
     }
 
+    /// True when the `Inst::BitCount` at `v` reads an operand that cannot
+    /// be zero, so the lowering may drop its zero guard.
+    pub(crate) fn count_nonzero(&self, v: ValueId) -> bool {
+        self.count_nonzero.get(v as usize).copied().unwrap_or(false)
+    }
+
     pub(crate) fn is_wide(&self, v: ValueId) -> bool {
         self.wide.get(v as usize).copied().unwrap_or(false)
+    }
+
+    /// Whether `v`, the value of `inst`, lives in the FP file.
+    pub(crate) fn is_fp_value(&self, inst: &Inst, v: ValueId) -> bool {
+        produces_fp_result(inst) || self.fp_const.get(v as usize).copied().unwrap_or(false)
     }
 
     /// True when no consumer of `v` reads its bits above bit 31, so a
@@ -202,6 +231,338 @@ impl Allocation {
     pub(crate) fn high_clear(&self, v: ValueId) -> bool {
         self.high_clear.get(v as usize).copied().unwrap_or(false)
     }
+
+    /// True when no instruction and no terminator reads `v`. Unknown
+    /// values count as read.
+    pub(crate) fn is_unread(&self, v: ValueId) -> bool {
+        self.use_counts.get(v as usize).is_some_and(|&n| n == 0)
+    }
+
+    /// Whether register `r`, which the x86-64 lowering of `v` writes, holds
+    /// a value live across `v` (`implicit_live`). Without the record any
+    /// value placed in `r` counts.
+    pub(crate) fn holds_live_across(&self, v: ValueId, r: u8) -> bool {
+        match self.implicit_live.get(v as usize) {
+            Some(&regs) => (regs >> r) & 1 != 0,
+            None => self.places.contains(&Place::IntReg(r)),
+        }
+    }
+}
+
+/// An integer load whose zero test is a compare of its memory operand:
+/// one access of the load's own width, which a volatile load, one split
+/// under a proven alignment, a segment load and a widening index rule out.
+fn zero_testable_load(inst: &Inst) -> bool {
+    let kind = match inst {
+        Inst::Load {
+            kind,
+            volatile: false,
+            align: 0,
+            ..
+        }
+        | Inst::LoadLocal {
+            kind,
+            volatile: false,
+            ..
+        }
+        | Inst::LoadIndexed {
+            kind,
+            index_ext: super::super::ir::IndexExt::None,
+            ..
+        } => *kind,
+        _ => return false,
+    };
+    !matches!(
+        kind,
+        LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128
+    )
+}
+
+/// The `Imm` a store can write without materializing it into a register
+/// on `target`: x86-64 has `mov mem, imm` at 1, 2, 4 and 8 bytes, which
+/// stores the constant's low bytes, the quadword form sign-extending 32
+/// bits; AArch64 has no store immediate but reads zero out of xzr / wzr,
+/// so it takes the zero constant alone. A floating store qualifies when it
+/// writes the constant's own bits, not a conversion of them to the other
+/// width.
+fn store_immediate(func: &FunctionSsa, inst: &Inst, target: Target) -> Option<ValueId> {
+    let (value, kind) = match inst {
+        Inst::Store { value, kind, .. }
+        | Inst::StoreLocal { value, kind, .. }
+        | Inst::StoreIndexed { value, kind, .. }
+        | Inst::SegStore { value, kind, .. } => (*value, *kind),
+        _ => return None,
+    };
+    let Some(Inst::Imm(k)) = func.insts.get(value as usize) else {
+        return None;
+    };
+    let is_f32 = func
+        .f32_values
+        .get(value as usize)
+        .copied()
+        .unwrap_or(false);
+    // What the sub-word and the full-width forms reach on this target.
+    let (narrow, wide) = if target.is_x86_64() {
+        (true, i32::try_from(*k).is_ok())
+    } else if target.is_aarch64() {
+        (*k == 0, *k == 0)
+    } else {
+        (false, false)
+    };
+    let fits = match kind {
+        StoreKind::I8 | StoreKind::I16 | StoreKind::I32 => narrow,
+        StoreKind::F32 => is_f32 && narrow,
+        StoreKind::I64 => wide,
+        StoreKind::F64 => !is_f32 && wide,
+        StoreKind::F80 | StoreKind::F128 | StoreKind::V128 => false,
+    };
+    fits.then_some(value)
+}
+
+/// Per value: an `Imm` each reader of which takes in an FP register, where
+/// the aarch64 allocation places it. `reads` as for `operands_read`.
+pub(crate) fn fp_constants(func: &FunctionSsa, target: Target, reads: &[bool]) -> Vec<bool> {
+    let n = func.insts.len();
+    if !target.is_aarch64() {
+        return vec![false; n];
+    }
+    let mut seen = vec![(false, false); n];
+    let mut note = |v: ValueId, fp: bool| {
+        if let Some(Inst::Imm(_)) = func.insts.get(v as usize) {
+            let s = &mut seen[v as usize];
+            if fp { s.0 = true } else { s.1 = true }
+        }
+    };
+    for (i, inst) in func.insts.iter().enumerate() {
+        if reads.get(i).copied().unwrap_or(true) {
+            operand_files(func, inst, &mut note);
+        }
+    }
+    let fp_return = func.ret_is_fp && func.ret_agg.is_none();
+    for block in &func.blocks {
+        match block.terminator {
+            Terminator::Return(v) if v != NO_VALUE => note(v, fp_return),
+            ref t => t.for_each_operand(|v| note(v, false)),
+        }
+    }
+    seen.iter().map(|&(fp, int)| fp && !int).collect()
+}
+
+/// `f(v, fp)` per operand `v` of `inst`: `fp` when the aarch64 lowering reads
+/// `v` in an FP register at `v`'s precision. Rebuilt phi incomes are skipped.
+fn operand_files(func: &FunctionSsa, inst: &Inst, f: &mut impl FnMut(ValueId, bool)) {
+    let single = |v: ValueId| func.f32_values.get(v as usize).copied().unwrap_or(false);
+    // A float store takes either precision; a wider store a double.
+    let fp_store = |kind: StoreKind, v: ValueId| match kind {
+        StoreKind::F32 => true,
+        StoreKind::F64 | StoreKind::F128 => !single(v),
+        _ => false,
+    };
+    fn fp_args(
+        args: &[ValueId],
+        mask: &super::super::ir::FpMask,
+        aggs: &[Option<u32>],
+        f: &mut impl FnMut(ValueId, bool),
+    ) {
+        for (i, &a) in args.iter().enumerate() {
+            f(a, mask.has(i) && aggs.get(i).copied().flatten().is_none());
+        }
+    }
+    match inst {
+        Inst::Binop { op, lhs, rhs } => {
+            let fp = super::super::ir::is_fp_comparison_op(*op)
+                || matches!(op, BinOp::Fadd | BinOp::Fsub | BinOp::Fmul | BinOp::Fdiv);
+            f(*lhs, fp);
+            f(*rhs, fp);
+        }
+        Inst::Neg(v) => f(*v, false),
+        Inst::Fneg(v) => f(*v, true),
+        Inst::Fma { a, b, c, .. } => {
+            f(*a, true);
+            f(*b, true);
+            f(*c, true);
+        }
+        Inst::FpCast { kind, value } => f(
+            *value,
+            match kind {
+                FpCastKind::FpToInt | FpCastKind::UFpToInt => true,
+                FpCastKind::F32ToF64 => single(*value),
+                FpCastKind::F64ToF32 => !single(*value),
+                FpCastKind::IntToFp | FpCastKind::UIntToFp => false,
+            },
+        ),
+        Inst::Store {
+            addr, value, kind, ..
+        } => {
+            f(*addr, false);
+            f(*value, fp_store(*kind, *value));
+        }
+        Inst::StoreLocal { value, kind, .. } => f(*value, fp_store(*kind, *value)),
+        Inst::Copy { value, is_fp } => f(*value, *is_fp),
+        Inst::Call {
+            args,
+            fp_arg_mask,
+            arg_aggs,
+            ..
+        }
+        | Inst::CallExt {
+            args,
+            fp_arg_mask,
+            arg_aggs,
+            ..
+        } => fp_args(args, fp_arg_mask, arg_aggs, f),
+        Inst::CallIndirect {
+            target,
+            args,
+            fp_arg_mask,
+            arg_aggs,
+            ..
+        } => {
+            f(*target, false);
+            fp_args(args, fp_arg_mask, arg_aggs, f);
+        }
+        Inst::Intrinsic { kind, args }
+            if super::super::op::Intrinsic::from_i64(*kind).is_some_and(|i| i.is_fp_unary()) =>
+        {
+            args.iter().for_each(|&a| f(a, true));
+        }
+        Inst::Phi { incoming, kind } => {
+            for &(_, v) in incoming {
+                if !super::emit_common::phi_rebuilds_income(func, *kind, v) {
+                    f(v, produces_fp_result(inst));
+                }
+            }
+        }
+        _ => for_each_operand(inst, |v| f(v, false)),
+    }
+}
+
+/// Take the phi incomes an edge rebuilds from their bits off the use counts.
+fn drop_rebuilt_incomes(func: &FunctionSsa, use_counts: &mut [u32]) {
+    for inst in &func.insts {
+        let Inst::Phi { incoming, kind } = inst else {
+            continue;
+        };
+        for &(_, v) in incoming {
+            if super::emit_common::phi_rebuilds_income(func, *kind, v) {
+                let c = &mut use_counts[v as usize];
+                *c = c.saturating_sub(1);
+            }
+        }
+    }
+}
+
+/// The x86-64 registers some lowerings use implicitly.
+const X86_RAX: u8 = 0;
+const X86_RCX: u8 = 1;
+const X86_RDX: u8 = 2;
+
+/// A shift or rotate, whose variable count x86-64 reads in cl.
+fn is_shift_op(op: BinOp) -> bool {
+    matches!(op, BinOp::Shl | BinOp::Shr | BinOp::Shru | BinOp::Ror)
+}
+
+/// A division, a remainder or a high multiply, which x86-64 computes in
+/// rdx:rax.
+fn is_rdx_rax_op(op: BinOp) -> bool {
+    matches!(
+        op,
+        BinOp::Div | BinOp::Divu | BinOp::Mod | BinOp::Modu | BinOp::Mulh | BinOp::Mulhu
+    )
+}
+
+/// The registers x86-64's lowering of `inst` writes besides its result, as
+/// a mask: rcx for a shift or rotate by a count no immediate form takes,
+/// rdx:rax for a division, a remainder and a high multiply.
+pub(crate) fn x86_implicit_writes(inst: &Inst) -> u16 {
+    match *inst {
+        Inst::Binop { op, .. } if is_shift_op(op) => 1 << X86_RCX,
+        Inst::BinopI { op, rhs_imm, .. } if is_shift_op(op) && !(0..64).contains(&rhs_imm) => {
+            1 << X86_RCX
+        }
+        Inst::Binop { op, .. } if is_rdx_rax_op(op) => (1 << X86_RAX) | (1 << X86_RDX),
+        _ => 0,
+    }
+}
+
+/// x86-64 register preferences the colorer honours among free caller-saved
+/// registers. `apart[root]` keeps the result of a non-commutative `op dst,
+/// rhs` (`sub`, `subsd`, `divsd`, a shift) off the register of `rhs`, which
+/// the emitter would copy aside first. A shift reads a register count in
+/// cl: the count is hinted to rcx, and `avoid[v]` holds rcx for the shift's
+/// result and operand. A division takes its dividend in rax and leaves the
+/// quotient there and the remainder in rdx, which the hints follow; its
+/// divisor avoids rdx:rax. The values live across an instruction avoid the
+/// registers it writes ([`x86_implicit_writes`]), a count excepted for rcx.
+fn x86_preferences(
+    func: &FunctionSsa,
+    liveness: &super::liveness::Liveness,
+    node_of: &[ValueId],
+    hints: &mut [Option<u8>],
+) -> (Vec<Vec<ValueId>>, Vec<u64>) {
+    let n = func.insts.len();
+    let binop = |inst: &Inst| match *inst {
+        Inst::Binop { op, lhs, rhs } if (lhs as usize) < n && (rhs as usize) < n => {
+            Some((op, lhs, rhs))
+        }
+        _ => None,
+    };
+    let mut is_count = vec![false; n];
+    for (v, inst) in func.insts.iter().enumerate() {
+        let Some((op, lhs, rhs)) = binop(inst) else {
+            continue;
+        };
+        if is_shift_op(op) {
+            is_count[rhs as usize] = true;
+            hints[rhs as usize].get_or_insert(X86_RCX);
+        } else if is_rdx_rax_op(op) {
+            hints[lhs as usize].get_or_insert(X86_RAX);
+            let high = matches!(op, BinOp::Mod | BinOp::Modu | BinOp::Mulh | BinOp::Mulhu);
+            hints[v].get_or_insert(if high { X86_RDX } else { X86_RAX });
+        }
+    }
+    let mut apart: Vec<Vec<ValueId>> = vec![Vec::new(); n];
+    let mut avoid: Vec<u64> = vec![0; n];
+    let rcx = 1u64 << X86_RCX;
+    let rdx_rax = (1u64 << X86_RAX) | (1u64 << X86_RDX);
+    let mut keep_out = |u: ValueId, regs: u64| {
+        let regs = if is_count[u as usize] {
+            regs & !rcx
+        } else {
+            regs
+        };
+        if !produces_fp_result(&func.insts[u as usize]) {
+            avoid[u as usize] |= regs;
+        }
+    };
+    for (v, inst) in func.insts.iter().enumerate() {
+        let Some((op, lhs, rhs)) = binop(inst) else {
+            continue;
+        };
+        if is_rdx_rax_op(op) {
+            keep_out(rhs, rdx_rax);
+        }
+        if !is_shift_op(op) && !matches!(op, BinOp::Sub | BinOp::Fsub | BinOp::Fdiv) {
+            continue;
+        }
+        let (a, b) = (node_of[v], node_of[rhs as usize]);
+        if a != b && !apart[a as usize].contains(&b) {
+            apart[a as usize].push(b);
+            apart[b as usize].push(a);
+        }
+        if is_shift_op(op) {
+            keep_out(v as ValueId, rcx);
+            keep_out(lhs, rcx);
+        }
+    }
+    let writes = |inst: &Inst| x86_implicit_writes(inst) != 0;
+    for (site, live) in liveness.values_live_after(func, &writes) {
+        let regs = u64::from(x86_implicit_writes(&func.insts[site as usize]));
+        for u in live {
+            keep_out(u, regs);
+        }
+    }
+    (apart, avoid)
 }
 
 /// Floating-point scratch registers the emit pass needs: two operand
@@ -245,7 +606,8 @@ impl RegBanks {
     }
 
     /// The target's banks minus `fixed`. The FP scratch takes the first
-    /// unreserved candidates of the target's row; when fewer than
+    /// unreserved candidates of the target's row, and the row's other
+    /// volatile registers join the caller-saved bank; when fewer than
     /// [`FP_SCRATCH_COUNT`] remain it takes the callee-saved FP bank's
     /// tail out of the bank, and the prologue saves what the body
     /// touches ([`fp_scratch_demand`]). What is still missing is
@@ -259,6 +621,7 @@ impl RegBanks {
                 .collect()
         };
         let mut callee_fprs = keep(rows.callee_fprs, FixedRegs::has_fpr);
+        let mut caller_fprs = keep(rows.caller_fprs, FixedRegs::has_fpr);
         let mut fp_scratch = [NO_FP_SCRATCH; FP_SCRATCH_COUNT];
         let mut n = 0usize;
         for r in rows
@@ -267,11 +630,12 @@ impl RegBanks {
             .copied()
             .filter(|&r| !fixed.has_fpr(r))
         {
-            if n == FP_SCRATCH_COUNT {
-                break;
+            if n < FP_SCRATCH_COUNT {
+                fp_scratch[n] = r;
+                n += 1;
+            } else if !fp_callee_saved(target, r) {
+                caller_fprs.push(r);
             }
-            fp_scratch[n] = r;
-            n += 1;
         }
         while n < FP_SCRATCH_COUNT {
             let Some(r) = callee_fprs.pop() else { break };
@@ -282,7 +646,7 @@ impl RegBanks {
             callee_gprs: keep(rows.callee_gprs, FixedRegs::has_gpr),
             caller_gprs: keep(rows.caller_gprs, FixedRegs::has_gpr),
             callee_fprs,
-            caller_fprs: keep(rows.caller_fprs, FixedRegs::has_fpr),
+            caller_fprs,
             fp_scratch,
         }
     }
@@ -308,8 +672,9 @@ struct Rows {
     callee_fprs: &'static [u8],
     caller_fprs: &'static [u8],
     /// FP scratch candidates in preference order: the registers the
-    /// default configuration uses, then every other register outside
-    /// the banks.
+    /// default configuration uses, then the ones a reserved scratch
+    /// moves to, which otherwise join the caller-saved bank when
+    /// volatile.
     fp_scratch: &'static [u8],
 }
 
@@ -329,18 +694,17 @@ impl Rows {
                 // arg register so the `mov x0..x7, xN` setup
                 // disappears. x16 / x17 are the encoder scratch
                 // (large-immediate and adrp / add fixups), x18 is the
-                // Windows platform register, x19 is the writer's
-                // address-materialisation scratch (see
-                // `function_clobbers_scratch`); all stay reserved.
+                // Windows platform register, x19 is the emit pass's third
+                // scratch (`ScratchPool::third`); all stay reserved.
                 // AAPCS64 callee-saved (non-volatile) GPRs are
-                // x19..x28; x19 is the writer's scratch so the bank
-                // starts at x20 and runs through x28.
+                // x19..x28, so the bank starts at x20 and runs through
+                // x28.
                 callee_gprs: &[20, 21, 22, 23, 24, 25, 26, 27, 28],
                 caller_gprs: &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
                 callee_fprs: &[8, 9, 10, 11, 12, 13, 14, 15],
                 caller_fprs: &[0, 1, 2, 3, 4, 5, 6, 7],
-                // d16..d18 are the emit pass's scratch; d19..d31 are the
-                // other caller-saved registers outside the banks.
+                // d16..d18 are the emit pass's scratch; d19..d31 join the
+                // caller-saved bank (`RegBanks::new`).
                 fp_scratch: &[
                     16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31,
                 ],
@@ -364,7 +728,7 @@ impl Rows {
                 callee_fprs: &[],
                 caller_fprs: &[0, 1, 2, 3, 4, 5, 6, 7],
                 // xmm14 / xmm15 / xmm13 are the emit pass's scratch;
-                // xmm8..xmm12 are the other registers outside the banks.
+                // xmm8..xmm12 join the caller-saved bank (`RegBanks::new`).
                 fp_scratch: &[14, 15, 13, 8, 9, 10, 11, 12],
             },
             Target::WindowsX64 => Self {
@@ -444,60 +808,6 @@ pub(crate) fn bank_capacity(target: Target, fixed: FixedRegs) -> BankCapacity {
     }
 }
 
-/// Allocate physical placements for every value in `func`. See
-/// the module docs for the algorithm.
-/// Callee-saved registers the emit pass reserves as fixed scratch and
-/// must preserve when the body clobbers them. The allocator's
-/// `gpr_used` callee-saved filter cannot see a reserved scratch -- it
-/// is never an allocator value -- so the save decision lives here.
-///
-/// x86_64 reserves r10/r11 (`SCRATCH_R10` / `SCRATCH_R11`), both
-/// caller-saved, so it has nothing to preserve: a body that only
-/// touches scratch stays leaf-elidable. aarch64 reserves x19
-/// (callee-saved) as the address scratch the TLS / indirect-call /
-/// intrinsic lowerings route through, and as a third modulo operand
-/// when a dividend, divisor and result all spill.
-///
-/// The returned slice is the set of such registers actually clobbered.
-/// Each target consumes it through its own prologue/epilogue path
-/// (x86_64 folds it into `gpr_used_callee`; aarch64 reserves a
-/// dedicated slot via `Frame::uses_x19`).
-pub(crate) fn function_clobbers_scratch(
-    func: &FunctionSsa,
-    target: Target,
-    spill_count: u32,
-) -> &'static [u8] {
-    match target {
-        Target::LinuxX64 | Target::WindowsX64 => &[],
-        Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => {
-            let routes_through_x19 = func.insts.iter().any(|inst| {
-                matches!(
-                    inst,
-                    Inst::TlsAddr(_)
-                        | Inst::CallIndirect { .. }
-                        | Inst::CallExt { .. }
-                        | Inst::Intrinsic { .. }
-                )
-            });
-            let mod_under_spill = spill_count > 0
-                && func.insts.iter().any(|inst| {
-                    matches!(
-                        inst,
-                        Inst::Binop {
-                            op: BinOp::Mod | BinOp::Modu,
-                            ..
-                        }
-                    )
-                });
-            if routes_through_x19 || mod_under_spill {
-                &[19]
-            } else {
-                &[]
-            }
-        }
-    }
-}
-
 /// Which entries of `RegBanks::fp_scratch` the body can write. The
 /// handlers stage spilled FP destinations and materialised operands
 /// through the first, break FP move cycles / build sign masks / narrow
@@ -507,8 +817,8 @@ pub(crate) fn function_clobbers_scratch(
 /// A scratch the target's ABI marks callee-saved (Win64 xmm6..xmm15, or
 /// the AAPCS64 d8..d15 tail taken under `-ffixed-`) then joins the
 /// prologue's save list, so a foreign caller holding a live value there
-/// across a call into this code does not see it corrupted. A zero fill
-/// writes no scratch that owes a save ([`zero_fill_fp_register`]).
+/// across a call into this code does not see it corrupted. A zero fill or a
+/// population count writes no scratch that owes a save ([`free_fp_register`]).
 pub(crate) fn fp_scratch_demand(func: &FunctionSsa) -> [bool; FP_SCRATCH_COUNT] {
     // Tail-call forwarders jmp out with no epilogue, so a saved register
     // could never be restored; they touch no FP scratch either.
@@ -540,9 +850,9 @@ pub(crate) fn fp_scratch_shortfall(
         )
 }
 
-/// The FP register an x86_64 zero fill may write without a save: the scratch if volatile or
-/// already saved, else a volatile bank register holding no value of the function.
-pub(crate) fn zero_fill_fp_register(
+/// An FP register one instruction's lowering may write without a save: the scratch if
+/// volatile or already saved, else a volatile bank register holding no value of the function.
+pub(crate) fn free_fp_register(
     func: &FunctionSsa,
     alloc: &Allocation,
     target: Target,
@@ -570,6 +880,8 @@ pub(crate) fn zero_fill_fp_register(
         .find(|&r| volatile(r) && !alloc.places.contains(&Place::FpReg(r)))
 }
 
+/// Allocate physical placements for every value in `func`. See
+/// the module docs for the algorithm.
 pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> Allocation {
     let n_insts = func.insts.len();
     let mut places: Vec<Place> = vec![Place::None; n_insts];
@@ -578,7 +890,13 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     // and what it must give back to its caller
     // (`__attribute__((ms_abi))` / `((sysv_abi))`).
     let conv_target = target.abi_row(func.conv);
-    populate_return_hints(func, conv_target, &mut hints);
+    // An instruction the emitters skip reads nothing, so it keeps no
+    // operand live and weighs on no spill decision.
+    let mut use_counts = compute_use_counts(func);
+    drop_rebuilt_incomes(func, &mut use_counts);
+    let reads = operands_read(func, &use_counts);
+    let fp_const = fp_constants(func, target, &reads);
+    populate_return_hints(func, conv_target, &fp_const, &mut hints);
     populate_param_ref_hints(func, conv_target, &mut hints);
     populate_phi_hints(func, &mut hints);
     // The allocation banks stay the target's own, not the convention's:
@@ -599,11 +917,15 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             sxtw_source: Vec::new(),
             sxtw_k: Vec::new(),
             branch_fused: Vec::new(),
+            imm_store: Vec::new(),
+            fp_const,
+            implicit_live: Vec::new(),
             hints,
             f32_values: Vec::new(),
             high_observed: Vec::new(),
             high_clear: Vec::new(),
             cmp32: Vec::new(),
+            count_nonzero: Vec::new(),
             wide: Vec::new(),
             asm_preserve: (u32::MAX, u32::MAX),
         };
@@ -618,10 +940,10 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     // last-use is the max over all members so a value stays live
     // until every member of its class is dead.
     let liveness = super::emit_common::time_pass("ssa::liveness::Liveness::compute", || {
-        super::liveness::Liveness::compute(func)
+        super::liveness::Liveness::compute_reading(func, reads)
     });
     // Reads the block-level live-out sets the analysis above solved.
-    let last_use = compute_last_use(func, liveness.block_liveness());
+    let last_use = compute_last_use(func, &liveness);
     // Interference over individual values, the relation the coalescer
     // tests classes against. `node_of` is the identity here because no
     // class exists yet; the colourer's graph below is the same sweep over
@@ -658,6 +980,11 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     let node_of: Vec<ValueId> = (0..func.insts.len() as ValueId)
         .map(|v| classes.find(v))
         .collect();
+    let (apart, avoid) = if target.is_x86_64() {
+        x86_preferences(func, &liveness, &node_of, &mut hints)
+    } else {
+        (Vec::new(), Vec::new())
+    };
     let param_incoming_forbid = compute_param_incoming_forbid(func, conv_target);
     // Values live across an inline-asm block, and the registers each
     // block's lowering writes. A value kept out of that set survives the
@@ -676,21 +1003,23 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             must_callee: false,
             hint: None,
             forbid: 0,
+            avoid: 0,
             wide: false,
         });
-        entry.is_fp = produces_fp_result(inst);
+        entry.is_fp = produces_fp_result(inst) || fp_const[v];
         entry.wide |= wide[v];
         entry.must_callee |= calls_after_def[v];
         if entry.hint.is_none() {
             entry.hint = hints[v];
         }
         entry.forbid |= param_incoming_forbid[v];
+        entry.avoid |= avoid.get(v).copied().unwrap_or(0);
         if let Some(&(gpr, fpr)) = asm_forbid.get(root) {
             entry.forbid |= u64::from(if entry.is_fp { fpr } else { gpr });
         }
     }
     let (max_gpr, max_fpr) = pool_size_limits();
-    let spill_weights = compute_spill_weights(func, &node_of);
+    let spill_weights = compute_spill_weights(func, &node_of, &liveness);
     let coloring = color_graph(
         &value_interference,
         &node_of,
@@ -700,10 +1029,31 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
         max_fpr,
         func.has_returns_twice_call,
         &spill_weights,
+        &apart,
     );
     places = coloring.places;
     let spill_count = coloring.spill_count;
-    let mut use_counts = compute_use_counts(func);
+    let mut implicit_live: Vec<u16> = Vec::new();
+    if target.is_x86_64() {
+        implicit_live = vec![0; func.insts.len()];
+        let writes = |inst: &Inst| x86_implicit_writes(inst) != 0;
+        for (site, live) in liveness.values_live_after(func, &writes) {
+            let inst = &func.insts[site as usize];
+            // A shift reads its count in cl and leaves it there.
+            let kept = match *inst {
+                Inst::Binop { op, rhs, .. } if is_shift_op(op) => rhs,
+                _ => NO_VALUE,
+            };
+            let regs = x86_implicit_writes(inst);
+            for u in live.into_iter().filter(|&u| u != kept) {
+                if let Place::IntReg(r) = places[u as usize]
+                    && (regs >> r) & 1 != 0
+                {
+                    implicit_live[site as usize] |= 1 << r;
+                }
+            }
+        }
+    }
     // Recognise the c5 sign-narrow shape:
     //   Shl(X, K) ; Shr(_, K)   with K in {32, 48, 56}
     // The shift's rhs may arrive either as a `BinopI` (with the
@@ -751,8 +1101,10 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             | Inst::LocalAddr(_)
             | Inst::Extend { .. }
             | Inst::Bswap { .. }
+            | Inst::BitCount { .. }
             | Inst::Copy { .. }
             | Inst::FpCast { .. }
+            | Inst::Neg(_)
             | Inst::Fneg(_)
             | Inst::Fma { .. }
             | Inst::Load { .. }
@@ -841,6 +1193,31 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             *slot = slot.saturating_sub(1);
         }
     }
+    // A store whose own value is unread can take a constant from its
+    // encoding. When every reader of an `Imm` is such a store, the stores
+    // are marked and the `Imm` loses its readers, so it is never
+    // materialized; ahead of the branch fusion below, a dead `Imm(0)` no
+    // longer counts as a flag-writing `xor`.
+    let candidates: Vec<(usize, ValueId)> = func
+        .insts
+        .iter()
+        .enumerate()
+        .filter(|&(v, _)| use_counts[v] == 0)
+        .filter_map(|(v, inst)| Some((v, store_immediate(func, inst, target)?)))
+        .collect();
+    let mut imm_readers: Vec<u32> = vec![0; func.insts.len()];
+    for &(_, c) in &candidates {
+        imm_readers[c as usize] += 1;
+    }
+    let mut imm_store: Vec<bool> = vec![false; func.insts.len()];
+    for &(v, c) in &candidates {
+        imm_store[v] = imm_readers[c as usize] == use_counts[c as usize];
+    }
+    for &(v, c) in &candidates {
+        if imm_store[v] {
+            use_counts[c as usize] = 0;
+        }
+    }
     // Recognise comparison-feeding-branch sites. The terminator's cond
     // must be a Binop / BinopI comparison defined in the same block
     // with the terminator as its single consumer, and every following
@@ -903,6 +1280,9 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             Inst::FpCast { kind, .. } => {
                 !(is_x86 && matches!(kind, FpCastKind::UFpToInt | FpCastKind::UIntToFp))
             }
+            // x86-64 `neg` sets the flags; the aarch64 `sub Xd,XZR,Xn` it
+            // lowers to does not.
+            Inst::Neg(_) | Inst::BitCount { .. } => !is_x86,
             Inst::Binop { op, .. } | Inst::BinopI { op, .. } => {
                 if is_x86 {
                     matches!(op, BinOp::Fadd | BinOp::Fsub | BinOp::Fmul | BinOp::Fdiv)
@@ -958,18 +1338,51 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
         if use_counts.get(cond as usize).copied().unwrap_or(0) != 1 {
             continue;
         }
-        let is_compare = matches!(
-            func.insts.get(cond as usize),
-            Some(Inst::Binop { op, .. }) | Some(Inst::BinopI { op, .. })
-                if is_compare_op(*op)
-        );
-        if !is_compare {
+        // A comparison sets the flags; so do x86-64's `cmp $0, mem` in
+        // place of a load that only the branch reads -- at the load's
+        // width, so not for a quadword the branch tests the low word of --
+        // and its `test $imm` in place of a mask. aarch64 branches on a
+        // one-bit mask with `tbz` / `tbnz`, which read the masked register
+        // at the branch, so nothing may be emitted in between.
+        let low_word = func.low_word_tests.get(bidx).copied().unwrap_or(false);
+        let (sets_flags, masked) = match func.insts.get(cond as usize) {
+            Some(Inst::BinopI {
+                op: BinOp::And,
+                rhs_imm,
+                ..
+            }) => {
+                let fuses = branch_mask_fuses(*rhs_imm, low_word, is_x86);
+                (fuses && is_x86, fuses && !is_x86)
+            }
+            Some(Inst::Binop { op, .. } | Inst::BinopI { op, .. }) => (is_compare_op(*op), false),
+            Some(inst) => {
+                let quad = matches!(
+                    inst,
+                    Inst::Load {
+                        kind: LoadKind::I64,
+                        ..
+                    } | Inst::LoadLocal {
+                        kind: LoadKind::I64,
+                        ..
+                    } | Inst::LoadIndexed {
+                        kind: LoadKind::I64,
+                        ..
+                    }
+                );
+                (
+                    is_x86 && zero_testable_load(inst) && !(low_word && quad),
+                    false,
+                )
+            }
+            None => (false, false),
+        };
+        if !sets_flags && !masked {
             continue;
         }
         let window_ok = ((cond + 1)..block.inst_range.end).all(|p| {
             let inst = &func.insts[p as usize];
             // A dead pure inst emits no code (`is_dead_pure`).
-            (inst.is_pure() && use_counts[p as usize] == 0) || flags_survive(inst)
+            (inst.is_pure() && use_counts[p as usize] == 0) || (sets_flags && flags_survive(inst))
         });
         if !window_ok {
             continue;
@@ -1008,10 +1421,10 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     // live and a dead value still contributes through the live one.
     // Runs after the folds above, which zero the counts of values they
     // make dead. Registers written outside a value's place -- the
-    // writer's fixed scratch -- are covered by
-    // `function_clobbers_scratch` / the Win64 xmm listing below, and
-    // phi-predecessor moves write the phi's own place, which is
-    // reached through the phi (never dead-pure).
+    // writer's fixed scratch -- are covered by the aarch64 frame's x19
+    // decision and the Win64 xmm listing below, and phi-predecessor
+    // moves write the phi's own place, which is reached through the
+    // phi (never dead-pure).
     let mut gpr_used: alloc::collections::BTreeSet<u8> = alloc::collections::BTreeSet::new();
     let mut fp_used: alloc::collections::BTreeSet<u8> = alloc::collections::BTreeSet::new();
     for (v, inst) in func.insts.iter().enumerate() {
@@ -1064,20 +1477,16 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
         }
     }
     // The x86_64 writer's fixed scratch (r10 / r11) is caller-saved, so
-    // it needs no save: `function_clobbers_scratch` returns empty for
-    // x86_64 and r13 -- now an ordinary callee-saved allocation target --
-    // is already captured by the `callee_gprs` filter above when colored.
-    // The aarch64 writer reserves the callee-saved x19; it consumes
-    // `function_clobbers_scratch` through its own `Frame::uses_x19` path,
-    // not this list, so adding it here would double-count the save.
+    // it needs no save. The aarch64 writer's callee-saved x19 is saved
+    // through `Frame::uses_x19`, not this list.
     let mut fp_used_callee: Vec<u8> = fp_used
         .into_iter()
         .filter(|r| banks.callee_fprs.contains(r) || fp_callee_saved(conv_target, *r))
         .collect();
     // The same for the floating-point argument registers a call
-    // marshals into: the target's bank runs xmm0..xmm7 where the
-    // Microsoft x64 convention reserves xmm6 upward, so a call passing
-    // that many floating-point arguments reaches them.
+    // marshals into: System V passes them in xmm0..xmm7
+    // (`plan_call_args_aggs`) where the Microsoft x64 convention
+    // reserves xmm6 upward, so a call passing that many reaches them.
     if conv_target != target {
         let fp_args = func
             .insts
@@ -1085,8 +1494,8 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             .map(fp_arg_count)
             .max()
             .unwrap_or(0)
-            .min(banks.caller_fprs.len());
-        for &r in &banks.caller_fprs[..fp_args] {
+            .min(8);
+        for r in 0..fp_args as u8 {
             if fp_callee_saved(conv_target, r) && !fp_used_callee.contains(&r) {
                 fp_used_callee.push(r);
             }
@@ -1119,7 +1528,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
         }
     }
     #[cfg(feature = "codegen_test")]
-    verify_allocation(func, &places, target, &banks, &liveness);
+    verify_allocation(func, &places, target, &banks, &liveness, &fp_const);
 
     let asm_preserve = asm_preserve_masks(func, target);
     Allocation {
@@ -1133,6 +1542,9 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
         sxtw_source,
         sxtw_k,
         branch_fused,
+        imm_store,
+        fp_const,
+        implicit_live,
         hints,
         f32_values: func.f32_values.clone(),
         high_observed: crate::c5::codegen::passes::drop_redundant_extend::compute_high_observed(
@@ -1140,6 +1552,11 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
         ),
         high_clear: crate::c5::codegen::passes::drop_redundant_extend::compute_high_clear(func),
         cmp32: func.cmp32.clone(),
+        count_nonzero: if target.is_x86_64() {
+            crate::c5::codegen::passes::value_range::counts_over_nonzero(func)
+        } else {
+            Vec::new()
+        },
         wide,
         asm_preserve,
     }
@@ -1241,7 +1658,7 @@ fn asm_forbid_masks(func: &FunctionSsa, sites: &[AsmSite], node_of: &[ValueId]) 
 
 /// Registers no allocation and no lowering of this compiler leaves dead:
 /// the stack and frame pointers, and on AArch64 the link register, the
-/// platform register and x19, the writer's own address scratch. An
+/// platform register and x19, the emit pass's third scratch. An
 /// inline-asm block naming one preserves it around its body.
 fn abi_reserved_gprs(target: Target) -> u32 {
     if target.is_aarch64() {
@@ -1353,6 +1770,7 @@ fn verify_allocation(
     target: Target,
     banks: &RegBanks,
     liveness: &super::liveness::Liveness,
+    fp_const: &[bool],
 ) {
     if std::env::var("BADC_VERIFY_ALLOC").is_err() {
         return;
@@ -1381,15 +1799,7 @@ fn verify_allocation(
             });
         }
         let term = alloc::format!("b{b}'s terminator");
-        read(&alloc::format!("b{b}'s exit accumulator"), blk.exit_acc);
-        match &blk.terminator {
-            Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => read(&term, *cond),
-            Terminator::GotoIndirect { target } | Terminator::JumpTable { idx: target, .. } => {
-                read(&term, *target)
-            }
-            Terminator::Return(v) => read(&term, *v),
-            _ => {}
-        }
+        blk.terminator.for_each_operand(|v| read(&term, v));
     }
 
     // Cross-call discipline: caller-saved registers do not survive a call.
@@ -1425,7 +1835,7 @@ fn verify_allocation(
         if !covered(v) || !produces_value(inst) {
             continue;
         }
-        let is_fp = produces_fp_result(inst);
+        let is_fp = produces_fp_result(inst) || fp_const[v];
         match places.get(v).copied().unwrap_or(Place::None) {
             Place::FpReg(_) if !is_fp => report(alloc::format!(
                 "class: integer v{v} placed in an fp register"
@@ -1602,6 +2012,9 @@ pub(crate) struct NodeConstraints {
     /// Used to keep a `ParamRef` off the incoming argument register of a
     /// later same-bank `ParamRef`, whose incoming value is still live.
     pub forbid: u64,
+    /// Registers (in this node's bank) the colorer passes over, the hint
+    /// included, for another free caller-saved one ([`x86_preferences`]).
+    pub avoid: u64,
     /// A 128-bit value, whose spill takes two units.
     pub wide: bool,
 }
@@ -1701,10 +2114,13 @@ fn class_members(node_of: &[ValueId]) -> (Vec<u32>, Vec<ValueId>) {
 /// processed by descending `weights` entry (loop-depth-weighted use
 /// count, so the hottest values color first), ties broken by ascending
 /// node id for host-independent output; an empty `weights` slice orders
-/// by ascending id. A node takes its hint when bank-legal and free,
-/// otherwise a caller-saved register (to avoid a prologue save) unless
-/// it must be callee-saved, otherwise a callee-saved register, and
-/// spills when its bank offers no free register. Because the coldest
+/// by ascending id. A node takes its hint when bank-legal, free and
+/// outside its `avoid` set, otherwise a caller-saved register (to avoid a
+/// prologue save) unless it must be callee-saved -- one outside its `avoid`
+/// set and apart from its `apart` neighbours (their registers, or the hints
+/// of those not yet colored) when one is free, else its hint -- otherwise
+/// a callee-saved register, and spills when its bank offers no free
+/// register. Because the coldest
 /// remaining node is colored last, it is the one left to spill when a
 /// bank fills. `interference` (built from CFG liveness) is the sole
 /// source of conflicts, so a value live across a back-edge passthrough
@@ -1721,6 +2137,7 @@ pub(crate) fn color_graph(
     max_fpr: usize,
     no_slot_share: bool,
     weights: &[u64],
+    apart: &[Vec<ValueId>],
 ) -> Coloring {
     let n = node_of.len();
     let mut color: Vec<Place> = vec![Place::None; n];
@@ -1751,6 +2168,9 @@ pub(crate) fn color_graph(
         };
         stamp += 1;
         let mut forbidden: [bool; 64] = [false; 64];
+        // The hints of interfering neighbours still to be colored: a node
+        // that cannot take its own hint leaves those registers to them.
+        let mut hinted: u64 = 0;
         // A spill slot is 8 bytes shared by both banks (a 128-bit value holds
         // two), so a slot an interfering neighbour holds is off-limits.
         for &m in &memb_val[memb_off[node] as usize..memb_off[node + 1] as usize] {
@@ -1766,6 +2186,14 @@ pub(crate) fn color_graph(
                         slot_used[s as usize] = stamp;
                         if constraints[root as usize].is_some_and(|nc| nc.wide) {
                             slot_used[s as usize + 1] = stamp;
+                        }
+                    }
+                    Place::None => {
+                        if let Some(oc) = constraints[root as usize]
+                            && oc.is_fp == c.is_fp
+                            && let Some(h) = oc.hint
+                        {
+                            hinted |= 1 << h;
                         }
                     }
                     _ => {}
@@ -1800,11 +2228,29 @@ pub(crate) fn color_graph(
         };
         let caller = &caller_full[..caller_full.len().min(cap)];
         let free = |r: u8| !forbidden[r as usize];
-        let pick = c
-            .hint
-            .filter(|&h| {
-                free(h) && (callee.contains(&h) || (!c.must_callee && caller.contains(&h)))
+        let mut avoid = c.avoid | hinted;
+        for &o in apart.get(node).map_or(&[][..], Vec::as_slice) {
+            match (color[o as usize], constraints[o as usize]) {
+                (Place::IntReg(r), _) if !c.is_fp => avoid |= 1 << r,
+                (Place::FpReg(r), _) if c.is_fp => avoid |= 1 << r,
+                (Place::None, Some(oc)) if oc.is_fp == c.is_fp => {
+                    avoid |= oc.hint.map_or(0, |h| 1 << h);
+                }
+                _ => {}
+            }
+        }
+        let hint = c.hint.filter(|&h| {
+            free(h) && (callee.contains(&h) || (!c.must_callee && caller.contains(&h)))
+        });
+        let pick = hint
+            .filter(|&h| (c.avoid >> h) & 1 == 0)
+            .or_else(|| {
+                let kept = |r: &u8| free(*r) && (avoid >> *r) & 1 == 0;
+                (!c.must_callee)
+                    .then(|| caller.iter().copied().find(kept))
+                    .flatten()
             })
+            .or(hint)
             .or_else(|| {
                 if c.must_callee {
                     callee.iter().copied().find(|&r| free(r))
@@ -1893,13 +2339,20 @@ pub(crate) fn block_weights(func: &FunctionSsa) -> Vec<u64> {
 /// nodes first, so the coldest values are the ones that spill when a
 /// bank fills. Straight-line functions weight every use at depth 0, so
 /// the order degrades to raw use count.
-fn compute_spill_weights(func: &FunctionSsa, node_of: &[ValueId]) -> Vec<u64> {
+fn compute_spill_weights(
+    func: &FunctionSsa,
+    node_of: &[ValueId],
+    liveness: &super::liveness::Liveness,
+) -> Vec<u64> {
     let n = func.insts.len();
     let block_weight = block_weights(func);
     let mut w: Vec<u64> = vec![0u64; n];
     for (b, block) in func.blocks.iter().enumerate() {
         let wb = block_weight[b];
         for i in block.inst_range.clone() {
+            if !liveness.reads(i) {
+                continue;
+            }
             let inst = &func.insts[i as usize];
             for_each_operand(inst, |op| {
                 if op != NO_VALUE && (op as usize) < n {
@@ -1907,13 +2360,6 @@ fn compute_spill_weights(func: &FunctionSsa, node_of: &[ValueId]) -> Vec<u64> {
                     w[root] = w[root].saturating_add(wb);
                 }
             });
-            if let Inst::CallIndirect { target, .. } = inst {
-                let t = *target;
-                if t != NO_VALUE && (t as usize) < n {
-                    let root = node_of[t as usize] as usize;
-                    w[root] = w[root].saturating_add(wb);
-                }
-            }
         }
         let mut bump_term = |v: ValueId| {
             if v != NO_VALUE && (v as usize) < n {
@@ -1953,11 +2399,6 @@ pub(crate) fn compute_use_counts(func: &FunctionSsa) -> Vec<u32> {
     for inst in &func.insts {
         for_each_operand(inst, |op| bump_into(&mut counts, op));
     }
-    for inst in &func.insts {
-        if let Inst::CallIndirect { target, .. } = inst {
-            bump_into(&mut counts, *target);
-        }
-    }
     for block in &func.blocks {
         match block.terminator {
             super::super::ir::Terminator::Bz { cond, .. } => bump_into(&mut counts, cond),
@@ -1992,6 +2433,37 @@ pub(crate) fn compute_use_counts(func: &FunctionSsa) -> Vec<u32> {
         }
     }
     counts
+}
+
+/// Whether a branch on `x & imm`, the mask read by that branch alone,
+/// tests the bits in place: x86-64 with a `test` whose immediate holds
+/// the mask (a byte, a zero-extended word, or a sign-extended word) or
+/// with `bt` for one bit, aarch64 with `tbz` / `tbnz` for one bit. A
+/// low-word branch reads the mask's low 32 bits, which a mask with a bit
+/// above 31 does not give.
+pub(crate) fn branch_mask_fuses(imm: i64, low_word: bool, is_x86: bool) -> bool {
+    let low = (0..=u32::MAX as i64).contains(&imm);
+    let one_bit = (imm as u64).is_power_of_two();
+    let in_place = one_bit || (is_x86 && (low || i32::try_from(imm).is_ok()));
+    in_place && (low || !low_word)
+}
+
+/// Whether x86-64 tests the fused mask `imm` with `bt`: its one bit is
+/// out of every `test` immediate's reach.
+pub(crate) fn x86_mask_takes_bt(imm: i64) -> bool {
+    !(0..=u32::MAX as i64).contains(&imm) && i32::try_from(imm).is_err()
+}
+
+/// Per instruction: whether its lowering reads its operands. A dead pure
+/// value ([`super::emit_common::is_dead_pure_counts`]) lowers to nothing,
+/// so the liveness and pressure walks skip its reads; the instruction
+/// itself stays as it is, since a site that folds it reads its contents.
+pub(crate) fn operands_read(func: &FunctionSsa, use_counts: &[u32]) -> Vec<bool> {
+    func.insts
+        .iter()
+        .enumerate()
+        .map(|(v, inst)| !super::emit_common::is_dead_pure_counts(inst, v as ValueId, use_counts))
+        .collect()
 }
 
 /// Whether `inst` is the inline setjmp intrinsic. A longjmp back to
@@ -2145,11 +2617,12 @@ fn result_kind(inst: &Inst) -> ResultKind {
             // FP comparisons return an integer 0/1.
             _ => ResultKind::Int,
         },
+        Neg(_) => ResultKind::Int,
         Fneg(_) => ResultKind::Fp,
         Fma { .. } => ResultKind::Fp,
         MulAdd { .. } => ResultKind::Int,
         Extend { .. } => ResultKind::Int,
-        Bswap { .. } => ResultKind::Int,
+        Bswap { .. } | BitCount { .. } => ResultKind::Int,
         FpCast { kind, .. } => match kind {
             FpCastKind::FpToInt | FpCastKind::UFpToInt => ResultKind::Int,
             FpCastKind::IntToFp
@@ -2193,7 +2666,7 @@ fn result_kind(inst: &Inst) -> ResultKind {
                 ResultKind::Int
             }
         }
-        AllocaInit(_) => ResultKind::None,
+        AllocaInit(_) | LifetimeEnd(_) => ResultKind::None,
         // A value output is the one register value an asm statement defines.
         InlineAsm { asm, .. } => {
             if asm.operands.iter().any(|o| o.value && o.is_output) {
@@ -2374,7 +2847,12 @@ fn populate_call_result_hints(
 /// the return register. The pick-reg path honours each hint only when
 /// the register is free and live-across-call-compatible, so a missed
 /// hint falls back to the default policy.
-fn populate_return_hints(func: &FunctionSsa, target: Target, hints: &mut [Option<u8>]) {
+fn populate_return_hints(
+    func: &FunctionSsa,
+    target: Target,
+    fp_const: &[bool],
+    hints: &mut [Option<u8>],
+) {
     // Hint the value feeding `Terminator::Return` to the ABI return
     // register so the exit move drops out. Two cases are honoured:
     //
@@ -2433,7 +2911,12 @@ fn populate_return_hints(func: &FunctionSsa, target: Target, hints: &mut [Option
                     continue;
                 }
             }
-            match result_kind(&func.insts[v as usize]) {
+            let kind = if fp_const[v as usize] {
+                ResultKind::Fp
+            } else {
+                result_kind(&func.insts[v as usize])
+            };
+            match kind {
                 ResultKind::Int => try_set(hints, v, ret_int),
                 ResultKind::Fp => try_set(hints, v, ret_fp),
                 ResultKind::None => {}
@@ -2778,11 +3261,14 @@ fn populate_phi_hints_by_rescan(func: &FunctionSsa, hints: &mut [Option<u8>]) ->
 /// For each value, the PC index of its last use across the
 /// function. Defaults to the value's own PC (so a value with no
 /// uses still has a single-PC interval).
-fn compute_last_use(func: &FunctionSsa, live: &super::liveness::BlockLiveness) -> Vec<u32> {
+fn compute_last_use(func: &FunctionSsa, liveness: &super::liveness::Liveness) -> Vec<u32> {
     let n = func.insts.len();
     let mut last_use: Vec<u32> = (0..n as u32).collect();
     for (idx, inst) in func.insts.iter().enumerate() {
         let pc = idx as u32;
+        if !liveness.reads(pc) {
+            continue;
+        }
         for_each_operand(inst, |target| {
             if target != NO_VALUE
                 && (target as usize) < last_use.len()
@@ -2792,35 +3278,22 @@ fn compute_last_use(func: &FunctionSsa, live: &super::liveness::BlockLiveness) -
             }
         });
     }
-    // Each block's exit_acc keeps that value live to the end of the
-    // block, and the terminator may consume operands too. Bump every
-    // such carrier to `end_pc` so a value defined inside the block
-    // but read only by the terminator (the common Return-value case)
-    // has its interval cover any intervening call. Without this the
-    // forward scan leaves `last_use[v]` at v's own def PC and a
-    // downstream coalescing hint, which guards on `last_use`, can
-    // place `v` in a caller-saved register that the call clobbers.
+    // A terminator reads its operand at the end of the block. Bump it to
+    // `end_pc` so a value defined inside the block but read only by the
+    // terminator (the common Return-value case) has its interval cover
+    // any intervening call. Without this the forward scan leaves
+    // `last_use[v]` at v's own def PC and a downstream coalescing hint,
+    // which guards on `last_use`, can place `v` in a caller-saved
+    // register that the call clobbers.
     for b in &func.blocks {
         let end_pc = b.inst_range.end;
-        let mut bump = |v: ValueId| {
-            if v != NO_VALUE && (v as usize) < last_use.len() && last_use[v as usize] < end_pc {
+        b.terminator.for_each_operand(|v| {
+            if (v as usize) < last_use.len() && last_use[v as usize] < end_pc {
                 last_use[v as usize] = end_pc;
             }
-        };
-        bump(b.exit_acc);
-        // A `GotoIndirect` sets `exit_acc` to its target, so the bump
-        // above already covers it; the explicit arm keeps this walk
-        // uniform with the liveness and use-count terminator walks.
-        match &b.terminator {
-            Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => bump(*cond),
-            Terminator::Return(v) => bump(*v),
-            Terminator::GotoIndirect { target } | Terminator::JumpTable { idx: target, .. } => {
-                bump(*target)
-            }
-            _ => {}
-        }
+        });
     }
-    extend_last_use_across_blocks(func, live, &mut last_use);
+    extend_last_use_across_blocks(func, liveness.block_liveness(), &mut last_use);
     last_use
 }
 
@@ -2877,8 +3350,13 @@ fn compute_calls_after_def(
     // order: a value live across a call only on a branch or back-edge
     // path has that call outside its `[def, last_use]` pc interval, so
     // a pc-interval test misses it.
-    let tls_addr_is_call = matches!(target, Target::MacOSAarch64);
-    liveness.values_live_across_calls(func, tls_addr_is_call)
+    liveness.values_live_across_calls(func, tls_addr_is_call(target))
+}
+
+/// Whether the target's `Inst::TlsAddr` lowering issues a call: Mach-O
+/// invokes the TLV descriptor's routine through `blr`.
+pub(crate) fn tls_addr_is_call(target: Target) -> bool {
+    matches!(target, Target::MacOSAarch64)
 }
 
 /// Promote each phi class's `calls_after_def` flag so every member
@@ -2945,6 +3423,7 @@ mod tests {
             must_callee,
             hint,
             forbid: 0,
+            avoid: 0,
             wide: false,
         })
     }
@@ -2955,6 +3434,7 @@ mod tests {
             must_callee,
             hint: None,
             forbid: 0,
+            avoid: 0,
             wide,
         })
     }
@@ -2977,6 +3457,7 @@ mod tests {
             usize::MAX,
             usize::MAX,
             false,
+            &[],
             &[],
         );
         assert_eq!(
@@ -3004,6 +3485,7 @@ mod tests {
             usize::MAX,
             usize::MAX,
             false,
+            &[],
             &[],
         );
         assert_eq!(r.places, vec![Place::FpReg(8), Place::Spill(0)]);
@@ -3155,6 +3637,25 @@ mod tests {
                 covered > 0,
                 "{target:?}: no asm site in the corpus writes a callee-saved register",
             );
+        }
+    }
+
+    /// The caller-saved FP bank is every volatile register of the target
+    /// but the emit pass's scratch, argument registers first.
+    #[test]
+    fn caller_saved_fp_bank_is_every_volatile_register_but_the_scratch() {
+        for (target, count) in [
+            (Target::LinuxAarch64, 32),
+            (Target::MacOSAarch64, 32),
+            (Target::WindowsAarch64, 32),
+            (Target::LinuxX64, 16),
+            (Target::WindowsX64, 16),
+        ] {
+            let banks = RegBanks::for_target(target);
+            let want: Vec<u8> = (0..count)
+                .filter(|&r| !fp_callee_saved(target, r) && !banks.fp_scratch.contains(&r))
+                .collect();
+            assert_eq!(banks.caller_fprs, want, "{target:?}");
         }
     }
 
@@ -3311,6 +3812,7 @@ int main(void) { return 0; }
             usize::MAX,
             false,
             &[],
+            &[],
         );
         assert_eq!(r.spill_count, 0);
         let regs: Vec<Place> = r.places.clone();
@@ -3336,6 +3838,7 @@ int main(void) { return 0; }
             usize::MAX,
             usize::MAX,
             false,
+            &[],
             &[],
         );
         assert_eq!(
@@ -3375,6 +3878,7 @@ int main(void) { return 0; }
             usize::MAX,
             false,
             &[],
+            &[],
         );
         assert_eq!(shared.spill_count, 1, "non-interfering spills share");
         assert_eq!(shared.places[4], shared.places[5]);
@@ -3386,6 +3890,7 @@ int main(void) { return 0; }
             usize::MAX,
             usize::MAX,
             true,
+            &[],
             &[],
         );
         assert_eq!(r.spill_count, 2, "returns-twice: one slot per value");
@@ -3408,6 +3913,7 @@ int main(void) { return 0; }
             usize::MAX,
             usize::MAX,
             false,
+            &[],
             &[],
         );
         assert!(
@@ -3433,6 +3939,7 @@ int main(void) { return 0; }
             usize::MAX,
             false,
             &[],
+            &[],
         );
         assert!(
             matches!(r.places[0], Place::IntReg(0) | Place::IntReg(1)),
@@ -3454,6 +3961,7 @@ int main(void) { return 0; }
             usize::MAX,
             usize::MAX,
             false,
+            &[],
             &[],
         );
         assert_eq!(
@@ -3479,6 +3987,7 @@ int main(void) { return 0; }
             usize::MAX,
             usize::MAX,
             false,
+            &[],
             &[],
         );
         assert_eq!(r.places[0], r.places[1], "class members share a register");
@@ -3506,6 +4015,7 @@ int main(void) { return 0; }
             usize::MAX,
             false,
             &[1, 100, 100],
+            &[],
         );
         assert_eq!(cold.spill_count, 1);
         assert!(
@@ -3524,6 +4034,7 @@ int main(void) { return 0; }
             usize::MAX,
             false,
             &[100, 1, 1],
+            &[],
         );
         assert!(
             matches!(hot.places[0], Place::IntReg(_)),
@@ -3560,6 +4071,7 @@ int main(void) { return 0; }
             usize::MAX,
             false,
             &equal,
+            &[],
         );
         let b = color_graph(
             &g,
@@ -3570,6 +4082,7 @@ int main(void) { return 0; }
             usize::MAX,
             false,
             &equal,
+            &[],
         );
         assert_eq!(
             a.places, b.places,
@@ -3599,9 +4112,13 @@ int main(void) { return 0; }
         );
         let node_of: Vec<ValueId> = (0..swap.insts.len() as ValueId).collect();
         assert!(
-            compute_spill_weights(swap, &node_of)
-                .iter()
-                .all(|&w| w < LOOP_WEIGHT),
+            compute_spill_weights(
+                swap,
+                &node_of,
+                &super::super::liveness::Liveness::compute(swap)
+            )
+            .iter()
+            .all(|&w| w < LOOP_WEIGHT),
             "a loop-free function weights every use at depth 0 (raw use count)"
         );
         // Loop function: the loop body sits at depth >= 1 and a
@@ -3614,9 +4131,13 @@ int main(void) { return 0; }
         );
         let node_of: Vec<ValueId> = (0..hot.insts.len() as ValueId).collect();
         assert!(
-            compute_spill_weights(hot, &node_of)
-                .iter()
-                .any(|&w| w >= LOOP_WEIGHT),
+            compute_spill_weights(
+                hot,
+                &node_of,
+                &super::super::liveness::Liveness::compute(hot)
+            )
+            .iter()
+            .any(|&w| w >= LOOP_WEIGHT),
             "a loop-carried value must outweigh a function-scope value"
         );
     }
@@ -3807,10 +4328,7 @@ int main(void) { return 0; }
                     .expect("produce_ssa_funcs");
             let f = funcs.iter().find(|f| f.name == name).expect(name);
             let alloc = super::allocate(f, target, fixed);
-            (
-                zero_fill_fp_register(f, &alloc, target, fixed),
-                alloc.fp_used,
-            )
+            (free_fp_register(f, &alloc, target, fixed), alloc.fp_used)
         };
         let scratch_fixed = FixedRegs {
             gpr: 0,
@@ -3940,7 +4458,7 @@ int main(void) { return 0; }
 
         let last_use = compute_last_use(
             &func,
-            &crate::c5::codegen::ssa::liveness::BlockLiveness::compute(&func),
+            &crate::c5::codegen::ssa::liveness::Liveness::compute(&func),
         );
         assert!(
             last_use[v_imm_idx] > v_tls_idx as u32,
@@ -4250,6 +4768,7 @@ int main(void) { return 0; }
             inst_src: alloc::vec![(0, 0); insts.len()],
             f32_values: alloc::vec![false; insts.len()],
             cmp32: Vec::new(),
+            low_word_tests: Vec::new(),
             param_fp_mask: crate::c5::ir::FpMask::EMPTY,
             agg_descs: alloc::vec::Vec::new(),
             param_aggs: alloc::vec::Vec::new(),
@@ -4376,6 +4895,7 @@ int main(void) { return 0; }
             inst_src: alloc::vec![(0, 0); n],
             f32_values: alloc::vec![false; n],
             cmp32: Vec::new(),
+            low_word_tests: Vec::new(),
             insts,
             blocks: alloc::vec![crate::c5::ir::Block {
                 start_pc: 0,
@@ -4486,6 +5006,7 @@ int main(void) { return 0; }
             inst_src: vec![(0, 0); n],
             f32_values: vec![false; n],
             cmp32: Vec::new(),
+            low_word_tests: Vec::new(),
             param_fp_mask: crate::c5::ir::FpMask::EMPTY,
             agg_descs: Vec::new(),
             param_aggs: Vec::new(),
@@ -4557,6 +5078,26 @@ int main(void) { return 0; }
         }
     }
 
+    /// An indirect call reads its target once: the operand walk yields
+    /// it, and nothing counts it again.
+    #[test]
+    fn indirect_call_target_is_read_once() {
+        let call = Inst::CallIndirect {
+            target: 0,
+            args: vec![1],
+            callee_variadic: false,
+            fixed_args: 1,
+            fp_return: false,
+            fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
+            callee_conv: crate::c5::codegen::CallConv::Target,
+            arg_aggs: Vec::new(),
+            ret_agg: None,
+            ret_slot_local: 0,
+        };
+        let f = branch_func(vec![load_i64(), load_i64(), call], 2);
+        assert_eq!(compute_use_counts(&f)[..2], [1, 1]);
+    }
+
     fn store_of(value: ValueId) -> Inst {
         Inst::StoreLocal {
             off: -1,
@@ -4582,7 +5123,11 @@ int main(void) { return 0; }
                         rhs_imm: 5,
                     },
                     Inst::Imm(0),
-                    store_of(2),
+                    Inst::Copy {
+                        value: 2,
+                        is_fp: false,
+                    },
+                    store_of(3),
                 ],
                 1,
             )
@@ -4591,6 +5136,445 @@ int main(void) { return 0; }
         assert!(a64.branch_fused[1]);
         let x64 = allocate(&build(), Target::LinuxX64);
         assert!(!x64.branch_fused[1]);
+    }
+
+    /// A zero that only a store reads is written from the store's
+    /// encoding on x86_64 and never materialised, so it writes no flags.
+    #[test]
+    fn zero_stored_as_an_immediate_leaves_the_flags_alone() {
+        let func = branch_func(
+            vec![
+                load_i64(),
+                Inst::BinopI {
+                    op: BinOp::Lt,
+                    lhs: 0,
+                    rhs_imm: 5,
+                },
+                Inst::Imm(0),
+                store_of(2),
+            ],
+            1,
+        );
+        let x64 = allocate(&func, Target::LinuxX64);
+        assert!(x64.imm_store[3] && x64.is_unread(2));
+        assert!(x64.branch_fused[1]);
+    }
+
+    /// One block storing `insts`' values and returning `ret`.
+    fn store_func(insts: Vec<Inst>, ret: ValueId) -> FunctionSsa {
+        use super::super::super::ir::Block;
+        let n = insts.len() as u32;
+        func_with(
+            insts,
+            vec![Block {
+                start_pc: 0,
+                inst_range: 0..n,
+                terminator: Terminator::Return(ret),
+                exit_acc: NO_VALUE,
+            }],
+        )
+    }
+
+    fn store_kind(addr: ValueId, value: ValueId, kind: StoreKind) -> Inst {
+        Inst::Store {
+            addr,
+            disp: 0,
+            value,
+            kind,
+            volatile: false,
+            align: 0,
+        }
+    }
+
+    /// x86-64 stores a constant from the instruction at every width: the
+    /// low bytes at 1, 2 and 4, a sign-extended imm32 at 8, and a floating
+    /// constant's own bits. Each `Imm` dies. AArch64 marks nothing.
+    #[test]
+    fn store_of_an_encodable_constant_takes_it_from_the_instruction() {
+        let build = || {
+            let mut f = store_func(
+                vec![
+                    load_i64(),
+                    Inst::Imm(0x1_0000),
+                    store_kind(0, 1, StoreKind::I8),
+                    Inst::Imm(-1),
+                    store_kind(0, 3, StoreKind::I16),
+                    Inst::Imm(0x8000_0001),
+                    store_kind(0, 5, StoreKind::I32),
+                    Inst::Imm(i64::from(i32::MIN)),
+                    store_kind(0, 7, StoreKind::I64),
+                    Inst::Imm(0x3fc0_0000),
+                    store_kind(0, 9, StoreKind::F32),
+                    Inst::Imm(0),
+                    store_kind(0, 11, StoreKind::F64),
+                    Inst::Imm(9),
+                    Inst::StoreLocal {
+                        off: -1,
+                        value: 13,
+                        kind: StoreKind::I32,
+                        volatile: true,
+                    },
+                    store_kind(0, 13, StoreKind::I64),
+                ],
+                NO_VALUE,
+            );
+            f.f32_values[9] = true;
+            f
+        };
+        let x64 = allocate(&build(), Target::LinuxX64);
+        for (store, imm) in [(2, 1), (4, 3), (6, 5), (8, 7), (10, 9), (12, 11), (14, 13)] {
+            assert!(x64.imm_store[store], "store v{store}");
+            assert!(x64.is_unread(imm), "v{imm}");
+        }
+        assert!(x64.imm_store[15]);
+        // AArch64 has no store immediate, but reads zero out of xzr / wzr,
+        // so the F64 store of `Imm(0)` is the one store it marks.
+        let a64 = allocate(&build(), Target::LinuxAarch64);
+        let marked: alloc::vec::Vec<usize> = a64
+            .imm_store
+            .iter()
+            .enumerate()
+            .filter(|&(_, &m)| m)
+            .map(|(i, _)| i)
+            .collect();
+        assert_eq!(marked, [12]);
+        assert!(a64.is_unread(11));
+        assert_eq!(a64.use_counts[13], 2);
+    }
+
+    /// The constant stays in a register when a store cannot encode it (a
+    /// quadword beyond imm32, a floating store that converts it, an x87 or
+    /// vector store), when it has another reader (the return value, the
+    /// store's address), and when the store's own value is read.
+    #[test]
+    fn store_keeps_a_register_where_the_constant_cannot_be_encoded() {
+        let mut f = store_func(
+            vec![
+                load_i64(),
+                Inst::Imm(0x8000_0000),
+                store_kind(0, 1, StoreKind::I64),
+                Inst::Imm(-0x8000_0001),
+                store_kind(0, 3, StoreKind::I64),
+                Inst::Imm(0x3ff0_0000_0000_0000),
+                store_kind(0, 5, StoreKind::F64),
+                Inst::Imm(0x3f80_0000),
+                store_kind(0, 7, StoreKind::F64),
+                Inst::Imm(0),
+                store_kind(0, 9, StoreKind::F32),
+                Inst::Imm(0),
+                store_kind(0, 11, StoreKind::F80),
+                Inst::Imm(5),
+                store_kind(0, 13, StoreKind::I32),
+                Inst::Imm(64),
+                store_kind(15, 15, StoreKind::I64),
+                Inst::Imm(7),
+                store_kind(0, 17, StoreKind::I32),
+                store_kind(0, 18, StoreKind::I64),
+            ],
+            13,
+        );
+        f.f32_values[7] = true;
+        let x64 = allocate(&f, Target::LinuxX64);
+        for store in [2, 4, 6, 8, 10, 12, 14, 16, 18, 19] {
+            assert!(!x64.imm_store[store], "store v{store}");
+        }
+        for imm in [1, 3, 5, 7, 9, 11, 13, 15, 17] {
+            assert!(!x64.is_unread(imm), "v{imm}");
+        }
+        // The same on AArch64, where only zero has a register-free form:
+        // the F32 store of `Imm(0)` is not f32-marked and the F80 store has
+        // no single-register form at all.
+        let a64 = allocate(&f, Target::LinuxAarch64);
+        for store in [2, 4, 6, 8, 10, 12, 14, 16, 18, 19] {
+            assert!(!a64.imm_store[store], "store v{store}");
+        }
+    }
+
+    fn color_nodes(
+        g: &Interference,
+        cons: &[Option<NodeConstraints>],
+        weights: &[u64],
+        apart: &[Vec<ValueId>],
+    ) -> Vec<Place> {
+        let node_of: Vec<ValueId> = (0..cons.len() as ValueId).collect();
+        let banks = tiny_banks();
+        color_graph(
+            g,
+            &node_of,
+            cons,
+            &banks,
+            usize::MAX,
+            usize::MAX,
+            false,
+            weights,
+            apart,
+        )
+        .places
+    }
+
+    /// A node without a usable hint takes a free caller-saved register
+    /// apart from its keep-apart neighbours: the register of one already
+    /// colored, the hint of one not yet colored.
+    #[test]
+    fn keep_apart_steers_a_node_off_its_neighbour() {
+        let g = Interference::from_edges(2, &[]);
+        let cons = [int_node(false, None), int_node(false, Some(0))];
+        let apart = vec![vec![1], vec![0]];
+        let (r0, r1) = (Place::IntReg(0), Place::IntReg(1));
+        assert_eq!(color_nodes(&g, &cons, &[], &[]), [r0, r0]);
+        assert_eq!(color_nodes(&g, &cons, &[], &apart), [r1, r0]);
+        assert_eq!(color_nodes(&g, &cons, &[1, 5], &apart), [r1, r0]);
+    }
+
+    /// The preference never displaces a node's own hint and never moves a
+    /// must-callee node; with no other caller-saved register free, the
+    /// avoided one is taken before a callee-saved one.
+    #[test]
+    fn keep_apart_yields_to_the_hint_and_to_the_bank() {
+        let (r0, r1) = (Place::IntReg(0), Place::IntReg(1));
+        let none = Interference::from_edges(2, &[]);
+        let apart = vec![vec![1], vec![0]];
+        let hinted = [int_node(false, Some(0)), int_node(false, Some(0))];
+        assert_eq!(color_nodes(&none, &hinted, &[1, 5], &apart), [r0, r0]);
+        let callee = [int_node(true, None), int_node(true, None)];
+        let r20 = Place::IntReg(20);
+        assert_eq!(color_nodes(&none, &callee, &[], &apart), [r20, r20]);
+        // Node 2 interferes with node 0 (r0) and keeps apart from node 1 (r1).
+        let g = Interference::from_edges(3, &[(0, 1), (0, 2)]);
+        let free = [
+            int_node(false, None),
+            int_node(false, None),
+            int_node(false, None),
+        ];
+        let apart = vec![vec![], vec![2], vec![1]];
+        assert_eq!(color_nodes(&g, &free, &[], &apart), [r0, r1, r1]);
+    }
+
+    /// A node's own avoid set outranks its hint: the hint is taken only
+    /// when no other caller-saved register is free.
+    #[test]
+    fn avoid_set_outranks_the_hint() {
+        let mut node = int_node(false, Some(0));
+        if let Some(c) = node.as_mut() {
+            c.avoid = 1;
+        }
+        let alone = Interference::from_edges(1, &[]);
+        assert_eq!(color_nodes(&alone, &[node], &[], &[]), [Place::IntReg(1)]);
+        // Node 0 holds r1 and interferes with node 1.
+        let g = Interference::from_edges(2, &[(0, 1)]);
+        let cons = [int_node(false, Some(1)), node];
+        assert_eq!(
+            color_nodes(&g, &cons, &[], &[]),
+            [Place::IntReg(1), Place::IntReg(0)]
+        );
+    }
+
+    /// On x86-64 a shift's count takes rcx, its result and a value live
+    /// across it keep out, and no save is recorded; a difference keeps its
+    /// result apart from its subtrahend. AArch64 records nothing.
+    #[test]
+    fn variable_shift_leaves_rcx_to_its_count() {
+        let local = |off| Inst::LoadLocal {
+            off,
+            kind: LoadKind::I64,
+            volatile: false,
+        };
+        let build = || {
+            store_func(
+                vec![
+                    local(2),
+                    local(3),
+                    local(4),
+                    Inst::Binop {
+                        op: BinOp::Shl,
+                        lhs: 0,
+                        rhs: 1,
+                    },
+                    Inst::Binop {
+                        op: BinOp::Sub,
+                        lhs: 2,
+                        rhs: 3,
+                    },
+                ],
+                4,
+            )
+        };
+        let full =
+            |target| with_pool_size_override(usize::MAX, usize::MAX, || allocate(&build(), target));
+        let x64 = full(Target::LinuxX64);
+        let rcx = Place::IntReg(X86_RCX);
+        assert_eq!(x64.places[1], rcx);
+        for v in [0, 2, 3] {
+            assert_ne!(x64.places[v], rcx, "v{v}");
+        }
+        assert_ne!(x64.places[4], x64.places[3]);
+        assert!(!x64.holds_live_across(3, X86_RCX));
+        assert!(full(Target::LinuxAarch64).implicit_live.is_empty());
+    }
+
+    /// With two caller-saved registers a value live across the shift ends
+    /// in rcx, and the allocation records it for the emitter's save.
+    #[test]
+    fn rcx_held_across_a_shift_is_recorded() {
+        let local = |off| Inst::LoadLocal {
+            off,
+            kind: LoadKind::I64,
+            volatile: false,
+        };
+        let add = |lhs, rhs| Inst::Binop {
+            op: BinOp::Add,
+            lhs,
+            rhs,
+        };
+        let func = store_func(
+            vec![
+                local(2),
+                local(3),
+                local(4),
+                local(5),
+                Inst::Binop {
+                    op: BinOp::Shl,
+                    lhs: 0,
+                    rhs: 3,
+                },
+                add(4, 1),
+                add(5, 2),
+            ],
+            6,
+        );
+        let x64 = with_pool_size_override(2, usize::MAX, || allocate(&func, Target::LinuxX64));
+        assert_eq!(x64.places[1], Place::IntReg(X86_RCX));
+        assert!(x64.holds_live_across(4, X86_RCX));
+    }
+
+    fn local_i64(off: i64) -> Inst {
+        Inst::LoadLocal {
+            off,
+            kind: LoadKind::I64,
+            volatile: false,
+        }
+    }
+
+    /// `(v0 op v1) + v2`, returned: `v2` is live across the operation.
+    fn rdx_rax_func(op: BinOp) -> FunctionSsa {
+        store_func(
+            vec![
+                local_i64(2),
+                local_i64(3),
+                local_i64(4),
+                Inst::Binop { op, lhs: 0, rhs: 1 },
+                Inst::Binop {
+                    op: BinOp::Add,
+                    lhs: 3,
+                    rhs: 2,
+                },
+            ],
+            4,
+        )
+    }
+
+    /// A value read after a call only by an instruction no emitter lowers
+    /// (a sum nothing reads) does not cross the call: it takes a
+    /// caller-saved register and the function saves nothing.
+    #[test]
+    fn a_read_by_a_skipped_instruction_crosses_no_call() {
+        let func = store_func(
+            vec![
+                local_i64(2),
+                Inst::Call {
+                    target_pc: 0,
+                    args: Vec::new(),
+                    fixed_args: 0,
+                    fp_return: false,
+                    fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
+                    arg_aggs: Vec::new(),
+                    ret_agg: None,
+                    ret_slot_local: 0,
+                },
+                Inst::Binop {
+                    op: BinOp::Add,
+                    lhs: 0,
+                    rhs: 1,
+                },
+            ],
+            1,
+        );
+        for target in [Target::LinuxX64, Target::LinuxAarch64] {
+            let a = with_pool_size_override(usize::MAX, usize::MAX, || allocate(&func, target));
+            let banks = RegBanks::for_target(target);
+            let Place::IntReg(r) = a.places[0] else {
+                panic!("{target:?}: {:?}", a.places[0])
+            };
+            assert!(banks.caller_gprs.contains(&r), "{target:?}: x{r}");
+            assert!(a.gpr_used.is_empty(), "{target:?}: {:?}", a.gpr_used);
+            assert_eq!(a.last_use[0], 0, "{target:?}: no emitted read");
+        }
+        let live = super::super::liveness::Liveness::compute(&func);
+        let node_of: Vec<ValueId> = (0..3).collect();
+        assert_eq!(compute_spill_weights(&func, &node_of, &live)[0], 0);
+    }
+
+    /// On x86-64 a division takes its dividend in rax and leaves its
+    /// quotient there, its remainder or high product in rdx; the divisor
+    /// and a value live across it keep out of rdx:rax, and no save is
+    /// recorded. AArch64 records nothing.
+    #[test]
+    fn division_leaves_rdx_rax_to_its_operation() {
+        let (rax, rdx) = (Place::IntReg(X86_RAX), Place::IntReg(X86_RDX));
+        for (op, result) in [
+            (BinOp::Div, rax),
+            (BinOp::Divu, rax),
+            (BinOp::Mod, rdx),
+            (BinOp::Modu, rdx),
+            (BinOp::Mulh, rdx),
+            (BinOp::Mulhu, rdx),
+        ] {
+            let x64 = with_pool_size_override(usize::MAX, usize::MAX, || {
+                allocate(&rdx_rax_func(op), Target::LinuxX64)
+            });
+            assert_eq!((x64.places[0], x64.places[3]), (rax, result), "{op:?}");
+            for v in [1, 2] {
+                assert!(![rax, rdx].contains(&x64.places[v]), "{op:?} v{v}");
+            }
+            assert!(!x64.holds_live_across(3, X86_RAX) && !x64.holds_live_across(3, X86_RDX));
+            let a64 = allocate(&rdx_rax_func(op), Target::LinuxAarch64);
+            assert!(a64.implicit_live.is_empty());
+        }
+    }
+
+    /// Over the caller-saved rax, rcx and rdx, three values live across a
+    /// division -- its divisor among them -- leave one in rdx:rax, and the
+    /// record names exactly the registers such values hold.
+    #[test]
+    fn value_held_in_rdx_rax_across_a_division_is_recorded() {
+        let add = |lhs, rhs| Inst::Binop {
+            op: BinOp::Add,
+            lhs,
+            rhs,
+        };
+        let func = store_func(
+            vec![
+                local_i64(2),
+                local_i64(3),
+                local_i64(4),
+                local_i64(5),
+                Inst::Binop {
+                    op: BinOp::Div,
+                    lhs: 0,
+                    rhs: 1,
+                },
+                add(4, 1),
+                add(5, 2),
+                add(6, 3),
+            ],
+            7,
+        );
+        let x64 = with_pool_size_override(3, usize::MAX, || allocate(&func, Target::LinuxX64));
+        let held = |r: u8| [1, 2, 3].iter().any(|&u| x64.places[u] == Place::IntReg(r));
+        assert!(held(X86_RAX) || held(X86_RDX), "{:?}", x64.places);
+        for r in [X86_RAX, X86_RDX] {
+            assert_eq!(x64.holds_live_across(4, r), held(r), "{:?}", x64.places);
+        }
     }
 
     /// Integer ALU work between the compare and the branch writes
@@ -4618,6 +5602,89 @@ int main(void) { return 0; }
         };
         assert!(allocate(&build(), Target::LinuxAarch64).branch_fused[1]);
         assert!(!allocate(&build(), Target::LinuxX64).branch_fused[1]);
+    }
+
+    /// A mask the branch alone reads fuses into it: x86-64 tests it in
+    /// place and needs the flags to survive to the branch; aarch64 takes
+    /// one bit with `tbz`, which reads the register at the branch, so any
+    /// emitted instruction in between keeps the mask.
+    #[test]
+    fn mask_feeding_a_branch_fuses() {
+        let build = |imm: i64, between: bool| {
+            let mut insts = vec![
+                load_i64(),
+                Inst::BinopI {
+                    op: BinOp::And,
+                    lhs: 0,
+                    rhs_imm: imm,
+                },
+            ];
+            if between {
+                insts.push(Inst::BinopI {
+                    op: BinOp::Add,
+                    lhs: 0,
+                    rhs_imm: 7,
+                });
+                insts.push(store_of(2));
+            }
+            branch_func(insts, 1)
+        };
+        let fused = |t, imm, between| allocate(&build(imm, between), t).branch_fused[1];
+        assert!(fused(Target::LinuxAarch64, 4, false));
+        assert!(!fused(Target::LinuxAarch64, 4, true));
+        assert!(!fused(Target::LinuxAarch64, 6, false));
+        assert!(fused(Target::LinuxX64, 6, false));
+        assert!(!fused(Target::LinuxX64, 6, true));
+    }
+
+    /// x86-64 compares a load the branch alone reads in memory at the
+    /// load's width; a branch that tests the low word of a quadword keeps
+    /// the load in a register, where it tests four bytes.
+    #[test]
+    fn low_word_test_of_a_quadword_is_not_compared_in_memory() {
+        let build = |kind: LoadKind, low_word: bool| {
+            let mut f = branch_func(
+                vec![Inst::LoadLocal {
+                    off: 2,
+                    kind,
+                    volatile: false,
+                }],
+                0,
+            );
+            f.low_word_tests = vec![low_word, false, false];
+            allocate(&f, Target::LinuxX64).branch_fused[0]
+        };
+        assert!(build(LoadKind::I64, false));
+        assert!(!build(LoadKind::I64, true));
+        assert!(build(LoadKind::I32, true));
+    }
+
+    /// The masks each target tests in place, and the ones a low-word
+    /// branch cannot: its test reads bits 0..31 of the mask only.
+    #[test]
+    fn masks_a_branch_tests_in_place() {
+        for (imm, low_word, x86, a64) in [
+            (0xFF, false, true, false),
+            (0xFFFF_FFFF, true, true, false),
+            (-8, false, true, false),
+            (-8, true, false, false),
+            (1 << 40, false, true, true),
+            (1 << 40, true, false, false),
+            (3 << 40, false, false, false),
+            (i64::MIN, false, true, true),
+            (1 << 31, true, true, true),
+        ] {
+            assert_eq!(
+                branch_mask_fuses(imm, low_word, true),
+                x86,
+                "{imm:#x} {low_word}"
+            );
+            assert_eq!(
+                branch_mask_fuses(imm, low_word, false),
+                a64,
+                "{imm:#x} {low_word}"
+            );
+        }
     }
 
     /// A compare with a second consumer keeps its materialisation on

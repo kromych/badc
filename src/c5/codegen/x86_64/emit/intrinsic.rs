@@ -351,7 +351,7 @@ pub(super) fn emit_intrinsic(
         | I::Bswap16
         | I::Bswap32
         | I::Bswap64 => {
-            // Lowered to a portable shift / mask sequence in the walker.
+            // Lowered to `Inst::BitCount` / `Inst::Bswap` in the walker.
             fail("intrinsic: bit builtin reached codegen")
         }
         I::AtomicLoad
@@ -380,6 +380,99 @@ pub(super) fn emit_intrinsic(
         | I::Atomic128LoadEx
         | I::Atomic128StoreEx
         | I::Atomic128StoreInsert => fail("128-bit atomic asm shape is aarch64-only"),
+    }
+}
+
+/// Whether the lowering of `intrinsic` needs the frame record: it reads
+/// rbp, or moves rsp. The rest are register and memory instructions that
+/// run on the caller's frame. No lowering calls a helper. The match names
+/// every intrinsic, so a new one states its answer.
+pub(super) fn intrinsic_keeps_frame(intrinsic: crate::c5::op::Intrinsic, abi: super::Abi) -> bool {
+    use crate::c5::op::Intrinsic as I;
+    match intrinsic {
+        // rbp-relative: the variadic areas, the frame address, the return
+        // slot above the saved rbp. A read of rsp observes the same frame,
+        // below its record.
+        I::VaStart | I::FrameAddress | I::ReturnAddress | I::StackPointer => true,
+        // rsp moves for the rest of the function.
+        I::Alloca | I::AllocaSave | I::AllocaRestore => true,
+        // A pool register is borrowed around a push / pop.
+        I::VaCopy => abi.sysv_host_variadic(),
+        I::Divq128 => true,
+        I::VaArg
+        | I::VaEnd
+        | I::Trap
+        | I::CpuRelax
+        | I::AtomicThreadFence
+        | I::AtomicAcquireFence
+        | I::AtomicReleaseFence
+        | I::AtomicSignalFence
+        | I::X87StoreControlWord
+        | I::X87LoadControlWord
+        | I::X86FxSave
+        | I::X86FxRestore
+        | I::X86Sgdt
+        | I::X86Sidt
+        | I::X86Sldt
+        | I::X86Str
+        | I::X86Lgdt
+        | I::X86Lidt
+        | I::X86Lldt
+        | I::X86Clflush
+        | I::Sqrt
+        | I::Sqrtf
+        | I::Fabs
+        | I::Fabsf
+        | I::Floor
+        | I::Floorf
+        | I::Ceil
+        | I::Ceilf
+        | I::Trunc
+        | I::Truncf => false,
+        // No lowering on this target; `emit_intrinsic` refuses them.
+        I::ConstantP
+        | I::SetjmpAArch64
+        | I::LongjmpAArch64
+        | I::Fma
+        | I::Fmaf
+        | I::Clz
+        | I::Ctz
+        | I::Popcount
+        | I::Clzll
+        | I::Ctzll
+        | I::Popcountll
+        | I::Clrsb
+        | I::Clrsbll
+        | I::Parity
+        | I::Parityll
+        | I::Ffs
+        | I::Ffsll
+        | I::Bswap16
+        | I::Bswap32
+        | I::Bswap64
+        | I::AtomicLoad
+        | I::AtomicStore
+        | I::AtomicExchange
+        | I::AtomicFetchAdd
+        | I::AtomicFetchSub
+        | I::AtomicFetchAnd
+        | I::AtomicFetchOr
+        | I::AtomicFetchXor
+        | I::AtomicCompareExchangeStrong
+        | I::AArch64ReadCacheType
+        | I::AArch64DcCvau
+        | I::AArch64IcIvau
+        | I::AArch64DsbIsh
+        | I::AArch64Isb
+        | I::Atomic128CmpXchg
+        | I::Atomic128Xchg
+        | I::Atomic128FetchAnd
+        | I::Atomic128FetchOr
+        | I::Atomic128Load
+        | I::Atomic128Store
+        | I::Atomic128LoadEx
+        | I::Atomic128StoreEx
+        | I::Atomic128StoreInsert => true,
     }
 }
 
@@ -413,7 +506,7 @@ fn emit_va_start_sysv(
     // straight to the overflow area; with the XMM area unpopulated
     // (`-mno-sse`) the FP bank reads as exhausted.
     let gp_offset = plan.next_gpr.min(6) as u32 * 8;
-    let fp_offset = if abi.no_fp_varargs {
+    let fp_offset = if abi.no_fp_regs {
         SYSV_REG_SAVE_BYTES
     } else {
         SYSV_GP_SAVE_BYTES + plan.next_fpr.min(8) as u32 * 16
@@ -621,7 +714,7 @@ fn emit_alloca(
     super::encode::emit_jcc_rel32(code, Cc::E, 0);
     let skip_at = code.len() - 4;
     let loop_start = code.len();
-    emit_sub_rsp_imm32(code, STACK_PROBE_PAGE);
+    emit_sub_rsp(code, STACK_PROBE_PAGE);
     emit_stack_probe(code);
     super::encode::emit_ri(code, Mnem::Sub, 8, size_reg, 1);
     super::encode::emit_jcc_rel32(code, Cc::Ne, 0);
@@ -833,7 +926,7 @@ pub(super) fn emit_mzero(
     alloc: &Allocation,
     frame: Frame,
 ) -> Emit {
-    use super::encode::{emit_mi, emit_movups_m_xmm};
+    use super::encode::{emit_mi, emit_movups_mem_xmm};
     if size < 0 {
         return fail("Mzero: negative size");
     }
@@ -852,7 +945,7 @@ pub(super) fn emit_mzero(
         w
     };
     let store = |code: &mut Vec<u8>, w: u32, base: Reg, off: i32| match xmm {
-        Some(x) if w == 16 => emit_movups_m_xmm(code, base, off, x),
+        Some(x) if w == 16 => emit_movups_mem_xmm(code, base, off, x),
         _ => emit_mi(code, Mnem::Mov, w as u8, base, off, 0),
     };
     if let Some(x) = xmm {

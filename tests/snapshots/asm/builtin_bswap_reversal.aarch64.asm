@@ -77,7 +77,7 @@ Disassembly of section .text:
                	lsr	w0, w0, #16
                	mov	x17, #0x807             // =2055
                	eor	x0, x0, x17
-               	cbz	x0, <addr>
+               	cbz	w0, <addr>
                	mov	x0, #0x4                // =4
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
@@ -97,7 +97,7 @@ Disassembly of section .text:
                	lsr	w0, w0, #16
                	mov	x17, #0x4433            // =17459
                	eor	x0, x0, x17
-               	cbz	x0, <addr>
+               	cbz	w0, <addr>
                	mov	x0, #0x6                // =6
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10

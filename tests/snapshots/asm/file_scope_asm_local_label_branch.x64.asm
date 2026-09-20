@@ -30,58 +30,40 @@ Disassembly of section .text:
                	movl	(%rax), %ecx
                	incq	%rcx
                	movl	%ecx, (%rax)
-               	xorq	%rax, %rax
-               	movl	%eax, (%rdi)
+               	movl	$0x0, (%rdi)
                	retq
 
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%rbx, (%rsp)
-               	leaq	<rip>, %rbx
-               	movl	$0x1, %eax
-               	movl	%eax, (%rbx)
-               	movq	%rbx, %rdi
+               	leaq	<rip>, %rdi
+               	movl	$0x1, (%rdi)
                	callq	<addr>
-               	movl	(%rbx), %eax
-               	testq	%rax, %rax
+               	leaq	<rip>, %rdi
+               	cmpl	$0x0, (%rdi)
                	jne	<addr>
                	leaq	<rip>, %rax
-               	movl	(%rax), %eax
-               	testl	%eax, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
+               	cmpl	$0x0, (%rax)
                	je	<addr>
                	movl	$0x1, %eax
-               	movq	(%rsp), %rbx
-               	leave
+               	popq	%rbp
                	retq
-               	movl	$0x3, %eax
-               	movl	%eax, (%rbx)
-               	movq	%rbx, %rdi
+               	movl	$0x3, (%rdi)
                	callq	<addr>
-               	movl	(%rbx), %eax
-               	testq	%rax, %rax
+               	leaq	<rip>, %rax
+               	cmpl	$0x0, (%rax)
                	jne	<addr>
                	leaq	<rip>, %rax
                	movl	(%rax), %eax
                	xorq	$0x1, %rax
                	testl	%eax, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x2, %eax
-               	movq	(%rsp), %rbx
-               	leave
+               	popq	%rbp
                	retq
                	movl	$0x2a, %eax
-               	movq	(%rsp), %rbx
-               	leave
+               	popq	%rbp
                	retq
-               	addb	%dl, -0x48(%rdx)
 
 <pv_unlock>:
                	pushq	%rdx

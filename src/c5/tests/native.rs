@@ -1090,6 +1090,24 @@ fn far_stack_arguments_reach_their_slots() {
     }
 }
 
+/// Under `-mgeneral-regs-only` the population count takes the
+/// general-register reduction; the edge fixture checks every count against
+/// its references at `-O0` and `-O`.
+#[test]
+fn bit_counts_without_fp_registers_run() {
+    for (base, suffix) in [
+        (NativeOptions::default(), "-gro"),
+        (NativeOptions::new().with_optimize(), "-gro-O"),
+    ] {
+        let opts = NativeOptions {
+            no_fp_regs: true,
+            ..base
+        };
+        let outcome = build_and_run_fixture_with_options("builtin_bit_count_edges.c", opts, suffix);
+        assert!(outcome.matches(0), "{suffix}: {outcome:?}");
+    }
+}
+
 #[test]
 fn fixture_parity() {
     let failures = super::parity_failures(NATIVE_FIXTURES, |name, expected| {

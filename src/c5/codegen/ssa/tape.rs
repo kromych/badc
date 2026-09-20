@@ -1,17 +1,132 @@
-//! Placing instructions into a function's instruction tape.
+//! Placing and moving instructions in a function's instruction tape.
 //!
-//! An insertion shifts the value id of every instruction after it, and
+//! An insertion or a move shifts the value id of other instructions, and
 //! [`FunctionSsa`] keys several tables by value id: the tables parallel
 //! to `insts`, and the cross-TU relocation lists. One left behind names
 //! the wrong instructions, and nothing downstream can tell -- the ids
 //! are still in range. The rewrite therefore lives here once, and the
-//! destructure in [`insert`] names every field of the struct, so a table
+//! destructure in [`keyed`] names every field of the struct, so a table
 //! added later does not compile until it is classified.
 
 use alloc::vec;
 use alloc::vec::Vec;
 
-use super::super::ir::{Block, FunctionSsa, Inst, NO_VALUE, ValueId};
+use super::super::ir::{Block, BlockId, FunctionSsa, Inst, NO_VALUE, ValueId};
+
+/// The parts of a [`FunctionSsa`] keyed by value id.
+struct Keyed<'a> {
+    insts: &'a mut Vec<Inst>,
+    inst_src: &'a mut Vec<(u32, u32)>,
+    f32_values: &'a mut Vec<bool>,
+    cmp32: &'a mut Vec<bool>,
+    blocks: &'a mut Vec<Block>,
+    extern_call_refs: &'a mut Vec<(u32, u32)>,
+    extern_imm_code_refs: &'a mut Vec<(u32, u32)>,
+    extern_imm_data_refs: &'a mut Vec<(u32, u32)>,
+    extern_tls_refs: &'a mut Vec<(u32, u32)>,
+}
+
+fn keyed(func: &mut FunctionSsa) -> Keyed<'_> {
+    let FunctionSsa {
+        name: _,
+        ent_pc: _,
+        end_pc: _,
+        locals: _,
+        ssp: _,
+        n_params: _,
+        is_variadic: _,
+        is_inline: _,
+        is_always_inline: _,
+        is_noinline: _,
+        is_naked: _,
+        conv: _,
+        is_weak: _,
+        is_internal: _,
+        section: _,
+        patchable_entry: _,
+        no_instrument: _,
+        const_params: _,
+        insts,
+        inst_src,
+        blocks,
+        extern_call_refs,
+        extern_imm_code_refs,
+        extern_imm_data_refs,
+        extern_tls_refs,
+        f32_values,
+        cmp32,
+        low_word_tests: _,
+        param_fp_mask: _,
+        agg_descs: _,
+        param_aggs: _,
+        param_local_slots: _,
+        ret_agg: _,
+        ret_is_fp: _,
+        ret_type_tag: _,
+        indirect_result_slot: _,
+        computed_goto_targets: _,
+        label_data_relocs: _,
+        jump_tables: _,
+        synthetic_base: _,
+        multi_cell_slots: _,
+        array_slots: _,
+        over_aligned: _,
+        frame_align: _,
+        realign_region_bytes: _,
+        has_returns_twice_call: _,
+        did_unroll: _,
+        did_inline: _,
+    } = func;
+    Keyed {
+        insts,
+        inst_src,
+        f32_values,
+        cmp32,
+        blocks,
+        extern_call_refs,
+        extern_imm_code_refs,
+        extern_imm_data_refs,
+        extern_tls_refs,
+    }
+}
+
+/// Rewrite every recorded value id through `remap`, indexed by the old
+/// id. The tape and its parallel tables are already in the new order.
+fn renumber(k: &mut Keyed<'_>, remap: &[ValueId]) {
+    let map = |op: &mut ValueId| {
+        if *op != NO_VALUE && (*op as usize) < remap.len() {
+            *op = remap[*op as usize];
+        }
+    };
+    for inst in k.insts.iter_mut() {
+        inst.for_each_operand_mut(map);
+    }
+    for block in k.blocks.iter_mut() {
+        map(&mut block.exit_acc);
+        block.terminator.for_each_operand_mut(map);
+    }
+    rekey(k, remap);
+}
+
+/// Carry the relocation tables across a tape rebuild done elsewhere. An
+/// instruction the rebuild dropped maps to `NO_VALUE` and loses its entries.
+pub(crate) fn rekey_refs(func: &mut FunctionSsa, remap: &[ValueId]) {
+    rekey(&mut keyed(func), remap);
+}
+
+fn rekey(k: &mut Keyed<'_>, remap: &[ValueId]) {
+    for table in [
+        &mut *k.extern_call_refs,
+        &mut *k.extern_imm_code_refs,
+        &mut *k.extern_imm_data_refs,
+        &mut *k.extern_tls_refs,
+    ] {
+        table.retain_mut(|(v, _)| {
+            *v = remap.get(*v as usize).copied().unwrap_or(NO_VALUE);
+            *v != NO_VALUE
+        });
+    }
+}
 
 /// One instruction to place ahead of tape index `at`, which must name an
 /// instruction inside a block. Operands are old value ids: [`insert`]
@@ -63,55 +178,18 @@ impl Undo {
 /// An inserted value takes the source position of the instruction it
 /// goes ahead of.
 pub(crate) fn insert(func: &mut FunctionSsa, ins: &[Insertion]) -> (Rewrite, Undo) {
-    let FunctionSsa {
-        name: _,
-        ent_pc: _,
-        end_pc: _,
-        locals: _,
-        ssp: _,
-        n_params: _,
-        is_variadic: _,
-        is_inline: _,
-        is_always_inline: _,
-        is_noinline: _,
-        is_naked: _,
-        conv: _,
-        is_weak: _,
-        is_internal: _,
-        section: _,
-        patchable_entry: _,
-        no_instrument: _,
-        const_params: _,
+    let mut k = keyed(func);
+    let Keyed {
         insts,
         inst_src,
+        f32_values,
+        cmp32,
         blocks,
         extern_call_refs,
         extern_imm_code_refs,
         extern_imm_data_refs,
         extern_tls_refs,
-        f32_values,
-        cmp32,
-        param_fp_mask: _,
-        agg_descs: _,
-        param_aggs: _,
-        param_local_slots: _,
-        ret_agg: _,
-        ret_is_fp: _,
-        ret_type_tag: _,
-        indirect_result_slot: _,
-        computed_goto_targets: _,
-        label_data_relocs: _,
-        jump_tables: _,
-        synthetic_base: _,
-        multi_cell_slots: _,
-        array_slots: _,
-        over_aligned: _,
-        frame_align: _,
-        realign_region_bytes: _,
-        has_returns_twice_call: _,
-        did_unroll: _,
-        did_inline: _,
-    } = func;
+    } = &mut k;
     let n_old = insts.len();
     debug_assert!(ins.windows(2).all(|w| w[0].at <= w[1].at));
     debug_assert!(ins.iter().all(|i| (i.at as usize) < n_old));
@@ -167,38 +245,122 @@ pub(crate) fn insert(func: &mut FunctionSsa, ins: &[Insertion]) -> (Rewrite, Und
         let (s, e) = (block.inst_range.start, block.inst_range.end);
         block.inst_range = (s + before[s as usize])..(e + before[e as usize]);
     }
-    let map = |op: &mut ValueId| {
-        if *op != NO_VALUE && (*op as usize) < n_old {
-            *op = remap[*op as usize];
-        }
-    };
-    for inst in new_insts.iter_mut() {
-        inst.for_each_operand_mut(map);
-    }
-    for block in blocks.iter_mut() {
-        if block.exit_acc != NO_VALUE && (block.exit_acc as usize) < n_old {
-            block.exit_acc = remap[block.exit_acc as usize];
-        }
-        block.terminator.for_each_operand_mut(map);
-    }
-    for table in [
-        extern_call_refs,
-        extern_imm_code_refs,
-        extern_imm_data_refs,
-        extern_tls_refs,
-    ] {
-        for (v, _) in table.iter_mut() {
-            map(v);
-        }
-    }
     let undo = Undo {
-        insts: core::mem::replace(insts, new_insts),
-        inst_src: core::mem::replace(inst_src, new_src),
-        f32_values: core::mem::replace(f32_values, new_f32),
-        cmp32: core::mem::replace(cmp32, new_cmp),
+        insts: core::mem::replace(*insts, new_insts),
+        inst_src: core::mem::replace(*inst_src, new_src),
+        f32_values: core::mem::replace(*f32_values, new_f32),
+        cmp32: core::mem::replace(*cmp32, new_cmp),
         ..undo
     };
+    renumber(&mut k, &remap);
     (Rewrite { remap, ids }, undo)
+}
+
+/// Give the first block of each chain the instructions of the whole
+/// chain, in chain order, and leave the other members empty. The chains
+/// share no block. A chain's first non-empty member keeps its place and
+/// the later ones move behind it; the rest of the tape keeps its order.
+pub(crate) fn concat(func: &mut FunctionSsa, chains: &[Vec<BlockId>]) {
+    let mut k = keyed(func);
+    let n = k.insts.len();
+    let old: Vec<core::ops::Range<u32>> = k.blocks.iter().map(|b| b.inst_range.clone()).collect();
+    debug_assert!(ranges_are_disjoint(&old));
+    const NONE: u32 = u32::MAX;
+    let mut moved = vec![false; n];
+    // The chain whose later members go behind this tape index.
+    let mut tail_of = vec![NONE; n];
+    for (c, chain) in chains.iter().enumerate() {
+        let mut full = chain
+            .iter()
+            .map(|&b| &old[b as usize])
+            .filter(|r| !r.is_empty());
+        let Some(base) = full.next() else {
+            continue;
+        };
+        tail_of[base.end as usize - 1] = c as u32;
+        for r in full {
+            moved[r.start as usize..r.end as usize].fill(true);
+        }
+    }
+    let mut order: Vec<ValueId> = Vec::with_capacity(n);
+    for at in 0..n {
+        if moved[at] {
+            continue;
+        }
+        order.push(at as ValueId);
+        if tail_of[at] == NONE {
+            continue;
+        }
+        for &b in &chains[tail_of[at] as usize] {
+            let r = &old[b as usize];
+            if !r.is_empty() && moved[r.start as usize] {
+                order.extend(r.clone());
+            }
+        }
+    }
+    debug_assert_eq!(order.len(), n);
+    let mut remap: Vec<ValueId> = vec![NO_VALUE; n];
+    for (new, &at) in order.iter().enumerate() {
+        remap[at as usize] = new as ValueId;
+    }
+    // A range moves with its first instruction.
+    let moved_to = |r: &core::ops::Range<u32>| {
+        let start = remap.get(r.start as usize).copied().unwrap_or(n as u32);
+        start..start + (r.end - r.start)
+    };
+    for (block, r) in k.blocks.iter_mut().zip(&old) {
+        block.inst_range = moved_to(r);
+    }
+    for chain in chains {
+        let len: u32 = chain
+            .iter()
+            .map(|&b| old[b as usize].end - old[b as usize].start)
+            .sum();
+        let start = chain
+            .iter()
+            .map(|&b| &old[b as usize])
+            .find(|r| !r.is_empty())
+            .map_or(k.blocks[chain[0] as usize].inst_range.start, |r| {
+                moved_to(r).start
+            });
+        for &b in &chain[1..] {
+            k.blocks[b as usize].inst_range = start + len..start + len;
+        }
+        k.blocks[chain[0] as usize].inst_range = start..start + len;
+    }
+    if order
+        .iter()
+        .enumerate()
+        .all(|(new, &at)| new == at as usize)
+    {
+        return;
+    }
+    let mut from = core::mem::take(k.insts);
+    *k.insts = order
+        .iter()
+        .map(|&at| core::mem::replace(&mut from[at as usize], Inst::Imm(0)))
+        .collect();
+    permute(k.inst_src, &order);
+    permute(k.f32_values, &order);
+    permute(k.cmp32, &order);
+    renumber(&mut k, &remap);
+}
+
+/// Reorder a table parallel to the tape; an empty one stays empty.
+fn permute<T: Copy + Default>(table: &mut Vec<T>, order: &[ValueId]) {
+    if !table.is_empty() {
+        *table = order
+            .iter()
+            .map(|&at| table.get(at as usize).copied().unwrap_or_default())
+            .collect();
+    }
+}
+
+/// Whether no two non-empty block ranges share an instruction.
+fn ranges_are_disjoint(ranges: &[core::ops::Range<u32>]) -> bool {
+    let mut full: Vec<&core::ops::Range<u32>> = ranges.iter().filter(|r| !r.is_empty()).collect();
+    full.sort_by_key(|r| r.start);
+    full.windows(2).all(|w| w[0].end <= w[1].start)
 }
 
 #[cfg(test)]
@@ -286,5 +448,140 @@ mod tests {
         assert!(matches!(f.insts[1], Inst::Imm(2)));
         assert_eq!(f.blocks[0].inst_range, 0..2);
         assert_eq!(f.extern_imm_data_refs, alloc::vec![(1, 3)]);
+    }
+
+    fn add(lhs: ValueId, rhs: ValueId) -> Inst {
+        Inst::Binop {
+            op: super::super::super::ir::BinOp::Add,
+            lhs,
+            rhs,
+        }
+    }
+
+    /// Adjacent ranges join with no instruction renumbered.
+    #[test]
+    fn concat_of_adjacent_ranges_moves_nothing() {
+        let mut f = func_with(
+            alloc::vec![Inst::Imm(1), Inst::Imm(2), add(0, 1)],
+            alloc::vec![
+                block(0..1, Terminator::Jmp(1)),
+                block(1..3, Terminator::Return(2)),
+            ],
+        );
+        concat(&mut f, &[alloc::vec![0, 1]]);
+        assert_eq!(f.blocks[0].inst_range, 0..3);
+        assert!(f.blocks[1].inst_range.is_empty());
+        assert!(matches!(f.insts[2], Inst::Binop { lhs: 0, rhs: 1, .. }));
+        assert!(matches!(f.blocks[1].terminator, Terminator::Return(2)));
+    }
+
+    /// A member that sits elsewhere on the tape moves behind the head,
+    /// and everything keyed by value id follows: operands, terminators,
+    /// `exit_acc`, the parallel tables, the relocation table and the
+    /// range of the block in between.
+    #[test]
+    fn concat_moves_a_distant_range_behind_the_head() {
+        let mut f = func_with(
+            alloc::vec![
+                Inst::Imm(1),      // v0  b0
+                Inst::Imm(7),      // v1  b1
+                add(1, 1),         // v2  b1
+                Inst::ImmData(16), // v3  b2
+                add(0, 3),         // v4  b2
+            ],
+            alloc::vec![
+                block(0..1, Terminator::Jmp(2)),
+                block(1..3, Terminator::Return(2)),
+                block(
+                    3..5,
+                    Terminator::Bz {
+                        cond: 4,
+                        target: 1,
+                        fall_through: 1,
+                    },
+                ),
+            ],
+        );
+        f.blocks[2].exit_acc = 4;
+        f.inst_src = alloc::vec![(10, 0), (11, 0), (12, 0), (13, 0), (14, 0)];
+        f.f32_values = alloc::vec![false, true, false, false, false];
+        f.cmp32 = alloc::vec![false, false, false, false, true];
+        f.extern_imm_data_refs = alloc::vec![(3, 9)];
+        concat(&mut f, &[alloc::vec![0, 2]]);
+        // New order: v0, v3, v4, v1, v2.
+        assert_eq!(f.blocks[0].inst_range, 0..3);
+        assert_eq!(f.blocks[1].inst_range, 3..5);
+        assert!(f.blocks[2].inst_range.is_empty());
+        assert!(matches!(f.insts[1], Inst::ImmData(16)));
+        assert!(matches!(f.insts[2], Inst::Binop { lhs: 0, rhs: 1, .. }));
+        assert!(matches!(f.insts[4], Inst::Binop { lhs: 3, rhs: 3, .. }));
+        assert!(matches!(f.blocks[1].terminator, Terminator::Return(4)));
+        assert!(matches!(
+            f.blocks[2].terminator,
+            Terminator::Bz { cond: 2, .. }
+        ));
+        assert_eq!(f.blocks[2].exit_acc, 2);
+        assert_eq!(
+            f.inst_src,
+            alloc::vec![(10, 0), (13, 0), (14, 0), (11, 0), (12, 0)]
+        );
+        assert_eq!(f.f32_values, alloc::vec![false, false, false, true, false]);
+        assert_eq!(f.cmp32, alloc::vec![false, false, true, false, false]);
+        assert_eq!(f.extern_imm_data_refs, alloc::vec![(1, 9)]);
+    }
+
+    /// An empty head takes over the first non-empty member where it
+    /// stands; a member ahead of it on the tape moves back behind it, and
+    /// an instruction no block covers keeps its relative place.
+    #[test]
+    fn concat_anchors_at_the_first_non_empty_member() {
+        let mut f = func_with(
+            alloc::vec![
+                Inst::Imm(3), // v0  b3, the last of the chain
+                Inst::Imm(0), // v1  covered by no block
+                Inst::Imm(2), // v2  b2
+            ],
+            alloc::vec![
+                block(0..0, Terminator::Jmp(1)),
+                block(3..3, Terminator::Jmp(2)),
+                block(2..3, Terminator::Jmp(3)),
+                block(0..1, Terminator::Return(0)),
+            ],
+        );
+        concat(&mut f, &[alloc::vec![0, 1, 2, 3]]);
+        // New order: v1, v2, v0.
+        assert_eq!(f.blocks[0].inst_range, 1..3);
+        assert!(f.blocks[1..].iter().all(|b| b.inst_range.is_empty()));
+        assert!(matches!(f.insts[1], Inst::Imm(2)));
+        assert!(matches!(f.insts[2], Inst::Imm(3)));
+        assert!(matches!(f.blocks[3].terminator, Terminator::Return(2)));
+    }
+
+    /// Two chains in one call, the second anchored inside the span the
+    /// first one vacates.
+    #[test]
+    fn concat_handles_several_chains_at_once() {
+        let mut f = func_with(
+            alloc::vec![
+                Inst::Imm(10), // v0  b0
+                Inst::Imm(11), // v1  b1
+                Inst::Imm(12), // v2  b2
+                Inst::Imm(13), // v3  b3
+            ],
+            alloc::vec![
+                block(0..1, Terminator::Jmp(2)),
+                block(1..2, Terminator::Jmp(3)),
+                block(2..3, Terminator::Return(2)),
+                block(3..4, Terminator::Return(3)),
+            ],
+        );
+        concat(&mut f, &[alloc::vec![0, 2], alloc::vec![1, 3]]);
+        // New order: v0, v2, v1, v3.
+        assert_eq!(f.blocks[0].inst_range, 0..2);
+        assert_eq!(f.blocks[1].inst_range, 2..4);
+        assert!(matches!(f.insts[1], Inst::Imm(12)));
+        assert!(matches!(f.insts[2], Inst::Imm(11)));
+        assert!(matches!(f.blocks[2].terminator, Terminator::Return(1)));
+        assert!(matches!(f.blocks[3].terminator, Terminator::Return(3)));
     }
 }

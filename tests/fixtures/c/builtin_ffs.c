@@ -1,8 +1,8 @@
 // GCC / POSIX __builtin_ffs / ffsl / ffsll: one plus the index of the
 // least-significant set bit, and 0 for a zero argument. Unlike ctz, the
-// zero case is defined. Compiler builtins (no header), lowered to a
-// portable (ctz + 1) * (x != 0) sequence. Asserted against hand-computed
-// values so the fixture runs on the interpreter without formatted output.
+// zero case is defined. Compiler builtins (no header), built on the
+// trailing-zero count. Asserted against hand-computed values so the
+// fixture runs on the interpreter without formatted output.
 
 static int eq(int a, int b) { return a == b; }
 

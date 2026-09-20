@@ -250,7 +250,7 @@ mod mul_add_tests {
         alloc.last_use[a as usize] = if a_dies { v } else { v + 1 };
         alloc.last_use[b as usize] = v + 1;
         alloc.spill_count = alloc.spill_count.max(4);
-        let frame = compute_frame(&func, &alloc, target.abi());
+        let frame = compute_frame(&func, &alloc, target.abi(), target);
         let mut code = Vec::new();
         assert!(
             emit_mul_add(&mut code, dst, v, a, b, c, neg_product, &alloc, frame).is_ok(),
@@ -354,6 +354,453 @@ mod mul_add_tests {
             (SCRATCH_R11.0, SCRATCH_R10.0),
             "sub r10, r11: {code:02x?}",
         );
+    }
+}
+
+#[cfg(test)]
+mod indexed_tests {
+    use super::*;
+    use crate::c5::ir::Inst;
+    use alloc::vec::Vec;
+
+    /// The function of `src` that holds an indexed access after the
+    /// index fold, that access, and the function's allocation with room
+    /// for the slots a test pins.
+    fn indexed_access(src: &str) -> (FunctionSsa, Inst, Allocation) {
+        let target = Target::LinuxX64;
+        let program = crate::Compiler::with_target(
+            alloc::format!("{src} int main(void){{ return 0; }}"),
+            target,
+        )
+        .compile()
+        .expect("compile");
+        let mut funcs =
+            crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+                .expect("ssa");
+        crate::c5::codegen::passes::index_fold::run(&mut funcs);
+        let indexed = |i: &Inst| matches!(i, Inst::LoadIndexed { .. } | Inst::StoreIndexed { .. });
+        let func = funcs
+            .into_iter()
+            .find(|f| f.insts.iter().any(indexed))
+            .expect("a function with an indexed access");
+        let access = func.insts.iter().find(|i| indexed(i)).unwrap().clone();
+        let mut alloc = super::super::ssa::reg_alloc::allocate(
+            &func,
+            target,
+            crate::c5::codegen::FixedRegs::NONE,
+        );
+        alloc.spill_count = alloc.spill_count.max(3);
+        (func, access, alloc)
+    }
+
+    /// A one-byte element is addressed `[base + index]`: the sign- and
+    /// zero-extending loads, the store, and the spilled-operand store
+    /// through `lea r10, [r10 + r11]`.
+    #[test]
+    fn byte_indexed_access_is_unscaled() {
+        let target = Target::LinuxX64;
+        for (src, want) in [
+            (
+                "int get(signed char *a, long i){ return a[i]; }",
+                // movsx rax, byte [rdi + rsi]
+                alloc::vec![0x48u8, 0x0F, 0xBE, 0x04, 0x37],
+            ),
+            (
+                "int get(unsigned char *a, long i){ return a[i]; }",
+                // movzx rax, byte [rdi + rsi]
+                alloc::vec![0x48, 0x0F, 0xB6, 0x04, 0x37],
+            ),
+        ] {
+            let (func, access, mut alloc) = indexed_access(src);
+            let Inst::LoadIndexed {
+                base,
+                index,
+                scale,
+                kind,
+                ..
+            } = access
+            else {
+                panic!("{access:?}")
+            };
+            assert_eq!(scale, 1);
+            alloc.places[base as usize] = Place::IntReg(Reg::RDI.0);
+            alloc.places[index as usize] = Place::IntReg(Reg::RSI.0);
+            let frame = compute_frame(&func, &alloc, target.abi(), target);
+            let mut code = Vec::new();
+            let dst = Place::IntReg(Reg::RAX.0);
+            let lsl = (index, IndexExt::None);
+            emit_load_indexed(&mut code, dst, base, lsl, scale, kind, &alloc, frame)
+                .expect("emit_load_indexed");
+            assert_eq!(code, want, "{src}");
+            // No SIB form widens its index: a marked access is refused.
+            for ext in [IndexExt::Sxtw, IndexExt::Uxtw] {
+                let marked = (index, ext);
+                assert!(
+                    emit_load_indexed(&mut code, dst, base, marked, scale, kind, &alloc, frame)
+                        .is_err()
+                );
+            }
+        }
+
+        let (func, access, mut alloc) =
+            indexed_access("void put(char *a, long i, char v){ a[i] = v; }");
+        let Inst::StoreIndexed {
+            base,
+            index,
+            scale,
+            value,
+            kind,
+            ..
+        } = access
+        else {
+            panic!("{access:?}")
+        };
+        assert_eq!(scale, 1);
+        let mut store_as = |places: [Place; 3], ext: IndexExt| {
+            alloc.places[base as usize] = places[0];
+            alloc.places[index as usize] = places[1];
+            alloc.places[value as usize] = places[2];
+            let frame = compute_frame(&func, &alloc, target.abi(), target);
+            let mut code = Vec::new();
+            emit_store_indexed(
+                &mut code,
+                Place::None,
+                base,
+                (index, ext),
+                scale,
+                value,
+                kind,
+                &alloc,
+                frame,
+            )
+            .map(|()| code)
+        };
+        let mut store =
+            |places: [Place; 3]| store_as(places, IndexExt::None).expect("emit_store_indexed");
+        // mov [rdi + rsi], dl
+        let reg = |r: Reg| Place::IntReg(r.0);
+        assert_eq!(
+            store([reg(Reg::RDI), reg(Reg::RSI), reg(Reg::RDX)]),
+            [0x88, 0x14, 0x37]
+        );
+        let spilled = store([Place::Spill(0), Place::Spill(1), Place::Spill(2)]);
+        // lea r10, [r10 + r11] ; ... ; mov [r10], r11b
+        let lea = [0x4F, 0x8D, 0x14, 0x1A];
+        assert!(
+            spilled.windows(lea.len()).any(|w| w == lea),
+            "{spilled:02x?}"
+        );
+        assert!(spilled.ends_with(&[0x45, 0x88, 0x1A]), "{spilled:02x?}");
+        let regs = [reg(Reg::RDI), reg(Reg::RSI), reg(Reg::RDX)];
+        assert!(store_as(regs, IndexExt::Sxtw).is_err());
+    }
+}
+
+#[cfg(test)]
+mod two_address_tests {
+    use super::*;
+    use crate::c5::ir::{BinOp, Inst};
+    use alloc::vec::Vec;
+
+    /// The `-O0` function of `src` holding a `Binop` of `op`, that inst,
+    /// and the function's allocation with room for one pinned slot.
+    fn binop_of(src: &str, op: BinOp) -> (FunctionSsa, u32, Allocation) {
+        let target = Target::LinuxX64;
+        let program = crate::Compiler::with_target(
+            alloc::format!("{src} int main(void){{ return 0; }}"),
+            target,
+        )
+        .compile()
+        .expect("compile");
+        let funcs =
+            crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+                .expect("ssa");
+        for func in funcs {
+            let at = func
+                .insts
+                .iter()
+                .position(|i| matches!(i, Inst::Binop { op: o, .. } if *o == op));
+            if let Some(v) = at {
+                let mut alloc = super::super::ssa::reg_alloc::allocate(
+                    &func,
+                    target,
+                    crate::c5::codegen::FixedRegs::NONE,
+                );
+                alloc.spill_count = alloc.spill_count.max(1);
+                return (func, v as u32, alloc);
+            }
+        }
+        panic!("no {op:?} in {src}")
+    }
+
+    /// A difference placed in its subtrahend's register negates it in
+    /// place and adds the minuend: `neg rax; add rax, rsi`. When the
+    /// minuend is the same register (`a - a`) or spilled, the subtrahend
+    /// is copied to r10 first and `sub rax, r10` computes the difference.
+    #[test]
+    fn subtract_into_the_subtrahend_register() {
+        let target = Target::LinuxX64;
+        let reg = |r: Reg| Place::IntReg(r.0);
+        let emit = |src: &str, lhs_at: Place, rhs_at: Place| {
+            let (func, v, mut alloc) = binop_of(src, BinOp::Sub);
+            let Inst::Binop { lhs, rhs, .. } = func.insts[v as usize] else {
+                panic!("{:?}", func.insts[v as usize])
+            };
+            alloc.places[lhs as usize] = lhs_at;
+            alloc.places[rhs as usize] = rhs_at;
+            let frame = compute_frame(&func, &alloc, target.abi(), target);
+            let mut code = Vec::new();
+            let dst = reg(Reg::RAX);
+            emit_binop(&mut code, BinOp::Sub, v, dst, lhs, rhs, &alloc, frame).expect("emit_binop");
+            code
+        };
+        let two = "long f(long a, long b){ return a - b; }";
+        assert_eq!(
+            emit(two, reg(Reg::RSI), reg(Reg::RAX)),
+            [0x48, 0xF7, 0xD8, 0x48, 0x01, 0xF0]
+        );
+        let same = "long f(long a){ return a - a; }";
+        assert_eq!(
+            emit(same, reg(Reg::RAX), reg(Reg::RAX)),
+            [0x49, 0x89, 0xC2, 0x4C, 0x29, 0xD0]
+        );
+        let spilled = emit(two, Place::Spill(0), reg(Reg::RAX));
+        assert!(spilled.starts_with(&[0x49, 0x89, 0xC2]), "{spilled:02x?}");
+        assert!(spilled.ends_with(&[0x4C, 0x29, 0xD0]), "{spilled:02x?}");
+    }
+
+    /// A shift saves rcx around the count's move into cl exactly when the
+    /// allocation records a value other than the count live there; without
+    /// a record, any value allocated to rcx counts. A result in rcx is
+    /// shifted in r11 from the lhs's own register.
+    #[test]
+    fn shift_saves_rcx_as_the_allocation_records() {
+        let target = Target::LinuxX64;
+        let reg = |r: Reg| Place::IntReg(r.0);
+        let (func, v, mut alloc) = binop_of("long f(long a, long c){ return a << c; }", BinOp::Shl);
+        let Inst::Binop { lhs, rhs, .. } = func.insts[v as usize] else {
+            panic!("{:?}", func.insts[v as usize])
+        };
+        for p in alloc.places.iter_mut() {
+            if *p == reg(Reg::RCX) {
+                *p = Place::None;
+            }
+        }
+        alloc.places[lhs as usize] = reg(Reg::RDI);
+        alloc.places[rhs as usize] = reg(Reg::RSI);
+        let emit = |alloc: &Allocation, dst: Reg| {
+            let frame = compute_frame(&func, alloc, target.abi(), target);
+            let mut code = Vec::new();
+            emit_binop(&mut code, BinOp::Shl, v, reg(dst), lhs, rhs, alloc, frame)
+                .expect("emit_binop");
+            code
+        };
+        // mov rax, rdi; [push rcx;] mov rcx, rsi; shl rax, cl; [pop rcx]
+        let bare = [0x48, 0x89, 0xF8, 0x48, 0x89, 0xF1, 0x48, 0xD3, 0xE0];
+        let saved = [
+            0x48, 0x89, 0xF8, 0x51, 0x48, 0x89, 0xF1, 0x48, 0xD3, 0xE0, 0x59,
+        ];
+        alloc.implicit_live = alloc::vec![0; func.insts.len()];
+        assert_eq!(emit(&alloc, Reg::RAX), bare);
+        alloc.implicit_live[v as usize] = 1 << Reg::RCX.0;
+        assert_eq!(emit(&alloc, Reg::RAX), saved);
+        alloc.implicit_live.clear();
+        assert_eq!(emit(&alloc, Reg::RAX), bare);
+        let other = (0..func.insts.len() as u32).find(|&i| i != lhs && i != rhs && i != v);
+        alloc.places[other.expect("another value") as usize] = reg(Reg::RCX);
+        assert_eq!(emit(&alloc, Reg::RAX), saved);
+        // mov r11, rdi; mov rcx, rsi; shl r11, cl; mov rcx, r11
+        assert_eq!(
+            emit(&alloc, Reg::RCX),
+            [
+                0x49, 0x89, 0xFB, 0x48, 0x89, 0xF1, 0x49, 0xD3, 0xE3, 0x4C, 0x89, 0xD9
+            ]
+        );
+    }
+
+    /// A division saves rax / rdx exactly for the values the allocation
+    /// records live in them across it, never over its own result; without
+    /// a record, any value placed there counts. Encodings are clang's.
+    #[test]
+    fn division_saves_as_the_allocation_records() {
+        let target = Target::LinuxX64;
+        let reg = |r: Reg| Place::IntReg(r.0);
+        let lower = |src: &str, op: BinOp| {
+            let (func, v, mut alloc) = binop_of(src, op);
+            let Inst::Binop { lhs, rhs, .. } = func.insts[v as usize] else {
+                panic!("{:?}", func.insts[v as usize])
+            };
+            for p in alloc.places.iter_mut() {
+                if *p == reg(Reg::RAX) || *p == reg(Reg::RDX) {
+                    *p = Place::None;
+                }
+            }
+            alloc.places[lhs as usize] = reg(Reg::RDI);
+            alloc.places[rhs as usize] = reg(Reg::RSI);
+            (func, v, alloc)
+        };
+        let emit = |func: &FunctionSsa, v: u32, alloc: &Allocation, op: BinOp, dst: Reg| {
+            let Inst::Binop { lhs, rhs, .. } = func.insts[v as usize] else {
+                panic!("{:?}", func.insts[v as usize])
+            };
+            let frame = compute_frame(func, alloc, target.abi(), target);
+            let mut code = Vec::new();
+            emit_binop(&mut code, op, v, reg(dst), lhs, rhs, alloc, frame).expect("emit_binop");
+            code
+        };
+        let (rax, rdx) = (1u16 << Reg::RAX.0, 1u16 << Reg::RDX.0);
+        // mov rax, rdi; cqo; idiv rsi
+        let divide = [0x48, 0x89, 0xF8, 0x48, 0x99, 0x48, 0xF7, 0xFE];
+        let with = |pre: &[u8], post: &[u8], tail: &[u8]| {
+            let mut w = pre.to_vec();
+            w.extend(divide);
+            w.extend(tail);
+            w.extend(post);
+            w
+        };
+        let quot = [0x48, 0x89, 0xC1]; // mov rcx, rax
+
+        let (func, v, mut alloc) = lower("long f(long a, long b){ return a / b; }", BinOp::Div);
+        let n = func.insts.len();
+        for (record, pre, post) in [
+            (0, &[][..], &[][..]),
+            (rdx, &[0x52], &[0x5A]),
+            (rax | rdx, &[0x50, 0x52], &[0x5A, 0x58]),
+        ] {
+            alloc.implicit_live = alloc::vec![0; n];
+            alloc.implicit_live[v as usize] = record;
+            assert_eq!(
+                emit(&func, v, &alloc, BinOp::Div, Reg::RCX),
+                with(pre, post, &quot)
+            );
+        }
+        // The quotient's own register is never restored over it.
+        assert_eq!(
+            emit(&func, v, &alloc, BinOp::Div, Reg::RAX),
+            with(&[0x52], &[0x5A], &[])
+        );
+        alloc.implicit_live.clear();
+        assert_eq!(
+            emit(&func, v, &alloc, BinOp::Div, Reg::RCX),
+            with(&[], &[], &quot)
+        );
+        let other = (0..n as u32).find(|&i| i != v && alloc.places[i as usize] == Place::None);
+        alloc.places[other.expect("another value") as usize] = reg(Reg::RDX);
+        assert_eq!(
+            emit(&func, v, &alloc, BinOp::Div, Reg::RCX),
+            with(&[0x52], &[0x5A], &quot)
+        );
+
+        // The remainder is read from rdx; an unsigned divide zeroes rdx.
+        let (func, v, mut alloc) = lower("long f(long a, long b){ return a % b; }", BinOp::Mod);
+        alloc.implicit_live = alloc::vec![0; func.insts.len()];
+        assert_eq!(
+            emit(&func, v, &alloc, BinOp::Mod, Reg::RCX),
+            with(&[], &[], &[0x48, 0x89, 0xD1])
+        );
+        let src = "unsigned long f(unsigned long a, unsigned long b){ return a / b; }";
+        let (func, v, mut alloc) = lower(src, BinOp::Divu);
+        alloc.implicit_live = alloc::vec![0; func.insts.len()];
+        let divu = [
+            0x48, 0x89, 0xF8, 0x31, 0xD2, 0x48, 0xF7, 0xF6, 0x48, 0x89, 0xC1,
+        ];
+        assert_eq!(emit(&func, v, &alloc, BinOp::Divu, Reg::RCX), divu);
+    }
+}
+
+#[cfg(test)]
+mod imm_store_tests {
+    use super::*;
+    use crate::c5::ir::Inst;
+    use alloc::vec::Vec;
+
+    /// The function of `src` after the index fold, the first store its
+    /// allocation writes from the instruction, and that allocation with
+    /// room for the slots a test pins.
+    fn marked_store(src: &str) -> (FunctionSsa, u32, Allocation) {
+        let target = Target::LinuxX64;
+        let program = crate::Compiler::with_target(
+            alloc::format!("{src} int main(void){{ return 0; }}"),
+            target,
+        )
+        .compile()
+        .expect("compile");
+        let mut funcs =
+            crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+                .expect("ssa");
+        crate::c5::codegen::passes::index_fold::run(&mut funcs);
+        for func in funcs {
+            let mut alloc = super::super::ssa::reg_alloc::allocate(
+                &func,
+                target,
+                crate::c5::codegen::FixedRegs::NONE,
+            );
+            if let Some(v) = alloc.imm_store.iter().position(|&m| m) {
+                alloc.spill_count = alloc.spill_count.max(2);
+                return (func, v as u32, alloc);
+            }
+        }
+        panic!("no store takes an immediate: {src}")
+    }
+
+    fn emit(func: &FunctionSsa, v: u32, alloc: &Allocation, abi: Abi) -> Vec<u8> {
+        let frame = compute_frame(func, alloc, abi, Target::LinuxX64);
+        let mut code = Vec::new();
+        emit_store_of_imm(&mut code, &func.insts[v as usize], func, alloc, frame, abi)
+            .expect("emit_store_of_imm");
+        code
+    }
+
+    /// Spilled operands reload into r10 and r11, which the immediate
+    /// leaves free: `mov dword [r10 + r11 * 4], 42`, `mov qword [r10], 7`.
+    #[test]
+    fn constant_store_through_spilled_operands() {
+        let abi = Target::LinuxX64.abi();
+        let (func, v, mut alloc) = marked_store("void put(int *a, long i){ a[i] = 42; }");
+        let Inst::StoreIndexed { base, index, .. } = func.insts[v as usize] else {
+            panic!("{:?}", func.insts[v as usize])
+        };
+        alloc.places[base as usize] = Place::Spill(0);
+        alloc.places[index as usize] = Place::Spill(1);
+        let code = emit(&func, v, &alloc, abi);
+        let want = [0x43, 0xC7, 0x04, 0x9A, 0x2A, 0x00, 0x00, 0x00];
+        assert!(code.ends_with(&want), "{code:02x?}");
+
+        let (func, v, mut alloc) = marked_store("void put(long *p){ *p = 7; }");
+        let Inst::Store { addr, .. } = func.insts[v as usize] else {
+            panic!("{:?}", func.insts[v as usize])
+        };
+        alloc.places[addr as usize] = Place::Spill(0);
+        let code = emit(&func, v, &alloc, abi);
+        let want = [0x49, 0xC7, 0x02, 0x07, 0x00, 0x00, 0x00];
+        assert!(code.ends_with(&want), "{code:02x?}");
+    }
+
+    /// Under strict alignment a packed quadword at offset 1 splits into
+    /// byte stores of the sign-extended constant, least significant
+    /// first, with no borrowed register; without it the store is one
+    /// `mov qword` at that offset.
+    #[test]
+    fn packed_constant_store_splits_into_its_bytes() {
+        let (func, v, mut alloc) = marked_store(
+            "struct __attribute__((packed)) h { char t; long v; };\n\
+             void put(struct h *p){ p->v = -3; }",
+        );
+        let Inst::Store { addr, disp: 1, .. } = func.insts[v as usize] else {
+            panic!("{:?}", func.insts[v as usize])
+        };
+        alloc.places[addr as usize] = Place::IntReg(Reg::RDI.0);
+        let mut abi = Target::LinuxX64.abi();
+        assert_eq!(
+            emit(&func, v, &alloc, abi),
+            [0x48, 0xC7, 0x47, 0x01, 0xFD, 0xFF, 0xFF, 0xFF]
+        );
+        abi.strict_align = true;
+        let mut want = alloc::vec![0xC6, 0x47, 0x01, 0xFD];
+        for at in 2..9 {
+            want.extend([0xC6, 0x47, at, 0xFF]);
+        }
+        assert_eq!(emit(&func, v, &alloc, abi), want);
     }
 }
 

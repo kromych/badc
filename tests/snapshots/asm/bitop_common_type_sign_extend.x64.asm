@@ -32,14 +32,12 @@ Disassembly of section .text:
                	leaq	-0x10(%rbp), %rax
                	addq	$0x8, %rax
                	leaq	-0x23e(%rax), %rcx
-               	movq	%rax, %r10
-               	movq	%rcx, %rax
-               	subq	%r10, %rax
-               	cmpq	$-0x23e, %rax           # imm = 0xFDC2
+               	subq	%rax, %rcx
+               	cmpq	$-0x23e, %rcx           # imm = 0xFDC2
                	je	<addr>
                	movl	$0x5, %eax
                	leave
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	leave
                	retq

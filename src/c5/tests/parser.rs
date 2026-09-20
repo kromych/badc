@@ -3995,3 +3995,26 @@ fn generic_associations_are_separated_by_commas() {
                }";
     assert_eq!(super::run_str(src), 0);
 }
+
+#[test]
+fn static_init_reads_only_a_const_object_in_bounds() {
+    // A static initializer reads an element or member of a `const` object
+    // with static storage and an initializer; one of a writable object, one
+    // past the object, or one of an object whose initializer comes later is
+    // not a constant expression -- not the element's address either.
+    let decls = "int a[3] = {1, 2, 3}; struct S { int x; } s[2]; int m[2][3]; \
+                 static const int c3[3] = {1, 2, 3}; static const int tent[2];";
+    for (init, name) in [
+        ("int v = a[1];", "a"),
+        ("int v = s[1].x;", "s"),
+        ("struct T { int y; } t = { s[0].x };", "s"),
+        ("int v = m[1][2];", "m"),
+        ("int v = c3[3];", "c3"),
+        ("int v = tent[1];", "tent"),
+    ] {
+        expect_compile_error(
+            &format!("{decls} {init}"),
+            &format!("constant integer expected (got identifier `{name}`)"),
+        );
+    }
+}

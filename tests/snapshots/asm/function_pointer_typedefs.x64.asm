@@ -27,33 +27,28 @@ Disassembly of section .text:
 
 <do_add>:
                	leaq	(%rdi,%rsi), %rax
-               	movslq	%eax, %rax
                	retq
 
 <do_sub>:
                	movq	%rdi, %rax
                	subq	%rsi, %rax
-               	movslq	%eax, %rax
                	retq
 
 <do_cmp>:
                	cmpl	%esi, %edi
                	jge	<addr>
-               	movabsq	$-0x1, %rax
+               	movq	$-0x1, %rax
                	retq
                	cmpl	%esi, %edi
                	jle	<addr>
                	movl	$0x1, %eax
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	retq
 
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	movabsq	$-0x1, %rax
-               	movl	$0x1, %eax
-               	xorq	%rax, %rax
                	movl	$0x2, %edi
                	movl	$0x3, %esi
                	callq	<addr>
@@ -78,6 +73,6 @@ Disassembly of section .text:
                	movl	$0x6, %eax
                	popq	%rbp
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	popq	%rbp
                	retq

@@ -42,7 +42,7 @@ pub(super) fn emit_intrinsic(
         I::AllocaSave => emit_alloca_save(code, dst, frame, scratch),
         I::AllocaRestore => emit_alloca_restore(code, args, alloc, frame, scratch),
         I::SetjmpAArch64 => emit_setjmp(code, args, dst, alloc, frame, scratch),
-        I::LongjmpAArch64 => emit_longjmp(code, args, alloc, frame),
+        I::LongjmpAArch64 => emit_longjmp(code, args, alloc, frame, scratch),
         // fma / fmaf lower to Inst::Fma at the call site, so they never
         // reach the Inst::Intrinsic dispatch.
         I::Fma | I::Fmaf => fail("intrinsic: fma / fmaf lower to Inst::Fma, not Inst::Intrinsic"),
@@ -121,9 +121,9 @@ pub(super) fn emit_intrinsic(
         // A `register T v asm("sp")` read; `add` reads register 31 as sp.
         I::StackPointer => emit_frame_register(code, dst, frame, Reg(31), "StackPointer"),
         I::ReturnAddress => emit_return_address(code, args, dst, alloc, frame, scratch),
-        // The integer bit-count and byte-swap builtins are lowered to a
-        // portable shift / mask sequence in the walker; they never reach
-        // codegen as an `Inst::Intrinsic`.
+        // The walker lowers the bit-count and byte-swap builtins to
+        // `Inst::BitCount` / `Inst::Bswap`; they never reach codegen as an
+        // `Inst::Intrinsic`.
         I::Clz
         | I::Ctz
         | I::Popcount
@@ -151,6 +151,98 @@ pub(super) fn emit_intrinsic(
         | I::AtomicFetchOr
         | I::AtomicFetchXor
         | I::AtomicCompareExchangeStrong => fail("intrinsic: atomic op reached codegen"),
+    }
+}
+
+/// Whether the lowering of `intrinsic` needs the frame record: it reads
+/// fp, moves sp, or overwrites x30. The rest are register and memory
+/// instructions that run on the caller's frame. No lowering calls a
+/// helper. The match names every intrinsic, so a new one states its answer.
+pub(super) fn intrinsic_keeps_frame(intrinsic: crate::c5::op::Intrinsic, abi: super::Abi) -> bool {
+    use crate::c5::op::Intrinsic as I;
+    match intrinsic {
+        // fp-relative: the variadic areas, the frame address, the record's
+        // return slot (staged through x30). A read of sp observes the same
+        // frame, below its record.
+        I::VaStart | I::FrameAddress | I::ReturnAddress | I::StackPointer => true,
+        // sp moves for the rest of the function, or to another frame.
+        I::Alloca | I::AllocaSave | I::AllocaRestore | I::SetjmpAArch64 | I::LongjmpAArch64 => true,
+        // The AAPCS64 `va_list` forms borrow a register around a push / pop;
+        // the cursor forms are loads and stores.
+        I::VaArg | I::VaCopy => abi.aarch64_host_variadic(),
+        // The working registers are pushed around the exclusive loop.
+        I::Atomic128CmpXchg
+        | I::Atomic128Xchg
+        | I::Atomic128FetchAnd
+        | I::Atomic128FetchOr
+        | I::Atomic128Load
+        | I::Atomic128Store
+        | I::Atomic128LoadEx
+        | I::Atomic128StoreEx
+        | I::Atomic128StoreInsert => true,
+        I::VaEnd
+        | I::Trap
+        | I::CpuRelax
+        | I::AtomicThreadFence
+        | I::AtomicAcquireFence
+        | I::AtomicReleaseFence
+        | I::AtomicSignalFence
+        | I::AArch64DsbIsh
+        | I::AArch64Isb
+        | I::AArch64DcCvau
+        | I::AArch64IcIvau
+        | I::AArch64ReadCacheType
+        | I::Sqrt
+        | I::Sqrtf
+        | I::Fabs
+        | I::Fabsf
+        | I::Floor
+        | I::Floorf
+        | I::Ceil
+        | I::Ceilf
+        | I::Trunc
+        | I::Truncf => false,
+        // No lowering on this target; `emit_intrinsic` refuses them.
+        I::ConstantP
+        | I::Fma
+        | I::Fmaf
+        | I::Clz
+        | I::Ctz
+        | I::Popcount
+        | I::Clzll
+        | I::Ctzll
+        | I::Popcountll
+        | I::Clrsb
+        | I::Clrsbll
+        | I::Parity
+        | I::Parityll
+        | I::Ffs
+        | I::Ffsll
+        | I::Bswap16
+        | I::Bswap32
+        | I::Bswap64
+        | I::AtomicLoad
+        | I::AtomicStore
+        | I::AtomicExchange
+        | I::AtomicFetchAdd
+        | I::AtomicFetchSub
+        | I::AtomicFetchAnd
+        | I::AtomicFetchOr
+        | I::AtomicFetchXor
+        | I::AtomicCompareExchangeStrong
+        | I::X87StoreControlWord
+        | I::X87LoadControlWord
+        | I::X86FxSave
+        | I::X86FxRestore
+        | I::X86Sgdt
+        | I::X86Sidt
+        | I::X86Sldt
+        | I::X86Str
+        | I::X86Lgdt
+        | I::X86Lidt
+        | I::X86Lldt
+        | I::X86Clflush
+        | I::Divq128 => true,
     }
 }
 
@@ -263,10 +355,9 @@ fn emit_setjmp(
     else {
         return fail("Setjmp: env not int reg / spill / fp");
     };
-    // The helper reads env from x19; route it there.
-    if env_r.0 != 19 {
-        emit_mov_reg(code, Reg(19), env_r);
-    }
+    // The helper reads env from x19 and leaves its result there.
+    let x19 = scratch.third(frame);
+    emit_mov_reg(code, x19, env_r);
     emit_setjmp_aarch64(code);
     // x19 holds 0 on the initial pass and the longjmp value on a return;
     // the helper's saved PC points past its last instruction, so the
@@ -274,9 +365,7 @@ fn emit_setjmp(
     let Some(rd) = int_or_spill_scratch(dst, scratch) else {
         return fail("Setjmp: dst not int reg / spill");
     };
-    if rd.0 != 19 {
-        emit_mov_reg(code, rd, Reg(19));
-    }
+    emit_mov_reg(code, rd, x19);
     store_spilled_int(code, frame, dst, rd);
     Ok(())
 }
@@ -285,7 +374,13 @@ fn emit_setjmp(
 /// args[0] = env, args[1] = val. The helper restores the saved register
 /// set, materializes x19 = (val != 0) ? val : 1 per C99 7.13.2.1p2, and
 /// branches to the saved PC.
-fn emit_longjmp(code: &mut Vec<u8>, args: &[u32], alloc: &Allocation, frame: Frame) -> Emit {
+fn emit_longjmp(
+    code: &mut Vec<u8>,
+    args: &[u32],
+    alloc: &Allocation,
+    frame: Frame,
+    scratch: &ScratchPool,
+) -> Emit {
     if args.len() != 2 {
         return fail("Longjmp: expected 2 args");
     }
@@ -318,7 +413,7 @@ fn emit_longjmp(code: &mut Vec<u8>, args: &[u32], alloc: &Allocation, frame: Fra
     // cmp val, #0 ; cinc x19, val, eq -- 0 becomes 1, anything else passes
     // through unchanged.
     emit(code, enc_subs_imm(Reg(31), Reg(17), 0));
-    emit(code, enc_cinc(Reg(19), Reg(17), Cond::Eq));
+    emit(code, enc_cinc(scratch.third(frame), Reg(17), Cond::Eq));
     emit(code, enc_br(Reg(10)));
     Ok(())
 }
@@ -715,7 +810,7 @@ fn atomic_operand_into(
 /// are restored so a spilled result lands at the unshifted sp offset.
 fn write_atomic_result(code: &mut Vec<u8>, dst: Place, src: Reg, frame: Frame) {
     super::ssa::emit_common::write_atomic_result(
-        &super::ssa::emit_common::Aarch64Backend,
+        &super::ssa::emit_common::Aarch64Backend::default(),
         code,
         dst,
         src.0,

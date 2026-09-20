@@ -26,41 +26,28 @@ Disassembly of section .text:
                	int3
 
 <zero_and_sum>:
-               	xorq	%rax, %rax
-               	leaq	(%rdi), %rcx
-               	movl	%eax, (%rcx)
+               	movl	$0x0, (%rdi)
                	leaq	0x28(%rdi), %rax
-               	leaq	(%rax), %rdx
-               	movl	$0x1, %ecx
-               	movl	%ecx, (%rdx)
-               	movl	%ecx, 0x4(%rdi)
-               	movl	$0x2, %ecx
-               	movl	%ecx, 0x4(%rax)
-               	movl	%ecx, 0x8(%rdi)
-               	movl	$0x3, %ecx
-               	movl	%ecx, 0x8(%rax)
-               	movl	%ecx, 0xc(%rdi)
-               	movl	$0x4, %ecx
-               	movl	%ecx, 0xc(%rax)
-               	movl	%ecx, 0x10(%rdi)
-               	movl	$0x5, %ecx
-               	movl	%ecx, 0x10(%rax)
-               	movl	%ecx, 0x14(%rdi)
-               	movl	$0x6, %ecx
-               	movl	%ecx, 0x14(%rax)
-               	movl	%ecx, 0x18(%rdi)
-               	movl	$0x7, %ecx
-               	movl	%ecx, 0x18(%rax)
-               	movl	%ecx, 0x1c(%rdi)
+               	movl	$0x1, (%rax)
+               	movl	$0x1, 0x4(%rdi)
+               	movl	$0x2, 0x4(%rax)
+               	movl	$0x2, 0x8(%rdi)
+               	movl	$0x3, 0x8(%rax)
+               	movl	$0x3, 0xc(%rdi)
+               	movl	$0x4, 0xc(%rax)
+               	movl	$0x4, 0x10(%rdi)
+               	movl	$0x5, 0x10(%rax)
+               	movl	$0x5, 0x14(%rdi)
+               	movl	$0x6, 0x14(%rax)
+               	movl	$0x6, 0x18(%rdi)
+               	movl	$0x7, 0x18(%rax)
+               	movl	$0x7, 0x1c(%rdi)
                	leaq	0x28(%rdi), %rax
-               	movl	$0x8, %ecx
-               	movl	%ecx, 0x1c(%rax)
-               	movl	%ecx, 0x20(%rdi)
-               	movl	$0x9, %ecx
-               	movl	%ecx, 0x20(%rax)
-               	movl	%ecx, 0x24(%rdi)
-               	movl	$0xa, %ecx
-               	movl	%ecx, 0x24(%rax)
+               	movl	$0x8, 0x1c(%rax)
+               	movl	$0x8, 0x20(%rdi)
+               	movl	$0x9, 0x20(%rax)
+               	movl	$0x9, 0x24(%rdi)
+               	movl	$0xa, 0x24(%rax)
                	movl	$0x64, %eax
                	movl	%eax, 0xa0(%rdi)
                	retq
@@ -95,6 +82,6 @@ Disassembly of section .text:
                	movl	$0x4, %eax
                	leave
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	leave
                	retq

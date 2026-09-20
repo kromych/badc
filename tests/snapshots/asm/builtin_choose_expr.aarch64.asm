@@ -19,8 +19,7 @@ Disassembly of section .text:
                	sub	sp, sp, #0x10
                	add	x0, x0, #0x38
                	ldarb	w0, [x0]
-               	sub	x1, x29, #0x8
-               	strb	w0, [x1]
+               	sturb	w0, [x29, #-0x8]
                	ldurb	w0, [x29, #-0x8]
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
@@ -37,19 +36,17 @@ Disassembly of section .text:
                	str	xzr, [x0, #0x30]
                	strb	wzr, [x0, #0x38]
                	mov	x0, #0x0                // =0
-               	b	<addr>
-               	sub	x2, x29, #0x80
-               	sxtw	x1, w0
-               	lsl	x3, x1, #3
-               	add	x2, x2, x3
-               	mov	x3, #-0x1               // =-1
-               	str	x3, [x2]
-               	add	x0, x1, #0x1
+               	sub	x1, x29, #0x80
+               	lsl	x2, x0, #3
+               	add	x1, x1, x2
+               	mov	x2, #-0x1               // =-1
+               	str	x2, [x1]
+               	add	x0, x0, #0x1
                	cmp	w0, #0x10
                	b.lt	<addr>
                	sub	x0, x29, #0xc0
                	bl	<addr>
-               	cbz	x0, <addr>
+               	cbz	w0, <addr>
                	mov	x0, #0x7                // =7
                	add	sp, sp, #0xc0
                	ldp	x29, x30, [sp], #0x10
@@ -58,7 +55,7 @@ Disassembly of section .text:
                	mov	x1, #0x1                // =1
                	strb	w1, [x0, #0x38]
                	bl	<addr>
-               	cmp	x0, #0x1
+               	cmp	w0, #0x1
                	b.eq	<addr>
                	mov	x0, #0x8                // =8
                	add	sp, sp, #0xc0

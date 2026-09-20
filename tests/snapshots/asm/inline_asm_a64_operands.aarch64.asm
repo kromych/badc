@@ -77,7 +77,6 @@ Disassembly of section .text:
                	ldur	x0, [x29, #-0x8]
                	cbz	x0, <addr>
                	ldur	x0, [x29, #-0x10]
-               	sxtw	x0, w0
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret

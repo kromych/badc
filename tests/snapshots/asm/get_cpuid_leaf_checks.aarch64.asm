@@ -23,31 +23,14 @@ Disassembly of section .text:
                	stur	w0, [x29, #-0x10]
                	stur	w0, [x29, #-0x18]
                	stur	w0, [x29, #-0x20]
-               	mov	x1, #0x1                // =1
-               	mov	x2, x1
-               	mov	x2, x1
-               	mov	x2, x1
-               	mov	x2, x1
                	stur	w0, [x29, #-0x68]
                	stur	w0, [x29, #-0x70]
                	stur	w0, [x29, #-0x78]
                	stur	w0, [x29, #-0x80]
-               	mov	x0, x1
-               	mov	x0, x1
-               	mov	x0, x1
-               	mov	x0, #0xa5a5             // =42405
-               	movk	x0, #0xa5a5, lsl #16
                	stur	w0, [x29, #-0xc8]
                	stur	w0, [x29, #-0xd0]
                	stur	w0, [x29, #-0xd8]
                	stur	w0, [x29, #-0xe0]
-               	mov	x0, #0x1                // =1
-               	mov	x1, x0
-               	mov	x1, x0
-               	mov	x1, x0
-               	mov	x0, #0x0                // =0
-               	mov	x1, x0
-               	mov	x1, x0
                	mov	x0, #0x0                // =0
                	add	sp, sp, #0x1c0
                	ldp	x29, x30, [sp], #0x10

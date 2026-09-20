@@ -67,7 +67,7 @@ pub fn embedded_headers() -> &'static [(&'static str, &'static str)] {
 /// call appears in source so it can suggest the right `#include`.
 /// `memory.h` is omitted: it's a legacy alias for `string.h` and
 /// would just produce duplicate hits in the diagnostic.
-pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
+pub(super) static EMBEDDED_HEADERS: &[(&str, &str)] = &[
     (
         "_builtins.h",
         include_str!("../../libc/include/_builtins.h"),

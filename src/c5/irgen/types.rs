@@ -84,14 +84,13 @@ pub(super) fn is_bool_scalar(ty: i64) -> bool {
 }
 
 /// Sign- or zero-extend a scalar call result to 64 bits per its
-/// declared return type. A c5-compiled callee already returns a
-/// 64-bit-correct value and the emitter widens a direct libc call from
-/// the binding's return type, but a call through a function pointer to
-/// a host routine has neither: the routine sets only its natural-width
-/// register (`strcmp` returns 32 bits in `eax` with undefined high
-/// bits), so the result widens here before the caller reads it at 64
-/// bits (C99 6.3.1.1 / 6.5.2.2). Idempotent, and inert on void,
-/// floating-point, pointer, `_Bool`, struct and full-width results.
+/// declared return type. A sub-word integer return occupies the low
+/// bits of the return register and leaves the rest unspecified (System
+/// V AMD64 3.2.3, AAPCS64 6.9, Win64), so the reading side widens it
+/// before a 64-bit consumer sees it (C99 6.3.1.1 / 6.5.2.2). A direct
+/// libc call takes the emitter's widening from the binding's return
+/// type instead. Idempotent, and inert on void, floating-point,
+/// pointer, `_Bool`, struct and full-width results.
 pub(super) fn extend_scalar_call_result(
     b: &mut SsaBuilder,
     v: ValueId,
@@ -119,9 +118,18 @@ pub(super) fn extend_scalar_call_result(
         };
         b.binop_imm(BinOp::And, v, mask)
     } else {
-        let bits = 64i64 - (rs as i64) * 8;
-        let shifted = b.binop_imm(BinOp::Shl, v, bits);
-        b.binop_imm(BinOp::Shr, shifted, bits)
+        b.extend(v, sign_extend_kind(rs))
+    }
+}
+
+/// The `Inst::Extend` kind that sign-extends a `rs`-byte value.
+/// Callers gate on `rs` being 1, 2 or 4.
+pub(super) fn sign_extend_kind(rs: usize) -> crate::c5::ir::LoadKind {
+    use crate::c5::ir::LoadKind;
+    match rs {
+        1 => LoadKind::I8,
+        2 => LoadKind::I16,
+        _ => LoadKind::I32,
     }
 }
 
@@ -161,26 +169,6 @@ pub(super) fn type_size_bytes(ty: i64, target: Target) -> usize {
         if target.is_windows() { 4 } else { 8 }
     } else if stripped == Ty::LongLong as i64 {
         8
-    } else {
-        0
-    }
-}
-
-/// AND mask narrowing an unsigned operand of an integer divide or
-/// modulo to its declared storage width. Zero -- no mask -- for an
-/// I64-wide type and for any signed type.
-pub(super) fn unsigned_narrow_mask(ty: i64) -> i64 {
-    let stripped = strip_unsigned(ty);
-    let unsigned = (ty & UNSIGNED_BIT) != 0;
-    if !unsigned {
-        return 0;
-    }
-    if stripped == Ty::Char as i64 {
-        0xff
-    } else if stripped == Ty::Short as i64 {
-        0xffff
-    } else if stripped == Ty::Int as i64 {
-        0xffff_ffff
     } else {
         0
     }

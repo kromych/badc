@@ -28,8 +28,8 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ret
-               	ldr	x2, [x0, #0x38]
-               	cmp	x2, x1
+               	ldr	x0, [x0, #0x38]
+               	cmp	x0, x1
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ret

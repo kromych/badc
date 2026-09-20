@@ -1,8 +1,8 @@
 # Booting badc kernels on real hardware: the GPD MicroPC
 
-The VM lanes prove a kernel boots under an emulator whose devices badc's
-output has never surprised. This box is the other half: a physical
-machine, reached over a real RS-232 line, that runs the same packages.
+The VM lanes prove a kernel boots under emulated devices. This box is the
+other half: a physical machine, reached over a real RS-232 line, that runs
+the same packages.
 
 ## What the machine is
 
@@ -21,10 +21,18 @@ sudo. Its address is site-specific and deliberately not recorded here.
 Three of those decide what this box can and cannot test.
 
 **No AVX.** Goldmont Plus carries SSE4.2 and AES-NI and stops there. The
-kernel's AVX2/AVX-512 RAID6 and crypto paths compile but never execute
+kernel's AVX2/AVX-512 RAID6 and crypto paths compile but do not execute
 here, so the inline-asm work they cover still needs the x86_64 Linux
 box. It also means the EVEX encoding gap is not reachable at runtime on
 this machine.
+
+**Below the baseline.** badc assumes x86-64-v3
+([native-compilation.md](../../doc/native-compilation.md#instruction-set-baseline));
+this CPU stops at x86-64-v2, with none of AVX2, FMA3, BMI1 or BMI2. Its
+kernels boot because `-mno-sse` keeps FMA3 out of kernel objects and badc's
+integer lowering uses nothing above x86-64-v2. A baseline instruction in
+that lowering would break the boot here first: the VEX-encoded ones fault,
+and LZCNT / TZCNT execute as BSR / BSF.
 
 **SATA, not NVMe.** A boot here exercises `ahci`/`libata`, not the `nvme`
 path the emulated lanes drive. The two are complementary rather than
@@ -93,12 +101,22 @@ sudo grubby --info=DEFAULT          # root= is printed on its own line,
                                     # NOT inside args="..."
 ```
 
-Deriving the file from `args=` alone produces a command line with no root
-device. Nothing complains at install time; the entry simply cannot mount
-a root filesystem, and the machine lands in emergency mode on the next
-boot into it. That is not hypothetical -- it is how this box was first
-stranded, and the resulting entry had to be repaired with
-`grubby --update-kernel=... --args="root=UUID=..."`.
+`grubby --info` prints the root device in its own `root=` field and leaves
+it out of `args=`, so an `/etc/kernel/cmdline` derived from `args` alone is
+missing it. The entry `kernel-install` then writes for a newly installed
+kernel has no root device; the kernel reaches the initramfs,
+`systemd-gpt-auto-generator` looks for a root partition,
+`dev-gpt-auto-root.device` times out after 45 s, `sysroot.mount` fails and
+the boot parks in an emergency shell. Nothing complains at install time --
+the installed kernel looks fine and the running one is unaffected. That is
+how this box was first stranded, and the entry had to be repaired with
+`grubby --update-kernel=... --args="root=UUID=..."`. Check the file before
+installing any kernel:
+
+```bash
+grep -o 'root=[^ ]*' /etc/kernel/cmdline || echo 'MISSING: kernel-install \
+  will write an entry with no root device'
+```
 
 Installing a kernel here also **silently takes the standing default**:
 `rpm -i` runs `kernel-install`, which writes the new entry and points
@@ -106,21 +124,6 @@ Installing a kernel here also **silently takes the standing default**:
 
 ```bash
 sudo grubby --set-default /boot/vmlinuz-<the distro kernel>
-```
-
-**That file must carry `root=`.** `grubby --info` prints the root device
-in its own `root=` field and leaves it out of `args=`, so an
-`/etc/kernel/cmdline` built from `args` alone is missing it. The entry
-`kernel-install` then writes for a newly installed kernel has no root
-device; the kernel reaches the initramfs, `systemd-gpt-auto-generator`
-looks for a root partition, `dev-gpt-auto-root.device` times out after
-45 s, `sysroot.mount` fails and the boot parks in an emergency shell. It
-is silent until it happens -- the installed kernel looks fine, and the
-running one is unaffected. Check it before installing any kernel:
-
-```bash
-grep -o 'root=[^ ]*' /etc/kernel/cmdline || echo 'MISSING: kernel-install \
-  will write an entry with no root device'
 ```
 
 Each piece earns its place:
@@ -188,7 +191,7 @@ minute.
 Before the real root is mounted nothing pets it, and the case is not
 hypothetical. A kernel whose boot entry lost its `root=` reaches the
 initramfs, fails to mount the root filesystem, and parks in an emergency
-shell; the watchdog configuration lives on the filesystem that was never
+shell; the watchdog configuration lives on the filesystem that was not
 mounted, so nothing resets the box.
 
 Magic SysRq is what ends that, and it is this machine's only remote reset
@@ -204,10 +207,10 @@ kernel.sysrq = 1        # persistent; Fedora's default of 16 permits sync alone
 is what the harness does after the watchdog has had its chance. It is
 best-effort: it needs a kernel still servicing interrupts.
 
-A locked root account takes away the other half of the answer. `sulogin`
-refuses a console it cannot authenticate on -- `Cannot open access to
-console, the root account is locked` -- which on a box whose only console
-is a serial line leaves no way in at all:
+A locked root account takes away the other half of the answer. `sulogin` refuses
+a console it cannot authenticate on --
+`Cannot open access to console, the root account is locked` -- which on a box
+whose only console is a serial line leaves no way in at all:
 
 ```
 # /etc/systemd/system/emergency.service.d/override.conf, and the same for
@@ -218,10 +221,10 @@ Environment=SYSTEMD_SULOGIN_FORCE=1
 
 ### Suspend, disabled at every layer that can ask for it
 
-A desktop session on the target will put it to sleep mid-run. Observed on
-this box as a broadcast from the greeter -- `The system will suspend
-now!` -- which ends the ssh connection and silences the console, and is
-indistinguishable from a kernel that hung.
+A desktop session on the target will put it to sleep mid-run. Observed on this
+box as a broadcast from the greeter -- `The system will suspend now!` -- which
+ends the ssh connection and silences the console, and is indistinguishable from
+a kernel that hung.
 
 ```bash
 systemctl mask sleep.target suspend.target hibernate.target \
@@ -249,12 +252,11 @@ sudo -u gdm dbus-run-session -- gsettings set \
   org.gnome.desktop.session idle-delay 0
 ```
 
-Masking the targets is the layer that actually holds: whatever asks --
-greeter, logind idle, the power button -- the request fails rather than
-being honoured. `systemctl suspend` now answers `Call to Suspend failed:
-Access denied`. The lid settings matter separately, because the machine
-is a clamshell that will sit closed on a bench; without them, closing it
-ends the run.
+Masking the targets is the layer that actually holds: whatever asks -- greeter,
+logind idle, the power button -- the request fails rather than being honoured.
+`systemctl suspend` now answers `Call to Suspend failed: Access denied`. The lid
+settings matter separately, because the machine is a clamshell that will sit
+closed on a bench; without them, closing it ends the run.
 
 ### No desktop
 
@@ -267,7 +269,7 @@ The greeter is what asked to suspend, and a desktop session contributes
 nothing to a kernel boot test while adding daemons, a compositor and a
 power policy that can each act on the machine mid-run. Removing it also
 returns about a gigabyte: the box now sits at 745 MB of 7.7 GB. The masks
-above still hold whatever runs on top; this simply removes the layer that
+above still hold whatever runs on top; this removes the layer that
 kept asking.
 
 ### A shell in emergency mode, and a way back from a wedge
@@ -286,38 +288,33 @@ Environment=SYSTEMD_SULOGIN_FORCE=1
 kernel.sysrq = 1
 ```
 
-The autologin getty covers a boot that reaches userspace. A boot that
-does **not** drops to emergency mode, which runs `sulogin` -- and Fedora
-ships the root account locked, so the console answers `Cannot open access
-to console, the root account is locked.` and there is no shell at the one
-moment a shell matters. `SYSTEMD_SULOGIN_FORCE=1` is the documented way
-to let a headless machine past that.
+The autologin getty covers a boot that reaches userspace;
+`SYSTEMD_SULOGIN_FORCE=1` covers the emergency and rescue shells a boot that
+fails drops to, past the locked root account above.
 
-`kernel.sysrq=1` makes a serial BREAK followed by a key reach the kernel,
-so a wedged box can be synced and reset over the wire (`BREAK` then `s`,
-then `b`). On this machine that is the *only* remote reset: the battery
-means cutting mains power changes nothing, and the systemd watchdog is
-useless once systemd is running but stuck at a prompt.
+`kernel.sysrq=1` makes a serial BREAK followed by a key reach the kernel, so
+a wedged box can be synced and reset over the wire (`BREAK` then `s`, then
+`b`) -- including where the systemd watchdog cannot help, with systemd
+running but stuck at a prompt.
 
 ### What a failed boot leaves behind
 
-Nothing on disk. A boot that ends in emergency mode never gets far enough
+Nothing on disk. A boot that ends in emergency mode does not get far enough
 to flush the journal, so `journalctl -b -1` has no record of it --
 verified after exactly that failure. **The serial console is the only
 evidence**, which means the capture has to be running *before* the reboot
 is issued and stay open across it. Opening the port afterwards catches
 whatever is still in flight and nothing that came before.
 
-One case now leaves more than that. With `nmi_watchdog=panic
-softlockup_panic=1` on the badc entry, a lockup the NMI watchdog detects
-panics rather than sitting there, so the trace reaches the console and,
-where `hwprep.py arm` has enabled pstore, survives the reboot. A hang the
-detector cannot catch is unchanged: the console holds whatever was
-printed, and the chipset watchdog is what ends it.
+One case now leaves more than that. With `nmi_watchdog=panic softlockup_panic=1`
+on the badc entry, a lockup the NMI watchdog detects panics rather than sitting
+there, so the trace reaches the console and, where `hwprep.py arm` has enabled
+pstore, survives the reboot. A hang the detector cannot catch is unchanged: the
+console holds whatever was printed, and the chipset watchdog is what ends it.
 
 ## Booting a badc kernel
 
-Never make one the default. Install it, select it for exactly one boot,
+Do not make one the default. Install it, select it for exactly one boot,
 and let any failure fall back:
 
 ```bash
@@ -332,21 +329,21 @@ kernel that hangs is one power-button press away from a working system,
 and an unattended failure that trips the watchdog comes back on the
 distro kernel by itself.
 
-Installing a kernel also **moves the standing default to it**:
-`kernel-install` writes the new entry and `grubby --default-kernel` then
-names it, which quietly removes the fallback the one-shot scheme depends
-on. Put it back before rebooting:
+Installing a kernel moves the standing default to it, as above, which
+removes the fallback the one-shot scheme depends on. Put it back before
+rebooting:
 
 ```bash
 sudo grubby --set-default /boot/vmlinuz-7.1.10-200.fc44.x86_64
 ```
 
-`rpm -i` refuses a kernel whose version-release orders below the one the
-box already runs -- the pinned release built as `-1` against Fedora's
-`-200.fc44` -- with `package kernel-7.1.10-200.fc44.x86_64 (which is newer
-than ...) is already installed`. Kernels are install-only, so the version
-ordering is not meaningful here; `--oldpackage` is what gets past it, and
-`dnf install` applies the same semantics on its own.
+`rpm -i` refuses a kernel whose version-release orders below the one the box
+already runs -- the pinned release built as `-1` against Fedora's `-200.fc44` --
+with
+`package kernel-7.1.10-200.fc44.x86_64 (which is newer than ...) is already installed`.
+Kernels are install-only, so the version ordering is not meaningful here;
+`--oldpackage` is what gets past it, and `dnf install` applies the same
+semantics on its own.
 
 ## The harness lane
 
@@ -362,7 +359,7 @@ python3 demos/linux/packages.py --arch x86_64 --distro fedora --phases hw \
     --workdir <scratch> --report hw-x86_64.json
 ```
 
-Three of this box's properties are the lane's load-bearing assumptions:
+Four of this box's properties are the lane's load-bearing assumptions:
 
 - **The standing default is a distro kernel.** The lane reads it with
   `grubby --default-kernel`, checks `CONFIG_CC_VERSION_TEXT` in that
@@ -375,18 +372,15 @@ Three of this box's properties are the lane's load-bearing assumptions:
   the stage the console reached and then waits for the box to come back on
   the standing default; that second wait is what separates a kernel that
   hung from a box that is gone. A boot that parks *before* the real root is
-  mounted -- an initramfs emergency shell -- runs a systemd that never read
+  mounted -- an initramfs emergency shell -- runs a systemd that did not read
   `/etc/systemd/system.conf.d/watchdog.conf`, so nothing resets it. The lane
   names that outcome from the console rather than waiting the timeout out,
   and then resets the machine with SysRq over the serial line.
 - **The console is on the wire from timestamp 0.000000.** `earlycon` is
   what turns "printed nothing" into a stage the report can name.
-- **A failed boot leaves no journal.** `journalctl --list-boots` has no
-  entry for one: emergency mode never gets far enough to flush a journal
-  to disk. The serial console is the only record such a boot has, which is
-  why the lane opens the port before it does anything else, holds it open
-  across the reset, and writes the log unbuffered. A port opened after the
-  fact catches whatever was still in flight and nothing that preceded it.
+- **A failed boot leaves no journal**, as above, which is why the lane opens
+  the port before it does anything else, holds it open across the reset, and
+  writes the log unbuffered.
 
 The lane leaves the machine on the standing default and clears any pending
 one-shot selection on every exit path, including the failing ones. Like
@@ -428,6 +422,7 @@ usually need a kext.
 - **kdump** is not installed. It would capture a vmcore for panics the
   serial line truncates, though a badc kernel's own kdump path is itself
   unproven.
+
 ## Undoing all of it
 
 Every change above is reversible, and none of it touches the distribution

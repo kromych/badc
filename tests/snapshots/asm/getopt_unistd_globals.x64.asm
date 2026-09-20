@@ -32,18 +32,15 @@ Disassembly of section .text:
                	movl	$0x1, %edi
                	movl	%edi, (%rax)
                	movq	<rip>, %rax      # <addr>
-               	xorq	%rcx, %rcx
-               	movl	%ecx, (%rax)
+               	movl	$0x0, (%rax)
                	movq	<rip>, %rax      # <addr>
-               	movq	(%rax), %rax
-               	testq	%rax, %rax
+               	cmpq	$0x0, (%rax)
                	je	<addr>
                	movq	%rdi, %rax
                	popq	%rbp
                	retq
                	movq	<rip>, %rax      # <addr>
-               	movslq	(%rax), %rax
-               	testq	%rax, %rax
+               	cmpl	$0x0, (%rax)
                	je	<addr>
                	movl	$0x2, %eax
                	popq	%rbp
@@ -58,6 +55,6 @@ Disassembly of section .text:
                	movl	$0x3, %eax
                	popq	%rbp
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	popq	%rbp
                	retq

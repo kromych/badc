@@ -26,37 +26,33 @@ Disassembly of section .text:
                	int3
 
 <main>:
+               	leaq	<rip>, %rax
+               	movl	(%rax), %eax
+               	imulq	$0xa, %rax, %rax
                	leaq	<rip>, %rcx
                	movl	(%rcx), %ecx
-               	imulq	$0xa, %rcx, %rcx
-               	movl	%ecx, %ecx
-               	leaq	<rip>, %rdx
-               	movl	(%rdx), %edx
-               	addq	%rdx, %rcx
-               	movl	%ecx, %esi
-               	leaq	<rip>, %rdi
-               	movq	(%rdi), %rcx
+               	leaq	(%rax,%rcx), %rsi
+               	leaq	<rip>, %rax
+               	movq	(%rax), %rcx
                	movslq	(%rcx), %rdx
                	incq	%rdx
                	movl	%edx, (%rcx)
                	leaq	<rip>, %rcx
                	movq	(%rcx), %rdx
-               	movslq	0x4(%rdx), %r8
-               	addq	$0xa, %r8
-               	movl	%r8d, 0x4(%rdx)
-               	xorq	%rax, %rax
-               	movq	(%rdi), %rax
+               	movslq	0x4(%rdx), %rdi
+               	addq	$0xa, %rdi
+               	movl	%edi, 0x4(%rdx)
+               	movq	(%rax), %rax
                	movslq	(%rax), %rax
-               	addq	%rsi, %rax
-               	movq	(%rcx), %rdx
-               	movslq	(%rdx), %rsi
-               	addq	%rsi, %rax
-               	movslq	0x4(%rdx), %rcx
+               	leaq	(%rsi,%rax), %rdx
+               	movq	(%rcx), %rax
+               	movslq	(%rax), %rcx
+               	addq	%rdx, %rcx
+               	movslq	0x4(%rax), %rax
                	addq	%rcx, %rax
                	leaq	<rip>, %rcx
                	movq	(%rcx), %rcx
                	movslq	(%rcx), %rcx
                	addq	%rcx, %rax
                	subq	$0x64, %rax
-               	movslq	%eax, %rax
                	retq

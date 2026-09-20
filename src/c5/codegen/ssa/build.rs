@@ -32,8 +32,8 @@
 use alloc::vec::Vec;
 
 use super::super::ir::{
-    AsmSeg, AtomicRmwOp, BinOp, Block, BlockId, FpCastKind, FunctionSsa, Inst, LoadKind, MemOrder,
-    NO_VALUE, StoreKind, Terminator, ValueId, quotient_op,
+    AsmSeg, AtomicRmwOp, BinOp, BitCountOp, Block, BlockId, FpCastKind, FunctionSsa, Inst,
+    LoadKind, MemOrder, NO_VALUE, StoreKind, Terminator, ValueId, quotient_op,
 };
 
 /// Cached `(off, kind, value)` for a previously-pushed
@@ -55,12 +55,9 @@ struct LocalCacheEntry {
 /// ImmCode produce no side effects and read no memory, so the
 /// cache only needs `switch_to` invalidation. The intra-block
 /// dominance an SSA function requires holds for repeats inside
-/// the same block. `LocalAddr` is deliberately excluded -- the
-/// per-arch emit pattern-matches `LocalAddr` immediately
-/// followed by `Load` / `Store` and fuses the pair into a
-/// single-instruction addressing mode; CSE'ing the LocalAddr
-/// breaks that adjacency and falls into the "op outside the
-/// implemented subset" branch.
+/// the same block. `LocalAddr` stays out: one address per access
+/// is what `index_fold::fold_slot_addresses` folds into the
+/// access, and it takes an address a single access consumes.
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 enum PureKey {
     Imm(i64),
@@ -82,6 +79,7 @@ enum PureKey {
         lhs: ValueId,
         rhs_imm: i64,
     },
+    Neg(ValueId),
     Fneg(ValueId),
     FpCast {
         kind: FpCastKind,
@@ -97,6 +95,11 @@ enum PureKey {
         kind: LoadKind,
     },
     Bswap {
+        value: ValueId,
+        width: u8,
+    },
+    BitCount {
+        op: BitCountOp,
         value: ValueId,
         width: u8,
     },
@@ -147,6 +150,9 @@ pub(crate) struct SsaBuilder {
     /// divide plus `n - q*d` so a division over the same operands
     /// shares the quotient. See [`Self::binop`].
     split_modulo: bool,
+    /// When set, a divide by a constant stays one `BinopI` for the
+    /// mid-end to fold, bound and expand. See [`Self::divmod_const`].
+    defer_divmod: bool,
     /// Current `(line, file_idx)` source position. Stamped onto
     /// every inst pushed into the function so the DWARF emitter
     /// can recover a per-statement line table for walker-produced
@@ -188,6 +194,7 @@ impl SsaBuilder {
             extern_tls_refs: Vec::new(),
             f32_values: Vec::new(),
             cmp32: Vec::new(),
+            low_word_tests: Vec::new(),
             param_fp_mask: crate::c5::ir::FpMask::EMPTY,
             agg_descs: alloc::vec::Vec::new(),
             param_aggs: alloc::vec::Vec::new(),
@@ -221,6 +228,7 @@ impl SsaBuilder {
             last_def: NO_VALUE,
             cur_src: (0, 0),
             split_modulo: false,
+            defer_divmod: false,
         };
         let entry = b.new_block();
         b.switch_to(entry);
@@ -254,6 +262,12 @@ impl SsaBuilder {
     /// Enable the register-divisor modulo split. See [`Self::binop`].
     pub(crate) fn set_split_modulo(&mut self, on: bool) {
         self.split_modulo = on;
+    }
+
+    /// Leave constant divides to `passes::divmod_const`. See
+    /// [`Self::divmod_const`].
+    pub(crate) fn set_defer_divmod(&mut self, on: bool) {
+        self.defer_divmod = on;
     }
 
     /// Record the over-aligned frame region for over-aligned automatic
@@ -316,6 +330,26 @@ impl SsaBuilder {
 
     /// Scan the in-block pure-value cache for a previously-built
     /// entry with the same key; return its ValueId on a hit.
+    /// Ahead of a call: forget the loads, since the callee may write
+    /// through any pointer it receives (an escaped local's address
+    /// included), and the operand-free values, which take one or two
+    /// instructions to set again after the call and a callee-saved
+    /// register, saved and restored on every call of the function, to
+    /// keep across it.
+    fn cross_call(&mut self) {
+        self.local_cache.clear();
+        self.pure_cache.retain(|k, _| {
+            !matches!(
+                k,
+                PureKey::Imm(_)
+                    | PureKey::ImmF32(_)
+                    | PureKey::ImmData(_)
+                    | PureKey::ImmCode(_)
+                    | PureKey::TlsAddr(_)
+            )
+        });
+    }
+
     fn lookup_pure(&self, key: PureKey) -> Option<ValueId> {
         self.pure_cache.get(&key).copied()
     }
@@ -588,6 +622,12 @@ impl SsaBuilder {
     /// initialises consistently across SSA producers.
     pub(crate) fn alloca_init(&mut self, slot: i64) -> ValueId {
         self.push(Inst::AllocaInit(slot))
+    }
+
+    /// `Inst::LifetimeEnd` -- the end of the automatic object at `slot`
+    /// (C99 6.2.4p2). No value, no code; `ssa::slot_coalesce` reads it.
+    pub(crate) fn lifetime_end(&mut self, slot: i64) -> ValueId {
+        self.push(Inst::LifetimeEnd(slot))
     }
 
     /// `Inst::ParamRef`. The value is the i-th declared parameter
@@ -869,10 +909,17 @@ impl SsaBuilder {
     /// divisor to shifts, masks and reciprocal multiplies. Returns
     /// `None` when `op` is not a divide / modulo, `rhs` is not an
     /// immediate, or the divisor is zero, leaving the caller on the
-    /// register-rhs divide path (the per-arch `BinopI` emit does not
-    /// lower Div / Mod). `width_bits` is the operand width after the
-    /// usual arithmetic conversions; narrower types are already
+    /// register-rhs divide path. `width_bits` is the operand width after
+    /// the usual arithmetic conversions; narrower types are already
     /// sign- / zero-extended into the 64-bit SSA value.
+    ///
+    /// With [`Self::set_defer_divmod`] the result is one `BinopI`, which
+    /// no emitter lowers: `passes::divmod_const` expands it once the
+    /// constant folder and the range analysis have read it, sizing the
+    /// operation from the operand's range instead of `width_bits`. An
+    /// expansion of at most one instruction is not deferred: the operand
+    /// itself, a constant, a shift, a mask or a comparison bounds the
+    /// result as tightly, and keeps its shape for the passes in between.
     pub(crate) fn divmod_const(
         &mut self,
         op: BinOp,
@@ -881,7 +928,11 @@ impl SsaBuilder {
         width_bits: u32,
     ) -> Option<ValueId> {
         let d = self.peek_imm(rhs)?;
-        super::super::magic::lower_divmod(self, op, lhs, d, width_bits)
+        use super::super::magic::{lower_divmod, step_count};
+        if self.defer_divmod && step_count(op, d, width_bits).is_some_and(|n| n > 1) {
+            return Some(self.binop_imm(op, lhs, d));
+        }
+        lower_divmod(self, op, lhs, d, width_bits)
     }
 
     /// If `v` names an `Inst::Imm` in the current function, return
@@ -1082,9 +1133,35 @@ impl SsaBuilder {
         })
     }
 
+    /// `Inst::Neg` -- two's-complement negation of the full 64-bit
+    /// value, wrapping. A constant operand folds the same way.
+    /// CSE-eligible.
+    pub(crate) fn neg(&mut self, v: ValueId) -> ValueId {
+        if let Some(k) = self.peek_imm(v)
+            && !self.is_f32(v)
+        {
+            return self.imm(k.wrapping_neg());
+        }
+        let key = PureKey::Neg(v);
+        if let Some(cached) = self.lookup_pure(key) {
+            return cached;
+        }
+        let id = self.push(Inst::Neg(v));
+        self.pure_cache.insert(key, id);
+        id
+    }
+
     /// `Inst::Fneg`. Pure value; same input -> same output bit
-    /// pattern. CSE-eligible.
+    /// pattern. CSE-eligible. A constant operand folds: IEEE 754
+    /// negation flips the sign bit, exactly for every value.
     pub(crate) fn fneg(&mut self, v: ValueId) -> ValueId {
+        if let Some(&Inst::Imm(k)) = self.func.insts.get(v as usize) {
+            return if self.is_f32(v) {
+                self.imm_f32(k as u32 ^ 0x8000_0000)
+            } else {
+                self.imm(k ^ i64::MIN)
+            };
+        }
         let key = PureKey::Fneg(v);
         if let Some(cached) = self.lookup_pure(key) {
             return cached;
@@ -1131,6 +1208,21 @@ impl SsaBuilder {
             return cached;
         }
         let id = self.push(Inst::Bswap { value, width });
+        self.pure_cache.insert(key, id);
+        id
+    }
+
+    /// `Inst::BitCount` -- the `op` count over the low `width` bytes of
+    /// `value`. A constant operand folds. CSE-eligible.
+    pub(crate) fn bit_count(&mut self, op: BitCountOp, value: ValueId, width: u8) -> ValueId {
+        if let Some(k) = self.peek_imm(value) {
+            return self.imm(crate::c5::vm::eval::eval_bit_count(op, k, width));
+        }
+        let key = PureKey::BitCount { op, value, width };
+        if let Some(cached) = self.lookup_pure(key) {
+            return cached;
+        }
+        let id = self.push(Inst::BitCount { op, value, width });
         self.pure_cache.insert(key, id);
         id
     }
@@ -1194,10 +1286,7 @@ impl SsaBuilder {
         self.mark_f32(id)
     }
 
-    /// `Inst::Call` -- direct user-function call. Callees may
-    /// write through any pointer they receive (including ones
-    /// derived from local addresses that escaped earlier in the
-    /// caller), so every CSE entry invalidates.
+    /// `Inst::Call` -- direct user-function call (see `cross_call`).
     pub(crate) fn call(
         &mut self,
         target_pc: usize,
@@ -1206,7 +1295,7 @@ impl SsaBuilder {
         fp_return: bool,
         fp_arg_mask: crate::c5::ir::FpMask,
     ) -> ValueId {
-        self.local_cache.clear();
+        self.cross_call();
         self.push(Inst::Call {
             target_pc,
             args,
@@ -1231,7 +1320,7 @@ impl SsaBuilder {
         fp_return: bool,
         fp_arg_mask: crate::c5::ir::FpMask,
     ) -> ValueId {
-        self.local_cache.clear();
+        self.cross_call();
         let v = self.push(Inst::Call {
             target_pc: 0,
             args,
@@ -1258,7 +1347,7 @@ impl SsaBuilder {
         fp_arg_mask: crate::c5::ir::FpMask,
         callee_conv: crate::c5::codegen::CallConv,
     ) -> ValueId {
-        self.local_cache.clear();
+        self.cross_call();
         self.push(Inst::CallIndirect {
             target,
             args,
@@ -1458,10 +1547,7 @@ impl SsaBuilder {
         base
     }
 
-    /// `Inst::CallExt` -- libc / external call. libc body may
-    /// write through caller-supplied pointers, including ones
-    /// derived from escaped local addresses; invalidate the
-    /// CSE cache.
+    /// `Inst::CallExt` -- libc / external call (see `cross_call`).
     pub(crate) fn call_ext(
         &mut self,
         binding_idx: i64,
@@ -1469,7 +1555,7 @@ impl SsaBuilder {
         fp_arg_mask: crate::c5::ir::FpMask,
         fp_return: bool,
     ) -> ValueId {
-        self.local_cache.clear();
+        self.cross_call();
         self.push(Inst::CallExt {
             binding_idx,
             args,
@@ -1619,7 +1705,7 @@ impl SsaBuilder {
 /// width_bits`, so 32 -> I32, 48 -> I16, 56 -> I8. Other amounts are
 /// genuine shifts (or sub-word bitfield extractions) and are left
 /// alone.
-fn sign_narrow_kind(k: i64) -> Option<LoadKind> {
+pub(crate) fn sign_narrow_kind(k: i64) -> Option<LoadKind> {
     match k {
         32 => Some(LoadKind::I32),
         48 => Some(LoadKind::I16),

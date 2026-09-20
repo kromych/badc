@@ -60,10 +60,7 @@ pub(crate) fn run(func: &mut FunctionSsa) -> BTreeSet<i64> {
 }
 
 pub(crate) fn applies(func: &FunctionSsa) -> bool {
-    !(func.is_naked
-        || func.has_returns_twice_call
-        || !func.computed_goto_targets.is_empty()
-        || func.has_sp_asm())
+    !(func.is_naked || func.has_returns_twice_call || func.has_sp_asm())
 }
 
 /// [`run`]'s slots once `callee` is spliced: its aggregate parameters are

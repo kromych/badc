@@ -8,7 +8,7 @@ deps; the optional module adds two more files for the SHA-512
 families.
 
 Pinned at upstream tag `4.0.2`. Pulled through the badc
-vendor-deps mirror -- see [`setup.py`](setup.py).
+vendor-deps mirror -- see `setup.py`.
 
 ## Vendored surface
 
@@ -21,7 +21,7 @@ vendor-deps mirror -- see [`setup.py`](setup.py).
 
 ## Smoke scenarios
 
-[`smoke.py`](smoke.py) builds the two TUs + the driver through
+`smoke.py` builds the two TUs + the driver through
 badc in four flavours (amalgamation + separate-TU compile, each
 at `-O` and no-`-O`), plus an archive flavour, and runs each
 binary. Five scenarios:

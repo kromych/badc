@@ -346,19 +346,13 @@ pub(crate) enum Token {
     StaticAssert,
     /// `void` keyword. A distinct lexeme so a bare `void` return
     /// type or `(void)` parameter list can be told apart from a
-    /// `char` of the same width. The type encoding stays
-    /// `Ty::Char | UNSIGNED_BIT` for both spellings (so `void *`
-    /// arithmetic, sizeof, struct-field layout, and function-
-    /// pointer encoding behave identically to a previous `void
-    /// = char` desugaring); the void-vs-char distinction is
-    /// carried out-of-band by
-    /// [`super::compiler::Compiler::pending_base_was_void`] and
-    /// [`super::symbol::Symbol::returns_void`]. The earlier
-    /// attempt to add a `Ty::Void` band collided with the
-    /// function-pointer slot encoding C99 6.7.6.3 requires for
-    /// `void (*)(...)` members of dispatch-table structs;
-    /// keeping the encoding untouched and carrying void-ness on
-    /// the side avoids that collision.
+    /// `char` of the same width. The type tag stays in the
+    /// `unsigned char` band (so `void *` arithmetic, sizeof,
+    /// struct-field layout, and function-pointer encoding follow
+    /// that band) and carries `types::VOID_BIT`, which
+    /// `types::is_void_ty` tests; the parser also tracks the
+    /// spelling in [`super::compiler::Compiler::pending_base_was_void`]
+    /// and [`super::symbol::Symbol::returns_void`].
     Void,
     /// `typeof` and `typeof_unqual` (C23 6.7.2.5) and their double-underscore
     /// `__typeof__` / `__typeof` / `__typeof_unqual__` / `__typeof_unqual`

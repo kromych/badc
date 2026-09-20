@@ -26,10 +26,7 @@ Disassembly of section .text:
                	int3
 
 <macc>:
-               	movl	%edi, %eax
-               	movl	%esi, %esi
-               	addq	%rsi, %rax
-               	movl	%eax, %eax
+               	leaq	(%rdi,%rsi), %rax
                	movslq	%eax, %rax
                	imulq	%rdx, %rax
                	addq	%rcx, %rax
@@ -37,11 +34,10 @@ Disassembly of section .text:
 
 <macc_sub>:
                	movslq	%edi, %rdi
-               	movq	%rdi, %rax
-               	imulq	%rsi, %rax
-               	movq	%rax, %r10
+               	movq	%rdi, %rcx
+               	imulq	%rsi, %rcx
                	movq	%rdx, %rax
-               	subq	%r10, %rax
+               	subq	%rcx, %rax
                	retq
 
 <main>:
@@ -58,8 +54,8 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	popq	%rbp
                	retq
-               	movabsq	$-0x4, %rdi
-               	xorq	%rsi, %rsi
+               	movq	$-0x4, %rdi
+               	xorl	%esi, %esi
                	movl	$0x3b9aca00, %edx       # imm = 0x3B9ACA00
                	movq	%rsi, %rcx
                	callq	<addr>
@@ -72,16 +68,16 @@ Disassembly of section .text:
                	movl	$0x2, %edi
                	movl	$0x3, %esi
                	movl	$0x7, %edx
-               	movabsq	$-0x1, %rcx
+               	movq	$-0x1, %rcx
                	callq	<addr>
                	cmpq	$0x22, %rax
                	je	<addr>
                	movl	$0x3, %eax
                	popq	%rbp
                	retq
-               	movabsq	$-0x5, %rdi
+               	movq	$-0x5, %rdi
                	movl	$0x3b9aca00, %esi       # imm = 0x3B9ACA00
-               	xorq	%rdx, %rdx
+               	xorl	%edx, %edx
                	callq	<addr>
                	movabsq	$0x12a05f200, %r11      # imm = 0x12A05F200
                	cmpq	%r11, %rax
@@ -90,7 +86,7 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	movl	$0xf4240, %edi          # imm = 0xF4240
-               	xorq	%rdx, %rdx
+               	xorl	%edx, %edx
                	movq	%rdi, %rsi
                	callq	<addr>
                	movabsq	$-0xe8d4a51000, %r11    # imm = 0xFFFFFF172B5AF000

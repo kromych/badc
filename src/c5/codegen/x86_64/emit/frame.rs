@@ -58,6 +58,9 @@ pub(crate) struct Frame {
     /// with no rsp move; its bytes are counted in `frame_bytes` and the
     /// objects live at `[rbp + align_region_off + region_off]`.
     pub align_region_off: i64,
+    /// The body makes a call or holds an intrinsic whose lowering needs the
+    /// frame record (`body_keeps_frame_record`).
+    pub keeps_record: bool,
     /// Registers `-ffixed-` keeps out of every scratch pick.
     pub fixed_regs: super::FixedRegs,
     /// The FP scratch xmm registers, outside the allocator's banks; see
@@ -67,7 +70,12 @@ pub(crate) struct Frame {
     pub parts: super::ssa::emit_common::FrameStack,
 }
 
-pub(crate) fn compute_frame(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi) -> Frame {
+pub(crate) fn compute_frame(
+    func: &FunctionSsa,
+    alloc: &Allocation,
+    abi: super::Abi,
+    target: Target,
+) -> Frame {
     let (declared_locals_bytes, alloc_spill_bytes, saved_gpr_bytes) =
         super::ssa::emit_common::compute_frame_base(func, alloc);
     // The canary region joins the top of the locals region, so every offset
@@ -92,8 +100,8 @@ pub(crate) fn compute_frame(func: &FunctionSsa, alloc: &Allocation, abi: super::
     } else {
         0
     };
-    // Win64: the saved non-volatile xmm scratch, 16 bytes each, below the
-    // saved GPRs.
+    // Win64: the saved non-volatile xmm scratch, 16 bytes each, above the
+    // saved GPRs, which the prologue pushes at the frame bottom.
     let saved_fpr_bytes = alloc.fp_used.len() as u32 * 16;
     // The inline-asm scratch region, sized for the largest statement. A
     // naked function has no frame and stages nothing.
@@ -136,6 +144,9 @@ pub(crate) fn compute_frame(func: &FunctionSsa, alloc: &Allocation, abi: super::
         frame_bytes,
         alloc_spill_base: upper_bytes,
         canary_bytes,
+        keeps_record: super::ssa::emit_common::body_keeps_frame_record(func, target, |i| {
+            intrinsic_keeps_frame(i, abi)
+        }),
         fixed_regs: abi.fixed_regs,
         fp_scratch: alloc.fp_scratch,
         parts: super::ssa::emit_common::FrameStack {
@@ -489,7 +500,7 @@ pub(super) fn is_full_leaf(
     if !alloc.fp_used.is_empty() {
         return false;
     }
-    super::ssa::emit_common::function_makes_no_calls(func)
+    !frame.keeps_record
 }
 
 /// Each declared parameter's incoming placement from `plan_call_args`;

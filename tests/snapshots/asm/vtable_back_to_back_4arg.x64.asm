@@ -30,64 +30,58 @@ Disassembly of section .text:
                	movq	%rax, (%rdi)
                	leaq	(%rdx,%rcx), %rax
                	movl	%eax, 0x8(%rdi)
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	retq
 
 <g_generate>:
-               	movslq	0x8(%rdi), %rax
-               	addq	$0x64, %rax
-               	movl	%eax, (%rsi)
-               	movslq	%edx, %rax
+               	movq	%rdx, %rax
+               	movslq	0x8(%rdi), %rcx
+               	addq	$0x64, %rcx
+               	movl	%ecx, (%rsi)
                	retq
 
 <driver>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x30, %rsp
-               	movq	%rbx, (%rsp)
+               	subq	$0x20, %rsp
                	leaq	-0x18(%rbp), %rdi
                	xorps	%xmm14, %xmm14
                	movups	%xmm14, (%rdi)
                	leaq	<rip>, %rax
                	movq	(%rax), %rax
                	leaq	<rip>, %rsi
-               	movl	$0x1, %ebx
+               	movl	$0x1, %edx
                	movl	$0x64, %ecx
-               	movq	%rbx, %rdx
                	callq	*%rax
                	leaq	-0x18(%rbp), %rdi
                	movq	(%rdi), %rax
                	movq	0x8(%rax), %rax
                	leaq	-0x8(%rbp), %rsi
-               	movq	%rbx, %rdx
+               	movl	$0x1, %edx
                	callq	*%rax
                	movslq	-0x8(%rbp), %rax
-               	movq	(%rsp), %rbx
                	leave
                	retq
 
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x70, %rsp
-               	movq	%rbx, (%rsp)
+               	subq	$0x60, %rsp
                	leaq	-0x10(%rbp), %rdi
                	xorps	%xmm14, %xmm14
                	movups	%xmm14, (%rdi)
                	leaq	<rip>, %rax
                	movq	(%rax), %rax
                	leaq	<rip>, %rsi
-               	movl	$0x1, %ebx
+               	movl	$0x1, %edx
                	movl	$0x64, %ecx
-               	movq	%rbx, %rdx
                	callq	*%rax
                	leaq	-0x10(%rbp), %rdi
                	movq	(%rdi), %rax
                	movq	0x8(%rax), %rax
                	leaq	-0x40(%rbp), %rsi
-               	movq	%rbx, %rdx
+               	movl	$0x1, %edx
                	callq	*%rax
                	movslq	-0x40(%rbp), %rax
-               	movq	(%rsp), %rbx
                	leave
                	retq

@@ -26,19 +26,16 @@ Disassembly of section .text:
                	int3
 
 <hop_return_n>:
-               	cmpl	$0x2, %edi
+               	movq	%rdi, %rax
+               	cmpl	$0x2, %eax
                	jge	<addr>
-               	movslq	%edi, %rax
                	retq
-               	movslq	%edi, %rax
                	retq
 
 <hop>:
                	leaq	0x1(%rdi), %rax
-               	movslq	%eax, %rax
                	retq
 
 <main>:
-               	movl	$0x7, %eax
                	movl	$0x7, %eax
                	retq

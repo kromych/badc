@@ -27,20 +27,17 @@ Disassembly of section .text:
 
 <main>:
                	movl	$0x1, %ecx
-               	xorq	%rax, %rax
-               	jmp	<addr>
+               	xorl	%eax, %eax
                	imulq	$0xf4243, %rcx, %rcx    # imm = 0xF4243
                	addq	%rax, %rcx
                	movslq	%ecx, %rcx
                	incq	%rcx
-               	movslq	%eax, %rax
                	incq	%rax
                	cmpl	$0x32, %eax
                	jl	<addr>
                	cmpq	$-0x4728dfba, %rcx      # imm = 0xB8D72046
                	jne	<addr>
-               	xorq	%rax, %rax
-               	movslq	%eax, %rax
+               	xorl	%eax, %eax
                	retq
                	movl	$0x1, %eax
                	jmp	<addr>

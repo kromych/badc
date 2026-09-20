@@ -16,17 +16,13 @@ Disassembly of section .text:
 <hop_return_n>:
                	cmp	w0, #0x2
                	b.ge	<addr>
-               	sxtw	x0, w0
                	ret
-               	sxtw	x0, w0
                	ret
 
 <hop>:
                	add	x0, x0, #0x1
-               	sxtw	x0, w0
                	ret
 
 <main>:
-               	mov	x0, #0x7                // =7
                	mov	x0, #0x7                // =7
                	ret

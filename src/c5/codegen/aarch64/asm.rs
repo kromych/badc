@@ -1778,6 +1778,17 @@ pub(crate) fn assign_operand_regs(
 mod tests {
     use super::*;
 
+    /// The codegen's pattern-side immediate and the assembler's decimal
+    /// parser agree on every one of the 256 values.
+    #[test]
+    fn fp_imm_parser_agrees_with_the_expansion() {
+        for imm8 in 0..=u8::MAX {
+            let bits = super::super::encode::vfp_expand_imm(imm8, false);
+            let text = alloc::format!("{}", f64::from_bits(bits));
+            assert_eq!(parse_fp_imm(&text), Some(imm8), "{text}");
+        }
+    }
+
     #[test]
     fn parse_location_counter_targets() {
         // `.` alone and with a signed byte offset, decimal or hex.

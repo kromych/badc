@@ -1,4 +1,4 @@
-# `badc`
+# `badc` ([performance](https://badc.dev/performance/))
 
 [![CI](https://github.com/kromych/badc/actions/workflows/ci.yml/badge.svg)](https://github.com/kromych/badc/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/kromych/badc?sort=semver&display_name=tag)](https://github.com/kromych/badc/releases/latest)
@@ -10,13 +10,15 @@
 `badc` is a small cross-platform optimizing C compiler, and a
 compiler-as-library, that emits native binaries for five targets from any host.
 It carries its own linker, DWARF emitter, inline-asm encoder, in-process JIT,
-and SSA interpreter.
+and SSA interpreter. To ensure correctness, CI runs over 80 jobs and a few
+thousand tests, and fuzzing jobs run daily.
 
-> `badc` used to be bad when the project started out, and the name stuck.
->
-> There is some compiler-building jargon in this document here and there. You can safely skip it, and jump to the usage section right away.
->
-> For _the true compiler heads_ there is the `--dump-ssa` option which prints each function's SSA IR plus the register allocator's per-value placement to stderr before lowering.
+> * `badc` used to be bad when the project started out, and the name stuck.
+> * There is some compiler-building jargon in this document here and there. You
+>   can skip it and go to the usage section.
+> * For _the true compiler heads_ there is the `--dump-ssa` option, which prints
+>   each function's SSA IR plus the register allocator's per-value placement to
+>   stderr before lowering.
 
 ## Demos
 
@@ -35,24 +37,27 @@ and SSA interpreter.
   [`yasm`](./demos/yasm/) assemblers, each run against its own test suite.
 * _Firmware and kernels_: [`edk2`](./demos/edk2/): badc compiles the full
   UEFI firmware from edk2 source into a bootable OVMF / AAVMF image, and the CI
-  boots run under it. [`efi_hello`](./demos/efi_hello/) is a single-source EFI
-  application, its PE subsystem selected by `#pragma subsystem`. [`kernel`](./demos/kernel/) is a freestanding preemptive
+  boots run under it. [`efi_hello`](./demos/README.md#efi_hello) is a
+  single-source EFI application, its PE subsystem selected by
+  `#pragma subsystem`. [`kernel`](./demos/kernel/) is a freestanding preemptive
   multitasking kernel on both architectures, timer interrupts and context
-  switches included , [`Linux`](./demos/linux) is the Linux kernel `7.1.10`.
+  switches included, [`Linux`](./demos/linux/) is the Linux kernel `7.1.10`.
 * _Cryptography and compression_: [`TweetNaCl`](./demos/tweetnacl/),
   [`Monocypher`](./demos/monocypher/), [`BearSSL`](./demos/bearssl/),
   [`miniz`](./demos/miniz/), [`bzip2`](./demos/bzip2/).
-* _Graphics, math, and the rest_: [`stb`](./demos/stb/),
+* _Graphics, math, and the rest_: [`stb`](./demos/README.md#stb),
   [`raylib`](./demos/raylib/) with a Lode Runner game,
   [`kissfft`](./demos/kissfft/), the [`GUI`](./demos/gui_hello/) demos (one
   windowed program per OS family, each cross-compiled to every target), the
-  [`WDM`](./demos/wdm_driver/) Windows kernel driver, the NT native binaries
-  ([`nt_hello`](./demos/nt_hello/), an `IMAGE_SUBSYSTEM_NATIVE` PE that runs
-  under `ntdll` alone, and [`nt_loader`](./demos/nt_loader/), which spawns one
-  through `NtCreateUserProcess`), and the cooperative-concurrency libraries
-  ([`libmill`](./demos/libmill/), [`libdill`](./demos/libdill/),
-  [`coroutines`](./demos/coroutines/)), whose context switches run through
-  inline asm.
+  [`WDM`](./demos/README.md#wdm_driver) Windows kernel driver, the NT native
+  binaries ([`nt_hello`](./demos/README.md#nt_hello), an
+  `IMAGE_SUBSYSTEM_NATIVE` PE that runs under `ntdll` alone, and
+  [`nt_loader`](./demos/README.md#nt_loader), which spawns one through
+  `NtCreateUserProcess`), and the cooperative-concurrency libraries
+  ([`libmill`](./demos/README.md#libmill-libdill-coroutines),
+  [`libdill`](./demos/README.md#libmill-libdill-coroutines),
+  [`coroutines`](./demos/README.md#libmill-libdill-coroutines)), whose context
+  switches run through inline asm.
 * _Editors, terminal tools_: [`uemacs`](./demos/uemacs/), MicroEMACS built
   from Linus Torvalds' tree,
   [`picocom`](./demos/picocom/), a serial terminal emulator (driven between
@@ -80,17 +85,18 @@ And you can really crank the fun up with something like
 badc -O --jit tests/fixtures/c/c4.c tests/fixtures/c/c4.c tests/fixtures/c/c4.c tests/fixtures/c/c4.c
 ```
 
-to run it quadro-nested :)
+to run it quadro-nested under JIT :)
 
 It has since grown from a stack IR through a 3-operand IR to SSA with an
-optimizing backend, without taking on the pass count of a titan toolchain.
+optimizing backend.
 
 ## Documentation
 
 * [What `badc` can do](./doc/what-badc-can-do.md) -- a short survey of `badc` features.
 * [Getting started](./doc/getting-started.md) -- install, first run, flags,
   debugging, C as a script.
-* [Native compilation](./doc/native-compilation.md) -- targets, multiple
+* [Native compilation](./doc/native-compilation.md) -- targets, the
+  instruction-set baseline (x86-64-v3, the Apple M1's ARMv8.4-A), multiple
   translation units, the linker, headers and bindings, `#pragma`-driven build
   flags, the JIT, optimizations.
 * [Diagnostics](./doc/diagnostics.md) -- the catalogue: every warning and

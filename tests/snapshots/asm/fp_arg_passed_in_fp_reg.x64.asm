@@ -39,40 +39,39 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x1, %eax
                	retq
-               	movabsq	$0x3ff8000000000000, %rax # imm = 0x3FF8000000000000
+               	movabsq	$0x3ff8000000000000, %rcx # imm = 0x3FF8000000000000
                	movabsq	$0x4004000000000000, %rdx # imm = 0x4004000000000000
-               	movl	$0x3, %ecx
+               	movl	$0x3, %eax
                	movl	$0x4, %esi
                	xorps	%xmm0, %xmm0
-               	cvtsi2sd	%rcx, %xmm0
+               	cvtsi2sd	%rax, %xmm0
                	xorps	%xmm1, %xmm1
                	cvtsi2sd	%rsi, %xmm1
                	movapd	%xmm1, %xmm15
                	movq	%rdx, %xmm1
                	mulsd	%xmm15, %xmm1
-               	movq	%rax, %xmm14
+               	movq	%rcx, %xmm14
                	movapd	%xmm0, %xmm15
                	movapd	%xmm1, %xmm0
                	vfmadd231sd	%xmm15, %xmm14, %xmm0 # xmm0 = (xmm14 * xmm15) + xmm0
-               	movabsq	$0x402d000000000000, %rax # imm = 0x402D000000000000
-               	movq	%rax, %xmm15
+               	movabsq	$0x402d000000000000, %rcx # imm = 0x402D000000000000
+               	movq	%rcx, %xmm15
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x2, %eax
                	retq
-               	movabsq	$0x4019000000000000, %rax # imm = 0x4019000000000000
+               	movabsq	$0x4019000000000000, %rcx # imm = 0x4019000000000000
                	movabsq	$0x4010000000000000, %rdx # imm = 0x4010000000000000
-               	movq	%rax, %xmm14
+               	movq	%rcx, %xmm14
                	movq	%rdx, %xmm15
-               	movq	%rax, %xmm0
+               	movq	%rcx, %xmm0
                	vfmadd231sd	%xmm15, %xmm14, %xmm0 # xmm0 = (xmm14 * xmm15) + xmm0
-               	movabsq	$0x403f400000000000, %rax # imm = 0x403F400000000000
-               	movq	%rax, %xmm15
+               	movabsq	$0x403f400000000000, %rcx # imm = 0x403F400000000000
+               	movq	%rcx, %xmm15
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>
                	je	<addr>
-               	movq	%rcx, %rax
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	retq

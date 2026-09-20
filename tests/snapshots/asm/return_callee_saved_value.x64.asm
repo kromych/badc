@@ -28,15 +28,15 @@ Disassembly of section .text:
 <held_across_call>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%rbx, (%rsp)
+               	subq	$0x8, %rsp
+               	pushq	%rbx
                	leaq	(%rdi,%rdi,2), %rax
                	leaq	0x1(%rax), %rbx
                	leaq	<rip>, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
                	movq	%rbx, %rax
-               	movq	(%rsp), %rbx
+               	popq	%rbx
                	leave
                	retq
 
@@ -50,13 +50,13 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	popq	%rbp
                	retq
-               	movabsq	$-0x4, %rdi
+               	movq	$-0x4, %rdi
                	callq	<addr>
                	cmpq	$-0xb, %rax
                	je	<addr>
                	movl	$0x2, %eax
                	popq	%rbp
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	popq	%rbp
                	retq

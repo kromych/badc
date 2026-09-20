@@ -365,15 +365,23 @@ fn store_kind_width(kind: super::super::ir::StoreKind) -> u32 {
     }
 }
 
+/// Bytes the prologue writes into a register-carried parameter's cell: the
+/// argument register, whole, at every declared width. The rest of the cell
+/// it never writes.
+const PARAM_HOME_BYTES: u32 = 8;
+
 /// `mask[i]`: the body's first access to parameter `i`'s frame cell is a
-/// store in the entry block, wide enough for every surviving load of the
-/// cell, and nothing takes the cell's address. The entry block dominates
-/// the function, so that store precedes every read and the incoming value
-/// the prologue would put there has no reader (C99 6.2.4p2). It is the
-/// `-O0` shape: the walker seeds each parameter's cell from its `ParamRef`
-/// and the body reads it back at the declared width. The cell stays
-/// observed, so a caller sizing the cell region reads
-/// [`scan_param_slot_usage`] instead.
+/// store in the entry block that covers every byte a reader can see. The
+/// entry block dominates the function and runs once, so that store
+/// precedes every read -- including one through an address the body takes
+/// later, since taking it is itself an access this scan orders -- and the
+/// incoming value the prologue would put there has no reader (C99
+/// 6.2.4p2). It is the `-O0` shape: the walker seeds each parameter's cell
+/// from its `ParamRef` and the body reads it back at the declared width.
+/// Coverage is the widest surviving `LoadLocal`, and [`PARAM_HOME_BYTES`]
+/// besides once the address is taken: a read through an address names no
+/// width here. The cell stays observed, so a caller sizing the cell region
+/// reads [`scan_param_slot_usage`] instead.
 pub(crate) fn param_cell_written_first(
     func: &super::super::ir::FunctionSsa,
     alloc: &super::reg_alloc::Allocation,
@@ -417,26 +425,39 @@ pub(crate) fn param_cell_written_first(
         }
     }
     (0..n_params)
-        .map(|c| !escapes[c] && written[c] > 0 && written[c] >= widest_load[c])
+        .map(|c| {
+            let covers = if escapes[c] {
+                widest_load[c].max(PARAM_HOME_BYTES)
+            } else {
+                widest_load[c]
+            };
+            written[c] > 0 && written[c] >= covers
+        })
         .collect()
 }
 
-/// Whether the function issues no call and needs no scratch-clobbering
-/// intrinsic or TLS access, so a leaf prologue/epilogue may be elided. The
-/// frame and register-file conditions a leaf also requires are target-specific
-/// and checked by the caller.
-pub(crate) fn function_makes_no_calls(func: &super::super::ir::FunctionSsa) -> bool {
+/// Whether the body needs the frame record: it makes a call, which
+/// overwrites the return address register or moves the stack under the
+/// return address, or holds an intrinsic whose lowering the backend states
+/// to need it (`intrinsic_keeps_frame`). A `TlsAddr` is a call where the
+/// target's TLS access is one. The frame and register-file conditions a leaf
+/// also requires are target-specific and checked by the caller.
+pub(crate) fn body_keeps_frame_record(
+    func: &super::super::ir::FunctionSsa,
+    target: super::Target,
+    intrinsic_keeps_frame: impl Fn(crate::c5::op::Intrinsic) -> bool,
+) -> bool {
     use super::super::ir::Inst;
-    !func.insts.iter().any(|inst| {
-        matches!(
-            inst,
-            Inst::Call { .. }
-                | Inst::CallIndirect { .. }
-                | Inst::CallExt { .. }
-                | Inst::TailExt(_)
-                | Inst::Intrinsic { .. }
-                | Inst::TlsAddr(_)
-        )
+    func.insts.iter().any(|inst| match inst {
+        Inst::Call { .. } | Inst::CallIndirect { .. } | Inst::CallExt { .. } | Inst::TailExt(_) => {
+            true
+        }
+        Inst::TlsAddr(_) => super::reg_alloc::tls_addr_is_call(target),
+        // An unknown discriminant has no lowering; the emit refuses it.
+        Inst::Intrinsic { kind, .. } => {
+            crate::c5::op::Intrinsic::from_i64(*kind).is_none_or(&intrinsic_keeps_frame)
+        }
+        _ => false,
     })
 }
 
@@ -512,6 +533,17 @@ pub(crate) trait EmitBackend {
     );
     /// Copy one integer register to another (`dst <- src`).
     fn int_reg_mov(&self, code: &mut alloc::vec::Vec<u8>, dst: u8, src: u8);
+    /// `dst <- src` sign-extended from the width of `kind` (`I8` / `I16` / `I32`).
+    fn int_reg_ext(
+        &self,
+        code: &mut alloc::vec::Vec<u8>,
+        dst: u8,
+        src: u8,
+        kind: super::super::ir::LoadKind,
+    );
+    /// Exchange two integer registers. `false`, with nothing emitted, where
+    /// the target has no such instruction.
+    fn int_reg_xchg(&self, code: &mut alloc::vec::Vec<u8>, a: u8, b: u8) -> bool;
     /// Store integer register `src` to spill slot `slot`; `base` is a free
     /// scratch a backend may use to form an out-of-reach slot address.
     fn int_spill_store(
@@ -530,15 +562,13 @@ pub(crate) trait EmitBackend {
         slot: u32,
         dst: u8,
     );
-    /// Move a value from spill slot `src` to spill slot `dst`, staging through
-    /// register `stage`; `hold` is a borrowable register for an out-of-reach
-    /// destination address. The reach handling is target-specific.
-    fn int_spill_to_spill(
+    /// Store `stage` to spill slot `slot`; an out-of-reach slot address
+    /// borrows `hold`, which may carry a cycle source, around the store.
+    fn int_spill_store_staged(
         &self,
         code: &mut alloc::vec::Vec<u8>,
         frame: Self::Frame,
-        src: u32,
-        dst: u32,
+        slot: u32,
         stage: u8,
         hold: u8,
     );
@@ -553,30 +583,36 @@ pub(crate) trait EmitBackend {
         slot: u32,
         src: u8,
     );
-    /// Break a residual cycle in an integer place-move set: emit one resolving
-    /// transfer and rewrite the moves that read the displaced source. x86_64
-    /// exchanges a register-register edge; aarch64 stages through `hold`.
-    fn break_place_cycle(
-        &self,
-        code: &mut alloc::vec::Vec<u8>,
-        moves: &mut alloc::vec::Vec<(super::reg_alloc::Place, super::reg_alloc::Place)>,
-        frame: Self::Frame,
-        hold: u8,
-        stage: u8,
-    );
     /// Load a raw integer immediate into integer register `dst`.
     fn int_reg_load_imm(&self, code: &mut alloc::vec::Vec<u8>, dst: u8, bits: i64);
     /// Reinterpret integer register `src`'s bits as a floating-point value in
     /// FP register `dst` (no numeric conversion): `fmov` / `movq`. `is_f64`
     /// selects the 8-byte vs 4-byte form.
     fn fp_reg_from_int_reg(&self, code: &mut alloc::vec::Vec<u8>, dst: u8, src: u8, is_f64: bool);
+    /// Write the pattern `bits` to FP register `dst`, `is_f64` as for
+    /// [`Self::fp_reg_from_int_reg`]; integer register `stage` is free.
+    fn fp_reg_load_const(
+        &self,
+        code: &mut alloc::vec::Vec<u8>,
+        dst: u8,
+        stage: u8,
+        bits: i64,
+        is_f64: bool,
+    ) {
+        self.int_reg_load_imm(code, stage, bits);
+        self.fp_reg_from_int_reg(code, dst, stage, is_f64);
+    }
 }
 
 /// Stateless backend selectors. The per-target leaf implementations live in the
 /// respective emitter modules; the shared generic helpers dispatch through one
 /// of these.
 pub(crate) struct X64Backend;
-pub(crate) struct Aarch64Backend;
+/// The aarch64 one collects the `(site, bits, single)` literal loads it emits.
+#[derive(Default)]
+pub(crate) struct Aarch64Backend {
+    pub(crate) fp_literals: core::cell::RefCell<alloc::vec::Vec<(usize, u64, bool)>>,
+}
 
 /// Emit a resolved FP location-to-location move. The four source/target
 /// combinations are shared; the backend supplies the register and spill-slot
@@ -612,25 +648,81 @@ pub(crate) fn emit_fp_place_move<B: EmitBackend>(
     }
 }
 
-/// Emit a resolved integer location-to-location move. The four source/target
-/// combinations are shared; `stage` carries a spill-to-spill value and `hold`
-/// backs an out-of-reach destination address on backends that need it.
+/// The sign extension the entry applies to `ParamRef` `v` of `kind` (C99
+/// 6.5.2.2p4): an `I8` / `I16` always, an `I32` when a consumer reads bits 32..63.
+pub(crate) fn param_entry_ext(
+    kind: super::super::ir::LoadKind,
+    v: super::super::ir::ValueId,
+    alloc: &super::reg_alloc::Allocation,
+) -> Option<super::super::ir::LoadKind> {
+    use super::super::ir::LoadKind;
+    match kind {
+        LoadKind::I8 | LoadKind::I16 => Some(kind),
+        LoadKind::I32 if !alloc.high_dead(v) => Some(kind),
+        _ => None,
+    }
+}
+
+/// One move of an integer parallel copy. The write into `dst` applies `ext`,
+/// a sign extension from that kind's width (`I8` / `I16` / `I32`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct PlaceMove {
+    pub(crate) src: super::reg_alloc::Place,
+    pub(crate) dst: super::reg_alloc::Place,
+    pub(crate) ext: Option<super::super::ir::LoadKind>,
+}
+
+impl PlaceMove {
+    pub(crate) fn copy(src: super::reg_alloc::Place, dst: super::reg_alloc::Place) -> Self {
+        PlaceMove {
+            src,
+            dst,
+            ext: None,
+        }
+    }
+
+    /// Whether the move changes nothing: an extension in place is a write.
+    fn is_nop(&self) -> bool {
+        self.ext.is_none() && place_same_loc(self.src, self.dst)
+    }
+}
+
+/// Emit a resolved integer location-to-location move. `stage` carries a
+/// value into a spill slot; `hold` backs an out-of-reach slot address.
 pub(crate) fn emit_place_move<B: EmitBackend>(
     b: &B,
     code: &mut alloc::vec::Vec<u8>,
-    src: super::reg_alloc::Place,
-    dst: super::reg_alloc::Place,
+    m: PlaceMove,
     frame: B::Frame,
     stage: u8,
     hold: u8,
 ) {
     use super::reg_alloc::Place;
-    match (src, dst) {
-        (Place::IntReg(s), Place::IntReg(t)) => b.int_reg_mov(code, t, s),
-        (Place::IntReg(s), Place::Spill(slot)) => b.int_spill_store(code, frame, slot, s, stage),
-        (Place::Spill(slot), Place::IntReg(t)) => b.int_spill_load(code, frame, slot, t),
+    let reg_move = |code: &mut alloc::vec::Vec<u8>, t: u8, s: u8| match m.ext {
+        Some(kind) => b.int_reg_ext(code, t, s, kind),
+        None => b.int_reg_mov(code, t, s),
+    };
+    match (m.src, m.dst) {
+        (Place::IntReg(s), Place::IntReg(t)) => reg_move(code, t, s),
+        (Place::IntReg(s), Place::Spill(slot)) if m.ext.is_none() => {
+            b.int_spill_store(code, frame, slot, s, stage)
+        }
+        (Place::IntReg(s), Place::Spill(slot)) => {
+            reg_move(code, stage, s);
+            b.int_spill_store_staged(code, frame, slot, stage, hold);
+        }
+        (Place::Spill(slot), Place::IntReg(t)) => {
+            b.int_spill_load(code, frame, slot, t);
+            if m.ext.is_some() {
+                reg_move(code, t, t);
+            }
+        }
         (Place::Spill(ss), Place::Spill(ts)) => {
-            b.int_spill_to_spill(code, frame, ss, ts, stage, hold)
+            b.int_spill_load(code, frame, ss, stage);
+            if m.ext.is_some() {
+                reg_move(code, stage, stage);
+            }
+            b.int_spill_store_staged(code, frame, ts, stage, hold);
         }
         // FP and None locations are filtered by the caller before scheduling.
         _ => {}
@@ -684,34 +776,42 @@ pub(crate) fn schedule_fp_place_moves<B: EmitBackend>(
     }
 }
 
-/// Sequentialize parallel integer location-to-location moves. An endpoint
-/// that is an FP register or None is an `Err` (the caller falls back to
-/// per-instruction placement). Each move is emitted via [`emit_place_move`]; a
-/// residual cycle is broken by the backend's [`EmitBackend::break_place_cycle`].
-/// `hold`/`stage` are scratch registers outside the allocator's bank.
+/// Sequentialize parallel integer location-to-location moves with distinct
+/// targets; an FP or None endpoint is an `Err`. A move is emitted once no
+/// other pending move reads its target, so an extension in place follows the
+/// copies out of its register. `hold` / `stage` lie outside the allocator's bank.
 pub(crate) fn schedule_place_moves<B: EmitBackend>(
     b: &B,
     code: &mut alloc::vec::Vec<u8>,
-    moves: &mut alloc::vec::Vec<(super::reg_alloc::Place, super::reg_alloc::Place)>,
+    moves: &mut alloc::vec::Vec<PlaceMove>,
     frame: B::Frame,
     hold: u8,
     stage: u8,
 ) -> Emit {
     use super::reg_alloc::Place;
-    moves.retain(|(s, t)| !place_same_loc(*s, *t));
-    if moves.iter().any(|(s, t)| {
-        matches!(s, Place::FpReg(_) | Place::None) || matches!(t, Place::FpReg(_) | Place::None)
+    moves.retain(|m| !m.is_nop());
+    if moves.iter().any(|m| {
+        matches!(m.src, Place::FpReg(_) | Place::None)
+            || matches!(m.dst, Place::FpReg(_) | Place::None)
     }) {
         return fail::<B, _>("parallel move: endpoint not int reg / spill");
     }
+    debug_assert!(
+        (0..moves.len())
+            .all(|i| (i + 1..moves.len()).all(|j| !place_same_loc(moves[i].dst, moves[j].dst))),
+        "parallel move: two moves write one place"
+    );
     while !moves.is_empty() {
         let mut progress = false;
         let mut i = 0;
         while i < moves.len() {
-            let (s, t) = moves[i];
-            let tgt_still_a_source = moves.iter().any(|(os, _)| place_same_loc(*os, t));
+            let m = moves[i];
+            let tgt_still_a_source = moves
+                .iter()
+                .enumerate()
+                .any(|(j, o)| j != i && place_same_loc(o.src, m.dst));
             if !tgt_still_a_source {
-                emit_place_move(b, code, s, t, frame, stage, hold);
+                emit_place_move(b, code, m, frame, stage, hold);
                 moves.swap_remove(i);
                 progress = true;
             } else {
@@ -719,10 +819,58 @@ pub(crate) fn schedule_place_moves<B: EmitBackend>(
             }
         }
         if !progress {
-            b.break_place_cycle(code, moves, frame, hold, stage);
+            break_place_cycle(b, code, moves, frame, hold, stage);
         }
     }
     Ok(())
+}
+
+/// Break one of the cycles `moves` has come down to; each of their sources
+/// has one reader. A register pair whose move converts nothing is exchanged
+/// where the target can: that move is done and its reader reads the other
+/// register. Otherwise one source is staged into `hold`, and every move of
+/// the cycle applies its own conversion on the way.
+fn break_place_cycle<B: EmitBackend>(
+    b: &B,
+    code: &mut alloc::vec::Vec<u8>,
+    moves: &mut alloc::vec::Vec<PlaceMove>,
+    frame: B::Frame,
+    hold: u8,
+    stage: u8,
+) {
+    use super::reg_alloc::Place;
+    let pair = moves.iter().position(|m| {
+        m.ext.is_none() && matches!((m.src, m.dst), (Place::IntReg(_), Place::IntReg(_)))
+    });
+    if let Some(i) = pair
+        && let PlaceMove {
+            src: src @ Place::IntReg(s),
+            dst: dst @ Place::IntReg(t),
+            ..
+        } = moves[i]
+        && b.int_reg_xchg(code, s, t)
+    {
+        for m in moves.iter_mut() {
+            if place_same_loc(m.src, dst) {
+                m.src = src;
+            }
+        }
+        moves[i].src = dst;
+        moves.retain(|m| !m.is_nop());
+        return;
+    }
+    let cyc = moves
+        .iter()
+        .map(|m| m.src)
+        .find(|s| !place_same_loc(*s, Place::IntReg(hold)))
+        .unwrap_or(moves[0].src);
+    let staging = PlaceMove::copy(cyc, Place::IntReg(hold));
+    emit_place_move(b, code, staging, frame, stage, hold);
+    for m in moves.iter_mut() {
+        if place_same_loc(m.src, cyc) {
+            m.src = Place::IntReg(hold);
+        }
+    }
 }
 
 /// Write an atomic operation's result register `src` to its destination
@@ -760,7 +908,7 @@ pub(crate) fn emit_phi_predecessor_moves<B: EmitBackend>(
     fp_hold: u8,
     fp_stage: u8,
 ) -> Emit {
-    use super::super::ir::{Inst, LoadKind, Terminator};
+    use super::super::ir::{Inst, Terminator};
     use super::reg_alloc::Place;
     let succs: alloc::vec::Vec<super::super::ir::BlockId> =
         match func.blocks[self_block as usize].terminator {
@@ -839,84 +987,17 @@ pub(crate) fn emit_phi_predecessor_moves<B: EmitBackend>(
             }
         };
     for succ in succs {
-        let head = func.blocks[succ as usize].inst_range.start;
-        let end = func.blocks[succ as usize].inst_range.end;
-        // Collect every phi's predecessor-exit move as one location-to-location
-        // parallel copy per register file: a register reg-to-reg move can
-        // overwrite a register a pending spill store still reads, so register
-        // and stack-slot operands must be scheduled together. An FP phi (kind
-        // F32 / F64 / V128) is FP-classed; every other phi is integer-classed. The two
-        // files do not alias, so the two copies are independent.
-        let mut moves: alloc::vec::Vec<(Place, Place)> = alloc::vec::Vec::new();
-        let mut fp_moves: alloc::vec::Vec<(Place, Place, bool)> = alloc::vec::Vec::new();
-        // (bits, dst_place, is_f64, wide) for a constant feeding an FP phi.
-        // `result_kind` classes every `Imm` in the integer file, so an FP
-        // phi's only integer-file operand is a float constant; `phi_class`
-        // refuses to coalesce the class boundary and delegates the move
-        // here. Re-materialising the constant reads only reserved scratch,
-        // so it is independent of the register moves scheduled above.
-        let mut fp_const_moves: alloc::vec::Vec<(i64, Place, bool, bool)> = alloc::vec::Vec::new();
-        for id in head..end {
-            let Inst::Phi { incoming, kind } = &func.insts[id as usize] else {
-                break;
-            };
-            let Some((_, src_v)) = incoming.iter().find(|(pred, _)| *pred == self_block) else {
-                continue;
-            };
-            let dst_place = alloc
-                .places
-                .get(id as usize)
-                .copied()
-                .unwrap_or(Place::None);
-            let src_place = alloc
-                .places
-                .get(*src_v as usize)
-                .copied()
-                .unwrap_or(Place::None);
-            let phi_is_fp = matches!(
-                kind,
-                LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128
-            );
-            let wide = matches!(kind, LoadKind::V128);
-            if matches!(dst_place, Place::None) {
-                continue;
-            }
-            if phi_is_fp {
-                if let Inst::Imm(bits) = func.insts[*src_v as usize] {
-                    fp_const_moves.push((
-                        bits,
-                        dst_place,
-                        matches!(kind, LoadKind::F64 | LoadKind::V128),
-                        wide,
-                    ));
-                    continue;
-                }
-                debug_assert!(
-                    !matches!(src_place, Place::IntReg(_)),
-                    "FP phi integer-file operand must be a constant"
-                );
-                if matches!(src_place, Place::None) {
-                    continue;
-                }
-                fp_moves.push((src_place, dst_place, wide));
-            } else {
-                if matches!(src_place, Place::None) {
-                    continue;
-                }
-                moves.push((src_place, dst_place));
-            }
-        }
-        schedule_place_moves(b, code, &mut moves, frame, int_hold, int_stage)?;
-        schedule_fp_place_moves(b, code, &mut fp_moves, frame, fp_hold, fp_stage);
+        let mut m = edge_moves(func, alloc, self_block, succ);
+        schedule_place_moves(b, code, &mut m.int, frame, int_hold, int_stage)?;
+        schedule_fp_place_moves(b, code, &mut m.fp, frame, fp_hold, fp_stage);
         // After both same-file parallel copies: any FP move reading a phi's
         // register as its source has already run, so overwriting the FP
         // destination here cannot clobber a still-pending read.
-        for (bits, dst, is_f64, wide) in fp_const_moves {
-            b.int_reg_load_imm(code, int_stage, bits);
+        for (bits, dst, is_f64, wide) in m.fp_const {
             match dst {
-                Place::FpReg(t) => b.fp_reg_from_int_reg(code, t, int_stage, is_f64),
+                Place::FpReg(t) => b.fp_reg_load_const(code, t, int_stage, bits, is_f64),
                 Place::Spill(slot) => {
-                    b.fp_reg_from_int_reg(code, fp_stage, int_stage, is_f64);
+                    b.fp_reg_load_const(code, fp_stage, int_stage, bits, is_f64);
                     if wide {
                         b.v128_spill_store(code, frame, slot, fp_stage);
                     } else {
@@ -928,6 +1009,97 @@ pub(crate) fn emit_phi_predecessor_moves<B: EmitBackend>(
         }
     }
     Ok(())
+}
+
+/// The phi moves of the CFG edge `pred -> succ`: one location-to-location
+/// parallel copy per register file, without the moves that stay in place.
+pub(crate) struct EdgeMoves {
+    pub(crate) int: alloc::vec::Vec<PlaceMove>,
+    /// `(src, dst, wide)`.
+    pub(crate) fp: alloc::vec::Vec<(super::reg_alloc::Place, super::reg_alloc::Place, bool)>,
+    /// `(bits, dst, is_f64, wide)` for a constant feeding an FP phi.
+    pub(crate) fp_const: alloc::vec::Vec<(i64, super::reg_alloc::Place, bool, bool)>,
+}
+
+impl EdgeMoves {
+    /// Whether the edge emits no instruction.
+    pub(crate) fn is_empty(&self) -> bool {
+        self.int.is_empty() && self.fp.is_empty() && self.fp_const.is_empty()
+    }
+}
+
+/// Whether the edge move of a phi of `kind` builds its income `v` from `v`'s
+/// bits, which reads no place: a constant feeding a floating phi.
+pub(crate) fn phi_rebuilds_income(
+    func: &super::super::ir::FunctionSsa,
+    kind: super::super::ir::LoadKind,
+    v: super::super::ir::ValueId,
+) -> bool {
+    use super::super::ir::{Inst, LoadKind};
+    matches!(
+        kind,
+        LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128
+    ) && matches!(func.insts.get(v as usize), Some(Inst::Imm(_)))
+}
+
+/// Collect every phi of `succ` that names `pred`. A register reg-to-reg move
+/// can overwrite a register a pending spill store still reads, so register
+/// and stack-slot operands of one file are scheduled together. An FP phi
+/// (kind F32 / F64 / F80 / F128 / V128) is FP-classed, every other phi
+/// integer-classed; the two files do not alias.
+pub(crate) fn edge_moves(
+    func: &super::super::ir::FunctionSsa,
+    alloc: &super::reg_alloc::Allocation,
+    pred: super::super::ir::BlockId,
+    succ: super::super::ir::BlockId,
+) -> EdgeMoves {
+    use super::super::ir::{Inst, LoadKind};
+    use super::reg_alloc::Place;
+    let mut m = EdgeMoves {
+        int: alloc::vec::Vec::new(),
+        fp: alloc::vec::Vec::new(),
+        fp_const: alloc::vec::Vec::new(),
+    };
+    let place =
+        |v: super::super::ir::ValueId| alloc.places.get(v as usize).copied().unwrap_or(Place::None);
+    for id in func.blocks[succ as usize].inst_range.clone() {
+        let Inst::Phi { incoming, kind } = &func.insts[id as usize] else {
+            break;
+        };
+        let Some((_, src_v)) = incoming.iter().find(|(p, _)| *p == pred) else {
+            continue;
+        };
+        let (src_place, dst_place) = (place(*src_v), place(id));
+        if matches!(dst_place, Place::None) {
+            continue;
+        }
+        let wide = matches!(kind, LoadKind::V128);
+        let phi_is_fp = matches!(
+            kind,
+            LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128
+        );
+        if phi_is_fp {
+            // `phi_class` never coalesces a constant into an FP phi's class,
+            // wherever the constant is placed; the move rebuilds it.
+            if phi_rebuilds_income(func, *kind, *src_v)
+                && let Inst::Imm(bits) = func.insts[*src_v as usize]
+            {
+                let is_f64 = matches!(kind, LoadKind::F64 | LoadKind::V128);
+                m.fp_const.push((bits, dst_place, is_f64, wide));
+                continue;
+            }
+            debug_assert!(
+                !matches!(src_place, Place::IntReg(_)),
+                "FP phi integer-file operand must be a constant"
+            );
+            if !matches!(src_place, Place::None) && !place_same_loc(src_place, dst_place) {
+                m.fp.push((src_place, dst_place, wide));
+            }
+        } else if !matches!(src_place, Place::None) && !place_same_loc(src_place, dst_place) {
+            m.int.push(PlaceMove::copy(src_place, dst_place));
+        }
+    }
+    m
 }
 
 /// Sequentialize a set of parallel register moves `(src, dst)` (raw register
@@ -1302,6 +1474,18 @@ pub(crate) fn is_dead_pure(
     is_dead_pure_counts(inst, v, &alloc.use_counts)
 }
 
+/// Whether `inst` lowers to no machine code and records nothing: a phi,
+/// whose value the predecessors' exit moves place, or a dead pure value.
+/// The one definition both emitters skip by and the block plan reads, so a
+/// block the plan leaves out is one neither emitter would have written.
+pub(crate) fn inst_emits_nothing(
+    inst: &super::super::ir::Inst,
+    v: super::super::ir::ValueId,
+    alloc: &super::reg_alloc::Allocation,
+) -> bool {
+    matches!(inst, super::super::ir::Inst::Phi { .. }) || is_dead_pure(inst, v, alloc)
+}
+
 /// [`is_dead_pure`] over a bare use-count slice. The allocator applies
 /// it before the `Allocation` exists, when it collects the used-register
 /// sets; the two callers must agree on which values produce no code.
@@ -1659,8 +1843,13 @@ pub(crate) fn lower_unit<B: LowerTarget>(
     // post-inline bodies directly; the walk and the -O passes that produced
     // them are skipped, the rest of the pipeline runs unchanged.
     let walked = prebuilt.is_none();
-    let (mut ssa_funcs, prebuilt_promoted, prebuilt_owners) = match prebuilt {
-        Some(p) => (p.funcs, p.promoted_local_slots, Some(p.reachable_owners)),
+    let (mut ssa_funcs, prebuilt_promoted, prebuilt_owners, mut param_ranges) = match prebuilt {
+        Some(p) => (
+            p.funcs,
+            p.promoted_local_slots,
+            Some(p.reachable_owners),
+            p.param_ranges,
+        ),
         None => (
             time_pass_arch("ssa::produce_ssa_funcs", B::ARCH, || {
                 super::shadow::produce_ssa_funcs(
@@ -1672,6 +1861,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
             })?,
             alloc::collections::BTreeMap::new(),
             None,
+            super::shadow::ParamRanges::new(),
         ),
     };
     // The walk's own output is the reachable set the -O passes below
@@ -1723,6 +1913,10 @@ pub(crate) fn lower_unit<B: LowerTarget>(
     // Record the promoted slots per function so the debug-info emitter
     // can drop their now-stale frame location.
     if native.optimize && walked {
+        // Every computed goto of a function through one dispatch block.
+        time_pass_arch("passes::factor_gotos::run", B::ARCH, || {
+            super::super::passes::factor_gotos::run(&mut ssa_funcs);
+        });
         // Vector slots become `V128` slot accesses for mem2reg to promote.
         time_pass_arch("ssa::vector_slots::run", B::ARCH, || {
             for f in &mut ssa_funcs {
@@ -1777,7 +1971,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         // what reaches the bodies that stay out of line.
         // Interprocedural parameter ranges, by entry PC; read by the
         // range analysis inside the branch-fold fixed point below.
-        let param_ranges = time_pass_arch("passes::ipa_const_param::run", B::ARCH, || {
+        param_ranges = time_pass_arch("passes::ipa_const_param::run", B::ARCH, || {
             let escaping =
                 super::super::passes::ipa_const_param::escaping_functions(&ssa_funcs, program);
             super::super::passes::ipa_const_param::run(&mut ssa_funcs, &escaping)
@@ -1869,6 +2063,13 @@ pub(crate) fn lower_unit<B: LowerTarget>(
                 }
             }
         });
+        // An aggregate built in a frame temporary and copied once is
+        // built in the destination instead. Runs after sroa, whose
+        // register budget leaves the wider objects in memory, and
+        // before the frame is packed, so the temporary's cells go.
+        time_pass_arch("passes::copy_elide::run", B::ARCH, || {
+            super::super::passes::copy_elide::run(&mut ssa_funcs);
+        });
         // Rotate idiom recognition: collapses `(x >> c) | (x << (W -
         // c))` chains to `BinopI(Ror, x, c)`. Runs after the inliner
         // so post-inline parameter substitutions expose the constant
@@ -1921,6 +2122,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         });
         if let Some(o) = &mut orphaned_data {
             o.ssa.promoted_local_slots = promoted_local_slots.clone();
+            o.ssa.param_ranges = param_ranges.clone();
         }
         // A probe caller relowers the reported bodies against a `.data`
         // this run cannot know, so everything below would be discarded.
@@ -1948,16 +2150,20 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         time_pass_arch("passes::split_crit_edges::run", B::ARCH, || {
             super::super::passes::split_crit_edges::run(&mut ssa_funcs);
         });
-        time_pass_arch("passes::dedup_imm::run", B::ARCH, || {
-            super::super::passes::dedup_imm::run(&mut ssa_funcs);
-        });
         time_pass_arch("passes::drop_redundant_extend::run", B::ARCH, || {
             super::super::passes::drop_redundant_extend::run(&mut ssa_funcs);
         });
-        // Scaled-index addressing: fold `base + index*scale` into the
-        // load / store. Runs last so it sees the final address shape;
-        // the optimizer passes never traverse `LoadIndexed` /
-        // `StoreIndexed`, so the per-arch emit is the only later consumer.
+        // Expand the divides by a constant the walker and the constant
+        // folder left whole. After the range rule above has read their
+        // bounds; before the value numbering, which merges the quotient a
+        // division and a remainder over the same operands both compute.
+        time_pass_arch("passes::divmod_const::run", B::ARCH, || {
+            super::super::passes::divmod_const::run(&mut ssa_funcs, &param_ranges);
+        });
+        // Indexed addressing: fold `base + index*scale` into the load /
+        // store. Runs after every pass that reads the address arithmetic;
+        // of the later ones only the store forwarding models the indexed
+        // forms.
         time_pass_arch("passes::index_fold::run", B::ARCH, || {
             super::super::passes::index_fold::run(&mut ssa_funcs);
         });
@@ -1969,6 +2175,13 @@ pub(crate) fn lower_unit<B: LowerTarget>(
             let caps = super::reg_alloc::bank_capacity(target, native.fixed_regs);
             super::super::passes::cse::run(&mut ssa_funcs, caps);
         });
+        // Fold a frame address into the one access that consumes it.
+        // After the value numbering, which merges the per-access
+        // `LocalAddr` duplicates the builder emits, so the use count
+        // tells a sole consumer from a shared base.
+        time_pass_arch("passes::index_fold::fold_slot_addresses", B::ARCH, || {
+            super::super::passes::index_fold::fold_slot_addresses(&mut ssa_funcs);
+        });
         // Rebuild the single modulo where the builder's split quotient
         // found no division to share with. After the value numbering,
         // which is what can still supply that second consumer.
@@ -1977,8 +2190,9 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         });
         // Store-to-load and load-to-load forwarding within a block. Runs
         // after the index fold so a struct field's store and load address
-        // are both normalised to the same `(base, disp)`. Bounded by
-        // live-range extension so it does not pin scattered re-reads in a
+        // are both normalised to the same `(base, disp)`, and an element's
+        // to the same `(base, index, scale)`. Bounded by live-range
+        // extension so it does not pin scattered re-reads in a
         // register-starved unrolled loop.
         time_pass_arch("passes::store_forward::run", B::ARCH, || {
             super::super::passes::store_forward::run(&mut ssa_funcs);
@@ -1995,9 +2209,9 @@ pub(crate) fn lower_unit<B: LowerTarget>(
             super::super::passes::inline::devirtualize(&mut ssa_funcs, &code_syms, &extern_fns);
         });
         // Block layout: fallthrough chains, loop rotation to
-        // bottom-test, branch inversion. Reorders blocks and remaps
-        // block ids only, so it runs last; the emit elides jumps to
-        // the next block in the new order.
+        // bottom-test. Reorders blocks and remaps block ids only, so it
+        // runs last; the emit elides jumps to the next block in the new
+        // order.
         time_pass_arch("passes::layout::run", B::ARCH, || {
             super::super::passes::layout::run(&mut ssa_funcs);
         });
@@ -2316,6 +2530,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         .emit_cfi_sections(B::cfi_target(&native))
         .map_err(|m| C5Error::hard(Code::ASSEMBLER, alloc::format!("<file-scope asm>: {m}")))?;
     let (asm_section_list, asm_sym_decls) = st.asm_sections.into_parts();
+    st.rodata.place_literals();
     let mut build = super::Build {
         diagnostics: reported(&mut sink)?,
         emitted_relocs: alloc::vec::Vec::new(),
@@ -2434,7 +2649,261 @@ fn record_coalesced_slots(
 
 #[cfg(test)]
 mod tests {
-    use super::{Unsupported, unsupported_error};
+    use super::super::super::ir::LoadKind;
+    use super::super::reg_alloc::Place;
+    use super::{EmitBackend, PlaceMove, Unsupported, schedule_place_moves, unsupported_error};
+    use alloc::vec::Vec;
+
+    const MOV: u8 = 1;
+    const EXT: u8 = 2;
+    const XCHG: u8 = 3;
+    const STORE: u8 = 4;
+    const LOAD: u8 = 5;
+    const HOLD: u8 = 14;
+    const STAGE: u8 = 15;
+    /// Registers precede the spill slots in the replayed state.
+    const REGS: usize = 16;
+
+    /// Records each integer transfer as `[op, a, b, c]` for [`replay`];
+    /// `xchg` is whether the target exchanges registers.
+    struct Rec {
+        xchg: bool,
+    }
+
+    fn width(kind: LoadKind) -> u8 {
+        match kind {
+            LoadKind::I8 => 8,
+            LoadKind::I16 => 16,
+            LoadKind::I32 => 32,
+            _ => unreachable!("not a sign extension: {kind:?}"),
+        }
+    }
+
+    impl EmitBackend for Rec {
+        type Frame = ();
+        const ARCH: &'static str = "test";
+        fn fp_reg_mov(&self, _: &mut Vec<u8>, _: u8, _: u8) {
+            unreachable!()
+        }
+        fn fp_spill_store(&self, _: &mut Vec<u8>, _: (), _: u32, _: u8) {
+            unreachable!()
+        }
+        fn fp_spill_load(&self, _: &mut Vec<u8>, _: (), _: u32, _: u8) {
+            unreachable!()
+        }
+        fn v128_reg_mov(&self, _: &mut Vec<u8>, _: u8, _: u8) {
+            unreachable!()
+        }
+        fn v128_spill_store(&self, _: &mut Vec<u8>, _: (), _: u32, _: u8) {
+            unreachable!()
+        }
+        fn v128_spill_load(&self, _: &mut Vec<u8>, _: (), _: u32, _: u8) {
+            unreachable!()
+        }
+        fn int_reg_mov(&self, code: &mut Vec<u8>, dst: u8, src: u8) {
+            code.extend([MOV, dst, src, 0]);
+        }
+        fn int_reg_ext(&self, code: &mut Vec<u8>, dst: u8, src: u8, kind: LoadKind) {
+            code.extend([EXT, dst, src, width(kind)]);
+        }
+        fn int_reg_xchg(&self, code: &mut Vec<u8>, a: u8, b: u8) -> bool {
+            if self.xchg {
+                code.extend([XCHG, a, b, 0]);
+            }
+            self.xchg
+        }
+        fn int_spill_store(&self, code: &mut Vec<u8>, _: (), slot: u32, src: u8, base: u8) {
+            assert_eq!(base, STAGE);
+            code.extend([STORE, slot as u8, src, 0]);
+        }
+        fn int_spill_load(&self, code: &mut Vec<u8>, _: (), slot: u32, dst: u8) {
+            code.extend([LOAD, dst, slot as u8, 0]);
+        }
+        fn int_spill_store_staged(
+            &self,
+            code: &mut Vec<u8>,
+            _: (),
+            slot: u32,
+            stage: u8,
+            hold: u8,
+        ) {
+            assert_eq!((stage, hold), (STAGE, HOLD));
+            code.extend([STORE, slot as u8, stage, 0]);
+        }
+        fn int_spill_store_auto(&self, _: &mut Vec<u8>, _: (), _: u32, _: u8) {
+            unreachable!()
+        }
+        fn int_reg_load_imm(&self, _: &mut Vec<u8>, _: u8, _: i64) {
+            unreachable!()
+        }
+        fn fp_reg_from_int_reg(&self, _: &mut Vec<u8>, _: u8, _: u8, _: bool) {
+            unreachable!()
+        }
+    }
+
+    fn sext(v: u64, bits: u8) -> u64 {
+        let sh = 64 - u32::from(bits);
+        (((v << sh) as i64) >> sh) as u64
+    }
+
+    fn loc(p: Place) -> usize {
+        match p {
+            Place::IntReg(r) => r as usize,
+            Place::Spill(s) => REGS + s as usize,
+            _ => unreachable!(),
+        }
+    }
+
+    fn replay(code: &[u8], st: &mut [u64]) {
+        for op in code.chunks(4) {
+            let (a, b) = (op[1] as usize, op[2] as usize);
+            match op[0] {
+                MOV => st[a] = st[b],
+                EXT => st[a] = sext(st[b], op[3]),
+                XCHG => st.swap(a, b),
+                STORE => st[REGS + a] = st[b],
+                LOAD => st[a] = st[REGS + b],
+                _ => unreachable!(),
+            }
+        }
+    }
+
+    /// Schedule `moves`, check the replayed code against the parallel copy
+    /// (every target takes its converted source as it was on entry, every
+    /// other place but the scratch keeps its value), and return the code.
+    fn check(rec: &Rec, moves: &[PlaceMove]) -> Vec<u8> {
+        let mut pending = moves.to_vec();
+        let mut code = Vec::new();
+        schedule_place_moves(rec, &mut code, &mut pending, (), HOLD, STAGE).unwrap();
+        // Bytes 0, 1 and 3 have their sign bits set and byte 7 does not, so
+        // each extension width gives a different value; `i` tells places apart.
+        let init: Vec<u64> = (0..REGS as u64 + 8)
+            .map(|i| 0x35a5_f00d_9b00_b480 | i << 16 | i)
+            .collect();
+        let mut want = init.clone();
+        for m in moves {
+            let v = init[loc(m.src)];
+            want[loc(m.dst)] = m.ext.map_or(v, |k| sext(v, width(k)));
+        }
+        let mut got = init;
+        replay(&code, &mut got);
+        want[HOLD as usize] = got[HOLD as usize];
+        want[STAGE as usize] = got[STAGE as usize];
+        assert_eq!(got, want, "{moves:?} -> {code:?}");
+        code
+    }
+
+    fn mv(src: Place, dst: Place, ext: Option<LoadKind>) -> PlaceMove {
+        PlaceMove { src, dst, ext }
+    }
+
+    #[test]
+    fn a_parallel_copy_with_conversions_keeps_its_meaning() {
+        let mut seed = 0x9e37_79b9_7f4a_7c15u64;
+        let mut next = |n: usize| {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            (seed % n as u64) as usize
+        };
+        let places: Vec<Place> = (0..6)
+            .map(Place::IntReg)
+            .chain((0..4).map(Place::Spill))
+            .collect();
+        let exts = [
+            None,
+            Some(LoadKind::I8),
+            Some(LoadKind::I16),
+            Some(LoadKind::I32),
+        ];
+        for _ in 0..4000 {
+            let mut dsts = places.clone();
+            for i in (1..dsts.len()).rev() {
+                dsts.swap(i, next(i + 1));
+            }
+            dsts.truncate(1 + next(places.len()));
+            let mut srcs = dsts.clone();
+            if next(2) == 0 {
+                // A permutation of the targets: cycles and self-moves only.
+                for i in (1..srcs.len()).rev() {
+                    srcs.swap(i, next(i + 1));
+                }
+            } else {
+                for s in srcs.iter_mut() {
+                    *s = places[next(places.len())];
+                }
+            }
+            let moves: Vec<PlaceMove> = dsts
+                .iter()
+                .zip(&srcs)
+                .map(|(&dst, &src)| mv(src, dst, exts[next(exts.len())]))
+                .collect();
+            check(&Rec { xchg: false }, &moves);
+            check(&Rec { xchg: true }, &moves);
+        }
+    }
+
+    #[test]
+    fn a_converting_move_is_one_instruction() {
+        let code = check(
+            &Rec { xchg: true },
+            &[mv(Place::IntReg(0), Place::IntReg(9), Some(LoadKind::I32))],
+        );
+        assert_eq!(code, [EXT, 9, 0, 32]);
+    }
+
+    /// An extension in place is a write, made after the other read of its
+    /// register; a plain self-move emits nothing.
+    #[test]
+    fn a_conversion_in_place_follows_the_copy_out() {
+        let r = Place::IntReg;
+        let moves = [
+            mv(r(0), r(0), Some(LoadKind::I32)),
+            mv(r(0), r(1), None),
+            mv(r(2), r(2), None),
+        ];
+        assert_eq!(
+            check(&Rec { xchg: false }, &moves),
+            [MOV, 1, 0, 0, EXT, 0, 0, 32]
+        );
+    }
+
+    #[test]
+    fn a_conversion_into_a_slot_is_staged() {
+        let moves = [mv(Place::IntReg(0), Place::Spill(3), Some(LoadKind::I16))];
+        assert_eq!(
+            check(&Rec { xchg: false }, &moves),
+            [EXT, STAGE, 0, 16, STORE, 3, STAGE, 0]
+        );
+    }
+
+    /// A swap exchanges its plain move and extends in place; without an
+    /// exchange it takes three moves.
+    #[test]
+    fn a_swap_exchanges_its_plain_move() {
+        let r = Place::IntReg;
+        let moves = [mv(r(0), r(1), None), mv(r(1), r(0), Some(LoadKind::I32))];
+        assert_eq!(
+            check(&Rec { xchg: true }, &moves),
+            [XCHG, 0, 1, 0, EXT, 0, 0, 32]
+        );
+        assert_eq!(check(&Rec { xchg: false }, &moves).len(), 3 * 4);
+    }
+
+    /// A cycle of conversions is staged, not exchanged: one instruction per
+    /// move plus the staging copy.
+    #[test]
+    fn a_cycle_of_conversions_is_staged() {
+        let r = Place::IntReg;
+        let moves = [
+            mv(r(0), r(1), Some(LoadKind::I32)),
+            mv(r(1), r(2), Some(LoadKind::I8)),
+            mv(r(2), r(0), Some(LoadKind::I16)),
+        ];
+        let code = check(&Rec { xchg: true }, &moves);
+        assert_eq!(code.len(), 4 * 4, "{code:?}");
+        assert!(code.chunks(4).all(|op| op[0] != XCHG), "{code:?}");
+    }
 
     /// `unsupported_error` reads only the `Unsupported` it is given, so the
     /// text below is what every feature configuration reports, `no_std`

@@ -27,12 +27,8 @@ Disassembly of section .text:
 
 <einl>:
                	leaq	0x3(%rdi), %rax
-               	movslq	%eax, %rax
                	retq
 
 <main>:
-               	movl	$0x1, %eax
-               	movq	%rax, %rcx
-               	xorq	%rax, %rax
-               	movq	%rax, %rcx
+               	xorl	%eax, %eax
                	retq

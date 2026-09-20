@@ -46,8 +46,8 @@ Disassembly of section .text:
 <pointer_offset>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%rbx, (%rsp)
+               	subq	$0x8, %rsp
+               	pushq	%rbx
                	movq	%rdi, %rbx
                	movq	%rsi, %rdi
                	xorl	%eax, %eax
@@ -55,7 +55,7 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	addq	%rbx, %rax
                	subq	%rbx, %rax
-               	movq	(%rsp), %rbx
+               	popq	%rbx
                	leave
                	retq
 
@@ -91,6 +91,6 @@ Disassembly of section .text:
                	movl	$0x7, %eax
                	popq	%rbp
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	popq	%rbp
                	retq

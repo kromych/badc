@@ -26,54 +26,34 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	xorq	%rax, %rax
-               	movq	%rax, %rcx
-               	movq	%rax, %rcx
-               	movq	%rax, %rcx
-               	movq	%rax, %rcx
-               	movq	%rax, %rcx
+               	xorl	%eax, %eax
                	leaq	<rip>, %rdx
-               	jmp	<addr>
-               	leaq	0x20(%rdx), %rdi
-               	movslq	%eax, %rcx
-               	movq	%rcx, %rsi
+               	leaq	0x20(%rdx), %rcx
+               	movq	%rax, %rsi
                	shlq	$0x3, %rsi
-               	addq	%rsi, %rdi
-               	movslq	(%rdi), %rdi
-               	cmpl	$0x9, %edi
+               	addq	%rsi, %rcx
+               	movslq	(%rcx), %rsi
+               	cmpl	$0x9, %esi
                	jne	<addr>
-               	leaq	0x20(%rdx), %rdi
-               	addq	%rdi, %rsi
-               	movslq	0x4(%rsi), %rsi
-               	cmpl	$0xa, %esi
-               	setne	%sil
-               	movzbq	%sil, %rsi
-               	testq	%rsi, %rsi
+               	movslq	0x4(%rcx), %rcx
+               	cmpl	$0xa, %ecx
                	jne	<addr>
-               	leaq	0x1(%rcx), %rax
+               	incq	%rax
                	cmpl	$0x4, %eax
                	jl	<addr>
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	leaq	<rip>, %rdx
-               	jmp	<addr>
-               	movslq	%eax, %rcx
-               	movq	%rcx, %rsi
-               	shlq	$0x3, %rsi
-               	leaq	(%rdx,%rsi), %rdi
-               	movslq	(%rdi), %rdi
-               	testq	%rdi, %rdi
+               	movq	%rax, %rcx
+               	shlq	$0x3, %rcx
+               	addq	%rdx, %rcx
+               	cmpl	$0x0, (%rcx)
                	jne	<addr>
-               	addq	%rdx, %rsi
-               	movslq	0x4(%rsi), %rsi
-               	testl	%esi, %esi
-               	setne	%sil
-               	movzbq	%sil, %rsi
-               	testq	%rsi, %rsi
+               	cmpl	$0x0, 0x4(%rcx)
                	jne	<addr>
-               	leaq	0x1(%rcx), %rax
+               	incq	%rax
                	cmpl	$0x4, %eax
                	jl	<addr>
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	retq
                	movl	$0x8, %eax
                	retq

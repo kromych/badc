@@ -1,3 +1,21 @@
+// Quicksort stress for the perf table. Exercises the swap in the
+// partition loop, the two scanning cursors and the recursion that
+// carries them. Pick N so wall-clock is in the 50-500 ms range on the
+// slowest compiler under test.
+//
+// The shape is chosen for the code generator, not for sorting. This
+// partition takes the middle element as its pivot, which an input
+// built against it drives to O(n^2) comparisons, and it recurses on
+// both sides, so its stack depth follows the recursion rather than
+// O(log n). An implementation meant for use would take the median of
+// three or the ninther as its pivot, fall back to heapsort past a
+// depth of about 2*log2(n), cut over to insertion sort on short
+// ranges, recurse on the smaller side and loop on the larger, and sort
+// through a comparison function rather than a fixed `int` order. It
+// would also take the midpoint as `lo + (hi - lo) / 2`: `(lo + hi) / 2`
+// is wrong once the sum passes INT_MAX, which the 2 000 000 elements
+// here stay well inside.
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

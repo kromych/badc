@@ -181,10 +181,11 @@ fn local_int_assign_emits_store() {
     assert!(immediates.contains(&42));
 }
 
-/// Unary negation: walker lowers `-x` as `0 - x`. Locks the
-/// Neg dispatch path.
+/// Unary negation: a constant operand folds to the negated constant,
+/// and a loaded one becomes one `Inst::Neg`. Locks the Neg dispatch
+/// path.
 #[test]
-fn unary_neg_lowers_to_sub() {
+fn unary_neg_lowers_to_one_negate() {
     let mut ast = Ast::new();
     let src = SrcPos { line: 1, file: 0 };
     let lit = ast.push_expr(
@@ -206,15 +207,68 @@ fn unary_neg_lowers_to_sub() {
     ast.body = Some(__ret);
 
     let func = walk(ast, 0, 0, &empty_symbols()).expect("walk");
-    let binops: alloc::vec::Vec<BinOp> = func
-        .insts
-        .iter()
-        .filter_map(|i| match i {
-            Inst::Binop { op, .. } => Some(*op),
-            _ => None,
-        })
-        .collect();
-    assert_eq!(binops, alloc::vec![BinOp::Sub]);
+    assert!(
+        !func
+            .insts
+            .iter()
+            .any(|i| matches!(i, Inst::Binop { .. } | Inst::BinopI { .. } | Inst::Neg(_))),
+        "a constant negation should fold: {:?}",
+        func.insts
+    );
+    assert!(
+        func.insts.iter().any(|i| matches!(i, Inst::Imm(-5))),
+        "no folded constant: {:?}",
+        func.insts
+    );
+
+    let mut syms = empty_symbols();
+    syms.push(Symbol {
+        name: alloc::string::String::from("x"),
+        class: Token::Loc as i64,
+        type_: Ty::Int as i64,
+        val: -1,
+        ..Default::default()
+    });
+    let mut ast = Ast::new();
+    let x = ast.push_expr(
+        Expr::Ident {
+            sym: 0,
+            ty: Ty::Int as i64,
+            class: Token::Loc as i64,
+            val: -1,
+            is_thread_local: false,
+            array_size: 0,
+        },
+        src,
+    );
+    let neg = ast.push_expr(
+        Expr::Unary {
+            op: UnOp::Neg,
+            child: x,
+            ty: Ty::Int as i64,
+        },
+        src,
+    );
+    let __ret = ast.push_stmt(Stmt::Return(Some(neg)), src);
+    ast.body = Some(__ret);
+    let func = walk(ast, 8, 0, &syms).expect("walk");
+    assert_eq!(
+        func.insts
+            .iter()
+            .filter(|i| matches!(i, Inst::Neg(_)))
+            .count(),
+        1,
+        "not one negate: {:?}",
+        func.insts
+    );
+    assert!(
+        !func
+            .insts
+            .iter()
+            .any(|i| matches!(i, Inst::Binop { .. } | Inst::BinopI { op: BinOp::Mul, .. })),
+        "a multiply or a register binop: {:?}",
+        func.insts
+    );
 }
 
 /// A statement shape the parser never produces (`Asm`) surfaces as a

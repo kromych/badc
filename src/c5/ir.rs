@@ -144,9 +144,11 @@ pub(crate) enum Inst {
     /// natural width of `kind` (1 for I8/U8, 2 for I16/U16, 4 for
     /// I32/U32, 8 for I64). Carries no volatile flag: `index_fold`
     /// leaves volatile accesses on the plain `Load` / `Store` forms.
+    /// `index_ext` selects how much of `index` is read.
     LoadIndexed {
         base: ValueId,
         index: ValueId,
+        index_ext: IndexExt,
         scale: u8,
         kind: LoadKind,
     },
@@ -155,6 +157,7 @@ pub(crate) enum Inst {
     StoreIndexed {
         base: ValueId,
         index: ValueId,
+        index_ext: IndexExt,
         scale: u8,
         value: ValueId,
         kind: StoreKind,
@@ -196,6 +199,12 @@ pub(crate) enum Inst {
         lhs: ValueId,
         rhs_imm: i64,
     },
+    /// Two's-complement integer negation of the full 64-bit operand,
+    /// `0 - value` modulo 2^64 (C99 6.5.3.3p3 over the promoted operand;
+    /// the negation of the type minimum wraps to itself). Lowers to one
+    /// `neg`. A narrow result is renormalized by the `Extend` the walker
+    /// emits after it, as it is for the other width-preserving binops.
+    Neg(ValueId),
     /// Unary floating-point negation.
     Fneg(ValueId),
     /// Fused multiply-add computed with a single rounding (C99 6.5p8,
@@ -245,6 +254,16 @@ pub(crate) enum Inst {
     /// the byte-reversal instruction (`bswap` / `rev`); the 16-bit form
     /// needs one extra instruction to zero the upper bits.
     Bswap { value: ValueId, width: u8 },
+    /// Count the bits of the low `width` bytes of `value` that `op` names
+    /// (`__builtin_clz` / `ctz` / `popcount`, GCC's builtins; C99 has no
+    /// operator). `width` is 4 or 8; operand bits above `width * 8` do not
+    /// affect the result. A leading or trailing count of 0 is `width * 8`,
+    /// so the result is in `0..=width * 8`, zero-extended to 64 bits.
+    BitCount {
+        op: BitCountOp,
+        value: ValueId,
+        width: u8,
+    },
     /// Register-to-register copy of `value`, with `is_fp` naming the
     /// bank the copy runs in (the operand's own bank, which the
     /// instruction cannot otherwise be asked for). Emitted by the
@@ -280,7 +299,7 @@ pub(crate) enum Inst {
         /// is a floating-point scalar passed in an FP argument
         /// register (System V AMD64 3.2.3 / AAPCS64 6.4.1). Derived
         /// from the argument's C type, not its register placement: a
-        /// floating-point constant rides an integer register as its
+        /// floating-point constant can ride an integer register as its
         /// `Imm` bit pattern, so the placement alone cannot classify
         /// it. The per-arch emit feeds this to `plan_call_args`.
         fp_arg_mask: FpMask,
@@ -464,6 +483,16 @@ pub(crate) enum Inst {
     /// at runtime, so the codegen switches spill addressing to the
     /// frame pointer. Zero means no alloca. Produces no SSA value.
     AllocaInit(i64),
+    /// End of the lifetime of the automatic object based at this frame
+    /// slot (C99 6.2.4p2): control has left the block the object was
+    /// declared in, so no access to its storage is defined from here,
+    /// whatever its address reached. Emitted by the walker at each block
+    /// exit; read by `ssa::slot_coalesce`, which bounds an escaped
+    /// object's storage lifetime with it. Produces no SSA value and no
+    /// code. Dropping a marker is conservative -- it leaves the object
+    /// live to the end of the function -- so a pass may delete one, but
+    /// a pass that renumbers slot offsets must carry it.
+    LifetimeEnd(i64),
     /// The i-th declared parameter's incoming value, tagged with
     /// the parameter's natural load width. The walker emits one
     /// per non-relocated integer parameter on a non-variadic,
@@ -537,14 +566,23 @@ impl Inst {
                 | Inst::LoadIndexed { .. }
                 | Inst::Binop { .. }
                 | Inst::BinopI { .. }
+                | Inst::Neg(_)
                 | Inst::Fneg(_)
                 | Inst::Fma { .. }
                 | Inst::MulAdd { .. }
                 | Inst::FpCast { .. }
                 | Inst::Extend { .. }
                 | Inst::Bswap { .. }
+                | Inst::BitCount { .. }
                 | Inst::Copy { .. }
         )
+    }
+
+    /// True for the end-of-lifetime marker, which states a fact about
+    /// frame storage and issues no code: every size budget measured in
+    /// emitted instructions leaves it out.
+    pub(crate) fn is_lifetime_marker(&self) -> bool {
+        matches!(self, Inst::LifetimeEnd(_))
     }
 
     /// Variant name for diagnostics. Exhaustive so a new variant is
@@ -568,11 +606,13 @@ impl Inst {
             Inst::StoreIndexed { .. } => "StoreIndexed",
             Inst::Binop { .. } => "Binop",
             Inst::BinopI { .. } => "BinopI",
+            Inst::Neg(_) => "Neg",
             Inst::Fneg(_) => "Fneg",
             Inst::Fma { .. } => "Fma",
             Inst::MulAdd { .. } => "MulAdd",
             Inst::Extend { .. } => "Extend",
             Inst::Bswap { .. } => "Bswap",
+            Inst::BitCount { .. } => "BitCount",
             Inst::Copy { .. } => "Copy",
             Inst::FpCast { .. } => "FpCast",
             Inst::Call { .. } => "Call",
@@ -589,6 +629,7 @@ impl Inst {
             Inst::X86Simd { .. } => "X86Simd",
             Inst::InlineAsm { .. } => "InlineAsm",
             Inst::AllocaInit(_) => "AllocaInit",
+            Inst::LifetimeEnd(_) => "LifetimeEnd",
             Inst::ParamRef { .. } => "ParamRef",
             Inst::Phi { .. } => "Phi",
         }
@@ -613,6 +654,7 @@ impl Inst {
             | Inst::LoadLocal { .. }
             | Inst::TailExt(_)
             | Inst::AllocaInit(_)
+            | Inst::LifetimeEnd(_)
             | Inst::ParamRef { .. } => {}
             Inst::Load { addr, .. } => f(*addr),
             Inst::Store { addr, value, .. } => {
@@ -641,14 +683,14 @@ impl Inst {
                 f(*rhs);
             }
             Inst::BinopI { lhs, .. } => f(*lhs),
-            Inst::Fneg(v) => f(*v),
+            Inst::Neg(v) | Inst::Fneg(v) => f(*v),
             Inst::Fma { a, b, c, .. } | Inst::MulAdd { a, b, c, .. } => {
                 f(*a);
                 f(*b);
                 f(*c);
             }
             Inst::Extend { value, .. } => f(*value),
-            Inst::Bswap { value, .. } => f(*value),
+            Inst::Bswap { value, .. } | Inst::BitCount { value, .. } => f(*value),
             Inst::Copy { value, .. } => f(*value),
             Inst::FpCast { value, .. } => f(*value),
             Inst::Call { args, .. }
@@ -716,6 +758,7 @@ impl Inst {
             | Inst::LoadLocal { .. }
             | Inst::TailExt(_)
             | Inst::AllocaInit(_)
+            | Inst::LifetimeEnd(_)
             | Inst::ParamRef { .. } => {}
             Inst::Load { addr, .. } => f(addr),
             Inst::Store { addr, value, .. } => {
@@ -744,14 +787,14 @@ impl Inst {
                 f(rhs);
             }
             Inst::BinopI { lhs, .. } => f(lhs),
-            Inst::Fneg(v) => f(v),
+            Inst::Neg(v) | Inst::Fneg(v) => f(v),
             Inst::Fma { a, b, c, .. } | Inst::MulAdd { a, b, c, .. } => {
                 f(a);
                 f(b);
                 f(c);
             }
             Inst::Extend { value, .. } => f(value),
-            Inst::Bswap { value, .. } => f(value),
+            Inst::Bswap { value, .. } | Inst::BitCount { value, .. } => f(value),
             Inst::Copy { value, .. } => f(value),
             Inst::FpCast { value, .. } => f(value),
             Inst::Call { args, .. }
@@ -832,6 +875,18 @@ pub(crate) enum LoadKind {
     F128,
     /// 16 bytes read whole into a SIMD register: a 128-bit vector value.
     V128,
+}
+
+/// How much of an indexed access's `index` forms the address: all 64
+/// bits, or the low word sign- / zero-extended by the access itself.
+/// Only AArch64, whose register-offset addressing has the forms, sets
+/// the extending ones.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Default)]
+pub(crate) enum IndexExt {
+    #[default]
+    None,
+    Sxtw,
+    Uxtw,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1029,6 +1084,11 @@ pub(crate) fn eval_int_binop(op: BinOp, lhs: i64, rhs: i64) -> Result<i64, DivBy
     Ok(v)
 }
 
+/// Integer division and remainder, signed and unsigned (C99 6.5.5).
+pub(crate) fn is_divmod_op(op: BinOp) -> bool {
+    matches!(op, BinOp::Div | BinOp::Divu | BinOp::Mod | BinOp::Modu)
+}
+
 /// The divide sharing a modulo's quotient, and its inverse. The two
 /// halves of `n = (n / d) * d + n % d` (C99 6.5.5p6) pair by
 /// signedness.
@@ -1046,6 +1106,20 @@ pub(crate) fn remainder_op(op: BinOp) -> Option<BinOp> {
         BinOp::Divu => Some(BinOp::Modu),
         _ => None,
     }
+}
+
+/// The bits [`Inst::BitCount`] counts: the zeros above the highest set
+/// bit, the zeros below the lowest set bit, or the set bits.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) enum BitCountOp {
+    Clz,
+    Ctz,
+    Popcount,
+    /// Leading redundant sign bits: the number of bits below the sign bit
+    /// that repeat it, `w - 1` for 0 and -1 (`__builtin_clrsb`). Equals
+    /// `clz((x ^ (x << 1)) | 1)` over the same width, which is the
+    /// x86-64 lowering; AArch64 has `cls`.
+    Clrsb,
 }
 
 /// Operator for an atomic read-modify-write (C11 7.17.7.2-7.17.7.5).
@@ -1721,6 +1795,11 @@ pub(crate) struct FunctionSsa {
     /// that adds, removes or rewrites instructions; a shorter table is
     /// read as all-false, which is the 64-bit form.
     pub cmp32: Vec<bool>,
+    /// Per-block table: the block's `Bz` / `Bnz` reads only the low 32
+    /// bits of its condition, which `constfold_branch::strip_zero_test_conds`
+    /// took from a compare `narrow` marked 32-bit. Set immediately before
+    /// allocation; a shorter table is read as all-false.
+    pub low_word_tests: Vec<bool>,
     /// Per-parameter floating-point mask: bit `i` set when declared
     /// parameter `i` is a floating-point scalar passed in an FP
     /// argument register (C99 6.2.5p10). The callee resolves each
@@ -1759,15 +1838,15 @@ pub(crate) struct FunctionSsa {
     /// 6.2.5p10): the result is delivered in the FP return register
     /// (d0 / xmm0). This is the declared-type signal the return emit
     /// uses; a producing instruction's register file alone is
-    /// insufficient because a bare FP constant materializes as an
+    /// insufficient because a bare FP constant can materialize as an
     /// integer immediate in a GPR.
     pub ret_is_fp: bool,
     /// Declared return type tag (`Ty` encoding, unsigned bit OR'd in;
-    /// 0 when not recorded). A function's epilogue extends a sub-word
-    /// integer return to 64 bits per this type, and a caller reading
-    /// the accumulator relies on that; the emit-time tail-call
-    /// conversion compares the caller's and callee's recipes and
-    /// keeps the regular call-then-extend path when they differ.
+    /// 0 when not recorded). A sub-word integer return occupies the low
+    /// bits of the return register and the caller widens it
+    /// (`irgen::types::extend_scalar_call_result`); the emit-time
+    /// tail-call conversion compares the caller's and callee's recipes
+    /// and keeps the regular call-then-extend path when they differ.
     pub ret_type_tag: i64,
     /// Negative frame slot holding the caller-supplied indirect-result
     /// address (AAPCS64 x8) for a function returning an aggregate
@@ -1905,6 +1984,13 @@ impl FunctionSsa {
             _ => false,
         })
     }
+
+    /// The blocks ending in a `Terminator::GotoIndirect`, ascending.
+    pub(crate) fn indirect_branches(&self) -> impl Iterator<Item = BlockId> + '_ {
+        self.blocks.iter().enumerate().filter_map(|(b, block)| {
+            matches!(block.terminator, Terminator::GotoIndirect { .. }).then_some(b as BlockId)
+        })
+    }
 }
 
 /// Functions that contain stack-pointer asm or reach one through the
@@ -1983,11 +2069,13 @@ impl crate::c5::layout::DataOffsets for Inst {
             | Inst::SegStore { .. }
             | Inst::Binop { .. }
             | Inst::BinopI { .. }
+            | Inst::Neg { .. }
             | Inst::Fneg { .. }
             | Inst::Fma { .. }
             | Inst::MulAdd { .. }
             | Inst::Extend { .. }
             | Inst::Bswap { .. }
+            | Inst::BitCount { .. }
             | Inst::Copy { .. }
             | Inst::FpCast { .. }
             | Inst::Call { .. }
@@ -2004,6 +2092,7 @@ impl crate::c5::layout::DataOffsets for Inst {
             | Inst::X86Simd { .. }
             | Inst::InlineAsm { .. }
             | Inst::AllocaInit { .. }
+            | Inst::LifetimeEnd { .. }
             | Inst::ParamRef { .. }
             | Inst::Phi { .. } => {}
         }
@@ -2040,6 +2129,7 @@ impl crate::c5::layout::DataOffsets for FunctionSsa {
             extern_tls_refs: _,
             f32_values: _,
             cmp32: _,
+            low_word_tests: _,
             param_fp_mask: _,
             agg_descs: _,
             param_aggs: _,
@@ -2131,6 +2221,7 @@ mod tests {
                 Inst::LoadIndexed {
                     base: 1,
                     index: 2,
+                    index_ext: IndexExt::None,
                     scale: 8,
                     kind: LoadKind::I64
                 },
@@ -2140,6 +2231,7 @@ mod tests {
                 Inst::StoreIndexed {
                     base: 1,
                     index: 2,
+                    index_ext: IndexExt::Sxtw,
                     scale: 8,
                     value: 3,
                     kind: StoreKind::I64

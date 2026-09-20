@@ -14,7 +14,7 @@ Disassembly of section .text:
                	brk	#0x1
 
 <use>:
-               	sxtw	x0, w1
+               	mov	x0, x1
                	ret
 
 <probe>:
@@ -34,5 +34,4 @@ Disassembly of section .text:
                	mov	x0, #0x1                // =1
                	ret
                	mov	x0, #0x0                // =0
-               	mov	x1, x0
                	ret

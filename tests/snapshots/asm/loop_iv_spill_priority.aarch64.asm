@@ -14,52 +14,35 @@ Disassembly of section .text:
                	brk	#0x1
 
 <hot>:
-               	mov	x2, x0
-               	mov	x0, #0x0                // =0
-               	ldr	w1, [x2]
-               	add	x1, x1, #0x1
-               	mov	w6, w1
-               	ldr	w1, [x2, #0x4]
-               	add	x1, x1, #0x2
-               	mov	w7, w1
-               	ldr	w1, [x2, #0x8]
-               	add	x1, x1, #0x3
-               	mov	w8, w1
-               	ldr	w1, [x2, #0xc]
-               	add	x1, x1, #0x4
-               	mov	w9, w1
-               	ldr	w1, [x2, #0x10]
-               	add	x1, x1, #0x5
-               	mov	w10, w1
-               	ldr	w1, [x2, #0x14]
-               	add	x1, x1, #0x6
-               	mov	w11, w1
-               	ldr	w1, [x2, #0x18]
-               	add	x1, x1, #0x7
-               	mov	w12, w1
-               	ldr	w1, [x2, #0x1c]
-               	add	x1, x1, #0x8
-               	mov	w13, w1
-               	mov	x3, x0
-               	b	<addr>
-               	mov	w4, w3
+               	mov	x1, #0x0                // =0
+               	ldr	w2, [x0]
+               	add	x5, x2, #0x1
+               	ldr	w2, [x0, #0x4]
+               	add	x6, x2, #0x2
+               	ldr	w2, [x0, #0x8]
+               	add	x7, x2, #0x3
+               	ldr	w2, [x0, #0xc]
+               	add	x8, x2, #0x4
+               	ldr	w2, [x0, #0x10]
+               	add	x9, x2, #0x5
+               	ldr	w2, [x0, #0x14]
+               	add	x10, x2, #0x6
+               	ldr	w2, [x0, #0x18]
+               	add	x11, x2, #0x7
+               	ldr	w2, [x0, #0x1c]
+               	add	x12, x2, #0x8
+               	mov	x2, x1
                	and	x3, x1, #0x7
-               	ldr	w3, [x2, x3, lsl #2]
-               	add	x5, x1, #0x1
-               	mov	w5, w5
-               	mul	x3, x3, x5
-               	mov	w3, w3
-               	add	x3, x4, x3
-               	mov	w3, w3
-               	lsl	x4, x3, #1
-               	mov	w4, w4
-               	eor	x3, x3, x4
-               	add	x3, x3, x1
-               	add	x0, x1, #0x1
-               	mov	w1, w0
+               	ldr	w4, [x0, x3, lsl #2]
+               	add	x3, x1, #0x1
+               	madd	x2, x4, x3, x2
+               	lsl	x4, x2, #1
+               	eor	x2, x2, x4
+               	add	x2, x2, x1
+               	mov	x1, x3
                	cmp	w1, #0x3e8
                	b.lo	<addr>
-               	mov	w0, w3
+               	eor	x0, x2, x5
                	eor	x0, x0, x6
                	eor	x0, x0, x7
                	eor	x0, x0, x8
@@ -67,7 +50,6 @@ Disassembly of section .text:
                	eor	x0, x0, x10
                	eor	x0, x0, x11
                	eor	x0, x0, x12
-               	eor	x0, x0, x13
                	ret
 
 <main>:
@@ -89,9 +71,7 @@ Disassembly of section .text:
                	ldr	x10, [sp], #0x10
                	mov	x1, #0x3e8              // =1000
                	bl	<addr>
-               	mov	w0, w0
                	and	x0, x0, #0xff
-               	sxtw	x0, w0
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret

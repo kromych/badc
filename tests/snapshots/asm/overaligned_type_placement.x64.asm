@@ -27,110 +27,57 @@ Disassembly of section .text:
 
 <main>:
                	leaq	<rip>, %rax
-               	andq	$0x3f, %rax
-               	testl	%eax, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
+               	testb	$0x3f, %al
                	je	<addr>
                	movl	$0x1, %eax
                	retq
                	leaq	<rip>, %rax
-               	andq	$0x7f, %rax
-               	testl	%eax, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
+               	testb	$0x7f, %al
                	je	<addr>
                	movl	$0x2, %eax
                	retq
-               	leaq	<rip>, %rax
-               	andq	$0x3f, %rax
-               	testl	%eax, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
+               	leaq	<rip>, %rcx
+               	testb	$0x3f, %cl
                	je	<addr>
                	movl	$0x3, %eax
                	retq
-               	leaq	<rip>, %rax
-               	andq	$0x7f, %rax
-               	testl	%eax, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
+               	leaq	<rip>, %rcx
+               	testb	$0x7f, %cl
                	je	<addr>
                	movl	$0x4, %eax
                	retq
-               	leaq	<rip>, %rax
-               	andq	$0x3f, %rax
-               	testl	%eax, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
+               	leaq	<rip>, %rdx
+               	testb	$0x3f, %dl
                	je	<addr>
                	movl	$0x5, %eax
                	retq
-               	leaq	<rip>, %rax
-               	andq	$0x7f, %rax
-               	testl	%eax, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
+               	leaq	<rip>, %rdx
+               	testb	$0x7f, %dl
                	je	<addr>
                	movl	$0x6, %eax
                	retq
-               	leaq	<rip>, %rax
-               	andq	$0x7f, %rax
-               	testl	%eax, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
+               	leaq	<rip>, %rsi
+               	testb	$0x7f, %sil
                	je	<addr>
                	movl	$0x7, %eax
                	retq
-               	leaq	<rip>, %rax
-               	movl	$0xb, %ecx
-               	movl	%ecx, (%rax)
-               	leaq	<rip>, %rcx
-               	movl	$0x16, %edx
-               	movl	%edx, (%rcx)
-               	leaq	<rip>, %rcx
-               	movl	$0x21, %edx
-               	movl	%edx, (%rcx)
-               	leaq	<rip>, %rcx
-               	movl	$0x2c, %edx
-               	movl	%edx, (%rcx)
+               	movl	$0xb, (%rax)
+               	movl	$0x16, (%rcx)
+               	movl	$0x21, (%rdx)
+               	movl	$0x2c, (%rsi)
                	movslq	(%rax), %rax
                	cmpl	$0xb, %eax
                	jne	<addr>
-               	leaq	<rip>, %rax
-               	movslq	(%rax), %rax
+               	movslq	(%rcx), %rax
                	cmpl	$0x16, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	jne	<addr>
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	cmpl	$0x21, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	jne	<addr>
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	cmpl	$0x2c, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x8, %eax
                	retq
@@ -141,11 +88,8 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	cmpl	$0x16, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x9, %eax
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	retq

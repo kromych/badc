@@ -15,7 +15,6 @@ Disassembly of section .text:
 
 <add>:
                	add	x0, x0, x1
-               	sxtw	x0, w0
                	ret
 
 <main>:
@@ -24,6 +23,5 @@ Disassembly of section .text:
                	mov	x0, #0x7                // =7
                	bl	<addr>
                	mov	x0, #0x0                // =0
-               	mov	x1, x0
                	ldp	x29, x30, [sp], #0x10
                	ret

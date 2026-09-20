@@ -29,24 +29,19 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x30, %rsp
-               	xorq	%rcx, %rcx
-               	movq	%rcx, %rax
                	leaq	-0x30(%rbp), %rax
-               	movl	$0x1111, %edx           # imm = 0x1111
-               	movq	%rdx, 0x8(%rax)
-               	leaq	0x8(%rax), %rdx
-               	cmpq	%rdx, %rdx
+               	movq	$0x1111, 0x8(%rax)      # imm = 0x1111
+               	leaq	0x8(%rax), %rcx
+               	cmpq	%rcx, %rcx
                	je	<addr>
                	movl	$0x4, %eax
                	leave
                	retq
-               	movl	$0x2222, %edx           # imm = 0x2222
-               	movq	%rdx, 0x10(%rax)
+               	movq	$0x2222, 0x10(%rax)     # imm = 0x2222
                	movq	0x8(%rax), %rax
                	cmpq	$0x1111, %rax           # imm = 0x1111
                	jne	<addr>
-               	movq	%rcx, %rax
-               	movq	%rcx, %rax
+               	xorl	%eax, %eax
                	leave
                	retq
                	movl	$0x5, %eax

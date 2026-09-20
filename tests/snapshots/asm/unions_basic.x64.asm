@@ -29,17 +29,16 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	leaq	-0x8(%rbp), %rax
-               	movl	$0x2a, %ecx
-               	movl	%ecx, (%rax)
-               	xorq	%rcx, %rcx
-               	movl	%ecx, (%rax)
+               	leaq	-0x8(%rbp), %rcx
+               	movl	$0x2a, (%rcx)
+               	xorl	%eax, %eax
+               	movl	%eax, (%rcx)
                	leaq	<rip>, %rdx
-               	movq	%rdx, (%rax)
+               	movq	%rdx, (%rcx)
                	movabsq	$0x400c000000000000, %rdx # imm = 0x400C000000000000
                	movq	%rdx, %xmm14
-               	movsd	%xmm14, (%rax,%riz)
-               	movsd	(%rax,%riz), %xmm0
+               	movsd	%xmm14, (%rcx)
+               	movsd	(%rcx), %xmm0
                	movabsq	$0x400b333333333333, %rdx # imm = 0x400B333333333333
                	movq	%rdx, %xmm15
                	ucomisd	%xmm0, %xmm15
@@ -47,14 +46,13 @@ Disassembly of section .text:
                	movl	$0x4, %eax
                	leave
                	retq
-               	movsd	(%rax,%riz), %xmm0
-               	movabsq	$0x400ccccccccccccd, %rax # imm = 0x400CCCCCCCCCCCCD
-               	movq	%rax, %xmm15
+               	movsd	(%rcx), %xmm0
+               	movabsq	$0x400ccccccccccccd, %rcx # imm = 0x400CCCCCCCCCCCCD
+               	movq	%rcx, %xmm15
                	ucomisd	%xmm15, %xmm0
                	jbe	<addr>
                	movl	$0x5, %eax
                	leave
                	retq
-               	movq	%rcx, %rax
                	leave
                	retq

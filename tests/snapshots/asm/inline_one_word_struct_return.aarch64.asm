@@ -15,21 +15,16 @@ Disassembly of section .text:
 
 <main>:
                	mov	x0, #0x0                // =0
-               	mov	x3, #0xa                // =10
+               	mov	x2, #0xa                // =10
                	mov	x1, x0
-               	b	<addr>
-               	add	x2, x0, #0x1
-               	sxtw	x2, w2
-               	mul	x2, x2, x3
-               	add	x1, x1, x2
-               	sxtw	x0, w0
                	add	x0, x0, #0x1
+               	mul	x3, x0, x2
+               	add	x1, x1, x3
                	cmp	w0, #0x5
                	b.lt	<addr>
                	cmp	x1, #0x96
                	b.ne	<addr>
                	mov	x0, #0x0                // =0
-               	sxtw	x0, w0
                	ret
                	mov	x0, #0x1                // =1
                	b	<addr>

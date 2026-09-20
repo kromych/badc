@@ -14,51 +14,39 @@ Disassembly of section .text:
                	brk	#0x1
 
 <mixed>:
-               	stp	x20, x21, [sp, #-0x40]!
+               	stp	x20, x21, [sp, #-0x30]!
                	str	x22, [sp, #0x10]
-               	str	x19, [sp, #0x20]
-               	stp	x29, x30, [sp, #0x30]
-               	add	x29, sp, #0x30
-               	mov	x20, x0
-               	mov	x22, x2
-               	sxtw	x20, w20
-               	mov	x9, x1
+               	stp	x29, x30, [sp, #0x20]
+               	add	x29, sp, #0x20
+               	sxtw	x20, w0
+               	mov	x21, x2
                	mov	x0, x20
-               	blr	x9
-               	add	x21, x20, x0
-               	mov	x9, x22
+               	blr	x1
+               	add	x22, x20, x0
                	mov	x0, x20
-               	blr	x9
-               	add	x0, x21, x0
-               	sxtw	x0, w0
-               	ldp	x29, x30, [sp, #0x30]
-               	ldr	x19, [sp, #0x20]
+               	blr	x21
+               	add	x0, x22, x0
+               	ldp	x29, x30, [sp, #0x20]
                	ldr	x22, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0x40
+               	ldp	x20, x21, [sp], #0x30
                	ret
 
 <apply1>:
-               	str	x19, [sp, #-0x20]!
-               	stp	x29, x30, [sp, #0x10]
-               	add	x29, sp, #0x10
+               	stp	x29, x30, [sp, #-0x10]!
+               	mov	x29, sp
                	sxtw	x1, w1
                	mov	x9, x0
                	mov	x0, x1
                	blr	x9
-               	sxtw	x0, w0
-               	ldp	x29, x30, [sp, #0x10]
-               	ldr	x19, [sp], #0x20
+               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <inc>:
                	add	x0, x0, #0x1
-               	sxtw	x0, w0
                	ret
 
 <neg>:
-               	mov	x17, #-0x1              // =-1
-               	mul	x0, x0, x17
-               	sxtw	x0, w0
+               	neg	x0, x0
                	ret
 
 <main>:

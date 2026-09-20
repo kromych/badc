@@ -28,7 +28,6 @@ Disassembly of section .text:
 <doer>:
                	movq	%rdi, %rax
                	imulq	%rsi, %rax
-               	movslq	%eax, %rax
                	retq
 
 <main>:
@@ -66,6 +65,6 @@ Disassembly of section .text:
                	movl	$0x4, %eax
                	popq	%rbp
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	popq	%rbp
                	retq

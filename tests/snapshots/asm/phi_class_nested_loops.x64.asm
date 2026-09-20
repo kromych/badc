@@ -26,45 +26,35 @@ Disassembly of section .text:
                	int3
 
 <test>:
-               	xorq	%rsi, %rsi
-               	movq	%rsi, %r8
-               	jmp	<addr>
-               	xorq	%rax, %rax
-               	movq	%rax, %rcx
-               	jmp	<addr>
-               	incq	%rax
-               	movslq	%eax, %rax
-               	movslq	%ecx, %rcx
+               	xorl	%eax, %eax
+               	movq	%rax, %r8
+               	cmpl	%edi, %r8d
+               	jge	<addr>
+               	xorl	%ecx, %ecx
+               	movq	%rcx, %rdx
+               	cmpl	%edi, %edx
+               	jge	<addr>
                	incq	%rcx
-               	cmpl	%edi, %ecx
+               	incq	%rdx
+               	cmpl	%edi, %edx
                	jl	<addr>
-               	addq	%rsi, %rax
-               	movslq	%eax, %rsi
-               	movslq	%r8d, %rax
-               	leaq	0x1(%rax), %r8
+               	addq	%rcx, %rax
+               	incq	%r8
                	cmpl	%edi, %r8d
                	jl	<addr>
-               	movslq	%esi, %rax
                	retq
 
 <main>:
-               	xorq	%rsi, %rsi
-               	movq	%rsi, %rdi
-               	jmp	<addr>
-               	xorq	%rax, %rax
-               	movq	%rax, %rcx
-               	jmp	<addr>
-               	incq	%rax
-               	movslq	%eax, %rax
-               	movslq	%ecx, %rcx
+               	xorl	%eax, %eax
+               	movq	%rax, %rdi
+               	xorl	%ecx, %ecx
+               	movq	%rcx, %rdx
                	incq	%rcx
-               	cmpl	$0x7, %ecx
+               	incq	%rdx
+               	cmpl	$0x7, %edx
                	jl	<addr>
-               	addq	%rsi, %rax
-               	movslq	%eax, %rsi
-               	movslq	%edi, %rax
-               	leaq	0x1(%rax), %rdi
+               	addq	%rcx, %rax
+               	incq	%rdi
                	cmpl	$0x7, %edi
                	jl	<addr>
-               	movslq	%esi, %rax
                	retq

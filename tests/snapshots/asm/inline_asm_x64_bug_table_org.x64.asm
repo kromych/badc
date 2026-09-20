@@ -31,5 +31,5 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	ud2
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	retq

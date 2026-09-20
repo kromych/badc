@@ -28,40 +28,22 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	movq	%rbx, (%rsp)
+               	subq	$0x18, %rsp
+               	pushq	%rbx
                	leaq	<rip>, %rax
-               	addq	$0x0, %rax
-               	movl	$0x2000, %ecx           # imm = 0x2000
-               	movq	%rcx, (%rax)
-               	leaq	<rip>, %rax
-               	movl	$0x2001, %ecx           # imm = 0x2001
-               	movq	%rcx, 0x8(%rax)
-               	leaq	<rip>, %rax
-               	movl	$0x2002, %ecx           # imm = 0x2002
-               	movq	%rcx, 0x10(%rax)
-               	leaq	<rip>, %rax
-               	movl	$0x2003, %ecx           # imm = 0x2003
-               	movq	%rcx, 0x18(%rax)
-               	leaq	<rip>, %rax
-               	movl	$0x2004, %ecx           # imm = 0x2004
-               	movq	%rcx, 0x20(%rax)
-               	leaq	<rip>, %rax
-               	movl	$0x2005, %ecx           # imm = 0x2005
-               	movq	%rcx, 0x28(%rax)
-               	leaq	<rip>, %rax
-               	movl	$0x2006, %ecx           # imm = 0x2006
-               	movq	%rcx, 0x30(%rax)
-               	leaq	<rip>, %rax
-               	movl	$0x2007, %ecx           # imm = 0x2007
-               	movq	%rcx, 0x38(%rax)
+               	movq	$0x2000, (%rax)         # imm = 0x2000
+               	movq	$0x2001, 0x8(%rax)      # imm = 0x2001
+               	movq	$0x2002, 0x10(%rax)     # imm = 0x2002
+               	movq	$0x2003, 0x18(%rax)     # imm = 0x2003
+               	movq	$0x2004, 0x20(%rax)     # imm = 0x2004
+               	movq	$0x2005, 0x28(%rax)     # imm = 0x2005
+               	movq	$0x2006, 0x30(%rax)     # imm = 0x2006
                	leaq	<rip>, %rcx
-               	movq	%rcx, %rax
-               	andq	$0x7, %rax
-               	testq	%rax, %rax
+               	movq	$0x2007, 0x38(%rcx)     # imm = 0x2007
+               	testb	$0x7, %cl
                	je	<addr>
                	movl	$0x1, %eax
-               	movq	(%rsp), %rbx
+               	popq	%rbx
                	leave
                	retq
                	movq	%rcx, %rax
@@ -73,7 +55,7 @@ Disassembly of section .text:
                	cmpq	$0x2000, %rax           # imm = 0x2000
                	je	<addr>
                	movl	$0x2, %eax
-               	movq	(%rsp), %rbx
+               	popq	%rbx
                	leave
                	retq
                	movq	%rcx, %rax
@@ -85,7 +67,7 @@ Disassembly of section .text:
                	cmpq	$0x2002, %rax           # imm = 0x2002
                	je	<addr>
                	movl	$0x3, %eax
-               	movq	(%rsp), %rbx
+               	popq	%rbx
                	leave
                	retq
                	movq	%rcx, %rax
@@ -97,7 +79,7 @@ Disassembly of section .text:
                	cmpq	$0x2000, %rax           # imm = 0x2000
                	je	<addr>
                	movl	$0x4, %eax
-               	movq	(%rsp), %rbx
+               	popq	%rbx
                	leave
                	retq
                	movq	%rcx, %rax
@@ -109,7 +91,7 @@ Disassembly of section .text:
                	cmpq	$0xbeef, %rax           # imm = 0xBEEF
                	je	<addr>
                	movl	$0x5, %eax
-               	movq	(%rsp), %rbx
+               	popq	%rbx
                	leave
                	retq
                	movq	%rcx, %rax
@@ -123,7 +105,7 @@ Disassembly of section .text:
                	cmpq	%rdx, %rax
                	je	<addr>
                	movl	$0x6, %eax
-               	movq	(%rsp), %rbx
+               	popq	%rbx
                	leave
                	retq
                	movq	%rcx, %rax
@@ -135,10 +117,10 @@ Disassembly of section .text:
                	cmpq	$0x2005, %rax           # imm = 0x2005
                	je	<addr>
                	movl	$0x7, %eax
-               	movq	(%rsp), %rbx
+               	popq	%rbx
                	leave
                	retq
                	movl	$0x2a, %eax
-               	movq	(%rsp), %rbx
+               	popq	%rbx
                	leave
                	retq

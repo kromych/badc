@@ -9,6 +9,9 @@ pub(super) struct BranchFixup {
     /// Target block in the function's `blocks` table.
     pub(super) target: BlockId,
     pub(super) kind: LocalBranchKind,
+    /// The block whose terminator emitted the branch; `None` for a branch
+    /// inside an inline-asm template, whose length is the template's.
+    pub(super) owner: Option<BlockId>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -19,16 +22,39 @@ pub(super) enum LocalBranchKind {
     Cbz(Reg),
     /// CBNZ Xt, label.
     Cbnz(Reg),
+    /// CBZ Wt, label: the low word is zero.
+    CbzW(Reg),
+    /// CBNZ Wt, label.
+    CbnzW(Reg),
+    /// TBZ Rt, #bit, label: `imm14` field, +/-32 KiB reach.
+    Tbz(Reg, u8),
+    /// TBNZ Rt, #bit, label.
+    Tbnz(Reg, u8),
     /// B.cond label.
     Bcc(Cond),
 }
 
 impl LocalBranchKind {
+    /// The conditional form taken exactly when `self` is not; `B` has none.
+    fn inverted(self) -> Option<LocalBranchKind> {
+        match self {
+            LocalBranchKind::B => None,
+            LocalBranchKind::Cbz(rt) => Some(LocalBranchKind::Cbnz(rt)),
+            LocalBranchKind::Cbnz(rt) => Some(LocalBranchKind::Cbz(rt)),
+            LocalBranchKind::CbzW(rt) => Some(LocalBranchKind::CbnzW(rt)),
+            LocalBranchKind::CbnzW(rt) => Some(LocalBranchKind::CbzW(rt)),
+            LocalBranchKind::Tbz(rt, bit) => Some(LocalBranchKind::Tbnz(rt, bit)),
+            LocalBranchKind::Tbnz(rt, bit) => Some(LocalBranchKind::Tbz(rt, bit)),
+            LocalBranchKind::Bcc(cond) => Some(LocalBranchKind::Bcc(cond.flip())),
+        }
+    }
+
     /// The branch word for the word displacement `imm`, or `None` when the
     /// displacement is outside the form's immediate field.
     fn word(self, imm: i32) -> Option<u32> {
         let bits = match self {
             LocalBranchKind::B => 26,
+            LocalBranchKind::Tbz(..) | LocalBranchKind::Tbnz(..) => 14,
             _ => 19,
         };
         if !(-(1 << (bits - 1))..(1 << (bits - 1))).contains(&imm) {
@@ -38,14 +64,18 @@ impl LocalBranchKind {
             LocalBranchKind::B => enc_b(imm),
             LocalBranchKind::Cbz(rt) => enc_cbz(rt, imm),
             LocalBranchKind::Cbnz(rt) => enc_cbnz(rt, imm),
+            LocalBranchKind::CbzW(rt) => super::encode::enc_cbz_w(rt, imm),
+            LocalBranchKind::CbnzW(rt) => super::encode::enc_cbnz_w(rt, imm),
+            LocalBranchKind::Tbz(rt, bit) => super::encode::enc_tbz(rt, bit, imm),
+            LocalBranchKind::Tbnz(rt, bit) => super::encode::enc_tbnz(rt, bit, imm),
             LocalBranchKind::Bcc(cond) => enc_b_cond(cond, imm),
         })
     }
 }
 
-/// Lengths of the output tables at function entry. A bailed emit truncates
-/// every table back to them, so queued fixups never point into discarded
-/// code.
+/// The output tables at function entry. A bailed emit and a re-emission
+/// both return every table to this state, so nothing queued points into
+/// discarded code.
 struct EmitSnapshot {
     code: usize,
     fixups: usize,
@@ -62,6 +92,12 @@ struct EmitSnapshot {
     macho_tlv_fixups: usize,
     macho_tlv_descriptors: usize,
     elf_tpoff_fixups: usize,
+    ssa_line_rows: usize,
+    text_data_ranges: usize,
+    text_align: usize,
+    asm_text_labels: usize,
+    asm_section_text_refs: usize,
+    text_map_state: Option<super::super::map_syms::MapClass>,
 }
 
 /// The state of one function's emission: the output tables, the read-only
@@ -80,8 +116,15 @@ struct FunctionEmitter<'a, 'b> {
     abs_jump_tables: bool,
     entry: super::FunctionEntry,
     snapshot: EmitSnapshot,
+    /// Which blocks are emitted and where each branch lands.
+    plan: super::ssa::block_plan::BlockPlan,
+    /// `ParamRef` values the entry parallel copy already placed.
+    prebatched: Vec<bool>,
     block_offsets: Vec<usize>,
     branch_fixups: Vec<BranchFixup>,
+    /// Per block: its conditional branch does not reach its target and
+    /// takes the inverted test over a `B`.
+    far_cond: Vec<bool>,
     /// Template `%lK` branches that reach their label's block with no
     /// operand frame in the way; encoded against `block_offsets`.
     direct_goto_branches: Vec<AsmGotoDirectBranch>,
@@ -90,6 +133,8 @@ struct FunctionEmitter<'a, 'b> {
     block_addr_fixups: Vec<(usize, BlockId, Reg)>,
     /// `(table_start, table_idx)` per `Terminator::JumpTable`.
     jump_table_fixups: Vec<(usize, u32)>,
+    /// `(site, bits, single)` per floating literal load.
+    fp_literals: Vec<(usize, u64, bool)>,
     /// ALTERNATIVE `.subsection` replacements, appended after the body.
     deferred_regions: Vec<DeferredAsmRegion>,
 }
@@ -130,10 +175,12 @@ pub(crate) fn emit_function(
     stack_protect: super::StackProtect,
     entry: super::FunctionEntry,
     fixed_regs: super::FixedRegs,
+    // `-O`: the block plan may repeat a small test in place of a jump to it.
+    repeat_tests: bool,
 ) -> Emit {
     let abi = {
         let mut a = target.abi();
-        a.no_fp_varargs = no_fp_regs;
+        a.no_fp_regs = no_fp_regs;
         a.strict_align = strict_align;
         a.hardening = hardening;
         a.stack_protect = stack_protect;
@@ -182,6 +229,12 @@ pub(crate) fn emit_function(
         macho_tlv_fixups: macho_tlv_fixups.len(),
         macho_tlv_descriptors: macho_tlv_descriptors.len(),
         elf_tpoff_fixups: cx.elf_tpoff_fixups.len(),
+        ssa_line_rows: cx.ssa_line_rows.len(),
+        text_data_ranges: cx.text_data_ranges.len(),
+        text_align: *cx.text_align,
+        asm_text_labels: asm_text_labels.len(),
+        asm_section_text_refs: asm_section_text_refs.len(),
+        text_map_state: *text_map_state,
     };
     let mut em = FunctionEmitter {
         cx,
@@ -211,18 +264,23 @@ pub(crate) fn emit_function(
         abs_jump_tables,
         entry,
         snapshot,
+        plan: super::ssa::block_plan::BlockPlan::build(func, alloc, repeat_tests),
+        prebatched: Vec::new(),
         block_offsets: alloc::vec![0; func.blocks.len()],
         branch_fixups: Vec::new(),
+        far_cond: alloc::vec![false; func.blocks.len()],
         direct_goto_branches: Vec::new(),
         block_addr_fixups: Vec::new(),
         jump_table_fixups: Vec::new(),
+        fp_literals: Vec::new(),
         deferred_regions: Vec::new(),
     };
-    em.emit_entry();
-    let mut prebatched: Vec<bool> = alloc::vec![false; func.insts.len()];
-    em.place_int_params(&mut prebatched)?;
-    em.place_fp_params(&mut prebatched);
-    em.emit_blocks(&prebatched)?;
+    em.emit_body()?;
+    debug_assert_eq!(
+        scratch.third_taken(),
+        frame.uses_x19,
+        "x19 save and x19 writers disagree"
+    );
     em.resolve_layout()
 }
 
@@ -233,9 +291,58 @@ fn homes_distinct(homes: &[Place]) -> bool {
 }
 
 impl FunctionEmitter<'_, '_> {
+    /// Emit the entry and the blocks until every conditional branch reaches
+    /// its target. One that does not is re-emitted as the inverted test
+    /// over a `B`, which lengthens the code and can put another out of
+    /// reach; the far set only grows, so the loop ends.
+    fn emit_body(&mut self) -> Emit {
+        loop {
+            self.emit_entry();
+            self.prebatched = alloc::vec![false; self.fcx.func.insts.len()];
+            self.place_int_params()?;
+            self.place_fp_params();
+            self.emit_blocks()?;
+            if !self.mark_far_branches() {
+                return Ok(());
+            }
+            self.restore_outputs();
+            self.block_offsets.fill(0);
+            self.branch_fixups.clear();
+            self.direct_goto_branches.clear();
+            self.block_addr_fixups.clear();
+            self.jump_table_fixups.clear();
+            self.fp_literals.clear();
+            self.deferred_regions.clear();
+        }
+    }
+
+    /// Mark the owner of every conditional branch whose displacement does
+    /// not fit its field. Returns whether the far set grew.
+    fn mark_far_branches(&mut self) -> bool {
+        let mut grew = false;
+        for fx in &self.branch_fixups {
+            let (Some(owner), Some(_)) = (fx.owner, fx.kind.inverted()) else {
+                continue;
+            };
+            let rel = self.block_offsets[fx.target as usize] as i64 - fx.site as i64;
+            let fits = i32::try_from(rel / 4).is_ok_and(|imm| fx.kind.word(imm).is_some());
+            if !fits {
+                self.far_cond[owner as usize] = true;
+                grew = true;
+            }
+        }
+        grew
+    }
+
     /// Discard everything this function emitted and queued, and return `e`
     /// as the emit's result.
     fn rollback<T>(&mut self, e: Unsupported) -> Emit<T> {
+        self.restore_outputs();
+        Err(e)
+    }
+
+    /// Return every output table to its state at function entry.
+    fn restore_outputs(&mut self) {
         let s = &self.snapshot;
         self.cx.code.truncate(s.code);
         self.fixups.truncate(s.fixups);
@@ -254,7 +361,12 @@ impl FunctionEmitter<'_, '_> {
         self.cx.elf_tpoff_fixups.truncate(s.elf_tpoff_fixups);
         self.macho_tlv_fixups.truncate(s.macho_tlv_fixups);
         self.macho_tlv_descriptors.truncate(s.macho_tlv_descriptors);
-        Err(e)
+        self.cx.ssa_line_rows.truncate(s.ssa_line_rows);
+        self.cx.text_data_ranges.truncate(s.text_data_ranges);
+        *self.cx.text_align = s.text_align;
+        self.asm_text_labels.truncate(s.asm_text_labels);
+        self.asm_section_text_refs.truncate(s.asm_section_text_refs);
+        *self.text_map_state = s.text_map_state;
     }
 
     fn align_stream(&mut self) {
@@ -265,19 +377,92 @@ impl FunctionEmitter<'_, '_> {
         self.cx.code[site..site + 4].copy_from_slice(&word.to_le_bytes());
     }
 
-    fn push_branch(&mut self, target: BlockId, kind: LocalBranchKind) {
+    /// Queue a branch of `block_idx`'s terminator and emit its placeholder.
+    fn emit_branch(&mut self, block_idx: usize, target: BlockId, kind: LocalBranchKind) {
         self.branch_fixups.push(BranchFixup {
             site: self.cx.code.len(),
             target,
             kind,
+            owner: Some(block_idx as BlockId),
         });
+        let placeholder = kind.word(0).expect("a zero displacement fits every form");
+        emit(self.cx.code, placeholder);
     }
 
-    /// Branch to `target` unless it is the next block in layout order.
-    fn branch_unless_next(&mut self, block_idx: usize, target: BlockId) {
-        if target as usize != block_idx + 1 {
-            self.push_branch(target, LocalBranchKind::B);
-            emit(self.cx.code, enc_b(0));
+    /// The conditional branch of `block_idx`'s terminator: `kind` itself,
+    /// or where [`Self::mark_far_branches`] found the target out of its
+    /// reach, the inverted test over a `B`.
+    fn emit_cond(&mut self, block_idx: usize, target: BlockId, kind: LocalBranchKind) {
+        match kind.inverted() {
+            Some(skip) if self.far_cond[block_idx] => {
+                let over_b = skip.word(2).expect("two words fit every form");
+                emit(self.cx.code, over_b);
+                self.emit_branch(block_idx, target, LocalBranchKind::B);
+            }
+            _ => self.emit_branch(block_idx, target, kind),
+        }
+    }
+
+    /// Reach where an edge to `target` lands from the end of `block_idx`:
+    /// nothing when its code runs into it, the plan's repeat of a small
+    /// test, else a `B`.
+    fn branch_unless_next(&mut self, block_idx: usize, target: BlockId) -> Emit {
+        if self.plan.falls_into(block_idx, target) {
+            return Ok(());
+        }
+        if let Some(h) = self.plan.repeated_at(block_idx, target) {
+            return self.emit_repeat(block_idx, h);
+        }
+        let target = self.plan.resolve(target);
+        self.emit_branch(block_idx, target, LocalBranchKind::B);
+        Ok(())
+    }
+
+    /// GCC computed goto: `br` through the address `Inst::BlockAddr`
+    /// materialized.
+    fn emit_goto_indirect(&mut self, target: super::super::ir::ValueId) -> Emit {
+        let FnCtx {
+            alloc,
+            frame,
+            scratch,
+            ..
+        } = self.fcx;
+        let tplace = place_of(alloc, target);
+        let Some(rt) = materialize_int(self.cx.code, tplace, scratch.primary, frame) else {
+            return self.rollback(bail("GotoIndirect: target Place not int", target, tplace));
+        };
+        emit(self.cx.code, enc_br(rt));
+        Ok(())
+    }
+
+    /// The instructions of block `h` and its branch, as the end of
+    /// `block_idx`. A conditional's one arm is what this code runs into, so
+    /// the branch closes it. A decided test goes, with what only it reads.
+    fn emit_repeat(&mut self, block_idx: usize, h: BlockId) -> Emit {
+        let block = &self.fcx.func.blocks[h as usize];
+        let decided = self.plan.decided_at(block_idx);
+        for v in block.inst_range.clone() {
+            if decided.is_none() || !self.plan.is_test_only(v) {
+                self.emit_block_inst(block, v)?;
+            }
+        }
+        self.align_stream();
+        if let Some(arm) = decided {
+            return self.branch_unless_next(block_idx, arm);
+        }
+        match block.terminator {
+            Terminator::Bz {
+                cond,
+                target,
+                fall_through,
+            } => self.emit_cond_branch(block_idx, h as usize, cond, target, fall_through, true),
+            Terminator::Bnz {
+                cond,
+                target,
+                fall_through,
+            } => self.emit_cond_branch(block_idx, h as usize, cond, target, fall_through, false),
+            Terminator::GotoIndirect { target } => self.emit_goto_indirect(target),
+            _ => unreachable!("the plan repeats a conditional or an indirect branch"),
         }
     }
 
@@ -336,7 +521,7 @@ impl FunctionEmitter<'_, '_> {
     /// homes are distinct; otherwise `emit_inst` places each in program order,
     /// which the allocator's self-home hint keeps sound
     /// (`param-shuffle-clobber` in `verify_allocation`).
-    fn place_int_params(&mut self, prebatched: &mut [bool]) -> Emit {
+    fn place_int_params(&mut self) -> Emit {
         let FnCtx {
             func,
             alloc,
@@ -345,16 +530,15 @@ impl FunctionEmitter<'_, '_> {
             param_plan,
             ..
         } = self.fcx;
-        let mut moves: Vec<(Place, Place)> = Vec::new();
-        let mut exts: Vec<(Place, LoadKind)> = Vec::new();
+        let mut moves: Vec<PlaceMove> = Vec::new();
         let mut vids: Vec<usize> = Vec::new();
         let mut homes: Vec<Place> = Vec::new();
         for (vid, inst) in func.insts.iter().enumerate() {
             let Inst::ParamRef { idx, kind } = inst else {
                 continue;
             };
-            if super::ssa::emit_common::is_dead_pure(inst, vid as super::super::ir::ValueId, alloc)
-            {
+            let v = vid as super::super::ir::ValueId;
+            if super::ssa::emit_common::is_dead_pure(inst, v, alloc) {
                 continue;
             }
             let dst = place_of(alloc, vid as u32);
@@ -367,51 +551,28 @@ impl FunctionEmitter<'_, '_> {
             else {
                 continue;
             };
-            moves.push((Place::IntReg(src), dst));
+            moves.push(PlaceMove {
+                src: Place::IntReg(src),
+                dst,
+                ext: param_entry_ext(*kind, v, alloc),
+            });
             vids.push(vid);
             homes.push(dst);
-            // The caller passes the raw 64-bit value; the callee performs the
-            // C99 6.5.2.2p4 conversion. An I32 extend touches only bits
-            // 32..63 and is skipped when no consumer reads them.
-            if matches!(kind, LoadKind::I8 | LoadKind::I16)
-                || (matches!(kind, LoadKind::I32)
-                    && !alloc.high_dead(vid as super::super::ir::ValueId))
-            {
-                exts.push((dst, *kind));
-            }
         }
         if moves.is_empty() || !homes_distinct(&homes) {
             return Ok(());
         }
         let code = &mut *self.cx.code;
         schedule_place_moves(code, &mut moves, frame, scratch.primary, scratch.secondary)?;
-        for (dst, kind) in exts {
-            let ext = |code: &mut Vec<u8>, r: Reg| match kind {
-                LoadKind::I8 => emit(code, super::encode::enc_sxtb(r, r)),
-                LoadKind::I16 => emit(code, super::encode::enc_sxth(r, r)),
-                LoadKind::I32 => emit(code, super::encode::enc_sxtw(r, r)),
-                _ => {}
-            };
-            match dst {
-                Place::IntReg(r) => ext(code, Reg(r)),
-                Place::Spill(slot) => {
-                    let sp_off = spill_off(frame, slot);
-                    emit_spill_ldr_x(code, frame, scratch.primary, sp_off);
-                    ext(code, scratch.primary);
-                    emit_spill_str_x(code, frame, scratch.primary, sp_off, scratch.secondary);
-                }
-                Place::None | Place::FpReg(_) => {}
-            }
-        }
         for vid in vids {
-            prebatched[vid] = true;
+            self.prebatched[vid] = true;
         }
         Ok(())
     }
 
     /// The floating-point counterpart of [`Self::place_int_params`]: the
     /// FP scratch breaks cycles in the d-register bank.
-    fn place_fp_params(&mut self, prebatched: &mut [bool]) {
+    fn place_fp_params(&mut self) {
         let FnCtx {
             func,
             alloc,
@@ -449,7 +610,7 @@ impl FunctionEmitter<'_, '_> {
             return;
         }
         super::ssa::emit_common::schedule_fp_place_moves(
-            &super::ssa::emit_common::Aarch64Backend,
+            &super::ssa::emit_common::Aarch64Backend::default(),
             self.cx.code,
             &mut fp_moves,
             frame,
@@ -457,13 +618,13 @@ impl FunctionEmitter<'_, '_> {
             16,
         );
         for vid in fp_vids {
-            prebatched[vid] = true;
+            self.prebatched[vid] = true;
         }
     }
 
     /// Walk the blocks in layout order: each block's landing pad,
     /// instructions, phi moves and terminator.
-    fn emit_blocks(&mut self, prebatched: &[bool]) -> Emit {
+    fn emit_blocks(&mut self) -> Emit {
         let FnCtx {
             func,
             alloc,
@@ -475,11 +636,16 @@ impl FunctionEmitter<'_, '_> {
         // Blocks a `BR` can reach take a `BTI J` at their head, ahead of
         // the offset every branch fixup resolves to.
         let bti_targets = if abi.hardening.bti {
-            super::super::indirect_branch_target_blocks(func)
+            self.plan.landing_pads(func)
         } else {
             alloc::collections::BTreeSet::new()
         };
         for (block_idx, block) in func.blocks.iter().enumerate() {
+            if self.plan.is_skipped(block_idx) {
+                #[cfg(debug_assertions)]
+                self.assert_emits_nothing(block_idx)?;
+                continue;
+            }
             let bti = bti_targets.contains(&(block_idx as BlockId));
             if bti {
                 self.align_stream();
@@ -495,7 +661,7 @@ impl FunctionEmitter<'_, '_> {
                 emit(self.cx.code, super::encode::BTI_J);
             }
             for v in block.inst_range.clone() {
-                self.emit_block_inst(block, v, prebatched)?;
+                self.emit_block_inst(block, v)?;
             }
             // The phi moves and the terminator are instructions, except for
             // a naked function's synthetic return, which emits nothing.
@@ -509,11 +675,55 @@ impl FunctionEmitter<'_, '_> {
                 alloc,
                 scratch,
                 frame,
+                &mut self.fp_literals,
             ) {
                 return self.rollback(e);
             }
             self.emit_terminator(block_idx, block)?;
         }
+        // A block left out stands where its edges land, for every reader of
+        // the offsets.
+        for b in 0..func.blocks.len() {
+            if self.plan.is_skipped(b) {
+                self.block_offsets[b] =
+                    self.block_offsets[self.plan.resolve(b as BlockId) as usize];
+            }
+        }
+        Ok(())
+    }
+
+    /// A block the plan leaves out writes nothing when lowered: its
+    /// instructions, then the moves of its outgoing edge.
+    #[cfg(debug_assertions)]
+    fn assert_emits_nothing(&mut self, block_idx: usize) -> Emit {
+        let FnCtx {
+            func,
+            alloc,
+            frame,
+            scratch,
+            ..
+        } = self.fcx;
+        let block = &func.blocks[block_idx];
+        let (code, fixups) = (self.cx.code.len(), self.branch_fixups.len());
+        for v in block.inst_range.clone() {
+            self.emit_block_inst(block, v)?;
+        }
+        if let Err(e) = emit_phi_predecessor_moves(
+            self.cx.code,
+            block_idx as BlockId,
+            func,
+            alloc,
+            scratch,
+            frame,
+            &mut self.fp_literals,
+        ) {
+            return self.rollback(e);
+        }
+        assert!(
+            self.cx.code.len() == code && self.branch_fixups.len() == fixups,
+            "block {block_idx} of `{}` is left out of the code but lowers to bytes",
+            func.name
+        );
         Ok(())
     }
 
@@ -524,7 +734,6 @@ impl FunctionEmitter<'_, '_> {
         &mut self,
         block: &super::super::ir::Block,
         v: super::super::ir::ValueId,
-        prebatched: &[bool],
     ) -> Emit {
         let FnCtx { func, alloc, .. } = self.fcx;
         let inst = &func.insts[v as usize];
@@ -532,10 +741,10 @@ impl FunctionEmitter<'_, '_> {
         if func.is_naked && !matches!(inst, Inst::InlineAsm { .. }) {
             return Ok(());
         }
-        if super::ssa::emit_common::is_dead_pure(inst, v, alloc) {
+        if super::ssa::emit_common::inst_emits_nothing(inst, v, alloc) {
             return Ok(());
         }
-        if prebatched[v as usize] {
+        if self.prebatched[v as usize] {
             return Ok(());
         }
         // An inline-asm block takes the mapping state itself.
@@ -548,10 +757,16 @@ impl FunctionEmitter<'_, '_> {
             self.cx.code.len(),
             self.cx.ssa_line_rows,
         );
-        // The two forms that resolve against this function's block layout
-        // are lowered here, where the fixup tables live.
+        // The forms that resolve against this function's block layout or
+        // read-only data are lowered here, where the fixup tables live.
         if let Inst::BlockAddr(tb) = inst {
             return self.emit_block_addr(v, place, *tb);
+        }
+        if let (Inst::Imm(bits), Place::FpReg(d)) = (inst, place) {
+            let (x, single) = (self.fcx.scratch.primary, alloc.is_f32(v));
+            let literals = &mut self.fp_literals;
+            emit_fp_imm(self.cx.code, d, *bits as u64, single, x, literals);
+            return Ok(());
         }
         if let Inst::InlineAsm { asm, args } = inst
             && let Terminator::AsmGoto { table } = block.terminator
@@ -701,37 +916,43 @@ impl FunctionEmitter<'_, '_> {
                 self.cx.user_extern_data_refs,
             ),
             Terminator::Jmp(t) | Terminator::FallThrough(t) => {
-                self.branch_unless_next(block_idx, t)
+                return self.branch_unless_next(block_idx, t);
             }
             Terminator::Bz {
                 cond,
                 target,
                 fall_through,
-            } => return self.emit_cond_branch(block_idx, cond, target, fall_through, true),
+            } => {
+                return self.emit_cond_branch(
+                    block_idx,
+                    block_idx,
+                    cond,
+                    target,
+                    fall_through,
+                    true,
+                );
+            }
             Terminator::Bnz {
                 cond,
                 target,
                 fall_through,
-            } => return self.emit_cond_branch(block_idx, cond, target, fall_through, false),
-            // GCC computed goto: `br` through the address `Inst::BlockAddr`
-            // materialized.
-            Terminator::GotoIndirect { target } => {
-                let tplace = place_of(alloc, target);
-                let Some(rt) = materialize_int(self.cx.code, tplace, scratch.primary, frame) else {
-                    return self.rollback(bail(
-                        "GotoIndirect: target Place not int",
-                        target,
-                        tplace,
-                    ));
-                };
-                emit(self.cx.code, enc_br(rt));
+            } => {
+                return self.emit_cond_branch(
+                    block_idx,
+                    block_idx,
+                    cond,
+                    target,
+                    fall_through,
+                    false,
+                );
             }
+            Terminator::GotoIndirect { target } => return self.emit_goto_indirect(target),
             Terminator::JumpTable { idx, table } => return self.emit_jump_table(idx, table),
             // The label branches were lowered inside the `Inst::InlineAsm`;
             // only the fall-through edge (row entry 0) is emitted here.
             Terminator::AsmGoto { table } => {
                 let fall = func.jump_tables[table as usize][0];
-                self.branch_unless_next(block_idx, fall);
+                return self.branch_unless_next(block_idx, fall);
             }
             // Tail-jump through the GOT-patched trampoline; the writer fills
             // the adrp / ldr immediates once the target's RVA is final.
@@ -759,11 +980,13 @@ impl FunctionEmitter<'_, '_> {
     fn emit_cond_branch(
         &mut self,
         block_idx: usize,
+        owner: usize,
         cond: super::super::ir::ValueId,
         target: BlockId,
         fall_through: BlockId,
         negate: bool,
     ) -> Emit {
+        use super::ssa::block_plan::CondShape;
         let FnCtx {
             func,
             alloc,
@@ -771,11 +994,34 @@ impl FunctionEmitter<'_, '_> {
             scratch,
             ..
         } = self.fcx;
+        let (target, fall_through, negate) =
+            match self
+                .plan
+                .cond_shape(block_idx, target, fall_through, negate)
+            {
+                CondShape::Jump(t) => return self.branch_unless_next(block_idx, t),
+                CondShape::Branch {
+                    taken,
+                    other,
+                    negate,
+                } => (taken, other, negate),
+            };
         if let Some(bcc) = fused_branch_cond(func, alloc, cond, negate) {
-            self.push_branch(target, LocalBranchKind::Bcc(bcc));
-            emit(self.cx.code, enc_b_cond(bcc, 0));
-            self.branch_unless_next(block_idx, fall_through);
-            return Ok(());
+            self.emit_cond(block_idx, target, LocalBranchKind::Bcc(bcc));
+            return self.branch_unless_next(block_idx, fall_through);
+        }
+        if let Some((value, bit)) = fused_bit_test(func, alloc, cond) {
+            let place = place_of(alloc, value);
+            let Some(rt) = materialize_int(self.cx.code, place, scratch.primary, frame) else {
+                return self.rollback(bail("Bz/Bnz: tested value Place not int", value, place));
+            };
+            let kind = if negate {
+                LocalBranchKind::Tbz(rt, bit)
+            } else {
+                LocalBranchKind::Tbnz(rt, bit)
+            };
+            self.emit_cond(block_idx, target, kind);
+            return self.branch_unless_next(block_idx, fall_through);
         }
         let cond_place = place_of(alloc, cond);
         let rt = if let Place::FpReg(dr) = cond_place {
@@ -789,15 +1035,15 @@ impl FunctionEmitter<'_, '_> {
                 }
             }
         };
-        let (kind, word) = if negate {
-            (LocalBranchKind::Cbz(rt), enc_cbz(rt, 0))
-        } else {
-            (LocalBranchKind::Cbnz(rt), enc_cbnz(rt, 0))
+        let low_word = func.low_word_tests.get(owner).copied().unwrap_or(false);
+        let kind = match (negate, low_word) {
+            (true, false) => LocalBranchKind::Cbz(rt),
+            (false, false) => LocalBranchKind::Cbnz(rt),
+            (true, true) => LocalBranchKind::CbzW(rt),
+            (false, true) => LocalBranchKind::CbnzW(rt),
         };
-        self.push_branch(target, kind);
-        emit(self.cx.code, word);
-        self.branch_unless_next(block_idx, fall_through);
-        Ok(())
+        self.emit_cond(block_idx, target, kind);
+        self.branch_unless_next(block_idx, fall_through)
     }
 
     /// Table dispatch through the read-only blob: image output reads a
@@ -823,9 +1069,12 @@ impl FunctionEmitter<'_, '_> {
         emit(code, enc_adrp(tbl, 0));
         emit(code, enc_add_imm(tbl, tbl, 0));
         if self.abs_jump_tables {
-            emit(code, enc_ldr_reg_lsl3(tbl, tbl, rt));
+            emit(code, enc_ldr_reg_lsl3(tbl, tbl, rt, IndexExt::None));
         } else {
-            emit(code, enc_ldrsw_reg_lsl2(scratch.primary, tbl, rt));
+            emit(
+                code,
+                enc_ldrsw_reg_lsl2(scratch.primary, tbl, rt, IndexExt::None),
+            );
             emit(code, enc_add_reg(tbl, tbl, scratch.primary));
         }
         emit(code, enc_br(tbl));
@@ -857,7 +1106,17 @@ impl FunctionEmitter<'_, '_> {
         self.patch_direct_goto_branches()?;
         self.patch_branch_fixups()?;
         self.materialize_jump_tables();
+        self.materialize_fp_literals();
         Ok(())
+    }
+
+    /// Hand each floating literal load to the unit's pool. Past the last
+    /// bail site, like the tables.
+    fn materialize_fp_literals(&mut self) {
+        for (site, bits, single) in core::mem::take(&mut self.fp_literals) {
+            let width = if single { 4 } else { 8 };
+            self.rodata.literals.load(site, bits, width);
+        }
     }
 
     /// Patch each `&&label` ADR against its block's final offset.
@@ -969,6 +1228,12 @@ impl FunctionEmitter<'_, '_> {
     fn patch_branch_fixups(&mut self) -> Emit {
         for fx in core::mem::take(&mut self.branch_fixups) {
             let rel = self.block_offsets[fx.target as usize] as i64 - fx.site as i64;
+            debug_assert!(
+                !(fx.owner.is_some() && fx.kind == LocalBranchKind::B && rel == 4),
+                "`{}`: block {:?} branches to the next instruction",
+                self.fcx.func.name,
+                fx.owner
+            );
             if rel % 4 != 0 {
                 return self.rollback(unsupported("branch fixup: rel not 4-aligned"));
             }
@@ -1132,7 +1397,7 @@ fn emit_prologue(
         emit_struct_param_scatter(code, func, abi, frame);
         return;
     }
-    if is_full_leaf(func, frame, alloc) {
+    if is_full_leaf(frame, alloc) {
         return;
     }
     emit_frame_and_saves(code, alloc, frame);
@@ -1163,7 +1428,7 @@ fn emit_prologue(
 
 /// The host-ABI variadic register save area above the saved fp/lr: the
 /// integer argument registers at an 8-byte stride and, for AAPCS64,
-/// q0..q7 at a 16-byte stride after them. Under `no_fp_varargs` the
+/// q0..q7 at a 16-byte stride after them. Under `no_fp_regs` the
 /// vector half stays reserved but unwritten (the store would fault) and
 /// `va_start` marks it exhausted.
 fn emit_register_save_area(
@@ -1178,7 +1443,7 @@ fn emit_register_save_area(
     for (i, &r) in abi.int_arg_regs.iter().enumerate() {
         emit(code, enc_str_imm(Reg(r), Reg(31), (i as u32) * 8));
     }
-    if vector && !abi.no_fp_varargs {
+    if vector && !abi.no_fp_regs {
         for i in 0..8u32 {
             // The whole 128 bits: a Short Vector argument occupies its
             // register across the full width (AAPCS64 6.4.2 C.1), which is
@@ -1210,10 +1475,7 @@ fn emit_param_homes(code: &mut Vec<u8>, func: &FunctionSsa, alloc: &Allocation, 
         let home = param_home_off(i, func, frame);
         match *placement {
             super::ArgPlacement::IntReg(r) => emit_fp_store_x(code, Reg(r), home),
-            super::ArgPlacement::FpReg(d) => {
-                emit(code, enc_fmov_d_to_x(Reg(16), d));
-                emit_fp_store_x(code, Reg(16), home);
-            }
+            super::ArgPlacement::FpReg(d) => emit_fp_store_d(code, d, home),
             _ => {}
         }
     }
@@ -1222,6 +1484,12 @@ fn emit_param_homes(code: &mut Vec<u8>, func: &FunctionSsa, alloc: &Allocation, 
 /// Store `rt` at `[fp + off]`, through x17 past the offset forms.
 fn emit_fp_store_x(code: &mut Vec<u8>, rt: Reg, off: i64) {
     emit_mem(code, super::encode::STR_X, rt.0, Reg(29), off, Reg(17));
+}
+
+/// Store the low 8 bytes of `dt` at `[fp + off]`. Same bytes as a
+/// `fmov`ed general register, without the transfer.
+fn emit_fp_store_d(code: &mut Vec<u8>, dt: u8, off: i64) {
+    emit_mem(code, super::encode::STR_D, dt, Reg(29), off, Reg(17));
 }
 
 /// Store each register-passed aggregate parameter's argument registers
@@ -1674,6 +1942,30 @@ fn fused_branch_cond(
     Some(if negate { positive.flip() } else { positive })
 }
 
+/// The value and bit a branch-fused one-bit mask tests (`tbz` / `tbnz`).
+fn fused_bit_test(
+    func: &super::super::ir::FunctionSsa,
+    alloc: &Allocation,
+    cond: super::super::ir::ValueId,
+) -> Option<(super::super::ir::ValueId, u8)> {
+    if !alloc
+        .branch_fused
+        .get(cond as usize)
+        .copied()
+        .unwrap_or(false)
+    {
+        return None;
+    }
+    match func.insts.get(cond as usize)? {
+        Inst::BinopI {
+            op: BinOp::And,
+            lhs,
+            rhs_imm,
+        } => Some((*lhs, (*rhs_imm as u64).trailing_zeros() as u8)),
+        _ => None,
+    }
+}
+
 /// Emit the function epilogue + `ret` for a Return terminator.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_return(
@@ -1693,7 +1985,7 @@ pub(super) fn emit_return(
         emit_scalar_return(code, value, alloc, frame, scratch, func);
     }
     // A full leaf saved nothing.
-    if is_full_leaf(func, frame, alloc) {
+    if is_full_leaf(frame, alloc) {
         emit(code, enc_ret(Reg(30)));
         return;
     }

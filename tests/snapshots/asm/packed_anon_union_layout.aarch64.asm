@@ -16,16 +16,14 @@ Disassembly of section .text:
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x190
-               	str	x19, [sp]
+               	sub	sp, sp, #0x180
                	sub	x0, x29, #0x180
                	add	x1, x0, #0x80
                	sub	x0, x1, x0
                	cmp	x0, #0x80
                	b.eq	<addr>
                	mov	x0, #0x9                // =9
-               	ldr	x19, [sp]
-               	add	sp, sp, #0x190
+               	add	sp, sp, #0x180
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x0, x29, #0x80
@@ -41,31 +39,27 @@ Disassembly of section .text:
                	str	w1, [x0, #0x44]
                	ldrb	w1, [x0]
                	eor	x1, x1, #0x3
-               	cbz	x1, <addr>
+               	cbz	w1, <addr>
                	mov	x0, #0xa                // =10
-               	ldr	x19, [sp]
-               	add	sp, sp, #0x190
+               	add	sp, sp, #0x180
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldrb	w1, [x0, #0x3c]
                	eor	x1, x1, #0x8
-               	cbz	x1, <addr>
+               	cbz	w1, <addr>
                	mov	x0, #0xb                // =11
-               	ldr	x19, [sp]
-               	add	sp, sp, #0x190
+               	add	sp, sp, #0x180
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldrb	w0, [x0, #0x44]
                	mov	x17, #0x14              // =20
                	eor	x0, x0, x17
-               	cbz	x0, <addr>
+               	cbz	w0, <addr>
                	mov	x0, #0xc                // =12
-               	ldr	x19, [sp]
-               	add	sp, sp, #0x190
+               	add	sp, sp, #0x180
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x0                // =0
-               	ldr	x19, [sp]
-               	add	sp, sp, #0x190
+               	add	sp, sp, #0x180
                	ldp	x29, x30, [sp], #0x10
                	ret

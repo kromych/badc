@@ -28,41 +28,34 @@ Disassembly of section .text:
                	ret
 
 <main>:
-               	str	x19, [sp, #-0x70]!
-               	stp	x29, x30, [sp, #0x60]
-               	add	x29, sp, #0x60
+               	stp	x29, x30, [sp, #-0x10]!
+               	mov	x29, sp
+               	sub	sp, sp, #0x50
                	sub	x0, x29, #0x50
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	str	x1, [x0]
-               	sub	x1, x29, #0x48
-               	mov	x2, #0x3                // =3
-               	str	x2, [x1, #0x10]
-               	sub	x2, x29, #0x28
-               	mov	x3, #0x7                // =7
-               	str	x3, [x2, #0x10]
-               	mov	x4, #0x5                // =5
+               	sub	x2, x29, #0x48
+               	mov	x1, #0x3                // =3
+               	str	x1, [x2, #0x10]
+               	sub	x4, x29, #0x28
+               	mov	x1, #0x7                // =7
+               	str	x1, [x4, #0x10]
+               	mov	x3, #0x5                // =5
                	mov	x5, #0x9                // =9
-               	mov	x3, #0x0                // =0
-               	stur	w3, [x29, #-0x8]
-               	ldr	x3, [x0]
-               	sub	x6, x29, #0x8
-               	add	x1, x1, #0x10
+               	stur	wzr, [x29, #-0x8]
+               	ldr	x6, [x0]
+               	sub	x1, x29, #0x8
                	add	x2, x2, #0x10
-               	mov	x9, x3
-               	mov	x3, x4
-               	mov	x4, x2
-               	mov	x2, x1
-               	mov	x1, x6
-               	blr	x9
+               	add	x4, x4, #0x10
+               	blr	x6
                	ldursw	x1, [x29, #-0x8]
                	add	x0, x0, x1
                	cmp	x0, #0xc0d
                	b.ne	<addr>
                	mov	x0, #0x0                // =0
-               	sxtw	x0, w0
-               	ldp	x29, x30, [sp, #0x60]
-               	ldr	x19, [sp], #0x70
+               	add	sp, sp, #0x50
+               	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x1                // =1
                	b	<addr>

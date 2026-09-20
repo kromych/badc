@@ -3336,6 +3336,23 @@ fn const_pointer_object_fold() {
 }
 
 #[test]
+fn const_object_member_fold() {
+    // A static initializer folds a scalar that a `[i]` / `.field` chain
+    // reaches in a `const` object with static storage, as GCC does, instead
+    // of taking the element's address; a chain that stops at a row still
+    // decays to the row's address.
+    assert_eq!(run_fixture("const_object_member_fold.c"), 0);
+}
+
+#[test]
+fn typedef_name_label() {
+    // A typedef name followed by `:` at a block item is a label (C99 6.2.3
+    // gives labels their own name space): at the function body's top level,
+    // in a nested block and after a `case` label.
+    assert_eq!(run_fixture("typedef_name_label.c"), 0);
+}
+
+#[test]
 fn block_scope_thread_local() {
     // C11 6.7.1: a block-scope `static _Thread_local` / `static __thread`
     // object has thread storage duration -- placed in the TLS block, one per
@@ -3478,17 +3495,25 @@ fn sysexits_codes() {
 
 #[test]
 fn builtin_bit_count() {
-    // GCC __builtin_clz / ctz / popcount (+ ll forms), lowered to a
-    // portable shift / mask sequence; results match hand-computed
-    // values on every lane including the interpreter.
+    // GCC __builtin_clz / ctz / popcount (+ ll forms), lowered to
+    // `Inst::BitCount`; results match hand-computed values on every lane
+    // including the interpreter.
     assert_eq!(run_fixture("builtin_bit_count.c"), 0);
+}
+
+#[test]
+fn builtin_bit_count_edges() {
+    // Every bit-count builtin at both widths over run-time operands at the
+    // edges -- 0, 1, the powers of two, all-ones, the sign bit -- against
+    // bit-by-bit references; clz / ctz of 0 are the width.
+    assert_eq!(run_fixture("builtin_bit_count_edges.c"), 0);
 }
 
 #[test]
 fn builtin_ffs() {
     // GCC / POSIX __builtin_ffs / ffsl / ffsll: one plus the index of the
     // least-significant set bit, 0 for a zero argument (the zero case is
-    // defined, unlike ctz). Lowered as `(ctz(x) + 1) * (x != 0)`.
+    // defined, unlike ctz). Built on the trailing count.
     assert_eq!(run_fixture("builtin_ffs.c"), 0);
 }
 

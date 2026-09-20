@@ -25,7 +25,7 @@ pub fn embedded_runtime() -> &'static [(&'static str, &'static str)] {
     EMBEDDED_RUNTIME
 }
 
-pub(super) const EMBEDDED_RUNTIME: &[(&str, &str)] =
+pub(super) static EMBEDDED_RUNTIME: &[(&str, &str)] =
     &[("runtime.c", include_str!("../../libc/lib/runtime.c"))];
 
 /// Compiler-runtime sources joined to the link on demand: each is
@@ -36,7 +36,7 @@ pub fn embedded_compiler_rt() -> &'static [(&'static str, &'static str)] {
     EMBEDDED_COMPILER_RT
 }
 
-pub(super) const EMBEDDED_COMPILER_RT: &[(&str, &str)] = &[
+pub(super) static EMBEDDED_COMPILER_RT: &[(&str, &str)] = &[
     (
         "compiler_rt.c",
         include_str!("../../libc/lib/compiler_rt.c"),
@@ -55,7 +55,7 @@ pub fn embedded_libc() -> &'static [(&'static str, &'static str)] {
     EMBEDDED_LIBC
 }
 
-pub(super) const EMBEDDED_LIBC: &[(&str, &str)] = &[
+pub(super) static EMBEDDED_LIBC: &[(&str, &str)] = &[
     ("pattern.c", include_str!("../../libc/lib/pattern.c")),
     ("stdio_ext.c", include_str!("../../libc/lib/stdio_ext.c")),
     ("string_ext.c", include_str!("../../libc/lib/string_ext.c")),

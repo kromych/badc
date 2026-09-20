@@ -27,21 +27,19 @@ Disassembly of section .text:
                	and	x2, x2, #0xfffffffffffffff0
                	orr	x2, x2, #0x3
                	str	w2, [x0, #0x4]
-               	mov	w0, w1
-               	and	x0, x0, #0xf
+               	and	x0, x1, #0xf
                	lsl	x0, x0, #60
                	asr	x0, x0, #60
-               	cmp	x0, #0x5
+               	cmp	w0, #0x5
                	b.eq	<addr>
                	mov	x0, #0x1f               // =31
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	w0, w2
-               	and	x0, x0, #0xf
+               	and	x0, x2, #0xf
                	lsl	x0, x0, #60
                	asr	x0, x0, #60
-               	cmp	x0, #0x3
+               	cmp	w0, #0x3
                	b.eq	<addr>
                	mov	x0, #0x20               // =32
                	add	sp, sp, #0x10

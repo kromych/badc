@@ -32,20 +32,17 @@ Disassembly of section .text:
                	movl	%esi, 0x200(%rdi)
                	xorl	%eax, %eax
                	callq	<addr>
-               	movzbq	%al, %rax
                	ud2
 
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x210, %rsp            # imm = 0x210
-               	xorq	%rax, %rax
-               	movl	%eax, -0x210(%rbp)
+               	movl	$0x0, -0x210(%rbp)
                	leaq	-0x208(%rbp), %rdi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	jne	<addr>
                	movslq	-0x210(%rbp), %rax
                	incq	%rax
@@ -74,6 +71,6 @@ Disassembly of section .text:
                	movl	$0xf, %eax
                	leave
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	leave
                	retq

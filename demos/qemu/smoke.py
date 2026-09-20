@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""End-to-end smoke for badc against QEMU 11.0.2 (system emulator).
+"""End-to-end smoke for badc against QEMU 11.1.1 (system emulator).
 
 Compiles every translation unit that feeds ``qemu-system-<arch>`` with badc and
-archives the utility library with badc's ``--ar`` -- no ``make``, no ``meson``.
+archives its in-tree libraries with badc's ``--ar`` -- no ``make``, no ``meson``.
 QEMU's build is not reproducible off-box without meson's generated config, so
 the vendored asset ships that config: a captured ``compile_commands.json``, the
 linker response files, and every meson-generated header/source (see setup.py).
@@ -10,8 +10,11 @@ The smoke reads the response files for the object list and
 ``compile_commands.json`` for each unit's flags, rewriting the gcc flag set to
 badc's and substituting the host glib include path via ``pkg-config``.
 
-Two units feed the emulator: the per-target objects (``qemu-system-<arch>.rsp``)
-and the utility library (``libqemuutil.a.rsp``); both are compiled with badc.
+The emulator's link (``qemu-system-<arch>.rsp``) names its objects and the
+in-tree static libraries it pulls from: the utility library
+(``libqemuutil.a.rsp``) and, per target, others such as the target stubs or the
+vhost-user subproject libraries. Every member is compiled with badc and each
+library is archived with badc's ``--ar``.
 
 The runnable emulator is produced by badc's OWN linker over the 100%-badc
 objects (the pure self-link) -- no system linker anywhere in the chain. Every
@@ -54,7 +57,7 @@ _syslib_spec = importlib.util.spec_from_file_location(
 _syslib = importlib.util.module_from_spec(_syslib_spec)
 _syslib_spec.loader.exec_module(_syslib)
 
-VERSION = "11.0.2"
+VERSION = "11.1.1"
 
 # Per-target vendored build config: (cache build subdir, response-file stem).
 TARGETS = {
@@ -95,8 +98,7 @@ ASM_ARCH = {"aarch64": "arm64", "x86_64": "x86"}
 # so the portable struct Int128 path is used, which also rules out the
 # __int128-based 128-bit compare-and-swap (leaving QEMU's lock-based fallback);
 # no elfutils so libdw (TCG debuginfo) is off. Each has a portable fallback /
-# inline stub in QEMU, the same one the aarch64 config already selects. A no-op
-# where the config does not set them.
+# inline stub in QEMU. A no-op where the config does not set them.
 BADC_DISABLED_CONFIG = ("CONFIG_AVX2_OPT", "CONFIG_AVX512BW_OPT", "CONFIG_LIBDW",
                         "CONFIG_INT128", "CONFIG_INT128_TYPE", "CONFIG_CMPXCHG128")
 
@@ -244,43 +246,31 @@ def index_by_output(build_dir: Path) -> dict[str, dict]:
     return by_out
 
 
-# In-tree static libraries meson builds from a subproject and the emulator
-# links, but whose objects the per-target response file lists only as the
-# archive (not enumerated). When the link needs one, its objects are compiled
-# from source alongside the emulator's. link-test.c is a build-time check, not
-# a library member.
-SUBPROJECT_LIBS = ("libvhost-user", "libvduse")
-
-
-def subproject_objects(build_dir: Path, stem: str) -> list[str]:
-    """Object outputs for the subproject static libraries the target links,
-    derived from compile_commands. Empty when the target links none (e.g.
-    aarch64, whose config disables vhost-user)."""
-    rsp = (build_dir / f"{stem}.rsp").read_text()
-    needed = [s for s in SUBPROJECT_LIBS if s in rsp]
-    if not needed:
-        return []
-    entries = json.loads((build_dir / "compile_commands.json").read_text())
-    objs: list[str] = []
-    for e in entries:
-        f = e["file"]
-        if "link-test" in f or not any(f"subprojects/{s}" in f for s in needed):
+def link_archives(build_dir: Path, stem: str, by_out: dict[str, dict]) -> dict[str, list[str]]:
+    """The in-tree static libraries the target's link names, in link order,
+    each with its member objects: those of the library's own response file
+    where ninja kept one, else the compile_commands outputs under meson's
+    private directory for it (`<library>.p/`). A system library is named by an
+    absolute path or `-l` and is not rebuilt."""
+    archives: dict[str, list[str]] = {}
+    for tok in (build_dir / f"{stem}.rsp").read_text().split():
+        if not tok.endswith(".a") or os.path.isabs(tok):
             continue
-        argv = e.get("arguments") or shlex.split(e["command"])
-        for i, a in enumerate(argv):
-            if a == "-o":
-                objs.append(os.path.normpath(argv[i + 1]))
-                break
-            if a.startswith("-o") and len(a) > 2:
-                objs.append(os.path.normpath(a[2:]))
-                break
-    return objs
+        name = os.path.normpath(tok)
+        if (build_dir / f"{name}.rsp").is_file():
+            members = read_objects(build_dir, name)
+        else:
+            members = sorted(o for o in by_out if o.startswith(f"{name}.p{os.sep}"))
+        if not members:
+            fail(f"{name}: the captured config lists no member objects")
+        archives[name] = members
+    return archives
 
 
 def adapt_config(build_dir: Path) -> int:
     """Disable the vendored config macros badc cannot honor (host SIMD opts,
-    libdw) in config-host.h so units select their scalar / stub path. Idempotent;
-    returns the count changed (0 where none are set, e.g. aarch64)."""
+    __int128, libdw) in config-host.h so units select their scalar / stub path.
+    Idempotent; returns the count changed (0 where none are set)."""
     cfg = build_dir / "config-host.h"
     if not cfg.is_file():
         return 0
@@ -327,10 +317,10 @@ def main() -> int:
     log(f"badc={badc} arch={arch} target=qemu-system-{arch}")
 
     drop = lambda objs: [o for o in objs if not any(d in o for d in BADC_DROP_OBJECTS)]
-    main_o = drop(read_objects(build_dir, stem)) + subproject_objects(build_dir, stem)
-    util_o = drop(read_objects(build_dir, "libqemuutil.a"))
-    all_o = list(dict.fromkeys(main_o + util_o))
     by_out = index_by_output(build_dir)
+    main_o = drop(read_objects(build_dir, stem))
+    archives = {a: drop(m) for a, m in link_archives(build_dir, stem, by_out).items()}
+    all_o = list(dict.fromkeys(main_o + [o for m in archives.values() for o in m]))
     # The build box's absolute source/build roots, recorded in compile_commands,
     # are rewritten to the extracted bundle so captured -isystem/-iquote paths
     # (linux-headers, host, tcg) resolve here and the build stays hermetic.
@@ -385,14 +375,19 @@ def main() -> int:
                 print(f"  {v}  {obj}", file=sys.stderr)
         fail(f"{len(all_o) - ok} translation unit(s) did not compile")
 
-    # Archive the utility library with badc's own archiver.
-    lib = out_dir / "libqemuutil.a"
-    r = subprocess.run(
-        [str(badc), "--ar", "-o", str(lib), *[str(out_dir / o) for o in util_o]],
-        capture_output=True, text=True,
-    )
-    if r.returncode != 0 or not lib.is_file():
-        fail(f"badc --ar libqemuutil failed:\n{r.stderr.strip()[-800:]}")
+    # Archive each in-tree library with badc's own archiver; the link pulls
+    # its members on demand, as the system linker does in meson's build.
+    libs: list[str] = []
+    for name, members in archives.items():
+        lib = out_dir / name
+        lib.parent.mkdir(parents=True, exist_ok=True)
+        r = subprocess.run(
+            [str(badc), "--ar", "-o", str(lib), *[str(out_dir / o) for o in members]],
+            capture_output=True, text=True,
+        )
+        if r.returncode != 0 or not lib.is_file():
+            fail(f"badc --ar {name} failed:\n{r.stderr.strip()[-800:]}")
+        libs.append(str(lib))
 
     main_paths = [str(out_dir / o) for o in main_o]
     # The host is the sysroot: badc reads no library directory the
@@ -400,10 +395,10 @@ def main() -> int:
     link_libs = [*_syslib.sysroot_args(), *glib_libs, "-lz", "-lm", "-lutil", "-lfdt"]
 
     # Pure badc self-link: badc's own linker over the 100%-badc objects, with
-    # badc's own --ar archive of the utility library. No system-cc fallback --
+    # badc's own --ar archives of the in-tree libraries. No system-cc fallback --
     # full self-containment is the gate, so a link failure fails the smoke.
     binp = out_dir / f"qemu-system-{arch}"
-    pure = [str(badc), *opt, *main_paths, str(lib), *link_libs, "-o", str(binp)]
+    pure = [str(badc), *opt, *main_paths, *libs, *link_libs, "-o", str(binp)]
     r = subprocess.run(pure, cwd=build_dir, capture_output=True, text=True, timeout=600)
     if r.returncode != 0 or not binp.is_file():
         err = ((r.stderr or "") + (r.stdout or "")).strip()

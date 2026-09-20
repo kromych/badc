@@ -18,7 +18,6 @@ Disassembly of section .text:
                	mov	x29, sp
                	mov	x0, #0x5                // =5
                	bl	<addr>
-               	sxtw	x0, w0
                	ldp	x29, x30, [sp], #0x10
                	ret
 
@@ -28,7 +27,6 @@ Disassembly of section .text:
                	mov	x0, #0x4                // =4
                	bl	<addr>
                	add	x0, x0, #0xd
-               	sxtw	x0, w0
                	ldp	x29, x30, [sp], #0x10
                	ret
 
@@ -37,14 +35,14 @@ Disassembly of section .text:
                	mov	x29, sp
                	mov	x0, #0x5                // =5
                	bl	<addr>
-               	cmp	x0, #0x1c
+               	cmp	w0, #0x1c
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x4                // =4
                	bl	<addr>
-               	cmp	x0, #0x18
+               	cmp	w0, #0x18
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ldp	x29, x30, [sp], #0x10
@@ -52,11 +50,9 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	ldp	x29, x30, [sp], #0x10
                	ret
-		...
 
 <boot_offset>:
                	add	x0, x0, #0x7
-               	sxtw	x0, w0
                	ret
 
 <boot_step>:
@@ -65,5 +61,4 @@ Disassembly of section .text:
                	add	x1, x1, #0x1
                	add	x0, x0, #0x7
                	add	x0, x1, x0
-               	sxtw	x0, w0
                	ret

@@ -26,13 +26,21 @@ pub(crate) struct Frame {
     /// canary, 0 when unprotected; counted in `frame_bytes` and in
     /// `alloc_spill_base`.
     pub canary_bytes: u32,
-    /// Whether the function clobbers (and therefore saves) x19.
+    /// Whether the body writes x19 ([`writes_x19`]), which the frame then
+    /// saves.
     pub uses_x19: bool,
+    /// The body makes a call or holds an intrinsic whose lowering needs the
+    /// frame record (`body_keeps_frame_record`).
+    pub keeps_record: bool,
     /// Registers `-ffixed-` keeps out of every scratch pick.
     pub fixed_regs: super::FixedRegs,
     /// The FP scratch d-registers, outside the allocator's banks; see
     /// `RegBanks::fp_scratch`.
     pub fp_scratch: [u8; super::ssa::reg_alloc::FP_SCRATCH_COUNT],
+    /// The d-register a population count runs `cnt` in: none without a
+    /// count, under `-mgeneral-regs-only`, or when every candidate would
+    /// owe a save (`reg_alloc::free_fp_register`).
+    pub count_fp: Option<u8>,
     /// The regions `frame_bytes` and `va_save_bytes` sum.
     pub parts: super::ssa::emit_common::FrameStack,
     /// The ABI the function was lowered against; the home map reads its
@@ -76,12 +84,7 @@ pub(crate) fn compute_frame(
         super::ssa::emit_common::canary_bytes(func, declared_locals_bytes, abi.stack_protect);
     let locals_bytes = declared_locals_bytes + canary_bytes;
     let saved_fpr_bytes = super::ssa::emit_common::slots16(alloc.fp_used.len() as u32);
-    // x19 gets a slot only when the function clobbers it (TLS, indirect
-    // calls, intrinsics, a spilled modulo); `function_clobbers_scratch` is
-    // the shared decision.
-    let uses_x19 =
-        !super::ssa::reg_alloc::function_clobbers_scratch(func, target, alloc.spill_count)
-            .is_empty();
+    let uses_x19 = writes_x19(func, alloc, abi);
     let x19_save_bytes = if uses_x19 { 16u32 } else { 0 };
     // A region aligned exactly 16 joins the static frame between the spill
     // region and the saved registers; above 16 the prologue realigns sp. A
@@ -128,8 +131,12 @@ pub(crate) fn compute_frame(
         alloc_spill_base: upper_bytes,
         canary_bytes,
         uses_x19,
+        keeps_record: super::ssa::emit_common::body_keeps_frame_record(func, target, |i| {
+            intrinsic_keeps_frame(i, abi)
+        }),
         fixed_regs: abi.fixed_regs,
         fp_scratch: alloc.fp_scratch,
+        count_fp: count_fp_register(func, alloc, abi, target),
         parts: super::ssa::emit_common::FrameStack {
             record: 0,
             locals: declared_locals_bytes,
@@ -562,7 +569,7 @@ pub(super) fn frame_stack(
     frame: Frame,
     alloc: &Allocation,
 ) -> super::ssa::emit_common::FrameStack {
-    if func.is_naked || is_full_leaf(func, frame, alloc) {
+    if func.is_naked || is_full_leaf(frame, alloc) {
         return Default::default();
     }
     let mut parts = frame.parts;
@@ -579,7 +586,7 @@ pub(super) fn frame_stack(
 /// A function with no call, no frame, no parameter read from memory and no
 /// callee-saved register skips the frame record and returns off the
 /// caller's lr.
-pub(super) fn is_full_leaf(func: &FunctionSsa, frame: Frame, alloc: &Allocation) -> bool {
+pub(super) fn is_full_leaf(frame: Frame, alloc: &Allocation) -> bool {
     if frame.frame_bytes != 0
         || frame.va_save_bytes != 0
         || frame.param_home_needed
@@ -594,7 +601,7 @@ pub(super) fn is_full_leaf(func: &FunctionSsa, frame: Frame, alloc: &Allocation)
     if !alloc.gpr_used.is_empty() || !alloc.fp_used.is_empty() {
         return false;
     }
-    super::ssa::emit_common::function_makes_no_calls(func)
+    !frame.keeps_record
 }
 
 /// Whether the function signs its return address under
@@ -610,19 +617,83 @@ pub(super) fn signs_return_address(
 ) -> bool {
     abi.hardening.pac_ret
         && !func.is_naked
-        && !is_full_leaf(func, frame, alloc)
+        && !is_full_leaf(frame, alloc)
         && !func
             .blocks
             .iter()
             .any(|b| matches!(b.terminator, Terminator::TailExt(_)))
 }
 
+/// Whether the body writes x19, the emitter's third integer scratch: a
+/// modulo or a cursor `va_arg` whose operands leave neither of the pair
+/// free, and the inline setjmp / longjmp. x19 is callee-saved and outside
+/// the allocator's banks, so no save list names it. Each case asks the
+/// lowering's own register choice, over the instructions the emit walks.
+fn writes_x19(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi) -> bool {
+    use crate::c5::op::Intrinsic as I;
+    // A naked function emits only its inline asm and has no frame.
+    if func.is_naked {
+        return false;
+    }
+    let scratch = ScratchPool::new();
+    let place = |v: u32| place_of(alloc, v);
+    func.blocks
+        .iter()
+        .flat_map(|b| b.inst_range.clone())
+        .any(|v| {
+            let inst = &func.insts[v as usize];
+            if super::ssa::emit_common::is_dead_pure(inst, v, alloc) {
+                return false;
+            }
+            match inst {
+                Inst::Binop {
+                    op: BinOp::Mod | BinOp::Modu,
+                    lhs,
+                    rhs,
+                } => mod_takes_third_scratch(place(v), place(*lhs), place(*rhs), &scratch),
+                Inst::Intrinsic { kind, args } => match I::from_i64(*kind) {
+                    Some(I::SetjmpAArch64 | I::LongjmpAArch64) => true,
+                    Some(I::VaArg) if !abi.aarch64_host_variadic() => {
+                        args.first().is_some_and(|&ap| {
+                            va_arg_cursor_takes_third_scratch(place(ap), place(v), &scratch)
+                        })
+                    }
+                    _ => false,
+                },
+                _ => false,
+            }
+        })
+}
+
+/// [`Frame::count_fp`].
+fn count_fp_register(
+    func: &FunctionSsa,
+    alloc: &Allocation,
+    abi: super::Abi,
+    target: Target,
+) -> Option<u8> {
+    let counts = func.insts.iter().any(|i| {
+        matches!(
+            i,
+            Inst::BitCount {
+                op: BitCountOp::Popcount,
+                ..
+            }
+        )
+    });
+    (counts && !abi.no_fp_regs)
+        .then(|| super::ssa::reg_alloc::free_fp_register(func, alloc, target, abi.fixed_regs))
+        .flatten()
+}
+
 /// The emitter's scratch registers: x16 (IP0) and x17 (IP1), which
 /// AAPCS64 reserves for intra-procedure use, outside the allocator's
-/// banks.
+/// banks, and x19 for the lowerings the pair cannot serve.
 pub(super) struct ScratchPool {
     pub(super) primary: Reg,
     pub(super) secondary: Reg,
+    /// [`Self::third`] was taken, for the check against `Frame::uses_x19`.
+    third_taken: core::cell::Cell<bool>,
 }
 
 impl ScratchPool {
@@ -630,6 +701,23 @@ impl ScratchPool {
         Self {
             primary: Reg(16),
             secondary: Reg(17),
+            third_taken: core::cell::Cell::new(false),
         }
+    }
+
+    /// x19. The frame saves it for exactly the functions [`writes_x19`]
+    /// names, so a lowering reaching here outside them would return with
+    /// the caller's x19 destroyed.
+    pub(super) fn third(&self, frame: Frame) -> Reg {
+        assert!(
+            frame.uses_x19,
+            "ICE: x19 taken in a frame that does not save it"
+        );
+        self.third_taken.set(true);
+        Reg(19)
+    }
+
+    pub(super) fn third_taken(&self) -> bool {
+        self.third_taken.get()
     }
 }

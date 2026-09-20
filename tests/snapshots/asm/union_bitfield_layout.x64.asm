@@ -38,24 +38,24 @@ Disassembly of section .text:
                	andq	$-0x10, %rdx
                	orq	$0x3, %rdx
                	movl	%edx, 0x4(%rax)
-               	movl	%ecx, %eax
+               	movq	%rcx, %rax
                	andq	$0xf, %rax
                	shlq	$0x3c, %rax
                	sarq	$0x3c, %rax
-               	cmpq	$0x5, %rax
+               	cmpl	$0x5, %eax
                	je	<addr>
                	movl	$0x1f, %eax
                	leave
                	retq
-               	movl	%edx, %eax
+               	movq	%rdx, %rax
                	andq	$0xf, %rax
                	shlq	$0x3c, %rax
                	sarq	$0x3c, %rax
-               	cmpq	$0x3, %rax
+               	cmpl	$0x3, %eax
                	je	<addr>
                	movl	$0x20, %eax
                	leave
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	leave
                	retq

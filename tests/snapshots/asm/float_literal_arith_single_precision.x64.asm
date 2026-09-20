@@ -39,14 +39,14 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	retq
                	movl	$0x40400000, %eax       # imm = 0x40400000
-               	movl	$0x41000000, %edx       # imm = 0x41000000
-               	movl	$0x3f000000, %ecx       # imm = 0x3F000000
+               	movl	$0x41000000, %ecx       # imm = 0x41000000
+               	movl	$0x3f000000, %edx       # imm = 0x3F000000
                	movl	$0x3e800000, %esi       # imm = 0x3E800000
                	movq	%rsi, %xmm15
-               	movq	%rdx, %xmm0
+               	movq	%rcx, %xmm0
                	mulss	%xmm15, %xmm0
                	movq	%rax, %xmm14
-               	movq	%rcx, %xmm15
+               	movq	%rdx, %xmm15
                	vfmadd231ss	%xmm15, %xmm14, %xmm0 # xmm0 = (xmm14 * xmm15) + xmm0
                	movl	$0x40600000, %eax       # imm = 0x40600000
                	movq	%rax, %xmm15
@@ -55,7 +55,7 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x2, %eax
                	retq
-               	xorq	%rcx, %rcx
+               	xorl	%ecx, %ecx
                	movl	$0x3dcccccd, %eax       # imm = 0x3DCCCCCD
                	movq	%rax, %xmm15
                	movq	%rcx, %xmm0
@@ -93,5 +93,5 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x4, %eax
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	retq

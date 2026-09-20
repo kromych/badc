@@ -1,0 +1,95 @@
+name: csmith-fuzz
+
+# Differential fuzzing of the compiler against csmith-generated programs, one
+# job per architecture. Five minutes of fuzzing reaches several hundred cases
+# per job, which is where the yield sits: the trial that opened this found one
+# defect per two dozen programs. Findings go to the week's issue and the cases
+# to a release used as a store, so the job's own log is not the record.
+#
+# The two lanes run one at a time. Both would otherwise open the week's issue
+# concurrently on the first finding of a week -- GitHub has no create-if-absent
+# for an issue -- and the week would start with two of them.
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "file findings (off: print what would be filed)"
+        type: boolean
+        default: false
+      minutes:
+        description: "fuzzing budget per job"
+        type: string
+        default: "5"
+  schedule:
+    # Daily at 03:41 UTC, off the :00/:30 marks the fleet crowds and clear of
+    # the nightly asm-fuzz job at 07:17.
+    - cron: "41 3 * * *"
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  fuzz:
+    name: fuzz (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        os:
+          - ubuntu-latest
+          - ubuntu-24.04-arm
+    runs-on: ${{ matrix.os }}
+    # The build dominates: five minutes of fuzzing on top of a cold
+    # rust-cache build. The cap is a hang backstop, not the budget.
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: fuzz-${{ matrix.os }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: install csmith
+        # Debian and Ubuntu split the generator from its runtime headers:
+        # `csmith` carries /usr/bin/csmith, `libcsmith-dev` carries
+        # /usr/include/csmith/csmith.h, which every generated program includes.
+        # Both are in universe, 2.3.0 on noble and later.
+        run: ./scripts/apt_resilient_install.sh csmith libcsmith-dev
+      - name: build badc
+        run: cargo build --release --locked --features full --bin badc
+      - name: fuzz
+        # The dispatch inputs reach the shell through the environment rather
+        # than through expression interpolation, which would splice whatever
+        # was typed into the command line.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MINUTES: ${{ inputs.minutes || '5' }}
+          PUBLISH: ${{ github.event_name != 'workflow_dispatch' || inputs.publish }}
+        run: |
+          publish=
+          if [ "$PUBLISH" = "true" ]; then publish=--publish; fi
+          python3 scripts/csmith_fuzz.py \
+            --minutes "$MINUTES" \
+            --badc target/release/badc \
+            --require-csmith \
+            --out-dir fuzz-cases \
+            --report fuzz-report.json \
+            $publish
+      - name: publish the run's cases and report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: csmith-fuzz-${{ matrix.os }}
+          path: |
+            fuzz-cases
+            fuzz-report.json
+          if-no-files-found: ignore
+          retention-days: 14

@@ -27,8 +27,7 @@ Disassembly of section .text:
 
 <f>:
                	leaq	(%rdi,%rdi,2), %rax
-               	leaq	(%rax), %rcx
-               	addq	%rax, %rcx
+               	leaq	(%rax,%rax), %rcx
                	addq	%rax, %rcx
                	addq	%rcx, %rax
                	retq

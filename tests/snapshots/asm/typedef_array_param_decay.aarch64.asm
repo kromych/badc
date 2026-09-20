@@ -14,10 +14,8 @@ Disassembly of section .text:
                	brk	#0x1
 
 <copy>:
-               	add	x2, x0, #0x0
-               	add	x3, x1, #0x0
-               	ldr	x3, [x3]
-               	str	x3, [x2]
+               	ldr	x2, [x1]
+               	str	x2, [x0]
                	ldr	x2, [x1, #0x8]
                	str	x2, [x0, #0x8]
                	ldr	x2, [x1, #0x10]
@@ -55,9 +53,8 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x100
                	sub	x1, x29, #0x100
-               	add	x0, x1, #0x0
-               	mov	x2, #0x1                // =1
-               	str	x2, [x0]
+               	mov	x0, #0x1                // =1
+               	str	x0, [x1]
                	mov	x0, #0x2                // =2
                	str	x0, [x1, #0x8]
                	mov	x0, #0x3                // =3
@@ -91,9 +88,7 @@ Disassembly of section .text:
                	sub	x0, x29, #0x80
                	bl	<addr>
                	sub	x0, x29, #0x80
-               	add	x1, x0, #0x0
-               	ldr	x1, [x1]
-               	add	x1, x1, #0x0
+               	ldr	x1, [x0]
                	ldr	x2, [x0, #0x8]
                	add	x1, x1, x2
                	ldr	x2, [x0, #0x10]

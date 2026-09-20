@@ -6,6 +6,16 @@
 //
 // Runtime grows linearly in MAX; pick MAX so wall-clock stays in the
 // range the other fixtures use on the slowest compiler under test.
+//
+// The shape is chosen for the code generator, not for the search. A
+// search meant for use would enumerate digit multisets and test the
+// few candidates they produce instead of every integer below MAX; the
+// loop over all of them is what makes the division by a constant
+// measurable. It would also build the power table in integer
+// arithmetic -- `pow(i, i)` is a floating-point call whose result is
+// exact here only because 9^9 is 387 420 489, well inside what a
+// `double` represents -- and keep the table `static`, where this one
+// has external linkage.
 
 #include <math.h>
 #include <stdbool.h>

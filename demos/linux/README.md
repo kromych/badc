@@ -135,8 +135,8 @@ python3 demos/linux/replay.py --kernel-dir <built tree> \
     --unit fs/proc/array.o --forbid __scoped_seqlock_bug
 ```
 
-The kernel spells a build-time assertion as a call to a declared-but-never-
-defined function (`__compiletime_assert_*`, `__scoped_seqlock_bug`,
+The kernel spells a build-time assertion as a call to a function that is
+declared and not defined (`__compiletime_assert_*`, `__scoped_seqlock_bug`,
 `__bad_udelay`) in a branch the compiler is expected to delete. When a fold
 stops firing, the symbol reaches the object and nothing reports it until
 the final vmlinux link -- a whole kernel build later. Stated as a `--forbid`
@@ -152,14 +152,14 @@ python3 demos/linux/replay.py --kernel-dir <built tree> \
 ```
 
 `--require` guards a vacuous pass: a unit that failed to compile satisfies
-`--forbid` too. With neither, the run reports each object's undefined
-symbols and asserts nothing. Selection is `--unit <object>` or `--match
-<substring>`, both repeatable.
+`--forbid` too. With neither, the run reports each object's undefined symbols
+and asserts nothing. Selection is `--unit <object>` or `--match <substring>`,
+both repeatable.
 
-The tree is never written: the recorded command names its object and its
-dependency file inside it, and both are redirected into `--workdir` (a
+Nothing is written into the tree: the recorded command names its object and
+its dependency file inside it, and both are redirected into `--workdir` (a
 temporary directory by default, and refused if it sits inside the tree).
-That is not housekeeping. Compiling into a tree while a build is using it
+Compiling into a tree while a build is using it
 swaps one object under that build, and the symptom is a plausible wrong
 number rather than an error -- a link reporting failures that belong to the
 compiler under test rather than the one being measured.
@@ -212,7 +212,7 @@ unreadable.
 The kernel decides what its code may use by probing the compiler at configure
 time, and Kconfig bakes the answers into `include/generated/autoconf.h`. A
 corpus captured from a gcc reference build therefore carries gcc's answers, and
-replaying it asks badc to compile code gated on capabilities it was never
+replaying it asks badc to compile code gated on capabilities badc was not
 asked about. The measured consequence on x86_64 is `CONFIG_CC_HAS_NAMED_AS=1`,
 which turns on the `__seg_gs` named address space in the percpu headers and
 masks 84% of the tree behind one construct badc does not implement.
@@ -289,9 +289,9 @@ whose every C object is badc's, and the kernel's own link and boot become
 the correctness test for those objects.
 
 Named as `CC=`, the shim classifies each invocation. A kernel C compile
-(`-c`, `-D__KERNEL__`, a `.c` source, not `-m16`/`-m32`) goes to badc and
-only to badc: no other compiler runs on it, so no other compiler's object
-can reach the image. The rewritten flag set forwards kbuild's
+(`-c`, `-D__KERNEL__`, a `.c` source, not `-m16`/`-m32`) goes to badc alone,
+so no other compiler's object can reach the image. The rewritten flag set
+forwards kbuild's
 `-Wp,-MMD,<path>`, so badc writes the `.d` file `fixdep` turns into the
 `.cmd` file and incremental rebuilds trigger on the right headers. A badc
 failure is the shim's failure -- it removes any partial object, puts
@@ -323,30 +323,27 @@ reach badc. badc rejects the argument sets it does not implement, so a
 spelling it does not cover fails the unit rather than building it
 unprotected.
 
-Every other flag on the command line is accounted for too. It is
-forwarded, or listed in `UNSUPPORTED_*` -- badc has no equivalent and the
-object's difference is measured or not ruled out, so each unit that
-carries one reports `<flag> not applied` down the diagnostic channel and
-the count lands in the build's summary -- or listed in `IGNORE_*` with the
-measurement showing badc's object is the same without it. A flag on no
-list fails the unit and names itself in the manifest. Silently discarding
-what the shim does not recognize is what let `-fno-jump-tables` reach no
-compiler while every `.o.cmd` recorded it: the probe behind it is
-delegated to the reference compiler, so nothing in the build's own
-artifacts disagreed. On the pinned `defconfig` the unsupported set is
-`-fasynchronous-unwind-tables`:
-that property is not in the built image whatever the configuration
-says. The ftrace patch sites are forwarded:
-`-fpatchable-function-entry=N,M` gives every function its NOP area and
-its `__patchable_function_entries` record, and on x86_64 `-pg -mfentry
--mrecord-mcount` gives it the `__fentry__` call and the `__mcount_loc`
-entry, in the forms gcc emits. `-ftrivial-auto-var-init=zero`
+Every other flag on the command line is accounted for too. It is forwarded, or
+listed in `UNSUPPORTED_*` -- badc has no equivalent and the object's difference
+is measured or not ruled out, so each unit that carries one reports
+`<flag> not applied` down the diagnostic channel and the count lands in the
+build's summary -- or listed in `IGNORE_*` with the measurement showing badc's
+object is the same without it. A flag on no list fails the unit and names itself
+in the manifest. Silently discarding what the shim does not recognize is what
+let `-fno-jump-tables` reach no compiler while every `.o.cmd` recorded it: the
+probe behind it is delegated to the reference compiler, so nothing in the
+build's own artifacts disagreed. On the pinned `defconfig` the unsupported set
+is `-fasynchronous-unwind-tables`: that property is not in the built image
+whatever the configuration says. The ftrace patch sites are forwarded:
+`-fpatchable-function-entry=N,M` gives every function its NOP area and its
+`__patchable_function_entries` record, and on x86_64
+`-pg -mfentry -mrecord-mcount` gives it the `__fentry__` call and the
+`__mcount_loc` entry, in the forms gcc emits. `-ftrivial-auto-var-init=zero`
 (CONFIG_INIT_STACK_ALL_ZERO) is forwarded and implemented;
-`-fzero-init-padding-bits=all` is dropped with the measurement that an
-automatic aggregate initializer already zero-fills the whole object,
-padding included, before storing the members. `buildcc.py --self-test`
-checks the classification and takes no tree; `verify.py --self-test`
-runs it, which CI does on every push.
+`-fzero-init-padding-bits=all` is dropped with the measurement that an automatic
+aggregate initializer already zero-fills the whole object, padding included,
+before storing the members. `buildcc.py --self-test` checks the classification
+and takes no tree; `verify.py --self-test` runs it, which CI does on every push.
 
 Everything else (probes, `-E`, `-S`, links, the host tools under
 `scripts/` and `tools/`) goes to gcc untouched, so the configuration and
@@ -405,7 +402,7 @@ Environment: `BADC` (required), `BADC_REAL_CC` (default `gcc`),
 records every decision in `$BADC_LD_MANIFEST`. Nothing reaches GNU ld
 except what `$BADC_LD_FALLBACK` names:
 
-* Every link is badc's and only badc's: the `-r` merges (`vmlinux.o`,
+* badc makes every link: the `-r` merges (`vmlinux.o`,
   `arch/arm64/kvm/hyp/nvhe/*`), every `vmlinux` kallsyms pass, the x86 boot
   decompressor, all three vDSOs, the `-m elf_i386` boot links
   (`arch/x86/boot/setup.elf`, `arch/x86/realmode/rm/realmode.elf`, `vdso32`),
@@ -538,7 +535,7 @@ does to its `ld`), `HOSTCFLAGS` with `hostcompat/`, `DEPMOD=true`, the
 them -- so `readelf` is found while Apple's `strip` and `ar` keep shadowing
 GNU's -- and `PKG_CONFIG_PATH` pointing at Homebrew's OpenSSL for the
 signing host tools `CONFIG_MODULE_SIG` builds. Every `make` it runs is
-resolved on that PATH, so the system's GNU Make 3.81 is never the one used.
+resolved on that PATH, so the system's GNU Make 3.81 is not the one used.
 
 ```sh
 python3 demos/linux/packages.py --arch aarch64 [--distro fedora] \
@@ -581,7 +578,7 @@ rather than by continuing. Only if every check passes does it print the second
 marker, `BADC-SELFTEST-OK`. Each file is named on the console before it is
 opened (`BADC-SELFTEST-STEP`), so a boot that stops reports which file it
 stopped on, and the gate quotes that line in the failure. A kernel whose
-procfs reads never return prints the boot marker and hangs, which the boot
+procfs reads do not return prints the boot marker and hangs, which the boot
 marker alone cannot distinguish from a pass.
 
 The checks end at the vDSO, the one image in the build a loader has to search
@@ -686,37 +683,36 @@ reported only. `--no-payload` skips the boot.
 ### The nested KVM boot
 
 `--nested-kvm` boots once more, under the host's KVM with `-cpu host`
-(`-M virt,virtualization=on` on aarch64), and the kernel under test is then
-the hypervisor. Everything the gate controls in that boot is badc's. The
-initramfs carries the badc-built `qemu-system-<arch>` the qemu demo
-produces (`--guest-qemu`, the binary CI's kernel job boots under) with the
-shared libraries `ldd` lists (13 on the x86_64 box) and its loader at the
-path its `PT_INTERP` names, the ROM set the demo's `setup.py --pc-bios`
-fetches (`--guest-firmware`; for a `-kernel` boot the emulator opens
-`bios-256k.bin`, `linuxboot_dma.bin` and `kvmvapic.bin`, and nothing on
-aarch64), the KVM modules this build made under `arch/<arch>/kvm` with the
-modules they depend on ahead of them, the kernel image itself and the
-marker initramfs (`initramfs.py --guest-emulator`). After its checks
-`/init` loads the modules through `finit_module`, mounts devtmpfs, reports
-the virtualization extension `/proc/cpuinfo` lists (`BADC-NESTED
-cpuinfo=vmx`) and whether `/dev/kvm` opens, and runs the emulator on the
-image with the marker initramfs under `-accel kvm`; the guest's console
-arrives on the outer one between `BADC-NESTED-GUEST-BEGIN` and
-`BADC-NESTED-GUEST-END exit=<n>`, so the log holds both boots and each is
+(`-M virt,virtualization=on` on aarch64), and the kernel under test is then the
+hypervisor. Everything the gate controls in that boot is badc's. The initramfs
+carries the badc-built `qemu-system-<arch>` the qemu demo produces
+(`--guest-qemu`, the binary CI's kernel job boots under) with the shared
+libraries `ldd` lists (13 on the x86_64 box) and its loader at the path its
+`PT_INTERP` names, the ROM set the demo's `setup.py --pc-bios` fetches
+(`--guest-firmware`; for a `-kernel` boot the emulator opens `bios-256k.bin`,
+`linuxboot_dma.bin` and `kvmvapic.bin`, and nothing on aarch64), the KVM modules
+this build made under `arch/<arch>/kvm` with the modules they depend on ahead of
+them, the kernel image itself and the marker initramfs
+(`initramfs.py --guest-emulator`). After its checks `/init` loads the modules
+through `finit_module`, mounts devtmpfs, reports the virtualization extension
+`/proc/cpuinfo` lists (`BADC-NESTED cpuinfo=vmx`) and whether `/dev/kvm` opens,
+and runs the emulator on the image with the marker initramfs under `-accel kvm`;
+the guest's console arrives on the outer one between `BADC-NESTED-GUEST-BEGIN`
+and `BADC-NESTED-GUEST-END exit=<n>`, so the log holds both boots and each is
 held to the marker checks.
 
-The verdict is one of three. It is skipped, not passed, where the host has
-no writable `/dev/kvm`, where the emulator starts no machine because the
-host's KVM offers no nesting (the aarch64 box, an Apple M2 under Asahi
-Fedora 44 with qemu 10.2, answers `host kernel KVM does not support
-providing Virtualization extensions to the guest CPU`), or where the guest
-is given nothing to nest on -- `/proc/cpuinfo` lists neither `vmx` nor
-`svm` on x86_64, which is what `kvm_intel.nested=0` on the host produces,
-or the CPUs started at EL1 on aarch64. It fails where the extension is
-offered and `/dev/kvm` still never appears, where the guest never reaches
-both markers or its emulator never exits, and where the outer boot fails
-any check the other boots are held to. Everything else is a pass, and the
-report carries what `/init` reported and the guest's own boot record.
+The verdict is one of three. It is skipped, not passed, where the host has no
+writable `/dev/kvm`, where the emulator starts no machine because the host's KVM
+offers no nesting (the aarch64 box, an Apple M2 under Asahi Fedora 44 with qemu
+10.2, answers
+`host kernel KVM does not support providing Virtualization extensions to the guest CPU`),
+or where the guest is given nothing to nest on -- `/proc/cpuinfo` lists neither
+`vmx` nor `svm` on x86_64, which is what `kvm_intel.nested=0` on the host
+produces, or the CPUs started at EL1 on aarch64. It fails where the extension is
+offered and `/dev/kvm` still does not appear, where the guest misses either
+marker or its emulator does not exit, and where the outer boot fails any check
+the other boots are held to. Everything else is a pass, and the report carries
+what `/init` reported and the guest's own boot record.
 
 x86_64 `defconfig` builds no KVM at all, so with `--build` the flag sets
 `CONFIG_KVM`, `CONFIG_KVM_INTEL` and `CONFIG_KVM_AMD` to `m` before the
@@ -812,9 +808,9 @@ measurement has a baseline from the same userspace.
 "Clean dmesg" at boot is the `DMESG_SEVERE` vocabulary: the oops shapes, plus
 the driver-reported faults -- the SCSI sense keys a working device does not
 produce, block I/O errors, filesystem corruption reports and PCI AER. The oops
-shapes alone were not enough: a controller answering every command with `Sense
-Key : Hardware Error` passed eight patterns, a taint word of 0 and a systemd
-that came up.
+shapes alone were not enough: a controller answering every command with
+`Sense Key : Hardware Error` passed eight patterns, a taint word of 0 and a
+systemd that came up.
 
 Everything the boot logged at KERN_ERR or worse is also collected and diffed
 against the stock boot of the same image, and the run prints the lines the
@@ -846,19 +842,19 @@ drive is attached with `serial=<its drive id>`, and the guest finds the data
 disk by that serial rather than by driver: on the root's own bus the seed
 image binds the same driver and enumerates first.
 
-`--vm-data-bus` attaches a second, empty disk on a controller of its own
-while the root stays where the firmware can boot it: the booted kernel must
-bind that controller's driver, and the run makes an ext4 on the disk, writes
-64 MiB, drops the caches, remounts, compares the digest and runs `e2fsck`.
-That is how `megasas` and `lsi53c895a`, which present no boot device under
-EFI, and `ahci` on aarch64 are covered. qemu's `megasas` model rejects every
-pass-through frame that carries no scatter-gather entry (`megasas_map_sgl`),
-so the TEST UNIT READY the sd driver issues at probe returns `Hardware
-Error` / `Internal target failure` -- measured identical with a gcc-built
-`megaraid_sas` swapped into the same boot. `MODEL_SENSE` in `packages.py`
-records that answer: the scans report those lines for the model's SCSI host
-and assert nothing on them, and the drive rides with `write-cache=off` so
-the filesystem issues no SYNCHRONIZE CACHE, which the same rejection fails.
+`--vm-data-bus` attaches a second, empty disk on a controller of its own while
+the root stays where the firmware can boot it: the booted kernel must bind that
+controller's driver, and the run makes an ext4 on the disk, writes 64 MiB, drops
+the caches, remounts, compares the digest and runs `e2fsck`. That is how
+`megasas` and `lsi53c895a`, which present no boot device under EFI, and `ahci`
+on aarch64 are covered. qemu's `megasas` model rejects every pass-through frame
+that carries no scatter-gather entry (`megasas_map_sgl`), so the TEST UNIT READY
+the sd driver issues at probe returns `Hardware Error` /
+`Internal target failure` -- measured identical with a gcc-built `megaraid_sas`
+swapped into the same boot. `MODEL_SENSE` in `packages.py` records that answer:
+the scans report those lines for the model's SCSI host and assert nothing on
+them, and the drive rides with `write-cache=off` so the filesystem issues no
+SYNCHRONIZE CACHE, which the same rejection fails.
 
 The guest boots under EFI, as the machines these packages are meant for do.
 `--vm-firmware auto` (the default) takes the first firmware installed on the
@@ -942,7 +938,7 @@ image and copies `/boot/config-$(uname -r)` out of it, which is the one source
 that cannot drift from the kernel the distribution ships. It is how the asset
 is refreshed when an image pin moves -- run it, then add the new digest to
 `DISTROS` in `packages.py` and to `scripts/vendor_deps/build_bundle.py`, and
-publish. A package build itself no longer boots a VM to read a config.
+publish. A package build itself boots no VM to read a config.
 
 `--config <path>` names an ad-hoc file, and without `--config` the tree's own
 `defconfig` is built.
@@ -975,7 +971,7 @@ set the mirror has moved past is rebuilt rather than reused.
 Booting proves the kernel reaches userspace over one storage and one network
 path. A distribution kernel ships several thousand modules and the boot loads
 a few dozen. The stage that runs after the boot probes, inside the badc
-kernel, drives the code the boot never reaches. Its steps are data -- a name,
+kernel, drives the code the boot does not reach. Its steps are data -- a name,
 the guest work and the rule that reads the outcome -- so the set extends
 without touching the driver; each step lands in the report under
 `vm.exercise` and a failing one appends to the run's `failures`.
@@ -983,16 +979,16 @@ without touching the driver; each step lands in the report under
 `sockets,storage,crypto,modules,kunit,fs,dmesg`.
 
 `sockets,storage,crypto,kunit,dmesg` -- the gate set -- run on every boot; the
-boot probes otherwise judge a kernel by what the guest's own init reported
-about itself, which is a property of the image. Two defects reached the branch
-that way. An AF_VSOCK bind that returned `EINVAL` on every socket surfaced
-only because one distribution's systemd generated a unit for the family and
-the other's did not. A storage controller that answered every `TEST UNIT
-READY` with a hardware error surfaced only as sense data in the console log,
-which no pattern matched. In both cases `taint` was 0, systemd came up, and
-the boot was recorded as clean. `--exercise` adds `modules` and `fs`, which
-cost minutes; `--no-exercise-gate` drops the stage entirely, and a boot that
-skips it has no cover on the subsystems the probes never reach.
+boot probes otherwise judge a kernel by what the guest's own init reported about
+itself, which is a property of the image. Two defects reached the branch that
+way. An AF_VSOCK bind that returned `EINVAL` on every socket surfaced only
+because one distribution's systemd generated a unit for the family and the
+other's did not. A storage controller that answered every `TEST UNIT READY` with
+a hardware error surfaced only as sense data in the console log, which no
+pattern matched. In both cases `taint` was 0, systemd came up, and the boot was
+recorded as clean. `--exercise` adds `modules` and `fs`, which cost minutes;
+`--no-exercise-gate` drops the stage entirely, and a boot that skips it has no
+cover on the subsystems the probes do not reach.
 
 `storage` writes a known payload to the root filesystem with direct I/O, reads
 it back after dropping the caches and compares it against the source digest,
@@ -1001,7 +997,7 @@ first; where `dd` fails or delivers fewer bytes than the payload, the read is
 repeated buffered and the verdict notes it with `dd`'s message, since the
 buffered read still proves the data reached the device. A digest is compared
 only once the byte count matched, so an empty or short read is reported as a
-read failure, never as a mismatch. The digests are half of it: the step runs
+read failure rather than a mismatch. The digests are half of it: the step runs
 the I/O inside one task so the kernel log window that I/O produced is read as
 part of the verdict, which is where a controller that completes transfers and
 reports hardware errors is caught. `--exercise-storage-mb` sizes the payload.
@@ -1053,8 +1049,8 @@ filed as unusable, which is reported and does not fail it.
 under a per-module timeout, and classifies each outcome. A module that
 declines because the hardware is absent is expected and counted; a module that
 faults, hangs, fails on a missing symbol or sets the oops or machine-check
-taint bit is a finding. Modules already loaded when the sweep starts are never
-unloaded, so the sweep cannot take the network or the root disk down; the test
+taint bit is a finding. Modules already loaded when the sweep starts stay
+loaded, so the sweep cannot take the network or the root disk down; the test
 suites are left to the `kunit` step, since a suite loaded here runs a second
 time and collides with its own boot-time registrations; the rest are pruned
 every 250 loads, which bounds memory and exercises the module exit
@@ -1080,11 +1076,11 @@ create/rename/hardlink/unlink churn, a tree copy with `find`/`grep` sweeps and
 `rm -rf`, sparse writes with `O_DIRECT` reads, and one `fsstress` or `fio` job
 when the image has either. The writers hold back above 80% full: a filesystem
 the jobs drive to ENOSPC can end the instance unmountable -- ntfs3 cannot
-extend `$MFT` once it is full -- and that says nothing about the kernel. Data is verified rather than assumed: a file set is
-written from a seed held in tmpfs, its digests are computed from that seed and
-never from the filesystem, and
-after the workload the caches are dropped, the filesystem is unmounted and
-mounted again, and every digest is checked. Silent corruption is what a
+extend `$MFT` once it is full -- and that says nothing about the kernel. Data
+is verified: a file set is written from a seed held in tmpfs, its digests are
+computed from that seed rather than from the filesystem, and after the workload
+the caches are dropped, the filesystem is unmounted and mounted again, and
+every digest is checked. Silent corruption is what a
 codegen defect on a copy or checksum path produces, and no dmesg scan reports
 it. Each instance ends with the filesystem's own check-only fsck, where a
 non-clean result is a hard failure.
@@ -1148,6 +1144,7 @@ The stage attaches `--exercise-spares` thin qcow2 disks (2 by default) after
 the system disk and the seed, on the same bus; the system disk keeps its bus
 and its `bootindex=0`. It also raises `--vm-mem` to 4096 when it is lower,
 since the sweep holds every loaded module resident between prunes.
+
 ### Building the kernel on the badc kernel (the `selfhost` phase)
 
 An installed kernel that boots and passes probes has been asked for minutes of
@@ -1242,13 +1239,13 @@ byte.
 ### The distribution's own configuration (`--config from-vm`)
 
 `defconfig` is the tree's answer to what a kernel should contain; a
-distribution's is its own, and the two differ in size and in shape. `--config
-from-vm` boots the pinned cloud image before anything is built, reads
+distribution's is its own, and the two differ in size and in shape.
+`--config from-vm` boots the pinned cloud image before anything is built, reads
 `/boot/config-$(uname -r)` -- the configuration the distribution's kernel
 package ships -- and uses it as the corpus. The source cannot drift from the
-kernel the image actually runs, and it is the same image the gate installs
-into, so the configuration and the system under test agree by construction.
-The extraction lands in `<workdir>/config-vm-<arch>.config` with a
+kernel the image actually runs, and it is the same image the gate installs into,
+so the configuration and the system under test agree by construction. The
+extraction lands in `<workdir>/config-vm-<arch>.config` with a
 `config-vm-<arch>.json` recording the release it came from, its sha256 and its
 option count; a later run reuses it instead of booting again.
 
@@ -1382,12 +1379,12 @@ and the cache's eviction window is not shorter than this lane's cadence.
 
 ### On real hardware (the `hw` phase)
 
-The vm phase proves a kernel boots under an emulator whose devices badc's
-output has never surprised. `--phases hw` runs the same sequence on a physical
-machine: the same probes, the same dmesg scanners, the same exercise stage,
-with the console read from a serial port on this host instead of a file qemu
-writes. Everything downstream of the machine -- `probes()`, the core sweep,
-`exercise.py` -- takes a target rather than a VM, and an emulated guest and a
+The vm phase proves a kernel boots under emulated devices. `--phases hw` runs
+the same sequence on a physical machine: the same probes, the same dmesg
+scanners, the same exercise stage, with the console read from a serial port on
+this host instead of a file qemu writes. Everything downstream of the machine
+-- `probes()`, the core sweep, `exercise.py` -- takes a target rather than a
+VM, and an emulated guest and a
 physical box differ only in how they are started, watched and released.
 
 `packages.py` reaches the machine over ssh (`--hw-host [user@]host`, with
@@ -1403,7 +1400,7 @@ silence, which reads like a wiring fault and is not one. Nothing is written to
 the port. The capture is byte for byte, so `DMESG_SEVERE`, the
 firmware-silence check and the EDK2 exception scan read a hardware console and
 a qemu one the same way. Without `--hw-serial` the phase still runs, and a
-boot that never reaches ssh then leaves no record of how far it got.
+boot that does not reach ssh leaves no record of how far it got.
 
 The sequence:
 
@@ -1427,7 +1424,7 @@ The sequence:
    default, which silently removes the fallback the run checked for in
    step 2.
 6. Find the new entry with `grubby --info=ALL`, check that it names a root
-   device, and select it with `grub2-reboot <index>` -- one boot only, never
+   device, and select it with `grub2-reboot <index>` -- one boot only, not
    `grub2-set-default`.
 7. Reset, and watch the console while waiting for ssh.
 8. Run the probes, assert the boot, and run the exercise stage under
@@ -1453,15 +1450,15 @@ not useful, and that second wait is what separates the two.
 The wait does not always have to run out. A boot that ends badly ends in one
 of a few named ways -- `emergency` (the initramfs emergency shell: the root
 filesystem was not mounted), `panic`, `dracut-shell` -- and each is a
-different verdict, not a variant of "ssh never returned". The console says
+different verdict, not a variant of "ssh did not return". The console says
 which, so the run ends the wait on the marker rather than on the timeout and
 records the outcome and its verdict in the report. The earliest marker wins,
 so a panic is not reported as the emergency shell that followed it.
 
 Recovery is tried twice. First the watchdog and the one-shot expiry, which
 between them return a wedged kernel to the standing default on their own.
-Then, when the machine is parked where the watchdog was never armed -- an
-initramfs emergency shell runs a systemd that never read the watchdog
+Then, when the machine is parked where the watchdog was not armed -- an
+initramfs emergency shell runs a systemd that did not read the watchdog
 configuration, because that file lives on the filesystem it failed to mount
 -- a SysRq reset over the serial line: a BREAK followed by sync,
 remount-read-only, boot. It is best-effort, needing a kernel that still
@@ -1470,7 +1467,7 @@ services interrupts and a `kernel.sysrq` mask that permits the command, and
 a battery has.
 
 Two things follow from a failed boot leaving **no journal** -- emergency mode
-never gets far enough to flush one, so the serial console is the only record
+does not get far enough to flush one, so the serial console is the only record
 that boot has. The reader is started before anything else the phase does and
 stays open across the reset, so the capture spans the whole reboot rather
 than picking up whatever was still in flight when someone opened the port;
@@ -1629,18 +1626,18 @@ python3 demos/linux/layout.py --arch x86_64 \
     --cross-check 40 --report layout-x86_64.json
 ```
 
-`--stride N` keeps every Nth unit of the path-sorted corpus in `--replay`
-mode, a sample spread over the subsystems; CI's `kernel` job runs the replay
-at stride 8 over the defconfig tree the gate just built, with `--cross-check
-20`, and fails on any differing layout. Both trees must carry debug info
-(`CONFIG_DEBUG_INFO_DWARF4`; badc emits DWARF 4) and must hold the same
-source and the same configuration. The run
-enforces the second part rather than assuming it: it refuses to compare
-unless the two `.config` files agree once the toolchain identification
-symbols -- `CONFIG_CC_VERSION_TEXT`, the `*_VERSION` strings -- are removed,
-and unless the kernel releases match. Everything else, including the
-`CONFIG_CC_HAS_*` capability answers, has to be identical, because a
-difference there can move a member on its own and the comparison would then
+`--stride N` keeps every Nth unit of the path-sorted corpus in `--replay` mode,
+a sample spread over the subsystems; CI's `kernel` job runs the replay at stride
+8 over the defconfig tree the gate just built, with `--cross-check 20`, and
+fails on any differing layout. Both trees must carry debug info
+(`CONFIG_DEBUG_INFO_DWARF4`; badc emits DWARF 4) and must hold the same source
+and the same configuration. The run enforces the second part rather than
+assuming it: it compares only when the kernel releases match and the two
+`.config` files agree once the toolchain identification symbols --
+`CONFIG_CC_VERSION_TEXT`, the `*_VERSION` strings -- are removed. Everything
+else, including the `CONFIG_CC_HAS_*` capability answers, has to be identical,
+because a difference there can move a member on its own and the comparison
+would then
 measure the configuration instead of the compiler.
 
 Three input modes:

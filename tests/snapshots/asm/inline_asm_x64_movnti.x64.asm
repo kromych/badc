@@ -28,15 +28,14 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	movq	%rbx, (%rsp)
-               	xorq	%rax, %rax
-               	movl	%eax, -0x8(%rbp)
+               	subq	$0x18, %rsp
+               	pushq	%rbx
+               	movl	$0x0, -0x8(%rbp)
                	leaq	-0x8(%rbp), %rax
                	movl	$0x2a, %ebx
                	movntil	%ebx, (%rax)
                	sfence
                	movslq	-0x8(%rbp), %rax
-               	movq	(%rsp), %rbx
+               	popq	%rbx
                	leave
                	retq

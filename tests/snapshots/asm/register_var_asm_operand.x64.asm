@@ -28,21 +28,21 @@ Disassembly of section .text:
 <through_r12>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	movq	%r12, (%rsp)
+               	subq	$0x18, %rsp
+               	pushq	%r12
                	movq	%rdi, %r12
                	movq	%r12, %rax
                	movq	%rax, -0x8(%rbp)
                	movq	-0x8(%rbp), %rax
-               	movq	(%rsp), %r12
+               	popq	%r12
                	leave
                	retq
 
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	movq	%r12, (%rsp)
+               	subq	$0x18, %rsp
+               	pushq	%r12
                	movl	$0x2a, %r12d
                	movq	%r12, %rax
                	movq	%rax, -0x8(%rbp)
@@ -50,20 +50,20 @@ Disassembly of section .text:
                	cmpq	$0x2a, %rax
                	je	<addr>
                	movl	$0x1, %eax
-               	movq	(%rsp), %r12
+               	popq	%r12
                	leave
                	retq
-               	movabsq	$-0x7, %r12
+               	movq	$-0x7, %r12
                	movq	%r12, %rax
                	movq	%rax, -0x8(%rbp)
                	movq	-0x8(%rbp), %rax
                	cmpq	$-0x7, %rax
                	je	<addr>
                	movl	$0x2, %eax
-               	movq	(%rsp), %r12
+               	popq	%r12
                	leave
                	retq
-               	xorq	%rax, %rax
-               	movq	(%rsp), %r12
+               	xorl	%eax, %eax
+               	popq	%r12
                	leave
                	retq

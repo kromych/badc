@@ -1,9 +1,9 @@
 # Standard conformance
 
 badc targets C99. Anything a C99 program relies on that is not listed here
-follows C99; the standard is the reference for the conforming surface.
-This document records three things: the implementation-defined choices C99
-requires a compiler to make (6.2.5, 6.7.2), the divergences -- from C99,
+follows C99. This document records three things: the implementation-defined
+choices C99 requires a compiler to make (6.2.5, 6.7.2), the divergences --
+from C99,
 and from gcc / clang practice where the standard leaves the choice open --
 and the non-C99 extensions badc implements (C11, C23, POSIX, GCC, MSVC,
 and badc's own).
@@ -100,14 +100,14 @@ exists, 5 = rare in modern source.
 `volatile` is enforced (6.7.3p6): an access through a volatile-qualified
 lvalue is marked through the IR, performed exactly once in program order at
 every optimization level, kept memory-resident (no promotion, coalescing,
-forwarding, or dead-access elision), and never moved across an inline-asm
+forwarding, or dead-access elision), and not moved across an inline-asm
 statement. One gap remains: a whole-aggregate copy of a volatile-qualified
 struct is lowered as an unmarked block copy. `const` is accepted but not
 enforced: badc does not diagnose assignment to a `const`-qualified object (a
 6.5.16.1 constraint violation) or the discarding of `const` in a conversion,
 so a program that modifies a `const` object compiles without the required
-diagnostic. `restrict` is accepted as a sound no-op -- it is only an
-aliasing hint with no observable semantics.
+diagnostic. `restrict` is accepted and ignored: it is an aliasing hint with
+no observable semantics.
 
 ### Function-pointer return lineage carries one call level, severity 5
 
@@ -195,7 +195,9 @@ accepted, and the request it names selects the one behaviour badc has.
 `-O1` / `-O2` / `-O3` / `-Os` / `-Oz` / `-Ofast` / `-Og` all select the
 single optimization level, `-g<level>` the single amount of debug
 information, and `-mcpu=<name>`, whose name must be an AArch64 part
-badc knows, a scheduling model badc does not differentiate. Only the
+badc knows, a scheduling model badc does not differentiate; the
+instructions stay the [baseline](./native-compilation.md#instruction-set-baseline)
+whatever the part. Only the
 `-g` family reports the gap, since a DWARF version and format are
 written into the output.
 
@@ -217,13 +219,12 @@ implemented; a selector is a diagnostic's name, one of its aliases, its
 `B` code or a group name, and one no catalogue row answers to is refused
 by name. `--list-diagnostics` prints the catalogue.
 
-The diagnostic pragmas -- `#pragma GCC diagnostic`, `#pragma clang
-diagnostic` and MSVC's `#pragma warning(...)` -- take the same selectors
-and decide a row's level at the source position they precede, for the
-parser's diagnostics as well as the preprocessor's. A pragma covering
-the position wins over the command line; `push` and `pop` bound the
-region it covers. A link diagnostic has no position in a translation
-unit, so the command line alone governs one.
+The diagnostic pragmas -- `#pragma GCC diagnostic`, `#pragma clang diagnostic`
+and MSVC's `#pragma warning(...)` -- take the same selectors and decide a row's
+level at the source position they precede, for the parser's diagnostics as well
+as the preprocessor's. A pragma covering the position wins over the command
+line; `push` and `pop` bound the region it covers. A link diagnostic has no
+position in a translation unit, so the command line alone governs one.
 
 `-Wa,<opt>` and `-Xassembler <opt>` are checked rather than passed on, since
 the assembler is built in: an option outside the accepted set is refused by
@@ -366,13 +367,15 @@ name. TODO: hold the bound version and the declared interface in step.
   - checked arithmetic -- `__builtin_add_overflow` / `sub` / `mul`;
   - memory -- `__builtin_memcpy` / `memmove` / `memset`.
 
-  The bit-count builtins lower to a portable shift / mask sequence in the
-  SSA walker rather than to `lzcnt` / `tzcnt` / `popcnt` / `rbit`, so the
-  interpreter and every target agree bit for bit. A consequence of that
-  lowering: `__builtin_clz(0)` and `__builtin_ctz(0)` return the operand
-  width instead of being undefined. The byte-swap builtins are an IR
-  operation every backend and the interpreter implement, and select
-  `bswap` on x86_64 and `rev` on aarch64.
+  The bit counts are an IR operation every backend and the interpreter
+  implement, and `__builtin_clz(0)` and `__builtin_ctz(0)` return the
+  operand width on all of them instead of being undefined. aarch64 selects
+  `clz`, `rbit` + `clz` and `cnt` + `addv` (a general-register sequence
+  under `-mgeneral-regs-only`); x86_64 selects `popcnt`, and `bsr` / `bsf`
+  with a `cmovz` for the zero operand rather than `lzcnt` / `tzcnt`, which
+  a processor without LZCNT / BMI1 executes as `bsr` / `bsf`. `clrsb`,
+  `ffs` and `parity` are built on them. The byte-swap builtins are an IR
+  operation too, and select `bswap` on x86_64 and `rev` on aarch64.
   `__builtin_unreachable` lowers to a trap, so reaching one aborts.
   `__builtin_has_attribute` is accepted and always folds to 0.
   The remaining string, allocation and absolute-value `__builtin_`
@@ -453,9 +456,9 @@ name. TODO: hold the bound version and the declared interface in step.
   `patchable_function_entry`, and the MSVC `__declspec(thread)` /
   `dllexport`. Other attributes -- `format`, `pure` / `const`,
   `deprecated`, `fallthrough` and the rest -- are parsed and silently
-  discarded; there is no "attribute ignored" diagnostic. Two asymmetries
-  are worth knowing: `__has_attribute` answers 1 for a fixed list of GCC
-  attribute names wider than the honored set
+  discarded; there is no "attribute ignored" diagnostic. Two asymmetries:
+  `__has_attribute` answers 1 for a fixed list of GCC attribute names wider
+  than the honored set
   (and 0 for the honored `vector_size` / `dllexport`), and the C23
   `[[...]]` syntax honors only the bare names plus `aligned`,
   `constructor` and `destructor`, so `[[gnu::section("x")]]` parses and is
@@ -476,11 +479,11 @@ name. TODO: hold the bound version and the declared interface in step.
   composite rules instead of `v0`-`v3`. TODO: homogeneous vector
   aggregates.
 - GCC named-rest variadic macro (`#define foo(args...)`).
-- The GNU89 inline linkage model, per function via
-  `__attribute__((gnu_inline))` and per unit via `-fgnu89-inline`: `extern
-  inline` provides no external definition and a plain `inline` does, the
-  inverse of C99 6.7.4p6. With `--gnu`, `__GNUC_STDC_INLINE__` or
-  `__GNUC_GNU_INLINE__` reports which model is in force.
+- The GNU89 inline linkage model, per function via `__attribute__((gnu_inline))`
+  and per unit via `-fgnu89-inline`: `extern inline` provides no external
+  definition and a plain `inline` does, the inverse of C99 6.7.4p6. With
+  `--gnu`, `__GNUC_STDC_INLINE__` or `__GNUC_GNU_INLINE__` reports which model
+  is in force.
 - `--gnu` additionally defines the GCC identity macros (`__GNUC__` 4,
   `__GNUC_MINOR__` 3, `__GNUC_PATCHLEVEL__` 0, `__VERSION__`),
   `__STRICT_ANSI__`, the `__GCC_HAVE_SYNC_COMPARE_AND_SWAP_{1,2,4,8}` set,
@@ -568,21 +571,20 @@ name. TODO: hold the bound version and the declared interface in step.
   likewise warns, except that the `pack`, `once`, `STDC`, `GCC` and `clang`
   heads are accepted silently.
 - `__BADC_VERSION__`, `__BADC_TARGET__`, `__BADC_WINDOWS__` predefines.
-- Extension: a `#if` / `#elif` controlling expression accepts a string
-  operand -- a string literal, with any encoding prefix and its escapes
-  undecoded, or a macro expanding to one -- in exactly one position: as an
-  operand of `==` / `!=` whose other operand is also a string. The two
-  compare by spelling, prefix excluded (`#if __BADC_TARGET__ ==
-  "macos-aarch64"`, `#if __BADC_VERSION__ != "0.1.0"`). C99 6.10.1p4
-  restricts `#if` to an integer constant expression; badc admits the
-  comparison so the string-valued `__BADC_TARGET__` / `__BADC_VERSION__`
-  predefines can gate source. A string anywhere else -- the whole
-  controlling expression, an operand of `!`, `~`, unary `+` / `-`, of an
-  arithmetic, bitwise, shift, relational or logical operator, a `?:`
-  condition or arm, or the other side of an integer in `==` / `!=` -- is
-  an error naming the operator, whether or not that operand is evaluated.
-  Adjacent string literals do not concatenate. An identifier left after
-  macro expansion is 0 as in C99, a macro whose unquoted body is not a
+- Extension: a `#if` / `#elif` controlling expression accepts a string operand
+  -- a string literal, with any encoding prefix and its escapes undecoded, or a
+  macro expanding to one -- in exactly one position: as an operand of `==` /
+  `!=` whose other operand is also a string. The two compare by spelling, prefix
+  excluded (`#if __BADC_TARGET__ == "macos-aarch64"`,
+  `#if __BADC_VERSION__ != "0.1.0"`). C99 6.10.1p4 restricts `#if` to an integer
+  constant expression; badc admits the comparison so the string-valued
+  `__BADC_TARGET__` / `__BADC_VERSION__` predefines can gate source. A string
+  anywhere else -- the whole controlling expression, an operand of `!`, `~`,
+  unary `+` / `-`, of an arithmetic, bitwise, shift, relational or logical
+  operator, a `?:` condition or arm, or the other side of an integer in `==` /
+  `!=` -- is an error naming the operator, whether or not that operand is
+  evaluated. Adjacent string literals do not concatenate. An identifier left
+  after macro expansion is 0 as in C99, a macro whose unquoted body is not a
   number included.
 
 ## Roadmap

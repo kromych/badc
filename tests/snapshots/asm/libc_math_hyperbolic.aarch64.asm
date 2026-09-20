@@ -14,183 +14,114 @@ Disassembly of section .text:
                	brk	#0x1
 
 <main>:
-               	str	x20, [sp, #-0x30]!
-               	str	x19, [sp, #0x10]
-               	stp	x29, x30, [sp, #0x20]
-               	add	x29, sp, #0x20
-               	mov	x20, #0x0               // =0
-               	fmov	d0, x20
+               	stp	x29, x30, [sp, #-0x10]!
+               	mov	x29, sp
+               	movi	d0, #0000000000000000
                	bl	<addr>
-               	fmov	d17, x20
-               	fsub	d0, d0, d17
-               	mov	x0, #0x0                // =0
-               	fmov	d17, x0
-               	fcmp	d0, d17
+               	movi	d1, #0000000000000000
+               	fsub	d0, d0, d1
+               	fcmp	d0, d1
                	b.pl	<addr>
                	fneg	d0, d0
-               	mov	x0, #0xd695             // =54933
-               	movk	x0, #0xe826, lsl #16
-               	movk	x0, #0x2e0b, lsl #32
-               	movk	x0, #0x3e11, lsl #48
-               	fmov	d17, x0
-               	fcmp	d0, d17
-               	cset	x0, mi
-               	sxtw	x0, w0
-               	cbnz	x0, <addr>
+               	adrp	x16, <page>
+               	ldr	d1, [x16]
+               	fcmp	d0, d1
+               	b.mi	<addr>
                	mov	x0, #0x1                // =1
-               	ldp	x29, x30, [sp, #0x20]
-               	ldr	x19, [sp, #0x10]
-               	ldr	x20, [sp], #0x30
+               	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x3ff0000000000000 // =4607182418800017408
-               	fmov	d0, x0
+               	fmov	d0, #1.00000000
                	bl	<addr>
-               	mov	x20, #0x0               // =0
-               	fmov	d17, x20
-               	fsub	d0, d0, d17
-               	fmov	d17, x20
-               	fcmp	d0, d17
+               	movi	d1, #0000000000000000
+               	fsub	d0, d0, d1
+               	fcmp	d0, d1
                	b.pl	<addr>
                	fneg	d0, d0
-               	mov	x0, #0xd695             // =54933
-               	movk	x0, #0xe826, lsl #16
-               	movk	x0, #0x2e0b, lsl #32
-               	movk	x0, #0x3e11, lsl #48
-               	fmov	d17, x0
-               	fcmp	d0, d17
-               	cset	x0, mi
-               	sxtw	x0, w0
-               	cbnz	x0, <addr>
+               	adrp	x16, <page>
+               	ldr	d2, [x16]
+               	fcmp	d0, d2
+               	b.mi	<addr>
                	mov	x0, #0x2                // =2
-               	ldp	x29, x30, [sp, #0x20]
-               	ldr	x19, [sp, #0x10]
-               	ldr	x20, [sp], #0x30
+               	ldp	x29, x30, [sp], #0x10
                	ret
-               	fmov	d0, x20
+               	fmov	d0, d1
                	bl	<addr>
-               	fmov	d17, x20
-               	fsub	d0, d0, d17
-               	mov	x0, #0x0                // =0
-               	fmov	d17, x0
-               	fcmp	d0, d17
+               	movi	d1, #0000000000000000
+               	fsub	d0, d0, d1
+               	fcmp	d0, d1
                	b.pl	<addr>
                	fneg	d0, d0
-               	mov	x0, #0xd695             // =54933
-               	movk	x0, #0xe826, lsl #16
-               	movk	x0, #0x2e0b, lsl #32
-               	movk	x0, #0x3e11, lsl #48
-               	fmov	d17, x0
-               	fcmp	d0, d17
-               	cset	x0, mi
-               	sxtw	x0, w0
-               	cbnz	x0, <addr>
+               	adrp	x16, <page>
+               	ldr	d1, [x16]
+               	fcmp	d0, d1
+               	b.mi	<addr>
                	mov	x0, #0x3                // =3
-               	ldp	x29, x30, [sp, #0x20]
-               	ldr	x19, [sp, #0x10]
-               	ldr	x20, [sp], #0x30
+               	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x20, #0x4000000000000000 // =4611686018427387904
-               	fmov	d0, x20
+               	fmov	d0, #2.00000000
                	bl	<addr>
                	bl	<addr>
-               	fmov	d17, x20
-               	fsub	d0, d0, d17
-               	mov	x0, #0x0                // =0
-               	fmov	d17, x0
-               	fcmp	d0, d17
+               	fmov	d1, #2.00000000
+               	fsub	d0, d0, d1
+               	movi	d1, #0000000000000000
+               	fcmp	d0, d1
                	b.pl	<addr>
                	fneg	d0, d0
-               	mov	x0, #0xd695             // =54933
-               	movk	x0, #0xe826, lsl #16
-               	movk	x0, #0x2e0b, lsl #32
-               	movk	x0, #0x3e11, lsl #48
-               	fmov	d17, x0
-               	fcmp	d0, d17
-               	cset	x0, mi
-               	sxtw	x0, w0
-               	cbnz	x0, <addr>
+               	adrp	x16, <page>
+               	ldr	d1, [x16]
+               	fcmp	d0, d1
+               	b.mi	<addr>
                	mov	x0, #0x4                // =4
-               	ldp	x29, x30, [sp, #0x20]
-               	ldr	x19, [sp, #0x10]
-               	ldr	x20, [sp], #0x30
+               	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x20, #0x4008000000000000 // =4613937818241073152
-               	fmov	d0, x20
+               	fmov	d0, #3.00000000
                	bl	<addr>
                	bl	<addr>
-               	fmov	d17, x20
-               	fsub	d0, d0, d17
-               	mov	x0, #0x0                // =0
-               	fmov	d17, x0
-               	fcmp	d0, d17
+               	fmov	d1, #3.00000000
+               	fsub	d0, d0, d1
+               	movi	d1, #0000000000000000
+               	fcmp	d0, d1
                	b.pl	<addr>
                	fneg	d0, d0
-               	mov	x0, #0xd695             // =54933
-               	movk	x0, #0xe826, lsl #16
-               	movk	x0, #0x2e0b, lsl #32
-               	movk	x0, #0x3e11, lsl #48
-               	fmov	d17, x0
-               	fcmp	d0, d17
-               	cset	x0, mi
-               	sxtw	x0, w0
-               	cbnz	x0, <addr>
+               	adrp	x16, <page>
+               	ldr	d1, [x16]
+               	fcmp	d0, d1
+               	b.mi	<addr>
                	mov	x0, #0x5                // =5
-               	ldp	x29, x30, [sp, #0x20]
-               	ldr	x19, [sp, #0x10]
-               	ldr	x20, [sp], #0x30
+               	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x20, #0x3fe0000000000000 // =4602678819172646912
-               	fmov	d0, x20
+               	fmov	d0, #0.50000000
                	bl	<addr>
                	bl	<addr>
-               	fmov	d17, x20
-               	fsub	d0, d0, d17
-               	mov	x0, #0x0                // =0
-               	fmov	d17, x0
-               	fcmp	d0, d17
+               	fmov	d1, #0.50000000
+               	fsub	d0, d0, d1
+               	movi	d1, #0000000000000000
+               	fcmp	d0, d1
                	b.pl	<addr>
                	fneg	d0, d0
-               	mov	x0, #0xd695             // =54933
-               	movk	x0, #0xe826, lsl #16
-               	movk	x0, #0x2e0b, lsl #32
-               	movk	x0, #0x3e11, lsl #48
-               	fmov	d17, x0
-               	fcmp	d0, d17
-               	cset	x0, mi
-               	sxtw	x0, w0
-               	cbnz	x0, <addr>
+               	adrp	x16, <page>
+               	ldr	d1, [x16]
+               	fcmp	d0, d1
+               	b.mi	<addr>
                	mov	x0, #0x6                // =6
-               	ldp	x29, x30, [sp, #0x20]
-               	ldr	x19, [sp, #0x10]
-               	ldr	x20, [sp], #0x30
+               	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x0                // =0
-               	fmov	d0, x0
+               	movi	d0, #0000000000000000
                	bl	<addr>
                	fcvt	d0, s0
-               	mov	x0, #0x0                // =0
-               	fmov	d17, x0
-               	fsub	d0, d0, d17
-               	fmov	d17, x0
-               	fcmp	d0, d17
+               	movi	d1, #0000000000000000
+               	fsub	d0, d0, d1
+               	fcmp	d0, d1
                	b.pl	<addr>
                	fneg	d0, d0
-               	mov	x0, #0xd695             // =54933
-               	movk	x0, #0xe826, lsl #16
-               	movk	x0, #0x2e0b, lsl #32
-               	movk	x0, #0x3e11, lsl #48
-               	fmov	d17, x0
-               	fcmp	d0, d17
-               	cset	x0, mi
-               	sxtw	x0, w0
-               	cbnz	x0, <addr>
+               	adrp	x16, <page>
+               	ldr	d1, [x16]
+               	fcmp	d0, d1
+               	b.mi	<addr>
                	mov	x0, #0x7                // =7
-               	ldp	x29, x30, [sp, #0x20]
-               	ldr	x19, [sp, #0x10]
-               	ldr	x20, [sp], #0x30
+               	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x0                // =0
-               	fmov	d0, x0
+               	movi	d0, #0000000000000000
                	bl	<addr>
                	fcvt	d0, s0
                	mov	x0, #0x0                // =0
@@ -200,29 +131,12 @@ Disassembly of section .text:
                	fcmp	d0, d17
                	b.pl	<addr>
                	fneg	d0, d0
-               	mov	x1, #0xd695             // =54933
-               	movk	x1, #0xe826, lsl #16
-               	movk	x1, #0x2e0b, lsl #32
-               	movk	x1, #0x3e11, lsl #48
-               	fmov	d17, x1
-               	fcmp	d0, d17
-               	cset	x1, mi
-               	sxtw	x1, w1
-               	cbnz	x1, <addr>
+               	adrp	x16, <page>
+               	ldr	d1, [x16]
+               	fcmp	d0, d1
+               	b.mi	<addr>
                	mov	x0, #0x8                // =8
-               	ldp	x29, x30, [sp, #0x20]
-               	ldr	x19, [sp, #0x10]
-               	ldr	x20, [sp], #0x30
+               	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldp	x29, x30, [sp, #0x20]
-               	ldr	x19, [sp, #0x10]
-               	ldr	x20, [sp], #0x30
+               	ldp	x29, x30, [sp], #0x10
                	ret
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>

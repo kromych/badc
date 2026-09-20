@@ -27,14 +27,13 @@ two lanes agree, this document says so and does not repeat the reasoning.
 The root filesystem is ext4, so there is no filesystem snapshot to roll back
 to. Rollback here means *boot a different kernel*, and nothing else.
 
-## The constraint, stated plainly
+## The constraint
 
 There is a UART on this board -- sysfs reports `ttyS0` as `type=4`
-(`PORT_16550A`) at `0x3f8` IRQ 4, which is a port the driver probed, not a
-phantom node -- but it reaches no connector anyone can attach a cable to. The
-chassis has no DB-9, and whatever header may exist on the PCB is not
-accessible. So there is no serial console, and with no monitor attached there
-is no console at all.
+(`PORT_16550A`) at `0x3f8` IRQ 4, a port the driver probed rather than a
+phantom node -- but it reaches no connector anyone can attach a cable to. So
+there is no serial console, and with no monitor attached there is no console
+at all.
 
 A kernel that fails before the network comes up therefore produces **no output
 anywhere**: nothing to watch, no scrollback to read, no shell to log into. The
@@ -53,7 +52,7 @@ empty. The conclusion held; the evidence for it did not.)
 Four independent layers, in the order they take effect. Any one of them alone
 recovers the machine; they are stacked because the cheap ones fail silently.
 
-### 1. One-shot boot selection, never a changed default
+### 1. One-shot boot selection, not a changed default
 
 `GRUB_DEFAULT=saved` is already set, so `grub2-reboot` selects an entry **for
 the next boot only**. The saved default is untouched.
@@ -65,7 +64,7 @@ sudo systemctl reboot
 ```
 
 If that kernel does not reach userspace, the following boot is the stock
-default again -- no intervention, no console needed. **Never** run
+default again -- no intervention, no console needed. **Do not** run
 `grub2-set-default` or `grubby --set-default` against a badc entry.
 
 ### 2. A bounded panic
@@ -96,7 +95,7 @@ command line and passes them to init as environment instead, printing one
 
 `hwprep.py entry` puts all four on the badc entry; they are not options.
 
-### 3. The hardware watchdog, for hangs that never panic
+### 3. The hardware watchdog, for hangs that do not panic
 
 A hang that no detector catches -- no panic, no oops, and nothing the NMI
 watchdog sees -- is the case layers 1 and 2 do not cover, because nothing ever
@@ -116,8 +115,8 @@ power button. That gap is real; see "What is still uncovered".
 
 ### 4. The stock kernels stay
 
-Never `dnf remove kernel`, and keep `installonly_limit` at three or more. The
-badc package installs under its own version string (`7.1.10`), so it is an
+Do not run `dnf remove kernel`, and keep `installonly_limit` at three or more.
+The badc package installs under its own version string (`7.1.10`), so it is an
 addition and not a replacement. Verify before rebooting:
 
 ```sh
@@ -245,13 +244,13 @@ sudo cat /sys/fs/pstore/dmesg-efi-*
 sudo rm /sys/fs/pstore/dmesg-efi-* # clear before the next attempt
 ```
 
-`efi_pstore` is **builtin** on the Fedora kernels this box runs (`modinfo
-efi_pstore` reports `filename: (builtin)`), and it ships with
-`pstore_disable=Y`. A builtin takes its parameters from the kernel command
-line, not from `modprobe.d`: a `modprobe.d` drop-in for it is read by nothing
-and changes nothing. The parameter therefore goes on the badc entry's command
-line, as `efi_pstore.pstore_disable=0`, where it applies to the kernel whose
-death is being recorded and to no other.
+`efi_pstore` is **builtin** on the Fedora kernels this box runs
+(`modinfo efi_pstore` reports `filename: (builtin)`), and it ships with
+`pstore_disable=Y`. A builtin takes its parameters from the kernel command line,
+not from `modprobe.d`: a `modprobe.d` drop-in for it is read by nothing and
+changes nothing. The parameter therefore goes on the badc entry's command line,
+as `efi_pstore.pstore_disable=0`, where it applies to the kernel whose death is
+being recorded and to no other.
 
 The ESP has 2 GB free and EFI variable space is small; clearing records between
 runs keeps the variable store from filling.
@@ -267,11 +266,9 @@ messages worth having. Drop both from the badc entry. Leave
 Each step is reversible and the undo is recorded at the end of this document.
 
 Every step below needs root; the operator account has a passwordless `sudo`
-rule, so they can be driven over ssh. `hwprep.py` applies them, records what it
-changed, and replays the record backwards on `rollback`.
-
-`hwprep.py` performs these, records every change it makes, and replays the
-record backwards on `rollback`. Run it on the box:
+rule, so they can be driven over ssh. `hwprep.py` applies them, records every
+change it makes, and replays the record backwards on `rollback`. Run it on
+the box:
 
 ```sh
 scp demos/linux/hwprep.py <box>:                     # from the repo
@@ -316,7 +313,7 @@ sudo systemctl reboot
 
 `boot` selects the entry through `grub2-reboot`, which GRUB consumes on the
 next start. It does not change `GRUB_DEFAULT`, so a kernel that panics, hangs
-or never reaches userspace is followed by a stock boot without anyone touching
+or does not reach userspace is followed by a stock boot without anyone touching
 the machine.
 
 ## Boot procedure

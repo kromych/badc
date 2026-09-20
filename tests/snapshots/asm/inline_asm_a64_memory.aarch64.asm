@@ -55,8 +55,7 @@ Disassembly of section .text:
                	ldr	x0, [sp]
                	ldr	x1, [sp, #0x8]
                	str	x1, [x0]
-               	mov	x0, #0x0                // =0
-               	stur	x0, [x29, #-0x28]
+               	stur	xzr, [x29, #-0x28]
                	sub	x16, x29, #0x28
                	str	x16, [sp]
                	str	x2, [sp, #0x8]
@@ -107,20 +106,16 @@ Disassembly of section .text:
                	b.ne	<addr>
                	ldur	x0, [x29, #-0x10]
                	cmp	x0, #0x2
-               	cset	x0, ne
-               	cbnz	x0, <addr>
+               	b.ne	<addr>
                	ldursw	x0, [x29, #-0x8]
                	mov	x17, #-0x7              // =-7
                	cmp	w0, w17
-               	cset	x0, ne
-               	cbz	x0, <addr>
+               	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x70
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x0, x29, #0x58
-               	ldr	x0, [x0]
-               	sxtw	x0, w0
+               	ldur	x0, [x29, #-0x58]
                	add	sp, sp, #0x70
                	ldp	x29, x30, [sp], #0x10
                	ret

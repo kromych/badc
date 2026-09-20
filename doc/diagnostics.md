@@ -7,9 +7,9 @@ unit.c:3: warning: unused variable `x` [B2001] [-Wunused-variable]
 unit.c:7: error: `)` expected after cast [B2020] [syntax]
 ```
 
-The code and the name are stable: a code is never reused or renumbered,
-a name is never reused for a different diagnostic. Either selects the
-row wherever a selector is accepted:
+The code and the name are stable: each stays with the diagnostic it was
+assigned, and a code is not renumbered. Either selects the row wherever
+a selector is accepted:
 
 * `-W<name>` / `-Wno-<name>` report or ignore a controllable row,
   `-Werror=<name>` / `-Wno-error=<name>` raise it to an error or put it
@@ -17,11 +17,11 @@ row wherever a selector is accepted:
   `-Wall`, `-Wextra` and `-Wpedantic` turn on the groups of the same
   names, following gcc's split. A code spelled `B2001` is accepted
   wherever a name is.
-* `#pragma GCC diagnostic ignored "-W<name>"` (also `warning`, `error`,
-  `push`, `pop`), `#pragma clang diagnostic ...` and MSVC's
-  `#pragma warning(disable | error | default | once | suppress | push |
-  pop : <number>)` apply from the pragma's position; an MSVC number
-  names the row it is an alias of.
+* `#pragma GCC diagnostic ignored "-W<name>"` (also `warning`, `error`, `push`,
+  `pop`), `#pragma clang diagnostic ...` and MSVC's
+  `#pragma warning(disable | error | default | once | suppress | push | pop : <number>)`
+  apply from the pragma's position; an MSVC number names the row it is an
+  alias of.
 * `badc --explain <selector>` prints one row with its aliases;
   `badc --list-diagnostics` prints this table.
 

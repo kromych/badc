@@ -3,7 +3,7 @@
 //! constant folder (`codegen::passes::constfold`) share one
 //! implementation of the operator semantics.
 
-use super::super::ir::{BinOp, FpCastKind, LoadKind, eval_int_binop};
+use super::super::ir::{BinOp, BitCountOp, FpCastKind, LoadKind, eval_int_binop};
 
 /// The interpreter's diagnosis of a zero divisor, named for the trapping
 /// op: it reports the division rather than invoking host-level UB. The VM
@@ -140,6 +140,29 @@ pub(crate) fn eval_bswap(raw: i64, width: u8) -> i64 {
         4 => (raw as u32).swap_bytes() as i64,
         _ => (raw as u64).swap_bytes() as i64,
     }
+}
+
+/// `Inst::BitCount`: count over the low `width` bytes (4 or 8); a leading
+/// or trailing count of 0 is the bit width.
+pub(crate) fn eval_bit_count(op: BitCountOp, raw: i64, width: u8) -> i64 {
+    let n = if width == 4 {
+        let x = raw as u32;
+        match op {
+            BitCountOp::Clz => x.leading_zeros(),
+            BitCountOp::Ctz => x.trailing_zeros(),
+            BitCountOp::Popcount => x.count_ones(),
+            BitCountOp::Clrsb => ((x ^ (x << 1)) | 1).leading_zeros(),
+        }
+    } else {
+        let x = raw as u64;
+        match op {
+            BitCountOp::Clz => x.leading_zeros(),
+            BitCountOp::Ctz => x.trailing_zeros(),
+            BitCountOp::Popcount => x.count_ones(),
+            BitCountOp::Clrsb => ((x ^ (x << 1)) | 1).leading_zeros(),
+        }
+    };
+    i64::from(n)
 }
 
 /// `Inst::FpCast`. A register carrying a single-precision value

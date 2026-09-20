@@ -26,8 +26,15 @@ use super::{C5Error, Compiler, Program, Vm};
 mod atomics;
 mod auto_var_init;
 #[cfg(feature = "full")]
+mod block_plan;
+#[cfg(feature = "full")]
+mod branch_reach;
+#[cfg(feature = "full")]
 mod codegen;
+#[cfg(feature = "full")]
+mod computed_goto;
 mod deferred;
+mod divmod;
 #[cfg(feature = "full")]
 mod dwarf;
 #[cfg(feature = "full")]
@@ -57,6 +64,8 @@ mod native_pe_x64;
 mod parser;
 #[cfg(feature = "full")]
 mod patchable_entry;
+#[cfg(feature = "full")]
+mod perf_codegen;
 mod pointer_tracking;
 mod programs;
 #[cfg(feature = "full")]
@@ -67,6 +76,8 @@ mod relocatable;
 mod stack_guard;
 mod types;
 mod vla;
+#[cfg(feature = "full")]
+mod x64_frame;
 mod x86_simd;
 
 /// Absolute path of `tests/fixtures/c/<name>` relative to the crate root.

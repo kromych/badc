@@ -26,6 +26,11 @@
 //! alloca clears the whole table, since each can write through a pointer
 //! the pass does not model.
 //!
+//! An indexed access is one location per `(base, index, scale)` of value
+//! ids and index extension, and forwards on an exact match. Two index values can hold the same
+//! number, so no two indexed locations are known distinct: any store
+//! drops all of them, and an indexed store drops every pointer entry.
+//!
 //! Width and signedness. The forwarded value must equal what the load
 //! would have produced from memory:
 //!   - An `I64` load of an `I64` store reuses the stored value directly.
@@ -55,7 +60,7 @@
 //! nor seeds on either discipline.
 
 use crate::c5::codegen::ssa::mem2reg::address_free_slots;
-use crate::c5::ir::{FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind, ValueId};
+use crate::c5::ir::{FunctionSsa, IndexExt, Inst, LoadKind, NO_VALUE, StoreKind, ValueId};
 use alloc::collections::BTreeSet;
 use alloc::vec::Vec;
 
@@ -101,6 +106,27 @@ fn is_int_store(kind: StoreKind) -> bool {
 /// reload.
 const MAX_FORWARD_DISTANCE: u32 = 16;
 
+/// Distance between two instruction indices in emitted instructions:
+/// the bound above is about the live range the forward extends, and a
+/// lifetime marker adds none. Returns a closure over a prefix count so
+/// each query is O(1).
+fn emitted_span(func: &FunctionSsa) -> impl Fn(u32, usize) -> u32 + use<> {
+    let mut prefix: Vec<u32> = Vec::with_capacity(func.insts.len() + 1);
+    let mut n = 0u32;
+    for inst in &func.insts {
+        prefix.push(n);
+        n += u32::from(!inst.is_lifetime_marker());
+    }
+    prefix.push(n);
+    move |from: u32, to: usize| {
+        let (a, b) = (
+            prefix.get(from as usize).copied().unwrap_or(0),
+            prefix.get(to).copied().unwrap_or(0),
+        );
+        b.saturating_sub(a)
+    }
+}
+
 /// A known-available memory value within the current block.
 #[derive(Clone, Copy)]
 struct Entry {
@@ -131,6 +157,40 @@ struct SlotEntry {
     src_idx: u32,
     /// As [`Entry::load_kind`].
     load_kind: Option<LoadKind>,
+}
+
+/// As [`Entry`], for the location `base + index * scale`.
+#[derive(Clone, Copy)]
+struct IndexedEntry {
+    base: ValueId,
+    index: ValueId,
+    index_ext: IndexExt,
+    scale: u8,
+    width: u8,
+    value: ValueId,
+    src_idx: u32,
+    load_kind: Option<LoadKind>,
+}
+
+/// How a load takes a location's available value: as it stands, or
+/// sign-extended from the load's width.
+#[derive(Clone, Copy)]
+enum Reuse {
+    Direct,
+    Extended,
+}
+
+/// The reuse open to a load of `kind` from an entry of origin `origin`
+/// ([`Entry::load_kind`]), per the module note; `None` reads memory.
+fn reuse(origin: Option<LoadKind>, kind: LoadKind) -> Option<Reuse> {
+    match origin {
+        None => match kind {
+            LoadKind::I64 => Some(Reuse::Direct),
+            LoadKind::I8 | LoadKind::I16 | LoadKind::I32 => Some(Reuse::Extended),
+            _ => None,
+        },
+        Some(k) => (k == kind).then_some(Reuse::Direct),
+    }
 }
 
 /// Slots whose store -> load pairs may forward: reachable only through
@@ -219,6 +279,28 @@ fn overlaps(a: i32, aw: u8, b: i32, bw: u8) -> bool {
     (a as i64) < b_end && (b as i64) < a_end
 }
 
+/// Apply [`reuse`] to load `i`; true when it recorded a redirect.
+fn take(
+    redirect: &mut [Option<ValueId>],
+    rewrites: &mut Vec<(usize, Inst)>,
+    i: usize,
+    value: ValueId,
+    origin: Option<LoadKind>,
+    kind: LoadKind,
+) -> bool {
+    match reuse(origin, kind) {
+        Some(Reuse::Direct) => {
+            redirect[i] = Some(value);
+            true
+        }
+        Some(Reuse::Extended) => {
+            rewrites.push((i, Inst::Extend { value, kind }));
+            false
+        }
+        None => false,
+    }
+}
+
 pub(crate) fn run(funcs: &mut [FunctionSsa]) {
     for func in funcs {
         run_one(func);
@@ -238,9 +320,11 @@ fn run_one(func: &mut FunctionSsa) {
     let mut any = false;
     let slots = forwardable_slots(func);
     let exposed = exposed_slots(func, &slots);
+    let span = emitted_span(func);
 
     for block in &func.blocks {
         let mut table: Vec<Entry> = Vec::new();
+        let mut indexed: Vec<IndexedEntry> = Vec::new();
         let mut slot_table: Vec<SlotEntry> = Vec::new();
         for idx in block.inst_range.clone() {
             let i = idx as usize;
@@ -270,39 +354,9 @@ fn run_one(func: &mut FunctionSsa) {
                         .copied();
                     // Only forward when the source is within the
                     // live-range-extension bound; a farther reuse reloads.
-                    let hit = hit
-                        .filter(|e| (i as u32).saturating_sub(e.src_idx) <= MAX_FORWARD_DISTANCE);
+                    let hit = hit.filter(|e| span(e.src_idx, i) <= MAX_FORWARD_DISTANCE);
                     if let Some(e) = hit {
-                        match e.load_kind {
-                            None => {
-                                // Store-origin: reuse the raw stored value.
-                                match kind {
-                                    LoadKind::I64 => {
-                                        redirect[i] = Some(e.value);
-                                        any = true;
-                                    }
-                                    LoadKind::I8 | LoadKind::I16 | LoadKind::I32 => {
-                                        rewrites.push((
-                                            i,
-                                            Inst::Extend {
-                                                value: e.value,
-                                                kind,
-                                            },
-                                        ));
-                                    }
-                                    // Unsigned sub-width and floating: not
-                                    // forwarded (see the module note).
-                                    _ => {}
-                                }
-                            }
-                            Some(k) if k == kind => {
-                                // Load-origin with the same kind: the
-                                // extension already matches.
-                                redirect[i] = Some(e.value);
-                                any = true;
-                            }
-                            Some(_) => {}
-                        }
+                        any |= take(&mut redirect, &mut rewrites, i, e.value, e.load_kind, kind);
                     }
                     // Record this load so a later identical one forwards.
                     // The value a future load should reuse is the stored
@@ -341,6 +395,7 @@ fn run_one(func: &mut FunctionSsa) {
                     // written range. An exposed slot's address is a value,
                     // so the write can reach it.
                     table.retain(|e| e.addr == addr && !overlaps(e.disp, e.width, disp, w));
+                    indexed.clear();
                     slot_table.retain(|e| !exposed.contains(&e.off));
                     // A volatile store invalidates like any store but
                     // seeds no forward: a later load of the location
@@ -375,33 +430,9 @@ fn run_one(func: &mut FunctionSsa) {
                         .iter()
                         .find(|e| e.off == off && e.width == w)
                         .copied()
-                        .filter(|e| (i as u32).saturating_sub(e.src_idx) <= MAX_FORWARD_DISTANCE);
+                        .filter(|e| span(e.src_idx, i) <= MAX_FORWARD_DISTANCE);
                     if let Some(e) = hit {
-                        match e.load_kind {
-                            None => match kind {
-                                LoadKind::I64 => {
-                                    redirect[i] = Some(e.value);
-                                    any = true;
-                                }
-                                LoadKind::I8 | LoadKind::I16 | LoadKind::I32 => {
-                                    rewrites.push((
-                                        i,
-                                        Inst::Extend {
-                                            value: e.value,
-                                            kind,
-                                        },
-                                    ));
-                                }
-                                // Unsigned sub-width and floating: not
-                                // forwarded (see the module note).
-                                _ => {}
-                            },
-                            Some(k) if k == kind => {
-                                redirect[i] = Some(e.value);
-                                any = true;
-                            }
-                            Some(_) => {}
-                        }
+                        any |= take(&mut redirect, &mut rewrites, i, e.value, e.load_kind, kind);
                     }
                     if !slot_table.iter().any(|e| e.off == off && e.width == w) {
                         let value = redirect[i].unwrap_or(i as ValueId);
@@ -428,6 +459,7 @@ fn run_one(func: &mut FunctionSsa) {
                     // (the pointer can be a `LocalAddr` of this slot),
                     // so the pointer table clears as before.
                     table.clear();
+                    indexed.clear();
                     slot_table.retain(|e| e.off != off);
                     if (slots.contains(&off) || exposed.contains(&off))
                         && is_int_store(kind)
@@ -449,7 +481,6 @@ fn run_one(func: &mut FunctionSsa) {
                 // invalidates an entry here.
                 Inst::SegLoad { .. }
                 | Inst::SegStore { .. }
-                | Inst::LoadIndexed { .. }
                 | Inst::Imm(_)
                 | Inst::ImmData(_)
                 | Inst::ImmCode(_)
@@ -457,23 +488,86 @@ fn run_one(func: &mut FunctionSsa) {
                 | Inst::BlockAddr(_)
                 | Inst::LocalAddr(_)
                 | Inst::TlsAddr(_)
+                | Inst::LifetimeEnd(_)
                 | Inst::Binop { .. }
                 | Inst::BinopI { .. }
+                | Inst::Neg(_)
                 | Inst::Fneg(_)
                 | Inst::Fma { .. }
                 | Inst::MulAdd { .. }
                 | Inst::Extend { .. }
                 | Inst::Bswap { .. }
+                | Inst::BitCount { .. }
                 | Inst::Copy { .. }
                 | Inst::FpCast { .. }
                 | Inst::ParamRef { .. }
                 | Inst::Phi { .. } => {}
+                Inst::LoadIndexed {
+                    base,
+                    index,
+                    index_ext,
+                    scale,
+                    kind,
+                } => {
+                    let (base, index, ext, scale, kind) =
+                        (*base, *index, *index_ext, *scale, *kind);
+                    let w = load_width(kind);
+                    let same = |e: &IndexedEntry| {
+                        (e.base, e.index, e.index_ext, e.scale, e.width)
+                            == (base, index, ext, scale, w)
+                    };
+                    let hit = indexed
+                        .iter()
+                        .find(|e| same(e))
+                        .copied()
+                        .filter(|e| span(e.src_idx, i) <= MAX_FORWARD_DISTANCE);
+                    if let Some(e) = hit {
+                        any |= take(&mut redirect, &mut rewrites, i, e.value, e.load_kind, kind);
+                    }
+                    if !indexed.iter().any(same) {
+                        indexed.push(IndexedEntry {
+                            base,
+                            index,
+                            index_ext: ext,
+                            scale,
+                            width: w,
+                            value: redirect[i].unwrap_or(i as ValueId),
+                            src_idx: idx,
+                            load_kind: Some(kind),
+                        });
+                    }
+                }
+                // No other location is known distinct from the written
+                // one (see the module note).
+                Inst::StoreIndexed {
+                    base,
+                    index,
+                    index_ext,
+                    scale,
+                    value,
+                    kind,
+                } => {
+                    table.clear();
+                    indexed.clear();
+                    slot_table.retain(|e| !exposed.contains(&e.off));
+                    if is_int_store(*kind) {
+                        indexed.push(IndexedEntry {
+                            base: *base,
+                            index: *index,
+                            index_ext: *index_ext,
+                            scale: *scale,
+                            width: store_width(*kind),
+                            value: *value,
+                            src_idx: idx,
+                            load_kind: None,
+                        });
+                    }
+                }
                 // Anything that can write through a pointer the pass
-                // does not track clears the pointer table. Forwardable
+                // does not track clears the pointer tables. Forwardable
                 // slot entries survive (no address value); exposed slot
                 // entries die.
-                Inst::StoreIndexed { .. }
-                | Inst::Mcpy { .. }
+                Inst::Mcpy { .. }
                 | Inst::Mzero { .. }
                 | Inst::AtomicRmw { .. }
                 | Inst::AtomicCas { .. }
@@ -481,13 +575,14 @@ fn run_one(func: &mut FunctionSsa) {
                 | Inst::AtomicStore { .. }
                 | Inst::AllocaInit(_) => {
                     table.clear();
+                    indexed.clear();
                     slot_table.retain(|e| !exposed.contains(&e.off));
                 }
                 // A call cannot write a forwardable slot either, but
                 // forwarding across one would hold the value in a
                 // register (or a spill slot) over the call, which costs
-                // more than the frame reload it removes. Both tables
-                // clear.
+                // more than the frame reload it removes. Every table
+                // clears.
                 Inst::Call { .. }
                 | Inst::CallIndirect { .. }
                 | Inst::CallExt { .. }
@@ -496,6 +591,7 @@ fn run_one(func: &mut FunctionSsa) {
                 | Inst::InlineAsm { .. }
                 | Inst::TailExt(_) => {
                     table.clear();
+                    indexed.clear();
                     slot_table.clear();
                 }
             }
@@ -759,13 +855,16 @@ pub(crate) fn fold_const_loads(func: &mut FunctionSsa) -> bool {
                 | Inst::BlockAddr(_)
                 | Inst::LocalAddr(_)
                 | Inst::TlsAddr(_)
+                | Inst::LifetimeEnd(_)
                 | Inst::Binop { .. }
                 | Inst::BinopI { .. }
+                | Inst::Neg(_)
                 | Inst::Fneg(_)
                 | Inst::Fma { .. }
                 | Inst::MulAdd { .. }
                 | Inst::Extend { .. }
                 | Inst::Bswap { .. }
+                | Inst::BitCount { .. }
                 | Inst::Copy { .. }
                 | Inst::FpCast { .. }
                 | Inst::ParamRef { .. }
@@ -813,7 +912,7 @@ pub(crate) fn fold_const_loads(func: &mut FunctionSsa) -> bool {
 #[cfg(test)]
 mod tests {
     use super::run_one;
-    use crate::c5::ir::{Block, FunctionSsa, Inst, LoadKind, StoreKind, Terminator};
+    use crate::c5::ir::{Block, FunctionSsa, IndexExt, Inst, LoadKind, StoreKind, Terminator};
     use alloc::vec::Vec;
 
     fn fresh(insts: Vec<Inst>, term: Terminator, exit_acc: u32) -> FunctionSsa {
@@ -840,6 +939,7 @@ mod tests {
             inst_src: alloc::vec![(0, 0); n],
             f32_values: alloc::vec![false; n],
             cmp32: Vec::new(),
+            low_word_tests: Vec::new(),
             param_fp_mask: crate::c5::ir::FpMask::EMPTY,
             agg_descs: alloc::vec::Vec::new(),
             param_aggs: alloc::vec::Vec::new(),
@@ -1519,5 +1619,236 @@ mod tests {
             matches!(f.insts[4], Inst::Binop { lhs: 2, rhs: 2, .. }),
             "the second identical load should forward to the first",
         );
+    }
+
+    fn param(idx: u8) -> Inst {
+        Inst::ParamRef {
+            idx: idx.into(),
+            kind: LoadKind::I64,
+        }
+    }
+
+    fn load_indexed(base: u32, index: u32, scale: u8, kind: LoadKind) -> Inst {
+        Inst::LoadIndexed {
+            base,
+            index,
+            index_ext: IndexExt::None,
+            scale,
+            kind,
+        }
+    }
+
+    fn store_indexed(base: u32, index: u32, scale: u8, value: u32, kind: StoreKind) -> Inst {
+        Inst::StoreIndexed {
+            base,
+            index,
+            index_ext: IndexExt::None,
+            scale,
+            value,
+            kind,
+        }
+    }
+
+    /// v0 = base, v1 = index, v2 = a second index / pointer / value;
+    /// v3 = `first`, then `between`, then a final `LoadIndexed` of
+    /// `(v0, v1, scale 1, kind)`, which the function returns. Yields the
+    /// value returned and the final load's instruction after the pass.
+    fn indexed_reload(first: Inst, between: Vec<Inst>, kind: LoadKind) -> (u32, Inst) {
+        let mut insts = alloc::vec![param(0), param(1), param(2), first];
+        insts.extend(between);
+        let last = insts.len() as u32;
+        insts.push(load_indexed(0, 1, 1, kind));
+        let mut f = fresh(insts, Terminator::Return(last), last);
+        run_one(&mut f);
+        let Terminator::Return(v) = f.blocks[0].terminator else {
+            unreachable!()
+        };
+        (v, f.insts[last as usize].clone())
+    }
+
+    #[test]
+    fn indexed_load_to_load_forwards_on_the_same_key() {
+        let (v, _) = indexed_reload(
+            load_indexed(0, 1, 1, LoadKind::U8),
+            Vec::new(),
+            LoadKind::U8,
+        );
+        assert_eq!(
+            v, 3,
+            "a second load of (base, index, scale, kind) reuses the first"
+        );
+    }
+
+    /// A different index value, scale, base or load kind is another key.
+    #[test]
+    fn indexed_load_with_another_key_reads_memory() {
+        for first in [
+            load_indexed(0, 2, 1, LoadKind::U8),
+            load_indexed(2, 1, 1, LoadKind::U8),
+            load_indexed(0, 1, 1, LoadKind::I8),
+            load_indexed(0, 1, 4, LoadKind::U32),
+        ] {
+            let (v, last) = indexed_reload(first.clone(), Vec::new(), LoadKind::U8);
+            assert_eq!(v, 4, "{first:?} must not satisfy the load");
+            assert!(matches!(last, Inst::LoadIndexed { .. }));
+        }
+    }
+
+    #[test]
+    fn indexed_store_forwards_by_width_and_signedness() {
+        let (v, last) = indexed_reload(
+            store_indexed(0, 1, 1, 2, StoreKind::I8),
+            Vec::new(),
+            LoadKind::I8,
+        );
+        assert_eq!(v, 4);
+        assert!(
+            matches!(
+                last,
+                Inst::Extend {
+                    value: 2,
+                    kind: LoadKind::I8
+                }
+            ),
+            "a signed reload sign-extends the stored value: {last:?}"
+        );
+        let (v, last) = indexed_reload(
+            store_indexed(0, 1, 1, 2, StoreKind::I8),
+            Vec::new(),
+            LoadKind::U8,
+        );
+        assert_eq!(v, 4);
+        assert!(
+            matches!(last, Inst::LoadIndexed { .. }),
+            "an unsigned sub-width reload reads memory: {last:?}"
+        );
+    }
+
+    /// Every instruction that can write the element between the two
+    /// accesses sends the second one to memory. `v2` may equal `v1` at run
+    /// time, so a store through another index value is such a write.
+    #[test]
+    fn indexed_forward_stops_at_every_possible_write() {
+        let asm = alloc::boxed::Box::new(crate::c5::ir::AsmBlock {
+            template: Vec::new(),
+            operands: Vec::new(),
+            clobber_regs: 0,
+            clobber_fp_regs: 0,
+            clobber_memory: true,
+            volatile: true,
+        });
+        let plain_store = |volatile| Inst::Store {
+            addr: 2,
+            disp: 0,
+            value: 2,
+            kind: StoreKind::I8,
+            volatile,
+            align: 0,
+        };
+        let barriers: Vec<Inst> = alloc::vec![
+            store_indexed(0, 2, 1, 2, StoreKind::I8),
+            store_indexed(2, 1, 1, 2, StoreKind::I8),
+            plain_store(false),
+            plain_store(true),
+            Inst::StoreLocal {
+                off: 8,
+                value: 2,
+                kind: StoreKind::I64,
+                volatile: false,
+            },
+            Inst::Mcpy {
+                dst: 2,
+                src: 0,
+                size: 16,
+                align: 1,
+            },
+            Inst::Mzero {
+                dst: 2,
+                size: 16,
+                align: 1,
+            },
+            Inst::CallExt {
+                binding_idx: 0,
+                args: Vec::new(),
+                fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
+                fp_return: false,
+                arg_aggs: Vec::new(),
+                ret_agg: None,
+                ret_slot_local: 0,
+            },
+            Inst::InlineAsm {
+                asm,
+                args: Vec::new(),
+            },
+        ];
+        for barrier in barriers {
+            for first in [
+                load_indexed(0, 1, 1, LoadKind::I8),
+                store_indexed(0, 1, 1, 2, StoreKind::I8),
+            ] {
+                let (v, last) =
+                    indexed_reload(first.clone(), alloc::vec![barrier.clone()], LoadKind::I8);
+                assert_eq!(v, 5, "{first:?} forwarded across {barrier:?}");
+                assert!(
+                    matches!(last, Inst::LoadIndexed { .. }),
+                    "{first:?} forwarded across {barrier:?}: {last:?}"
+                );
+            }
+        }
+    }
+
+    /// A volatile load reads only: the entries around it stay valid.
+    #[test]
+    fn indexed_forward_passes_a_volatile_load() {
+        let volatile_load = Inst::Load {
+            addr: 2,
+            disp: 0,
+            kind: LoadKind::I8,
+            volatile: true,
+            align: 0,
+        };
+        let (v, _) = indexed_reload(
+            load_indexed(0, 1, 1, LoadKind::I8),
+            alloc::vec![volatile_load],
+            LoadKind::I8,
+        );
+        assert_eq!(v, 3);
+    }
+
+    /// An indexed store can write the location a pointer entry names.
+    #[test]
+    fn indexed_store_drops_pointer_entries() {
+        let mut f = fresh(
+            alloc::vec![
+                param(0),
+                param(1),
+                Inst::Load {
+                    addr: 0,
+                    disp: 0,
+                    kind: LoadKind::I8,
+                    volatile: false,
+                    align: 0,
+                },
+                store_indexed(1, 0, 1, 1, StoreKind::I8),
+                Inst::Load {
+                    addr: 0,
+                    disp: 0,
+                    kind: LoadKind::I8,
+                    volatile: false,
+                    align: 0,
+                },
+            ],
+            Terminator::Return(4),
+            4,
+        );
+        run_one(&mut f);
+        assert!(matches!(f.blocks[0].terminator, Terminator::Return(4)));
+    }
+
+    #[test]
+    fn indexed_forward_is_bounded_by_distance() {
+        let filler = alloc::vec![Inst::Imm(0); super::MAX_FORWARD_DISTANCE as usize + 1];
+        let (v, _) = indexed_reload(load_indexed(0, 1, 1, LoadKind::I8), filler, LoadKind::I8);
+        assert_ne!(v, 3, "a reuse past the bound reloads");
     }
 }

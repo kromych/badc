@@ -19,8 +19,7 @@ Disassembly of section .text:
                	sub	sp, sp, #0x10
                	mov	x0, #0xe3               // =227
                	sturb	w0, [x29, #-0x8]
-               	sub	x0, x29, #0x8
-               	ldrb	w0, [x0]
+               	ldurb	w0, [x29, #-0x8]
                	cmp	w0, #0xe3
                	b.eq	<addr>
                	mov	x0, #0x4                // =4

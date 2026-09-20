@@ -28,56 +28,47 @@ Disassembly of section .text:
 <__c5_lazy_stream>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%rbx, (%rsp)
-               	leaq	<rip>, %rbx
-               	leaq	(%rbx), %rax
-               	movq	(%rax), %rcx
-               	testq	%rcx, %rcx
+               	leaq	<rip>, %rax
+               	cmpq	$0x0, (%rax)
                	je	<addr>
                	movq	(%rax), %rax
-               	movq	(%rsp), %rbx
-               	leave
+               	popq	%rbp
                	retq
-               	xorq	%rdi, %rdi
+               	xorl	%edi, %edi
                	leaq	<rip>, %rsi
                	xorl	%eax, %eax
                	callq	<addr>
                	testq	%rax, %rax
                	je	<addr>
-               	leaq	(%rbx), %rcx
+               	leaq	<rip>, %rcx
                	movq	(%rax), %rax
                	movq	%rax, (%rcx)
-               	leaq	(%rbx), %rax
+               	leaq	<rip>, %rax
                	movq	(%rax), %rax
-               	movq	(%rsp), %rbx
-               	leave
+               	popq	%rbp
                	retq
 
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	xorq	%rax, %rax
-               	movl	%eax, -0x10(%rbp)
-               	movl	%eax, -0x8(%rbp)
+               	movl	$0x0, -0x10(%rbp)
+               	movl	$0x0, -0x8(%rbp)
                	cmpl	$0x1869f, %edi          # imm = 0x1869F
                	jle	<addr>
                	leaq	<rip>, %rdi
                	leaq	-0x10(%rbp), %rsi
                	movb	$0x0, %al
                	callq	<addr>
-               	xorq	%rdi, %rdi
+               	xorl	%edi, %edi
                	callq	<addr>
                	movq	%rax, %rdi
                	leaq	<rip>, %rsi
                	leaq	-0x8(%rbp), %rdx
                	movb	$0x0, %al
                	callq	<addr>
-               	movslq	%eax, %rax
                	movslq	-0x10(%rbp), %rax
                	movslq	-0x8(%rbp), %rcx
                	addq	%rcx, %rax
-               	movslq	%eax, %rax
                	leave
                	retq

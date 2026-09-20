@@ -15,12 +15,10 @@ Disassembly of section .text:
 
 <int32_to_x>:
                	add	x0, x0, #0x1
-               	sxtw	x0, w0
                	ret
 
 <uint32_to_x>:
                	add	x0, x0, #0x2
-               	sxtw	x0, w0
                	ret
 
 <main>:

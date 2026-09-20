@@ -32,6 +32,5 @@ Disassembly of section .text:
                	leaq	-0x200(%rbp), %rdi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movslq	%eax, %rax
                	leave
                	retq

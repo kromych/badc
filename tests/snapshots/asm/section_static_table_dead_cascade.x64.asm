@@ -27,12 +27,10 @@ Disassembly of section .text:
 
 <used_setup>:
                	leaq	(%rdi,%rdi,2), %rax
-               	movslq	%eax, %rax
                	retq
 
 <live_setup>:
                	leaq	0x7(%rdi), %rax
-               	movslq	%eax, %rax
                	retq
 
 <main>:
@@ -45,7 +43,6 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	popq	%rbp
                	retq
-               	xorq	%rax, %rax
-               	movq	%rax, %rcx
+               	xorl	%eax, %eax
                	popq	%rbp
                	retq

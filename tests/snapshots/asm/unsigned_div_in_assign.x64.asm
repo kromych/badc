@@ -26,36 +26,26 @@ Disassembly of section .text:
                	int3
 
 <outer>:
-               	movq	(%rdi), %rax
-               	movq	%rax, %rcx
-               	shrq	$0x3, %rcx
-               	movabsq	$0x5555555555555556, %rdx # imm = 0x5555555555555556
-               	movq	%rdx, %r10
-               	pushq	%rax
-               	pushq	%rdx
+               	movq	(%rdi), %rcx
                	movq	%rcx, %rax
-               	mulq	%r10
-               	movq	%rdx, %rcx
-               	popq	%rdx
-               	popq	%rax
-               	movabsq	$0x2492492492492493, %rdx # imm = 0x2492492492492493
-               	movq	%rdx, %r10
-               	pushq	%rax
-               	mulq	%r10
-               	popq	%rax
-               	movq	%rax, %rsi
-               	subq	%rdx, %rsi
-               	shrq	%rsi
-               	addq	%rsi, %rdx
-               	shrq	$0x2, %rdx
-               	imulq	$0x7, %rdx, %rdx
+               	shrq	$0x3, %rax
+               	movabsq	$0x5555555555555556, %rsi # imm = 0x5555555555555556
+               	mulq	%rsi
+               	movq	%rdx, %rsi
+               	movabsq	$0x2492492492492493, %rdi # imm = 0x2492492492492493
+               	movq	%rcx, %rax
+               	mulq	%rdi
+               	movq	%rcx, %rax
                	subq	%rdx, %rax
-               	imulq	$0x64, %rcx, %rcx
+               	shrq	%rax
+               	addq	%rdx, %rax
+               	shrq	$0x2, %rax
+               	imulq	$0x7, %rax, %rax
+               	subq	%rax, %rcx
+               	imulq	$0x64, %rsi, %rax
                	addq	%rcx, %rax
-               	movslq	%eax, %rax
                	retq
 
 <main>:
-               	xorq	%rax, %rax
-               	movq	%rax, %rcx
+               	xorl	%eax, %eax
                	retq

@@ -16,13 +16,11 @@ Disassembly of section .text:
 <sum>:
                	add	x0, x0, x1
                	add	x0, x0, x2
-               	sxtw	x0, w0
                	ret
 
 <main>:
-               	str	x19, [sp, #-0x20]!
-               	stp	x29, x30, [sp, #0x10]
-               	add	x29, sp, #0x10
+               	stp	x29, x30, [sp, #-0x10]!
+               	mov	x29, sp
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	mov	x1, #0x7                // =7
@@ -30,6 +28,5 @@ Disassembly of section .text:
                	mov	x3, #0x9                // =9
                	bl	<addr>
                	mov	x0, #0x0                // =0
-               	ldp	x29, x30, [sp, #0x10]
-               	ldr	x19, [sp], #0x20
+               	ldp	x29, x30, [sp], #0x10
                	ret

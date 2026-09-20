@@ -7,9 +7,9 @@ Disassembly of section .text:
                	endbr64
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	movq	%rbx, (%rsp)
-               	movq	%r12, 0x8(%rsp)
+               	subq	$0x10, %rsp
+               	pushq	%r12
+               	pushq	%rbx
                	movq	%rdi, %rbx
                	movq	%rsp, %rax
                	callq	*(%rip)                 # <addr>
@@ -23,14 +23,14 @@ Disassembly of section .text:
                	movq	%rbx, %rdi
                	callq	<addr>
 		R_X86_64_PLT32	raw_spin_trylock-0x4
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	jne	<addr>
                	movq	%rbx, %rdi
                	callq	<addr>
 		R_X86_64_PLT32	queued_spin_lock_slowpath-0x4
                	movq	%r12, %rax
-               	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
+               	popq	%rbx
+               	popq	%r12
                	leave
                	retq
 
@@ -38,20 +38,18 @@ Disassembly of section .text:
                	endbr64
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	movq	%rbx, (%rsp)
+               	subq	$0x18, %rsp
+               	pushq	%rbx
                	movq	%rsi, %rbx
                	callq	<addr>
 		R_X86_64_PLT32	raw_spin_unlock-0x4
-               	movq	%rbx, %rax
-               	andq	$0x200, %rax            # imm = 0x200
-               	testq	%rax, %rax
+               	testl	$0x200, %ebx            # imm = 0x200
                	je	<addr>
                	movq	%rsp, %rax
                	callq	*(%rip)                 # <addr>
 		R_X86_64_PC32	pv_ops+0xc
                	movq	%rax, -0x8(%rbp)
-               	movq	(%rsp), %rbx
+               	popq	%rbx
                	leave
                	retq
 

@@ -601,9 +601,13 @@ pub(crate) fn asm_operand_form(func: &FunctionSsa, arg: u32) -> alloc::string::S
                 | Inst::StoreIndexed { .. }
                 | Inst::SegStore { .. },
             ) => "a stored value",
-            Some(Inst::Binop { .. } | Inst::BinopI { .. } | Inst::Bswap { .. }) => {
-                "an arithmetic result"
-            }
+            Some(
+                Inst::Binop { .. }
+                | Inst::BinopI { .. }
+                | Inst::Neg(_)
+                | Inst::Bswap { .. }
+                | Inst::BitCount { .. },
+            ) => "an arithmetic result",
             Some(Inst::Fneg(_) | Inst::Fma { .. } | Inst::MulAdd { .. } | Inst::FpCast { .. }) => {
                 "a floating-point result"
             }
@@ -623,6 +627,7 @@ pub(crate) fn asm_operand_form(func: &FunctionSsa, arg: u32) -> alloc::string::S
             Some(Inst::Mzero { .. }) => "a block zero fill",
             Some(Inst::InlineAsm { .. }) => "an asm statement",
             Some(Inst::AllocaInit(_)) => "an alloca marker",
+            Some(Inst::LifetimeEnd(_)) => "an end-of-lifetime marker",
             Some(Inst::ParamRef { .. }) => "a function parameter",
             Some(Inst::Phi { incoming, .. }) => {
                 return alloc::format!("a join of {} control-flow paths", incoming.len());

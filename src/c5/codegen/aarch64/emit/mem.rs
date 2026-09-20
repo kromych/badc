@@ -309,7 +309,10 @@ pub(super) fn emit_tls_addr(
             });
             emit(code, enc_adrp(Reg(17), 0));
             emit(code, enc_ldr32_imm(Reg(17), Reg(17), 0));
-            emit(code, enc_ldr_reg_lsl3(Reg(16), Reg(16), Reg(17)));
+            emit(
+                code,
+                enc_ldr_reg_lsl3(Reg(16), Reg(16), Reg(17), IndexExt::None),
+            );
             let add_off = code.len();
             let imm = if tls_extern_sym.is_some() {
                 0
@@ -871,6 +874,72 @@ fn int_store_op(kind: StoreKind) -> Option<MemOp> {
     })
 }
 
+/// [`int_store_op`] at a floating kind's width: the general-register form
+/// that writes the same bytes.
+fn int_store_op_any_kind(kind: StoreKind) -> Option<MemOp> {
+    match kind {
+        StoreKind::F64 => Some(STR_X),
+        StoreKind::F32 => Some(STR_W),
+        k => int_store_op(k),
+    }
+}
+
+/// The general register a store issues from in place of its value's own
+/// place, with the form that writes the value's width.
+///
+/// Zero comes out of xzr / wzr: the allocator marks such a store and
+/// leaves the constant unmaterialized (`Allocation::imm_store`), so this
+/// is the only source it has. A floating store whose value already sits
+/// in the general bank issues from it too -- `str x` / `str w` writes the
+/// bit pattern that `fmov` into a V register and `str d` / `str s` would
+/// -- unless the store's own result is read, which wants the value in an
+/// FP register anyway (C99 6.5.16p3), or the value is a `double` the
+/// store narrows to `float`.
+fn int_store_source(
+    v: super::super::ir::ValueId,
+    kind: StoreKind,
+    value: u32,
+    dst: Place,
+    alloc: &Allocation,
+) -> Option<(MemOp, Reg)> {
+    let op = int_store_op_any_kind(kind)?;
+    if alloc.imm_store.get(v as usize).copied().unwrap_or(false) {
+        return Some((op, Reg(31)));
+    }
+    if dst != Place::None {
+        return None;
+    }
+    match (kind, place_of(alloc, value)) {
+        (StoreKind::F64, Place::IntReg(r)) => Some((op, Reg(r))),
+        (StoreKind::F32, Place::IntReg(r)) if alloc.is_f32(value) => Some((op, Reg(r))),
+        _ => None,
+    }
+}
+
+/// Store the low bytes of `rs` at `[rn + disp]` through `op`, in aligned
+/// pieces under `bound`.
+fn emit_int_store(
+    code: &mut Vec<u8>,
+    op: MemOp,
+    rs: Reg,
+    rn: Reg,
+    disp: i64,
+    bound: Option<u32>,
+    scratch: &ScratchPool,
+) {
+    let t = scratch_other(scratch, rn);
+    match bound {
+        Some(a) => {
+            let (base, off) = bound_base(code, rn, disp, op.size(), op.size(), a, t);
+            emit_narrow_store(code, rs, base, off, op.size(), a);
+        }
+        None => {
+            let (base, off) = mem_base(code, op, rn, disp, t);
+            emit(code, enc_mem(op, rs.0, base, off));
+        }
+    }
+}
+
 /// `Inst::Load`; `bound` is the address alignment proven under `-mstrict-align`.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_load(
@@ -1028,6 +1097,7 @@ pub(super) fn emit_load_local(
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_store_local(
     code: &mut Vec<u8>,
+    v: super::super::ir::ValueId,
     dst: Place,
     off: i64,
     value: u32,
@@ -1040,6 +1110,10 @@ pub(super) fn emit_store_local(
     let (base, disp) = local_slot_base(off, func, frame);
     let t = scratch.secondary;
     let value_place = place_of(alloc, value);
+    if let Some((op, rs)) = int_store_source(v, kind, value, dst, alloc) {
+        emit_mem(code, op, rs.0, base, disp, t);
+        return propagate_int(code, frame, dst, rs);
+    }
     if matches!(kind, StoreKind::F32) {
         return emit_store_local_f32(
             code,
@@ -1183,15 +1257,15 @@ fn propagate_fp(code: &mut Vec<u8>, frame: Frame, dst: Place, dn: u8) {
 }
 
 /// `Inst::LoadIndexed`: one scaled-indexed load
-/// (`ldr Xt, [Xn, Xm, lsl #N]`) when `scale` is the natural width of
-/// `kind`. TODO: the FP forms; the walker's indexed fold does not
-/// produce them.
+/// (`ldr Xt, [Xn, Rm, <ext> #N]`) when `scale` is the natural width of
+/// `kind`; `index` carries the value and how much of it is read. TODO:
+/// the FP forms; the walker's indexed fold does not produce them.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_load_indexed(
     code: &mut Vec<u8>,
     dst: Place,
     base: u32,
-    index: u32,
+    (index, ext): (u32, IndexExt),
     scale: u8,
     kind: LoadKind,
     alloc: &Allocation,
@@ -1232,13 +1306,13 @@ pub(super) fn emit_load_indexed(
         return fail("LoadIndexed: scale doesn't match access width");
     }
     let word = match kind {
-        LoadKind::I64 => super::encode::enc_ldr_reg_lsl3(rd, rn, rm),
-        LoadKind::I32 => super::encode::enc_ldrsw_reg_lsl2(rd, rn, rm),
-        LoadKind::U32 => super::encode::enc_ldr32_reg_lsl2(rd, rn, rm),
-        LoadKind::I16 => super::encode::enc_ldrsh_reg_lsl1(rd, rn, rm),
-        LoadKind::U16 => super::encode::enc_ldrh_reg_lsl1(rd, rn, rm),
-        LoadKind::I8 => super::encode::enc_ldrsb_reg(rd, rn, rm),
-        LoadKind::U8 => super::encode::enc_ldrb_reg(rd, rn, rm),
+        LoadKind::I64 => super::encode::enc_ldr_reg_lsl3(rd, rn, rm, ext),
+        LoadKind::I32 => super::encode::enc_ldrsw_reg_lsl2(rd, rn, rm, ext),
+        LoadKind::U32 => super::encode::enc_ldr32_reg_lsl2(rd, rn, rm, ext),
+        LoadKind::I16 => super::encode::enc_ldrsh_reg_lsl1(rd, rn, rm, ext),
+        LoadKind::U16 => super::encode::enc_ldrh_reg_lsl1(rd, rn, rm, ext),
+        LoadKind::I8 => super::encode::enc_ldrsb_reg(rd, rn, rm, ext),
+        LoadKind::U8 => super::encode::enc_ldrb_reg(rd, rn, rm, ext),
         LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128 => {
             unreachable!()
         }
@@ -1252,9 +1326,10 @@ pub(super) fn emit_load_indexed(
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_store_indexed(
     code: &mut Vec<u8>,
+    v: super::super::ir::ValueId,
     dst: Place,
     base: u32,
-    index: u32,
+    (index, ext): (u32, IndexExt),
     scale: u8,
     value: u32,
     kind: StoreKind,
@@ -1306,12 +1381,14 @@ pub(super) fn emit_store_indexed(
         let shift = scale.trailing_zeros();
         emit(
             code,
-            super::encode::enc_add_reg_lsl(scratch.primary, rn, rm, shift),
+            super::encode::enc_add_index(scratch.primary, rn, rm, ext, shift),
         );
         addr_reg = Some(scratch.primary);
         vscratch = scratch.secondary;
     }
-    let rv = if let StoreKind::I64 = kind
+    let rv = if let Some((_, rs)) = int_store_source(v, kind, value, dst, alloc) {
+        rs
+    } else if let StoreKind::I64 = kind
         && let Place::FpReg(dr) = value_place
     {
         emit(code, super::encode::enc_fmov_d_to_x(vscratch, dr));
@@ -1323,10 +1400,10 @@ pub(super) fn emit_store_indexed(
         }
     };
     let word = match (kind, addr_reg) {
-        (StoreKind::I64, None) => super::encode::enc_str_reg_lsl3(rv, rn, rm),
-        (StoreKind::I32, None) => super::encode::enc_str32_reg_lsl2(rv, rn, rm),
-        (StoreKind::I16, None) => super::encode::enc_strh_reg_lsl1(rv, rn, rm),
-        (StoreKind::I8, None) => super::encode::enc_strb_reg(rv, rn, rm),
+        (StoreKind::I64, None) => super::encode::enc_str_reg_lsl3(rv, rn, rm, ext),
+        (StoreKind::I32, None) => super::encode::enc_str32_reg_lsl2(rv, rn, rm, ext),
+        (StoreKind::I16, None) => super::encode::enc_strh_reg_lsl1(rv, rn, rm, ext),
+        (StoreKind::I8, None) => super::encode::enc_strb_reg(rv, rn, rm, ext),
         (StoreKind::I64, Some(a)) => super::encode::enc_str_imm(rv, a, 0),
         (StoreKind::I32, Some(a)) => super::encode::enc_str32_imm(rv, a, 0),
         (StoreKind::I16, Some(a)) => super::encode::enc_strh_imm(rv, a, 0),
@@ -1345,6 +1422,7 @@ pub(super) fn emit_store_indexed(
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_store(
     code: &mut Vec<u8>,
+    v: super::super::ir::ValueId,
     dst: Place,
     addr: u32,
     disp: i32,
@@ -1362,6 +1440,10 @@ pub(super) fn emit_store(
     let Some(rn) = materialize_int(code, place_of(alloc, addr), scratch.primary, frame) else {
         return fail("Store: addr not int reg / spill");
     };
+    if let Some((op, rs)) = int_store_source(v, kind, value, dst, alloc) {
+        emit_int_store(code, op, rs, rn, disp, bound, scratch);
+        return propagate_int(code, frame, dst, rs);
+    }
     let fp_value = |code: &mut Vec<u8>, single: bool| {
         reload_fp(
             code,
@@ -1548,16 +1630,23 @@ pub(super) fn materialize_int_shifted(
     frame: Frame,
     sp_shift: u32,
 ) -> Option<Reg> {
+    let reg = int_operand_reg(place, scratch)?;
+    if let Place::Spill(slot) = place {
+        // The shift compensates a temporary sp move; the fp-based
+        // dynamic-sp form is immune to it.
+        let shift = if frame.dynamic_sp { 0 } else { sp_shift };
+        let sp_off = spill_off(frame, slot) + shift;
+        emit_spill_ldr_x(code, frame, scratch, sp_off);
+    }
+    Some(reg)
+}
+
+/// The register [`materialize_int`] leaves `place` in: its own, or `scratch`
+/// for a spill.
+pub(super) fn int_operand_reg(place: Place, scratch: Reg) -> Option<Reg> {
     match place {
         Place::IntReg(r) => Some(Reg(r)),
-        Place::Spill(slot) => {
-            // The shift compensates a temporary sp move; the fp-based
-            // dynamic-sp form is immune to it.
-            let shift = if frame.dynamic_sp { 0 } else { sp_shift };
-            let sp_off = spill_off(frame, slot) + shift;
-            emit_spill_ldr_x(code, frame, scratch, sp_off);
-            Some(scratch)
-        }
+        Place::Spill(_) => Some(scratch),
         Place::FpReg(_) | Place::None => None,
     }
 }

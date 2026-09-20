@@ -29,17 +29,16 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	xorq	%rcx, %rcx
-               	movl	%ecx, -0x8(%rbp)
+               	movl	$0x0, -0x8(%rbp)
                	movq	%rdi, %rax
                	shlq	%rax
-               	leaq	-0x8(%rbp), %rdx
-               	leaq	(%rax), %rcx
-               	movl	%ecx, (%rdx)
-               	addq	%rax, %rcx
-               	movl	%ecx, (%rdx)
-               	addq	%rcx, %rax
-               	movl	%eax, (%rdx)
+               	leaq	-0x8(%rbp), %rcx
+               	movl	%eax, (%rcx)
+               	movq	%rax, %rdx
+               	addq	%rax, %rdx
+               	movl	%edx, (%rcx)
+               	addq	%rdx, %rax
+               	movl	%eax, (%rcx)
                	movslq	-0x8(%rbp), %rax
                	leave
                	retq
@@ -48,15 +47,11 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	xorq	%rcx, %rcx
-               	movl	%ecx, -0x8(%rbp)
+               	movl	$0x0, -0x8(%rbp)
                	leaq	-0x8(%rbp), %rax
-               	movl	$0xe, %ecx
-               	movl	%ecx, (%rax)
-               	movl	$0x1c, %ecx
-               	movl	%ecx, (%rax)
-               	movl	$0x2a, %ecx
-               	movl	%ecx, (%rax)
+               	movl	$0xe, (%rax)
+               	movl	$0x1c, (%rax)
+               	movl	$0x2a, (%rax)
                	movslq	-0x8(%rbp), %rax
                	leave
                	retq

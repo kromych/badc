@@ -293,7 +293,7 @@ demos/edk2/*
 # The firmware build tree the scripts create stays ignored.
 demos/edk2/.ovmf-build/
 
-# qemu -- QEMU 11.0.2 system emulator. `setup.py` fetches the trimmed source and
+# qemu -- QEMU 11.1.1 system emulator. `setup.py` fetches the trimmed source and
 # the captured meson build config from the vendor-deps mirror into `.cache/`.
 # Only the runner scripts, the badc build shims, and the README are committed.
 demos/qemu/*
@@ -309,3 +309,10 @@ demos/qemu/*
 demos/linux/.cache/
 demos/linux/.work/
 .badc-provenance
+
+# csmith fuzzing -- the paths the CI job passes `scripts/csmith_fuzz.py` for
+# the offending sources and its report. `platform.info`, which csmith drops
+# into whatever directory it runs in, is deliberately not listed: nothing may
+# run the generator from the tree, and an untracked file is how that shows.
+/fuzz-cases/
+/fuzz-report.json

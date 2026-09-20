@@ -27,7 +27,6 @@ Disassembly of section .text:
 
 <add>:
                	leaq	(%rdi,%rsi), %rax
-               	movslq	%eax, %rax
                	retq
 
 <pick>:
@@ -35,6 +34,5 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	xorq	%rax, %rax
-               	movq	%rax, %rcx
+               	xorl	%eax, %eax
                	retq

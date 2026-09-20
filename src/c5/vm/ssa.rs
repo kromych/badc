@@ -1249,6 +1249,10 @@ fn run_inst<H: Host>(
             frame.regs[v as usize] = round_if_f32(res, frame.func.f32_values.get(v as usize));
             return Ok(());
         }
+        Inst::Neg(src) => {
+            frame.regs[v as usize] = frame.regs[*src as usize].wrapping_neg();
+            return Ok(());
+        }
         Inst::Fneg(src) => {
             let raw = frame.regs[*src as usize];
             let neg = eval::eval_fneg(raw);
@@ -1257,6 +1261,10 @@ fn run_inst<H: Host>(
         }
         Inst::Bswap { value, width } => {
             frame.regs[v as usize] = eval::eval_bswap(frame.regs[*value as usize], *width);
+            return Ok(());
+        }
+        Inst::BitCount { op, value, width } => {
+            frame.regs[v as usize] = eval::eval_bit_count(*op, frame.regs[*value as usize], *width);
             return Ok(());
         }
         Inst::Fma {
@@ -1400,6 +1408,11 @@ fn run_inst<H: Host>(
         }
         Inst::InlineAsm { asm, args } => {
             run_inline_asm(mem, frame, asm, args)?;
+            return Ok(());
+        }
+        Inst::LifetimeEnd(_) => {
+            // A lifetime marker names no storage the interpreter
+            // reclaims: the frame cell stays until the call returns.
             return Ok(());
         }
         Inst::AllocaInit(_) => {
@@ -3190,9 +3203,9 @@ fn run_intrinsic(
             frame.regs[v as usize] = load_from_memory(mem, record + 8, LoadKind::I64)?;
             Ok(())
         }
-        // The integer bit-count builtins are lowered to a portable
-        // shift / mask sequence in the walker; they never reach the VM
-        // as an `Inst::Intrinsic`.
+        // The walker lowers the bit-count and byte-swap builtins to
+        // `Inst::BitCount` / `Inst::Bswap`; they never reach the VM as an
+        // `Inst::Intrinsic`.
         Intrinsic::Clz
         | Intrinsic::Ctz
         | Intrinsic::Popcount

@@ -27,14 +27,11 @@ Disassembly of section .text:
 
 <bump>:
                	leaq	<rip>, %rax
-               	movl	$0x2a, %ecx
-               	movl	%ecx, (%rax)
+               	movl	$0x2a, (%rax)
                	retq
 
 <main>:
-               	leaq	<rip>, %rax
-               	movl	$0x2a, %ecx
-               	movl	%ecx, (%rax)
-               	leaq	<rip>, %rax
-               	movslq	(%rax), %rax
+               	leaq	<rip>, %rcx
+               	movl	$0x2a, %eax
+               	movl	%eax, (%rcx)
                	retq

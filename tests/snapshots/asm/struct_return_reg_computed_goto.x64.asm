@@ -26,62 +26,35 @@ Disassembly of section .text:
                	int3
 
 <simple>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	xorq	%rax, %rax
-               	movl	%eax, -0x18(%rbp)
-               	leaq	<rip>, %rcx         # <addr>
-               	jmpq	*%rcx
-               	movl	$0x7, %ecx
-               	movl	%ecx, -0x18(%rbp)
-               	movq	%rax, -0x18(%rbp)
-               	leave
+               	leaq	<rip>, %rax         # <addr>
+               	jmpq	*%rax
+               	xorl	%eax, %eax
                	retq
 
 <ternary>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x30, %rsp
-               	movl	%edi, -0x30(%rbp)
-               	xorq	%rax, %rax
-               	movl	%eax, -0x18(%rbp)
-               	movslq	%edi, %rcx
-               	testq	%rcx, %rcx
-               	je	<addr>
-               	leaq	<rip>, %rcx        # <addr>
-               	movq	%rcx, -0x18(%rbp)
-               	jmp	<addr>
-               	leaq	<rip>, %rcx        # <addr>
-               	movq	%rcx, -0x18(%rbp)
-               	movq	-0x18(%rbp), %rcx
-               	jmpq	*%rcx
+               	leaq	<rip>, %rax         # <addr>
+               	jmpq	*%rax
                	movl	$0x1, %eax
-               	movl	%eax, -0x18(%rbp)
-               	leave
                	retq
-               	movl	$0x2, %ecx
-               	movl	%ecx, -0x18(%rbp)
-               	movq	%rax, -0x18(%rbp)
-               	leave
+               	xorl	%eax, %eax
                	retq
 
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	callq	<addr>
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	je	<addr>
                	movl	$0x2, %eax
                	popq	%rbp
                	retq
-               	xorq	%rdi, %rdi
+               	xorl	%edi, %edi
                	callq	<addr>
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	je	<addr>
                	movl	$0x3, %eax
                	popq	%rbp
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	popq	%rbp
                	retq

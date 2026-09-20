@@ -27,7 +27,6 @@ Disassembly of section .text:
 
 <cs_inner>:
                	leaq	0x5(%rdi), %rax
-               	movslq	%eax, %rax
                	retq
 
 <main>:
@@ -44,7 +43,6 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	addb	%al, (%rax)
-               	addb	%dl, 0x52(%rcx)
 
 <cs_wrapper>:
                	pushq	%rcx

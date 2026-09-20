@@ -14,19 +14,22 @@ Disassembly of section .text:
                	brk	#0x1
 
 <rounds>:
-               	mov	x8, x0
-               	mov	x7, x1
-               	add	x0, x8, #0x0
-               	ldr	x0, [x0]
-               	ldr	x1, [x8, #0x8]
-               	ldr	x2, [x8, #0x10]
-               	ldr	x3, [x8, #0x18]
-               	ldr	x4, [x8, #0x20]
-               	ldr	x5, [x8, #0x28]
-               	ldr	x6, [x8, #0x30]
-               	ldr	x8, [x8, #0x38]
-               	b	<addr>
-               	lsl	x7, x8, #1
+               	ldr	x2, [x0]
+               	ldr	x3, [x0, #0x8]
+               	ldr	x4, [x0, #0x10]
+               	ldr	x5, [x0, #0x18]
+               	ldr	x6, [x0, #0x20]
+               	ldr	x7, [x0, #0x28]
+               	ldr	x8, [x0, #0x30]
+               	ldr	x0, [x0, #0x38]
+               	sub	x9, x1, #0x1
+               	cmp	w1, #0x0
+               	b.le	<addr>
+               	lsl	x1, x0, #1
+               	add	x1, x8, x1
+               	lsl	x8, x8, #1
+               	add	x8, x7, x8
+               	lsl	x7, x7, #1
                	add	x7, x6, x7
                	lsl	x6, x6, #1
                	add	x6, x5, x6
@@ -37,24 +40,19 @@ Disassembly of section .text:
                	lsl	x3, x3, #1
                	add	x3, x2, x3
                	lsl	x2, x2, #1
-               	add	x2, x1, x2
-               	lsl	x1, x1, #1
-               	add	x1, x0, x1
-               	lsl	x0, x0, #1
-               	eor	x0, x8, x0
-               	mov	x8, x7
-               	mov	x7, x9
-               	sub	x9, x7, #0x1
-               	cmp	w7, #0x0
+               	eor	x2, x0, x2
+               	mov	x0, x1
+               	mov	x1, x9
+               	sub	x9, x1, #0x1
+               	cmp	w1, #0x0
                	b.gt	<addr>
-               	add	x0, x0, #0x0
-               	add	x0, x0, x1
-               	add	x0, x0, x2
-               	add	x0, x0, x3
-               	add	x0, x0, x4
-               	add	x0, x0, x5
-               	add	x0, x0, x6
-               	add	x0, x0, x8
+               	add	x1, x2, x3
+               	add	x1, x1, x4
+               	add	x1, x1, x5
+               	add	x1, x1, x6
+               	add	x1, x1, x7
+               	add	x1, x1, x8
+               	add	x0, x1, x0
                	ret
 
 <main>:
@@ -62,9 +60,8 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x40
                	sub	x0, x29, #0x40
-               	add	x1, x0, #0x0
-               	mov	x2, #0x7                // =7
-               	str	x2, [x1]
+               	mov	x1, #0x7                // =7
+               	str	x1, [x0]
                	mov	x1, #0x1118             // =4376
                	str	x1, [x0, #0x8]
                	mov	x1, #0x2229             // =8745

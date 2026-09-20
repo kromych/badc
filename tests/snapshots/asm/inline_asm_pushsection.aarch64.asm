@@ -17,14 +17,12 @@ Disassembly of section .text:
                	nop
                	nop
                	add	x0, x0, #0x1
-               	sxtw	x0, w0
                	ret
 
 <fixup_style>:
                	nop
                	nop
                	add	x0, x0, #0x1
-               	sxtw	x0, w0
                	ret
 
 <main>:

@@ -3,10 +3,11 @@
 //!
 //! The builder's value cache (`ssa/build.rs`) merges duplicates inside a
 //! block and resets at block boundaries, so a computation repeated in a
-//! dominated block survives to emit; the inliner's splices add more, and
-//! `dedup_imm` only canonicalises data / code / TLS address immediates.
+//! dominated block survives to emit; the inliner's splices add more.
 //! This pass numbers pure values over the dominator tree and redirects a
-//! duplicate's consumers to the dominating leader.
+//! duplicate's consumers to the dominating leader. A data, code or TLS
+//! address is keyed with the cross-unit symbol it binds to, if any: two
+//! such with one layout key and different symbols are different values.
 //!
 //! A merge trades a recomputation for a live range covering the region
 //! between leader and duplicate -- the blocks backward-reachable from
@@ -35,10 +36,12 @@
 
 use crate::c5::codegen::ssa::liveness::BlockLiveness;
 use crate::c5::codegen::ssa::reg_alloc::{
-    BankCapacity, compute_use_counts, produces_fp_result, produces_value,
+    BankCapacity, compute_use_counts, for_each_operand, operands_read, produces_fp_result,
+    produces_value,
 };
 use crate::c5::ir::{
-    BinOp, BlockId, FpCastKind, FunctionSsa, Inst, LoadKind, NO_VALUE, Terminator, ValueId,
+    BinOp, BitCountOp, BlockId, FpCastKind, FunctionSsa, Inst, LoadKind, NO_VALUE, Terminator,
+    ValueId,
 };
 use alloc::vec::Vec;
 use hashbrown::HashMap;
@@ -51,17 +54,23 @@ const GPR: usize = 0;
 const FP: usize = 1;
 
 /// Value-number key over leader-resolved operands: equal keys, equal
-/// values. Every variant carries the `f32_values` flag, which is part of
-/// a value's identity and which the operands do not fix -- a `(double)x`
-/// and a `(float)x` are one `FpCast` shape over one operand.
+/// values. Every variant but the addresses, which carry their bound
+/// symbol, carries the `f32_values` flag, which is part of a value's
+/// identity and which the operands do not fix -- a `(double)x` and a
+/// `(float)x` are one `FpCast` shape over one operand.
 #[derive(PartialEq, Eq, Hash, Clone, Copy)]
 enum Key {
     Imm(i64, bool),
     LocalAddr(i64, bool),
+    ImmData(i64, u32),
+    ImmCode(usize, u32),
+    TlsAddr(i64, u32),
     Binop(BinOp, ValueId, ValueId, bool),
     BinopI(BinOp, ValueId, i64, bool),
     Extend(ValueId, LoadKind, bool),
     Bswap(ValueId, u8, bool),
+    BitCount(BitCountOp, ValueId, u8, bool),
+    Neg(ValueId),
     Fneg(ValueId, bool),
     FpCast(FpCastKind, ValueId, bool),
     Fma(ValueId, ValueId, ValueId, bool, bool, bool),
@@ -132,7 +141,7 @@ fn remat_cost(inst: &Inst) -> u32 {
             BinOp::Fadd | BinOp::Fsub | BinOp::Fmul => 3,
             _ => 1,
         },
-        Inst::Fma { .. } | Inst::MulAdd { .. } | Inst::FpCast { .. } => 3,
+        Inst::Fma { .. } | Inst::MulAdd { .. } | Inst::FpCast { .. } | Inst::BitCount { .. } => 3,
         _ => 1,
     }
 }
@@ -140,7 +149,14 @@ fn remat_cost(inst: &Inst) -> u32 {
 /// Free registers a merge must leave, capped so a small bank still merges.
 fn headroom(inst: &Inst, capacity: u32) -> u32 {
     let want = match (inst, remat_cost(inst)) {
-        (Inst::Imm(_) | Inst::LocalAddr(_), _) => 4,
+        (
+            Inst::Imm(_)
+            | Inst::LocalAddr(_)
+            | Inst::ImmData(_)
+            | Inst::ImmCode(_)
+            | Inst::TlsAddr(_),
+            _,
+        ) => 4,
         (_, 0..=2) => 2,
         (_, 3..=7) => 1,
         _ => 0,
@@ -198,9 +214,11 @@ impl LiveCount<'_> {
     }
 }
 
-fn pressure(func: &FunctionSsa) -> Pressure {
+/// The allocator's liveness view: `reads` from `operands_read`, so an
+/// instruction the emitters skip keeps no operand live here either.
+fn pressure(func: &FunctionSsa, reads: &[bool]) -> Pressure {
     let n = func.insts.len();
-    let live_sets = BlockLiveness::compute(func);
+    let live_sets = BlockLiveness::compute_reading(func, reads);
     // Bank per value, `u8::MAX` for one the allocator never places.
     let bank: Vec<u8> = func
         .insts
@@ -227,11 +245,7 @@ fn pressure(func: &FunctionSsa) -> Pressure {
     for (b, blk) in func.blocks.iter().enumerate() {
         lc.reset();
         live_sets.for_each_live_out(b as BlockId, |v| lc.add(v));
-        if blk.exit_acc != NO_VALUE {
-            lc.add(blk.exit_acc);
-        }
-        let mut term = blk.terminator;
-        term.for_each_operand_mut(|v| lc.add(*v));
+        blk.terminator.for_each_operand(|v| lc.add(v));
         for idx in blk.inst_range.clone().rev() {
             let i = idx as usize;
             if i >= n {
@@ -250,8 +264,8 @@ fn pressure(func: &FunctionSsa) -> Pressure {
             }
             lc.remove(idx);
             // Phi operands are edge uses, in the predecessors' live-out.
-            if !matches!(func.insts[i], Inst::Phi { .. }) {
-                func.insts[i].for_each_operand(|op| lc.add(op));
+            if !matches!(func.insts[i], Inst::Phi { .. }) && reads[i] {
+                for_each_operand(&func.insts[i], |op| lc.add(op));
             }
         }
     }
@@ -542,11 +556,16 @@ impl Gate<'_> {
     }
 }
 
-fn key_of(inst: &Inst, vn: &[ValueId], is_f32: bool) -> Option<Key> {
+/// `sym` is the cross-unit symbol an address value binds to, `u32::MAX`
+/// for none.
+fn key_of(inst: &Inst, vn: &[ValueId], is_f32: bool, sym: u32) -> Option<Key> {
     let r = |v: ValueId| resolve_vn(vn, v);
     match inst {
         Inst::Imm(k) => Some(Key::Imm(*k, is_f32)),
         Inst::LocalAddr(off) => Some(Key::LocalAddr(*off, is_f32)),
+        Inst::ImmData(k) => Some(Key::ImmData(*k, sym)),
+        Inst::ImmCode(t) => Some(Key::ImmCode(*t, sym)),
+        Inst::TlsAddr(off) => Some(Key::TlsAddr(*off, sym)),
         Inst::Binop { op, lhs, rhs } => {
             let (mut a, mut b) = (r(*lhs), r(*rhs));
             if commutative_int(*op) && a > b {
@@ -557,6 +576,8 @@ fn key_of(inst: &Inst, vn: &[ValueId], is_f32: bool) -> Option<Key> {
         Inst::BinopI { op, lhs, rhs_imm } => Some(Key::BinopI(*op, r(*lhs), *rhs_imm, is_f32)),
         Inst::Extend { value, kind } => Some(Key::Extend(r(*value), *kind, is_f32)),
         Inst::Bswap { value, width } => Some(Key::Bswap(r(*value), *width, is_f32)),
+        Inst::BitCount { op, value, width } => Some(Key::BitCount(*op, r(*value), *width, is_f32)),
+        Inst::Neg(v) => Some(Key::Neg(r(*v))),
         Inst::Fneg(v) => Some(Key::Fneg(r(*v), is_f32)),
         Inst::FpCast { kind, value } => Some(Key::FpCast(*kind, r(*value), is_f32)),
         Inst::Fma {
@@ -631,7 +652,7 @@ fn run_one(func: &mut FunctionSsa, caps: BankCapacity) {
     let depth = loop_depth(&preds, &tin, &tout);
     let use_counts = compute_use_counts(func);
     let pinned = branch_pinned(func, &use_counts);
-    let p = pressure(func);
+    let p = pressure(func, &operands_read(func, &use_counts));
     let mut gate = Gate {
         preds: &preds,
         p: &p,
@@ -656,6 +677,13 @@ fn run_one(func: &mut FunctionSsa, caps: BankCapacity) {
         }
     }
 
+    let bound: HashMap<ValueId, u32> = func
+        .extern_imm_data_refs
+        .iter()
+        .chain(&func.extern_imm_code_refs)
+        .chain(&func.extern_tls_refs)
+        .copied()
+        .collect();
     let mut redirect: Vec<Option<ValueId>> = alloc::vec![None; n];
     let mut vn: Vec<ValueId> = (0..n as ValueId).collect();
     let mut map: HashMap<Key, ValueId> = HashMap::new();
@@ -682,7 +710,8 @@ fn run_one(func: &mut FunctionSsa, caps: BankCapacity) {
                         continue;
                     }
                     let is_f32 = func.f32_values.get(i).copied().unwrap_or(false);
-                    let Some(key) = key_of(&func.insts[i], &vn, is_f32) else {
+                    let sym = bound.get(&idx).copied().unwrap_or(u32::MAX);
+                    let Some(key) = key_of(&func.insts[i], &vn, is_f32, sym) else {
                         continue;
                     };
                     if let Some(&leader) = map.get(&key)
@@ -763,6 +792,7 @@ mod tests {
             inst_src: alloc::vec![(0, 0); insts.len()],
             f32_values: alloc::vec![false; insts.len()],
             cmp32: alloc::vec![false; insts.len()],
+            low_word_tests: Vec::new(),
             param_fp_mask: crate::c5::ir::FpMask::EMPTY,
             agg_descs: Vec::new(),
             param_aggs: Vec::new(),
@@ -872,6 +902,37 @@ mod tests {
             3,
             "a merge that overruns the bank must not happen"
         );
+    }
+
+    /// `dominated_dup` with a constant that only an unread sum in b1 reads:
+    /// no emitter lowers the sum, so the constant holds no register across
+    /// the region, and the merge is taken at the bank size that takes the
+    /// plain one.
+    #[test]
+    fn a_read_by_a_skipped_instruction_raises_no_pressure() {
+        let plain_merges = |total| {
+            let mut f = dominated_dup();
+            run_one(&mut f, caps(total, total));
+            return_val(&f, 1) == 2
+        };
+        assert!(!plain_merges(4) && plain_merges(5));
+        let mut f = fresh(
+            alloc::vec![
+                Inst::Imm(3),
+                Inst::Imm(5),
+                add(0, 1),
+                Inst::Imm(9),
+                add(0, 1),
+                add(3, 3),
+            ],
+            alloc::vec![
+                blk(0..4, bz(2, 2, 1), 2),
+                blk(4..6, Terminator::Return(4), 4),
+                blk(6..6, Terminator::Return(0), 0),
+            ],
+        );
+        run_one(&mut f, caps(5, 5));
+        assert_eq!(return_val(&f, 1), 2);
     }
 
     /// b1 and b2 are siblings, so b1's computation is not available on
@@ -1072,6 +1133,47 @@ mod tests {
             panic!("expected a Binop at v8");
         };
         assert_eq!((lhs, rhs), (3, 4), "a wider bank admits both");
+    }
+
+    /// b0: v0 = &data+0, branch;  b1: v1 = &data+0, return v1. The key
+    /// holds the cross-unit symbol each address binds to.
+    #[test]
+    fn address_values_merge_only_under_one_symbol() {
+        let build = |refs: Vec<(u32, u32)>| {
+            let mut f = fresh(
+                alloc::vec![Inst::ImmData(0), Inst::ImmData(0)],
+                alloc::vec![
+                    blk(0..1, bz(0, 2, 1), 0),
+                    blk(1..2, Terminator::Return(1), 1),
+                    blk(2..2, Terminator::Return(0), 0),
+                ],
+            );
+            f.extern_imm_data_refs = refs;
+            run_one(&mut f, caps(16, 8));
+            return_val(&f, 1)
+        };
+        assert_eq!(
+            build(alloc::vec![(0, 1), (1, 1)]),
+            0,
+            "one symbol, one value"
+        );
+        assert_eq!(
+            build(alloc::vec![(0, 1), (1, 2)]),
+            1,
+            "two symbols, two values"
+        );
+    }
+
+    /// An address rematerialises in one or two instructions, so a merge
+    /// that holds it across a straight-line call is declined like any
+    /// other.
+    #[test]
+    fn address_across_a_call_outside_a_loop_is_rematerialised() {
+        let mut f = dup_across_call();
+        f.insts[2] = Inst::ImmData(8);
+        f.insts[4] = Inst::ImmData(8);
+        run_one(&mut f, caps(32, 24));
+        assert_eq!(return_val(&f, 1), 4, "a straight-line call is not repaid");
     }
 
     /// Same input, same output: the dominator-tree DFS and the tape-order

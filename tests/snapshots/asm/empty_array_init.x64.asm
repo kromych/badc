@@ -27,18 +27,14 @@ Disassembly of section .text:
 
 <main>:
                	leaq	<rip>, %rax
-               	addq	$0x0, %rax
-               	movslq	(%rax), %rax
-               	addq	$0x0, %rax
-               	leaq	<rip>, %rcx
-               	movslq	0x4(%rcx), %rcx
-               	addq	%rcx, %rax
-               	leaq	<rip>, %rcx
-               	movslq	0x8(%rcx), %rcx
+               	movslq	(%rax), %rcx
+               	movslq	0x4(%rax), %rdx
+               	addq	%rdx, %rcx
+               	movslq	0x8(%rax), %rax
                	addq	%rcx, %rax
                	cmpl	$0x3c, %eax
                	je	<addr>
                	movl	$0x6, %eax
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	retq

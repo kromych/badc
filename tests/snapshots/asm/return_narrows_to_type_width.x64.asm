@@ -30,7 +30,7 @@ Disassembly of section .text:
                	retq
 
 <sret>:
-               	movabsq	$-0x80000000, %rax      # imm = 0x80000000
+               	movq	$-0x80000000, %rax      # imm = 0x80000000
                	retq
 
 <hret>:
@@ -43,25 +43,26 @@ Disassembly of section .text:
                	movl	$0x7, %edi
                	callq	<addr>
                	movl	$0x92000007, %r11d      # imm = 0x92000007
-               	cmpq	%r11, %rax
+               	cmpl	%r11d, %eax
                	je	<addr>
                	movl	$0x1, %eax
                	popq	%rbp
                	retq
                	movl	$0x80000000, %edi       # imm = 0x80000000
                	callq	<addr>
-               	cmpq	$-0x80000000, %rax      # imm = 0x80000000
+               	cmpl	$0x80000000, %eax       # imm = 0x80000000
                	je	<addr>
                	movl	$0x2, %eax
                	popq	%rbp
                	retq
                	movl	$0x1ffff, %edi          # imm = 0x1FFFF
                	callq	<addr>
-               	cmpq	$0xffff, %rax           # imm = 0xFFFF
+               	andq	$0xffff, %rax           # imm = 0xFFFF
+               	cmpl	$0xffff, %eax           # imm = 0xFFFF
                	je	<addr>
                	movl	$0x3, %eax
                	popq	%rbp
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	popq	%rbp
                	retq

@@ -45,18 +45,16 @@ Disassembly of section .text:
                	movq	-0x10(%rbp), %rax
                	movq	%rax, %rcx
                	shrq	$0x20, %rcx
-               	xorq	%rax, %rax
-               	testq	%rcx, %rcx
+               	xorl	%eax, %eax
+               	testl	%ecx, %ecx
                	jne	<addr>
                	movq	-0x8(%rbp), %rax
                	shrq	$0x20, %rax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	sete	%al
                	movzbq	%al, %rax
-               	movslq	%eax, %rax
                	leave
                	retq
-               	jmp	<addr>
 
 <tick_int_halves>:
                	pushq	%rbp
@@ -85,7 +83,6 @@ Disassembly of section .text:
                	cmpq	$0x99, %rax
                	sete	%al
                	movzbq	%al, %rax
-               	movslq	%eax, %rax
                	leave
                	retq
 
@@ -94,48 +91,42 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	leaq	-0x8(%rbp), %rax
-               	movl	$0xbeef, %ecx           # imm = 0xBEEF
-               	movw	%cx, (%rax)
-               	xorq	%rcx, %rcx
+               	movw	$0xbeef, (%rax)         # imm = 0xBEEF
+               	xorl	%ecx, %ecx
                	movw	%cx, 0x2(%rax)
-               	movl	$0xfeed, %edx           # imm = 0xFEED
-               	movw	%dx, 0x4(%rax)
+               	movw	$0xfeed, 0x4(%rax)      # imm = 0xFEED
                	leaq	0x2(%rax), %rdx
                	movl	$0x11223344, %eax       # imm = 0x11223344
                	movw	%ax, (%rdx)
-               	leaq	-0x8(%rbp), %rax
-               	movzwq	(%rax), %rdx
-               	xorq	$0xbeef, %rdx           # imm = 0xBEEF
-               	testq	%rdx, %rdx
+               	leaq	-0x8(%rbp), %rdx
+               	movzwq	(%rdx), %rax
+               	xorq	$0xbeef, %rax           # imm = 0xBEEF
+               	testl	%eax, %eax
                	jne	<addr>
-               	movzwq	0x2(%rax), %rcx
-               	xorq	$0x3344, %rcx           # imm = 0x3344
-               	testl	%ecx, %ecx
+               	movzwq	0x2(%rdx), %rax
+               	xorq	$0x3344, %rax           # imm = 0x3344
+               	testl	%eax, %eax
                	sete	%cl
                	movzbq	%cl, %rcx
-               	xorq	%rdx, %rdx
+               	xorl	%eax, %eax
                	testq	%rcx, %rcx
                	je	<addr>
-               	movzwq	0x4(%rax), %rax
+               	movzwq	0x4(%rdx), %rax
                	xorq	$0xfeed, %rax           # imm = 0xFEED
                	testl	%eax, %eax
-               	sete	%dl
-               	movzbq	%dl, %rdx
-               	movslq	%edx, %rax
+               	sete	%al
+               	movzbq	%al, %rax
                	leave
                	retq
-               	jmp	<addr>
-               	jmp	<addr>
 
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	xorq	%rax, %rax
-               	movq	%rax, -0x8(%rbp)
+               	movq	$0x0, -0x8(%rbp)
                	leaq	-0x8(%rbp), %rdi
                	callq	<addr>
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	jne	<addr>
                	movl	$0x1, %eax
                	leave
@@ -145,29 +136,26 @@ Disassembly of section .text:
                	shrq	$0x30, %rcx
                	movq	%rax, %rdx
                	shrq	$0x30, %rdx
-               	cmpq	%rdx, %rcx
+               	cmpl	%edx, %ecx
                	jne	<addr>
                	movq	-0x8(%rbp), %rcx
                	cmpq	%rcx, %rax
-               	setb	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	je	<addr>
+               	jae	<addr>
                	movl	$0x2, %eax
                	leave
                	retq
                	callq	<addr>
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	jne	<addr>
                	movl	$0x3, %eax
                	leave
                	retq
                	callq	<addr>
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	jne	<addr>
                	movl	$0x4, %eax
                	leave
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	leave
                	retq

@@ -18,14 +18,11 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x30
                	mov	x0, #0x0                // =0
-               	mov	x5, #0x3                // =3
-               	b	<addr>
-               	sub	x3, x29, #0x30
-               	sxtw	x1, w0
-               	mul	x2, x1, x5
-               	mov	x4, x2
-               	strh	w4, [x3, x1, lsl #1]
-               	add	x0, x1, #0x1
+               	mov	x1, #0x3                // =3
+               	sub	x2, x29, #0x30
+               	mul	x3, x0, x1
+               	strh	w3, [x2, x0, lsl #1]
+               	add	x0, x0, #0x1
                	cmp	w0, #0x18
                	b.lt	<addr>
                	sub	x0, x29, #0x30

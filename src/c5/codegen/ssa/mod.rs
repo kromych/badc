@@ -2,6 +2,7 @@
 //! the shared emit substrate. The per-target instruction selection lives in
 //! the sibling x86_64/ and aarch64/ modules.
 
+pub(crate) mod block_plan;
 pub(crate) mod build;
 pub(crate) mod cfi;
 #[cfg(feature = "std")]

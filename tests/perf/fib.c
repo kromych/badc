@@ -3,6 +3,13 @@
 // add-and-compare hot path. Runtime grows ~exponentially in N; pick
 // N so wall-clock is in the 50-500 ms range on the slowest
 // compiler under test.
+//
+// The shape is chosen for the code generator, not for the result. An
+// implementation that had to produce Fibonacci numbers would iterate,
+// or use fast doubling, in O(n) additions: this one makes 126 491 971
+// calls for fib(38), and those calls are the measurement. It would
+// also bound its domain, since fib(93) overflows the `long` this
+// returns.
 
 #include <stdio.h>
 #include <time.h>

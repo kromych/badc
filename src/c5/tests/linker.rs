@@ -5405,8 +5405,8 @@ fn cpuid_xgetbv_asm_emit_for_x86_64() {
     // The GCC `cpuid` / `xgetbv` inline-asm forms (a common CPU feature
     // probe) lower to dedicated intrinsics on x86_64: the `cpuid` (0F A2)
     // and `xgetbv` (0F 01 D0) opcodes appear, and rbx, which `cpuid`
-    // writes and System V makes callee-saved, rides the prologue's save
-    // area (`mov [rsp + disp], rbx`).
+    // writes and System V makes callee-saved, is pushed by the prologue
+    // and popped ahead of the frame teardown.
     use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
     let program = Compiler::new(
         "static void cpuid(unsigned f, unsigned s, unsigned o[4]) {\n\
@@ -5436,11 +5436,20 @@ fn cpuid_xgetbv_asm_emit_for_x86_64() {
         bytes.windows(3).any(|w| w == [0x0F, 0x01, 0xD0]),
         "xgetbv opcode (0F 01 D0) must be emitted"
     );
+    let code = super::codegen::function_bytes(&bytes, "cpuid");
+    let n = code.len() as u32;
+    let uw = crate::c5::codegen::decode_x86_64_prologue_unwind(&code, 0, n, n);
+    assert!(!uw.leaf, "{code:02x?}");
+    // `push rbx` directly after the frame allocation.
+    let saves_at = uw.frame_alloc_end.max(uw.set_fpreg_end) as usize;
+    assert_eq!(
+        code[saves_at], 0x53,
+        "rbx (callee-saved, clobbered by cpuid) must be pushed: {code:02x?}"
+    );
+    // `pop rbx; leave; ret`.
     assert!(
-        bytes.windows(4).any(|w| w == [0x48, 0x89, 0x1C, 0x24]
-            || w[..3] == [0x48, 0x89, 0x5C] && w[3] == 0x24
-            || w[..3] == [0x48, 0x89, 0x9C] && w[3] == 0x24),
-        "rbx (callee-saved, clobbered by cpuid) must be saved in the frame"
+        code.ends_with(&[0x5B, 0xC9, 0xC3]),
+        "rbx must be popped ahead of the teardown: {code:02x?}"
     );
 }
 

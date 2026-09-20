@@ -27,17 +27,17 @@ Disassembly of section .text:
 
 <main>:
                	leaq	<rip>, %rax
-               	movsd	(%rax,%riz), %xmm0
-               	movsd	(%rax,%riz), %xmm1
+               	movsd	(%rax), %xmm0
+               	movsd	(%rax), %xmm1
                	divsd	%xmm1, %xmm0
                	leaq	<rip>, %rax
-               	movsd	(%rax,%riz), %xmm1
+               	movsd	(%rax), %xmm1
                	leaq	<rip>, %rax
-               	movss	(%rax,%riz), %xmm2
-               	movss	(%rax,%riz), %xmm3
+               	movss	(%rax), %xmm2
+               	movss	(%rax), %xmm3
                	divss	%xmm3, %xmm2
                	leaq	<rip>, %rax
-               	movss	(%rax,%riz), %xmm3
+               	movss	(%rax), %xmm3
                	ucomisd	%xmm0, %xmm1
                	jbe	<addr>
                	movl	$0x1, %eax
@@ -140,7 +140,7 @@ Disassembly of section .text:
                	movq	%rax, %xmm15
                	ucomiss	%xmm3, %xmm15
                	jbe	<addr>
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	retq
                	movl	$0x1a, %eax
                	retq

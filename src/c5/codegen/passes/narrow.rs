@@ -14,7 +14,7 @@
 //! source, erasing the evidence. Every drop rule preserves the low word,
 //! so a marked comparison stays correct across them.
 
-use crate::c5::ir::{BinOp, FunctionSsa, Inst, LoadKind, ValueId};
+use crate::c5::ir::{BinOp, BlockId, FunctionSsa, Inst, LoadKind, ValueId};
 use alloc::vec::Vec;
 
 /// What a value's register holds above bit 31: `sign` when those bits
@@ -83,6 +83,7 @@ fn ext32(func: &FunctionSsa, v: ValueId) -> Ext32 {
             4 => ZERO,
             _ => NONE,
         },
+        Inst::BitCount { .. } => BOTH,
         Inst::Binop { op, .. } if compare_sign(*op).is_some() => BOTH,
         Inst::BinopI { op, rhs_imm, .. } => match op {
             _ if compare_sign(*op).is_some() => BOTH,
@@ -142,17 +143,67 @@ fn imm_ext32(imm: i64) -> Ext32 {
 /// that follow rewrite only non-comparison slots, `split_ranges` remaps
 /// it with the values, and a table shorter than `insts` reads as
 /// all-false -- the 64-bit form.
+///
+/// An operand whose shape states no extension is judged by its range
+/// where the comparison reads it: a value inside `int` holds its own
+/// sign extension, one inside `[0, 2^32)` its zero extension. That keeps
+/// a comparison 32-bit over an operand whose extend an earlier run of
+/// the range fold already removed.
 pub(crate) fn mark_compares(func: &mut FunctionSsa) {
     let read: &FunctionSsa = func;
+    // Ranges and the block of each instruction, built on first need.
+    let mut ranges: Option<(super::value_range::Ranges, Vec<BlockId>)> = None;
+    let mut by_range = |at: usize, v: ValueId| {
+        let (ranges, block_of) = ranges.get_or_insert_with(|| {
+            let mut block_of = alloc::vec![BlockId::MAX; read.insts.len()];
+            for (b, block) in read.blocks.iter().enumerate() {
+                for idx in block.inst_range.clone() {
+                    if let Some(slot) = block_of.get_mut(idx as usize) {
+                        *slot = b as BlockId;
+                    }
+                }
+            }
+            (super::value_range::Ranges::compute(read, &[]), block_of)
+        });
+        match block_of[at] {
+            BlockId::MAX => NONE,
+            b => {
+                let r = ranges.at(b, v);
+                Ext32 {
+                    sign: r.fits(LoadKind::I32),
+                    zero: r.high_word_clear(),
+                }
+            }
+        }
+    };
+    let mut side = |at: usize, v: ValueId| {
+        let e = ext32(read, v);
+        if e.sign || e.zero { e } else { by_range(at, v) }
+    };
     let out: Vec<bool> = read
         .insts
         .iter()
-        .map(|inst| match inst {
-            Inst::Binop { op, lhs, rhs } => narrow_ok(*op, ext32(read, *lhs), ext32(read, *rhs)),
-            Inst::BinopI { op, lhs, rhs_imm } => {
-                narrow_ok(*op, ext32(read, *lhs), imm_ext32(*rhs_imm))
+        .enumerate()
+        .map(|(i, inst)| {
+            let (op, lhs, rhs) = match inst {
+                Inst::Binop { op, lhs, rhs } => (*op, *lhs, Ok(*rhs)),
+                Inst::BinopI { op, lhs, rhs_imm } => (*op, *lhs, Err(*rhs_imm)),
+                _ => return false,
+            };
+            if compare_sign(op).is_none() {
+                return false;
             }
-            _ => false,
+            // A mark from an earlier run stays: operands may have lost
+            // their extends on the strength of it.
+            if is_cmp32(&read.cmp32, i as ValueId) {
+                return true;
+            }
+            let a = side(i, lhs);
+            let b = match rhs {
+                Ok(v) => side(i, v),
+                Err(imm) => imm_ext32(imm),
+            };
+            narrow_ok(op, a, b)
         })
         .collect();
     func.cmp32 = out;

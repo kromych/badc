@@ -949,12 +949,11 @@ int main(void) { return (read_shared() == 0x12345678) ? 0 : 1; }\n";
 }
 
 /// Two distinct extern data symbols both lower to `Inst::ImmData(0)`.
-/// The cross-block ImmData dedup must not coalesce them: each binds to a
-/// different cross-TU symbol. `sym_a` is referenced in the entry block
-/// (the dedup canonical for the key) and `sym_b` only in a later block;
-/// coalescing makes the later reference read `sym_a`.
+/// The value numbering must not merge them: each binds to a different
+/// cross-TU symbol. `sym_a` is read in the entry block and `sym_b` only
+/// in a dominated one; a merge makes the later reference read `sym_a`.
 #[test]
-fn cross_unit_dedup_imm_distinct_symbols() {
+fn cross_unit_address_values_keep_their_symbols() {
     use crate::{CompileOptions, Program};
 
     const UNIT_A: &str = "long sym_a = 100;\nlong sym_b = 7;\n";
@@ -981,7 +980,7 @@ int main(void) { return (combine(1) == 107) ? 0 : 1; }\n";
     )
     .unwrap_or_else(|e| panic!("link: {e}"));
 
-    let path = super::unique_temp_path("badc-elf64-dedup-imm", "cross_unit_dedup_imm", ".bin");
+    let path = super::unique_temp_path("badc-elf64-addr-vn", "cross_unit_addr_vn", ".bin");
     {
         let mut f = std::fs::File::create(&path).expect("create temp file");
         f.write_all(&bytes).expect("write temp file");
@@ -993,7 +992,7 @@ int main(void) { return (combine(1) == 107) ? 0 : 1; }\n";
     assert_eq!(
         output.status.code(),
         Some(0),
-        "distinct extern data symbols were coalesced by the ImmData dedup under -O"
+        "distinct extern data symbols were merged under -O"
     );
 }
 
@@ -1047,13 +1046,19 @@ fn variadic_prologue_no_fp_regs_omits_xmm_save() {
     };
     let contains = |hay: &[u8], needle: &[u8]| hay.windows(needle.len()).any(|w| w == needle);
 
-    // `movups %xmm0, disp32(%rbp,%riz)`, the first save-area slot: a
-    // longer needle than the bare opcode, which two bytes would match
-    // anywhere in the object.
-    const XMM_SPILL: [u8; 4] = [0x0f, 0x11, 0x84, 0x25];
+    // `movups %xmm0, disp(%rbp)`, the first save-area slot, at either
+    // displacement width and with no `movsd` / `movss` prefix: a longer
+    // needle than the bare opcode, which two bytes would match anywhere.
+    let xmm_spill = |obj: &[u8]| {
+        obj.windows(4).any(|w| {
+            !matches!(w[0], 0xf2 | 0xf3 | 0x66)
+                && w[1..3] == [0x0f, 0x11]
+                && matches!(w[3], 0x45 | 0x85)
+        })
+    };
     let default_obj = emit(false);
     assert!(
-        contains(&default_obj, &XMM_SPILL),
+        xmm_spill(&default_obj),
         "default object lacks the XMM spill"
     );
     assert!(
@@ -1062,7 +1067,7 @@ fn variadic_prologue_no_fp_regs_omits_xmm_save() {
     );
     let no_fp_regs_obj = emit(true);
     assert!(
-        !contains(&no_fp_regs_obj, &XMM_SPILL),
+        !xmm_spill(&no_fp_regs_obj),
         "no_fp_regs object still contains XMM stores"
     );
     assert!(

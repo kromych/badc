@@ -15,12 +15,10 @@ Disassembly of section .text:
 
 <do_add>:
                	add	x0, x0, x1
-               	sxtw	x0, w0
                	ret
 
 <do_sub>:
                	sub	x0, x0, x1
-               	sxtw	x0, w0
                	ret
 
 <do_cmp>:
@@ -38,9 +36,6 @@ Disassembly of section .text:
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	mov	x0, #-0x1               // =-1
-               	mov	x0, #0x1                // =1
-               	mov	x0, #0x0                // =0
                	mov	x0, #0x2                // =2
                	mov	x1, #0x3                // =3
                	bl	<addr>

@@ -24,21 +24,26 @@ pub(super) fn emit_extend(
         }
     };
     match kind {
-        LoadKind::I8 => emit(code, super::encode::enc_sxtb(rd, rn)),
-        LoadKind::I16 => emit(code, super::encode::enc_sxth(rd, rn)),
         // With bits 32..63 unread the source already is the result.
-        LoadKind::I32 if !alloc.high_dead(v) => emit(code, super::encode::enc_sxtw(rd, rn)),
-        LoadKind::I32 => {
-            if rd.0 != rn.0 {
-                emit_mov_reg(code, rd, rn);
-            }
-        }
+        LoadKind::I32 if alloc.high_dead(v) => emit_mov_reg(code, rd, rn),
+        LoadKind::I8 | LoadKind::I16 | LoadKind::I32 => emit_sign_extend(code, rd, rn, kind),
         _ => {
             return fail("Extend: unsupported kind");
         }
     }
     store_spilled_int(code, frame, dst, rd);
     Ok(())
+}
+
+/// `rd <- rn`, sign-extended from the width of an `I8` / `I16` / `I32`
+/// `kind` (`SXTB` / `SXTH` / `SXTW`); any other kind takes the whole register.
+pub(super) fn emit_sign_extend(code: &mut Vec<u8>, rd: Reg, rn: Reg, kind: LoadKind) {
+    match kind {
+        LoadKind::I8 => emit(code, super::encode::enc_sxtb(rd, rn)),
+        LoadKind::I16 => emit(code, super::encode::enc_sxth(rd, rn)),
+        LoadKind::I32 => emit(code, super::encode::enc_sxtw(rd, rn)),
+        _ => emit_mov_reg(code, rd, rn),
+    }
 }
 
 /// `Inst::Copy`: move `value` into this instruction's place, bit-exact
@@ -106,6 +111,27 @@ pub(super) fn emit_copy(
     Ok(())
 }
 
+/// `Inst::Neg`: `neg Xd, Xn` (the `sub Xd, XZR, Xn` alias).
+pub(super) fn emit_neg(
+    code: &mut Vec<u8>,
+    dst: Place,
+    value: u32,
+    alloc: &Allocation,
+    frame: Frame,
+    scratch: &ScratchPool,
+) -> Emit {
+    let src_place = place_of(alloc, value);
+    let Some(rn) = materialize_int(code, src_place, scratch.primary, frame) else {
+        return fail("Neg: value not int reg / spill");
+    };
+    let Some(rd) = int_or_spill_scratch(dst, scratch) else {
+        return fail("Neg: dst not int reg / spill");
+    };
+    emit(code, super::encode::enc_neg(rd, rn));
+    store_spilled_int(code, frame, dst, rd);
+    Ok(())
+}
+
 /// `Inst::Bswap`: reverse the low `width` bytes, zero-extended: `rev Xd`,
 /// `rev Wd` (zero-extending), or `rev Wd` then `lsr Wd, #16`, which
 /// drops the reversed upper halfword.
@@ -139,6 +165,91 @@ pub(super) fn emit_bswap(
     }
     store_spilled_int(code, frame, dst, rd);
     Ok(())
+}
+
+/// `Inst::BitCount` over the low `width` bytes, in the `W` forms for 4:
+/// `clz`; `cls` for the leading sign bits; `rbit` + `clz` for the trailing
+/// count; `cnt` + `addv` through [`Frame::count_fp`] for the set bits, or
+/// the general-register reduction when there is none.
+pub(super) fn emit_bit_count(
+    code: &mut Vec<u8>,
+    dst: Place,
+    op: BitCountOp,
+    value: u32,
+    width: u8,
+    alloc: &Allocation,
+    frame: Frame,
+    scratch: &ScratchPool,
+) -> Emit {
+    use super::encode::{enc_cls, enc_cls32, enc_clz, enc_clz32, enc_rbit32, enc_rbit64};
+    let src_place = place_of(alloc, value);
+    let Some(rn) = materialize_int(code, src_place, scratch.primary, frame) else {
+        return fail("BitCount: value not int reg / spill");
+    };
+    let Some(rd) = int_or_spill_scratch(dst, scratch) else {
+        return fail("BitCount: dst not int reg / spill");
+    };
+    let is64 = width == 8;
+    type Enc = fn(Reg, Reg) -> u32;
+    let (clz, rbit, cls): (Enc, Enc, Enc) = if is64 {
+        (enc_clz, enc_rbit64, enc_cls)
+    } else {
+        (enc_clz32, enc_rbit32, enc_cls32)
+    };
+    match op {
+        BitCountOp::Clz => emit(code, clz(rd, rn)),
+        BitCountOp::Clrsb => emit(code, cls(rd, rn)),
+        BitCountOp::Ctz => {
+            emit(code, rbit(rd, rn));
+            emit(code, clz(rd, rd));
+        }
+        BitCountOp::Popcount => match frame.count_fp {
+            Some(v) => {
+                let stage = if is64 {
+                    enc_fmov_x_to_d(v, rn)
+                } else {
+                    enc_fmov_w_to_s(v, rn)
+                };
+                emit(code, stage);
+                emit(code, super::encode::enc_cnt_8b(v, v));
+                emit(code, super::encode::enc_addv_8b(v, v));
+                emit(code, super::encode::enc_fmov_s_to_w(rd, v));
+            }
+            None => emit_popcount_gpr(code, rd, rn, scratch.secondary, is64),
+        },
+    }
+    store_spilled_int(code, frame, dst, rd);
+    Ok(())
+}
+
+/// Set bits of `rn` into `rd` in the general registers: pair, nibble and
+/// byte counts (Hacker's Delight 5-1), summed into the top byte by a
+/// multiply. `t` is distinct from both; `rd` may be `rn`.
+fn emit_popcount_gpr(code: &mut Vec<u8>, rd: Reg, rn: Reg, t: Reg, is64: bool) {
+    use super::encode::{
+        LogicalOp, enc_addsub_lsr, enc_logical_imm, enc_lsr_imm, enc_lsr32_imm, enc_mul32,
+    };
+    let imm = |op, rd, rn, pattern: u64| {
+        let value = if is64 { pattern } else { pattern & 0xFFFF_FFFF };
+        enc_logical_imm(op, is64, rd, rn, value).expect("a repeating pattern is a bitmask")
+    };
+    let and = LogicalOp::And;
+    emit(code, imm(and, t, rn, 0xAAAA_AAAA_AAAA_AAAA));
+    emit(code, enc_addsub_lsr(true, rd, rn, t, 1, is64));
+    emit(code, imm(and, t, rd, 0xCCCC_CCCC_CCCC_CCCC));
+    emit(code, imm(and, rd, rd, 0x3333_3333_3333_3333));
+    emit(code, enc_addsub_lsr(false, rd, rd, t, 2, is64));
+    emit(code, enc_addsub_lsr(false, rd, rd, rd, 4, is64));
+    emit(code, imm(and, rd, rd, 0x0F0F_0F0F_0F0F_0F0F));
+    // `mov t, #0x0101...`: `orr` from the zero register.
+    emit(code, imm(LogicalOp::Orr, t, Reg(31), 0x0101_0101_0101_0101));
+    if is64 {
+        emit(code, enc_mul(rd, rd, t));
+        emit(code, enc_lsr_imm(rd, rd, 56));
+    } else {
+        emit(code, enc_mul32(rd, rd, t));
+        emit(code, enc_lsr32_imm(rd, rd, 24));
+    }
 }
 
 /// `Inst::MulAdd`: one `madd` / `msub`, which reads all three sources
@@ -346,13 +457,8 @@ pub(super) fn emit_binop(
         return Ok(());
     }
     if matches!(op, BinOp::Mod | BinOp::Modu) {
-        // rem = rn - (rn / rm) * rm: the quotient must alias neither operand,
-        // and a spilled divisor sits in scratch.secondary. x19 is reserved by
-        // the prologue for a spilling function with a modulo.
-        let quot = [scratch.secondary, scratch.primary, rd, Reg(19)]
-            .into_iter()
-            .find(|r| r.0 != rn.0 && r.0 != rm.0)
-            .unwrap_or(Reg(19));
+        // rem = rn - (rn / rm) * rm.
+        let quot = mod_quotient_reg(rn, rm, rd, scratch).unwrap_or_else(|| scratch.third(frame));
         let divider = if matches!(op, BinOp::Mod) {
             enc_sdiv(quot, rn, rm)
         } else {
@@ -369,6 +475,32 @@ pub(super) fn emit_binop(
     emit(code, word);
     store_spilled_int(code, frame, dst, rd);
     Ok(())
+}
+
+/// The quotient register of a modulo, which may alias neither operand: a
+/// spilled dividend sits in `scratch.primary`, a spilled divisor in
+/// `scratch.secondary`. `None` when the pair and `rd` are all taken.
+fn mod_quotient_reg(rn: Reg, rm: Reg, rd: Reg, scratch: &ScratchPool) -> Option<Reg> {
+    [scratch.secondary, scratch.primary, rd]
+        .into_iter()
+        .find(|r| r.0 != rn.0 && r.0 != rm.0)
+}
+
+/// Whether `emit_binop` lowers this modulo through [`ScratchPool::third`].
+pub(super) fn mod_takes_third_scratch(
+    dst: Place,
+    lhs: Place,
+    rhs: Place,
+    scratch: &ScratchPool,
+) -> bool {
+    let (Some(rd), Some(rn), Some(rm)) = (
+        int_or_spill_scratch(dst, scratch),
+        int_operand_reg(lhs, scratch.primary),
+        int_operand_reg(rhs, scratch.secondary),
+    ) else {
+        return false;
+    };
+    mod_quotient_reg(rn, rm, rd, scratch).is_none()
 }
 
 /// The register-form encoding of an integer binop; `None` for a
@@ -559,6 +691,10 @@ pub(super) fn emit_binop_imm(
     frame: Frame,
     scratch: &ScratchPool,
 ) -> Emit {
+    // A one-bit mask the branch alone reads is the branch's `tbz` / `tbnz`.
+    if op == BinOp::And && alloc.branch_fused.get(v as usize).copied().unwrap_or(false) {
+        return Ok(());
+    }
     let Some(rd) = int_or_spill_scratch(dst, scratch) else {
         return fail("BinopI: dst not int reg / spill");
     };

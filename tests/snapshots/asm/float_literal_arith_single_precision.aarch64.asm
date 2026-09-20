@@ -14,66 +14,45 @@ Disassembly of section .text:
                	brk	#0x1
 
 <main>:
-               	mov	x0, #0x40200000         // =1075838976
-               	mov	x1, #0x3f800000         // =1065353216
-               	fmov	s16, w0
-               	fmov	s17, w1
-               	fsub	s0, s16, s17
-               	mov	x0, #0x3fc00000         // =1069547520
-               	fmov	s17, w0
-               	fcmp	s0, s17
+               	fmov	s0, #2.50000000
+               	fmov	s1, #1.00000000
+               	fsub	s0, s0, s1
+               	fmov	s2, #1.50000000
+               	fcmp	s0, s2
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ret
-               	mov	x0, #0x40400000         // =1077936128
-               	mov	x3, #0x41000000         // =1090519040
-               	mov	x2, #0x3f000000         // =1056964608
-               	mov	x4, #0x3e800000         // =1048576000
-               	fmov	s16, w3
-               	fmov	s17, w4
-               	fmul	s0, s16, s17
-               	fmov	s16, w0
-               	fmov	s17, w2
-               	fmadd	s0, s16, s17, s0
-               	mov	x0, #0x40600000         // =1080033280
-               	fmov	s17, w0
-               	fcmp	s0, s17
+               	fmov	s0, #3.00000000
+               	fmov	s2, #8.00000000
+               	fmov	s3, #0.50000000
+               	fmov	s4, #0.25000000
+               	fmul	s2, s2, s4
+               	fmadd	s0, s0, s3, s2
+               	fmov	s2, #3.50000000
+               	fcmp	s0, s2
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ret
-               	mov	x2, #0x0                // =0
-               	mov	x0, #0xcccd             // =52429
-               	movk	x0, #0x3dcc, lsl #16
-               	fmov	s16, w2
-               	fmov	s17, w0
-               	fadd	s0, s16, s17
-               	fmov	s17, w0
-               	fadd	s0, s0, s17
-               	fmov	s17, w0
-               	fadd	s0, s0, s17
-               	fmov	s17, w0
-               	fadd	s0, s0, s17
-               	fmov	s17, w0
-               	fadd	s0, s0, s17
-               	fmov	s17, w0
-               	fadd	s0, s0, s17
-               	fmov	s17, w0
-               	fadd	s0, s0, s17
-               	fmov	s17, w0
-               	fadd	s0, s0, s17
-               	fmov	s17, w0
-               	fadd	s0, s0, s17
-               	fmov	s17, w0
-               	fadd	s0, s0, s17
-               	fmov	s17, w1
-               	fcmp	s0, s17
+               	movi	d2, #0000000000000000
+               	adrp	x16, <page>
+               	ldr	s0, [x16]
+               	fadd	s2, s2, s0
+               	fadd	s2, s2, s0
+               	fadd	s2, s2, s0
+               	fadd	s2, s2, s0
+               	fadd	s2, s2, s0
+               	fadd	s2, s2, s0
+               	fadd	s2, s2, s0
+               	fadd	s2, s2, s0
+               	fadd	s2, s2, s0
+               	fadd	s0, s2, s0
+               	fcmp	s0, s1
                	b.ne	<addr>
                	mov	x0, #0x3                // =3
                	ret
-               	mov	x0, #0x1                // =1
-               	movk	x0, #0x3f80, lsl #16
-               	fmov	s17, w0
-               	fcmp	s0, s17
+               	adrp	x16, <page>
+               	ldr	s1, [x16, #0x4]
+               	fcmp	s0, s1
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	ret

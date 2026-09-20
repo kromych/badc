@@ -14,16 +14,20 @@
 //!     the immediate encodes without a per-use scratch
 //!     materialisation or the `Imm` def has no other use;
 //!   * `Binop { lhs = Imm }` -> the rhs-imm form via commutation or
-//!     compare mirroring, then the rule above.
+//!     compare mirroring, then the rule above;
+//!   * `Fneg { Imm }` -> `Imm` with the sign bit flipped;
+//!   * `Neg { Imm }` -> the negated `Imm`, and `x * -1` / `0 - x` ->
+//!     `Neg { x }`, which takes one instruction where the multiply
+//!     takes three and needs no constant register.
 //!
-//! Only a plain integer `Inst::Imm` whose `f32_values` flag is clear
-//! participates: `ImmData` / `ImmCode` / `ImmExtCode` / `BlockAddr` /
-//! `TlsAddr` / `LocalAddr` resolve to addresses at emit time, and an
-//! f32 `Imm` carries the low-32 bit pattern in the IR while the
-//! evaluator's register convention is f64-widened. Division the
-//! evaluator computes but native code traps on (`/ 0`,
-//! `i64::MIN / -1`) is refused by `eval::fold_binop`, so folding
-//! never changes runtime behavior.
+//! Save for that sign flip, only a plain integer `Inst::Imm` whose
+//! `f32_values` flag is clear participates: `ImmData` / `ImmCode` /
+//! `ImmExtCode` / `BlockAddr` / `TlsAddr` / `LocalAddr` resolve to
+//! addresses at emit time, and an f32 `Imm` carries the low-32 bit
+//! pattern in the IR while the evaluator's register convention is
+//! f64-widened. Division the evaluator computes but native code traps
+//! on (`/ 0`, `i64::MIN / -1`) is refused by `eval::fold_binop`, so
+//! folding never changes runtime behavior.
 //!
 //! Blocks and terminators are untouched and every rewrite is
 //! in-place, so `inst_src` / `f32_values` stay parallel. Operand
@@ -51,8 +55,8 @@ const MAX_ROUNDS: usize = 4;
 pub(crate) fn run_one(func: &mut FunctionSsa) {
     for _ in 0..MAX_ROUNDS {
         let folded = fold_round(func);
-        let stripped = strip_bool_renormalize(func);
-        if !folded && !stripped {
+        let forwarded = forward_identities(func);
+        if !folded && !forwarded {
             return;
         }
     }
@@ -111,38 +115,60 @@ fn is_compare_op(op: BinOp) -> bool {
     )
 }
 
-/// Redirect every consumer of `x != 0` to `x` when `x` is provably
-/// 0/1 (`is_bool_value`). The short-circuit lowering re-normalizes an
-/// `&&` / `||` operand a comparison or `!` already normalized; the
-/// redirect leaves the renormalizing compare dead. `x` is an operand
-/// of the compare, so it dominates every redirected use. Returns
-/// whether any operand actually changed.
-fn strip_bool_renormalize(func: &mut FunctionSsa) -> bool {
-    let n = func.insts.len();
-    let mut redirect: Vec<Option<ValueId>> = vec![None; n];
-    let mut any = false;
-    for (idx, slot) in redirect.iter_mut().enumerate() {
-        if matches!(func.f32_values.get(idx), Some(true)) {
-            continue;
-        }
-        let lhs = match &func.insts[idx] {
-            Inst::BinopI {
-                op: BinOp::Ne,
-                lhs,
-                rhs_imm: 0,
-            } => *lhs,
-            Inst::Binop {
-                op: BinOp::Ne,
-                lhs,
-                rhs,
-            } if matches!(func.insts.get(*rhs as usize), Some(Inst::Imm(0))) => *lhs,
-            _ => continue,
-        };
-        if is_bool_value(func, lhs, BOOL_DEPTH) {
-            *slot = Some(lhs);
-            any = true;
-        }
+/// The operand an instruction reproduces bit for bit, if any: `x != 0`
+/// over a provably 0/1 `x` (`is_bool_value`) -- the short-circuit lowering
+/// re-normalizes an `&&` / `||` operand a comparison or `!` already
+/// normalized -- and an integer operation by its identity constant.
+fn forwarded_operand(func: &FunctionSsa, idx: usize) -> Option<ValueId> {
+    if matches!(func.f32_values.get(idx), Some(true)) {
+        return None;
     }
+    let (op, lhs, imm) = match &func.insts[idx] {
+        Inst::BinopI { op, lhs, rhs_imm } => (*op, *lhs, *rhs_imm),
+        Inst::Binop { op, lhs, rhs } => (*op, *lhs, imm_of(func, *rhs)?),
+        _ => return None,
+    };
+    let identity = match op {
+        BinOp::Ne => imm == 0 && is_bool_value(func, lhs, BOOL_DEPTH),
+        BinOp::Add | BinOp::Sub | BinOp::Or | BinOp::Xor => imm == 0,
+        BinOp::Shl | BinOp::Shr | BinOp::Shru => imm == 0,
+        BinOp::Mul | BinOp::Div | BinOp::Divu => imm == 1,
+        BinOp::And => imm == -1,
+        _ => false,
+    };
+    identity.then_some(lhs)
+}
+
+/// The operand of `v`'s definition when that definition is a negate.
+fn negated_value(func: &FunctionSsa, v: ValueId) -> Option<ValueId> {
+    match func.insts.get(v as usize) {
+        Some(Inst::Neg(x)) => Some(*x),
+        _ => None,
+    }
+}
+
+/// The operand of a doubly-applied negation: `-(-x)` is `x` for every
+/// two's-complement value, the type minimum included.
+fn double_negate_operand(func: &FunctionSsa, idx: usize) -> Option<ValueId> {
+    let Inst::Neg(v) = func.insts[idx] else {
+        return None;
+    };
+    match func.insts.get(v as usize) {
+        Some(Inst::Neg(inner)) => Some(*inner),
+        _ => None,
+    }
+}
+
+/// Redirect every consumer of an instruction [`forwarded_operand`]
+/// answers to that operand, leaving the instruction dead. The operand
+/// dominates each redirected use, since it dominates the instruction.
+/// Returns whether any operand actually changed.
+fn forward_identities(func: &mut FunctionSsa) -> bool {
+    let n = func.insts.len();
+    let redirect: Vec<Option<ValueId>> = (0..n)
+        .map(|i| forwarded_operand(func, i).or_else(|| double_negate_operand(func, i)))
+        .collect();
+    let any = redirect.iter().any(Option::is_some);
     if !any {
         return false;
     }
@@ -197,9 +223,9 @@ fn strip_bool_renormalize(func: &mut FunctionSsa) -> bool {
 const SELECT_EVAL_BUDGET: u32 = 96;
 
 /// Evaluate `v` with `pivot` bound to `bind`, over the same integer
-/// `Extend` / `Bswap` / `BinopI` / `Binop` set [`fold_round`] folds. Any other
-/// def, and any operand the shared resolver cannot pin to an integer
-/// immediate, makes the value unknown.
+/// `Extend` / `Bswap` / `BitCount` / `BinopI` / `Binop` set [`fold_round`]
+/// folds. Any other def, and any operand the shared resolver cannot pin to
+/// an integer immediate, makes the value unknown.
 fn eval_with(
     func: &FunctionSsa,
     v: ValueId,
@@ -223,6 +249,11 @@ fn eval_with(
             kind,
         )),
         Inst::Bswap { value, width } => Some(eval::eval_bswap(
+            eval_with(func, value, pivot, bind, budget)?,
+            width,
+        )),
+        Inst::BitCount { op, value, width } => Some(eval::eval_bit_count(
+            op,
             eval_with(func, value, pivot, bind, budget)?,
             width,
         )),
@@ -331,7 +362,11 @@ pub(crate) fn fold_selects(func: &mut FunctionSsa) -> bool {
             }
             if !matches!(
                 func.insts[u as usize],
-                Inst::Extend { .. } | Inst::Bswap { .. } | Inst::BinopI { .. } | Inst::Binop { .. }
+                Inst::Extend { .. }
+                    | Inst::Bswap { .. }
+                    | Inst::BitCount { .. }
+                    | Inst::BinopI { .. }
+                    | Inst::Binop { .. }
             ) {
                 continue;
             }
@@ -409,15 +444,10 @@ pub(crate) fn addr_facts(program: &crate::c5::program::Program) -> AddrFacts {
     facts
 }
 
-/// Recursion budget for the non-null address walk: a base behind a few
-/// collapsed merges.
-const NONNULL_DEPTH: u32 = 8;
-
 /// Whether `v` produces an address that cannot compare equal to a null
 /// pointer constant (C99 6.3.2.3p3, 6.5.9p6): a local slot, a block
 /// address, an import stub, or a code / data / TLS address whose
-/// referent has a non-weak definition in this unit per [`AddrFacts`].
-/// Degenerate phis are chased like the constant resolver does. A
+/// referent has a non-weak definition in this unit per [`AddrFacts`]. A
 /// displacement chain on such a base is not walked through: the IR does
 /// not distinguish pointer arithmetic (in-bounds by C99 6.5.6p8) from
 /// integer arithmetic on a converted address, and the latter may wrap
@@ -427,11 +457,7 @@ fn is_nonnull_addr(
     extern_syms: &BTreeMap<u32, u32>,
     facts: &AddrFacts,
     v: ValueId,
-    depth: u32,
 ) -> bool {
-    if depth == 0 {
-        return false;
-    }
     // An extern-resolved instruction is judged by its symbol; its
     // payload is a placeholder.
     if let Some(sym) = extern_syms.get(&v) {
@@ -444,9 +470,6 @@ fn is_nonnull_addr(
         Some(Inst::ImmData(off)) => outside(&facts.weak_data, *off),
         Some(Inst::TlsAddr(off)) => outside(&facts.weak_tls, *off),
         Some(Inst::ImmExtCode(_) | Inst::LocalAddr(_) | Inst::BlockAddr(_)) => true,
-        Some(Inst::Phi { incoming, .. }) if incoming.len() == 1 => {
-            is_nonnull_addr(func, extern_syms, facts, incoming[0].1, depth - 1)
-        }
         _ => false,
     }
 }
@@ -464,17 +487,6 @@ enum AddrIdent {
     ExtCode(i64),
     Local(i64),
     ExternSym(u32),
-}
-
-/// Chase degenerate phis to the defining instruction's index.
-fn resolve_value(func: &FunctionSsa, mut v: ValueId) -> ValueId {
-    for _ in 0..NONNULL_DEPTH {
-        match func.insts.get(v as usize) {
-            Some(Inst::Phi { incoming, .. }) if incoming.len() == 1 => v = incoming[0].1,
-            _ => break,
-        }
-    }
-    v
 }
 
 fn addr_ident(
@@ -525,11 +537,11 @@ pub(crate) fn fold_addr_compares(func: &mut FunctionSsa, facts: &AddrFacts) -> b
                 op: op @ (BinOp::Eq | BinOp::Ne),
                 lhs,
                 rhs_imm: 0,
-            } if is_nonnull_addr(func, &extern_syms, facts, *lhs, NONNULL_DEPTH) => {
+            } if is_nonnull_addr(func, &extern_syms, facts, *lhs) => {
                 Some(i64::from(*op == BinOp::Ne))
             }
             Inst::Binop { op, lhs, rhs } => same_operand_compare(*op).filter(|_| {
-                let (l, r) = (resolve_value(func, *lhs), resolve_value(func, *rhs));
+                let (l, r) = (*lhs, *rhs);
                 l == r
                     || matches!(
                         (
@@ -681,38 +693,27 @@ fn imm_through_phis_depth(
     v: ValueId,
     depth: u32,
 ) -> Option<i64> {
-    let mut i = v as usize;
-    // Chase single-incoming (degenerate) phis to the constant they
-    // collapse to: such a phi always takes its one predecessor's value.
-    // prune_unreachable produces them when it drops a folded branch's
-    // dead predecessor, so folding through them lets a chain built on the
-    // survivor (an `Extend`, a `BinopI`) resolve on the next round.
-    for _ in 0..insts.len() {
-        match insts.get(i)? {
-            Inst::Imm(k) if !matches!(f32_values.get(i), Some(true)) => return Some(*k),
-            Inst::Phi { incoming, .. } if incoming.len() == 1 => {
-                i = incoming[0].1 as usize;
+    match insts.get(v as usize)? {
+        Inst::Imm(k) if !matches!(f32_values.get(v as usize), Some(true)) => Some(*k),
+        // Every predecessor supplying the same constant makes the merge
+        // that constant, whichever edge is taken. A `&&` / `||` whose
+        // arms decide the same way reaches the fold in this shape, as
+        // does any merge of equal constants an inline exposed, and a
+        // merge a pruned branch left with one predecessor. The depth
+        // bound also terminates a loop phi, whose back edge reaches
+        // itself.
+        Inst::Phi { incoming, .. } => {
+            if depth == 0 {
+                return None;
             }
-            // Every predecessor supplying the same constant makes the
-            // merge that constant, whichever edge is taken. A `&&` / `||`
-            // whose arms decide the same way reaches the fold in this
-            // shape, as does any merge of equal constants an inline
-            // exposed. The depth bound also terminates a loop phi, whose
-            // back edge reaches itself.
-            Inst::Phi { incoming, .. } => {
-                if depth == 0 {
-                    return None;
-                }
-                let mut vals = incoming
-                    .iter()
-                    .map(|&(_, v)| imm_through_phis_depth(insts, f32_values, v, depth - 1));
-                let first = vals.next()??;
-                return vals.all(|k| k == Some(first)).then_some(first);
-            }
-            _ => return None,
+            let mut vals = incoming
+                .iter()
+                .map(|&(_, v)| imm_through_phis_depth(insts, f32_values, v, depth - 1));
+            let first = vals.next()??;
+            vals.all(|k| k == Some(first)).then_some(first)
         }
+        _ => None,
     }
-    None
 }
 
 /// Operand-reference counts, including terminator conditions and the
@@ -747,9 +748,9 @@ fn count_uses(func: &FunctionSsa) -> Vec<u32> {
     counts
 }
 
-/// Whether an `And` by `mask` leaves every bit a `width`-byte reversal
-/// reads (the low `width * 8`) unchanged.
-fn bswap_low_mask_transparent(mask: i64, width: u8) -> bool {
+/// Whether an `And` by `mask` leaves every bit a `width`-byte reversal or
+/// count reads (the low `width * 8`) unchanged.
+fn low_mask_transparent(mask: i64, width: u8) -> bool {
     match width {
         2 => mask & 0xffff == 0xffff,
         4 => mask & 0xffff_ffff == 0xffff_ffff,
@@ -768,7 +769,18 @@ fn fold_round(func: &mut FunctionSsa) -> bool {
     };
     let mut changed = false;
     for idx in 0..func.insts.len() {
-        if matches!(func.f32_values.get(idx), Some(true)) {
+        let f32 = |v: usize| matches!(func.f32_values.get(v), Some(true));
+        // IEEE 754 negation flips the sign bit, exactly for every value;
+        // an f32 `Imm` holds its pattern in the low word.
+        if let Inst::Fneg(src) = func.insts[idx]
+            && let Some(&Inst::Imm(k)) = func.insts.get(src as usize)
+            && f32(idx) == f32(src as usize)
+        {
+            func.insts[idx] = Inst::Imm(k ^ if f32(idx) { 0x8000_0000 } else { i64::MIN });
+            changed = true;
+            continue;
+        }
+        if f32(idx) {
             continue;
         }
         let new_inst = match &func.insts[idx] {
@@ -786,13 +798,104 @@ fn fold_round(func: &mut FunctionSsa) -> bool {
                         op: BinOp::And,
                         lhs,
                         rhs_imm,
-                    }) if bswap_low_mask_transparent(*rhs_imm, *width) => Some(Inst::Bswap {
+                    }) if low_mask_transparent(*rhs_imm, *width) => Some(Inst::Bswap {
                         value: *lhs,
                         width: *width,
                     }),
                     _ => None,
                 },
             },
+            Inst::BitCount { op, value, width } => match imm_of(func, *value) {
+                Some(k) => Some(Inst::Imm(eval::eval_bit_count(*op, k, *width))),
+                None => match func.insts.get(*value as usize) {
+                    Some(Inst::BinopI {
+                        op: BinOp::And,
+                        lhs,
+                        rhs_imm,
+                    }) if low_mask_transparent(*rhs_imm, *width) => Some(Inst::BitCount {
+                        op: *op,
+                        value: *lhs,
+                        width: *width,
+                    }),
+                    _ => None,
+                },
+            },
+            Inst::Neg(value) => imm_of(func, *value).map(|k| Inst::Imm(k.wrapping_neg())),
+            // `a + -b` is `a - b` and `a - -b` is `a + b`, exact modulo
+            // 2^64 either way; the negate goes dead when this was its
+            // only use.
+            Inst::Binop {
+                op: op @ (BinOp::Add | BinOp::Sub),
+                lhs,
+                rhs,
+            } if negated_value(func, *rhs).is_some() => {
+                negated_value(func, *rhs).map(|x| Inst::Binop {
+                    op: if *op == BinOp::Add {
+                        BinOp::Sub
+                    } else {
+                        BinOp::Add
+                    },
+                    lhs: *lhs,
+                    rhs: x,
+                })
+            }
+            Inst::Binop {
+                op: BinOp::Add,
+                lhs,
+                rhs,
+            } if negated_value(func, *lhs).is_some() => {
+                negated_value(func, *lhs).map(|x| Inst::Binop {
+                    op: BinOp::Sub,
+                    lhs: *rhs,
+                    rhs: x,
+                })
+            }
+            // `-x - 1` is `~x` for every two's-complement value.
+            Inst::BinopI {
+                op: BinOp::Add,
+                lhs,
+                rhs_imm: -1,
+            }
+            | Inst::BinopI {
+                op: BinOp::Sub,
+                lhs,
+                rhs_imm: 1,
+            } if negated_value(func, *lhs).is_some() => {
+                negated_value(func, *lhs).map(|x| Inst::BinopI {
+                    op: BinOp::Xor,
+                    lhs: x,
+                    rhs_imm: -1,
+                })
+            }
+            // `x * -1` is `-x` and `0 - x` is `-x`, for every value:
+            // two's-complement multiply and subtract are exact modulo
+            // 2^64, and so is the negate they become.
+            Inst::BinopI {
+                op: BinOp::Mul,
+                lhs,
+                rhs_imm: -1,
+            } => Some(Inst::Neg(*lhs)),
+            Inst::Binop {
+                op: BinOp::Mul,
+                lhs,
+                rhs,
+            } if imm_of(func, *rhs) == Some(-1) && imm_of(func, *lhs).is_none() => {
+                Some(Inst::Neg(*lhs))
+            }
+            Inst::Binop {
+                op: BinOp::Mul,
+                lhs,
+                rhs,
+            } if imm_of(func, *lhs) == Some(-1) && imm_of(func, *rhs).is_none() => {
+                Some(Inst::Neg(*rhs))
+            }
+            Inst::Binop {
+                op: BinOp::Sub,
+                lhs,
+                rhs,
+            } if imm_of(func, *lhs) == Some(0) && imm_of(func, *rhs).is_none() => {
+                Some(Inst::Neg(*rhs))
+            }
             Inst::BinopI { op, lhs, rhs_imm } => imm_of(func, *lhs)
                 .and_then(|l| eval::fold_binop(*op, l, *rhs_imm))
                 .map(Inst::Imm),
@@ -871,6 +974,7 @@ mod tests {
             inst_src: vec![(0, 0); n],
             f32_values: vec![false; n],
             cmp32: Vec::new(),
+            low_word_tests: Vec::new(),
             param_fp_mask: crate::c5::ir::FpMask::EMPTY,
             agg_descs: Vec::new(),
             param_aggs: Vec::new(),
@@ -961,6 +1065,78 @@ mod tests {
             run_one(&mut f);
             assert!(matches!(f.insts[2], Inst::Binop { .. }), "{op:?}");
         }
+    }
+
+    #[test]
+    fn an_identity_operation_forwards_its_operand() {
+        let forwards = [
+            (BinOp::Add, 0),
+            (BinOp::Sub, 0),
+            (BinOp::Or, 0),
+            (BinOp::Xor, 0),
+            (BinOp::Shl, 0),
+            (BinOp::Shr, 0),
+            (BinOp::Shru, 0),
+            (BinOp::Mul, 1),
+            (BinOp::Div, 1),
+            (BinOp::Divu, 1),
+            (BinOp::And, -1),
+        ];
+        let keeps = [
+            (BinOp::Add, 1),
+            (BinOp::And, 0xffff_ffff),
+            (BinOp::Mod, 1),
+            (BinOp::Modu, 1),
+            (BinOp::Ne, 0),
+        ];
+        for (op, k, forwarded) in forwards
+            .iter()
+            .map(|&(op, k)| (op, k, true))
+            .chain(keeps.iter().map(|&(op, k)| (op, k, false)))
+        {
+            let mut f = fresh(vec![
+                Inst::LocalAddr(0),
+                Inst::BinopI {
+                    op,
+                    lhs: 0,
+                    rhs_imm: k,
+                },
+                Inst::BinopI {
+                    op: BinOp::Add,
+                    lhs: 1,
+                    rhs_imm: 8,
+                },
+            ]);
+            run_one(&mut f);
+            let reads = match f.insts[2] {
+                Inst::BinopI { lhs, .. } => lhs,
+                ref other => panic!("{other:?}"),
+            };
+            assert_eq!(reads == 0, forwarded, "{op:?} {k}");
+        }
+    }
+
+    /// A negated constant is the constant with its sign bit flipped: bit
+    /// 63 of a double, bit 31 of a float's low-word pattern, zero
+    /// included. A negation whose width differs from its operand's stays.
+    #[test]
+    fn negated_constant_flips_its_sign_bit() {
+        let run = |bits: i64, f32_src: bool, f32_neg: bool| {
+            let mut f = fresh(vec![Inst::Imm(bits), Inst::Fneg(0)]);
+            f.f32_values = vec![f32_src, f32_neg];
+            run_one(&mut f);
+            f.insts[1].clone()
+        };
+        let neg = |x: f64| (-x).to_bits() as i64;
+        assert!(
+            matches!(run(2.5f64.to_bits() as i64, false, false), Inst::Imm(k) if k == neg(2.5))
+        );
+        assert!(matches!(run(0, false, false), Inst::Imm(i64::MIN)));
+        let f32_bits = 2.5f32.to_bits() as i64;
+        assert!(
+            matches!(run(f32_bits, true, true), Inst::Imm(k) if k == (-2.5f32).to_bits() as i64)
+        );
+        assert!(matches!(run(f32_bits, true, false), Inst::Fneg(0)));
     }
 
     #[test]

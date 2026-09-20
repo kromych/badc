@@ -54,27 +54,27 @@ Disassembly of section .text:
                	movq	%rax, (%rsi)
                	popq	%rax
                	movl	$0x41180000, %edi       # imm = 0x41180000
-               	movss	(%rax,%riz), %xmm0
-               	movss	0x4(%rax,%riz), %xmm1
+               	movss	(%rax), %xmm0
+               	movss	0x4(%rax), %xmm1
                	addss	%xmm1, %xmm0
-               	movss	(%rcx,%riz), %xmm1
+               	movss	(%rcx), %xmm1
                	addss	%xmm1, %xmm0
-               	movss	0x4(%rcx,%riz), %xmm1
+               	movss	0x4(%rcx), %xmm1
                	addss	%xmm1, %xmm0
-               	movss	(%rdx,%riz), %xmm1
+               	movss	(%rdx), %xmm1
                	addss	%xmm1, %xmm0
-               	movss	0x4(%rdx,%riz), %xmm1
+               	movss	0x4(%rdx), %xmm1
                	addss	%xmm1, %xmm0
-               	movss	(%rsi,%riz), %xmm1
+               	movss	(%rsi), %xmm1
                	addss	%xmm1, %xmm0
-               	movss	0x4(%rsi,%riz), %xmm1
+               	movss	0x4(%rsi), %xmm1
                	addss	%xmm1, %xmm0
                	movq	%rdi, %xmm15
                	movapd	%xmm0, %xmm1
                	addss	%xmm15, %xmm1
-               	movl	$0xa, %ecx
+               	movl	$0xa, %eax
                	xorps	%xmm0, %xmm0
-               	cvtsi2ss	%rcx, %xmm0
+               	cvtsi2ss	%rax, %xmm0
                	addss	%xmm0, %xmm1
                	movl	$0x425e0000, %eax       # imm = 0x425E0000
                	movq	%rax, %xmm15
@@ -84,8 +84,8 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	leave
                	retq
-               	xorq	%rax, %rax
-               	movl	$0x3e800000, %edx       # imm = 0x3E800000
+               	xorl	%eax, %eax
+               	movl	$0x3e800000, %ecx       # imm = 0x3E800000
                	movq	%rax, %xmm15
                	movq	%rax, %xmm1
                	addss	%xmm15, %xmm1
@@ -101,7 +101,7 @@ Disassembly of section .text:
                	addss	%xmm15, %xmm1
                	movq	%rax, %xmm15
                	addss	%xmm15, %xmm1
-               	movq	%rdx, %xmm15
+               	movq	%rcx, %xmm15
                	addss	%xmm15, %xmm1
                	movapd	%xmm0, %xmm15
                	movapd	%xmm1, %xmm0
@@ -114,6 +114,6 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	leave
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	leave
                	retq

@@ -1999,7 +1999,7 @@ fn a_shared_library_data_import_reads_its_slot_on_every_target() {
 /// Walk an emitted ELF64 `.symtab` and return `(name, st_size)` for
 /// every `STT_FUNC` entry. Minimal fixed-offset parse for the symbol-
 /// size regression above.
-fn elf_func_symbols(b: &[u8]) -> alloc::vec::Vec<(alloc::string::String, u64)> {
+pub(super) fn elf_func_symbols(b: &[u8]) -> alloc::vec::Vec<(alloc::string::String, u64)> {
     let u16a = |o: usize| u16::from_le_bytes(b[o..o + 2].try_into().unwrap());
     let u32a = |o: usize| u32::from_le_bytes(b[o..o + 4].try_into().unwrap());
     let u64a = |o: usize| u64::from_le_bytes(b[o..o + 8].try_into().unwrap());
@@ -2081,32 +2081,33 @@ fn elf_func_value(b: &[u8], name: &str) -> Option<u64> {
     None
 }
 
-/// A block whose unconditional `Jmp` targets the next block in layout
-/// must fall through, not emit a jump to the immediately-following
-/// instruction (`e9 00 00 00 00` -- `jmp rel32 = 0` -- on x86-64). Such
-/// dead jumps inflate the dynamic branch count and code size. Compile a
-/// branchy function and confirm the byte sequence is absent.
+/// A block reaches the block its code runs into without a branch, and no
+/// branch lands on a branch: an `if` / `else` whose arms rejoin, an `if`
+/// with an empty arm and a `do` left by `break`, decoded on both ELF
+/// targets at `-O0` and `-O`. The instructions are decoded: a zero-distance
+/// x86-64 `jmp` is `eb 00` once relaxed, not `e9 00 00 00 00`.
 #[test]
 fn jmp_to_next_block_falls_through() {
-    use crate::{NativeOptions, Target};
-    let program = super::compile_str_bare(
-        "int f(int x){ int r; if(x>0){r=1;}else{r=2;} return r+x; } \
-         int main(){ return f(3); }",
-    );
-    let bytes = crate::c5::object::emit_native_single_tu_for_test(
-        &program,
-        Target::LinuxX64,
-        NativeOptions::new().with_optimize(),
-    )
-    .expect("emit LinuxX64");
-    let dead = bytes
-        .windows(5)
-        .filter(|w| *w == [0xe9, 0x00, 0x00, 0x00, 0x00])
-        .count();
-    assert_eq!(
-        dead, 0,
-        "found {dead} `jmp +0` (dead fall-through jump) byte sequences"
-    );
+    use super::perf_codegen::{
+        a64_at, a64_branches_land_on_code, x64_at, x64_branches_land_on_code,
+    };
+    let src = "int rejoin(int x) { int r; if (x > 0) { r = 1; } else { r = 2; } return r + x; }\n\
+               int empty_arm(int x) { if (x) { } else { } return x; }\n\
+               int left_by_break(int x) { do { if (x) break; x += 3; } while (0); return x; }\n";
+    for optimize in [false, true] {
+        for name in ["rejoin", "empty_arm", "left_by_break"] {
+            let ws = a64_at(src, name, optimize);
+            assert!(
+                a64_branches_land_on_code(&ws),
+                "aarch64 {name} (-O {optimize}): {ws:08x?}"
+            );
+            let insns = x64_at(src, name, optimize);
+            assert!(
+                x64_branches_land_on_code(&insns),
+                "x86-64 {name} (-O {optimize}): {insns:x?}"
+            );
+        }
+    }
 }
 
 /// Switch lowering: a dense case set (>= 8 cases, span < 2 * cases)
@@ -2177,15 +2178,15 @@ fn dense_switch_lowers_to_jump_table_sparse_keeps_tree() {
 /// C99 6.3.1.8 + 6.5p5: the post-binop sign-narrow that renormalizes an
 /// `int` result is built as `Inst::Extend { kind: I32 }`, which the
 /// aarch64 emit lowers to `SXTW Xd, Wn` (`SBFM Xd, Xn, #0, #31`) and the
-/// x86_64 emit to `movsxd r64, r32`. The product feeds a return, whose
-/// upper bits are observed, so the extension is kept. Verify the encoded
-/// byte sequence shows up and the pre-canonicalization shift pair (a
-/// `movz xN, #32` feeding an `lsl`) does not.
+/// x86_64 emit to `movsxd r64, r32`. The product is returned as `long`,
+/// which observes its upper bits, so the extension is kept. Verify the
+/// encoded byte sequence shows up and the pre-canonicalization shift
+/// pair (a `movz xN, #32` feeding an `lsl`) does not.
 #[test]
 fn sxtw_fold_collapses_int_mul_sign_narrow() {
     use crate::{NativeOptions, Target, emit_native_with_options};
     let program = super::compile_str(
-        "int product(int a, int b) { return a * b; } int main() { return product(7, 6); }",
+        "long product(int a, int b) { return a * b; } int main() { return (int)product(7, 6); }",
     );
     let bytes_arm =
         emit_native_with_options(&program, Target::MacOSAarch64, NativeOptions::default())
@@ -2523,13 +2524,23 @@ fn x64_spillfree_leaf_elides_frame_and_scratch_save() {
          text[entry..]={:02x?}",
         &text[entry..(entry + 16).min(text.len())]
     );
-    // It must also not save the secondary scratch r13 to the stack
-    // (`movq %r13, (%rsp)` = 4c 89 2c 24); r13 is now an ordinary
+    // It must also not save r13 (`push %r13` = 41 55): an ordinary
     // callee-saved allocation target, saved only when it holds a value,
-    // and this leaf holds none there.
+    // and this leaf holds none there. The whole function pushes nothing.
+    let size = elf_func_symbols(&obj)
+        .into_iter()
+        .find(|(n, _)| n == "leaf_add")
+        .expect("leaf_add size")
+        .1 as usize;
+    let body = &text[entry..entry + size];
     assert!(
-        !contains_bytes(text, &[0x4c, 0x89, 0x2c, 0x24]),
-        "leaf_add must not save r13; the scratch pair is the caller-saved r10/r11"
+        !contains_bytes(body, &[0x41, 0x55]),
+        "leaf_add must not save r13; the scratch pair is the caller-saved r10/r11: {body:02x?}"
+    );
+    assert_eq!(body.last(), Some(&0xc3), "{body:02x?}");
+    assert!(
+        !body.iter().any(|b| matches!(b, 0x50..=0x57)),
+        "a frameless leaf pushes nothing: {body:02x?}"
     );
 }
 
@@ -3318,9 +3329,11 @@ fn zero_local_aggregate_emits_no_writable_template() {
 
 /// Block-scoped arrays with disjoint lifetimes share one frame block
 /// (the interpreter-loop shape); an array whose address escapes into a
-/// call argument keeps dedicated whole-function storage. Variable
-/// bounds keep the subscripts non-constant so the arrays stay
-/// memory-resident.
+/// call argument and whose block is left by `break` -- so no end-of-
+/// lifetime marker is reached -- keeps dedicated whole-function storage.
+/// Variable bounds keep the subscripts non-constant so the arrays stay
+/// memory-resident. The `-O0` mode is the one under test: the lifetime
+/// bound is the repack mode's.
 #[test]
 fn block_scoped_arrays_share_frame_slots() {
     use crate::Target;
@@ -3377,6 +3390,238 @@ fn block_scoped_arrays_share_frame_slots() {
     assert!(
         after >= 16,
         "the escaped arm keeps its own 8-cell block ({after})"
+    );
+}
+
+/// Slots of `name` after the repack, which is where an object's lifetime
+/// bounds its storage. `-O0` (`compact == false`) keeps every declared
+/// object's own cell, so the two modes are reported separately.
+#[cfg(test)]
+fn coalesced_locals(src: &str, name: &str, compact: bool) -> i64 {
+    use crate::Target;
+    let program = super::compile_str(src);
+    let mut funcs =
+        crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, Target::host(), compact, true)
+            .expect("ssa");
+    crate::c5::codegen::ssa::slot_coalesce::run(
+        &mut funcs,
+        compact,
+        crate::c5::codegen::StackProtect::OFF,
+    );
+    funcs
+        .iter()
+        .find(|f| f.name == name)
+        .unwrap_or_else(|| panic!("no function {name}"))
+        .locals
+}
+
+/// C99 6.2.4p2: an automatic object is dead once its block's execution
+/// ends, whatever its address reached, so objects declared in disjoint
+/// blocks share one cell however far their addresses escaped. Without the
+/// bound each escaped object pinned a cell for the whole function.
+#[test]
+fn escaped_objects_in_disjoint_blocks_share_one_cell() {
+    let src = r#"
+        void sink(unsigned *p);
+        void many(void)
+        {
+            { unsigned a = 1; sink(&a); }
+            { unsigned b = 2; sink(&b); }
+            { unsigned c = 3; sink(&c); }
+            { unsigned d = 4; sink(&d); }
+        }
+        int main(void) { return 0; }
+    "#;
+    assert_eq!(coalesced_locals(src, "many", true), 1);
+    assert_eq!(
+        coalesced_locals(src, "many", false),
+        5,
+        "-O0 keeps each object's own cell and its debug location"
+    );
+}
+
+/// A block left by `break` runs no end-of-lifetime marker on that path,
+/// so the object it declared is not bounded and keeps its own cell: what
+/// an escaped address may still reach is then unbounded.
+#[test]
+fn a_block_whose_marker_no_path_reaches_keeps_its_own_cell() {
+    let src = r#"
+        void sink(unsigned *p);
+        void looped(int n)
+        {
+            for (int i = 0; i < n; i++) {
+                { unsigned a = 1; sink(&a); break; }
+            }
+            { unsigned b = 2; sink(&b); }
+        }
+        int main(void) { return 0; }
+    "#;
+    assert_eq!(
+        coalesced_locals(src, "looped", true),
+        3,
+        "each object keeps a cell, beside the loop counter's"
+    );
+}
+
+/// The lifetimes overlap when one block encloses the other, so the two
+/// objects keep their own cells: the inner object's address may still be
+/// written through while the outer one is live.
+#[test]
+fn an_object_live_across_an_inner_block_keeps_its_own_cell() {
+    let src = r#"
+        void sink(unsigned *p);
+        void nested(void)
+        {
+            { unsigned outer = 1; sink(&outer);
+              { unsigned inner = 2; sink(&inner); }
+              sink(&outer); }
+        }
+        int main(void) { return 0; }
+    "#;
+    assert_eq!(coalesced_locals(src, "nested", true), 2);
+}
+
+/// Two objects of one block are alive at the same time, so they keep
+/// distinct storage even though each is written and read only once.
+#[test]
+fn two_escaped_objects_of_one_block_keep_distinct_cells() {
+    let src = r#"
+        void sink(unsigned *p);
+        void together(void)
+        {
+            { unsigned a = 1; unsigned b = 2; sink(&a); sink(&b); }
+        }
+        int main(void) { return 0; }
+    "#;
+    assert_eq!(coalesced_locals(src, "together", true), 2);
+}
+
+/// An object no instruction reads or writes is observable only through a
+/// comparison of its address, which needs both objects alive; the pair in
+/// one scope therefore keeps distinct cells while successive scopes share
+/// them. This is the kernel's `typecheck()` shape.
+#[test]
+fn address_compared_dummies_share_across_scopes_only() {
+    let checks = |scopes: &str| {
+        alloc::format!(
+            r#"
+        int use(int x);
+        int checks(int v)
+        {{
+            int r = 0;
+            {scopes}
+            return use(r);
+        }}
+        int main(void) {{ return 0; }}
+    "#
+        )
+    };
+    let one = coalesced_locals(
+        &checks("r += ({ int d1; int d2; (void)(&d1 == &d2); v; });"),
+        "checks",
+        true,
+    );
+    let three = coalesced_locals(
+        &checks(
+            "r += ({ int d1; int d2; (void)(&d1 == &d2); v; });\n\
+             r += ({ int e1; int e2; (void)(&e1 == &e2); v; });\n\
+             r += ({ int f1; int f2; (void)(&f1 == &f2); v; });",
+        ),
+        "checks",
+        true,
+    );
+    assert_eq!(one, 3, "one scope: two dummy cells beside the accumulator");
+    assert_eq!(three, one, "three scopes cost what one does");
+}
+
+/// A `volatile` object keeps its own storage: its accesses are not the
+/// pass's to account for, and a lifetime bound does not change that.
+#[test]
+fn a_volatile_object_does_not_share_storage() {
+    let src = r#"
+        void sink(volatile unsigned *p);
+        void vols(void)
+        {
+            { volatile unsigned a = 1; sink(&a); a = 2; }
+            { volatile unsigned b = 3; sink(&b); b = 4; }
+        }
+        int main(void) { return 0; }
+    "#;
+    assert_eq!(coalesced_locals(src, "vols", true), 2);
+}
+
+/// An over-aligned object is a member of the realigned region, which is
+/// addressed by its own offset; sharing a member's slot would misplace the
+/// partner, so the bound does not reach it.
+#[test]
+fn an_over_aligned_object_does_not_share_storage() {
+    let src = r#"
+        void sink(unsigned *p);
+        void aligned16(void)
+        {
+            { _Alignas(16) unsigned a = 1; sink(&a); }
+            { _Alignas(16) unsigned b = 2; sink(&b); }
+        }
+        int main(void) { return 0; }
+    "#;
+    assert_eq!(coalesced_locals(src, "aligned16", true), 2);
+}
+
+/// A body that may be re-entered after its first return does not have its
+/// lifetimes bounded by control flow at all (C99 7.13.2.1p3), so no two
+/// objects share storage however disjoint their scopes.
+#[test]
+fn a_returns_twice_call_bars_scope_sharing() {
+    let body = |decl: &str| {
+        alloc::format!(
+            r#"
+        {decl}
+        void sink(unsigned *p);
+        jmp_buf env;
+        void twice(void)
+        {{
+            if (setjmp(env)) return;
+            {{ unsigned a = 1; sink(&a); }}
+            {{ unsigned b = 2; sink(&b); }}
+        }}
+        int main(void) {{ return 0; }}
+    "#
+        )
+    };
+    assert_eq!(
+        coalesced_locals(&body("#include <setjmp.h>"), "twice", true),
+        2
+    );
+    assert_eq!(
+        coalesced_locals(
+            &body("typedef long jmp_buf[32];\nint setjmp(jmp_buf env);"),
+            "twice",
+            true
+        ),
+        2,
+        "a callee declared in the unit rather than through the header counts too"
+    );
+}
+
+/// The declarations a `for` initializer and a variable-length array block
+/// own are not stated as ending, so their storage keeps the whole
+/// function: a VLA's bytes are sp-carved and reclaimed by the block's own
+/// bracket, and the `for` scope closes outside `parse_block_stmt`.
+#[test]
+fn a_vla_block_keeps_its_own_storage() {
+    let src = r#"
+        void sink(unsigned *p);
+        void vla(int n)
+        {
+            { unsigned a[8]; sink(a); }
+            { unsigned b[n]; sink(b); }
+        }
+        int main(void) { return 0; }
+    "#;
+    assert_eq!(
+        coalesced_locals(src, "vla", true),
+        7,
+        "the fixed array's four cells stay beside the VLA's bookkeeping"
     );
 }
 
@@ -4421,12 +4666,11 @@ fn undefined_references_stay_untyped() {
 }
 
 /// A `_Bool` returned by a callee defined in another unit is only
-/// defined in the low byte per the psABI; a caller that tests the full
-/// return register (`!f()` / `if (f())`) must mask to the low byte
-/// first, or garbage high bits (e.g. a gcc `sete %al` with no
-/// zero-extend) make the branch go the wrong way. Regression for a
-/// cross-unit `_Bool`-returning call whose `!f()` test took the wrong
-/// branch on garbage high bits.
+/// defined in the low byte per the psABI; a caller's test of it (`!f()`
+/// / `if (f())`) must read the low byte only, or garbage high bits (e.g.
+/// a gcc `sete %al` with no zero-extend) make the branch go the wrong
+/// way. Regression for a cross-unit `_Bool`-returning call whose `!f()`
+/// test took the wrong branch on garbage high bits.
 #[test]
 fn external_bool_return_is_masked_before_branch() {
     use crate::{Compiler, NativeOptions, OutputKind, Target, emit_native_with_options};
@@ -4446,16 +4690,20 @@ fn external_bool_return_is_masked_before_branch() {
     )
     .expect("emit relocatable");
     let text = elf64_section(&obj, ".text").expect(".text");
-    // The bool return must be reduced to its low byte before the conditional
-    // branch. `and $0xff, %rax` is the accumulator form 48 25 ff 00 00 00 --
-    // the catalogue's shortest encoding for rax; 48 81 e0 ff 00 00 00 is the
-    // equivalent 81 /4 form a non-accumulator register would take.
+    // The branch reads the low byte of the bool return only: `and $0xff,
+    // %rax` ahead of a full test (the accumulator form 48 25 ff 00 00 00, or
+    // the 81 /4 form 48 81 e0 ff 00 00 00 of another register), or the
+    // `test $0xff, %al` (a8 ff) a mask fuses into when the branch alone
+    // reads it, followed by `je` / `jne`.
     let masks = text
         .windows(6)
         .any(|w| w == [0x48, 0x25, 0xff, 0x00, 0x00, 0x00])
         || text
             .windows(7)
-            .any(|w| w == [0x48, 0x81, 0xe0, 0xff, 0x00, 0x00, 0x00]);
+            .any(|w| w == [0x48, 0x81, 0xe0, 0xff, 0x00, 0x00, 0x00])
+        || text
+            .windows(3)
+            .any(|w| w[..2] == [0xa8, 0xff] && matches!(w[2], 0x74 | 0x75 | 0x0f));
     assert!(
         masks,
         "expected the external _Bool return to be masked to its low byte before use"
@@ -7719,6 +7967,9 @@ impl<'a> ElfView<'a> {
     fn sh_size(&self, i: usize) -> usize {
         self.u64(self.shdr(i) + 32) as usize
     }
+    fn sh_entsize(&self, i: usize) -> usize {
+        self.u64(self.shdr(i) + 56) as usize
+    }
 
     fn name_of(&self, i: usize) -> &'a str {
         let start = self.sh_offset(self.shstr) + self.u32(self.shdr(i)) as usize;
@@ -7880,6 +8131,56 @@ fn aarch64_switch_table_lands_in_rodata_section_of_object() {
     }
 }
 
+/// A floating literal lands in the mergeable constant section of its
+/// width, one entry per pattern whichever functions load it, and each
+/// load takes the page relocation and the low-12 one scaled by its access
+/// size, both against that section.
+#[test]
+fn aarch64_floating_literal_lands_in_a_constant_section_of_its_width() {
+    use crate::Target;
+    use crate::c5::object::elf_reloc_types::{
+        R_AARCH64_ADR_PREL_PG_HI21, R_AARCH64_LDST32_ABS_LO12_NC, R_AARCH64_LDST64_ABS_LO12_NC,
+    };
+    const SRC: &str = "double d(double x) { return x * 0.001; }\n\
+double e(double x) { return x + 0.001; }\n\
+float f(float x) { return x * 0.1f; }\n";
+    let bytes = super::perf_codegen::object_at(SRC, Target::LinuxAarch64, true);
+    let elf = ElfView::new(&bytes);
+    const SHF_ALLOC_MERGE: u64 = 0x2 | 0x10;
+    let rows = elf.rela_rows(elf.find(".rela.text").expect("no .rela.text"));
+    for (name, lo12, pattern, loads) in [
+        (
+            ".rodata.cst8",
+            R_AARCH64_LDST64_ABS_LO12_NC,
+            0.001f64.to_bits().to_le_bytes().to_vec(),
+            2,
+        ),
+        (
+            ".rodata.cst4",
+            R_AARCH64_LDST32_ABS_LO12_NC,
+            0.1f32.to_bits().to_le_bytes().to_vec(),
+            1,
+        ),
+    ] {
+        let sec = elf.find(name).expect(name);
+        assert_eq!(elf.sh_flags(sec), SHF_ALLOC_MERGE, "{name} flags");
+        assert_eq!(elf.sh_entsize(sec), pattern.len(), "{name} entry size");
+        let at = elf.sh_offset(sec);
+        assert_eq!(
+            &bytes[at..at + elf.sh_size(sec)],
+            &pattern[..],
+            "{name} holds one slot"
+        );
+        let pairs: alloc::vec::Vec<(u32, u64)> = rows
+            .iter()
+            .filter(|r| elf.sym_shndx(r.sym) == sec && elf.sym_type(r.sym) == 3)
+            .map(|r| (r.rtype, r.addend))
+            .collect();
+        let pair = [(R_AARCH64_ADR_PREL_PG_HI21, 0), (lo12, 0)];
+        assert_eq!(pairs, pair.repeat(loads), "{name} loads");
+    }
+}
+
 /// `-fPIC` on aarch64 takes the same label-difference form the x86-64
 /// side does: 4-byte pc-relative slots, so no absolute relocation
 /// reaches the object.
@@ -7904,6 +8205,84 @@ fn aarch64_switch_table_pic_object_uses_pcrel_entries() {
     for (k, r) in rows.iter().enumerate() {
         assert_eq!(r.offset, (k * 4) as u64, "entry {k} offset stride");
         assert_eq!(r.rtype, R_AARCH64_PREL32, "entry {k} relocation kind");
+    }
+}
+
+/// Under `-mbranch-protection=bti` and `-fcf-protection=branch` every
+/// switch-table slot lands on a landing pad, and a case with no code of its
+/// own takes the slot of the block its edge reaches: no slot lands on a pad
+/// followed by a jump, and the empty cases share one slot target.
+#[test]
+fn switch_slots_land_on_pads_where_their_cases_reach() {
+    use crate::{
+        CompileOptions, Compiler, Hardening, NativeOptions, OutputKind, Target,
+        emit_native_with_options,
+    };
+    const SRC: &str = "int classify(int x) {\n\
+         int r = 0;\n\
+         switch (x) {\n\
+         case 0: break; case 1: case 2: r = 10; break; case 3: break;\n\
+         case 4: r = 40; break; case 5: case 6: case 7: break;\n\
+         case 8: r = 80; break; case 9: break; default: r = -1; break;\n\
+         }\n\
+         return r + x;\n}\n";
+    const EMPTY: [usize; 6] = [0, 3, 5, 6, 7, 9];
+    let bti = Hardening {
+        bti: true,
+        ..Hardening::NONE
+    };
+    let cet = Hardening {
+        cf_protection_branch: true,
+        ..Hardening::NONE
+    };
+    for (target, hardening, pad, jump) in [
+        (
+            Target::LinuxAarch64,
+            bti,
+            &[0x9F, 0x24, 0x03, 0xD5][..],
+            (|c: &[u8]| c[3] & 0xFC == 0x14) as fn(&[u8]) -> bool,
+        ),
+        (Target::LinuxX64, cet, &[0xF3, 0x0F, 0x1E, 0xFA][..], |c| {
+            matches!(c[0], 0xE9 | 0xEB)
+        }),
+    ] {
+        for optimize in [false, true] {
+            let prog = Compiler::with_options(
+                SRC.to_string(),
+                target,
+                CompileOptions::default()
+                    .with_no_entry_point(true)
+                    .with_optimize(optimize),
+            )
+            .compile()
+            .expect("compile");
+            let opts = NativeOptions {
+                output_kind: OutputKind::Relocatable,
+                hardening,
+                optimize,
+                ..NativeOptions::default()
+            };
+            let obj = emit_native_with_options(&prog, target, opts).expect("emit");
+            let elf = ElfView::new(&obj);
+            let text = elf.find(".text").expect("no .text");
+            let code = &obj[elf.sh_offset(text)..][..elf.sh_size(text)];
+            let rela = elf.find(".rela.rodata.jump_tables").expect("no table");
+            let slots: Vec<usize> = elf
+                .rela_rows(rela)
+                .iter()
+                .map(|r| r.addend as usize)
+                .collect();
+            assert_eq!(slots.len(), 10, "{target:?} -O {optimize}");
+            for &at in &slots {
+                let ctx = || format!("{target:?} -O {optimize}: slot at {at:#x}");
+                assert_eq!(&code[at..at + 4], pad, "{}", ctx());
+                assert!(!jump(&code[at + 4..]), "{}", ctx());
+            }
+            assert!(
+                EMPTY.iter().all(|&k| slots[k] == slots[EMPTY[0]]),
+                "{target:?} -O {optimize}: {slots:x?}"
+            );
+        }
     }
 }
 
@@ -8316,10 +8695,13 @@ fn copy_between_two_locals_keeps_neither_in_memory() {
     }
 }
 
-/// An aggregate holding an array, or of more cells than the usable GPR file
-/// on either target, keeps its block copy out.
+/// An aggregate holding an array, or of more cells than the usable GPR
+/// file on either target, stays in memory: the field splitter declines
+/// it and its initializer keeps writing memory. The initializer writes
+/// the destination and no copy follows, since the temporary the walker
+/// staged is written whole in the block that copied it.
 #[test]
-fn size_bound_keeps_block_copies_out() {
+fn size_bound_keeps_the_object_in_memory() {
     const SRC: &str = "struct arr { long a[2]; };\n\
         struct q4 { long a, b, c, d; };\n\
         struct wide { struct q4 a, b, c, d, e, f, g, h; };\n\
@@ -8339,10 +8721,16 @@ fn size_bound_keeps_block_copies_out() {
                 .find(|(_, i)| i.starts_with("ParamRef(0"))
                 .map(|(id, _)| *id)
                 .expect("the pointer");
-            let copy = alloc::format!("Mcpy {{ dst=v{param}, ");
             assert!(
-                insts.iter().any(|(_, i)| i.starts_with(&copy)),
-                "{target:?}: {name} keeps its block copy: {body}"
+                !insts.iter().any(|(_, i)| i.starts_with("Mcpy {")),
+                "{target:?}: {name} keeps a copy: {body}"
+            );
+            let writes = alloc::format!("v{param},");
+            assert!(
+                insts.iter().any(|(_, i)| {
+                    (i.starts_with("Store {") || i.starts_with("Mzero {")) && i.contains(&writes)
+                }),
+                "{target:?}: {name} writes the destination: {body}"
             );
         }
     }
@@ -8431,7 +8819,7 @@ long from_ptr(struct P *p) { struct P t = *p; return t.a + t.b; }
 
 /// [`optimized_function`] over the full register pool: the register budget
 /// the split is admitted under does not follow the pressure caps.
-fn optimized_function_full_pool(
+pub(super) fn optimized_function_full_pool(
     src: &str,
     name: &str,
     target: crate::Target,
@@ -8757,17 +9145,25 @@ fn split_object_is_reported_for_the_debug_location_drop() {
     }
 }
 
+/// A compound literal holding an array is an object of its own (C99
+/// 6.5.2.5p5) that the field splitter declines, so its initializer
+/// stays in memory -- and writes the destination, since nothing between
+/// the writes and the copy can reach it.
 #[test]
-fn literal_holding_an_array_keeps_its_block_copy() {
+fn literal_holding_an_array_is_built_in_place() {
     const SRC: &str = "struct arr { long a[2]; };\n\
         void literal(struct arr *out, long x) { *out = (struct arr){{x, x + 5}}; }\n";
     for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
         let (body, insts) = optimized_function_full_pool(SRC, "literal", target);
         let out = inst_id(&insts, "ParamRef(0", &body);
-        let copy = alloc::format!("Mcpy {{ dst=v{out}, ");
         assert!(
-            has_inst(&insts, &[copy.as_str()]) && stores_through(&insts, out).is_empty(),
-            "{target:?}: the literal is copied whole: {body}"
+            !insts.iter().any(|(_, i)| i.starts_with("Mcpy {")),
+            "{target:?}: the literal is still copied: {body}"
+        );
+        assert_eq!(
+            stores_through(&insts, out).len(),
+            2,
+            "{target:?}: both elements are written through the parameter: {body}"
         );
     }
 }
@@ -8841,11 +9237,14 @@ fn volatile_parameter_entry_copy_stores_volatile() {
                 .filter(|(_, i)| i.starts_with(head) && (!volatile || i.contains(", volatile")))
                 .count()
         };
+        // A read of the copy's own slot folds the frame offset into the
+        // load, so it carries its volatile mark in `LoadLocal` form.
+        let volatile_loads = count("Load {", true) + count("LoadLocal {", true);
         assert!(
             !has_inst(&insts, &["Mcpy"])
                 && count("Store {", false) == stores
                 && count("Store {", true) == stores
-                && count("Load {", true) >= 2,
+                && volatile_loads >= 2,
             "{target:?}: the parameter is copied and read through volatile accesses: {body}"
         );
     }
@@ -10634,7 +11033,7 @@ fn functions_calling(obj: &[u8], symbol: &str) -> alloc::vec::Vec<alloc::string:
 
 /// Every `.rela.text` entry as `(r_offset, symbol name, r_addend)`,
 /// whatever its type -- the branch-only view is `x64_branch_relocs`.
-fn text_relocs(obj: &[u8]) -> alloc::vec::Vec<(u64, alloc::string::String, i64)> {
+pub(super) fn text_relocs(obj: &[u8]) -> alloc::vec::Vec<(u64, alloc::string::String, i64)> {
     let sections = elf_section_bodies(obj);
     let body = |n: &str| {
         sections
@@ -11149,7 +11548,7 @@ fn ms_abi_selects_the_microsoft_x64_convention() {
     const FROM_RDI: &[u8] = &[0x48, 0x89, 0xf8];
     // `sub rsp, 0x20`: the caller-reserved shadow space (Microsoft x64
     // calling convention); System V reserves none.
-    const SHADOW: &[u8] = &[0x48, 0x81, 0xec, 0x20, 0x00, 0x00, 0x00];
+    const SHADOW: &[u8] = &[0x48, 0x83, 0xec, 0x20];
     // `mov rcx, rdi` / `mov rsi, rdi`: the first argument's outgoing
     // register at a call site.
     const TO_RCX: &[u8] = &[0x48, 0x89, 0xf9];
@@ -12177,7 +12576,7 @@ fn relocatable_object(src: &str, target: crate::Target) -> alloc::vec::Vec<u8> {
     .unwrap_or_else(|e| panic!("emit object ({target:?}): {e}"))
 }
 
-fn function_bytes(obj: &[u8], name: &str) -> alloc::vec::Vec<u8> {
+pub(super) fn function_bytes(obj: &[u8], name: &str) -> alloc::vec::Vec<u8> {
     let text = elf64_section(obj, ".text").expect(".text");
     let start = elf_func_value(obj, name).unwrap_or_else(|| panic!("no `{name}`")) as usize;
     let (_, size) = elf_func_symbols(obj)
@@ -12187,7 +12586,7 @@ fn function_bytes(obj: &[u8], name: &str) -> alloc::vec::Vec<u8> {
     text[start..start + size as usize].to_vec()
 }
 
-fn function_words(obj: &[u8], name: &str) -> alloc::vec::Vec<u32> {
+pub(super) fn function_words(obj: &[u8], name: &str) -> alloc::vec::Vec<u32> {
     let b = function_bytes(obj, name);
     b.as_chunks::<4>()
         .0
@@ -12912,4 +13311,61 @@ fn hidden_result_pointer_leaves_argument_classes_in_place() {
             "{target:?}: the call places only d in the FP bank"
         );
     }
+}
+
+/// A loop's condition and step carry their own lines. The statement was
+/// stamped where the parser finished it, after the body, so the test of a
+/// `while` took the line of the statement after the loop, and a `for`
+/// step or a `do` condition took the line of the body's last statement.
+#[test]
+fn loop_conditions_and_steps_take_their_own_lines() {
+    use crate::c5::codegen::ssa::shadow::produce_ssa_funcs;
+    use crate::c5::ir::{BinOp, Inst};
+    const SRC: &str = "int w(int n) {\n\
+        \x20 int i = 0, s = 0;\n\
+        \x20 /* line 3 */\n\
+        \x20 while (i < n) {\n\
+        \x20   s += i;\n\
+        \x20   i++;\n\
+        \x20 }\n\
+        \x20 s += 1;\n\
+        \x20 return s;\n\
+        }\n\
+        int g(int n) {\n\
+        \x20 int s = 0;\n\
+        \x20 for (int i = 0;\n\
+        \x20      i < n;\n\
+        \x20      i += 3) {\n\
+        \x20   s += i;\n\
+        \x20 }\n\
+        \x20 do {\n\
+        \x20   s--;\n\
+        \x20 } while (s > 100);\n\
+        \x20 return s;\n\
+        }\n\
+        int main(void) { return w(1) + g(1); }\n";
+    let program = super::compile_str_bare(SRC);
+    let funcs = produce_ssa_funcs(&program, crate::Target::host(), false, true).expect("ssa");
+    let lines_of = |name: &str, want: &dyn Fn(&Inst) -> bool| -> alloc::vec::Vec<u32> {
+        let f = funcs.iter().find(|f| f.name == name).expect(name);
+        (0..f.insts.len())
+            .filter(|&v| want(&f.insts[v]))
+            .map(|v| f.inst_src[v].0)
+            .collect()
+    };
+    let is = |want: BinOp| move |i: &Inst| matches!(i, Inst::BinopI { op, .. } | Inst::Binop { op, .. } if *op == want);
+    assert_eq!(lines_of("w", &is(BinOp::Lt)), [4], "while test");
+    assert_eq!(lines_of("g", &is(BinOp::Lt)), [14], "for test");
+    assert_eq!(lines_of("g", &is(BinOp::Gt)), [20], "do test");
+    let step = |i: &Inst| {
+        matches!(
+            i,
+            Inst::BinopI {
+                op: BinOp::Add,
+                rhs_imm: 3,
+                ..
+            }
+        )
+    };
+    assert_eq!(lines_of("g", &step), [15], "for step");
 }

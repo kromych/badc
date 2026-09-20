@@ -53,7 +53,7 @@ Disassembly of section .text:
                	ldr	x16, [sp]
                	str	w0, [x16]
                	ldursw	x0, [x29, #-0x8]
-               	cbz	x0, <addr>
+               	cbz	w0, <addr>
                	mov	x0, #0x2                // =2
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10

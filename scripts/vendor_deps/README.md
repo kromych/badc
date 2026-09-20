@@ -5,9 +5,8 @@ Demos that pull a third-party library (`miniz`, `kissfft`,
 `monocypher`, `bearssl`, `lua`, `curl`, `picocom`, `screen`, `vim`)
 fetch the upstream
 archive on first use. CI hitting the upstream hosts directly
-was flaky -- transient
-`RemoteDisconnected` failures from the GitHub release CDN and
-sourceware.org. To stop those, the upstream archives are
+produced `RemoteDisconnected` failures from the GitHub release
+CDN and sourceware.org. To stop those, the upstream archives are
 mirrored once on a `kromych/badc` GitHub release and each
 demo's `setup.py` pulls from that single URL with a pinned
 sha256 verified before extraction.
@@ -35,8 +34,8 @@ project's identifier for the release:
 | bearssl    | bearssl.org release tarball             | tarball-sha256  |
 | lua        | lua.org source + test-suite tarballs    | tarball-sha256  |
 | curl       | curl.se release tarball                 | tarball-sha256  |
-| qemu       | git v11.0.2 tag; bundle assembled off   | git (assembled) |
-| pc-bios-x86| qemu 11.0.2 release tarball `pc-bios/`  | tarball-sha256  |
+| qemu       | git v11.1.1 tag; bundle assembled off   | git (assembled) |
+| pc-bios-x86| qemu 11.1.1 release tarball `pc-bios/`  | tarball-sha256  |
 | linux      | cdn.kernel.org release tarball          | tarball-sha256  |
 | uemacs     | github torvalds/uemacs `master` commit  | git             |
 | picocom    | github npat-efault/picocom tag tarball  | tarball-sha256  |
@@ -55,14 +54,54 @@ headers and sources that is not reproducible off-box, so the
 demo needs that generated config captured alongside the source.
 `build_qemu_bundle.py` assembles the bundle from a configured
 QEMU build directory: it trims the source (dropping the git
-history, test suite, docs, ROM/firmware blobs, and meson
-subprojects -- none are compile inputs) and captures the
-meson-generated build inputs (`compile_commands.json`, the
-`*.rsp` response files, and every generated `*.h`/`*.c`/`*.inc`/
-`*.def`). See that script's header for the per-target capture +
-`--pack` flow. Pin the packed asset's sha256 in
+history, test suite, docs, ROM/firmware blobs, the berkeley
+float test data and Python bytecode -- none are compile inputs)
+and captures the meson-generated build inputs
+(`compile_commands.json`, the `*.rsp` response files, and every
+generated `*.h`/`*.c`/`*.inc`/`*.def`). See that script's header
+for the per-target capture + `--pack` flow. Pin the packed asset's sha256 in
 `demos/qemu/setup.py` and upload it to the release. `manifest.json`
 does not track it (it is not produced by `build_bundle.py`).
+
+Each target is configured and built on a host of its own
+architecture, in a directory beside a git clone of the release
+tag named `qemu-rm` (the compile database names sources as
+`../qemu-rm/...`), and built with `ninja -d keeprsp` so the
+linker response files survive for the capture. The 11.1.1
+bundle was configured with:
+
+```sh
+# aarch64
+../qemu-rm/configure --target-list=aarch64-softmmu \
+    --without-default-features --enable-fdt=system
+
+# x86_64
+../qemu-rm/configure --target-list=x86_64-softmmu \
+    --without-default-features --enable-fdt=system \
+    --enable-kvm --enable-mshv --enable-nitro --enable-tpm \
+    --enable-plugins --enable-replication --enable-l2tpv3 \
+    --enable-oss --enable-malloc-trim --enable-keyring \
+    --enable-vhost-kernel --enable-vhost-net --enable-vhost-user \
+    --enable-vhost-crypto --enable-vhost-vdpa \
+    --enable-vhost-user-blk-server --enable-libvduse \
+    --enable-vduse-blk-export --enable-slirp-smbd \
+    --enable-tools --enable-guest-agent --enable-stack-protector \
+    --enable-bochs --enable-cloop --enable-dmg --enable-qcow1 \
+    --enable-vdi --enable-vhdx --enable-vmdk --enable-vpc \
+    --enable-vvfat --enable-qed --enable-parallels \
+    --enable-colo-proxy --enable-multiprocess --enable-hv-balloon
+```
+
+`--without-default-features` turns every auto-detected feature
+off, so the host's installed packages decide only what no option
+controls: `CONFIG_X11` (the libX11 headers), `CONFIG_IASL` (an
+`iasl` on the path; only a qtest reads it) and the compiler
+probes (`__int128`, AVX2, AVX-512BW), which `adapt_config` in
+`demos/qemu/smoke.py` turns off. `--enable-fdt=system` needs the
+libfdt headers (Fedora: `libfdt-devel`); the smoke links the
+system `-lfdt`. A bump diffs each target's `config-host.h` and
+`<arch>-softmmu-config-{target,devices}.h` against the previous
+capture; what differs should be only what upstream changed.
 
 ## x86 ROM set (`pc-bios-x86`)
 
@@ -76,9 +115,9 @@ passes `-L` at this set. It is packed straight from an upstream
 release tarball, so no build directory is involved:
 
 ```sh
-curl -O https://download.qemu.org/qemu-11.0.2.tar.xz
+curl -O https://download.qemu.org/qemu-11.1.1.tar.xz
 python3 scripts/vendor_deps/build_qemu_bundle.py \
-    --pack-pc-bios qemu-11.0.2.tar.xz --out /tmp/roms
+    --pack-pc-bios qemu-11.1.1.tar.xz --out /tmp/roms
 ```
 
 The blob list is `PC_BIOS_X86` in that script; the asset name
@@ -146,13 +185,13 @@ download paths:
   (it does not distinguish 401 from 404 to avoid leaking repo
   existence).
 
-The token is only ever sent to `api.github.com` over TLS,
-never echoed in error messages, never persisted. CI's
+The token is sent to `api.github.com` over TLS and nowhere
+else; it stays out of error messages and off disk. CI's
 auto-provisioned `secrets.GITHUB_TOKEN` is mapped into env in
 `.github/workflows/ci.yml`; once the repo is public that
 mapping (and any local `export GITHUB_TOKEN=$(gh auth token)`)
 becomes unnecessary, and external contributors can run the
-smokes without ever touching a token.
+smokes without a token.
 
 Local cheat-sheet for a private-repo run:
 

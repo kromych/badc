@@ -32,9 +32,8 @@ Disassembly of section .text:
 <twice>:
                	movslq	(%rdi), %rax
                	shlq	%rax
-               	movslq	%eax, %rax
                	retq
 
 <main>:
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	retq

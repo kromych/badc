@@ -778,11 +778,9 @@ fn block_scoped_local_emitted() {
     let _ = std::fs::remove_file(&path);
 }
 
-/// x19 is callee-saved (AAPCS64) and the scratch the writer forces
-/// for address materialisation. A function that materialises no
-/// address and makes no indirect / external call never clobbers x19,
-/// so its prologue must not spill it; a function that touches a
-/// CallExt thunk shape still relies on x19 internally.
+/// x19 is callee-saved (AAPCS64) and the emitter's third scratch. No
+/// lowering of an arithmetic leaf, a global access or an external call
+/// writes it, so none of their prologues saves it.
 #[test]
 fn leaf_function_omits_x19_save() {
     let src = "extern int puts(const char *);\n\
@@ -809,8 +807,8 @@ fn leaf_function_omits_x19_save() {
     let with_ext = lldb_disasm(&path, "with_ext")
         .unwrap_or_else(|| panic!("lldb could not disassemble `with_ext`"));
     assert!(
-        with_ext.contains("x19"),
-        "function with CallExt must save/restore x19:\n{with_ext}"
+        !with_ext.contains("x19"),
+        "an external call writes no x19, so nothing saves it:\n{with_ext}"
     );
     let _ = std::fs::remove_file(&path);
 }

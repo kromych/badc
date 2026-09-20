@@ -42,7 +42,6 @@ Disassembly of section .text:
                	retq
 
 <driver>:
-               	movslq	%edi, %rdi
                	cmpl	$0x1, %edi
                	jl	<addr>
                	cmpl	$0x2, %edi
@@ -50,18 +49,16 @@ Disassembly of section .text:
                	cmpl	$0x2, %edi
                	je	<addr>
                	movl	$0x190, %eax            # imm = 0x190
-               	movslq	%eax, %rax
                	retq
                	movl	$0x12c, %eax            # imm = 0x12C
                	jmp	<addr>
                	movl	$0xc8, %eax
                	jmp	<addr>
-               	testq	%rdi, %rdi
+               	testl	%edi, %edi
                	jne	<addr>
                	movl	$0x64, %eax
                	jmp	<addr>
 
 <main>:
-               	movl	$0x12c, %eax            # imm = 0x12C
                	movl	$0x12c, %eax            # imm = 0x12C
                	retq

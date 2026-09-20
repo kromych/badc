@@ -483,9 +483,9 @@ pub(crate) enum Machine {
 /// [`return_extension`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ReturnExt {
-    /// Already 64-bit (pointer, `long long`, LP64 `long`,
-    /// `void`/no return, FP) -- caller copies the host return
-    /// register into the accumulator without touching it.
+    /// Already 64-bit (pointer, `long long`, LP64 `long`, FP), or no
+    /// value at all (`void`) -- the caller takes the host return
+    /// register as it is.
     None,
     /// Sign-extend the low 8 / 16 / 32 bits.
     Sign8,
@@ -503,6 +503,22 @@ impl ReturnExt {
     pub(crate) fn high_word_only(self) -> bool {
         matches!(self, ReturnExt::Sign32 | ReturnExt::Zero32)
     }
+}
+
+/// The extension a call site applies to `v`, the result of an import
+/// returning `return_type_tag`: none for a result nothing reads, and none
+/// for a 32-bit widening whose high word nothing reads.
+pub(crate) fn call_result_extension(
+    return_type_tag: i64,
+    target: Target,
+    alloc: &ssa::reg_alloc::Allocation,
+    v: crate::c5::ir::ValueId,
+) -> ReturnExt {
+    let ext = return_extension(return_type_tag, target);
+    if alloc.is_unread(v) || (ext.high_word_only() && alloc.high_dead(v)) {
+        return ReturnExt::None;
+    }
+    ext
 }
 
 /// Upper bound on ent_pcs the lowering needs to look up. The
@@ -536,8 +552,7 @@ pub(super) fn pc_extent_for_lowering(
 /// store instruction pair.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ArgPlacement {
-    /// Goes into an integer arg register. Index is into
-    /// `Abi::int_arg_regs`.
+    /// Goes into this integer arg register (one of `Abi::int_arg_regs`).
     IntReg(u8),
     /// Goes into a floating-point arg register. Index is the
     /// register number (d0..d7 on aarch64, xmm0..xmm7 on
@@ -563,7 +578,7 @@ pub(crate) enum ArgPlacement {
     },
     /// An aggregate passed by an implicit reference: the caller
     /// copies it to a temporary and passes the pointer in this
-    /// integer register (index into `Abi::int_arg_regs`).
+    /// integer register (one of `Abi::int_arg_regs`).
     StructByRefReg(u8),
     /// As `StructByRefReg`, but the implicit-reference pointer
     /// overflows to the outgoing-args stack at `[sp + offset]`.
@@ -631,6 +646,22 @@ pub(crate) struct CallPlan {
     pub next_gpr: usize,
     pub next_fpr: usize,
     pub stack_bytes: u32,
+}
+
+impl CallPlan {
+    /// The integer registers the placements fill.
+    pub(crate) fn int_regs(&self) -> impl Iterator<Item = u8> + '_ {
+        self.placements.iter().flat_map(|p| {
+            let (one, parts): (Option<u8>, &[ClassReg]) = match p {
+                ArgPlacement::IntReg(r) | ArgPlacement::StructByRefReg(r) => (Some(*r), &[]),
+                ArgPlacement::StructSplit { reg, .. } => (Some(*reg), &[]),
+                ArgPlacement::StructRegs { regs, n, .. } => (None, &regs[..*n as usize]),
+                _ => (None, &[]),
+            };
+            one.into_iter()
+                .chain(parts.iter().filter(|c| !c.is_fp).map(|c| c.reg))
+        })
+    }
 }
 
 /// The leading arguments a call places as named: none of a Windows arm64 variadic callee's.
@@ -1073,6 +1104,10 @@ pub(crate) fn return_extension(return_type_tag: i64, target: Target) -> ReturnEx
         // prototype.
         return ReturnExt::None;
     }
+    // `void` shares `unsigned char`'s band; the call leaves no value.
+    if ty_helpers::is_void_ty(return_type_tag) {
+        return ReturnExt::None;
+    }
     let unsigned = ty_helpers::is_unsigned_ty(return_type_tag);
     let bare = ty_helpers::strip_unsigned(return_type_tag);
     if ty_helpers::is_pointer_ty(bare) {
@@ -1117,9 +1152,6 @@ pub(crate) fn return_extension(return_type_tag: i64, target: Target) -> ReturnEx
         };
     }
     if bare == Ty::Char as i64 {
-        // Lexer aliases `void` -> `Ty::Char`. Either way, signed
-        // is the safer extension for an 8-bit return; unsigned is
-        // a hint from a `unsigned char` prototype.
         return if unsigned {
             ReturnExt::Zero8
         } else {
@@ -1127,6 +1159,30 @@ pub(crate) fn return_extension(return_type_tag: i64, target: Target) -> ReturnEx
         };
     }
     ReturnExt::None
+}
+
+/// True when `return_type_tag` is an integer type that is narrower than
+/// the return register on every target, so the result occupies the low
+/// word and bits 32..63 carry none of it (SysV AMD64 3.2.3, AAPCS64 6.9,
+/// Win64: a sub-register return leaves the rest of the register
+/// unspecified). A caller reading such a result above the type's width
+/// extends it itself.
+///
+/// `long` is excluded because its width is per-target (4 bytes on LLP64,
+/// 8 on LP64) and the mid-end asks this before the target is fixed. Tag
+/// 0 -- no recorded prototype, which `Ty::Char` also encodes -- is
+/// excluded for the same reason [`return_extension`] excludes it.
+pub(crate) fn return_is_low_word(return_type_tag: i64) -> bool {
+    use crate::c5::compiler::types as ty_helpers;
+    use crate::c5::token::Ty;
+    if return_type_tag == 0 || ty_helpers::is_void_ty(return_type_tag) {
+        return false;
+    }
+    let bare = ty_helpers::strip_unsigned(return_type_tag);
+    if ty_helpers::is_pointer_ty(bare) {
+        return false;
+    }
+    bare == Ty::Bool as i64 || bare == Ty::Short as i64 || bare == Ty::Int as i64
 }
 
 /// One resolved external import: a binding the program reaches
@@ -1187,8 +1243,8 @@ pub(crate) struct ResolvedImport {
     /// (atoi, fclose, ...) leave the upper 32 bits of RAX
     /// undefined, and a downstream 64-bit comparison against a
     /// negative literal sees garbage. `0` (= `Ty::Char` = "no
-    /// prototype seen") falls through with no extension; `void`
-    /// also reduces to `Ty::Char` since the lexer aliases it.
+    /// prototype seen") falls through with no extension, as does
+    /// `void`, which the tag's void bit names.
     pub return_type_tag: i64,
     /// Prototype's return type was spelled `long double`. The
     /// SysV x86_64 ABI returns long double in x87 `st(0)`; c5's
@@ -2206,8 +2262,9 @@ pub(crate) struct AsmTextLabel {
 /// `.debug_frame` builder installs its CFA rules at the same
 /// boundaries.
 ///
-/// The prologue is `push rbp; mov rbp,rsp; [sub rsp,N]`, with the
-/// return address at `[rsp]` on entry and at `[rbp + 8]` from the
+/// The prologue is `push rbp; mov rbp,rsp; [sub rsp,N]` and the pushes
+/// of the callee-saved registers, which no field describes. The
+/// return address is at `[rsp]` on entry and at `[rbp + 8]` from the
 /// `mov` on. Each `*_end` field is the byte offset just past the
 /// matching instruction, which the unwind codes use as their
 /// `CodeOffset` (the offset of the next instruction).
@@ -2227,12 +2284,11 @@ pub(crate) struct FnUnwind {
     pub push_rbp_end: u32,
     /// Offset (from `begin`) past `mov rbp,rsp`.
     pub set_fpreg_end: u32,
-    /// Bytes the standard frame allocation reserves (`frame_bytes`).
-    /// 0 when the function reserves no locals / spill / callee-save
-    /// area.
+    /// Bytes the prologue's single `sub rsp,N` reserves: the frame
+    /// less the pushed callee-saved registers. 0 without that `sub`.
     pub frame_bytes: u32,
-    /// Offset (from `begin`) past `sub rsp,frame_bytes`. Set only
-    /// when `frame_bytes > 0`.
+    /// Offset (from `begin`) past `sub rsp,N`. Set only when
+    /// `frame_bytes > 0`.
     pub frame_alloc_end: u32,
 }
 
@@ -2438,18 +2494,77 @@ pub(crate) struct LabelReloc {
 }
 
 /// Read-only data materialized during native emit: switch dispatch
-/// tables. Kept out of `Build::text` so the code section holds only
-/// instructions, and out of `Build::data` because data/bss offsets
-/// are fixed before lowering runs. Writers place `bytes` in a
-/// read-only region, resolve `addr_fixups` sites, and fill each
-/// `rel32` slot; `abs64` slots surface as relocations of the
-/// relocatable object.
+/// tables and floating-point literals. Kept out of `Build::text` so the
+/// code section holds only instructions, and out of `Build::data`
+/// because data/bss offsets are fixed before lowering runs. Writers
+/// place `bytes` in a read-only region at an 8-aligned address, resolve
+/// `addr_fixups` sites, and fill each `rel32` slot; `abs64` slots
+/// surface as relocations of the relocatable object.
 #[derive(Debug, Default)]
 pub(crate) struct RodataBuild {
     pub bytes: Vec<u8>,
     pub addr_fixups: Vec<RodataAddrFixup>,
     pub rel32: Vec<RodataRel32>,
     pub abs64: Vec<RodataAbs64>,
+    /// Floating literals, placed after the tables by [`Self::place_literals`].
+    pub literals: LiteralPool,
+}
+
+/// One slot per pattern and width, in a run of 8-byte and one of 4-byte slots.
+#[derive(Debug, Default)]
+pub(crate) struct LiteralPool {
+    slots: alloc::collections::BTreeMap<(u64, u8), u64>,
+    runs: [Vec<u8>; 2],
+    /// `(code_offset, width, offset in run)` per load.
+    loads: Vec<(usize, u8, u64)>,
+    /// `(offset, len)` of each run in `RodataBuild::bytes` once placed.
+    pub spans: [(u64, u64); 2],
+}
+
+impl LiteralPool {
+    fn run(width: u8) -> usize {
+        usize::from(width == 4)
+    }
+
+    /// The `adrp` + `ldr` pair at `code_offset` loads `width` bytes of `bits`.
+    pub(crate) fn load(&mut self, code_offset: usize, bits: u64, width: u8) {
+        let run = &mut self.runs[Self::run(width)];
+        let at = *self.slots.entry((bits, width)).or_insert_with(|| {
+            let at = run.len() as u64;
+            run.extend_from_slice(&bits.to_le_bytes()[..width.into()]);
+            at
+        });
+        self.loads.push((code_offset, width, at));
+    }
+}
+
+impl RodataBuild {
+    /// Append the literal runs to `bytes` and their loads to `addr_fixups`;
+    /// once, after the last function.
+    pub(crate) fn place_literals(&mut self) {
+        let pool = &mut self.literals;
+        for (k, width) in [(0, 8), (1, 4)] {
+            if pool.runs[k].is_empty() {
+                continue;
+            }
+            let at = self.bytes.len().next_multiple_of(width);
+            self.bytes.resize(at, 0);
+            self.bytes.append(&mut pool.runs[k]);
+            pool.spans[k] = (at as u64, (self.bytes.len() - at) as u64);
+        }
+        for (code_offset, width, at) in pool.loads.drain(..) {
+            self.addr_fixups.push(RodataAddrFixup {
+                code_offset,
+                rodata_offset: pool.spans[LiteralPool::run(width)].0 + at,
+            });
+        }
+    }
+
+    /// Length of the part of `bytes` ahead of the literals: the tables.
+    pub(crate) fn tables_len(&self) -> u64 {
+        let spans = self.literals.spans.iter().filter(|s| s.1 > 0);
+        spans.map(|s| s.0).min().unwrap_or(self.bytes.len() as u64)
+    }
 }
 
 /// Object-link analogue of [`RodataRel32`]: a 4- or 8-byte slot
@@ -2561,7 +2676,7 @@ pub(crate) struct TlsIndexFixup {
 /// offset is too large to fit the inline `add` immediate. The
 /// codegen records the offset; the writer patches a
 /// movz/movk-style sequence. None of our current fixtures trip
-/// this -- the `add x19, x16, #imm12` form covers TLS blocks
+/// this -- the `add rd, x16, #imm12` form covers TLS blocks
 /// up to 4080 bytes -- but the type is here so larger TLS
 /// programs surface a real error rather than silent
 /// truncation.
@@ -2773,24 +2888,6 @@ pub struct Hardening {
     /// which is the only instruction CET permits an indirect transfer to
     /// land on (Intel SDM Vol. 1, 18.3.1).
     pub cf_protection_branch: bool,
-}
-
-/// Blocks a function can be entered at by an indirect branch: every
-/// successor of a `Terminator::JumpTable` and every block whose address
-/// `&&label` took. Both arches place a landing pad at each -- `BTI J` on
-/// aarch64, `endbr64` on x86_64. A `Terminator::AsmGoto` label is
-/// excluded: the inline-asm lowering reaches it with a direct branch.
-pub(crate) fn indirect_branch_target_blocks(
-    func: &crate::c5::ir::FunctionSsa,
-) -> alloc::collections::BTreeSet<crate::c5::ir::BlockId> {
-    let mut out: alloc::collections::BTreeSet<_> =
-        func.computed_goto_targets.iter().copied().collect();
-    for block in &func.blocks {
-        if let crate::c5::ir::Terminator::JumpTable { table, .. } = block.terminator {
-            out.extend(func.jump_tables[table as usize].iter().copied());
-        }
-    }
-    out
 }
 
 impl Hardening {
@@ -3201,7 +3298,7 @@ pub struct NativeOptions {
     pub bss_segregate: bool,
     /// Keep compiler-generated code off the floating-point / SIMD
     /// register file (`-mno-sse` on x86_64, `-mgeneral-regs-only` on
-    /// aarch64). See [`Abi::no_fp_varargs`], which this sets.
+    /// aarch64). See [`Abi::no_fp_regs`], which this sets.
     pub no_fp_regs: bool,
     /// Keep every compiler-generated memory access naturally aligned for
     /// its width (`-mstrict-align`). Code that runs with the MMU off maps
@@ -4014,11 +4111,13 @@ pub(crate) struct Abi {
     /// FP/SIMD access raises a synchronous exception. The variadic callee
     /// prologue skips the FP half of the register save area and
     /// `va_start` marks the FP area exhausted, so `va_arg` walks the
-    /// general area then the overflow stack. Floating-point argument
+    /// general area then the overflow stack; the x86_64 zero fill keeps to
+    /// integer stores and the aarch64 population count to the
+    /// general-register sequence. Floating-point argument
     /// codegen is unaffected: such environments pass no FP varargs.
     /// Per-run (from [`NativeOptions::no_fp_regs`]), not a `Target::abi`
     /// row property.
-    pub no_fp_varargs: bool,
+    pub no_fp_regs: bool,
     /// Every compiler-generated memory access must be naturally aligned
     /// for its width. Per-run (from [`NativeOptions::strict_align`]), not
     /// a `Target::abi` row property; see [`access_chunk`].
@@ -4163,7 +4262,7 @@ impl Target {
                 pair_align16_gprs: false,
                 natural_composite_align: false,
                 variadic_zero_xmm_count: false,
-                no_fp_varargs: false,
+                no_fp_regs: false,
                 strict_align: false,
                 hardening: Hardening::NONE,
                 stack_protect: StackProtect::OFF,
@@ -4180,7 +4279,7 @@ impl Target {
                 pair_align16_gprs: true,
                 natural_composite_align: true,
                 variadic_zero_xmm_count: false,
-                no_fp_varargs: false,
+                no_fp_regs: false,
                 strict_align: false,
                 hardening: Hardening::NONE,
                 stack_protect: StackProtect::OFF,
@@ -4197,7 +4296,7 @@ impl Target {
                 pair_align16_gprs: false,
                 natural_composite_align: false,
                 variadic_zero_xmm_count: true,
-                no_fp_varargs: false,
+                no_fp_regs: false,
                 strict_align: false,
                 hardening: Hardening::NONE,
                 stack_protect: StackProtect::OFF,
@@ -4214,7 +4313,7 @@ impl Target {
                 pair_align16_gprs: false,
                 natural_composite_align: false,
                 variadic_zero_xmm_count: false,
-                no_fp_varargs: false,
+                no_fp_regs: false,
                 strict_align: false,
                 hardening: Hardening::NONE,
                 stack_protect: StackProtect::OFF,
@@ -4231,7 +4330,7 @@ impl Target {
                 pair_align16_gprs: true,
                 natural_composite_align: false,
                 variadic_zero_xmm_count: false,
-                no_fp_varargs: false,
+                no_fp_regs: false,
                 strict_align: false,
                 hardening: Hardening::NONE,
                 stack_protect: StackProtect::OFF,
@@ -4288,7 +4387,7 @@ mod access_bound_tests {
 #[cfg(test)]
 mod abi_plan_tests {
     use super::abi_classify::{AggClass, RegClass};
-    use super::{ArgAgg, ArgPlacement, Target, plan_call_args_aggs};
+    use super::{ArgAgg, ArgPlacement, CallPlan, ClassReg, Target, plan_call_args_aggs};
     use crate::c5::ir::FpMask;
 
     // A register-passed aggregate that spills must exhaust the correct
@@ -4511,6 +4610,47 @@ mod abi_plan_tests {
             assert_eq!(plan.placements[7], ArgPlacement::IntReg(7));
             assert_eq!(plan.placements[8], ArgPlacement::Stack(0));
         }
+    }
+
+    /// The integer registers a plan fills: scalar, by-reference and the
+    /// integer slots of a register-passed aggregate, not its FP slots.
+    #[test]
+    fn call_plan_names_the_integer_registers_it_fills() {
+        let plan = CallPlan {
+            placements: alloc::vec![
+                ArgPlacement::IntReg(7),
+                ArgPlacement::FpReg(0),
+                ArgPlacement::StructByRefReg(6),
+                ArgPlacement::StructRegs {
+                    regs: [
+                        ClassReg {
+                            reg: 2,
+                            is_fp: false
+                        },
+                        ClassReg {
+                            reg: 1,
+                            is_fp: true
+                        },
+                        ClassReg {
+                            reg: 9,
+                            is_fp: false
+                        },
+                        ClassReg {
+                            reg: 9,
+                            is_fp: false
+                        },
+                    ],
+                    n: 2,
+                    align: 8,
+                },
+                ArgPlacement::Stack(0),
+            ],
+            scratch_bytes: 0,
+            next_gpr: 0,
+            next_fpr: 0,
+            stack_bytes: 0,
+        };
+        assert_eq!(plan.int_regs().collect::<alloc::vec::Vec<_>>(), [7, 6, 2]);
     }
 
     #[test]

@@ -6,8 +6,9 @@ use super::super::*;
 use crate::c5::ast::expr_ty;
 impl<'a> Walker<'a> {
     /// Walk an `Expr::Unary` rvalue. AddrOf hands off to the lvalue
-    /// walk and Deref loads through the address; Neg, BitNot and LogNot
-    /// lower to a binop against an immediate.
+    /// walk and Deref loads through the address; Neg lowers to the
+    /// negate node of its operand's bank, BitNot and LogNot to a binop
+    /// against an immediate.
     pub(super) fn walk_unary(
         &mut self,
         b: &mut SsaBuilder,
@@ -21,6 +22,14 @@ impl<'a> Walker<'a> {
         }
         match op {
             UnOp::Neg => {
+                // A 128-bit operand negates as a pair and yields the
+                // address of a fresh 16-byte object, as every other
+                // 128-bit value-producing operator does.
+                if self.expr_is_int128_value(child) {
+                    let a = self.int128_operand(b, child)?;
+                    let pair = Self::int128_neg(b, a);
+                    return Ok(self.int128_materialize(b, pair));
+                }
                 let v = self.walk_expr_rvalue(b, child)?;
                 if is_floating_scalar(ty) {
                     // C99 6.5.3.3: `-x` keeps the operand's type, so a
@@ -31,8 +40,7 @@ impl<'a> Walker<'a> {
                     }
                     Ok(neg)
                 } else {
-                    let zero = b.imm(0);
-                    Ok(b.binop(BinOp::Sub, zero, v))
+                    Ok(b.neg(v))
                 }
             }
             UnOp::BitNot => {

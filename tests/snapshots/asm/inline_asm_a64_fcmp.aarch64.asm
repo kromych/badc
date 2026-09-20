@@ -28,23 +28,18 @@ Disassembly of section .text:
                	str	w0, [x16]
                	ldursw	x0, [x29, #-0x8]
                	cbz	x0, <addr>
-               	mov	x0, #0x4008000000000000 // =4613937818241073152
-               	fmov	d16, x0
-               	fneg	d0, d16
                	sub	x16, x29, #0x8
                	str	x16, [sp]
-               	str	d0, [sp, #0x8]
+               	mov	x16, #-0x3ff8000000000000 // =-4609434218613702656
+               	str	x16, [sp, #0x8]
                	ldr	d0, [sp, #0x8]
                	fcmp	d0, #0.0
                	cset	w0, ge
                	ldr	x16, [sp]
                	str	w0, [x16]
                	ldursw	x0, [x29, #-0x8]
-               	cmp	w0, #0x0
-               	cset	x0, eq
-               	cbz	x0, <addr>
+               	cbnz	w0, <addr>
                	mov	x0, #0x2a               // =42
-               	sxtw	x0, w0
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret

@@ -247,9 +247,10 @@ impl Compiler {
         self.ast_apply_binop(binop);
     }
 
-    /// Apply unary floating-point negation to the accumulator
-    /// (C99 6.5.3.3p3, result type IEEE-754 negated input).
-    pub(super) fn ast_fneg(&mut self) {
+    /// Apply unary negation to the accumulator (C99 6.5.3.3p3). The
+    /// walker picks the integer or the IEEE-754 form from the node's
+    /// type; `self.ty` must already hold the result type.
+    pub(super) fn ast_neg(&mut self) {
         self.pending.fn_ptr_chain_depth = -1;
         self.pending.fn_ptr_depth_is_array_elem = false;
         self.pending.value_is_fn_designator = false;
@@ -1618,37 +1619,37 @@ impl Compiler {
         )
     }
 
-    /// Push `Stmt::While { cond, body }`.
+    /// Push `Stmt::While { cond, body }` at the `while` keyword's position.
     pub(super) fn ast_emit_while(
         &mut self,
         cond: super::super::ast::ExprId,
         body: super::super::ast::StmtId,
+        pos: super::super::ast::SrcPos,
     ) -> super::super::ast::StmtId {
-        let pos = self.ast_src_pos();
         self.ast
             .push_stmt(super::super::ast::Stmt::While { cond, body }, pos)
     }
 
-    /// Push `Stmt::DoWhile { body, cond }`.
+    /// Push `Stmt::DoWhile { body, cond }` at its `while` keyword's position.
     pub(super) fn ast_emit_do_while(
         &mut self,
         body: super::super::ast::StmtId,
         cond: super::super::ast::ExprId,
+        pos: super::super::ast::SrcPos,
     ) -> super::super::ast::StmtId {
-        let pos = self.ast_src_pos();
         self.ast
             .push_stmt(super::super::ast::Stmt::DoWhile { body, cond }, pos)
     }
 
-    /// Push `Stmt::For { init, cond, post, body }`.
+    /// Push `Stmt::For { init, cond, post, body }` at the `for` keyword's position.
     pub(super) fn ast_emit_for(
         &mut self,
         init: Option<super::super::ast::BlockItem>,
         cond: Option<super::super::ast::ExprId>,
         post: Option<super::super::ast::ExprId>,
         body: super::super::ast::StmtId,
+        pos: super::super::ast::SrcPos,
     ) -> super::super::ast::StmtId {
-        let pos = self.ast_src_pos();
         self.ast.push_stmt(
             super::super::ast::Stmt::For {
                 init,

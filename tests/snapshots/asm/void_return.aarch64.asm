@@ -32,8 +32,7 @@ Disassembly of section .text:
                	ldrsw	x1, [x0]
                	cmp	w1, #0x0
                	b.ge	<addr>
-               	mov	x1, #0x0                // =0
-               	str	w1, [x0]
+               	str	wzr, [x0]
                	ret
                	ldrsw	x1, [x0]
                	add	x1, x1, #0x1
@@ -75,14 +74,12 @@ Disassembly of section .text:
                	ret
 
 <count_down>:
-               	sxtw	x0, w0
-               	b	<addr>
+               	cbz	w0, <addr>
                	ldrsw	x2, [x1]
                	add	x2, x2, x0
                	str	w2, [x1]
                	sub	x0, x0, #0x1
-               	sxtw	x0, w0
-               	cbnz	x0, <addr>
+               	cbnz	w0, <addr>
                	ret
 
 <main>:
@@ -95,8 +92,7 @@ Disassembly of section .text:
                	ldrsw	x1, [x0]
                	cmp	w1, #0x0
                	b.ge	<addr>
-               	mov	x1, #0x0                // =0
-               	str	w1, [x0]
+               	str	wzr, [x0]
                	mov	x1, #0x1                // =1
                	str	w1, [x0]
                	ldursw	x2, [x29, #-0x8]

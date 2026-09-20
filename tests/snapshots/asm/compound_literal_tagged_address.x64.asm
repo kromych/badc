@@ -34,8 +34,7 @@ Disassembly of section .text:
                	orq	$0x1, %rcx
                	movq	%rcx, -0x8(%rbp)
                	movq	-0x8(%rbp), %rcx
-               	andq	$0x1, %rcx
-               	testq	%rcx, %rcx
+               	testb	$0x1, %cl
                	jne	<addr>
                	movl	$0x1, %eax
                	leave
@@ -62,6 +61,6 @@ Disassembly of section .text:
                	movl	$0x5, %eax
                	leave
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	leave
                	retq

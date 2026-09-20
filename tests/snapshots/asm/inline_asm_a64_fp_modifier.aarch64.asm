@@ -29,12 +29,11 @@ Disassembly of section .text:
                	ldr	x16, [sp]
                	str	d0, [x16]
                	ldur	d0, [x29, #-0x8]
-               	mov	x0, #0x4045000000000000 // =4631107791820423168
-               	fmov	d17, x0
-               	fcmp	d0, d17
+               	mov	x16, #0x4045000000000000 // =4631107791820423168
+               	fmov	d1, x16
+               	fcmp	d0, d1
                	b.ne	<addr>
                	mov	x0, #0x2a               // =42
-               	sxtw	x0, w0
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret

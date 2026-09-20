@@ -14,5 +14,4 @@ Disassembly of section .text:
                	brk	#0x1
 
 <main>:
-               	sxtw	x0, w0
                	ret

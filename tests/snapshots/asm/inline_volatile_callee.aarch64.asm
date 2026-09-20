@@ -34,14 +34,12 @@ Disassembly of section .text:
                	ldrsw	x0, [x0]
                	stur	w0, [x29, #-0x8]
                	ldursw	x0, [x29, #-0x8]
-               	mov	x0, #0x0                // =0
-               	stur	w0, [x29, #-0x8]
+               	stur	wzr, [x29, #-0x8]
                	mov	x0, #0x1                // =1
                	stur	w0, [x29, #-0x8]
                	bl	<addr>
                	add	x0, x0, #0x3
                	sub	x0, x0, #0x7
-               	sxtw	x0, w0
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret

@@ -124,19 +124,24 @@ pub(super) fn emit_extend(
         return fail("Extend: value not int reg / spill");
     };
     match kind {
-        LoadKind::I8 => super::encode::emit_movsx_r_r8(code, rd, rn),
-        LoadKind::I16 => super::encode::emit_movsx_r_r16(code, rd, rn),
         // With bits 32..63 unread the source already is the result.
-        LoadKind::I32 if !alloc.high_dead(v) => super::encode::emit_movsxd_r_r(code, rd, rn),
-        LoadKind::I32 => {
-            if rd != rn {
-                emit_mov_rr(code, rd, rn);
-            }
-        }
+        LoadKind::I32 if alloc.high_dead(v) => emit_mov_rr(code, rd, rn),
+        LoadKind::I8 | LoadKind::I16 | LoadKind::I32 => emit_sign_extend(code, rd, rn, kind),
         _ => return fail("Extend: unsupported kind"),
     }
     spill_dst_to_slot(code, dst, rd, frame);
     Ok(())
+}
+
+/// `rd <- rn`, sign-extended from the width of an `I8` / `I16` / `I32`
+/// `kind` (`MOVSX` / `MOVSXD`); any other kind takes the whole register.
+pub(super) fn emit_sign_extend(code: &mut Vec<u8>, rd: Reg, rn: Reg, kind: LoadKind) {
+    match kind {
+        LoadKind::I8 => super::encode::emit_movsx_r_r8(code, rd, rn),
+        LoadKind::I16 => super::encode::emit_movsx_r_r16(code, rd, rn),
+        LoadKind::I32 => super::encode::emit_movsxd_r_r(code, rd, rn),
+        _ => emit_mov_rr(code, rd, rn),
+    }
 }
 
 /// `Inst::Copy { value, is_fp }` -- move `value` into this
@@ -190,6 +195,30 @@ pub(super) fn emit_copy(
     Ok(())
 }
 
+/// `Inst::Neg { value }` -- `negq dst`, after moving the operand into
+/// `dst` when it is not already there.
+pub(super) fn emit_neg(
+    code: &mut Vec<u8>,
+    dst: Place,
+    value: u32,
+    alloc: &Allocation,
+    frame: Frame,
+) -> Emit {
+    let src_place = place_of(alloc, value);
+    let Some(rd) = int_or_spill_dst(dst) else {
+        return fail("Neg: dst not int reg / spill");
+    };
+    let Some(rn) = materialize_int(code, src_place, rd, frame) else {
+        return fail("Neg: value not int reg / spill");
+    };
+    if rd != rn {
+        emit_mov_rr(code, rd, rn);
+    }
+    emit_unary_r(code, Mnem::Neg, 8, rd);
+    spill_dst_to_slot(code, dst, rd, frame);
+    Ok(())
+}
+
 /// `Inst::Bswap { value, width }` -- reverse the low `width` bytes,
 /// zero-extended. 64-bit: `bswap r64`. 32-bit: `bswap r32` (reads the
 /// low dword, zero-extends). 16-bit: `movzx` clears the upper bits the
@@ -223,6 +252,71 @@ pub(super) fn emit_bswap(
         _ => {
             emit_mov_rr(code, rd, rn);
             super::encode::emit_bswap_r(code, rd, 8);
+        }
+    }
+    spill_dst_to_slot(code, dst, rd, frame);
+    Ok(())
+}
+
+/// `Inst::BitCount` over the low `width` bytes, the 32-bit forms for 4:
+/// `popcnt`; `bsf`, then `cmovz` of the bit width where ZF marks a zero
+/// operand, whose destination the SDM leaves undefined; `bsr`, `cmovz` of
+/// `2 * bits - 1`, then `xor bits - 1`, which takes index `i` to
+/// `bits - 1 - i`. `nonzero` states that the operand cannot be zero, which
+/// leaves the guard's constant and `cmovz` dead.
+pub(super) fn emit_bit_count(
+    code: &mut Vec<u8>,
+    dst: Place,
+    op: BitCountOp,
+    value: u32,
+    width: u8,
+    nonzero: bool,
+    alloc: &Allocation,
+    frame: Frame,
+) -> Emit {
+    let src_place = place_of(alloc, value);
+    let Some(rd) = int_or_spill_dst(dst) else {
+        return fail("BitCount: dst not int reg / spill");
+    };
+    let Some(rn) = materialize_int(code, src_place, rd, frame) else {
+        return fail("BitCount: value not int reg / spill");
+    };
+    let bits = i32::from(width) * 8;
+    match op {
+        BitCountOp::Popcount => emit_rr(code, Mnem::Popcnt, width, rd, rn),
+        BitCountOp::Ctz => {
+            if !nonzero {
+                emit_mov_r_imm64(code, SCRATCH_R11, i64::from(bits));
+            }
+            emit_rr(code, Mnem::Bsf, width, rd, rn);
+            if !nonzero {
+                emit_rr(code, Mnem::Cmovz, 4, rd, SCRATCH_R11);
+            }
+        }
+        BitCountOp::Clz => {
+            if !nonzero {
+                emit_mov_r_imm64(code, SCRATCH_R11, i64::from(2 * bits - 1));
+            }
+            emit_rr(code, Mnem::Bsr, width, rd, rn);
+            if !nonzero {
+                emit_rr(code, Mnem::Cmovz, 4, rd, SCRATCH_R11);
+            }
+            emit_ri(code, Mnem::Xor, 4, rd, bits - 1);
+        }
+        // x86-64 has no leading-sign-bit count: `clz((x ^ (x << 1)) | 1)`
+        // over the same width. The `or` leaves the operand non-zero, so
+        // `bsr` needs no zero guard.
+        BitCountOp::Clrsb => {
+            if width == 4 {
+                super::encode::emit_mov_r32_r32(code, SCRATCH_R11, rn);
+            } else {
+                emit_mov_rr(code, SCRATCH_R11, rn);
+            }
+            emit_shift_ri(code, Mnem::Shl, width, SCRATCH_R11, 1);
+            emit_rr(code, Mnem::Xor, width, SCRATCH_R11, rn);
+            emit_ri(code, Mnem::Or, width, SCRATCH_R11, 1);
+            emit_rr(code, Mnem::Bsr, width, rd, SCRATCH_R11);
+            emit_ri(code, Mnem::Xor, 4, rd, bits - 1);
         }
     }
     spill_dst_to_slot(code, dst, rd, frame);
@@ -931,7 +1025,7 @@ fn emit_int_binop(
         } else {
             rhs_place
         };
-        return emit_binop_rdx_rax(code, op, dst, rd, rn, rhs_place, frame);
+        return emit_binop_rdx_rax(code, op, v, dst, rd, rn, rhs_place, alloc, frame);
     }
     // `OP rd, rm` mutates rd. When rhs already sits in rd, a commutative op
     // takes `OP rd, rn` as it stands; a non-commutative one stages rhs into
@@ -953,6 +1047,13 @@ fn emit_int_binop(
             | BinOp::Ule
             | BinOp::Uge
     );
+    // `rd = rn - rd` negates the subtrahend in place and adds, with no
+    // scratch; nothing reads the flags a `sub` leaves.
+    if op == BinOp::Sub && rhs_aliases_rd && !rhs_preserved_in_scratch && rn.0 != rd.0 {
+        emit_unary_r(code, Mnem::Neg, 8, rd);
+        emit_rr(code, Mnem::Add, 8, rd, rn);
+        return Ok(());
+    }
     if rhs_aliases_rd && commutative {
         // When rhs was preserved into rhs_scratch above (lhs Spill case),
         // rd now holds lhs from the spill load and the second operand
@@ -992,7 +1093,7 @@ fn emit_int_binop(
     // the LHS into rd first (preserves SSA semantics where the
     // result is `lhs OP rhs`). Cmp ops skip this -- they read
     // rn / rm directly and write dst via setcc+movzx.
-    if !is_cmp && rd.0 != rn.0 {
+    if !is_cmp && !is_shift && rd.0 != rn.0 {
         emit_mov_rr(code, rd, rn);
     }
     if let Some(m) = alu_mnem(op) {
@@ -1005,9 +1106,18 @@ fn emit_int_binop(
             return Ok(());
         }
     } else if is_shift {
-        // The count is a register here; `mov rd, rn` above left the lhs
-        // in rd.
-        return emit_shift_by_count_reg(code, op, v, dst, rd, ShiftCount::Reg(rm), alloc, frame);
+        // The count is a register here; the shift moves the lhs from rn.
+        return emit_shift_by_count_reg(
+            code,
+            op,
+            v,
+            dst,
+            rd,
+            rn,
+            ShiftCount::Reg(rm),
+            alloc,
+            frame,
+        );
     } else {
         // A new op variant reaching here is an IR producer / consumer
         // mismatch, not a register-pressure shape.
@@ -1017,19 +1127,34 @@ fn emit_int_binop(
     Ok(())
 }
 
+/// Whether `r`, which the lowering of `v` writes besides its result, holds
+/// a value that must survive it: one live across `v`, or a `-ffixed-` one.
+fn implicit_holds_live(
+    alloc: &Allocation,
+    v: super::super::ir::ValueId,
+    r: Reg,
+    frame: Frame,
+) -> bool {
+    frame.fixed_regs.has_gpr(r.0) || alloc.holds_live_across(v, r.0)
+}
+
 /// `BinOp::{Div,Mod,Divu,Modu,Mulh,Mulhu}`, all through the implicit
 /// rdx:rax pair: IDIV / DIV read the dividend there and leave the quotient
 /// in rax and the remainder in rdx; one-operand IMUL / MUL write the
-/// 128-bit product to rdx:rax. Allocated values in rax / rdx are preserved
-/// with push / pop; the transient misalignment is harmless since no call
-/// intervenes. `rn` is the materialised lhs; `rhs_place` routes into r10.
+/// 128-bit product to rdx:rax. A value live in rax / rdx across the
+/// operation is preserved with push / pop; the transient misalignment is
+/// harmless since no call intervenes. `rn` is the materialised lhs;
+/// `rhs_place` routes into r10.
+#[allow(clippy::too_many_arguments)]
 fn emit_binop_rdx_rax(
     code: &mut Vec<u8>,
     op: BinOp,
+    v: super::super::ir::ValueId,
     dst: Place,
     rd: Reg,
     rn: Reg,
     rhs_place: Place,
+    alloc: &Allocation,
     frame: Frame,
 ) -> Emit {
     let is_mulh = matches!(op, BinOp::Mulh | BinOp::Mulhu);
@@ -1039,8 +1164,8 @@ fn emit_binop_rdx_rax(
 
     // rax receives the lhs and the quotient / low half, rdx the high half and
     // the remainder; a register rd overwrites anyway is not saved.
-    let preserve_rax = rd.0 != Reg::RAX.0;
-    let preserve_rdx = rd.0 != Reg::RDX.0;
+    let preserve_rax = rd.0 != Reg::RAX.0 && implicit_holds_live(alloc, v, Reg::RAX, frame);
+    let preserve_rdx = rd.0 != Reg::RDX.0 && implicit_holds_live(alloc, v, Reg::RDX, frame);
     let pushed_bytes = (preserve_rax as i32 + preserve_rdx as i32) * 8;
 
     // The one-operand forms accept r/m64, so a spilled operand is named
@@ -1085,7 +1210,7 @@ fn emit_binop_rdx_rax(
     // `xor edx, edx`. A multiply reads only rax and overwrites rdx.
     if !is_mulh {
         if is_unsigned {
-            emit_rr(code, Mnem::Xor, 8, Reg::RDX, Reg::RDX);
+            super::encode::emit_zero_r(code, Reg::RDX);
         } else {
             super::encode::emit_cqo(code);
         }
@@ -1125,9 +1250,9 @@ enum ShiftCount {
     Imm(i64),
 }
 
-/// `rd = rd OP count` for a variable count, the value already in `rd`: the
-/// count moves into rcx (cl), a live rcx preserved with push / pop; when
-/// `rd` is rcx the shift is staged in a reserved scratch and copied back.
+/// `rd = src OP count` for a variable count: the count moves into rcx (cl),
+/// a live rcx preserved with push / pop; when `rd` is rcx the value is
+/// shifted in a reserved scratch and copied back.
 #[allow(clippy::too_many_arguments)]
 fn emit_shift_by_count_reg(
     code: &mut Vec<u8>,
@@ -1135,6 +1260,7 @@ fn emit_shift_by_count_reg(
     v: super::super::ir::ValueId,
     dst: Place,
     rd: Reg,
+    src: Reg,
     count: ShiftCount,
     alloc: &Allocation,
     frame: Frame,
@@ -1149,7 +1275,7 @@ fn emit_shift_by_count_reg(
         // register; r11 is reserved outside both allocator banks and
         // never aliases rd, the count, or any live value.
         let scratch = SCRATCH_R11;
-        emit_mov_rr(code, scratch, rd);
+        emit_mov_rr(code, scratch, src);
         match count {
             ShiftCount::Reg(r) if r.0 != Reg::RCX.0 => emit_mov_rr(code, Reg::RCX, r),
             ShiftCount::Reg(_) => {}
@@ -1160,16 +1286,11 @@ fn emit_shift_by_count_reg(
         spill_dst_to_slot(code, dst, rd, frame);
         return Ok(());
     }
-    // rcx is saved whenever any value is allocated there: a `def < v <
-    // last_use` interval test misses a value carried around a loop back
-    // edge. A `-ffixed-rcx` value is preserved the same way.
-    let _ = v;
+    stage_lhs(code, rd, src);
+    // rcx is saved for a value other than the count live in it across the
+    // shift, and for `-ffixed-rcx`.
     let rcx_holds_live = count_reg.map(|r| r.0).unwrap_or(u8::MAX) != Reg::RCX.0
-        && (frame.fixed_regs.has_gpr(Reg::RCX.0)
-            || alloc
-                .places
-                .iter()
-                .any(|p| matches!(p, Place::IntReg(r) if *r == Reg::RCX.0)));
+        && implicit_holds_live(alloc, v, Reg::RCX, frame);
     if rcx_holds_live {
         emit_push_r(code, Reg::RCX);
     }
@@ -1224,6 +1345,21 @@ pub(super) fn emit_binop_imm(
     let Some(rn) = int_operand_into_rd(code, lhs_place, rd, frame) else {
         return fail("BinopI: lhs not int reg / spill");
     };
+    // A mask the branch alone reads sets its flags with the narrowest
+    // `test` that holds it, or `bt` for a bit above them
+    // (`branch_mask_fuses`).
+    if op == BinOp::And && alloc.branch_fused.get(v as usize).copied().unwrap_or(false) {
+        let (mnem, width, imm) = match rhs_imm {
+            _ if crate::c5::codegen::ssa::reg_alloc::x86_mask_takes_bt(rhs_imm) => {
+                (Mnem::Bt, 8, (rhs_imm as u64).trailing_zeros() as i32)
+            }
+            0..=0xFF => (Mnem::Test, 1, rhs_imm as u8 as i8 as i32),
+            0x100..=0xFFFF_FFFF => (Mnem::Test, 4, rhs_imm as u32 as i32),
+            _ => (Mnem::Test, 8, rhs_imm as i32),
+        };
+        super::encode::emit_ri(code, mnem, width, rn, imm);
+        return Ok(());
+    }
     // The sign-narrow pair folds to one movsxd / movsx, as in `emit_binop`.
     let sxtw_source = alloc
         .sxtw_source
@@ -1348,13 +1484,13 @@ pub(super) fn emit_binop_imm(
     // routes through cl like the register-shift path, so the emit stays
     // well-formed.
     if matches!(op, BinOp::Shl | BinOp::Shr | BinOp::Shru | BinOp::Ror) {
-        stage_lhs(code, rd, rn);
         return emit_shift_by_count_reg(
             code,
             op,
             v,
             dst,
             rd,
+            rn,
             ShiftCount::Imm(rhs_imm),
             alloc,
             frame,

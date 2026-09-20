@@ -14,46 +14,37 @@ Disassembly of section .text:
                	brk	#0x1
 
 <wsum>:
-               	stp	d8, d9, [sp, #-0x20]!
-               	stp	x29, x30, [sp, #0x10]
-               	add	x29, sp, #0x10
-               	fmov	d9, d1
-               	ldr	s1, [x29, #0x10]
-               	ldr	s8, [x29, #0x18]
-               	mov	x0, #0x3f800000         // =1065353216
-               	mov	x1, #0x40000000         // =1073741824
-               	fmov	s17, w1
-               	fmul	s9, s9, s17
-               	fmov	s17, w0
-               	fmadd	s0, s0, s17, s9
-               	mov	x0, #0x40800000         // =1082130432
-               	fmov	s17, w0
-               	fmadd	s0, s2, s17, s0
-               	mov	x0, #0x41000000         // =1090519040
-               	fmov	s17, w0
-               	fmadd	s0, s3, s17, s0
-               	mov	x0, #0x41800000         // =1098907648
-               	fmov	s17, w0
-               	fmadd	s0, s4, s17, s0
-               	mov	x0, #0x42000000         // =1107296256
-               	fmov	s17, w0
-               	fmadd	s0, s5, s17, s0
-               	mov	x0, #0x42800000         // =1115684864
-               	fmov	s17, w0
-               	fmadd	s0, s6, s17, s0
-               	mov	x0, #0x43000000         // =1124073472
-               	fmov	s17, w0
-               	fmadd	s0, s7, s17, s0
-               	mov	x0, #0x43800000         // =1132462080
-               	fmov	s17, w0
-               	fmadd	s0, s1, s17, s0
-               	mov	x0, #0x44000000         // =1140850688
-               	fmov	s17, w0
-               	fmadd	s0, s8, s17, s0
+               	stp	x29, x30, [sp, #-0x10]!
+               	mov	x29, sp
+               	ldr	s19, [x29, #0x10]
+               	ldr	s20, [x29, #0x18]
+               	fmov	s21, #1.00000000
+               	fmov	s22, #2.00000000
+               	fmul	s1, s1, s22
+               	fmadd	s0, s0, s21, s1
+               	fmov	s1, #4.00000000
+               	fmadd	s0, s2, s1, s0
+               	fmov	s1, #8.00000000
+               	fmadd	s0, s3, s1, s0
+               	fmov	s1, #16.00000000
+               	fmadd	s0, s4, s1, s0
+               	mov	x16, #0x42000000        // =1107296256
+               	fmov	s1, w16
+               	fmadd	s0, s5, s1, s0
+               	mov	x16, #0x42800000        // =1115684864
+               	fmov	s1, w16
+               	fmadd	s0, s6, s1, s0
+               	mov	x16, #0x43000000        // =1124073472
+               	fmov	s1, w16
+               	fmadd	s0, s7, s1, s0
+               	mov	x16, #0x43800000        // =1132462080
+               	fmov	s1, w16
+               	fmadd	s0, s19, s1, s0
+               	mov	x16, #0x44000000        // =1140850688
+               	fmov	s1, w16
+               	fmadd	s0, s20, s1, s0
                	fcvtzs	x0, s0
-               	sxtw	x0, w0
-               	ldp	x29, x30, [sp, #0x10]
-               	ldp	d8, d9, [sp], #0x20
+               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <main>:
@@ -82,11 +73,11 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x10]
                	ldr	d8, [sp], #0x20
                	ret
-               	mov	x0, #0x3fc00000         // =1069547520
-               	mov	x1, #0x3f000000         // =1056964608
+               	fmov	s0, #1.50000000
+               	fmov	s1, #0.50000000
                	sub	sp, sp, #0x10
-               	str	x0, [sp]
-               	str	x1, [sp, #0x8]
+               	str	d0, [sp]
+               	str	d1, [sp, #0x8]
                	fmov	d0, d8
                	fmov	d7, d8
                	fmov	d6, d8

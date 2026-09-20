@@ -164,14 +164,25 @@ pub(crate) fn magic_signed(d: u64, w: u32) -> SignedMagic {
 }
 
 /// Receiver for the constant-divide lowering. The SSA builder emits the
-/// sequence; the derivation tests evaluate it through the VM's binop
-/// semantics. Both drive [`lower_divmod`], so the emitted code and the
-/// tested code are the same code.
+/// sequence at `-O0` and `passes::divmod_const` at `-O`; the derivation
+/// tests evaluate it through the VM's binop semantics. All drive
+/// [`lower_divmod`], so the emitted code and the tested code are the same
+/// code. The lowering asks for no operation that is an identity, so a
+/// sink needs no peephole of its own.
 pub(crate) trait DivSink {
     type Val: Copy;
     fn imm(&mut self, k: i64) -> Self::Val;
     fn binop(&mut self, op: BinOp, lhs: Self::Val, rhs: Self::Val) -> Self::Val;
     fn binop_imm(&mut self, op: BinOp, lhs: Self::Val, rhs: i64) -> Self::Val;
+}
+
+/// `v` shifted right by `k` under `op` (`Shr` or `Shru`).
+fn shift_right<S: DivSink>(s: &mut S, op: BinOp, v: S::Val, k: u32) -> S::Val {
+    if k == 0 {
+        v
+    } else {
+        s.binop_imm(op, v, k as i64)
+    }
 }
 
 /// `log2(x)` when `x` is a power of two.
@@ -187,15 +198,24 @@ fn mulhu<S: DivSink>(s: &mut S, n: S::Val, m: u64, w: u32, extra: u32) -> S::Val
     if w == 64 {
         let mv = s.imm(m as i64);
         let hi = s.binop(BinOp::Mulhu, n, mv);
-        s.binop_imm(BinOp::Shru, hi, extra as i64)
+        shift_right(s, BinOp::Shru, hi, extra)
     } else {
         let prod = s.binop_imm(BinOp::Mul, n, m as i64);
         s.binop_imm(BinOp::Shru, prod, (32 + extra) as i64)
     }
 }
 
-/// Unsigned `n / d` for a non-power-of-two `d` below `2^w`.
-fn udiv_magic<S: DivSink>(s: &mut S, n: S::Val, d: u64, w: u32) -> S::Val {
+/// Unsigned `n / d` for a non-power-of-two `d` below `2^w` and a
+/// numerator below `2^bits`.
+fn udiv_magic<S: DivSink>(s: &mut S, n: S::Val, d: u64, w: u32, bits: u32) -> S::Val {
+    // A numerator narrower than the register always admits a `w`-bit
+    // multiplier: `bits + 1` bits suffice for it (Granlund & Montgomery,
+    // theorem 4.2), and the search returns no larger one.
+    if bits < w {
+        let mag = magic_unsigned(d, w, bits);
+        debug_assert!(!mag.add);
+        return mulhu(s, n, mag.m, w, mag.shift);
+    }
     // An even divisor can pre-shift the numerator: `n / d ==
     // (n >>u tz) / (d >>u tz)`. The narrower numerator often admits a
     // `w`-bit multiplier where the full range needed `w + 1`, trading
@@ -222,7 +242,7 @@ fn udiv_magic<S: DivSink>(s: &mut S, n: S::Val, d: u64, w: u32) -> S::Val {
     let diff = s.binop(BinOp::Sub, n, t);
     let half = s.binop_imm(BinOp::Shru, diff, 1);
     let sum = s.binop(BinOp::Add, half, t);
-    s.binop_imm(BinOp::Shru, sum, mag.shift as i64)
+    shift_right(s, BinOp::Shru, sum, mag.shift)
 }
 
 /// Signed `n / d` for a positive non-power-of-two `d` below `2^(w-1)`.
@@ -239,7 +259,7 @@ fn sdiv_magic<S: DivSink>(s: &mut S, n: S::Val, d: u64, w: u32) -> S::Val {
         } else {
             hi
         };
-        s.binop_imm(BinOp::Shr, hi, mag.shift as i64)
+        shift_right(s, BinOp::Shr, hi, mag.shift)
     } else {
         // The 32-bit product fits in the register, so the multiplier
         // is used at its true positive value and needs no fixup.
@@ -256,8 +276,17 @@ fn sdiv_magic<S: DivSink>(s: &mut S, n: S::Val, d: u64, w: u32) -> S::Val {
 /// arithmetic shift by `k` truncates toward zero instead of flooring.
 /// Returns the biased numerator and the bias; the modulo sequence
 /// subtracts the bias back out.
-fn sdiv_pow2_bias<S: DivSink>(s: &mut S, n: S::Val, k: u32) -> (S::Val, S::Val) {
-    let sign = s.binop_imm(BinOp::Shr, n, 63);
+///
+/// The bias is the top `k` bits of the sign replicated across the
+/// register. A `w`-bit operand is sign-extended, so its top `65 - w`
+/// bits already are copies of the sign and a `k` within them reads the
+/// bias off the numerator with one logical shift.
+fn sdiv_pow2_bias<S: DivSink>(s: &mut S, n: S::Val, k: u32, w: u32) -> (S::Val, S::Val) {
+    let sign = if k <= 65 - w {
+        n
+    } else {
+        s.binop_imm(BinOp::Shr, n, 63)
+    };
     let bias = s.binop_imm(BinOp::Shru, sign, (64 - k) as i64);
     (s.binop(BinOp::Add, n, bias), bias)
 }
@@ -265,6 +294,72 @@ fn sdiv_pow2_bias<S: DivSink>(s: &mut S, n: S::Val, k: u32) -> (S::Val, S::Val) 
 fn negate<S: DivSink>(s: &mut S, v: S::Val) -> S::Val {
     let zero = s.imm(0);
     s.binop(BinOp::Sub, zero, v)
+}
+
+/// Unsigned `n / d`, or `n % d` with `want_rem`, for a numerator below
+/// `2^bits`, `bits <= w`. A signed division of a non-negative numerator
+/// by a positive divisor is this one. `None` for a zero divisor.
+pub(crate) fn lower_udivmod<S: DivSink>(
+    s: &mut S,
+    want_rem: bool,
+    n: S::Val,
+    du: u64,
+    w: u32,
+    bits: u32,
+) -> Option<S::Val> {
+    debug_assert!((w == 32 || w == 64) && (1..=w).contains(&bits));
+    if du == 0 {
+        return None;
+    }
+    if du == 1 {
+        return Some(if want_rem { s.imm(0) } else { n });
+    }
+    // Every numerator is below the divisor.
+    if bits < 64 && du >> bits != 0 {
+        return Some(if want_rem { n } else { s.imm(0) });
+    }
+    if let Some(k) = pow2_log(du) {
+        return Some(if want_rem {
+            s.binop_imm(BinOp::And, n, du.wrapping_sub(1) as i64)
+        } else {
+            s.binop_imm(BinOp::Shru, n, k as i64)
+        });
+    }
+    // Above 2^(w-1) the only quotients are 0 and 1, so the reciprocal is
+    // a compare.
+    let q = if du > (1u64 << (w - 1)) {
+        s.binop_imm(BinOp::Uge, n, du as i64)
+    } else {
+        udiv_magic(s, n, du, w, bits)
+    };
+    if !want_rem {
+        return Some(q);
+    }
+    let qd = s.binop_imm(BinOp::Mul, q, du as i64);
+    Some(s.binop(BinOp::Sub, n, qd))
+}
+
+/// Sink that counts what it is asked for.
+struct Count(u32);
+
+impl DivSink for Count {
+    type Val = ();
+    fn imm(&mut self, _: i64) {
+        self.0 += 1;
+    }
+    fn binop(&mut self, _: BinOp, _: (), _: ()) {
+        self.0 += 1;
+    }
+    fn binop_imm(&mut self, _: BinOp, _: (), _: i64) {
+        self.0 += 1;
+    }
+}
+
+/// Instructions [`lower_divmod`] issues for `n op d`; `None` where it
+/// declines.
+pub(crate) fn step_count(op: BinOp, d: i64, w: u32) -> Option<u32> {
+    let mut c = Count(0);
+    lower_divmod(&mut c, op, (), d, w).map(|()| c.0)
 }
 
 /// Lower `n op d` for a compile-time divisor to multiplies and shifts.
@@ -292,29 +387,7 @@ pub(crate) fn lower_divmod<S: DivSink>(
             } else {
                 (d as u64) & 0xffff_ffff
             };
-            if du == 0 {
-                return None;
-            }
-            let want_rem = matches!(op, BinOp::Modu);
-            if let Some(k) = pow2_log(du) {
-                return Some(if want_rem {
-                    s.binop_imm(BinOp::And, n, du.wrapping_sub(1) as i64)
-                } else {
-                    s.binop_imm(BinOp::Shru, n, k as i64)
-                });
-            }
-            // Above 2^(w-1) the only quotients are 0 and 1, so the
-            // reciprocal is a compare.
-            let q = if du > (1u64 << (w - 1)) {
-                s.binop_imm(BinOp::Uge, n, du as i64)
-            } else {
-                udiv_magic(s, n, du, w)
-            };
-            if !want_rem {
-                return Some(q);
-            }
-            let qd = s.binop_imm(BinOp::Mul, q, du as i64);
-            Some(s.binop(BinOp::Sub, n, qd))
+            lower_udivmod(s, matches!(op, BinOp::Modu), n, du, w, w)
         }
         BinOp::Div | BinOp::Mod => {
             if d == 0 {
@@ -335,7 +408,7 @@ pub(crate) fn lower_divmod<S: DivSink>(
                 return Some(if d < 0 { negate(s, n) } else { n });
             }
             if let Some(k) = pow2_log(ad) {
-                let (adj, bias) = sdiv_pow2_bias(s, n, k);
+                let (adj, bias) = sdiv_pow2_bias(s, n, k, w);
                 if !want_rem {
                     let q = s.binop_imm(BinOp::Shr, adj, k as i64);
                     return Some(if d < 0 { negate(s, q) } else { q });

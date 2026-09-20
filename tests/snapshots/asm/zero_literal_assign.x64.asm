@@ -78,16 +78,14 @@ Disassembly of section .text:
                	retq
 
 <copy_nonzero>:
-               	movl	$0x1, %eax
-               	movl	$0x2, %ecx
-               	movq	%rax, (%rdi)
-               	movq	%rcx, 0x8(%rdi)
+               	movq	$0x1, (%rdi)
+               	movq	$0x2, 0x8(%rdi)
                	retq
 
 <zero_local>:
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	retq
 
 <main>:
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	retq

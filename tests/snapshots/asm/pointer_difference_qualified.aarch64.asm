@@ -21,7 +21,6 @@ Disassembly of section .text:
                	add	x0, x0, x1
                	asr	x0, x0, #2
                	sub	x0, x0, #0x1
-               	sxtw	x0, w0
                	ret
 
 <unqualified_left>:
@@ -89,7 +88,6 @@ Disassembly of section .text:
                	cmp	x2, x0
                	cset	x0, ne
                	add	x0, x1, x0
-               	sxtw	x0, w0
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret

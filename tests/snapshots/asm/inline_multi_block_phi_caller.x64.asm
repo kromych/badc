@@ -26,53 +26,43 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%rbx, (%rsp)
                	movl	$0x1, %ecx
                	leaq	<rip>, %rax
-               	movl	(%rax), %r8d
-               	xorq	%rdx, %rdx
-               	jmp	<addr>
-               	movl	$0xaaaaaaab, %esi       # imm = 0xAAAAAAAB
-               	imulq	%rax, %rsi
+               	movl	(%rax), %edi
+               	xorl	%eax, %eax
+               	movl	$0xaaaaaaab, %r8d       # imm = 0xAAAAAAAB
+               	leaq	<rip>, %rdx
+               	cmpl	%edi, %eax
+               	jae	<addr>
+               	movq	%rax, %rsi
+               	imulq	%r8, %rsi
                	shrq	$0x21, %rsi
-               	leaq	(%rsi,%rsi,2), %rsi
-               	movq	%rax, %rdi
-               	subq	%rsi, %rdi
-               	movl	%edi, %edi
-               	cmpl	$0x1, %edi
+               	leaq	(%rsi,%rsi,2), %r9
+               	movq	%rax, %rsi
+               	subq	%r9, %rsi
+               	cmpl	$0x1, %esi
                	jb	<addr>
-               	cmpl	$0x1, %edi
+               	cmpl	$0x1, %esi
                	je	<addr>
-               	leaq	<rip>, %rsi
-               	movq	%rax, %rdi
-               	andq	$0x3, %rdi
-               	movl	%ecx, (%rsi,%rdi,4)
-               	imulq	$0x41c64e6d, %rcx, %rcx # imm = 0x41C64E6D
-               	movl	%ecx, %ecx
-               	addq	$0x3039, %rcx           # imm = 0x3039
-               	movl	%ecx, %ecx
+               	movq	%rax, %rsi
+               	andq	$0x3, %rsi
+               	movl	%ecx, (%rdx,%rsi,4)
                	jmp	<addr>
-               	leaq	<rip>, %rsi
-               	movq	%rax, %rdi
-               	andq	$0x3, %rdi
-               	movl	(%rsi,%rdi,4), %ebx
-               	movq	%rbx, %r9
+               	movq	%rax, %rsi
+               	andq	$0x3, %rsi
+               	movl	(%rdx,%rsi,4), %r9d
                	xorq	%rcx, %r9
-               	movl	%r9d, (%rsi,%rdi,4)
+               	movl	%r9d, (%rdx,%rsi,4)
                	jmp	<addr>
-               	leaq	<rip>, %rsi
-               	movq	%rax, %rdi
-               	andq	$0x3, %rdi
-               	movl	(%rsi,%rdi,4), %ebx
-               	leaq	(%rbx,%rcx), %r9
-               	movl	%r9d, (%rsi,%rdi,4)
-               	jmp	<addr>
-               	leaq	0x1(%rax), %rdx
-               	movl	%edx, %eax
-               	cmpl	%r8d, %eax
+               	movq	%rax, %rsi
+               	andq	$0x3, %rsi
+               	movl	(%rdx,%rsi,4), %r9d
+               	addq	%rcx, %r9
+               	movl	%r9d, (%rdx,%rsi,4)
+               	imulq	$0x41c64e6d, %rcx, %rcx # imm = 0x41C64E6D
+               	addq	$0x3039, %rcx           # imm = 0x3039
+               	incq	%rax
+               	cmpl	%edi, %eax
                	jb	<addr>
                	leaq	<rip>, %rax
                	movl	(%rax), %ecx
@@ -83,7 +73,4 @@ Disassembly of section .text:
                	movl	0xc(%rax), %eax
                	xorq	%rcx, %rax
                	andq	$0x7f, %rax
-               	movslq	%eax, %rax
-               	movq	(%rsp), %rbx
-               	leave
                	retq

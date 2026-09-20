@@ -15,8 +15,4 @@ Disassembly of section .text:
 
 <main>:
                	mov	x0, #0x0                // =0
-               	mov	x1, x0
-               	mov	x1, #0x7                // =7
-               	mov	x1, #0x1064             // =4196
-               	mov	x1, #0x106b             // =4203
                	ret

@@ -16,58 +16,39 @@ Disassembly of section .text:
 <main>:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	ldrb	w0, [x0]
+               	ldrb	w1, [x0]
                	mov	x17, #0xc3              // =195
-               	eor	x0, x0, x17
-               	cbz	x0, <addr>
+               	eor	x1, x1, x17
+               	cbz	w1, <addr>
                	mov	x0, #0x3                // =3
                	ret
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrb	w0, [x0, #0x1]
+               	ldrb	w1, [x0, #0x1]
                	mov	x17, #0xa1              // =161
-               	eor	x0, x0, x17
-               	cbz	x0, <addr>
+               	eor	x1, x1, x17
+               	cbz	w1, <addr>
                	mov	x0, #0x4                // =4
                	ret
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
                	ldrb	w0, [x0, #0x2]
-               	cbz	x0, <addr>
+               	cbz	w0, <addr>
                	mov	x0, #0x5                // =5
                	ret
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	ldr	w0, [x0]
+               	ldr	w1, [x0]
                	mov	x17, #0x61              // =97
-               	eor	x0, x0, x17
-               	cbnz	x0, <addr>
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	w0, [x0, #0x4]
+               	eor	x1, x1, x17
+               	cbnz	w1, <addr>
+               	ldr	w1, [x0, #0x4]
                	mov	x17, #0xe1              // =225
-               	eor	x0, x0, x17
-               	cmp	w0, #0x0
-               	cset	x0, ne
-               	cbnz	x0, <addr>
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	w0, [x0, #0x8]
+               	eor	x1, x1, x17
+               	cbnz	w1, <addr>
+               	ldr	w1, [x0, #0x8]
                	mov	x17, #0x62              // =98
-               	eor	x0, x0, x17
-               	cmp	w0, #0x0
-               	cset	x0, ne
-               	cbnz	x0, <addr>
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
+               	eor	x1, x1, x17
+               	cbnz	w1, <addr>
                	ldr	w0, [x0, #0xc]
-               	cmp	w0, #0x0
-               	cset	x0, ne
-               	cbz	x0, <addr>
+               	cbz	w0, <addr>
                	mov	x0, #0x7                // =7
                	ret
                	mov	x0, #0x0                // =0
-               	mov	x2, x0
-               	mov	x2, x0
-               	mov	x1, x0
                	ret

@@ -26,9 +26,10 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	retq
 		...
+               	addb	%dh, %dh
 
 <em_div_ex>:
                	divb	%cl

@@ -32,6 +32,6 @@ Disassembly of section .text:
                	rdtsc
                	movl	%eax, -0x10(%rbp)
                	movl	%edx, -0x8(%rbp)
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	leave
                	retq

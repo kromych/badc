@@ -15,7 +15,8 @@
 //!      the same low 32 bits in `value`, and the extend only differs in
 //!      the unread upper half, so it can be dropped. This removes the
 //!      per-op renormalization left over from a chain of low-word
-//!      integer arithmetic.
+//!      integer arithmetic. The unsigned renormalization, an `And` by a
+//!      constant whose low word is all ones, drops on the same terms.
 //!
 //!   3. `value` is itself an `Extend` no wider than this one. The inner
 //!      result already holds its sign bit in every position at and above
@@ -36,7 +37,7 @@
 //!
 //! A fifth case works on value ranges: `drop_fitting` redirects an
 //! `Extend`, or an `And` by a constant, that is the identity on every
-//! value its operand's definition can produce.
+//! value its operand can hold where the instruction reads it.
 //!
 //! Finally, `drop_call_arg_reextends` removes the caller-side
 //! re-extension of an argument to a direct internal call whose callee
@@ -48,7 +49,9 @@
 //! the per-arch emit's `is_dead_pure` skip drop it. `resolve` walks
 //! redirect chains so stacked extends collapse.
 
-use crate::c5::ir::{BinOp, FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind, Terminator, ValueId};
+use crate::c5::ir::{
+    BinOp, FunctionSsa, IndexExt, Inst, LoadKind, NO_VALUE, StoreKind, Terminator, ValueId,
+};
 use alloc::vec::Vec;
 
 pub(crate) fn run(funcs: &mut [FunctionSsa]) {
@@ -78,17 +81,19 @@ fn observe(hi: &mut [bool], work: &mut Vec<ValueId>, v: ValueId) {
 /// arithmetic), and a `Phi` selects one operand, so these forward the consumer's
 /// observation to their operands and are transparent to the low word. A right
 /// shift, divide/modulo, rotate, ordered/equality compare, 64-bit store, address
-/// operand, call argument, FP cast, atomic, return, or branch condition reads the
-/// full register, so it observes the upper bits directly. `Inst::Extend` reads
-/// only the low `kind`-width bits, so it never observes its source's upper bits.
-/// An `And` with a constant whose high word is clear forwards none: its result's
-/// high word is clear whatever the other operand holds.
+/// operand, call argument, FP cast, atomic, or branch condition reads the full
+/// register, so it observes the upper bits directly. `Inst::Extend` reads only the
+/// low `kind`-width bits, so it never observes its source's upper bits. An `And`
+/// with a constant whose high word is clear forwards none: its result's high word
+/// is clear whatever the other operand holds. A return observes the full register
+/// unless the declared return type is narrower than it on every target
+/// (`return_is_low_word`), in which case the result rides the low word and the
+/// reading side widens it.
 /// Anything not positively classified as low-word-only is treated as observing,
 /// so the result is a conservative over-approximation. Shared with the allocator,
 /// which consults it to skip a `ParamRef` entry sign-extension whose result is
 /// never read above bit 31 (the parameter's low word already holds the C99
-/// 6.5.2.2p4-converted value; the return boundary stays conservative, so a value
-/// feeding the return keeps its canonicalization).
+/// 6.5.2.2p4-converted value).
 pub(crate) fn compute_high_observed(func: &FunctionSsa) -> Vec<bool> {
     compute_high_observed_through(func, &[])
 }
@@ -116,13 +121,22 @@ fn compute_high_observed_through(func: &FunctionSsa, collapsing: &[bool]) -> Vec
             | Inst::LoadLocal { .. }
             | Inst::TailExt(_)
             | Inst::AllocaInit(_)
+            | Inst::LifetimeEnd(_)
             | Inst::ParamRef { .. }
             | Inst::Extend { .. } => {}
             Inst::Copy { value, .. } => observe(&mut hi, &mut work, *value),
             Inst::Load { addr, .. } => observe(&mut hi, &mut work, *addr),
-            Inst::LoadIndexed { base, index, .. } => {
+            // An extending access reads the low word of its index.
+            Inst::LoadIndexed {
+                base,
+                index,
+                index_ext,
+                ..
+            } => {
                 observe(&mut hi, &mut work, *base);
-                observe(&mut hi, &mut work, *index);
+                if *index_ext == IndexExt::None {
+                    observe(&mut hi, &mut work, *index);
+                }
             }
             Inst::Store {
                 addr, value, kind, ..
@@ -149,12 +163,15 @@ fn compute_high_observed_through(func: &FunctionSsa, collapsing: &[bool]) -> Vec
             Inst::StoreIndexed {
                 base,
                 index,
+                index_ext,
                 value,
                 kind,
                 ..
             } => {
                 observe(&mut hi, &mut work, *base);
-                observe(&mut hi, &mut work, *index);
+                if *index_ext == IndexExt::None {
+                    observe(&mut hi, &mut work, *index);
+                }
                 if *kind == StoreKind::I64 {
                     observe(&mut hi, &mut work, *value);
                 }
@@ -182,14 +199,17 @@ fn compute_high_observed_through(func: &FunctionSsa, collapsing: &[bool]) -> Vec
                 _ if cmp32 => {}
                 _ => observe(&mut hi, &mut work, *lhs),
             },
-            // The 2- and 4-byte reversals read only the low bytes they
-            // reverse; the 8-byte form reads the full register.
-            Inst::Bswap { value, width } => {
+            // The 2- and 4-byte reversals and counts read only the low
+            // bytes they operate on; the 8-byte forms read the full register.
+            Inst::Bswap { value, width } | Inst::BitCount { value, width, .. } => {
                 if *width == 8 {
                     observe(&mut hi, &mut work, *value);
                 }
             }
             Inst::FpCast { value, .. } => observe(&mut hi, &mut work, *value),
+            // Negation is exact modulo 2^64, so the result's low bytes
+            // need only the operand's, as `Sub` does.
+            Inst::Neg(_) => {}
             Inst::Fneg(v) => observe(&mut hi, &mut work, *v),
             Inst::Fma { a, b, c, .. } => {
                 observe(&mut hi, &mut work, *a);
@@ -234,20 +254,22 @@ fn compute_high_observed_through(func: &FunctionSsa, collapsing: &[bool]) -> Vec
             Inst::Phi { .. } => {}
         }
     }
-    for block in &func.blocks {
-        if block.exit_acc != NO_VALUE {
-            observe(&mut hi, &mut work, block.exit_acc);
+    // A terminator reads its operand at full width, except a zero test
+    // that reads the low word (`low_word_tests`) and a return whose
+    // declared type is narrower than the return register, which carries
+    // the result in its low word alone. `Block::exit_acc` names a value
+    // and reads none.
+    let ret_low_word = crate::c5::codegen::return_is_low_word(func.ret_type_tag);
+    for (b, block) in func.blocks.iter().enumerate() {
+        if func.low_word_tests.get(b).copied().unwrap_or(false) {
+            continue;
         }
-        match &block.terminator {
-            Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => {
-                observe(&mut hi, &mut work, *cond);
-            }
-            Terminator::GotoIndirect { target } | Terminator::JumpTable { idx: target, .. } => {
-                observe(&mut hi, &mut work, *target)
-            }
-            Terminator::Return(v) if *v != NO_VALUE => observe(&mut hi, &mut work, *v),
-            _ => {}
+        if ret_low_word && matches!(block.terminator, Terminator::Return(_)) {
+            continue;
         }
+        block
+            .terminator
+            .for_each_operand(|v| observe(&mut hi, &mut work, v));
     }
 
     // Propagate: an observed transparent result observes its operands.
@@ -271,6 +293,7 @@ fn compute_high_observed_through(func: &FunctionSsa, collapsing: &[bool]) -> Vec
                 observe(&mut hi, &mut work, *lhs);
                 observe(&mut hi, &mut work, *rhs);
             }
+            Inst::Neg(v) => observe(&mut hi, &mut work, *v),
             Inst::Binop {
                 op: BinOp::Shl,
                 lhs,
@@ -462,50 +485,45 @@ fn dedup_dominated_extends(func: &FunctionSsa, redirect: &mut [Option<ValueId>])
         (range.start.max(br.start)..range.end.min(br.end))
             .any(|idx| is_call(&func.insts[idx as usize]))
     };
-    let graph = crate::c5::codegen::ssa::mem2reg::SuccGraph::new(func);
+    let preds = crate::c5::codegen::ssa::mem2reg::predecessors(func);
     // A function with no call at all cannot have one between two
     // points, so the search below never fires.
     let any_call = block_has_call.iter().any(|&c| c);
-    // Visit marks for the search, reused across queries: `seen[b][f]`
-    // holds the query number that last marked block `b` in state `f`.
-    let mut seen = alloc::vec![[0u32; 2]; func.blocks.len()];
+    // Visit marks for the search, reused across queries: `seen[b]` holds
+    // the query number that last marked block `b`.
+    let mut seen = alloc::vec![0u32; func.blocks.len()];
     let mut query = 0u32;
-    let mut work: Vec<(u32, bool)> = Vec::new();
-    // Whether some path from `c` (exclusive) to `e` (exclusive) passes a
-    // call: the straight-line segment when both sit in one block, else a
-    // forward search over successor edges carrying a seen-a-call state.
-    // The start block contributes its calls after `c`, the target block
-    // its calls before `e`, and any block in between its calls
-    // wholesale (a cyclic revisit of the start / target block too).
+    let mut work: Vec<u32> = Vec::new();
+    // Whether a call sits where `c` would be live on its way to `e`: the
+    // points from which `e` is reached without passing `c` again, walked
+    // backward from `e` up to `c`, which dominates it. In one block that
+    // is the stretch between them; otherwise the leader's block after
+    // `c`, the use's block before `e`, and every block the walk enters
+    // in between (the use's block again when a loop leads back to it).
     let mut call_between = |c: ValueId, e: ValueId| -> bool {
         if !any_call {
             return false;
         }
         let c_blk = inst_block[c as usize];
         let e_blk = inst_block[e as usize];
-        if c_blk == e_blk && c < e && call_in(c_blk, c + 1..e) {
+        if c_blk == e_blk {
+            return call_in(c_blk, c + 1..e);
+        }
+        if call_in(c_blk, c + 1..u32::MAX) || call_in(e_blk, 0..e) {
             return true;
         }
         query += 1;
+        seen[c_blk as usize] = query;
         work.clear();
-        let start_flag = call_in(c_blk, c + 1..u32::MAX);
-        for &s in graph.of(c_blk) {
-            if seen[s as usize][start_flag as usize] != query {
-                seen[s as usize][start_flag as usize] = query;
-                work.push((s, start_flag));
+        work.extend_from_slice(&preds[e_blk as usize]);
+        while let Some(b) = work.pop() {
+            if core::mem::replace(&mut seen[b as usize], query) == query {
+                continue;
             }
-        }
-        while let Some((b, f)) = work.pop() {
-            if b == e_blk && (f || call_in(b, 0..e)) {
+            if block_has_call[b as usize] {
                 return true;
             }
-            let f2 = f || block_has_call[b as usize];
-            for &s in graph.of(b) {
-                if seen[s as usize][f2 as usize] != query {
-                    seen[s as usize][f2 as usize] = query;
-                    work.push((s, f2));
-                }
-            }
+            work.extend_from_slice(&preds[b as usize]);
         }
         false
     };
@@ -569,17 +587,9 @@ fn param_reextend_kinds(func: &FunctionSsa) -> Vec<Option<LoadKind>> {
         crate::c5::codegen::ssa::reg_alloc::for_each_operand(inst, |v| bump(&mut use_counts, v));
     }
     for block in &func.blocks {
-        if block.exit_acc != NO_VALUE {
-            bump(&mut use_counts, block.exit_acc);
-        }
-        match block.terminator {
-            Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => {
-                bump(&mut use_counts, cond)
-            }
-            Terminator::GotoIndirect { target } => bump(&mut use_counts, target),
-            Terminator::Return(v) if v != NO_VALUE => bump(&mut use_counts, v),
-            _ => {}
-        }
+        block
+            .terminator
+            .for_each_operand(|v| bump(&mut use_counts, v));
     }
     for (i, kind) in kinds.iter_mut().enumerate() {
         let slot = i as i64 + 2;
@@ -715,9 +725,39 @@ fn narrow_int_load(insts: &[Inst], v: ValueId) -> Option<(u32, bool)> {
     })
 }
 
+/// The operand an `And` by a constant with an all-ones low word passes
+/// through in its low 32 bits: the unsigned renormalization
+/// `x & 0xffff_ffff` and any wider mask of that shape.
+fn low_word_mask_operand(func: &FunctionSsa, inst: &Inst) -> Option<ValueId> {
+    let keeps_low_word = |v: ValueId| {
+        matches!(func.insts.get(v as usize), Some(Inst::Imm(k)) if *k as u32 == u32::MAX)
+            && !func.f32_values.get(v as usize).copied().unwrap_or(false)
+    };
+    match *inst {
+        Inst::BinopI {
+            op: BinOp::And,
+            lhs,
+            rhs_imm,
+        } if rhs_imm as u32 == u32::MAX => Some(lhs),
+        Inst::Binop {
+            op: BinOp::And,
+            lhs,
+            rhs,
+        } if keeps_low_word(rhs) => Some(lhs),
+        Inst::Binop {
+            op: BinOp::And,
+            lhs,
+            rhs,
+        } if keeps_low_word(lhs) => Some(rhs),
+        _ => None,
+    }
+}
+
 fn run_one(func: &mut FunctionSsa) {
     let n = func.insts.len();
-    if !func.insts.iter().any(|i| matches!(i, Inst::Extend { .. })) {
+    let candidate =
+        |i: &Inst| matches!(i, Inst::Extend { .. }) || low_word_mask_operand(func, i).is_some();
+    if !func.insts.iter().any(candidate) {
         return;
     }
     // An Extend is redundant when (1) its operand is a narrow integer load
@@ -754,6 +794,14 @@ fn run_one(func: &mut FunctionSsa) {
     let high = compute_high_observed_through(func, &collapsing);
     let mut redirect: Vec<Option<ValueId>> = alloc::vec![None; n];
     for (idx, inst) in func.insts.iter().enumerate() {
+        // (2) for the unsigned renormalization: the mask changes bits
+        // 32..63 only, which no consumer reads.
+        if let Some(operand) = low_word_mask_operand(func, inst)
+            && !high[idx]
+        {
+            redirect[idx] = Some(operand);
+            continue;
+        }
         let Inst::Extend { value, kind } = inst else {
             continue;
         };
@@ -774,14 +822,10 @@ fn run_one(func: &mut FunctionSsa) {
     if redirect.iter().all(|r| r.is_none()) {
         return;
     }
-    // Rewrite every operand, terminator value, and block accumulator.
+    // Rewrite every operand, terminator value, and block accumulator. A
+    // redirected instruction is dead; its operand follows the redirects
+    // too, so it keeps no redirected value live.
     for inst in func.insts.iter_mut() {
-        // The redirect-from list (the dead Extends) reads the load
-        // operand; rewriting it would be a self-edit, so skip those
-        // and let the per-arch emit's is_dead_pure path drop them.
-        if let Inst::Extend { value: _, kind: _ } = inst {
-            continue;
-        }
         inst.for_each_operand_mut(|op| *op = resolve(&redirect, *op));
     }
     for block in func.blocks.iter_mut() {
@@ -814,9 +858,15 @@ pub(crate) fn compute_high_clear(func: &FunctionSsa) -> Vec<bool> {
         .collect()
 }
 
-/// Redirect an extension whose operand's `value_range::def_ranges` bound
-/// fits it. After `run_one`, whose drops of the renormalizations feeding a
-/// join would otherwise see the join's upper half read.
+/// Redirect an extension that is the identity on every value its operand
+/// holds where the extension reads it: the operand's definition range met
+/// with the branch bounds in force in the extension's block
+/// (`value_range::Ranges::at`). The operand then holds the extension's
+/// result in all 64 bits, so every consumer can read it.
+///
+/// After `run_one`: the ranges describe the registers as that pass left
+/// them, and a renormalization it dropped for an unread upper half is not
+/// kept alive by a range that would rest on it.
 fn drop_fitting(func: &mut FunctionSsa) {
     let narrows = |i: &Inst| {
         matches!(
@@ -829,57 +879,51 @@ fn drop_fitting(func: &mut FunctionSsa) {
     if !func.insts.iter().any(narrows) {
         return;
     }
-    let def = super::value_range::def_ranges(func, &[]);
-    let range = |v: ValueId| {
-        def.get(v as usize)
-            .copied()
-            .unwrap_or(super::value_range::UNIVERSE)
-    };
+    let ranges = super::value_range::Ranges::compute(func, &[]);
     let imm = |v: ValueId| match func.insts.get(v as usize) {
         Some(Inst::Imm(k)) if !func.f32_values.get(v as usize).copied().unwrap_or(false) => {
             Some(*k)
         }
         _ => None,
     };
-    let kept = |v: ValueId, mask: Option<i64>| mask.is_some_and(|k| range(v).kept_by_mask(k));
-    let redirect: Vec<Option<ValueId>> = func
-        .insts
-        .iter()
-        .map(|inst| match *inst {
-            // An I32 extend is the per-op renormalization the high-bit
-            // observation and the emit's `high_dead` already elide where
-            // its result's upper half is unread; folding it by range only
-            // relocates the extension and can pin the operand in a
-            // register. The narrow signed kinds have no such machinery.
-            Inst::Extend {
-                value,
-                kind: kind @ (LoadKind::I8 | LoadKind::I16),
-            } => range(value).fits(kind).then_some(value),
-            Inst::BinopI {
-                op: BinOp::And,
-                lhs,
-                rhs_imm,
-            } => kept(lhs, Some(rhs_imm)).then_some(lhs),
-            Inst::Binop {
-                op: BinOp::And,
-                lhs,
-                rhs,
-            } if kept(lhs, imm(rhs)) => Some(lhs),
-            Inst::Binop {
-                op: BinOp::And,
-                lhs,
-                rhs,
-            } if kept(rhs, imm(lhs)) => Some(rhs),
-            _ => None,
-        })
-        .collect();
+    let mut redirect: Vec<Option<ValueId>> = alloc::vec![None; func.insts.len()];
+    for (b, block) in func.blocks.iter().enumerate() {
+        let b = b as crate::c5::ir::BlockId;
+        let kept =
+            |v: ValueId, mask: Option<i64>| mask.is_some_and(|k| ranges.at(b, v).kept_by_mask(k));
+        for idx in block.inst_range.clone() {
+            let Some(inst) = func.insts.get(idx as usize) else {
+                continue;
+            };
+            redirect[idx as usize] = match *inst {
+                Inst::Extend {
+                    value,
+                    kind: kind @ (LoadKind::I8 | LoadKind::I16 | LoadKind::I32),
+                } => ranges.at(b, value).fits(kind).then_some(value),
+                Inst::BinopI {
+                    op: BinOp::And,
+                    lhs,
+                    rhs_imm,
+                } => kept(lhs, Some(rhs_imm)).then_some(lhs),
+                Inst::Binop {
+                    op: BinOp::And,
+                    lhs,
+                    rhs,
+                } if kept(lhs, imm(rhs)) => Some(lhs),
+                Inst::Binop {
+                    op: BinOp::And,
+                    lhs,
+                    rhs,
+                } if kept(rhs, imm(lhs)) => Some(rhs),
+                _ => None,
+            };
+        }
+    }
     if redirect.iter().all(Option::is_none) {
         return;
     }
-    for (inst, from) in func.insts.iter_mut().zip(&redirect) {
-        if from.is_none() {
-            inst.for_each_operand_mut(|op| *op = resolve(&redirect, *op));
-        }
+    for inst in func.insts.iter_mut() {
+        inst.for_each_operand_mut(|op| *op = resolve(&redirect, *op));
     }
     for block in func.blocks.iter_mut() {
         if block.exit_acc != NO_VALUE {
@@ -920,6 +964,7 @@ mod tests {
             inst_src: alloc::vec![(0, 0); insts.len()],
             f32_values: alloc::vec![false; insts.len()],
             cmp32: Vec::new(),
+            low_word_tests: Vec::new(),
             param_fp_mask: crate::c5::ir::FpMask::EMPTY,
             agg_descs: alloc::vec::Vec::new(),
             param_aggs: alloc::vec::Vec::new(),
@@ -1305,6 +1350,211 @@ mod tests {
         }
     }
 
+    /// v0 Imm(addr); v1 Load I64; v2 = v1 & 0xffff_ffff; v3 = `reader`
+    /// of v2; v4 = Store(v3, I64); an optional v5 follows.
+    fn unsigned_renormalization_read_by(reader: Inst, tail: Option<Inst>) -> FunctionSsa {
+        let mut insts = vec![
+            Inst::Imm(0),
+            Inst::Load {
+                addr: 0,
+                disp: 0,
+                kind: LoadKind::I64,
+                volatile: false,
+                align: 0,
+            },
+            Inst::BinopI {
+                op: BinOp::And,
+                lhs: 1,
+                rhs_imm: 0xffff_ffff,
+            },
+            reader,
+            Inst::Store {
+                addr: 0,
+                disp: 0,
+                value: 3,
+                kind: StoreKind::I64,
+                volatile: false,
+                align: 0,
+            },
+        ];
+        insts.extend(tail);
+        let n = insts.len() as u32;
+        fresh(
+            insts,
+            vec![Block {
+                start_pc: 0,
+                inst_range: 0..n,
+                terminator: Terminator::Return(NO_VALUE),
+                exit_acc: NO_VALUE,
+            }],
+        )
+    }
+
+    fn first_operand(inst: &Inst) -> ValueId {
+        let mut first = NO_VALUE;
+        inst.for_each_operand(|v| {
+            if first == NO_VALUE {
+                first = v;
+            }
+        });
+        first
+    }
+
+    /// `(x & 0xffff_ffff) + k` masked again reads only the low word of the
+    /// first mask, which therefore drops; the second one is stored at 8
+    /// bytes and stays.
+    #[test]
+    fn unsigned_renormalization_with_an_unread_high_word_is_dropped() {
+        for mask in [0xffff_ffff, 0x1_ffff_ffff] {
+            let mut f = unsigned_renormalization_read_by(
+                Inst::BinopI {
+                    op: BinOp::Add,
+                    lhs: 2,
+                    rhs_imm: 12345,
+                },
+                None,
+            );
+            f.insts[2] = Inst::BinopI {
+                op: BinOp::And,
+                lhs: 1,
+                rhs_imm: mask,
+            };
+            f.insts[4] = Inst::BinopI {
+                op: BinOp::And,
+                lhs: 3,
+                rhs_imm: 0xffff_ffff,
+            };
+            f.insts.push(Inst::Store {
+                addr: 0,
+                disp: 0,
+                value: 4,
+                kind: StoreKind::I64,
+                volatile: false,
+                align: 0,
+            });
+            f.inst_src.push((0, 0));
+            f.f32_values.push(false);
+            f.blocks[0].inst_range = 0..6;
+            run_one(&mut f);
+            assert_eq!(first_operand(&f.insts[3]), 1, "{mask:#x}: {:?}", f.insts[3]);
+            assert!(
+                matches!(f.insts[5], Inst::Store { value: 4, .. }),
+                "{mask:#x}: {:?}",
+                f.insts[5]
+            );
+        }
+    }
+
+    /// Every reader of bits 32..63 keeps the mask: an 8-byte store, a
+    /// right shift, a division, a 64-bit comparison, an address, a call
+    /// argument, an indexed access and a floating conversion.
+    #[test]
+    fn unsigned_renormalization_with_a_read_high_word_is_kept() {
+        let binop = |op| Inst::Binop { op, lhs: 2, rhs: 1 };
+        let imm = |op| Inst::BinopI {
+            op,
+            lhs: 2,
+            rhs_imm: 3,
+        };
+        let readers = [
+            // v3 is stored at 8 bytes, and an `Or` passes the high word on.
+            imm(BinOp::Or),
+            imm(BinOp::Shr),
+            imm(BinOp::Shru),
+            binop(BinOp::Div),
+            binop(BinOp::Divu),
+            binop(BinOp::Modu),
+            binop(BinOp::Ult),
+            imm(BinOp::Lt),
+            Inst::Load {
+                addr: 2,
+                disp: 0,
+                kind: LoadKind::I32,
+                volatile: false,
+                align: 0,
+            },
+            Inst::LoadIndexed {
+                base: 1,
+                index: 2,
+                index_ext: IndexExt::None,
+                scale: 4,
+                kind: LoadKind::I32,
+            },
+            Inst::CallExt {
+                binding_idx: 0,
+                args: vec![2],
+                fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
+                fp_return: false,
+                arg_aggs: Vec::new(),
+                ret_agg: None,
+                ret_slot_local: 0,
+            },
+            Inst::FpCast {
+                kind: crate::c5::ir::FpCastKind::IntToFp,
+                value: 2,
+            },
+        ];
+        for reader in readers {
+            let mut f = unsigned_renormalization_read_by(reader.clone(), None);
+            run_one(&mut f);
+            let mut reads_mask = false;
+            f.insts[3].for_each_operand(|v| reads_mask |= v == 2);
+            assert!(reads_mask, "{reader:?} -> {:?}", f.insts[3]);
+        }
+        // The mask itself stored at 8 bytes next to a low-word reader.
+        let mut f = unsigned_renormalization_read_by(
+            imm(BinOp::Add),
+            Some(Inst::Store {
+                addr: 0,
+                disp: 0,
+                value: 2,
+                kind: StoreKind::I64,
+                volatile: false,
+                align: 0,
+            }),
+        );
+        f.insts[4] = Inst::Store {
+            addr: 0,
+            disp: 0,
+            value: 3,
+            kind: StoreKind::I32,
+            volatile: false,
+            align: 0,
+        };
+        run_one(&mut f);
+        assert_eq!(first_operand(&f.insts[3]), 2, "{:?}", f.insts[3]);
+    }
+
+    /// A mask that clears a bit of the low word is no renormalization.
+    #[test]
+    fn mask_clearing_a_low_word_bit_is_kept() {
+        for mask in [0x7fff_ffff, 0xffff_fffe, 0xffff] {
+            let mut f = unsigned_renormalization_read_by(
+                Inst::BinopI {
+                    op: BinOp::Add,
+                    lhs: 2,
+                    rhs_imm: 1,
+                },
+                None,
+            );
+            f.insts[2] = Inst::BinopI {
+                op: BinOp::And,
+                lhs: 1,
+                rhs_imm: mask,
+            };
+            f.insts[4] = Inst::Store {
+                addr: 0,
+                disp: 0,
+                value: 3,
+                kind: StoreKind::I32,
+                volatile: false,
+                align: 0,
+            };
+            run_one(&mut f);
+            assert_eq!(first_operand(&f.insts[3]), 2, "{mask:#x}");
+        }
+    }
+
     #[test]
     fn extend_with_dead_high_bits_is_dropped() {
         let mut f = extend_over_add_feeding_store(StoreKind::I32);
@@ -1314,6 +1564,37 @@ mod tests {
             "narrow store should read the pre-extend add directly; got {:?}",
             f.insts[4],
         );
+    }
+
+    /// `Block::exit_acc` names the extend without reading it, so the
+    /// extend is dropped as it is without the naming.
+    #[test]
+    fn block_exit_value_reads_no_high_bits() {
+        let mut f = extend_over_add_feeding_store(StoreKind::I32);
+        f.blocks[0].exit_acc = 3;
+        run_one(&mut f);
+        assert!(
+            matches!(f.insts[4], Inst::Store { value: 2, .. }),
+            "{:?}",
+            f.insts[4]
+        );
+        assert_eq!(f.blocks[0].exit_acc, 2);
+    }
+
+    /// A terminator operand is read at full width: the returned extend
+    /// stays, for its narrow consumer too.
+    #[test]
+    fn returned_extend_is_kept() {
+        let mut f = extend_over_add_feeding_store(StoreKind::I32);
+        f.blocks[0].terminator = Terminator::Return(3);
+        f.blocks[0].exit_acc = 3;
+        run_one(&mut f);
+        assert!(
+            matches!(f.insts[4], Inst::Store { value: 3, .. }),
+            "{:?}",
+            f.insts[4]
+        );
+        assert!(matches!(f.blocks[0].terminator, Terminator::Return(3)));
     }
 
     #[test]
@@ -1539,6 +1820,106 @@ mod tests {
             "a call-argument extend keeps its own position; dedup must not \
              stretch the dominating extend's live range to the call",
         );
+    }
+
+    /// `v0 = param`, then per block its extends of `v0` (`E`) and calls
+    /// (`C`), ended by the given terminator. Returns each value's redirect.
+    fn dedup_around_calls(shape: &[(&str, Terminator)]) -> Vec<Option<ValueId>> {
+        let mut insts = vec![Inst::ParamRef {
+            idx: 0,
+            kind: LoadKind::I64,
+        }];
+        let mut blocks = Vec::new();
+        for (b, (ops, terminator)) in shape.iter().enumerate() {
+            let start = if b == 0 { 0 } else { insts.len() as u32 };
+            for op in ops.chars() {
+                insts.push(match op {
+                    'E' => Inst::Extend {
+                        value: 0,
+                        kind: LoadKind::I32,
+                    },
+                    _ => Inst::Call {
+                        target_pc: 99,
+                        args: Vec::new(),
+                        fixed_args: 0,
+                        fp_return: false,
+                        fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
+                        arg_aggs: Vec::new(),
+                        ret_agg: None,
+                        ret_slot_local: 0,
+                    },
+                });
+            }
+            blocks.push(Block {
+                start_pc: 0,
+                inst_range: start..insts.len() as u32,
+                terminator: *terminator,
+                exit_acc: NO_VALUE,
+            });
+        }
+        let f = fresh(insts, blocks);
+        let mut redirect = vec![None; f.insts.len()];
+        dedup_dominated_extends(&f, &mut redirect);
+        redirect
+    }
+
+    fn bnz(cond: ValueId, target: u32, fall_through: u32) -> Terminator {
+        Terminator::Bnz {
+            cond,
+            target,
+            fall_through,
+        }
+    }
+
+    /// A call on a cycle through the block is not between two extends
+    /// of that block: the path around it runs the first one again.
+    #[test]
+    fn extends_of_one_block_share_past_a_call_on_its_cycle() {
+        let r = dedup_around_calls(&[
+            ("", Terminator::Jmp(1)),
+            ("EE", Terminator::Jmp(2)),
+            ("C", bnz(3, 1, 3)),
+            ("", Terminator::Return(NO_VALUE)),
+        ]);
+        assert_eq!(r[2], Some(1));
+    }
+
+    /// A loop header's extend reaches its body past a call on the latch.
+    #[test]
+    fn header_extend_reaches_the_body_past_a_call_on_the_latch() {
+        let r = dedup_around_calls(&[
+            ("", Terminator::Jmp(1)),
+            ("E", Terminator::Jmp(2)),
+            ("E", Terminator::Jmp(3)),
+            ("C", bnz(3, 1, 4)),
+            ("", Terminator::Return(NO_VALUE)),
+        ]);
+        assert_eq!(r[2], Some(1));
+    }
+
+    /// Where the leader would live across a call, each extend stays: a
+    /// call between them in one block, after the leader in its block,
+    /// in a block between them, and in a loop the leader is outside of.
+    #[test]
+    fn an_extend_across_a_call_keeps_its_own() {
+        let ret = || Terminator::Return(NO_VALUE);
+        let r = dedup_around_calls(&[("ECE", ret())]);
+        assert_eq!(r[3], None);
+        let r = dedup_around_calls(&[("EC", Terminator::Jmp(1)), ("E", ret())]);
+        assert_eq!(r[3], None);
+        let r = dedup_around_calls(&[
+            ("E", Terminator::Jmp(1)),
+            ("C", Terminator::Jmp(2)),
+            ("E", ret()),
+        ]);
+        assert_eq!(r[3], None);
+        let r = dedup_around_calls(&[
+            ("E", Terminator::Jmp(1)),
+            ("E", Terminator::Jmp(2)),
+            ("C", bnz(3, 1, 3)),
+            ("", ret()),
+        ]);
+        assert_eq!(r[2], None);
     }
 
     /// Callee at ent_pc 7: ParamRef(0, I32) returned; caller passes
@@ -1964,6 +2345,115 @@ mod tests {
         assert!(matches!(byte(sext), Terminator::Return(3)));
         // A masked byte reaches 0xff, which a signed char does not hold.
         assert!(matches!(byte(and(0, 0xff)), Terminator::Return(4)));
+    }
+
+    /// `n - 2` on both sides of `n < 2`, each renormalized and stored at 8
+    /// bytes so the extension's upper half is read:
+    ///
+    /// b0: v0 = n; v1 = v0 < 2                     Bnz v1 -> b2 else b1
+    /// b1: v2 = v0 - 2; v3 = sext32(v2); store v3  return
+    /// b2: v4 = v0 - 2; v5 = sext32(v4); store v5  return
+    fn decrement_on_both_sides(n: Inst, narrow_compare: bool) -> FunctionSsa {
+        let sub = Inst::BinopI {
+            op: BinOp::Sub,
+            lhs: 0,
+            rhs_imm: 2,
+        };
+        let ext = |value| Inst::Extend {
+            value,
+            kind: LoadKind::I32,
+        };
+        let store = |value| Inst::StoreLocal {
+            off: -1,
+            value,
+            kind: StoreKind::I64,
+            volatile: false,
+        };
+        let insts = vec![
+            n,
+            Inst::BinopI {
+                op: BinOp::Lt,
+                lhs: 0,
+                rhs_imm: 2,
+            },
+            sub.clone(),
+            ext(2),
+            store(3),
+            sub,
+            ext(5),
+            store(6),
+        ];
+        let block = |inst_range, terminator| Block {
+            start_pc: 0,
+            inst_range,
+            terminator,
+            exit_acc: NO_VALUE,
+        };
+        let mut f = fresh(
+            insts,
+            vec![
+                block(
+                    0..2,
+                    Terminator::Bnz {
+                        cond: 1,
+                        target: 2,
+                        fall_through: 1,
+                    },
+                ),
+                block(2..5, Terminator::Return(NO_VALUE)),
+                block(5..8, Terminator::Return(NO_VALUE)),
+            ],
+        );
+        f.n_params = 1;
+        if narrow_compare {
+            f.cmp32 = vec![false, true];
+        }
+        f
+    }
+
+    /// Under `n >= 2` the decrement of an `int` stays inside `int` and its
+    /// renormalization is the identity; under `n < 2` it can wrap and the
+    /// renormalization stays. The same expression in the two blocks takes
+    /// each block's own bound.
+    #[test]
+    fn renormalization_under_a_guard_drops_where_the_range_fits() {
+        let n = Inst::ParamRef {
+            idx: 0,
+            kind: LoadKind::I32,
+        };
+        for narrow_compare in [false, true] {
+            let mut f = decrement_on_both_sides(n.clone(), narrow_compare);
+            drop_fitting(&mut f);
+            assert!(
+                matches!(f.insts[4], Inst::StoreLocal { value: 2, .. }),
+                "narrow={narrow_compare}: {:?}",
+                f.insts[4]
+            );
+            assert!(
+                matches!(f.insts[7], Inst::StoreLocal { value: 6, .. }),
+                "narrow={narrow_compare}: {:?}",
+                f.insts[7]
+            );
+        }
+    }
+
+    /// A 32-bit comparison of a register whose upper half is unknown says
+    /// nothing about the register: `n - 2` over a 64-bit `n` keeps its
+    /// renormalization on both sides. Read at 64 bits, the comparison
+    /// bounds `n` from below only, and `n - 2` still leaves `int` above.
+    #[test]
+    fn narrow_guard_of_a_wide_value_drops_no_renormalization() {
+        let wide = Inst::LoadLocal {
+            off: -2,
+            kind: LoadKind::I64,
+            volatile: false,
+        };
+        for narrow_compare in [true, false] {
+            let mut f = decrement_on_both_sides(wide.clone(), narrow_compare);
+            drop_fitting(&mut f);
+            assert!(matches!(f.insts[4], Inst::StoreLocal { value: 3, .. }));
+            assert!(matches!(f.insts[7], Inst::StoreLocal { value: 6, .. }));
+        }
     }
 
     /// A byte carried around a back edge, masked by register operands.

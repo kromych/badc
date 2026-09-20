@@ -27,8 +27,8 @@ Disassembly of section .text:
 
 <write_pkru>:
                	movl	%edi, %eax
-               	xorq	%rcx, %rcx
-               	xorq	%rdx, %rdx
+               	xorl	%ecx, %ecx
+               	xorl	%edx, %edx
                	wrpkru
                	retq
 
@@ -36,7 +36,6 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	leaq	<rip>, %rcx
                	movl	%ds:<rip>, %eax
                	movl	%eax, -0x8(%rbp)
                	movl	-0x8(%rbp), %eax
@@ -47,7 +46,8 @@ Disassembly of section .text:
                	leave
                	retq
                	clflush	%ds:<rip>
-               	movl	(%rcx), %eax
+               	leaq	<rip>, %rax
+               	movl	(%rax), %eax
                	movl	$0xa5a5a5a5, %r11d      # imm = 0xA5A5A5A5
                	cmpl	%r11d, %eax
                	je	<addr>
@@ -57,8 +57,8 @@ Disassembly of section .text:
                	nop
                	nop
                	nop
-               	movl	$0x12345678, %eax       # imm = 0x12345678
-               	movl	%eax, (%rcx)
+               	leaq	<rip>, %rax
+               	movl	$0x12345678, (%rax)     # imm = 0x12345678
                	movl	%ds:<rip>, %eax
                	movl	%eax, -0x8(%rbp)
                	movl	-0x8(%rbp), %eax

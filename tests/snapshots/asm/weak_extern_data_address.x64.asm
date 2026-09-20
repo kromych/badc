@@ -40,19 +40,13 @@ Disassembly of section .text:
                	jne	<addr>
                	movl	$0x3, %eax
                	retq
-               	leaq	<rip>, %rax
-               	movslq	(%rax), %rax
-               	cmpl	$0xb, %eax
+               	movslq	(%rax), %rcx
+               	cmpl	$0xb, %ecx
                	jne	<addr>
-               	leaq	<rip>, %rax
                	movslq	0x8(%rax), %rax
                	cmpl	$0x21, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x4, %eax
                	retq
-               	xorq	%rax, %rax
-               	movq	%rax, %rcx
+               	xorl	%eax, %eax
                	retq

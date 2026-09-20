@@ -28,22 +28,20 @@ Disassembly of section .text:
 <ret_ptr_as_int>:
                	leaq	<rip>, %rax
                	movq	(%rax), %rax
-               	movslq	%eax, %rax
                	retq
 
 <ret_int_as_ptr>:
-               	movq	%rdi, %rax
-               	movslq	%eax, %rax
-               	retq
-
-<ret_null>:
-               	xorq	%rax, %rax
-               	retq
-
-<ret_ok>:
                	movslq	%edi, %rax
                	retq
 
+<ret_null>:
+               	xorl	%eax, %eax
+               	retq
+
+<ret_ok>:
+               	movq	%rdi, %rax
+               	retq
+
 <main>:
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	retq

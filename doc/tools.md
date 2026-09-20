@@ -1,6 +1,6 @@
 # Tools
 
-Debugging aids under [`tools/`](../tools/), not part of the compiler.
+Debugging aids under `tools/`, not part of the compiler.
 
 ## `core-walker.py`
 
@@ -13,8 +13,8 @@ higher-level debugger path is blocked.
 * `--dump-around-rbp`: print the 16 8-byte slots around `rbp`.
 * `--scan-stack`: ignore the rbp chain, scan upward from `rsp` for any 8-byte
   slot that looks like a code address, and resolve each. When stack corruption
-  broke the rbp chain the return addresses are usually still on the stack, just
-  no longer reachable through the saved-rbp links.
+  broke the rbp chain the return addresses are usually still on the stack, but
+  out of reach of the saved-rbp links.
 * `--list-segments`: list every PT_LOAD with its vaddr range.
 
 ## `probe_asm_units/`

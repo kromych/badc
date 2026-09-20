@@ -14,10 +14,8 @@ Disassembly of section .text:
                	ud2
                	ud2
                	movl	$0xa, %eax
-               	movslq	%eax, %rax
                	jmp	<addr>
 		R_X86_64_PLT32	__x86_return_thunk-0x4
-               	jmp	<addr>
                	cmpl	$0x2, %edi
                	jl	<addr>
                	movl	$0x14, %eax
@@ -45,9 +43,9 @@ Disassembly of section .text:
 
 <trap_then_return>:
                	endbr64
-               	testl	%edi, %edi
+               	movq	%rdi, %rax
+               	testl	%eax, %eax
                	jge	<addr>
                	ud2
-               	movslq	%edi, %rax
                	jmp	<addr>
 		R_X86_64_PLT32	__x86_return_thunk-0x4

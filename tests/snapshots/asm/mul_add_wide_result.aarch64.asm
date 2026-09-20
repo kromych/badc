@@ -14,10 +14,7 @@ Disassembly of section .text:
                	brk	#0x1
 
 <macc>:
-               	mov	w0, w0
-               	mov	w1, w1
                	add	x0, x0, x1
-               	mov	w0, w0
                	sxtw	x0, w0
                	madd	x0, x0, x2, x3
                	ret

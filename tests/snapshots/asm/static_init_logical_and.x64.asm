@@ -26,58 +26,40 @@ Disassembly of section .text:
                	int3
 
 <dispatch>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	movl	%edi, -0x20(%rbp)
-               	leaq	<rip>, %rax
-               	movq	%rdi, %rcx
-               	andq	$0x1, %rcx
+               	leaq	<rip>, %rdx
+               	movq	%rdi, %rax
+               	andq	$0x1, %rax
+               	movq	%rax, %rcx
                	shlq	$0x3, %rcx
-               	addq	%rcx, %rax
-               	movq	(%rax), %rdx
-               	leaq	<rip>, %rax
-               	addq	%rax, %rcx
+               	addq	%rcx, %rdx
+               	movq	(%rdx), %rsi
+               	leaq	<rip>, %rdx
+               	addq	%rdx, %rcx
                	movq	(%rcx), %rcx
-               	cmpq	%rcx, %rdx
+               	cmpq	%rcx, %rsi
                	je	<addr>
-               	movabsq	$-0x1, %rax
-               	leave
+               	movq	$-0x1, %rax
                	retq
-               	movslq	-0x20(%rbp), %rcx
-               	andq	$0x1, %rcx
-               	movq	(%rax,%rcx,8), %rax
+               	movq	(%rdx,%rax,8), %rax
                	jmpq	*%rax
                	movl	$0xa, %eax
-               	movl	%eax, -0x8(%rbp)
-               	movslq	-0x8(%rbp), %rcx
-               	incq	%rcx
-               	addq	$0x0, %rcx
-               	incq	%rcx
-               	leaq	0x1(%rcx), %rax
-               	movslq	%eax, %rax
-               	leave
+               	incq	%rax
+               	incq	%rax
+               	incq	%rax
                	retq
                	movl	$0x14, %eax
-               	movl	%eax, -0x8(%rbp)
                	jmp	<addr>
 
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	xorq	%rdi, %rdi
-               	movq	%rdi, %rax
-               	movq	%rdi, %rax
-               	movq	%rdi, %rax
+               	xorl	%edi, %edi
                	callq	<addr>
-               	cmpq	$0xd, %rax
+               	cmpl	$0xd, %eax
                	jne	<addr>
                	movl	$0x1, %edi
                	callq	<addr>
-               	cmpq	$0x17, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
+               	cmpl	$0x17, %eax
                	je	<addr>
                	movl	$0x3, %eax
                	popq	%rbp

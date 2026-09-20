@@ -1,11 +1,12 @@
 //! GCC builtins that are not intrinsic instructions: the checked
-//! arithmetic, the constant-size memory transfers, and the portable
-//! bit-count lowerings.
+//! arithmetic, the constant-size memory transfers, and the bit-count
+//! forms built on `Inst::BitCount`.
 
 use super::access::{load_kind_for_width, store_kind_for, store_kind_for_width, store_place};
 use super::types::type_size_bytes;
 use super::*;
 use crate::c5::ast::expr_ty;
+use crate::c5::ir::BitCountOp;
 
 impl<'a> Walker<'a> {
     /// Expand a GCC `__builtin_memcpy` / `__builtin_memmove` /
@@ -398,29 +399,28 @@ impl<'a> Walker<'a> {
             }
             return Ok(v);
         }
-        // clz / ctz at zero are undefined in GCC; this lowering returns
-        // the bit width.
+        // clz / ctz at zero are undefined in GCC; `Inst::BitCount` gives
+        // the bit width there.
         if let Some(i) = Intrinsic::from_i64(kind)
             && i.is_int_bit_unary()
         {
             use crate::c5::op::Intrinsic as I;
             let x = arg_vals[0];
-            let w64 = i.is_bit_unary_64();
+            let width = if i.is_bit_unary_64() { 8 } else { 4 };
             return Ok(match i {
-                I::Clz | I::Clzll => lower_clz(b, x, w64),
-                I::Ctz | I::Ctzll => lower_ctz(b, x, w64),
-                I::Clrsb | I::Clrsbll => lower_clrsb(b, x, w64),
-                I::Ffs | I::Ffsll => lower_ffs(b, x, w64),
+                I::Clz | I::Clzll => b.bit_count(BitCountOp::Clz, x, width),
+                I::Ctz | I::Ctzll => b.bit_count(BitCountOp::Ctz, x, width),
+                I::Clrsb | I::Clrsbll => b.bit_count(BitCountOp::Clrsb, x, width),
+                I::Ffs | I::Ffsll => lower_ffs(b, x, width),
                 I::Parity | I::Parityll => {
-                    let pc = lower_popcount(b, x, w64);
+                    let pc = b.bit_count(BitCountOp::Popcount, x, width);
                     b.binop_imm(BinOp::And, pc, 1)
                 }
-                _ => lower_popcount(b, x, w64),
+                _ => b.bit_count(BitCountOp::Popcount, x, width),
             });
         }
         // Byte reversal is a single instruction on every
-        // supported target, so it lowers to a dedicated inst
-        // rather than a portable shift / mask sequence.
+        // supported target, so it lowers to a dedicated inst.
         if let Some(i) = Intrinsic::from_i64(kind)
             && i.is_bswap()
         {
@@ -461,112 +461,13 @@ impl<'a> Walker<'a> {
     }
 }
 
-// Portable lowering of the GCC bit-count builtins. Each expands to a
-// branchless shift / mask sequence over the SSA builder, so the result
-// matches across the interpreter and every target with no dedicated
-// instruction. `w64` selects the 64-bit forms; the rest operate on the
-// low 32 bits, the operand arriving zero-extended.
-
-type Bld = SsaBuilder;
-
-type Val = ValueId;
-
-/// Count set bits via the standard SWAR reduction. Right shifts are
-/// logical (`BinOp::Shru`) so the masks see clean bits regardless of
-/// the operand's sign. The result is at most the bit width, so the
-/// final `& 0x7f` extracts it.
-pub(super) fn lower_popcount(b: &mut Bld, x: Val, w64: bool) -> Val {
-    let su = BinOp::Shru;
-    let and = BinOp::And;
-    if w64 {
-        let t = b.binop_imm(su, x, 1);
-        let t = b.binop_imm(and, t, 0x5555_5555_5555_5555u64 as i64);
-        let a = b.binop(BinOp::Sub, x, t);
-        let lo = b.binop_imm(and, a, 0x3333_3333_3333_3333u64 as i64);
-        let hi = b.binop_imm(su, a, 2);
-        let hi = b.binop_imm(and, hi, 0x3333_3333_3333_3333u64 as i64);
-        let a = b.binop(BinOp::Add, lo, hi);
-        let s = b.binop_imm(su, a, 4);
-        let a = b.binop(BinOp::Add, a, s);
-        let a = b.binop_imm(and, a, 0x0f0f_0f0f_0f0f_0f0fu64 as i64);
-        let s = b.binop_imm(su, a, 8);
-        let a = b.binop(BinOp::Add, a, s);
-        let s = b.binop_imm(su, a, 16);
-        let a = b.binop(BinOp::Add, a, s);
-        let s = b.binop_imm(su, a, 32);
-        let a = b.binop(BinOp::Add, a, s);
-        b.binop_imm(and, a, 0x7f)
-    } else {
-        let x = b.binop_imm(and, x, 0xffff_ffff);
-        let t = b.binop_imm(su, x, 1);
-        let t = b.binop_imm(and, t, 0x5555_5555);
-        let a = b.binop(BinOp::Sub, x, t);
-        let lo = b.binop_imm(and, a, 0x3333_3333);
-        let hi = b.binop_imm(su, a, 2);
-        let hi = b.binop_imm(and, hi, 0x3333_3333);
-        let a = b.binop(BinOp::Add, lo, hi);
-        let s = b.binop_imm(su, a, 4);
-        let a = b.binop(BinOp::Add, a, s);
-        let a = b.binop_imm(and, a, 0x0f0f_0f0f);
-        let s = b.binop_imm(su, a, 8);
-        let a = b.binop(BinOp::Add, a, s);
-        let s = b.binop_imm(su, a, 16);
-        let a = b.binop(BinOp::Add, a, s);
-        b.binop_imm(and, a, 0x7f)
-    }
-}
-
-/// Count leading redundant sign bits: `clz(x ^ (x >> (w-1))) - 1`, with
-/// an arithmetic shift forming the all-sign mask. XORing it clears the
-/// leading run of sign bits to zeros (and always the sign bit itself),
-/// so `clz` of the result is that run length plus one. `x` is sign-
-/// extended into the register, so its high half mirrors the sign in the
-/// 32-bit case and the XOR leaves the upper bits zero.
-pub(super) fn lower_clrsb(b: &mut Bld, x: Val, w64: bool) -> Val {
-    let sign = b.binop_imm(BinOp::Shr, x, if w64 { 63 } else { 31 });
-    let folded = b.binop(BinOp::Xor, x, sign);
-    let clz = lower_clz(b, folded, w64);
-    b.binop_imm(BinOp::Sub, clz, 1)
-}
-
-/// Count leading zeros: smear the highest set bit down to fill the low
-/// bits, then `width - popcount`. At zero the smear stays zero and the
-/// result is the bit width.
-pub(super) fn lower_clz(b: &mut Bld, x: Val, w64: bool) -> Val {
-    let su = BinOp::Shru;
-    let or = BinOp::Or;
-    let t = b.binop_imm(su, x, 1);
-    let mut s = b.binop(or, x, t);
-    for sh in [2, 4, 8, 16] {
-        let t = b.binop_imm(su, s, sh);
-        s = b.binop(or, s, t);
-    }
-    if w64 {
-        let t = b.binop_imm(su, s, 32);
-        s = b.binop(or, s, t);
-    }
-    let pc = lower_popcount(b, s, w64);
-    let width = b.imm(if w64 { 64 } else { 32 });
-    b.binop(BinOp::Sub, width, pc)
-}
-
-/// Count trailing zeros as `popcount((x - 1) & ~x)`: `x - 1` turns the
-/// trailing zeros into ones and clears the lowest set bit, and `~x`
-/// keeps only those positions. At zero the mask is all-ones and the
-/// result is the bit width.
-pub(super) fn lower_ctz(b: &mut Bld, x: Val, w64: bool) -> Val {
-    let xm1 = b.binop_imm(BinOp::Sub, x, 1);
-    let notx = b.binop_imm(BinOp::Xor, x, -1);
-    let m = b.binop(BinOp::And, xm1, notx);
-    lower_popcount(b, m, w64)
-}
-
-/// POSIX / GCC `ffs`: one plus the index of the least-significant set
-/// bit, 0 for a zero input. `lower_ctz` returns the bit width at zero,
-/// so the `(x != 0)` factor forces that case to 0.
-pub(super) fn lower_ffs(b: &mut Bld, x: Val, w64: bool) -> Val {
-    let ctz = lower_ctz(b, x, w64);
+/// POSIX / GCC `ffs`: one plus the index of the least-significant set bit, 0
+/// for 0. ctz is the bit width `w` only for 0, the one count with bit
+/// `log2(w)` set, so `(ctz >> log2(w)) - 1` clears `ctz + 1` there alone.
+fn lower_ffs(b: &mut SsaBuilder, x: ValueId, width: u8) -> ValueId {
+    let ctz = b.bit_count(BitCountOp::Ctz, x, width);
     let cp1 = b.binop_imm(BinOp::Add, ctz, 1);
-    let nz = b.binop_imm(BinOp::Ne, x, 0);
-    b.binop(BinOp::Mul, cp1, nz)
+    let at_zero = b.binop_imm(BinOp::Shru, ctz, if width == 8 { 6 } else { 5 });
+    let keep = b.binop_imm(BinOp::Sub, at_zero, 1);
+    b.binop(BinOp::And, cp1, keep)
 }

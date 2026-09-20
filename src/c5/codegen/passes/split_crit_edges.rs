@@ -49,20 +49,69 @@ fn edge_carries_phi_moves(func: &FunctionSsa, pred: BlockId, succ: BlockId) -> b
     false
 }
 
-fn run_one(func: &mut FunctionSsa) {
-    let n_original = func.blocks.len();
-    if n_original == 0 {
+/// A label whose phi names the function's one indirect branch hands its
+/// address (`BlockAddr`, target list, static-data slots) to a new empty
+/// block that jumps to it, and the phi's moves run there.
+fn split_label_addresses(func: &mut FunctionSsa) {
+    let sites: Vec<BlockId> = func.indirect_branches().collect();
+    let [site] = sites[..] else {
+        return;
+    };
+    let labels: Vec<BlockId> = func
+        .computed_goto_targets
+        .iter()
+        .copied()
+        .filter(|&l| edge_carries_phi_moves(func, site, l))
+        .collect();
+    if labels.is_empty() {
         return;
     }
+    let insts_end = func.insts.len() as u32;
+    let mut address: Vec<BlockId> = (0..func.blocks.len() as BlockId).collect();
+    for l in labels {
+        let e = func.blocks.len() as BlockId;
+        func.blocks.push(Block {
+            start_pc: 0,
+            inst_range: insts_end..insts_end,
+            terminator: Terminator::Jmp(l),
+            exit_acc: crate::c5::ir::NO_VALUE,
+        });
+        for id in func.blocks[l as usize].inst_range.clone() {
+            let Inst::Phi { incoming, .. } = &mut func.insts[id as usize] else {
+                break;
+            };
+            for (b, _) in incoming.iter_mut() {
+                if *b == site {
+                    *b = e;
+                }
+            }
+        }
+        address[l as usize] = e;
+    }
+    for t in func.computed_goto_targets.iter_mut() {
+        *t = address[*t as usize];
+    }
+    for r in func.label_data_relocs.iter_mut() {
+        r.block = address[r.block as usize];
+    }
+    for inst in func.insts.iter_mut() {
+        if let Inst::BlockAddr(b) = inst {
+            *b = address[*b as usize];
+        }
+    }
+}
+
+fn run_one(func: &mut FunctionSsa) {
+    if func.blocks.is_empty() {
+        return;
+    }
+    split_label_addresses(func);
+    let n_original = func.blocks.len();
     // Splits to apply, deferred so we don't mutate the block list
     // while we walk it. Each entry is `(pred, original_succ)`.
     let mut splits: Vec<(BlockId, BlockId)> = Vec::new();
     for (idx, block) in func.blocks.iter().enumerate().take(n_original) {
-        // An indirect branch reads an address-taken label's own block
-        // address, so its edges cannot be routed through a synthetic
-        // block. `emit_phi_predecessor_moves` refuses a function whose
-        // computed-goto target carries a phi rather than run the moves
-        // on every one of the branch's edges.
+        // An indirect branch lands on the labels' own addresses.
         if matches!(block.terminator, Terminator::GotoIndirect { .. }) {
             continue;
         }
@@ -247,6 +296,7 @@ mod tests {
             inst_src: alloc::vec![(0, 0); insts.len()],
             f32_values: alloc::vec![false; insts.len()],
             cmp32: Vec::new(),
+            low_word_tests: Vec::new(),
             param_fp_mask: crate::c5::ir::FpMask::EMPTY,
             agg_descs: alloc::vec::Vec::new(),
             param_aggs: alloc::vec::Vec::new(),
@@ -606,19 +656,19 @@ mod tests {
         assert_eq!(incoming.as_slice(), &[(2, 0)]);
     }
 
-    /// An indirect branch reads a label's own block address, so its edges
-    /// cannot be routed through a synthetic block. The pass leaves them; the
-    /// emit refuses such a function instead.
-    #[test]
-    fn goto_indirect_predecessor_is_left_alone() {
+    /// b0 branches indirectly to the labels b1 and b2; b3 jumps to b1, whose
+    /// phi merges b0's and b3's values. `BlockAddr(1)` and a static-data
+    /// slot name b1; `sites` extra blocks end in their own indirect branch.
+    fn label_phi(sites: usize) -> FunctionSsa {
         let mut f = fresh(
             vec![
-                Inst::Imm(0),
+                Inst::BlockAddr(1),
                 Inst::Phi {
-                    incoming: alloc::vec![(0, 0)],
+                    incoming: alloc::vec![(0, 0), (3, 3)],
                     kind: LoadKind::I64,
                 },
                 Inst::Imm(2),
+                Inst::Imm(3),
             ],
             vec![
                 Block {
@@ -639,12 +689,61 @@ mod tests {
                     terminator: Terminator::Return(2),
                     exit_acc: 2,
                 },
+                Block {
+                    start_pc: 0,
+                    inst_range: 3..4,
+                    terminator: Terminator::Jmp(1),
+                    exit_acc: 3,
+                },
             ],
         );
+        for _ in 0..sites {
+            f.blocks.push(Block {
+                start_pc: 0,
+                inst_range: 4..4,
+                terminator: Terminator::GotoIndirect { target: 3 },
+                exit_acc: NO_VALUE,
+            });
+        }
         f.computed_goto_targets = alloc::vec![1, 2];
+        f.label_data_relocs = alloc::vec![crate::c5::ir::LabelDataReloc {
+            data_offset: 0,
+            block: 1,
+        }];
+        f
+    }
+
+    /// An indirect branch lands on a label's own address, so the edge into a
+    /// label carrying its phi cannot be split; the label's address moves to
+    /// a new block that jumps to the label and names the edge in the phi.
+    #[test]
+    fn label_phi_named_by_the_indirect_branch_takes_an_address_block() {
+        let mut f = label_phi(0);
+        run_one(&mut f);
+        assert_eq!(f.blocks.len(), 5);
+        assert_eq!(f.blocks[4].terminator, Terminator::Jmp(1));
+        assert!(f.blocks[4].inst_range.is_empty());
+        assert_eq!(f.computed_goto_targets, alloc::vec![4, 2]);
+        assert!(matches!(f.insts[0], Inst::BlockAddr(4)));
+        assert_eq!(f.label_data_relocs[0].block, 4);
+        let Inst::Phi { incoming, .. } = &f.insts[1] else {
+            panic!("expected phi");
+        };
+        assert_eq!(incoming.as_slice(), &[(4, 0), (3, 3)]);
+        // The direct edge into the label stays.
+        assert_eq!(f.blocks[3].terminator, Terminator::Jmp(1));
+    }
+
+    /// With two indirect branches the address block would need a phi of its
+    /// own, so the label keeps its address; mem2reg places no such phi.
+    #[test]
+    fn a_label_two_indirect_branches_reach_keeps_its_address() {
+        let mut f = label_phi(1);
         let n_before = f.blocks.len();
         run_one(&mut f);
         assert_eq!(f.blocks.len(), n_before);
+        assert_eq!(f.computed_goto_targets, alloc::vec![1, 2]);
+        assert!(matches!(f.insts[0], Inst::BlockAddr(1)));
     }
 
     #[test]

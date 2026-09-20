@@ -490,6 +490,24 @@ fn far_stack_arguments_reach_their_slots() {
     }
 }
 
+/// Under `-mgeneral-regs-only` the population count takes the
+/// general-register reduction; the edge fixture checks every count against
+/// its references at `-O0` and `-O`.
+#[test]
+fn bit_counts_without_fp_registers_run() {
+    for (base, suffix) in [
+        (NativeOptions::default(), "-gro"),
+        (NativeOptions::new().with_optimize(), "-gro-O"),
+    ] {
+        let opts = NativeOptions {
+            no_fp_regs: true,
+            ..base
+        };
+        let outcome = build_and_run_fixture_with_options("builtin_bit_count_edges.c", opts, suffix);
+        assert!(outcome.matches(0), "{suffix}: {outcome:?}");
+    }
+}
+
 #[test]
 fn fixture_parity() {
     let failures = super::parity_failures(NATIVE_ELF_FIXTURES, |name, expected| {
@@ -898,13 +916,12 @@ int main(void) { return (read_shared() == 0x12345678) ? 0 : 1; }\n";
 }
 
 /// Two distinct extern data symbols both lower to `Inst::ImmData(0)`.
-/// The cross-block ImmData dedup must not coalesce them: each binds to a
-/// different cross-TU symbol, so they hold different addresses. `sym_a`
-/// is referenced in the entry block (the dedup canonical for the key)
-/// and `sym_b` only in a later block; coalescing makes the later
-/// reference read `sym_a`.
+/// The value numbering must not merge them: each binds to a different
+/// cross-TU symbol, so they hold different addresses. `sym_a` is read in
+/// the entry block and `sym_b` only in a dominated one; a merge makes the
+/// later reference read `sym_a`.
 #[test]
-fn cross_unit_dedup_imm_distinct_symbols() {
+fn cross_unit_address_values_keep_their_symbols() {
     use crate::{CompileOptions, Program};
 
     const UNIT_A: &str = "long sym_a = 100;\nlong sym_b = 7;\n";
@@ -931,8 +948,7 @@ int main(void) { return (combine(1) == 107) ? 0 : 1; }\n";
     )
     .unwrap_or_else(|e| panic!("link: {e}"));
 
-    let path =
-        super::unique_temp_path("badc-elf-aarch64-dedup-imm", "cross_unit_dedup_imm", ".bin");
+    let path = super::unique_temp_path("badc-elf-aarch64-addr-vn", "cross_unit_addr_vn", ".bin");
     {
         let mut f = std::fs::File::create(&path).expect("create temp file");
         f.write_all(&bytes).expect("write temp file");
@@ -944,7 +960,7 @@ int main(void) { return (combine(1) == 107) ? 0 : 1; }\n";
     assert_eq!(
         output.status.code(),
         Some(0),
-        "distinct extern data symbols were coalesced by the ImmData dedup under -O"
+        "distinct extern data symbols were merged under -O"
     );
 }
 

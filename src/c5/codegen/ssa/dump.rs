@@ -80,6 +80,9 @@ pub(crate) fn dump_function(func: &FunctionSsa, alloc: &Allocation) -> String {
                 .collect();
             out.push_str(&format!("   [{}]", targets.join(", ")));
         }
+        if func.low_word_tests.get(b_idx).copied().unwrap_or(false) {
+            out.push_str("   (low word)");
+        }
         if block.exit_acc != NO_VALUE {
             out.push_str(&format!("   (exit_acc=v{})", block.exit_acc));
         }
@@ -167,20 +170,24 @@ fn fmt_inst(inst: &Inst) -> String {
         LoadIndexed {
             base,
             index,
+            index_ext,
             scale,
             kind,
         } => format!(
-            "LoadIndexed {{ base=v{base}, index=v{index}, scale={scale}, kind={} }}",
+            "LoadIndexed {{ base=v{base}, index=v{index}{}, scale={scale}, kind={} }}",
+            fmt_index_ext(*index_ext),
             fmt_load_kind(*kind),
         ),
         StoreIndexed {
             base,
             index,
+            index_ext,
             scale,
             value,
             kind,
         } => format!(
-            "StoreIndexed {{ base=v{base}, index=v{index}, scale={scale}, value=v{value}, kind={} }}",
+            "StoreIndexed {{ base=v{base}, index=v{index}{}, scale={scale}, value=v{value}, kind={} }}",
+            fmt_index_ext(*index_ext),
             fmt_store_kind(*kind),
         ),
         Binop { op, lhs, rhs } => {
@@ -190,6 +197,7 @@ fn fmt_inst(inst: &Inst) -> String {
             "BinopI {{ op={}, lhs=v{lhs}, rhs_imm={rhs_imm} }}",
             fmt_binop(*op),
         ),
+        Neg(v) => format!("Neg(v{v})"),
         Fneg(v) => format!("Fneg(v{v})"),
         Fma {
             a,
@@ -210,6 +218,9 @@ fn fmt_inst(inst: &Inst) -> String {
             format!("Extend {{ value=v{value}, kind={} }}", fmt_load_kind(*kind))
         }
         Bswap { value, width } => format!("Bswap {{ value=v{value}, width={width} }}"),
+        BitCount { op, value, width } => {
+            format!("BitCount {{ op={op:?}, value=v{value}, width={width} }}")
+        }
         Copy { value, is_fp } => format!("Copy {{ value=v{value}, fp={is_fp} }}"),
         FpCast { kind, value } => {
             format!("FpCast {{ kind={}, value=v{value} }}", fmt_fp_cast(*kind),)
@@ -303,6 +314,7 @@ fn fmt_inst(inst: &Inst) -> String {
             fmt_value_list(args),
         ),
         AllocaInit(slot) => format!("AllocaInit({slot})"),
+        LifetimeEnd(slot) => format!("LifetimeEnd({slot})"),
         ParamRef { idx, kind } => format!("ParamRef({idx}, kind={})", fmt_load_kind(*kind)),
         Phi { incoming, kind } => {
             let mut parts = String::new();
@@ -377,6 +389,16 @@ fn fmt_place(p: Place) -> String {
 /// Rendered only when set so non-volatile dumps are unchanged.
 fn fmt_volatile(v: bool) -> &'static str {
     if v { ", volatile" } else { "" }
+}
+
+/// Follows the index operand; empty for a full-width index.
+fn fmt_index_ext(ext: super::super::ir::IndexExt) -> &'static str {
+    use super::super::ir::IndexExt;
+    match ext {
+        IndexExt::None => "",
+        IndexExt::Sxtw => " sxtw",
+        IndexExt::Uxtw => " uxtw",
+    }
 }
 
 /// Proven alignment of a memory access, shown only when it is below

@@ -61,7 +61,8 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	nopw	(%rax,%rax)
+               	nop
+               	nopw	%cs:(%rax,%rax)
                	nopw	%cs:(%rax,%rax)
                	nopw	%cs:(%rax,%rax)
                	nopw	%cs:(%rax,%rax)
@@ -69,18 +70,16 @@ Disassembly of section .text:
                	leaq	-<rip>, %rax        # <addr>
                	movq	%rax, -0x8(%rbp)
                	movq	-0x8(%rbp), %rax
-               	andq	$0x3f, %rax
-               	testq	%rax, %rax
+               	testb	$0x3f, %al
                	je	<addr>
                	movl	$0x1, %eax
                	leave
                	retq
-               	nop
+               	nopw	(%rax,%rax)
                	leaq	-<rip>, %rax        # <addr>
                	movq	%rax, -0x8(%rbp)
                	movq	-0x8(%rbp), %rax
-               	andq	$0x1f, %rax
-               	testq	%rax, %rax
+               	testb	$0x1f, %al
                	je	<addr>
                	movl	$0x2, %eax
                	leave

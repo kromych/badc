@@ -545,7 +545,7 @@ pub(super) fn emit_call(
     }
     emit_call_to(code, fixups, target_pc);
     if plan.scratch_bytes > 0 {
-        emit_add_rsp_imm32(code, plan.scratch_bytes);
+        emit_add_rsp(code, plan.scratch_bytes);
     }
     // A <= 16-byte aggregate return arrives classified; larger ones keep the
     // out-pointer convention and never set `ret_agg`.
@@ -620,7 +620,7 @@ pub(super) fn emit_call_ext(
     });
     super::encode::emit_call_rel32(code, 0);
     if plan.scratch_bytes > 0 {
-        emit_add_rsp_imm32(code, plan.scratch_bytes);
+        emit_add_rsp(code, plan.scratch_bytes);
     }
     // A register-returned aggregate (System V AMD64 3.2.3) stores into the
     // caller's result temp; > 16-byte returns take the out-pointer path.
@@ -636,7 +636,7 @@ pub(super) fn emit_call_ext(
     let bare = ty_helpers::strip_unsigned(return_type_tag);
     let returns_long_double = imp.returns_long_double;
     if returns_long_double && matches!(target, Target::LinuxX64) {
-        emit_sub_rsp_imm32(code, 16);
+        emit_sub_rsp(code, 16);
         // fstp QWORD PTR [rsp] -- `DD /3`, mod=00, rm=100 (SIB
         // follows), SIB = 0x24 (base = rsp, no index).
         code.extend_from_slice(&[0xDD, 0x1C, 0x24]);
@@ -645,7 +645,7 @@ pub(super) fn emit_call_ext(
             _ => SCRATCH_R10,
         };
         emit_mov_r_mem(code, scratch, Reg::RSP, 0);
-        emit_add_rsp_imm32(code, 16);
+        emit_add_rsp(code, 16);
         int_result_to_dst(code, dst, scratch, frame);
         return Ok(());
     }
@@ -655,12 +655,8 @@ pub(super) fn emit_call_ext(
         xmm0_result_to_dst(code, dst, frame);
         return Ok(());
     }
-    // The 32-bit widenings write only bits 32..63, as the `ParamRef`
-    // entry conversion does on the incoming side of the same boundary.
-    let ext = super::return_extension(return_type_tag, target);
-    if !(ext.high_word_only() && alloc.high_dead(v)) {
-        super::encode::emit_extend_rax_for_return(code, ext);
-    }
+    let ext = super::call_result_extension(return_type_tag, target, alloc, v);
+    super::encode::emit_extend_rax_for_return(code, ext);
     mirror_int_dst(code, dst, Reg::RAX, frame);
     Ok(())
 }
@@ -721,26 +717,7 @@ pub(super) fn emit_call_indirect(
     // and the r10 staging scratch).
     let mut blocked: alloc::vec::Vec<Reg> =
         alloc::vec::Vec::with_capacity(args.len() + abi.int_arg_regs.len() + 2);
-    for &a in args {
-        if let Some(Place::IntReg(r)) = alloc.places.get(a as usize) {
-            blocked.push(Reg(*r));
-        }
-    }
-    for p in &plan.placements {
-        match p {
-            super::ArgPlacement::IntReg(r) | super::ArgPlacement::StructByRefReg(r) => {
-                blocked.push(Reg(*r));
-            }
-            super::ArgPlacement::StructRegs { regs, n, .. } => {
-                for cr in &regs[..*n as usize] {
-                    if !cr.is_fp {
-                        blocked.push(Reg(cr.reg));
-                    }
-                }
-            }
-            _ => {}
-        }
-    }
+    blocked.extend(plan.int_regs().map(Reg));
     blocked.push(SCRATCH_R10);
     // A System V variadic call sets `al` just before the `call`, so the
     // target must not sit in rax.
@@ -748,9 +725,22 @@ pub(super) fn emit_call_indirect(
     if sysv_variadic_call {
         blocked.push(Reg::RAX);
     }
-    // The target pointer moves to a caller-saved scratch before the marshal
-    // clobbers it; when every candidate is blocked it spills to the stack.
-    let target_scratch = pick_caller_saved_scratch(Reg(0xff), &blocked, abi.fixed_regs);
+    // A target in a register the marshal does not write (r11 copies its
+    // memory arguments) is called where it is.
+    let in_place = match target_place {
+        Place::IntReg(r) if r != SCRATCH_R11.0 && !blocked.iter().any(|b| b.0 == r) => Some(Reg(r)),
+        _ => None,
+    };
+    for &a in args {
+        if let Some(Place::IntReg(r)) = alloc.places.get(a as usize) {
+            blocked.push(Reg(*r));
+        }
+    }
+    // Otherwise the target pointer moves to a caller-saved scratch before
+    // the marshal clobbers it; when every candidate is blocked it spills
+    // to the stack.
+    let target_scratch =
+        in_place.or_else(|| pick_caller_saved_scratch(Reg(0xff), &blocked, abi.fixed_regs));
     // System V AMD64 3.2.3: a variadic call passes the XMM-argument
     // count in `al`. Computed from the plan and emitted after the
     // marshal (which never writes rax, blocked above for the target).
@@ -774,7 +764,7 @@ pub(super) fn emit_call_indirect(
         }
         emit_hardened_call_r(code, target_scratch, abi, extern_sites);
         if plan.scratch_bytes > 0 {
-            emit_add_rsp_imm32(code, plan.scratch_bytes);
+            emit_add_rsp(code, plan.scratch_bytes);
         }
     } else {
         // No register survives the marshal: the target spills to a 16-byte slot
@@ -784,7 +774,7 @@ pub(super) fn emit_call_indirect(
             return fail("CallIndirect: target not int reg / spill");
         };
         let slot_bytes = 16u32;
-        emit_sub_rsp_imm32(code, slot_bytes);
+        emit_sub_rsp(code, slot_bytes);
         emit_mov_mem_r(code, Reg::RSP, 0, target_r);
         if plan.scratch_bytes > 0 {
             emit_stack_alloc(code, plan.scratch_bytes, None);
@@ -811,9 +801,9 @@ pub(super) fn emit_call_indirect(
         }
         emit_hardened_call_r(code, SCRATCH_R10, abi, extern_sites);
         if plan.scratch_bytes > 0 {
-            emit_add_rsp_imm32(code, plan.scratch_bytes);
+            emit_add_rsp(code, plan.scratch_bytes);
         }
-        emit_add_rsp_imm32(code, slot_bytes);
+        emit_add_rsp(code, slot_bytes);
     }
     // A register-returned aggregate (System V AMD64 3.2.3) stores into the
     // caller's result temp.
@@ -1036,10 +1026,6 @@ pub(super) fn emit_tail_call(
     extern_sites: &mut Vec<super::UserExternCallSite>,
     extern_data_refs: &mut Vec<super::UserExternDataRef>,
 ) -> Emit {
-    debug_assert!(
-        !frame.dynamic_sp,
-        "detect_tail_call rejects dynamic-sp frames"
-    );
     // The argument-register window is disjoint from `alloc.gpr_used`, so the
     // restores below cannot clobber the marshalled values.
     let mut plan = super::plan_call_args(args.len(), args.len(), fp_arg_mask, abi);
@@ -1059,9 +1045,12 @@ pub(super) fn emit_tail_call(
     // sp shift must be zero.
     plan.scratch_bytes = 0;
     marshal_args(code, &plan, args, &[], alloc, frame, abi, "TailCall")?;
-    // `emit_return`'s epilogue without the return-value staging.
+    // `emit_return`'s epilogue without the return-value staging. A frame
+    // realigned for an over-aligned object has rsp below the saves;
+    // `detect_tail_call` admits it, no address of the object being taken.
     emit_canary_check(code, frame, abi, extern_sites, extern_data_refs);
-    restore_callee_saved(code, alloc, frame);
+    restore_dynamic_sp(code, frame);
+    restore_callee_saved(code, alloc);
     emit_frame_teardown(code, func, frame, alloc, abi);
     // A Call-kind fixup resolves the rel32 like an intra-unit call; the
     // opcode is `jmp`.

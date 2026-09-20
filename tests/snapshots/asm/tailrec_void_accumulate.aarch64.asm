@@ -15,7 +15,7 @@ Disassembly of section .text:
 
 <accumulate>:
                	sxtw	x0, w0
-               	b	<addr>
+               	cbz	w0, <addr>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	ldr	x2, [x1]
@@ -23,7 +23,7 @@ Disassembly of section .text:
                	str	x2, [x1]
                	sub	x0, x0, #0x1
                	sxtw	x0, w0
-               	cbnz	x0, <addr>
+               	cbnz	w0, <addr>
                	ret
 
 <main>:
@@ -38,7 +38,6 @@ Disassembly of section .text:
                	cmp	x0, x17
                	b.ne	<addr>
                	mov	x0, #0x0                // =0
-               	sxtw	x0, w0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x1                // =1

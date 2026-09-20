@@ -32,49 +32,29 @@ Disassembly of section .text:
                	jne	<addr>
                	movslq	0x4(%rax), %rcx
                	cmpl	$0x17, %ecx
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
                	jne	<addr>
                	movslq	0x8(%rax), %rcx
                	cmpl	$0x4, %ecx
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
                	jne	<addr>
                	movslq	0xc(%rax), %rax
                	cmpl	$0x5, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x2, %eax
                	retq
                	leaq	<rip>, %rax
-               	movsbq	(%rax), %rax
-               	cmpl	$0x68, %eax
+               	movsbq	(%rax), %rcx
+               	cmpl	$0x68, %ecx
                	jne	<addr>
-               	leaq	<rip>, %rax
-               	movsbq	0x4(%rax), %rax
-               	cmpl	$0x6f, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
+               	movsbq	0x4(%rax), %rcx
+               	cmpl	$0x6f, %ecx
                	jne	<addr>
-               	leaq	<rip>, %rax
-               	movsbq	0x5(%rax), %rax
-               	testl	%eax, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
+               	cmpb	$0x0, 0x5(%rax)
                	je	<addr>
                	movl	$0x3, %eax
                	retq
-               	leaq	<rip>, %rax
-               	movsbq	0x6(%rax), %rax
-               	testq	%rax, %rax
+               	cmpb	$0x0, 0x6(%rax)
                	je	<addr>
                	movl	$0x4, %eax
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	retq

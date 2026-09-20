@@ -3,9 +3,9 @@
 Builds a UEFI application from real [TianoCore EDK II](https://github.com/tianocore/edk2)
 MdePkg sources with badc, for **X64 and AArch64**, and boots each under OVMF/QEMU.
 
-This is the project's headline target: badc compiles the MdePkg library
-closure and links a **PE32+ EFI application** with its **own linker** -- no
-external `ld`/`lld`, no `GenFw` -- that a real UEFI firmware loads and runs.
+badc compiles the MdePkg library closure and links a **PE32+ EFI
+application** with its **own linker** -- no external `ld`/`lld`, no
+`GenFw` -- that a UEFI firmware loads and runs.
 The app (`MyApp.c`) formats through EDK II's own `UnicodeSPrint`
 (BasePrintLib) and writes to `ConOut`, so a correct boot exercises the whole
 closure end to end.

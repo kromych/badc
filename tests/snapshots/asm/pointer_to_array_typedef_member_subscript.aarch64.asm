@@ -23,7 +23,6 @@ Disassembly of section .text:
                	and	x1, x1, #0xffffffff0000003f
                	orr	x1, x1, #0x40
                	stur	w1, [x29, #-0x8]
-               	mov	w1, w1
                	and	x1, x1, #0xffffffffffffffc0
                	orr	x1, x1, #0x1
                	stur	w1, [x29, #-0x8]

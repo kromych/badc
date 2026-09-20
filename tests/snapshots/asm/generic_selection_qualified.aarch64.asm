@@ -33,12 +33,11 @@ Disassembly of section .text:
                	stur	w0, [x29, #-0x20]
                	sub	x1, x29, #0x20
                	sub	x2, x1, x1
-               	asr	x5, x2, #63
-               	lsr	x5, x5, #62
-               	add	x2, x2, x5
+               	asr	x3, x2, #63
+               	lsr	x3, x3, #62
+               	add	x2, x2, x3
                	asr	x2, x2, #2
                	cbnz	x2, <addr>
-               	mov	x2, x0
                	add	x2, x1, #0x4
                	sub	x1, x2, x1
                	asr	x2, x1, #63
@@ -46,14 +45,11 @@ Disassembly of section .text:
                	add	x1, x1, x2
                	asr	x1, x1, #2
                	cmp	x1, #0x1
-               	cset	x1, ne
-               	cbz	x1, <addr>
+               	b.eq	<addr>
                	mov	x0, #0x1c               // =28
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x1, x0
-               	mov	x1, x0
                	sub	x1, x29, #0x18
                	stur	x1, [x29, #-0x20]
                	add	sp, sp, #0x20

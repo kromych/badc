@@ -348,6 +348,14 @@ def diagnostic_code(text: str) -> str | None:
     return found.group(1) if found else None
 
 
+def first_error_line(text: str) -> str:
+    """The diagnostic itself, which separates a rejection from an ICE."""
+    for line in text.splitlines():
+        if "error" in line:
+            return line.strip()[:200]
+    return ""
+
+
 def normalize_message(message: str) -> str:
     """Drop what varies between two hits of the same defect.
 
@@ -431,6 +439,7 @@ def run_case(
             csmith.include,
             limits,
             limits.reference_run,
+            tag=reference.name,
         )
         steps.extend(gate.steps)
         if gate.checksum is None:
@@ -492,9 +501,15 @@ def build_and_run(
     limits: Limits,
     run_timeout: float,
     env: dict[str, str] | None = None,
+    tag: str = "badc",
 ) -> Outcome:
-    binary = f"case{config}"
+    # The output name carries the compiler as well as the level: the
+    # reference's gate build and badc's are both at `-O0`, and one name for
+    # both would leave a stale binary standing in for a build that produced
+    # none.
+    binary = f"case-{tag}{config}"
     argv = compile_argv(compiler, config, include, "case.c", binary)
+    (workdir / binary).unlink(missing_ok=True)
     built = run_command(argv, workdir, limits.compile, env)
     if not built.ok or not (workdir / binary).exists():
         reason = "compile timed out" if built.timed_out else "compile failed"
@@ -561,12 +576,14 @@ def classify(
                     built,
                 )
             else:
-                code = diagnostic_code(built.stderr + built.stdout) or "no-code"
+                text = built.stderr + built.stdout
+                code = diagnostic_code(text) or "no-code"
+                said = first_error_line(text) or f"exit {built.status}"
                 record(
                     "compile-error",
                     config,
                     ["compile-error", code],
-                    f"rejected the program ({code})",
+                    f"rejected the program: {said}",
                     built,
                 )
             continue
@@ -675,6 +692,7 @@ def confirm(
         csmith.include,
         limits,
         limits.reference_run,
+        tag=reference.name,
     )
     steps.extend(again.steps)
     if again.checksum is None:
@@ -702,6 +720,7 @@ class Run:
     csmith: str
     badc: str
     reference: str
+    reference_name: str
     bounds: str
     cases: int = 0
     skipped: dict[str, int] = dataclasses.field(default_factory=dict)
@@ -822,14 +841,23 @@ def asset_url(repo: str, name: str) -> str:
 
 
 def repro_commands(run: Run, finding: Finding, csmith: Csmith | None) -> str:
+    """Generate the case and build it the way the finding was reached.
+
+    A compile-time verdict needs the compile alone; a verdict about what the
+    program did needs the runs and the reference's answer beside them.
+    """
     bounds = " ".join(GENERATION_BOUNDS)
     include = str(csmith.include) if csmith else "$CSMITH_INCLUDE"
-    configs = finding.config.split(",")
-    lines = [
-        f"csmith --seed {finding.seed} {bounds} -o case.c",
-    ]
-    for config in configs:
-        lines.append(f'badc {config} -w -I "{include}" -o case{config} case.c')
+    runtime = not finding.verdict.startswith("compile-")
+    lines = [f"csmith --seed {finding.seed} {bounds} -o case.c"]
+    if runtime and run.reference_name:
+        lines.append(
+            f'{run.reference_name} {REFERENCE_GATE} -w -I "{include}"'
+            " -o case-ref case.c && ./case-ref"
+        )
+    for config in finding.config.split(","):
+        build = f'badc {config} -w -I "{include}" -o case{config} case.c'
+        lines.append(f"{build} && ./case{config}" if runtime else build)
     return "\n".join(lines)
 
 
@@ -1179,6 +1207,7 @@ def self_test() -> int:
         csmith="csmith 2.3.0",
         badc="badc 0.4.4",
         reference="clang 21.0.0",
+        reference_name="clang",
         bounds=" ".join(GENERATION_BOUNDS),
     )
     finding = Finding(
@@ -1261,6 +1290,7 @@ def self_test() -> int:
     findings = classify(1, "x86_64", outcomes, "AA", Path("case.c"), 10)
     check("a rejected program is a finding", [f.verdict for f in findings], ["compile-error"])
     check("its signature names the diagnostic", "B2020" in findings[0].human, True)
+    check("its detail quotes the diagnostic", "error: x" in findings[0].detail, True)
     outcomes["-O"] = Outcome(
         "-O",
         Step([], 0, 0.1, "", "", False),
@@ -1392,6 +1422,7 @@ def main(argv: list[str] | None = None) -> int:
             if reference
             else "none (badc -O0 vs -O only)"
         ),
+        reference_name=reference.name if reference else "",
         bounds=" ".join(GENERATION_BOUNDS),
     )
     limits = Limits(

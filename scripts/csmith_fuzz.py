@@ -142,10 +142,12 @@ class Reference:
         return self.binary.name
 
 
-def first_line_of_version(binary: Path, fallback: str) -> str:
+def first_line_of_version(
+    binary: Path, fallback: str, cwd: str | None = None
+) -> str:
     try:
         out = subprocess.run(
-            [str(binary), "--version"], capture_output=True, text=True
+            [str(binary), "--version"], capture_output=True, text=True, cwd=cwd
         ).stdout
     except OSError:
         return fallback
@@ -153,7 +155,14 @@ def first_line_of_version(binary: Path, fallback: str) -> str:
 
 
 def csmith_version(binary: Path) -> str:
-    return first_line_of_version(binary, "csmith (version unknown)")
+    """Ask the generator its version from a scratch directory.
+
+    csmith writes `platform.info` into its working directory on every
+    invocation, `--version` and `--help` included, so asking it anything from
+    the repository leaves that file in the tree.
+    """
+    with tempfile.TemporaryDirectory() as scratch:
+        return first_line_of_version(binary, "csmith (version unknown)", scratch)
 
 
 def include_candidates(binary: Path, version: str) -> list[Path]:
@@ -1286,17 +1295,25 @@ def self_test() -> int:
 def generator_stays_out_of_the_tree() -> list[str]:
     """csmith writes `platform.info` into its working directory.
 
-    A case that ran from the repository root would leave that file behind, so
-    every case gets its own scratch directory. Prove it with a real generation
-    when csmith is installed.
+    Every invocation does it, `--version` and `--help` included, so the check
+    covers discovery as well as generation: both run from the repository root
+    here, and neither may leave that file in the tree.
     """
-    csmith = find_csmith(None, None)
-    if csmith is None:
-        print("csmith absent: the generator-cwd check needs it, skipping that part")
-        return []
     stray = REPO_ROOT / "platform.info"
     before = stray.exists()
     problems: list[str] = []
+    here = os.getcwd()
+    try:
+        os.chdir(REPO_ROOT)
+        csmith = find_csmith(None, None)
+        if stray.exists() and not before:
+            problems.append(f"finding the generator left {stray} in the repository")
+            stray.unlink()
+    finally:
+        os.chdir(here)
+    if csmith is None:
+        print("csmith absent: the generator checks need it, skipping that part")
+        return problems
     with tempfile.TemporaryDirectory() as tmp:
         workdir = Path(tmp)
         limits = Limits(generate=30.0, compile=60.0, run=20.0, reference_run=2.0)

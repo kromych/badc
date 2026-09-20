@@ -189,7 +189,18 @@ pub(super) fn x64_insns(code: &[u8]) -> Vec<X64Insn> {
                 _ => panic!("x86-64 opcode {op:#x} at {at:#x}: {code:02x?}"),
             },
             0x50..=0x5F | 0x90..=0x99 | 0xC3 | 0xC9 | 0xCC | 0xF4 => (false, 0),
-            0x63 | 0x84..=0x8B | 0x8D | 0x8F | 0xD0..=0xD3 | 0xF6 | 0xF7 | 0xFE | 0xFF => (true, 0),
+            // 0xD8..0xDF: the x87 escapes, ModRM in both the memory and
+            // the register form, never an immediate.
+            0x63
+            | 0x84..=0x8B
+            | 0x8D
+            | 0x8F
+            | 0xD0..=0xD3
+            | 0xD8..=0xDF
+            | 0xF6
+            | 0xF7
+            | 0xFE
+            | 0xFF => (true, 0),
             0x68 | 0xA9 | 0xE8 | 0xE9 => (false, 4),
             0x6A | 0x70..=0x7F | 0xA8 | 0xB0..=0xB7 | 0xEB => (false, 1),
             0x69 | 0x81 | 0xC7 => (true, wide),
@@ -2944,5 +2955,67 @@ fn counts_of_one_value_do_not_merge() {
             format!("{target:?} trio: {counts} counts: {body}")
         });
     }
+    m.finish();
+}
+
+/// `(rn, stores, fp)` of a load or store at an immediate offset, scaled
+/// (`ldr` / `str`) or unscaled (`ldur` / `stur`); `None` for anything else.
+/// `opc` 0 is a store at every width, and 2 the 128-bit vector store.
+fn a64_mem_imm(w: u32) -> Option<(u32, bool, bool)> {
+    let scaled = w & 0x3B00_0000 == 0x3900_0000;
+    let unscaled = w & 0x3B20_0C00 == 0x3800_0000;
+    if !scaled && !unscaled {
+        return None;
+    }
+    let fp = (w >> 26) & 1 == 1;
+    let opc = (w >> 22) & 3;
+    Some(((w >> 5) & 31, opc == 0 || (fp && opc == 2), fp))
+}
+
+/// `fmov <Xd>, <Dn>`: the 64-bit vector-to-general transfer.
+fn a64_fmov_d_to_x(w: u32) -> bool {
+    w & 0xFFFE_0000 == 0x9E66_0000
+}
+
+/// The x86-64 stores the backend emits to a frame slot.
+fn x64_is_store(i: &X64Insn) -> bool {
+    matches!(
+        i.op,
+        0x88 | 0x89 | 0xC6 | 0xC7 | 0x0F11 | 0x0F29 | 0x0FD6 | 0x0F7F
+    )
+}
+
+const RBP: u8 = 5;
+
+/// A parameter read wider than the body's own store of it: the prologue's
+/// home store keeps a reader, so it is the store under test below.
+const WIDE: &str = "long double wide(double d) { return *(long double *)&d; }\n";
+
+/// The prologue stores a floating parameter out of its own register bank;
+/// the general bank is not a stop on the way to the cell.
+#[test]
+fn a_floating_parameter_homes_from_its_own_bank() {
+    let mut m = Misses::default();
+    let ws = a64(WIDE, "wide");
+    let home = ws
+        .iter()
+        .position(|&w| a64_mem_imm(w).is_some_and(|(rn, st, _)| rn == 29 && st));
+    m.expect(
+        match home {
+            Some(h) => {
+                a64_mem_imm(ws[h]).is_some_and(|(_, _, fp)| fp)
+                    && !ws[..h].iter().any(|&w| a64_fmov_d_to_x(w))
+            }
+            None => false,
+        },
+        || format!("aarch64 wide: the home store crosses banks: {ws:08x?}"),
+    );
+    let insns = x64(WIDE, "wide");
+    let home = insns
+        .iter()
+        .find(|i| x64_is_store(i) && i.mem_base() == Some(RBP));
+    m.expect(home.is_some_and(|i| i.op == 0x0F11), || {
+        format!("x86-64 wide: the home store crosses banks: {insns:x?}")
+    });
     m.finish();
 }

@@ -1475,10 +1475,7 @@ fn emit_param_homes(code: &mut Vec<u8>, func: &FunctionSsa, alloc: &Allocation, 
         let home = param_home_off(i, func, frame);
         match *placement {
             super::ArgPlacement::IntReg(r) => emit_fp_store_x(code, Reg(r), home),
-            super::ArgPlacement::FpReg(d) => {
-                emit(code, enc_fmov_d_to_x(Reg(16), d));
-                emit_fp_store_x(code, Reg(16), home);
-            }
+            super::ArgPlacement::FpReg(d) => emit_fp_store_d(code, d, home),
             _ => {}
         }
     }
@@ -1487,6 +1484,12 @@ fn emit_param_homes(code: &mut Vec<u8>, func: &FunctionSsa, alloc: &Allocation, 
 /// Store `rt` at `[fp + off]`, through x17 past the offset forms.
 fn emit_fp_store_x(code: &mut Vec<u8>, rt: Reg, off: i64) {
     emit_mem(code, super::encode::STR_X, rt.0, Reg(29), off, Reg(17));
+}
+
+/// Store the low 8 bytes of `dt` at `[fp + off]`. Same bytes as a
+/// `fmov`ed general register, without the transfer.
+fn emit_fp_store_d(code: &mut Vec<u8>, dt: u8, off: i64) {
+    emit_mem(code, super::encode::STR_D, dt, Reg(29), off, Reg(17));
 }
 
 /// Store each register-passed aggregate parameter's argument registers

@@ -1871,19 +1871,18 @@ fn ent_pc=34 n_params=0 variadic=false locals=85
     v694 BinopI { op=and, lhs=v692, rhs_imm=65280 }       -> x1
     v695 Binop { op=or, lhs=v689, rhs=v694 }              -> x0
     v696 BinopI { op=or, lhs=v695, rhs_imm=65536 }        -> x3
-    v697 BinopI { op=and, lhs=v696, rhs_imm=4294967295 }  -> x0
-    v698 Imm(0)                                           -> x0
-    v699 Call { target_pc=33, args=[v688], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v700 BinopI { op=and, lhs=v699, rhs_imm=4294967295 }  -> x1
-    v701 BinopI { op=and, lhs=v696, rhs_imm=4294967295 }  -> x1
-    v702 Binop { op=ne, lhs=v699, rhs=v696 }              -> x0
-    terminator Bz { cond=v702, target=b76, fall=b75 }   (exit_acc=v702)
+    v697 Imm(0)                                           -> x0
+    v698 Call { target_pc=33, args=[v688], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v699 BinopI { op=and, lhs=v698, rhs_imm=4294967295 }  -> x1
+    v700 BinopI { op=and, lhs=v696, rhs_imm=4294967295 }  -> x1
+    v701 Binop { op=ne, lhs=v698, rhs=v696 }              -> x0
+    terminator Bz { cond=v701, target=b76, fall=b75 }   (exit_acc=v701)
   block 75  start_pc=0
-    v703 Imm(28)                                          -> x0
-    terminator Return(v703)   (exit_acc=v703)
+    v702 Imm(28)                                          -> x0
+    terminator Return(v702)   (exit_acc=v702)
   block 76  start_pc=0
-    v704 Imm(0)                                           -> x0
-    terminator Return(v704)   (exit_acc=v704)
+    v703 Imm(0)                                           -> x0
+    terminator Return(v703)   (exit_acc=v703)
   block 77  start_pc=0
     v209 Imm(11)                                          -> x0
     terminator Return(v209)   (exit_acc=v209)

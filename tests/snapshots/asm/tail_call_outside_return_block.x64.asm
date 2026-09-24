@@ -61,9 +61,9 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	movslq	%r8d, %r8
-               	movq	%rdi, %rax
-               	orq	$0x40000, %rax          # imm = 0x40000
-               	movl	%eax, %edi
+               	movl	%edi, %eax
+               	movq	%rax, %rdi
+               	orq	$0x40000, %rdi          # imm = 0x40000
                	movl	%esi, %esi
                	callq	<addr>
                	testq	%rax, %rax

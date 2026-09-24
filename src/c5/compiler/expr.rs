@@ -3897,18 +3897,34 @@ impl Compiler {
             return Ok(());
         }
         let common = self.arith_common_ty(lhs_ty, rhs_ty);
-        self.ty = common;
-        self.ast_binop(bop);
         // An operand converted to an unsigned common type (C99 6.3.1.8)
         // still sits sign-extended in the accumulator, and `|` and `^`
-        // carry its high bits into the result where `&` clears them.
+        // carry its high bits into the result where `&` clears them. A
+        // non-negative literal has none to carry.
+        let lhs_carries = !is_unsigned_ty(lhs_ty)
+            && !self
+                .ast_vstack
+                .last()
+                .copied()
+                .flatten()
+                .is_some_and(|id| self.is_nonnegative_literal(id));
+        let rhs_carries = !is_unsigned_ty(rhs_ty)
+            && !self
+                .ast_acc
+                .is_some_and(|id| self.is_nonnegative_literal(id));
+        self.ty = common;
+        self.ast_binop(bop);
         if !matches!(bop, super::super::ir::BinOp::And)
             && is_unsigned_ty(common)
-            && !(is_unsigned_ty(lhs_ty) && is_unsigned_ty(rhs_ty))
+            && (lhs_carries || rhs_carries)
         {
             self.maybe_mask_to_unsigned_width(lhs_ty, rhs_ty);
         }
         Ok(())
+    }
+
+    fn is_nonnegative_literal(&self, id: super::super::ast::ExprId) -> bool {
+        matches!(self.ast.expr(id), super::super::ast::Expr::IntLit { val, .. } if *val >= 0)
     }
 
     /// C99 6.5.9: `==` and `!=`.

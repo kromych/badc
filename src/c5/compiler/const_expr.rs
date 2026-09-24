@@ -2138,10 +2138,7 @@ impl Compiler {
                 "relocated compound-literal element is not an integer constant expression",
             ));
         }
-        Ok(ConstVal::Int {
-            val: self.read_data_int(at as usize, size, elem_ty) as i128,
-            ty: elem_ty,
-        })
+        Ok(self.const_int_of(self.read_data_int(at as usize, size, elem_ty), elem_ty))
     }
 
     /// Whether a relocation patches any byte of `data[at..at + size]`: its
@@ -2154,18 +2151,30 @@ impl Compiler {
             || self.pending_label_relocs.iter().any(|r| hit(r.data_offset))
     }
 
-    /// The little-endian integer of type `ty` stored at `data[at..at + size]`,
-    /// sign-extended from `size` bytes when `ty` is signed.
-    fn read_data_int(&self, at: usize, size: usize, ty: i64) -> i64 {
-        let mut v: i64 = 0;
-        for k in 0..size.min(8) {
-            v |= (self.data[at + k] as i64) << (k * 8);
+    /// The little-endian integer of type `ty` stored at `data[at..at + size]`:
+    /// sign-extended from `size` bytes when `ty` is signed, zero-extended
+    /// when it is unsigned.
+    fn read_data_int(&self, at: usize, size: usize, ty: i64) -> i128 {
+        let size = size.min(8);
+        let mut v: u64 = 0;
+        for k in 0..size {
+            v |= (self.data[at + k] as u64) << (k * 8);
         }
-        if !is_unsigned_ty(ty) && size < 8 {
-            let sign = 1i64 << (size * 8 - 1);
-            v = (v ^ sign).wrapping_sub(sign);
+        narrow_const_int(size, is_unsigned_ty(ty), false, v as i128)
+    }
+
+    /// An integer constant of type `ty` whose `i128` is the value the type
+    /// represents: the low bits of `v` at the type's width, zero-extended
+    /// for an unsigned type. A 64-bit literal or object read arrives as
+    /// sign-extended `i64` bits, which read as negative in a conversion to
+    /// a floating type (C99 6.3.1.4p2).
+    pub(super) fn const_int_of(&self, v: i128, ty: i64) -> ConstVal {
+        let bytes = self.size_of_type(ty);
+        let is_bool = strip_unsigned(ty) == Ty::Bool as i64;
+        ConstVal::Int {
+            val: narrow_const_int(bytes, is_unsigned_ty(ty), is_bool, v),
+            ty,
         }
-        v
     }
 
     /// Fold a read of a scalar sub-object of a `const` object with static
@@ -2255,10 +2264,7 @@ impl Compiler {
         Ok(Some(match (is_floating_ty(ty), size) {
             (true, 4) => ConstVal::Float(f32::from_bits(bits as u32) as f64),
             (true, _) => ConstVal::Float(f64::from_bits(bits as u64)),
-            (false, _) => ConstVal::Int {
-                val: bits as i128,
-                ty,
-            },
+            (false, _) => self.const_int_of(bits, ty),
         }))
     }
 
@@ -2466,7 +2472,7 @@ impl Compiler {
             let v = self.lex.ival;
             let ty = self.num_token_type(v);
             self.next()?;
-            return Ok(ConstVal::Int { val: v as i128, ty });
+            return Ok(self.const_int_of(v as i128, ty));
         }
         if self.lex.tk == '"' {
             // String literal in a constant expression -- evaluates
@@ -2541,7 +2547,7 @@ impl Compiler {
             let v = self.symbols[self.lex.curr_id_idx].val;
             let ty = self.symbols[self.lex.curr_id_idx].type_;
             self.next()?;
-            return Ok(ConstVal::Int { val: v as i128, ty });
+            return Ok(self.const_int_of(v as i128, ty));
         }
         // A block-scope `const` scalar arithmetic object with a recorded
         // constant initializer folds to that value in the contexts GCC
@@ -2559,9 +2565,7 @@ impl Compiler {
                 self.symbols[idx].was_read = true;
                 self.next()?;
                 return Ok(match v {
-                    crate::c5::symbol::ConstObjectValue::Int(i) => {
-                        ConstVal::Int { val: i as i128, ty }
-                    }
+                    crate::c5::symbol::ConstObjectValue::Int(i) => self.const_int_of(i as i128, ty),
                     crate::c5::symbol::ConstObjectValue::FloatBits(b) => {
                         ConstVal::Float(f64::from_bits(b))
                     }
@@ -2581,18 +2585,10 @@ impl Compiler {
                 let off = sym.val as usize;
                 let size = self.size_of_type(ty);
                 if (1..=8).contains(&size) && off + size <= self.data.len() {
-                    let mut v: i64 = 0;
-                    for k in 0..size {
-                        v |= (self.data[off + k] as i64) << (k * 8);
-                    }
-                    // Sign-extend a signed type narrower than 8 bytes.
-                    if !is_unsigned_ty(ty) && size < 8 {
-                        let sign = 1i64 << (size * 8 - 1);
-                        v = (v ^ sign).wrapping_sub(sign);
-                    }
+                    let v = self.read_data_int(off, size, ty);
                     self.symbols[idx].was_referenced = true;
                     self.next()?;
-                    return Ok(ConstVal::Int { val: v as i128, ty });
+                    return Ok(self.const_int_of(v, ty));
                 }
             }
         }

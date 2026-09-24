@@ -4268,10 +4268,18 @@ impl<'a> RelocWriter<'a> {
                 sh_addralign: crate::c5::layout::tls_image_align(program.tls_align) as u64,
                 ..Default::default()
             };
-            out.place(
-                tls(out.fixed_name(SHIDX_TDATA), SHT_PROGBITS),
-                &program.tls_data[..tls_init_size],
-            );
+            // A slot `.rela.tdata` patches holds zero, as one `.rela.data`
+            // patches does: the addend is in the relocation.
+            let mut tdata = program.tls_data[..tls_init_size].to_vec();
+            let patched = (program.tls_data_relocs.iter().map(|r| r.data_offset))
+                .chain(program.tls_code_relocs.iter().map(|r| r.data_offset))
+                .chain(program.tls_extern_data_relocs.iter().map(|r| r.data_offset));
+            for off in patched {
+                if let Some(slot) = tdata.get_mut(off as usize..off as usize + 8) {
+                    slot.fill(0);
+                }
+            }
+            out.place(tls(out.fixed_name(SHIDX_TDATA), SHT_PROGBITS), &tdata);
             out.place_nobits(
                 tls(out.fixed_name(SHIDX_TBSS), SHT_NOBITS),
                 (program.tls_data.len() - tls_init_size) as u64,

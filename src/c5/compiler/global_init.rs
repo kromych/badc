@@ -274,7 +274,7 @@ impl Compiler {
                 return Err(self.compile_err_at(
                     Code::INVALID_INITIALIZER,
                     line,
-                    "scalar initializer wrapped in `{{ ... }}` must hold a single value",
+                    "scalar initializer wrapped in `{ ... }` must hold a single value",
                 ));
             }
             self.next()?; // consume `}`

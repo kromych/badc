@@ -3046,6 +3046,22 @@ fn a_member_read_through_an_address_is_not_a_constant() {
 }
 
 #[test]
+fn a_braced_scalar_initializer_holds_one_value() {
+    // C99 6.7.8p11: the braces around a scalar initializer hold a single
+    // expression, at file scope, at block scope and in a member.
+    for decl in [
+        "int x = {1, 2};",
+        "void f(void) { static int x = {1, 2}; }",
+        "struct { int a; } x = {{1, 2}};",
+    ] {
+        expect_compile_error(
+            &format!("{decl}\nint main(void) {{ return 0; }}"),
+            "scalar initializer wrapped in `{ ... }` must hold a single value",
+        );
+    }
+}
+
+#[test]
 fn sizeof_of_an_incomplete_array_type_name_is_rejected() {
     // C99 6.5.3.4p1: `sizeof` does not apply to an incomplete type. An
     // array type name with an unspecified bound is one, written out or

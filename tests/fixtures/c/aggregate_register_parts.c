@@ -4,33 +4,34 @@
    members -- and the ones that keep their frame object: an address that
    escapes, a union, a float beside an integer, two floats in one eightbyte,
    a memory-class aggregate. Each result is checked against scalar
-   arithmetic; the exit code names the first mismatch. */
+   arithmetic; the exit code names the first mismatch. A 64-bit field or
+   value is `long long`: `long` is 32 bits under LLP64. */
 
 #include <stdarg.h>
 
 #define NOINLINE __attribute__((noinline))
 
-struct P { long a, b; };
+struct P { long long a, b; };
 struct Q { int a, b; };
-struct R { long a; int b; };
+struct R { long long a; int b; };
 struct S { char x[3]; };
-struct T { char c; short s; int i; long l; };
+struct T { char c; short s; int i; long long l; };
 struct D { double x, y; };
 struct F3 { float x, y, z; };
 struct F1 { float x; };
-struct DL { double d; long l; };
+struct DL { double d; long long l; };
 struct FI { float f; int i; };
-union U { long l; double d; };
+union U { long long l; double d; };
 struct W1 { char c; };
 struct W2 { short s; };
 struct W4 { int i; };
-struct W8 { long l; };
-struct N { struct Q q; long l; };
-struct PP { int *p; long n; };
-struct B { long a, b, c; };
+struct W8 { long long l; };
+struct N { struct Q q; long long l; };
+struct PP { int *p; long long n; };
+struct B { long long a, b, c; };
 
 NOINLINE struct P by_value(struct P v) { v.a += 1; return v; }
-NOINLINE struct P make_pair(long a, long b) { struct P p; p.a = a; p.b = b; return p; }
+NOINLINE struct P make_pair(long long a, long long b) { struct P p; p.a = a; p.b = b; return p; }
 NOINLINE struct Q swapq(struct Q v) { struct Q r; r.a = v.b; r.b = v.a; return r; }
 NOINLINE struct R tail(struct R v) { struct R r; r.a = v.a + v.b; r.b = v.b * 2; return r; }
 NOINLINE struct S bytes(struct S v) { v.x[0] += 1; v.x[1] += 2; v.x[2] += 3; return v; }
@@ -62,9 +63,9 @@ NOINLINE struct N nested(struct N v) {
 NOINLINE struct PP pp(struct PP v) { v.p += 1; v.n -= 1; return v; }
 NOINLINE struct B big(struct B v) { v.c += v.a + v.b; return v; }
 
-NOINLINE long sum_via_ptr(const struct P *p) { return p->a + p->b; }
+NOINLINE long long sum_via_ptr(const struct P *p) { return p->a + p->b; }
 NOINLINE void bump_via_ptr(struct P *p) { p->a += 10; p->b += 20; }
-NOINLINE long escape(struct P v) { return sum_via_ptr(&v); }
+NOINLINE long long escape(struct P v) { return sum_via_ptr(&v); }
 NOINLINE struct P escape_ret(struct P v) { bump_via_ptr(&v); return v; }
 NOINLINE struct P forward(struct P v) { return by_value(v); }
 NOINLINE struct P pick(struct P v, int k) {
@@ -73,14 +74,14 @@ NOINLINE struct P pick(struct P v, int k) {
     }
     return make_pair(v.b, v.a);
 }
-NOINLINE long live(struct P v, long k) {
-    long t = k * 3;
+NOINLINE long long live(struct P v, long long k) {
+    long long t = k * 3;
     struct P w = by_value(v);
     return t + w.a + w.b;
 }
 struct P g = {100, 200};
 NOINLINE struct P ret_global(void) { return g; }
-NOINLINE struct P lit(long x) { return (struct P){x, x + 1}; }
+NOINLINE struct P lit(long long x) { return (struct P){x, x + 1}; }
 NOINLINE struct P rec(struct P v, int n) {
     if (n == 0) {
         return v;
@@ -88,8 +89,8 @@ NOINLINE struct P rec(struct P v, int n) {
     v.a += n;
     return rec(v, n - 1);
 }
-NOINLINE long loop(struct P v) {
-    long s = 0;
+NOINLINE long long loop(struct P v) {
+    long long s = 0;
     int i;
     for (i = 0; i < 4; i++) {
         s += v.a;
@@ -97,32 +98,33 @@ NOINLINE long loop(struct P v) {
     }
     return s;
 }
-NOINLINE long spill(struct P v, long a, long b, long c, long d, long e, long f) {
-    long m0 = a * b, m1 = c * d, m2 = e * f, m3 = a + c + e, m4 = b + d + f;
-    long m5 = m0 ^ m1, m6 = m2 ^ m3, m7 = m4 * 7;
+NOINLINE long long spill(struct P v, long long a, long long b, long long c,
+                         long long d, long long e, long long f) {
+    long long m0 = a * b, m1 = c * d, m2 = e * f, m3 = a + c + e, m4 = b + d + f;
+    long long m5 = m0 ^ m1, m6 = m2 ^ m3, m7 = m4 * 7;
     struct P w = by_value(v);
     return m0 + m1 + m2 + m3 + m4 + m5 + m6 + m7 + w.a * 1000 + w.b;
 }
 NOINLINE struct P self_assign(struct P v) { v = v; v.b -= v.a; return v; }
-NOINLINE long lo128(__int128 a, long c) { return (long)a + c; }
+NOINLINE long long lo128(__int128 a, long long c) { return (long long)a + c; }
 NOINLINE __int128 bump128(__int128 a) { return a + 1; }
-NOINLINE long named_va(long x, struct P p, ...) {
+NOINLINE long long named_va(long long x, struct P p, ...) {
     va_list ap;
-    long c;
+    long long c;
     va_start(ap, p);
-    c = va_arg(ap, long);
+    c = va_arg(ap, long long);
     va_end(ap);
     return p.b * 1000 + p.a + c * 7 + x;
 }
-static volatile long sunk;
-NOINLINE long sink(long x) { sunk = x; return x + 1; }
-NOINLINE struct P const_across(long x) { struct P r = {7, 8}; sink(x); return r; }
-NOINLINE struct P keep_across(struct P v, long x) { sink(x); return v; }
+static volatile long long sunk;
+NOINLINE long long sink(long long x) { sunk = x; return x + 1; }
+NOINLINE struct P const_across(long long x) { struct P r = {7, 8}; sink(x); return r; }
+NOINLINE struct P keep_across(struct P v, long long x) { sink(x); return v; }
 NOINLINE struct P va_ret(int n, ...) {
     va_list ap;
     struct P r;
     va_start(ap, n);
-    r.a = va_arg(ap, long);
+    r.a = va_arg(ap, long long);
     r.b = n;
     va_end(ap);
     return r;
@@ -143,7 +145,7 @@ int main(void) {
     struct W1 a1 = {5};
     struct W2 a2 = {600};
     struct W4 a4 = {70000};
-    struct W8 a8 = {8000000000L};
+    struct W8 a8 = {8000000000LL};
     struct N n = {{1, 2}, 30};
     int arr[4] = {0, 1, 2, 3};
     struct PP ppv = {arr, 4};
@@ -202,7 +204,7 @@ int main(void) {
     a2 = w2(a2);
     a4 = w4(a4);
     a8 = w8(a8);
-    if (a1.c != 6 || a2.s != 601 || a4.i != 70001 || a8.l != 8000000001L) {
+    if (a1.c != 6 || a2.s != 601 || a4.i != 70001 || a8.l != 8000000001LL) {
         return 13;
     }
     n = nested(n);
@@ -266,14 +268,14 @@ int main(void) {
     {
         __int128 w = ((__int128)5 << 64) | 11;
         w = bump128(w);
-        if (lo128(w, 3) != 15 || (long)(w >> 64) != 5) {
+        if (lo128(w, 3) != 15 || (long long)(w >> 64) != 5) {
             return 29;
         }
     }
-    if (named_va(1, p, 3L) != -9000 + 15 + 21 + 1) {
+    if (named_va(1, p, 3LL) != -9000 + 15 + 21 + 1) {
         return 30;
     }
-    p = va_ret(4, 9L);
+    p = va_ret(4, 9LL);
     if (p.a != 9 || p.b != 4) {
         return 31;
     }

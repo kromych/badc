@@ -359,13 +359,15 @@ impl Compiler {
                 if *v || p.len() != k.len() {
                     return Verdict::Conflict;
                 }
+                let ahead = matches!(prior, Prototype(..));
                 p.iter().zip(k).fold(Verdict::Compatible, |acc, (pt, kt)| {
                     if acc == Verdict::Conflict
                         || self.tags_agree(value(pt), promoted(value(kt)), false)
                     {
                         acc
-                    } else if agree(pt, kt) {
-                        // GNU: the prototype names the type before the promotion.
+                    } else if ahead && agree(pt, kt) {
+                        // GNU: a prototype ahead of the definition names the
+                        // type before the promotion.
                         Verdict::Extension
                     } else {
                         Verdict::Conflict

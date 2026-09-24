@@ -72,6 +72,12 @@ fn function_redeclarations_of_another_type_are_rejected() {
             "now:      int (float)",
         ),
         ("int f(char c);\nint f();\n", "now:      int ()"),
+        // GCC and clang take a type before its promotion from a prototype
+        // ahead of an old-style definition only.
+        (
+            "int f(c) short c; { return c; }\nint f(short);\n",
+            "now:      int (short)",
+        ),
         (
             "int f() { return 0; }\nint f(int);\n",
             "now:      int (int)",

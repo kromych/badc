@@ -646,6 +646,7 @@ fn plan_one(
                 | Inst::Fneg(_)
                 | Inst::Fma { .. }
                 | Inst::MulAdd { .. }
+                | Inst::Udiv128 { .. }
                 | Inst::Extend { .. }
                 | Inst::Bswap { .. }
                 | Inst::BitCount { .. }

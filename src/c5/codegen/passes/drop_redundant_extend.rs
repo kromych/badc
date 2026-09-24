@@ -185,6 +185,16 @@ fn compute_high_observed_through(func: &FunctionSsa, collapsing: &[bool]) -> Vec
             // Same low-word rule as the `Mul` / `Add` / `Sub` pair it
             // contracts: the result's low bytes need only the operands'.
             Inst::MulAdd { .. } => {}
+            // A quotient depends on every bit of its operands.
+            Inst::Udiv128 {
+                hi: h,
+                lo: l,
+                divisor: d,
+            } => {
+                observe(&mut hi, &mut work, *h);
+                observe(&mut hi, &mut work, *l);
+                observe(&mut hi, &mut work, *d);
+            }
             Inst::Binop { op, lhs, rhs } => match op {
                 BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::And | BinOp::Or | BinOp::Xor => {}
                 BinOp::Shl => observe(&mut hi, &mut work, *rhs),
@@ -341,6 +351,15 @@ fn compute_high_observed_through(func: &FunctionSsa, collapsing: &[bool]) -> Vec
                 observe(&mut hi, &mut work, *a);
                 observe(&mut hi, &mut work, *b);
                 observe(&mut hi, &mut work, *c);
+            }
+            Inst::Udiv128 {
+                hi: h,
+                lo: l,
+                divisor: d,
+            } => {
+                observe(&mut hi, &mut work, *h);
+                observe(&mut hi, &mut work, *l);
+                observe(&mut hi, &mut work, *d);
             }
             Inst::Extend { value, .. } if collapsing.get(r as usize).copied().unwrap_or(false) => {
                 observe(&mut hi, &mut work, *value)

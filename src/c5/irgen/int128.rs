@@ -5,7 +5,7 @@
 use super::bitfield::bitfield_mask_halves;
 use super::*;
 use crate::c5::ast::expr_ty;
-use crate::c5::ir::is_int_comparison_op;
+use crate::c5::ir::{BitCountOp, is_int_comparison_op};
 
 impl<'a> Walker<'a> {
     /// Load the two 64-bit halves of the 128-bit object at `addr`
@@ -227,35 +227,9 @@ impl<'a> Walker<'a> {
         }
     }
 
-    /// High 64 bits of the unsigned 64x64 product, from the four
-    /// 32-bit partial products. Built from ops every backend has, so
-    /// all four agree by construction.
-    // TODO: a widening-multiply opcode would fold this to one
-    // instruction (x86_64 `mul`, aarch64 `umulh`).
+    /// High 64 bits of the unsigned 64x64 product.
     pub(super) fn int128_mulhi_u(b: &mut SsaBuilder, x: ValueId, y: ValueId) -> ValueId {
-        const LOW32: i64 = 0xffff_ffff;
-        let x0 = b.binop_imm(BinOp::And, x, LOW32);
-        let x1 = b.binop_imm(BinOp::Shru, x, 32);
-        let y0 = b.binop_imm(BinOp::And, y, LOW32);
-        let y1 = b.binop_imm(BinOp::Shru, y, 32);
-        let carry = {
-            let p = b.binop(BinOp::Mul, x0, y0);
-            b.binop_imm(BinOp::Shru, p, 32)
-        };
-        let mid = {
-            let p = b.binop(BinOp::Mul, x1, y0);
-            b.binop(BinOp::Add, p, carry)
-        };
-        let mid_lo = b.binop_imm(BinOp::And, mid, LOW32);
-        let mid_hi = b.binop_imm(BinOp::Shru, mid, 32);
-        let mid2_hi = {
-            let p = b.binop(BinOp::Mul, x0, y1);
-            let s = b.binop(BinOp::Add, p, mid_lo);
-            b.binop_imm(BinOp::Shru, s, 32)
-        };
-        let hi = b.binop(BinOp::Mul, x1, y1);
-        let hi = b.binop(BinOp::Add, hi, mid_hi);
-        b.binop(BinOp::Add, hi, mid2_hi)
+        b.binop(BinOp::Mulhu, x, y)
     }
 
     /// 128-bit multiply. The low half is the 64-bit product of the low
@@ -272,18 +246,13 @@ impl<'a> Walker<'a> {
         (lo, hi)
     }
 
-    /// Unsigned 128-bit divide, returning `(quotient, remainder)`.
-    /// Operands that both fit in 64 bits take the hardware divide.
-    /// Otherwise a restoring shift-subtract runs over the 128 bits: the
-    /// dividend shifts left out of `n` into the running remainder while
-    /// the quotient bits shift into `n` from below, so both results
-    /// share one register pair, and the body is branchless -- the
-    /// compare feeds a 0/-1 mask -- leaving one loop-carried branch.
-    /// Lowering it inline rather than calling a runtime helper serves
-    /// the VM, the JIT and both native targets from one implementation
-    /// and leaves nothing to link into a freestanding image. A zero
-    /// divisor is undefined (C99 6.5.5p5): the hardware path traps and
-    /// the loop yields all-ones.
+    /// Unsigned 128-bit divide, returning `(quotient, remainder)`. Operands
+    /// within 64 bits take the 64-bit divide; a divisor within 64 bits one
+    /// 128-by-64 step ([`Self::udiv128by64`]), after dividing the high word
+    /// when it is not below the divisor (compiler-rt `__udivmodti4`); a wider
+    /// divisor one step over its normalized top word (Hacker's Delight 9-5).
+    /// Inline, it serves the VM, the JIT and both targets and links nothing
+    /// into a freestanding image. A zero divisor is undefined (C99 6.5.5p5).
     fn int128_udivmod(&mut self, b: &mut SsaBuilder, a: Halves, c: Halves) -> (Halves, Halves) {
         let q_lo = b.alloc_synthetic_local();
         let q_hi = b.alloc_synthetic_local();
@@ -309,32 +278,63 @@ impl<'a> Walker<'a> {
         b.jmp(done_blk);
 
         b.switch_to(wide_blk);
+        let narrow_divisor = b.new_block();
+        let wide_divisor = b.new_block();
+        b.branch_zero(c.1, narrow_divisor, wide_divisor);
+
+        // The step's quotient fits once the high word is below the divisor.
+        b.switch_to(narrow_divisor);
+        let top = b.alloc_synthetic_local();
+        let high_word = b.new_block();
+        let step = b.new_block();
         let zero = b.imm(0);
-        b.store_local(q_lo, a.0, sk);
-        b.store_local(q_hi, a.1, sk);
-        b.store_local(r_lo, zero, sk);
+        b.store_local(q_hi, zero, sk);
+        b.store_local(top, a.1, sk);
+        let above = b.binop(BinOp::Uge, a.1, c.0);
+        b.branch_zero(above, step, high_word);
+        b.switch_to(high_word);
+        let qh = b.binop(BinOp::Divu, a.1, c.0);
+        let rh = b.binop(BinOp::Modu, a.1, c.0);
+        b.store_local(q_hi, qh, sk);
+        b.store_local(top, rh, sk);
+        b.jmp(step);
+        b.switch_to(step);
+        let h = b.load_local(top, lk);
+        let ql = self.udiv128by64(b, h, a.0, c.0);
+        let back = b.binop(BinOp::Mul, ql, c.0);
+        let rl = b.binop(BinOp::Sub, a.0, back);
+        let zero = b.imm(0);
+        b.store_local(q_lo, ql, sk);
+        b.store_local(r_lo, rl, sk);
         b.store_local(r_hi, zero, sk);
-        let counter = b.alloc_synthetic_local();
-        let n = b.imm(128);
-        b.store_local(counter, n, sk);
-        let head_blk = b.new_block();
-        let body_blk = b.new_block();
-        b.jmp(head_blk);
+        b.jmp(done_blk);
 
-        b.switch_to(head_blk);
-        let i = b.load_local(counter, lk);
-        b.branch_zero(i, done_blk, body_blk);
-
-        b.switch_to(body_blk);
-        let nl = b.load_local(q_lo, lk);
-        let nh = b.load_local(q_hi, lk);
-        let rl = b.load_local(r_lo, lk);
-        let rh = b.load_local(r_hi, lk);
-        let top = b.binop_imm(BinOp::Shru, nh, 63);
-        let rem = Self::int128_shift_const(b, BinOp::Shl, (rl, rh), 1);
-        let rem = (b.binop(BinOp::Or, rem.0, top), rem.1);
-        let num = Self::int128_shift_const(b, BinOp::Shl, (nl, nh), 1);
+        // The estimate over the halved dividend is the quotient or one above;
+        // lowered by one where nonzero, the remainder's compare settles it.
+        b.switch_to(wide_divisor);
+        let n = b.bit_count(BitCountOp::Clz, c.1, 8);
+        let rn = b.binop_imm(BinOp::Xor, n, 63);
+        let v1 = {
+            let high = b.binop(BinOp::Shl, c.1, n);
+            let spill = b.binop_imm(BinOp::Shru, c.0, 1);
+            let spill = b.binop(BinOp::Shru, spill, rn);
+            b.binop(BinOp::Or, high, spill)
+        };
+        let half = Self::int128_shift_const(b, BinOp::Shru, a, 1);
+        let q1 = self.udiv128by64(b, half.1, half.0, v1);
+        let q0 = b.binop(BinOp::Shru, q1, rn);
+        let q0 = {
+            let nonzero = b.binop_imm(BinOp::Ne, q0, 0);
+            b.binop(BinOp::Sub, q0, nonzero)
+        };
+        let product = {
+            let hi = Self::int128_mulhi_u(b, q0, c.0);
+            let cross = b.binop(BinOp::Mul, q0, c.1);
+            (b.binop(BinOp::Mul, q0, c.0), b.binop(BinOp::Add, hi, cross))
+        };
+        let rem = Self::int128_sub(b, a, product);
         let fits = Self::int128_cmp(b, BinOp::Uge, rem, c);
+        let q0 = b.binop(BinOp::Add, q0, fits);
         let mask = {
             let zero = b.imm(0);
             b.binop(BinOp::Sub, zero, fits)
@@ -344,19 +344,106 @@ impl<'a> Walker<'a> {
             b.binop(BinOp::And, c.1, mask),
         );
         let rem = Self::int128_sub(b, rem, sub);
-        let num_lo = b.binop(BinOp::Or, num.0, fits);
-        b.store_local(q_lo, num_lo, sk);
-        b.store_local(q_hi, num.1, sk);
+        let zero = b.imm(0);
+        b.store_local(q_lo, q0, sk);
+        b.store_local(q_hi, zero, sk);
         b.store_local(r_lo, rem.0, sk);
         b.store_local(r_hi, rem.1, sk);
-        let next = b.binop_imm(BinOp::Sub, i, 1);
-        b.store_local(counter, next, sk);
-        b.jmp(head_blk);
+        b.jmp(done_blk);
 
         b.switch_to(done_blk);
         let q = (b.load_local(q_lo, lk), b.load_local(q_hi, lk));
         let r = (b.load_local(r_lo, lk), b.load_local(r_hi, lk));
         (q, r)
+    }
+
+    /// The quotient of `hi:lo` by `d`, for `hi < d`: `Inst::Udiv128` on
+    /// x86_64, elsewhere a long division in two 32-bit digits over the
+    /// normalized divisor (Knuth 4.3.1 Algorithm D; Hacker's Delight `divlu`,
+    /// compiler-rt `udiv128by64to64default`).
+    fn udiv128by64(&self, b: &mut SsaBuilder, hi: ValueId, lo: ValueId, d: ValueId) -> ValueId {
+        if self.target.is_x86_64() {
+            return b.udiv128(hi, lo, d);
+        }
+        let s = b.bit_count(BitCountOp::Clz, d, 8);
+        let v = b.binop(BinOp::Shl, d, s);
+        let vn1 = b.binop_imm(BinOp::Shru, v, 32);
+        let vn0 = b.binop_imm(BinOp::And, v, 0xffff_ffff);
+        // `lo >> (64 - s)`, 0 for `s == 0`; `s ^ 63` is `63 - s`.
+        let spill = {
+            let rs = b.binop_imm(BinOp::Xor, s, 63);
+            let half = b.binop_imm(BinOp::Shru, lo, 1);
+            b.binop(BinOp::Shru, half, rs)
+        };
+        let un64 = {
+            let high = b.binop(BinOp::Shl, hi, s);
+            b.binop(BinOp::Or, high, spill)
+        };
+        let un10 = b.binop(BinOp::Shl, lo, s);
+        let un1 = b.binop_imm(BinOp::Shru, un10, 32);
+        let un0 = b.binop_imm(BinOp::And, un10, 0xffff_ffff);
+        let q1 = Self::quotient_digit(b, un64, un1, vn1, vn0);
+        let un21 = {
+            let shifted = b.binop_imm(BinOp::Shl, un64, 32);
+            let joined = b.binop(BinOp::Or, shifted, un1);
+            let back = b.binop(BinOp::Mul, q1, v);
+            b.binop(BinOp::Sub, joined, back)
+        };
+        let q0 = Self::quotient_digit(b, un21, un0, vn1, vn0);
+        let high = b.binop_imm(BinOp::Shl, q1, 32);
+        b.binop(BinOp::Or, high, q0)
+    }
+
+    /// The 32-bit quotient digit of `num:digit` by the normalized `vn1:vn0`:
+    /// `num / vn1`, lowered while it leaves the digit range or its product
+    /// with `vn0` passes `rhat:digit` and `rhat` stays within a digit; at
+    /// most twice (Knuth 4.3.1 Theorem B) and rarely, so off the path.
+    fn quotient_digit(
+        b: &mut SsaBuilder,
+        num: ValueId,
+        digit: ValueId,
+        vn1: ValueId,
+        vn0: ValueId,
+    ) -> ValueId {
+        let (sk, lk) = (StoreKind::I64, LoadKind::I64);
+        let q_slot = b.alloc_synthetic_local();
+        let r_slot = b.alloc_synthetic_local();
+        let q = b.binop(BinOp::Divu, num, vn1);
+        let rhat = {
+            let back = b.binop(BinOp::Mul, q, vn1);
+            b.binop(BinOp::Sub, num, back)
+        };
+        b.store_local(q_slot, q, sk);
+        b.store_local(r_slot, rhat, sk);
+        let check = b.new_block();
+        let product = b.new_block();
+        let lower = b.new_block();
+        let done = b.new_block();
+        b.jmp(check);
+
+        b.switch_to(check);
+        let q = b.load_local(q_slot, lk);
+        let rhat = b.load_local(r_slot, lk);
+        let wide = b.binop_imm(BinOp::Shru, q, 32);
+        b.branch_nonzero(wide, lower, product);
+        b.switch_to(product);
+        let over = {
+            let low = b.binop(BinOp::Mul, q, vn0);
+            let shifted = b.binop_imm(BinOp::Shl, rhat, 32);
+            let joined = b.binop(BinOp::Or, shifted, digit);
+            b.binop(BinOp::Ugt, low, joined)
+        };
+        b.branch_nonzero(over, lower, done);
+
+        b.switch_to(lower);
+        let q = b.binop_imm(BinOp::Sub, q, 1);
+        let rhat = b.binop(BinOp::Add, rhat, vn1);
+        b.store_local(q_slot, q, sk);
+        b.store_local(r_slot, rhat, sk);
+        let wide = b.binop_imm(BinOp::Shru, rhat, 32);
+        b.branch_zero(wide, check, done);
+        b.switch_to(done);
+        b.load_local(q_slot, lk)
     }
 
     /// Signed 128-bit divide, returning `(quotient, remainder)`.

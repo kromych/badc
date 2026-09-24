@@ -480,8 +480,8 @@ fn is_rdx_rax_op(op: BinOp) -> bool {
 
 /// The registers x86-64's lowering of `inst` writes besides its result, as
 /// a mask: rcx for a shift or rotate by a count no immediate form takes,
-/// rdx:rax for a division, a remainder and a high multiply, rax for the
-/// `CMPXCHG` of a compare-exchange and of a bitwise read-modify-write.
+/// rdx:rax for a division, a remainder, a high multiply and `Udiv128`, rax
+/// for the `CMPXCHG` of a compare-exchange and of a bitwise read-modify-write.
 pub(crate) fn x86_implicit_writes(inst: &Inst) -> u16 {
     match *inst {
         Inst::Binop { op, .. } if is_shift_op(op) => 1 << X86_RCX,
@@ -489,6 +489,7 @@ pub(crate) fn x86_implicit_writes(inst: &Inst) -> u16 {
             1 << X86_RCX
         }
         Inst::Binop { op, .. } if is_rdx_rax_op(op) => (1 << X86_RAX) | (1 << X86_RDX),
+        Inst::Udiv128 { .. } => (1 << X86_RAX) | (1 << X86_RDX),
         Inst::AtomicCas { .. } => 1 << X86_RAX,
         Inst::AtomicRmw { op, .. } if cmpxchg_rmw(op) => 1 << X86_RAX,
         _ => 0,
@@ -558,11 +559,20 @@ fn x86_preferences(
         _ => None,
     };
     let mut is_count = vec![false; n];
+    let mut udiv_divisors: Vec<ValueId> = Vec::new();
     for (v, inst) in func.insts.iter().enumerate() {
-        // A `CMPXCHG` leaves the prior contents in rax.
+        // A `CMPXCHG` leaves the prior contents in rax; `div` reads rdx:rax.
         match *inst {
             Inst::AtomicCas { .. } => {
                 hints[v].get_or_insert(X86_RAX);
+            }
+            Inst::Udiv128 { hi, lo, divisor }
+                if [hi, lo, divisor].iter().all(|&o| (o as usize) < n) =>
+            {
+                hints[v].get_or_insert(X86_RAX);
+                hints[lo as usize].get_or_insert(X86_RAX);
+                hints[hi as usize].get_or_insert(X86_RDX);
+                udiv_divisors.push(divisor);
             }
             Inst::AtomicRmw { op, .. } if cmpxchg_rmw(op) => {
                 hints[v].get_or_insert(X86_RAX);
@@ -595,6 +605,9 @@ fn x86_preferences(
             avoid[u as usize] |= regs;
         }
     };
+    for &d in &udiv_divisors {
+        keep_out(d, rdx_rax);
+    }
     for (v, inst) in func.insts.iter().enumerate() {
         let Some((op, lhs, rhs)) = binop(inst) else {
             continue;
@@ -2772,7 +2785,7 @@ fn result_kind(inst: &Inst) -> ResultKind {
         Neg(_) => ResultKind::Int,
         Fneg(_) => ResultKind::Fp,
         Fma { .. } => ResultKind::Fp,
-        MulAdd { .. } => ResultKind::Int,
+        MulAdd { .. } | Udiv128 { .. } => ResultKind::Int,
         Extend { .. } => ResultKind::Int,
         Bswap { .. } | BitCount { .. } => ResultKind::Int,
         FpCast { kind, .. } => match kind {

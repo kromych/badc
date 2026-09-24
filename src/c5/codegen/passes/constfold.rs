@@ -787,6 +787,12 @@ fn fold_round(func: &mut FunctionSsa) -> bool {
             Inst::Extend { value, kind } => {
                 imm_of(func, *value).map(|k| Inst::Imm(eval::eval_extend(k, *kind)))
             }
+            Inst::Udiv128 { hi, lo, divisor } => {
+                match (imm_of(func, *hi), imm_of(func, *lo), imm_of(func, *divisor)) {
+                    (Some(h), Some(l), Some(d)) => eval::udiv128(h, l, d).map(Inst::Imm),
+                    _ => None,
+                }
+            }
             Inst::Bswap { value, width } => match imm_of(func, *value) {
                 Some(k) => Some(Inst::Imm(eval::eval_bswap(k, *width))),
                 // The reversal reads only the low `width` bytes, so a
@@ -1065,6 +1071,41 @@ mod tests {
             ]);
             run_one(&mut f);
             assert!(matches!(f.insts[2], Inst::Binop { .. }), "{op:?}");
+        }
+    }
+
+    /// A 128-by-64 division of constants folds where it would not fault.
+    #[test]
+    fn a_fitting_128_by_64_division_of_constants_folds() {
+        for (hi, lo, divisor, want) in [
+            (1, 0, 3, Some(0x5555_5555_5555_5555)),
+            (0, -1, -1, Some(1)),
+            (2, 5, 2, None),
+            (0, 7, 0, None),
+        ] {
+            let mut f = fresh(vec![
+                Inst::Imm(hi),
+                Inst::Imm(lo),
+                Inst::Imm(divisor),
+                Inst::Udiv128 {
+                    hi: 0,
+                    lo: 1,
+                    divisor: 2,
+                },
+            ]);
+            run_one(&mut f);
+            match want {
+                Some(q) => assert!(
+                    matches!(f.insts[3], Inst::Imm(k) if k == q),
+                    "{:?}",
+                    f.insts[3]
+                ),
+                None => assert!(
+                    matches!(f.insts[3], Inst::Udiv128 { .. }),
+                    "{:?}",
+                    f.insts[3]
+                ),
+            }
         }
     }
 

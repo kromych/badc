@@ -1282,6 +1282,20 @@ fn run_inst<H: Host>(
             frame.regs[v as usize] = round_if_f32(res, frame.func.f32_values.get(v as usize));
             return Ok(());
         }
+        Inst::Udiv128 { hi, lo, divisor } => {
+            let (h, l, d) = (
+                frame.regs[*hi as usize],
+                frame.regs[*lo as usize],
+                frame.regs[*divisor as usize],
+            );
+            let Some(q) = eval::udiv128(h, l, d) else {
+                return Err(C5Error::Runtime(
+                    "vm_ssa: 128-by-64 division overflow".into(),
+                ));
+            };
+            frame.regs[v as usize] = q;
+            return Ok(());
+        }
         Inst::MulAdd {
             a,
             b,

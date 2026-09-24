@@ -604,6 +604,7 @@ pub(crate) fn asm_operand_form(func: &FunctionSsa, arg: u32) -> alloc::string::S
                 | Inst::Bswap { .. }
                 | Inst::BitCount { .. },
             ) => "an arithmetic result",
+            Some(Inst::Udiv128 { .. }) => "an arithmetic result",
             Some(Inst::Fneg(_) | Inst::Fma { .. } | Inst::MulAdd { .. } | Inst::FpCast { .. }) => {
                 "a floating-point result"
             }

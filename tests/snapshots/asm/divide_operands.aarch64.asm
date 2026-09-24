@@ -137,50 +137,151 @@ Disassembly of section .text:
                	ret
 
 <wide_quot>:
-               	mov	x6, x0
-               	mov	x4, x1
-               	orr	x0, x4, x3
-               	cbz	x0, <addr>
-               	mov	x1, #0x0                // =0
-               	mov	x5, #0x80               // =128
-               	mov	x0, x6
-               	mov	x6, x1
-               	lsr	x7, x4, #63
-               	lsl	x8, x6, #1
-               	lsl	x1, x1, #1
-               	lsr	x6, x6, #63
-               	orr	x1, x1, x6
-               	orr	x6, x8, x7
-               	lsl	x9, x0, #1
-               	lsl	x4, x4, #1
-               	lsr	x0, x0, #63
-               	orr	x4, x4, x0
-               	cmp	x1, x3
-               	cset	x0, lo
-               	cmp	x1, x3
-               	cset	x7, eq
-               	cmp	x6, x2
-               	cset	x8, lo
-               	and	x7, x7, x8
-               	orr	x0, x0, x7
-               	eor	x0, x0, #0x1
-               	neg	x7, x0
-               	and	x8, x2, x7
-               	and	x7, x3, x7
-               	cmp	x6, x8
-               	cset	x10, lo
-               	sub	x6, x6, x8
-               	sub	x1, x1, x7
-               	sub	x1, x1, x10
-               	orr	x0, x9, x0
+               	orr	x4, x1, x3
+               	cbz	x4, <addr>
+               	cbz	x3, <addr>
+               	clz	x4, x3
+               	eor	x14, x4, #0x3f
+               	lsl	x4, x3, x4
+               	lsr	x5, x2, #1
+               	lsr	x5, x5, x14
+               	orr	x5, x4, x5
+               	lsr	x9, x1, #1
+               	lsr	x4, x0, #1
+               	lsl	x6, x1, #63
+               	orr	x6, x4, x6
+               	clz	x4, x5
+               	lsl	x12, x5, x4
+               	lsr	x7, x12, #32
+               	mov	w8, w12
+               	eor	x5, x4, #0x3f
+               	lsr	x10, x6, #1
+               	lsr	x5, x10, x5
+               	lsl	x9, x9, x4
+               	orr	x13, x9, x5
+               	lsl	x4, x6, x4
+               	lsr	x6, x4, #32
+               	mov	w9, w4
+               	udiv	x4, x13, x7
+               	msub	x5, x4, x7, x13
+               	lsr	x10, x4, #32
+               	cbnz	x10, <addr>
+               	mul	x10, x4, x8
+               	lsl	x11, x5, #32
+               	orr	x11, x11, x6
+               	cmp	x10, x11
+               	b.ls	<addr>
+               	sub	x4, x4, #0x1
+               	add	x5, x5, x7
+               	lsr	x10, x5, #32
+               	cbz	x10, <addr>
+               	lsl	x5, x13, #32
+               	orr	x5, x5, x6
+               	msub	x6, x4, x12, x5
+               	udiv	x5, x6, x7
+               	msub	x6, x5, x7, x6
+               	lsr	x10, x5, #32
+               	cbnz	x10, <addr>
+               	mul	x10, x5, x8
+               	lsl	x11, x6, #32
+               	orr	x11, x11, x9
+               	cmp	x10, x11
+               	b.ls	<addr>
                	sub	x5, x5, #0x1
-               	cbnz	x5, <addr>
-               	mov	x1, x4
+               	add	x6, x6, x7
+               	lsr	x10, x6, #32
+               	cbz	x10, <addr>
+               	lsl	x4, x4, #32
+               	orr	x4, x4, x5
+               	lsr	x4, x4, x14
+               	cmp	x4, #0x0
+               	cset	x5, ne
+               	sub	x4, x4, x5
+               	umulh	x6, x4, x2
+               	mul	x5, x4, x2
+               	madd	x6, x4, x3, x6
+               	cmp	x0, x5
+               	cset	x7, lo
+               	sub	x0, x0, x5
+               	sub	x1, x1, x6
+               	sub	x1, x1, x7
+               	cmp	x1, x3
+               	cset	x5, lo
+               	cmp	x1, x3
+               	cset	x6, eq
+               	cmp	x0, x2
+               	cset	x7, lo
+               	and	x6, x6, x7
+               	orr	x5, x5, x6
+               	eor	x5, x5, #0x1
+               	add	x4, x4, x5
+               	mov	x11, #0x0               // =0
+               	neg	x5, x5
+               	and	x2, x2, x5
+               	and	x3, x3, x5
+               	cmp	x0, x2
+               	cset	x5, lo
+               	sub	x0, x0, x2
+               	sub	x1, x1, x3
+               	sub	x1, x1, x5
+               	mov	x0, x4
+               	mov	x1, x11
                	ret
-               	udiv	x0, x6, x2
-               	msub	x6, x0, x2, x6
+               	mov	x11, #0x0               // =0
+               	cmp	x1, x2
+               	b.lo	<addr>
+               	udiv	x11, x1, x2
+               	msub	x1, x11, x2, x1
+               	clz	x3, x2
+               	lsl	x12, x2, x3
+               	lsr	x6, x12, #32
+               	mov	w7, w12
+               	eor	x4, x3, #0x3f
+               	lsr	x5, x0, #1
+               	lsr	x4, x5, x4
+               	lsl	x1, x1, x3
+               	orr	x1, x1, x4
+               	lsl	x3, x0, x3
+               	lsr	x5, x3, #32
+               	mov	w8, w3
+               	udiv	x3, x1, x6
+               	msub	x4, x3, x6, x1
+               	lsr	x9, x3, #32
+               	cbnz	x9, <addr>
+               	mul	x9, x3, x7
+               	lsl	x10, x4, #32
+               	orr	x10, x10, x5
+               	cmp	x9, x10
+               	b.ls	<addr>
+               	sub	x3, x3, #0x1
+               	add	x4, x4, x6
+               	lsr	x9, x4, #32
+               	cbz	x9, <addr>
+               	lsl	x1, x1, #32
+               	orr	x1, x1, x5
+               	msub	x1, x3, x12, x1
+               	udiv	x4, x1, x6
+               	msub	x5, x4, x6, x1
+               	lsr	x9, x4, #32
+               	cbnz	x9, <addr>
+               	mul	x9, x4, x7
+               	lsl	x10, x5, #32
+               	orr	x10, x10, x8
+               	cmp	x9, x10
+               	b.ls	<addr>
+               	sub	x4, x4, #0x1
+               	add	x5, x5, x6
+               	lsr	x9, x5, #32
+               	cbz	x9, <addr>
+               	lsl	x1, x3, #32
+               	orr	x4, x1, x4
+               	msub	x0, x4, x2, x0
                	mov	x1, #0x0                // =0
-               	mov	x4, x1
+               	b	<addr>
+               	udiv	x4, x0, x2
+               	msub	x0, x4, x2, x0
+               	mov	x1, #0x0                // =0
+               	mov	x11, x1
                	b	<addr>
 
 <main>:

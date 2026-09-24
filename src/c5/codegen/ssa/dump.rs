@@ -208,6 +208,9 @@ fn fmt_inst(inst: &Inst) -> String {
         } => format!(
             "Fma {{ a=v{a}, b=v{b}, c=v{c}, neg_product={neg_product}, neg_addend={neg_addend} }}"
         ),
+        Udiv128 { hi, lo, divisor } => {
+            format!("Udiv128 {{ hi=v{hi}, lo=v{lo}, divisor=v{divisor} }}")
+        }
         MulAdd {
             a,
             b,

@@ -1401,6 +1401,17 @@ impl SsaBuilder {
         self.push(Inst::Mzero { dst, size, align })
     }
 
+    /// `Inst::Udiv128`, folded when all three operands are constants.
+    pub(crate) fn udiv128(&mut self, hi: ValueId, lo: ValueId, divisor: ValueId) -> ValueId {
+        if let (Some(h), Some(l), Some(d)) =
+            (self.peek_imm(hi), self.peek_imm(lo), self.peek_imm(divisor))
+            && let Some(q) = crate::c5::vm::eval::udiv128(h, l, d)
+        {
+            return self.imm(q);
+        }
+        self.push(Inst::Udiv128 { hi, lo, divisor })
+    }
+
     /// `Inst::AtomicRmw` -- atomic read-modify-write on the `width`-byte
     /// object at `addr` (C11 7.17.7) carrying `order`. Returns the inst's
     /// id; its value is the object's prior contents. Atomics are not pure

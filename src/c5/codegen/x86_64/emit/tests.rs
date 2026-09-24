@@ -803,6 +803,115 @@ mod two_address_tests {
         ];
         assert_eq!(emit(&func, v, &alloc, BinOp::Divu, Reg::RCX), divu);
     }
+
+    /// `hi:lo` reaches rdx:rax as one parallel move, a divisor there moves
+    /// aside, and rax / rdx live across the divide are saved. Encodings are
+    /// llvm-mc's, but for the exchange's `87 /r` form.
+    #[test]
+    fn udiv128_moves_its_dividend_into_rdx_rax() {
+        let target = Target::LinuxX64;
+        let reg = |r: Reg| Place::IntReg(r.0);
+        let src = "unsigned long long f(unsigned long long hi, unsigned long long lo,\n\
+                   unsigned long long d) {\n\
+                   return (unsigned long long)((((unsigned __int128)hi << 64) | lo) / d);\n\
+                   }";
+        let program = crate::Compiler::with_target(
+            alloc::format!("{src} int main(void){{ return 0; }}"),
+            target,
+        )
+        .compile()
+        .expect("compile");
+        let funcs =
+            crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+                .expect("ssa");
+        let (func, v) = funcs
+            .into_iter()
+            .find_map(|f| {
+                let at = f
+                    .insts
+                    .iter()
+                    .position(|i| matches!(i, Inst::Udiv128 { .. }))?;
+                Some((f, at as u32))
+            })
+            .expect("a 128-by-64 division");
+        let Inst::Udiv128 { hi, lo, divisor } = func.insts[v as usize] else {
+            unreachable!()
+        };
+        let mut alloc = super::super::ssa::reg_alloc::allocate(
+            &func,
+            target,
+            crate::c5::codegen::FixedRegs::NONE,
+        );
+        for p in alloc.places.iter_mut() {
+            if *p == reg(Reg::RAX) || *p == reg(Reg::RDX) {
+                *p = Place::None;
+            }
+        }
+        alloc.implicit_live = alloc::vec![0; func.insts.len()];
+        let emit = |alloc: &Allocation, h: Reg, l: Reg, d: Reg| {
+            let mut alloc = alloc.clone();
+            alloc.places[hi as usize] = reg(h);
+            alloc.places[lo as usize] = reg(l);
+            alloc.places[divisor as usize] = reg(d);
+            let frame = compute_frame(&func, &alloc, target.abi(), target);
+            let mut code = Vec::new();
+            emit_udiv128(&mut code, v, reg(Reg::R8), hi, lo, divisor, &alloc, frame)
+                .expect("emit_udiv128");
+            code
+        };
+        let div_rcx: &[u8] = &[0x48, 0xF7, 0xF1];
+        let div_r11: &[u8] = &[0x49, 0xF7, 0xF3];
+        let mov_r8_rax: &[u8] = &[0x49, 0x89, 0xC0];
+        let mov_rdx_rdi: &[u8] = &[0x48, 0x89, 0xFA];
+        let mov_rax_rsi: &[u8] = &[0x48, 0x89, 0xF0];
+        let mov_rax_rdx: &[u8] = &[0x48, 0x89, 0xD0];
+        let mov_r11_rax: &[u8] = &[0x49, 0x89, 0xC3];
+        let xchg_rax_rdx: &[u8] = &[0x48, 0x87, 0xD0];
+        let (push_rax_rdx, pop_rdx_rax): (&[u8], &[u8]) = (&[0x50, 0x52], &[0x5A, 0x58]);
+        let cases = [
+            (
+                Reg::RDI,
+                Reg::RSI,
+                Reg::RCX,
+                [mov_rdx_rdi, mov_rax_rsi, div_rcx].concat(),
+            ),
+            (
+                Reg::RAX,
+                Reg::RDX,
+                Reg::RCX,
+                [xchg_rax_rdx, div_rcx].concat(),
+            ),
+            (
+                Reg::RDI,
+                Reg::RDX,
+                Reg::RCX,
+                [mov_rax_rdx, mov_rdx_rdi, div_rcx].concat(),
+            ),
+            (
+                Reg::RDI,
+                Reg::RSI,
+                Reg::RAX,
+                [mov_r11_rax, mov_rdx_rdi, mov_rax_rsi, div_r11].concat(),
+            ),
+        ];
+        for (h, l, d, body) in cases {
+            assert_eq!(
+                emit(&alloc, h, l, d),
+                [&body[..], mov_r8_rax].concat(),
+                "{h:?} {l:?} {d:?}"
+            );
+        }
+        alloc.implicit_live[v as usize] = (1 << Reg::RAX.0) | (1 << Reg::RDX.0);
+        let saved = [
+            push_rax_rdx,
+            mov_rdx_rdi,
+            mov_rax_rsi,
+            div_rcx,
+            mov_r8_rax,
+            pop_rdx_rax,
+        ];
+        assert_eq!(emit(&alloc, Reg::RDI, Reg::RSI, Reg::RCX), saved.concat());
+    }
 }
 
 #[cfg(test)]

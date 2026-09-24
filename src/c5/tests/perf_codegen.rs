@@ -534,6 +534,44 @@ fn x64_in_loop(insns: &[X64Insn], pred: impl Fn(&X64Insn) -> bool) -> bool {
         })
 }
 
+/// Whether the control flow of `insns` has a cycle, which a backward branch
+/// from a block placed past the return does not make.
+fn x64_has_cycle(insns: &[X64Insn]) -> bool {
+    let index = |at: usize| insns.iter().position(|i| i.at == at);
+    let successors = |k: usize| {
+        let i = &insns[k];
+        let next = (i.op != 0xC3 && !i.is_jmp())
+            .then_some(k + 1)
+            .filter(|&n| n < insns.len());
+        let taken = (i.is_jmp() || i.is_jcc())
+            .then(|| index(i.target()))
+            .flatten();
+        next.into_iter().chain(taken)
+    };
+    let (mut on_path, mut seen) = (vec![false; insns.len()], vec![false; insns.len()]);
+    let mut stack = vec![(0usize, false)];
+    while let Some((k, leaving)) = stack.pop() {
+        if leaving {
+            on_path[k] = false;
+            continue;
+        }
+        if seen[k] {
+            continue;
+        }
+        (seen[k], on_path[k]) = (true, true);
+        stack.push((k, true));
+        for n in successors(k) {
+            if on_path[n] {
+                return true;
+            }
+            if !seen[n] {
+                stack.push((n, false));
+            }
+        }
+    }
+    false
+}
+
 /// `mov wd, wm`, the zero extension of a low word.
 fn a64_is_mask(w: u32) -> bool {
     w & 0xFFE0_FFE0 == 0x2A00_03E0
@@ -802,6 +840,50 @@ fn compound_division_by_a_constant_takes_no_divide() {
         let divides = |i: &X64Insn| i.op == 0xF7 && i.modrm.is_some_and(|b| (b >> 3) & 7 >= 6);
         m.expect(!insns.iter().any(divides), || {
             format!("x86-64 {name}: a hardware divide: {insns:x?}")
+        });
+    }
+    m.finish();
+}
+
+/// Every 128-bit division form steps by one `div` on x86-64 and by two
+/// 32-bit quotient digits over `udiv` on aarch64; none loops over bits.
+#[test]
+fn int128_division_takes_no_bit_loop() {
+    const SRC: &str = "typedef unsigned long long u64;\n\
+        typedef unsigned __int128 u128;\n\
+        u64 div128(u64 hi, u64 lo, u64 d) {\n\
+            u128 hl = ((u128)hi << 64) + lo;\n\
+            return (u64)(hl / d);\n\
+        }\n\
+        u128 udiv(u128 a, u128 b) { return a / b; }\n\
+        u128 umod(u128 a, u128 b) { return a % b; }\n\
+        __int128 sdiv(__int128 a, __int128 b) { return a / b; }\n\
+        __int128 smod(__int128 a, __int128 b) { return a % b; }\n";
+    // `lsl #1` and `lsr #63` (UBFM), `extr #63`: a 128-bit shift by one.
+    let one_bit = |w: u32| {
+        matches!(w & 0xFFFF_FC00, 0xD37F_F800 | 0xD37F_FC00) || w & 0xFFE0_FC00 == 0x93C0_FC00
+    };
+    let udiv = |w: &&u32| **w & 0xFFE0_FC00 == 0x9AC0_0800;
+    // `div r/m64`, the /6 row of the 0xF7 group.
+    let div =
+        |i: &&X64Insn| i.op == 0xF7 && i.rex_w() && i.modrm.is_some_and(|b| (b >> 3) & 7 == 6);
+    let mut m = Misses::default();
+    for name in ["div128", "udiv", "umod", "sdiv", "smod"] {
+        let ws = a64(SRC, name);
+        m.expect(!a64_in_loop(&ws, one_bit), || {
+            format!("aarch64 {name}: a loop shifts by one bit: {ws:08x?}")
+        });
+        m.expect(ws.iter().filter(udiv).count() >= 4, || {
+            format!(
+                "aarch64 {name}: no `udiv` for a 64-bit pair, a high word and two digits: {ws:08x?}"
+            )
+        });
+        let insns = x64(SRC, name);
+        m.expect(!x64_has_cycle(&insns), || {
+            format!("x86-64 {name}: a loop: {insns:x?}")
+        });
+        m.expect(insns.iter().filter(div).count() >= 3, || {
+            format!("x86-64 {name}: no `div` for a 64-bit pair, a high word and a step: {insns:x?}")
         });
     }
     m.finish();

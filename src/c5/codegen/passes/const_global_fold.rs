@@ -638,6 +638,7 @@ fn walk_block(
             | Inst::Fneg(_)
             | Inst::Fma { .. }
             | Inst::MulAdd { .. }
+            | Inst::Udiv128 { .. }
             | Inst::Extend { .. }
             | Inst::Bswap { .. }
             | Inst::BitCount { .. }

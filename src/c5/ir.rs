@@ -234,6 +234,13 @@ pub(crate) enum Inst {
         c: ValueId,
         neg_product: bool,
     },
+    /// The quotient of the unsigned 128-bit `hi:lo` by `divisor`, for `hi <
+    /// divisor`: x86_64 `div` of rdx:rax (`irgen::int128`).
+    Udiv128 {
+        hi: ValueId,
+        lo: ValueId,
+        divisor: ValueId,
+    },
     /// Sign-extend the low bytes of `value` to 64 bits: discard the
     /// bits above `kind`'s width and replicate the sign bit, the fused
     /// `trunc; sext` that lowers to one `sxtb`/`sxth`/`sxtw` (AArch64)
@@ -606,6 +613,7 @@ impl Inst {
                 | Inst::Fneg(_)
                 | Inst::Fma { .. }
                 | Inst::MulAdd { .. }
+                | Inst::Udiv128 { .. }
                 | Inst::FpCast { .. }
                 | Inst::Extend { .. }
                 | Inst::Bswap { .. }
@@ -648,6 +656,7 @@ impl Inst {
             Inst::Fneg(_) => "Fneg",
             Inst::Fma { .. } => "Fma",
             Inst::MulAdd { .. } => "MulAdd",
+            Inst::Udiv128 { .. } => "Udiv128",
             Inst::Extend { .. } => "Extend",
             Inst::Bswap { .. } => "Bswap",
             Inst::BitCount { .. } => "BitCount",
@@ -732,6 +741,11 @@ impl Inst {
                 f(*a);
                 f(*b);
                 f(*c);
+            }
+            Inst::Udiv128 { hi, lo, divisor } => {
+                f(*hi);
+                f(*lo);
+                f(*divisor);
             }
             Inst::Extend { value, .. } => f(*value),
             Inst::Bswap { value, .. } | Inst::BitCount { value, .. } => f(*value),
@@ -839,6 +853,11 @@ impl Inst {
                 f(a);
                 f(b);
                 f(c);
+            }
+            Inst::Udiv128 { hi, lo, divisor } => {
+                f(hi);
+                f(lo);
+                f(divisor);
             }
             Inst::Extend { value, .. } => f(value),
             Inst::Bswap { value, .. } | Inst::BitCount { value, .. } => f(value),
@@ -2240,6 +2259,7 @@ impl crate::c5::layout::DataOffsets for Inst {
             | Inst::Fneg { .. }
             | Inst::Fma { .. }
             | Inst::MulAdd { .. }
+            | Inst::Udiv128 { .. }
             | Inst::Extend { .. }
             | Inst::Bswap { .. }
             | Inst::BitCount { .. }

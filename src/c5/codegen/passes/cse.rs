@@ -75,6 +75,7 @@ enum Key {
     FpCast(FpCastKind, ValueId, bool),
     Fma(ValueId, ValueId, ValueId, bool, bool, bool),
     MulAdd(ValueId, ValueId, ValueId, bool),
+    Udiv128(ValueId, ValueId, ValueId),
 }
 
 pub(crate) fn run(funcs: &mut [FunctionSsa], caps: BankCapacity) {
@@ -142,6 +143,7 @@ fn remat_cost(inst: &Inst) -> u32 {
             _ => 1,
         },
         Inst::Fma { .. } | Inst::MulAdd { .. } | Inst::FpCast { .. } | Inst::BitCount { .. } => 3,
+        Inst::Udiv128 { .. } => 12,
         _ => 1,
     }
 }
@@ -600,6 +602,7 @@ fn key_of(inst: &Inst, vn: &[ValueId], is_f32: bool, sym: u32) -> Option<Key> {
             c,
             neg_product,
         } => Some(Key::MulAdd(r(*a), r(*b), r(*c), *neg_product)),
+        Inst::Udiv128 { hi, lo, divisor } => Some(Key::Udiv128(r(*hi), r(*lo), r(*divisor))),
         _ => None,
     }
 }

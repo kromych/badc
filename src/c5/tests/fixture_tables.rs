@@ -69,6 +69,7 @@
 /// that exercise those paths run end-to-end.
 pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("inline_asm_stack_switch_spill.c", 0),
+    ("int128_divide_edges.c", 0),
     ("far_frame_slots.c", 0),
     ("overaligned_region_storage.c", 0),
     ("static_local_shadows_file_scope.c", 0),
@@ -1228,6 +1229,7 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
 /// same fixtures; if they drift, one of them has a bug.
 pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("inline_asm_stack_switch_spill.c", 0),
+    ("int128_divide_edges.c", 0),
     ("far_frame_slots.c", 0),
     ("overaligned_region_storage.c", 0),
     ("static_local_shadows_file_scope.c", 0),
@@ -2084,6 +2086,7 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
 
 pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("inline_asm_stack_switch_spill.c", 0),
+    ("int128_divide_edges.c", 0),
     ("far_frame_slots.c", 0),
     ("overaligned_region_storage.c", 0),
     ("static_local_shadows_file_scope.c", 0),
@@ -2917,6 +2920,7 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
 /// POSIX-only semantics.
 pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("inline_asm_stack_switch_spill.c", 0),
+    ("int128_divide_edges.c", 0),
     ("far_frame_slots.c", 0),
     ("overaligned_region_storage.c", 0),
     ("asm_register_outputs.c", 0),
@@ -3532,6 +3536,7 @@ pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
 /// are arch-independent.
 pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("inline_asm_stack_switch_spill.c", 0),
+    ("int128_divide_edges.c", 0),
     ("far_frame_slots.c", 0),
     ("overaligned_region_storage.c", 0),
     ("asm_register_outputs.c", 0),
@@ -4088,6 +4093,7 @@ pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
 
 pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
     ("inline_asm_stack_switch_spill.c", 0),
+    ("int128_divide_edges.c", 0),
     ("far_frame_slots.c", 0),
     ("overaligned_region_storage.c", 0),
     ("asm_register_outputs.c", 0),

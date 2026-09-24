@@ -1132,6 +1132,7 @@ fn is_inline_candidate(
             | Inst::Fneg(_)
             | Inst::Fma { .. }
             | Inst::MulAdd { .. }
+            | Inst::Udiv128 { .. }
             | Inst::FpCast { .. }
             | Inst::Load { .. }
             | Inst::LoadIndexed { .. } => {}
@@ -2098,6 +2099,7 @@ fn needs_param_agg_copy(c: &FunctionSsa) -> bool {
         | Inst::Fneg(_)
         | Inst::Fma { .. }
         | Inst::MulAdd { .. }
+        | Inst::Udiv128 { .. }
         | Inst::Extend { .. }
         | Inst::Bswap { .. }
         | Inst::BitCount { .. }

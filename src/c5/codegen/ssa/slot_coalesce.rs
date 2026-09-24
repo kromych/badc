@@ -368,8 +368,12 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
                     op: BinOp::Add | BinOp::Sub,
                     ..
                 } => {}
-                // An integer pointer comparison reads no memory and its
-                // result carries no reconstructible address (C99 6.5.8).
+                // A pointer comparison reads no memory and its result
+                // carries no reconstructible address (C99 6.5.8), but it
+                // observes the object's identity: two objects whose
+                // addresses are compared must both hold their storage at
+                // that point (C99 6.5.9p6), so each operand's object is
+                // in use there.
                 Inst::Binop {
                     op:
                         BinOp::Eq
@@ -382,8 +386,15 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
                         | BinOp::Ugt
                         | BinOp::Ule
                         | BinOp::Uge,
-                    ..
-                } => {}
+                    lhs,
+                    rhs,
+                } => {
+                    for v in [*lhs, *rhs] {
+                        if let Some((base, _)) = base_of(v) {
+                            raw_events.push((pc, base, READ));
+                        }
+                    }
+                }
                 Inst::Load {
                     addr,
                     disp,

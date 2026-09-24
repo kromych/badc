@@ -1144,19 +1144,9 @@ impl Compiler {
         let elem_size = self.size_of_type(elem_ty);
         let bytes = elements.len() * elem_size;
         let start_addr = self.stage_template_bytes(bytes);
-        if elem_size == 1 {
-            for (idx, &(v, _)) in elements.iter().enumerate() {
-                self.data[start_addr + idx] = v as u8;
-            }
-        } else {
-            // By index, so the LE-write and reloc-push helpers are the
-            // ones the other writers use.
-            for (idx, &(v, reloc)) in elements.iter().enumerate() {
-                let here = start_addr + idx * elem_size;
-                let bits = self.to_storage_bits(v, reloc, elem_ty);
-                self.write_init_bytes(here, bits, elem_size);
-                self.push_init_reloc(here, v as i64, reloc)?;
-            }
+        for (idx, &(v, reloc)) in elements.iter().enumerate() {
+            let here = start_addr + idx * elem_size;
+            self.write_init_value(here, elem_size, v, reloc, elem_ty)?;
         }
         Ok((start_addr, bytes))
     }

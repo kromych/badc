@@ -2362,8 +2362,8 @@ impl Compiler {
     /// initializer has already written the value into the object's `.data`
     /// bytes. The cursor is on the name. `None`, with the cursor restored,
     /// for any other shape: no chain to a non-pointer, a chain ending at an
-    /// array, aggregate, `long double` or bitfield, an index outside the
-    /// object, or bytes a relocation patches other than a whole address.
+    /// array, aggregate or `long double`, an index outside the object, or
+    /// bytes a relocation patches other than a whole address.
     fn try_fold_const_object_read(&mut self) -> Result<Option<ConstVal>, C5Error> {
         let idx = self.lex.curr_id_idx;
         let s = &self.symbols[idx];
@@ -2388,6 +2388,9 @@ impl Compiler {
         let cp = self.init_checkpoint();
         self.next()?;
         let mut steps = 0;
+        // The last member read, when it is a bit-field: its bit offset,
+        // width and storage-unit size in bytes at `off`.
+        let mut bits: Option<(u32, u32, usize)> = None;
         loop {
             if self.lex.tk == Token::Brak && !dims.is_empty() {
                 self.next()?;
@@ -2411,14 +2414,24 @@ impl Compiler {
                 } else {
                     None
                 };
-                let field = field
-                    .filter(|f| f.bit_width == 0)
-                    .map(|f| (f.offset as i64, f.ty, dims_of(&f.array_dims, f.array_size)));
-                let Some((f_off, f_ty, f_dims)) = field else {
+                let field = field.map(|f| {
+                    let b = (f.bit_width > 0).then_some((
+                        f.bit_offset,
+                        f.bit_width,
+                        f.bit_unit_size as usize,
+                    ));
+                    (
+                        f.offset as i64,
+                        f.ty,
+                        dims_of(&f.array_dims, f.array_size),
+                        b,
+                    )
+                });
+                let Some((f_off, f_ty, f_dims, f_bits)) = field else {
                     self.restore_init_checkpoint(cp);
                     return Ok(None);
                 };
-                (off, ty, dims) = (off + f_off, f_ty, f_dims);
+                (off, ty, dims, bits) = (off + f_off, f_ty, f_dims, f_bits);
                 self.next()?;
             } else {
                 break;
@@ -2436,6 +2449,8 @@ impl Compiler {
             || off as usize + size > self.data.len()
         {
             None
+        } else if let Some((bit, width, unit)) = bits {
+            self.read_const_bits(off as usize, unit, bit, width, ty)
         } else {
             self.read_const_slot(off as usize, size, ty)
         };
@@ -2467,6 +2482,34 @@ impl Compiler {
             (true, _) => ConstVal::Float(f64::from_bits(bits as u64)),
             (false, _) => self.const_int_of(bits, ty),
         })
+    }
+
+    /// The bit-field of `width` bits at bit `bit` of the `const` storage
+    /// unit `data[at..at + size]`, converted to its type `ty` (C99 6.7.2.1p10):
+    /// sign-extended for a signed type, 0 or 1 for `_Bool`.
+    fn read_const_bits(
+        &self,
+        at: usize,
+        size: usize,
+        bit: u32,
+        width: u32,
+        ty: i64,
+    ) -> Option<ConstVal> {
+        if !(1..=8).contains(&size)
+            || at + size > self.data.len()
+            || bit + width > (size * 8) as u32
+            || self.data_range_relocated(at, size)
+        {
+            return None;
+        }
+        let unit = self.read_data_int(at, size, ty | UNSIGNED_BIT) as u64;
+        let field = (unit >> bit) & (u64::MAX >> (64 - width));
+        let v = if is_unsigned_ty(ty) || strip_unsigned(ty) == Ty::Bool as i64 {
+            field as i128
+        } else {
+            ((field << (64 - width)) as i64 >> (64 - width)) as i128
+        };
+        Some(self.const_int_of(v, ty))
     }
 
     /// The address a relocation starting at `data[at]` over a whole

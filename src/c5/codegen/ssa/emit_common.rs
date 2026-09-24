@@ -2067,6 +2067,11 @@ pub(crate) fn lower_unit<B: LowerTarget>(
                 }
             }
         });
+        // The register transfers of an aggregate parameter or return join
+        // the tape, so the object below is one sroa can split.
+        time_pass_arch("passes::agg_parts::run", B::ARCH, || {
+            super::super::passes::agg_parts::run(&mut ssa_funcs, target);
+        });
         // Split address-taken local aggregates into per-field slots and
         // re-run mem2reg to promote them to SSA values, in every function
         // holding a candidate object; the promoted field slots feed the

@@ -14,13 +14,6 @@ Disassembly of section .text:
                	brk	#0x1
 
 <take_wrap>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	stur	x0, [x29, #-0x8]
-               	ldur	w0, [x29, #-0x8]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <add2>:

@@ -26,40 +26,17 @@ Disassembly of section .text:
                	int3
 
 <id_word>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%rdi, -0x8(%rbp)
-               	leaq	-0x8(%rbp), %rax
-               	movq	%rax, %rcx
-               	movq	(%rcx), %rax
-               	leave
+               	movq	%rdi, %rax
                	retq
 
 <id_pair>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%rdi, -0x10(%rbp)
-               	movq	%rsi, -0x8(%rbp)
-               	leaq	-0x10(%rbp), %rax
-               	movq	%rax, %rcx
-               	movq	(%rcx), %rax
-               	movq	0x8(%rcx), %rdx
-               	leave
+               	movq	%rdi, %rax
+               	movq	%rsi, %rdx
                	retq
 
 <id_pair_hint>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%rdi, -0x10(%rbp)
-               	movq	%rsi, -0x8(%rbp)
-               	leaq	-0x10(%rbp), %rax
-               	movq	%rax, %rcx
-               	movq	(%rcx), %rax
-               	movq	0x8(%rcx), %rdx
-               	leave
+               	movq	%rdi, %rax
+               	movq	%rsi, %rdx
                	retq
 
 <use_word>:

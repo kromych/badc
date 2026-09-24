@@ -696,36 +696,42 @@ fn param_home_clobber_set(
     alloc: &Allocation,
     abi: super::Abi,
 ) -> alloc::vec::Vec<bool> {
-    use super::ArgPlacement as P;
     let plan = param_placements(func, abi);
     let mut mask = alloc::vec![false; plan.len()];
     if plan.is_empty() {
         return mask;
     }
-    let live_param_ref = |vid: usize| -> Option<(usize, LoadKind)> {
+    // A live parameter read: a `ParamRef`, which has a home, or a
+    // `ParamPart`, which reads its register in the same order and has none.
+    let live_read = |vid: usize| -> Option<(Option<usize>, LoadKind)> {
         let inst = &func.insts[vid];
-        let Inst::ParamRef { idx, kind } = inst else {
-            return None;
+        let (home, kind) = match inst {
+            Inst::ParamRef { idx, kind } => (Some(*idx as usize), *kind),
+            Inst::ParamPart { kind, .. } => (None, *kind),
+            _ => return None,
         };
         if super::ssa::emit_common::is_dead_pure(inst, vid as super::super::ir::ValueId, alloc) {
             return None;
         }
-        Some((*idx as usize, *kind))
+        Some((home, kind))
     };
+    let incoming = |vid: usize| super::ssa::reg_alloc::incoming_reg(&plan, &func.insts[vid]);
     // FP parameters always take the per-inst path, so the same hazard
     // applies within the FP bank.
     let mut written_fp: alloc::collections::BTreeSet<u8> = alloc::collections::BTreeSet::new();
     for vid in 0..func.insts.len() {
-        let Some((i, kind)) = live_param_ref(vid) else {
+        let Some((home, kind)) = live_read(vid) else {
             continue;
         };
         if !matches!(kind, LoadKind::F32 | LoadKind::F64) {
             continue;
         }
-        let Some(P::FpReg(arg_reg)) = plan.get(i).copied() else {
+        let Some((true, arg_reg)) = incoming(vid) else {
             continue;
         };
-        if written_fp.contains(&arg_reg) {
+        if written_fp.contains(&arg_reg)
+            && let Some(i) = home
+        {
             mask[i] = true;
         }
         if let Some(Place::FpReg(r)) = alloc.places.get(vid).copied() {
@@ -736,10 +742,7 @@ fn param_home_clobber_set(
     // mirrored.
     let mut batch_homes: alloc::vec::Vec<Place> = alloc::vec::Vec::new();
     for vid in 0..func.insts.len() {
-        let Some((i, _)) = live_param_ref(vid) else {
-            continue;
-        };
-        if !matches!(plan.get(i), Some(P::IntReg(_))) {
+        if live_read(vid).is_none() || !matches!(incoming(vid), Some((false, _))) {
             continue;
         }
         let dst = alloc.places.get(vid).copied().unwrap_or(Place::None);
@@ -754,19 +757,20 @@ fn param_home_clobber_set(
         return mask;
     }
     // Per-inst path: a later parameter whose argument register was
-    // already written by an earlier `ParamRef`'s home placement is
-    // clobbered before it can be read. Only integer parameters take part;
-    // an FP parameter's incoming xmm register is disjoint from
-    // `int_arg_regs`.
+    // already written by an earlier read's placement is clobbered before
+    // it can be read. Only integer registers take part; an FP parameter's
+    // incoming xmm register is disjoint from `int_arg_regs`.
     let mut written: alloc::collections::BTreeSet<u8> = alloc::collections::BTreeSet::new();
     for vid in 0..func.insts.len() {
-        let Some((i, _)) = live_param_ref(vid) else {
+        let Some((home, _)) = live_read(vid) else {
             continue;
         };
-        let Some(P::IntReg(arg_reg)) = plan.get(i).copied() else {
+        let Some((false, arg_reg)) = incoming(vid) else {
             continue;
         };
-        if written.contains(&arg_reg) {
+        if written.contains(&arg_reg)
+            && let Some(i) = home
+        {
             mask[i] = true;
         }
         if let Some(Place::IntReg(r)) = alloc.places.get(vid).copied() {

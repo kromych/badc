@@ -18,23 +18,7 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x1, lsl #12   // =0x1000
                	str	xzr, [sp]
-               	sub	sp, sp, #0x50
-               	sub	x16, x29, #0x1, lsl #12 // =0x1000
-               	sub	x16, x16, #0x50
-               	str	x0, [x16]
-               	str	x1, [x16, #0x8]
-               	sub	x16, x29, #0x1, lsl #12 // =0x1000
-               	sub	x16, x16, #0x40
-               	str	x2, [x16]
-               	str	x3, [x16, #0x8]
-               	sub	x16, x29, #0x1, lsl #12 // =0x1000
-               	sub	x16, x16, #0x30
-               	str	x4, [x16]
-               	str	x5, [x16, #0x8]
-               	sub	x16, x29, #0x1, lsl #12 // =0x1000
-               	sub	x16, x16, #0x20
-               	str	x6, [x16]
-               	str	x7, [x16, #0x8]
+               	sub	sp, sp, #0x10
                	sub	x16, x29, #0x1, lsl #12 // =0x1000
                	sub	x16, x16, #0x10
                	ldr	x17, [x29, #0x10]
@@ -1321,29 +1305,13 @@ Disassembly of section .text:
                	str	x17, [x16]
                	ldr	x17, [x29, #0x1018]
                	str	x17, [x16, #0x8]
-               	sub	x0, x29, #0x1, lsl #12  // =0x1000
-               	sub	x0, x0, #0x50
-               	ldr	x1, [x0]
-               	ldr	x0, [x0, #0x8]
-               	add	x1, x1, x0
-               	sub	x0, x29, #0x1, lsl #12  // =0x1000
-               	sub	x0, x0, #0x40
-               	ldr	x2, [x0]
-               	ldr	x0, [x0, #0x8]
-               	add	x0, x2, x0
-               	add	x1, x1, x0
-               	sub	x0, x29, #0x1, lsl #12  // =0x1000
-               	sub	x0, x0, #0x30
-               	ldr	x2, [x0]
-               	ldr	x0, [x0, #0x8]
-               	add	x0, x2, x0
-               	add	x1, x1, x0
-               	sub	x0, x29, #0x1, lsl #12  // =0x1000
-               	sub	x0, x0, #0x20
-               	ldr	x2, [x0]
-               	ldr	x0, [x0, #0x8]
-               	add	x0, x2, x0
-               	add	x1, x1, x0
+               	add	x0, x0, x1
+               	add	x1, x2, x3
+               	add	x0, x0, x1
+               	add	x1, x4, x5
+               	add	x0, x0, x1
+               	add	x1, x6, x7
+               	add	x1, x0, x1
                	sub	x0, x29, #0x1, lsl #12  // =0x1000
                	sub	x0, x0, #0x10
                	ldr	x2, [x0]
@@ -2631,7 +2599,7 @@ Disassembly of section .text:
                	add	x0, x2, x0
                	add	x0, x1, x0
                	add	sp, sp, #0x1, lsl #12   // =0x1000
-               	add	sp, sp, #0x50
+               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
 

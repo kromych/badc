@@ -316,6 +316,20 @@ fn fmt_inst(inst: &Inst) -> String {
         AllocaInit(slot) => format!("AllocaInit({slot})"),
         LifetimeEnd(slot) => format!("LifetimeEnd({slot})"),
         ParamRef { idx, kind } => format!("ParamRef({idx}, kind={})", fmt_load_kind(*kind)),
+        ParamPart { idx, part, kind } => {
+            format!(
+                "ParamPart({idx}, part={part}, kind={})",
+                fmt_load_kind(*kind)
+            )
+        }
+        AggParts {
+            desc,
+            parts,
+            fp_mask,
+        } => format!(
+            "AggParts {{ desc={desc}, parts=[{}], fp_mask={fp_mask:#x} }}",
+            fmt_value_list(parts)
+        ),
         Phi { incoming, kind } => {
             let mut parts = String::new();
             for (i, (b, v)) in incoming.iter().enumerate() {

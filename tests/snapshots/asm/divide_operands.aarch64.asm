@@ -137,68 +137,50 @@ Disassembly of section .text:
                	ret
 
 <wide_quot>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x50
-               	stur	x0, [x29, #-0x50]
-               	stur	x1, [x29, #-0x48]
-               	stur	x2, [x29, #-0x40]
-               	stur	x3, [x29, #-0x38]
-               	sub	x0, x29, #0x50
-               	ldr	x4, [x0]
-               	ldr	x1, [x0, #0x8]
-               	sub	x0, x29, #0x40
-               	ldr	x6, [x0]
-               	ldr	x5, [x0, #0x8]
-               	orr	x0, x1, x5
+               	mov	x6, x0
+               	mov	x4, x1
+               	orr	x0, x4, x3
                	cbz	x0, <addr>
-               	mov	x0, #0x0                // =0
-               	mov	x2, #0x80               // =128
-               	mov	x3, x4
-               	mov	x4, x0
-               	lsr	x7, x1, #63
-               	lsl	x8, x4, #1
-               	lsl	x0, x0, #1
-               	lsr	x4, x4, #63
-               	orr	x0, x0, x4
-               	orr	x4, x8, x7
-               	lsl	x9, x3, #1
+               	mov	x1, #0x0                // =0
+               	mov	x5, #0x80               // =128
+               	mov	x0, x6
+               	mov	x6, x1
+               	lsr	x7, x4, #63
+               	lsl	x8, x6, #1
                	lsl	x1, x1, #1
-               	lsr	x3, x3, #63
-               	orr	x1, x1, x3
-               	cmp	x0, x5
-               	cset	x3, lo
-               	cmp	x0, x5
+               	lsr	x6, x6, #63
+               	orr	x1, x1, x6
+               	orr	x6, x8, x7
+               	lsl	x9, x0, #1
+               	lsl	x4, x4, #1
+               	lsr	x0, x0, #63
+               	orr	x4, x4, x0
+               	cmp	x1, x3
+               	cset	x0, lo
+               	cmp	x1, x3
                	cset	x7, eq
-               	cmp	x4, x6
+               	cmp	x6, x2
                	cset	x8, lo
                	and	x7, x7, x8
-               	orr	x3, x3, x7
-               	eor	x3, x3, #0x1
-               	neg	x7, x3
-               	and	x8, x6, x7
-               	and	x7, x5, x7
-               	cmp	x4, x8
+               	orr	x0, x0, x7
+               	eor	x0, x0, #0x1
+               	neg	x7, x0
+               	and	x8, x2, x7
+               	and	x7, x3, x7
+               	cmp	x6, x8
                	cset	x10, lo
-               	sub	x4, x4, x8
-               	sub	x0, x0, x7
-               	sub	x0, x0, x10
-               	orr	x3, x9, x3
-               	sub	x2, x2, #0x1
-               	cbnz	x2, <addr>
-               	sub	x0, x29, #0x10
-               	str	x3, [x0]
-               	str	x1, [x0, #0x8]
-               	mov	x16, x0
-               	ldr	x1, [x16, #0x8]
-               	ldr	x0, [x16]
-               	add	sp, sp, #0x50
-               	ldp	x29, x30, [sp], #0x10
+               	sub	x6, x6, x8
+               	sub	x1, x1, x7
+               	sub	x1, x1, x10
+               	orr	x0, x9, x0
+               	sub	x5, x5, #0x1
+               	cbnz	x5, <addr>
+               	mov	x1, x4
                	ret
-               	udiv	x3, x4, x6
-               	msub	x4, x3, x6, x4
-               	mov	x0, #0x0                // =0
-               	mov	x1, x0
+               	udiv	x0, x6, x2
+               	msub	x6, x0, x2, x6
+               	mov	x1, #0x0                // =0
+               	mov	x4, x1
                	b	<addr>
 
 <main>:

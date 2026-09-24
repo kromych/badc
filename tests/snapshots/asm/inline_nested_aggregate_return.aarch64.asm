@@ -14,26 +14,14 @@ Disassembly of section .text:
                	brk	#0x1
 
 <make_pair>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	mov	x1, x0
-               	sub	x0, x29, #0x10
-               	str	x1, [x0]
                	mov	x17, #0x3               // =3
-               	mul	x1, x1, x17
+               	mul	x1, x0, x17
                	add	x1, x1, #0x1
-               	str	x1, [x0, #0x8]
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldrsw	x2, [x1]
-               	add	x2, x2, #0x1
-               	str	w2, [x1]
-               	mov	x16, x0
-               	ldr	x1, [x16, #0x8]
-               	ldr	x0, [x16]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
+               	ldrsw	x3, [x2]
+               	add	x3, x3, #0x1
+               	str	w3, [x2]
                	ret
 
 <main>:

@@ -26,34 +26,19 @@ Disassembly of section .text:
                	int3
 
 <take_kuid>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%rdi, -0x8(%rbp)
-               	movl	-0x8(%rbp), %eax
-               	leave
+               	movq	%rdi, %rax
                	retq
 
 <take_pair>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%rdi, -0x8(%rbp)
-               	leaq	-0x8(%rbp), %rax
-               	movl	0x4(%rax), %ecx
-               	shlq	$0x20, %rcx
-               	movl	(%rax), %eax
+               	movq	%rdi, %rax
+               	shrq	$0x20, %rax
+               	shlq	$0x20, %rax
+               	movl	%edi, %ecx
                	orq	%rcx, %rax
-               	leave
                	retq
 
 <take_kuid_proto>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%rdi, -0x8(%rbp)
-               	movl	-0x8(%rbp), %eax
-               	leave
+               	movq	%rdi, %rax
                	retq
 
 <main>:

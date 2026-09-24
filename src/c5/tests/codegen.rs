@@ -12617,6 +12617,13 @@ fn stores_pair(ws: &[u32], rt: u8) -> bool {
     ws.iter().any(stp) || slots(lo).any(|(base, off)| slots(hi).any(|s| s == (base, off + 8)))
 }
 
+/// Whether `ws` adds registers `a` and `b` into x0, in either order.
+fn adds_regs(ws: &[u32], a: u8, b: u8) -> bool {
+    use crate::c5::codegen::aarch64::encode::{Reg, enc_add_reg};
+    ws.contains(&enc_add_reg(Reg(0), Reg(a), Reg(b)))
+        || ws.contains(&enc_add_reg(Reg(0), Reg(b), Reg(a)))
+}
+
 fn expect_words(ws: &[u32], want: &[u32], what: &str) {
     for w in want {
         assert!(ws.contains(w), "{what}: {w:#010x} missing");
@@ -12630,12 +12637,12 @@ fn expect_words(ws: &[u32], want: &[u32], what: &str) {
 fn align16_arguments_pair_registers_and_align_stack_slots() {
     use crate::Target;
     use crate::c5::codegen::aarch64::encode::{
-        Reg, enc_add_imm, enc_and_align_down, enc_ldr_imm, enc_mov_reg, enc_movz, enc_str_imm,
+        Reg, enc_add_imm, enc_and_align_down, enc_ldr_imm, enc_movz, enc_str_imm,
     };
     const SRC: &str = "#include <stdarg.h>\n\
         typedef long long ll;\n\
-        ll take_c(void *ctx, __int128 a, ll c) { return c; }\n\
-        ll after_five(ll r0, ll r1, ll r2, ll r3, ll r4, __int128 a, ll c) { return c; }\n\
+        ll take_c(void *ctx, __int128 a, ll c) { return c + (ll)a; }\n\
+        ll after_five(ll r0, ll r1, ll r2, ll r3, ll r4, __int128 a, ll c) { return c + (ll)a; }\n\
         ll after_seven(ll r0, ll r1, ll r2, ll r3, ll r4, ll r5, ll r6, __int128 a, ll c)\n\
             { return c + (ll)a; }\n\
         ll va_pair(int n, ...) { va_list ap; va_start(ap, n);\n\
@@ -12674,15 +12681,12 @@ fn align16_arguments_pair_registers_and_align_stack_slots() {
         (Target::MacOSAarch64, 1, 3),
     ] {
         let obj = relocatable_object(SRC, target);
+        // The sum reads the pair's low register and `c` straight from
+        // their argument registers.
         let take_c = function_words(&obj, "take_c");
         assert!(
-            stores_pair(&take_c, pair),
-            "{target:?} take_c: the pair is not x{pair}"
-        );
-        expect_words(
-            &take_c,
-            &[enc_mov_reg(x(0), x(next))],
-            &alloc::format!("{target:?} take_c"),
+            adds_regs(&take_c, pair, next),
+            "{target:?} take_c: the pair is not x{pair}: {take_c:08x?}"
         );
         let caller = [
             enc_ldr_imm(x(pair + 1), x(pair), 8),
@@ -12729,11 +12733,13 @@ fn align16_arguments_pair_registers_and_align_stack_slots() {
     // after seven the pair itself spills, 16-aligned, ahead of `c`.
     let obj = relocatable_object(SRC, Target::LinuxAarch64);
     let after_five = function_words(&obj, "after_five");
+    let reads_c = after_five
+        .iter()
+        .any(|&w| w & !0x1f == enc_ldr_imm(x(0), x(29), 16) & !0x1f);
     assert!(
-        stores_pair(&after_five, 6),
-        "after_five: the pair is not x6"
+        reads_c && (0..31).any(|r| adds_regs(&after_five, 6, r)),
+        "after_five: the pair is not x6: {after_five:08x?}"
     );
-    expect_words(&after_five, &[enc_ldr_imm(x(0), x(29), 16)], "after_five");
     let seven = [
         enc_ldr_imm(x(17), x(29), 16),
         enc_ldr_imm(x(17), x(29), 24),
@@ -12768,12 +12774,10 @@ fn align16_arguments_pair_registers_and_align_stack_slots() {
 #[test]
 fn attribute_aligned_aggregate_is_placed_per_arm64_platform() {
     use crate::Target;
-    use crate::c5::codegen::aarch64::encode::{
-        Reg, enc_ldr_imm, enc_mov_reg, enc_movz, enc_str_imm,
-    };
+    use crate::c5::codegen::aarch64::encode::{Reg, enc_ldr_imm, enc_movz, enc_str_imm};
     const SRC: &str = "typedef long long ll;\n\
         struct whole16 { ll lo; ll hi; } __attribute__((aligned(16)));\n\
-        ll take_reg(ll x, struct whole16 s, ll c) { return c; }\n\
+        ll take_reg(ll x, struct whole16 s, ll c) { return c + s.hi; }\n\
         ll ext_reg(ll x, struct whole16 s, ll c);\n\
         ll ext_stack(ll r0, ll r1, ll r2, ll r3, ll r4, ll r5, ll r6, ll r7, ll x,\n\
             struct whole16 s, ll c);\n\
@@ -12788,16 +12792,13 @@ fn attribute_aligned_aggregate_is_placed_per_arm64_platform() {
     ] {
         let obj = relocatable_object(SRC, target);
         let what = |f: &str| alloc::format!("{target:?} {f}");
+        // The sum reads the pair's high register and `c` straight from
+        // their argument registers.
         let take_reg = function_words(&obj, "take_reg");
         assert!(
-            stores_pair(&take_reg, pair),
-            "{}: the pair is not x{pair}",
+            adds_regs(&take_reg, pair + 1, pair + 2),
+            "{}: the pair is not x{pair}: {take_reg:08x?}",
             what("take_reg")
-        );
-        expect_words(
-            &take_reg,
-            &[enc_mov_reg(x(0), x(pair + 2))],
-            &what("take_reg"),
         );
         let caller = [
             enc_ldr_imm(x(pair + 1), x(pair), 8),

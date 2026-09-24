@@ -313,9 +313,9 @@ pub(super) fn emit_inst(
         }
         // A lifetime marker states a fact about storage the frame
         // already holds; `ssa::slot_coalesce` reads it and no code
-        // follows from it.
-        Inst::LifetimeEnd(_) => Ok(()),
-        Inst::ParamRef { idx, kind } => emit_param_ref(code, *idx, *kind, dst, v, fcx),
+        // follows from it. The return moves the parts of an `AggParts`.
+        Inst::LifetimeEnd(_) | Inst::AggParts { .. } => Ok(()),
+        Inst::ParamRef { .. } | Inst::ParamPart { .. } => emit_incoming(code, inst, dst, v, fcx),
         Inst::Imm(value) => {
             let Some(rd) = int_or_spill_dst(dst) else {
                 return fail("Imm: dst not int reg / spill");
@@ -758,17 +758,16 @@ fn emit_call_inst(
     }
 }
 
-/// Materialise the i-th host-ABI parameter into its `Place`, converting
-/// the low `kind` bytes per C99 6.3.1.3. An earlier `ParamRef` may have
-/// overwritten the incoming argument register (the allocator packs
+/// `Inst::ParamRef` / `Inst::ParamPart`: the incoming register the plan
+/// names into the value's place, an integer one converted from the low
+/// `kind` bytes per C99 6.3.1.3. An earlier `ParamRef` may have
+/// overwritten a parameter's argument register (the allocator packs
 /// sequentially-live parameters into one register), so `param_from_home`
 /// marks the parameters that read the home the prologue stored
-/// (`param_home_off`). The plan names the incoming register; a
-/// stack-passed parameter always reads its home.
-fn emit_param_ref(
+/// (`param_home_off`); a stack-passed parameter always reads its home.
+fn emit_incoming(
     code: &mut Vec<u8>,
-    idx: u32,
-    kind: LoadKind,
+    inst: &Inst,
     dst: Place,
     v: super::super::ir::ValueId,
     fcx: &FnCtx,
@@ -782,9 +781,15 @@ fn emit_param_ref(
         param_plan,
         ..
     } = *fcx;
-    let i = idx as usize;
-    let from_home = param_from_home.get(i).copied().unwrap_or(false);
-    let home_off = param_home_off(i, func, frame, abi) as i32;
+    let (kind, home) = match inst {
+        Inst::ParamRef { idx, kind } => (*kind, Some(*idx as usize)),
+        Inst::ParamPart { kind, .. } => (*kind, None),
+        _ => return fail("incoming: not a parameter read"),
+    };
+    let name = inst.variant_name();
+    let from_home = home.is_some_and(|i| param_from_home.get(i).copied().unwrap_or(false));
+    let home_off = home.map_or(0, |i| param_home_off(i, func, frame, abi) as i32);
+    let incoming = super::ssa::reg_alloc::incoming_reg(param_plan, inst);
     if matches!(kind, LoadKind::F32 | LoadKind::F64) {
         // A `float` occupies the low 32 bits of the xmm; the body re-narrows
         // it through the f32 store the walker seeded, so a scalar copy
@@ -803,12 +808,14 @@ fn emit_param_ref(
                     load_home(code, Reg(frame.fp_scratch[0]));
                     fp_spill_dst_to_slot(code, dst, Reg(frame.fp_scratch[0]), frame);
                 }
-                _ => return fail("ParamRef: FP param dst not fp reg / spill"),
+                _ => return fail(alloc::format!("{name}: FP dst not fp reg / spill")),
             }
             return Ok(());
         }
-        let Some(super::ArgPlacement::FpReg(x)) = param_plan.get(i).copied() else {
-            return fail("ParamRef: FP param not in an FP argument register");
+        let Some((true, x)) = incoming else {
+            return fail(alloc::format!(
+                "{name}: FP value not in an FP argument register"
+            ));
         };
         let xmm = Reg(x);
         match dst {
@@ -818,14 +825,18 @@ fn emit_param_ref(
                 }
             }
             Place::Spill(_) => fp_spill_dst_to_slot(code, dst, xmm, frame),
-            _ => return fail("ParamRef: FP param dst not fp reg / spill"),
+            _ => return fail(alloc::format!("{name}: FP dst not fp reg / spill")),
         }
         return Ok(());
     }
-    let arg_reg = match param_plan.get(i).copied() {
-        Some(super::ArgPlacement::IntReg(r)) => Reg(r),
+    let arg_reg = match incoming {
+        Some((false, r)) => Reg(r),
         _ if from_home => Reg(0),
-        _ => return fail("ParamRef: int param has no incoming integer register"),
+        _ => {
+            return fail(alloc::format!(
+                "{name}: integer value has no incoming register"
+            ));
+        }
     };
     let ext = param_entry_ext(kind, v, alloc);
     let materialize = |code: &mut Vec<u8>, rd: Reg| {
@@ -852,7 +863,7 @@ fn emit_param_ref(
             materialize(code, SCRATCH_R10);
             spill_dst_to_slot(code, dst, SCRATCH_R10, frame);
         }
-        _ => return fail("ParamRef: dst not int reg / spill"),
+        _ => return fail(alloc::format!("{name}: dst not int reg / spill")),
     }
     Ok(())
 }

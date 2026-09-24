@@ -501,6 +501,8 @@ fn run_one(func: &mut FunctionSsa) {
                 | Inst::Copy { .. }
                 | Inst::FpCast { .. }
                 | Inst::ParamRef { .. }
+                | Inst::ParamPart { .. }
+                | Inst::AggParts { .. }
                 | Inst::Phi { .. } => {}
                 Inst::LoadIndexed {
                     base,
@@ -868,6 +870,8 @@ pub(crate) fn fold_const_loads(func: &mut FunctionSsa) -> bool {
                 | Inst::Copy { .. }
                 | Inst::FpCast { .. }
                 | Inst::ParamRef { .. }
+                | Inst::ParamPart { .. }
+                | Inst::AggParts { .. }
                 | Inst::Phi { .. } => {}
                 Inst::StoreIndexed { .. }
                 | Inst::Mcpy { .. }

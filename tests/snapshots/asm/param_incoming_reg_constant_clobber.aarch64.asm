@@ -81,8 +81,7 @@ Disassembly of section .text:
                	b.le	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	mov	x16, x0
-               	ldr	x0, [x16]
+               	ldrh	w0, [x0]
                	ret
                	sdiv	x0, x0, x1
                	b	<addr>

@@ -3560,3 +3560,115 @@ fn aggregate_copy_saves_nothing_and_moves_sixteen_bytes() {
     }
     m.finish();
 }
+
+const REGISTER_AGGREGATES: &str = "struct P { long a, b; };\n\
+    struct P by_value(struct P v) { v.a += 1; return v; }\n\
+    struct P make_pair(long a, long b) { struct P p; p.a = a; p.b = b; return p; }\n\
+    struct P swap(struct P v) { struct P r; r.a = v.b; r.b = v.a; return r; }\n\
+    struct Q { int a, b; };\n\
+    struct Q swapq(struct Q v) { struct Q r; r.a = v.b; r.b = v.a; return r; }\n";
+
+/// A register-passed aggregate whose address never escapes stays in
+/// registers through the body: no frame, no memory access, the pair
+/// moving straight through. `by_value` is an add and a return, `make_pair`
+/// hands its arguments on, `swap` exchanges the pair through the scratch
+/// register, and two `int`s in one register are shifted, not stored.
+#[test]
+fn register_aggregate_keeps_no_frame_object() {
+    let mut m = Misses::default();
+    let ret = 0xD65F_03C0;
+    let expect_a64 = |m: &mut Misses, name: &str, want: &[u32]| {
+        let ws = a64(REGISTER_AGGREGATES, name);
+        m.expect(ws == want, || format!("aarch64 {name}: {ws:08x?}"));
+    };
+    // add x0, x0, #1; ret
+    expect_a64(&mut m, "by_value", &[0x9100_0400, ret]);
+    expect_a64(&mut m, "make_pair", &[ret]);
+    // Three register moves break the cycle, then ret.
+    let ws = a64(REGISTER_AGGREGATES, "swap");
+    let is_mov = |w: u32| w & 0xFFE0_FFE0 == 0xAA00_03E0;
+    m.expect(
+        ws.len() == 4 && ws[..3].iter().all(|&w| is_mov(w)) && ws[3] == ret,
+        || format!("aarch64 swap: {ws:08x?}"),
+    );
+    for name in ["by_value", "make_pair", "swap", "swapq"] {
+        let ws = a64(REGISTER_AGGREGATES, name);
+        m.expect(
+            !a64_has_frame_record(&ws) && !ws.iter().any(|&w| a64_mem_imm(w).is_some()),
+            || format!("aarch64 {name}: a frame or a memory access: {ws:08x?}"),
+        );
+        let insns = x64(REGISTER_AGGREGATES, name);
+        // `lea` computes an address without a memory access.
+        let touches_memory = |i: &X64Insn| i.op != 0x8D && i.modrm.is_some() && !i.reg_form();
+        m.expect(
+            !insns
+                .iter()
+                .any(|i| matches!(i.op, 0x50..=0x57) || touches_memory(i)),
+            || format!("x86-64 {name}: a push or a memory operand: {insns:x?}"),
+        );
+    }
+    // lea rax, [rdi + 1]; mov rdx, rsi; ret, in either order.
+    let insns = x64(REGISTER_AGGREGATES, "by_value");
+    m.expect(
+        insns.len() == 3
+            && insns
+                .iter()
+                .any(|i| i.op == 0x8D && i.regs() == (0, 7) && i.disp == 1)
+            && insns.iter().any(|i| i.op == 0x89 && i.regs() == (6, 2)),
+        || format!("x86-64 by_value: {insns:x?}"),
+    );
+    // mov rax, rdi; mov rdx, rsi; ret
+    let insns = x64(REGISTER_AGGREGATES, "make_pair");
+    m.expect(
+        insns.len() == 3
+            && insns.iter().any(|i| i.op == 0x89 && i.regs() == (7, 0))
+            && insns.iter().any(|i| i.op == 0x89 && i.regs() == (6, 2)),
+        || format!("x86-64 make_pair: {insns:x?}"),
+    );
+    m.finish();
+}
+
+const PARTS_ACROSS_CALL: &str = "struct P { long a, b; };\n\
+    long g(long);\n\
+    struct P across(long x) { struct P r = {7, 8}; g(x); return r; }\n";
+
+/// The constant parts of a return in registers are set again after a call
+/// (`ssa::remat`) straight into the return registers their hints name, so
+/// no callee-saved register holds them across it.
+#[test]
+fn constant_parts_are_set_again_after_a_call() {
+    let mut m = Misses::default();
+    let ws = a64(PARTS_ACROSS_CALL, "across");
+    let after_bl = ws
+        .iter()
+        .position(|&w| w & 0xFC00_0000 == 0x9400_0000)
+        .map_or(&[][..], |i| &ws[i + 1..]);
+    // mov x0, #7; mov x1, #8
+    m.expect(
+        after_bl.contains(&0xD280_00E0) && after_bl.contains(&0xD280_0101),
+        || format!("aarch64 across: the parts are not set after the call: {ws:08x?}"),
+    );
+    let pair_saves = ws
+        .iter()
+        .filter(|&&w| matches!(w & 0xFFC0_0000, 0xA980_0000 | 0xA900_0000) && (w >> 5) & 31 == 31)
+        .count();
+    m.expect(pair_saves == 1, || {
+        format!("aarch64 across: {pair_saves} pair saves, not the frame record: {ws:08x?}")
+    });
+    let insns = x64(PARTS_ACROSS_CALL, "across");
+    let after_call = insns
+        .iter()
+        .position(|i| i.op == 0xE8)
+        .map_or(&[][..], |i| &insns[i + 1..]);
+    // mov eax, 7; mov edx, 8
+    m.expect(
+        after_call.iter().any(|i| i.op == 0xB8 && i.imm == 7)
+            && after_call.iter().any(|i| i.op == 0xBA && i.imm == 8),
+        || format!("x86-64 across: the parts are not set after the call: {insns:x?}"),
+    );
+    let pushes = insns.iter().filter(|i| matches!(i.op, 0x50..=0x57)).count();
+    m.expect(pushes == 1, || {
+        format!("x86-64 across: {pushes} pushes, not rbp alone: {insns:x?}")
+    });
+    m.finish();
+}

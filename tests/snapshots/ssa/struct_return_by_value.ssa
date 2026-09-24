@@ -1,11 +1,21 @@
 ; --- SSA dump (ok=true) ent_pc=6 ---
 ; name=echo_small
-fn ent_pc=6 n_params=1 variadic=false locals=1
+fn ent_pc=6 n_params=1 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
-    v0   AllocaInit(0)                                    -> -
-    v1   LocalAddr(-1)                                    -> x0
-    terminator Return(v1)   (exit_acc=v1)
+    v0   ParamPart(0, part=0, kind=I64)                   -> x7
+    v1   Imm(0)                                           -> x0
+    v2   Imm(0)                                           -> x0
+    v3   BinopI { op=shru, lhs=v0, rhs_imm=32 }           -> x0
+    v4   Imm(0)                                           -> x1
+    v5   AllocaInit(0)                                    -> -
+    v6   Imm(0)                                           -> x1
+    v7   BinopI { op=and, lhs=v0, rhs_imm=4294967295 }    -> x1
+    v8   BinopI { op=and, lhs=v3, rhs_imm=4294967295 }    -> x2
+    v9   BinopI { op=shl, lhs=v3, rhs_imm=32 }            -> x0
+    v10  Binop { op=or, lhs=v7, rhs=v9 }                  -> x0
+    v11  AggParts { desc=0, parts=[v10], fp_mask=0x0 }    -> -
+    terminator Return(v11)   (exit_acc=v6)
 ; --- SSA dump (ok=true) ent_pc=7 ---
 ; name=main
 fn ent_pc=7 n_params=0 variadic=false locals=2

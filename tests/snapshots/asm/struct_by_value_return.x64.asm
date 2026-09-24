@@ -35,15 +35,10 @@ Disassembly of section .text:
                	retq
 
 <make_pair>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	leaq	-0x8(%rbp), %rax
-               	movl	%edi, (%rax)
-               	movl	%esi, 0x4(%rax)
-               	movq	%rax, %rcx
-               	movq	(%rcx), %rax
-               	leave
+               	movl	%edi, %eax
+               	movl	%esi, %ecx
+               	shlq	$0x20, %rcx
+               	orq	%rcx, %rax
                	retq
 
 <clobber>:
@@ -51,25 +46,16 @@ Disassembly of section .text:
                	retq
 
 <sum_pair_pair>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	movq	%rdi, -0x8(%rbp)
-               	movq	%rsi, -0x10(%rbp)
-               	leaq	-0x18(%rbp), %rax
-               	leaq	-0x8(%rbp), %rcx
-               	movslq	(%rcx), %rsi
-               	leaq	-0x10(%rbp), %rdx
-               	movslq	(%rdx), %rdi
-               	addq	%rdi, %rsi
-               	movl	%esi, (%rax)
-               	movslq	0x4(%rcx), %rcx
-               	movslq	0x4(%rdx), %rdx
-               	addq	%rdx, %rcx
-               	movl	%ecx, 0x4(%rax)
-               	movq	%rax, %rcx
-               	movq	(%rcx), %rax
-               	leave
+               	movq	%rdi, %rax
+               	shrq	$0x20, %rax
+               	movq	%rsi, %rcx
+               	shrq	$0x20, %rcx
+               	leaq	(%rdi,%rsi), %rdx
+               	addq	%rcx, %rax
+               	movl	%edx, %ecx
+               	movl	%eax, %eax
+               	shlq	$0x20, %rax
+               	orq	%rcx, %rax
                	retq
 
 <main>:

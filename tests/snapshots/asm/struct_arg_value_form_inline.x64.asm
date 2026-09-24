@@ -26,54 +26,34 @@ Disassembly of section .text:
                	int3
 
 <take_kuid>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%rdi, -0x8(%rbp)
-               	movl	-0x8(%rbp), %eax
-               	leave
+               	movq	%rdi, %rax
                	retq
 
 <take_triple>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%rdi, -0x8(%rbp)
-               	leaq	-0x8(%rbp), %rax
-               	movzbq	(%rax), %rcx
-               	movzbq	0x1(%rax), %rdx
-               	shlq	$0x8, %rdx
-               	orq	%rdx, %rcx
-               	movzbq	0x2(%rax), %rax
-               	shlq	$0x10, %rax
+               	movq	%rdi, %rax
+               	shrq	$0x8, %rax
+               	movq	%rdi, %rcx
+               	shrq	$0x10, %rcx
+               	movq	%rdi, %rdx
+               	andq	$0xff, %rdx
+               	andq	$0xff, %rax
+               	shlq	$0x8, %rax
+               	orq	%rdx, %rax
+               	andq	$0xff, %rcx
+               	shlq	$0x10, %rcx
                	orq	%rcx, %rax
-               	leave
                	retq
 
 <take_pair>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%rdi, -0x8(%rbp)
-               	leaq	-0x8(%rbp), %rax
-               	movl	0x4(%rax), %ecx
-               	shlq	$0x20, %rcx
-               	movl	(%rax), %eax
+               	movq	%rdi, %rax
+               	shrq	$0x20, %rax
+               	shlq	$0x20, %rax
+               	movl	%edi, %ecx
                	orq	%rcx, %rax
-               	leave
                	retq
 
 <take_wide>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%rdi, -0x10(%rbp)
-               	movq	%rsi, -0x8(%rbp)
-               	leaq	-0x10(%rbp), %rax
-               	movq	(%rax), %rcx
-               	movq	0x8(%rax), %rax
-               	addq	%rcx, %rax
-               	leave
+               	leaq	(%rdi,%rsi), %rax
                	retq
 
 <main>:

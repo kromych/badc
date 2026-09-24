@@ -26,22 +26,13 @@ Disassembly of section .text:
                	int3
 
 <make_pair>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	leaq	-0x10(%rbp), %rax
-               	movq	%rdi, (%rax)
-               	leaq	(%rdi,%rdi,2), %rcx
-               	incq	%rcx
-               	movq	%rcx, 0x8(%rax)
+               	movq	%rdi, %rax
+               	leaq	(%rax,%rax,2), %rcx
+               	leaq	0x1(%rcx), %rdx
                	leaq	<rip>, %rcx
-               	movslq	(%rcx), %rdx
-               	incq	%rdx
-               	movl	%edx, (%rcx)
-               	movq	%rax, %rcx
-               	movq	(%rcx), %rax
-               	movq	0x8(%rcx), %rdx
-               	leave
+               	movslq	(%rcx), %rsi
+               	incq	%rsi
+               	movl	%esi, (%rcx)
                	retq
 
 <main>:

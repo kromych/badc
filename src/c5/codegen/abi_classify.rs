@@ -314,6 +314,65 @@ pub(crate) fn fp_member_layout(
     Some(alloc::vec![(0, width)])
 }
 
+/// One register of an aggregate passed or returned in registers: its
+/// class, the bytes of the aggregate it carries, and the flattened
+/// fields lying wholly inside them.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct RegPart {
+    pub class: RegClass,
+    pub offset: u32,
+    pub width: u32,
+    pub fields: alloc::vec::Vec<FlatField>,
+}
+
+/// The register parts of an aggregate of `size` bytes with `fields`,
+/// passed (`is_return` false) or returned in registers under `abi`, in
+/// register order: an HFA's members, else the eightbytes with their
+/// classes. `None` when it takes no register, and for a vector register,
+/// whose lanes no scalar access names.
+pub(crate) fn register_parts(
+    size: u32,
+    fields: &[FlatField],
+    abi: Abi,
+    is_return: bool,
+) -> Option<alloc::vec::Vec<RegPart>> {
+    let AggClass::Regs(classes) = classify_aggregate(size, 0, fields, abi, is_return) else {
+        return None;
+    };
+    if classes.is_empty() || classes.contains(&RegClass::Vector) {
+        return None;
+    }
+    let layout: alloc::vec::Vec<(u32, u32, RegClass)> = match hfa_member_layout(fields) {
+        Some(members) if abi.arch != Arch::X86_64 => members
+            .iter()
+            .map(|&(off, msize)| (off, msize, RegClass::Sse))
+            .collect(),
+        _ => classes
+            .iter()
+            .enumerate()
+            .map(|(k, &class)| {
+                let off = 8 * k as u32;
+                (off, (size - off).min(8), class)
+            })
+            .collect(),
+    };
+    Some(
+        layout
+            .into_iter()
+            .map(|(offset, width, class)| RegPart {
+                class,
+                offset,
+                width,
+                fields: fields
+                    .iter()
+                    .filter(|f| f.offset >= offset && f.offset + f.size <= offset + width)
+                    .copied()
+                    .collect(),
+            })
+            .collect(),
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -679,5 +738,73 @@ mod tests {
             classify_aggregate(3, 1, &f, win64(), false),
             AggClass::ByRef
         );
+    }
+
+    /// The parts of a `struct { long a, b; }` on either ABI are its two
+    /// eightbytes, an HFA's its members on AAPCS64 and its SSE eightbytes
+    /// on System V, a 12-byte aggregate's tail is a 4-byte part, a
+    /// one-eightbyte aggregate holds both of its `int`s in one part, and a
+    /// vector or a memory-class aggregate has none.
+    #[test]
+    fn register_parts_follow_the_class_layout() {
+        let two_longs = [ff(0, 8, ScalarKind::Int), ff(8, 8, ScalarKind::Int)];
+        for abi in [sysv(), aapcs()] {
+            let parts = register_parts(16, &two_longs, abi, false).expect("in registers");
+            assert_eq!(
+                parts
+                    .iter()
+                    .map(|p| (p.class, p.offset, p.width, p.fields.len()))
+                    .collect::<alloc::vec::Vec<_>>(),
+                [(RegClass::Integer, 0, 8, 1), (RegClass::Integer, 8, 8, 1)]
+            );
+        }
+        let two_doubles = [ff(0, 8, ScalarKind::F64), ff(8, 8, ScalarKind::F64)];
+        for abi in [sysv(), aapcs()] {
+            let parts = register_parts(16, &two_doubles, abi, true).expect("in registers");
+            assert!(
+                parts
+                    .iter()
+                    .all(|p| p.class == RegClass::Sse && p.fields.len() == 1)
+            );
+        }
+        let three_floats = [
+            ff(0, 4, ScalarKind::F32),
+            ff(4, 4, ScalarKind::F32),
+            ff(8, 4, ScalarKind::F32),
+        ];
+        let hfa = register_parts(12, &three_floats, aapcs(), false).expect("an HFA");
+        assert_eq!(
+            hfa.iter()
+                .map(|p| (p.offset, p.width))
+                .collect::<alloc::vec::Vec<_>>(),
+            [(0, 4), (4, 4), (8, 4)]
+        );
+        let sse = register_parts(12, &three_floats, sysv(), false).expect("two SSE eightbytes");
+        assert_eq!(
+            sse.iter()
+                .map(|p| (p.class, p.offset, p.width, p.fields.len()))
+                .collect::<alloc::vec::Vec<_>>(),
+            [(RegClass::Sse, 0, 8, 2), (RegClass::Sse, 8, 4, 1)]
+        );
+        let long_int = [ff(0, 8, ScalarKind::Int), ff(8, 4, ScalarKind::Int)];
+        let parts = register_parts(12, &long_int, sysv(), false).expect("in registers");
+        assert_eq!(
+            (parts[1].offset, parts[1].width, parts[1].fields.len()),
+            (8, 4, 1)
+        );
+        let two_ints = [ff(0, 4, ScalarKind::Int), ff(4, 4, ScalarKind::Int)];
+        for abi in [sysv(), aapcs(), win64()] {
+            let parts = register_parts(8, &two_ints, abi, false).expect("one register");
+            assert_eq!((parts.len(), parts[0].fields.len()), (1, 2));
+        }
+        assert!(register_parts(16, &[ff(0, 16, ScalarKind::Vector)], sysv(), false).is_none());
+        let big = [
+            ff(0, 8, ScalarKind::Int),
+            ff(8, 8, ScalarKind::Int),
+            ff(16, 8, ScalarKind::Int),
+        ];
+        assert!(register_parts(24, &big, sysv(), false).is_none());
+        assert!(register_parts(24, &big, aapcs(), true).is_none());
+        assert!(register_parts(12, &long_int, win64(), false).is_none());
     }
 }

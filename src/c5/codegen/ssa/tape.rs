@@ -154,8 +154,10 @@ impl At {
     }
 }
 
-/// One instruction to place at `at`. Operands are old value ids:
-/// [`insert`] maps them with the rest.
+/// One instruction to place at `at`. Operands are old value ids, which
+/// [`insert`] maps with the rest; one at or past the old tape's length
+/// names the insertion that far past it in the slice [`insert`] takes,
+/// so an insertion can read an earlier one.
 pub(crate) struct Insertion {
     pub at: At,
     pub inst: Inst,
@@ -195,6 +197,32 @@ impl Undo {
         func.extern_imm_data_refs = self.extern_imm_data_refs;
         func.extern_tls_refs = self.extern_tls_refs;
     }
+}
+
+/// Order `ins` for [`insert`]: ascending by [`At::order`], insertions at
+/// one place keeping their order, and an operand naming an insertion
+/// pointed at its new position. `n_old` is the tape's length. Returns
+/// each insertion's new position.
+pub(crate) fn sort(ins: &mut Vec<Insertion>, blocks: &[Block], n_old: usize) -> Vec<usize> {
+    let mut order: Vec<usize> = (0..ins.len()).collect();
+    order.sort_by_key(|&j| ins[j].at.order(blocks));
+    let mut new_pos = vec![0; ins.len()];
+    for (p, &j) in order.iter().enumerate() {
+        new_pos[j] = p;
+    }
+    let mut taken: Vec<Option<Insertion>> = ins.drain(..).map(Some).collect();
+    for (p, &j) in order.iter().enumerate() {
+        let mut i = taken[j].take().expect("each insertion once");
+        i.inst.for_each_operand_mut(|op| {
+            if *op != NO_VALUE && (*op as usize) >= n_old {
+                let q = new_pos[*op as usize - n_old];
+                debug_assert!(q < p, "an insertion reads a later one");
+                *op = (n_old + q) as ValueId;
+            }
+        });
+        ins.push(i);
+    }
+    new_pos
 }
 
 /// Place `ins` -- ascending by [`At::order`] -- into the tape and move
@@ -315,7 +343,10 @@ pub(crate) fn insert(func: &mut FunctionSsa, ins: &[Insertion]) -> (Rewrite, Und
         cmp32: core::mem::replace(*cmp32, new_cmp),
         ..undo
     };
-    renumber(&mut k, &remap);
+    // An operand past the old tape names an insertion.
+    let mut operands = remap.clone();
+    operands.extend_from_slice(&ids);
+    renumber(&mut k, &operands);
     (Rewrite { remap, ids }, undo)
 }
 
@@ -596,6 +627,43 @@ mod tests {
         assert!(matches!(f.insts[2], Inst::Imm(8)));
         assert!(matches!(f.insts[3], Inst::Imm(9)));
         assert!(matches!(f.blocks[3].terminator, Terminator::Return(5)));
+    }
+
+    /// A plan given out of tape order keeps each insertion's reads of an
+    /// earlier one once [`sort`] has ordered it: two at a block's end and
+    /// two into an empty block, each second one reading the first.
+    #[test]
+    fn a_sorted_plan_keeps_its_chained_operands() {
+        let mut f = func_with(
+            alloc::vec![Inst::Imm(1), Inst::Imm(2)],
+            alloc::vec![
+                block(0..1, Terminator::Jmp(1)),
+                block(1..1, Terminator::Jmp(2)),
+                block(1..2, Terminator::Return(1)),
+            ],
+        );
+        let put = |at, inst| Insertion {
+            at,
+            inst,
+            is_f32: false,
+        };
+        let mut ins = alloc::vec![
+            put(At::After(1), Inst::Imm(5)),
+            put(At::After(1), add(1, 2)),
+            put(At::Empty(1), Inst::Imm(7)),
+            put(At::Empty(1), add(0, 4)),
+        ];
+        assert_eq!(sort(&mut ins, &f.blocks, 2), alloc::vec![2, 3, 0, 1]);
+        assert!(matches!(ins[1].inst, Inst::Binop { lhs: 0, rhs: 2, .. }));
+        assert!(matches!(ins[3].inst, Inst::Binop { lhs: 1, rhs: 4, .. }));
+        let (rw, _undo) = insert(&mut f, &ins);
+        assert_eq!(rw.ids, alloc::vec![1, 2, 4, 5]);
+        assert_eq!(rw.remap, alloc::vec![0, 3]);
+        let ranges: Vec<_> = f.blocks.iter().map(|b| b.inst_range.clone()).collect();
+        assert_eq!(ranges, alloc::vec![0..1, 1..3, 3..6]);
+        assert!(matches!(f.insts[2], Inst::Binop { lhs: 0, rhs: 1, .. }));
+        assert!(matches!(f.insts[5], Inst::Binop { lhs: 3, rhs: 4, .. }));
+        assert!(matches!(f.blocks[2].terminator, Terminator::Return(3)));
     }
 
     fn add(lhs: ValueId, rhs: ValueId) -> Inst {

@@ -534,7 +534,7 @@ impl FunctionEmitter<'_, '_> {
         let mut vids: Vec<usize> = Vec::new();
         let mut homes: Vec<Place> = Vec::new();
         for (vid, inst) in func.insts.iter().enumerate() {
-            let Inst::ParamRef { idx, kind } = inst else {
+            let (Inst::ParamRef { kind, .. } | Inst::ParamPart { kind, .. }) = inst else {
                 continue;
             };
             let v = vid as super::super::ir::ValueId;
@@ -547,8 +547,7 @@ impl FunctionEmitter<'_, '_> {
             }
             // A stack-passed integer parameter has no register source and
             // stays on the per-inst home-cell path.
-            let Some(super::ArgPlacement::IntReg(src)) = param_plan.get(*idx as usize).copied()
-            else {
+            let Some((false, src)) = super::ssa::reg_alloc::incoming_reg(param_plan, inst) else {
                 continue;
             };
             moves.push(PlaceMove {
@@ -584,7 +583,7 @@ impl FunctionEmitter<'_, '_> {
         let mut fp_vids: Vec<usize> = Vec::new();
         let mut fp_homes: Vec<Place> = Vec::new();
         for (vid, inst) in func.insts.iter().enumerate() {
-            let Inst::ParamRef { idx, kind } = inst else {
+            let (Inst::ParamRef { kind, .. } | Inst::ParamPart { kind, .. }) = inst else {
                 continue;
             };
             if !matches!(kind, LoadKind::F32 | LoadKind::F64) {
@@ -598,8 +597,7 @@ impl FunctionEmitter<'_, '_> {
             if !matches!(dst, Place::FpReg(_) | Place::Spill(_)) {
                 continue;
             }
-            let Some(super::ArgPlacement::FpReg(src)) = param_plan.get(*idx as usize).copied()
-            else {
+            let Some((true, src)) = super::ssa::reg_alloc::incoming_reg(param_plan, inst) else {
                 continue;
             };
             fp_moves.push((Place::FpReg(src), dst, false));
@@ -904,17 +902,19 @@ impl FunctionEmitter<'_, '_> {
         match block.terminator {
             // A naked function's inline-asm body provides its own return.
             Terminator::Return(_) if func.is_naked => {}
-            Terminator::Return(v) => emit_return(
-                self.cx.code,
-                v,
-                alloc,
-                frame,
-                scratch,
-                func,
-                abi,
-                self.cx.asm_extern_call_sites,
-                self.cx.user_extern_data_refs,
-            ),
+            Terminator::Return(v) => {
+                return emit_return(
+                    self.cx.code,
+                    v,
+                    alloc,
+                    frame,
+                    scratch,
+                    func,
+                    abi,
+                    self.cx.asm_extern_call_sites,
+                    self.cx.user_extern_data_refs,
+                );
+            }
             Terminator::Jmp(t) | Terminator::FallThrough(t) => {
                 return self.branch_unless_next(block_idx, t);
             }
@@ -1978,16 +1978,16 @@ pub(super) fn emit_return(
     abi: super::Abi,
     extern_sites: &mut Vec<super::UserExternCallSite>,
     extern_data_refs: &mut Vec<super::UserExternDataRef>,
-) {
+) -> Emit {
     if let Some(ai) = func.ret_agg {
-        emit_aggregate_return(code, value, ai, alloc, frame, scratch, func, abi);
+        emit_aggregate_return(code, value, ai, alloc, frame, scratch, func, abi)?;
     } else if value != super::super::ir::NO_VALUE {
         emit_scalar_return(code, value, alloc, frame, scratch, func);
     }
     // A full leaf saved nothing.
     if is_full_leaf(frame, alloc) {
         emit(code, enc_ret(Reg(30)));
-        return;
+        return Ok(());
     }
     emit_canary_check(code, frame, abi, extern_sites, extern_data_refs);
     restore_dynamic_sp(code, frame);
@@ -2014,13 +2014,64 @@ pub(super) fn emit_return(
         emit(code, super::encode::AUTIASP);
     }
     emit(code, enc_ret(Reg(30)));
+    Ok(())
+}
+
+/// A return in registers: each part moves into its class's register
+/// (AAPCS64 6.9), the integer parts as one parallel copy through x16 /
+/// x17, the floating-point ones through d16 / d17, and a constant's bit
+/// pattern crossing banks between the two.
+fn emit_parts_return(
+    code: &mut Vec<u8>,
+    parts: &[super::super::ir::ValueId],
+    fp_mask: &super::super::ir::FpMask,
+    alloc: &Allocation,
+    frame: Frame,
+    scratch: &ScratchPool,
+) -> Emit {
+    let regs = super::ssa::reg_alloc::agg_part_regs(fp_mask, parts.len(), (&[0, 1], &[0, 1, 2, 3]));
+    let mut int_moves: Vec<PlaceMove> = Vec::new();
+    let mut fp_moves: Vec<(Place, Place, bool)> = Vec::new();
+    let mut cross: Vec<(u8, Reg)> = Vec::new();
+    for (&p, &(is_fp, r)) in parts.iter().zip(&regs) {
+        let src = place_of(alloc, p);
+        match (is_fp, src) {
+            (false, Place::IntReg(_) | Place::Spill(_)) => {
+                int_moves.push(PlaceMove::copy(src, Place::IntReg(r)));
+            }
+            (true, Place::FpReg(_) | Place::Spill(_)) => {
+                fp_moves.push((src, Place::FpReg(r), false))
+            }
+            (true, Place::IntReg(s)) => cross.push((r, Reg(s))),
+            _ => return fail("AggParts: part not in a register or spill slot of its bank"),
+        }
+    }
+    super::ssa::emit_common::schedule_fp_place_moves(
+        &super::ssa::emit_common::Aarch64Backend::default(),
+        code,
+        &mut fp_moves,
+        frame,
+        17,
+        16,
+    );
+    for (d, s) in cross {
+        emit(code, enc_fmov_x_to_d(d, s));
+    }
+    schedule_place_moves(
+        code,
+        &mut int_moves,
+        frame,
+        scratch.primary,
+        scratch.secondary,
+    )
 }
 
 /// Host-ABI aggregate return (AAPCS64 6.9). `value` is the struct's
-/// address. An HFA returns member k in v[k]; an aggregate of at most 16
-/// bytes returns its eightbytes in x0/x1; a larger one is copied through
-/// the caller-supplied x8 pointer (saved to `indirect_result_slot` by the
-/// prologue) and that pointer is returned in x0.
+/// address, or an `AggParts` of the registers' values. An HFA returns
+/// member k in v[k]; an aggregate of at most 16 bytes returns its
+/// eightbytes in x0/x1; a larger one is copied through the caller-supplied
+/// x8 pointer (saved to `indirect_result_slot` by the prologue) and that
+/// pointer is returned in x0.
 #[allow(clippy::too_many_arguments)]
 fn emit_aggregate_return(
     code: &mut Vec<u8>,
@@ -2031,7 +2082,10 @@ fn emit_aggregate_return(
     scratch: &ScratchPool,
     func: &FunctionSsa,
     abi: super::Abi,
-) {
+) -> Emit {
+    if let Some(Inst::AggParts { parts, fp_mask, .. }) = func.insts.get(value as usize) {
+        return emit_parts_return(code, parts, fp_mask, alloc, frame, scratch);
+    }
     let desc = &func.agg_descs[ai as usize];
     let size = desc.size;
     let saddr = materialize_int(code, place_of(alloc, value), scratch.primary, frame)
@@ -2053,7 +2107,7 @@ fn emit_aggregate_return(
                 scratch.secondary,
             );
         }
-        return;
+        return Ok(());
     }
     if size <= 16 {
         if size > 8 {
@@ -2078,7 +2132,7 @@ fn emit_aggregate_return(
             abi.strict_align,
             scratch.secondary,
         );
-        return;
+        return Ok(());
     }
     let dst = scratch.secondary;
     let _ = emit_local_addr_fp(
@@ -2105,6 +2159,7 @@ fn emit_aggregate_return(
         emit(code, enc_ldr_imm(dst, dst, 0));
     }
     emit_mov_reg(code, Reg(0), dst);
+    Ok(())
 }
 
 /// Move a scalar return value into its register: d0 for a floating-point

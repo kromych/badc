@@ -444,11 +444,11 @@ impl FnEmit<'_, '_> {
         let mut vids: Vec<usize> = Vec::new();
         let mut homes: Vec<Place> = Vec::new();
         for (vid, inst) in func.insts.iter().enumerate() {
-            let Inst::ParamRef { idx, kind } = inst else {
+            let (Inst::ParamRef { kind, .. } | Inst::ParamPart { kind, .. }) = inst else {
                 continue;
             };
-            // A dead `ParamRef` is skipped by the per-inst path; an FP home
-            // stays on that path too.
+            // A dead read is skipped by the per-inst path; an FP home stays
+            // on that path too.
             let v = vid as super::super::ir::ValueId;
             if super::ssa::emit_common::is_dead_pure(inst, v, alloc) {
                 continue;
@@ -460,8 +460,7 @@ impl FnEmit<'_, '_> {
             // The plan names the incoming register: an earlier FP parameter
             // does not shift the integer bank. A stack-passed parameter has
             // no register source and reads its home cell per inst.
-            let Some(super::ArgPlacement::IntReg(src)) = param_plan.get(*idx as usize).copied()
-            else {
+            let Some((false, src)) = super::ssa::reg_alloc::incoming_reg(param_plan, inst) else {
                 continue;
             };
             moves.push(PlaceMove {
@@ -749,8 +748,7 @@ impl FnEmit<'_, '_> {
                         abi,
                         self.out.cx.asm_extern_call_sites,
                         self.out.cx.user_extern_data_refs,
-                    );
-                    Ok(())
+                    )
                 }
             }
             Terminator::Jmp(t) | Terminator::FallThrough(t) => self.jump_unless_next(block_idx, t),
@@ -1437,7 +1435,17 @@ fn emit_return(
     abi: super::Abi,
     extern_sites: &mut Vec<super::UserExternCallSite>,
     extern_data_refs: &mut Vec<super::UserExternDataRef>,
-) {
+) -> Emit {
+    // A return in registers moves its parts ahead of the restores: rax, rdx
+    // and the xmm registers are not restored.
+    if let Some(Inst::AggParts { parts, fp_mask, .. }) = func.insts.get(value as usize) {
+        emit_parts_return(code, parts, fp_mask, alloc, frame)?;
+        emit_canary_check(code, frame, abi, extern_sites, extern_data_refs);
+        restore_dynamic_sp(code, frame);
+        restore_callee_saved(code, alloc);
+        emit_epilogue_ret(code, func, frame, alloc, abi, extern_sites);
+        return Ok(());
+    }
     // A return value in a callee-saved register stages through rcx
     // (caller-saved, never in `gpr_used`) across the restore; any other
     // source moves into rax after it. The integer mirror of an FP return
@@ -1504,7 +1512,7 @@ fn emit_return(
             off += width;
         }
         emit_epilogue_ret(code, func, frame, alloc, abi, extern_sites);
-        return;
+        return Ok(());
     }
     // An FP return rides xmm0 (C99 6.2.5p10); the declared type decides, since
     // an FP constant or an integer-classed producer leaves the bits in a GPR,
@@ -1580,6 +1588,53 @@ fn emit_return(
     // call site is FP-classed (`Inst::Call::fp_return`) and reads
     // xmm0, so no rax mirror is emitted.
     emit_epilogue_ret(code, func, frame, alloc, abi, extern_sites);
+    Ok(())
+}
+
+/// A return in registers (System V AMD64 3.2.3): each part moves into its
+/// class's register, the integer parts as one parallel copy through r10 /
+/// r11, the SSE parts through the FP scratch, and a constant's bit pattern
+/// crossing banks between the two.
+fn emit_parts_return(
+    code: &mut Vec<u8>,
+    parts: &[super::super::ir::ValueId],
+    fp_mask: &super::super::ir::FpMask,
+    alloc: &Allocation,
+    frame: Frame,
+) -> Emit {
+    let regs = super::ssa::reg_alloc::agg_part_regs(
+        fp_mask,
+        parts.len(),
+        (&[Reg::RAX.0, Reg::RDX.0], &[Reg::XMM0.0, Reg::XMM0.0 + 1]),
+    );
+    let mut int_moves: Vec<PlaceMove> = Vec::new();
+    let mut fp_moves: Vec<(Place, Place, bool)> = Vec::new();
+    let mut cross: Vec<(Reg, Reg)> = Vec::new();
+    for (&p, &(is_fp, r)) in parts.iter().zip(&regs) {
+        let src = place_of(alloc, p);
+        match (is_fp, src) {
+            (false, Place::IntReg(_) | Place::Spill(_)) => {
+                int_moves.push(PlaceMove::copy(src, Place::IntReg(r)));
+            }
+            (true, Place::FpReg(_) | Place::Spill(_)) => {
+                fp_moves.push((src, Place::FpReg(r), false))
+            }
+            (true, Place::IntReg(s)) => cross.push((Reg(r), Reg(s))),
+            _ => return fail("AggParts: part not in a register or spill slot of its bank"),
+        }
+    }
+    super::ssa::emit_common::schedule_fp_place_moves(
+        &super::ssa::emit_common::X64Backend,
+        code,
+        &mut fp_moves,
+        frame,
+        frame.fp_scratch[1],
+        frame.fp_scratch[0],
+    );
+    for (x, s) in cross {
+        emit_movq_xmm_r(code, x, s);
+    }
+    schedule_place_moves(code, &mut int_moves, frame, SCRATCH_R10, SCRATCH_R11)
 }
 
 /// Frame teardown and `ret` after the canary check and the callee-saved

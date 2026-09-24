@@ -423,6 +423,7 @@ fn every_fixture_compiles_standalone_for_linux() {
 /// copied from another table, so a wrong one fails instead of drifting.
 const LINKED_IMAGE_RUN_FIXTURES: &[(&str, i32)] = &[
     ("aggregate_copy_site_temps.c", 0),
+    ("aggregate_register_parts.c", 0),
     ("data_reloc_one_past_end.c", 10),
     ("constant_set_again_after_call.c", 0),
     ("static_init_cast_funcptr.c", 0),

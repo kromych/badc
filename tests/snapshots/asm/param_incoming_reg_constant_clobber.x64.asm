@@ -86,8 +86,7 @@ Disassembly of section .text:
                	cmpl	$0x5, %eax
                	jle	<addr>
                	leaq	<rip>, %rax
-               	movq	%rax, %rcx
-               	movq	(%rcx), %rax
+               	movzwq	(%rax), %rax
                	retq
                	cqto
                	idivq	%rcx

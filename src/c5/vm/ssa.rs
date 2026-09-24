@@ -1457,6 +1457,9 @@ fn run_inst<H: Host>(
         // rather than reading the generic address space.
         Inst::SegLoad { .. } => "SegLoad",
         Inst::SegStore { .. } => "SegStore",
+        // Emitted by the `-O` pipeline, which the interpreter's SSA skips.
+        Inst::ParamPart { .. } => "ParamPart",
+        Inst::AggParts { .. } => "AggParts",
         Inst::Phi { .. } => "Phi",
     };
     Err(C5Error::Runtime(format!("vm_ssa: {name} not implemented",)))

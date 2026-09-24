@@ -434,6 +434,11 @@ fn operand_files(func: &FunctionSsa, inst: &Inst, f: &mut impl FnMut(ValueId, bo
                 }
             }
         }
+        Inst::AggParts { parts, fp_mask, .. } => {
+            for (k, &p) in parts.iter().enumerate() {
+                f(p, fp_mask.has(k));
+            }
+        }
         _ => for_each_operand(inst, |v| f(v, false)),
     }
 }
@@ -1970,18 +1975,15 @@ fn verify_allocation(
                 _ => {}
             }
         }
-        let incoming_regs = param_incoming_regs(func, target);
+        let plan = param_incoming_plan(func, target);
         // (value index, home, incoming register) for each used integer
-        // ParamRef placed in a register or spill slot.
+        // `ParamRef` / `ParamPart` placed in a register or spill slot.
         let mut params: Vec<(usize, Place, u8)> = Vec::new();
         for (vid, inst) in func.insts.iter().enumerate() {
-            let Inst::ParamRef { idx, .. } = inst else {
-                continue;
-            };
             if !used[vid] || !covered(vid) {
                 continue;
             }
-            let Some(Some((false, incoming))) = incoming_regs.get(*idx as usize).copied() else {
+            let Some((false, incoming)) = incoming_reg(&plan, inst) else {
                 continue;
             };
             let home = places.get(vid).copied().unwrap_or(Place::None);
@@ -2592,12 +2594,13 @@ fn result_kind(inst: &Inst) -> ResultKind {
         // A parameter seeded with an FP load kind arrives in an FP
         // argument register; classify it accordingly so the seed and
         // its consumers share the FP register file.
-        ParamRef { kind, .. } => match kind {
+        ParamRef { kind, .. } | ParamPart { kind, .. } => match kind {
             LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128 => {
                 ResultKind::Fp
             }
             _ => ResultKind::Int,
         },
+        AggParts { .. } => ResultKind::None,
         Phi { kind, .. } => match kind {
             LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128 => {
                 ResultKind::Fp
@@ -2730,7 +2733,14 @@ fn populate_call_arg_hints(
     hints: &mut [Option<u8>],
 ) {
     use crate::c5::codegen::{ArgPlacement, CallConv};
-    let incoming = param_incoming_regs(func, target);
+    let incoming: Vec<Option<(bool, u8)>> = param_incoming_plan(func, target)
+        .iter()
+        .map(|p| match *p {
+            ArgPlacement::IntReg(r) => Some((false, r)),
+            ArgPlacement::FpReg(r) => Some((true, r)),
+            _ => None,
+        })
+        .collect();
     for (pc, inst) in func.insts.iter().enumerate() {
         // An import's variadic count is unknown here; its arguments plan as fixed.
         let (args, fixed, fp_arg_mask, arg_aggs, conv) = match inst {
@@ -2884,19 +2894,16 @@ fn populate_return_hints(
     // Hint the value feeding `Terminator::Return` to the ABI return
     // register so the exit move drops out. Two cases are honoured:
     //
-    //   * Leaf functions (no `Inst::Call*` anywhere). Empirically
-    //     safe -- no call can clobber the caller-saved return register.
+    //   * Leaf functions (no call site, `is_call_site`, anywhere).
+    //     Empirically safe -- no call can clobber the caller-saved
+    //     return register.
     //   * Single-block functions where the Return value's def has
     //     no call between it and the terminator. Straight-line
     //     control flow means there is no back-edge / phi-merge gap
     //     that the broader per-value relaxation otherwise surfaces
     //     as a regression, absent in straight-line shapes.
-    let has_call = func.insts.iter().any(|inst| {
-        matches!(
-            inst,
-            Inst::Call { .. } | Inst::CallIndirect { .. } | Inst::CallExt { .. }
-        )
-    });
+    let call = |inst: &Inst| is_call_site(inst, tls_addr_is_call(target));
+    let has_call = func.insts.iter().any(call);
     let single_block = func.blocks.len() == 1;
     if has_call && !single_block {
         return;
@@ -2917,38 +2924,42 @@ fn populate_return_hints(
     }
 
     for block in &func.blocks {
-        if let Terminator::Return(v) = block.terminator
-            && v != NO_VALUE
-            && (v as usize) < func.insts.len()
-        {
-            if has_call {
-                // Single-block branch: require v's def to live in
-                // this block AND no call after the def. Without
-                // these guards the hint clobbers v across the call.
-                let (start, end) = (block.inst_range.start, block.inst_range.end);
-                if v < start || v >= end {
-                    continue;
-                }
-                let intervening_call = (v + 1..end).any(|pc| {
-                    matches!(
-                        func.insts[pc as usize],
-                        Inst::Call { .. } | Inst::CallIndirect { .. } | Inst::CallExt { .. }
-                    )
-                });
-                if intervening_call {
-                    continue;
+        let Terminator::Return(v) = block.terminator else {
+            continue;
+        };
+        if v == NO_VALUE || (v as usize) >= func.insts.len() {
+            continue;
+        }
+        // Single-block branch: require the value's def to live in this
+        // block AND no call after the def. Without these guards the hint
+        // clobbers the value across the call.
+        let (start, end) = (block.inst_range.start, block.inst_range.end);
+        let hintable = |v: ValueId| {
+            !has_call
+                || (v >= start && v < end && !(v + 1..end).any(|pc| call(&func.insts[pc as usize])))
+        };
+        // A return in registers takes each part in its class's register.
+        if let Inst::AggParts { parts, fp_mask, .. } = &func.insts[v as usize] {
+            let regs = agg_part_regs(fp_mask, parts.len(), agg_return_regs(target));
+            for (&p, &(_, r)) in parts.iter().zip(&regs) {
+                if hintable(p) {
+                    try_set(hints, p, r);
                 }
             }
-            let kind = if fp_const[v as usize] {
-                ResultKind::Fp
-            } else {
-                result_kind(&func.insts[v as usize])
-            };
-            match kind {
-                ResultKind::Int => try_set(hints, v, ret_int),
-                ResultKind::Fp => try_set(hints, v, ret_fp),
-                ResultKind::None => {}
-            }
+            continue;
+        }
+        if !hintable(v) {
+            continue;
+        }
+        let kind = if fp_const[v as usize] {
+            ResultKind::Fp
+        } else {
+            result_kind(&func.insts[v as usize])
+        };
+        match kind {
+            ResultKind::Int => try_set(hints, v, ret_int),
+            ResultKind::Fp => try_set(hints, v, ret_fp),
+            ResultKind::None => {}
         }
     }
 }
@@ -2977,16 +2988,67 @@ fn fp_arg_count(inst: &Inst) -> usize {
     }
 }
 
-/// Each parameter's incoming `(is_fp, reg)` from the placement the prologue
-/// and every call site share; `None` on the stack or for an aggregate.
-fn param_incoming_regs(func: &FunctionSsa, target: Target) -> Vec<Option<(bool, u8)>> {
+/// The parameter placements the prologue and every call site share.
+fn param_incoming_plan(
+    func: &FunctionSsa,
+    target: Target,
+) -> Vec<crate::c5::codegen::ArgPlacement> {
     let abi = target.abi_row(func.conv).abi();
     super::emit_common::param_placements_common(func, abi)
-        .iter()
-        .map(|p| match *p {
-            crate::c5::codegen::ArgPlacement::IntReg(r) => Some((false, r)),
-            crate::c5::codegen::ArgPlacement::FpReg(r) => Some((true, r)),
+}
+
+/// The argument register `inst` reads at entry, as `(is_fp, reg)`: a
+/// `ParamRef`'s parameter register or a `ParamPart`'s part register.
+/// `None` for anything else, a stack-passed parameter included.
+pub(crate) fn incoming_reg(
+    plan: &[crate::c5::codegen::ArgPlacement],
+    inst: &Inst,
+) -> Option<(bool, u8)> {
+    use crate::c5::codegen::ArgPlacement as P;
+    match inst {
+        Inst::ParamRef { idx, .. } => match plan.get(*idx as usize)? {
+            P::IntReg(r) => Some((false, *r)),
+            P::FpReg(r) => Some((true, *r)),
             _ => None,
+        },
+        Inst::ParamPart { idx, part, .. } => match plan.get(*idx as usize)? {
+            P::StructRegs { regs, n, .. } if *part < *n => {
+                let c = regs[*part as usize];
+                Some((c.is_fp, c.reg))
+            }
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+/// The registers a return in registers delivers its parts in: the integer
+/// ones and the floating-point ones, each in part order.
+pub(crate) fn agg_return_regs(target: Target) -> (&'static [u8], &'static [u8]) {
+    if target.is_x86_64() {
+        (&[X86_RAX, X86_RDX], &[0, 1])
+    } else {
+        (&[0, 1], &[0, 1, 2, 3])
+    }
+}
+
+/// Per part of an `AggParts` of `n` parts, `(is_fp, reg)` over the
+/// integer and floating-point return registers ([`agg_return_regs`]).
+pub(crate) fn agg_part_regs(
+    fp_mask: &super::super::ir::FpMask,
+    n: usize,
+    (ints, fps): (&[u8], &[u8]),
+) -> Vec<(bool, u8)> {
+    let (mut int_i, mut fp_i) = (0usize, 0usize);
+    (0..n)
+        .map(|k| {
+            if fp_mask.has(k) {
+                fp_i += 1;
+                (true, fps[(fp_i - 1).min(fps.len() - 1)])
+            } else {
+                int_i += 1;
+                (false, ints[(int_i - 1).min(ints.len() - 1)])
+            }
         })
         .collect()
 }
@@ -3015,7 +3077,7 @@ fn compute_param_incoming_forbid(
     if func.is_variadic {
         return forbid;
     }
-    let incoming = param_incoming_regs(func, target);
+    let plan = param_incoming_plan(func, target);
     // Only protect parameters that are read: an unused `ParamRef` is not
     // materialized, so its incoming register need not survive.
     let mut used = alloc::vec![false; func.insts.len()];
@@ -3042,17 +3104,14 @@ fn compute_param_incoming_forbid(
             _ => {}
         }
     }
-    // (value id, is_fp, incoming register) for each used ParamRef, in
-    // value-id (materialization) order.
+    // (value id, is_fp, incoming register) for each used `ParamRef` /
+    // `ParamPart`, in value-id (materialization) order.
     let mut params: Vec<(usize, bool, u8)> = Vec::new();
     for (vid, inst) in func.insts.iter().enumerate() {
-        let Inst::ParamRef { idx, .. } = inst else {
-            continue;
-        };
         if !used[vid] {
             continue;
         }
-        if let Some(&Some((is_fp, r))) = incoming.get(*idx as usize) {
+        if let Some((is_fp, r)) = incoming_reg(&plan, inst) {
             params.push((vid, is_fp, r));
         }
     }
@@ -3095,10 +3154,9 @@ fn populate_param_ref_hints(func: &FunctionSsa, target: Target, hints: &mut [Opt
     // registers are caller-saved and free at entry, so the hint is
     // honoured whenever the parameter is not forced elsewhere (live
     // across a call, or competing for the same register).
-    let incoming = param_incoming_regs(func, target);
+    let plan = param_incoming_plan(func, target);
     for (idx, inst) in func.insts.iter().enumerate() {
-        if let Inst::ParamRef { idx: i, .. } = inst
-            && let Some(&Some((_, r))) = incoming.get(*i as usize)
+        if let Some((_, r)) = incoming_reg(&plan, inst)
             && idx < hints.len()
             && hints[idx].is_none()
         {
@@ -5696,6 +5754,79 @@ int main(void) { return 0; }
                 "{target:?}: {:?}",
                 a.places
             );
+        }
+    }
+
+    /// The parts of a return in registers are hinted to their class's
+    /// registers on both targets, and a `ParamPart` to its incoming
+    /// register, so a function passing a pair straight through moves
+    /// nothing.
+    #[test]
+    fn register_parts_take_their_abi_registers() {
+        use crate::c5::ir::FpMask;
+        let mut fp_mask = FpMask::EMPTY;
+        fp_mask.set(1);
+        assert_eq!(
+            agg_part_regs(&fp_mask, 2, agg_return_regs(Target::LinuxX64)),
+            alloc::vec![(false, X86_RAX), (true, 0)]
+        );
+        assert_eq!(
+            agg_part_regs(&FpMask::EMPTY, 2, agg_return_regs(Target::LinuxAarch64)),
+            alloc::vec![(false, 0), (false, 1)]
+        );
+        let src = "struct P { long a, b; }; struct P id(struct P v) { return v; }\n\
+            struct P swap(struct P v) { struct P r; r.a = v.b; r.b = v.a; return r; }";
+        for target in [Target::LinuxAarch64, Target::LinuxX64] {
+            let program = crate::Compiler::with_target(
+                alloc::format!("{src} int main(void){{ return 0; }}"),
+                target,
+            )
+            .compile()
+            .expect("compile");
+            let mut funcs =
+                crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, true, true)
+                    .expect("ssa");
+            super::super::super::passes::agg_parts::run(&mut funcs, target);
+            let ints = agg_return_regs(target).0;
+            let args = target.abi().int_arg_regs;
+            for (name, straight) in [("id", true), ("swap", false)] {
+                let f = funcs.iter().find(|f| f.name == name).expect(name);
+                let a = with_pool_size_override(usize::MAX, usize::MAX, || allocate(f, target));
+                let parts: Vec<ValueId> = f
+                    .insts
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, i)| matches!(i, Inst::ParamPart { .. }))
+                    .map(|(v, _)| v as ValueId)
+                    .collect();
+                assert_eq!(parts.len(), 2, "{target:?} {name}");
+                for (k, &p) in parts.iter().enumerate() {
+                    let plan = param_incoming_plan(f, target);
+                    let reg = incoming_reg(&plan, &f.insts[p as usize]).map(|r| r.1);
+                    assert_eq!(reg, Some(args[k]), "{target:?} {name}: part {k}");
+                    assert_eq!(a.hints[p as usize], reg, "{target:?} {name}: part {k} hint");
+                    if straight {
+                        assert_eq!(
+                            a.places[p as usize],
+                            Place::IntReg(args[k]),
+                            "{target:?} {name}"
+                        );
+                    }
+                }
+                let Terminator::Return(r) = f.blocks[0].terminator else {
+                    panic!("{target:?} {name}")
+                };
+                let Inst::AggParts { parts: ret, .. } = &f.insts[r as usize] else {
+                    panic!("{target:?} {name}")
+                };
+                for (k, &p) in ret.iter().enumerate() {
+                    assert_eq!(
+                        a.hints[p as usize],
+                        Some(ints[k]),
+                        "{target:?} {name}: ret {k}"
+                    );
+                }
+            }
         }
     }
 

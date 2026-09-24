@@ -16,120 +16,75 @@ Disassembly of section .text:
 <sum16p>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x100
-               	stur	x0, [x29, #-0x10]
-               	stur	x1, [x29, #-0x8]
-               	stur	x2, [x29, #-0x20]
-               	stur	x3, [x29, #-0x18]
-               	stur	x4, [x29, #-0x30]
-               	stur	x5, [x29, #-0x28]
-               	stur	x6, [x29, #-0x40]
-               	stur	x7, [x29, #-0x38]
-               	sub	x16, x29, #0x50
+               	sub	sp, sp, #0xc0
+               	sub	x16, x29, #0xc0
                	ldr	x17, [x29, #0x10]
                	str	x17, [x16]
                	ldr	x17, [x29, #0x18]
                	str	x17, [x16, #0x8]
-               	sub	x16, x29, #0x60
+               	sub	x16, x29, #0xb0
                	ldr	x17, [x29, #0x20]
                	str	x17, [x16]
                	ldr	x17, [x29, #0x28]
                	str	x17, [x16, #0x8]
-               	sub	x16, x29, #0x70
+               	sub	x16, x29, #0xa0
                	ldr	x17, [x29, #0x30]
                	str	x17, [x16]
                	ldr	x17, [x29, #0x38]
                	str	x17, [x16, #0x8]
-               	sub	x16, x29, #0x80
+               	sub	x16, x29, #0x90
                	ldr	x17, [x29, #0x40]
                	str	x17, [x16]
                	ldr	x17, [x29, #0x48]
                	str	x17, [x16, #0x8]
-               	sub	x16, x29, #0x90
+               	sub	x16, x29, #0x80
                	ldr	x17, [x29, #0x50]
                	str	x17, [x16]
                	ldr	x17, [x29, #0x58]
                	str	x17, [x16, #0x8]
-               	sub	x16, x29, #0xa0
+               	sub	x16, x29, #0x70
                	ldr	x17, [x29, #0x60]
                	str	x17, [x16]
                	ldr	x17, [x29, #0x68]
                	str	x17, [x16, #0x8]
-               	sub	x16, x29, #0xb0
+               	sub	x16, x29, #0x60
                	ldr	x17, [x29, #0x70]
                	str	x17, [x16]
                	ldr	x17, [x29, #0x78]
                	str	x17, [x16, #0x8]
-               	sub	x16, x29, #0xc0
+               	sub	x16, x29, #0x50
                	ldr	x17, [x29, #0x80]
                	str	x17, [x16]
                	ldr	x17, [x29, #0x88]
                	str	x17, [x16, #0x8]
-               	sub	x16, x29, #0xd0
+               	sub	x16, x29, #0x40
                	ldr	x17, [x29, #0x90]
                	str	x17, [x16]
                	ldr	x17, [x29, #0x98]
                	str	x17, [x16, #0x8]
-               	sub	x16, x29, #0xe0
+               	sub	x16, x29, #0x30
                	ldr	x17, [x29, #0xa0]
                	str	x17, [x16]
                	ldr	x17, [x29, #0xa8]
                	str	x17, [x16, #0x8]
-               	sub	x16, x29, #0xf0
+               	sub	x16, x29, #0x20
                	ldr	x17, [x29, #0xb0]
                	str	x17, [x16]
                	ldr	x17, [x29, #0xb8]
                	str	x17, [x16, #0x8]
-               	sub	x16, x29, #0x100
+               	sub	x16, x29, #0x10
                	ldr	x17, [x29, #0xc0]
                	str	x17, [x16]
                	ldr	x17, [x29, #0xc8]
                	str	x17, [x16, #0x8]
-               	sub	x0, x29, #0x10
-               	ldr	x1, [x0]
-               	ldr	x0, [x0, #0x8]
-               	add	x1, x1, x0
-               	sub	x0, x29, #0x20
-               	ldr	x2, [x0]
-               	add	x1, x1, x2
-               	ldr	x0, [x0, #0x8]
-               	add	x1, x1, x0
-               	sub	x0, x29, #0x30
-               	ldr	x2, [x0]
-               	add	x1, x1, x2
-               	ldr	x0, [x0, #0x8]
-               	add	x1, x1, x0
-               	sub	x0, x29, #0x40
-               	ldr	x2, [x0]
-               	add	x1, x1, x2
-               	ldr	x0, [x0, #0x8]
-               	add	x1, x1, x0
-               	sub	x0, x29, #0x50
-               	ldr	x2, [x0]
-               	add	x1, x1, x2
-               	ldr	x0, [x0, #0x8]
-               	add	x1, x1, x0
-               	sub	x0, x29, #0x60
-               	ldr	x2, [x0]
-               	add	x1, x1, x2
-               	ldr	x0, [x0, #0x8]
-               	add	x1, x1, x0
-               	sub	x0, x29, #0x70
-               	ldr	x2, [x0]
-               	add	x1, x1, x2
-               	ldr	x0, [x0, #0x8]
-               	add	x1, x1, x0
-               	sub	x0, x29, #0x80
-               	ldr	x2, [x0]
-               	add	x1, x1, x2
-               	ldr	x0, [x0, #0x8]
-               	add	x1, x1, x0
-               	sub	x0, x29, #0x90
-               	ldr	x2, [x0]
-               	add	x1, x1, x2
-               	ldr	x0, [x0, #0x8]
-               	add	x1, x1, x0
-               	sub	x0, x29, #0xa0
+               	add	x0, x0, x1
+               	add	x0, x0, x2
+               	add	x0, x0, x3
+               	add	x0, x0, x4
+               	add	x0, x0, x5
+               	add	x0, x0, x6
+               	add	x1, x0, x7
+               	sub	x0, x29, #0xc0
                	ldr	x2, [x0]
                	add	x1, x1, x2
                	ldr	x0, [x0, #0x8]
@@ -139,32 +94,57 @@ Disassembly of section .text:
                	add	x1, x1, x2
                	ldr	x0, [x0, #0x8]
                	add	x1, x1, x0
-               	sub	x0, x29, #0xc0
+               	sub	x0, x29, #0xa0
                	ldr	x2, [x0]
                	add	x1, x1, x2
                	ldr	x0, [x0, #0x8]
                	add	x1, x1, x0
-               	sub	x0, x29, #0xd0
+               	sub	x0, x29, #0x90
                	ldr	x2, [x0]
                	add	x1, x1, x2
                	ldr	x0, [x0, #0x8]
                	add	x1, x1, x0
-               	sub	x0, x29, #0xe0
+               	sub	x0, x29, #0x80
                	ldr	x2, [x0]
                	add	x1, x1, x2
                	ldr	x0, [x0, #0x8]
                	add	x1, x1, x0
-               	sub	x0, x29, #0xf0
+               	sub	x0, x29, #0x70
                	ldr	x2, [x0]
                	add	x1, x1, x2
                	ldr	x0, [x0, #0x8]
                	add	x1, x1, x0
-               	sub	x0, x29, #0x100
+               	sub	x0, x29, #0x60
+               	ldr	x2, [x0]
+               	add	x1, x1, x2
+               	ldr	x0, [x0, #0x8]
+               	add	x1, x1, x0
+               	sub	x0, x29, #0x50
+               	ldr	x2, [x0]
+               	add	x1, x1, x2
+               	ldr	x0, [x0, #0x8]
+               	add	x1, x1, x0
+               	sub	x0, x29, #0x40
+               	ldr	x2, [x0]
+               	add	x1, x1, x2
+               	ldr	x0, [x0, #0x8]
+               	add	x1, x1, x0
+               	sub	x0, x29, #0x30
+               	ldr	x2, [x0]
+               	add	x1, x1, x2
+               	ldr	x0, [x0, #0x8]
+               	add	x1, x1, x0
+               	sub	x0, x29, #0x20
+               	ldr	x2, [x0]
+               	add	x1, x1, x2
+               	ldr	x0, [x0, #0x8]
+               	add	x1, x1, x0
+               	sub	x0, x29, #0x10
                	ldr	x2, [x0]
                	add	x1, x1, x2
                	ldr	x0, [x0, #0x8]
                	add	x0, x1, x0
-               	add	sp, sp, #0x100
+               	add	sp, sp, #0xc0
                	ldp	x29, x30, [sp], #0x10
                	ret
 

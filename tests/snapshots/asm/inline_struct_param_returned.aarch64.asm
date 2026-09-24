@@ -14,43 +14,12 @@ Disassembly of section .text:
                	brk	#0x1
 
 <id_word>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	stur	x0, [x29, #-0x8]
-               	sub	x0, x29, #0x8
-               	mov	x16, x0
-               	ldr	x0, [x16]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <id_pair>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	stur	x0, [x29, #-0x10]
-               	stur	x1, [x29, #-0x8]
-               	sub	x0, x29, #0x10
-               	mov	x16, x0
-               	ldr	x1, [x16, #0x8]
-               	ldr	x0, [x16]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <id_pair_hint>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	stur	x0, [x29, #-0x10]
-               	stur	x1, [x29, #-0x8]
-               	sub	x0, x29, #0x10
-               	mov	x16, x0
-               	ldr	x1, [x16, #0x8]
-               	ldr	x0, [x16]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <use_word>:

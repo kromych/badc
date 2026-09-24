@@ -47,19 +47,8 @@ Disassembly of section .text:
                	retq
 
 <by_value>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%rdi, -0x10(%rbp)
-               	movq	%rsi, -0x8(%rbp)
-               	leaq	-0x10(%rbp), %rax
-               	movq	(%rax), %rcx
-               	incq	%rcx
-               	movq	%rcx, (%rax)
-               	movq	%rax, %rcx
-               	movq	(%rcx), %rax
-               	movq	0x8(%rcx), %rdx
-               	leave
+               	movq	%rsi, %rdx
+               	leaq	0x1(%rdi), %rax
                	retq
 
 <nested>:
@@ -203,17 +192,8 @@ Disassembly of section .text:
                	retq
 
 <take>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%rdi, -0x10(%rbp)
-               	movq	%rsi, -0x8(%rbp)
-               	leaq	-0x10(%rbp), %rax
-               	movq	(%rax), %rcx
-               	leaq	(%rcx,%rcx,2), %rcx
-               	movq	0x8(%rax), %rax
-               	addq	%rcx, %rax
-               	leave
+               	leaq	(%rdi,%rdi,2), %rax
+               	addq	%rsi, %rax
                	retq
 
 <by_value_arg>:
@@ -235,18 +215,8 @@ Disassembly of section .text:
                	retq
 
 <make_pair>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	leaq	-0x10(%rbp), %rax
-               	xorps	%xmm14, %xmm14
-               	movups	%xmm14, (%rax)
-               	movq	%rdi, (%rax)
-               	movq	$0x9, 0x8(%rax)
-               	movq	%rax, %rcx
-               	movq	(%rcx), %rax
-               	movq	0x8(%rcx), %rdx
-               	leave
+               	movq	%rdi, %rax
+               	movl	$0x9, %edx
                	retq
 
 <make_large>:

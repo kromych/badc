@@ -1,12 +1,15 @@
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=take_wrap
-fn ent_pc=0 n_params=1 variadic=false locals=1
+fn ent_pc=0 n_params=1 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
-    v0   AllocaInit(0)                                    -> -
-    v1   LocalAddr(-1)                                    -> x0
-    v2   LoadLocal { off=-1, kind=U32 }                   -> x0
-    terminator Return(v2)   (exit_acc=v2)
+    v0   ParamPart(0, part=0, kind=I64)                   -> x0
+    v1   Imm(0)                                           -> x1
+    v2   Imm(0)                                           -> x1
+    v3   AllocaInit(0)                                    -> -
+    v4   Imm(0)                                           -> x1
+    v5   BinopI { op=and, lhs=v0, rhs_imm=4294967295 }    -> x1
+    terminator Return(v0)   (exit_acc=v0)
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=add2
 fn ent_pc=1 n_params=2 variadic=false locals=0

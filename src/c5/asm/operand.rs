@@ -628,7 +628,8 @@ pub(crate) fn asm_operand_form(func: &FunctionSsa, arg: u32) -> alloc::string::S
             Some(Inst::InlineAsm { .. }) => "an asm statement",
             Some(Inst::AllocaInit(_)) => "an alloca marker",
             Some(Inst::LifetimeEnd(_)) => "an end-of-lifetime marker",
-            Some(Inst::ParamRef { .. }) => "a function parameter",
+            Some(Inst::ParamRef { .. } | Inst::ParamPart { .. }) => "a function parameter",
+            Some(Inst::AggParts { .. }) => "a returned aggregate",
             Some(Inst::Phi { incoming, .. }) => {
                 return alloc::format!("a join of {} control-flow paths", incoming.len());
             }

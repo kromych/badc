@@ -508,6 +508,23 @@ pub(crate) enum Inst {
     /// rewrite then collapse to a plain copy when their kind
     /// matches the ParamRef's kind.
     ParamRef { idx: u32, kind: LoadKind },
+    /// Register `part` of aggregate parameter `idx`, which the host ABI
+    /// passes in registers: the k-th eightbyte or floating-point member
+    /// of `agg_descs[param_aggs[idx]]`, as a value of `kind`'s bank
+    /// (`abi_classify::register_parts`). `passes::agg_parts` emits one
+    /// per register for a parameter it takes out of its frame object,
+    /// whose `param_local_slots` entry is then 0.
+    ParamPart { idx: u32, part: u8, kind: LoadKind },
+    /// The aggregate `agg_descs[desc]` as the values of its register
+    /// parts in class order, `fp_mask` naming the floating-point ones,
+    /// for a `Terminator::Return` in registers. Produces no value. The
+    /// last instruction of its block, so the parts are still in their
+    /// places when the return moves them.
+    AggParts {
+        desc: u32,
+        parts: Vec<ValueId>,
+        fp_mask: FpMask,
+    },
     /// SSA phi: at a join block where a promoted slot has more
     /// than one reaching definition, mem2reg synthesises one of
     /// these per slot to merge the predecessors' incoming
@@ -575,6 +592,7 @@ impl Inst {
                 | Inst::Bswap { .. }
                 | Inst::BitCount { .. }
                 | Inst::Copy { .. }
+                | Inst::ParamPart { .. }
         )
     }
 
@@ -631,6 +649,8 @@ impl Inst {
             Inst::AllocaInit(_) => "AllocaInit",
             Inst::LifetimeEnd(_) => "LifetimeEnd",
             Inst::ParamRef { .. } => "ParamRef",
+            Inst::ParamPart { .. } => "ParamPart",
+            Inst::AggParts { .. } => "AggParts",
             Inst::Phi { .. } => "Phi",
         }
     }
@@ -655,7 +675,9 @@ impl Inst {
             | Inst::TailExt(_)
             | Inst::AllocaInit(_)
             | Inst::LifetimeEnd(_)
-            | Inst::ParamRef { .. } => {}
+            | Inst::ParamRef { .. }
+            | Inst::ParamPart { .. } => {}
+            Inst::AggParts { parts, .. } => parts.iter().for_each(|&v| f(v)),
             Inst::Load { addr, .. } => f(*addr),
             Inst::Store { addr, value, .. } => {
                 f(*addr);
@@ -759,7 +781,9 @@ impl Inst {
             | Inst::TailExt(_)
             | Inst::AllocaInit(_)
             | Inst::LifetimeEnd(_)
-            | Inst::ParamRef { .. } => {}
+            | Inst::ParamRef { .. }
+            | Inst::ParamPart { .. } => {}
+            Inst::AggParts { parts, .. } => parts.iter_mut().for_each(f),
             Inst::Load { addr, .. } => f(addr),
             Inst::Store { addr, value, .. } => {
                 f(addr);
@@ -1826,8 +1850,9 @@ pub(crate) struct FunctionSsa {
     /// storage, or 0 when the parameter has no dedicated local.
     /// A register-passed aggregate parameter has no SSA entry-copy;
     /// the callee prologue (native) and `run_func` (VM) write the
-    /// argument's bytes directly into this slot. Parallel to the
-    /// declared parameter list; empty for SSA built outside the
+    /// argument's bytes directly into this slot, until `passes::agg_parts`
+    /// puts the transfer in the tape and zeroes the entry. Parallel to
+    /// the declared parameter list; empty for SSA built outside the
     /// walker.
     pub param_local_slots: Vec<i64>,
     /// `Some(i)` when this function returns the aggregate
@@ -2094,6 +2119,8 @@ impl crate::c5::layout::DataOffsets for Inst {
             | Inst::AllocaInit { .. }
             | Inst::LifetimeEnd { .. }
             | Inst::ParamRef { .. }
+            | Inst::ParamPart { .. }
+            | Inst::AggParts { .. }
             | Inst::Phi { .. } => {}
         }
     }

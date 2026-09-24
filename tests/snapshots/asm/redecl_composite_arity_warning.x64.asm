@@ -26,12 +26,7 @@ Disassembly of section .text:
                	int3
 
 <take_wrap>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%rdi, -0x8(%rbp)
-               	movl	-0x8(%rbp), %eax
-               	leave
+               	movq	%rdi, %rax
                	retq
 
 <add2>:

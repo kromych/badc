@@ -34,27 +34,11 @@ Disassembly of section .text:
                	retq
 
 <mk1>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	leaq	-0x8(%rbp), %rax
-               	leaq	<rip>, %rcx
-               	movq	%rcx, (%rax)
-               	movq	%rax, %rcx
-               	movq	(%rcx), %rax
-               	leave
+               	leaq	<rip>, %rax
                	retq
 
 <mk2>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	leaq	-0x8(%rbp), %rax
-               	leaq	<rip>, %rcx
-               	movq	%rcx, (%rax)
-               	movq	%rax, %rcx
-               	movq	(%rcx), %rax
-               	leave
+               	leaq	<rip>, %rax
                	retq
 
 <pick>:

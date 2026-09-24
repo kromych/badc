@@ -36,20 +36,7 @@ Disassembly of section .text:
                	ret
 
 <by_value>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	stur	x0, [x29, #-0x10]
-               	stur	x1, [x29, #-0x8]
-               	sub	x0, x29, #0x10
-               	ldr	x1, [x0]
-               	add	x1, x1, #0x1
-               	str	x1, [x0]
-               	mov	x16, x0
-               	ldr	x1, [x16, #0x8]
-               	ldr	x0, [x16]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	add	x0, x0, #0x1
                	ret
 
 <nested>:
@@ -193,19 +180,9 @@ Disassembly of section .text:
                	ret
 
 <take>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	stur	x0, [x29, #-0x10]
-               	stur	x1, [x29, #-0x8]
-               	sub	x0, x29, #0x10
-               	ldr	x1, [x0]
                	mov	x17, #0x3               // =3
-               	mul	x1, x1, x17
-               	ldr	x0, [x0, #0x8]
-               	add	x0, x1, x0
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	mul	x0, x0, x17
+               	add	x0, x0, x1
                	ret
 
 <by_value_arg>:
@@ -228,20 +205,7 @@ Disassembly of section .text:
                	ret
 
 <make_pair>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	mov	x1, x0
-               	sub	x0, x29, #0x10
-               	stp	xzr, xzr, [x0]
-               	str	x1, [x0]
                	mov	x1, #0x9                // =9
-               	str	x1, [x0, #0x8]
-               	mov	x16, x0
-               	ldr	x1, [x16, #0x8]
-               	ldr	x0, [x16]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <make_large>:

@@ -123,7 +123,12 @@ fn compute_high_observed_through(func: &FunctionSsa, collapsing: &[bool]) -> Vec
             | Inst::AllocaInit(_)
             | Inst::LifetimeEnd(_)
             | Inst::ParamRef { .. }
+            | Inst::ParamPart { .. }
             | Inst::Extend { .. } => {}
+            // A part is returned whole in its register.
+            Inst::AggParts { parts, .. } => {
+                parts.iter().for_each(|&p| observe(&mut hi, &mut work, p))
+            }
             Inst::Copy { value, .. } => observe(&mut hi, &mut work, *value),
             Inst::Load { addr, .. } => observe(&mut hi, &mut work, *addr),
             // An extending access reads the low word of its index.

@@ -26,16 +26,8 @@ Disassembly of section .text:
                	int3
 
 <mkesc>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	$0x2a, (%rsi)
-               	leaq	-0x8(%rbp), %rax
-               	movq	$0x0, (%rax)
-               	movq	$0x2a, (%rax)
-               	movq	%rax, %rcx
-               	movq	(%rcx), %rax
-               	leave
+               	movl	$0x2a, %eax
+               	movq	%rax, (%rsi)
                	retq
 
 <main>:

@@ -14,10 +14,9 @@ Disassembly of section .text:
                	brk	#0x1
 
 <read_wide>:
-               	add	x0, x0, #0x10
-               	mov	x16, x0
-               	ldr	x1, [x16, #0x8]
-               	ldr	x0, [x16]
+               	add	x1, x0, #0x10
+               	ldr	x0, [x1]
+               	ldr	x1, [x1, #0x8]
                	ret
 
 <main>:
@@ -98,13 +97,9 @@ Disassembly of section .text:
                	stp	xzr, xzr, [x0]
                	stp	xzr, xzr, [x0, #0x10]
                	stp	xzr, xzr, [x0, #0x20]
-               	mov	x1, #0x1                // =1
-               	str	w1, [x0]
                	add	x1, x0, #0x10
                	str	x21, [x1]
                	str	x20, [x1, #0x8]
-               	mov	x2, #0x2                // =2
-               	str	w2, [x0, #0x20]
                	ldr	x2, [x1]
                	ldr	x4, [x0, #0x18]
                	add	x3, x2, #0x3
@@ -114,18 +109,6 @@ Disassembly of section .text:
                	add	x2, x4, x2
                	str	x3, [x1]
                	str	x2, [x1, #0x8]
-               	ldrsw	x1, [x0]
-               	add	x1, x1, #0x1
-               	str	w1, [x0]
-               	cmp	w1, #0x2
-               	b.ne	<addr>
-               	ldrsw	x1, [x0, #0x20]
-               	cmp	w1, #0x2
-               	b.eq	<addr>
-               	mov	x0, #0xa                // =10
-               	ldp	x29, x30, [sp, #0x130]
-               	ldp	x20, x21, [sp], #0x140
-               	ret
                	bl	<addr>
                	stur	x0, [x29, #-0x40]
                	stur	x1, [x29, #-0x38]
@@ -145,16 +128,6 @@ Disassembly of section .text:
                	add	x1, x0, #0x10
                	str	xzr, [x1]
                	str	xzr, [x1, #0x8]
-               	ldrsw	x2, [x0]
-               	cmp	w2, #0x2
-               	b.ne	<addr>
-               	ldrsw	x2, [x0, #0x20]
-               	cmp	w2, #0x2
-               	b.eq	<addr>
-               	mov	x0, #0xc                // =12
-               	ldp	x29, x30, [sp, #0x130]
-               	ldp	x20, x21, [sp], #0x140
-               	ret
                	str	x21, [x1]
                	str	x20, [x1, #0x8]
                	bl	<addr>

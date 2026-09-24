@@ -1315,6 +1315,7 @@ impl Compiler {
         self.array_temps.clear();
         self.func_over_aligned.clear();
         self.labels.clear();
+        self.jumps = super::jumps::Jumps::default();
         self.unresolved_gotos.clear();
         self.local_label_scopes.clear();
         self.func_local_addr_taken = false;
@@ -1439,7 +1440,7 @@ impl Compiler {
         // The function body's top-level block scope for
         // `__attribute__((cleanup))` variables; cleaned on
         // fall-through (below) and on every `return`.
-        self.cleanup_scopes.push(alloc::vec::Vec::new());
+        self.open_cleanup_scope(false);
         // GCC local labels declared by the body's top-level
         // block; see `Compiler::resolve_label_name`.
         self.local_label_scopes.open();
@@ -1521,23 +1522,14 @@ impl Compiler {
         // Fall-through / implicit return: run the body's
         // top-level `__attribute__((cleanup))` functions in
         // reverse declaration order before the synthetic return.
-        if self.cleanup_scopes.last().is_some_and(|s| !s.is_empty()) {
-            let pending: alloc::vec::Vec<_> = self
-                .cleanup_scopes
-                .last()
-                .unwrap()
-                .iter()
-                .rev()
-                .cloned()
-                .collect();
-            for cv in pending {
-                let before = self.ast.stmts.len();
-                self.push_cleanup_call(&cv);
-                for id in before..self.ast.stmts.len() {
-                    top_level_ids.push(id as super::super::ast::StmtId);
-                }
+        for cv in self.innermost_cleanups() {
+            let before = self.ast.stmts.len();
+            self.push_cleanup_call(&cv);
+            for id in before..self.ast.stmts.len() {
+                top_level_ids.push(id as super::super::ast::StmtId);
             }
         }
+        self.resolve_jumps()?;
         self.cleanup_scopes.pop();
         self.tag_scopes.pop();
         self.local_label_scopes.close();

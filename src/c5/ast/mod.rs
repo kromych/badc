@@ -631,6 +631,9 @@ pub(crate) enum Stmt {
     /// slot into an `Inst::LifetimeEnd`, which bounds how long the
     /// storage must stay the object's.
     ScopeEnd(Vec<i64>),
+    /// A `goto` or computed `goto` (`jump`) running `cleanups` first, after
+    /// a computed `goto`'s target is read.
+    CleanupJump { cleanups: Vec<StmtId>, jump: StmtId },
 }
 
 /// Value source of one runtime-initializer element: an expression to
@@ -875,6 +878,8 @@ pub(crate) struct AsmBlockAst {
     /// `asm goto` label list, in source order; a template `%lK`
     /// reference names `labels[K]`. Empty for plain extended asm.
     pub labels: Vec<LabelId>,
+    /// Per label, the cleanup calls the jump to it runs.
+    pub cleanups: Vec<Vec<StmtId>>,
 }
 
 #[derive(Debug, Default, Clone)]
@@ -894,6 +899,8 @@ pub(crate) struct Ast {
     /// in well-formed C. `None` until the parser finishes the
     /// function definition.
     pub body: Option<StmtId>,
+    /// The labels whose address is taken, a computed `goto`'s targets.
+    pub label_addrs: Vec<LabelId>,
     /// Forward-fixup table for `goto`. `goto_targets[id as usize]`
     /// is `Some(StmtId)` once the matching labelled statement is
     /// seen; `None` while the label is still pending.

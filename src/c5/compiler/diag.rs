@@ -139,7 +139,11 @@ impl Compiler {
     /// conservative (no false positives).
     fn stmt_may_fall_through(&self, id: StmtId) -> bool {
         match self.ast.stmt(id) {
-            Stmt::Return(_) | Stmt::Goto(_) | Stmt::Break | Stmt::Continue => false,
+            Stmt::Return(_)
+            | Stmt::Goto(_)
+            | Stmt::CleanupJump { .. }
+            | Stmt::Break
+            | Stmt::Continue => false,
             // A call to a `_Noreturn` function does not reach its
             // continuation; any other expression statement does.
             Stmt::Expr(e) => !self.expr_is_noreturn_call(*e),

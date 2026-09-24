@@ -164,7 +164,7 @@ catalog! {
         "a builtin or intrinsic called with arguments it does not take";
     3024, "invalid-statement", [], Error, Hard,
         [], Live,
-        "a statement outside the construct it needs: `break` outside a loop, `case` outside a switch, a `goto` to no label";
+        "a statement outside the construct it needs: `break` outside a loop, `case` outside a switch, a `goto` to no label, a jump into a statement expression or into the scope of a variably modified or cleanup object";
     3025, "incompatible-types", [], Error, Hard,
         [], Live,
         "a value of a type no implicit conversion takes to the type required: an aggregate assigned, passed or returned as another";

@@ -1853,7 +1853,9 @@ impl Compiler {
         if !self.label_is_defined(&name) {
             self.unresolved_gotos.push(name.clone());
         }
-        Ok(self.ast_label_by_name(&name))
+        let label = self.ast_label_by_name(&name);
+        self.note_label_addr(label);
+        Ok(label)
     }
 
     /// Push a `Stmt::Return(value)` node into the per-function

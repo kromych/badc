@@ -845,7 +845,7 @@ void two16(int c) { if (c) { struct st16 a; use16(&a); } else { struct st16 b; u
 /// Every edge that leaves a block ends the lifetimes of the objects it
 /// declared (C99 6.2.4p2), so two 512-byte arrays in disjoint blocks share
 /// one 512-byte cell whether the blocks fall through, return, break,
-/// continue or goto out, and when a path never enters the first block. A
+/// continue or any goto out, and when a path never enters the first block. A
 /// `for` statement is a block (C99 6.8.5p5): the kernel's `scoped_ksimd()`
 /// declares its 528-byte state in one, left by `return` or by `break`, and
 /// the two states take one over-aligned region block.
@@ -863,6 +863,15 @@ void cont(int n) {
     { char b[512]; g(b); }
 }
 void jump(int c) { { char a[512]; g(a); if (c) goto out; g(a + 1); } out: { char b[512]; g(b); } }
+void asmjump(int c) {
+    { char a[512]; g(a); if (c) asm goto("" :::: out); g(a + 1); }
+out: { char b[512]; g(b); }
+}
+void cjump(int c) {
+    void *t = &&out;
+    { char a[512]; g(a); if (c) goto *t; again: g(a + 1); if (a[0]) goto again; }
+out: { char b[512]; g(b); }
+}
 struct st { _Alignas(16) unsigned char v[512]; unsigned int fpsr, fpcr; };
 void use_st(struct st *);
 int ksimd(int c) {
@@ -875,7 +884,10 @@ int ksimd(int c) {
     for target in ["linux-aarch64", "linux-x64"] {
         let arg = format!("--target={target}");
         let frames = frame_reports(&dir, "scope_exits", SRC, &[arg.as_str()]);
-        for f in ["fall", "ret", "skip", "sw", "brk", "cont", "jump"] {
+        let shapes = [
+            "fall", "ret", "skip", "sw", "brk", "cont", "jump", "cjump", "asmjump",
+        ];
+        for f in shapes {
             let (bytes, parts) = frames
                 .get(f)
                 .unwrap_or_else(|| panic!("{target} {f}: {frames:?}"));

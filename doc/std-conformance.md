@@ -345,7 +345,10 @@ name. TODO: hold the bound version and the declared interface in step.
 - Computed goto / labels as values: `&&label` and `goto *expr`, including a
   `&&label` element in an automatic or static array initializer (the
   dispatch-table idiom; a static table is filled by runtime stores since a
-  block address is not a link-time constant).
+  block address is not a link-time constant). A computed goto may reach any
+  label whose address is taken: it runs the `cleanup` functions of the
+  scopes it leaves when every such label leaves the same ones, and is
+  rejected otherwise; gcc runs none of them, clang rejects the jump.
 - The array range designator `[a ... b] = value`.
 - Zero-length arrays (`T x[0]`) accepted as flexible array members.
 - `__int128` / `unsigned __int128`, with `__SIZEOF_INT128__` defined as 16.
@@ -449,7 +452,9 @@ name. TODO: hold the bound version and the declared interface in step.
   `always_inline`, `noinline`, `gnu_inline`, `ms_abi` / `sysv_abi` (the
   x86_64 calling convention of a function or of a function pointer's
   pointee; x86-only, inert elsewhere, as in GCC),
-  `cleanup(fn)` (the function runs on scope exit), `constructor` /
+  `cleanup(fn)` (the function runs on every exit from the scope, `goto`
+  and `asm goto` included; a jump past the declaration into the scope is
+  rejected, as by clang, where gcc accepts it), `constructor` /
   `destructor` (run before / after `main`, optional priority), `noreturn`,
   `unused` / `maybe_unused`, `vector_size(N)` (modeled as an aggregate),
   `transparent_union`, `no_instrument_function`, `uninitialized`,

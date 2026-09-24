@@ -737,6 +737,111 @@ fn address_of_undefined_label() {
     );
 }
 
+// A jump may not pass a VLA or cleanup declaration into its scope, nor
+// enter a statement expression.
+
+fn with_cleanup(body: &str) -> String {
+    alloc::format!(
+        "static void f(int *p) {{ (void)p; }}\n#define CL __attribute__((cleanup(f)))\n\
+         {body}\nint main(void) {{ return 0; }}\n"
+    )
+}
+
+#[test]
+fn goto_into_a_cleanup_scope_is_reported_at_the_goto() {
+    let src = with_cleanup("void t(int c) {\n if (c)\n  goto in;\n { int a CL = 0;\n in: ; }\n}");
+    expect_compile_error(
+        &src,
+        ":5: error: `goto` jumps into the scope of `a`, declared with a cleanup function at line 6",
+    );
+}
+
+#[test]
+fn goto_past_a_cleanup_declaration_in_its_scope() {
+    expect_compile_error(
+        &with_cleanup("void t(int c) { { if (c) goto in; int a CL = 0; in: ; } }"),
+        "`goto` jumps into the scope of `a`, declared with a cleanup function",
+    );
+}
+
+#[test]
+fn goto_into_a_vla_scope() {
+    expect_compile_error(
+        "void t(int c, int n) { if (c) goto in; { char v[n]; in: v[0] = 0; } }\n\
+         int main(void) { return 0; }",
+        "`goto` jumps into the scope of `v`, declared with a variably modified type",
+    );
+}
+
+#[test]
+fn switch_into_a_cleanup_scope() {
+    expect_compile_error(
+        &with_cleanup("void t(int k) { switch (k) { int a CL; case 1: break; } }"),
+        "`switch` jumps into the scope of `a`, declared with a cleanup function",
+    );
+}
+
+#[test]
+fn switch_into_a_vla_scope() {
+    expect_compile_error(
+        "void t(int k, int n) { switch (k) { char v[n]; default: v[0] = 0; } }\n\
+         int main(void) { return 0; }",
+        "`switch` jumps into the scope of `v`, declared with a variably modified type",
+    );
+}
+
+#[test]
+fn computed_goto_into_a_cleanup_scope() {
+    expect_compile_error(
+        &with_cleanup("void t(int c) { void *p = &&in; if (c) goto *p; { int a CL = 0; in: ; } }"),
+        "computed `goto` jumps into the scope of `a`, declared with a cleanup function",
+    );
+}
+
+#[test]
+fn asm_goto_into_a_cleanup_scope() {
+    expect_compile_error(
+        &with_cleanup("void t(void) { asm goto(\"\" :::: in); { int a CL = 0; in: ; } }"),
+        "`asm goto` jumps into the scope of `a`, declared with a cleanup function",
+    );
+}
+
+#[test]
+fn goto_into_a_statement_expression() {
+    expect_compile_error(
+        "int t(int c) { if (c) goto in; return ({ in: 1; }); }\nint main(void) { return 0; }",
+        "`goto` jumps into a statement expression",
+    );
+}
+
+#[test]
+fn computed_goto_whose_cleanups_depend_on_its_target() {
+    // `out` leaves the scope of `a`, `mid` does not.
+    expect_compile_error(
+        &with_cleanup(
+            "void t(int c) { void *p = c ? &&out : &&mid; { int a CL = 0; goto *p; mid: ; } out: ; }",
+        ),
+        "computed `goto` leaves scopes whose cleanup functions depend on its target",
+    );
+}
+
+#[test]
+fn jumps_that_enter_no_protected_scope() {
+    // The fifth is the kernel's `scoped_guard()`: from a statement
+    // expression into the loop.
+    let cases = [
+        "void t(int c, int n) { { char v[n]; v[0] = 0; if (c) goto out; } out: ; }",
+        "void t(void) { int k = 0; { again: ; int a CL = 0; (void)a; if (k++ < 2) goto again; } }",
+        "void t(int k, int n) { switch (k) { case 1: { char v[n]; v[0] = 0; } } }",
+        "int t(void) { return ({ int r = 0; goto o; o: r; }); }",
+        "void t(void) { for (int s CL = 0; ; ({ goto l; })) if (0) { l: break; } else { (void)s; } }",
+        "void t(void) { { int a CL = 0; (void)a; asm goto(\"\" :::: out); } out: ; }",
+    ];
+    for body in cases {
+        expect_compiles(&with_cleanup(body), body);
+    }
+}
+
 // The label table is keyed by name, so its size does not change what a
 // label diagnostic names or where it points. The two diagnostic cases
 // below run wide enough that a table-order dependency would show.

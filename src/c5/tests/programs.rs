@@ -2303,6 +2303,12 @@ fn attribute_cleanup() {
 }
 
 #[test]
+fn goto_cleanup_scopes() {
+    // A goto or computed goto runs the cleanups of the scopes it leaves.
+    assert_eq!(run_fixture("goto_cleanup_scopes.c"), 0);
+}
+
+#[test]
 fn sizeof_array_type_and_binding() {
     // `sizeof(T [N])` sizes the array type; `sizeof(arr)[i]` binds to
     // the full unary-expression.

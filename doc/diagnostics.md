@@ -72,7 +72,7 @@ regenerates.
 | B3021 | `constant-expression` | error | hard | - | an expression that must be constant and is not, or one the compiler cannot evaluate at translation time |
 | B3022 | `invalid-initializer` | error | hard | - | an initializer C99 6.7.8 rejects: a mismatched brace form, a designator naming nothing, an index out of range |
 | B3023 | `invalid-arguments` | error | hard | - | a builtin or intrinsic called with arguments it does not take |
-| B3024 | `invalid-statement` | error | hard | - | a statement outside the construct it needs: `break` outside a loop, `case` outside a switch, a `goto` to no label |
+| B3024 | `invalid-statement` | error | hard | - | a statement outside the construct it needs: `break` outside a loop, `case` outside a switch, a `goto` to no label, a jump into a statement expression or into the scope of a variably modified or cleanup object |
 | B3025 | `incompatible-types` | error | hard | - | a value of a type no implicit conversion takes to the type required: an aggregate assigned, passed or returned as another |
 | B3026 | `return-mismatch` | error | controllable | default | a `return` with a value in a function returning `void`, or with none in a function returning a value |
 | B3027 | `void-value` | error | hard | - | the value of a `void` expression used: as an operand, an argument, an initializer, an assigned or returned value, or a controlling expression |

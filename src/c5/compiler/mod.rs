@@ -26,6 +26,7 @@ mod expr;
 mod function;
 mod global_init;
 mod initializer;
+mod jumps;
 mod locals;
 mod loop_idiom;
 mod redeclaration;
@@ -2389,11 +2390,13 @@ pub struct Compiler {
     /// Stack of block scopes carrying `__attribute__((cleanup(fn)))`
     /// variables, innermost last, in declaration order. A block exit emits
     /// `fn(&var)` in reverse order (C++-style, matching GCC) on every path
-    /// out: fall-through, `return`, `break`, and `continue`. Entries are
-    /// snapshots of the declared binding: the symbol slot is rebound when
+    /// out: fall-through, `return`, `break`, `continue` and `goto`. Entries
+    /// are snapshots of the declared binding: the symbol slot is rebound when
     /// an inner scope shadows the name, and an exit emitted inside such a
     /// scope must address the registered binding, not the current one.
-    cleanup_scopes: Vec<Vec<stmt::CleanupVar>>,
+    cleanup_scopes: Vec<jumps::CleanupScope>,
+    /// The function's scopes, labels and jumps; see [`jumps`].
+    jumps: jumps::Jumps,
     /// `cleanup_scopes` depth at each enclosing `break` target (loop or
     /// `switch`) and `continue` target (loop only), innermost last. A
     /// `break` / `continue` cleans the scopes above the recorded depth.
@@ -2995,6 +2998,7 @@ impl Compiler {
             variables: Vec::new(),
             pending_block_locals: Vec::new(),
             cleanup_scopes: Vec::new(),
+            jumps: jumps::Jumps::default(),
             break_cleanup_depths: Vec::new(),
             continue_cleanup_depths: Vec::new(),
             current_function_name: String::new(),

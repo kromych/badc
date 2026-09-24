@@ -94,7 +94,8 @@ impl<'a> Walker<'a> {
             Stmt::AsmGoto(idx) => {
                 // GCC `asm goto`. Target 0 is the fall-through
                 // successor; the label blocks follow in label-list
-                // order, through the same machinery `goto` uses.
+                // order. An edge leaving a scope goes through a block of
+                // its own that leaves it as `goto` does.
                 let asm = self.ast.asm_blocks[*idx as usize].clone();
                 let mut args: alloc::vec::Vec<ValueId> =
                     alloc::vec::Vec::with_capacity(asm.operand_exprs.len());
@@ -103,11 +104,28 @@ impl<'a> Walker<'a> {
                 }
                 let fall = b.new_block();
                 let mut targets = alloc::vec::Vec::with_capacity(1 + asm.labels.len());
+                let mut exits = alloc::vec::Vec::new();
                 targets.push(fall);
-                for &l in &asm.labels {
-                    targets.push(self.block_for_label(b, l));
+                for (i, &l) in asm.labels.iter().enumerate() {
+                    let label = self.block_for_label(b, l);
+                    let depth = self.label_depth(l);
+                    if asm.cleanups[i].is_empty() && !self.leaves_anything(depth) {
+                        targets.push(label);
+                    } else {
+                        let exit = b.new_block();
+                        targets.push(exit);
+                        exits.push((exit, i, depth, label));
+                    }
                 }
                 b.asm_goto(alloc::boxed::Box::new(asm.block), args, targets);
+                for (exit, i, depth, label) in exits {
+                    b.switch_to(exit);
+                    for &c in &asm.cleanups[i] {
+                        self.walk_stmt(b, c)?;
+                    }
+                    self.leave_scopes(b, depth, false);
+                    b.jmp(label);
+                }
                 b.switch_to(fall);
                 Ok(false)
             }
@@ -120,14 +138,24 @@ impl<'a> Walker<'a> {
             }
             Stmt::GotoIndirect(target) => {
                 let v = self.walk_expr_rvalue(b, *target)?;
-                // Whichever label it names, the jump leaves the scopes none is in.
-                let depth = (0..self.label_scopes.len() as LabelId)
-                    .map(|l| self.label_depth(l))
-                    .max()
-                    .unwrap_or(self.scopes.len());
-                self.leave_scopes(b, depth, false);
-                b.goto_indirect(v);
+                self.goto_indirect(b, v);
                 Ok(true)
+            }
+            Stmt::CleanupJump { cleanups, jump } => {
+                let target = match self.ast.stmt(*jump) {
+                    Stmt::GotoIndirect(t) => Some(self.walk_expr_rvalue(b, *t)?),
+                    _ => None,
+                };
+                for &c in cleanups {
+                    self.walk_stmt(b, c)?;
+                }
+                match target {
+                    Some(v) => {
+                        self.goto_indirect(b, v);
+                        Ok(true)
+                    }
+                    None => self.walk_stmt(b, *jump),
+                }
             }
             Stmt::Labeled { label, body } => {
                 let label_blk = self.block_for_label(b, *label);
@@ -525,10 +553,31 @@ impl<'a> Walker<'a> {
         }
     }
 
+    /// A computed `goto` to `v`. Whichever label whose address is taken it
+    /// names, the jump leaves the scopes none is in.
+    fn goto_indirect(&self, b: &mut SsaBuilder, v: ValueId) {
+        let depth = self
+            .ast
+            .label_addrs
+            .iter()
+            .map(|&l| self.label_depth(l))
+            .max()
+            .unwrap_or(self.scopes.len());
+        self.leave_scopes(b, depth, false);
+        b.goto_indirect(v);
+    }
+
     /// Return `v`, ending every open scope; the frame's teardown frees VLAs.
     fn return_value(&self, b: &mut SsaBuilder, v: ValueId) {
         self.leave_scopes(b, 0, true);
         b.return_(v);
+    }
+
+    /// Whether leaving the scopes above `depth` emits anything.
+    fn leaves_anything(&self, depth: usize) -> bool {
+        self.scopes[depth.min(self.scopes.len())..]
+            .iter()
+            .any(|s| !s.ends.is_empty() || s.vla_save.is_some())
     }
 
     /// Leave the scopes above `depth`: end their lifetimes and, unless

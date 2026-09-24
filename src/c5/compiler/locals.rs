@@ -1454,6 +1454,7 @@ impl Compiler {
         s.was_written = true;
         s.address_escaped = true;
         self.func_vla_decls += 1;
+        self.note_jump_barrier(loc_idx, true);
         // The VLA storage comes from the per-frame alloca arena, so the
         // function reserves the arena and its bookkeeping slot.
         self.uses_alloca_in_current_fn = true;

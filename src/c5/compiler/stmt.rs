@@ -39,7 +39,7 @@ use super::types::{is_struct_ty, is_struct_value_ty, is_void_ty, struct_ptr_dept
 /// A registered `__attribute__((cleanup(fn)))` variable. The fields the
 /// destructor call bakes into its `Ident` are captured at declaration
 /// time; see `register_cleanup_var`.
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub(super) struct CleanupVar {
     var_sym: usize,
     fn_sym: usize,
@@ -324,7 +324,7 @@ impl Compiler {
         // scope is the whole for statement. Push a cleanup scope so the
         // init declaration registers into it; it is run where control
         // leaves the loop (below) rather than at the enclosing block.
-        self.cleanup_scopes.push(alloc::vec::Vec::new());
+        self.open_cleanup_scope(false);
 
         // C99 6.8.5.3 for-init is either an expression or a
         // declaration. The declared identifier's scope is the
@@ -449,18 +449,8 @@ impl Compiler {
         // the scope stack; `continue` keeps the object (it persists
         // across iterations, C99 6.8.5.3). The calls are read while the
         // init binding is still live -- before the restore below.
-        if self.cleanup_scopes.last().is_some_and(|s| !s.is_empty()) {
-            let pending: alloc::vec::Vec<CleanupVar> = self
-                .cleanup_scopes
-                .last()
-                .unwrap()
-                .iter()
-                .rev()
-                .cloned()
-                .collect();
-            for cv in pending {
-                self.push_cleanup_call(&cv);
-            }
+        for cv in self.innermost_cleanups() {
+            self.push_cleanup_call(&cv);
         }
         self.cleanup_scopes.pop();
         // C99 6.8.5p5: the for statement is a block, whose end ends the
@@ -506,10 +496,12 @@ impl Compiler {
         self.switch_cases.push(Vec::new());
         self.switch_defaults.push(false);
         self.enter_switch();
+        self.enter_switch_body();
 
         let body_before = self.ast_stmts_snapshot();
         self.stmt()?;
         let body_s = self.ast_wrap_stmts_since(body_before);
+        self.leave_switch_body();
 
         // Same conservative drop at the body-exit boundary.
         self.flush_pending_stores();
@@ -706,8 +698,18 @@ impl Compiler {
             fn_ty: self.symbols[fn_sym].type_,
         };
         if let Some(scope) = self.cleanup_scopes.last_mut() {
-            scope.push(cv);
+            scope.vars.push(cv);
         }
+        self.note_jump_barrier(var_sym, false);
+    }
+
+    /// The innermost scope's cleanup variables, latest declared first.
+    pub(super) fn innermost_cleanups(&self) -> alloc::vec::Vec<CleanupVar> {
+        self.cleanup_scopes
+            .last()
+            .map_or_else(alloc::vec::Vec::new, |s| {
+                s.vars.iter().rev().cloned().collect()
+            })
     }
 
     /// Build the `Stmt::Expr` for one cleanup call `fn(&var)` and push it
@@ -756,7 +758,7 @@ impl Compiler {
     fn emit_cleanups_above(&mut self, from: usize) {
         let mut pending: alloc::vec::Vec<CleanupVar> = alloc::vec::Vec::new();
         for scope in self.cleanup_scopes[from..].iter().rev() {
-            for cv in scope.iter().rev() {
+            for cv in scope.vars.iter().rev() {
                 pending.push(cv.clone());
             }
         }
@@ -769,7 +771,9 @@ impl Compiler {
     /// variable, i.e. a `return` / `break` / `continue` here must run
     /// cleanup functions.
     fn has_cleanups_above(&self, from: usize) -> bool {
-        self.cleanup_scopes[from..].iter().any(|s| !s.is_empty())
+        self.cleanup_scopes[from..]
+            .iter()
+            .any(|s| !s.vars.is_empty())
     }
 
     /// Coalesce the sibling statements pushed since `start` (a spill, the
@@ -886,9 +890,12 @@ impl Compiler {
     /// statement expression takes its value from. The scope-exit
     /// statements this appends (`cleanup` destructor calls, the VLA stack
     /// restore) follow that item, so the block's last item is not it.
-    fn parse_block_stmt(&mut self) -> Result<(super::super::ast::StmtId, Option<usize>), C5Error> {
+    fn parse_block_stmt(
+        &mut self,
+        stmt_expr: bool,
+    ) -> Result<(super::super::ast::StmtId, Option<usize>), C5Error> {
         self.next()?;
-        self.cleanup_scopes.push(alloc::vec::Vec::new());
+        self.open_cleanup_scope(stmt_expr);
         // C99 6.2.1: a block introduces a new scope for struct,
         // union, and enum tags. Tag bindings declared in this block
         // shadow same-named tags in any enclosing scope and go out of
@@ -987,21 +994,11 @@ impl Compiler {
         // reclaim below (a cleanup may read VLA storage). When the block
         // ends in a terminator these are emitted after it and the walker
         // never reaches them; the terminator's own path already cleaned.
-        if self.cleanup_scopes.last().is_some_and(|s| !s.is_empty()) {
-            let pending: alloc::vec::Vec<CleanupVar> = self
-                .cleanup_scopes
-                .last()
-                .unwrap()
-                .iter()
-                .rev()
-                .cloned()
-                .collect();
-            for cv in pending {
-                let before = self.ast.stmts.len();
-                self.push_cleanup_call(&cv);
-                for id in before..self.ast.stmts.len() {
-                    top_level_ids.push(id as super::super::ast::StmtId);
-                }
+        for cv in self.innermost_cleanups() {
+            let before = self.ast.stmts.len();
+            self.push_cleanup_call(&cv);
+            for id in before..self.ast.stmts.len() {
+                top_level_ids.push(id as super::super::ast::StmtId);
             }
         }
         self.cleanup_scopes.pop();
@@ -1129,7 +1126,7 @@ impl Compiler {
         // specifier carriers, which the block's own declarations reset
         // or consume, and restore them for the enclosing parse.
         let specifiers = self.pending.take_decl_specifiers();
-        let parsed = self.parse_block_stmt();
+        let parsed = self.parse_block_stmt(true);
         self.pending.restore_decl_specifiers(specifiers);
         let (block, value_item) = parsed?;
         self.ast_vstack.truncate(vstack_depth);
@@ -1946,10 +1943,12 @@ impl Compiler {
             volatile,
         };
         let idx = self.ast.asm_blocks.len() as u32;
+        let cleanups = alloc::vec![alloc::vec::Vec::new(); label_ids.len()];
         self.ast.asm_blocks.push(AsmBlockAst {
             block,
             operand_exprs,
-            labels: label_ids,
+            labels: label_ids.clone(),
+            cleanups,
         });
         self.mark_emit_other();
         if is_goto {
@@ -1957,8 +1956,13 @@ impl Compiler {
             // walker closes the block with `Terminator::AsmGoto`.
             self.flush_pending_stores();
             let pos = self.ast_src_pos();
-            self.ast
+            let stmt = self
+                .ast
                 .push_stmt(super::super::ast::Stmt::AsmGoto(idx), pos);
+            for (i, label) in label_ids.into_iter().enumerate() {
+                let target = super::jumps::Target::Asm { asm: idx, i, label };
+                self.note_jump(stmt, target, pos.line as usize);
+            }
             return Ok(());
         }
         self.ty = Ty::Int as i64;
@@ -2986,6 +2990,7 @@ impl Compiler {
                 ));
             }
             let label = self.define_label(&name);
+            self.note_label(label);
             self.next()?; // consume Id
             self.next()?; // consume ':'
             // C23 6.9 / GNU: an attribute-specifier may decorate a label
@@ -3097,6 +3102,7 @@ impl Compiler {
         } else if self.lex.tk == Token::Switch {
             self.parse_switch_stmt()?;
         } else if self.lex.tk == Token::Case {
+            let line = self.lex.line;
             self.next()?;
             // Case label is a constant expression: integer literal,
             // negated literal, parenthesised literal, enum / `#define`d
@@ -3114,6 +3120,7 @@ impl Compiler {
                 lo
             };
             self.consume(b':', "expected colon after case")?;
+            self.check_switch_label(line)?;
             if hi < lo {
                 return Err(self.compile_err(
                     Code::INVALID_STATEMENT,
@@ -3163,8 +3170,10 @@ impl Compiler {
             let body_s = self.ast_wrap_stmts_since(body_before);
             self.ast_emit_case(lo, hi, body_s);
         } else if self.lex.tk == Token::Default {
+            let line = self.lex.line;
             self.next()?;
             self.consume(b':', "expected colon after default")?;
+            self.check_switch_label(line)?;
             // C99 6.8.4.2p3: at most one default label per switch
             // (constraint). A second default would resolve to the first's
             // block and re-terminate it in the walker.
@@ -3200,6 +3209,7 @@ impl Compiler {
             let body_s = self.ast_wrap_stmts_since(body_before);
             self.ast_emit_default(body_s);
         } else if self.lex.tk == Token::Goto {
+            let line = self.lex.line;
             self.next()?;
             if self.lex.tk == Token::MulOp {
                 // GCC computed goto: `goto *expr;` branches to the
@@ -3210,7 +3220,8 @@ impl Compiler {
                 self.flush_pending_stores();
                 self.consume(b';', "semicolon expected after computed goto")?;
                 if let Some(t) = target {
-                    self.ast_emit_goto_indirect(t);
+                    let stmt = self.ast_emit_goto_indirect(t);
+                    self.note_jump(stmt, super::jumps::Target::Computed, line);
                 }
             } else {
                 if self.lex.tk != Token::Id {
@@ -3227,7 +3238,8 @@ impl Compiler {
 
                 self.consume(b';', "semicolon expected after goto")?;
                 let label = self.ast_label_by_name(&target_name);
-                self.ast_emit_goto(label);
+                let stmt = self.ast_emit_goto(label);
+                self.note_jump(stmt, super::jumps::Target::Label(label), line);
             }
         } else if self.lex.tk == Token::Break {
             self.next()?;
@@ -3411,7 +3423,7 @@ impl Compiler {
             self.coalesce_exit_since(start);
             self.consume(b';', "semicolon expected")?;
         } else if self.lex.tk == '{' {
-            self.parse_block_stmt()?;
+            self.parse_block_stmt(false)?;
         } else if self.lex.tk == ';' {
             self.next()?;
         } else {

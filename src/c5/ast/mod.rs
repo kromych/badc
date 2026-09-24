@@ -930,7 +930,7 @@ pub(crate) struct Ast {
     pub conv_indirect_callees: Vec<(ExprId, crate::c5::codegen::CallConv)>,
     /// The parameter types of an indirect call's pointed-to prototype,
     /// keyed by the callee's `ExprId`, recorded while the prototype is in
-    /// scope.
+    /// scope; empty for a pointer to a function without one.
     pub indirect_callee_params: alloc::collections::BTreeMap<ExprId, Vec<i64>>,
     /// `Expr::Ident` nodes that reference a block-scope `extern` which
     /// shadows an enclosing bound name (a local, parameter, or enum

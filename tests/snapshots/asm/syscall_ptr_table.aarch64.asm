@@ -31,7 +31,7 @@ Disassembly of section .text:
                	mov	x1, #0x42               // =66
                	mov	x2, #0x1a4              // =420
                	blr	x3
-               	sxtw	x20, w0
+               	mov	x20, x0
                	cmp	w20, #0x0
                	b.ge	<addr>
                	mov	x0, #0x1                // =1

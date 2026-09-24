@@ -43,7 +43,6 @@ Disassembly of section .text:
 <apply>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	movslq	%esi, %rsi
                	movq	%rdi, %rax
                	movq	%rsi, %rdi
                	callq	*%rax
@@ -71,7 +70,6 @@ Disassembly of section .text:
 <grouped>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	movslq	%esi, %rsi
                	movq	%rdi, %rax
                	movq	%rsi, %rdi
                	callq	*%rax
@@ -81,7 +79,6 @@ Disassembly of section .text:
 <via_alias>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	movslq	%esi, %rsi
                	movq	%rdi, %rax
                	movq	%rsi, %rdi
                	callq	*%rax

@@ -241,9 +241,9 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	leaq	(%rax,%r12), %rcx
                	leaq	(%rax,%r13), %rsi
-               	movl	%ebx, %edx
                	movq	%rdi, %rax
                	movq	%rcx, %rdi
+               	movq	%rbx, %rdx
                	callq	*%rax
                	leaq	<rip>, %rcx
                	leaq	(%rcx,%r12), %rax

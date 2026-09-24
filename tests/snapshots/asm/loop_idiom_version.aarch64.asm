@@ -215,11 +215,11 @@ Disassembly of section .text:
                	b.lt	<addr>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	add	x3, x1, x21
+               	add	x2, x1, x21
                	add	x1, x1, x22
-               	mov	w2, w20
                	mov	x9, x0
-               	mov	x0, x3
+               	mov	x0, x2
+               	mov	x2, x20
                	blr	x9
                	adrp	x1, <page>
                	add	x1, x1, <lo12>

@@ -136,7 +136,6 @@ Disassembly of section .text:
 <through_ptr>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	movslq	%esi, %rsi
                	movq	%rdi, %rax
                	movq	%rsi, %rdi
                	callq	*%rax

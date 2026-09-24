@@ -554,7 +554,7 @@ impl<'a> Walker<'a> {
         // rather than on the stack the callee's va_arg walks. Carrying
         // the prototype on the pointer's type would close this.
         let (callee_variadic, callee_fixed) = self.indirect_callee_proto(callee, args.exprs.len());
-        let params = self.indirect_callee_params(callee);
+        let params = self.indirect_callee_params(callee).unwrap_or_default();
         // Every ABI question below is asked of the pointed-to function's
         // own convention, not the target's default.
         let abi = self.target.abi_for(conv);
@@ -640,18 +640,24 @@ impl<'a> Walker<'a> {
         Ok(self.call_result(b, call, ret_temp, ty, true))
     }
 
-    /// The parameter types of a pointer callee's prototype, where known.
-    fn indirect_callee_params(&self, callee: ExprId) -> &'a [i64] {
+    /// The parameter types of a pointer callee's prototype, empty for a
+    /// pointer without one, `None` where the parse did not carry the
+    /// pointer's type. A block-scope binding's symbol no longer holds its
+    /// own by the walk.
+    ///
+    /// TODO: a call's result, a conditional or a comma operand as the callee
+    /// carries no prototype.
+    fn indirect_callee_params(&self, callee: ExprId) -> Option<&'a [i64]> {
         if let Some(params) = self.ast.indirect_callee_params.get(&callee) {
-            return params;
+            return Some(params);
         }
         match self.ast.expr(callee) {
-            Expr::Ident { sym, .. } => self
+            Expr::Ident { sym, class, .. } if *class != Token::Loc as i64 => self
                 .symbols
                 .get(*sym as usize)
                 .filter(|s| s.fn_ptr_indirection >= 1)
-                .map_or(&[], |s| s.params.as_slice()),
-            _ => &[],
+                .map(|s| s.params.as_slice()),
+            _ => None,
         }
     }
 

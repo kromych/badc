@@ -2364,6 +2364,10 @@ impl Compiler {
                 .conv_indirect_callees
                 .push((callee_id, self.symbols[id_idx].conv));
         }
+        if is_var_call {
+            let params = self.symbols[id_idx].params.clone();
+            self.ast.indirect_callee_params.insert(callee_id, params);
+        }
         self.ast_emit_call(callee_id, ast_arg_ids.clone(), result_ty);
         // A struct result is its temp's address (the address-as-value rule).
         if callee.returns_struct {
@@ -2485,10 +2489,12 @@ impl Compiler {
             self.symbols[id_idx].array_size != 0 || self.symbols[id_idx].is_zero_len_array;
         let is_vla_var = self.symbols[id_idx].is_vla;
         self.pending.object_ref = self.declared_object_ref(id_idx);
-        // A function-pointer variable carries its prototype so `(*fp)(args)`,
-        // which reaches the postfix call, converts each argument (C99
-        // 6.5.2.2p7).
-        if !is_array_var && !is_struct_value && !self.symbols[id_idx].params.is_empty() {
+        // A function-pointer variable carries its prototype, or the lack of
+        // one, so `(*fp)(args)`, which reaches the postfix call, converts or
+        // promotes each argument (C99 6.5.2.2p6, p7).
+        let fn_ptr = self.symbols[id_idx].fn_ptr_indirection >= 1;
+        if !is_array_var && !is_struct_value && (fn_ptr || !self.symbols[id_idx].params.is_empty())
+        {
             self.pending.indirect_callee_params = Some(self.symbols[id_idx].params.clone());
             self.pending.indirect_callee_is_variadic = self.symbols[id_idx].is_variadic;
             self.pending.indirect_callee_conv = self.symbols[id_idx].conv;
@@ -2778,11 +2784,13 @@ impl Compiler {
             self.pending.indirect_callee_fn_ptr_depth =
                 type_name.fn_ptr_indirection.unwrap_or(1).max(1);
             self.pending.indirect_callee_ret_fn_ptr = 0;
-            self.pending.indirect_callee_params = if pp.types.is_empty() {
-                None
-            } else {
-                Some(pp.types)
-            };
+            self.pending.indirect_callee_params = Some(pp.types);
+        } else if let Some(f) = type_name.fn_ty.filter(|f| f.ptr_depth >= 1) {
+            // A typedef names the pointer type: its parameter types.
+            self.pending.indirect_callee_is_variadic = f.variadic;
+            self.pending.indirect_callee_fn_ptr_depth = f.ptr_depth as i64;
+            self.pending.indirect_callee_ret_fn_ptr = 0;
+            self.pending.indirect_callee_params = Some(f.params.unwrap_or_default());
         }
         Ok(())
     }
@@ -3343,10 +3351,13 @@ impl Compiler {
                 self.emit_lea(temp_off);
                 self.ast_psh();
                 self.expr(Token::Assign as i64)?;
-                if let Some(params) = &callee_params
-                    && arg_idx < params.len()
-                {
-                    self.convert_assign_rhs(params[arg_idx]);
+                match &callee_params {
+                    Some(params) if arg_idx < params.len() => {
+                        self.convert_assign_rhs(params[arg_idx]);
+                    }
+                    // C99 6.5.2.2p6: past the prototype, or with none, `float` becomes `double`.
+                    Some(_) if is_float_ty(self.ty) => self.convert_assign_rhs(Ty::Double as i64),
+                    _ => {}
                 }
                 indirect_arg_ids.push(self.ast_acc);
                 self.ast_assign();
@@ -3419,7 +3430,7 @@ impl Compiler {
                         .conv_indirect_callees
                         .push((callee_id, callee_conv));
                 }
-                if let Some(params) = callee_params.filter(|p| !p.is_empty()) {
+                if let Some(params) = callee_params {
                     self.ast.indirect_callee_params.insert(callee_id, params);
                 }
                 let id = self.ast.push_expr(

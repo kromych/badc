@@ -2600,6 +2600,13 @@ fn kr_old_style_def() {
 }
 
 #[test]
+fn indirect_call_prototypes() {
+    // A call through a pointer converts or promotes its arguments by the
+    // pointed-to type, however the callee is spelled.
+    assert_eq!(run_fixture("indirect_call_prototypes.c"), 0);
+}
+
+#[test]
 fn fn_ptr_return_type() {
     // A call through a function pointer yields the callee's return
     // type, so a following `->` / `[` sees the right shape.

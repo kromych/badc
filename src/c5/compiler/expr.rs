@@ -1690,16 +1690,24 @@ impl Compiler {
         );
         self.ast_acc = Some(id);
         // `__builtin_va_arg` yields the argument as a value of `T`: the slot
-        // address the intrinsic returns is read through `T *`.
+        // address the intrinsic returns is read through a pointer to the type
+        // the caller passed, then converted to `T`.
         if let Some(res_ty) = va_arg_result_ty {
+            let slot_ty = self.va_arg_slot_ty(res_ty);
             if let Some(child) = self.ast_acc {
-                self.ast_emit_cast(child, res_ty + Ty::Ptr as i64);
+                self.ast_emit_cast(child, slot_ty + Ty::Ptr as i64);
             }
             if !(is_struct_value_ty(res_ty)) {
                 self.mark_emit_scalar_load();
             }
-            self.ty = res_ty;
+            self.ty = slot_ty;
             self.ast_apply_unary(super::super::ast::UnOp::Deref);
+            if slot_ty != res_ty
+                && let Some(read) = self.ast_acc
+            {
+                self.ast_emit_cast(read, res_ty);
+                self.ty = res_ty;
+            }
         }
         // A frame record holds the caller's frame pointer at offset 0, so
         // each level above 0 is one load through the level below; the
@@ -1911,6 +1919,18 @@ impl Compiler {
         Ok(())
     }
 
+    /// The type a variadic argument of type `ty` travels as: a `long double`
+    /// wider than `double` is passed as the binary64 badc computes with.
+    fn va_arg_slot_ty(&self, ty: i64) -> i64 {
+        if super::types::is_long_double_scalar(ty)
+            && self.target.long_double() != crate::c5::codegen::LongDoubleKind::F64
+        {
+            Ty::Double as i64
+        } else {
+            ty
+        }
+    }
+
     /// The operands of `__builtin_va_arg(ap, T)`: the `va_list` address
     /// and the packed descriptor of `T`. Returns `T`.
     fn parse_va_arg_operands(
@@ -1941,7 +1961,7 @@ impl Compiler {
         let type_name = self.parse_type_name()?;
         let arg_ty = type_name.ty;
         let is_pointer = type_name.ptr_levels > 0;
-        let size = self.size_of_type(arg_ty) as i64;
+        let size = self.size_of_type(self.va_arg_slot_ty(arg_ty)) as i64;
         // C99 6.5.2.2p6: a floating argument past the promotions is `double`
         // and rides the fp save area; a pointer or integer the gp save area.
         // A 64- or 128-bit vector rides the fp save area too, one whole

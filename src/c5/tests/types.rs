@@ -1401,6 +1401,19 @@ fn long_double_storage_round_trips_through_its_abi_format() {
     );
 }
 
+/// A `long double` parameter reads back what its caller passed on every
+/// target, through a register, the stack, `fabsl` or `va_arg`.
+#[test]
+fn long_double_parameters_read_back_what_the_caller_passed() {
+    use super::Vm;
+    use crate::{Compiler, Target};
+    let src = super::load_fixture("long_double_parameter_shapes.c");
+    for t in [Target::LinuxX64, Target::LinuxAarch64, Target::MacOSAarch64] {
+        let program = Compiler::with_target(src.clone(), t).compile().unwrap();
+        assert_eq!(Vm::new(program).run().unwrap(), 0, "{t:?}");
+    }
+}
+
 /// `long double` keeps `double`'s 53-bit significand through the compute
 /// path, so a value needing more than 53 bits does not round-trip even
 /// where the stored object could hold it (x87 80-bit has 64 significand

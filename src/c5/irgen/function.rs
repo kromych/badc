@@ -363,9 +363,10 @@ impl<'a> ParamEntry<'a> {
 
     /// Copy each by-address aggregate parameter into the body local the
     /// parser reserved for it -- the c5 convention passes the source's
-    /// address in the parameter's argument cell -- and narrow each
-    /// `float` parameter into its narrow-storage local. A negative
-    /// `param_local_slots` entry marks both kinds.
+    /// address in the parameter's argument cell -- narrow each `float`
+    /// parameter into its narrow-storage local, and widen each binary64
+    /// `long double` argument into its local of the platform format. A
+    /// negative `param_local_slots` entry marks all three kinds.
     fn emit_entry_copies(&self, b: &mut SsaBuilder) {
         for i in 0..self.param_tys.len() {
             let pty = self.param_tys[i];
@@ -396,6 +397,15 @@ impl<'a> ParamEntry<'a> {
                 } else {
                     b.mcpy(dst, src, size, align);
                 }
+                continue;
+            }
+            if is_long_double_scalar(pty) {
+                let val = if self.host_abi && self.in_fp_reg(i) {
+                    b.param_ref((self.shift + i) as u32, LoadKind::F64)
+                } else {
+                    b.load_local(arg_slot, LoadKind::F64)
+                };
+                b.store_local(local_slot, val, store_kind_for(pty, self.target));
                 continue;
             }
             if stripped != Ty::Float as i64 {

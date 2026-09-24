@@ -1432,6 +1432,22 @@ impl Compiler {
             // Symbol now points at the f32-storage local.
             self.symbols[idx].val = local_val;
         }
+
+        // A `long double` wider than `double` arrives as the binary64 badc
+        // computes with, in one 8-byte cell. The walker converts it at entry
+        // into a local of the platform format the body reads.
+        if self.target.long_double() != crate::c5::codegen::LongDoubleKind::F64 {
+            for &idx in params.indices.iter() {
+                let pty = self.symbols[idx].type_;
+                if !super::types::is_long_double_scalar(pty) {
+                    continue;
+                }
+                let slots = self.slots_of_type(pty);
+                let local_val = self.reserve_object_slots(pty, slots)?;
+                self.record_multi_cell_temp(local_val, slots, pty);
+                self.symbols[idx].val = local_val;
+            }
+        }
         Ok(())
     }
 

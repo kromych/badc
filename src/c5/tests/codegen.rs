@@ -8608,7 +8608,8 @@ pub(super) fn optimized_function_with(
 /// A long double member is read and written 16 bytes wide and a split
 /// field takes a one-cell slot, so the object stays in memory. Given such
 /// a slot, the member's store wrote the cell above it -- the saved frame
-/// pointer, in this function on x86-64.
+/// pointer, in this function on x86-64. The parameter's own home, which
+/// its entry store fills from the argument register, is two cells.
 #[test]
 fn wide_member_keeps_its_object_in_memory() {
     const SRC: &str = "struct ld { int a; int b; long double x; };\n\
@@ -8629,10 +8630,16 @@ fn wide_member_keeps_its_object_in_memory() {
                 .any(|(_, i)| i.starts_with("Store {") && wide(i)),
             "{target:?}: the member is stored through its object: {body}"
         );
+        let from_param = |i: &str| {
+            let id = i.split("value=v").nth(1).and_then(|r| r.split(',').next());
+            insts.iter().any(|(v, t)| {
+                Some(alloc::format!("{v}").as_str()) == id && t.starts_with("ParamRef")
+            })
+        };
         assert!(
             !insts
                 .iter()
-                .any(|(_, i)| i.starts_with("StoreLocal { off=-") && wide(i)),
+                .any(|(_, i)| { i.starts_with("StoreLocal { off=-") && wide(i) && !from_param(i) }),
             "{target:?}: no one-cell slot holds the member: {body}"
         );
     }

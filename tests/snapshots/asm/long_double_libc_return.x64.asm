@@ -28,11 +28,12 @@ Disassembly of section .text:
 <ldexpl>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	movsd	%xmm0, -0x20(%rbp)
-               	movsd	%xmm0, -0x20(%rbp)
+               	subq	$0x10, %rsp
                	movl	$0x35, %edi
-               	fldt	-0x20(%rbp)
+               	movsd	%xmm0, -0x8(%rsp)
+               	fldl	-0x8(%rsp)
+               	fstpt	-0x10(%rbp)
+               	fldt	-0x10(%rbp)
                	fstpl	-0x8(%rsp)
                	movsd	-0x8(%rsp), %xmm0
                	xorl	%eax, %eax

@@ -418,8 +418,7 @@ Disassembly of section .text:
                	leave
                	retq
                	movl	-0x28(%rbp), %eax
-               	decq	%rax
-               	movl	%eax, %edi
+               	leaq	-0x1(%rax), %rdi
                	callq	<addr>
                	movabsq	$0x1fffffffe, %r11      # imm = 0x1FFFFFFFE
                	cmpq	%r11, %rax

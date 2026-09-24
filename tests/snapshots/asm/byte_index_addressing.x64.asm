@@ -348,8 +348,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
-               	addq	$0x7, %rax
-               	movl	%eax, %esi
+               	leaq	0x7(%rax), %rsi
                	callq	<addr>
                	cmpl	$0xef, %eax
                	jne	<addr>

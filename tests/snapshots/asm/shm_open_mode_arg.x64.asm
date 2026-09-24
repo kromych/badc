@@ -55,15 +55,15 @@ Disassembly of section .text:
                	popq	%r12
                	leave
                	retq
-               	movslq	%r12d, %rdi
                	leaq	-0x90(%rbp), %rsi
+               	movq	%r12, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x2, %ebx
-               	movslq	%r12d, %rdi
+               	movq	%r12, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
                	leaq	-0xd0(%rbp), %rdi

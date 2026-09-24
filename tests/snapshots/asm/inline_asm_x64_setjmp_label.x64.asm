@@ -29,7 +29,6 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x100, %rsp            # imm = 0x100
-               	movslq	%edi, %rdi
                	xorl	%eax, %eax
                	leaq	-0x100(%rbp), %rcx
                	addq	%rax, %rcx

@@ -291,30 +291,30 @@ fn ent_pc=11 n_params=0 variadic=false locals=10
     v199 Imm(18)                                          -> x0
     terminator Return(v199)   (exit_acc=v199)
   block 44  start_pc=0
-    v200 Extend { value=v195, kind=I32 }                  -> x7
+    v200 Extend { value=v195, kind=I32 }                  -> x0
     v201 ImmData(63)                                      -> x6
     v202 ImmData(70)                                      -> x2
     v203 Imm(42)                                          -> x1
-    v204 CallExt { binding_idx=61, args=[v200, v201, v202, v203], fp_arg_mask=0x0 } -> x0
+    v204 CallExt { binding_idx=61, args=[v195, v201, v202, v203], fp_arg_mask=0x0 } -> x0
     v205 BinopI { op=ne, lhs=v204, rhs_imm=9 }            -> x0
     terminator Bz { cond=v205, target=b46, fall=b45 }   (exit_acc=v205)
   block 45  start_pc=0
     v206 Imm(19)                                          -> x0
     terminator Return(v206)   (exit_acc=v206)
   block 46  start_pc=0
-    v207 Extend { value=v195, kind=I32 }                  -> x7
+    v207 Extend { value=v195, kind=I32 }                  -> x0
     v208 Imm(0)                                           -> x6
-    v209 CallExt { binding_idx=197, args=[v207, v208, v208], fp_arg_mask=0x0 } -> x0
+    v209 CallExt { binding_idx=197, args=[v195, v208, v208], fp_arg_mask=0x0 } -> x0
     v210 BinopI { op=ne, lhs=v209, rhs_imm=0 }            -> x1
     terminator Bz { cond=v209, target=b48, fall=b47 }   (exit_acc=v210)
   block 47  start_pc=0
     v211 Imm(20)                                          -> x0
     terminator Return(v211)   (exit_acc=v211)
   block 48  start_pc=0
-    v212 Extend { value=v195, kind=I32 }                  -> x7
+    v212 Extend { value=v195, kind=I32 }                  -> x0
     v213 LocalAddr(-8)                                    -> x6
     v214 Imm(64)                                          -> x2
-    v215 CallExt { binding_idx=187, args=[v212, v213, v214], fp_arg_mask=0x0 } -> x0
+    v215 CallExt { binding_idx=187, args=[v195, v213, v214], fp_arg_mask=0x0 } -> x0
     v216 BinopI { op=ne, lhs=v215, rhs_imm=9 }            -> x0
     terminator Bz { cond=v216, target=b50, fall=b49 }   (exit_acc=v216)
   block 49  start_pc=0

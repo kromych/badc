@@ -68,6 +68,7 @@
 /// pointers resolve to native offsets via `FuncFixup`, so fixtures
 /// that exercise those paths run end-to-end.
 pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
+    ("call_arg_low_word.c", 0),
     ("early_return_before_frame.c", 0),
     ("inline_asm_stack_switch_spill.c", 0),
     ("int128_divide_edges.c", 0),
@@ -1229,6 +1230,7 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
 /// stay in sync because both backends should faithfully execute the
 /// same fixtures; if they drift, one of them has a bug.
 pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
+    ("call_arg_low_word.c", 0),
     ("early_return_before_frame.c", 0),
     ("inline_asm_stack_switch_spill.c", 0),
     ("int128_divide_edges.c", 0),
@@ -2087,6 +2089,7 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
 ];
 
 pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
+    ("call_arg_low_word.c", 0),
     ("early_return_before_frame.c", 0),
     ("inline_asm_stack_switch_spill.c", 0),
     ("int128_divide_edges.c", 0),
@@ -2922,6 +2925,7 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
 /// Subset of the cross-arch fixture corpus that doesn't lean on
 /// POSIX-only semantics.
 pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
+    ("call_arg_low_word.c", 0),
     ("early_return_before_frame.c", 0),
     ("inline_asm_stack_switch_spill.c", 0),
     ("int128_divide_edges.c", 0),
@@ -3539,6 +3543,7 @@ pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
 /// limitations (POSIX-only setenv shape, dlopen-against-libc-soname)
 /// are arch-independent.
 pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
+    ("call_arg_low_word.c", 0),
     ("early_return_before_frame.c", 0),
     ("inline_asm_stack_switch_spill.c", 0),
     ("int128_divide_edges.c", 0),
@@ -4097,6 +4102,7 @@ pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
 ];
 
 pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
+    ("call_arg_low_word.c", 0),
     ("early_return_before_frame.c", 0),
     ("inline_asm_stack_switch_spill.c", 0),
     ("int128_divide_edges.c", 0),

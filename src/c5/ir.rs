@@ -310,6 +310,12 @@ pub(crate) enum Inst {
         /// `Imm` bit pattern, so the placement alone cannot classify
         /// it. The per-arch emit feeds this to `plan_call_args`.
         fp_arg_mask: FpMask,
+        /// Bit `i` set when the callee reads argument `i` in the low 32
+        /// bits alone: a named integer parameter no wider than 32 bits,
+        /// whose upper half every supported ABI leaves unspecified (System
+        /// V AMD64 3.2.3, AAPCS64 6.8.2); a narrower one still arrives
+        /// extended to 32 bits (Apple arm64). Clear past bit 63.
+        low_word_args: u64,
         /// Host-ABI aggregate metadata. Parallel to `args`:
         /// `arg_aggs[k] = Some(i)` marks `args[k]` as the address of
         /// an aggregate laid out by the function's `agg_descs[i]`,
@@ -348,6 +354,8 @@ pub(crate) enum Inst {
         fp_return: bool,
         /// See [`Self::Call::fp_arg_mask`].
         fp_arg_mask: FpMask,
+        /// See [`Self::Call::low_word_args`].
+        low_word_args: u64,
         /// Calling convention the pointed-to function follows, read off
         /// the callee pointer's declared type
         /// (`__attribute__((ms_abi))` / `((sysv_abi))`). Selects the
@@ -366,6 +374,8 @@ pub(crate) enum Inst {
         binding_idx: i64,
         args: Vec<ValueId>,
         fp_arg_mask: FpMask,
+        /// See [`Self::Call::low_word_args`].
+        low_word_args: u64,
         /// True when the callee returns a floating-point scalar, so the
         /// result is delivered in the FP return register (d0 / xmm0) and
         /// the value is FP-classed. Mirrors [`Self::Call::fp_return`];

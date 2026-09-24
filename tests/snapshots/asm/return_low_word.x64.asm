@@ -60,7 +60,6 @@ Disassembly of section .text:
 <as_long>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	movslq	%edi, %rdi
                	callq	<addr>
                	movslq	%eax, %rax
                	popq	%rbp
@@ -69,7 +68,6 @@ Disassembly of section .text:
 <as_ulong>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	movl	%edi, %edi
                	callq	<addr>
                	movl	%eax, %eax
                	popq	%rbp
@@ -87,7 +85,6 @@ Disassembly of section .text:
 <as_test>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	movslq	%edi, %rdi
                	callq	<addr>
                	testl	%eax, %eax
                	je	<addr>
@@ -103,7 +100,6 @@ Disassembly of section .text:
                	subq	$0x8, %rsp
                	pushq	%rbx
                	movq	%rdi, %rbx
-               	movslq	%esi, %rsi
                	movq	%rsi, %rdi
                	callq	<addr>
                	movslq	%eax, %rax
@@ -115,7 +111,6 @@ Disassembly of section .text:
 <as_short>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	movslq	%edi, %rdi
                	callq	<addr>
                	movswq	%ax, %rax
                	popq	%rbp
@@ -124,7 +119,6 @@ Disassembly of section .text:
 <as_char>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	movslq	%edi, %rdi
                	callq	<addr>
                	movsbq	%al, %rax
                	popq	%rbp
@@ -133,8 +127,6 @@ Disassembly of section .text:
 <as_diff>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	movslq	%edi, %rdi
-               	movslq	%esi, %rsi
                	callq	<addr>
                	movslq	%eax, %rax
                	decq	%rax

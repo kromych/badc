@@ -35,8 +35,7 @@ Disassembly of section .text:
                	pushq	%r12
                	pushq	%rbx
                	movq	%rdi, %r12
-               	movslq	%edx, %r13
-               	movslq	%esi, %rsi
+               	movq	%rdx, %r13
                	leaq	(%rsi,%r13), %rax
                	movslq	%eax, %rax
                	movq	%rax, %rcx
@@ -73,7 +72,7 @@ Disassembly of section .text:
                	jle	<addr>
                	movq	%r12, %rdi
                	callq	<addr>
-               	movslq	%ebx, %rsi
+               	movq	%rbx, %rsi
                	cmpl	%r13d, %esi
                	jl	<addr>
                	popq	%rbx

@@ -440,7 +440,6 @@ Disassembly of section .text:
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	ldr	x1, [x1, #0x8]
-               	mov	w1, w1
                	bl	<addr>
                	mov	x17, #0x5555            // =21845
                	movk	x17, #0x5555, lsl #16

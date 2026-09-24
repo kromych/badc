@@ -16,7 +16,6 @@ Disassembly of section .text:
 <make>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sxtw	x4, w4
                	adrp	x5, <page>
                	add	x5, x5, <lo12>
                	ldrsw	x6, [x5]
@@ -24,8 +23,6 @@ Disassembly of section .text:
                	str	w6, [x5]
                	cmp	w4, #0x3e8
                	b.le	<addr>
-               	mov	w0, w0
-               	mov	w1, w1
                	sub	x4, x4, #0x1
                	bl	<addr>
                	ldp	x29, x30, [sp], #0x10
@@ -52,10 +49,7 @@ Disassembly of section .text:
 <wrap>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sxtw	x4, w4
-               	mov	w0, w0
                	orr	x0, x0, #0x40000
-               	mov	w1, w1
                	bl	<addr>
                	cbz	x0, <addr>
                	ldr	x1, [x0, #0x18]

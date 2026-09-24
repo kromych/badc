@@ -365,6 +365,7 @@ mod tests {
             binding_idx: 0,
             args,
             fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
+            low_word_args: 0,
             fp_return: false,
             arg_aggs: Vec::new(),
             ret_agg: None,

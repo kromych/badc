@@ -432,7 +432,6 @@ Disassembly of section .text:
                	ret
                	ldur	w0, [x29, #-0x28]
                	sub	x0, x0, #0x1
-               	mov	w0, w0
                	bl	<addr>
                	mov	x17, #0x1fffffffe       // =8589934590
                	cmp	x0, x17

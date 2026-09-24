@@ -486,6 +486,16 @@ impl SsaBuilder {
         }
     }
 
+    /// Record the call's [`Inst::Call::low_word_args`].
+    pub(crate) fn set_call_low_word_args(&mut self, v: ValueId, mask: u64) {
+        match &mut self.func.insts[v as usize] {
+            Inst::Call { low_word_args, .. }
+            | Inst::CallIndirect { low_word_args, .. }
+            | Inst::CallExt { low_word_args, .. } => *low_word_args = mask,
+            _ => {}
+        }
+    }
+
     pub(crate) fn set_call_arg_aggs(&mut self, v: ValueId, arg_aggs: Vec<Option<u32>>) {
         match &mut self.func.insts[v as usize] {
             Inst::Call { arg_aggs: a, .. }
@@ -1319,6 +1329,7 @@ impl SsaBuilder {
             fixed_args,
             fp_return,
             fp_arg_mask,
+            low_word_args: 0,
             arg_aggs: alloc::vec::Vec::new(),
             ret_agg: None,
             ret_slot_local: 0,
@@ -1344,6 +1355,7 @@ impl SsaBuilder {
             fixed_args,
             fp_return,
             fp_arg_mask,
+            low_word_args: 0,
             arg_aggs: alloc::vec::Vec::new(),
             ret_agg: None,
             ret_slot_local: 0,
@@ -1372,6 +1384,7 @@ impl SsaBuilder {
             fixed_args,
             fp_return,
             fp_arg_mask,
+            low_word_args: 0,
             callee_conv,
             arg_aggs: alloc::vec::Vec::new(),
             ret_agg: None,
@@ -1592,6 +1605,7 @@ impl SsaBuilder {
             binding_idx,
             args,
             fp_arg_mask,
+            low_word_args: 0,
             fp_return,
             arg_aggs: alloc::vec::Vec::new(),
             ret_agg: None,

@@ -40,13 +40,13 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	movslq	%ebx, %rdi
+               	movq	%rbx, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax
                	je	<addr>
-               	movslq	%ebx, %rdi
+               	movq	%rbx, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
@@ -56,7 +56,7 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	movslq	%ebx, %rdi
+               	movq	%rbx, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
@@ -66,7 +66,7 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	movslq	%ebx, %rdi
+               	movq	%rbx, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
@@ -76,7 +76,6 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	movslq	%ebx, %rbx
                	leaq	<rip>, %rdi
                	xorl	%eax, %eax
                	callq	<addr>

@@ -17,9 +17,6 @@ Disassembly of section .text:
                	cbz	w2, <addr>
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sxtw	x0, w0
-               	sxtw	x2, w2
-               	sxtw	x1, w1
                	sub	x2, x2, #0x1
                	mov	x16, x1
                	mov	x1, x0

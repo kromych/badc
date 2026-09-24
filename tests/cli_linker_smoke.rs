@@ -5627,6 +5627,60 @@ fn hidden_result_pointer_calls_cross_the_system_compiler_boundary() {
     drive_across_the_system_compiler(&cc, "hidden-ptr-interop", common, "mix, floats, spill");
 }
 
+// A parameter of 32 bits or less is read in the low word, across the system
+// compiler boundary both ways: each side calls the other's callees through
+// 64-bit parameter types, an upper half set, then through their own types
+// with arguments its 64-bit arithmetic narrowed.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn low_word_arguments_cross_the_system_compiler_boundary() {
+    let Some(cc) = host_cc() else {
+        eprintln!(
+            "skipping low_word_arguments_cross_the_system_compiler_boundary: no system C compiler"
+        );
+        return;
+    };
+    let common = "typedef unsigned long long u64;\n\
+        typedef long long s64;\n\
+        static s64 widen_i(int x) { return x; }\n\
+        static u64 widen_u(unsigned x) { return x; }\n\
+        static u64 halve(unsigned x) { return (u64)x >> 1; }\n\
+        static s64 sum(int a, int b) { return (s64)a + (s64)b; }\n\
+        static s64 pick(const s64 *t, int i) { return t[i]; }\n\
+        static s64 byte(signed char c) { return c; }\n\
+        static u64 half(unsigned short h) { return h; }\n\
+        struct fns { s64 (*widen_i)(int); u64 (*widen_u)(unsigned); u64 (*halve)(unsigned);\n\
+          s64 (*sum)(int, int); s64 (*pick)(const s64 *, int); s64 (*byte)(signed char);\n\
+          u64 (*half)(unsigned short); };\n\
+        typedef u64 (*wide1)(u64);\n\
+        typedef s64 (*wide2)(u64, u64);\n\
+        typedef s64 (*wide_pick)(const s64 *, u64);\n\
+        static const s64 table[8] = { 10, 11, 12, 13, 14, 15, 16, 17 };\n\
+        static int drive(const struct fns *f, int base)\n\
+        { volatile u64 vh = 0xdeadbeef00000004ULL, vn = 0x12345678fffffffcULL;\n\
+          u64 h = vh, n = vn;\n\
+          if ((s64)((wide1)f->widen_i)(n) != -4) return base + 1;\n\
+          if (((wide1)f->widen_u)(h) != 4) return base + 2;\n\
+          if (((wide1)f->halve)(h + 2) != 3) return base + 3;\n\
+          if (((wide2)f->sum)(h, n) != 0) return base + 4;\n\
+          if (((wide_pick)f->pick)(table + 4, n) != 10) return base + 5;\n\
+          if ((s64)((wide1)f->byte)(0x12345678ffffff85ULL) != -123) return base + 6;\n\
+          if (((wide1)f->half)(0xdeadbeef0000fffeULL) != 0xfffe) return base + 7;\n\
+          if (f->widen_i((int)n + 1) != -3) return base + 8;\n\
+          if (f->widen_u((unsigned)h | 1) != 5) return base + 9;\n\
+          if (f->sum((int)h, (int)n - 1) != -1) return base + 10;\n\
+          if (f->pick(table + 4, (int)h - 5) != 13) return base + 11;\n\
+          if (f->byte((signed char)(h + 0x81)) != -123) return base + 12;\n\
+          if (f->half((unsigned short)(n + 3)) != 0xffff) return base + 13;\n\
+          return 0; }\n";
+    drive_across_the_system_compiler(
+        &cc,
+        "low-word-args-interop",
+        common,
+        "widen_i, widen_u, halve, sum, pick, byte, half",
+    );
+}
+
 // `-Map=FILE` / `-Map FILE` / `-M` produce a GNU-ld-style link map.
 // Emitting a Linux ELF needs no matching host, so these run anywhere.
 #[test]

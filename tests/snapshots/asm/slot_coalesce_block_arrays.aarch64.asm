@@ -33,7 +33,6 @@ Disassembly of section .text:
                	sub	sp, sp, #0x400
                	mov	x1, x0
                	mov	x3, #0x3e8              // =1000
-               	sxtw	x2, w2
                	mov	x0, #0x0                // =0
                	cmp	w1, #0x2
                	b.lt	<addr>

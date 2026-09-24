@@ -2501,10 +2501,10 @@ Disassembly of section .text:
                	popq	%r15
                	leave
                	retq
-               	movslq	%ebx, %rdi
                	leaq	<rip>, %rax
                	movq	(%rax), %rsi
                	movl	$0x3ffff, %edx          # imm = 0x3FFFF
+               	movq	%rbx, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
                	testq	%rax, %rax
@@ -2524,7 +2524,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx
                	movq	(%rcx), %rcx
                	movb	$0x0, (%rcx,%rax)
-               	movslq	%ebx, %rdi
+               	movq	%rbx, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
                	leaq	<rip>, %rax
@@ -3168,8 +3168,7 @@ Disassembly of section .text:
                	cmpq	$0x1e, %r12
                	jne	<addr>
                	movq	0x8(%rbx), %rdi
-               	movq	(%rbx), %rax
-               	movslq	%eax, %rsi
+               	movq	(%rbx), %rsi
                	movb	$0x0, %al
                	callq	<addr>
                	movslq	%eax, %rax
@@ -3177,8 +3176,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	cmpq	$0x1f, %r12
                	jne	<addr>
-               	movq	0x10(%rbx), %rax
-               	movslq	%eax, %rdi
+               	movq	0x10(%rbx), %rdi
                	movq	0x8(%rbx), %rsi
                	movq	(%rbx), %rdx
                	xorl	%eax, %eax
@@ -3187,8 +3185,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	cmpq	$0x20, %r12
                	jne	<addr>
-               	movq	(%rbx), %rax
-               	movslq	%eax, %rdi
+               	movq	(%rbx), %rdi
                	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
@@ -3232,8 +3229,7 @@ Disassembly of section .text:
                	cmpq	$0x24, %r12
                	jne	<addr>
                	movq	0x10(%rbx), %rdi
-               	movq	0x8(%rbx), %rax
-               	movslq	%eax, %rsi
+               	movq	0x8(%rbx), %rsi
                	movq	(%rbx), %rdx
                	xorl	%eax, %eax
                	callq	<addr>

@@ -3362,6 +3362,7 @@ impl Compiler {
         self.emit_indirect_call_ast(
             callee_ast,
             indirect_arg_ids,
+            callee_params,
             callee_is_variadic,
             callee_fixed,
             callee_conv,
@@ -3373,6 +3374,7 @@ impl Compiler {
         &mut self,
         callee_ast: Option<super::super::ast::ExprId>,
         indirect_arg_ids: alloc::vec::Vec<Option<super::super::ast::ExprId>>,
+        callee_params: Option<alloc::vec::Vec<i64>>,
         callee_is_variadic: bool,
         callee_fixed: u32,
         callee_conv: crate::c5::codegen::CallConv,
@@ -3406,6 +3408,9 @@ impl Compiler {
                     self.ast
                         .conv_indirect_callees
                         .push((callee_id, callee_conv));
+                }
+                if let Some(params) = callee_params.filter(|p| !p.is_empty()) {
+                    self.ast.indirect_callee_params.insert(callee_id, params);
                 }
                 let id = self.ast.push_expr(
                     super::super::ast::Expr::Call {

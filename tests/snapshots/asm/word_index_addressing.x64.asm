@@ -355,16 +355,14 @@ Disassembly of section .text:
                	retq
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
-               	addq	$0x7, %rax
-               	movl	%eax, %esi
+               	leaq	0x7(%rax), %rsi
                	callq	<addr>
                	cmpq	$0x7fffffff, %rax       # imm = 0x7FFFFFFF
                	jne	<addr>
                	leaq	<rip>, %rdi
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
-               	incq	%rax
-               	movl	%eax, %esi
+               	leaq	0x1(%rax), %rsi
                	callq	<addr>
                	cmpq	$-0x2, %rax
                	je	<addr>
@@ -374,8 +372,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
-               	addq	$0x3, %rax
-               	movl	%eax, %esi
+               	leaq	0x3(%rax), %rsi
                	movl	$0x21, %edx
                	callq	<addr>
                	leaq	<rip>, %rax
@@ -420,11 +417,9 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi
                	leaq	<rip>, %rax
                	movslq	(%rax), %rcx
-               	decq	%rcx
-               	movl	%ecx, %esi
+               	leaq	-0x1(%rcx), %rsi
                	movslq	(%rax), %rax
-               	addq	$0x3, %rax
-               	movl	%eax, %edx
+               	leaq	0x3(%rax), %rdx
                	callq	<addr>
                	cmpq	$-0x1, %rax
                	je	<addr>
@@ -499,14 +494,11 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi
                	leaq	<rip>, %rax
                	movslq	(%rax), %rcx
-               	addq	$-0x4, %rcx
-               	movl	%ecx, %esi
+               	leaq	-0x4(%rcx), %rsi
                	movslq	(%rax), %rcx
-               	addq	$0x4, %rcx
-               	movl	%ecx, %edx
+               	leaq	0x4(%rcx), %rdx
                	movslq	(%rax), %rax
-               	addq	$0x8, %rax
-               	movl	%eax, %ecx
+               	leaq	0x8(%rax), %rcx
                	callq	<addr>
                	cmpq	$0x100, %rax            # imm = 0x100
                	je	<addr>

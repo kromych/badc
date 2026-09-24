@@ -1809,6 +1809,61 @@ fn narrow_parameter_converts_in_its_entry_move() {
     m.finish();
 }
 
+/// No `int` extension or `unsigned` mask precedes a direct, indirect or
+/// library call taking the argument in the low word (`wrap` of
+/// `tail_call_outside_return_block.c`); a narrower argument keeps its
+/// extension to 32 bits, a variadic one its full width.
+#[test]
+fn a_32_bit_argument_is_passed_without_extension() {
+    const SRC: &str = "#include <stdio.h>\n\
+        #include <string.h>\n\
+        struct node;\n\
+        struct node *make(unsigned flags, unsigned order, void *policy,\n\
+                          unsigned long index, int slot);\n\
+        struct node *wrap(unsigned flags, unsigned order, void *policy,\n\
+                          unsigned long index, int slot) {\n\
+            return make(flags | 0x40000, order, policy, index, slot);\n\
+        }\n\
+        struct ops { long (*op)(unsigned, int); };\n\
+        long through(const struct ops *o, unsigned a, int b) { return o->op(a | 1, b); }\n\
+        void fill(char *p, unsigned c, unsigned long n) { memset(p, c | 1, n); }\n\
+        long take8(signed char c);\n\
+        long narrow(long v) { return take8((signed char)v); }\n\
+        int show(int x) { return printf(\"%d\\n\", x + 1); }\n";
+    // SBFM of either width, the `sxt*` forms; `movsx` of each width.
+    let sbfm = |ws: &[u32]| {
+        ws.iter()
+            .filter(|&&w| w & 0x7F80_0000 == 0x1300_0000)
+            .count()
+    };
+    let movsx = |insns: &[X64Insn]| {
+        insns
+            .iter()
+            .filter(|i| matches!(i.op, 0x63 | 0x0FBE | 0x0FBF))
+            .count()
+    };
+    let mut m = Misses::default();
+    for (name, extends) in [
+        ("wrap", 0),
+        ("through", 0),
+        ("fill", 0),
+        ("narrow", 1),
+        ("show", 1),
+    ] {
+        let ws = a64(SRC, name);
+        let masks = ws.iter().filter(|&&w| a64_is_mask(w)).count();
+        m.expect(sbfm(&ws) == extends && masks == 0, || {
+            format!("aarch64 {name}: {extends} sxt* and no mask expected: {ws:08x?}")
+        });
+        let insns = x64(SRC, name);
+        let masks = insns.iter().filter(|i| x64_is_mask(i)).count();
+        m.expect(movsx(&insns) == extends && masks == 0, || {
+            format!("x86-64 {name}: {extends} movsx and no mask expected: {insns:x?}")
+        });
+    }
+    m.finish();
+}
+
 /// The `int` entry conversion is left out where only the low word is read;
 /// a `signed char` one is not, since it sets the low word too.
 #[test]

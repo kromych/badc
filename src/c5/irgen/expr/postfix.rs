@@ -4,7 +4,7 @@
 use super::super::access::{load_kind_for, load_kind_width, load_place};
 use super::super::atomic::RmwOpen;
 use super::super::types::{
-    arg_value_ty, extend_scalar_call_result, is_float_ty, is_floating_scalar,
+    arg_value_ty, extend_scalar_call_result, is_float_ty, is_floating_scalar, low_word_param,
 };
 use super::super::*;
 /// A struct or union member access (C99 6.5.2.3), shared by the read and
@@ -189,6 +189,8 @@ impl<'a> Walker<'a> {
             false,
             fp_mask.shifted(1),
         );
+        let low = self.low_word_args(&self.symbols[sym as usize].params, named, 1);
+        b.set_call_low_word_args(call, low);
         b.set_call_out_slot(call, result_slot);
         if !arg_aggs.is_empty() {
             b.set_call_arg_aggs(call, after_out_ptr(&arg_aggs));
@@ -222,6 +224,7 @@ impl<'a> Walker<'a> {
         };
         let named = self.symbols[sym as usize].params.len();
         let arg_aggs = self.call_arg_aggs(b, &mut args, named, Some(sym), true);
+        let low = self.low_word_args(&self.symbols[sym as usize].params, fixed_args, 0);
         // C99 6.5.2.2p6: a variadic floating-point argument widens to
         // `double` under a host variadic ABI but stays FP-classed --
         // riding an FP argument register on the register-save hosts, and
@@ -236,6 +239,7 @@ impl<'a> Walker<'a> {
             let target_pc = self.live_fun_val(sym, val);
             let call =
                 emit_direct_call(b, target_pc, sym, args.vals, fixed_args, fp_return, fp_mask);
+            b.set_call_low_word_args(call, low);
             if !arg_aggs.is_empty() {
                 b.set_call_arg_aggs(call, arg_aggs);
             }
@@ -268,6 +272,7 @@ impl<'a> Walker<'a> {
             fp_return,
             call_fp_mask,
         );
+        b.set_call_low_word_args(call, low);
         if !arg_aggs.is_empty() {
             b.set_call_arg_aggs(call, arg_aggs);
         }
@@ -489,6 +494,7 @@ impl<'a> Walker<'a> {
             }
         }
         let (ty, fp_mask) = (args.ty, args.fp_mask.clone());
+        let params = &self.symbols[sym as usize].params;
         // System V AMD64 MEMORY class / Win64 oversize: the caller
         // allocates the result buffer and passes its address as the
         // hidden first integer argument, which shifts the FP-argument
@@ -505,6 +511,7 @@ impl<'a> Walker<'a> {
             shifted.push(out_arg);
             shifted.extend_from_slice(&args.vals);
             let call = b.call_ext(val, shifted, fp_mask.shifted(1), false);
+            b.set_call_low_word_args(call, self.low_word_args(params, nparams, 1));
             b.set_call_out_slot(call, result_slot);
             if !arg_aggs.is_empty() {
                 b.set_call_arg_aggs(call, after_out_ptr(&arg_aggs));
@@ -516,6 +523,7 @@ impl<'a> Walker<'a> {
         let ret_temp = self.call_ret_temp(b, args.conv, ty);
         let fp_return = is_floating_scalar(ty);
         let call = b.call_ext(val, args.vals, fp_mask, fp_return);
+        b.set_call_low_word_args(call, self.low_word_args(params, nparams, 0));
         if !arg_aggs.is_empty() {
             b.set_call_arg_aggs(call, arg_aggs);
         }
@@ -546,6 +554,7 @@ impl<'a> Walker<'a> {
         // rather than on the stack the callee's va_arg walks. Carrying
         // the prototype on the pointer's type would close this.
         let (callee_variadic, callee_fixed) = self.indirect_callee_proto(callee, args.exprs.len());
+        let params = self.indirect_callee_params(callee);
         // Every ABI question below is asked of the pointed-to function's
         // own convention, not the target's default.
         let abi = self.target.abi_for(conv);
@@ -572,6 +581,7 @@ impl<'a> Walker<'a> {
             all_args.extend_from_slice(&args.vals);
             let fixed = all_args.len();
             let call = b.call_indirect(target, all_args, false, fixed, false, call_fp_mask, conv);
+            b.set_call_low_word_args(call, self.low_word_args(params, callee_fixed, 1));
             b.set_call_out_slot(call, result_slot);
             if !arg_aggs.is_empty() {
                 b.set_call_arg_aggs(call, after_out_ptr(&arg_aggs));
@@ -596,6 +606,7 @@ impl<'a> Walker<'a> {
                 fp_mask,
                 conv,
             );
+            b.set_call_low_word_args(call, self.low_word_args(params, callee_fixed, 0));
             if !arg_aggs.is_empty() {
                 b.set_call_arg_aggs(call, arg_aggs);
             }
@@ -622,10 +633,37 @@ impl<'a> Walker<'a> {
             call_fp_mask,
             conv,
         );
+        b.set_call_low_word_args(call, self.low_word_args(params, callee_fixed, 0));
         if !arg_aggs.is_empty() {
             b.set_call_arg_aggs(call, arg_aggs);
         }
         Ok(self.call_result(b, call, ret_temp, ty, true))
+    }
+
+    /// The parameter types of a pointer callee's prototype, where known.
+    fn indirect_callee_params(&self, callee: ExprId) -> &'a [i64] {
+        if let Some(params) = self.ast.indirect_callee_params.get(&callee) {
+            return params;
+        }
+        match self.ast.expr(callee) {
+            Expr::Ident { sym, .. } => self
+                .symbols
+                .get(*sym as usize)
+                .filter(|s| s.fn_ptr_indirection >= 1)
+                .map_or(&[], |s| s.params.as_slice()),
+            _ => &[],
+        }
+    }
+
+    /// [`Inst::Call::low_word_args`] for `named` of `params`, placed `shift`
+    /// positions up past a hidden leading argument.
+    fn low_word_args(&self, params: &[i64], named: usize, shift: usize) -> u64 {
+        params
+            .iter()
+            .take(named)
+            .enumerate()
+            .filter(|&(i, &ty)| i + shift < 64 && low_word_param(ty, self.target))
+            .fold(0, |mask, (i, _)| mask | 1 << (i + shift))
     }
 
     /// Allocate the result object a c5 out-pointer return writes through,

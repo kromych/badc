@@ -19,7 +19,6 @@ Disassembly of section .text:
                	str	x20, [sp, #-0x20]!
                	stp	x29, x30, [sp, #0x10]
                	add	x29, sp, #0x10
-               	sxtw	x1, w1
                	ldrb	w2, [x0, w1, sxtw]
                	lsl	x3, x1, #3
                	sxtw	x3, w3

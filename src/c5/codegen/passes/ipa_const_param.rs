@@ -236,15 +236,35 @@ pub(crate) fn run(
             )
         })
         .collect();
+    // Parameters read from the whole register, whose upper half a low-word
+    // argument (`Inst::Call::low_word_args`) leaves unspecified.
+    let raw_reads: BTreeMap<usize, u64> = funcs
+        .iter()
+        .filter(|f| params.contains_key(&f.ent_pc))
+        .map(|f| {
+            let raw = f.insts.iter().fold(0u64, |m, inst| match inst {
+                Inst::ParamRef {
+                    idx,
+                    kind: LoadKind::I64,
+                } if *idx < 64 => m | 1 << idx,
+                _ => m,
+            });
+            (f.ent_pc, raw)
+        })
+        .collect();
     let mut called: BTreeSet<usize> = BTreeSet::new();
     for f in funcs.iter() {
         for inst in &f.insts {
             let Inst::Call {
-                target_pc, args, ..
+                target_pc,
+                args,
+                low_word_args,
+                ..
             } = inst
             else {
                 continue;
             };
+            let unbounded = low_word_args & raw_reads.get(target_pc).copied().unwrap_or(0);
             let Some(n) = agreed.get(target_pc).map(|a| a.consts.len()) else {
                 continue;
             };
@@ -262,7 +282,11 @@ pub(crate) fn run(
                     (Some(k), Some(prev)) if k == prev => {}
                     _ => slots.consts[i] = None,
                 }
-                let r = super::value_range::arg_range(f.insts.as_slice(), arg);
+                let r = if i < 64 && unbounded >> i & 1 != 0 {
+                    UNIVERSE
+                } else {
+                    super::value_range::arg_range(f.insts.as_slice(), arg)
+                };
                 slots.ranges[i] = if first { r } else { slots.ranges[i].hull(r) };
             }
         }
@@ -319,4 +343,74 @@ pub(crate) fn run(
         .filter(|(_, a)| a.ranges.iter().any(|r| !r.is_universe()))
         .map(|(pc, a)| (pc, a.ranges))
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::c5::ir::{BinOp, Block, FpMask, Terminator};
+
+    fn one_block(ent_pc: usize, insts: Vec<Inst>, ret: ValueId) -> FunctionSsa {
+        let n = insts.len() as u32;
+        FunctionSsa {
+            ent_pc,
+            insts,
+            blocks: alloc::vec![Block {
+                start_pc: 0,
+                inst_range: 0..n,
+                terminator: Terminator::Return(ret),
+                exit_acc: ret,
+            }],
+            ..Default::default()
+        }
+    }
+
+    /// A low-word argument's range bounds a narrow signed parameter read,
+    /// which derives the value from the low word, and not a whole-register
+    /// one.
+    #[test]
+    fn a_low_word_argument_bounds_only_a_narrow_read() {
+        for (kind, low_word_args, bounded) in [
+            (LoadKind::I64, 0, true),
+            (LoadKind::I64, 1, false),
+            (LoadKind::I32, 1, true),
+        ] {
+            let mut callee = one_block(7, alloc::vec![Inst::ParamRef { idx: 0, kind }], 0);
+            callee.is_internal = true;
+            callee.n_params = 1;
+            let caller = one_block(
+                1,
+                alloc::vec![
+                    Inst::ParamRef {
+                        idx: 0,
+                        kind: LoadKind::I64,
+                    },
+                    Inst::BinopI {
+                        op: BinOp::And,
+                        lhs: 0,
+                        rhs_imm: 0xffff,
+                    },
+                    Inst::Call {
+                        target_pc: 7,
+                        args: alloc::vec![1],
+                        fixed_args: 1,
+                        fp_return: false,
+                        fp_arg_mask: FpMask::EMPTY,
+                        low_word_args,
+                        arg_aggs: Vec::new(),
+                        ret_agg: None,
+                        ret_slot_local: 0,
+                    },
+                ],
+                2,
+            );
+            let mut funcs = alloc::vec![caller, callee];
+            let ranges = run(&mut funcs, &BTreeSet::new());
+            assert_eq!(
+                ranges.contains_key(&7),
+                bounded,
+                "{kind:?}, low_word_args {low_word_args}: {ranges:?}"
+            );
+        }
+    }
 }

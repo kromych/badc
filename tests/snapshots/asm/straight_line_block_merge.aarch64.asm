@@ -24,7 +24,6 @@ Disassembly of section .text:
 <both>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sxtw	x0, w0
                	cmp	w0, #0x3
                	b.ge	<addr>
                	cmp	w1, #0x7
@@ -40,7 +39,6 @@ Disassembly of section .text:
 <either>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sxtw	x1, w1
                	cmp	w0, #0x3
                	b.lt	<addr>
                	cmp	w1, #0x7
@@ -74,7 +72,6 @@ Disassembly of section .text:
                	str	x20, [sp, #-0x20]!
                	stp	x29, x30, [sp, #0x10]
                	add	x29, sp, #0x10
-               	sxtw	x1, w1
                	mov	x17, #0x3               // =3
                	mul	x2, x0, x17
                	add	x20, x2, #0x1

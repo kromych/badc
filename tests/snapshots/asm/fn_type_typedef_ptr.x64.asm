@@ -53,7 +53,6 @@ Disassembly of section .text:
 <apply2>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	movslq	%esi, %rsi
                	movq	%rdi, %rax
                	movq	%rsi, %rdi
                	callq	*%rax
@@ -63,7 +62,6 @@ Disassembly of section .text:
 <deref_call>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	movslq	%esi, %rsi
                	movq	(%rdi), %rax
                	movq	%rsi, %rdi
                	callq	*%rax

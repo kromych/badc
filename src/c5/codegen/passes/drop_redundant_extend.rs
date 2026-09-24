@@ -74,6 +74,15 @@ fn observe(hi: &mut [bool], work: &mut Vec<ValueId>, v: ValueId) {
     }
 }
 
+/// Observe the arguments of a call outside its `low_word_args`.
+fn observe_args(hi: &mut [bool], work: &mut Vec<ValueId>, args: &[ValueId], low_word_args: u64) {
+    for (i, &a) in args.iter().enumerate() {
+        if i >= 64 || low_word_args >> i & 1 == 0 {
+            observe(hi, work, a);
+        }
+    }
+}
+
 /// For every value, whether any consumer reads bits at or above bit 32.
 ///
 /// An `Add`/`Sub`/`Mul`/`And`/`Or`/`Xor`/`Shl` result's low 32 bits depend only
@@ -81,14 +90,14 @@ fn observe(hi: &mut [bool], work: &mut Vec<ValueId>, v: ValueId) {
 /// arithmetic), and a `Phi` selects one operand, so these forward the consumer's
 /// observation to their operands and are transparent to the low word. A right
 /// shift, divide/modulo, rotate, ordered/equality compare, 64-bit store, address
-/// operand, call argument, FP cast, atomic, or branch condition reads the full
-/// register, so it observes the upper bits directly. `Inst::Extend` reads only the
-/// low `kind`-width bits, so it never observes its source's upper bits. An `And`
-/// with a constant whose high word is clear forwards none: its result's high word
-/// is clear whatever the other operand holds. A return observes the full register
-/// unless the declared return type is narrower than it on every target
-/// (`return_is_low_word`), in which case the result rides the low word and the
-/// reading side widens it.
+/// operand, FP cast, atomic, branch condition, or call argument outside the call's
+/// `low_word_args` reads the full register, so it observes the upper bits directly.
+/// `Inst::Extend` reads only the low `kind`-width bits, so it never observes its
+/// source's upper bits. An `And` with a constant whose high word is clear forwards
+/// none: its result's high word is clear whatever the other operand holds. A
+/// return observes the full register unless the declared return type is narrower
+/// than it on every target (`return_is_low_word`), in which case the result rides
+/// the low word and the reading side widens it.
 /// Anything not positively classified as low-word-only is treated as observing,
 /// so the result is a conservative over-approximation. Shared with the allocator,
 /// which consults it to skip a `ParamRef` entry sign-extension whose result is
@@ -232,20 +241,31 @@ fn compute_high_observed_through(func: &FunctionSsa, collapsing: &[bool]) -> Vec
                 observe(&mut hi, &mut work, *b);
                 observe(&mut hi, &mut work, *c);
             }
-            Inst::Call { args, .. }
-            | Inst::CallExt { args, .. }
-            | Inst::Intrinsic { args, .. }
+            Inst::Intrinsic { args, .. }
             | Inst::X86Simd { args, .. }
             | Inst::InlineAsm { args, .. } => {
                 for a in args {
                     observe(&mut hi, &mut work, *a);
                 }
             }
-            Inst::CallIndirect { target, args, .. } => {
+            Inst::Call {
+                args,
+                low_word_args,
+                ..
+            }
+            | Inst::CallExt {
+                args,
+                low_word_args,
+                ..
+            } => observe_args(&mut hi, &mut work, args, *low_word_args),
+            Inst::CallIndirect {
+                target,
+                args,
+                low_word_args,
+                ..
+            } => {
                 observe(&mut hi, &mut work, *target);
-                for a in args {
-                    observe(&mut hi, &mut work, *a);
-                }
+                observe_args(&mut hi, &mut work, args, *low_word_args);
             }
             Inst::Mcpy { dst, src, .. } => {
                 observe(&mut hi, &mut work, *dst);
@@ -677,8 +697,8 @@ fn param_reextend_kinds(func: &FunctionSsa) -> Vec<Option<LoadKind>> {
 /// width no wider than `kind` (see [`param_reextend_kinds`]). The bits
 /// the drop changes are above the extend's width, and the callee reads
 /// none of them. Restricted to `Inst::Call`: an external or indirect
-/// callee's entry behavior is unknown, so those keep the canonical
-/// C99 6.5.2.2p4-converted argument value.
+/// callee's entry behavior is unknown, so those keep the argument's low
+/// word as C99 6.5.2.2p4 converts it.
 fn drop_call_arg_reextends(funcs: &mut [FunctionSsa]) {
     use hashbrown::HashMap;
     let mut by_ent: HashMap<usize, Vec<Option<LoadKind>>> = HashMap::new();
@@ -1521,6 +1541,7 @@ mod tests {
                 binding_idx: 0,
                 args: vec![2],
                 fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
+                low_word_args: 0,
                 fp_return: false,
                 arg_aggs: Vec::new(),
                 ret_agg: None,
@@ -1818,6 +1839,7 @@ mod tests {
                     fixed_args: 1,
                     fp_return: false,
                     fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
+                    low_word_args: 0,
                     arg_aggs: Vec::new(),
                     ret_agg: None,
                     ret_slot_local: 0,
@@ -1881,6 +1903,7 @@ mod tests {
                         fixed_args: 0,
                         fp_return: false,
                         fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
+                        low_word_args: 0,
                         arg_aggs: Vec::new(),
                         ret_agg: None,
                         ret_slot_local: 0,
@@ -1998,6 +2021,7 @@ mod tests {
                     fixed_args: 1,
                     fp_return: false,
                     fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
+                    low_word_args: 0,
                     arg_aggs: Vec::new(),
                     ret_agg: None,
                     ret_slot_local: 0,
@@ -2083,6 +2107,7 @@ mod tests {
                     binding_idx: 0,
                     args: alloc::vec![2],
                     fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
+                    low_word_args: 0,
                     fp_return: false,
                     arg_aggs: Vec::new(),
                     ret_agg: None,

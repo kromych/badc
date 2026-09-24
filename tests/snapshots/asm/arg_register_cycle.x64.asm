@@ -30,9 +30,6 @@ Disassembly of section .text:
                	je	<addr>
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	movslq	%edi, %rdi
-               	movslq	%edx, %rdx
-               	movslq	%esi, %rsi
                	decq	%rdx
                	xchgq	%rsi, %rdi
                	callq	<addr>

@@ -122,6 +122,12 @@ pub(super) fn extend_scalar_call_result(
     }
 }
 
+/// Whether a parameter of type `ty` is read in the low 32 bits alone
+/// (`Inst::Call::low_word_args`).
+pub(super) fn low_word_param(ty: i64, target: Target) -> bool {
+    !is_floating_scalar(ty) && !is_pointer_ty(ty) && matches!(type_size_bytes(ty, target), 1..=4)
+}
+
 /// The `Inst::Extend` kind that sign-extends a `rs`-byte value.
 /// Callers gate on `rs` being 1, 2 or 4.
 pub(super) fn sign_extend_kind(rs: usize) -> crate::c5::ir::LoadKind {

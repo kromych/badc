@@ -28,11 +28,11 @@ Disassembly of section .text:
                	add	sp, sp, #0x340
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sxtw	x0, w20
+               	mov	x0, x20
                	bl	<addr>
                	sxtw	x0, w0
                	cbz	x0, <addr>
-               	sxtw	x0, w20
+               	mov	x0, x20
                	bl	<addr>
                	sxtw	x0, w0
                	cbnz	x0, <addr>
@@ -41,7 +41,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x340
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sxtw	x0, w20
+               	mov	x0, x20
                	bl	<addr>
                	sxtw	x0, w0
                	cmp	x0, #0x61
@@ -51,7 +51,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x340
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sxtw	x0, w20
+               	mov	x0, x20
                	bl	<addr>
                	sxtw	x0, w0
                	cmp	x0, #0x41
@@ -61,7 +61,6 @@ Disassembly of section .text:
                	add	sp, sp, #0x340
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sxtw	x20, w20
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	bl	<addr>

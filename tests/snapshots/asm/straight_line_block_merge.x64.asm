@@ -36,7 +36,6 @@ Disassembly of section .text:
 <both>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	movslq	%edi, %rdi
                	cmpl	$0x3, %edi
                	jge	<addr>
                	cmpl	$0x7, %esi
@@ -52,7 +51,6 @@ Disassembly of section .text:
 <either>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	movslq	%esi, %rsi
                	cmpl	$0x3, %edi
                	jl	<addr>
                	cmpl	$0x7, %esi
@@ -90,7 +88,6 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x8, %rsp
                	pushq	%rbx
-               	movslq	%esi, %rsi
                	leaq	(%rdi,%rdi,2), %rax
                	leaq	0x1(%rax), %rbx
                	cmpl	$0x3, %edi

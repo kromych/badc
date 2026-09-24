@@ -459,8 +459,7 @@ Disassembly of section .text:
                	retq
                	movl	$0xffffffff, %edi       # imm = 0xFFFFFFFF
                	leaq	<rip>, %rax
-               	movq	0x8(%rax), %rax
-               	movl	%eax, %esi
+               	movq	0x8(%rax), %rsi
                	callq	<addr>
                	cmpl	$0x55555555, %eax       # imm = 0x55555555
                	jne	<addr>

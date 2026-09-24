@@ -19,7 +19,7 @@ Disassembly of section .text:
                	str	x20, [sp, #-0x20]!
                	stp	x29, x30, [sp, #0x10]
                	add	x29, sp, #0x10
-               	sxtw	x20, w0
+               	mov	x20, x0
                	sub	x0, x20, #0x1
                	bl	<addr>
                	add	x0, x20, x0
@@ -35,7 +35,7 @@ Disassembly of section .text:
                	str	x24, [sp, #0x20]
                	stp	x29, x30, [sp, #0x30]
                	add	x29, sp, #0x30
-               	sxtw	x20, w0
+               	mov	x20, x0
                	mov	x24, x4
                	mov	x23, x3
                	mov	x22, x2

@@ -16,7 +16,6 @@ Disassembly of section .text:
 <scalbn>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sxtw	x0, w0
                	bl	<addr>
                	ldp	x29, x30, [sp], #0x10
                	ret

@@ -31,12 +31,12 @@ Disassembly of section .text:
                	mov	x0, #0xa                // =10
                	bl	<addr>
                	mov	x21, x0
-               	sxtw	x0, w20
                	mov	x2, #0x9                // =9
+               	mov	x0, x20
                	mov	x1, x21
                	bl	<addr>
                	strb	wzr, [x21, #0x9]
-               	sxtw	x0, w20
+               	mov	x0, x20
                	bl	<addr>
                	mov	x0, #0x0                // =0
                	ldp	x29, x30, [sp, #0x10]

@@ -1045,7 +1045,7 @@ fn ent_pc=33 n_params=1 variadic=false locals=1
 ; --- SSA dump (ok=true) ent_pc=34 ---
 ; name=main
 fn ent_pc=34 n_params=0 variadic=false locals=85
-  spill_count=0 gpr_used=[3] fp_used=[]
+  spill_count=0 gpr_used=[3, 12] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ImmData(32)                                      -> x0
@@ -1892,17 +1892,17 @@ fn ent_pc=34 n_params=0 variadic=false locals=85
     terminator Return(v696)   (exit_acc=v696)
   block 74  start_pc=0
     v697 Imm(0)                                           -> x0
-    v698 BinopI { op=and, lhs=v2, rhs_imm=4294967295 }    -> x7
+    v698 BinopI { op=and, lhs=v2, rhs_imm=4294967295 }    -> x0
     v699 BinopI { op=and, lhs=v2, rhs_imm=255 }           -> x0
-    v700 BinopI { op=add, lhs=v698, rhs_imm=1 }           -> x1
+    v700 BinopI { op=add, lhs=v2, rhs_imm=1 }             -> x1
     v701 BinopI { op=and, lhs=v700, rhs_imm=4294967295 }  -> x2
     v702 BinopI { op=shl, lhs=v700, rhs_imm=8 }           -> x1
     v703 BinopI { op=and, lhs=v702, rhs_imm=4294967295 }  -> x2
     v704 BinopI { op=and, lhs=v702, rhs_imm=65280 }       -> x1
     v705 Binop { op=or, lhs=v699, rhs=v704 }              -> x0
-    v706 BinopI { op=or, lhs=v705, rhs_imm=65536 }        -> x3
+    v706 BinopI { op=or, lhs=v705, rhs_imm=65536 }        -> x12
     v707 Imm(0)                                           -> x0
-    v708 Call { target_pc=33, args=[v698], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v708 Call { target_pc=33, args=[v2], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v709 BinopI { op=and, lhs=v708, rhs_imm=4294967295 }  -> x1
     v710 BinopI { op=and, lhs=v706, rhs_imm=4294967295 }  -> x1
     v711 Binop { op=ne, lhs=v708, rhs=v706 }              -> x0

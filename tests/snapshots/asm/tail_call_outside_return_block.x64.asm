@@ -28,15 +28,12 @@ Disassembly of section .text:
 <make>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	movslq	%r8d, %r8
                	leaq	<rip>, %rax
                	movslq	(%rax), %r9
                	incq	%r9
                	movl	%r9d, (%rax)
                	cmpl	$0x3e8, %r8d            # imm = 0x3E8
                	jle	<addr>
-               	movl	%edi, %edi
-               	movl	%esi, %esi
                	decq	%r8
                	popq	%rbp
                	jmp	<addr>
@@ -60,11 +57,7 @@ Disassembly of section .text:
 <wrap>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	movslq	%r8d, %r8
-               	movl	%edi, %eax
-               	movq	%rax, %rdi
                	orq	$0x40000, %rdi          # imm = 0x40000
-               	movl	%esi, %esi
                	callq	<addr>
                	testq	%rax, %rax
                	je	<addr>

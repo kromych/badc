@@ -380,6 +380,7 @@ impl Compiler {
         self.pending.attr_section = None;
         self.pending.attr_patchable_entry = None;
         self.pending.attr_no_instrument = false;
+        self.pending.attr_no_stack_protector = false;
         self.pending.attr_alias = None;
         self.pending.saw_register_storage = false;
         self.pending.auto_type_single_declarator = false;
@@ -2959,6 +2960,9 @@ impl Compiler {
         }
         if self.pending.attr_no_instrument {
             self.symbols[id_idx].no_instrument_function = true;
+        }
+        if self.pending.attr_no_stack_protector {
+            self.symbols[id_idx].no_stack_protector = true;
         }
         if self.pending_is_noinline {
             self.symbols[id_idx].is_noinline = true;

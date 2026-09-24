@@ -223,7 +223,7 @@ fn ent_pc=9 n_params=1 variadic=false locals=0
     terminator Return(v208)   (exit_acc=v208)
 ; --- SSA dump (ok=true) ent_pc=10 ---
 ; name=syndrome
-fn ent_pc=10 n_params=5 variadic=false locals=3
+fn ent_pc=10 n_params=5 variadic=false locals=2
   spill_count=6 gpr_used=[3, 12, 13, 14, 15] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -239,7 +239,7 @@ fn ent_pc=10 n_params=5 variadic=false locals=3
     v10  Imm(0)                                           -> x0
     v11  Imm(29)                                          -> x0
     v12  Imm(29)                                          -> x0
-    v13  LocalAddr(-3)                                    -> x0
+    v13  LocalAddr(-2)                                    -> x0
     v14  Imm(29)                                          -> x1
     v15  Imm(7424)                                        -> x1
     v16  Imm(7453)                                        -> x1
@@ -250,7 +250,7 @@ fn ent_pc=10 n_params=5 variadic=false locals=3
     v21  Store { addr=v13, disp=0, value=v20, kind=I64 }  -> -
     v22  BinopI { op=add, lhs=v13, rhs_imm=8 }            -> x2
     v23  Store { addr=v13, disp=8, value=v20, kind=I64 }  -> -
-    v24  LocalAddr(-3)                                    -> x0
+    v24  LocalAddr(-2)                                    -> x0
     v25  Imm(0)                                           -> x0
     v26  InlineAsm { template="movdqu %1, %0", ops=2, args=[-, v13] } -> [spill 4]
     v27  Imm(0)                                           -> x0
@@ -456,27 +456,29 @@ fn ent_pc=10 n_params=5 variadic=false locals=3
     v225 InlineAsm { template="movdqu %1, %0", ops=2, args=[v218, v78] } -> -
     v226 BinopI { op=and, lhs=v203, rhs_imm=4294967295 }  -> x0
     v227 Imm(0)                                           -> x0
-    v228 LocalAddr(-1)                                    -> x0
+    v228 Imm(0)                                           -> x0
     v229 Imm(0)                                           -> x0
-    v230 InlineAsm { template="movq %1, %0", ops=2, args=[v228, v78] } -> -
-    v231 LoadLocal { off=-1, kind=I64 }                   -> x0
-    v232 BinopI { op=and, lhs=v231, rhs_imm=255 }         -> x0
-    v233 Binop { op=add, lhs=v203, rhs=v232 }             -> x13
-    v234 Imm(0)                                           -> x0
-    v235 BinopI { op=and, lhs=v233, rhs_imm=4294967295 }  -> x0
-    v236 LifetimeEnd(0)                                   -> -
-    v237 LifetimeEnd(0)                                   -> -
+    v230 Imm(0)                                           -> x0
+    v231 Imm(0)                                           -> x0
+    v232 Imm(0)                                           -> x0
+    v233 InlineAsm { template="movq %1, %0", ops=2, args=[-, v78] } -> x0
+    v234 BinopI { op=and, lhs=v233, rhs_imm=255 }         -> x0
+    v235 Binop { op=add, lhs=v203, rhs=v234 }             -> x13
+    v236 Imm(0)                                           -> x0
+    v237 BinopI { op=and, lhs=v235, rhs_imm=4294967295 }  -> x0
     v238 LifetimeEnd(0)                                   -> -
     v239 LifetimeEnd(0)                                   -> -
     v240 LifetimeEnd(0)                                   -> -
-    v241 Extend { value=v47, kind=I32 }                   -> x0
-    v242 BinopI { op=add, lhs=v47, rhs_imm=16 }           -> x3
-    v243 Imm(0)                                           -> x0
-    v244 Extend { value=v242, kind=I32 }                  -> x0
-    terminator Jmp(b5)   (exit_acc=v242)
+    v241 LifetimeEnd(0)                                   -> -
+    v242 LifetimeEnd(0)                                   -> -
+    v243 Extend { value=v47, kind=I32 }                   -> x0
+    v244 BinopI { op=add, lhs=v47, rhs_imm=16 }           -> x3
+    v245 Imm(0)                                           -> x0
+    v246 Extend { value=v244, kind=I32 }                  -> x0
+    terminator Jmp(b5)   (exit_acc=v244)
   block 5  start_pc=0
-    v47  Phi { incoming=[b0:v40, b4:v242], kind=I64 }     -> x3
-    v48  Phi { incoming=[b0:v40, b4:v233], kind=I64 }     -> x13
+    v47  Phi { incoming=[b0:v40, b4:v244], kind=I64 }     -> x3
+    v48  Phi { incoming=[b0:v40, b4:v235], kind=I64 }     -> x13
     v49  Extend { value=v47, kind=I32 }                   -> x0
     v50  Imm(0)                                           -> x0
     v51  BinopI { op=lt, lhs=v47, rhs_imm=48 }            -> x0

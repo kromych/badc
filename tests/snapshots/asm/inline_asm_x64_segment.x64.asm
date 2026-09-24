@@ -28,22 +28,18 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x28, %rsp
+               	subq	$0x8, %rsp
                	pushq	%rbx
                	movq	%fs:0x0, %rax
-               	movq	%rax, -0x8(%rbp)
-               	cmpq	$0x0, -0x8(%rbp)
+               	movq	%rax, %rcx
+               	testq	%rcx, %rcx
                	jne	<addr>
                	movl	$0x1, %eax
                	popq	%rbx
                	leave
                	retq
-               	movq	-0x8(%rbp), %rax
-               	movq	%rax, %rbx
+               	movq	%rcx, %rbx
                	movq	(%rbx), %rax
-               	movq	%rax, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rax
-               	movq	-0x8(%rbp), %rcx
                	cmpq	%rcx, %rax
                	je	<addr>
                	movl	$0x2, %eax
@@ -52,9 +48,6 @@ Disassembly of section .text:
                	retq
                	xorl	%ebx, %ebx
                	movq	%fs:(%rbx), %rax
-               	movq	%rax, -0x18(%rbp)
-               	movq	-0x18(%rbp), %rax
-               	movq	-0x8(%rbp), %rcx
                	cmpq	%rcx, %rax
                	je	<addr>
                	movl	$0x3, %eax

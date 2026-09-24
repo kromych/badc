@@ -16,36 +16,25 @@ Disassembly of section .text:
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	stur	xzr, [x29, #-0x10]
-               	stur	xzr, [x29, #-0x8]
-               	sub	x16, x29, #0x10
-               	str	x16, [sp]
+               	sub	sp, sp, #0x10
                	adrp	x16, <page>
                	add	x16, x16, <lo12>
-               	str	x16, [sp, #0x8]
-               	ldr	x1, [sp, #0x8]
+               	str	x16, [sp]
+               	ldr	x1, [sp]
                	ldrh	w0, [x1, #0x4]
-               	ldr	x16, [sp]
-               	str	x0, [x16]
-               	sub	x16, x29, #0x8
-               	str	x16, [sp]
+               	mov	x2, x0
                	adrp	x16, <page>
                	add	x16, x16, <lo12>
-               	str	x16, [sp, #0x8]
-               	ldr	x1, [sp, #0x8]
+               	str	x16, [sp]
+               	ldr	x1, [sp]
                	ldrsw	x0, [x1, #0xc]
-               	ldr	x16, [sp]
-               	str	x0, [x16]
-               	ldur	x0, [x29, #-0x10]
-               	cmp	x0, #0x21
+               	cmp	x2, #0x21
                	b.ne	<addr>
-               	ldur	x0, [x29, #-0x8]
                	mov	x17, #-0x7              // =-7
                	cmp	x0, x17
                	b.ne	<addr>
                	mov	x0, #0x2a               // =42
-               	add	sp, sp, #0x20
+               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x0                // =0

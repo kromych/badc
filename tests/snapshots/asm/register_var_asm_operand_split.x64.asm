@@ -26,67 +26,39 @@ Disassembly of section .text:
                	int3
 
 <through_rdx>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
                	movq	%rdi, %rdx
                	movq	%rdx, %rax
-               	movq	%rax, -0x8(%rbp)
-               	movq	-0x8(%rbp), %rax
-               	leave
                	retq
 
 <via_named_rdx>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
                	movq	%rdi, %rdx
                	movq	%rdx, %rax
-               	movq	%rax, -0x8(%rbp)
-               	movq	-0x8(%rbp), %rax
-               	leave
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
                	movl	$0x2a, %edx
                	movq	%rdx, %rax
-               	movq	%rax, -0x8(%rbp)
-               	movq	-0x8(%rbp), %rax
                	cmpq	$0x2a, %rax
                	je	<addr>
                	movl	$0x1, %eax
-               	leave
                	retq
                	movq	$-0x7, %rdx
                	movq	%rdx, %rax
-               	movq	%rax, -0x8(%rbp)
-               	movq	-0x8(%rbp), %rax
                	cmpq	$-0x7, %rax
                	je	<addr>
                	movl	$0x2, %eax
-               	leave
                	retq
                	movl	$0x7b, %edx
                	movq	%rdx, %rax
-               	movq	%rax, -0x8(%rbp)
-               	movq	-0x8(%rbp), %rax
                	cmpq	$0x7b, %rax
                	je	<addr>
                	movl	$0x3, %eax
-               	leave
                	retq
                	movq	$-0x5, %rdx
                	movq	%rdx, %rax
-               	movq	%rax, -0x8(%rbp)
-               	movq	-0x8(%rbp), %rax
                	cmpq	$-0x5, %rax
                	je	<addr>
                	movl	$0x4, %eax
-               	leave
                	retq
                	xorl	%eax, %eax
-               	leave
                	retq

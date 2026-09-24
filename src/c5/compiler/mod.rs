@@ -1398,6 +1398,8 @@ pub(in crate::c5::compiler) struct Pending {
     pub attr_patchable_entry: Option<(u32, u32)>,
     /// A consumed `__attribute__((no_instrument_function))`.
     pub attr_no_instrument: bool,
+    /// A consumed `__attribute__((no_stack_protector))`.
+    pub attr_no_stack_protector: bool,
     /// A consumed `__attribute__((alias("target")))`: the declared name
     /// is an additional symbol for `target`.
     pub attr_alias: Option<alloc::string::String>,
@@ -1428,6 +1430,7 @@ pub(super) struct DeclSpecifiers {
     attr_section: Option<alloc::string::String>,
     attr_patchable_entry: Option<(u32, u32)>,
     attr_no_instrument: bool,
+    attr_no_stack_protector: bool,
     attr_cleanup: Option<usize>,
     attr_uninitialized: bool,
     attr_align: i64,
@@ -1451,6 +1454,7 @@ impl Pending {
             attr_section: self.attr_section.take(),
             attr_patchable_entry: self.attr_patchable_entry.take(),
             attr_no_instrument: core::mem::take(&mut self.attr_no_instrument),
+            attr_no_stack_protector: core::mem::take(&mut self.attr_no_stack_protector),
             attr_cleanup: self.attr_cleanup.take(),
             attr_uninitialized: core::mem::take(&mut self.attr_uninitialized),
             attr_align: core::mem::take(&mut self.attr_align),
@@ -1471,6 +1475,7 @@ impl Pending {
         self.attr_section = s.attr_section;
         self.attr_patchable_entry = s.attr_patchable_entry;
         self.attr_no_instrument = s.attr_no_instrument;
+        self.attr_no_stack_protector = s.attr_no_stack_protector;
         self.attr_cleanup = s.attr_cleanup;
         self.attr_uninitialized = s.attr_uninitialized;
         self.attr_align = s.attr_align;
@@ -1643,6 +1648,7 @@ impl Default for Pending {
             attr_section: None,
             attr_patchable_entry: None,
             attr_no_instrument: false,
+            attr_no_stack_protector: false,
             attr_alias: None,
             saw_register_storage: false,
             auto_type_single_declarator: false,

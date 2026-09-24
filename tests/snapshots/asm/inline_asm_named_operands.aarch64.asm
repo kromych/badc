@@ -16,142 +16,100 @@ Disassembly of section .text:
 <move_named>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x20
+               	sub	sp, sp, #0x10
                	sxtw	x0, w0
-               	sub	x16, x29, #0x8
-               	str	x16, [sp]
-               	str	x0, [sp, #0x8]
-               	ldr	x1, [sp, #0x8]
+               	str	x0, [sp]
+               	ldr	x1, [sp]
                	mov	w0, w1
-               	ldr	x16, [sp]
-               	str	w0, [x16]
-               	ldursw	x0, [x29, #-0x8]
-               	add	sp, sp, #0x20
+               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
 
 <add_mixed>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x30
-               	sub	x16, x29, #0x8
-               	str	x16, [sp]
-               	str	x0, [sp, #0x8]
-               	str	x1, [sp, #0x10]
-               	ldr	x1, [sp, #0x8]
-               	ldr	x2, [sp, #0x10]
+               	sub	sp, sp, #0x10
+               	str	x0, [sp]
+               	str	x1, [sp, #0x8]
+               	ldr	x1, [sp]
+               	ldr	x2, [sp, #0x8]
                	add	x0, x1, x2
-               	ldr	x16, [sp]
-               	str	x0, [x16]
-               	ldur	x0, [x29, #-0x8]
-               	add	sp, sp, #0x30
+               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
 
 <modifier_named>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x20
+               	sub	sp, sp, #0x10
                	sxtw	x0, w0
-               	sub	x16, x29, #0x8
-               	str	x16, [sp]
-               	str	x0, [sp, #0x8]
-               	ldr	x1, [sp, #0x8]
+               	str	x0, [sp]
+               	ldr	x1, [sp]
                	add	w0, w1, w1
-               	ldr	x16, [sp]
-               	str	w0, [x16]
-               	ldursw	x0, [x29, #-0x8]
-               	add	sp, sp, #0x20
+               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
 
 <rw_named>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	stur	x0, [x29, #-0x10]
-               	stur	w0, [x29, #-0x10]
-               	sub	x16, x29, #0x10
-               	str	x16, [sp]
-               	ldr	x16, [sp]
-               	ldr	w0, [x16]
+               	sub	sp, sp, #0x10
+               	mov	w0, w0
+               	str	x0, [sp]
+               	ldr	x0, [sp]
                	add	w0, w0, #0x5
-               	ldr	x16, [sp]
-               	str	w0, [x16]
-               	ldursw	x0, [x29, #-0x10]
-               	add	sp, sp, #0x20
+               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
 
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x30
-               	sub	x16, x29, #0x8
-               	str	x16, [sp]
+               	sub	sp, sp, #0x10
                	mov	x16, #0x7               // =7
-               	str	x16, [sp, #0x8]
-               	ldr	x1, [sp, #0x8]
+               	str	x16, [sp]
+               	ldr	x1, [sp]
                	mov	w0, w1
-               	ldr	x16, [sp]
-               	str	w0, [x16]
-               	ldursw	x0, [x29, #-0x8]
                	cmp	w0, #0x7
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
-               	add	sp, sp, #0x30
+               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x16, x29, #0x8
-               	str	x16, [sp]
                	mov	x16, #0x1e              // =30
-               	str	x16, [sp, #0x8]
+               	str	x16, [sp]
                	mov	x16, #0xc               // =12
-               	str	x16, [sp, #0x10]
-               	ldr	x1, [sp, #0x8]
-               	ldr	x2, [sp, #0x10]
+               	str	x16, [sp, #0x8]
+               	ldr	x1, [sp]
+               	ldr	x2, [sp, #0x8]
                	add	x0, x1, x2
-               	ldr	x16, [sp]
-               	str	x0, [x16]
-               	ldur	x0, [x29, #-0x8]
                	cmp	x0, #0x2a
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
-               	add	sp, sp, #0x30
+               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x16, x29, #0x8
-               	str	x16, [sp]
                	mov	x16, #0x15              // =21
-               	str	x16, [sp, #0x8]
-               	ldr	x1, [sp, #0x8]
+               	str	x16, [sp]
+               	ldr	x1, [sp]
                	add	w0, w1, w1
-               	ldr	x16, [sp]
-               	str	w0, [x16]
-               	ldursw	x0, [x29, #-0x8]
                	cmp	w0, #0x2a
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
-               	add	sp, sp, #0x30
+               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x25               // =37
-               	stur	w0, [x29, #-0x8]
-               	sub	x16, x29, #0x8
-               	str	x16, [sp]
-               	ldr	x16, [sp]
-               	ldr	w0, [x16]
+               	str	x0, [sp]
+               	ldr	x0, [sp]
                	add	w0, w0, #0x5
-               	ldr	x16, [sp]
-               	str	w0, [x16]
-               	ldursw	x0, [x29, #-0x8]
                	cmp	w0, #0x2a
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
-               	add	sp, sp, #0x30
+               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x2a               // =42
-               	add	sp, sp, #0x30
+               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret

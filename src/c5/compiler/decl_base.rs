@@ -48,6 +48,7 @@ struct AttrFlags {
     weak: bool,
     used: bool,
     no_instrument_function: bool,
+    no_stack_protector: bool,
     uninitialized: bool,
     transparent_union: bool,
     ms_abi: bool,
@@ -71,6 +72,7 @@ impl AttrFlags {
         self.weak |= other.weak;
         self.used |= other.used;
         self.no_instrument_function |= other.no_instrument_function;
+        self.no_stack_protector |= other.no_stack_protector;
         self.uninitialized |= other.uninitialized;
         self.transparent_union |= other.transparent_union;
         self.ms_abi |= other.ms_abi;
@@ -1133,6 +1135,10 @@ impl Compiler {
                 f.used = true;
             } else if n == "no_instrument_function" || n == "__no_instrument_function__" {
                 f.no_instrument_function = true;
+            } else if n == "no_stack_protector" || n == "__no_stack_protector__" {
+                // GNU `no_stack_protector`: no canary whatever
+                // `-fstack-protector*` selects.
+                f.no_stack_protector = true;
             } else if n == "uninitialized" || n == "__uninitialized__" {
                 // GNU `uninitialized`: the automatic object opts out of
                 // `-ftrivial-auto-var-init`.
@@ -1570,6 +1576,9 @@ impl Compiler {
         }
         if attrs.no_instrument_function {
             self.pending.attr_no_instrument = true;
+        }
+        if attrs.no_stack_protector {
+            self.pending.attr_no_stack_protector = true;
         }
         if let Some(p) = init_priority {
             self.pending.attr_init_priority = Some(p);

@@ -1327,7 +1327,7 @@ fn emit_store_local_f32(
 
 /// Propagate a stored integer value, the c5 accumulator, to `dst` when the
 /// allocator parked it elsewhere; `Err` for an FP destination.
-fn propagate_int(code: &mut Vec<u8>, frame: Frame, dst: Place, rv: Reg) -> Emit {
+pub(super) fn propagate_int(code: &mut Vec<u8>, frame: Frame, dst: Place, rv: Reg) -> Emit {
     match dst {
         Place::IntReg(r) if r != rv.0 => emit_mov_reg(code, Reg(r), rv),
         Place::IntReg(_) | Place::None => {}

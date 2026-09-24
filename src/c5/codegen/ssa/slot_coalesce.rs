@@ -78,10 +78,8 @@ pub(crate) fn run(
     let mut out = CoalesceDwarf::new();
     for f in funcs.iter_mut() {
         let ent_pc = f.ent_pc;
-        // A naked function emits no prologue and carries no canary, so
-        // nothing selects an order for its frame. `has_frame` is true
-        // here: a function with storage to order has one.
-        let protected = !f.is_naked && ssp.protects(f.ssp, true);
+        // `has_frame` is true here: a function with storage to order has one.
+        let protected = super::emit_common::protected(f, ssp, true);
         let m = coalesce(f, compact, protected);
         if !m.is_empty() {
             out.insert(ent_pc, m);

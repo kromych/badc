@@ -28,36 +28,27 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x18, %rsp
+               	subq	$0x8, %rsp
                	pushq	%rbx
-               	movq	$0x14, -0x8(%rbp)
-               	movq	-0x8(%rbp), %rax
+               	movl	$0x14, %eax
                	movl	$0x2a, %ebx
                	cmpq	%rbx, %rax
                	cmovlq	%rbx, %rax
-               	movq	%rax, -0x8(%rbp)
-               	movq	-0x8(%rbp), %rcx
-               	movq	$0x2a, -0x8(%rbp)
-               	movq	-0x8(%rbp), %rax
+               	movq	%rax, %rcx
+               	movl	$0x2a, %eax
                	movl	$0xa, %ebx
                	cmpq	%rbx, %rax
                	cmovlq	%rbx, %rax
-               	movq	%rax, -0x8(%rbp)
-               	movq	-0x8(%rbp), %rdx
-               	movq	$0x64, -0x8(%rbp)
-               	movq	-0x8(%rbp), %rax
+               	movq	%rax, %rdx
+               	movl	$0x64, %eax
                	movl	$0x2a, %ebx
                	cmpq	%rbx, %rax
                	cmovgq	%rbx, %rax
-               	movq	%rax, -0x8(%rbp)
-               	movq	-0x8(%rbp), %rsi
-               	movq	$0x2a, -0x8(%rbp)
-               	movq	-0x8(%rbp), %rax
+               	movq	%rax, %rsi
+               	movl	$0x2a, %eax
                	movl	$0x63, %ebx
                	cmpq	%rbx, %rax
                	cmovgq	%rbx, %rax
-               	movq	%rax, -0x8(%rbp)
-               	movq	-0x8(%rbp), %rax
                	cmpq	$0x2a, %rcx
                	jne	<addr>
                	cmpq	$0x2a, %rdx

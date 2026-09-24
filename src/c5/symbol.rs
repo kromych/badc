@@ -182,6 +182,10 @@ pub(crate) struct Symbol {
     /// of the name: `-pg` emits no profiling call in the body.
     pub no_instrument_function: bool,
 
+    /// `__attribute__((no_stack_protector))` seen on any declaration of
+    /// the name: `-fstack-protector*` gives the body no canary.
+    pub no_stack_protector: bool,
+
     /// `__attribute__((noinline))` seen on any declaration of the name.
     /// Sticky like `is_constructor`: gcc binds the attribute to the
     /// function, so a prototype carrying it holds the later definition
@@ -816,6 +820,7 @@ impl crate::c5::layout::DataOffsets for Symbol {
             section_name,
             patchable_function_entry: _,
             no_instrument_function: _,
+            no_stack_protector: _,
             is_noinline: _,
             is_constructor: _,
             is_destructor: _,

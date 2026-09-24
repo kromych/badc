@@ -77,11 +77,11 @@ Disassembly of section .text:
                	ret
 
 <syndrome>:
-               	stp	x20, x21, [sp, #-0xa0]!
+               	stp	x20, x21, [sp, #-0x90]!
                	stp	x22, x23, [sp, #0x10]
                	str	x24, [sp, #0x20]
-               	stp	x29, x30, [sp, #0x90]
-               	add	x29, sp, #0x90
+               	stp	x29, x30, [sp, #0x80]
+               	add	x29, sp, #0x80
                	mov	x21, x2
                	mov	x24, x4
                	mov	x23, x3
@@ -162,25 +162,20 @@ Disassembly of section .text:
                	ldr	x0, [sp, #0x30]
                	ldur	q0, [sp, #0x38]
                	str	q0, [x0]
-               	sub	x16, x29, #0x8
-               	str	x16, [sp, #0x30]
                	ldr	q16, [sp, #0x70]
-               	stur	q16, [sp, #0x38]
-               	ldur	q0, [sp, #0x38]
+               	str	q16, [sp, #0x30]
+               	ldr	q0, [sp, #0x30]
                	mov	x0, v0.d[0]
-               	ldr	x16, [sp, #0x30]
-               	str	x0, [x16]
-               	ldur	x0, [x29, #-0x8]
                	and	x0, x0, #0xff
                	add	x22, x1, x0
                	add	x20, x20, #0x10
                	cmp	w20, #0x30
                	b.lt	<addr>
                	mov	x0, x22
-               	ldp	x29, x30, [sp, #0x90]
+               	ldp	x29, x30, [sp, #0x80]
                	ldr	x24, [sp, #0x20]
                	ldp	x22, x23, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0xa0
+               	ldp	x20, x21, [sp], #0x90
                	ret
 
 <main>:

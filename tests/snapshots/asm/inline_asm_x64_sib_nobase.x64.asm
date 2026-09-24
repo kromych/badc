@@ -28,7 +28,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x18, %rsp
+               	subq	$0x8, %rsp
                	pushq	%rbx
                	leaq	<rip>, %rax
                	movq	$0x2000, (%rax)         # imm = 0x2000
@@ -50,8 +50,6 @@ Disassembly of section .text:
                	shrq	$0x3, %rax
                	movq	%rax, %rbx
                	movq	(,%rbx,8), %rax
-               	movq	%rax, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rax
                	cmpq	$0x2000, %rax           # imm = 0x2000
                	je	<addr>
                	movl	$0x2, %eax
@@ -62,8 +60,6 @@ Disassembly of section .text:
                	shrq	$0x3, %rax
                	movq	%rax, %rbx
                	movq	0x10(,%rbx,8), %rax
-               	movq	%rax, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rax
                	cmpq	$0x2002, %rax           # imm = 0x2002
                	je	<addr>
                	movl	$0x3, %eax
@@ -74,8 +70,6 @@ Disassembly of section .text:
                	shrq	$0x2, %rax
                	movq	%rax, %rbx
                	movq	(,%rbx,4), %rax
-               	movq	%rax, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rax
                	cmpq	$0x2000, %rax           # imm = 0x2000
                	je	<addr>
                	movl	$0x4, %eax
@@ -98,8 +92,6 @@ Disassembly of section .text:
                	shrq	$0x3, %rax
                	movq	%rax, %rbx
                	leaq	0x8(,%rbx,8), %rax
-               	movq	%rax, -0x8(%rbp)
-               	movq	-0x8(%rbp), %rax
                	leaq	<rip>, %rdx
                	addq	$0x8, %rdx
                	cmpq	%rdx, %rax
@@ -112,8 +104,6 @@ Disassembly of section .text:
                	shrq	%rax
                	movq	%rax, %r9
                	movq	0x28(,%r9,2), %rax
-               	movq	%rax, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rax
                	cmpq	$0x2005, %rax           # imm = 0x2005
                	je	<addr>
                	movl	$0x7, %eax

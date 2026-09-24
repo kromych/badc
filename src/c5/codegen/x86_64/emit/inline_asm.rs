@@ -2005,7 +2005,7 @@ impl AsmScratch {
             Some(Place::IntReg(r)) => Ok(ArgSrc::Gpr(r)),
             Some(Place::FpReg(x)) => Ok(ArgSrc::Xmm(x)),
             Some(Place::Spill(s)) => {
-                let (base, disp) = if op.value {
+                let (base, disp) = if op.value && op.width == 16 {
                     v128_spill_addr(stmt.frame, s)
                 } else {
                     spill_slot_addr(stmt.frame, s)
@@ -2110,7 +2110,7 @@ impl AsmScratch {
                 }
                 AsmConstraint::Fp | AsmConstraint::Bound(_) | AsmConstraint::Flags(_) => continue,
                 AsmConstraint::Mem | AsmConstraint::MemBase => (r, TransferKind::Value),
-                _ if !op.is_output => (r, TransferKind::Value),
+                _ if !op.is_output || (op.is_rw && op.value) => (r, TransferKind::Value),
                 _ if op.is_rw => (r, TransferKind::Load(op.width)),
                 _ => continue,
             };
@@ -2213,14 +2213,23 @@ impl AsmScratch {
             .position(|o| o.value && o.is_output)
             && let Some(r) = op_reg[i]
         {
+            let vector = matches!(stmt.asm.operands[i].constraint, AsmConstraint::Fp);
             match place_of(stmt.alloc, stmt.site) {
                 Place::FpReg(x) if x != r => {
                     super::encode::emit_movapd_xmm_xmm(out.cx.code, Reg(x), Reg(r))
                 }
-                Place::Spill(s) => {
+                Place::IntReg(x) if x != r => {
+                    super::encode::emit_mov_rr(out.cx.code, Reg(x), Reg(r))
+                }
+                Place::Spill(s) if vector => {
                     let (base, disp) = v128_spill_addr(stmt.frame, s);
                     let (base, disp) = self.late_base(stmt, base, disp);
                     super::encode::emit_movups_mem_xmm(out.cx.code, base, disp, Reg(r));
+                }
+                Place::Spill(s) => {
+                    let (base, disp) = spill_slot_addr(stmt.frame, s);
+                    let (base, disp) = self.late_base(stmt, base, disp);
+                    super::encode::emit_mov_mem_r(out.cx.code, base, disp, Reg(r));
                 }
                 _ => {}
             }

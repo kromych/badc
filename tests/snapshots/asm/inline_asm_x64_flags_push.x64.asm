@@ -28,15 +28,13 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x18, %rsp
+               	subq	$0x8, %rsp
                	pushq	%rbx
                	movl	$0x7, %ebx
                	movl	$0x7, %ecx
                	cmpq	%rcx, %rbx
                	pushfq
                	popq	%rax
-               	movq	%rax, -0x8(%rbp)
-               	movq	-0x8(%rbp), %rax
                	testb	$0x40, %al
                	jne	<addr>
                	movl	$0x1, %eax
@@ -48,8 +46,6 @@ Disassembly of section .text:
                	cmpq	%rcx, %rbx
                	pushfq
                	popq	%rax
-               	movq	%rax, -0x8(%rbp)
-               	movq	-0x8(%rbp), %rax
                	testb	$0x40, %al
                	je	<addr>
                	movl	$0x2, %eax
@@ -59,8 +55,7 @@ Disassembly of section .text:
                	movl	$0x1234, %ebx           # imm = 0x1234
                	pushw	%bx
                	popw	%ax
-               	movw	%ax, -0x8(%rbp)
-               	movzwq	-0x8(%rbp), %rax
+               	andq	$0xffff, %rax           # imm = 0xFFFF
                	xorq	$0x1234, %rax           # imm = 0x1234
                	testl	%eax, %eax
                	je	<addr>
@@ -71,8 +66,7 @@ Disassembly of section .text:
                	movl	$0xbeef, %ebx           # imm = 0xBEEF
                	pushw	%bx
                	popw	%ax
-               	movw	%ax, -0x8(%rbp)
-               	movzwq	-0x8(%rbp), %rax
+               	andq	$0xffff, %rax           # imm = 0xFFFF
                	xorq	$0xbeef, %rax           # imm = 0xBEEF
                	testl	%eax, %eax
                	je	<addr>
@@ -85,15 +79,11 @@ Disassembly of section .text:
                	cmpq	%rcx, %rbx
                	pushfq
                	popq	%rax
-               	movq	%rax, -0x8(%rbp)
-               	movq	-0x8(%rbp), %rax
                	movq	%rax, %rbx
                	pushq	%rbx
                	popfq
                	pushfq
                	popq	%rax
-               	movq	%rax, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rax
                	testb	$0x40, %al
                	jne	<addr>
                	movl	$0x5, %eax

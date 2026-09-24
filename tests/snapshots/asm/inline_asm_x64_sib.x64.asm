@@ -28,7 +28,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x18, %rsp
+               	subq	$0x8, %rsp
                	pushq	%rbx
                	xorl	%eax, %eax
                	leaq	<rip>, %rcx
@@ -40,8 +40,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rbx
                	movl	$0x5, %ecx
                	movq	(%rbx,%rcx,8), %rax
-               	movq	%rax, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rax
                	cmpq	$0x1005, %rax           # imm = 0x1005
                	je	<addr>
                	movl	$0x1, %eax
@@ -51,8 +49,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rbx
                	movl	$0x5, %ecx
                	movq	0x10(%rbx,%rcx,8), %rax
-               	movq	%rax, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rax
                	cmpq	$0x1007, %rax           # imm = 0x1007
                	je	<addr>
                	movl	$0x2, %eax
@@ -62,8 +58,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rbx
                	movl	$0x18, %ecx
                	movq	(%rbx,%rcx), %rax
-               	movq	%rax, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rax
                	cmpq	$0x1003, %rax           # imm = 0x1003
                	je	<addr>
                	movl	$0x3, %eax
@@ -73,8 +67,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rbx
                	movl	$0x2, %ecx
                	movl	(%rbx,%rcx,4), %eax
-               	movq	%rax, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rax
                	cmpq	$0x1001, %rax           # imm = 0x1001
                	je	<addr>
                	movl	$0x4, %eax
@@ -97,8 +89,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rbx
                	movl	$0x3, %ecx
                	leaq	0x8(%rbx,%rcx,8), %rax
-               	movq	%rax, -0x8(%rbp)
-               	movq	-0x8(%rbp), %rax
                	leaq	0x20(%rdx), %rcx
                	cmpq	%rcx, %rax
                	je	<addr>

@@ -184,6 +184,7 @@ impl SsaBuilder {
             section: None,
             patchable_entry: None,
             no_instrument: false,
+            no_stack_protector: false,
             const_params: 0,
             insts: Vec::new(),
             inst_src: Vec::new(),

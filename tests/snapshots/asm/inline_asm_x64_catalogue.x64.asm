@@ -28,49 +28,38 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x38, %rsp
+               	subq	$0x18, %rsp
                	pushq	%rbx
-               	movq	$-0x14, -0x8(%rbp)
-               	movq	-0x8(%rbp), %rax
+               	movq	$-0x14, %rax
                	negq	%rax
-               	movq	%rax, -0x8(%rbp)
-               	movq	-0x8(%rbp), %rcx
-               	movq	$-0x8, -0x8(%rbp)
-               	movq	-0x8(%rbp), %rax
+               	movq	%rax, %rcx
+               	movq	$-0x8, %rax
                	notq	%rax
-               	movq	%rax, -0x8(%rbp)
-               	movq	-0x8(%rbp), %rdx
-               	movq	$0x64, -0x28(%rbp)
-               	movq	$0xf, -0x20(%rbp)
-               	movq	-0x28(%rbp), %rax
-               	movq	-0x20(%rbp), %rbx
+               	movq	%rax, %rdx
+               	movl	$0x64, %eax
+               	movq	$0xf, -0x8(%rbp)
+               	movq	-0x8(%rbp), %rbx
                	xchgq	%rbx, %rax
-               	movq	%rax, -0x28(%rbp)
-               	movq	%rbx, -0x20(%rbp)
-               	movq	$0x5, -0x18(%rbp)
-               	movq	-0x18(%rbp), %rax
+               	movq	%rbx, -0x8(%rbp)
+               	movq	%rax, %rsi
+               	movl	$0x5, %eax
                	rolq	%rax
-               	movq	%rax, -0x18(%rbp)
-               	movq	$0x14, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rax
+               	movq	%rax, %rdi
+               	movl	$0x14, %eax
                	movl	$0x16, %ebx
                	addq	$0x0, %rax
                	adcq	%rbx, %rax
-               	movq	%rax, -0x10(%rbp)
                	cmpq	$0x14, %rcx
                	jne	<addr>
                	cmpq	$0x7, %rdx
                	jne	<addr>
-               	movq	-0x28(%rbp), %rax
-               	cmpq	$0xf, %rax
+               	cmpq	$0xf, %rsi
                	jne	<addr>
-               	movq	-0x20(%rbp), %rax
-               	cmpq	$0x64, %rax
+               	movq	-0x8(%rbp), %rcx
+               	cmpq	$0x64, %rcx
                	jne	<addr>
-               	movq	-0x18(%rbp), %rax
-               	cmpq	$0xa, %rax
+               	cmpq	$0xa, %rdi
                	jne	<addr>
-               	movq	-0x10(%rbp), %rax
                	cmpq	$0x2a, %rax
                	jne	<addr>
                	movl	$0x2a, %eax

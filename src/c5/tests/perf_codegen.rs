@@ -2219,6 +2219,48 @@ fn aarch64_frames_spill_only_past_the_callee_saved_bank() {
     m.finish();
 }
 
+/// A register output of an inline asm statement into a scalar local is
+/// the statement's own value, so the local takes no frame slot: the
+/// gsbase switch of the kernel's entry path is `swapgs; rdgsbase %rax;
+/// swapgs; ret` and nothing else, and a system-register read on AArch64
+/// is `mrs; ret`. An output into a volatile local is still written to it.
+#[test]
+fn asm_register_output_keeps_the_local_out_of_the_frame() {
+    const X64: &str = "__attribute__((noinline)) unsigned long rdgs(void) {\n\
+unsigned long gsbase;\n\
+asm volatile(\"swapgs\" ::: \"memory\");\n\
+asm volatile(\"rdgsbase %0\" : \"=r\"(gsbase));\n\
+asm volatile(\"swapgs\" ::: \"memory\");\n\
+return gsbase;\n}\n\
+__attribute__((noinline)) void keep(void) {\n\
+volatile unsigned long v;\n\
+asm volatile(\"rdgsbase %0\" : \"=r\"(v));\n}\n";
+    const A64: &str = "__attribute__((noinline)) unsigned long tpid(void) {\n\
+unsigned long v;\n\
+asm volatile(\"mrs %0, tpidr_el0\" : \"=r\"(v));\n\
+return v;\n}\n";
+    let mut m = Misses::default();
+    let bytes = function_bytes(&object_at(X64, Target::LinuxX64, true), "rdgs");
+    let leaf: [u8; 12] = [
+        0x0f, 0x01, 0xf8, 0xf3, 0x48, 0x0f, 0xae, 0xc8, 0x0f, 0x01, 0xf8, 0xc3,
+    ];
+    m.expect(bytes == leaf, || {
+        format!("x86-64 rdgs: not the four-instruction leaf: {bytes:02x?}")
+    });
+    // `mov %rax, disp8(%rbp)`: the volatile write stays. Raw bytes, since
+    // the decoder takes no `rdgsbase`.
+    let bytes = function_bytes(&object_at(X64, Target::LinuxX64, true), "keep");
+    m.expect(bytes.windows(3).any(|w| w == [0x48, 0x89, 0x45]), || {
+        format!("x86-64 keep: no store to the volatile local: {bytes:02x?}")
+    });
+    let ws = a64(A64, "tpid");
+    // `mrs x0, tpidr_el0; ret`.
+    m.expect(ws == [0xD53B_D040, 0xD65F_03C0], || {
+        format!("aarch64 tpid: not the two-instruction leaf: {ws:08x?}")
+    });
+    m.finish();
+}
+
 /// A constant read past a call by a contracted multiply-add, by a return
 /// and by a phi income through a split edge is set again after the call:
 /// no callee-saved register holds one, `ret` and `flag` save none, and

@@ -29,15 +29,13 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	leaq	-0x10(%rbp), %rcx
-               	leaq	-0x8(%rbp), %rdx
+               	leaq	-0x8(%rbp), %rcx
                	movabsq	$-0x2152411021524111, %rax # imm = 0xDEADBEEFDEADBEEF
-               	movq	%rax, (%rcx)
-               	movq	%rax, (%rdx)
-               	rdtsc
                	movq	%rax, -0x10(%rbp)
+               	movq	%rax, (%rcx)
+               	rdtsc
                	movq	%rdx, -0x8(%rbp)
-               	movq	-0x10(%rbp), %rax
+               	movq	%rax, -0x10(%rbp)
                	movq	-0x8(%rbp), %rcx
                	shlq	$0x20, %rcx
                	orq	%rcx, %rax
@@ -61,11 +59,10 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	rdtsc
-               	movl	%eax, -0x8(%rbp)
-               	movl	%edx, -0x10(%rbp)
-               	movl	-0x10(%rbp), %eax
-               	shlq	$0x20, %rax
+               	movl	%edx, -0x8(%rbp)
                	movl	-0x8(%rbp), %ecx
+               	shlq	$0x20, %rcx
+               	movl	%eax, %eax
                	orq	%rcx, %rax
                	leave
                	retq
@@ -74,12 +71,10 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	leaq	-0x8(%rbp), %rax
-               	movabsq	$-0x2152411021524111, %rcx # imm = 0xDEADBEEFDEADBEEF
-               	movq	%rcx, (%rax)
+               	movabsq	$-0x2152411021524111, %rax # imm = 0xDEADBEEFDEADBEEF
+               	movq	%rax, -0x8(%rbp)
                	movl	$0x99, %eax
                	movq	%rax, -0x8(%rbp)
-               	movq	-0x8(%rbp), %rax
                	cmpq	$0x99, %rax
                	sete	%al
                	movzbq	%al, %rax

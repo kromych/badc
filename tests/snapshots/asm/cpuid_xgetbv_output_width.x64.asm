@@ -93,11 +93,9 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	xorl	%ecx, %ecx
                	cpuid
-               	movl	%eax, -0x20(%rbp)
                	movl	%ebx, -0x18(%rbp)
                	movl	%ecx, -0x10(%rbp)
                	movl	%edx, -0x8(%rbp)
-               	movl	-0x20(%rbp), %eax
                	leaq	<rip>, %rcx
                	movq	(%rcx), %rcx
                	cmpl	%ecx, %eax
@@ -139,7 +137,6 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	xorl	%ecx, %ecx
                	cpuid
-               	movl	%eax, -0x30(%rbp)
                	movl	%ebx, -0x28(%rbp)
                	movl	%ecx, -0x20(%rbp)
                	movl	%edx, -0x18(%rbp)
@@ -156,9 +153,8 @@ Disassembly of section .text:
                	xorl	%esi, %esi
                	xorl	%ecx, %ecx
                	xgetbv
-               	movq	%rax, -0x10(%rbp)
                	movq	%rdx, -0x8(%rbp)
-               	movq	-0x10(%rbp), %rax
+               	movq	%rax, -0x10(%rbp)
                	shrq	$0x20, %rax
                	testl	%eax, %eax
                	jne	<addr>

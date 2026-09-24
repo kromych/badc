@@ -1328,6 +1328,7 @@ pub(super) fn is_known_attribute(name: &str) -> bool {
             | "fallthrough"
             | "nothrow"
             | "no_instrument_function"
+            | "no_stack_protector"
             | "patchable_function_entry"
             | "returns_twice"
             | "noclone"

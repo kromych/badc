@@ -1407,7 +1407,7 @@ fn run_inst<H: Host>(
             return Ok(());
         }
         Inst::InlineAsm { asm, args } => {
-            run_inline_asm(mem, frame, asm, args)?;
+            run_inline_asm(mem, frame, asm, args, v)?;
             return Ok(());
         }
         Inst::LifetimeEnd(_) => {
@@ -2253,9 +2253,10 @@ fn libc_size(name: &str, raw: Option<i64>) -> Result<usize, C5Error> {
 /// Evaluate a GCC extended-asm statement (`Inst::InlineAsm`) in the
 /// interpreter. The template is parsed into instructions and executed
 /// against a 16-entry model register file seeded from the operand
-/// values; the results are stored through the output addresses. This
-/// reproduces the semantics the native encoding runs on hardware, so a
-/// fixture round-trips identically on any host. Non-deterministic reads
+/// values; the results are stored through the output addresses, a value
+/// output into the statement's own register `site`. This reproduces the
+/// semantics the native encoding runs on hardware, so a fixture
+/// round-trips identically on any host. Non-deterministic reads
 /// (timestamp counter) yield zero, matching the native fallback in
 /// value tests.
 fn run_inline_asm(
@@ -2263,6 +2264,7 @@ fn run_inline_asm(
     frame: &mut Frame<'_>,
     asm: &crate::c5::ir::AsmBlock,
     args: &[ValueId],
+    site: ValueId,
 ) -> Result<(), C5Error> {
     use crate::c5::codegen::x86_64::asm::{AsmOpnd, Mnemonic, parse_template};
     use crate::c5::ir::AsmRegSize;
@@ -2366,7 +2368,7 @@ fn run_inline_asm(
             xregs[r as usize] = frame.regs[args[i] as usize];
             continue;
         }
-        if !op.is_output {
+        if !op.is_output || (op.is_rw && op.value) {
             xregs[r as usize] = frame.regs[args[i] as usize];
         } else if op.is_rw {
             let addr = frame.regs[args[i] as usize] as usize;
@@ -2668,12 +2670,17 @@ fn run_inline_asm(
         }
     }
 
-    // Store the outputs back through their destination addresses.
+    // Store the outputs back through their destination addresses; the
+    // value output is the statement's own register.
     for (i, op) in asm.operands.iter().enumerate() {
         if op.is_output
             && !matches!(op.constraint, crate::c5::ir::AsmConstraint::Bound(_))
             && let Some(r) = op_reg[i]
         {
+            if op.value {
+                frame.regs[site as usize] = xregs[r as usize];
+                continue;
+            }
             let addr = frame.regs[args[i] as usize] as usize;
             store_to_memory(mem, addr, xregs[r as usize], width_store_kind(op.width))?;
         }

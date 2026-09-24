@@ -1310,10 +1310,20 @@ pub(crate) fn canary_bytes(
     ssp: super::super::StackProtect,
 ) -> u32 {
     let has_frame = locals_bytes > 0 || uses_dynamic_alloca(func);
-    if func.is_naked || !ssp.protects(func.ssp, has_frame) {
+    if !protected(func, ssp, has_frame) {
         return 0;
     }
     super::super::CANARY_REGION_BYTES
+}
+
+/// Whether `func` carries a canary under `ssp`: a naked function emits no
+/// prologue to hold one, and `no_stack_protector` opts the body out.
+pub(crate) fn protected(
+    func: &super::super::ir::FunctionSsa,
+    ssp: super::super::StackProtect,
+    has_frame: bool,
+) -> bool {
+    !func.is_naked && !func.no_stack_protector && ssp.protects(func.ssp, has_frame)
 }
 
 /// Frame-base-relative byte offset of the canary slot: the topmost 8 bytes
@@ -1951,10 +1961,13 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         time_pass_arch("passes::factor_gotos::run", B::ARCH, || {
             super::super::passes::factor_gotos::run(&mut ssa_funcs);
         });
-        // Vector slots become `V128` slot accesses for mem2reg to promote.
+        // Vector slots become `V128` slot accesses, and inline-asm register
+        // outputs into slots the statements' own values, for mem2reg to
+        // promote.
         time_pass_arch("ssa::vector_slots::run", B::ARCH, || {
             for f in &mut ssa_funcs {
                 super::vector_slots::run(f);
+                super::asm_outputs::run(f);
             }
         });
         time_pass_arch("ssa::mem2reg::run", B::ARCH, || {
@@ -2057,6 +2070,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
             for f in &mut ssa_funcs {
                 if f.did_inline {
                     super::vector_slots::run(f);
+                    super::asm_outputs::run(f);
                     let promoted = super::mem2reg::run(f);
                     if !promoted.is_empty() {
                         promoted_local_slots

@@ -45,6 +45,7 @@ fn keyed(func: &mut FunctionSsa) -> Keyed<'_> {
         section: _,
         patchable_entry: _,
         no_instrument: _,
+        no_stack_protector: _,
         const_params: _,
         insts,
         inst_src,

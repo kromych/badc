@@ -26,14 +26,9 @@ Disassembly of section .text:
                	ldr	x16, [sp]
                	str	d0, [x16]
                	ldur	d0, [x29, #-0x8]
-               	sub	x16, x29, #0x8
-               	str	x16, [sp]
-               	str	d0, [sp, #0x8]
-               	ldr	d0, [sp, #0x8]
+               	str	d0, [sp]
+               	ldr	d0, [sp]
                	fmov	x0, d0
-               	ldr	x16, [sp]
-               	str	x0, [x16]
-               	ldur	x0, [x29, #-0x8]
                	mov	x17, #0x4045000000000000 // =4631107791820423168
                	cmp	x0, x17
                	b.ne	<addr>

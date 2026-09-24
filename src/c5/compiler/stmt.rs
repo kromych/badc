@@ -1667,6 +1667,7 @@ impl Compiler {
                 (true, Some(Segment::Fs)) => AsmSeg::Fs,
                 _ => AsmSeg::None,
             };
+            let volatile_object = super::types::is_volatile_object_ty(self.ty);
             // A value wider than a general register needs a register pair,
             // which no constraint here models; a single register would carry
             // only part of the value. Memory, SIMD, and immediate operands
@@ -1849,6 +1850,7 @@ impl Compiler {
                 seg: operand_seg,
                 static_arg: false,
                 value: false,
+                volatile_object,
             });
             if is_output {
                 n_outputs += 1;

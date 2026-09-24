@@ -16,6 +16,7 @@ mod asm_scratch_tests {
                 seg: AsmSeg::None,
                 static_arg: false,
                 value: false,
+                volatile_object: false,
             }],
             clobber_regs,
             clobber_fp_regs: 0,
@@ -69,6 +70,7 @@ mod asm_scratch_tests {
             seg: AsmSeg::None,
             static_arg: false,
             value: false,
+            volatile_object: false,
         }];
         let op = asm_save_masks_and_stage(&asm, &[Some(3)], fixed, (0, 0)).unwrap();
         assert_eq!(op.0, 0);

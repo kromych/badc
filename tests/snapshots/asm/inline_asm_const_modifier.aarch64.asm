@@ -17,17 +17,13 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x20
-               	sub	x16, x29, #0x10
-               	str	x16, [sp]
                	sub	x16, x29, #0x8
-               	str	x16, [sp, #0x8]
+               	str	x16, [sp]
                	b	<addr>
                	udf	#0x2a
                	adr	x0, <addr>
                	ldr	w1, [x0]
                	ldr	x16, [sp]
-               	str	x0, [x16]
-               	ldr	x16, [sp, #0x8]
                	str	w1, [x16]
                	ldursw	x0, [x29, #-0x8]
                	add	sp, sp, #0x20
@@ -48,17 +44,13 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x20
-               	sub	x16, x29, #0x10
-               	str	x16, [sp]
                	sub	x16, x29, #0x8
-               	str	x16, [sp, #0x8]
+               	str	x16, [sp]
                	b	<addr>
                	udf	#0x2a
                	adr	x0, <addr>
                	ldr	w1, [x0]
                	ldr	x16, [sp]
-               	str	x0, [x16]
-               	ldr	x16, [sp, #0x8]
                	str	w1, [x16]
                	ldursw	x0, [x29, #-0x8]
                	cmp	w0, #0x2a

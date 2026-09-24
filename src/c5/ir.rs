@@ -1347,6 +1347,9 @@ pub(crate) struct AsmOperand {
     /// An output's value, one per statement at most, is the instruction's
     /// own, and its argument `NO_VALUE`.
     pub value: bool,
+    /// The operand's object is volatile-qualified, so the statement's write
+    /// to it is an access the abstract machine performs (C99 6.7.3p6).
+    pub volatile_object: bool,
 }
 
 /// A parsed GCC extended-asm statement (`asm(template : outputs :
@@ -1759,6 +1762,8 @@ pub(crate) struct FunctionSsa {
     pub patchable_entry: Option<(u32, u32)>,
     /// `__attribute__((no_instrument_function))`: no profiling call.
     pub no_instrument: bool,
+    /// `__attribute__((no_stack_protector))`: no canary.
+    pub no_stack_protector: bool,
     /// Declared parameters, by index, whose value a whole-program
     /// constant reached (`passes::ipa_const_param`). Their incoming
     /// argument register has no reader left, so the entry spill of
@@ -2146,6 +2151,7 @@ impl crate::c5::layout::DataOffsets for FunctionSsa {
             section: _,
             patchable_entry: _,
             no_instrument: _,
+            no_stack_protector: _,
             const_params: _,
             insts,
             inst_src: _,

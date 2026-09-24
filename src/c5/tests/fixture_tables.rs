@@ -592,6 +592,7 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("inline_asm_a64_llsc_prfm.c", 42),
     ("inline_asm_goto.c", 42),
     ("asm_goto_operand_region_paths.c", 42),
+    ("asm_register_outputs.c", 0),
     ("inline_asm_goto_callee_saved_exits.c", 42),
     ("inline_asm_reg_var.c", 42),
     ("inline_asm_reg_var_inout.c", 42),
@@ -1793,6 +1794,7 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("inline_asm_a64_llsc_prfm.c", 42),
     ("inline_asm_goto.c", 42),
     ("asm_goto_operand_region_paths.c", 42),
+    ("asm_register_outputs.c", 0),
     ("inline_asm_goto_callee_saved_exits.c", 42),
     ("inline_asm_reg_var.c", 42),
     ("inline_asm_reg_var_inout.c", 42),
@@ -2140,6 +2142,7 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("inline_asm_x64_callee_saved_preserved.c", 0),
     ("inline_asm_goto.c", 42),
     ("asm_goto_operand_region_paths.c", 42),
+    ("asm_register_outputs.c", 0),
     ("inline_asm_goto_callee_saved_exits.c", 42),
     ("inline_asm_reg_var.c", 42),
     ("inline_asm_reg_var_inout.c", 42),
@@ -2868,6 +2871,7 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
 /// Subset of the cross-arch fixture corpus that doesn't lean on
 /// POSIX-only semantics.
 pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
+    ("asm_register_outputs.c", 0),
     ("static_local_shadows_file_scope.c", 0),
     ("anon_bitfield_reserves_bits.c", 0),
     ("attribute_mode.c", 0),
@@ -3467,6 +3471,7 @@ pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
 /// limitations (POSIX-only setenv shape, dlopen-against-libc-soname)
 /// are arch-independent.
 pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
+    ("asm_register_outputs.c", 0),
     ("static_local_shadows_file_scope.c", 0),
     ("anon_bitfield_reserves_bits.c", 0),
     ("attribute_mode.c", 0),
@@ -4007,6 +4012,7 @@ pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
 ];
 
 pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
+    ("asm_register_outputs.c", 0),
     ("static_local_shadows_file_scope.c", 0),
     // A declared `long double` object takes the target ABI's storage
     // format, and the compute path's binary64 round-trips through it.

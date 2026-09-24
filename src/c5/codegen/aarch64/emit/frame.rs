@@ -212,8 +212,8 @@ pub(super) fn asm_stmt_bytes(
 pub(super) fn asm_capture_units(op: &super::super::ir::AsmOperand) -> usize {
     match (op.value, op.is_output && !op.is_rw) {
         (true, true) => 0,
-        (true, false) => 2,
-        (false, _) => 1,
+        (true, false) if op.width == 16 => 2,
+        _ => 1,
     }
 }
 

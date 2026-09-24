@@ -30,7 +30,6 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	rdtsc
-               	movl	%eax, -0x10(%rbp)
                	movl	%edx, -0x8(%rbp)
                	xorl	%eax, %eax
                	leave

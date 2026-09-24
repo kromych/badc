@@ -426,6 +426,7 @@ const LINKED_IMAGE_RUN_FIXTURES: &[(&str, i32)] = &[
     ("aggregate_register_parts.c", 0),
     ("data_reloc_one_past_end.c", 10),
     ("constant_set_again_after_call.c", 0),
+    ("asm_register_outputs.c", 0),
     ("static_init_cast_funcptr.c", 0),
     ("static_init_paren_relocation.c", 0),
     ("sys_addr_in_static_init.c", 42),

@@ -2565,7 +2565,10 @@ pub(crate) fn wide_values(func: &FunctionSsa) -> Vec<bool> {
                 *kind == LoadKind::V128
             }
             Inst::Store { kind, .. } | Inst::StoreLocal { kind, .. } => *kind == StoreKind::V128,
-            Inst::InlineAsm { asm, .. } => asm.operands.iter().any(|o| o.value && o.is_output),
+            Inst::InlineAsm { asm, .. } => asm
+                .operands
+                .iter()
+                .any(|o| o.value && o.is_output && o.width == 16),
             _ => false,
         })
         .collect();
@@ -2699,13 +2702,11 @@ fn result_kind(inst: &Inst) -> ResultKind {
         }
         AllocaInit(_) | LifetimeEnd(_) => ResultKind::None,
         // A value output is the one register value an asm statement defines.
-        InlineAsm { asm, .. } => {
-            if asm.operands.iter().any(|o| o.value && o.is_output) {
-                ResultKind::Fp
-            } else {
-                ResultKind::None
-            }
-        }
+        InlineAsm { asm, .. } => match asm.operands.iter().find(|o| o.value && o.is_output) {
+            Some(o) if matches!(o.constraint, crate::c5::ir::AsmConstraint::Fp) => ResultKind::Fp,
+            Some(_) => ResultKind::Int,
+            None => ResultKind::None,
+        },
     }
 }
 
@@ -4894,6 +4895,7 @@ int main(void) { return 0; }
             section: None,
             patchable_entry: None,
             no_instrument: false,
+            no_stack_protector: false,
             is_weak: false,
             is_internal: false,
             const_params: 0,
@@ -5132,6 +5134,7 @@ int main(void) { return 0; }
             section: None,
             patchable_entry: None,
             no_instrument: false,
+            no_stack_protector: false,
             is_weak: false,
             is_internal: false,
             const_params: 0,

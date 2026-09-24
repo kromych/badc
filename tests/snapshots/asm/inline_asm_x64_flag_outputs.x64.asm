@@ -30,15 +30,12 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x28, %rsp
                	pushq	%rbx
-               	movq	$0x1, -0x10(%rbp)
                	movl	$0x1, %eax
                	movl	$0x2, %ecx
                	addq	%rcx, %rax
                	setb	%bl
                	movzbq	%bl, %rbx
-               	movq	%rax, -0x10(%rbp)
                	movb	%bl, -0x8(%rbp)
-               	movq	-0x10(%rbp), %rax
                	movq	%rax, -0x20(%rbp)
                	movzbq	-0x8(%rbp), %rcx
                	movq	%rcx, -0x18(%rbp)
@@ -50,15 +47,12 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	movq	$-0x1, -0x10(%rbp)
                	movq	$-0x1, %rax
                	movl	$0x1, %ecx
                	addq	%rcx, %rax
                	setb	%bl
                	movzbq	%bl, %rbx
-               	movq	%rax, -0x10(%rbp)
                	movb	%bl, -0x8(%rbp)
-               	movq	-0x10(%rbp), %rax
                	movq	%rax, -0x20(%rbp)
                	movzbq	-0x8(%rbp), %rcx
                	addq	$0xc, %rcx
@@ -113,25 +107,20 @@ Disassembly of section .text:
                	leave
                	retq
                	movabsq	$0x7fffffffffffffff, %rax # imm = 0x7FFFFFFFFFFFFFFF
-               	movq	%rax, -0x8(%rbp)
-               	movabsq	$0x7fffffffffffffff, %rax # imm = 0x7FFFFFFFFFFFFFFF
                	movl	$0x1, %ecx
                	addq	%rcx, %rax
                	seto	%bl
                	movzbq	%bl, %rbx
-               	movq	%rax, -0x8(%rbp)
                	movb	%bl, -0x10(%rbp)
                	movzbq	-0x10(%rbp), %rax
                	xorq	$0x1, %rax
                	testl	%eax, %eax
                	jne	<addr>
-               	movq	$0x1, -0x8(%rbp)
                	movl	$0x1, %eax
                	movl	$0x1, %ecx
                	addq	%rcx, %rax
                	seto	%bl
                	movzbq	%bl, %rbx
-               	movq	%rax, -0x8(%rbp)
                	movb	%bl, -0x10(%rbp)
                	cmpb	$0x0, -0x10(%rbp)
                	je	<addr>

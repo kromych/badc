@@ -33,17 +33,11 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
                	movl	%ds:<rip>, %eax
-               	movl	%eax, -0x8(%rbp)
-               	movl	-0x8(%rbp), %eax
                	movl	$0xa5a5a5a5, %r11d      # imm = 0xA5A5A5A5
                	cmpl	%r11d, %eax
                	je	<addr>
                	movl	$0x1, %eax
-               	leave
                	retq
                	clflush	%ds:<rip>
                	leaq	<rip>, %rax
@@ -52,7 +46,6 @@ Disassembly of section .text:
                	cmpl	%r11d, %eax
                	je	<addr>
                	movl	$0x2, %eax
-               	leave
                	retq
                	nop
                	nop
@@ -60,13 +53,9 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movl	$0x12345678, (%rax)     # imm = 0x12345678
                	movl	%ds:<rip>, %eax
-               	movl	%eax, -0x8(%rbp)
-               	movl	-0x8(%rbp), %eax
                	cmpl	$0x12345678, %eax       # imm = 0x12345678
                	je	<addr>
                	movl	$0x3, %eax
-               	leave
                	retq
                	movl	$0x2a, %eax
-               	leave
                	retq

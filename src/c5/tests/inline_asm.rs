@@ -98,6 +98,7 @@ fn a_bound_operand_names_the_stack_pointer_only_when_the_template_names_it() {
                 seg: AsmSeg::None,
                 static_arg: false,
                 value: false,
+                volatile_object: false,
             })
             .collect(),
         clobber_regs: 0,
@@ -3017,15 +3018,16 @@ fn x64_frame_bytes(text: &[u8]) -> i32 {
 #[cfg(feature = "native-emit")]
 #[test]
 fn x64_frame_pointer_clobber_stores_an_output_through_the_stack_pointer() {
-    // A register output is stored back after the template, which wrote rbp,
-    // and before the restore, so a frame local's slot is addressed through
+    // A register output into an object that stays in memory, here a
+    // volatile one, is stored back after the template, which wrote rbp,
+    // and before the restore, so the object's slot is addressed through
     // rsp like the saves: `mov %rax, d(%rsp)` names the byte the function
     // later reads as `d - frame_bytes(%rbp)`.
     let src = "int h(int);\n\
                long f(int v)\n\
                {\n\
                    int r = h(v);\n\
-                   long x;\n\
+                   volatile long x;\n\
                    __asm__ volatile(\"xorq %%rbp, %%rbp\\n\\tmovq $7, %0\" : \"=r\"(x) : : \"rbp\");\n\
                    return r + h(v) + x;\n\
                }\n";
@@ -3052,6 +3054,50 @@ fn x64_frame_pointer_clobber_stores_an_output_through_the_stack_pointer() {
             .windows(4)
             .any(|w| w[..2] == [0x48, 0x8b] && w[2] & 0xc7 == 0x45 && w[3] == disp),
         "no rbp-relative read of the output's slot: {:02x?}",
+        &text[at..]
+    );
+}
+
+// Emits a relocatable object, so it needs `native-emit`.
+#[cfg(feature = "native-emit")]
+#[test]
+fn x64_frame_pointer_clobber_spills_a_value_output_through_the_stack_pointer() {
+    // An output into an ordinary local is the statement's value. Over two
+    // callee-saved registers it spills, the three values live across the
+    // second call being one too many, and its spill store follows the
+    // template, which wrote rbp, ahead of the restore, through rsp.
+    let src = "int h(int);\n\
+               long f(int v)\n\
+               {\n\
+                   int r = h(v);\n\
+                   long x;\n\
+                   __asm__ volatile(\"xorq %%rbp, %%rbp\\n\\tmovq $7, %0\" : \"=r\"(x) : : \"rbp\");\n\
+                   return r + h(v) + x;\n\
+               }\n";
+    let text = crate::c5::codegen::ssa::reg_alloc::with_pool_size_override(2, 2, || {
+        asm_text(src, crate::Target::LinuxX64, true)
+    });
+    let at = text
+        .windows(3)
+        .position(|w| w == [0x48, 0x31, 0xed])
+        .expect("the template");
+    let (save, store) = (text[at - 1], text[at + 14]);
+    assert_eq!(
+        text[at + 3..at + 20],
+        [
+            0x48, 0xc7, 0xc0, 7, 0, 0, 0, // mov $7, %rax
+            0x48, 0x89, 0x44, 0x24, store, // mov %rax, disp8(%rsp)
+            0x48, 0x8b, 0x6c, 0x24, save, // mov disp8(%rsp), %rbp
+        ],
+        "{:02x?}",
+        &text[at..at + 20]
+    );
+    // A REX.W instruction with a `disp8(%rsp)` operand at the store's slot.
+    assert!(
+        text[at + 20..]
+            .windows(5)
+            .any(|w| w[0] & 0xf8 == 0x48 && w[2] & 0xc7 == 0x44 && w[3..] == [0x24, store]),
+        "no rsp-relative read of the spill slot: {:02x?}",
         &text[at..]
     );
 }

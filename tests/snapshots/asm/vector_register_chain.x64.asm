@@ -62,7 +62,7 @@ Disassembly of section .text:
 <syndrome>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x58, %rsp
+               	subq	$0x48, %rsp
                	pushq	%r15
                	pushq	%r14
                	pushq	%r13
@@ -71,19 +71,19 @@ Disassembly of section .text:
                	movq	%rdx, %r12
                	movq	%r8, %r15
                	movq	%rcx, %r14
-               	leaq	-0x18(%rbp), %rax
+               	leaq	-0x10(%rbp), %rax
                	movabsq	$0x1d1d1d1d1d1d1d1d, %rcx # imm = 0x1D1D1D1D1D1D1D1D
                	movq	%rcx, (%rax)
                	movq	%rcx, 0x8(%rax)
-               	leaq	-0x18(%rbp), %rax
+               	leaq	-0x10(%rbp), %rax
                	movdqu	(%rax), %xmm0
-               	movups	%xmm0, -0x50(%rbp)
+               	movups	%xmm0, -0x40(%rbp)
                	xorl	%ebx, %ebx
                	movq	%rbx, %r13
                	movq	0x18(%r12), %rax
                	addq	%rbx, %rax
                	movdqu	(%rax), %xmm0
-               	movups	%xmm0, -0x30(%rbp)
+               	movups	%xmm0, -0x20(%rbp)
                	movl	$0x2, %esi
                	movups	0x50(%rsp), %xmm14
                	movups	%xmm14, 0x40(%rsp)
@@ -95,7 +95,7 @@ Disassembly of section .text:
                	movups	0x40(%rsp), %xmm1
                	movdqa	%xmm1, %xmm0
                	pxor	%xmm2, %xmm0
-               	movups	%xmm0, -0x40(%rbp)
+               	movups	%xmm0, -0x30(%rbp)
                	movups	0x50(%rsp), %xmm1
                	pxor	%xmm0, %xmm0
                	pcmpgtb	%xmm1, %xmm0
@@ -114,7 +114,7 @@ Disassembly of section .text:
                	movapd	%xmm3, %xmm2
                	movdqa	%xmm1, %xmm0
                	pxor	%xmm2, %xmm0
-               	movups	%xmm0, -0x30(%rbp)
+               	movups	%xmm0, -0x20(%rbp)
                	decq	%rsi
                	testl	%esi, %esi
                	jge	<addr>
@@ -130,8 +130,6 @@ Disassembly of section .text:
                	movdqu	%xmm0, (%rax)
                	movups	0x50(%rsp), %xmm0
                	movq	%xmm0, %rax
-               	movq	%rax, -0x8(%rbp)
-               	movq	-0x8(%rbp), %rax
                	andq	$0xff, %rax
                	leaq	(%rcx,%rax), %r13
                	addq	$0x10, %rbx

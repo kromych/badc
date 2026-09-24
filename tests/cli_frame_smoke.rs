@@ -672,6 +672,29 @@ void wrgs(unsigned long gsbase)
     asm volatile("wrgsbase %0" :: "r" (gsbase) : "memory");
     asm volatile("swapgs" ::: "memory");
 }
+__attribute__((__noinline__, __section__(".noinstr.text")))
+unsigned long rdgs_inactive(void)
+{
+    unsigned long gsbase;
+    asm volatile("swapgs" ::: "memory");
+    asm volatile("rdgsbase %0" : "=r" (gsbase));
+    asm volatile("swapgs" ::: "memory");
+    return gsbase;
+}
+unsigned long read_inactive(void) { return rdgs_inactive(); }
+void fill(char *p);
+unsigned long guarded(void)
+{
+    char buf[16];
+    fill(buf);
+    return buf[3];
+}
+__attribute__((no_stack_protector)) unsigned long unguarded(void)
+{
+    char buf[16];
+    fill(buf);
+    return buf[3];
+}
 "#;
 
 /// The frame reports of `KERNEL_ASM` under the kernel's flags, by function.
@@ -691,6 +714,8 @@ fn kernel_asm_frames(dir: &Path) -> std::collections::BTreeMap<String, (u64, Str
             "-mstack-protector-guard=tls",
             "-mstack-protector-guard-reg=gs",
             "-mstack-protector-guard-symbol=__ref_stack_chk_guard",
+            "-ftrivial-auto-var-init=zero",
+            "-fpatchable-function-entry=16,16",
             "-Wframe-larger-than=0",
         ])
         .arg("-o")
@@ -734,7 +759,13 @@ fn x86_64_inline_asm_operands_take_no_frame_scratch() {
             !parts.contains("inline-asm scratch"),
             "{name}: {bytes} bytes: {parts}"
         );
-        assert!(!parts.contains("canary"), "{name}: {bytes} bytes: {parts}");
+        // `-fstack-protector-strong` guards the character array of
+        // `guarded`; `no_stack_protector` takes the guard off `unguarded`.
+        assert_eq!(
+            parts.contains("canary"),
+            name == "guarded",
+            "{name}: {bytes} bytes: {parts}"
+        );
     }
     let one = frames.get("one").expect("`one` has a frame");
     let eight = frames.get("eight").expect("`eight` has a frame");
@@ -752,11 +783,10 @@ fn x86_64_inline_asm_operands_take_no_frame_scratch() {
     // Five output locals, the saved frame pointer, and at most two
     // callee-saved registers.
     assert!(one.0 <= 48 + 8 + 16, "{frames:?}");
-    assert!(
-        frames.get("rdgs").is_some_and(|(b, _)| *b <= 24),
-        "{frames:?}"
-    );
-    for leaf in ["has", "wrgs"] {
+    // A register output into a scalar local is the statement's value, so
+    // the local takes no slot: the gsbase switch, in the shape the kernel
+    // compiles it under its flags, keeps no frame at all.
+    for leaf in ["has", "wrgs", "rdgs", "rdgs_inactive"] {
         assert!(
             !frames.contains_key(leaf),
             "{leaf} keeps no frame: {frames:?}"

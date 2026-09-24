@@ -381,6 +381,7 @@ impl Compiler {
         self.pending.attr_section = None;
         self.pending.attr_patchable_entry = None;
         self.pending.attr_no_instrument = false;
+        self.pending.attr_no_stack_protector = false;
         self.pending.attr_weak = false;
         self.pending.attr_call_conv = crate::c5::codegen::CallConv::Target;
         self.pending.attr_visibility = None;

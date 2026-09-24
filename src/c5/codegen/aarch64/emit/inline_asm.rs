@@ -965,9 +965,10 @@ impl AsmRegion {
                 ));
             };
             // A double `w` input captures its FP value and a 16-byte value its 128
-            // bits; any other 16-byte operand captures its address.
+            // bits; any other 16-byte operand captures its address. A scalar
+            // value operand captures its integer value.
             let op = &ops.asm.operands[i];
-            if op.value {
+            if op.value && op.width == 16 {
                 let Some(q) = materialize_v128(code, place, 16, self.frame, Reg(16)) else {
                     return Err(alloc::string::String::from(
                         "aarch64 inline asm: `w` operand not a vector place",
@@ -1023,7 +1024,9 @@ impl AsmRegion {
                 }
                 continue;
             }
-            if matches!(op.constraint, AsmConstraint::Mem | AsmConstraint::MemBase) || !op.is_output
+            if matches!(op.constraint, AsmConstraint::Mem | AsmConstraint::MemBase)
+                || !op.is_output
+                || (op.is_rw && op.value)
             {
                 self.ldr_x(code, Reg(r), self.cap_off(i));
             } else if op.is_rw {
@@ -1079,7 +1082,11 @@ impl AsmRegion {
         if let Some(i) = ops.asm.operands.iter().position(|o| o.value && o.is_output)
             && let Some(r) = ops.op_reg[i]
         {
-            propagate_v128(code, self.frame, ops.out_place, r, Reg(16));
+            if ops.asm.operands[i].width == 16 {
+                propagate_v128(code, self.frame, ops.out_place, r, Reg(16));
+            } else if super::mem::propagate_int(code, self.frame, ops.out_place, Reg(r)).is_err() {
+                return fail("inline asm: value output not an integer place");
+            }
         }
         Ok(())
     }

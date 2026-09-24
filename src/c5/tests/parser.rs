@@ -2973,7 +2973,10 @@ fn an_address_constant_initializes_only_an_object_that_holds_it() {
             "an object of type `short`",
         ),
         ("double x = (double)(long)&g;", "an object of type `double`"),
-        ("char c = (char)(long)\"abc\";", "an object of type `char`"),
+        (
+            "unsigned char c = (unsigned char)(long)\"abc\";",
+            "an object of type `unsigned char`",
+        ),
         ("int x = (int)(long)main;", "an object of type `int`"),
         (
             "_Thread_local int x = (int)(long)&g;",

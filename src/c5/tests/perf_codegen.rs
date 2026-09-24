@@ -2523,6 +2523,32 @@ void gen4(int disks, unsigned long bytes, unsigned char **dptr) {\n\
     m.finish();
 }
 
+/// The same syndrome step with each intrinsic's result passed straight to
+/// the next: the statement-expression wrappers' vectors are values too, and
+/// the function takes no frame.
+#[test]
+fn nested_neon_intrinsics_take_no_frame() {
+    const SRC: &str = "#include <arm_neon.h>\n\
+void step4(unsigned char *p, const unsigned char *d) {\n\
+    const uint8x16_t x1d = vdupq_n_u8(0x1d);\n\
+    uint8x16_t q0 = vld1q_u8(p), q1 = vld1q_u8(p + 16), q2 = vld1q_u8(p + 32), q3 = vld1q_u8(p + 48);\n\
+    uint8x16_t m0 = vandq_u8((uint8x16_t)vshrq_n_s8((int8x16_t)q0, 7), x1d);\n\
+    uint8x16_t m1 = vandq_u8((uint8x16_t)vshrq_n_s8((int8x16_t)q1, 7), x1d);\n\
+    uint8x16_t m2 = vandq_u8((uint8x16_t)vshrq_n_s8((int8x16_t)q2, 7), x1d);\n\
+    uint8x16_t m3 = vandq_u8((uint8x16_t)vshrq_n_s8((int8x16_t)q3, 7), x1d);\n\
+    vst1q_u8(p, veorq_u8(veorq_u8(vshlq_n_u8(q0, 1), m0), vld1q_u8(d)));\n\
+    vst1q_u8(p + 16, veorq_u8(veorq_u8(vshlq_n_u8(q1, 1), m1), vld1q_u8(d + 16)));\n\
+    vst1q_u8(p + 32, veorq_u8(veorq_u8(vshlq_n_u8(q2, 1), m2), vld1q_u8(d + 32)));\n\
+    vst1q_u8(p + 48, veorq_u8(veorq_u8(vshlq_n_u8(q3, 1), m3), vld1q_u8(d + 48)));\n\
+}\n";
+    let ws = a64(SRC, "step4");
+    let sp_access = |w: u32| w & 0x0A00_0000 == 0x0800_0000 && (w >> 5) & 31 == 31;
+    assert!(
+        !ws.iter().any(|&w| sp_access(w)),
+        "aarch64 step4: the frame is used: {ws:08x?}"
+    );
+}
+
 /// A constant read past a call by a contracted multiply-add, by a return
 /// and by a phi income through a split edge is set again after the call:
 /// no callee-saved register holds one, `ret` and `flag` save none, and

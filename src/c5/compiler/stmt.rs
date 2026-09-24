@@ -1129,6 +1129,9 @@ impl Compiler {
         let parsed = self.parse_block_stmt(true);
         self.pending.restore_decl_specifiers(specifiers);
         let (block, value_item) = parsed?;
+        // An enclosing call's staging recycle would lay later objects across
+        // the block's at shifted cells, which the frame passes then merge.
+        self.commit_block_slot(-self.loc_offs);
         self.ast_vstack.truncate(vstack_depth);
         let arena_after = self.ast.stmts.len();
         // The block's statements are sub-statements of this

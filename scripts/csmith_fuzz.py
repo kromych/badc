@@ -31,11 +31,22 @@ Findings are deduplicated by signature (see `signature_of`) within the run and
 against the comments already on the week's issue, so one defect is reported
 once per week per architecture rather than once per case that reaches it.
 
+`--reduce-minutes` spends that budget shrinking the findings the week's issue
+does not hold yet, with `cvise` or `creduce` from PATH, else the in-tree
+`c_reduce.py`. The interestingness test the harness writes keeps a compile
+verdict's signature, and for a runtime verdict keeps the reference honest: it
+must build under `-Werror` for the constructs a reduction likes to leave
+undefined, run clean under the undefined-behaviour and address sanitizers,
+and compute the same checksum at `-O0`, at `-O2` and with automatic storage
+pre-filled with a pattern and with zeros. A reduction that trades one
+defect for another is refused by the same test.
+
 `--publish` files them: the offending source, unreduced, becomes an asset of
-the `fuzz-cases-v1` release, and a comment naming it is appended to the issue
-`compiler fuzzing, <Monday>...<Sunday>` for the run's ISO week, which is opened
-if it does not exist. Without `--publish` nothing is written: the plan, the
-issue body and every comment are printed instead.
+the `fuzz-cases-v1` release, its reduction beside it when there is one, and a
+comment naming both is appended to the issue `compiler fuzzing,
+<Monday>...<Sunday>` for the run's ISO week, which is opened if it does not
+exist. Without `--publish` nothing is written: the plan, the issue body and
+every comment are printed instead.
 
 `--self-test` checks the pure parts (signatures, dedup, week arithmetic,
 rendering, the `gh` argument vectors) and needs neither csmith nor badc. With
@@ -57,6 +68,7 @@ import os
 import platform
 import random
 import re
+import shlex
 import shutil
 import signal
 import subprocess
@@ -114,9 +126,14 @@ ISSUE_LABEL = "robustness"
 
 # Evidence kept in a comment. The rest stays in the run's JSON report.
 EVIDENCE_LINES = 60
+# A reduction this short is quoted in the comment as well as linked.
+INLINE_REDUCTION_LINES = 60
+# Repeat seeds listed per signature in the job summary; the report has all.
+REPEAT_SEEDS_SHOWN = 5
 
 CHECKSUM_RE = re.compile(r"checksum\s*=\s*([0-9A-Fa-f]+)")
 PANIC_RE = re.compile(r"panicked at ([^\s:]+(?::\d+)+)\s*:?\s*\n?(.*)")
+BACKTRACE_FRAME_RE = re.compile(r"^\s*\d+:\s+(\S.*)$")
 DIAG_CODE_RE = re.compile(r"\[(B\d+)\]")
 SIGNATURE_RE = re.compile(r"signature[^0-9a-f]{0,16}([0-9a-f]{12})\b")
 ARCH_ALIASES = {"arm64": "aarch64", "amd64": "x86_64", "x64": "x86_64"}
@@ -286,6 +303,9 @@ class Finding:
     source: Path
     lines: int
     confirmed: bool = True
+    reduced: Path | None = None
+    reduced_lines: int = 0
+    reduce_note: str = ""
 
 
 @dataclasses.dataclass
@@ -341,6 +361,17 @@ def panic_site(text: str) -> tuple[str, str] | None:
         tail = text[found.end() :].strip().splitlines()
         message = tail[0].strip() if tail else ""
     return location, message
+
+
+def panic_frame(text: str) -> str | None:
+    """The innermost `badc::` frame of a panic's backtrace, which names the
+    defect more stably than the source line: an unrelated edit to the file
+    moves the line and not the function."""
+    for line in text.splitlines():
+        found = BACKTRACE_FRAME_RE.match(line)
+        if found and "badc::" in found.group(1):
+            return " ".join(found.group(1).split())
+    return None
 
 
 def diagnostic_code(text: str) -> str | None:
@@ -568,10 +599,11 @@ def classify(
             panic = panic_site(built.stderr)
             if panic:
                 location, message = panic
+                site = panic_frame(built.stderr) or location
                 record(
                     "compile-panic",
                     config,
-                    ["panic", location, normalize_message(message)],
+                    ["panic", site, normalize_message(message)],
                     f"panicked: {message}",
                     built,
                 )
@@ -710,6 +742,305 @@ def confirm(
 
 
 # --------------------------------------------------------------------------
+# reduction
+
+REDUCERS = ("cvise", "creduce")
+
+# The candidate must stay a program the reference has no licence to
+# compute differently: no missing return or uninitialized scalar, no
+# implicit declaration, and nothing the sanitizers see. csmith's own
+# programs take the address of packed members, so alignment stays off.
+REFERENCE_GUARD = (
+    "-Werror=return-type",
+    "-Werror=uninitialized",
+    "-Werror=implicit-function-declaration",
+    "-Werror=implicit-int",
+    "-Werror=int-conversion",
+    "-Werror=incompatible-pointer-types",
+    "-fsanitize=undefined,address",
+    "-fno-sanitize=alignment",
+    "-fno-sanitize-recover=all",
+)
+
+TEST_TEMPLATE = r"""#!/usr/bin/env python3
+# Interestingness test written by csmith_fuzz.py for one finding. Exit 0
+# while the candidate still shows the finding.
+import os
+import re
+import subprocess
+import sys
+
+SRC = sys.argv[1] if len(sys.argv) > 1 else "candidate.c"
+BADC = @badc@
+REF = @ref@
+INCLUDE = @include@
+VERDICT = @verdict@
+CONFIGS = @configs@
+SIGNATURE = @signature@
+DETAIL = @detail@
+COMPILE_TIMEOUT = @compile_timeout@
+RUN_TIMEOUT = @run_timeout@
+REF_RUN_TIMEOUT = @ref_run_timeout@
+GUARD = @guard@
+CHECKSUM_RE = re.compile(r"checksum\s*=\s*([0-9A-Fa-f]+)")
+
+
+def run(argv, timeout):
+    try:
+        done = subprocess.run(
+            argv,
+            capture_output=True,
+            text=True,
+            errors="replace",
+            timeout=timeout,
+            env=dict(os.environ, RUST_BACKTRACE="1", ASAN_OPTIONS="detect_leaks=0"),
+        )
+    except subprocess.TimeoutExpired:
+        return None, ""
+    return done.returncode, done.stdout + done.stderr
+
+
+def build(cc, flags, out):
+    return run([cc, *flags, "-w", "-I", INCLUDE, "-o", out, SRC], COMPILE_TIMEOUT)
+
+
+def checksum(out, timeout):
+    status, text = run(["./" + out], timeout)
+    if status is None:
+        return None, None
+    found = CHECKSUM_RE.search(text)
+    return status, (found.group(1).upper() if found else None)
+
+
+def reference():
+    if REF is None:
+        return None
+    status, _ = build(REF, ["-O0", *GUARD], "ref0")
+    if status != 0:
+        sys.exit(1)
+    status, want = checksum("ref0", REF_RUN_TIMEOUT)
+    if status != 0 or want is None:
+        sys.exit(1)
+    others = (
+        (["-O2"], "ref2"),
+        (["-O0", "-ftrivial-auto-var-init=pattern"], "ref3"),
+        (["-O0", "-ftrivial-auto-var-init=zero"], "ref4"),
+    )
+    for flags, out in others:
+        status, _ = build(REF, [*flags, *GUARD], out)
+        if status != 0:
+            sys.exit(1)
+        status, again = checksum(out, REF_RUN_TIMEOUT)
+        if status != 0 or again != want:
+            sys.exit(1)
+    return want
+
+
+def main():
+    if VERDICT in ("compile-panic", "compile-error", "compile-timeout"):
+        for config in CONFIGS:
+            status, text = build(BADC, [config], "out" + config)
+            if VERDICT == "compile-timeout":
+                if status is not None:
+                    sys.exit(1)
+            elif status is None or status == 0 or not re.search(SIGNATURE, text):
+                sys.exit(1)
+        sys.exit(0)
+    expected = reference()
+    for config in ("-O0", "-O"):
+        status, _ = build(BADC, [config], "out" + config)
+        if status != 0:
+            sys.exit(1)
+        status, got = checksum("out" + config, RUN_TIMEOUT)
+        if config not in CONFIGS:
+            # The other configuration keeps behaving: the finding names
+            # exactly the configurations that are wrong.
+            if status != 0 or got is None or (expected is not None and got != expected):
+                sys.exit(1)
+        elif VERDICT == "checksum-mismatch":
+            if status != 0 or got is None or got == expected:
+                sys.exit(1)
+        elif VERDICT == "run-signal":
+            if status is None or status >= 0 or -status != int(DETAIL):
+                sys.exit(1)
+        elif VERDICT == "run-exit":
+            if status is None or status != int(DETAIL):
+                sys.exit(1)
+        elif VERDICT == "run-timeout":
+            if status is not None:
+                sys.exit(1)
+        elif VERDICT == "checksum-missing":
+            if status != 0 or got is not None:
+                sys.exit(1)
+    sys.exit(0)
+
+
+main()
+"""
+
+
+def find_reducer(named: str | None) -> tuple[str, list[str]] | None:
+    """The reducer: `cvise` or `creduce` from PATH, else the in-tree
+    `c_reduce.py`; `none` turns reduction off."""
+    if named == "none":
+        return None
+    names = [named] if named and named != "auto" else list(REDUCERS)
+    for name in names:
+        if name == "c_reduce":
+            break
+        found = shutil.which(name)
+        if found:
+            return name, [found]
+    return "c_reduce", [sys.executable, str(REPO_ROOT / "scripts" / "c_reduce.py")]
+
+
+def signature_regex(finding: Finding) -> str:
+    """What a compile verdict's output must keep matching: the panic site
+    and message shape, or the diagnostic code."""
+    if finding.verdict == "compile-panic":
+        site = panic_site(finding.evidence)
+        location, message = site if site else ("", "")
+        frame = panic_frame(finding.evidence)
+        wanted = [re.escape(frame) if frame else re.escape(location)]
+        shape = normalize_message(message)
+        if shape:
+            # The numbers in the message vary with the candidate.
+            wanted.append(re.sub(r"\bN\b", r"\\d+", re.escape(shape)))
+        # Each part anywhere in the output: the message precedes the
+        # backtrace that names the frame.
+        return "".join(rf"(?=[\s\S]*{part})" for part in wanted)
+    code = diagnostic_code(finding.evidence)
+    return re.escape(f"[{code}]") if code else "error"
+
+
+def render_test(
+    finding: Finding,
+    badc: Path,
+    reference: Reference | None,
+    include: Path,
+    limits: Limits,
+) -> str:
+    detail = ""
+    found = re.search(r"signal (\d+)|exited (\d+)", finding.detail)
+    if found:
+        detail = found.group(1) or found.group(2)
+    values = {
+        "badc": repr(str(badc)),
+        "ref": repr(str(reference.binary) if reference else None),
+        "include": repr(str(include)),
+        "verdict": repr(finding.verdict),
+        "configs": repr(finding.config.split(",")),
+        "signature": repr(signature_regex(finding)),
+        "detail": repr(detail),
+        "compile_timeout": repr(limits.compile),
+        "run_timeout": repr(limits.run),
+        "ref_run_timeout": repr(max(limits.reference_run, 2.0)),
+        "guard": repr(list(REFERENCE_GUARD)),
+    }
+    text = TEST_TEMPLATE
+    for name, value in values.items():
+        text = text.replace(f"@{name}@", value)
+    return text
+
+
+def reduce_finding(
+    finding: Finding,
+    reducer: tuple[str, list[str]],
+    badc: Path,
+    reference: Reference | None,
+    include: Path,
+    limits: Limits,
+    seconds: float,
+    jobs: int,
+) -> None:
+    """Shrink `finding.source` for at most `seconds`, keeping the result only
+    when the test still holds on it and it is smaller."""
+    work = finding.source.parent / f"reduce-{finding.key}-{finding.seed}"
+    work.mkdir(parents=True, exist_ok=True)
+    candidate = work / "candidate.c"
+    shutil.copyfile(finding.source, candidate)
+    test = work / "test.py"
+    test.write_text(render_test(finding, badc, reference, include, limits), encoding="utf-8")
+    wrapper = work / "test.sh"
+    wrapper.write_text(
+        f"#!/bin/sh\nexec {shlex.quote(sys.executable)} {shlex.quote(str(test))} \"$@\"\n",
+        encoding="utf-8",
+    )
+    wrapper.chmod(0o755)
+    per_test = limits.compile * 2 + limits.run * 2 + 60.0
+    holds = run_command([sys.executable, str(test)], work, per_test)
+    if not holds.ok:
+        finding.reduce_note = "the interestingness test does not hold on the case"
+        return
+    name, argv = reducer
+    if name == "c_reduce":
+        command = [
+            *argv,
+            "candidate.c",
+            "-o",
+            "reduced.c",
+            "--expect-status",
+            "0",
+            "--expect",
+            "",
+            "--timeout",
+            str(per_test),
+            "--",
+            sys.executable,
+            str(test),
+            "{}",
+        ]
+        result = work / "reduced.c"
+    else:
+        command = [*argv, "--n", str(jobs), "--timeout", str(int(per_test)), "test.sh", "candidate.c"]
+        result = candidate
+    ran = run_command(command, work, seconds)
+    if not result.is_file():
+        finding.reduce_note = f"{name} left no output ({'timed out' if ran.timed_out else 'exit ' + str(ran.status)})"
+        return
+    again = run_command([sys.executable, str(test), str(result)], work, per_test)
+    if not again.ok:
+        finding.reduce_note = f"{name}'s output no longer shows the finding"
+        return
+    lines = len(result.read_text(errors="replace").splitlines())
+    if lines >= finding.lines:
+        finding.reduce_note = f"{name} took nothing off in {ran.seconds:.0f}s"
+        return
+    dest = finding.source.with_name(finding.source.stem + ".reduced.c")
+    shutil.copyfile(result, dest)
+    finding.reduced = dest
+    finding.reduced_lines = lines
+    finding.reduce_note = f"{name}, {ran.seconds:.0f}s" + (" (budget spent)" if ran.timed_out else "")
+
+
+def reduce_findings(
+    findings: list[Finding],
+    reducer: tuple[str, list[str]],
+    badc: Path,
+    reference: Reference | None,
+    include: Path,
+    limits: Limits,
+    minutes: float,
+    jobs: int,
+) -> None:
+    """Spend `minutes` across `findings`, the compile verdicts first: they
+    reduce in seconds and their reductions are the ones read most."""
+    deadline = time.monotonic() + minutes * 60.0
+    order = sorted(findings, key=lambda f: (not f.verdict.startswith("compile-"), f.lines))
+    for finding in order:
+        remaining = deadline - time.monotonic()
+        if remaining < 30.0:
+            finding.reduce_note = "no budget left"
+            continue
+        reduce_finding(finding, reducer, badc, reference, include, limits, remaining, jobs)
+        print(
+            f"reduce {finding.key}: {finding.lines} -> {finding.reduced_lines or finding.lines}"
+            f" lines ({finding.reduce_note})",
+            flush=True,
+        )
+
+
+# --------------------------------------------------------------------------
 # the run
 
 
@@ -726,6 +1057,7 @@ class Run:
     skipped: dict[str, int] = dataclasses.field(default_factory=dict)
     findings: list[Finding] = dataclasses.field(default_factory=list)
     repeats: dict[str, int] = dataclasses.field(default_factory=dict)
+    repeat_seeds: dict[str, list[int]] = dataclasses.field(default_factory=dict)
     seconds: float = 0.0
     lines: list[int] = dataclasses.field(default_factory=list)
 
@@ -781,6 +1113,7 @@ def fuzz(
                 for finding in result.findings:
                     if finding.key in seen:
                         run.repeats[finding.key] = run.repeats.get(finding.key, 0) + 1
+                        run.repeat_seeds.setdefault(finding.key, []).append(finding.seed)
                         continue
                     seen[finding.key] = finding
                     run.findings.append(finding)
@@ -826,7 +1159,11 @@ def weekly_issue_body(day: dt.date, run: Run) -> str:
             f"only against the same generator, so every comment names its "
             f"csmith version.",
             "",
-            "Harness: `scripts/csmith_fuzz.py`. Reducer: `scripts/c_reduce.py`.",
+            "A comment links the reduction beside the case when the run's "
+            "budget produced one, quoting it when it is short.",
+            "",
+            "Harness: `scripts/csmith_fuzz.py`. Reducers: `cvise`, `creduce`, "
+            "`scripts/c_reduce.py`.",
         ]
     )
 
@@ -834,6 +1171,10 @@ def weekly_issue_body(day: dt.date, run: Run) -> str:
 def asset_name(day: dt.date, arch: str, key: str, seed: int) -> str:
     iso = day.isocalendar()
     return f"{iso.year}-W{iso.week:02d}-{arch}-{key}-seed-{seed}.c"
+
+
+def reduced_asset_name(day: dt.date, arch: str, key: str, seed: int) -> str:
+    return asset_name(day, arch, key, seed)[: -len(".c")] + ".reduced.c"
 
 
 def asset_url(repo: str, name: str) -> str:
@@ -881,13 +1222,21 @@ def finding_comment(
         ("reference", f"`{run.reference}`"),
         ("seed", f"`{finding.seed}`"),
         ("case", f"[{finding.lines} lines, unreduced]({url})"),
-        ("signature", f"`{finding.key}`"),
     ]
+    if finding.reduced is not None:
+        small = asset_url(repo, reduced_asset_name(day, run.arch, finding.key, finding.seed))
+        rows.append(("reduced", f"[{finding.reduced_lines} lines]({small}), {finding.reduce_note}"))
+    elif finding.reduce_note:
+        rows.append(("reduced", f"no: {finding.reduce_note}"))
+    rows.append(("signature", f"`{finding.key}`"))
     table = ["| | |", "|---|---|"]
     table += [f"| {name} | {value} |" for name, value in rows]
     out = [f"## badc {finding.config.replace(',', ', ')}: {finding.detail}"]
     out += ["", *table, "", "Reproduce:", "", "```sh"]
     out += [repro_commands(run, finding, csmith), "```"]
+    if finding.reduced is not None and finding.reduced_lines <= INLINE_REDUCTION_LINES:
+        out += ["", f"<details><summary>the reduction, {finding.reduced_lines} lines</summary>", ""]
+        out += ["```c", finding.reduced.read_text(errors="replace").rstrip(), "```", "", "</details>"]
     if finding.evidence:
         out += ["", "Compiler output, `RUST_BACKTRACE=1`:", "", "```", finding.evidence, "```"]
     out += [
@@ -920,11 +1269,21 @@ def summary_markdown(run: Run, publishing: str) -> str:
         out += ["", "Skipped:", ""]
         out += [f"* {count} x {reason}" for reason, count in sorted(run.skipped.items())]
     if run.findings:
-        out += ["", "| signature | verdict | configuration | seed | repeats |", "|---|---|---|---|---|"]
+        out += [
+            "",
+            "| signature | verdict | configuration | seed | reduced | repeats (seeds) |",
+            "|---|---|---|---|---|---|",
+        ]
         for finding in run.findings:
+            seeds = run.repeat_seeds.get(finding.key, [])
+            shown = ", ".join(str(s) for s in seeds[:REPEAT_SEEDS_SHOWN])
+            if len(seeds) > REPEAT_SEEDS_SHOWN:
+                shown += ", ..."
+            reduced = f"{finding.reduced_lines} lines" if finding.reduced else "-"
             out.append(
                 f"| `{finding.key}` | {finding.verdict} | `{finding.config}` |"
-                f" {finding.seed} | {run.repeats.get(finding.key, 0)} |"
+                f" {finding.seed} | {reduced} | {run.repeats.get(finding.key, 0)}"
+                f"{' (' + shown + ')' if shown else ''} |"
             )
     else:
         out += ["", "No findings."]
@@ -946,6 +1305,7 @@ def report_json(run: Run, day: dt.date, repo: str) -> str:
             "bounds": run.bounds,
             "skipped": run.skipped,
             "repeats": run.repeats,
+            "repeat_seeds": run.repeat_seeds,
             "findings": [
                 {
                     "signature": f.key,
@@ -956,6 +1316,11 @@ def report_json(run: Run, day: dt.date, repo: str) -> str:
                     "detail": f.detail,
                     "lines": f.lines,
                     "asset": asset_name(day, run.arch, f.key, f.seed),
+                    "reduced_lines": f.reduced_lines,
+                    "reduced_asset": (
+                        reduced_asset_name(day, run.arch, f.key, f.seed) if f.reduced else None
+                    ),
+                    "reduction": f.reduce_note,
                     "evidence": f.evidence,
                 }
                 for f in run.findings
@@ -1089,6 +1454,11 @@ def publish(
             staged.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(finding.source, staged)
         gh.write(["release", "upload", CASE_STORE_TAG, str(staged), "--clobber"])
+        if finding.reduced is not None:
+            small = cases / reduced_asset_name(day, run.arch, finding.key, finding.seed)
+            if not small.exists():
+                shutil.copyfile(finding.reduced, small)
+            gh.write(["release", "upload", CASE_STORE_TAG, str(small), "--clobber"])
         gh.write(
             ["issue", "comment", target, "--body-file", "-"],
             stdin=finding_comment(run, finding, day, gh.repo, where, csmith),
@@ -1192,6 +1562,21 @@ def self_test() -> int:
         True,
     )
     check("no panic", panic_site("error: bad expression [B2020]"), None)
+    traced = (
+        panic
+        + "   1: core::panicking::panic_fmt\n"
+        + "   2: core::panicking::panic_bounds_check\n"
+        + "   3: <badc::c5::compiler::Compiler>::fill_member_value_t\n"
+        + "   4: <badc::c5::compiler::Compiler>::fill_struct_fields_t\n"
+    )
+    check(
+        "the innermost badc frame names the panic",
+        panic_frame(traced),
+        "<badc::c5::compiler::Compiler>::fill_member_value_t",
+    )
+    check("no backtrace, no frame", panic_frame(panic), None)
+    check("the reducer can be turned off", find_reducer("none"), None)
+    check("the in-tree reducer is the fallback", find_reducer("c_reduce")[0], "c_reduce")
     check(
         "diagnostic code",
         diagnostic_code("case.c:7: error: bad expression: got `;` [B2020] [syntax]"),
@@ -1226,6 +1611,34 @@ def self_test() -> int:
         run, finding, dt.date(2026, 9, 17), "kromych/badc", "local", None
     )
     check("comment carries its signature", known_signatures([comment]), {key})
+    finding.evidence = traced
+    check(
+        "a panic's test keeps its frame and message shape",
+        re.search(signature_regex(finding), traced) is not None,
+        True,
+    )
+    test_text = render_test(
+        finding, Path("/usr/bin/badc"), None, Path("/usr/include/csmith"), Limits(30, 60, 10, 1)
+    )
+    check("the test names the verdict", "VERDICT = 'compile-panic'" in test_text, True)
+    check("the test carries no placeholder", "@" in test_text.split("CHECKSUM_RE")[0], False)
+    compile(test_text, "test.py", "exec")
+    with tempfile.TemporaryDirectory() as tmp:
+        kept = Path(tmp) / "case.c"
+        kept.write_text("int main(void) { return 0; }\n", encoding="utf-8")
+        finding.source = kept
+        finding.reduced = kept
+        finding.reduced_lines = 1
+        finding.reduce_note = "cvise, 3s"
+        quoted = finding_comment(run, finding, dt.date(2026, 9, 17), "kromych/badc", "local", None)
+        check("a short reduction is quoted", "int main(void) { return 0; }" in quoted, True)
+        check(
+            "the reduction is linked",
+            reduced_asset_name(dt.date(2026, 9, 17), "x86_64", key, 4177298122) in quoted,
+            True,
+        )
+        finding.reduced = None
+        finding.reduced_lines = 0
     check("comment links the case", asset_url("kromych/badc", asset_name(dt.date(2026, 9, 17), "x86_64", key, 4177298122)) in comment, True)
     check("comment names the seed", "4177298122" in comment, True)
     check("summary lists the finding", key in summary_markdown(run, "dry run"), True)
@@ -1408,6 +1821,17 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     # budget spends on each non-terminating program.
     parser.add_argument("--reference-run-timeout", type=float, default=1.0)
     parser.add_argument("--generate-timeout", type=float, default=30.0)
+    parser.add_argument(
+        "--reduce-minutes",
+        type=float,
+        default=0.0,
+        help="budget for reducing the findings the week's issue lacks (0: off)",
+    )
+    parser.add_argument(
+        "--reducer",
+        default="auto",
+        help="cvise, creduce, c_reduce or none (default: the first on PATH)",
+    )
     parser.add_argument("--self-test", action="store_true")
     return parser.parse_args(argv)
 
@@ -1479,6 +1903,14 @@ def main(argv: list[str] | None = None) -> int:
         repo = detect_repo(args.repo)
         gh = Gh(repo, args.publish)
         filed = 0
+        reducer = find_reducer(args.reducer) if args.reduce_minutes > 0 else None
+        if run.findings and reducer is not None:
+            number = open_weekly_issue(gh, weekly_title(day))
+            already = issue_signatures(gh, number) if number is not None else set()
+            fresh = [f for f in run.findings if f.key not in already]
+            reduce_findings(
+                fresh, reducer, badc, reference, csmith.include, limits, args.reduce_minutes, jobs
+            )
         if run.findings:
             if not gh.available and args.publish:
                 print("error: gh not found; cannot file findings", file=sys.stderr)

@@ -246,7 +246,7 @@ impl ConstVal {
     /// True for a symbol-relative address constant (never null) or a
     /// non-zero sym-less address. Lets a comparison against a null
     /// pointer constant fold to a known boolean.
-    fn addr(self) -> Option<ConstAddr> {
+    pub(super) fn addr(self) -> Option<ConstAddr> {
         match self {
             ConstVal::Addr(a) => Some(a),
             _ => None,
@@ -2111,12 +2111,14 @@ impl Compiler {
                         root: ConstRoot::Data(sym),
                     });
                 }
+                // The cast retypes the operand; an address keeps its
+                // relocation.
                 let operand = self.parse_const_expr_unary_val()?;
                 return Ok(ConstDesig {
                     value: operand.as_int(),
                     ty,
                     is_lvalue: false,
-                    root: ConstRoot::None,
+                    root: operand.addr().map_or(ConstRoot::None, |a| a.root),
                 });
             }
             // Parenthesized designation: parentheses are transparent.

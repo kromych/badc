@@ -1197,22 +1197,37 @@ impl Compiler {
         // retypes the address, which is the same constant value. A
         // grouping `(` is matched by the trailing `)` consumed below.
         let mut ampersands = 0usize;
+        // The group depth of each `&` whose group is still open, and the
+        // count of those a `)` closed: `(&a[i])->f` is `a[i].f`, so a `->`
+        // after the group takes one back.
+        let mut open_amps: alloc::vec::Vec<i64> = alloc::vec::Vec::new();
+        let mut closed_amps = 0usize;
         loop {
             if self.lex.tk == Token::AndOp {
                 ampersands += 1;
+                open_amps.push(group_depth);
                 self.next()?;
             } else if self.lex.tk == '(' {
                 let paren_snap = self.lex.snapshot();
                 self.next()?;
                 if self.lex_is_type_start() {
+                    // Only a cast of the whole address is scanned; inside a
+                    // group or under `&` it retypes an operand the scan
+                    // would go on to designate with the uncast type.
+                    if ampersands > 0 || group_depth > 0 {
+                        self.restore_lex(snap);
+                        self.truncate_data(data_snap);
+                        return Ok(None);
+                    }
                     let cast_ty = self.parse_const_type_name()?.ty;
                     if self.lex.tk == ')' && !is_struct_value_ty(cast_ty) {
                         // The cast retypes the address and so sets the
                         // stride of a following `+ N`: a pointer target
                         // strides by its pointee (C99 6.5.6p8), an integer
                         // target by bytes (6.3.2.3p6). Same rule the
-                        // const-expr evaluator applies to `ConstAddr`.
-                        cast_stride = Some(
+                        // const-expr evaluator applies to `ConstAddr`. The
+                        // outermost of several casts is the one applied last.
+                        cast_stride.get_or_insert(
                             if is_pointer_ty(cast_ty)
                                 || (is_struct_ty(cast_ty) && struct_ptr_depth(cast_ty) > 0)
                             {
@@ -1289,6 +1304,14 @@ impl Compiler {
         };
         self.next()?; // consume the identifier
         loop {
+            // A `.` or `[` after a group that took an address applies to a
+            // pointer; neither designates.
+            let on_address = closed_amps > 0 && self.lex.tk != Token::Arrow;
+            if on_address && (self.lex.tk == Token::Brak || self.lex.tk == Token::Dot) {
+                self.restore_lex(snap);
+                self.truncate_data(data_snap);
+                return Ok(None);
+            }
             if self.lex.tk == Token::Brak {
                 self.next()?;
                 let n = self.parse_constant_int_folding_const_objects()?;
@@ -1301,6 +1324,23 @@ impl Compiler {
                 off += n * elem_stride_at(cur_ty, &cur_dims, level, self);
                 level += 1;
             } else if self.lex.tk == Token::Dot || self.lex.tk == Token::Arrow {
+                // `->` takes back an `&` a closed group applied, or reaches
+                // the first element of an array (`a->f` is `a[0].f`).
+                if self.lex.tk == Token::Arrow {
+                    let rank = if cur_dims.is_empty() {
+                        (cur_array_size != 0) as usize
+                    } else {
+                        cur_dims.len()
+                    };
+                    if closed_amps > 0 {
+                        closed_amps -= 1;
+                        ampersands -= 1;
+                    } else if level >= rank {
+                        self.restore_lex(snap);
+                        self.truncate_data(data_snap);
+                        return Ok(None);
+                    }
+                }
                 self.next()?;
                 if self.lex.tk != Token::Id || !(is_struct_value_ty(cur_ty)) {
                     self.restore_lex(snap);
@@ -1351,6 +1391,9 @@ impl Compiler {
                 off += if subtract { -n } else { n } * stride;
             } else if self.lex.tk == ')' && group_depth > 0 {
                 group_depth -= 1;
+                let closing = open_amps.iter().filter(|&&d| d > group_depth).count();
+                open_amps.truncate(open_amps.len() - closing);
+                closed_amps += closing;
                 self.next()?;
             } else {
                 break;
@@ -1374,7 +1417,8 @@ impl Compiler {
         // 6.6p9, 6.3.2.1p3). A bare non-array designation names a
         // value: the caller's evaluator folds it when something (a
         // const-qualified scalar) makes it constant.
-        if ampersands == 0 && !final_is_array {
+        // The address of an address is not an lvalue (C99 6.5.3.2p1).
+        if (ampersands == 0 && !final_is_array) || ampersands > 1 {
             self.restore_lex(snap);
             self.truncate_data(data_snap);
             return Ok(None);

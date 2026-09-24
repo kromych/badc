@@ -490,6 +490,7 @@ const LINKED_IMAGE_RUN_FIXTURES: &[(&str, i32)] = &[
     ("address_constant_through_cast.c", 0),
     ("local_byte_array_init_converts.c", 0),
     ("address_to_bool_initializer.c", 0),
+    ("address_constant_array_strides.c", 0),
 ];
 
 /// The sweep's target for this host, or `None` when the host cannot

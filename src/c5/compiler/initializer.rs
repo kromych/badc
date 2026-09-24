@@ -1421,8 +1421,29 @@ impl Compiler {
                         break;
                     }
                 };
-                let stride =
-                    cast_stride.unwrap_or_else(|| elem_stride_at(cur_ty, &cur_dims, level, self));
+                // An address taken with `&` steps over whole objects of the
+                // designated type, an array included (C99 6.5.6p8); an
+                // array that decays steps over its elements. The sum is
+                // over the address when its `&` stands in this group or a
+                // closed one; an `&` outside the group applies to the sum.
+                let over_address = closed_amps > 0 || open_amps.last() == Some(&group_depth);
+                let whole = if level < cur_dims.len() {
+                    cur_dims[level..].iter().product::<i64>()
+                } else if cur_dims.is_empty() && level == 0 && cur_array_size > 0 {
+                    cur_array_size
+                } else {
+                    1
+                };
+                // A cast of the whole address applies to a sum outside any
+                // group; one inside a group is the cast's operand.
+                let cast = cast_stride.filter(|_| group_depth == 0);
+                let stride = cast.unwrap_or_else(|| {
+                    if over_address {
+                        whole * self.size_of_type(cur_ty) as i64
+                    } else {
+                        elem_stride_at(cur_ty, &cur_dims, level, self)
+                    }
+                });
                 off += if subtract { -n } else { n } * stride;
             } else if self.lex.tk == ')' && group_depth > 0 {
                 group_depth -= 1;
@@ -1998,26 +2019,29 @@ impl Compiler {
         // The whole element folds with the cast applied first: a cast
         // in arithmetic strides by its pointee (`(char *)&s.b - (char
         // *)&s.a`, C99 6.5.6) and must not be dropped by the reloc-leaf
-        // shortcut below. The result stands only when it is arithmetic,
-        // consumed the whole element and staged nothing; a parse that
-        // appended data folded an address needing its relocation.
+        // shortcut below. The result stands when it consumed the whole
+        // element: an arithmetic one only when it staged nothing, an
+        // address with the relocation against what it staged.
         {
             let cp = self.init_checkpoint();
             let data_before = self.data.len();
             self.restore_lex(snap);
             let whole = self.parse_const_expr_cond_val();
-            let done = (self.lex.tk == ','
+            let ends = self.lex.tk == ','
                 || self.lex.tk == '}'
                 || self.lex.tk == ';'
                 || self.lex.tk == ')'
-                || self.lex.tk == ':')
-                && self.data.len() == data_before;
+                || self.lex.tk == ':';
+            let done = ends && self.data.len() == data_before;
             match whole {
                 Ok(ConstVal::Float(f)) if done => {
                     return Ok((f.to_bits() as i128, InitElemReloc::Float64Bits));
                 }
                 Ok(v @ ConstVal::Int { .. }) if done => {
                     return Ok((v.as_i128(), InitElemReloc::None));
+                }
+                Ok(v @ ConstVal::Addr(a)) if ends && a.root.is_symbolic() => {
+                    return self.init_scalar_of(v);
                 }
                 _ => self.restore_init_checkpoint(cp),
             }

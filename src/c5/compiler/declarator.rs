@@ -149,20 +149,12 @@ impl Compiler {
     /// forms. The leading `(` must be the current token. c5's flat type
     /// tag records only a base type plus a pointer level, so the entire
     /// declarator collapses to the pointer levels named by the inner
-    /// `*`s; the arg-list `(args)` and array `[N]` suffixes are absorbed
-    /// without affecting the result type. Returns that pointer level
-    /// (0 when the parentheses enclose no `*`). Used by both the cast
-    /// operand parser and the `sizeof` type-name parser.
-    pub(super) fn parse_abstract_ptr_declarator_levels(&mut self) -> Result<i64, C5Error> {
-        self.parse_abstract_ptr_declarator(false)
-            .map(|(levels, _, _)| levels)
-    }
-
-    /// As [`Self::parse_abstract_ptr_declarator_levels`], but with
-    /// `capture_proto` the plain fn-pointer shape's `(args)` list is
-    /// parsed and returned so a cast expression can record the pointee
-    /// prototype (parameter types, variadic split) for a following
-    /// call. Nested declarator shapes keep the skip behaviour.
+    /// `*`s, returned first (0 when the parentheses enclose no `*`). The
+    /// `[N]` suffixes of a pointer to an array come back as its
+    /// dimensions. With `capture_proto` the plain fn-pointer shape's
+    /// `(args)` list is parsed and returned so a cast expression can
+    /// record the pointee prototype (parameter types, variadic split) for
+    /// a following call. Nested declarator shapes keep the skip behaviour.
     pub(super) fn parse_abstract_ptr_declarator(
         &mut self,
         capture_proto: bool,

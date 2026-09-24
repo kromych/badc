@@ -1319,19 +1319,12 @@ impl Compiler {
         }
         if self.lex.tk == Token::AndOp {
             // Address constant: full-width, no arithmetic conversion. A
-            // symbol-relative address (`&global` / `&func`) yields a
-            // `ConstVal::Addr` -- foldable in pointer comparisons and, in a
-            // static initializer, a relocation; the pure-ICE entry points
-            // reject it. The `&((T *)0)->field` offsetof form has no symbol
-            // and is a plain integer.
-            let a = self.parse_const_address_of()?;
-            if a.root.is_symbolic() {
-                return Ok(ConstVal::Addr(a));
-            }
-            return Ok(ConstVal::Int {
-                val: a.value as i128,
-                ty: Ty::Ptr as i64,
-            });
+            // symbol-relative address (`&global` / `&func`) folds in pointer
+            // comparisons and, in a static initializer, is a relocation; the
+            // pure-ICE entry points reject it. The `&((T *)0)->field`
+            // offsetof form has no symbol: an integer once cast, which keeps
+            // its stride until then (`&((T *)0)->arr + 1`).
+            return Ok(ConstVal::Addr(self.parse_const_address_of()?));
         }
         if self.lex.tk == Token::MulOp {
             self.next()?;
@@ -1822,7 +1815,7 @@ impl Compiler {
             value: d.value,
             root: d.root,
             elem_size: (self.size_of_type(d.ty) as i64).max(1),
-            pointee: None,
+            pointee: Some(d.ty),
         })
     }
 
@@ -1945,6 +1938,28 @@ impl Compiler {
         Ok(())
     }
 
+    /// The designation type of an object of element type `elem`: the
+    /// array-aggregate tag of its dimensions (`dims` for more than one,
+    /// else `count` elements) when it is an array, so `&` of it spans the
+    /// whole array and a subscript peels a dimension; `elem` otherwise.
+    fn array_desig_ty(&mut self, elem: i64, dims: &[i64], count: i64) -> i64 {
+        if dims.len() >= 2 {
+            self.array_agg_type(elem, dims)
+        } else if count > 0 {
+            self.array_agg_type(elem, &[count])
+        } else {
+            elem
+        }
+    }
+
+    /// Whether a designation type is an array-aggregate tag.
+    fn is_array_desig(&self, ty: i64) -> bool {
+        is_struct_ty(ty) && struct_ptr_depth(ty) == 0 && {
+            let id = struct_id_of(ty);
+            id < self.structs.len() && self.structs[id].is_array
+        }
+    }
+
     /// One subscript applied to a designated object: an array-aggregate
     /// tag peels a dimension -- the designated object becomes the row of
     /// the remaining ones (or the element) and the stride is its size.
@@ -2055,6 +2070,11 @@ impl Compiler {
             // `->` requirement below.
             self.next()?;
             let inner = self.parse_const_designation()?;
+            // An array operand decays to its first element (6.3.2.1p3).
+            if inner.is_lvalue && self.is_array_desig(inner.ty) {
+                let (ty, _) = self.const_subscript_step(inner.ty);
+                return Ok(ConstDesig { ty, ..inner });
+            }
             if inner.is_lvalue {
                 return Err(self.compile_err_at(
                     Code::CONSTANT_EXPRESSION,
@@ -2085,11 +2105,8 @@ impl Compiler {
                     let (off, sym, dims) =
                         self.emit_array_compound_literal_body(ty, &name.base_dims)?;
                     self.symbols[sym].storage_is_const = name.object_is_const;
-                    let desig_ty = if dims.len() >= 2 {
-                        self.array_agg_type(ty, &dims)
-                    } else {
-                        ty
-                    };
+                    let count = dims.first().copied().unwrap_or(0);
+                    let desig_ty = self.array_desig_ty(ty, &dims, count);
                     return Ok(ConstDesig {
                         value: off,
                         ty: desig_ty,
@@ -2134,8 +2151,18 @@ impl Compiler {
                     root: operand.addr().map_or(ConstRoot::None, |a| a.root),
                 });
             }
-            // Parenthesized designation: parentheses are transparent.
-            let inner = self.parse_const_designation()?;
+            // Parenthesized designation: parentheses are transparent. An
+            // operand that is no designation, such as pointer arithmetic,
+            // folds as a value: the pointer it yields designates.
+            let cp = self.init_checkpoint();
+            if let Ok(inner) = self.parse_const_designation()
+                && self.lex.tk == ')'
+            {
+                self.next()?;
+                return Ok(inner);
+            }
+            self.restore_init_checkpoint(cp);
+            let v = self.parse_const_expr_cond_val()?;
             if self.lex.tk != ')' {
                 return Err(self.compile_err_at(
                     Code::SYNTAX,
@@ -2144,17 +2171,37 @@ impl Compiler {
                 ));
             }
             self.next()?;
-            return Ok(inner);
+            return match v {
+                ConstVal::Addr(a) => match a.pointee {
+                    Some(p) => Ok(ConstDesig {
+                        value: a.value,
+                        ty: p + Ty::Ptr as i64,
+                        is_lvalue: false,
+                        root: a.root,
+                    }),
+                    None => Err(self.compile_err_at(
+                        Code::CONSTANT_EXPRESSION,
+                        line,
+                        "the parenthesized address has no pointed-to type to designate",
+                    )),
+                },
+                v => Ok(ConstDesig {
+                    value: v.as_int(),
+                    ty: v.int_ty(),
+                    is_lvalue: false,
+                    root: ConstRoot::None,
+                }),
+            };
         }
         // A string literal is an unnamed array lvalue of static storage
-        // duration, so `&"..."` and `"..."[i]` are address constants. `ty` is
-        // the element type, so an `[i]` suffix strides by one element.
+        // duration, so `&"..."` and `"..."[i]` are address constants.
         if self.lex.tk == '"' {
             let (off, elem_ty, bytes) = self.stage_const_string()?;
             let a = self.const_string_addr(off, elem_ty, bytes);
+            let count = bytes / a.elem_size;
             return Ok(ConstDesig {
                 value: off,
-                ty: elem_ty,
+                ty: self.array_desig_ty(elem_ty, &[], count),
                 is_lvalue: true,
                 root: a.root,
             });
@@ -2172,12 +2219,12 @@ impl Compiler {
                 || class == Token::Sys as i64
             {
                 let is_code = class != Token::Glo as i64;
-                // A multi-dimensional array's subscripts stride by rows.
-                let dims = self.symbols[idx].array_dims.clone();
-                let ty = if dims.len() >= 2 {
-                    self.array_agg_type(self.symbols[idx].type_, &dims)
+                let s = &self.symbols[idx];
+                let (elem, dims, count) = (s.type_, s.array_dims.clone(), s.array_size);
+                let ty = if is_code {
+                    elem
                 } else {
-                    self.symbols[idx].type_
+                    self.array_desig_ty(elem, &dims, count)
                 };
                 // A libc-bound name has no code address of its own; its
                 // relocation target is the synthesised trampoline.
@@ -2400,7 +2447,9 @@ impl Compiler {
     }
 
     /// Resolve the current identifier as a field of `struct_ty` and return
-    /// `(byte offset, field type)`, advancing past the field name.
+    /// `(byte offset, designation type)`, advancing past the field name.
+    /// A member array's designation type is its array (see
+    /// [`Self::array_desig_ty`]).
     fn const_struct_field(&mut self, struct_ty: i64, line: usize) -> Result<(i64, i64), C5Error> {
         if !is_struct_ty(struct_ty) || struct_ptr_depth(struct_ty) != 0 {
             return Err(self.compile_err_at(
@@ -2429,8 +2478,9 @@ impl Compiler {
                     format!("struct {} has no field {}", self.structs[sid].name, name),
                 )
             })?;
-        let off = self.structs[sid].fields[pos].offset as i64;
-        let fty = self.structs[sid].fields[pos].ty;
+        let f = &self.structs[sid].fields[pos];
+        let (off, elem, dims, count) = (f.offset as i64, f.ty, f.array_dims.clone(), f.array_size);
+        let fty = self.array_desig_ty(elem, &dims, count);
         self.next()?;
         Ok((off, fty))
     }
@@ -2496,9 +2546,15 @@ impl Compiler {
                 }
                 // Parenthesized abstract declarator: `(*)(args)` (function
                 // pointer) or `(*)[N]` (pointer to array). The shared helper
-                // absorbs the suffixes and returns the pointer level (C99 6.7.7).
+                // returns the pointer level and a pointed-to array's
+                // dimensions (C99 6.7.7).
+                let mut array_pointee = None;
                 if self.lex.tk == '(' {
-                    target_ty += self.parse_abstract_ptr_declarator_levels()? * Ty::Ptr as i64;
+                    let (levels, _, dims) = self.parse_abstract_ptr_declarator(false)?;
+                    if levels == 1 && !dims.is_empty() && dims.iter().all(|&d| d > 0) {
+                        array_pointee = Some(self.array_agg_type(target_ty, &dims));
+                    }
+                    target_ty += levels * Ty::Ptr as i64;
                     while self.lex.tk == Token::TypeQual {
                         self.next()?;
                     }
@@ -2561,12 +2617,13 @@ impl Compiler {
                 {
                     let ptr_target = is_pointer_ty(target_ty)
                         || (is_struct_ty(target_ty) && struct_ptr_depth(target_ty) > 0);
-                    a.elem_size = if ptr_target {
-                        (self.size_of_type(pointee_ty(target_ty)) as i64).max(1)
-                    } else {
-                        1
+                    a.pointee = match array_pointee {
+                        Some(arr) => Some(arr),
+                        None => ptr_target.then(|| pointee_ty(target_ty)),
                     };
-                    a.pointee = ptr_target.then(|| pointee_ty(target_ty));
+                    a.elem_size = a
+                        .pointee
+                        .map_or(1, |p| (self.size_of_type(p) as i64).max(1));
                     return Ok(ConstVal::Addr(a));
                 }
                 return Ok(if is_floating_ty(target_ty) {
@@ -2721,16 +2778,21 @@ impl Compiler {
                         idx
                     };
                     self.symbols[idx].was_referenced = true;
-                    let elem_size = if is_fn {
-                        1
-                    } else {
-                        (self.size_of_type(self.symbols[idx].type_) as i64).max(1)
-                    };
+                    let pointee = (!is_fn).then(|| {
+                        let s = &self.symbols[idx];
+                        let (elem, dims) = (s.type_, s.array_dims.clone());
+                        if dims.len() >= 2 {
+                            self.array_agg_type(elem, &dims[1..])
+                        } else {
+                            elem
+                        }
+                    });
+                    let elem_size = pointee.map_or(1, |p| (self.size_of_type(p) as i64).max(1));
                     return Ok(ConstVal::Addr(ConstAddr {
                         value: self.symbols[idx].val,
                         root: ConstRoot::code_or_data(idx, is_fn),
                         elem_size,
-                        pointee: None,
+                        pointee,
                     }));
                 }
             }

@@ -382,7 +382,12 @@ impl<'a> Walker<'a> {
         Some(fold_int_binop(signed, l.off, r.off))
     }
 
-    /// The `addr == null` / `addr != null` arm of the fold above.
+    /// The `addr == null` / `addr != null` arm of the fold above. An
+    /// object whose storage data compaction dropped keeps folding as
+    /// the defined object it was: the walk that decided it was dead
+    /// folded this comparison, and a walk over the compacted program
+    /// must fold it the same way, or it materializes the arm the
+    /// first walk removed along with everything that arm named.
     fn fold_addr_vs_null(&self, op: BinOp, a: AddrConst) -> Option<i64> {
         if !matches!(op, BinOp::Eq | BinOp::Ne) || a.off != 0 {
             return None;
@@ -390,7 +395,7 @@ impl<'a> Walker<'a> {
         let nonnull = self
             .symbols
             .get(a.base.0 as usize)
-            .is_some_and(|s| s.defined_here && !s.is_weak);
+            .is_some_and(|s| (s.defined_here || s.storage_dropped) && !s.is_weak);
         nonnull.then_some((op == BinOp::Ne) as i64)
     }
 

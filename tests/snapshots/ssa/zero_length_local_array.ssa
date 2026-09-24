@@ -60,33 +60,33 @@ fn ent_pc=3 n_params=0 variadic=false locals=3
     v33  Imm(0)                                           -> x0
     terminator Return(v33)   (exit_acc=v33)
   block 9  start_pc=0
-    v36  LocalAddr(-3)                                    -> x1
+    v36  LocalAddr(-2)                                    -> x1
     v37  Imm(5)                                           -> x0
     v38  Store { addr=v36, disp=0, value=v37, kind=I32 }  -> -
-    v39  LocalAddr(-3)                                    -> x2
+    v39  LocalAddr(-2)                                    -> x2
     v40  BinopI { op=add, lhs=v36, rhs_imm=4 }            -> x2
     v41  Imm(6)                                           -> x2
     v42  Store { addr=v36, disp=4, value=v41, kind=I32 }  -> -
-    v43  LocalAddr(-3)                                    -> x6
+    v43  LocalAddr(-2)                                    -> x6
     v44  BinopI { op=add, lhs=v36, rhs_imm=8 }            -> x6
     v45  Imm(7)                                           -> x6
     v46  Store { addr=v36, disp=8, value=v45, kind=I32 }  -> -
-    v47  LocalAddr(-1)                                    -> x6
-    v48  LocalAddr(-3)                                    -> x7
+    v47  LocalAddr(-3)                                    -> x6
+    v48  LocalAddr(-2)                                    -> x7
     v49  Binop { op=eq, lhs=v47, rhs=v36 }                -> x6
     terminator Bz { cond=v49, target=b11, fall=b10 }   (exit_acc=v49)
   block 10  start_pc=0
     v50  Imm(5)                                           -> x1
     terminator Jmp(b2)   (exit_acc=v37)
   block 11  start_pc=0
-    v51  LocalAddr(-3)                                    -> x0
+    v51  LocalAddr(-2)                                    -> x0
     v52  Load { addr=v36, disp=0, kind=I32 }              -> x0
-    v53  LocalAddr(-3)                                    -> x6
+    v53  LocalAddr(-2)                                    -> x6
     v54  BinopI { op=add, lhs=v36, rhs_imm=4 }            -> x6
     v55  Load { addr=v36, disp=4, kind=I32 }              -> x1
     v56  Binop { op=add, lhs=v52, rhs=v55 }               -> x0
     v57  Extend { value=v56, kind=I32 }                   -> x1
-    v58  LocalAddr(-3)                                    -> x1
+    v58  LocalAddr(-2)                                    -> x1
     v59  BinopI { op=add, lhs=v58, rhs_imm=8 }            -> x6
     v60  Load { addr=v58, disp=8, kind=I32 }              -> x1
     v61  Binop { op=add, lhs=v56, rhs=v60 }               -> x0

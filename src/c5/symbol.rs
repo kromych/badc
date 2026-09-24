@@ -450,6 +450,15 @@ pub(crate) struct Symbol {
     /// references in the link-unit symbol table.
     pub defined_here: bool,
 
+    /// True for a `Token::Glo` this unit defined whose storage data
+    /// compaction dropped because no live code reached it. The record
+    /// stays so the AST's symbol indices hold; `defined_here` is
+    /// cleared so no writer places it. The parse-time facts about the
+    /// object stand: its address is still an address constant that is
+    /// not null (C99 6.6), which is what folded away every reference
+    /// to it in the first place.
+    pub storage_dropped: bool,
+
     /// True for a file-scope declaration that explicitly carried
     /// the `extern` storage-class keyword. Combined with
     /// `defined_here == false`, it distinguishes an extern
@@ -845,6 +854,7 @@ impl crate::c5::layout::DataOffsets for Symbol {
             h_type_align: _,
             linkage: _,
             defined_here,
+            storage_dropped,
             is_extern_decl: _,
             h_is_extern_decl: _,
             saw_noninline_decl: _,
@@ -887,6 +897,7 @@ impl crate::c5::layout::DataOffsets for Symbol {
             // places or carves it.
             None => {
                 *defined_here = false;
+                *storage_dropped = true;
                 *is_used = false;
                 *section_name = None;
                 *val = 0;

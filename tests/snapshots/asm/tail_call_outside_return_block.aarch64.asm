@@ -53,8 +53,8 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sxtw	x4, w4
-               	mov	w0, w0
                	orr	x0, x0, #0x40000
+               	mov	w0, w0
                	mov	w1, w1
                	bl	<addr>
                	cbz	x0, <addr>

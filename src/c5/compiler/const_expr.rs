@@ -2357,12 +2357,13 @@ impl Compiler {
 
     /// Fold a read of a scalar sub-object of a `const` object with static
     /// storage duration, reached by a `[i]` / `.field` chain from its name
-    /// (`tab[i].addr` over `static const struct { ... } tab[]`), as GCC and
-    /// Clang do under C99 6.6p10: the initializer has already written the
-    /// value into the object's `.data` bytes. The cursor is on the name.
-    /// `None`, with the cursor restored, for any other shape: no chain, a
-    /// chain ending at an array, aggregate, pointer, `long double` or
-    /// bitfield, an index outside the object, or bytes a relocation patches.
+    /// (`tab[i].addr` over `static const struct { ... } tab[]`), or of a
+    /// `const` pointer object, as GCC and Clang do under C99 6.6p10: the
+    /// initializer has already written the value into the object's `.data`
+    /// bytes. The cursor is on the name. `None`, with the cursor restored,
+    /// for any other shape: no chain to a non-pointer, a chain ending at an
+    /// array, aggregate, `long double` or bitfield, an index outside the
+    /// object, or bytes a relocation patches other than a whole address.
     fn try_fold_const_object_read(&mut self) -> Result<Option<ConstVal>, C5Error> {
         let idx = self.lex.curr_id_idx;
         let s = &self.symbols[idx];
@@ -2425,25 +2426,73 @@ impl Compiler {
             steps += 1;
         }
         let size = self.size_of_type(ty);
-        let scalar = !is_pointer_ty(ty) && !is_struct_ty(ty) && !is_long_double_ty(ty);
-        if steps == 0
+        let scalar = is_pointer_ty(ty) || (!is_struct_ty(ty) && !is_long_double_ty(ty));
+        // A bare name reads through the scalar path above, except a pointer.
+        let read = if (steps == 0 && !is_pointer_ty(ty))
             || !dims.is_empty()
             || !scalar
             || !(1..=8).contains(&size)
             || off < 0
             || off as usize + size > self.data.len()
-            || self.data_range_relocated(off as usize, size)
         {
+            None
+        } else {
+            self.read_const_slot(off as usize, size, ty)
+        };
+        let Some(v) = read else {
             self.restore_init_checkpoint(cp);
             return Ok(None);
-        }
+        };
         self.symbols[idx].was_referenced = true;
-        let bits = self.read_data_int(off as usize, size, ty);
-        Ok(Some(match (is_floating_ty(ty), size) {
+        Ok(Some(v))
+    }
+
+    /// The value in the `const` object slot `data[at..at + size]` of type
+    /// `ty`. A slot a relocation patches holds the address the relocation
+    /// resolves to, which only a pointer-wide read of the whole slot yields;
+    /// `None` for any other read of patched bytes.
+    fn read_const_slot(&self, at: usize, size: usize, ty: i64) -> Option<ConstVal> {
+        if self.data_range_relocated(at, size) {
+            let mut a = self.relocated_address_at(at, size)?;
+            if is_pointer_ty(ty) {
+                let p = pointee_ty(ty);
+                a.elem_size = (self.size_of_type(p) as i64).max(1);
+                a.pointee = Some(p);
+            }
+            return Some(ConstVal::Addr(a));
+        }
+        let bits = self.read_data_int(at, size, ty);
+        Some(match (is_floating_ty(ty), size) {
             (true, 4) => ConstVal::Float(f32::from_bits(bits as u32) as f64),
             (true, _) => ConstVal::Float(f64::from_bits(bits as u64)),
             (false, _) => self.const_int_of(bits, ty),
-        }))
+        })
+    }
+
+    /// The address a relocation starting at `data[at]` over a whole
+    /// pointer-wide slot of `size` bytes stores: a data object's or a
+    /// function's, relative to the symbol it was taken from.
+    fn relocated_address_at(&self, at: usize, size: usize) -> Option<ConstAddr> {
+        if size != self.size_of_type(Ty::Ptr as i64) {
+            return None;
+        }
+        let at = at as u64;
+        if let Some(i) = self.data_relocs.iter().position(|r| r.data_offset == at) {
+            let sym = *self.data_reloc_sym_idx.get(i)?;
+            return (sym != usize::MAX).then(|| ConstAddr {
+                value: self.data_relocs[i].target_offset as i64,
+                root: ConstRoot::Data(sym),
+                elem_size: 1,
+                pointee: None,
+            });
+        }
+        let i = self.code_relocs.iter().position(|r| r.data_offset == at)?;
+        Some(ConstAddr {
+            value: self.code_relocs[i].target_ent_pc as i64,
+            root: ConstRoot::Code(*self.code_reloc_sym_idx.get(i)?),
+            elem_size: 1,
+            pointee: None,
+        })
     }
 
     /// Resolve the current identifier as a field of `struct_ty` and return
@@ -2732,10 +2781,12 @@ impl Compiler {
                 let off = sym.val as usize;
                 let size = self.size_of_type(ty);
                 if (1..=8).contains(&size) && off + size <= self.data.len() {
-                    let v = self.read_data_int(off, size, ty);
-                    self.symbols[idx].was_referenced = true;
-                    self.next()?;
-                    return Ok(self.const_int_of(v, ty));
+                    let v = self.read_const_slot(off, size, ty);
+                    if let Some(v) = v {
+                        self.symbols[idx].was_referenced = true;
+                        self.next()?;
+                        return Ok(v);
+                    }
                 }
             }
         }

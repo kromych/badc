@@ -113,6 +113,20 @@ impl Compiler {
         }
     }
 
+    /// Undo a speculative parse: drop the data it staged, then return the
+    /// lexer to `snap`. The order is the contract: `restore_lex` re-records
+    /// the boundary of a restored string literal, and a boundary pushed
+    /// ahead of the truncation lands above the stale ones the truncation
+    /// must pop from the tail, which then survive past the new end.
+    pub(super) fn rewind_speculation(
+        &mut self,
+        snap: crate::c5::lexer::LexerSnapshot,
+        data_len: usize,
+    ) {
+        self.truncate_data(data_len);
+        self.restore_lex(snap);
+    }
+
     /// Truncate the data segment (a speculative parse is being undone)
     /// and drop everything recorded past the new end: later growth
     /// reuses those offsets for unrelated bytes, so a stale literal

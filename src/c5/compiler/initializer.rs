@@ -930,8 +930,7 @@ impl Compiler {
             if inner_dims.is_empty() && self.lex.tk == '"' && (is_wchar_array || is_char_array) {
                 brace_wrapped = true;
             } else {
-                self.restore_lex(snap);
-                self.truncate_data(data_snap);
+                self.rewind_speculation(snap, data_snap);
             }
         }
         // A string-literal array initializer may be parenthesized
@@ -951,8 +950,7 @@ impl Compiler {
             if self.lex.tk == '"' && (self.lex.str_is_wide || is_char_array) {
                 paren_depth = depth;
             } else {
-                self.restore_lex(snap);
-                self.truncate_data(data_snap);
+                self.rewind_speculation(snap, data_snap);
             }
         }
         // C99 6.7.8p14/p15: a string literal initializes an array whose
@@ -1243,16 +1241,14 @@ impl Compiler {
                     // group or under `&` it retypes an operand the scan
                     // would go on to designate with the uncast type.
                     if ampersands > 0 || group_depth > 0 {
-                        self.restore_lex(snap);
-                        self.truncate_data(data_snap);
+                        self.rewind_speculation(snap, data_snap);
                         return Ok(None);
                     }
                     let cast_ty = self.parse_const_type_name()?.ty;
                     // A cast to a type that cannot hold the address
                     // converts it (to `_Bool`, 1); the evaluator folds that.
                     if self.lex.tk == ')' && !self.holds_address(cast_ty) {
-                        self.restore_lex(snap);
-                        self.truncate_data(data_snap);
+                        self.rewind_speculation(snap, data_snap);
                         return Ok(None);
                     }
                     if self.lex.tk == ')' && !is_struct_value_ty(cast_ty) {
@@ -1305,14 +1301,12 @@ impl Compiler {
             }
         }
         if self.lex.tk != Token::Id {
-            self.restore_lex(snap);
-            self.truncate_data(data_snap);
+            self.rewind_speculation(snap, data_snap);
             return Ok(None);
         }
         let sym_idx = self.lex.curr_id_idx;
         if self.symbols[sym_idx].class != Token::Glo as i64 {
-            self.restore_lex(snap);
-            self.truncate_data(data_snap);
+            self.rewind_speculation(snap, data_snap);
             return Ok(None);
         }
         let mut off = self.symbols[sym_idx].val;
@@ -1343,16 +1337,14 @@ impl Compiler {
             // pointer; neither designates.
             let on_address = closed_amps > 0 && self.lex.tk != Token::Arrow;
             if on_address && (self.lex.tk == Token::Brak || self.lex.tk == Token::Dot) {
-                self.restore_lex(snap);
-                self.truncate_data(data_snap);
+                self.rewind_speculation(snap, data_snap);
                 return Ok(None);
             }
             if self.lex.tk == Token::Brak {
                 self.next()?;
                 let n = self.parse_constant_int_folding_const_objects()?;
                 if self.lex.tk != ']' {
-                    self.restore_lex(snap);
-                    self.truncate_data(data_snap);
+                    self.rewind_speculation(snap, data_snap);
                     return Ok(None);
                 }
                 self.next()?;
@@ -1371,15 +1363,13 @@ impl Compiler {
                         closed_amps -= 1;
                         ampersands -= 1;
                     } else if level >= rank {
-                        self.restore_lex(snap);
-                        self.truncate_data(data_snap);
+                        self.rewind_speculation(snap, data_snap);
                         return Ok(None);
                     }
                 }
                 self.next()?;
                 if self.lex.tk != Token::Id || !(is_struct_value_ty(cur_ty)) {
-                    self.restore_lex(snap);
-                    self.truncate_data(data_snap);
+                    self.rewind_speculation(snap, data_snap);
                     return Ok(None);
                 }
                 let fname = self.symbols[self.lex.curr_id_idx].name.clone();
@@ -1389,8 +1379,7 @@ impl Compiler {
                     .iter()
                     .position(|f| f.name == fname)
                 else {
-                    self.restore_lex(snap);
-                    self.truncate_data(data_snap);
+                    self.rewind_speculation(snap, data_snap);
                     return Ok(None);
                 };
                 let field = self.structs[sid].fields[fpos].clone();
@@ -1416,8 +1405,7 @@ impl Compiler {
                 let n = match self.parse_constant_int_folding_const_objects() {
                     Ok(n) => n,
                     Err(_) => {
-                        self.restore_lex(op_snap);
-                        self.truncate_data(op_data);
+                        self.rewind_speculation(op_snap, op_data);
                         break;
                     }
                 };
@@ -1475,8 +1463,7 @@ impl Compiler {
         // const-qualified scalar) makes it constant.
         // The address of an address is not an lvalue (C99 6.5.3.2p1).
         if (ampersands == 0 && !final_is_array) || ampersands > 1 {
-            self.restore_lex(snap);
-            self.truncate_data(data_snap);
+            self.rewind_speculation(snap, data_snap);
             return Ok(None);
         }
         Ok(Some((off, sym_idx, final_is_array)))
@@ -1920,8 +1907,7 @@ impl Compiler {
                     is_cast_of_string = self.lex.tk == '"';
                 }
             }
-            self.restore_lex(peek_snap);
-            self.truncate_data(peek_data);
+            self.rewind_speculation(peek_snap, peek_data);
             if is_cast_of_string {
                 let (value, reloc) = self.parse_constant_init_value()?;
                 if self.lex.tk != ')' {
@@ -2013,8 +1999,7 @@ impl Compiler {
                     _ => (v, reloc),
                 });
             }
-            self.restore_lex(paren_snap);
-            self.truncate_data(paren_data);
+            self.rewind_speculation(paren_snap, paren_data);
         }
         // The whole element folds with the cast applied first: a cast
         // in arithmetic strides by its pointee (`(char *)&s.b - (char
@@ -2125,8 +2110,7 @@ impl Compiler {
             if let Ok(v) = self.parse_constant_i128() {
                 return Ok((v, InitElemReloc::None));
             }
-            self.restore_lex(snap);
-            self.truncate_data(data_snap);
+            self.rewind_speculation(snap, data_snap);
             self.pending.const_expr_nonconst = nonconst;
         }
         if class == Token::Fun as i64 {
@@ -2912,7 +2896,6 @@ impl Compiler {
     }
 
     pub(super) fn restore_init_checkpoint(&mut self, cp: InitCheckpoint) {
-        self.restore_lex(cp.lex);
         self.next_ent_pc = cp.next_ent_pc;
         // The records below are about to go, so their slots are free
         // again. One record per slot, so releasing a popped record's
@@ -2950,6 +2933,9 @@ impl Compiler {
         self.code_reloc_sym_idx.truncate(cp.code_reloc_sym_idx);
         self.extern_data_relocs.truncate(cp.extern_data_relocs);
         self.pending_label_relocs.truncate(cp.pending_label_relocs);
+        // Last: a restored string literal re-records its boundary, which
+        // has to land on the truncated list (`rewind_speculation`).
+        self.restore_lex(cp.lex);
     }
 
     /// Fill a `{ ... }` struct or union initializer at `base`. An entry
@@ -3909,8 +3895,7 @@ impl Compiler {
             if self.lex.tk == '"' {
                 char_array_brace_string = true;
             } else {
-                self.restore_lex(snap);
-                self.truncate_data(data_snap);
+                self.rewind_speculation(snap, data_snap);
             }
         }
         // A string literal initializing a char array may be enclosed
@@ -3936,8 +3921,7 @@ impl Compiler {
             if self.lex.tk == '"' {
                 char_array_paren_depth = depth;
             } else {
-                self.restore_lex(snap);
-                self.truncate_data(data_snap);
+                self.rewind_speculation(snap, data_snap);
             }
         }
         if field.array_size > 0 && self.lex.tk == '"' && strip_unsigned(field.ty) == Ty::Char as i64

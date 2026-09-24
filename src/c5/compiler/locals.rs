@@ -1241,8 +1241,7 @@ impl Compiler {
             self.operand_scan_advance(&mut scan);
             self.next()?;
         }
-        self.restore_lex(snap);
-        self.truncate_data(data_snap);
+        self.rewind_speculation(snap, data_snap);
         Ok(found)
     }
 
@@ -2627,8 +2626,7 @@ impl Compiler {
             self.next()?;
             escapes = self.lex.tk == '{' && (prev_was_amp || array);
         }
-        self.restore_lex(snap);
-        self.truncate_data(staged);
+        self.rewind_speculation(snap, staged);
         Ok(escapes)
     }
 

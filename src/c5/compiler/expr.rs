@@ -5099,8 +5099,7 @@ impl Compiler {
         // Drop the data the scan appended, then position at the selected
         // association's `:`; the following `next` re-lexes its first
         // token, appending any string data at `data_start`.
-        self.truncate_data(data_start);
-        self.restore_lex(chosen);
+        self.rewind_speculation(chosen, data_start);
         self.next()?; // the `:` -> the expression's first token
         Ok(after)
     }
@@ -5125,8 +5124,7 @@ impl Compiler {
         self.code_reloc_sym_idx.truncate(saved_reloc);
         self.ast_acc = saved_ast_acc;
         self.ast_vstack.truncate(saved_vstack);
-        self.truncate_data(data_start);
-        self.restore_lex(snap);
+        self.rewind_speculation(snap, data_start);
         result.map(|_| ty)
     }
 

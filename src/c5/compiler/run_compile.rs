@@ -91,8 +91,7 @@ impl Compiler {
         let saved_data = self.data.len();
         let saved_pc = self.next_ent_pc;
         let result = self.designated_array_count_inner(fallback, inner_span);
-        self.restore_lex(snap);
-        self.truncate_data(saved_data);
+        self.rewind_speculation(snap, saved_data);
         self.next_ent_pc = saved_pc;
         // A non-constant designator (invalid, or a shape this peek can't
         // fold) falls back to the positional count; the real fill re-parses
@@ -107,8 +106,7 @@ impl Compiler {
         let saved_data = self.data.len();
         let saved_pc = self.next_ent_pc;
         let is_desig = self.next().is_ok() && self.lex.tk == Token::Brak;
-        self.restore_lex(snap);
-        self.truncate_data(saved_data);
+        self.rewind_speculation(snap, saved_data);
         self.next_ent_pc = saved_pc;
         is_desig
     }

@@ -75,8 +75,7 @@ impl Compiler {
                     || (c == Token::Glo as i64
                         && self.symbols[self.lex.curr_id_idx].array_size != 0)
             });
-        self.restore_lex(snap);
-        self.truncate_data(data_snap);
+        self.rewind_speculation(snap, data_snap);
         Ok(reloc)
     }
 
@@ -402,8 +401,7 @@ impl Compiler {
                 self.emit_addr_reloc(var_offset, sym_idx, off, is_thread_local)?;
                 return Ok(());
             }
-            self.restore_lex(snap);
-            self.truncate_data(data_snap);
+            self.rewind_speculation(snap, data_snap);
         }
         // A string literal is the slot's value only when it is the whole
         // initializer; a trailing `[i]` or operator makes it an operand

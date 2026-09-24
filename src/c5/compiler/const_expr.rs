@@ -1657,8 +1657,7 @@ impl Compiler {
         // staged only to be counted here, so the storage is reclaimed.
         let addr = self.take_concat_string_literal()?;
         if self.lex.tk != ')' {
-            self.truncate_data(data_len);
-            self.restore_lex(snap);
+            self.rewind_speculation(snap, data_len);
             return Ok(None);
         }
         self.next()?;
@@ -1715,9 +1714,8 @@ impl Compiler {
                 Ok(r)
             }
             None => {
-                self.truncate_data(data_len);
                 self.pending.const_expr_nonconst = nonconst;
-                self.restore_lex(snap);
+                self.rewind_speculation(snap, data_len);
                 Ok(None)
             }
         }
@@ -2046,8 +2044,7 @@ impl Compiler {
         let staged = self.data.len();
         self.next()?;
         let hit = self.lex.tk == '{';
-        self.restore_lex(snap);
-        self.truncate_data(staged);
+        self.rewind_speculation(snap, staged);
         Ok(hit)
     }
 

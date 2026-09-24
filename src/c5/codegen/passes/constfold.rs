@@ -902,6 +902,12 @@ fn fold_round(func: &mut FunctionSsa) -> bool {
             } if imm_of(func, *lhs) == Some(0) && imm_of(func, *rhs).is_none() => {
                 Some(Inst::Neg(*rhs))
             }
+            // No value is below zero unsigned.
+            Inst::BinopI {
+                op: op @ (BinOp::Ult | BinOp::Uge),
+                rhs_imm: 0,
+                ..
+            } => Some(Inst::Imm(i64::from(*op == BinOp::Uge))),
             Inst::BinopI { op, lhs, rhs_imm } => imm_of(func, *lhs)
                 .and_then(|l| eval::fold_binop(*op, l, *rhs_imm))
                 .map(Inst::Imm),
@@ -1104,6 +1110,39 @@ mod tests {
                     matches!(f.insts[3], Inst::Udiv128 { .. }),
                     "{:?}",
                     f.insts[3]
+                ),
+            }
+        }
+    }
+
+    /// Unsigned, `x < 0` and `x >= 0` are constants, `x <= 0` and `x > 0` not.
+    #[test]
+    fn an_unsigned_comparison_with_zero_that_cannot_vary_folds() {
+        for (op, want) in [
+            (BinOp::Ult, Some(0)),
+            (BinOp::Uge, Some(1)),
+            (BinOp::Ule, None),
+            (BinOp::Ugt, None),
+        ] {
+            let mut f = fresh(vec![
+                Inst::LocalAddr(0),
+                Inst::BinopI {
+                    op,
+                    lhs: 0,
+                    rhs_imm: 0,
+                },
+            ]);
+            run_one(&mut f);
+            match want {
+                Some(k) => assert!(
+                    matches!(f.insts[1], Inst::Imm(v) if v == k),
+                    "{op:?}: {:?}",
+                    f.insts[1]
+                ),
+                None => assert!(
+                    matches!(f.insts[1], Inst::BinopI { .. }),
+                    "{op:?}: {:?}",
+                    f.insts[1]
                 ),
             }
         }

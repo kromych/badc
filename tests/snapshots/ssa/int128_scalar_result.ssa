@@ -710,12 +710,12 @@ fn ent_pc=2 n_params=0 variadic=false locals=2
     v595 Imm(0)                                           -> x6
     v596 Imm(5)                                           -> x6
     v597 Imm(0)                                           -> x6
-    v598 BinopI { op=ult, lhs=v590, rhs_imm=0 }           -> x6
-    v599 BinopI { op=eq, lhs=v590, rhs_imm=0 }            -> x7
-    v600 BinopI { op=ult, lhs=v589, rhs_imm=5 }           -> x8
-    v601 Binop { op=and, lhs=v599, rhs=v600 }             -> x7
-    v602 Binop { op=or, lhs=v598, rhs=v601 }              -> x6
-    terminator Bz { cond=v602, target=b35, fall=b33 }   (exit_acc=v602)
+    v598 Imm(0)                                           -> x6
+    v599 BinopI { op=eq, lhs=v590, rhs_imm=0 }            -> x6
+    v600 BinopI { op=ult, lhs=v589, rhs_imm=5 }           -> x7
+    v601 Binop { op=and, lhs=v599, rhs=v600 }             -> x6
+    v602 BinopI { op=or, lhs=v601, rhs_imm=0 }            -> x7
+    terminator Bz { cond=v601, target=b35, fall=b33 }   (exit_acc=v601)
   block 35  start_pc=0
     v625 Extend { value=v591, kind=I32 }                  -> x6
     v626 BinopI { op=ne, lhs=v591, rhs_imm=5 }            -> x2

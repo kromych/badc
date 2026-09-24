@@ -744,17 +744,9 @@ Disassembly of section .text:
                	stur	x2, [x29, #-0x80]
                	sub	x2, x29, #0x80
                	str	x3, [x2, #0x8]
-               	ldr	x3, [x0]
                	ldr	x1, [x0, #0x8]
                	cmp	x1, #0x0
-               	cset	x4, lt
-               	cmp	x1, #0x0
-               	cset	x1, eq
-               	cmp	x3, #0x0
-               	cset	x3, lo
-               	and	x1, x1, x3
-               	orr	x1, x4, x1
-               	cbz	x1, <addr>
+               	b.ge	<addr>
                	ldr	x1, [x0]
                	ldr	x0, [x0, #0x8]
                	cmp	x1, #0x0
@@ -765,17 +757,9 @@ Disassembly of section .text:
                	sub	x0, x29, #0x40
                	str	x1, [x0]
                	str	x3, [x0, #0x8]
-               	ldr	x3, [x2]
                	ldr	x1, [x2, #0x8]
                	cmp	x1, #0x0
-               	cset	x4, lt
-               	cmp	x1, #0x0
-               	cset	x1, eq
-               	cmp	x3, #0x0
-               	cset	x3, lo
-               	and	x1, x1, x3
-               	orr	x1, x4, x1
-               	cbz	x1, <addr>
+               	b.ge	<addr>
                	ldr	x1, [x2]
                	ldr	x2, [x2, #0x8]
                	cmp	x1, #0x0
@@ -823,28 +807,14 @@ Disassembly of section .text:
                	str	x1, [x0, #0x8]
                	ldr	x5, [x0]
                	sub	x0, x29, #0x90
-               	ldr	x3, [x0]
                	ldr	x2, [x0, #0x8]
                	cmp	x2, #0x0
-               	cset	x4, lt
-               	cmp	x2, #0x0
-               	cset	x2, eq
-               	cmp	x3, #0x0
-               	cset	x3, lo
-               	and	x2, x2, x3
-               	orr	x4, x4, x2
+               	cset	x3, lt
                	sub	x2, x29, #0x80
-               	ldr	x6, [x2]
-               	ldr	x3, [x2, #0x8]
-               	cmp	x3, #0x0
-               	cset	x7, lt
-               	cmp	x3, #0x0
-               	cset	x3, eq
-               	cmp	x6, #0x0
-               	cset	x6, lo
-               	and	x3, x3, x6
-               	orr	x3, x7, x3
-               	cmp	w4, w3
+               	ldr	x4, [x2, #0x8]
+               	cmp	x4, #0x0
+               	cset	x4, lt
+               	cmp	w3, w4
                	b.eq	<addr>
                	sub	x3, x29, #0x60
                	ldr	x4, [x3]
@@ -874,17 +844,9 @@ Disassembly of section .text:
                	str	x1, [x0, #0x8]
                	ldr	x3, [x0]
                	sub	x0, x29, #0x90
-               	ldr	x2, [x0]
                	ldr	x0, [x0, #0x8]
                	cmp	x0, #0x0
-               	cset	x4, lt
-               	cmp	x0, #0x0
-               	cset	x0, eq
-               	cmp	x2, #0x0
-               	cset	x2, lo
-               	and	x0, x0, x2
-               	orr	x0, x4, x0
-               	cbz	x0, <addr>
+               	b.ge	<addr>
                	sub	x0, x29, #0x70
                	ldr	x2, [x0]
                	ldr	x0, [x0, #0x8]

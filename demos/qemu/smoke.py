@@ -75,6 +75,8 @@ SYS_INCLUDE = (
 
 # gcc-only flags with no badc equivalent; dropped from each compile command.
 DROP_EXACT = {"-c", "-pipe", "-pthread", "-w", "-g", "-MD", "-MMD", "-MP"}
+# Kept ahead of DROP_PREFIX: meson.build requires signed overflow to wrap.
+OVERFLOW = {"-fwrapv", "-fno-wrapv", "-fstrict-overflow", "-fno-strict-overflow"}
 DROP_PREFIX = ("-W", "-f", "-m", "-g", "-O", "-std", "-M", "-arch", "-print", "-x")
 
 # badc provides no host SIMD-intrinsics header (<arm_neon.h> on aarch64,
@@ -183,7 +185,7 @@ def transform(argv: list[str], glib_cflags: list[str], src_dir: Path, build_dir:
               orig_build: str, orig_src: str, scalar: bool, host_accel: str) -> list[str]:
     """Rewrite a gcc compile command into badc flags. Drops the output/source/
     dependency args and the gcc-only optimization/warning flags; keeps the
-    include + -D/-U set. Include paths captured as absolute build-box paths are
+    include + -D/-U set and the signed-overflow flags. Include paths captured as absolute build-box paths are
     rewritten to the bundle (portable_path) so the build uses QEMU's own
     linux-headers / host / tcg headers, not the host's; the absolute glib
     includes are dropped for the host's pkg-config set. -isystem/-iquote become
@@ -214,7 +216,7 @@ def transform(argv: list[str], glib_cflags: list[str], src_dir: Path, build_dir:
         elif a == "-include":
             out += ["-include", portable_path(argv[i + 1], orig_build, build_dir, orig_src, src_dir)]
             i += 2
-        elif a.startswith(("-D", "-U")):
+        elif a.startswith(("-D", "-U")) or a in OVERFLOW:
             out.append(a)
             i += 1
         elif a in DROP_EXACT or a.startswith(DROP_PREFIX):

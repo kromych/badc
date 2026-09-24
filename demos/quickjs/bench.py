@@ -61,12 +61,13 @@ def compile_cmd(kind, cc, opt, sources, out):
     defs = []
     for d in smoke.DEFINES:
         defs += ["-D", d]
+    # -fwrapv matches the upstream Makefile: the engine relies on signed
+    # overflow wrapping.
     if kind == "badc":
-        return [cc, *(["-O"] if opt else []), *defs,
+        return [cc, "-fwrapv", *(["-O"] if opt else []), *defs,
                 "-I", str(QJS_DIR), *sources, "-o", str(out)]
     if kind == "clang":
-        # -fwrapv matches the upstream Makefile: the engine relies on signed
-        # overflow wrapping. -w keeps the table readable.
+        # -w keeps the table readable.
         o = ["-O2", "-DNDEBUG"] if opt else ["-O0"]
         libs = ["-lm"]
         if sys.platform != "darwin":

@@ -112,7 +112,9 @@ def fail(msg: str) -> None:
 
 
 def badc_build(badc: Path, sources, out: Path, extra=()) -> None:
-    cmd = [str(badc), "-O", "--export-all", *extra]
+    # -fwrapv is the upstream Makefile's: the engine relies on signed
+    # overflow wrapping.
+    cmd = [str(badc), "-O", "-fwrapv", "--export-all", *extra]
     for d in DEFINES:
         cmd += ["-D", d]
     cmd += ["-I", str(QJS_DIR)]

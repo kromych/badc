@@ -1252,7 +1252,7 @@ fn split_objects(
     // place: its fields are at most a machine word wide and live in plain
     // slots, so its region record goes, and the region with the last one.
     func.over_aligned
-        .retain(|&(s, _)| !slots_of.contains_key(&s) || address_live.contains(&s));
+        .retain(|m| !slots_of.contains_key(&m.slot) || address_live.contains(&m.slot));
     if func.over_aligned.is_empty() {
         func.frame_align = 0;
         func.realign_region_bytes = 0;
@@ -3523,8 +3523,14 @@ mod tests {
     /// storage and the record with it.
     #[test]
     fn over_aligned_object_splits_and_drops_its_region_record() {
+        let member = |slot| crate::c5::ir::RegionMember {
+            slot,
+            off: 0,
+            align: 16,
+            size: 16,
+        };
         let mut f = two_elem_array();
-        f.over_aligned = alloc::vec![(-2, 0)];
+        f.over_aligned = alloc::vec![member(-2)];
         f.frame_align = 16;
         f.realign_region_bytes = 16;
         let split = split_objects(&mut f, 64);
@@ -3553,7 +3559,7 @@ mod tests {
         let fps = param_footprints(&[reader]);
         let mut f = caller_passing_object(100);
         let base = f.multi_cell_slots[0].0;
-        f.over_aligned = alloc::vec![(base, 0)];
+        f.over_aligned = alloc::vec![member(base)];
         f.frame_align = 16;
         f.realign_region_bytes = 16;
         let split =
@@ -3562,7 +3568,7 @@ mod tests {
         assert!(split[0].address_live);
         assert_eq!(
             f.over_aligned,
-            alloc::vec![(base, 0)],
+            alloc::vec![member(base)],
             "an object a call reaches keeps its region storage"
         );
         assert_eq!(f.frame_align, 16);

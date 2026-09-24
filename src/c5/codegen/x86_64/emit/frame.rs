@@ -76,12 +76,12 @@ pub(crate) fn compute_frame(
     abi: super::Abi,
     target: Target,
 ) -> Frame {
+    let base = super::ssa::emit_common::compute_frame_base(func, alloc);
     let (declared_locals_bytes, alloc_spill_bytes, saved_gpr_bytes) =
-        super::ssa::emit_common::compute_frame_base(func, alloc);
+        (base.locals, base.spills, base.saved_gprs);
     // The canary region joins the top of the locals region, so every offset
     // measured down from rbp shifts by it and no other region formula changes.
-    let canary_bytes =
-        super::ssa::emit_common::canary_bytes(func, declared_locals_bytes, abi.stack_protect);
+    let canary_bytes = super::ssa::emit_common::canary_bytes(func, &base, abi.stack_protect);
     let locals_bytes = declared_locals_bytes + canary_bytes;
     // The parameter cells sit below the locals, whose offsets they leave
     // alone; every region below them shifts by their size.
@@ -117,14 +117,9 @@ pub(crate) fn compute_frame(
     };
     // A region aligned to exactly 16 joins the static frame, whose regions
     // above it are all 16-byte multiples; above 16 the prologue realigns rsp
-    // instead. A region with no emitted access needs no bytes, as
-    // `compute_frame_base` decides for the locals.
+    // instead.
     let region_bytes = func.realign_region_bytes.max(0) as u32;
-    let static_region_bytes = if func.frame_align == 16 && declared_locals_bytes > 0 {
-        region_bytes
-    } else {
-        0
-    };
+    let static_region_bytes = base.static_region;
     let frame_bytes = upper_bytes
         + alloc_spill_bytes
         + saved_gpr_bytes

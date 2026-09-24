@@ -307,8 +307,8 @@ Disassembly of section .text:
 <ramp>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	leaq	-0x20(%rbp), %rcx
+               	subq	$0x10, %rsp
+               	leaq	-0x10(%rbp), %rcx
                	movq	%rdi, %rax
                	andq	$0xff, %rax
                	movb	%al, (%rcx)
@@ -321,7 +321,7 @@ Disassembly of section .text:
                	leaq	0x3(%rax), %rdx
                	andq	$0xff, %rdx
                	movb	%dl, 0x3(%rcx)
-               	leaq	-0x20(%rbp), %rcx
+               	leaq	-0x10(%rbp), %rcx
                	addq	$0x4, %rax
                	andq	$0xff, %rax
                	movb	%al, 0x4(%rcx)
@@ -339,7 +339,7 @@ Disassembly of section .text:
                	leaq	0x8(%rax), %rdx
                	andq	$0xff, %rdx
                	movb	%dl, 0x8(%rcx)
-               	leaq	-0x20(%rbp), %rcx
+               	leaq	-0x10(%rbp), %rcx
                	addq	$0x9, %rax
                	andq	$0xff, %rax
                	movb	%al, 0x9(%rcx)
@@ -357,7 +357,7 @@ Disassembly of section .text:
                	leaq	0xd(%rdx), %rax
                	andq	$0xff, %rax
                	movb	%al, 0xd(%rcx)
-               	leaq	-0x20(%rbp), %rax
+               	leaq	-0x10(%rbp), %rax
                	leaq	0xe(%rdx), %rcx
                	andq	$0xff, %rcx
                	movb	%cl, 0xe(%rax)

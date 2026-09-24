@@ -229,6 +229,12 @@ pub(crate) fn emit_function(
                 .collect(),
         );
     }
+    if !func.over_aligned.is_empty() {
+        cx.region_frame_offsets.insert(
+            func.ent_pc,
+            super::ssa::emit_common::region_frame_offsets(func, frame.align_region_off),
+        );
+    }
     if frame.frame_bytes > super::ssa::emit_common::MAX_FRAME_BYTES {
         return fail(super::ssa::emit_common::frame_too_large_msg(
             frame.frame_bytes as i64,

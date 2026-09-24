@@ -242,6 +242,7 @@ fn synth_program_and_build(
         promoted_local_slots: alloc::collections::BTreeMap::new(),
         canary_frame_bytes: alloc::collections::BTreeMap::new(),
         param_frame_offsets: alloc::collections::BTreeMap::new(),
+        region_frame_offsets: alloc::collections::BTreeMap::new(),
         coalesced_slot_remap: alloc::collections::BTreeMap::new(),
         fn_unwind,
         reloc_call_sites: Vec::new(),

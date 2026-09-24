@@ -100,7 +100,7 @@ Disassembly of section .text:
 <over_aligned>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x50
+               	sub	sp, sp, #0x10
                	adrp	x16, <page>
                	ldr	x16, [x16, <lo12>]
                	ldr	x16, [x16]
@@ -124,8 +124,8 @@ Disassembly of section .text:
                	bl	<addr>
                	mov	x16, #0x0               // =0
                	mov	x17, #0x0               // =0
-               	sub	sp, x29, #0x50
-               	add	sp, sp, #0x50
+               	sub	sp, x29, #0x10
+               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
 

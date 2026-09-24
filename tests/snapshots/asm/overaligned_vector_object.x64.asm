@@ -28,26 +28,26 @@ Disassembly of section .text:
 <automatic_boundaries>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x50, %rsp
+               	subq	$0x10, %rsp
                	subq	$0x20, %rsp
                	andq	$-0x20, %rsp
                	leaq	0x10(%rsp), %rcx
                	testb	$0xf, %cl
                	je	<addr>
                	movl	$0x4, %eax
-               	leaq	-0x50(%rbp), %rsp
+               	leaq	-0x10(%rbp), %rsp
                	leave
                	retq
                	leaq	(%rsp), %rdx
                	testb	$0x1f, %dl
                	je	<addr>
                	movl	$0x5, %eax
-               	leaq	-0x50(%rbp), %rsp
+               	leaq	-0x10(%rbp), %rsp
                	leave
                	retq
                	movl	$0x7, %eax
-               	movb	%al, -0x8(%rbp)
-               	movb	$0x8, -0x20(%rbp)
+               	movb	%al, -0x10(%rbp)
+               	movb	$0x8, -0x8(%rbp)
                	movl	$0xb, (%rcx)
                	movl	$0xd, 0xc(%rcx)
                	movl	$0x11, %esi
@@ -60,19 +60,19 @@ Disassembly of section .text:
                	cmpl	$0x29, %ecx
                	je	<addr>
                	movl	$0x6, %eax
-               	leaq	-0x50(%rbp), %rsp
+               	leaq	-0x10(%rbp), %rsp
                	leave
                	retq
-               	movsbq	-0x8(%rbp), %rcx
-               	movsbq	-0x20(%rbp), %rdx
+               	movsbq	-0x10(%rbp), %rcx
+               	movsbq	-0x8(%rbp), %rdx
                	addq	%rdx, %rcx
                	cmpl	$0xf, %ecx
                	je	<addr>
-               	leaq	-0x50(%rbp), %rsp
+               	leaq	-0x10(%rbp), %rsp
                	leave
                	retq
                	xorl	%eax, %eax
-               	leaq	-0x50(%rbp), %rsp
+               	leaq	-0x10(%rbp), %rsp
                	leave
                	retq
 

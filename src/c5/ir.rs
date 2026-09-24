@@ -1934,11 +1934,12 @@ pub(crate) struct FunctionSsa {
     pub array_slots: Vec<i64>,
     /// Automatic objects whose required alignment exceeds the 8-byte frame
     /// slot (C11 6.7.5 `_Alignas` / GNU `aligned`, or a type whose natural
-    /// alignment is 16), as `(slot_off, region_off)`. The prologue reserves a
-    /// `frame_align`-aligned region below the static frame; every backend
-    /// resolves these slots to `region_base + region_off` rather than the
-    /// fp-relative slot. Empty for the common case.
-    pub over_aligned: Vec<(i64, i64)>,
+    /// alignment is 16). The prologue reserves a `frame_align`-aligned
+    /// region below the static frame; every backend resolves a member's slot
+    /// to `region_base + off` rather than the fp-relative slot, and slot
+    /// coalescing keys the member outside the locals so it holds no storage
+    /// there. Empty for the common case.
+    pub over_aligned: Vec<RegionMember>,
     /// Alignment of the over-aligned region (max over `over_aligned`, a power
     /// of two >= 16), or 0 when no automatic object needs it. Exactly 16 keeps
     /// a static frame: the frame base is 16-aligned and every frame region a
@@ -1972,6 +1973,38 @@ pub(crate) struct FunctionSsa {
     /// saw (the slot did not exist then), so the re-run promotes it. False
     /// for every function the inliner left unchanged.
     pub did_inline: bool,
+}
+
+/// An automatic object of the over-aligned region (`FunctionSsa::over_aligned`):
+/// the frame slot that names it, its byte offset in the region, and the
+/// alignment and size its placement needs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct RegionMember {
+    pub slot: i64,
+    pub off: i64,
+    pub align: i64,
+    pub size: i64,
+}
+
+/// Lay out the over-aligned region (C11 6.7.5): each block of members that
+/// share storage takes the next offset its widest alignment allows, widest
+/// alignment first and otherwise in the given order. Returns the members
+/// with their offsets in placement order, the region's alignment (at least
+/// 16), and its size rounded to that alignment.
+pub(crate) fn place_region(mut blocks: Vec<Vec<RegionMember>>) -> (Vec<RegionMember>, i64, i64) {
+    let align_of = |b: &[RegionMember]| b.iter().map(|m| m.align).max().unwrap_or(1);
+    blocks.sort_by_key(|b| core::cmp::Reverse(align_of(b)));
+    let (mut placed, mut region_align, mut cursor) = (Vec::new(), 16, 0);
+    for block in blocks {
+        let align = align_of(&block);
+        region_align = region_align.max(align);
+        cursor = (cursor + align - 1) & -align;
+        let size = block.iter().map(|m| m.size).max().unwrap_or(0);
+        placed.extend(block.into_iter().map(|m| RegionMember { off: cursor, ..m }));
+        cursor += size;
+    }
+    let bytes = (cursor + region_align - 1) & -region_align;
+    (placed, region_align, bytes)
 }
 
 /// What a function's declared automatic objects say about its exposure to

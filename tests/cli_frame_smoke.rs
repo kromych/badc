@@ -699,13 +699,12 @@ __attribute__((no_stack_protector)) unsigned long unguarded(void)
 
 /// The frame reports of `KERNEL_ASM` under the kernel's flags, by function.
 fn kernel_asm_frames(dir: &Path) -> std::collections::BTreeMap<String, (u64, String)> {
-    let src = dir.join("kasm.c");
-    std::fs::write(&src, KERNEL_ASM).expect("write source");
-    let out = Command::new(badc())
-        .args([
+    frame_reports(
+        dir,
+        "kasm",
+        KERNEL_ASM,
+        &[
             "--target=linux-x64",
-            "-O",
-            "-c",
             "-mcmodel=kernel",
             "-mno-sse",
             "-fno-pic",
@@ -716,10 +715,25 @@ fn kernel_asm_frames(dir: &Path) -> std::collections::BTreeMap<String, (u64, Str
             "-mstack-protector-guard-symbol=__ref_stack_chk_guard",
             "-ftrivial-auto-var-init=zero",
             "-fpatchable-function-entry=16,16",
-            "-Wframe-larger-than=0",
-        ])
+        ],
+    )
+}
+
+/// The `-Wframe-larger-than=0` reports of `source` compiled at `-O` with
+/// `args`, by function: the frame bytes and the region breakdown.
+fn frame_reports(
+    dir: &Path,
+    stem: &str,
+    source: &str,
+    args: &[&str],
+) -> std::collections::BTreeMap<String, (u64, String)> {
+    let src = dir.join(format!("{stem}.c"));
+    std::fs::write(&src, source).expect("write source");
+    let out = Command::new(badc())
+        .args(["-O", "-c", "-Wframe-larger-than=0"])
+        .args(args)
         .arg("-o")
-        .arg(dir.join("kasm.o"))
+        .arg(dir.join(format!("{stem}.o")))
         .arg(&src)
         .output()
         .expect("run badc");
@@ -791,6 +805,40 @@ fn x86_64_inline_asm_operands_take_no_frame_scratch() {
             !frames.contains_key(leaf),
             "{leaf} keeps no frame: {frames:?}"
         );
+    }
+}
+
+/// An automatic object aligned above the 8-byte slot is reserved once, in
+/// the over-aligned region: a 528-byte object aligned 16 -- the kernel's
+/// `struct user_fpsimd_state` shape -- takes the frame a same-size 8-aligned
+/// one does, and two in disjoint blocks share one region block.
+#[test]
+fn an_over_aligned_object_is_reserved_once() {
+    const SRC: &str = r#"
+struct st16 { _Alignas(16) unsigned char v[512]; unsigned int fpsr, fpcr; };
+struct st8 { unsigned long long v[66]; };
+void use16(struct st16 *);
+void use8(struct st8 *);
+void one16(void) { struct st16 s; use16(&s); }
+void one8(void) { struct st8 s; use8(&s); }
+void two16(int c) { if (c) { struct st16 a; use16(&a); } else { struct st16 b; use16(&b); } }
+"#;
+    let dir = tempdir("overaligned");
+    for (target, record) in [("linux-aarch64", 16), ("linux-x64", 8)] {
+        let arg = format!("--target={target}");
+        let frames = frame_reports(&dir, "overaligned", SRC, &[arg.as_str()]);
+        for f in ["one16", "one8", "two16"] {
+            let (bytes, parts) = frames
+                .get(f)
+                .unwrap_or_else(|| panic!("{target} {f}: {frames:?}"));
+            assert_eq!(*bytes, 528 + record, "{target} {f}: {parts}");
+            if f != "one8" {
+                assert!(
+                    parts.contains("528 in an over-aligned region") && !parts.contains("locals"),
+                    "{target} {f}: {parts}"
+                );
+            }
+        }
     }
 }
 

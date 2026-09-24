@@ -50,7 +50,7 @@
 //! storage) carries `None` and its location is dropped, since no single
 //! frame address holds it for the whole scope.
 
-use super::super::ir::{BinOp, BlockId, FunctionSsa, Inst, ValueId};
+use super::super::ir::{BinOp, BlockId, FunctionSsa, Inst, RegionMember, ValueId};
 use super::mem2reg::SuccGraph;
 use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::vec::Vec;
@@ -252,17 +252,6 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
             _ => None,
         })
         .unwrap_or(0);
-
-    // Leave a realigning function (an automatic object aligned above 16,
-    // C11 6.7.5) uncoalesced: its dynamic-sp frame is the expensive shape
-    // already and stays as emitted. A 16-aligned region keeps the static
-    // frame; its member slots are reserved below and
-    // `FunctionSsa::over_aligned` is renumbered in lockstep. A protected
-    // frame is ordered regardless: its arrays outside the over-aligned
-    // region have the same claim on the top of the frame as any other.
-    if f.frame_align > 16 && !protected {
-        return BTreeMap::new();
-    }
 
     // Instructions covered by a block: the emitted tape. Branch folding
     // deletes blocks but leaves their instructions in `insts`; an access
@@ -645,10 +634,16 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
     if movable(alloca_top) {
         field_slots.insert(alloca_top);
     }
-    // An over-aligned region member's slot keys region storage, not a frame
-    // cell; sharing it would misplace the partner. It is renumbered in
-    // lockstep with `over_aligned` below.
-    let region_slots: BTreeSet<i64> = f.over_aligned.iter().map(|&(s, _)| s).collect();
+    // An over-aligned region member's storage is its region block, so its
+    // cells here hold nothing: a group that is exactly a member's cells is
+    // keyed past the storage below, and shares only with other members. A
+    // group reaching past a member's cells stays ordinary storage.
+    let region_slots: BTreeSet<i64> = f.over_aligned.iter().map(|m| m.slot).collect();
+    let region_cells: BTreeMap<i64, i64> = f
+        .over_aligned
+        .iter()
+        .map(|m| (m.slot, (m.size + 7) / 8))
+        .collect();
 
     // Cells whose object states the end of its lifetime (C99 6.2.4p2).
     // The object's footprint is what the pass already derived for it: its
@@ -703,6 +698,10 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
         needs_bound[g] =
             has_addr[g] && (!has_events[g] || (lo..=hi).any(|off| escaped.contains(&off)));
     }
+    let region_group: Vec<bool> = groups
+        .iter()
+        .map(|&(lo, hi)| region_cells.get(&lo).is_some_and(|&c| hi == lo + c - 1))
+        .collect();
     for (g, &(lo, hi)) in groups.iter().enumerate() {
         if needs_bound[g] && bounded[g] {
             has_events[g] = true;
@@ -711,7 +710,9 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
             || !has_events[g]
             || (needs_bound[g] && !bounded[g])
             || (lo..=hi).any(|off| {
-                sole.contains(&off) || field_slots.contains(&off) || region_slots.contains(&off)
+                sole.contains(&off)
+                    || field_slots.contains(&off)
+                    || (region_slots.contains(&off) && !region_group[g])
             });
         shareable[g] = !pinned;
     }
@@ -761,9 +762,10 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
     }
     let n_shareable = shareable.iter().filter(|&&s| s).count();
     // Nothing to share leaves the -O0 frame untouched; the compact mode
-    // still repacks so unreferenced slots are dropped, and a protected
-    // frame still repacks so the ordering below is applied.
-    if !compact && !protected && candidates.len() < 2 && n_shareable < 2 {
+    // still repacks so unreferenced slots are dropped, a protected frame so
+    // the ordering below is applied, and a region member so its cells go.
+    if !compact && !protected && region_cells.is_empty() && candidates.len() < 2 && n_shareable < 2
+    {
         return BTreeMap::new();
     }
 
@@ -1155,6 +1157,8 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
     let mut g_color_used = alloc::vec![0u32; nsg + 1];
     let mut g_ncolors = 0usize;
     let mut g_color_width: Vec<i64> = Vec::new();
+    // Region members and frame storage take separate colours.
+    let mut g_color_region: Vec<bool> = Vec::new();
     for (i, &sg) in order.iter().enumerate() {
         let stamp = i as u32 + 1;
         for w in 0..gwords {
@@ -1167,14 +1171,16 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
                 }
             }
         }
+        let region = region_group[sidx[sg]];
         let mut c = 0;
-        while g_color_used[c] == stamp {
+        while g_color_used[c] == stamp || (c < g_ncolors && g_color_region[c] != region) {
             c += 1;
         }
         g_color[sg] = c;
         if c == g_ncolors {
             g_ncolors += 1;
             g_color_width.push(width(sg));
+            g_color_region.push(region);
         }
     }
 
@@ -1212,17 +1218,27 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
     // and nothing else, so the two orders differ only in where array
     // storage sits.
     let mut units: Vec<Unit> = Vec::new();
-    for (g, &(lo, hi)) in groups.iter().enumerate() {
-        if shareable[g] {
-            continue;
+    let group_live = |g: usize| {
+        let (lo, hi) = groups[g];
+        !compact || (lo..=hi).any(|off| referenced.contains(&off))
+    };
+    for g in 0..ng {
+        if !shareable[g] && !region_group[g] && group_live(g) {
+            units.push(Unit::Group(g));
         }
-        if compact && !(lo..=hi).any(|off| referenced.contains(&off)) {
-            continue;
-        }
-        units.push(Unit::Group(g));
     }
-    units.extend(reserved_single.iter().map(|&off| Unit::Single(off)));
-    units.extend((0..g_ncolors).map(Unit::GroupColor));
+    let region_single = |off: i64| region_cells.contains_key(&off) && group_of(off).is_none();
+    units.extend(
+        reserved_single
+            .iter()
+            .filter(|&&off| !region_single(off))
+            .map(|&off| Unit::Single(off)),
+    );
+    units.extend(
+        (0..g_ncolors)
+            .filter(|&c| !g_color_region[c])
+            .map(Unit::GroupColor),
+    );
     {
         let mut seen = alloc::vec![false; ncolors];
         for &c in color.iter() {
@@ -1307,6 +1323,9 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
         g_members[g_color[sg]] += 1;
     }
     for sg in 0..nsg {
+        if region_group[sidx[sg]] {
+            continue;
+        }
         let (lo, hi) = groups[sidx[sg]];
         let w = hi - lo + 1;
         let mag = g_color_mag[g_color[sg]];
@@ -1322,6 +1341,34 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
         new_off.insert(off, color_off[color[i]]);
     }
     let new_locals = next_mag;
+    // Each region member is keyed past the original frame, so the key names
+    // its region block and neither a frame cell nor any slot the debug info
+    // still knows by its old offset; nothing names the member's interior
+    // cells. An unreferenced member takes no key and drops with its entry.
+    let keyed_group = |off: i64| group_of(off).filter(|&g| region_group[g] && groups[g].0 == off);
+    let mut next_key = total;
+    for m in &f.over_aligned {
+        let live = match keyed_group(m.slot) {
+            Some(g) => group_live(g),
+            None => region_single(m.slot) && (!compact || referenced.contains(&m.slot)),
+        };
+        if live {
+            next_key += 1;
+            new_off.insert(m.slot, -next_key);
+        }
+    }
+    debug_assert!(
+        f.insts.iter().all(|i| match *i {
+            Inst::LocalAddr(off)
+            | Inst::LoadLocal { off, .. }
+            | Inst::StoreLocal { off, .. }
+            | Inst::LifetimeEnd(off) => {
+                keyed_group(off).is_some() || group_of(off).is_none_or(|g| !region_group[g])
+            }
+            _ => true,
+        }),
+        "an instruction names an interior cell of an over-aligned region member"
+    );
     // A repack that frees no slot is discarded: the churn buys nothing.
     // A protected frame still applies one that reordered its storage,
     // which is the point of the repack there and is size-neutral.
@@ -1364,21 +1411,42 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
             *s = nn;
         }
     }
-    // Renumber the over-aligned region members in lockstep. A movable member
-    // absent from `new_off` was dropped by the compact repack (no surviving
-    // reference), so its entry goes too; the region bytes stay reserved
-    // unless every member dropped.
-    f.over_aligned
-        .retain(|&(s, _)| !movable(s) || new_off.contains_key(&s));
-    for e in &mut f.over_aligned {
-        if let Some(&nn) = new_off.get(&e.0) {
-            e.0 = nn;
-        }
+    // Lay the region out again over the members that survive. The members
+    // of one colour share a block, as disjoint lifetimes share frame storage;
+    // a movable member absent from `new_off` was dropped and frees its bytes.
+    let mut blocks: Vec<Vec<RegionMember>> = Vec::new();
+    let mut color_block: BTreeMap<usize, usize> = BTreeMap::new();
+    let mut block_slots: Vec<Vec<i64>> = Vec::new();
+    for m in &f.over_aligned {
+        let slot = match new_off.get(&m.slot) {
+            Some(&nn) => nn,
+            None if movable(m.slot) => continue,
+            None => m.slot,
+        };
+        let color = keyed_group(m.slot).and_then(|g| sg_of.get(&g).map(|&sg| g_color[sg]));
+        let b = match color.and_then(|c| color_block.get(&c).copied()) {
+            Some(b) => b,
+            None => {
+                if let Some(c) = color {
+                    color_block.insert(c, blocks.len());
+                }
+                blocks.push(Vec::new());
+                block_slots.push(Vec::new());
+                blocks.len() - 1
+            }
+        };
+        blocks[b].push(RegionMember { slot, ..*m });
+        block_slots[b].push(m.slot);
     }
-    if f.over_aligned.is_empty() {
-        f.frame_align = 0;
-        f.realign_region_bytes = 0;
+    // A shared block has no single object behind it for the debug location.
+    for slots in block_slots.iter().filter(|s| s.len() > 1) {
+        shared_group_cells.extend(slots.iter().copied());
     }
+    (f.over_aligned, f.frame_align, f.realign_region_bytes) = if blocks.is_empty() {
+        (Vec::new(), 0, 0)
+    } else {
+        super::super::ir::place_region(blocks)
+    };
     // The array-holding objects follow their storage. A base the compact
     // repack dropped goes with it; a base that shares a colour's block
     // keeps naming the cell it was given, which is inside that block.
@@ -1497,13 +1565,19 @@ mod tests {
         assert_eq!(f.locals, 10);
     }
 
-    /// A 16-aligned over-aligned region coalesces: member entries are
-    /// renumbered in lockstep with their slots, a dropped member's entry
-    /// goes with it, and an emptied region clears the frame fields. Above
-    /// 16 (a realigning frame) the function is left untouched.
+    /// A region member is keyed past the original frame and keeps no locals
+    /// cell, at 16 and in a realigning frame alike; a dropped member's entry
+    /// goes and frees its region bytes, and an emptied region clears the
+    /// frame fields.
     #[test]
-    fn region_slots_renumber_in_lockstep() {
-        let build = |align: i64| {
+    fn region_members_are_keyed_outside_the_locals() {
+        let member = |slot, off, align| RegionMember {
+            slot,
+            off,
+            align,
+            size: 8,
+        };
+        for align in [16, 32] {
             let mut f = one_block(
                 alloc::vec![
                     Inst::LocalAddr(-7),
@@ -1520,28 +1594,19 @@ mod tests {
             );
             // Slot -7 is live (the region member); slot -3's member has no
             // reference left and drops under compact.
-            f.over_aligned = alloc::vec![(-7, 0), (-3, 16)];
+            f.over_aligned = alloc::vec![member(-7, 0, align), member(-3, align, align)];
             f.frame_align = align;
-            f.realign_region_bytes = 32;
-            f
-        };
-        let mut f = build(16);
-        coalesce(&mut f, true, false);
-        assert!(matches!(f.insts[0], Inst::LocalAddr(-1)));
-        assert_eq!(
-            f.over_aligned,
-            alloc::vec![(-1, 0)],
-            "the live member follows its slot; the dead member's entry drops"
-        );
-        assert_eq!((f.frame_align, f.realign_region_bytes), (16, 32));
-
-        let mut f = build(32);
-        assert!(coalesce(&mut f, true, false).is_empty());
-        assert_eq!(f.locals, 10, "a realigning frame stays as emitted");
+            f.realign_region_bytes = 2 * align;
+            coalesce(&mut f, true, false);
+            assert!(matches!(f.insts[0], Inst::LocalAddr(-11)), "{align}");
+            assert_eq!(f.locals, 0, "{align}");
+            assert_eq!(f.over_aligned, alloc::vec![member(-11, 0, align)]);
+            assert_eq!((f.frame_align, f.realign_region_bytes), (align, align));
+        }
 
         // Every member dropped: the region clears entirely.
         let mut f = one_block(alloc::vec![Inst::Imm(0)], 0, 4);
-        f.over_aligned = alloc::vec![(-2, 0)];
+        f.over_aligned = alloc::vec![member(-2, 0, 16)];
         f.frame_align = 16;
         f.realign_region_bytes = 16;
         coalesce(&mut f, true, false);

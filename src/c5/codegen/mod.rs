@@ -2183,6 +2183,11 @@ pub(crate) struct Build {
     /// places `DW_TAG_formal_parameter` locations with it. Absent for a
     /// function with no parameters and on the multi-TU link path.
     pub param_frame_offsets: alloc::collections::BTreeMap<usize, alloc::vec::Vec<i64>>,
+    /// Where each over-aligned region member's storage is, by `ent_pc` and
+    /// member slot: its frame-base-relative byte offset in a static region,
+    /// or `None` past a realignment, which leaves it no frame-base offset.
+    pub region_frame_offsets:
+        alloc::collections::BTreeMap<usize, alloc::collections::BTreeMap<i64, Option<i64>>>,
     pub coalesced_slot_remap:
         alloc::collections::BTreeMap<usize, alloc::collections::BTreeMap<i64, i64>>,
     /// Per-function x86_64 unwind descriptors, in emission order. The

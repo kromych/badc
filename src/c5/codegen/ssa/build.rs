@@ -272,9 +272,14 @@ impl SsaBuilder {
     }
 
     /// Record the over-aligned frame region for over-aligned automatic
-    /// objects: the `(slot_off, region_off)` placements, the region alignment,
-    /// and its byte size. Consumed by the per-arch frame layout and the VM.
-    pub(crate) fn set_realign(&mut self, placed: Vec<(i64, i64)>, align: i64, region_bytes: i64) {
+    /// objects: the members' placements, the region alignment, and its byte
+    /// size. Consumed by the per-arch frame layout and the VM.
+    pub(crate) fn set_realign(
+        &mut self,
+        placed: Vec<crate::c5::ir::RegionMember>,
+        align: i64,
+        region_bytes: i64,
+    ) {
         self.func.over_aligned = placed;
         self.func.frame_align = align;
         self.func.realign_region_bytes = region_bytes;

@@ -76,26 +76,20 @@ pub(crate) fn compute_frame(
     abi: super::Abi,
     target: Target,
 ) -> Frame {
+    let base = super::ssa::emit_common::compute_frame_base(func, alloc);
     let (declared_locals_bytes, alloc_spill_bytes, saved_gpr_bytes) =
-        super::ssa::emit_common::compute_frame_base(func, alloc);
+        (base.locals, base.spills, base.saved_gprs);
     // The canary joins the top of the locals region; every fp-relative
     // offset shifts by it.
-    let canary_bytes =
-        super::ssa::emit_common::canary_bytes(func, declared_locals_bytes, abi.stack_protect);
+    let canary_bytes = super::ssa::emit_common::canary_bytes(func, &base, abi.stack_protect);
     let locals_bytes = declared_locals_bytes + canary_bytes;
     let saved_fpr_bytes = super::ssa::emit_common::slots16(alloc.fp_used.len() as u32);
     let uses_x19 = writes_x19(func, alloc, abi);
     let x19_save_bytes = if uses_x19 { 16u32 } else { 0 };
     // A region aligned exactly 16 joins the static frame between the spill
-    // region and the saved registers; above 16 the prologue realigns sp. A
-    // region with no surviving local access needs no bytes, as the locals
-    // region itself (`compute_frame_base`).
+    // region and the saved registers; above 16 the prologue realigns sp.
     let region_bytes = func.realign_region_bytes.max(0) as u32;
-    let static_region_bytes = if func.frame_align == 16 && declared_locals_bytes > 0 {
-        region_bytes
-    } else {
-        0
-    };
+    let static_region_bytes = base.static_region;
     // Inline-asm scratch below the spill region, sized for the largest
     // statement. A naked function has no frame and stages nothing.
     let asm_bytes = if func.is_naked {

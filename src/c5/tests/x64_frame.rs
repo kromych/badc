@@ -398,13 +398,14 @@ fn a_tail_jump_pops_what_the_prologue_pushed() {
 }
 
 /// A frame realigned for an over-aligned object has rsp below the saves, so
-/// a tail jump out of it resets rsp as a return does. The object's address
-/// is not taken, which is what admits the tail call.
+/// a tail jump out of it resets rsp as a return does. The object is
+/// volatile, which keeps it in memory, and its address is not taken, which
+/// is what admits the tail call.
 #[test]
 fn a_tail_jump_out_of_a_realigned_frame_resets_rsp() {
     const SRC: &str = "long h(long);\n\
         __attribute__((noinline)) long g(long a) { return h(a) * 3; }\n\
-        long f(long a) { _Alignas(64) long x = a; x += h(a); return g(x + a); }\n";
+        long f(long a) { _Alignas(64) volatile long x = a; x += h(a); return g(x + a); }\n";
     let target = Target::LinuxX64;
     let insns = insns_of(&optimized(SRC, target), "f");
     let frame = frame_of(&insns, target).expect("a frame");
@@ -423,6 +424,11 @@ fn a_tail_jump_out_of_a_realigned_frame_resets_rsp() {
         );
         assert_eq!(lea.disp, -i64::from(frame.bytes()), "{insns:x?}");
     }
+    // Not volatile, the object is promoted: nothing is left in the region
+    // and the frame is not realigned.
+    let promoted = SRC.replace("volatile ", "");
+    let insns = insns_of(&optimized(&promoted, target), "f");
+    assert!(!insns.iter().any(realigns), "{insns:x?}");
 }
 
 /// A return value that spilled is read through rsp, so ahead of the pops.

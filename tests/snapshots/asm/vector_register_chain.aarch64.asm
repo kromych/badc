@@ -16,15 +16,15 @@ Disassembly of section .text:
 <vqtbx1q_u8>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x80
-               	stur	q0, [x29, #-0x80]
-               	stur	q1, [x29, #-0x70]
-               	stur	q2, [x29, #-0x60]
-               	sub	x16, x29, #0x80
+               	sub	sp, sp, #0x50
+               	stur	q0, [x29, #-0x50]
+               	stur	q1, [x29, #-0x40]
+               	stur	q2, [x29, #-0x30]
+               	sub	x16, x29, #0x50
                	str	x16, [sp, #0x30]
-               	sub	x16, x29, #0x70
+               	sub	x16, x29, #0x40
                	str	x16, [sp, #0x38]
-               	sub	x16, x29, #0x60
+               	sub	x16, x29, #0x30
                	str	x16, [sp, #0x40]
                	ldr	x16, [sp, #0x30]
                	ldr	q0, [x16]
@@ -35,10 +35,10 @@ Disassembly of section .text:
                	tbx	v0.16b, { v1.16b }, v2.16b
                	ldr	x16, [sp, #0x30]
                	str	q0, [x16]
-               	sub	x0, x29, #0x80
+               	sub	x0, x29, #0x50
                	mov	x16, x0
                	ldr	q0, [x16]
-               	add	sp, sp, #0x80
+               	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
 

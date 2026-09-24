@@ -255,7 +255,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x50, %rsp
+               	subq	$0x30, %rsp
                	pushq	%r14
                	pushq	%r13
                	pushq	%r12
@@ -531,11 +531,11 @@ Disassembly of section .text:
                	movq	(%rax), %rdx
                	movq	(%rax), %rsi
                	orq	%rcx, %rsi
-               	leaq	-0x50(%rbp), %rdi
+               	leaq	-0x30(%rbp), %rdi
                	movq	%rsi, (%rdi)
                	movq	%rdx, 0x8(%rdi)
                	movq	0x8(%rax), %rax
-               	leaq	-0x30(%rbp), %rdx
+               	leaq	-0x20(%rbp), %rdx
                	movq	%rax, (%rdx)
                	movq	%rcx, 0x8(%rdx)
                	movq	0x8(%rdi), %rsi
@@ -543,9 +543,9 @@ Disassembly of section .text:
                	movq	0x8(%rdx), %rcx
                	movq	(%rdx), %rdx
                	callq	<addr>
-               	movq	%rax, -0x20(%rbp)
-               	movq	%rdx, -0x18(%rbp)
-               	leaq	-0x20(%rbp), %rax
+               	movq	%rax, -0x10(%rbp)
+               	movq	%rdx, -0x8(%rbp)
+               	leaq	-0x10(%rbp), %rax
                	movq	(%rax), %rcx
                	movq	0x8(%rax), %rax
                	movabsq	$0x5555555555555555, %r11 # imm = 0x5555555555555555
@@ -555,16 +555,16 @@ Disassembly of section .text:
                	orq	%rcx, %rax
                	testq	%rax, %rax
                	jne	<addr>
-               	leaq	-0x50(%rbp), %rdi
+               	leaq	-0x30(%rbp), %rdi
                	movq	%rdi, %rdx
                	movq	0x8(%rdi), %rsi
                	movq	(%rdi), %rdi
                	movq	0x8(%rdx), %rcx
                	movq	(%rdx), %rdx
                	callq	<addr>
-               	movq	%rax, -0x20(%rbp)
-               	movq	%rdx, -0x18(%rbp)
-               	leaq	-0x20(%rbp), %rax
+               	movq	%rax, -0x10(%rbp)
+               	movq	%rdx, -0x8(%rbp)
+               	leaq	-0x10(%rbp), %rax
                	movq	(%rax), %rcx
                	movq	0x8(%rax), %rax
                	xorq	$0x1, %rcx

@@ -80,7 +80,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x28, %rsp
+               	subq	$0x18, %rsp
                	pushq	%rbx
                	movl	$0x2, %eax
                	testl	%eax, %eax
@@ -114,7 +114,7 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	leaq	-0x20(%rbp), %rax
+               	leaq	-0x10(%rbp), %rax
                	xorps	%xmm14, %xmm14
                	movups	%xmm14, (%rax)
                	movq	$0x4, (%rax)
@@ -129,13 +129,13 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	testl	%eax, %eax
                	jne	<addr>
-               	leaq	-0x20(%rbp), %rax
+               	leaq	-0x10(%rbp), %rax
                	movq	(%rax), %rcx
                	movq	0x8(%rax), %rax
                	addq	%rcx, %rax
                	cmpl	$0x2, %eax
                	jne	<addr>
-               	leaq	-0x20(%rbp), %rax
+               	leaq	-0x10(%rbp), %rax
                	xorps	%xmm14, %xmm14
                	movups	%xmm14, (%rax)
                	movq	$0x0, (%rax)
@@ -143,7 +143,7 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	testl	%eax, %eax
                	jne	<addr>
-               	leaq	-0x20(%rbp), %rax
+               	leaq	-0x10(%rbp), %rax
                	movq	(%rax), %rcx
                	movq	0x8(%rax), %rax
                	addq	%rcx, %rax
@@ -177,13 +177,13 @@ Disassembly of section .text:
                	jmp	<addr>
                	addq	$0x2, %rcx
                	jmp	<addr>
-               	leaq	-0x20(%rbp), %rax
+               	leaq	-0x10(%rbp), %rax
                	movq	(%rax), %rcx
                	movq	0x8(%rax), %rdx
                	movq	%rcx, %rax
                	subq	%rdx, %rax
                	jmp	<addr>
-               	leaq	-0x20(%rbp), %rax
+               	leaq	-0x10(%rbp), %rax
                	movq	(%rax), %rcx
                	movq	0x8(%rax), %rdx
                	movq	%rcx, %rax

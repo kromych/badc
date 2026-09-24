@@ -101,23 +101,23 @@ fn place_over_aligned_slots(
     if slots.is_empty() {
         return Ok(());
     }
-    let mut items: alloc::vec::Vec<(i64, i64, i64)> = slots.to_vec();
-    items.sort_by_key(|&(_, align, _)| core::cmp::Reverse(align));
-    let mut frame_align: i64 = 16;
-    let mut cursor: i64 = 0;
-    let mut placed: alloc::vec::Vec<(i64, i64)> = alloc::vec::Vec::new();
-    for (slot, align, size) in items {
-        frame_align = frame_align.max(align);
-        cursor = (cursor + align - 1) & -align;
-        placed.push((slot, cursor));
-        cursor += size;
-    }
+    let blocks = slots
+        .iter()
+        .map(|&(slot, align, size)| {
+            alloc::vec![crate::c5::ir::RegionMember {
+                slot,
+                off: 0,
+                align,
+                size,
+            }]
+        })
+        .collect();
+    let (placed, frame_align, region_bytes) = crate::c5::ir::place_region(blocks);
     if frame_align > 16 && alloca_top_slot != 0 {
         return Err(WalkError::Unsupported(
             "an automatic object aligned above 16 cannot share a function with alloca/VLA",
         ));
     }
-    let region_bytes = (cursor + frame_align - 1) & -frame_align;
     b.set_realign(placed, frame_align, region_bytes);
     Ok(())
 }

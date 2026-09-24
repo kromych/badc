@@ -61,6 +61,10 @@ pub(crate) struct EmitCtx<'a> {
     /// `ent_pc`; the debug-info emitter places the formal parameters with it.
     pub(crate) param_frame_offsets:
         &'a mut alloc::collections::BTreeMap<usize, alloc::vec::Vec<i64>>,
+    /// Where each over-aligned region member's storage is, by `ent_pc`
+    /// (`Build::region_frame_offsets`).
+    pub(crate) region_frame_offsets:
+        &'a mut alloc::collections::BTreeMap<usize, alloc::collections::BTreeMap<i64, Option<i64>>>,
     /// Offsets of the `-pg` call sites `-mrecord-mcount` records.
     pub(crate) mcount_sites: &'a mut alloc::vec::Vec<usize>,
 }
@@ -211,82 +215,137 @@ pub(crate) fn check_frame_limits(
     Ok(())
 }
 
-/// True when the emitted form of `inst` addresses the locals region
-/// (negative slot offset): slot loads / stores / address-takes, a
-/// non-zero `AllocaInit` (its reserved slot keeps the locals region
-/// live), and a call gathering an aggregate return into its
-/// result-temp slot. Purely structural; whether the
+/// Where each over-aligned region member's storage is
+/// (`Build::region_frame_offsets`); `align_region_off` is the static
+/// region's frame-base offset, 0 when the region is not in the static frame.
+pub(crate) fn region_frame_offsets(
+    func: &super::super::ir::FunctionSsa,
+    align_region_off: i64,
+) -> alloc::collections::BTreeMap<i64, Option<i64>> {
+    func.over_aligned
+        .iter()
+        .map(|m| {
+            (
+                m.slot,
+                (align_region_off != 0).then_some(align_region_off + m.off),
+            )
+        })
+        .collect()
+}
+
+/// The local slot (negative offset) the emitted form of `inst` addresses:
+/// a slot load / store / address-take, the alloca-top slot a non-zero
+/// `AllocaInit` names by its positive index, and the result temp a call
+/// gathers an aggregate return into. Purely structural; whether the
 /// instruction is emitted at all is `is_dead_pure`'s decision, and the
-/// frame gate below combines the two so it cannot disagree with the
-/// per-inst emit skip.
-fn inst_addresses_local(inst: &super::super::ir::Inst) -> bool {
+/// frame gate combines the two so it cannot disagree with the per-inst
+/// emit skip.
+fn local_named(inst: &super::super::ir::Inst) -> Option<i64> {
     use super::super::ir::Inst;
-    match inst {
-        Inst::LoadLocal { off, .. } | Inst::StoreLocal { off, .. } | Inst::LocalAddr(off) => {
-            *off < 0
-        }
-        Inst::AllocaInit(slot) => *slot != 0,
+    let off = match *inst {
+        Inst::LoadLocal { off, .. } | Inst::StoreLocal { off, .. } | Inst::LocalAddr(off) => off,
+        Inst::AllocaInit(slot) => -slot.abs(),
         Inst::Call { ret_slot_local, .. }
         | Inst::CallIndirect { ret_slot_local, .. }
-        | Inst::CallExt { ret_slot_local, .. } => *ret_slot_local < 0,
-        _ => false,
+        | Inst::CallExt { ret_slot_local, .. } => ret_slot_local,
+        _ => 0,
+    };
+    (off < 0).then_some(off)
+}
+
+/// The locals an inline-asm statement reaches through a static operand,
+/// whose `LocalAddr` may be dead.
+fn asm_locals(
+    func: &super::super::ir::FunctionSsa,
+    inst: &super::super::ir::Inst,
+    note: &mut impl FnMut(i64),
+) {
+    let super::super::ir::Inst::InlineAsm { asm, args } = inst else {
+        return;
+    };
+    for (op, &a) in asm.operands.iter().zip(args) {
+        if op.static_arg
+            && let Some(crate::c5::asm::StaticOperand::Frame(off)) =
+                crate::c5::asm::asm_operand_static(func, a)
+            && off < 0
+        {
+            note(off);
+        }
     }
 }
 
-/// An inline-asm statement reaching a user local through a static operand,
-/// whose `LocalAddr` may be dead.
-fn asm_addresses_local(
-    func: &super::super::ir::FunctionSsa,
-    inst: &super::super::ir::Inst,
-) -> bool {
-    let super::super::ir::Inst::InlineAsm { asm, args } = inst else {
-        return false;
-    };
-    asm.operands.iter().zip(args).any(|(op, &a)| {
-        op.static_arg
-            && matches!(
-                crate::c5::asm::asm_operand_static(func, a),
-                Some(crate::c5::asm::StaticOperand::Frame(off)) if off < 0
-            )
-    })
+/// The frame regions both targets size identically, each a 16-byte aligned
+/// byte count.
+pub(crate) struct FrameBase {
+    pub(crate) locals: u32,
+    /// The over-aligned region when it joins the static frame (alignment 16).
+    pub(crate) static_region: u32,
+    pub(crate) spills: u32,
+    pub(crate) saved_gprs: u32,
 }
 
-/// The frame regions both targets size identically: the locals region, the
-/// allocator spill region, and the saved callee-GPR region, each a 16-byte
-/// aligned byte count. The locals region is zero when no emitted instruction
-/// references a user local (negative `off`); after mem2reg and dead-store
-/// elimination such an object is never observed and needs no storage
-/// (C99 6.2.4p2). An instruction the per-inst dispatch skips as dead pure
-/// (`is_dead_pure`) produces no machine code and therefore no access; the
-/// same predicate gates both decisions. Param cells use non-negative `off`
-/// and are sized separately.
+impl FrameBase {
+    /// Whether the frame holds an object a canary could guard: a local or
+    /// an over-aligned one, in the static region or a realigned one.
+    pub(crate) fn has_objects(&self, func: &super::super::ir::FunctionSsa) -> bool {
+        self.locals > 0 || self.static_region > 0 || func.frame_align > 16
+    }
+}
+
+/// The locals region is zero when no emitted instruction references a user
+/// local (negative `off`), and the static over-aligned region when none
+/// references a region member; after mem2reg and dead-store elimination such
+/// an object is never observed and needs no storage (C99 6.2.4p2). An
+/// instruction the per-inst dispatch skips as dead pure (`is_dead_pure`)
+/// produces no machine code and therefore no access; the same predicate
+/// gates both decisions. Param cells use non-negative `off` and are sized
+/// separately.
 pub(crate) fn compute_frame_base(
     func: &super::super::ir::FunctionSsa,
     alloc: &super::reg_alloc::Allocation,
-) -> (u32, u32, u32) {
-    let declared_locals_bytes = slots16(func.locals.max(0) as u32);
-    // Two prologue paths reach the locals region through FunctionSsa fields
-    // rather than instructions and count as accesses on their own: saving
-    // the caller-supplied indirect-result pointer into `indirect_result_slot`,
-    // and scattering a by-value aggregate parameter into its body local.
-    let any_local_access = func.indirect_result_slot < 0
-        || func
-            .param_aggs
-            .iter()
-            .zip(func.param_local_slots.iter())
-            .any(|(agg, slot)| agg.is_some() && *slot < 0)
-        || func.insts.iter().enumerate().any(|(idx, i)| {
-            (inst_addresses_local(i) && !is_dead_pure(i, idx as super::super::ir::ValueId, alloc))
-                || asm_addresses_local(func, i)
-        });
-    let locals_bytes = if any_local_access {
-        declared_locals_bytes
-    } else {
-        0
+) -> FrameBase {
+    let (mut local, mut region) = (false, false);
+    let mut note = |off: i64| {
+        if func.over_aligned.iter().any(|m| m.slot == off) {
+            region = true;
+        } else {
+            local = true;
+        }
     };
-    let alloc_spill_bytes = slots16(alloc.spill_count);
-    let saved_gpr_bytes = slots16(alloc.gpr_used.len() as u32);
-    (locals_bytes, alloc_spill_bytes, saved_gpr_bytes)
+    // Two prologue paths reach a local through FunctionSsa fields rather
+    // than instructions and count as accesses on their own: saving the
+    // caller-supplied indirect-result pointer into `indirect_result_slot`,
+    // and scattering a by-value aggregate parameter into its body local.
+    if func.indirect_result_slot < 0 {
+        note(func.indirect_result_slot);
+    }
+    for (agg, &slot) in func.param_aggs.iter().zip(func.param_local_slots.iter()) {
+        if agg.is_some() && slot < 0 {
+            note(slot);
+        }
+    }
+    for (idx, i) in func.insts.iter().enumerate() {
+        if let Some(off) = local_named(i)
+            && !is_dead_pure(i, idx as super::super::ir::ValueId, alloc)
+        {
+            note(off);
+        }
+        asm_locals(func, i, &mut note);
+    }
+    FrameBase {
+        locals: if local {
+            slots16(func.locals.max(0) as u32)
+        } else {
+            0
+        },
+        static_region: if region && func.frame_align == 16 {
+            func.realign_region_bytes.max(0) as u32
+        } else {
+            0
+        },
+        spills: slots16(alloc.spill_count),
+        saved_gprs: slots16(alloc.gpr_used.len() as u32),
+    }
 }
 
 /// Classify the function's parameter cells (`off >= 2`) by how the body uses
@@ -1299,17 +1358,16 @@ pub(crate) fn c5_slot_to_fp_offset(off: i64, param_stride: i64, canary_bytes: u3
     }
 }
 
-/// Bytes the stack-protector region adds to the frame. `locals_bytes` is
-/// the declared-locals region size `compute_frame_base` returned, which is
-/// zero when no local access survives -- there is then nothing in the frame
-/// for a canary to guard, and only `-fstack-protector-all` still asks for
-/// one. A naked function emits no prologue and can carry no canary.
+/// Bytes the stack-protector region adds to the frame. With no object in
+/// the frame (`FrameBase::has_objects`) there is nothing for a canary to
+/// guard, and only `-fstack-protector-all` still asks for one. A naked
+/// function emits no prologue and can carry no canary.
 pub(crate) fn canary_bytes(
     func: &super::super::ir::FunctionSsa,
-    locals_bytes: u32,
+    base: &FrameBase,
     ssp: super::super::StackProtect,
 ) -> u32 {
-    let has_frame = locals_bytes > 0 || uses_dynamic_alloca(func);
+    let has_frame = base.has_objects(func) || uses_dynamic_alloca(func);
     if !protected(func, ssp, has_frame) {
         return 0;
     }
@@ -1603,6 +1661,8 @@ pub(crate) struct LowerState {
     pub(crate) canary_frame_bytes: alloc::collections::BTreeMap<usize, u32>,
     pub(crate) frame_stack: alloc::collections::BTreeMap<usize, FrameStack>,
     pub(crate) param_frame_offsets: alloc::collections::BTreeMap<usize, alloc::vec::Vec<i64>>,
+    pub(crate) region_frame_offsets:
+        alloc::collections::BTreeMap<usize, alloc::collections::BTreeMap<i64, Option<i64>>>,
     /// Entry PC to code offset, `usize::MAX` for a PC with no instruction.
     pub(crate) pc_to_native: alloc::vec::Vec<usize>,
     pub(crate) rodata: super::RodataBuild,
@@ -1637,6 +1697,7 @@ impl LowerState {
             canary_frame_bytes: alloc::collections::BTreeMap::new(),
             frame_stack: alloc::collections::BTreeMap::new(),
             param_frame_offsets: alloc::collections::BTreeMap::new(),
+            region_frame_offsets: alloc::collections::BTreeMap::new(),
             pc_to_native: alloc::vec::Vec::new(),
             rodata: super::RodataBuild::default(),
         }
@@ -1666,6 +1727,7 @@ impl LowerState {
                 canary_frame_bytes: &mut self.canary_frame_bytes,
                 frame_stack: &mut self.frame_stack,
                 param_frame_offsets: &mut self.param_frame_offsets,
+                region_frame_offsets: &mut self.region_frame_offsets,
                 mcount_sites: &mut self.mcount_sites,
             },
             rodata: &mut self.rodata,
@@ -2633,6 +2695,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         coalesced_slot_remap,
         canary_frame_bytes: st.canary_frame_bytes,
         param_frame_offsets: st.param_frame_offsets,
+        region_frame_offsets: st.region_frame_offsets,
         fn_unwind: alloc::vec::Vec::new(),
         reloc_call_sites,
         user_extern_call_sites,

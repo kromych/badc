@@ -28,7 +28,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x80, %rsp
+               	subq	$0x40, %rsp
                	leaq	<rip>, %rdi
                	xorl	%esi, %esi
                	xorl	%eax, %eax
@@ -40,7 +40,7 @@ Disassembly of section .text:
                	movq	%r10, %xmm0
                	movsd	%xmm0, -0x8(%rsp)
                	fldl	-0x8(%rsp)
-               	fstpt	-0x80(%rbp)
+               	fstpt	-0x40(%rbp)
                	leaq	<rip>, %rdi
                	xorl	%esi, %esi
                	xorl	%eax, %eax
@@ -52,8 +52,8 @@ Disassembly of section .text:
                	movq	%r10, %xmm0
                	movsd	%xmm0, -0x8(%rsp)
                	fldl	-0x8(%rsp)
-               	fstpt	-0x70(%rbp)
-               	fldt	-0x80(%rbp)
+               	fstpt	-0x30(%rbp)
+               	fldt	-0x40(%rbp)
                	fstpl	-0x8(%rsp)
                	movsd	-0x8(%rsp), %xmm0
                	movabsq	$0x41f0000000000000, %rax # imm = 0x41F0000000000000
@@ -64,7 +64,7 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	leave
                	retq
-               	fldt	-0x70(%rbp)
+               	fldt	-0x30(%rbp)
                	fstpl	-0x8(%rsp)
                	movsd	-0x8(%rsp), %xmm0
                	movabsq	$0x43f0000000000000, %rax # imm = 0x43F0000000000000
@@ -86,8 +86,8 @@ Disassembly of section .text:
                	movq	%r10, %xmm0
                	movsd	%xmm0, -0x8(%rsp)
                	fldl	-0x8(%rsp)
-               	fstpt	-0x60(%rbp)
-               	fldt	-0x60(%rbp)
+               	fstpt	-0x30(%rbp)
+               	fldt	-0x30(%rbp)
                	fstpl	-0x8(%rsp)
                	movsd	-0x8(%rsp), %xmm0
                	movabsq	$-0x3f70000000000000, %rax # imm = 0xC090000000000000
@@ -100,7 +100,7 @@ Disassembly of section .text:
                	retq
                	leaq	-0x20(%rbp), %rdi
                	leaq	<rip>, %rsi
-               	fldt	-0x80(%rbp)
+               	fldt	-0x40(%rbp)
                	fstpl	-0x8(%rsp)
                	movsd	-0x8(%rsp), %xmm0
                	movb	$0x1, %al

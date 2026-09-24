@@ -1,19 +1,19 @@
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=main
-fn ent_pc=0 n_params=0 variadic=false locals=16
+fn ent_pc=0 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   LocalAddr(-16)                                   -> x0
+    v1   LocalAddr(-17)                                   -> x0
     v2   Imm(1)                                           -> x1
     v3   Store { addr=v1, disp=0, value=v2, kind=I64 }    -> -
-    v4   LocalAddr(-16)                                   -> x1
+    v4   LocalAddr(-17)                                   -> x1
     v5   BinopI { op=add, lhs=v1, rhs_imm=64 }            -> x1
     v6   Imm(2)                                           -> x1
     v7   Store { addr=v1, disp=64, value=v6, kind=I64 }   -> -
-    v8   LocalAddr(-16)                                   -> x1
+    v8   LocalAddr(-17)                                   -> x1
     v9   BinopI { op=add, lhs=v1, rhs_imm=64 }            -> x1
-    v10  LocalAddr(-16)                                   -> x2
+    v10  LocalAddr(-17)                                   -> x2
     v11  Binop { op=sub, lhs=v9, rhs=v1 }                 -> x1
     v12  BinopI { op=ne, lhs=v11, rhs_imm=64 }            -> x0
     terminator Bz { cond=v12, target=b2, fall=b1 }   (exit_acc=v12)
@@ -21,9 +21,9 @@ fn ent_pc=0 n_params=0 variadic=false locals=16
     v13  Imm(18)                                          -> x0
     terminator Return(v13)   (exit_acc=v13)
   block 2  start_pc=0
-    v14  LocalAddr(-16)                                   -> x0
+    v14  LocalAddr(-17)                                   -> x0
     v15  BinopI { op=add, lhs=v14, rhs_imm=64 }           -> x0
-    v16  LocalAddr(-16)                                   -> x0
+    v16  LocalAddr(-17)                                   -> x0
     v17  Imm(64)                                          -> x0
     v18  Imm(0)                                           -> x0
     v19  Imm(0)                                           -> x0

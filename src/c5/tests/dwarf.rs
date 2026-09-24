@@ -757,6 +757,43 @@ fn promoted_local_has_empty_location() {
     let _ = std::fs::remove_file(&path);
 }
 
+/// An over-aligned automatic's location is its storage in the over-aligned
+/// region: a lone 528-byte object aligned 16 sits right below the frame
+/// record, at fp - 528. One past a realignment has no frame-base offset, so
+/// its location is empty rather than a slot that holds nothing of it.
+#[test]
+fn over_aligned_local_is_located_in_its_region() {
+    let src = "struct st16 { _Alignas(16) unsigned char v[512]; unsigned fpsr, fpcr; };\
+               void *seen;\
+               __attribute__((noinline)) void use(void *p) { seen = p; }\
+               void one16(void) { struct st16 s; use(&s); }\
+               void one64(void) { _Alignas(64) unsigned char w[64]; use(w); }\
+               int main(void){ one16(); one64(); return 0; }";
+    let path = build_signed_mach_o(src, "over_aligned_local_loc");
+    let Some(out) = dwarfdump_debug_info(&path) else {
+        return;
+    };
+    let loc_of = |name: &str| {
+        let at = out
+            .find(&format!("(\"{name}\")"))
+            .unwrap_or_else(|| panic!("no `{name}` variable in:\n{out}"));
+        let after = &out[at..];
+        let end = after.find("DW_TAG").unwrap_or(after.len());
+        &after[..end]
+    };
+    assert!(
+        loc_of("s").contains("DW_OP_fbreg -528"),
+        "`s` should be located in its region, got:\n{}",
+        loc_of("s"),
+    );
+    assert!(
+        loc_of("w").contains("DW_AT_location\t(<empty>)"),
+        "`w` past a realignment should have an empty location, got:\n{}",
+        loc_of("w"),
+    );
+    let _ = std::fs::remove_file(&path);
+}
+
 /// C99 6.2.1 block scope: a local declared inside a nested `{ ... }`
 /// block needs its own DW_TAG_variable so a debugger can inspect it.
 /// The symbol-table restore at block exit unbinds such locals before

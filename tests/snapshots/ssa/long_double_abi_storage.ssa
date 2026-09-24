@@ -1,6 +1,6 @@
 ; --- SSA dump (ok=true) ent_pc=4 ---
 ; name=main
-fn ent_pc=4 n_params=0 variadic=false locals=8
+fn ent_pc=4 n_params=0 variadic=false locals=6
   spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -19,8 +19,8 @@ fn ent_pc=4 n_params=0 variadic=false locals=8
     v20  Imm(8)                                           -> x2
     v21  CallExt { binding_idx=9, args=[v18, v19, v20], fp_arg_mask=0x0 } -> x0
     v22  LoadLocal { off=-6, kind=F64 }                   -> d0
-    v23  StoreLocal { off=-8, value=v22, kind=F80 }       -> -
-    v24  LoadLocal { off=-8, kind=F80 }                   -> d0
+    v23  StoreLocal { off=-16, value=v22, kind=F80 }      -> -
+    v24  LoadLocal { off=-16, kind=F80 }                  -> d0
     v25  StoreLocal { off=-5, value=v24, kind=F64 }       -> -
     v26  LocalAddr(-3)                                    -> x7
     v27  LocalAddr(-5)                                    -> x6
@@ -51,8 +51,8 @@ fn ent_pc=4 n_params=0 variadic=false locals=8
     v37  Imm(8)                                           -> x2
     v38  CallExt { binding_idx=9, args=[v35, v36, v37], fp_arg_mask=0x0 } -> x0
     v39  LoadLocal { off=-6, kind=F64 }                   -> d0
-    v40  StoreLocal { off=-8, value=v39, kind=F80 }       -> -
-    v41  LoadLocal { off=-8, kind=F80 }                   -> d0
+    v40  StoreLocal { off=-16, value=v39, kind=F80 }      -> -
+    v41  LoadLocal { off=-16, kind=F80 }                  -> d0
     v42  StoreLocal { off=-5, value=v41, kind=F64 }       -> -
     v43  LocalAddr(-3)                                    -> x7
     v44  LocalAddr(-5)                                    -> x6
@@ -91,9 +91,9 @@ fn ent_pc=4 n_params=0 variadic=false locals=8
     terminator Return(v72)   (exit_acc=v72)
   block 10  start_pc=0
     v73  Imm(4607182418800017408)                         -> x0
-    v74  StoreLocal { off=-8, value=v73, kind=F80 }       -> -
+    v74  StoreLocal { off=-16, value=v73, kind=F80 }      -> -
     v75  LocalAddr(-2)                                    -> x7
-    v76  LocalAddr(-8)                                    -> x6
+    v76  LocalAddr(-16)                                   -> x6
     v77  Imm(16)                                          -> x2
     v78  CallExt { binding_idx=9, args=[v75, v76, v77], fp_arg_mask=0x0 } -> x0
     v79  LocalAddr(-2)                                    -> x0

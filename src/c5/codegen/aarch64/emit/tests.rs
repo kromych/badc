@@ -1396,6 +1396,7 @@ fn emit_return_42() {
             canary_frame_bytes: &mut alloc::collections::BTreeMap::new(),
             frame_stack: &mut alloc::collections::BTreeMap::new(),
             param_frame_offsets: &mut alloc::collections::BTreeMap::new(),
+            region_frame_offsets: &mut alloc::collections::BTreeMap::new(),
             mcount_sites: &mut alloc::vec::Vec::new(),
         };
         emit_function(
@@ -2337,6 +2338,7 @@ fn emit_return_one_plus_two() {
             canary_frame_bytes: &mut alloc::collections::BTreeMap::new(),
             frame_stack: &mut alloc::collections::BTreeMap::new(),
             param_frame_offsets: &mut alloc::collections::BTreeMap::new(),
+            region_frame_offsets: &mut alloc::collections::BTreeMap::new(),
             mcount_sites: &mut alloc::vec::Vec::new(),
         };
         emit_function(
@@ -2433,6 +2435,7 @@ fn emit_if_else_returns() {
             canary_frame_bytes: &mut alloc::collections::BTreeMap::new(),
             frame_stack: &mut alloc::collections::BTreeMap::new(),
             param_frame_offsets: &mut alloc::collections::BTreeMap::new(),
+            region_frame_offsets: &mut alloc::collections::BTreeMap::new(),
             mcount_sites: &mut alloc::vec::Vec::new(),
         };
         emit_function(

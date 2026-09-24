@@ -3286,9 +3286,13 @@ fn splice_multi_block(
     if !callee.over_aligned.is_empty() {
         let base_off = merged_region_bytes;
         let mut appended = false;
-        for &(slot, region_off) in &callee.over_aligned {
-            let rec = (slot - region_base, base_off + region_off);
-            if !merged_over_aligned.iter().any(|&(s, _)| s == rec.0) {
+        for m in &callee.over_aligned {
+            let rec = crate::c5::ir::RegionMember {
+                slot: m.slot - region_base,
+                off: base_off + m.off,
+                ..*m
+            };
+            if !merged_over_aligned.iter().any(|o| o.slot == rec.slot) {
                 merged_over_aligned.push(rec);
                 appended = true;
             }
@@ -6501,12 +6505,18 @@ mod tests {
     #[test]
     fn region_16_callee_merges_into_caller() {
         let abi = Target::LinuxX64.abi();
+        let member = |slot, off| crate::c5::ir::RegionMember {
+            slot,
+            off,
+            align: 16,
+            size: 16,
+        };
         let mut callee = asm_callee(100, 2);
-        callee.over_aligned = alloc::vec![(-1, 0)];
+        callee.over_aligned = alloc::vec![member(-1, 0)];
         callee.frame_align = 16;
         callee.realign_region_bytes = 16;
         let mut caller = multi_call_caller(1, 2, 100, 2);
-        caller.over_aligned = alloc::vec![(-2, 0)];
+        caller.over_aligned = alloc::vec![member(-2, 0)];
         caller.frame_align = 16;
         caller.realign_region_bytes = 16;
         let mut funcs = alloc::vec![caller, callee];
@@ -6520,7 +6530,7 @@ mod tests {
         );
         assert_eq!(
             funcs[0].over_aligned,
-            alloc::vec![(-2, 0), (-3, 16)],
+            alloc::vec![member(-2, 0), member(-3, 16)],
             "callee entry must relocate behind the caller's region"
         );
         assert_eq!(funcs[0].frame_align, 16);
@@ -6536,7 +6546,12 @@ mod tests {
     fn region_above_16_callee_stays_out_of_line() {
         let abi = Target::LinuxX64.abi();
         let mut callee = asm_callee(100, 2);
-        callee.over_aligned = alloc::vec![(-1, 0)];
+        callee.over_aligned = alloc::vec![crate::c5::ir::RegionMember {
+            slot: -1,
+            off: 0,
+            align: 32,
+            size: 32,
+        }];
         callee.frame_align = 32;
         callee.realign_region_bytes = 32;
         let mut funcs = alloc::vec![multi_call_caller(1, 2, 100, 1), callee];

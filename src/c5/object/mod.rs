@@ -1181,6 +1181,7 @@ pub(crate) mod test_support {
             coalesced_slot_remap: BTreeMap::new(),
             canary_frame_bytes: BTreeMap::new(),
             param_frame_offsets: BTreeMap::new(),
+            region_frame_offsets: BTreeMap::new(),
             fn_unwind: Vec::new(),
             reloc_call_sites: Vec::new(),
             user_extern_call_sites: Vec::new(),

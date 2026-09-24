@@ -576,6 +576,14 @@ fn collect_subprograms(
                     .and_then(|m| m.get(&v.fp_slot))
                     .copied()
                     .unwrap_or(v.fp_slot);
+                // An over-aligned automatic lives in the region, not at a slot.
+                // TODO: one past a realignment has no frame-base offset; its
+                // location needs a stack-pointer-relative description.
+                let region = build
+                    .region_frame_offsets
+                    .get(&ent_pc)
+                    .and_then(|m| m.get(&eff))
+                    .copied();
                 SubprogVar {
                     name_off: strs.intern(&v.name),
                     is_parameter: v.is_parameter,
@@ -584,10 +592,9 @@ fn collect_subprograms(
                     // it; the 16-byte cell above the frame record is the
                     // layout of a function with no record. A local uses
                     // the 8-byte slot stride.
-                    // TODO: an over-aligned automatic lives in the frame's
-                    // over-aligned region, not at this slot offset; its
-                    // location needs the per-function region base.
-                    fp_byte_offset: if eff >= 2 {
+                    fp_byte_offset: if let Some(Some(off)) = region {
+                        off
+                    } else if eff >= 2 {
                         param_homes
                             .and_then(|h| h.get((eff - 2) as usize).copied())
                             .unwrap_or((eff - 1) * 16)
@@ -598,10 +605,11 @@ fn collect_subprograms(
                         // frame base and keep their offsets.
                         eff * 8 - canary_shift
                     },
-                    promoted: build
-                        .promoted_local_slots
-                        .get(&ent_pc)
-                        .is_some_and(|slots| slots.contains(&v.fp_slot)),
+                    promoted: region == Some(None)
+                        || build
+                            .promoted_local_slots
+                            .get(&ent_pc)
+                            .is_some_and(|slots| slots.contains(&v.fp_slot)),
                     decl_line: v.decl_line,
                     array_size: v.array_size,
                     decl_file: v.decl_file,

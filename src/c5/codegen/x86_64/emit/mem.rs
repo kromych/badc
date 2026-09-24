@@ -398,7 +398,11 @@ pub(super) fn local_slot_base_disp(
 ) -> (Reg, i64) {
     if off < 0
         && (frame.align_region_off != 0 || frame.realign_align > 0)
-        && let Some(&(_, region_off)) = func.over_aligned.iter().find(|&&(s, _)| s == off)
+        && let Some(region_off) = func
+            .over_aligned
+            .iter()
+            .find(|m| m.slot == off)
+            .map(|m| m.off)
     {
         if frame.align_region_off != 0 {
             (Reg::RBP, frame.align_region_off + region_off)

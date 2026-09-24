@@ -368,9 +368,9 @@ Disassembly of section .text:
 <ramp>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x20
+               	sub	sp, sp, #0x10
                	mov	x3, x0
-               	sub	x2, x29, #0x20
+               	sub	x2, x29, #0x10
                	and	x1, x3, #0xff
                	strb	w1, [x2]
                	add	x0, x1, #0x1
@@ -400,7 +400,7 @@ Disassembly of section .text:
                	add	x0, x1, #0x9
                	and	x0, x0, #0xff
                	strb	w0, [x2, #0x9]
-               	sub	x0, x29, #0x20
+               	sub	x0, x29, #0x10
                	add	x2, x1, #0xa
                	and	x2, x2, #0xff
                	strb	w2, [x0, #0xa]
@@ -422,7 +422,7 @@ Disassembly of section .text:
                	strb	w1, [x0, #0xf]
                	mov	x16, x0
                	ldr	q0, [x16]
-               	add	sp, sp, #0x20
+               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
 

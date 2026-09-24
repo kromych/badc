@@ -3398,6 +3398,11 @@ fn block_scoped_arrays_share_frame_slots() {
 /// object's own cell, so the two modes are reported separately.
 #[cfg(test)]
 fn coalesced_locals(src: &str, name: &str, compact: bool) -> i64 {
+    coalesced(src, name, compact).locals
+}
+
+/// Function `name` of `src` after slot coalescing.
+fn coalesced(src: &str, name: &str, compact: bool) -> crate::c5::ir::FunctionSsa {
     use crate::Target;
     let program = super::compile_str(src);
     let mut funcs =
@@ -3409,10 +3414,9 @@ fn coalesced_locals(src: &str, name: &str, compact: bool) -> i64 {
         crate::c5::codegen::StackProtect::OFF,
     );
     funcs
-        .iter()
+        .into_iter()
         .find(|f| f.name == name)
         .unwrap_or_else(|| panic!("no function {name}"))
-        .locals
 }
 
 /// C99 6.2.4p2: an automatic object is dead once its block's execution
@@ -3550,11 +3554,12 @@ fn a_volatile_object_does_not_share_storage() {
     assert_eq!(coalesced_locals(src, "vols", true), 2);
 }
 
-/// An over-aligned object is a member of the realigned region, which is
-/// addressed by its own offset; sharing a member's slot would misplace the
-/// partner, so the bound does not reach it.
+/// An over-aligned object's storage is its region block alone: it keeps no
+/// locals cell. Objects in disjoint blocks share one block as ordinary
+/// objects share a cell; objects alive together, and every object at -O0,
+/// keep blocks of their own.
 #[test]
-fn an_over_aligned_object_does_not_share_storage() {
+fn an_over_aligned_object_takes_region_storage_alone() {
     let src = r#"
         void sink(unsigned *p);
         void aligned16(void)
@@ -3562,9 +3567,38 @@ fn an_over_aligned_object_does_not_share_storage() {
             { _Alignas(16) unsigned a = 1; sink(&a); }
             { _Alignas(16) unsigned b = 2; sink(&b); }
         }
+        void together(void)
+        {
+            _Alignas(16) unsigned a = 1;
+            _Alignas(16) unsigned b = 2;
+            sink(&a);
+            sink(&b);
+        }
         int main(void) { return 0; }
     "#;
-    assert_eq!(coalesced_locals(src, "aligned16", true), 2);
+    let f = coalesced(src, "aligned16", true);
+    assert_eq!(
+        (f.locals, f.realign_region_bytes),
+        (0, 16),
+        "{:?}",
+        f.over_aligned
+    );
+    assert_eq!(f.over_aligned.len(), 2);
+    assert_eq!(f.over_aligned[0].off, f.over_aligned[1].off);
+    let g = coalesced(src, "together", true);
+    assert_eq!(
+        (g.locals, g.realign_region_bytes),
+        (0, 32),
+        "{:?}",
+        g.over_aligned
+    );
+    let h = coalesced(src, "aligned16", false);
+    assert_eq!(
+        (h.locals, h.realign_region_bytes),
+        (0, 32),
+        "{:?}",
+        h.over_aligned
+    );
 }
 
 /// A body that may be re-entered after its first return does not have its

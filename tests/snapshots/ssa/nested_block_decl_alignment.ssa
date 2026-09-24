@@ -1,24 +1,24 @@
 ; --- SSA dump (ok=true) ent_pc=3 ---
 ; name=nested_auto
-fn ent_pc=3 n_params=0 variadic=false locals=2
+fn ent_pc=3 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(1)                                           -> x0
     v2   Imm(1)                                           -> x0
-    v3   LocalAddr(-1)                                    -> x1
+    v3   LocalAddr(-3)                                    -> x1
     v4   Imm(0)                                           -> x0
     v5   Imm(7)                                           -> x2
     v6   Store { addr=v3, disp=0, value=v5, kind=I8 }     -> -
-    v7   LocalAddr(-1)                                    -> x2
+    v7   LocalAddr(-3)                                    -> x2
     v8   BinopI { op=and, lhs=v3, rhs_imm=63 }            -> x1
     v9   BinopI { op=eq, lhs=v8, rhs_imm=0 }              -> x2
     v10  Imm(0)                                           -> x2
     terminator Bnz { cond=v8, target=b3, fall=b1 }   (low word)   (exit_acc=v9)
   block 1  start_pc=0
-    v12  LocalAddr(-1)                                    -> x0
+    v12  LocalAddr(-3)                                    -> x0
     v13  Imm(0)                                           -> x0
-    v14  LoadLocal { off=-1, kind=I8 }                    -> x0
+    v14  LoadLocal { off=-3, kind=I8 }                    -> x0
     v15  Imm(1)                                           -> x0
     v16  Imm(1)                                           -> x1
     v17  Imm(0)                                           -> x1
@@ -32,23 +32,23 @@ fn ent_pc=3 n_params=0 variadic=false locals=2
     terminator Jmp(b2)
 ; --- SSA dump (ok=true) ent_pc=4 ---
 ; name=nested_auto_typed
-fn ent_pc=4 n_params=0 variadic=false locals=9
+fn ent_pc=4 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(1)                                           -> x0
     v2   Imm(1)                                           -> x0
-    v3   LocalAddr(-8)                                    -> x1
+    v3   LocalAddr(-10)                                   -> x1
     v4   Imm(0)                                           -> x0
     v5   Imm(9)                                           -> x2
     v6   Store { addr=v3, disp=0, value=v5, kind=I32 }    -> -
-    v7   LocalAddr(-8)                                    -> x2
+    v7   LocalAddr(-10)                                   -> x2
     v8   BinopI { op=and, lhs=v3, rhs_imm=63 }            -> x2
     v9   BinopI { op=eq, lhs=v8, rhs_imm=0 }              -> x6
     v10  Imm(0)                                           -> x6
     terminator Bnz { cond=v8, target=b3, fall=b1 }   (low word)   (exit_acc=v9)
   block 1  start_pc=0
-    v12  LocalAddr(-8)                                    -> x0
+    v12  LocalAddr(-10)                                   -> x0
     v13  Imm(0)                                           -> x0
     v14  Load { addr=v3, disp=0, kind=U32 }               -> x0
     v15  BinopI { op=xor, lhs=v14, rhs_imm=9 }            -> x0

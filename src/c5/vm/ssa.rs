@@ -497,12 +497,10 @@ impl Frame<'_> {
         if off < 0 {
             // An over-aligned automatic object's storage is in the frame's
             // realigned region, not the fp-relative slot (C11 6.7.5).
-            if self.realign_base != 0 {
-                for &(slot, region_off) in &self.func.over_aligned {
-                    if slot == off {
-                        return Some(self.realign_base + region_off as usize);
-                    }
-                }
+            if self.realign_base != 0
+                && let Some(m) = self.func.over_aligned.iter().find(|m| m.slot == off)
+            {
+                return Some(self.realign_base + m.off as usize);
             }
             let slot_n = (-off) as usize;
             (slot_n >= 1 && slot_n <= self.locals)

@@ -1,18 +1,18 @@
 ; --- SSA dump (ok=true) ent_pc=7 ---
 ; name=main
-fn ent_pc=7 n_params=0 variadic=false locals=10
+fn ent_pc=7 n_params=0 variadic=false locals=4
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ImmData(12)                                      -> x7
     v2   Imm(0)                                           -> x6
     v3   CallExt { binding_idx=79, args=[v1, v2], fp_arg_mask=0x0, fp_return=true } -> d0
-    v4   StoreLocal { off=-10, value=v3, kind=F80 }       -> -
+    v4   StoreLocal { off=-15, value=v3, kind=F80 }       -> -
     v5   ImmData(23)                                      -> x7
     v6   Imm(0)                                           -> x6
     v7   CallExt { binding_idx=79, args=[v5, v6], fp_arg_mask=0x0, fp_return=true } -> d0
-    v8   StoreLocal { off=-8, value=v7, kind=F80 }        -> -
-    v9   LoadLocal { off=-10, kind=F80 }                  -> d0
+    v8   StoreLocal { off=-16, value=v7, kind=F80 }       -> -
+    v9   LoadLocal { off=-15, kind=F80 }                  -> d0
     v10  Imm(4751297606875873280)                         -> x0
     v11  Binop { op=fne, lhs=v9, rhs=v10 }                -> x0
     terminator Bz { cond=v11, target=b2, fall=b1 }   (exit_acc=v11)
@@ -20,7 +20,7 @@ fn ent_pc=7 n_params=0 variadic=false locals=10
     v12  Imm(1)                                           -> x0
     terminator Return(v12)   (exit_acc=v12)
   block 2  start_pc=0
-    v13  LoadLocal { off=-8, kind=F80 }                   -> d0
+    v13  LoadLocal { off=-16, kind=F80 }                  -> d0
     v14  Imm(4895412794951729152)                         -> x0
     v15  Binop { op=fne, lhs=v13, rhs=v14 }               -> x0
     terminator Bz { cond=v15, target=b4, fall=b3 }   (exit_acc=v15)
@@ -31,8 +31,8 @@ fn ent_pc=7 n_params=0 variadic=false locals=10
     v17  ImmData(44)                                      -> x7
     v18  Imm(0)                                           -> x6
     v19  CallExt { binding_idx=79, args=[v17, v18], fp_arg_mask=0x0, fp_return=true } -> d0
-    v20  StoreLocal { off=-6, value=v19, kind=F80 }       -> -
-    v21  LoadLocal { off=-6, kind=F80 }                   -> d0
+    v20  StoreLocal { off=-17, value=v19, kind=F80 }      -> -
+    v21  LoadLocal { off=-17, kind=F80 }                  -> d0
     v22  Imm(4652218415073722368)                         -> x0
     v23  Imm(-4571153621781053440)                        -> x0
     v24  Binop { op=fne, lhs=v21, rhs=v23 }               -> x0
@@ -43,7 +43,7 @@ fn ent_pc=7 n_params=0 variadic=false locals=10
   block 6  start_pc=0
     v26  LocalAddr(-4)                                    -> x7
     v27  ImmData(52)                                      -> x6
-    v28  LoadLocal { off=-10, kind=F80 }                  -> d0
+    v28  LoadLocal { off=-15, kind=F80 }                  -> d0
     v29  CallExt { binding_idx=2, args=[v26, v27, v28], fp_arg_mask=0x4 } -> x0
     v30  Imm(0)                                           -> x1
     v31  Extend { value=v29, kind=I32 }                   -> x1

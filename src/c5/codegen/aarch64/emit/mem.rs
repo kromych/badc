@@ -755,8 +755,8 @@ fn over_aligned_region_off(off: i64, func: &FunctionSsa, frame: Frame) -> Option
     }
     func.over_aligned
         .iter()
-        .find(|&&(s, _)| s == off)
-        .map(|&(_, region_off)| region_off)
+        .find(|m| m.slot == off)
+        .map(|m| m.off)
 }
 
 pub(super) fn fp_store_op(width: u32) -> MemOp {

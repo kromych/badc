@@ -103,7 +103,7 @@ Disassembly of section .text:
 <over_aligned>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x50, %rsp
+               	subq	$0x10, %rsp
                	movq	%fs:0x28, %r11
                	movq	%r11, -0x8(%rbp)
                	xorl	%r11d, %r11d
@@ -120,7 +120,7 @@ Disassembly of section .text:
                	je	<addr>
                	callq	<addr>
                	xorl	%r11d, %r11d
-               	leaq	-0x50(%rbp), %rsp
+               	leaq	-0x10(%rbp), %rsp
                	leave
                	retq
 

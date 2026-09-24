@@ -1675,10 +1675,15 @@ impl Compiler {
                 self.next()?;
             }
             self.push_literal_nul();
-            // A subscripted literal (`"..."[i]`) is a constant byte value,
-            // not an address; rewind past the staged bytes and let the
-            // scalar evaluator fold it with any trailing operators.
-            if self.lex.tk == Token::Brak {
+            // A subscript or an operator makes the literal an operand
+            // (`"..."[i]`, `"..." + n`); rewind past the staged bytes and
+            // let the scalar evaluator fold the whole expression.
+            let complete = self.lex.tk == ','
+                || self.lex.tk == '}'
+                || self.lex.tk == ';'
+                || self.lex.tk == ')'
+                || self.lex.tk == ':';
+            if !complete {
                 self.restore_init_checkpoint(cp);
                 return self.parse_constant_init_scalar();
             }

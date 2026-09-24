@@ -38,15 +38,15 @@ Disassembly of section .text:
                	add	x3, x3, <lo12>
                	adrp	x4, <page>
                	add	x4, x4, <lo12>
-               	ldrsb	x5, [x3, w0, sxtw]
+               	ldrb	w5, [x3, w0, sxtw]
                	cbz	x5, <addr>
                	ldrb	w5, [x2, w0, sxtw]
-               	ldrsb	x6, [x4, w0, sxtw]
-               	eor	x5, x5, x6
-               	cbz	w5, <addr>
+               	ldrb	w6, [x4, w0, sxtw]
+               	cmp	w5, w6
+               	b.eq	<addr>
                	orr	x1, x1, #0x8
                	add	x0, x0, #0x1
-               	ldrsb	x5, [x3, w0, sxtw]
+               	ldrb	w5, [x3, w0, sxtw]
                	cbnz	x5, <addr>
                	cbz	x1, <addr>
                	adrp	x0, <page>

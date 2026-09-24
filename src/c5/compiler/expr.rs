@@ -145,31 +145,49 @@ impl Compiler {
     /// value never selects it; only an integer constant takes the
     /// value-driven rank selection of 6.4.4.1p5.
     pub(super) fn num_token_type(&self, val: i64) -> i64 {
-        use crate::c5::lexer::StrPrefix;
         if !self.lex.num_is_char {
             return self.literal_auto_promoted_type(val);
         }
-        match self.lex.char_prefix {
+        // Unprefixed is `int` (6.4.4.4p10).
+        self.prefixed_char_ty(self.lex.char_prefix)
+            .unwrap_or(Ty::Int as i64)
+    }
+
+    /// The element type of the string literal at the cursor: plain `char`
+    /// without a prefix or with `u8`, else the prefix's character type.
+    pub(super) fn string_literal_elem_ty(&self) -> i64 {
+        match self.prefixed_char_ty(self.lex.str_prefix) {
+            Some(ty) if self.lex.str_is_wide => ty,
+            _ if self.lex.char_signed => Ty::Char as i64,
+            _ => Ty::Char as i64 | UNSIGNED_BIT,
+        }
+    }
+
+    /// The type an encoding prefix gives a character constant or a string
+    /// literal's elements (C11 6.4.4.4p2-p4, 6.4.5p6); `None` for no prefix
+    /// and `u8`.
+    pub(super) fn prefixed_char_ty(&self, prefix: crate::c5::lexer::StrPrefix) -> Option<i64> {
+        use crate::c5::lexer::StrPrefix;
+        match prefix {
             // `char16_t` is `uint_least16_t` and `char32_t` is
             // `uint_least32_t`: unsigned, and the same width on every
             // target. `wchar_t` takes both its width and its signedness
             // from the target ABI, so neither is derived from the other.
-            StrPrefix::Char16 => Ty::Short as i64 | UNSIGNED_BIT,
-            StrPrefix::Char32 => Ty::Int as i64 | UNSIGNED_BIT,
+            StrPrefix::Char16 => Some(Ty::Short as i64 | UNSIGNED_BIT),
+            StrPrefix::Char32 => Some(Ty::Int as i64 | UNSIGNED_BIT),
             StrPrefix::Wide => {
                 let base = if self.lex.wchar_bytes == 2 {
                     Ty::Short as i64
                 } else {
                     Ty::Int as i64
                 };
-                if self.lex.wchar_signed {
+                Some(if self.lex.wchar_signed {
                     base
                 } else {
                     base | UNSIGNED_BIT
-                }
+                })
             }
-            // Unprefixed is `int` (6.4.4.4p10).
-            _ => Ty::Int as i64,
+            _ => None,
         }
     }
 
@@ -1388,14 +1406,15 @@ impl Compiler {
     }
 
     fn parse_string_literal(&mut self) -> Result<(), C5Error> {
-        // C99 6.4.5p6: the literal is a `char[N+1]` that decays to `char *`
-        // here; `sizeof("...")` reads the array size through
-        // `last_array_decay_bytes`.
+        // C99 6.4.5p5: the literal is an array of its elements that decays
+        // to a pointer to the first here; `sizeof("...")` reads the array
+        // size through `last_array_decay_bytes`.
         let start_offset = self.lex.ival;
         // Adjacent literals concatenate (6.4.5p4). The lexer terminates a
         // wide literal itself and leaves a narrow one open, so the NUL is
         // added once the parts are in.
         let is_wide = self.lex.str_is_wide;
+        let elem_ty = self.string_literal_elem_ty();
         self.emit_data_imm(start_offset);
         self.next()?;
         while self.lex.tk == '"' {
@@ -1412,7 +1431,7 @@ impl Compiler {
                 ..super::ObjectRef::declared(bytes, Some(bytes))
             });
         }
-        self.ty = Ty::Ptr as i64;
+        self.ty = elem_ty + Ty::Ptr as i64;
         self.ast_emit_str_lit(start_offset, self.ty);
         Ok(())
     }

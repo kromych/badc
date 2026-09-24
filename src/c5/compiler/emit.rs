@@ -161,6 +161,7 @@ impl Compiler {
             sym.defined_here = false;
             sym.has_initializer = false;
             sym.is_compound_literal = false;
+            sym.is_string_literal = false;
         }
         // The retired `__func__` storage is gone, so a later reference
         // must materialise it again rather than resolve to the offset.

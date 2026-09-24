@@ -38,7 +38,7 @@ use super::diag::Category;
 use super::types::{
     UNSIGNED_BIT, integer_promote, is_floating_ty, is_long_double_ty, is_pointer_ty, is_struct_ty,
     is_struct_value_ty, is_unsigned_ty, narrow_const_int, pointee_ty, strip_unsigned, struct_id_of,
-    struct_ptr_depth,
+    struct_ptr_depth, unqualified_version_ty,
 };
 
 /// Compile-time arithmetic value of a constant expression. Integer
@@ -162,6 +162,10 @@ pub(super) struct ConstAddr {
     pub value: i64,
     pub root: ConstRoot,
     pub elem_size: i64,
+    /// The type a read through the address yields, where it is known:
+    /// the element type of a decayed string or array compound literal, or
+    /// a pointer cast's pointee.
+    pub pointee: Option<i64>,
 }
 
 /// Operator selector for [`Compiler::const_int_binop`], the single
@@ -718,8 +722,8 @@ impl Compiler {
     /// operand, and a fold error reports 0 rather than propagating.
     /// A symbol-relative address is fixed only at link time and a
     /// compound literal denotes an object (C99 6.5.2.5p4), so neither is
-    /// a constant value; gcc answers 0 for both and 1 for a string
-    /// literal, which folds here as a plain integer.
+    /// a constant value; gcc and clang answer 0 for both, but 1 for the
+    /// address of a string literal, cast or not, and 0 for one inside it.
     pub(super) fn eval_constant_p_operand(&mut self) -> Result<i64, C5Error> {
         let snap = self.lex.snapshot();
         let saved = (
@@ -729,7 +733,11 @@ impl Compiler {
         self.pending.const_expr_nonconst = false;
         self.pending.const_expr_compound_literal = false;
         let folded = self.parse_const_expr_cond_val();
-        let is_const = folded.is_ok_and(|v| !v.is_symbolic_addr())
+        let literal_start = |v: &ConstVal| {
+            matches!(v, ConstVal::Addr(a) if a.root.sym().is_some_and(|s|
+                self.symbols[s].is_string_literal && self.symbols[s].val == a.value))
+        };
+        let is_const = folded.is_ok_and(|v| !v.is_symbolic_addr() || literal_start(&v))
             && !self.pending.const_expr_compound_literal;
         (
             self.pending.const_expr_nonconst,
@@ -1293,6 +1301,7 @@ impl Compiler {
                 value: 0,
                 root: ConstRoot::Label(label),
                 elem_size: 1,
+                pointee: None,
             }));
         }
         if self.lex.tk == Token::AndOp {
@@ -1310,6 +1319,11 @@ impl Compiler {
                 val: a.value as i128,
                 ty: Ty::Ptr as i64,
             });
+        }
+        if self.lex.tk == Token::MulOp {
+            self.next()?;
+            let v = self.parse_const_expr_unary_val()?;
+            return self.read_const_pointee(v, ConstVal::int(0));
         }
         if self.lex.tk == Token::Sizeof {
             // Shared sizeof operand parser handles all three
@@ -1504,7 +1518,78 @@ impl Compiler {
                 ty: self.size_t_ty(),
             });
         }
-        self.parse_const_expr_primary_val()
+        let mut v = self.parse_const_expr_primary_val()?;
+        while self.lex.tk == Token::Brak {
+            if v.addr().is_some() {
+                v = self.parse_const_subscript(v)?;
+                continue;
+            }
+            // An integer base is `n[p]` only where the read through `p`
+            // folds; otherwise the `[` is left to the enclosing grammar, as
+            // in the designation `&0[m]`.
+            let (cp, nonconst) = (self.init_checkpoint(), self.pending.const_expr_nonconst);
+            match self.parse_const_subscript(v) {
+                Ok(r) => v = r,
+                Err(_) => {
+                    self.restore_init_checkpoint(cp);
+                    self.pending.const_expr_nonconst = nonconst;
+                    break;
+                }
+            }
+        }
+        Ok(v)
+    }
+
+    /// Parse `[n]` after `base` and fold the element read.
+    fn parse_const_subscript(&mut self, base: ConstVal) -> Result<ConstVal, C5Error> {
+        self.next()?;
+        let n = self.parse_const_expr_cond_val()?;
+        if self.lex.tk != ']' {
+            return Err(
+                self.compile_err(Code::SYNTAX, "close bracket expected in constant subscript")
+            );
+        }
+        self.next()?;
+        self.read_const_pointee(base, n)
+    }
+
+    /// Fold `*(p + n)`, the value of `p[n]` or `n[p]` (C99 6.5.2.1p2): a
+    /// constant where `p` points into a string literal, as clang folds it,
+    /// or into an array compound literal, and the read has the literal's
+    /// element type. Any other read is not a constant.
+    fn read_const_pointee(&mut self, p: ConstVal, n: ConstVal) -> Result<ConstVal, C5Error> {
+        let (a, n) = match (p, n) {
+            (ConstVal::Addr(a), n) | (n, ConstVal::Addr(a)) if n.addr().is_none() => {
+                (a, n.as_int())
+            }
+            _ => return Err(self.nonconst_read()),
+        };
+        let lit = a
+            .root
+            .sym()
+            .filter(|&s| self.symbols[s].is_compound_literal);
+        let (Some(sym), Some(ty)) = (lit, a.pointee) else {
+            return Err(self.nonconst_read());
+        };
+        let ty = unqualified_version_ty(ty);
+        let size = (self.size_of_type(ty) as i64).max(1);
+        let at = a.value.wrapping_add(n.wrapping_mul(size));
+        let s = &self.symbols[sym];
+        if ty != unqualified_version_ty(s.type_)
+            || at < s.val
+            || at + size > s.val + s.data_byte_size
+        {
+            return Err(self.nonconst_read());
+        }
+        self.read_staged_const_element(ty, at, 0)
+    }
+
+    fn nonconst_read(&mut self) -> C5Error {
+        self.pending.const_expr_nonconst = true;
+        self.compile_err(
+            Code::CONSTANT_EXPRESSION,
+            "a read through this pointer is not a constant expression",
+        )
     }
 
     /// Whether `-fno-builtin` / `-ffreestanding` / `-fno-builtin-<name>`
@@ -1724,6 +1809,7 @@ impl Compiler {
             value: d.value,
             root: d.root,
             elem_size: (self.size_of_type(d.ty) as i64).max(1),
+            pointee: None,
         })
     }
 
@@ -1835,6 +1921,7 @@ impl Compiler {
         if self.static_duration_init > 0
             && self.in_function_body()
             && self.symbols[sym].is_compound_literal
+            && !self.symbols[sym].is_string_literal
         {
             return Err(self.compile_err(
                 Code::CONSTANT_EXPRESSION,
@@ -2045,27 +2132,16 @@ impl Compiler {
             return Ok(inner);
         }
         // A string literal is an unnamed array lvalue of static storage
-        // duration (C99 6.4.5p6), so `&"..."` and `"..."[i]` are address
-        // constants. The lexer appended the bytes to the data segment
-        // (`ival` is their start; adjacent literals concatenate, no
-        // terminator yet), so add the single trailing NUL and intern a
-        // synthetic internal symbol at the data so the address folds through
-        // the same relocation machinery a named array uses. `ty` is the
-        // element type (`char`), so an `[i]` suffix strides by one byte.
+        // duration, so `&"..."` and `"..."[i]` are address constants. `ty` is
+        // the element type, so an `[i]` suffix strides by one element.
         if self.lex.tk == '"' {
-            let off = self.lex.ival;
-            self.next()?;
-            while self.lex.tk == '"' {
-                self.next()?;
-            }
-            self.push_literal_nul();
-            let len = self.data.len() as i64 - off;
-            let sym = self.intern_compound_literal_symbol(off, Ty::Char as i64, len);
+            let (off, elem_ty, bytes) = self.stage_const_string()?;
+            let a = self.const_string_addr(off, elem_ty, bytes);
             return Ok(ConstDesig {
                 value: off,
-                ty: Ty::Char as i64,
+                ty: elem_ty,
                 is_lvalue: true,
-                root: ConstRoot::Data(sym),
+                root: a.root,
             });
         }
         // A named object -- a global, a function, or a libc-bound stub -- is an
@@ -2106,7 +2182,15 @@ impl Compiler {
         }
         // Any other primary is a plain constant value -- the integer such as
         // the `0` in `(T*)0` -- an rvalue that is neither pointer nor lvalue.
-        let v = self.parse_const_expr_unary_val()?;
+        // A literal is taken alone, so the chain above takes a following
+        // subscript as the `n[a]` designation.
+        let v = if self.lex.tk == Token::Num {
+            let (v, ty) = (self.lex.ival, self.num_token_type(self.lex.ival));
+            self.next()?;
+            self.const_int_of(v as i128, ty)
+        } else {
+            self.parse_const_expr_unary_val()?
+        };
         Ok(ConstDesig {
             value: v.as_int(),
             ty: v.int_ty(),
@@ -2149,6 +2233,38 @@ impl Compiler {
             || self.code_relocs.iter().any(|r| hit(r.data_offset))
             || self.extern_data_relocs.iter().any(|r| hit(r.data_offset))
             || self.pending_label_relocs.iter().any(|r| hit(r.data_offset))
+    }
+
+    /// Stage the string literal at the cursor as the unnamed static array it
+    /// designates (C99 6.4.5p5), its parts joined (6.4.5p4) and terminated,
+    /// and return its data offset, element type and size in bytes. The
+    /// element type follows the encoding prefix, plain `char` without one.
+    fn stage_const_string(&mut self) -> Result<(i64, i64, i64), C5Error> {
+        let off = self.lex.ival;
+        let wide = self.lex.str_is_wide;
+        let elem_ty = self.string_literal_elem_ty();
+        self.next()?;
+        while self.lex.tk == '"' {
+            self.next()?;
+        }
+        // The lexer terminates a wide literal and leaves a narrow one open.
+        if !wide {
+            self.push_literal_nul();
+        }
+        Ok((off, elem_ty, self.data.len() as i64 - off))
+    }
+
+    /// The address of a staged string literal: a relocation against a
+    /// synthetic symbol over its bytes, striding by one element.
+    fn const_string_addr(&mut self, off: i64, elem_ty: i64, bytes: i64) -> ConstAddr {
+        let sym = self.intern_compound_literal_symbol(off, elem_ty, bytes);
+        self.symbols[sym].is_string_literal = true;
+        ConstAddr {
+            value: off,
+            root: ConstRoot::Data(sym),
+            elem_size: (self.size_of_type(elem_ty) as i64).max(1),
+            pointee: Some(elem_ty),
+        }
     }
 
     /// The little-endian integer of type `ty` stored at `data[at..at + size]`:
@@ -2360,6 +2476,7 @@ impl Compiler {
                         value: base,
                         root,
                         elem_size: span * elem_size,
+                        pointee: (level + 1 == dims.len()).then_some(target_ty),
                     }));
                 }
                 // Parenthesized abstract declarator: `(*)(args)` (function
@@ -2415,6 +2532,7 @@ impl Compiler {
                     } else {
                         1
                     };
+                    a.pointee = ptr_target.then(|| pointee_ty(target_ty));
                     return Ok(ConstVal::Addr(a));
                 }
                 return Ok(if is_floating_ty(target_ty) {
@@ -2445,25 +2563,6 @@ impl Compiler {
                 );
             }
             self.next()?;
-            // `((T[]){...})[i]`: a subscript on a parenthesized array
-            // compound literal folds by reading the staged element back.
-            if self.lex.tk == Token::Brak
-                && let ConstVal::Addr(a) = v
-                && let Some(idx) = a.root.sym()
-                && self.symbols[idx].is_compound_literal
-            {
-                self.next()?;
-                let n = self.parse_const_expr_cond_val()?.as_int();
-                if self.lex.tk != ']' {
-                    return Err(self.compile_err(
-                        Code::SYNTAX,
-                        "close bracket expected in constant subscript",
-                    ));
-                }
-                self.next()?;
-                let elem_ty = self.symbols[idx].type_;
-                return self.read_staged_const_element(elem_ty, a.value, n);
-            }
             return Ok(v);
         }
         if self.lex.tk == Token::Num {
@@ -2475,54 +2574,11 @@ impl Compiler {
             return Ok(self.const_int_of(v as i128, ty));
         }
         if self.lex.tk == '"' {
-            // String literal in a constant expression -- evaluates
-            // to the address of the literal's first byte in the
-            // data segment. Adjacent literals concatenate per
-            // C99 6.4.5p5. Used by static initializers that
-            // subtract pointer offsets like
-            // `(char *)"..." - (char *)0`.
-            let addr = self.lex.ival;
-            let narrow = !self.lex.str_is_wide;
-            self.next()?;
-            while self.lex.tk == '"' {
-                self.next()?;
-            }
-            self.push_literal_nul();
-            // `"..."[i]` with a constant index reads the staged byte back
-            // (C99 6.4.5p6: the literal is a static char array), so the
-            // subscript is a constant value, not just the address constant
-            // the designation grammar folds. The bytes stay staged: an
-            // enclosing checkpoint may span them, so they cannot be
-            // reclaimed here.
-            if narrow && self.lex.tk == Token::Brak {
-                let len = self.data.len() as i64 - addr;
-                self.next()?;
-                let n = self.parse_const_expr_cond_val()?.as_int();
-                if self.lex.tk != ']' {
-                    return Err(self.compile_err(
-                        Code::SYNTAX,
-                        "close bracket expected in constant subscript",
-                    ));
-                }
-                self.next()?;
-                if n < 0 || n >= len {
-                    return Err(self.compile_err(
-                        Code::CONSTANT_EXPRESSION,
-                        format!("string subscript {n} out of bounds [0, {len})"),
-                    ));
-                }
-                return Ok(ConstVal::Int {
-                    val: self.data[(addr + n) as usize] as i8 as i128,
-                    ty: Ty::Char as i64,
-                });
-            }
-            // TODO: the address folds as a plain integer, so `"abc" + 1`
-            // loses its relocation in a static initializer and counts as
-            // a constant value for `__builtin_constant_p`.
-            return Ok(ConstVal::Int {
-                val: addr as i128,
-                ty: Ty::Ptr as i64,
-            });
+            // The array decays to the address of its first element
+            // (6.3.2.1p3), an address constant (6.6p9). The bytes stay
+            // staged: an enclosing checkpoint may span them.
+            let (off, elem_ty, bytes) = self.stage_const_string()?;
+            return Ok(ConstVal::Addr(self.const_string_addr(off, elem_ty, bytes)));
         }
         if self.lex.tk == Token::FloatNum {
             // Floating literal -- the lexer staged the f64 bit
@@ -2640,6 +2696,7 @@ impl Compiler {
                         value: self.symbols[idx].val,
                         root: ConstRoot::code_or_data(idx, is_fn),
                         elem_size,
+                        pointee: None,
                     }));
                 }
             }

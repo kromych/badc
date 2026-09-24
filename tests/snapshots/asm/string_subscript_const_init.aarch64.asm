@@ -16,7 +16,7 @@ Disassembly of section .text:
 <f>:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	ldrsb	x0, [x0]
+               	ldrb	w0, [x0]
                	cbz	x0, <addr>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
@@ -127,7 +127,7 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	ldrsb	x0, [x0]
+               	ldrb	w0, [x0]
                	cbz	x0, <addr>
                	mov	x0, #0x9                // =9
                	ret

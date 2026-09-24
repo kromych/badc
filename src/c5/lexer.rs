@@ -350,6 +350,7 @@ pub(crate) struct LexerSnapshot {
     char_prefix: StrPrefix,
     str_is_wide: bool,
     str_elem_bytes: usize,
+    str_prefix: StrPrefix,
 }
 
 /// Resolved (file, line) -> byte span answers; `None` when no run
@@ -462,6 +463,11 @@ pub(crate) struct Lexer {
     /// `wchar_bytes` for `L"..."`, 2 for `u"..."` (char16_t), 4 for
     /// `U"..."` (char32_t). Only meaningful when `str_is_wide` is set.
     pub str_elem_bytes: usize,
+
+    /// Encoding prefix of the most recent wide string literal, which fixes
+    /// its element type (C11 6.4.5p6). Only meaningful when `str_is_wide`
+    /// is set.
+    pub str_prefix: StrPrefix,
 
     /// Encoding prefix of the most recent `Token::Num` character
     /// constant. C11 6.4.4.4p2-p4 types each prefix separately -- `L'x'`
@@ -634,6 +640,7 @@ impl Lexer {
             float_suffix_f32: false,
             str_is_wide: false,
             str_elem_bytes: 4,
+            str_prefix: StrPrefix::None,
             char_prefix: StrPrefix::None,
             num_is_char: false,
             wchar_bytes: 4,
@@ -1102,6 +1109,7 @@ impl Lexer {
             self.tk = Tok('"' as i64);
             self.str_is_wide = true;
             self.str_elem_bytes = elem_bytes;
+            self.str_prefix = prefix;
             return Ok(());
         }
     }
@@ -1351,6 +1359,7 @@ impl Lexer {
             char_prefix: self.char_prefix,
             str_is_wide: self.str_is_wide,
             str_elem_bytes: self.str_elem_bytes,
+            str_prefix: self.str_prefix,
         }
     }
 
@@ -1373,6 +1382,7 @@ impl Lexer {
         self.char_prefix = s.char_prefix;
         self.str_is_wide = s.str_is_wide;
         self.str_elem_bytes = s.str_elem_bytes;
+        self.str_prefix = s.str_prefix;
     }
 
     /// True if the next non-whitespace byte is the start of a

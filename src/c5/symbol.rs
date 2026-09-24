@@ -571,6 +571,10 @@ pub(crate) struct Symbol {
     /// expression, matching gcc / clang).
     pub is_compound_literal: bool,
 
+    /// Set beside `is_compound_literal` for the array of a string literal,
+    /// which has static storage duration wherever it appears (C99 6.4.5p5).
+    pub is_string_literal: bool,
+
     /// True once the parser has emitted any reference to this
     /// symbol after its declaration -- a read, a write, an
     /// address-of, or a decay. Set by the expression parser's
@@ -884,6 +888,7 @@ impl crate::c5::layout::DataOffsets for Symbol {
             static_local_record: _,
             h_static_local_record: _, // scope-restore shadow
             is_compound_literal: _,
+            is_string_literal: _,
             was_referenced: _,
             was_read: _,
             was_written: _,

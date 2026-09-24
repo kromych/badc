@@ -39,15 +39,15 @@ Disassembly of section .text:
                	add	x2, x2, <lo12>
                	adrp	x3, <page>
                	add	x3, x3, <lo12>
-               	ldrb	w4, [x2, w0, sxtw]
+               	ldrb	w4, [x2, x0]
                	cbz	x4, <addr>
                	add	x4, x1, #0x8
-               	ldrb	w4, [x4, w0, sxtw]
-               	ldrb	w5, [x3, w0, sxtw]
+               	ldrb	w4, [x4, x0]
+               	ldrb	w5, [x3, x0]
                	cmp	w4, w5
                	b.ne	<addr>
                	add	x0, x0, #0x1
-               	ldrb	w4, [x2, w0, sxtw]
+               	ldrb	w4, [x2, x0]
                	cbnz	x4, <addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>

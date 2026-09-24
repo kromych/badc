@@ -20,7 +20,7 @@ fn ent_pc=1 n_params=1 variadic=false locals=32
     v15  Store { addr=v10, disp=0, value=v12, kind=I8, volatile } -> -
     v16  Extend { value=v5, kind=I32 }                    -> x1
     v17  BinopI { op=add, lhs=v5, rhs_imm=1 }             -> x0
-    v18  Imm(0)                                           -> x1
+    v18  Extend { value=v17, kind=I32, nsw }              -> x1
     terminator Jmp(b2)   (exit_acc=v17)
   block 2  start_pc=0
     v5   Phi { incoming=[b0:v3, b1:v17], kind=I64 }       -> x0

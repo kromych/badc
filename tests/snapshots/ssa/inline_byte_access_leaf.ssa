@@ -58,7 +58,7 @@ fn ent_pc=3 n_params=2 variadic=false locals=0
     v52  Imm(0)                                           -> x0
     v53  Imm(0)                                           -> x0
     v54  Imm(1)                                           -> x0
-    v55  Imm(0)                                           -> x0
+    v55  Imm(1)                                           -> x0
     v56  Imm(1)                                           -> x0
     v57  Imm(1)                                           -> x0
     v58  Imm(1)                                           -> x0
@@ -108,7 +108,7 @@ fn ent_pc=3 n_params=2 variadic=false locals=0
     v102 Imm(0)                                           -> x0
     v103 Imm(1)                                           -> x0
     v104 Imm(2)                                           -> x0
-    v105 Imm(0)                                           -> x0
+    v105 Imm(2)                                           -> x0
     v106 Imm(2)                                           -> x0
     v107 Imm(2)                                           -> x0
     v108 Imm(1)                                           -> x0
@@ -158,7 +158,7 @@ fn ent_pc=3 n_params=2 variadic=false locals=0
     v152 Imm(0)                                           -> x0
     v153 Imm(2)                                           -> x0
     v154 Imm(3)                                           -> x0
-    v155 Imm(0)                                           -> x0
+    v155 Imm(3)                                           -> x0
     v156 Imm(3)                                           -> x0
     v157 Imm(3)                                           -> x0
     v158 Imm(1)                                           -> x0
@@ -208,7 +208,7 @@ fn ent_pc=3 n_params=2 variadic=false locals=0
     v202 Imm(0)                                           -> x0
     v203 Imm(3)                                           -> x0
     v204 Imm(4)                                           -> x0
-    v205 Imm(0)                                           -> x0
+    v205 Imm(4)                                           -> x0
     v206 Imm(4)                                           -> x0
     v207 Imm(4)                                           -> x0
     v208 Imm(1)                                           -> x0
@@ -258,7 +258,7 @@ fn ent_pc=3 n_params=2 variadic=false locals=0
     v252 Imm(0)                                           -> x0
     v253 Imm(4)                                           -> x0
     v254 Imm(5)                                           -> x0
-    v255 Imm(0)                                           -> x0
+    v255 Imm(5)                                           -> x0
     v256 Imm(5)                                           -> x0
     v257 Imm(5)                                           -> x0
     v258 Imm(1)                                           -> x0
@@ -308,7 +308,7 @@ fn ent_pc=3 n_params=2 variadic=false locals=0
     v302 Imm(0)                                           -> x0
     v303 Imm(5)                                           -> x0
     v304 Imm(6)                                           -> x0
-    v305 Imm(0)                                           -> x0
+    v305 Imm(6)                                           -> x0
     v306 Imm(6)                                           -> x0
     v307 Imm(6)                                           -> x0
     v308 Imm(1)                                           -> x0
@@ -358,7 +358,7 @@ fn ent_pc=3 n_params=2 variadic=false locals=0
     v352 Imm(0)                                           -> x0
     v353 Imm(6)                                           -> x0
     v354 Imm(7)                                           -> x0
-    v355 Imm(0)                                           -> x0
+    v355 Imm(7)                                           -> x0
     v356 Imm(7)                                           -> x0
     v357 Imm(7)                                           -> x0
     v358 Imm(1)                                           -> x0
@@ -408,7 +408,7 @@ fn ent_pc=3 n_params=2 variadic=false locals=0
     v402 Imm(0)                                           -> x0
     v403 Imm(7)                                           -> x0
     v404 Imm(8)                                           -> x0
-    v405 Imm(0)                                           -> x0
+    v405 Imm(8)                                           -> x0
     v406 Imm(8)                                           -> x0
     v407 Imm(8)                                           -> x0
     v408 Imm(0)                                           -> x0

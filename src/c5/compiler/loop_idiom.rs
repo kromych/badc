@@ -797,6 +797,7 @@ impl Compiler {
                 lhs: lvalue,
                 rhs: by,
                 ty,
+                nsw: false,
             },
             pos,
         )

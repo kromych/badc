@@ -88,7 +88,7 @@ fn ent_pc=0 n_params=1 variadic=false locals=0
     v66  LifetimeEnd(0)                                   -> -
     v67  Extend { value=v11, kind=I32 }                   -> x0
     v68  BinopI { op=add, lhs=v11, rhs_imm=1 }            -> x8
-    v69  Imm(0)                                           -> x0
+    v69  Extend { value=v68, kind=I32, nsw }              -> x0
     terminator Jmp(b11)   (exit_acc=v68)
   block 11  start_pc=0
     v11  Phi { incoming=[b0:v9, b10:v68], kind=I64 }      -> x8

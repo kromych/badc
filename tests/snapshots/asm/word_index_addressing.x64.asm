@@ -119,12 +119,12 @@ Disassembly of section .text:
                	retq
 
 <sum_down>:
+               	movslq	%esi, %rsi
                	xorl	%eax, %eax
                	leaq	-0x1(%rsi), %rcx
                	testl	%ecx, %ecx
                	jl	<addr>
-               	movslq	%ecx, %rdx
-               	movswq	(%rdi,%rdx,2), %rdx
+               	movswq	(%rdi,%rcx,2), %rdx
                	addq	%rdx, %rax
                	decq	%rcx
                	testl	%ecx, %ecx

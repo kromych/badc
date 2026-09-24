@@ -457,6 +457,7 @@ fn run_one(func: &mut FunctionSsa) {
                     value,
                     kind,
                     volatile,
+                    ..
                 } => {
                     let off = *off;
                     let value = *value;
@@ -843,6 +844,7 @@ pub(crate) fn fold_const_loads(func: &mut FunctionSsa) -> bool {
                     value,
                     kind,
                     volatile,
+                    ..
                 } => {
                     table.clear();
                     slot_table.retain(|e| e.off != off);
@@ -1337,6 +1339,7 @@ mod tests {
                     value: 0,
                     kind: StoreKind::I64,
                     volatile: false,
+                    nsw: false,
                 },
                 Inst::LoadLocal {
                     off: -1,
@@ -1370,6 +1373,7 @@ mod tests {
                     value: 0,
                     kind: StoreKind::I64,
                     volatile: false,
+                    nsw: false,
                 },
                 Inst::Call {
                     target_pc: 0,
@@ -1415,6 +1419,7 @@ mod tests {
                     value: 0,
                     kind: StoreKind::I64,
                     volatile: false,
+                    nsw: false,
                 },
                 Inst::Store {
                     addr: 1,
@@ -1455,6 +1460,7 @@ mod tests {
                     value: 0,
                     kind: StoreKind::I64,
                     volatile: true,
+                    nsw: false,
                 },
                 Inst::LoadLocal {
                     off: -1,
@@ -1491,12 +1497,14 @@ mod tests {
                     value: 0,
                     kind: StoreKind::I64,
                     volatile: false,
+                    nsw: false,
                 },
                 Inst::StoreLocal {
                     off: -1,
                     value: 1,
                     kind: StoreKind::I64,
                     volatile: false,
+                    nsw: false,
                 },
                 Inst::LoadLocal {
                     off: -1,
@@ -1529,6 +1537,7 @@ mod tests {
                     value: 0,
                     kind: StoreKind::I32,
                     volatile: false,
+                    nsw: false,
                 },
                 Inst::LoadLocal {
                     off: -1,
@@ -1568,6 +1577,7 @@ mod tests {
                     value: 0,
                     kind: StoreKind::I64,
                     volatile: false,
+                    nsw: false,
                 },
                 Inst::Call {
                     target_pc: 0,
@@ -1776,6 +1786,7 @@ mod tests {
                 value: 2,
                 kind: StoreKind::I64,
                 volatile: false,
+                nsw: false,
             },
             Inst::Mcpy {
                 dst: 2,

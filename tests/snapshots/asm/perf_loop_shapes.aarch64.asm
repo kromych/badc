@@ -144,21 +144,19 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	mov	x2, #0x2                // =2
-               	sxtw	x1, w2
-               	ldrb	w1, [x0, x1]
-               	cbnz	w1, <addr>
                	mul	x1, x2, x2
+               	ldrb	w3, [x0, x2]
+               	cbnz	w3, <addr>
                	cmp	w1, #0x3e8
                	b.ge	<addr>
                	mov	x3, #0x1                // =1
-               	strb	w3, [x0, w1, sxtw]
+               	strb	w3, [x0, x1]
                	add	x1, x1, x2
                	cmp	w1, #0x3e8
                	b.lt	<addr>
                	add	x2, x2, #0x1
-               	sxtw	x1, w2
-               	mul	x3, x1, x1
-               	cmp	x3, #0x3e8
+               	mul	x1, x2, x2
+               	cmp	x1, #0x3e8
                	b.lt	<addr>
                	add	x0, x0, #0x2
                	mov	x1, #0x3e6              // =998

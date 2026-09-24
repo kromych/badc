@@ -567,9 +567,9 @@ pub struct CompileOptions {
     /// the implementation. `None` keeps the target ABI's own choice; see
     /// [`Self::plain_char_signed`], the sole resolution of the pair.
     pub char_signed: Option<bool>,
-    /// `-fwrapv` / `-fno-strict-overflow`: a signed `+ - *` or unary `-` is
-    /// defined to wrap at its type's width. Off, its overflow is undefined
-    /// (C99 6.5p5) and the result is marked so.
+    /// `-fwrapv` / `-fno-strict-overflow`: a signed `+ - *`, unary `-`,
+    /// `++` or `--` is defined to wrap at its type's width. Off, its
+    /// overflow is undefined (C99 6.5p5) and the result is marked so.
     pub wrapv: bool,
     /// `-ftrivial-auto-var-init=`: what an automatic object declared
     /// without an initializer holds on entry to its scope; see

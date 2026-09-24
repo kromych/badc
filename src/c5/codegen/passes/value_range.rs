@@ -9,7 +9,9 @@
 //! Two ranges bound each value. [`def_ranges`] is what the definition
 //! alone says, iterated to a settled table so a phi is
 //! bounded by the hull of what reaches it -- which is how a loop-carried
-//! state variable is bounded by the states it can hold. On top of that a
+//! state variable is bounded by the states it can hold, and under the
+//! [`iv`] facts ([`Ranges::compute_assuming`]) a counter's phi by its type.
+//! On top of that a
 //! range per expression is carried down the dominator tree: entering a
 //! block whose only predecessor ends in a conditional branch, the
 //! condition's comparison holds (or its negation does) on every path in,
@@ -46,6 +48,8 @@ use alloc::vec::Vec;
 use crate::c5::ir::{
     BinOp, BitCountOp, BlockId, FunctionSsa, Inst, LoadKind, StoreKind, Terminator, ValueId,
 };
+
+pub(crate) mod iv;
 
 /// Inclusive bounds on a value's 64-bit register contents, read as a
 /// signed integer. `i128` so intersection and the +-1 steps below cannot
@@ -369,6 +373,7 @@ fn stored_facts(
             value,
             kind,
             volatile: false,
+            ..
         } => (load_kinds_of_store(*kind), *value, &|k| {
             (6, 0, load_kind_code(k), *off)
         }),
@@ -1190,33 +1195,41 @@ fn sole_pred(preds: &[Vec<BlockId>], b: BlockId) -> Option<BlockId> {
     }
 }
 
+/// Dominator-tree entry / exit stamps per block, `u32::MAX` off the tree:
+/// `a` dominates `b` exactly when `tin[a] <= tin[b] && tout[b] <= tout[a]`.
+fn dom_stamps(func: &FunctionSsa) -> (Vec<u32>, Vec<u32>) {
+    let n = func.blocks.len();
+    let idom = crate::c5::codegen::ssa::mem2reg::dominators(func);
+    let mut children: Vec<Vec<BlockId>> = alloc::vec![Vec::new(); n];
+    for (b, &d) in idom.iter().enumerate().take(n).skip(1) {
+        if d != BlockId::MAX && (d as usize) != b {
+            children[d as usize].push(b as BlockId);
+        }
+    }
+    let (mut tin, mut tout) = (alloc::vec![u32::MAX; n], alloc::vec![0u32; n]);
+    let mut clock = 0u32;
+    let mut stack: Vec<(BlockId, bool)> = Vec::new();
+    if n > 0 {
+        stack.push((0, false));
+    }
+    while let Some((b, done)) = stack.pop() {
+        if done {
+            tout[b as usize] = clock;
+            continue;
+        }
+        tin[b as usize] = clock;
+        clock += 1;
+        stack.push((b, true));
+        stack.extend(children[b as usize].iter().map(|&c| (c, false)));
+    }
+    (tin, tout)
+}
+
 impl Guards {
     fn new(func: &FunctionSsa, numbers: &Numbering, params: &[Range]) -> Self {
         let n = func.blocks.len();
-        let idom = crate::c5::codegen::ssa::mem2reg::dominators(func);
         let preds = crate::c5::codegen::ssa::mem2reg::predecessors(func);
-        let mut children: Vec<Vec<BlockId>> = alloc::vec![Vec::new(); n];
-        for (b, &d) in idom.iter().enumerate().take(n).skip(1) {
-            if d != BlockId::MAX && (d as usize) != b {
-                children[d as usize].push(b as BlockId);
-            }
-        }
-        let (mut tin, mut tout) = (alloc::vec![u32::MAX; n], alloc::vec![0u32; n]);
-        let mut clock = 0u32;
-        let mut stack: Vec<(BlockId, bool)> = Vec::new();
-        if n > 0 {
-            stack.push((0, false));
-        }
-        while let Some((b, done)) = stack.pop() {
-            if done {
-                tout[b as usize] = clock;
-                continue;
-            }
-            tin[b as usize] = clock;
-            clock += 1;
-            stack.push((b, true));
-            stack.extend(children[b as usize].iter().map(|&c| (c, false)));
-        }
+        let (tin, tout) = dom_stamps(func);
         let mut on: hashbrown::HashMap<ValueId, Vec<(BlockId, Bound)>> = Default::default();
         for b in 0..n as BlockId {
             let Some(p) = sole_pred(&preds, b) else {
@@ -1266,9 +1279,19 @@ pub(crate) struct Ranges {
 
 impl Ranges {
     pub(crate) fn compute(func: &FunctionSsa, params: &[Range]) -> Self {
+        Self::compute_assuming(func, params, &[])
+    }
+
+    /// [`Self::compute`] with each value `assumed` names fitting its kind
+    /// over operands that fit it: bounds of a defined execution only.
+    pub(crate) fn compute_assuming(
+        func: &FunctionSsa,
+        params: &[Range],
+        assumed: &[Option<LoadKind>],
+    ) -> Self {
         let numbers = value_numbers(func);
         let guards = Guards::new(func, &numbers, params);
-        let def = settle(func, params, &numbers, &guards);
+        let def = settle(func, params, &numbers, &guards, assumed);
         Ranges {
             def,
             numbers,
@@ -1419,6 +1442,7 @@ fn settle(
     params: &[Range],
     numbers: &Numbering,
     guards: &Guards,
+    assumed: &[Option<LoadKind>],
 ) -> Vec<Range> {
     use alloc::collections::BinaryHeap;
     use core::cmp::Reverse;
@@ -1442,6 +1466,7 @@ fn settle(
         numbers,
         guards,
         block_of: &block_of,
+        assumed,
     };
     let (starts, readers) = reader_table(func);
     let mut cur: Vec<Option<Range>> = alloc::vec![None; n];
@@ -1491,6 +1516,7 @@ struct Rules<'a> {
     numbers: &'a Numbering,
     guards: &'a Guards,
     block_of: &'a [BlockId],
+    assumed: &'a [Option<LoadKind>],
 }
 
 impl Rules<'_> {
@@ -1535,18 +1561,42 @@ impl Rules<'_> {
                 .reduce(Range::hull),
             inst => {
                 let mut unreached = false;
+                let mut operands = assumed_imm(inst);
                 let r = eval(inst, self.params, |o| {
-                    seen(b, o).unwrap_or_else(|| {
+                    let r = seen(b, o).unwrap_or_else(|| {
                         unreached = true;
                         UNIVERSE
-                    })
+                    });
+                    operands = operands.hull(r);
+                    r
                 });
+                let r = match self
+                    .assumed
+                    .get(v)
+                    .copied()
+                    .flatten()
+                    .and_then(extend_range)
+                {
+                    Some(w) if w.contains(operands) => {
+                        let m = r.meet(w);
+                        if m.lo <= m.hi { m } else { w }
+                    }
+                    _ => r,
+                };
                 // A branch that read an earlier instance of this
                 // expression bounds this one too.
                 let r = self.guards.narrow(b, self.numbers.of(v as ValueId), r);
                 (!unreached && r.lo <= r.hi).then_some(r)
             }
         }
+    }
+}
+
+/// The immediate operand of `inst`, zero for an instruction without one.
+fn assumed_imm(inst: &Inst) -> Range {
+    match inst {
+        Inst::BinopI { rhs_imm, .. } => Range::exact(*rhs_imm),
+        _ => Range::exact(0),
     }
 }
 

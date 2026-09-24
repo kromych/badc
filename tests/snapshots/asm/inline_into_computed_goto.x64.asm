@@ -41,24 +41,22 @@ Disassembly of section .text:
                	movslq	(%rdi), %r8
                	movq	(%rdx,%r8,8), %rdx
                	jmpq	*%rdx
-               	movslq	%ecx, %rcx
                	leaq	0x1(%rcx), %rdx
                	movslq	(%rdi,%rcx,4), %rcx
                	movq	(%rsi,%rcx,8), %rcx
                	andq	$-0x4, %rcx
                	addq	%rcx, %rax
                	leaq	-0x18(%rbp), %r8
-               	movslq	%edx, %rdx
                	leaq	0x1(%rdx), %rcx
                	movslq	(%rdi,%rdx,4), %rdx
                	movq	(%r8,%rdx,8), %rdx
                	jmpq	*%rdx
                	addq	%rax, %rax
-               	leaq	-0x18(%rbp), %r8
-               	movslq	%ecx, %rdx
-               	leaq	0x1(%rdx), %rcx
-               	movslq	(%rdi,%rdx,4), %rdx
-               	movq	(%r8,%rdx,8), %rdx
+               	leaq	-0x18(%rbp), %rdx
+               	leaq	0x1(%rcx), %r8
+               	movslq	(%rdi,%rcx,4), %rcx
+               	movq	(%rdx,%rcx,8), %rdx
+               	movq	%r8, %rcx
                	jmpq	*%rdx
                	leave
                	retq

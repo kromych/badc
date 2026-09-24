@@ -26,40 +26,38 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	leaq	<rip>, %rdx
-               	movzbq	0x8(%rdx), %rax
+               	leaq	<rip>, %rcx
+               	movzbq	0x8(%rcx), %rax
                	xorq	$0x6e, %rax
                	testl	%eax, %eax
                	jne	<addr>
-               	movzbq	0x9(%rdx), %rax
+               	movzbq	0x9(%rcx), %rax
                	xorq	$0x5f, %rax
                	testl	%eax, %eax
                	jne	<addr>
-               	movzbq	0xf(%rdx), %rax
+               	movzbq	0xf(%rcx), %rax
                	xorq	$0x73, %rax
                	testl	%eax, %eax
                	je	<addr>
                	movl	$0x1, %eax
                	retq
-               	cmpb	$0x0, 0x10(%rdx)
+               	cmpb	$0x0, 0x10(%rcx)
                	je	<addr>
                	movl	$0x2, %eax
                	retq
                	xorl	%eax, %eax
+               	leaq	<rip>, %rdx
                	leaq	<rip>, %rsi
-               	leaq	<rip>, %rdi
-               	movslq	%eax, %rcx
-               	cmpb	$0x0, (%rsi,%rcx)
+               	cmpb	$0x0, (%rdx,%rax)
                	je	<addr>
-               	leaq	0x8(%rdx), %r8
-               	movzbq	(%r8,%rcx), %r8
-               	movsbq	(%rdi,%rcx), %rcx
-               	andq	$0xff, %rcx
-               	cmpl	%ecx, %r8d
+               	leaq	0x8(%rcx), %rdi
+               	movzbq	(%rdi,%rax), %rdi
+               	movsbq	(%rsi,%rax), %r8
+               	andq	$0xff, %r8
+               	cmpl	%r8d, %edi
                	jne	<addr>
                	incq	%rax
-               	movslq	%eax, %rcx
-               	cmpb	$0x0, (%rsi,%rcx)
+               	cmpb	$0x0, (%rdx,%rax)
                	jne	<addr>
                	leaq	<rip>, %rax
                	movsbq	(%rax), %rcx

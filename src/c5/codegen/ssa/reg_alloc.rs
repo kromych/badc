@@ -5419,6 +5419,7 @@ int main(void) { return 0; }
             value,
             kind: StoreKind::I64,
             volatile: false,
+            nsw: false,
         }
     }
 
@@ -5528,6 +5529,7 @@ int main(void) { return 0; }
                         value: 13,
                         kind: StoreKind::I32,
                         volatile: true,
+                        nsw: false,
                     },
                     store_kind(0, 13, StoreKind::I64),
                 ],

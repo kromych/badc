@@ -65,7 +65,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=35
     v25  CallExt { binding_idx=48, args=[v20], fp_arg_mask=0x0 } -> x0
     v26  Imm(0)                                           -> x0
     v27  Imm(1)                                           -> x0
-    v28  Imm(0)                                           -> x0
+    v28  Imm(1)                                           -> x0
     v29  Imm(1)                                           -> x0
     v30  Imm(1)                                           -> x0
     v31  LocalAddr(-32)                                   -> x7
@@ -86,7 +86,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=35
     v44  CallExt { binding_idx=48, args=[v39], fp_arg_mask=0x0 } -> x0
     v45  Imm(1)                                           -> x0
     v46  Imm(2)                                           -> x0
-    v47  Imm(0)                                           -> x0
+    v47  Imm(2)                                           -> x0
     v48  Imm(2)                                           -> x0
     v49  Imm(1)                                           -> x0
     v50  LocalAddr(-32)                                   -> x7
@@ -107,7 +107,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=35
     v63  CallExt { binding_idx=48, args=[v58], fp_arg_mask=0x0 } -> x0
     v64  Imm(2)                                           -> x0
     v65  Imm(3)                                           -> x0
-    v66  Imm(0)                                           -> x0
+    v66  Imm(3)                                           -> x0
     v67  Imm(3)                                           -> x0
     v68  Imm(0)                                           -> x0
     v69  LocalAddr(-35)                                   -> x7

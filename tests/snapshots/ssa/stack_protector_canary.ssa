@@ -129,11 +129,11 @@ fn ent_pc=10 n_params=1 variadic=true locals=6
     v22  Intrinsic { kind=VaArg, args=[v20, v21] }        -> x2
     v23  Load { addr=v22, disp=0, kind=I32 }              -> x2
     v24  Binop { op=add, lhs=v15, rhs=v23 }               -> x1
-    v25  Imm(0)                                           -> x2
+    v25  Extend { value=v24, kind=I32, nsw }              -> x2
     v26  Extend { value=v24, kind=I32 }                   -> x2
     v27  Extend { value=v14, kind=I32 }                   -> x2
     v28  BinopI { op=add, lhs=v14, rhs_imm=1 }            -> x0
-    v29  Imm(0)                                           -> x2
+    v29  Extend { value=v28, kind=I32, nsw }              -> x2
     terminator Jmp(b2)   (exit_acc=v28)
   block 2  start_pc=0
     v14  Phi { incoming=[b0:v11, b1:v28], kind=I64 }      -> x0

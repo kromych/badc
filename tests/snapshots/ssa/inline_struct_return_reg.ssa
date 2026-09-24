@@ -27,7 +27,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=8
     v22  StoreIndexed { base=v9, index=v6, scale=8, value=v17, kind=I64 } -> -
     v23  Extend { value=v6, kind=I32 }                    -> x2
     v24  BinopI { op=add, lhs=v6, rhs_imm=1 }             -> x0
-    v25  Imm(0)                                           -> x2
+    v25  Extend { value=v24, kind=I32, nsw }              -> x2
     terminator Jmp(b2)   (exit_acc=v24)
   block 2  start_pc=0
     v6   Phi { incoming=[b0:v4, b1:v24], kind=I64 }       -> x0
@@ -50,7 +50,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=8
     v38  Imm(0)                                           -> x2
     v39  Imm(0)                                           -> x2
     v40  Imm(1)                                           -> x2
-    v41  Imm(0)                                           -> x2
+    v41  Imm(1)                                           -> x2
     v42  Imm(1)                                           -> x2
     v43  Imm(1)                                           -> x2
     v44  Imm(0)                                           -> x2
@@ -63,7 +63,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=8
     v51  Imm(0)                                           -> x2
     v52  Imm(1)                                           -> x2
     v53  Imm(2)                                           -> x2
-    v54  Imm(0)                                           -> x2
+    v54  Imm(2)                                           -> x2
     v55  Imm(2)                                           -> x2
     v56  Imm(1)                                           -> x2
     v57  Imm(0)                                           -> x2
@@ -76,7 +76,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=8
     v64  Imm(0)                                           -> x2
     v65  Imm(2)                                           -> x2
     v66  Imm(3)                                           -> x2
-    v67  Imm(0)                                           -> x2
+    v67  Imm(3)                                           -> x2
     v68  Imm(3)                                           -> x2
     v69  Imm(1)                                           -> x2
     v70  Imm(0)                                           -> x2
@@ -89,7 +89,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=8
     v77  Imm(0)                                           -> x1
     v78  Imm(3)                                           -> x1
     v79  Imm(4)                                           -> x1
-    v80  Imm(0)                                           -> x1
+    v80  Imm(4)                                           -> x1
     v81  Imm(4)                                           -> x1
     v82  Imm(0)                                           -> x1
     v83  Imm(85)                                          -> x1

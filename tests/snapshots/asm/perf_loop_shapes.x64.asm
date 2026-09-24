@@ -157,23 +157,20 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	movl	$0x2, %ecx
-               	movslq	%ecx, %rax
-               	cmpb	$0x0, (%rdi,%rax)
-               	jne	<addr>
                	movq	%rcx, %rax
                	imulq	%rcx, %rax
+               	cmpb	$0x0, (%rdi,%rcx)
+               	jne	<addr>
                	cmpl	$0x3e8, %eax            # imm = 0x3E8
                	jge	<addr>
-               	movslq	%eax, %rdx
-               	movb	$0x1, (%rdi,%rdx)
+               	movb	$0x1, (%rdi,%rax)
                	addq	%rcx, %rax
                	cmpl	$0x3e8, %eax            # imm = 0x3E8
                	jl	<addr>
                	incq	%rcx
-               	movslq	%ecx, %rax
-               	movq	%rax, %rdx
-               	imulq	%rax, %rdx
-               	cmpq	$0x3e8, %rdx            # imm = 0x3E8
+               	movq	%rcx, %rax
+               	imulq	%rcx, %rax
+               	cmpq	$0x3e8, %rax            # imm = 0x3E8
                	jl	<addr>
                	addq	$0x2, %rdi
                	movl	$0x3e6, %esi            # imm = 0x3E6

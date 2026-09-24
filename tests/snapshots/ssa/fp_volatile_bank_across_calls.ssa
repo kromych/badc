@@ -407,7 +407,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
   block 6  start_pc=0
     v73  Imm(0)                                           -> x0
     v74  Imm(1)                                           -> x0
-    v75  Imm(0)                                           -> x0
+    v75  Imm(1)                                           -> x0
     v76  Imm(1)                                           -> x0
     v77  Imm(64)                                          -> x0
     v78  Imm(16)                                          -> x0
@@ -490,7 +490,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
   block 10  start_pc=0
     v146 Imm(1)                                           -> x0
     v147 Imm(2)                                           -> x0
-    v148 Imm(0)                                           -> x0
+    v148 Imm(2)                                           -> x0
     v149 Imm(2)                                           -> x0
     v150 Imm(64)                                          -> x0
     v151 Imm(16)                                          -> x0
@@ -573,7 +573,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
   block 14  start_pc=0
     v219 Imm(2)                                           -> x0
     v220 Imm(3)                                           -> x0
-    v221 Imm(0)                                           -> x0
+    v221 Imm(3)                                           -> x0
     v222 Imm(3)                                           -> x0
     v223 Imm(64)                                          -> x0
     v224 Imm(16)                                          -> x0
@@ -656,7 +656,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
   block 18  start_pc=0
     v292 Imm(3)                                           -> x0
     v293 Imm(4)                                           -> x0
-    v294 Imm(0)                                           -> x0
+    v294 Imm(4)                                           -> x0
     v295 Imm(4)                                           -> x0
     v296 Imm(64)                                          -> x0
     v297 Imm(16)                                          -> x0

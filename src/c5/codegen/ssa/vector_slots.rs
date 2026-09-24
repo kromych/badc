@@ -83,6 +83,7 @@ fn slot_store(off: i64, value: ValueId) -> Inst {
         value,
         kind: StoreKind::V128,
         volatile: false,
+        nsw: false,
     }
 }
 

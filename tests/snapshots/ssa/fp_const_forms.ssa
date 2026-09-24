@@ -182,7 +182,7 @@ fn ent_pc=12 n_params=1 variadic=false locals=0
   block 2  start_pc=0
     v11  Extend { value=v6, kind=I32 }                    -> x0
     v12  BinopI { op=add, lhs=v6, rhs_imm=1 }             -> x3
-    v13  Imm(0)                                           -> x0
+    v13  Extend { value=v12, kind=I32, nsw }              -> x0
     terminator Jmp(b3)   (exit_acc=v12)
   block 3  start_pc=0
     v6   Phi { incoming=[b0:v3, b2:v12], kind=I64 }       -> x3

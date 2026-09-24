@@ -555,6 +555,7 @@ fn walk_block(
                 value,
                 kind,
                 volatile,
+                ..
             } => {
                 let a = off.wrapping_mul(8);
                 let w = store_width(*kind);

@@ -541,9 +541,22 @@ impl RmwPlace {
     }
 
     pub(super) fn store(&self, b: &mut SsaBuilder, value: ValueId, kind: StoreKind, vol: bool) {
+        self.store_marked(b, value, kind, vol, false);
+    }
+
+    /// [`Self::store`] of a value whose overflow is undefined when `nsw`,
+    /// which a local slot records (see [`Inst::StoreLocal`]).
+    pub(super) fn store_marked(
+        &self,
+        b: &mut SsaBuilder,
+        value: ValueId,
+        kind: StoreKind,
+        vol: bool,
+        nsw: bool,
+    ) {
         match *self {
             RmwPlace::Slot(off) => {
-                b.store_local_vol(off, value, kind, vol);
+                b.store_local_marked(off, value, kind, vol, nsw);
             }
             RmwPlace::Addr { addr, seg, align } => {
                 store_place(b, addr, value, kind, seg, vol, align);

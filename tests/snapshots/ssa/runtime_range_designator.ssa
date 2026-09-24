@@ -108,7 +108,7 @@ fn ent_pc=1 n_params=1 variadic=false locals=9
   block 4  start_pc=0
     v91  Extend { value=v88, kind=I32 }                   -> x2
     v92  BinopI { op=add, lhs=v88, rhs_imm=1 }            -> x0
-    v93  Imm(0)                                           -> x2
+    v93  Extend { value=v92, kind=I32, nsw }              -> x2
     terminator Jmp(b5)   (exit_acc=v92)
   block 5  start_pc=0
     v88  Phi { incoming=[b2:v86, b4:v92], kind=I64 }      -> x0
@@ -826,7 +826,7 @@ fn ent_pc=5 n_params=1 variadic=false locals=9
   block 4  start_pc=0
     v92  Extend { value=v89, kind=I32 }                   -> x2
     v93  BinopI { op=add, lhs=v89, rhs_imm=1 }            -> x0
-    v94  Imm(0)                                           -> x2
+    v94  Extend { value=v93, kind=I32, nsw }              -> x2
     terminator Jmp(b5)   (exit_acc=v93)
   block 5  start_pc=0
     v89  Phi { incoming=[b2:v87, b4:v93], kind=I64 }      -> x0

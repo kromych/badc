@@ -30,24 +30,22 @@ Disassembly of section .text:
                	ldrsw	x5, [x4]
                	ldr	x3, [x3, x5, lsl #3]
                	br	x3
-               	sxtw	x2, w2
                	add	x3, x2, #0x1
                	ldrsw	x2, [x4, x2, lsl #2]
                	ldr	x2, [x1, x2, lsl #3]
                	and	x2, x2, #0xfffffffffffffffc
                	add	x0, x0, x2
                	sub	x5, x29, #0x18
-               	sxtw	x3, w3
                	add	x2, x3, #0x1
                	ldrsw	x3, [x4, x3, lsl #2]
                	ldr	x3, [x5, x3, lsl #3]
                	br	x3
                	add	x0, x0, x0
-               	sub	x5, x29, #0x18
-               	sxtw	x3, w2
-               	add	x2, x3, #0x1
-               	ldrsw	x3, [x4, x3, lsl #2]
-               	ldr	x3, [x5, x3, lsl #3]
+               	sub	x3, x29, #0x18
+               	add	x5, x2, #0x1
+               	ldrsw	x2, [x4, x2, lsl #2]
+               	ldr	x3, [x3, x2, lsl #3]
+               	mov	x2, x5
                	br	x3
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10

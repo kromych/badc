@@ -2815,6 +2815,7 @@ fn splice_multi_block(
                 value,
                 kind: StoreKind::I64,
                 volatile: false,
+                nsw: false,
             });
             new_inst_src.push((0, 0));
             new_f32.push(false);
@@ -3064,6 +3065,7 @@ fn splice_multi_block(
                         value,
                         kind,
                         volatile,
+                        ..
                     } if *off < 0 || param_cell_reloc.contains_key(off) => {
                         let off = if *off < 0 {
                             off - region_base
@@ -3076,6 +3078,7 @@ fn splice_multi_block(
                             value: map_v(*value, &callee_remap),
                             kind: *kind,
                             volatile: *volatile,
+                            nsw: false,
                         });
                         new_inst_src.push((0, 0));
                         new_f32.push(false);
@@ -4481,6 +4484,7 @@ mod tests {
                 value: 0,
                 kind: StoreKind::I64,
                 volatile: false,
+                nsw: false,
             },
             call_to(inner_pc),
             Inst::LoadLocal {
@@ -4644,6 +4648,7 @@ mod tests {
                 value: 0,
                 kind: StoreKind::I64,
                 volatile: false,
+                nsw: false,
             },
             Inst::Imm(0x4000),
             Inst::CallIndirect {
@@ -4918,6 +4923,7 @@ mod tests {
                         value: 0,
                         kind: StoreKind::I64,
                         volatile: true,
+                        nsw: false,
                     },
                 ]
             })
@@ -5703,6 +5709,7 @@ mod tests {
                         value: 0,
                         kind: StoreKind::I32,
                         volatile,
+                        nsw: false,
                     },
                     Inst::Imm(4),
                 ],
@@ -5765,6 +5772,7 @@ mod tests {
                     value: 0,
                     kind: StoreKind::I64,
                     volatile: false,
+                    nsw: false,
                 });
             }
             let addr = insts.len() as u32;
@@ -6180,6 +6188,7 @@ mod tests {
                     value: 0,
                     kind: StoreKind::I64,
                     volatile: false,
+                    nsw: false,
                 },
                 Inst::LoadLocal {
                     off: 3,
@@ -6274,6 +6283,7 @@ mod tests {
                 value: 3,
                 kind: StoreKind::I64,
                 volatile: false,
+                nsw: false,
             }),
         );
         let used = value_use_mask(&written);
@@ -6310,6 +6320,7 @@ mod tests {
                 value: 3,
                 kind: StoreKind::F64,
                 volatile: false,
+                nsw: false,
             }),
         );
         let used = value_use_mask(&fp);
@@ -6343,6 +6354,7 @@ mod tests {
                 value: 1,
                 kind: StoreKind::I64,
                 volatile: false,
+                nsw: false,
             },
             Inst::LoadLocal {
                 off: 2,
@@ -6424,7 +6436,7 @@ mod tests {
                     off,
                     value,
                     kind: StoreKind::I64,
-                    volatile: false,
+                    volatile: false, ..
                 } => {
                     if matches!(caller.insts.get(*value as usize), Some(Inst::Imm(k)) if *k == 41 || *k == 7)
                     {

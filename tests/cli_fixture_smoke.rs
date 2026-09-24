@@ -495,6 +495,8 @@ const LINKED_IMAGE_RUN_FIXTURES: &[(&str, i32)] = &[
     ("address_constant_array_strides.c", 0),
     ("const_object_address_read.c", 0),
     ("const_bit_field_read.c", 0),
+    ("induction_variable_steps.c", 0),
+    ("wrap_signed.c", 0),
 ];
 
 /// The sweep's target for this host, or `None` when the host cannot
@@ -526,12 +528,14 @@ fn linked_image_fixtures_run_on_the_native_target() {
 
     let mut failures: Vec<String> = Vec::new();
     for (name, expected) in LINKED_IMAGE_RUN_FIXTURES {
+        let pinned = snapshot_flags(&dir.join(name));
         for (tag, flags) in [("-O0", &[][..]), ("-O", &["-O"][..])] {
             let stem = name.trim_end_matches(".c");
             let out = tmp_root.join(format!("{stem}{tag}"));
             let built = Command::new(badc)
                 .arg(format!("--target={target}"))
                 .args(flags)
+                .args(&pinned)
                 .arg("-o")
                 .arg(&out)
                 .arg(dir.join(name))

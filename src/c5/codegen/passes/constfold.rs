@@ -1823,6 +1823,7 @@ mod tests {
                 value: 2,
                 kind: crate::c5::ir::StoreKind::I64,
                 volatile: false,
+                nsw: false,
             },
         ]);
         run_one(&mut f);
@@ -1858,6 +1859,7 @@ mod tests {
                 value: 2,
                 kind: crate::c5::ir::StoreKind::I64,
                 volatile: false,
+                nsw: false,
             },
         ]);
         run_one(&mut f);
@@ -1895,6 +1897,7 @@ mod tests {
                 value: 4,
                 kind: crate::c5::ir::StoreKind::I64,
                 volatile: false,
+                nsw: false,
             },
         ]);
         run_one(&mut f);

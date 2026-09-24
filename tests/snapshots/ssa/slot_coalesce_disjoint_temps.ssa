@@ -79,7 +79,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v73  Binop { op=add, lhs=v70, rhs=v42 }               -> x1
     v74  Extend { value=v73, kind=I32, nsw }              -> x2
     v75  Binop { op=add, lhs=v7, rhs=v73 }                -> x7
-    v76  Imm(0)                                           -> x1
+    v76  Extend { value=v75, kind=I32, nsw }              -> x1
     v77  Extend { value=v75, kind=I32 }                   -> x1
     v78  Extend { value=v5, kind=I32 }                    -> x1
     v79  BinopI { op=and, lhs=v5, rhs_imm=1 }             -> x1
@@ -176,11 +176,11 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v130 Binop { op=add, lhs=v127, rhs=v101 }             -> x1
     v131 Extend { value=v130, kind=I32, nsw }             -> x2
     v132 Binop { op=add, lhs=v6, rhs=v130 }               -> x6
-    v133 Imm(0)                                           -> x1
+    v133 Extend { value=v132, kind=I32, nsw }             -> x1
     v134 Extend { value=v132, kind=I32 }                  -> x1
     v135 Extend { value=v5, kind=I32 }                    -> x1
     v136 BinopI { op=add, lhs=v5, rhs_imm=1 }             -> x0
-    v137 Imm(0)                                           -> x1
+    v137 Extend { value=v136, kind=I32, nsw }             -> x1
     terminator Jmp(b24)   (exit_acc=v136)
   block 24  start_pc=0
     v5   Phi { incoming=[b0:v1, b23:v136], kind=I64 }     -> x0

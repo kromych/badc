@@ -123,7 +123,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     v68  Imm(0)                                           -> x1
     v69  Extend { value=v19, kind=I32 }                   -> x1
     v70  BinopI { op=add, lhs=v19, rhs_imm=1 }            -> x3
-    v71  Imm(0)                                           -> x1
+    v71  Extend { value=v70, kind=I32, nsw }              -> x1
     terminator Jmp(b2)   (exit_acc=v70)
   block 2  start_pc=0
     v19  Phi { incoming=[b0:v17, b1:v70], kind=I64 }      -> x3

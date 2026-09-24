@@ -201,7 +201,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
   block 24  start_pc=0
     v146 Imm(0)                                           -> x0
     v147 Imm(1)                                           -> x0
-    v148 Imm(0)                                           -> x0
+    v148 Imm(1)                                           -> x0
     v149 Imm(1)                                           -> x0
     v150 Imm(1)                                           -> x0
     v151 ImmData(128)                                     -> x0
@@ -232,7 +232,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
   block 26  start_pc=0
     v173 Imm(1)                                           -> x0
     v174 Imm(2)                                           -> x0
-    v175 Imm(0)                                           -> x0
+    v175 Imm(2)                                           -> x0
     v176 Imm(2)                                           -> x0
     v177 Imm(1)                                           -> x0
     v178 ImmData(128)                                     -> x0
@@ -263,7 +263,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
   block 28  start_pc=0
     v200 Imm(2)                                           -> x1
     v201 Imm(3)                                           -> x1
-    v202 Imm(0)                                           -> x1
+    v202 Imm(3)                                           -> x1
     v203 Imm(3)                                           -> x1
     v204 Imm(1)                                           -> x1
     v205 ImmData(128)                                     -> x1
@@ -294,7 +294,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
   block 30  start_pc=0
     v227 Imm(3)                                           -> x1
     v228 Imm(4)                                           -> x1
-    v229 Imm(0)                                           -> x1
+    v229 Imm(4)                                           -> x1
     v230 Imm(4)                                           -> x1
     v231 Imm(0)                                           -> x1
     v232 ImmData(64)                                      -> x1

@@ -26,13 +26,13 @@ Disassembly of section .text:
                	int3
 
 <sum_at_high>:
+               	movslq	%esi, %rsi
                	movslq	%edx, %rdx
                	movslq	(%rdi,%rdx,4), %r8
                	xorl	%eax, %eax
                	cmpl	%edx, %esi
                	jg	<addr>
-               	movslq	%esi, %rcx
-               	movslq	(%rdi,%rcx,4), %rcx
+               	movslq	(%rdi,%rsi,4), %rcx
                	addq	%rcx, %rax
                	incq	%rsi
                	cmpl	%edx, %esi

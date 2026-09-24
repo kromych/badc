@@ -3212,9 +3212,19 @@ impl Compiler {
         let src = self.ast_src_pos();
         let expr = if postfix {
             self.next()?;
-            super::super::ast::Expr::PostInc { lvalue, by, ty }
+            super::super::ast::Expr::PostInc {
+                lvalue,
+                by,
+                ty,
+                nsw: false,
+            }
         } else {
-            super::super::ast::Expr::PreInc { lvalue, by, ty }
+            super::super::ast::Expr::PreInc {
+                lvalue,
+                by,
+                ty,
+                nsw: false,
+            }
         };
         let id = self.ast.push_expr(expr, src);
         self.ast_acc = Some(id);
@@ -3664,6 +3674,7 @@ impl Compiler {
                 lhs: lhs_node,
                 rhs: rhs_node,
                 ty: lhs_ty,
+                nsw: false,
             },
             pos,
         );
@@ -3766,7 +3777,16 @@ impl Compiler {
         }
         if let (Some(lhs), Some(rhs)) = (compound_lhs_ast, compound_rhs_ast) {
             let ca_ty = self.ty;
-            self.ast_emit_compound_assign(bop, lhs, rhs, ca_ty);
+            // The operation is performed in the lvalue's own type, or the
+            // store back is a conversion rather than an overflow.
+            let common =
+                (!op_is_fp && !is_pointer_ty(lhs_ty)).then(|| self.arith_common_ty(lhs_ty, rhs_ty));
+            let nsw = common.is_some_and(|c| {
+                self.overflow_undefined(bop, c)
+                    && self.overflow_undefined(bop, lhs_ty)
+                    && self.size_of_type(c) == self.size_of_type(lhs_ty)
+            });
+            self.ast_emit_compound_assign(bop, lhs, rhs, ca_ty, nsw);
         }
         Ok(())
     }
@@ -4884,6 +4904,7 @@ impl Compiler {
                         lvalue,
                         by,
                         ty: bf_field_ty,
+                        nsw: false,
                     },
                     src,
                 );

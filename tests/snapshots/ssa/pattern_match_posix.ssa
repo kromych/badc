@@ -40,7 +40,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=10
   block 2  start_pc=0
     v15  Extend { value=v11, kind=I32 }                   -> x0
     v16  BinopI { op=add, lhs=v11, rhs_imm=1 }            -> x3
-    v17  Imm(0)                                           -> x0
+    v17  Extend { value=v16, kind=I32, nsw }              -> x0
     terminator Jmp(b3)   (exit_acc=v16)
   block 3  start_pc=0
     v11  Phi { incoming=[b0:v9, b2:v16], kind=I64 }       -> x3
@@ -203,7 +203,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=10
     v211 LifetimeEnd(-10)                                 -> -
     v212 Extend { value=v45, kind=I32 }                   -> x0
     v213 BinopI { op=add, lhs=v45, rhs_imm=1 }            -> x3
-    v214 Imm(0)                                           -> x0
+    v214 Extend { value=v213, kind=I32, nsw }             -> x0
     terminator Jmp(b16)   (exit_acc=v213)
   block 16  start_pc=0
     v45  Phi { incoming=[b4:v38, b15:v213], kind=I64 }    -> x3

@@ -33,7 +33,7 @@ fn ent_pc=0 n_params=1 variadic=true locals=3
     v30  LifetimeEnd(0)                                   -> -
     v31  Extend { value=v7, kind=I32 }                    -> x2
     v32  BinopI { op=add, lhs=v7, rhs_imm=1 }             -> x0
-    v33  Imm(0)                                           -> x2
+    v33  Extend { value=v32, kind=I32, nsw }              -> x2
     terminator Jmp(b2)   (exit_acc=v32)
   block 2  start_pc=0
     v7   Phi { incoming=[b0:v4, b1:v32], kind=I64 }       -> x0

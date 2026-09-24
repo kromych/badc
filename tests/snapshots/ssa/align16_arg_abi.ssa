@@ -434,7 +434,7 @@ fn ent_pc=11 n_params=1 variadic=true locals=3
     v22  Imm(0)                                           -> x2
     v23  Extend { value=v7, kind=I32 }                    -> x2
     v24  BinopI { op=add, lhs=v7, rhs_imm=1 }             -> x2
-    v25  Imm(0)                                           -> x2
+    v25  Extend { value=v18, kind=I32, nsw }              -> x2
     terminator Jmp(b2)   (exit_acc=v18)
   block 2  start_pc=0
     v7   Phi { incoming=[b0:v1, b1:v18], kind=I64 }       -> x0

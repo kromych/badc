@@ -64,7 +64,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=25
     v58  Store { addr=v46, disp=0, value=v57, kind=I64 }  -> -
     v59  Imm(0)                                           -> x0
     v60  Imm(1)                                           -> x0
-    v61  Imm(0)                                           -> x0
+    v61  Imm(1)                                           -> x0
     v62  Imm(1)                                           -> x0
     v63  Imm(1)                                           -> x0
     v64  Imm(0)                                           -> x0
@@ -76,7 +76,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=25
     v70  Store { addr=v46, disp=8, value=v69, kind=I64 }  -> -
     v71  Imm(1)                                           -> x0
     v72  Imm(2)                                           -> x0
-    v73  Imm(0)                                           -> x0
+    v73  Imm(2)                                           -> x0
     v74  Imm(2)                                           -> x0
     v75  Imm(1)                                           -> x0
     v76  Imm(0)                                           -> x0
@@ -88,7 +88,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=25
     v82  Store { addr=v46, disp=16, value=v81, kind=I64 } -> -
     v83  Imm(2)                                           -> x0
     v84  Imm(3)                                           -> x0
-    v85  Imm(0)                                           -> x0
+    v85  Imm(3)                                           -> x0
     v86  Imm(3)                                           -> x0
     v87  Imm(1)                                           -> x0
     v88  Imm(0)                                           -> x0
@@ -100,7 +100,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=25
     v94  Store { addr=v46, disp=24, value=v93, kind=I64 } -> -
     v95  Imm(3)                                           -> x0
     v96  Imm(4)                                           -> x0
-    v97  Imm(0)                                           -> x0
+    v97  Imm(4)                                           -> x0
     v98  Imm(4)                                           -> x0
     v99  Imm(1)                                           -> x0
     v100 Imm(0)                                           -> x0
@@ -112,7 +112,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=25
     v106 Store { addr=v46, disp=32, value=v105, kind=I64 } -> -
     v107 Imm(4)                                           -> x0
     v108 Imm(5)                                           -> x0
-    v109 Imm(0)                                           -> x0
+    v109 Imm(5)                                           -> x0
     v110 Imm(5)                                           -> x0
     v111 Imm(1)                                           -> x0
     v112 Imm(0)                                           -> x0
@@ -124,7 +124,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=25
     v118 Store { addr=v46, disp=40, value=v117, kind=I64 } -> -
     v119 Imm(5)                                           -> x0
     v120 Imm(6)                                           -> x0
-    v121 Imm(0)                                           -> x0
+    v121 Imm(6)                                           -> x0
     v122 Imm(6)                                           -> x0
     v123 Imm(1)                                           -> x0
     v124 Imm(0)                                           -> x0
@@ -136,7 +136,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=25
     v130 Store { addr=v46, disp=48, value=v129, kind=I64 } -> -
     v131 Imm(6)                                           -> x0
     v132 Imm(7)                                           -> x0
-    v133 Imm(0)                                           -> x0
+    v133 Imm(7)                                           -> x0
     v134 Imm(7)                                           -> x0
     v135 Imm(1)                                           -> x0
     v136 Imm(0)                                           -> x0
@@ -148,7 +148,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=25
     v142 Store { addr=v46, disp=56, value=v141, kind=I64 } -> -
     v143 Imm(7)                                           -> x0
     v144 Imm(8)                                           -> x0
-    v145 Imm(0)                                           -> x0
+    v145 Imm(8)                                           -> x0
     v146 Imm(8)                                           -> x0
     v147 Imm(0)                                           -> x0
     v148 Imm(0)                                           -> x0
@@ -167,6 +167,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=25
     v276 Store { addr=v272, disp=0, value=v275, kind=I64, volatile } -> -
     v277 Extend { value=v266, kind=I32 }                  -> x6
     v278 BinopI { op=add, lhs=v266, rhs_imm=1 }           -> x6
+    v279 Extend { value=v273, kind=I32, nsw }             -> x6
     terminator Jmp(b2)   (exit_acc=v273)
   block 2  start_pc=0
     v266 Phi { incoming=[b0:v151, b1:v273], kind=I64 }    -> x0
@@ -174,29 +175,30 @@ fn ent_pc=1 n_params=0 variadic=false locals=25
     v268 BinopI { op=lt, lhs=v266, rhs_imm=24 }           -> x6
     terminator Bz { cond=v268, target=b3, fall=b1 }   (exit_acc=v268)
   block 3  start_pc=0
-    v279 Imm(0)                                           -> x0
-    terminator Jmp(b5)   (exit_acc=v279)
+    v280 Imm(0)                                           -> x0
+    terminator Jmp(b5)   (exit_acc=v280)
   block 4  start_pc=0
-    v284 LocalAddr(-24)                                   -> x6
-    v285 Extend { value=v280, kind=I32 }                  -> x7
-    v286 BinopI { op=shl, lhs=v280, rhs_imm=3 }           -> x7
-    v287 Binop { op=add, lhs=v284, rhs=v286 }             -> x6
-    v288 Load { addr=v287, disp=0, kind=I64, volatile }   -> x6
-    v289 Binop { op=add, lhs=v281, rhs=v288 }             -> x1
-    v290 Extend { value=v280, kind=I32 }                  -> x6
-    v291 BinopI { op=add, lhs=v280, rhs_imm=1 }           -> x0
-    terminator Jmp(b5)   (exit_acc=v291)
+    v285 LocalAddr(-24)                                   -> x6
+    v286 Extend { value=v281, kind=I32 }                  -> x7
+    v287 BinopI { op=shl, lhs=v281, rhs_imm=3 }           -> x7
+    v288 Binop { op=add, lhs=v285, rhs=v287 }             -> x6
+    v289 Load { addr=v288, disp=0, kind=I64, volatile }   -> x6
+    v290 Binop { op=add, lhs=v282, rhs=v289 }             -> x1
+    v291 Extend { value=v281, kind=I32 }                  -> x6
+    v292 BinopI { op=add, lhs=v281, rhs_imm=1 }           -> x0
+    v293 Extend { value=v292, kind=I32, nsw }             -> x6
+    terminator Jmp(b5)   (exit_acc=v292)
   block 5  start_pc=0
-    v280 Phi { incoming=[b3:v279, b4:v291], kind=I64 }    -> x0
-    v281 Phi { incoming=[b3:v151, b4:v289], kind=I64 }    -> x1
-    v282 Extend { value=v280, kind=I32 }                  -> x6
-    v283 BinopI { op=lt, lhs=v280, rhs_imm=24 }           -> x6
-    terminator Bz { cond=v283, target=b6, fall=b4 }   (exit_acc=v283)
+    v281 Phi { incoming=[b3:v280, b4:v292], kind=I64 }    -> x0
+    v282 Phi { incoming=[b3:v151, b4:v290], kind=I64 }    -> x1
+    v283 Extend { value=v281, kind=I32 }                  -> x6
+    v284 BinopI { op=lt, lhs=v281, rhs_imm=24 }           -> x6
+    terminator Bz { cond=v284, target=b6, fall=b4 }   (exit_acc=v284)
   block 6  start_pc=0
     v152 Imm(0)                                           -> x0
     v153 Imm(0)                                           -> x0
-    v154 BinopI { op=eq, lhs=v281, rhs_imm=0 }            -> x0
-    terminator Bnz { cond=v281, target=b8, fall=b7 }   (exit_acc=v154)
+    v154 BinopI { op=eq, lhs=v282, rhs_imm=0 }            -> x0
+    terminator Bnz { cond=v282, target=b8, fall=b7 }   (exit_acc=v154)
   block 7  start_pc=0
     v155 Imm(2)                                           -> x0
     terminator Return(v155)   (exit_acc=v155)
@@ -220,7 +222,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=25
   block 10  start_pc=0
     v168 Imm(0)                                           -> x0
     v169 Imm(1)                                           -> x0
-    v170 Imm(0)                                           -> x0
+    v170 Imm(1)                                           -> x0
     v171 Imm(1)                                           -> x0
     v172 Imm(1)                                           -> x0
     v173 Imm(0)                                           -> x0
@@ -235,7 +237,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=25
   block 11  start_pc=0
     v181 Imm(1)                                           -> x0
     v182 Imm(2)                                           -> x0
-    v183 Imm(0)                                           -> x0
+    v183 Imm(2)                                           -> x0
     v184 Imm(2)                                           -> x0
     v185 Imm(1)                                           -> x0
     v186 Imm(0)                                           -> x0
@@ -250,7 +252,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=25
   block 12  start_pc=0
     v194 Imm(2)                                           -> x0
     v195 Imm(3)                                           -> x0
-    v196 Imm(0)                                           -> x0
+    v196 Imm(3)                                           -> x0
     v197 Imm(3)                                           -> x0
     v198 Imm(1)                                           -> x0
     v199 Imm(0)                                           -> x0
@@ -265,7 +267,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=25
   block 13  start_pc=0
     v207 Imm(3)                                           -> x0
     v208 Imm(4)                                           -> x0
-    v209 Imm(0)                                           -> x0
+    v209 Imm(4)                                           -> x0
     v210 Imm(4)                                           -> x0
     v211 Imm(1)                                           -> x0
     v212 Imm(0)                                           -> x0
@@ -280,7 +282,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=25
   block 14  start_pc=0
     v220 Imm(4)                                           -> x0
     v221 Imm(5)                                           -> x0
-    v222 Imm(0)                                           -> x0
+    v222 Imm(5)                                           -> x0
     v223 Imm(5)                                           -> x0
     v224 Imm(1)                                           -> x0
     v225 Imm(0)                                           -> x0
@@ -295,7 +297,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=25
   block 15  start_pc=0
     v233 Imm(5)                                           -> x0
     v234 Imm(6)                                           -> x0
-    v235 Imm(0)                                           -> x0
+    v235 Imm(6)                                           -> x0
     v236 Imm(6)                                           -> x0
     v237 Imm(1)                                           -> x0
     v238 Imm(0)                                           -> x0
@@ -310,7 +312,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=25
   block 16  start_pc=0
     v246 Imm(6)                                           -> x0
     v247 Imm(7)                                           -> x0
-    v248 Imm(0)                                           -> x0
+    v248 Imm(7)                                           -> x0
     v249 Imm(7)                                           -> x0
     v250 Imm(1)                                           -> x0
     v251 Imm(0)                                           -> x0
@@ -325,7 +327,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=25
   block 17  start_pc=0
     v259 Imm(7)                                           -> x0
     v260 Imm(8)                                           -> x0
-    v261 Imm(0)                                           -> x0
+    v261 Imm(8)                                           -> x0
     v262 Imm(8)                                           -> x0
     v263 Imm(0)                                           -> x0
     v264 Imm(0)                                           -> x0

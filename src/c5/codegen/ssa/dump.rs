@@ -162,6 +162,7 @@ fn fmt_inst(inst: &Inst) -> String {
             value,
             kind,
             volatile,
+            ..
         } => format!(
             "StoreLocal {{ off={off}, value=v{value}, kind={}{} }}",
             fmt_store_kind(*kind),

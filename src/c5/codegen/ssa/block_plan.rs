@@ -678,6 +678,7 @@ mod tests {
             value: 0,
             kind: StoreKind::I64,
             volatile: false,
+            nsw: false,
         };
         for (inst, uses, silent) in [
             (Inst::Imm(9), 0, true),
@@ -959,6 +960,7 @@ mod tests {
             value: 0,
             kind: StoreKind::I64,
             volatile: false,
+            nsw: false,
         };
         let (f, a) = rotated(alloc::vec![store, compare()]);
         assert!(repeats(&BlockPlan::build(&f, &a, true, None)).is_empty());

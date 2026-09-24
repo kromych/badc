@@ -1546,7 +1546,7 @@ fn ent_pc=34 n_params=0 variadic=false locals=85
     v387 Store { addr=v381, disp=0, value=v386, kind=I64 } -> -
     v388 Imm(0)                                           -> x1
     v389 Imm(1)                                           -> x1
-    v390 Imm(0)                                           -> x1
+    v390 Imm(1)                                           -> x1
     v391 Imm(1)                                           -> x1
     v392 Imm(1)                                           -> x1
     v393 LocalAddr(-59)                                   -> x1
@@ -1558,7 +1558,7 @@ fn ent_pc=34 n_params=0 variadic=false locals=85
     v399 Store { addr=v381, disp=8, value=v2, kind=I64 }  -> -
     v400 Imm(1)                                           -> x1
     v401 Imm(2)                                           -> x1
-    v402 Imm(0)                                           -> x1
+    v402 Imm(2)                                           -> x1
     v403 Imm(2)                                           -> x1
     v404 Imm(1)                                           -> x1
     v405 LocalAddr(-59)                                   -> x1
@@ -1570,7 +1570,7 @@ fn ent_pc=34 n_params=0 variadic=false locals=85
     v411 Store { addr=v381, disp=16, value=v410, kind=I64 } -> -
     v412 Imm(2)                                           -> x1
     v413 Imm(3)                                           -> x1
-    v414 Imm(0)                                           -> x1
+    v414 Imm(3)                                           -> x1
     v415 Imm(3)                                           -> x1
     v416 Imm(1)                                           -> x1
     v417 LocalAddr(-59)                                   -> x1
@@ -1582,7 +1582,7 @@ fn ent_pc=34 n_params=0 variadic=false locals=85
     v423 Store { addr=v381, disp=24, value=v422, kind=I64 } -> -
     v424 Imm(3)                                           -> x1
     v425 Imm(4)                                           -> x1
-    v426 Imm(0)                                           -> x1
+    v426 Imm(4)                                           -> x1
     v427 Imm(4)                                           -> x1
     v428 Imm(1)                                           -> x1
     v429 LocalAddr(-59)                                   -> x1
@@ -1594,7 +1594,7 @@ fn ent_pc=34 n_params=0 variadic=false locals=85
     v435 Store { addr=v381, disp=32, value=v434, kind=I64 } -> -
     v436 Imm(4)                                           -> x1
     v437 Imm(5)                                           -> x1
-    v438 Imm(0)                                           -> x1
+    v438 Imm(5)                                           -> x1
     v439 Imm(5)                                           -> x1
     v440 Imm(1)                                           -> x1
     v441 LocalAddr(-59)                                   -> x1
@@ -1606,7 +1606,7 @@ fn ent_pc=34 n_params=0 variadic=false locals=85
     v447 Store { addr=v381, disp=40, value=v446, kind=I64 } -> -
     v448 Imm(5)                                           -> x0
     v449 Imm(6)                                           -> x0
-    v450 Imm(0)                                           -> x0
+    v450 Imm(6)                                           -> x0
     v451 Imm(6)                                           -> x0
     v452 Imm(1)                                           -> x0
     v453 LocalAddr(-59)                                   -> x0
@@ -1618,7 +1618,7 @@ fn ent_pc=34 n_params=0 variadic=false locals=85
     v459 Store { addr=v453, disp=48, value=v458, kind=I64 } -> -
     v460 Imm(6)                                           -> x1
     v461 Imm(7)                                           -> x1
-    v462 Imm(0)                                           -> x1
+    v462 Imm(7)                                           -> x1
     v463 Imm(7)                                           -> x1
     v464 Imm(1)                                           -> x1
     v465 LocalAddr(-59)                                   -> x1
@@ -1630,7 +1630,7 @@ fn ent_pc=34 n_params=0 variadic=false locals=85
     v471 Store { addr=v453, disp=56, value=v470, kind=I64 } -> -
     v472 Imm(7)                                           -> x1
     v473 Imm(8)                                           -> x1
-    v474 Imm(0)                                           -> x1
+    v474 Imm(8)                                           -> x1
     v475 Imm(8)                                           -> x1
     v476 Imm(1)                                           -> x1
     v477 LocalAddr(-59)                                   -> x1
@@ -1642,7 +1642,7 @@ fn ent_pc=34 n_params=0 variadic=false locals=85
     v483 Store { addr=v453, disp=64, value=v482, kind=I64 } -> -
     v484 Imm(8)                                           -> x1
     v485 Imm(9)                                           -> x1
-    v486 Imm(0)                                           -> x1
+    v486 Imm(9)                                           -> x1
     v487 Imm(9)                                           -> x1
     v488 Imm(1)                                           -> x1
     v489 LocalAddr(-59)                                   -> x1
@@ -1654,7 +1654,7 @@ fn ent_pc=34 n_params=0 variadic=false locals=85
     v495 Store { addr=v453, disp=72, value=v494, kind=I64 } -> -
     v496 Imm(9)                                           -> x1
     v497 Imm(10)                                          -> x1
-    v498 Imm(0)                                           -> x1
+    v498 Imm(10)                                          -> x1
     v499 Imm(10)                                          -> x1
     v500 Imm(1)                                           -> x1
     v501 LocalAddr(-59)                                   -> x1
@@ -1666,7 +1666,7 @@ fn ent_pc=34 n_params=0 variadic=false locals=85
     v507 Store { addr=v453, disp=80, value=v506, kind=I64 } -> -
     v508 Imm(10)                                          -> x1
     v509 Imm(11)                                          -> x1
-    v510 Imm(0)                                           -> x1
+    v510 Imm(11)                                          -> x1
     v511 Imm(11)                                          -> x1
     v512 Imm(1)                                           -> x1
     v513 LocalAddr(-59)                                   -> x1
@@ -1678,7 +1678,7 @@ fn ent_pc=34 n_params=0 variadic=false locals=85
     v519 Store { addr=v453, disp=88, value=v518, kind=I64 } -> -
     v520 Imm(11)                                          -> x0
     v521 Imm(12)                                          -> x0
-    v522 Imm(0)                                           -> x0
+    v522 Imm(12)                                          -> x0
     v523 Imm(12)                                          -> x0
     v524 Imm(1)                                           -> x0
     v525 LocalAddr(-59)                                   -> x6
@@ -1690,7 +1690,7 @@ fn ent_pc=34 n_params=0 variadic=false locals=85
     v531 Store { addr=v525, disp=96, value=v530, kind=I64 } -> -
     v532 Imm(12)                                          -> x0
     v533 Imm(13)                                          -> x0
-    v534 Imm(0)                                           -> x0
+    v534 Imm(13)                                          -> x0
     v535 Imm(13)                                          -> x0
     v536 Imm(1)                                           -> x0
     v537 LocalAddr(-59)                                   -> x0
@@ -1702,7 +1702,7 @@ fn ent_pc=34 n_params=0 variadic=false locals=85
     v543 Store { addr=v525, disp=104, value=v542, kind=I64 } -> -
     v544 Imm(13)                                          -> x0
     v545 Imm(14)                                          -> x0
-    v546 Imm(0)                                           -> x0
+    v546 Imm(14)                                          -> x0
     v547 Imm(14)                                          -> x0
     v548 Imm(1)                                           -> x0
     v549 LocalAddr(-59)                                   -> x0
@@ -1714,7 +1714,7 @@ fn ent_pc=34 n_params=0 variadic=false locals=85
     v555 Store { addr=v525, disp=112, value=v554, kind=I64 } -> -
     v556 Imm(14)                                          -> x0
     v557 Imm(15)                                          -> x0
-    v558 Imm(0)                                           -> x0
+    v558 Imm(15)                                          -> x0
     v559 Imm(15)                                          -> x0
     v560 Imm(1)                                           -> x0
     v561 LocalAddr(-59)                                   -> x0
@@ -1726,7 +1726,7 @@ fn ent_pc=34 n_params=0 variadic=false locals=85
     v567 Store { addr=v525, disp=120, value=v566, kind=I64 } -> -
     v568 Imm(15)                                          -> x0
     v569 Imm(16)                                          -> x0
-    v570 Imm(0)                                           -> x0
+    v570 Imm(16)                                          -> x0
     v571 Imm(16)                                          -> x0
     v572 Imm(0)                                           -> x0
     v573 LocalAddr(-43)                                   -> x7

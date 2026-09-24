@@ -172,6 +172,7 @@ pub(crate) fn run(func: &mut FunctionSsa) {
             value: site,
             kind: store_kind(e.width),
             volatile: false,
+            nsw: false,
         };
         gone.insert(at);
     }

@@ -862,6 +862,7 @@ mod tests {
             value: 2,
             kind: crate::c5::ir::StoreKind::I64,
             volatile: false,
+            nsw: false,
         };
         f.blocks[1].inst_range = 2..5;
         f.blocks[2] = block(5..5, Terminator::Jmp(1));

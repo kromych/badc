@@ -23,7 +23,8 @@
 
 use super::Compiler;
 use super::types::{
-    is_bool_ty, is_float_ty, is_floating_scalar, is_pointer_ty, is_struct_ty, is_unsigned_ty,
+    is_bool_ty, is_float_ty, is_floating_scalar, is_integer_scalar_ty, is_pointer_ty, is_struct_ty,
+    is_unsigned_ty,
 };
 
 impl Compiler {
@@ -143,6 +144,18 @@ impl Compiler {
         }
         let common = self.arith_common_ty(lhs_ty, rhs_ty);
         self.renormalize_overflow(common);
+    }
+
+    /// Whether `op` in type `ty` is a `+ - *` of a signed type of `int`
+    /// rank or above, whose overflow is undefined without `-fwrapv`.
+    pub(super) fn overflow_undefined(&self, op: crate::c5::ir::BinOp, ty: i64) -> bool {
+        use crate::c5::ir::BinOp as B;
+        !self.wrapv
+            && matches!(op, B::Add | B::Sub | B::Mul)
+            && is_integer_scalar_ty(ty)
+            && !is_unsigned_ty(ty)
+            && !is_bool_ty(ty)
+            && self.size_of_type(ty) >= 4
     }
 
     /// [`Self::renormalize_to_width`] after an operation whose signed

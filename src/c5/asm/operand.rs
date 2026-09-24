@@ -406,6 +406,7 @@ fn reaching_local_stores(
                     value,
                     kind,
                     volatile,
+                    ..
                 } if *o == off => {
                     if *volatile || store_int_width(*kind) != Some(lw) {
                         return None;
@@ -677,6 +678,7 @@ mod tests {
             value,
             kind: StoreKind::I32,
             volatile: false,
+            nsw: false,
         }
     }
 
@@ -856,6 +858,7 @@ mod tests {
                 value: 1,
                 kind: StoreKind::I64,
                 volatile: false,
+                nsw: false,
             },
             call(),
             Inst::LoadLocal {

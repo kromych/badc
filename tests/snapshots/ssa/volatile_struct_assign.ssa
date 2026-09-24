@@ -135,7 +135,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=2
     v106 StoreIndexed { base=v93, index=v95, scale=1, value=v105, kind=I8 } -> -
     v107 Extend { value=v95, kind=I32 }                   -> x2
     v108 BinopI { op=add, lhs=v95, rhs_imm=1 }            -> x0
-    v109 Imm(0)                                           -> x2
+    v109 Extend { value=v108, kind=I32, nsw }             -> x2
     terminator Jmp(b14)   (exit_acc=v108)
   block 14  start_pc=0
     v95  Phi { incoming=[b12:v92, b13:v108], kind=I64 }   -> x0
@@ -157,7 +157,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=2
     v122 StoreIndexed { base=v111, index=v113, scale=8, value=v121, kind=I64 } -> -
     v123 Extend { value=v113, kind=I32 }                  -> x2
     v124 BinopI { op=add, lhs=v113, rhs_imm=1 }           -> x0
-    v125 Imm(0)                                           -> x2
+    v125 Extend { value=v124, kind=I32, nsw }             -> x2
     terminator Jmp(b17)   (exit_acc=v124)
   block 17  start_pc=0
     v113 Phi { incoming=[b15:v110, b16:v124], kind=I64 }  -> x0
@@ -251,7 +251,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=2
   block 32  start_pc=0
     v141 Extend { value=v138, kind=I32 }                  -> x6
     v142 BinopI { op=add, lhs=v138, rhs_imm=1 }           -> x0
-    v143 Imm(0)                                           -> x6
+    v143 Extend { value=v142, kind=I32, nsw }             -> x6
     terminator Jmp(b33)   (exit_acc=v142)
   block 33  start_pc=0
     v138 Phi { incoming=[b30:v136, b32:v142], kind=I64 }  -> x0
@@ -275,7 +275,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=2
   block 36  start_pc=0
     v160 Extend { value=v157, kind=I32 }                  -> x1
     v161 BinopI { op=add, lhs=v157, rhs_imm=1 }           -> x0
-    v162 Imm(0)                                           -> x1
+    v162 Extend { value=v161, kind=I32, nsw }             -> x1
     terminator Jmp(b37)   (exit_acc=v161)
   block 37  start_pc=0
     v157 Phi { incoming=[b34:v154, b36:v161], kind=I64 }  -> x0

@@ -96,11 +96,12 @@ Disassembly of section .text:
 
 <sum_down>:
                	mov	x2, x0
+               	sxtw	x1, w1
                	mov	x0, #0x0                // =0
                	sub	x1, x1, #0x1
                	cmp	w1, #0x0
                	b.lt	<addr>
-               	ldrsh	x3, [x2, w1, sxtw #1]
+               	ldrsh	x3, [x2, x1, lsl #1]
                	add	x0, x0, x3
                	sub	x1, x1, #0x1
                	cmp	w1, #0x0

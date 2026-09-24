@@ -758,7 +758,7 @@ fn ent_pc=4 n_params=3 variadic=false locals=0
     v206 Phi { incoming=[b4:v37, b3:v200], kind=I64 }     -> x2
     v207 Extend { value=v38, kind=I32 }                   -> x1
     v208 BinopI { op=add, lhs=v38, rhs_imm=-1 }           -> x7
-    v209 Imm(0)                                           -> x1
+    v209 Extend { value=v208, kind=I32, nsw }             -> x1
     terminator Jmp(b6)   (exit_acc=v208)
   block 6  start_pc=0
     v34  Phi { incoming=[b0:v13, b5:v203], kind=I64 }     -> x0
@@ -2270,7 +2270,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=22
     v1009 LifetimeEnd(0)                                   -> -
     v1010 Extend { value=v565, kind=I32 }                  -> x0
     v1011 BinopI { op=add, lhs=v565, rhs_imm=1 }           -> x12
-    v1012 Imm(0)                                           -> x0
+    v1012 Extend { value=v1011, kind=I32, nsw }            -> x0
     terminator Jmp(b30)   (exit_acc=v1011)
   block 30  start_pc=0
     v565 Phi { incoming=[b16:v563, b29:v1011], kind=I64 } -> x12
@@ -2995,7 +2995,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=22
     v1614 LifetimeEnd(0)                                   -> -
     v1615 Extend { value=v1013, kind=I32 }                 -> x0
     v1616 BinopI { op=add, lhs=v1013, rhs_imm=1 }          -> x12
-    v1617 Imm(0)                                           -> x0
+    v1617 Extend { value=v1616, kind=I32, nsw }            -> x0
     terminator Jmp(b45)   (exit_acc=v1616)
   block 45  start_pc=0
     v1013 Phi { incoming=[b31:v651, b44:v1616], kind=I64 } -> x12
@@ -4902,7 +4902,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=22
     v3282 LifetimeEnd(-677)                                -> -
     v3283 Extend { value=v2535, kind=I32 }                 -> x0
     v3284 BinopI { op=add, lhs=v2535, rhs_imm=1 }          -> x12
-    v3285 Imm(0)                                           -> x0
+    v3285 Extend { value=v3284, kind=I32, nsw }            -> x0
     terminator Jmp(b128)   (exit_acc=v3284)
   block 128  start_pc=0
     v2535 Phi { incoming=[b76:v2533, b127:v3284], kind=I64 } -> x12
@@ -5453,7 +5453,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=22
     v3740 LifetimeEnd(-679)                                -> -
     v3741 Extend { value=v3286, kind=I32 }                 -> x0
     v3742 BinopI { op=add, lhs=v3286, rhs_imm=1 }          -> x3
-    v3743 Imm(0)                                           -> x0
+    v3743 Extend { value=v3742, kind=I32, nsw }            -> x0
     terminator Jmp(b142)   (exit_acc=v3742)
   block 142  start_pc=0
     v3286 Phi { incoming=[b129:v2588, b141:v3742], kind=I64 } -> x3

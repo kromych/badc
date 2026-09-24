@@ -16,14 +16,14 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v10  ImmData(8)                                       -> x0
     v11  Load { addr=v10, disp=0, kind=I32 }              -> x1
     v12  BinopI { op=add, lhs=v11, rhs_imm=0 }            -> x2
-    v13  Imm(0)                                           -> x2
+    v13  Extend { value=v11, kind=I32, nsw }              -> x2
     v14  Extend { value=v11, kind=I32 }                   -> x2
     v15  Imm(7)                                           -> x2
     v16  Store { addr=v10, disp=0, value=v15, kind=I32 }  -> -
     v17  Extend { value=v11, kind=I32 }                   -> x2
     v18  Imm(0)                                           -> x2
     v19  BinopI { op=add, lhs=v11, rhs_imm=5 }            -> x1
-    v20  Imm(0)                                           -> x2
+    v20  Extend { value=v19, kind=I32, nsw }              -> x2
     v21  Extend { value=v19, kind=I32 }                   -> x2
     v22  BinopI { op=ne, lhs=v19, rhs_imm=105 }           -> x1
     terminator Bz { cond=v22, target=b2, fall=b1 }   (exit_acc=v22)

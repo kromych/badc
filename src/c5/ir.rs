@@ -129,12 +129,14 @@ pub(crate) enum Inst {
     /// Store to a local / parameter slot. Same shape as
     /// [`Self::Store`] but with the address represented as a
     /// constant slot offset, so the emit folds it into the
-    /// store's addressing mode.
+    /// store's addressing mode. `nsw`: `value` overflowed undefined
+    /// (C99 6.5p5); promotion leaves a marked [`Self::Extend`] instead.
     StoreLocal {
         off: i64,
         value: ValueId,
         kind: StoreKind,
         volatile: bool,
+        nsw: bool,
     },
     /// Load from `base + index * scale`. Folded form of
     /// `Add(base, Mul/Shl(index, scale))` followed by a `Load`,
@@ -254,7 +256,8 @@ pub(crate) enum Inst {
     ///     width after a 64-bit computation (C99 6.5p5), from a
     ///     `Renormalize` node or a `Shl K; Shr K` pair.
     /// `nsw` marks the renormalization of an operation whose overflow is
-    /// undefined (`+ - *` and unary `-` without `-fwrapv`): in a defined
+    /// undefined (`+ - *`, unary `-`, and the step a marked
+    /// [`Self::StoreLocal`] stores, without `-fwrapv`): in a defined
     /// execution `value` fits `kind`. Two copies merge to the conjunction
     /// of their marks.
     Extend {
@@ -2422,7 +2425,8 @@ mod tests {
                     off: 0,
                     value: 3,
                     kind: StoreKind::I64,
-                    volatile: false
+                    volatile: false,
+                    nsw: false
                 },
                 alloc::vec![3]
             ),

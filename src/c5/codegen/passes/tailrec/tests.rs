@@ -526,6 +526,7 @@ fn store_local_body_is_rejected() {
         value: 0,
         kind: StoreKind::I64,
         volatile: false,
+        nsw: false,
     });
     f.inst_src.push((0, 0));
     f.f32_values.push(false);

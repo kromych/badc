@@ -22,6 +22,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=3
     v65  StoreIndexed { base=v5, index=v60, scale=1, value=v7, kind=I8 } -> -
     v66  Extend { value=v60, kind=I32 }                   -> x6
     v67  BinopI { op=add, lhs=v60, rhs_imm=1 }            -> x0
+    v68  Extend { value=v67, kind=I32, nsw }              -> x6
     terminator Jmp(b2)   (exit_acc=v67)
   block 2  start_pc=0
     v60  Phi { incoming=[b0:v11, b1:v67], kind=I64 }      -> x0
@@ -71,17 +72,18 @@ fn ent_pc=3 n_params=0 variadic=false locals=3
     v37  Imm(0)                                           -> x0
     terminator Jmp(b7)   (exit_acc=v37)
   block 6  start_pc=0
-    v71  Extend { value=v68, kind=I32 }                   -> x6
-    v72  Binop { op=add, lhs=v32, rhs=v68 }               -> x6
-    v73  StoreIndexed { base=v32, index=v68, scale=1, value=v36, kind=I8 } -> -
-    v74  Extend { value=v68, kind=I32 }                   -> x6
-    v75  BinopI { op=add, lhs=v68, rhs_imm=1 }            -> x0
-    terminator Jmp(b7)   (exit_acc=v75)
+    v72  Extend { value=v69, kind=I32 }                   -> x6
+    v73  Binop { op=add, lhs=v32, rhs=v69 }               -> x6
+    v74  StoreIndexed { base=v32, index=v69, scale=1, value=v36, kind=I8 } -> -
+    v75  Extend { value=v69, kind=I32 }                   -> x6
+    v76  BinopI { op=add, lhs=v69, rhs_imm=1 }            -> x0
+    v77  Extend { value=v76, kind=I32, nsw }              -> x6
+    terminator Jmp(b7)   (exit_acc=v76)
   block 7  start_pc=0
-    v68  Phi { incoming=[b5:v37, b6:v75], kind=I64 }      -> x0
-    v69  Extend { value=v68, kind=I32 }                   -> x6
-    v70  BinopI { op=lt, lhs=v68, rhs_imm=8 }             -> x6
-    terminator Bz { cond=v70, target=b8, fall=b6 }   (exit_acc=v70)
+    v69  Phi { incoming=[b5:v37, b6:v76], kind=I64 }      -> x0
+    v70  Extend { value=v69, kind=I32 }                   -> x6
+    v71  BinopI { op=lt, lhs=v69, rhs_imm=8 }             -> x6
+    terminator Bz { cond=v71, target=b8, fall=b6 }   (exit_acc=v71)
   block 8  start_pc=0
     v50  LocalAddr(-2)                                    -> x0
     v51  Load { addr=v50, disp=0, kind=I32 }              -> x1

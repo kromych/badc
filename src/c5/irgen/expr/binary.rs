@@ -455,7 +455,8 @@ impl<'a> Walker<'a> {
         Ok(self.narrow_int_to_ty(b, value, rhs_ty, ty))
     }
 
-    /// C99 6.5.16.2 compound assignment.
+    /// C99 6.5.16.2 compound assignment. `nsw`: the operation's overflow
+    /// is undefined (C99 6.5p5).
     pub(super) fn walk_compound_assign(
         &mut self,
         b: &mut SsaBuilder,
@@ -463,6 +464,7 @@ impl<'a> Walker<'a> {
         lhs: ExprId,
         rhs: ExprId,
         ty: i64,
+        nsw: bool,
     ) -> Result<ValueId, WalkError> {
         // C99 6.5.16.2p3: `E1 op= E2` is `E1 = E1 op E2` with E1
         // evaluated once, and its value is the post-op value.
@@ -511,7 +513,7 @@ impl<'a> Walker<'a> {
         } else {
             self.walk_int_binop(b, op, old, lhs, rhs, ty)?
         };
-        place.store(b, new_val, store_kind, vol);
+        place.store_marked(b, new_val, store_kind, vol, nsw);
         // C99 6.5.16.2p3: the value is the post-update value in E1's
         // type, so a sub-64-bit lvalue reloads through `load_kind`
         // rather than returning the unnarrowed 64-bit binop result. A

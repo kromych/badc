@@ -839,7 +839,7 @@ fn ent_pc=16 n_params=0 variadic=false locals=12
     v52  Store { addr=v50, disp=0, value=v51, kind=I64 }  -> -
     v53  Extend { value=v9, kind=I32 }                    -> x0
     v54  BinopI { op=add, lhs=v9, rhs_imm=1 }             -> x3
-    v55  Imm(0)                                           -> x0
+    v55  Extend { value=v54, kind=I32, nsw }              -> x0
     terminator Jmp(b38)   (exit_acc=v54)
   block 38  start_pc=0
     v8   Phi { incoming=[b0:v4, b37:v47], kind=I64 }      -> x12

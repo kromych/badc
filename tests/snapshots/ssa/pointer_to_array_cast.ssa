@@ -18,7 +18,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=6
     v13  StoreIndexed { base=v6, index=v3, scale=2, value=v10, kind=I16 } -> -
     v14  Extend { value=v3, kind=I32 }                    -> x1
     v15  BinopI { op=add, lhs=v3, rhs_imm=1 }             -> x0
-    v16  Imm(0)                                           -> x1
+    v16  Extend { value=v15, kind=I32, nsw }              -> x1
     terminator Jmp(b2)   (exit_acc=v15)
   block 2  start_pc=0
     v3   Phi { incoming=[b0:v1, b1:v15], kind=I64 }       -> x0

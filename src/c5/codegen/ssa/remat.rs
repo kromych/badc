@@ -499,6 +499,7 @@ mod tests {
             value,
             kind: StoreKind::I64,
             volatile: false,
+            nsw: false,
         }
     }
 

@@ -386,6 +386,7 @@ pub(crate) fn fold_slot_addresses(funcs: &mut [FunctionSsa]) {
                         value: *value,
                         kind: *kind,
                         volatile: *volatile,
+                        nsw: false,
                     }
                 }),
                 _ => None,

@@ -23,7 +23,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=128
     v18  Store { addr=v9, disp=2, value=v1, kind=I16 }    -> -
     v19  Extend { value=v3, kind=I32 }                    -> x2
     v20  BinopI { op=add, lhs=v3, rhs_imm=1 }             -> x0
-    v21  Imm(0)                                           -> x2
+    v21  Extend { value=v20, kind=I32, nsw }              -> x2
     terminator Jmp(b2)   (exit_acc=v20)
   block 2  start_pc=0
     v3   Phi { incoming=[b0:v1, b1:v20], kind=I64 }       -> x0
@@ -84,7 +84,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=128
     v69  Store { addr=v61, disp=0, value=v65, kind=I32 }  -> -
     v70  Imm(0)                                           -> x6
     v71  Imm(1)                                           -> x6
-    v72  Imm(0)                                           -> x6
+    v72  Imm(1)                                           -> x6
     v73  Imm(1)                                           -> x6
     v74  Imm(1)                                           -> x6
     v75  LocalAddr(-15)                                   -> x6
@@ -101,7 +101,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=128
     v86  Store { addr=v61, disp=4, value=v84, kind=I32 }  -> -
     v87  Imm(1)                                           -> x6
     v88  Imm(2)                                           -> x6
-    v89  Imm(0)                                           -> x6
+    v89  Imm(2)                                           -> x6
     v90  Imm(2)                                           -> x6
     v91  Imm(1)                                           -> x6
     v92  LocalAddr(-15)                                   -> x6
@@ -118,12 +118,12 @@ fn ent_pc=4 n_params=0 variadic=false locals=128
     v103 Store { addr=v61, disp=8, value=v101, kind=I32 } -> -
     v104 Imm(2)                                           -> x1
     v105 Imm(3)                                           -> x1
-    v106 Imm(0)                                           -> x1
+    v106 Imm(3)                                           -> x1
     v107 Imm(3)                                           -> x1
     v108 Imm(0)                                           -> x1
     v109 Extend { value=v51, kind=I32 }                   -> x1
     v110 BinopI { op=add, lhs=v51, rhs_imm=1 }            -> x0
-    v111 Imm(0)                                           -> x1
+    v111 Extend { value=v110, kind=I32, nsw }             -> x1
     terminator Jmp(b7)   (exit_acc=v110)
   block 7  start_pc=0
     v51  Phi { incoming=[b5:v49, b6:v110], kind=I64 }     -> x0
@@ -176,7 +176,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=128
     v151 Store { addr=v142, disp=0, value=v146, kind=I8 } -> -
     v152 Imm(0)                                           -> x6
     v153 Imm(1)                                           -> x6
-    v154 Imm(0)                                           -> x6
+    v154 Imm(1)                                           -> x6
     v155 Imm(1)                                           -> x6
     v156 Imm(1)                                           -> x6
     v157 LocalAddr(-4)                                    -> x6
@@ -194,7 +194,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=128
     v169 Store { addr=v142, disp=1, value=v166, kind=I8 } -> -
     v170 Imm(1)                                           -> x2
     v171 Imm(2)                                           -> x2
-    v172 Imm(0)                                           -> x2
+    v172 Imm(2)                                           -> x2
     v173 Imm(2)                                           -> x2
     v174 Imm(1)                                           -> x2
     v175 LocalAddr(-4)                                    -> x2
@@ -212,7 +212,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=128
     v187 Store { addr=v142, disp=2, value=v184, kind=I8 } -> -
     v188 Imm(2)                                           -> x1
     v189 Imm(3)                                           -> x1
-    v190 Imm(0)                                           -> x1
+    v190 Imm(3)                                           -> x1
     v191 Imm(3)                                           -> x1
     v192 Imm(1)                                           -> x1
     v193 LocalAddr(-4)                                    -> x1
@@ -230,12 +230,12 @@ fn ent_pc=4 n_params=0 variadic=false locals=128
     v205 Store { addr=v196, disp=3, value=v202, kind=I8 } -> -
     v206 Imm(3)                                           -> x1
     v207 Imm(4)                                           -> x1
-    v208 Imm(0)                                           -> x1
+    v208 Imm(4)                                           -> x1
     v209 Imm(4)                                           -> x1
     v210 Imm(0)                                           -> x1
     v211 Extend { value=v132, kind=I32 }                  -> x1
     v212 BinopI { op=add, lhs=v132, rhs_imm=1 }           -> x0
-    v213 Imm(0)                                           -> x1
+    v213 Extend { value=v212, kind=I32, nsw }             -> x1
     terminator Jmp(b12)   (exit_acc=v212)
   block 12  start_pc=0
     v132 Phi { incoming=[b10:v130, b11:v212], kind=I64 }  -> x0

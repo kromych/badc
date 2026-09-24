@@ -41,22 +41,18 @@ Disassembly of section .text:
                	ldrsw	x4, [x2]
                	ldr	x3, [x3, x4, lsl #3]
                	br	x3
-               	sxtw	x1, w1
                	add	x3, x1, #0x1
                	ldrsw	x1, [x2, x1, lsl #2]
                	add	x0, x0, x1
                	sub	x4, x29, #0x18
-               	sxtw	x3, w3
                	add	x1, x3, #0x1
                	ldrsw	x3, [x2, x3, lsl #2]
                	ldr	x3, [x4, x3, lsl #3]
                	br	x3
-               	sxtw	x1, w1
                	add	x3, x1, #0x1
                	ldrsw	x1, [x2, x1, lsl #2]
                	sub	x0, x0, x1
                	sub	x4, x29, #0x18
-               	sxtw	x3, w3
                	add	x1, x3, #0x1
                	ldrsw	x3, [x2, x3, lsl #2]
                	ldr	x3, [x4, x3, lsl #3]

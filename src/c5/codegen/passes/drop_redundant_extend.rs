@@ -37,7 +37,9 @@
 //!
 //! A fifth case works on value ranges: `drop_fitting` redirects an
 //! `Extend`, or an `And` by a constant, that is the identity on every
-//! value its operand can hold where the instruction reads it.
+//! value its operand can hold where the instruction reads it, or, for an
+//! induction variable (`value_range::iv`), in a defined execution where
+//! only addresses and comparisons read the upper half.
 //!
 //! Finally, `drop_call_arg_reextends` removes the caller-side
 //! re-extension of an argument to a direct internal call whose callee
@@ -60,8 +62,9 @@ pub(crate) fn run(funcs: &mut [FunctionSsa]) {
         // read at 32 bits stops observing its operands' upper half,
         // which is what makes the renormalizations feeding it dead.
         super::narrow::mark_compares(func);
+        let assumed = super::value_range::iv::assumptions(func);
         run_one(func);
-        drop_fitting(func);
+        drop_fitting(func, &assumed);
     }
     drop_call_arg_reextends(funcs);
 }
@@ -104,7 +107,7 @@ fn observe_args(hi: &mut [bool], work: &mut Vec<ValueId>, args: &[ValueId], low_
 /// never read above bit 31 (the parameter's low word already holds the C99
 /// 6.5.2.2p4-converted value).
 pub(crate) fn compute_high_observed(func: &FunctionSsa) -> Vec<bool> {
-    compute_high_observed_through(func, &[])
+    compute_high_observed_through(func, &[], false)
 }
 
 /// `compute_high_observed`, with the extends flagged in `collapsing`
@@ -112,13 +115,27 @@ pub(crate) fn compute_high_observed(func: &FunctionSsa) -> Vec<bool> {
 /// about to be replaced by its operand in all 64 bits, so it hands its
 /// own consumers' observation down: without that, the operand's low-word
 /// rule could fire against a consumer set the collapse is going to widen.
-fn compute_high_observed_through(func: &FunctionSsa, collapsing: &[bool]) -> Vec<bool> {
+/// With `addressing`, addresses, comparisons and branch conditions do not
+/// observe either.
+fn compute_high_observed_through(
+    func: &FunctionSsa,
+    collapsing: &[bool],
+    addressing: bool,
+) -> Vec<bool> {
     let n = func.insts.len();
     let mut hi = alloc::vec![false; n];
     let mut work: Vec<ValueId> = Vec::new();
+    let observe_addr = |hi: &mut [bool], work: &mut Vec<ValueId>, v: ValueId| {
+        if !addressing {
+            observe(hi, work, v);
+        }
+    };
 
     for (i, inst) in func.insts.iter().enumerate() {
-        let cmp32 = super::narrow::is_cmp32(&func.cmp32, i as ValueId);
+        let cmp32 = super::narrow::is_cmp32(&func.cmp32, i as ValueId)
+            || addressing
+                && matches!(inst, Inst::Binop { op, .. } | Inst::BinopI { op, .. }
+                    if crate::c5::ir::is_comparison_op(*op));
         match inst {
             Inst::Imm(_)
             | Inst::ImmData(_)
@@ -140,7 +157,7 @@ fn compute_high_observed_through(func: &FunctionSsa, collapsing: &[bool]) -> Vec
                 parts.iter().for_each(|&p| observe(&mut hi, &mut work, p))
             }
             Inst::Copy { value, .. } => observe(&mut hi, &mut work, *value),
-            Inst::Load { addr, .. } => observe(&mut hi, &mut work, *addr),
+            Inst::Load { addr, .. } => observe_addr(&mut hi, &mut work, *addr),
             // An extending access reads the low word of its index.
             Inst::LoadIndexed {
                 base,
@@ -148,15 +165,15 @@ fn compute_high_observed_through(func: &FunctionSsa, collapsing: &[bool]) -> Vec
                 index_ext,
                 ..
             } => {
-                observe(&mut hi, &mut work, *base);
+                observe_addr(&mut hi, &mut work, *base);
                 if *index_ext == IndexExt::None {
-                    observe(&mut hi, &mut work, *index);
+                    observe_addr(&mut hi, &mut work, *index);
                 }
             }
             Inst::Store {
                 addr, value, kind, ..
             } => {
-                observe(&mut hi, &mut work, *addr);
+                observe_addr(&mut hi, &mut work, *addr);
                 if *kind == StoreKind::I64 {
                     observe(&mut hi, &mut work, *value);
                 }
@@ -183,9 +200,9 @@ fn compute_high_observed_through(func: &FunctionSsa, collapsing: &[bool]) -> Vec
                 kind,
                 ..
             } => {
-                observe(&mut hi, &mut work, *base);
+                observe_addr(&mut hi, &mut work, *base);
                 if *index_ext == IndexExt::None {
-                    observe(&mut hi, &mut work, *index);
+                    observe_addr(&mut hi, &mut work, *index);
                 }
                 if *kind == StoreKind::I64 {
                     observe(&mut hi, &mut work, *value);
@@ -308,7 +325,13 @@ fn compute_high_observed_through(func: &FunctionSsa, collapsing: &[bool]) -> Vec
     // and reads none.
     let ret_low_word = crate::c5::codegen::return_is_low_word(func.ret_type_tag);
     for (b, block) in func.blocks.iter().enumerate() {
-        if func.low_word_tests.get(b).copied().unwrap_or(false) {
+        if func.low_word_tests.get(b).copied().unwrap_or(false)
+            || addressing
+                && matches!(
+                    block.terminator,
+                    Terminator::Bz { .. } | Terminator::Bnz { .. }
+                )
+        {
             continue;
         }
         if ret_low_word && matches!(block.terminator, Terminator::Return(_)) {
@@ -847,7 +870,7 @@ fn run_one(func: &mut FunctionSsa) {
             .zip(narrow_kind_bits(*kind))
             .is_some_and(|(ibits, ebits)| ibits <= ebits);
     }
-    let high = compute_high_observed_through(func, &collapsing);
+    let high = compute_high_observed_through(func, &collapsing, false);
     let mut redirect: Vec<Option<ValueId>> = alloc::vec![None; n];
     for (idx, inst) in func.insts.iter().enumerate() {
         // (2) for the unsigned renormalization: the mask changes bits
@@ -875,22 +898,26 @@ fn run_one(func: &mut FunctionSsa) {
         }
     }
     dedup_dominated_extends(func, &mut redirect);
-    if redirect.iter().all(|r| r.is_none()) {
+    apply_redirects(func, &redirect);
+}
+
+/// Rewrite every operand, terminator value, and block accumulator. A
+/// redirected instruction is dead; its operand follows the redirects too,
+/// so it keeps no redirected value live.
+fn apply_redirects(func: &mut FunctionSsa, redirect: &[Option<ValueId>]) {
+    if redirect.iter().all(Option::is_none) {
         return;
     }
-    // Rewrite every operand, terminator value, and block accumulator. A
-    // redirected instruction is dead; its operand follows the redirects
-    // too, so it keeps no redirected value live.
     for inst in func.insts.iter_mut() {
-        inst.for_each_operand_mut(|op| *op = resolve(&redirect, *op));
+        inst.for_each_operand_mut(|op| *op = resolve(redirect, *op));
     }
     for block in func.blocks.iter_mut() {
         if block.exit_acc != NO_VALUE {
-            block.exit_acc = resolve(&redirect, block.exit_acc);
+            block.exit_acc = resolve(redirect, block.exit_acc);
         }
         block
             .terminator
-            .for_each_operand_mut(|v| *v = resolve(&redirect, *v));
+            .for_each_operand_mut(|v| *v = resolve(redirect, *v));
     }
 }
 
@@ -923,7 +950,10 @@ pub(crate) fn compute_high_clear(func: &FunctionSsa) -> Vec<bool> {
 /// After `run_one`: the ranges describe the registers as that pass left
 /// them, and a renormalization it dropped for an unread upper half is not
 /// kept alive by a range that would rest on it.
-fn drop_fitting(func: &mut FunctionSsa) {
+/// Then, under the `assumed` induction facts, an `I32` extension whose upper
+/// half only addresses and comparisons read; any other reader keeps it and
+/// sees the value wrapped in every execution.
+fn drop_fitting(func: &mut FunctionSsa, assumed: &[Option<LoadKind>]) {
     let narrows = |i: &Inst| {
         matches!(
             i,
@@ -976,20 +1006,30 @@ fn drop_fitting(func: &mut FunctionSsa) {
             };
         }
     }
-    if redirect.iter().all(Option::is_none) {
+    apply_redirects(func, &redirect);
+    if !assumed.iter().any(Option::is_some) {
         return;
     }
-    for inst in func.insts.iter_mut() {
-        inst.for_each_operand_mut(|op| *op = resolve(&redirect, *op));
-    }
-    for block in func.blocks.iter_mut() {
-        if block.exit_acc != NO_VALUE {
-            block.exit_acc = resolve(&redirect, block.exit_acc);
+    let ranges = super::value_range::Ranges::compute_assuming(func, &[], assumed);
+    let escaping = compute_high_observed_through(func, &[], true);
+    let mut redirect: Vec<Option<ValueId>> = alloc::vec![None; func.insts.len()];
+    for (b, block) in func.blocks.iter().enumerate() {
+        for idx in block.inst_range.clone() {
+            if let Some(&Inst::Extend {
+                value,
+                kind: LoadKind::I32,
+                ..
+            }) = func.insts.get(idx as usize)
+                && !escaping[idx as usize]
+                && ranges
+                    .at(b as crate::c5::ir::BlockId, value)
+                    .fits(LoadKind::I32)
+            {
+                redirect[idx as usize] = Some(value);
+            }
         }
-        block
-            .terminator
-            .for_each_operand_mut(|v| *v = resolve(&redirect, *v));
     }
+    apply_redirects(func, &redirect);
 }
 
 #[cfg(test)]
@@ -2397,7 +2437,7 @@ mod tests {
                 },
             ],
         );
-        drop_fitting(&mut f);
+        drop_fitting(&mut f, &[]);
         assert!(
             matches!(f.insts[7], Inst::Binop { lhs: 3, rhs: 3, .. })
                 && matches!(f.insts[8], Inst::Binop { lhs: 7, rhs: 6, .. }),
@@ -2416,7 +2456,7 @@ mod tests {
             },
             vec![and(3, 0xff)],
         );
-        drop_fitting(&mut f);
+        drop_fitting(&mut f, &[]);
         assert!(matches!(f.blocks[2].terminator, Terminator::Return(4)));
     }
 
@@ -2429,7 +2469,7 @@ mod tests {
                 nsw: false,
             }];
             let mut f = join(Inst::Imm(-3), v2, tail);
-            drop_fitting(&mut f);
+            drop_fitting(&mut f, &[]);
             f.blocks[2].terminator
         };
         let sext = Inst::Extend {
@@ -2464,6 +2504,7 @@ mod tests {
             value,
             kind: StoreKind::I64,
             volatile: false,
+            nsw: false,
         };
         let insts = vec![
             n,
@@ -2519,7 +2560,7 @@ mod tests {
         };
         for narrow_compare in [false, true] {
             let mut f = decrement_on_both_sides(n.clone(), narrow_compare);
-            drop_fitting(&mut f);
+            drop_fitting(&mut f, &[]);
             assert!(
                 matches!(f.insts[4], Inst::StoreLocal { value: 2, .. }),
                 "narrow={narrow_compare}: {:?}",
@@ -2546,7 +2587,7 @@ mod tests {
         };
         for narrow_compare in [true, false] {
             let mut f = decrement_on_both_sides(wide.clone(), narrow_compare);
-            drop_fitting(&mut f);
+            drop_fitting(&mut f, &[]);
             assert!(matches!(f.insts[4], Inst::StoreLocal { value: 3, .. }));
             assert!(matches!(f.insts[7], Inst::StoreLocal { value: 6, .. }));
         }
@@ -2602,7 +2643,7 @@ mod tests {
                 block(7..8, Terminator::Return(7)),
             ],
         );
-        drop_fitting(&mut f);
+        drop_fitting(&mut f, &[]);
         assert!(
             matches!(f.insts[5], Inst::BinopI { lhs: 3, .. })
                 && matches!(f.insts[6], Inst::Binop { lhs: 5, rhs: 0, .. })

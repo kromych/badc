@@ -380,20 +380,32 @@ pub(crate) enum Expr {
         ty: i64,
     },
     /// `lhs op= rhs`. C99 6.5.16.2p3: `lhs` is evaluated exactly
-    /// once; the walker spills the address and reloads.
+    /// once; the walker spills the address and reloads. `nsw`: its
+    /// overflow is undefined (C99 6.5p5).
     CompoundAssign {
         op: BinOp,
         lhs: ExprId,
         rhs: ExprId,
         ty: i64,
+        nsw: bool,
     },
     /// Prefix `++` / `--`. `by` is the post-pointer-scaling step
     /// value (+1 / -1 for scalars, `+sizeof(*ptr)` / `-sizeof(*ptr)`
-    /// for pointers) the parser resolved at this site.
-    PreInc { lvalue: ExprId, by: i64, ty: i64 },
-    /// Postfix `++` / `--`. Same `by` semantics; the walker
+    /// for pointers) the parser resolved at this site; `nsw` as above.
+    PreInc {
+        lvalue: ExprId,
+        by: i64,
+        ty: i64,
+        nsw: bool,
+    },
+    /// Postfix `++` / `--`. Same `by` and `nsw` semantics; the walker
     /// captures the pre-update value as the expression's result.
-    PostInc { lvalue: ExprId, by: i64, ty: i64 },
+    PostInc {
+        lvalue: ExprId,
+        by: i64,
+        ty: i64,
+        nsw: bool,
+    },
     /// `sizeof <operand>`. Resolved to a constant at parse time.
     Sizeof(SizeofResolved),
     /// `lhs, rhs`. C99 6.5.17 -- evaluate `lhs` for side effects,

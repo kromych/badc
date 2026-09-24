@@ -1219,6 +1219,7 @@ fn split_objects(
                         value,
                         kind,
                         volatile: false,
+                        nsw: false,
                     };
                 }
             }
@@ -1474,6 +1475,7 @@ fn expand_writes(func: &mut FunctionSsa, splits: &BTreeMap<u32, Expansion>) {
                             value: kept_value,
                             kind,
                             volatile: false,
+                            nsw: false,
                         });
                         new_src.push(loc);
                         new_f32.push(false);
@@ -1496,6 +1498,7 @@ fn expand_writes(func: &mut FunctionSsa, splits: &BTreeMap<u32, Expansion>) {
                             value: loaded,
                             kind: c.store,
                             volatile: false,
+                            nsw: false,
                         });
                         new_src.push(loc);
                         new_src.push(loc);
@@ -3168,7 +3171,8 @@ mod tests {
                 off: -1,
                 value: 0,
                 kind: StoreKind::I64,
-                volatile: false
+                volatile: false,
+                nsw: false
             }, // v1  a[1] through the slot
             Inst::LocalAddr(-2), // v2
             store(2, 0),  // v3  a[0] through the address

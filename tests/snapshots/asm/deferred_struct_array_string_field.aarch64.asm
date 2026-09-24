@@ -27,14 +27,14 @@ Disassembly of section .text:
                	mov	x0, #0x1                // =1
                	ret
                	mov	x3, #0x0                // =0
-               	ldrb	w4, [x1, w3, sxtw]
+               	ldrb	w4, [x1, x3]
                	cbnz	x4, <addr>
                	ldr	x4, [x0]
-               	ldrb	w4, [x4, w3, sxtw]
+               	ldrb	w4, [x4, x3]
                	cbz	x4, <addr>
                	ldr	x4, [x0]
-               	ldrb	w4, [x4, w3, sxtw]
-               	ldrb	w5, [x1, w3, sxtw]
+               	ldrb	w4, [x4, x3]
+               	ldrb	w5, [x1, x3]
                	cmp	w4, w5
                	b.ne	<addr>
                	add	x3, x3, #0x1
@@ -42,14 +42,14 @@ Disassembly of section .text:
                	mov	x0, #0x1                // =1
                	ret
                	mov	x1, #0x0                // =0
-               	ldrb	w3, [x2, w1, sxtw]
+               	ldrb	w3, [x2, x1]
                	cbnz	x3, <addr>
                	ldr	x3, [x0, #0x10]
-               	ldrb	w3, [x3, w1, sxtw]
+               	ldrb	w3, [x3, x1]
                	cbz	x3, <addr>
                	ldr	x3, [x0, #0x10]
-               	ldrb	w3, [x3, w1, sxtw]
-               	ldrb	w4, [x2, w1, sxtw]
+               	ldrb	w3, [x3, x1]
+               	ldrb	w4, [x2, x1]
                	cmp	w3, w4
                	b.ne	<addr>
                	add	x1, x1, #0x1

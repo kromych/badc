@@ -1064,6 +1064,16 @@ fn imm_fits_load_kind(k: i64, kind: LoadKind) -> bool {
     }
 }
 
+/// Bits of a signed narrow integer kind.
+fn signed_narrow_bits(kind: LoadKind) -> Option<u32> {
+    match kind {
+        LoadKind::I8 => Some(8),
+        LoadKind::I16 => Some(16),
+        LoadKind::I32 => Some(32),
+        _ => None,
+    }
+}
+
 fn narrow_load_replacement(kind: LoadKind, value: ValueId) -> Inst {
     match kind {
         LoadKind::U8 => Inst::BinopI {
@@ -1444,6 +1454,9 @@ pub(crate) fn run(func: &mut FunctionSsa) -> Vec<i64> {
     // write) is recorded in `failed` and left entirely in memory.
     let mut redirect: Vec<Option<ValueId>> = alloc::vec![None; func.insts.len()];
     let mut store_ids: Vec<u32> = Vec::new();
+    let mut marked_stores: Vec<u32> = Vec::new();
+    let mut marked_value: alloc::collections::BTreeMap<ValueId, ValueId> =
+        alloc::collections::BTreeMap::new();
     let mut failed: BTreeSet<i64> = BTreeSet::new();
     let mut load_slot: alloc::collections::BTreeMap<u32, i64> = alloc::collections::BTreeMap::new();
     let mut store_slot: alloc::collections::BTreeMap<u32, i64> =
@@ -1507,20 +1520,35 @@ pub(crate) fn run(func: &mut FunctionSsa) -> Vec<i64> {
                     cursor.step(inst);
                     match inst {
                         Inst::StoreLocal {
-                            off, value, kind, ..
+                            off,
+                            value,
+                            kind,
+                            nsw,
+                            ..
                         } if slots.contains(off) => {
                             let w = if mixed_slots.contains(off) {
                                 store_byte_width(*kind).unwrap_or(8)
                             } else {
                                 8
                             };
+                            // It becomes the renormalization the slot holds.
+                            let marked = *nsw
+                                && !escape.escapes(*off)
+                                && narrow_load
+                                    .get(off)
+                                    .is_some_and(|&k| signed_narrow_bits(k).is_some());
                             saved.push((*off, current.get(off).copied()));
-                            current.insert(*off, (*value, w));
+                            current.insert(*off, (if marked { id } else { *value }, w));
                             // The stores of a slot whose address is
                             // taken stay: memory holds the current
                             // value once a pointer to it exists.
                             if !escape.escapes(*off) {
-                                redirect[id as usize] = Some(*value);
+                                if marked {
+                                    marked_stores.push(id);
+                                    marked_value.insert(id, *value);
+                                } else {
+                                    redirect[id as usize] = Some(*value);
+                                }
                                 store_ids.push(id);
                                 store_slot.insert(id, *off);
                             }
@@ -1588,9 +1616,22 @@ pub(crate) fn run(func: &mut FunctionSsa) -> Vec<i64> {
         }
         store_ids.retain(|id| !failed.contains(&store_slot[id]));
     }
-    if redirect.iter().all(|r| r.is_none()) {
+    marked_stores.retain(|id| !failed.contains(&store_slot[id]));
+    if redirect.iter().all(|r| r.is_none()) && marked_stores.is_empty() {
         return Vec::new();
     }
+    for &id in &marked_stores {
+        if let Inst::StoreLocal { off, value, .. } = func.insts[id as usize]
+            && let Some(&kind) = narrow_load.get(&off)
+        {
+            func.insts[id as usize] = Inst::Extend {
+                value,
+                kind,
+                nsw: true,
+            };
+        }
+    }
+    store_ids.retain(|id| !marked_stores.contains(id));
 
     // Narrow loads keep their own id but become an extension of the
     // reaching value, so their consumers read the same low bytes the
@@ -1621,6 +1662,10 @@ pub(crate) fn run(func: &mut FunctionSsa) -> Vec<i64> {
             if let Some(kind) = kind
                 && let Some(v) = redirect[load_id as usize]
             {
+                // Past a marked store a load reads the stored value, as past
+                // an unmarked one; the slot's phis merge the renormalization.
+                let v = marked_value.get(&v).copied().unwrap_or(v);
+                redirect[load_id as usize] = Some(v);
                 // The reaching value is already canonically
                 // sign-extended for its own kind when it is an
                 // `Inst::ParamRef { kind: pkind, .. }` whose
@@ -1697,6 +1742,7 @@ pub(crate) fn run(func: &mut FunctionSsa) -> Vec<i64> {
     // the debug-info emitter drops their frame location.
     store_ids
         .iter()
+        .chain(&marked_stores)
         .filter_map(|id| store_slot.get(id).copied())
         .collect::<BTreeSet<i64>>()
         .into_iter()
@@ -1830,6 +1876,7 @@ mod tests {
                 value: 0,
                 kind: StoreKind::I64,
                 volatile: false,
+                nsw: false,
             },
             Inst::LoadLocal {
                 off: -1,
@@ -1842,6 +1889,7 @@ mod tests {
                 value: 0,
                 kind: StoreKind::I64,
                 volatile: false,
+                nsw: false,
             },
         ];
         let blocks = alloc::vec![empty_block(Terminator::Return(NO_VALUE))];
@@ -1866,6 +1914,7 @@ mod tests {
                 value: 0,
                 kind: StoreKind::I64,
                 volatile: true,
+                nsw: false,
             },
             Inst::LoadLocal {
                 off: -1,
@@ -1894,6 +1943,7 @@ mod tests {
                 value: 0,
                 kind: StoreKind::I32,
                 volatile: false,
+                nsw: false,
             },
             Inst::Imm(2),
             Inst::StoreLocal {
@@ -1901,6 +1951,7 @@ mod tests {
                 value: 2,
                 kind: StoreKind::I32,
                 volatile: false,
+                nsw: false,
             },
             Inst::Imm(99),
         ];
@@ -2014,6 +2065,7 @@ mod tests {
                 value: 0,
                 kind: StoreKind::I64,
                 volatile: false,
+                nsw: false,
             },
             Inst::LoadLocal {
                 off: -1,
@@ -2055,6 +2107,7 @@ mod tests {
                 value: 0,
                 kind: store,
                 volatile: false,
+                nsw: false,
             },
             Inst::LoadLocal {
                 off: -1,
@@ -2117,6 +2170,7 @@ mod tests {
                 value: 0,
                 kind: StoreKind::F64,
                 volatile: false,
+                nsw: false,
             }, // v1
             Inst::ParamRef {
                 idx: 0,
@@ -2131,6 +2185,7 @@ mod tests {
                 value: 3,
                 kind: StoreKind::F64,
                 volatile: false,
+                nsw: false,
             }, // v4
             Inst::LoadLocal {
                 off: -1,
@@ -2183,6 +2238,7 @@ mod tests {
                 value: 0,
                 kind: StoreKind::I64,
                 volatile: false,
+                nsw: false,
             },
             Inst::LocalAddr(-1),
             Inst::LoadLocal {
@@ -2221,6 +2277,7 @@ mod tests {
                 value: 0,
                 kind: StoreKind::I64,
                 volatile: false,
+                nsw: false,
             },
             Inst::AllocaInit(-8),
             Inst::LoadLocal {
@@ -2261,6 +2318,7 @@ mod tests {
                 value: 0,
                 kind: StoreKind::I8,
                 volatile: false,
+                nsw: false,
             },
             Inst::LoadLocal {
                 off: -1,
@@ -2303,6 +2361,7 @@ mod tests {
                 value: 0,
                 kind: StoreKind::I8,
                 volatile: false,
+                nsw: false,
             },
             Inst::LoadLocal {
                 off: -1,
@@ -2348,6 +2407,7 @@ mod tests {
                 value: 0,
                 kind: StoreKind::I64,
                 volatile: false,
+                nsw: false,
             },
             Inst::LoadLocal {
                 off: -1,
@@ -2360,6 +2420,7 @@ mod tests {
                 value: 3,
                 kind: StoreKind::I32,
                 volatile: false,
+                nsw: false,
             },
             Inst::LoadLocal {
                 off: -1,
@@ -2407,6 +2468,7 @@ mod tests {
                 value: 0,
                 kind: StoreKind::I32,
                 volatile: false,
+                nsw: false,
             },
             Inst::LoadLocal {
                 off: -1,
@@ -2444,6 +2506,7 @@ mod tests {
                 value: 1,
                 kind: StoreKind::I64,
                 volatile: false,
+                nsw: false,
             },
             Inst::Imm(2), // block 2
             Inst::StoreLocal {
@@ -2451,6 +2514,7 @@ mod tests {
                 value: 3,
                 kind: StoreKind::I64,
                 volatile: false,
+                nsw: false,
             },
             Inst::LoadLocal {
                 off: -1,
@@ -2515,6 +2579,7 @@ mod tests {
                 value: 1,
                 kind: StoreKind::I64,
                 volatile: false,
+                nsw: false,
             },
             // block 2
             Inst::Imm(2),
@@ -2523,6 +2588,7 @@ mod tests {
                 value: 3,
                 kind: StoreKind::I64,
                 volatile: false,
+                nsw: false,
             },
             // block 3
             Inst::LoadLocal {
@@ -2638,6 +2704,7 @@ mod tests {
                 value: 1,
                 kind: StoreKind::I64,
                 volatile: false,
+                nsw: false,
             },
             Inst::Imm(2),
             Inst::StoreLocal {
@@ -2645,6 +2712,7 @@ mod tests {
                 value: 3,
                 kind: StoreKind::I64,
                 volatile: false,
+                nsw: false,
             },
             Inst::LoadLocal {
                 off: -1,
@@ -2733,6 +2801,7 @@ mod tests {
                 value: 1,
                 kind: StoreKind::I64,
                 volatile: false,
+                nsw: false,
             },
             // block 2: ids 3..5
             Inst::Imm(22),
@@ -2741,6 +2810,7 @@ mod tests {
                 value: 3,
                 kind: StoreKind::I64,
                 volatile: false,
+                nsw: false,
             },
             // block 3: id 5
             Inst::LoadLocal {
@@ -2866,6 +2936,7 @@ mod tests {
                 value: 1,
                 kind: StoreKind::I64,
                 volatile: false,
+                nsw: false,
             },
             Inst::LoadLocal {
                 off: -1,
@@ -2969,6 +3040,7 @@ mod tests {
                 value: 0,
                 kind: StoreKind::I64,
                 volatile: false,
+                nsw: false,
             }, // v1
             // b1: condition operand (placeholder; the body emits a
             // constant so the branch is deterministic; not subject
@@ -2981,6 +3053,7 @@ mod tests {
                 value: 3,
                 kind: StoreKind::I64,
                 volatile: false,
+                nsw: false,
             }, // v4
             Inst::Imm(9), // v5
             Inst::StoreLocal {
@@ -2988,6 +3061,7 @@ mod tests {
                 value: 5,
                 kind: StoreKind::I64,
                 volatile: false,
+                nsw: false,
             }, // v6
             // b3: load -1
             Inst::LoadLocal {
@@ -3102,6 +3176,7 @@ mod tests {
                 value: 0,
                 kind: StoreKind::I64,
                 volatile: false,
+                nsw: false,
             },
             Inst::LoadLocal {
                 off: -1,
@@ -3154,6 +3229,7 @@ mod tests {
                 value: 0,
                 kind: StoreKind::I64,
                 volatile: false,
+                nsw: false,
             },
             Inst::LoadLocal {
                 off: -1,
@@ -3213,6 +3289,7 @@ mod tests {
                 value: 1,
                 kind: StoreKind::I64,
                 volatile: false,
+                nsw: false,
             },
             // block 2: ids 3..5
             Inst::Imm(22),
@@ -3221,6 +3298,7 @@ mod tests {
                 value: 3,
                 kind: StoreKind::I64,
                 volatile: false,
+                nsw: false,
             },
             // block 3: ids 5..9
             Inst::LoadLocal {
@@ -3319,6 +3397,7 @@ mod tests {
             value,
             kind: StoreKind::I64,
             volatile: false,
+            nsw: false,
         }
     }
 
@@ -3435,5 +3514,83 @@ mod tests {
         let mut preds: Vec<BlockId> = phis[0].iter().map(|&(b, _)| b).collect();
         preds.sort_unstable();
         assert_eq!(preds, alloc::vec![0, 1]);
+    }
+
+    /// A marked store becomes the marked extension the header's phi merges;
+    /// a load past it extends the stored value itself.
+    #[test]
+    fn marked_store_becomes_the_extension_the_phi_merges() {
+        let store = |value, nsw| Inst::StoreLocal {
+            off: -1,
+            value,
+            kind: StoreKind::I32,
+            volatile: false,
+            nsw,
+        };
+        let load = || Inst::LoadLocal {
+            off: -1,
+            kind: LoadKind::I32,
+            volatile: false,
+        };
+        let insts = alloc::vec![
+            Inst::Imm(0),
+            store(0, false),
+            load(),
+            Inst::BinopI {
+                op: BinOp::Add,
+                lhs: 2,
+                rhs_imm: 1,
+            },
+            store(3, true),
+            load(),
+        ];
+        let blocks = alloc::vec![
+            Block {
+                start_pc: 0,
+                inst_range: 0..2,
+                terminator: Terminator::Jmp(1),
+                exit_acc: NO_VALUE,
+            },
+            Block {
+                start_pc: 0,
+                inst_range: 2..6,
+                terminator: Terminator::Bnz {
+                    cond: 5,
+                    target: 1,
+                    fall_through: 2,
+                },
+                exit_acc: NO_VALUE,
+            },
+            Block {
+                start_pc: 0,
+                inst_range: 6..6,
+                terminator: Terminator::Return(5),
+                exit_acc: NO_VALUE,
+            },
+        ];
+        let mut f = func_with(insts, blocks);
+        with_phi_promote_override(true, || run(&mut f));
+        // The phi goes in at the header's head, so the ids after it move.
+        let add = f
+            .insts
+            .iter()
+            .position(|i| matches!(i, Inst::BinopI { op: BinOp::Add, .. }))
+            .expect("the step") as ValueId;
+        let extend_of = |nsw: bool| {
+            f.insts.iter().position(|i| {
+                matches!(i, Inst::Extend { value, kind: LoadKind::I32, nsw: mark }
+                    if *value == add && *mark == nsw)
+            })
+        };
+        let marked = extend_of(true).expect("the marked store's extension") as ValueId;
+        assert!(extend_of(false).is_some(), "the reload: {:?}", f.insts);
+        assert!(
+            f.insts
+                .iter()
+                .any(|i| matches!(i, Inst::Phi { incoming, .. }
+                if incoming.iter().any(|&(b, v)| b == 1 && v == marked))),
+            "the phi merges the marked extension: {:?}",
+            f.insts
+        );
     }
 }

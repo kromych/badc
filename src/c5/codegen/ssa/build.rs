@@ -888,12 +888,26 @@ impl SsaBuilder {
         kind: StoreKind,
         volatile: bool,
     ) -> ValueId {
+        self.store_local_marked(off, value, kind, volatile, false)
+    }
+
+    /// [`Self::store_local_vol`] carrying the `nsw` mark of
+    /// [`Inst::StoreLocal`].
+    pub(crate) fn store_local_marked(
+        &mut self,
+        off: i64,
+        value: ValueId,
+        kind: StoreKind,
+        volatile: bool,
+        nsw: bool,
+    ) -> ValueId {
         self.local_cache.retain(|e| e.off != off);
         self.push(Inst::StoreLocal {
             off,
             value,
             kind,
             volatile,
+            nsw,
         })
     }
 

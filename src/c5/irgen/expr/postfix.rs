@@ -757,6 +757,7 @@ impl<'a> Walker<'a> {
     /// C99 6.5.2.4 / 6.5.3.1: step an lvalue by `by`. The expression's
     /// value is the pre-update value for the postfix form and the
     /// post-update value, in the lvalue's own type, for the prefix form.
+    /// `nsw`: the step's overflow is undefined (C99 6.5p5).
     pub(super) fn walk_inc(
         &mut self,
         b: &mut SsaBuilder,
@@ -764,6 +765,7 @@ impl<'a> Walker<'a> {
         by: i64,
         ty: i64,
         post: bool,
+        nsw: bool,
     ) -> Result<ValueId, WalkError> {
         if self.is_int128_value_ty(ty) || self.is_wide_unit_bitfield(lvalue) {
             return self.walk_int128_inc(b, lvalue, by, post);
@@ -776,7 +778,7 @@ impl<'a> Walker<'a> {
             old,
         } = self.rmw_open(b, lvalue, ty)?;
         let stepped = self.increment_value(b, old, by, ty);
-        place.store(b, stepped, store_kind, vol);
+        place.store_marked(b, stepped, store_kind, vol, nsw);
         if post {
             return Ok(old);
         }

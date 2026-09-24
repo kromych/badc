@@ -14,22 +14,29 @@ use crate::Target;
 /// The relocatable object of `src` at `-O` or `-O0`, over the full register
 /// pool so the pressure caps do not move registers.
 pub(super) fn object_at(src: &str, target: Target, optimize: bool) -> Vec<u8> {
-    object_with(src, target, optimize, (usize::MAX, usize::MAX))
+    object_with(src, target, optimize, (usize::MAX, usize::MAX), false)
 }
 
 /// The `-O` object of `src` over integer / FP banks capped to `caps`.
 fn object_with_pool(src: &str, target: Target, caps: (usize, usize)) -> Vec<u8> {
-    object_with(src, target, true, caps)
+    object_with(src, target, true, caps, false)
 }
 
-fn object_with(src: &str, target: Target, optimize: bool, caps: (usize, usize)) -> Vec<u8> {
+fn object_with(
+    src: &str,
+    target: Target,
+    optimize: bool,
+    caps: (usize, usize),
+    wrapv: bool,
+) -> Vec<u8> {
     use crate::{CompileOptions, Compiler, NativeOptions, OutputKind, emit_native_with_options};
     let program = Compiler::with_options(
         src.to_string(),
         target,
         CompileOptions::default()
             .with_no_entry_point(true)
-            .with_optimize(optimize),
+            .with_optimize(optimize)
+            .with_wrapv(wrapv),
     )
     .compile()
     .unwrap_or_else(|e| panic!("compile ({target:?}): {e}"));
@@ -65,6 +72,23 @@ fn a64(src: &str, name: &str) -> Vec<u32> {
 
 fn x64(src: &str, name: &str) -> Vec<X64Insn> {
     x64_at(src, name, true)
+}
+
+/// [`a64`] and [`x64`] under `-fwrapv`.
+fn a64_wrapv(src: &str, name: &str) -> Vec<u32> {
+    let caps = (usize::MAX, usize::MAX);
+    function_words(
+        &object_with(src, Target::LinuxAarch64, true, caps, true),
+        name,
+    )
+}
+
+fn x64_wrapv(src: &str, name: &str) -> Vec<X64Insn> {
+    let caps = (usize::MAX, usize::MAX);
+    x64_insns(&function_bytes(
+        &object_with(src, Target::LinuxX64, true, caps, true),
+        name,
+    ))
 }
 
 /// One decoded x86-64 instruction. `op` is the opcode with `0x0F00` set for
@@ -123,7 +147,7 @@ impl X64Insn {
         )
     }
     /// `movslq r32, r64` between registers.
-    fn is_movsxd_rr(&self) -> bool {
+    pub(super) fn is_movsxd_rr(&self) -> bool {
         self.op == 0x63 && self.rex_w() && self.reg_form()
     }
 }
@@ -532,7 +556,7 @@ fn a64_in_loop(ws: &[u32], pred: impl Fn(u32) -> bool) -> bool {
     })
 }
 
-fn x64_in_loop(insns: &[X64Insn], pred: impl Fn(&X64Insn) -> bool) -> bool {
+pub(super) fn x64_in_loop(insns: &[X64Insn], pred: impl Fn(&X64Insn) -> bool) -> bool {
     insns
         .iter()
         .filter(|b| (b.is_jmp() || b.is_jcc()) && b.target() <= b.at)
@@ -591,31 +615,48 @@ fn x64_is_mask(i: &X64Insn) -> bool {
     matches!(i.op, 0x89 | 0x8B) && !i.rex_w() && i.reg_form()
 }
 
-/// Arithmetic wraps, so a counter keeps its extension wherever its bound
-/// does not keep the step inside `int`: a disequality, `i <= n` (n can be
-/// INT_MAX), a step that is not a constant, a bound on the side the step
-/// moves away from, and a second back edge whose step is not a constant.
+/// Counters no bound keeps inside `int`: a disequality, `i <= n`, a
+/// variable step, a bound behind the step, and a variable second step.
+const UNBOUNDED_COUNTERS: [&str; 6] = [
+    "long f(const int *a, int n) { long s = 0; for (int i = 0; i != n; i++) s += a[i]; return s; }",
+    "long f(const int *a, int n) { long s = 0; for (int i = 0; i <= n; i++) s += a[i]; return s; }",
+    "long f(const int *a, int n, int k) { long s = 0; for (int i = 0; i < n; i += k) s += a[i]; return s; }",
+    "long f(const int *a, int n) { long s = 0; for (int i = n; i > 0; i++) s += a[i]; return s; }",
+    "long f(const int *a, int n) { long s = 0; for (int i = n; i < 0; i--) s += a[i]; return s; }",
+    "long f(const int *a, int n, int k) { long s = 0; int i = 0;\n\
+     while (i < n) { if (a[i] & 1) { i += 1; continue; } s += a[i]; i += k; } return s; }",
+];
+
+/// Under `-fwrapv` the step wraps, so such a counter keeps its extension.
 /// On aarch64 the subscript's access may perform it.
 #[test]
-fn counter_that_can_leave_int_keeps_its_extension() {
-    const SRCS: [&str; 6] = [
-        "long f(const int *a, int n) { long s = 0; for (int i = 0; i != n; i++) s += a[i]; return s; }",
-        "long f(const int *a, int n) { long s = 0; for (int i = 0; i <= n; i++) s += a[i]; return s; }",
-        "long f(const int *a, int n, int k) { long s = 0; for (int i = 0; i < n; i += k) s += a[i]; return s; }",
-        "long f(const int *a, int n) { long s = 0; for (int i = n; i > 0; i++) s += a[i]; return s; }",
-        "long f(const int *a, int n) { long s = 0; for (int i = n; i < 0; i--) s += a[i]; return s; }",
-        "long f(const int *a, int n, int k) { long s = 0; int i = 0;\n\
-         while (i < n) { if (a[i] & 1) { i += 1; continue; } s += a[i]; i += k; } return s; }",
-    ];
+fn counter_that_can_leave_int_keeps_its_extension_under_wrapv() {
     let mut m = Misses::default();
-    for src in SRCS {
-        let ws = a64(src, "f");
+    for src in UNBOUNDED_COUNTERS {
+        let ws = a64_wrapv(src, "f");
         m.expect(a64_in_loop(&ws, a64_extends_word), || {
             format!("aarch64: no sxtw in the loop of `{src}`: {ws:08x?}")
         });
-        let insns = x64(src, "f");
+        let insns = x64_wrapv(src, "f");
         m.expect(x64_in_loop(&insns, X64Insn::is_movsxd_rr), || {
             format!("x86-64: no movslq in the loop of `{src}`: {insns:x?}")
+        });
+    }
+    m.finish();
+}
+
+/// Without `-fwrapv` the overflow is undefined, so the loop holds none.
+#[test]
+fn counter_whose_overflow_is_undefined_holds_no_extension() {
+    let mut m = Misses::default();
+    for src in UNBOUNDED_COUNTERS {
+        let ws = a64(src, "f");
+        m.expect(!a64_in_loop(&ws, a64_extends_word), || {
+            format!("aarch64: an extension in the loop of `{src}`: {ws:08x?}")
+        });
+        let insns = x64(src, "f");
+        m.expect(!x64_in_loop(&insns, X64Insn::is_movsxd_rr), || {
+            format!("x86-64: a movslq in the loop of `{src}`: {insns:x?}")
         });
     }
     m.finish();

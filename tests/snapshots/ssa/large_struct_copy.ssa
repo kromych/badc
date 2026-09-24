@@ -80,7 +80,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=132
     v75  StoreIndexed { base=v68, index=v46, scale=4, value=v73, kind=I32 } -> -
     v76  Extend { value=v46, kind=I32 }                   -> x2
     v77  BinopI { op=add, lhs=v46, rhs_imm=1 }            -> x0
-    v78  Imm(0)                                           -> x2
+    v78  Extend { value=v77, kind=I32, nsw }              -> x2
     terminator Jmp(b2)   (exit_acc=v77)
   block 2  start_pc=0
     v46  Phi { incoming=[b0:v44, b1:v77], kind=I64 }      -> x0
@@ -249,7 +249,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=132
   block 23  start_pc=0
     v171 Extend { value=v168, kind=I32 }                  -> x2
     v172 BinopI { op=add, lhs=v168, rhs_imm=1 }           -> x0
-    v173 Imm(0)                                           -> x2
+    v173 Extend { value=v172, kind=I32, nsw }             -> x2
     terminator Jmp(b24)   (exit_acc=v172)
   block 24  start_pc=0
     v168 Phi { incoming=[b19:v166, b23:v172], kind=I64 }  -> x0

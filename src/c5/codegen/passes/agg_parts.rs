@@ -259,6 +259,7 @@ fn scatter(
                     value: v,
                     kind,
                     volatile: false,
+                    nsw: false,
                 },
                 false,
             );

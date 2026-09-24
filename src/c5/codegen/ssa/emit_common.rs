@@ -2893,6 +2893,7 @@ mod tests {
                 value: 1,
                 kind: StoreKind::I64,
                 volatile: false,
+                nsw: false,
             },
             Inst::Imm(7),
             Inst::ParamRef {

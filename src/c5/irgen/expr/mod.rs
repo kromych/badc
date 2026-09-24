@@ -98,11 +98,25 @@ impl<'a> Walker<'a> {
             }
             Expr::Index { array, idx, ty } => self.walk_index(b, id, *array, *idx, *ty),
             Expr::Cast { child, to_ty } => self.walk_cast(b, *child, *to_ty),
-            Expr::CompoundAssign { op, lhs, rhs, ty } => {
-                self.walk_compound_assign(b, *op, *lhs, *rhs, *ty)
-            }
-            Expr::PreInc { lvalue, by, ty } => self.walk_inc(b, *lvalue, *by, *ty, false),
-            Expr::PostInc { lvalue, by, ty } => self.walk_inc(b, *lvalue, *by, *ty, true),
+            Expr::CompoundAssign {
+                op,
+                lhs,
+                rhs,
+                ty,
+                nsw,
+            } => self.walk_compound_assign(b, *op, *lhs, *rhs, *ty, *nsw),
+            Expr::PreInc {
+                lvalue,
+                by,
+                ty,
+                nsw,
+            } => self.walk_inc(b, *lvalue, *by, *ty, false, *nsw),
+            Expr::PostInc {
+                lvalue,
+                by,
+                ty,
+                nsw,
+            } => self.walk_inc(b, *lvalue, *by, *ty, true, *nsw),
             Expr::Sizeof(s) => Ok(b.imm(s.size_bytes)),
             // C99 6.3.2.1p3: a VLA lvalue decays to a pointer to its
             // first element -- the runtime base pointer the matching

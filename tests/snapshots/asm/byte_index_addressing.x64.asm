@@ -174,12 +174,12 @@ Disassembly of section .text:
                	retq
 
 <mark>:
+               	movslq	%esi, %rsi
                	movq	%rsi, %rax
                	imulq	%rsi, %rax
                	cmpl	%edx, %eax
                	jge	<addr>
-               	movslq	%eax, %rcx
-               	movb	$0x1, (%rdi,%rcx)
+               	movb	$0x1, (%rdi,%rax)
                	addq	%rsi, %rax
                	cmpl	%edx, %eax
                	jl	<addr>
@@ -592,8 +592,7 @@ Disassembly of section .text:
                	movb	$0x1, 0x1(%rax)
                	movl	$0x2, %ebx
                	leaq	<rip>, %rdi
-               	movslq	%ebx, %rax
-               	cmpb	$0x0, (%rdi,%rax)
+               	cmpb	$0x0, (%rdi,%rbx)
                	jne	<addr>
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax

@@ -63,7 +63,7 @@ fn ent_pc=2 n_params=2 variadic=false locals=0
     v55  BinopI { op=and, lhs=v53, rhs_imm=255 }          -> x8
     v56  Imm(2)                                           -> x8
     v57  Imm(1)                                           -> x8
-    v58  Imm(0)                                           -> x8
+    v58  Imm(1)                                           -> x8
     v59  Imm(1)                                           -> x8
     v60  Imm(1)                                           -> x8
     v61  BinopI { op=and, lhs=v32, rhs_imm=255 }          -> x8
@@ -152,7 +152,7 @@ fn ent_pc=2 n_params=2 variadic=false locals=0
     v129 BinopI { op=and, lhs=v127, rhs_imm=255 }         -> x8
     v130 Imm(0)                                           -> x8
     v131 Imm(-1)                                          -> x8
-    v132 Imm(0)                                           -> x8
+    v132 Imm(-1)                                          -> x8
     v133 Imm(-1)                                          -> x8
     v134 Imm(0)                                           -> x8
     v135 Imm(0)                                           -> x8
@@ -265,7 +265,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     v82  InlineAsm { template="vmovdqa %0,%%ymm6", ops=1, args=[v81] } -> -
     v83  Imm(0)                                           -> x0
     v84  Imm(-1)                                          -> x0
-    v85  Imm(0)                                           -> x0
+    v85  Imm(-1)                                          -> x0
     v86  Imm(-1)                                          -> x0
     v87  Imm(0)                                           -> x0
     v88  InlineAsm { template="vpcmpgtb %%ymm4,%%ymm3,%%ymm5", ops=0, args=[] } -> -
@@ -555,7 +555,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=0
     v82  InlineAsm { template="vmovdqa64 %0,%%zmm6", ops=1, args=[v63] } -> -
     v83  Imm(0)                                           -> x0
     v84  Imm(-1)                                          -> x0
-    v85  Imm(0)                                           -> x0
+    v85  Imm(-1)                                          -> x0
     v86  Imm(-1)                                          -> x0
     v87  Imm(0)                                           -> x0
     v88  InlineAsm { template="vpcmpgtb %%zmm4,%%zmm1,%%k1", ops=0, args=[] } -> -
@@ -646,7 +646,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=0
     v173 InlineAsm { template="vmovdqa64 %0,%%zmm6", ops=1, args=[v172] } -> -
     v174 Imm(0)                                           -> x0
     v175 Imm(-1)                                          -> x0
-    v176 Imm(0)                                           -> x0
+    v176 Imm(-1)                                          -> x0
     v177 Imm(-1)                                          -> x0
     v178 Imm(0)                                           -> x0
     v179 InlineAsm { template="vpcmpgtb %%zmm4,%%zmm1,%%k1", ops=0, args=[] } -> -
@@ -737,7 +737,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=0
     v264 InlineAsm { template="vmovdqa64 %0,%%zmm6", ops=1, args=[v263] } -> -
     v265 Imm(0)                                           -> x0
     v266 Imm(-1)                                          -> x0
-    v267 Imm(0)                                           -> x0
+    v267 Imm(-1)                                          -> x0
     v268 Imm(-1)                                          -> x0
     v269 Imm(0)                                           -> x0
     v270 InlineAsm { template="vpcmpgtb %%zmm4,%%zmm1,%%k1", ops=0, args=[] } -> -
@@ -828,7 +828,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=0
     v355 InlineAsm { template="vmovdqa64 %0,%%zmm6", ops=1, args=[v354] } -> -
     v356 Imm(0)                                           -> x0
     v357 Imm(-1)                                          -> x0
-    v358 Imm(0)                                           -> x0
+    v358 Imm(-1)                                          -> x0
     v359 Imm(-1)                                          -> x0
     v360 Imm(0)                                           -> x0
     v361 InlineAsm { template="vpcmpgtb %%zmm4,%%zmm1,%%k1", ops=0, args=[] } -> -
@@ -1006,7 +1006,7 @@ fn ent_pc=11 n_params=0 variadic=false locals=0
   block 4  start_pc=0
     v12  Extend { value=v7, kind=I32 }                    -> x0
     v13  BinopI { op=add, lhs=v7, rhs_imm=1 }             -> x6
-    v14  Imm(0)                                           -> x0
+    v14  Extend { value=v13, kind=I32, nsw }              -> x0
     terminator Jmp(b5)   (exit_acc=v13)
   block 5  start_pc=0
     v7   Phi { incoming=[b0:v5, b4:v13], kind=I64 }       -> x6

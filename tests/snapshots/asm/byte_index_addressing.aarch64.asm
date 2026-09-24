@@ -160,11 +160,12 @@ Disassembly of section .text:
                	ret
 
 <mark>:
+               	sxtw	x1, w1
                	mul	x3, x1, x1
                	cmp	w3, w2
                	b.ge	<addr>
                	mov	x4, #0x1                // =1
-               	strb	w4, [x0, w3, sxtw]
+               	strb	w4, [x0, x3]
                	add	x3, x3, x1
                	cmp	w3, w2
                	b.lt	<addr>
@@ -721,7 +722,7 @@ Disassembly of section .text:
                	strb	w0, [x21]
                	strb	w0, [x21, #0x1]
                	mov	x20, #0x2               // =2
-               	ldrb	w0, [x21, w20, sxtw]
+               	ldrb	w0, [x21, x20]
                	cbnz	w0, <addr>
                	ldrsw	x0, [x22]
                	add	x2, x0, #0x40

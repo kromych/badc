@@ -47,8 +47,8 @@ __attribute__((noinline)) static long returned_constant(long x) {
     return r;
 }
 
-__attribute__((noinline)) static long wide_constant(long x) {
-    long k = 0x123456789abLL;
+__attribute__((noinline)) static long long wide_constant(long x) {
+    long long k = 0x123456789abLL;
     long a = note(x);
     long b = note(a);
     return (k ^ b) + (k >> 4);

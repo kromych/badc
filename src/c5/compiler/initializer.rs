@@ -324,6 +324,44 @@ impl Compiler {
     ///                      post-body fixup pass.
     ///   * `Label(id)`   -- `&&label`, stage a pending label reloc the
     ///                      function's walk resolves to a basic block.
+    /// Whether an object of type `ty` holds an address constant: a
+    /// pointer, or an integer as wide as one, the `(intptr_t)&x` form gcc
+    /// and clang accept. A narrower integer would need a truncating
+    /// relocation, and a floating object takes no address (C99 6.5.4p4).
+    pub(super) fn holds_address(&self, ty: i64) -> bool {
+        let floating = super::types::is_floating_scalar(ty) || super::types::is_long_double_ty(ty);
+        is_pointer_ty(ty)
+            || (!floating
+                && !is_bool_ty(ty)
+                && self.size_of_type(ty) >= self.size_of_type(Ty::Ptr as i64))
+    }
+
+    /// The relocation an initializer value takes in an object of type
+    /// `ty`: its own where the object holds an address, none for `_Bool`,
+    /// to which an address converts as 1 (C99 6.3.1.2), and an error
+    /// otherwise.
+    pub(super) fn init_reloc_for(
+        &self,
+        reloc: InitElemReloc,
+        ty: i64,
+    ) -> Result<InitElemReloc, C5Error> {
+        if matches!(reloc, InitElemReloc::None | InitElemReloc::Float64Bits)
+            || self.holds_address(ty)
+        {
+            return Ok(reloc);
+        }
+        if is_bool_ty(ty) {
+            return Ok(InitElemReloc::None);
+        }
+        Err(self.compile_err(
+            Code::CONSTANT_EXPRESSION,
+            format!(
+                "an address constant does not fit an object of type `{}`",
+                super::types::format_type(ty, &self.structs)
+            ),
+        ))
+    }
+
     fn push_init_reloc(
         &mut self,
         here: usize,
@@ -1210,6 +1248,13 @@ impl Compiler {
                         return Ok(None);
                     }
                     let cast_ty = self.parse_const_type_name()?.ty;
+                    // A cast to a type that cannot hold the address
+                    // converts it (to `_Bool`, 1); the evaluator folds that.
+                    if self.lex.tk == ')' && !self.holds_address(cast_ty) {
+                        self.restore_lex(snap);
+                        self.truncate_data(data_snap);
+                        return Ok(None);
+                    }
                     if self.lex.tk == ')' && !is_struct_value_ty(cast_ty) {
                         // The cast retypes the address and so sets the
                         // stride of a following `+ N`: a pointer target
@@ -4003,6 +4048,15 @@ impl Compiler {
             // the bitfield's bits into the existing storage
             // unit instead.
             let (value, reloc) = self.parse_constant_init_value()?;
+            if !matches!(
+                self.init_reloc_for(reloc, field.ty)?,
+                InitElemReloc::None | InitElemReloc::Float64Bits
+            ) {
+                return Err(self.compile_err(
+                    Code::CONSTANT_EXPRESSION,
+                    "an address constant does not fit a bit-field",
+                ));
+            }
             // C99 6.7.9p11 initializes as if by assignment, so the value
             // converts to the member's declared type first. The mask
             // below expresses that for an integer field but not for a
@@ -4340,9 +4394,10 @@ impl Compiler {
         reloc: InitElemReloc,
         elem_ty: i64,
     ) -> Result<(), C5Error> {
+        let kept = self.init_reloc_for(reloc, elem_ty)?;
         let bits = self.to_storage_bits(value, reloc, elem_ty);
         self.write_init_bytes(here, bits, field_size);
-        self.push_init_reloc(here, value as i64, reloc)
+        self.push_init_reloc(here, value as i64, kept)
     }
 
     /// Write packed initializer bytes for a global array at
@@ -4375,14 +4430,7 @@ impl Compiler {
         let elem_size = self.size_of_type(elem_ty);
         let mut byte_off = var_offset as usize;
         for &(v, reloc) in elements {
-            let bits = self.to_storage_bits(v, reloc, elem_ty);
-            self.write_init_bytes(byte_off, bits, elem_size);
-            // char-element arrays never carry a relocation kind --
-            // the elements are bare bytes from a string literal --
-            // so the reloc-push helper's None branch is the only
-            // one that fires for elem_size == 1. Keeping the call
-            // unconditional drops the size-1 special case.
-            self.push_init_reloc(byte_off, v as i64, reloc)?;
+            self.write_init_value(byte_off, elem_size, v, reloc, elem_ty)?;
             byte_off += elem_size;
         }
         Ok(())

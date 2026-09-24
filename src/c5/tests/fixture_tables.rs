@@ -856,6 +856,7 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("string_literal_address_constant.c", 0),
     ("address_constant_through_cast.c", 0),
     ("local_byte_array_init_converts.c", 0),
+    ("address_to_bool_initializer.c", 0),
     ("setenv_then_get.c", 'Z' as i32),
     ("setenv_overwrite.c", 0),
     // Runtime dynamic linking. Opens the global symbol table,
@@ -1543,6 +1544,7 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("string_literal_address_constant.c", 0),
     ("address_constant_through_cast.c", 0),
     ("local_byte_array_init_converts.c", 0),
+    ("address_to_bool_initializer.c", 0),
     ("setenv_then_get.c", 'Z' as i32),
     ("setenv_overwrite.c", 0),
     // Runtime dynamic linking through libdl (libdl.so.2 +
@@ -2458,6 +2460,7 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("string_literal_address_constant.c", 0),
     ("address_constant_through_cast.c", 0),
     ("local_byte_array_init_converts.c", 0),
+    ("address_to_bool_initializer.c", 0),
     ("setenv_then_get.c", 'Z' as i32),
     ("setenv_overwrite.c", 0),
     ("dlopen_atoi.c", 123),
@@ -3135,6 +3138,7 @@ pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("string_literal_address_constant.c", 0),
     ("address_constant_through_cast.c", 0),
     ("local_byte_array_init_converts.c", 0),
+    ("address_to_bool_initializer.c", 0),
     // c5-side vprintf -- the variadic walk happens in c5 source,
     // so the call into msvcrt is just `_write`. No libc va_list
     // bridge involved, which is why this fixture is in even when
@@ -3749,6 +3753,7 @@ pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("string_literal_address_constant.c", 0),
     ("address_constant_through_cast.c", 0),
     ("local_byte_array_init_converts.c", 0),
+    ("address_to_bool_initializer.c", 0),
     // c5-side vprintf -- variadic walking happens in c5 source
     // and the only Win32 call is `_write`, so this fixture stays
     // in even when the libc-shape variadic-sprintf path doesn't.
@@ -4416,6 +4421,7 @@ pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
     ("string_literal_address_constant.c", 0),
     ("address_constant_through_cast.c", 0),
     ("local_byte_array_init_converts.c", 0),
+    ("address_to_bool_initializer.c", 0),
     // dlopen+dlsym+blr finds libc atoi and the indirect call passes
     // "123" in the System V argument register.
     ("dlopen_atoi.c", 123),

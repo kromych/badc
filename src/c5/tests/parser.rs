@@ -2958,6 +2958,44 @@ fn static_initializer_diagnostic_names_what_failed() {
 }
 
 #[test]
+fn an_address_constant_initializes_only_an_object_that_holds_it() {
+    // A static object narrower than a pointer, a floating one and a
+    // bit-field have no relocation for an address; gcc and clang reject
+    // each, where the relocation used to overrun the object.
+    for (decl, what) in [
+        ("int x = (int)(long)&g;", "an object of type `int`"),
+        (
+            "struct { int a, b, c; } x = {1, &g, 3};",
+            "an object of type `int`",
+        ),
+        (
+            "short a[2] = {1, (short)(long)&g};",
+            "an object of type `short`",
+        ),
+        ("double x = (double)(long)&g;", "an object of type `double`"),
+        ("char c = (char)(long)\"abc\";", "an object of type `char`"),
+        ("int x = (int)(long)main;", "an object of type `int`"),
+        (
+            "_Thread_local int x = (int)(long)&g;",
+            "an object of type `int`",
+        ),
+        (
+            "struct { unsigned long long w : 40; } x = {(unsigned long long)&g};",
+            "a bit-field",
+        ),
+        (
+            "void h(void) { static int x = (int)(long)&g; }",
+            "an object of type `int`",
+        ),
+    ] {
+        expect_compile_error(
+            &format!("int g; int main(void);\n{decl}\nint main(void) {{ return 0; }}"),
+            &format!("an address constant does not fit {what}"),
+        );
+    }
+}
+
+#[test]
 fn sizeof_of_an_incomplete_array_type_name_is_rejected() {
     // C99 6.5.3.4p1: `sizeof` does not apply to an incomplete type. An
     // array type name with an unspecified bound is one, written out or

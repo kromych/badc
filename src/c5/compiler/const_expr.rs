@@ -2523,6 +2523,25 @@ impl Compiler {
                 // type changes, so the folded value stays a `ConstVal::Addr`.
                 // The cast retypes the address's arithmetic: a pointer
                 // target strides by its pointee, an integer target by bytes.
+                if let ConstVal::Addr(a) = v
+                    && a.root.is_symbolic()
+                {
+                    // An address is never null, so it converts to `_Bool`
+                    // as 1 (C99 6.3.1.2); it has no floating value (6.5.4p4
+                    // for a pointer, and no constant one as an integer).
+                    if strip_unsigned(target_ty) == Ty::Bool as i64 && !is_pointer_ty(target_ty) {
+                        return Ok(ConstVal::Int {
+                            val: 1,
+                            ty: target_ty,
+                        });
+                    }
+                    if is_floating_ty(target_ty) {
+                        return Err(self.compile_err(
+                            Code::CONSTANT_EXPRESSION,
+                            "an address has no constant floating value",
+                        ));
+                    }
+                }
                 if let ConstVal::Addr(mut a) = v
                     && a.root.is_symbolic()
                     && !is_floating_ty(target_ty)

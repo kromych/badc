@@ -185,11 +185,12 @@ impl Compiler {
         reloc: InitElemReloc,
         var_ty: i64,
     ) -> Result<(), C5Error> {
+        let kept = self.init_reloc_for(reloc, var_ty)?;
         let bits = self.to_storage_bits(value, reloc, var_ty);
         let at = off as usize;
         self.tls_data[at..at + 8].copy_from_slice(&(bits as u64).to_le_bytes());
         self.note_tls_init(off);
-        match reloc {
+        match kept {
             InitElemReloc::None | InitElemReloc::Float64Bits => {}
             InitElemReloc::Data(src_sym) => match src_sym {
                 Some(sym_idx) => self.emit_addr_reloc(off, sym_idx, value as i64, true)?,
@@ -324,6 +325,21 @@ impl Compiler {
             self.symbols[sym_idx].was_referenced = true;
             let ent_pc = self.symbols[sym_idx].val;
             self.next()?;
+            let reloc = InitElemReloc::Code(sym_idx);
+            if matches!(self.init_reloc_for(reloc, var_ty)?, InitElemReloc::None) {
+                let value = self.to_storage_bits(ent_pc as i128, reloc, var_ty);
+                return if is_thread_local {
+                    self.write_tls_init_value(line, var_offset, value, InitElemReloc::None, var_ty)
+                } else {
+                    self.write_init_value(
+                        var_offset as usize,
+                        8,
+                        value,
+                        InitElemReloc::None,
+                        var_ty,
+                    )
+                };
+            }
             let bytes = (ent_pc as u64).to_le_bytes();
             let reloc = crate::c5::program::CodeReloc {
                 data_offset: var_offset as u64,

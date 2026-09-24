@@ -25,7 +25,7 @@ __thread int *plus           = arr + 2;             // address plus offset
 __thread int *memb           = &pr.b;               // struct sub-object
 __thread int *whole          = &g;                  // file-scope static
 __thread int *ext            = &visible_g;          // external linkage
-__thread unsigned long uaddr = (unsigned long)&g;   // pointer-width int slot
+__thread __UINTPTR_TYPE__ uaddr = (__UINTPTR_TYPE__)&g; // pointer-width int slot
 __thread int *none           = 0;                   // null, no relocation
 __thread long plain          = 42;                  // integer, no relocation
 
@@ -38,7 +38,7 @@ int main() {
     if (memb != &pr.b || *memb != 6) return 6;
     if (whole != &g || *whole != 7) return 7;
     if (ext != &visible_g || *ext != 8) return 8;
-    if (uaddr != (unsigned long)&g) return 9;
+    if (uaddr != (__UINTPTR_TYPE__)&g) return 9;
     if (none != 0) return 10;
     if (plain != 42) return 11;
     // The template is writable per thread; a store must not disturb

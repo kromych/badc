@@ -2160,6 +2160,65 @@ return a + f(x, 6, 5, 4, 3, 2, 1);\n}\n";
     m.finish();
 }
 
+/// The allocation header of `name` in `src` at `-O` on `target`: spill
+/// slots and the callee-saved GPRs the prologue saves.
+fn allocation_of(src: &str, name: &str, target: Target) -> (u32, Vec<u8>) {
+    let (body, _) = optimized_function_full_pool(src, name, target);
+    let field = |key: &str, end: char| -> &str {
+        let at = body
+            .find(key)
+            .unwrap_or_else(|| panic!("no `{key}`: {body}"));
+        let rest = &body[at + key.len()..];
+        &rest[..rest.find(end).unwrap_or(rest.len())]
+    };
+    let spills = field("spill_count=", ' ').parse().expect("spill_count");
+    let gprs = field("gpr_used=[", ']')
+        .split(',')
+        .filter_map(|r| r.trim().parse().ok())
+        .collect();
+    (spills, gprs)
+}
+
+/// The fixtures whose frames once grew on AArch64 while shrinking on
+/// x86-64 spill no more on AArch64 than on x86-64, and a value spills there
+/// only once every callee-saved register x20..x28 is in the prologue's
+/// save list: `main` of the int128 and FMA fixtures holds every value in
+/// a caller-saved register on both targets, and `main` of the vfork one,
+/// whose values each take a slot of their own, fills the callee-saved
+/// bank before it spills.
+#[test]
+fn aarch64_frames_spill_only_past_the_callee_saved_bank() {
+    let fixture = |name: &str| {
+        std::fs::read_to_string(
+            std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("tests/fixtures/c")
+                .join(name),
+        )
+        .unwrap_or_else(|e| panic!("{name}: {e}"))
+    };
+    let mut m = Misses::default();
+    for name in ["int128_overflow_builtin.c", "fma_numeric_kernels.c"] {
+        let src = fixture(name);
+        for target in [Target::LinuxAarch64, Target::LinuxX64] {
+            let (spills, gprs) = allocation_of(&src, "main", target);
+            m.expect(spills == 0 && gprs.is_empty(), || {
+                format!("{name} main on {target:?}: {spills} spill slots, saves {gprs:?}")
+            });
+        }
+    }
+    let src = fixture("vfork_shared_stack_slot_reuse.c");
+    let (a64_spills, a64_gprs) = allocation_of(&src, "main", Target::LinuxAarch64);
+    let (x64_spills, _) = allocation_of(&src, "main", Target::LinuxX64);
+    m.expect(a64_spills <= x64_spills, || {
+        format!("vfork main: {a64_spills} spill slots on aarch64, {x64_spills} on x86-64")
+    });
+    m.expect(
+        a64_spills == 0 || (20..=28).all(|r| a64_gprs.contains(&r)),
+        || format!("vfork main on aarch64: {a64_spills} spill slots while saving {a64_gprs:?}"),
+    );
+    m.finish();
+}
+
 /// A constant read past a call by a contracted multiply-add, by a return
 /// and by a phi income through a split edge is set again after the call:
 /// no callee-saved register holds one, `ret` and `flag` save none, and

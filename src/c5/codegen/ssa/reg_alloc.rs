@@ -3885,6 +3885,48 @@ int main(void) { return 0; }
         assert_eq!(spilled, 1);
     }
 
+    /// Over each target's own banks, mutually interfering values spill
+    /// only once their bank is full: as many call-crossing values as the
+    /// callee-saved bank holds take every register of it and one more
+    /// spills one; values crossing no call take the caller-saved bank and
+    /// then the callee-saved one, and spill only past both.
+    #[test]
+    fn a_value_spills_only_once_its_bank_is_full() {
+        for target in [Target::LinuxAarch64, Target::LinuxX64] {
+            let banks = RegBanks::for_target(target);
+            let color = |n: usize, must_callee: bool| {
+                let edges: Vec<(u32, u32)> = (0..n as u32)
+                    .flat_map(|a| (a + 1..n as u32).map(move |b| (a, b)))
+                    .collect();
+                let node_of: Vec<ValueId> = (0..n as ValueId).collect();
+                let cons: Vec<Option<NodeConstraints>> =
+                    (0..n).map(|_| int_node(must_callee, None)).collect();
+                color_graph(
+                    &Interference::from_edges(n, &edges),
+                    &node_of,
+                    &cons,
+                    &banks,
+                    usize::MAX,
+                    usize::MAX,
+                    false,
+                    &[],
+                    &[],
+                )
+            };
+            let callee = banks.callee_gprs.len();
+            let full = color(callee, true);
+            let mut taken: Vec<u8> = full.places.iter().filter_map(|p| p.int_reg_u8()).collect();
+            taken.sort_unstable();
+            let mut bank = banks.callee_gprs.clone();
+            bank.sort_unstable();
+            assert_eq!((full.spill_count, taken), (0, bank), "{target:?}");
+            assert_eq!(color(callee + 1, true).spill_count, 1, "{target:?}");
+            let all = callee + banks.caller_gprs.len();
+            assert_eq!(color(all, false).spill_count, 0, "{target:?}");
+            assert_eq!(color(all + 1, false).spill_count, 1, "{target:?}");
+        }
+    }
+
     #[test]
     fn returns_twice_caller_never_shares_spill_slots() {
         // Nodes 0-3 fill the four registers; 4 and 5 both spill and do

@@ -329,7 +329,7 @@ fn ent_pc=2 n_params=5 variadic=false locals=10
     v3   Imm(0)                                           -> x12
     v4   Imm(0)                                           -> x0
     v5   Imm(64)                                          -> x0
-    v6   Imm(0)                                           -> x1
+    v6   Imm(0)                                           -> x2
     v7   ParamRef(3, kind=I64)                            -> x1
     v8   Imm(0)                                           -> x2
     v9   ParamRef(4, kind=I64)                            -> x13

@@ -472,6 +472,7 @@ const LINKED_IMAGE_RUN_FIXTURES: &[(&str, i32)] = &[
     ("addr_compare_disjoint_blocks.c", 0),
     ("unsigned_bitwise_mixed_sign.c", 0),
     ("dead_arm_static_callee.c", 0),
+    ("param_incoming_reg_constant_clobber.c", 0),
 ];
 
 /// The sweep's target for this host, or `None` when the host cannot

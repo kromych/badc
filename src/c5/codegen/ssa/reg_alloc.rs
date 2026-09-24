@@ -985,7 +985,13 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     } else {
         (Vec::new(), Vec::new())
     };
-    let param_incoming_forbid = compute_param_incoming_forbid(func, conv_target);
+    let value_is_fp: Vec<bool> = func
+        .insts
+        .iter()
+        .enumerate()
+        .map(|(v, inst)| produces_fp_result(inst) || fp_const[v])
+        .collect();
+    let param_incoming_forbid = compute_param_incoming_forbid(func, conv_target, &value_is_fp);
     // Values live across an inline-asm block, and the registers each
     // block's lowering writes. A value kept out of that set survives the
     // block untouched, so the emit needs no save / restore pair for it.
@@ -1918,11 +1924,12 @@ fn verify_allocation(
     // that reads every source before any write, so a home equal to
     // another parameter's incoming register is harmless. When two
     // parameters share a home the emit falls back to placing each
-    // ParamRef in program order, and then an earlier parameter whose
-    // home is a later parameter's incoming register overwrites that
-    // register before the later ParamRef reads it. This models that
-    // exact condition (the witness is the four-parameter
-    // `param_incoming_reg_clobber.c` shape).
+    // ParamRef in program order, and then any value defined before a
+    // ParamRef -- an earlier parameter, a constant -- whose register is
+    // that ParamRef's incoming register overwrites it before the ParamRef
+    // reads it. This models that exact condition (the witnesses are the
+    // four-parameter `param_incoming_reg_clobber.c` shape and the
+    // constant of `param_incoming_reg_constant_clobber.c`).
     if !func.is_variadic {
         let mut used = alloc::vec![false; func.insts.len()];
         for (v, inst) in func.insts.iter().enumerate() {
@@ -1975,17 +1982,16 @@ fn verify_allocation(
         let homes_distinct = (0..params.len())
             .all(|a| ((a + 1)..params.len()).all(|b| key(params[a].1) != key(params[b].1)));
         if !homes_distinct {
-            for a in 0..params.len() {
-                for b in 0..params.len() {
-                    if params[a].0 < params[b].0
-                        && matches!(params[a].1, Place::IntReg(r) if r == params[b].2)
-                    {
+            for &(vid, _, incoming) in &params {
+                for v in (0..vid).filter(|&v| covered(v) && produces_value(&func.insts[v])) {
+                    let home = places.get(v).copied().unwrap_or(Place::None);
+                    if matches!(home, Place::IntReg(r) if r == incoming) {
                         report(alloc::format!(
-                            "param-shuffle-clobber: ParamRef v{} home {:?} is the incoming \
-                             register of later ParamRef v{}; per-inst placement clobbers it",
-                            params[a].0,
-                            params[a].1,
-                            params[b].0
+                            "param-shuffle-clobber: v{} home {:?} is the incoming register \
+                             of later ParamRef v{}; per-inst placement clobbers it",
+                            v,
+                            home,
+                            vid
                         ));
                     }
                 }
@@ -2964,20 +2970,25 @@ fn param_incoming_regs(func: &FunctionSsa, target: Target) -> Vec<Option<(bool, 
 }
 
 /// Per-value mask of physical registers the colorer must not assign,
-/// to keep each `Inst::ParamRef` off the incoming argument register of a
-/// later same-bank `ParamRef`. A `ParamRef` reads its incoming argument
-/// register, which stays live from function entry until that `ParamRef`
-/// materializes. `ParamRef`s materialize in value-id order; an earlier
-/// one placed in a later one's incoming register overwrites that
-/// register before the later `ParamRef` reads it. The own-incoming-
-/// register hint ([`populate_param_ref_hints`]) avoids this at full
-/// register pressure, but is rejected once the incoming register falls
-/// beyond a truncated bank, so the colorer parks the early `ParamRef` on
-/// a low register that is another parameter's incoming register. Forbid
-/// that placement: the colorer then picks a free register or spills, and
-/// a spilled `ParamRef` stores its incoming register straight to the
-/// slot, which never clobbers.
-fn compute_param_incoming_forbid(func: &FunctionSsa, target: Target) -> Vec<u64> {
+/// to keep every value defined before a `Inst::ParamRef` off that
+/// parameter's incoming argument register. A `ParamRef` reads its
+/// incoming register, which stays live from function entry until the
+/// `ParamRef` materializes, in value-id order; any earlier definition
+/// placed in that register -- an earlier `ParamRef`, a constant, a load
+/// -- overwrites it before the `ParamRef` reads it. The own-incoming-
+/// register hint ([`populate_param_ref_hints`]) keeps a `ParamRef` in
+/// place at full register pressure, but is rejected once the incoming
+/// register falls beyond a truncated bank, and a constant defined between
+/// two `ParamRef`s has no such hint at all. Forbid the placement: the
+/// colorer then picks a free register or spills, and a spilled `ParamRef`
+/// stores its incoming register straight to the slot, which never
+/// clobbers. `value_is_fp[v]` names each value's bank; the mask is set
+/// only for values in the incoming register's bank.
+fn compute_param_incoming_forbid(
+    func: &FunctionSsa,
+    target: Target,
+    value_is_fp: &[bool],
+) -> Vec<u64> {
     let mut forbid = alloc::vec![0u64; func.insts.len()];
     if func.is_variadic {
         return forbid;
@@ -3023,11 +3034,10 @@ fn compute_param_incoming_forbid(func: &FunctionSsa, target: Target) -> Vec<u64>
             params.push((vid, is_fp, r));
         }
     }
-    for a in 0..params.len() {
-        let (vid_a, fp_a, _) = params[a];
-        for &(_, fp_b, reg_b) in &params[a + 1..] {
-            if fp_a == fp_b {
-                forbid[vid_a] |= 1u64 << reg_b;
+    for &(vid, fp, reg) in &params {
+        for v in 0..vid {
+            if produces_value(&func.insts[v]) && value_is_fp[v] == fp {
+                forbid[v] |= 1u64 << reg;
             }
         }
     }

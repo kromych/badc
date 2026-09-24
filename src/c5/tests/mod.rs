@@ -75,6 +75,8 @@ mod reloc_golden;
 mod relocatable;
 #[cfg(feature = "full")]
 mod stack_guard;
+#[cfg(feature = "full")]
+mod static_init;
 mod types;
 mod vla;
 #[cfg(feature = "full")]

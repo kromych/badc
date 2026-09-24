@@ -743,4 +743,30 @@ mod tests {
         }
         assert!(failures.is_empty(), "{}", failures.join("\n"));
     }
+
+    /// A program may repeat the Win32 prototypes after the bundled
+    /// `<windows.h>` with the SDK's types, spelled through the SDK's
+    /// typedefs or out in full as raylib does, with no redeclaration
+    /// diagnostic on either Windows target.
+    #[test]
+    fn win32_redeclarations_compose_with_the_bundled_windows_h() {
+        use crate::c5::diag::Code;
+        use crate::{CompileOptions, Compiler, Target};
+        const SRC: &str = include_str!("../../tests/fixtures/libc/win32_prototypes.h");
+        let mut failures = alloc::vec::Vec::new();
+        for target in [Target::WindowsX64, Target::WindowsAarch64] {
+            let opts = CompileOptions::default().with_no_entry_point(true);
+            match Compiler::with_options(SRC.into(), target, opts).compile() {
+                Err(err) => failures.push(alloc::format!("{}: {err}", target.id_str())),
+                Ok(program) => failures.extend(
+                    program
+                        .warnings
+                        .iter()
+                        .filter(|w| w.code == Code::REDECLARATION_MISMATCH)
+                        .map(|w| alloc::format!("{}: {w}", target.id_str())),
+                ),
+            }
+        }
+        assert!(failures.is_empty(), "{}", failures.join("\n"));
+    }
 }

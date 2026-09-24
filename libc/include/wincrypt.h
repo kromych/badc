@@ -11,7 +11,6 @@
 
 // HCRYPTPROV / HCRYPTKEY come from <windows.h>; add the hash handle and the
 // algorithm-id scalar here.
-typedef void        *HCRYPTHASH;
 typedef unsigned int ALG_ID;
 
 #define PROV_RSA_FULL       1

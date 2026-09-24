@@ -860,3 +860,96 @@ fn a_mismatched_layout_is_rejected() {
     };
     assert!(compile(&source(&l), l.target).is_err());
 }
+
+/// The Windows SDK's base types and handles as `<windows.h>` spells them:
+/// `DWORD` is `unsigned long`, the string pointers are const-correct, and
+/// under `STRICT` each handle points at a struct of its own. The PE image
+/// records take winnt.h's packing.
+#[test]
+fn windows_h_spells_the_sdk_types() {
+    const H: &[&str] = &["windows.h"];
+    let same =
+        |ty: &str, spelled: &str| (format!("_Generic(({ty})0, {spelled}: 1, default: 0)"), 1);
+    let size = |expr: &str, n: usize| (expr.to_string(), n);
+    for target in [Target::WindowsX64, Target::WindowsAarch64] {
+        check_values(
+            target,
+            H,
+            &[
+                same("DWORD", "unsigned long"),
+                same("LONG", "long"),
+                same("ULONG", "unsigned long"),
+                same("HRESULT", "long"),
+                same("NTSTATUS", "long"),
+                same("LSTATUS", "long"),
+                same("REGSAM", "unsigned long"),
+                same("BOOL", "int"),
+                same("UINT", "unsigned int"),
+                same("WCHAR", "wchar_t"),
+                same("LPDWORD", "unsigned long *"),
+                same("LPCSTR", "const char *"),
+                same("LPCWSTR", "const wchar_t *"),
+                same("LPCVOID", "const void *"),
+                same("SIZE_T", "unsigned long long"),
+                same("LPARAM", "long long"),
+                same("WPARAM", "unsigned long long"),
+                same("HANDLE", "void *"),
+                same("HMODULE", "struct HINSTANCE__ *"),
+                same("HINSTANCE", "struct HINSTANCE__ *"),
+                same("HWND", "struct HWND__ *"),
+                same("HDC", "struct HDC__ *"),
+                same("HKEY", "struct HKEY__ *"),
+                same("HCURSOR", "struct HICON__ *"),
+                same("HGDIOBJ", "void *"),
+                same("HGLOBAL", "void *"),
+                same("HCRYPTPROV", "unsigned long long"),
+                same("LPSECURITY_ATTRIBUTES", "struct _SECURITY_ATTRIBUTES *"),
+                same("LPOVERLAPPED", "struct _OVERLAPPED *"),
+                same("LPTHREAD_START_ROUTINE", "unsigned long (*)(void *)"),
+                same("FARPROC", "long long (*)()"),
+                size("sizeof(struct HINSTANCE__)", 4),
+                size("sizeof(IMAGE_DOS_HEADER)", 64),
+                size("sizeof(IMAGE_FILE_HEADER)", 20),
+                size("sizeof(IMAGE_OPTIONAL_HEADER64)", 240),
+                size("sizeof(IMAGE_NT_HEADERS64)", 264),
+                size("sizeof(IMAGE_SECTION_HEADER)", 40),
+                size("sizeof(IMAGE_IMPORT_DESCRIPTOR)", 20),
+                size("sizeof(IMAGE_THUNK_DATA64)", 8),
+                size("sizeof(IMAGE_BASE_RELOCATION)", 8),
+                size("sizeof(IMAGE_RESOURCE_DIRECTORY_ENTRY)", 8),
+                size("sizeof(IMAGE_TLS_DIRECTORY64)", 40),
+                size("offsetof(IMAGE_NT_HEADERS64, OptionalHeader)", 24),
+                size("offsetof(IMAGE_OPTIONAL_HEADER64, ImageBase)", 24),
+                size("offsetof(IMAGE_OPTIONAL_HEADER64, DataDirectory)", 112),
+                size("IMAGE_NT_SIGNATURE", 0x4550),
+                size("sizeof(OVERLAPPED)", 32),
+                size("offsetof(OVERLAPPED, OffsetHigh)", 20),
+                size("offsetof(OVERLAPPED, hEvent)", 24),
+                size("sizeof(SYSTEM_INFO)", 48),
+                size("offsetof(SYSTEM_INFO, wProcessorArchitecture)", 0),
+                size("offsetof(SYSTEM_INFO, dwPageSize)", 4),
+                size("sizeof(INPUT_RECORD)", 20),
+                size("sizeof(CHAR_INFO)", 4),
+                size("sizeof(STARTUPINFOA)", 104),
+                size("sizeof(CRITICAL_SECTION)", 40),
+                size("sizeof(REASON_CONTEXT)", 32),
+            ],
+        );
+    }
+    check_values(
+        Target::WindowsX64,
+        H,
+        &[
+            ("sizeof(RUNTIME_FUNCTION)", 12),
+            ("offsetof(RUNTIME_FUNCTION, UnwindData)", 8),
+        ],
+    );
+    check_values(
+        Target::WindowsAarch64,
+        H,
+        &[
+            ("sizeof(RUNTIME_FUNCTION)", 8),
+            ("offsetof(RUNTIME_FUNCTION, UnwindData)", 4),
+        ],
+    );
+}

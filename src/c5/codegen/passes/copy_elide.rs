@@ -15,8 +15,28 @@
 //! that reads the destination -- `*a = (struct A){ a->N, 1 }` -- would
 //! read what the move already overwrote. Requiring the window to hold no
 //! memory access and no call answers all three at once.
+//!
+//! A call returning an aggregate through a hidden result pointer writes
+//! the temporary its `ret_slot_local` names -- the AArch64 x8 return, or
+//! the out-pointer the call passes first on System V and Win64 -- and
+//! `s = f(...)` copies that into `s`; pointing the call at `s` builds the
+//! result in place, as the return-slot rule of gcc and clang does. The
+//! callee then writes `s` while it runs, so it must have no way to reach
+//! `s`: no escaping use of `s`'s address may execute on a path to the
+//! call, the call's own operands included. A local whose address first
+//! escapes after the call qualifies; a destination reached through a
+//! pointer never does, since the callee may hold another pointer to it.
+//! The window rule applies from the call to the copy, and a function
+//! calling a returns-twice function keeps its copies: a `longjmp` out of
+//! the callee would leave `s` partly written, where the abstract machine
+//! left it unchanged (C99 7.13.2.1p3). A read of the temporary past the
+//! copy -- one of `s` an earlier pass forwarded -- reads `s` instead,
+//! which holds the same bytes there when nothing else writes `s` and no
+//! escape of `s` reaches the read. An out-pointer call carries no result
+//! layout, so its copy must cover the temporary's whole cells, which a
+//! copy of a leading member cannot.
 
-use super::super::ir::{BinOp, FunctionSsa, Inst, ValueId};
+use super::super::ir::{BinOp, BlockId, FunctionSsa, Inst, NO_VALUE, ValueId};
 use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::vec::Vec;
 
@@ -89,6 +109,11 @@ fn run_one(f: &mut FunctionSsa) {
     let mut redirects: Vec<(usize, ValueId)> = Vec::new();
     let mut elided: Vec<(usize, ValueId)> = Vec::new();
     let mut taken: BTreeSet<i64> = BTreeSet::new();
+    // Calls pointed at their destination, and the destinations taken;
+    // addresses of a temporary that name the destination in its place.
+    let mut retargets: Vec<(usize, i64)> = Vec::new();
+    let mut renamed: Vec<(usize, i64)> = Vec::new();
+    let mut escapes = Escapes::new(f);
     for blk in &f.blocks {
         for pc in blk.inst_range.clone() {
             let i = pc as usize;
@@ -101,8 +126,23 @@ fn run_one(f: &mut FunctionSsa) {
             if taken.contains(&slot) || base_of(f, dst).is_some_and(|(d, _)| d == slot) {
                 continue;
             }
-            let Some(plan) = plan_one(f, &named, &users, slot, blk.inst_range.start as usize, i)
-            else {
+            let start = blk.inst_range.start as usize;
+            let Some(plan) = plan_one(f, &named, &users, slot, start, i) else {
+                if let Some((call, renames, reads)) =
+                    call_writer(f, &named, &users, slot, start, i, size)
+                    && let Some((d, 0)) = base_of(f, dst)
+                    && !taken.contains(&d)
+                    && !retargets.iter().any(|&(_, t)| t == slot)
+                    && slot_stays_put(f, d)
+                    && !escapes.reaches(f, d, call)
+                    && (reads.is_empty() || sole_writer(f, d, i))
+                    && reads.iter().all(|&at| !escapes.reaches(f, d, at))
+                {
+                    retargets.push((call, d));
+                    renamed.extend(renames.iter().map(|&a| (a, d)));
+                    elided.push((i, dst));
+                    taken.insert(slot);
+                }
                 continue;
             };
             if !covers(&plan.spans, size) {
@@ -115,6 +155,17 @@ fn run_one(f: &mut FunctionSsa) {
     }
     if elided.is_empty() {
         return;
+    }
+    for (call, d) in retargets {
+        match &mut f.insts[call] {
+            Inst::Call { ret_slot_local, .. }
+            | Inst::CallIndirect { ret_slot_local, .. }
+            | Inst::CallExt { ret_slot_local, .. } => *ret_slot_local = d,
+            _ => unreachable!("only a call is retargeted"),
+        }
+    }
+    for (a, d) in renamed {
+        f.insts[a] = Inst::LocalAddr(d);
     }
     // Each redirected instruction is a writer whose address is the
     // temporary's base, or the add that formed an interior address from
@@ -165,6 +216,289 @@ fn run_one(f: &mut FunctionSsa) {
         {
             *inst = Inst::Imm(0);
         }
+    }
+}
+
+/// The call that writes the temporary at `slot` whole through its
+/// result pointer, when nothing else names the slot but addresses the
+/// copy at `mcpy` and plain loads read, or that an out-pointer call
+/// passes first, the call sits in the copy's block, and the window from
+/// the call to the copy holds no memory access. With it, the addresses
+/// to rename and the positions of the loads among their readers. `None`
+/// for a function calling a returns-twice function.
+#[allow(clippy::type_complexity)]
+fn call_writer(
+    f: &FunctionSsa,
+    named: &BTreeMap<i64, Vec<usize>>,
+    users: &[Vec<usize>],
+    slot: i64,
+    start: usize,
+    mcpy: usize,
+    size: i64,
+) -> Option<(usize, Vec<usize>, Vec<usize>)> {
+    if f.has_returns_twice_call {
+        return None;
+    }
+    let mut call = None;
+    for &a in named.get(&slot)? {
+        let (ret_agg, args) = match f.insts.get(a)? {
+            Inst::LocalAddr(_) => continue,
+            Inst::Call {
+                ret_agg,
+                ret_slot_local,
+                args,
+                ..
+            }
+            | Inst::CallIndirect {
+                ret_agg,
+                ret_slot_local,
+                args,
+                ..
+            }
+            | Inst::CallExt {
+                ret_agg,
+                ret_slot_local,
+                args,
+                ..
+            } if *ret_slot_local == slot && call.is_none() => (ret_agg, args),
+            _ => return None,
+        };
+        let whole = match ret_agg {
+            Some(ai) => f.agg_descs.get(*ai as usize)?.size as i64,
+            None => {
+                let &(_, cells) = f.multi_cell_slots.iter().find(|&&(b, _)| b == slot)?;
+                cells * 8
+            }
+        };
+        if whole != size {
+            return None;
+        }
+        call = Some((
+            a,
+            ret_agg.is_none().then(|| args.first().copied()).flatten(),
+        ));
+    }
+    let (call, out_arg) = call?;
+    let mut renames: Vec<usize> = Vec::new();
+    let mut reads: Vec<usize> = Vec::new();
+    for &a in &named[&slot] {
+        if !matches!(f.insts.get(a), Some(Inst::LocalAddr(_))) {
+            continue;
+        }
+        let mut renamed = false;
+        for &u in &users[a] {
+            match f.insts.get(u) {
+                _ if u == mcpy => {}
+                Some(Inst::Load {
+                    addr,
+                    volatile: false,
+                    ..
+                }) if *addr == a as ValueId => {
+                    reads.push(u);
+                    renamed = true;
+                }
+                // The out-pointer, and in no other argument position.
+                Some(Inst::Call { args, .. })
+                | Some(Inst::CallIndirect { args, .. })
+                | Some(Inst::CallExt { args, .. })
+                    if u == call
+                        && out_arg == Some(a as ValueId)
+                        && args.iter().filter(|&&x| x == a as ValueId).count() == 1 =>
+                {
+                    renamed = true;
+                }
+                _ => return None,
+            }
+        }
+        if renamed {
+            renames.push(a);
+        }
+    }
+    if out_arg.is_some_and(|o| !renames.contains(&(o as usize))) {
+        return None;
+    }
+    if call < start || call >= mcpy || reads.iter().any(|&u| u > call && u < mcpy) {
+        return None;
+    }
+    let quiet = ((call + 1)..mcpy).all(|i| {
+        matches!(
+            f.insts.get(i),
+            Some(
+                Inst::Imm(_)
+                    | Inst::ImmData(_)
+                    | Inst::ImmCode(_)
+                    | Inst::ImmExtCode(_)
+                    | Inst::BlockAddr(_)
+                    | Inst::LocalAddr(_)
+                    | Inst::Binop { .. }
+                    | Inst::BinopI { .. }
+                    | Inst::Neg(_)
+                    | Inst::Extend { .. }
+                    | Inst::Copy { .. }
+                    | Inst::LifetimeEnd(_)
+            )
+        )
+    });
+    quiet.then_some((call, renames, reads))
+}
+
+/// Whether the copy at `mcpy` is the only instruction writing slot `d`:
+/// no store, fill or copy through its addresses and no call result
+/// lands there.
+fn sole_writer(f: &FunctionSsa, d: i64, mcpy: usize) -> bool {
+    let into = |v: ValueId| base_of(f, v).is_some_and(|(b, _)| b == d);
+    f.insts.iter().enumerate().all(|(i, inst)| match inst {
+        Inst::Store { addr, .. } | Inst::StoreIndexed { base: addr, .. } => !into(*addr),
+        Inst::Mcpy { dst, .. } | Inst::Mzero { dst, .. } => i == mcpy || !into(*dst),
+        Inst::StoreLocal { off, .. } => *off != d,
+        Inst::Call { ret_slot_local, .. }
+        | Inst::CallIndirect { ret_slot_local, .. }
+        | Inst::CallExt { ret_slot_local, .. } => *ret_slot_local != d,
+        _ => true,
+    })
+}
+
+/// Whether slot `d` is ordinary frame storage a result pointer may name:
+/// not a parameter's object or the indirect-result cell, which the
+/// prologue fills, not over-aligned storage the emit places elsewhere,
+/// and never accessed volatile.
+fn slot_stays_put(f: &FunctionSsa, d: i64) -> bool {
+    if d >= 0
+        || d == f.indirect_result_slot
+        || f.param_local_slots.contains(&d)
+        || f.over_aligned.iter().any(|m| m.slot == d)
+    {
+        return false;
+    }
+    !f.insts.iter().any(|i| match i {
+        Inst::LoadLocal { off, volatile, .. } | Inst::StoreLocal { off, volatile, .. } => {
+            *off == d && *volatile
+        }
+        Inst::AllocaInit(off) => *off == d,
+        Inst::Load {
+            addr,
+            volatile: true,
+            ..
+        }
+        | Inst::Store {
+            addr,
+            volatile: true,
+            ..
+        } => base_of(f, *addr).is_some_and(|(b, _)| b == d),
+        _ => false,
+    })
+}
+
+/// Where the address of a frame slot escapes: a use of a value naming the
+/// slot other than as the address of an access or a copy, or as the base
+/// of an address formed from it. Computed per slot on demand.
+struct Escapes {
+    block_of: Vec<BlockId>,
+    succ: crate::c5::codegen::ssa::mem2reg::SuccGraph,
+    done: BTreeMap<i64, Escape>,
+}
+
+/// One slot's escapes: the positions in each block, and the blocks some
+/// path from an escape enters.
+struct Escape {
+    at: BTreeMap<BlockId, Vec<usize>>,
+    entered: Vec<bool>,
+}
+
+impl Escapes {
+    fn new(f: &FunctionSsa) -> Self {
+        let mut block_of = alloc::vec![BlockId::MAX; f.insts.len()];
+        for (b, blk) in f.blocks.iter().enumerate() {
+            for v in blk.inst_range.clone() {
+                block_of[v as usize] = b as BlockId;
+            }
+        }
+        Self {
+            block_of,
+            succ: crate::c5::codegen::ssa::mem2reg::SuccGraph::new(f),
+            done: BTreeMap::new(),
+        }
+    }
+
+    /// Whether an escape of slot `d` can execute before the instruction
+    /// at `at`: earlier in its block, the instruction itself, or in a
+    /// block from which a path enters `at`'s block.
+    fn reaches(&mut self, f: &FunctionSsa, d: i64, at: usize) -> bool {
+        if !self.done.contains_key(&d) {
+            let e = self.scan(f, d);
+            self.done.insert(d, e);
+        }
+        let e = &self.done[&d];
+        let b = self.block_of[at];
+        e.entered[b as usize] || e.at.get(&b).is_some_and(|pos| pos.iter().any(|&u| u <= at))
+    }
+
+    fn scan(&self, f: &FunctionSsa, d: i64) -> Escape {
+        let n = f.insts.len();
+        // Values naming the slot: its base and the constant offsets off it.
+        let mut names = alloc::vec![false; n];
+        let mut changed = true;
+        while changed {
+            changed = false;
+            for (v, inst) in f.insts.iter().enumerate() {
+                let is = match inst {
+                    Inst::LocalAddr(off) => *off == d,
+                    Inst::BinopI {
+                        op: BinOp::Add | BinOp::Sub,
+                        lhs,
+                        ..
+                    } => names.get(*lhs as usize).copied().unwrap_or(false),
+                    _ => false,
+                };
+                if is && !names[v] {
+                    names[v] = true;
+                    changed = true;
+                }
+            }
+        }
+        let named = |v: ValueId| v != NO_VALUE && names.get(v as usize).copied().unwrap_or(false);
+        let mut at: BTreeMap<BlockId, Vec<usize>> = BTreeMap::new();
+        for (u, inst) in f.insts.iter().enumerate() {
+            let b = self.block_of[u];
+            if b == BlockId::MAX {
+                continue;
+            }
+            let escapes = match inst {
+                Inst::Load { .. } | Inst::LoadIndexed { .. } | Inst::BinopI { .. } => false,
+                Inst::Store { value, .. } => named(*value),
+                Inst::StoreIndexed { index, value, .. } => named(*index) || named(*value),
+                Inst::Mcpy { .. } | Inst::Mzero { .. } => false,
+                _ => {
+                    let mut any = false;
+                    inst.for_each_operand(|o| any |= named(o));
+                    any
+                }
+            };
+            if escapes {
+                at.entry(b).or_default().push(u);
+            }
+        }
+        for (b, blk) in f.blocks.iter().enumerate() {
+            let mut any = false;
+            blk.terminator.for_each_operand(|o| any |= named(o));
+            if any {
+                at.entry(b as BlockId)
+                    .or_default()
+                    .push(blk.inst_range.end as usize);
+            }
+        }
+        // Blocks entered by a path from an escape, over one edge or more.
+        let mut entered = alloc::vec![false; f.blocks.len()];
+        let mut work: Vec<BlockId> = at.keys().copied().collect();
+        while let Some(b) = work.pop() {
+            for &s in self.succ.of(b) {
+                if !entered[s as usize] {
+                    entered[s as usize] = true;
+                    work.push(s);
+                }
+            }
+        }
+        Escape { at, entered }
     }
 }
 
@@ -486,5 +820,114 @@ mod tests {
         let before = shape(&f);
         run_one(&mut f);
         assert_eq!(shape(&f), before);
+    }
+
+    /// The walker's SSA of `name` in `src` for AArch64, where a 32-byte
+    /// result takes the x8 pointer the call's `ret_slot_local` names.
+    fn walked(src: &str, name: &str) -> FunctionSsa {
+        let target = crate::Target::LinuxAarch64;
+        let program = crate::Compiler::with_target(
+            alloc::format!("{src} int main(void){{ return 0; }}"),
+            target,
+        )
+        .compile()
+        .expect("compile");
+        crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+            .expect("ssa")
+            .into_iter()
+            .find(|f| f.name == name)
+            .expect("the function")
+    }
+
+    /// Per call returning an aggregate, in tape order: whether it now
+    /// writes the slot its copy used to fill.
+    fn in_place(src: &str, name: &str) -> Vec<bool> {
+        let mut f = walked(src, name);
+        let mut dests: Vec<(usize, i64)> = Vec::new();
+        for (i, inst) in f.insts.iter().enumerate() {
+            let Inst::Call {
+                ret_agg: Some(_),
+                ret_slot_local,
+                ..
+            } = inst
+            else {
+                continue;
+            };
+            let dst = f.insts.iter().find_map(|m| match m {
+                Inst::Mcpy { dst, src, .. } if base_of(&f, *src) == Some((*ret_slot_local, 0)) => {
+                    base_of(&f, *dst).map(|(d, _)| d)
+                }
+                _ => None,
+            });
+            dests.push((i, dst.unwrap_or(0)));
+        }
+        run_one(&mut f);
+        dests
+            .into_iter()
+            .map(|(i, d)| matches!(f.insts[i], Inst::Call { ret_slot_local, .. } if ret_slot_local == d))
+            .collect()
+    }
+
+    const DECLS: &str = "struct S { long a, b, c, d; };\n\
+        struct S make(long);\n\
+        struct S take(struct S *);\n\
+        long use(struct S *);\n\
+        struct S *gp;\n";
+
+    /// A fresh object and a local whose address escapes only after the
+    /// call take the result pointer; an escape the call can see -- a
+    /// global holding the address, the call's own argument, the address
+    /// published around a loop -- keeps the temporary.
+    #[test]
+    fn a_result_pointer_names_a_destination_the_callee_cannot_reach() {
+        let case = |body: &str, name: &str| in_place(&alloc::format!("{DECLS}{body}"), name);
+        assert_eq!(
+            case(
+                "long f(void) { struct S s = make(1); return use(&s); }",
+                "f"
+            ),
+            [true]
+        );
+        assert_eq!(
+            case(
+                "long f(void) { struct S s; s = make(1); return use(&s); }",
+                "f"
+            ),
+            [true]
+        );
+        assert_eq!(
+            case(
+                "long f(void) { struct S s = make(1); gp = &s; s = make(2); return s.a; }",
+                "f"
+            ),
+            [true, false]
+        );
+        assert_eq!(
+            case(
+                "long f(void) { struct S s = make(1); s = take(&s); return s.a; }",
+                "f"
+            ),
+            [true, false]
+        );
+        assert_eq!(
+            case(
+                "long f(int n) { struct S s = make(0); long t = 0;\n\
+                 while (n--) { s = make(n); t += use(&s); } return t; }",
+                "f"
+            ),
+            [true, false]
+        );
+    }
+
+    /// A function calling a returns-twice function keeps its copies: a
+    /// `longjmp` out of the callee would leave the destination partly
+    /// written.
+    #[test]
+    fn a_returns_twice_caller_keeps_the_temporary() {
+        let src = alloc::format!(
+            "{DECLS}int setjmp(long *); long buf[32];\n\
+             long f(void) {{ struct S s; if (setjmp(buf)) return 0; s = make(1); return use(&s); }}"
+        );
+        assert_eq!(in_place(&src, "f"), [false]);
     }
 }

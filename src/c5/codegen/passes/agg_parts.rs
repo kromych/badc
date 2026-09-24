@@ -31,24 +31,36 @@
 //! its prologue fills, which the body reads through their homes and
 //! `va_start` steps past; its return takes the parts like any other.
 //!
+//! A call returning in registers stores its result registers into the
+//! caller's result temporary, outside the tape as well. The pass reads
+//! them as one `Inst::RetPart` each right after the call and stores them
+//! into the temporary field by field, and the call keeps no result slot;
+//! the temporary is then an ordinary local too, and what reads it -- the
+//! copy into a destination, a member access -- reads the parts. The
+//! store follows the callee's return, so no destination is observable to
+//! the callee the way a hidden result pointer's is (`copy_elide`).
+//!
 //! Runs after the inliner, whose splices bind a callee's parameter object
 //! to the caller's argument and copy a returned object field by field, and
 //! before `sroa`.
 
+use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 
 use crate::c5::codegen::abi_classify::{RegClass, RegPart, ScalarKind, register_parts};
 use crate::c5::codegen::ssa::tape::{self, At, Insertion};
-use crate::c5::codegen::{ArgPlacement, Target, offset_align};
+use crate::c5::codegen::{ArgPlacement, CallConv, Target, offset_align};
 use crate::c5::ir::{
     AggDesc, BinOp, BlockId, FpMask, FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind, Terminator,
     ValueId,
 };
 
-pub(crate) fn run(funcs: &mut [FunctionSsa], target: Target) {
+/// `conv_of` names the direct-call targets on a convention other than the
+/// target's own, as the call emitters read them (`callee_conventions`).
+pub(crate) fn run(funcs: &mut [FunctionSsa], target: Target, conv_of: &BTreeMap<usize, CallConv>) {
     for f in funcs {
         if !f.is_naked && !f.blocks.is_empty() {
-            run_one(f, target);
+            run_one(f, target, conv_of);
         }
     }
 }
@@ -323,7 +335,7 @@ fn gather(plan: &mut Plan, at: At, addr: ValueId, p: &RegPart, desc: &AggDesc) -
     acc.unwrap_or_else(|| plan.push(at, Inst::Imm(0), false))
 }
 
-fn run_one(func: &mut FunctionSsa, target: Target) {
+fn run_one(func: &mut FunctionSsa, target: Target, conv_of: &BTreeMap<usize, CallConv>) {
     let abi = target.abi_row(func.conv).abi();
     let placements = crate::c5::codegen::ssa::emit_common::param_placements_common(func, abi);
     let mut plan = Plan {
@@ -394,6 +406,9 @@ fn run_one(func: &mut FunctionSsa, target: Target) {
             );
         }
     }
+    // The call-side stores go first: a return at the same block end may
+    // gather what they store.
+    let calls = call_parts(func, target, conv_of, &mut plan, ret_parts.is_some());
     let mut bundles: Vec<(usize, ValueId)> = Vec::new();
     if let Some((ai, parts)) = ret_parts {
         let desc = &func.agg_descs[ai as usize];
@@ -446,6 +461,89 @@ fn run_one(func: &mut FunctionSsa, target: Target) {
     for i in taken {
         func.param_local_slots[i] = 0;
     }
+    for v in calls {
+        match &mut func.insts[rewrite.remap[v as usize] as usize] {
+            Inst::Call { ret_slot_local, .. }
+            | Inst::CallIndirect { ret_slot_local, .. }
+            | Inst::CallExt { ret_slot_local, .. } => *ret_slot_local = 0,
+            _ => unreachable!("only a call's result slot is released"),
+        }
+    }
+}
+
+/// Plan the `RetPart`s of each call returning in registers and their
+/// stores into its result temporary, placed right after the call. The
+/// callee's convention decides the registers, taken as the call emitters
+/// take it. Returns the calls whose slot the plan releases.
+fn call_parts(
+    func: &FunctionSsa,
+    target: Target,
+    conv_of: &BTreeMap<usize, CallConv>,
+    plan: &mut Plan,
+    returns_parts: bool,
+) -> Vec<ValueId> {
+    let mut calls = Vec::new();
+    for block in &func.blocks {
+        for v in block.inst_range.clone() {
+            let (conv, ret_agg, slot) = match &func.insts[v as usize] {
+                Inst::Call {
+                    target_pc,
+                    ret_agg,
+                    ret_slot_local,
+                    ..
+                } => (
+                    conv_of.get(target_pc).copied().unwrap_or_default(),
+                    *ret_agg,
+                    *ret_slot_local,
+                ),
+                Inst::CallIndirect {
+                    callee_conv,
+                    ret_agg,
+                    ret_slot_local,
+                    ..
+                } => (*callee_conv, *ret_agg, *ret_slot_local),
+                Inst::CallExt {
+                    ret_agg,
+                    ret_slot_local,
+                    ..
+                } => (func.conv, *ret_agg, *ret_slot_local),
+                _ => continue,
+            };
+            let Some(ai) = ret_agg else {
+                continue;
+            };
+            let desc = &func.agg_descs[ai as usize];
+            let abi = target.abi_row(conv).abi();
+            let Some(parts) = register_parts(desc.size, &desc.fields, abi, true) else {
+                continue;
+            };
+            if slot >= 0 || !tape_carries(&parts, desc.fields.len()) {
+                continue;
+            }
+            let at = At::After(v);
+            let mut in_bank = [0u8; 2];
+            let values: Vec<ValueId> = parts
+                .iter()
+                .map(|p| {
+                    let kind = part_kind(p);
+                    let bank = usize::from(p.class != RegClass::Integer);
+                    in_bank[bank] += 1;
+                    let part = Inst::RetPart {
+                        slot: in_bank[bank] - 1,
+                        kind,
+                    };
+                    plan.push(at, part, kind == LoadKind::F32)
+                })
+                .collect();
+            let split = splits_by_fields(func, slot, returns_parts);
+            let mut addr = None;
+            for (p, &value) in parts.iter().zip(&values) {
+                scatter(plan, at, slot, &mut addr, value, p, desc, split);
+            }
+            calls.push(v);
+        }
+    }
+    calls
 }
 
 #[cfg(test)]
@@ -484,7 +582,7 @@ mod tests {
             let mut f = walked(SRC, "by_value", target);
             let slot = f.param_local_slots[0];
             assert!(slot < 0, "{target:?}: {}", text(&f));
-            run(core::slice::from_mut(&mut f), target);
+            run(core::slice::from_mut(&mut f), target, &BTreeMap::new());
             let t = text(&f);
             let entry = f.blocks[0].inst_range.clone();
             let parts: Vec<u32> = entry
@@ -546,7 +644,7 @@ mod tests {
             { return a.a + a.b + s0 + b.a + b.b + b.c + c.a + s1; }";
         for target in [Target::LinuxAarch64, Target::LinuxX64, Target::WindowsX64] {
             let mut f = walked(SRC, "take", target);
-            run(core::slice::from_mut(&mut f), target);
+            run(core::slice::from_mut(&mut f), target, &BTreeMap::new());
             let t = text(&f);
             let reads: Vec<usize> = (0..f.insts.len())
                 .filter(|&v| matches!(f.insts[v], Inst::ParamRef { .. } | Inst::ParamPart { .. }))
@@ -569,7 +667,7 @@ mod tests {
         const SRC: &str = "struct Q { int a, b; }; struct Q swap(struct Q v) { struct Q r; r.a = v.b; r.b = v.a; return r; }";
         for target in [Target::LinuxAarch64, Target::LinuxX64, Target::WindowsX64] {
             let mut f = walked(SRC, "swap", target);
-            run(core::slice::from_mut(&mut f), target);
+            run(core::slice::from_mut(&mut f), target, &BTreeMap::new());
             let t = text(&f);
             let shr = f.insts.iter().filter(|i| {
                 matches!(
@@ -632,7 +730,7 @@ mod tests {
         const SRC: &str = "struct S { char c; int i; }; int id(struct S s) { return s.i; }";
         for target in [Target::LinuxAarch64, Target::LinuxX64] {
             let mut f = walked(SRC, "id", target);
-            run(core::slice::from_mut(&mut f), target);
+            run(core::slice::from_mut(&mut f), target, &BTreeMap::new());
             let t = text(&f);
             let stores: Vec<(i32, StoreKind)> = f
                 .insts
@@ -669,7 +767,7 @@ mod tests {
             for (name, whole) in [("esc", true), ("idx", true), ("copy", false)] {
                 let mut f = walked(SRC, name, target);
                 let slot = f.param_local_slots[0];
-                run(core::slice::from_mut(&mut f), target);
+                run(core::slice::from_mut(&mut f), target, &BTreeMap::new());
                 let t = text(&f);
                 // A whole register goes through the cell's own store.
                 let stores: Vec<(i32, StoreKind)> = f.blocks[0]
@@ -708,7 +806,7 @@ mod tests {
         for target in [Target::LinuxAarch64, Target::LinuxX64] {
             let mut f = walked(SRC, "va", target);
             let slot = f.param_local_slots[0];
-            run(core::slice::from_mut(&mut f), target);
+            run(core::slice::from_mut(&mut f), target, &BTreeMap::new());
             let t = text(&f);
             assert!(
                 !f.insts.iter().any(|i| matches!(i, Inst::ParamPart { .. })),
@@ -732,16 +830,24 @@ mod tests {
         for target in [Target::LinuxAarch64, Target::LinuxX64] {
             let mut f = walked(UNION, "id", target);
             let before = text(&f);
-            run(core::slice::from_mut(&mut f), target);
+            run(core::slice::from_mut(&mut f), target, &BTreeMap::new());
             assert_eq!(before, text(&f), "{target:?}");
         }
         const FLOATS: &str = "struct F { float x, y; }; struct F id(struct F u) { return u; }";
         let mut f = walked(FLOATS, "id", Target::LinuxX64);
         let before = text(&f);
-        run(core::slice::from_mut(&mut f), Target::LinuxX64);
+        run(
+            core::slice::from_mut(&mut f),
+            Target::LinuxX64,
+            &BTreeMap::new(),
+        );
         assert_eq!(before, text(&f));
         let mut f = walked(FLOATS, "id", Target::LinuxAarch64);
-        run(core::slice::from_mut(&mut f), Target::LinuxAarch64);
+        run(
+            core::slice::from_mut(&mut f),
+            Target::LinuxAarch64,
+            &BTreeMap::new(),
+        );
         let t = text(&f);
         let Terminator::Return(r) = f.blocks[0].terminator else {
             panic!("{t}")
@@ -754,7 +860,7 @@ mod tests {
         const DOUBLES: &str = "struct D { double x, y; }; struct D id(struct D u) { return u; }";
         for target in [Target::LinuxAarch64, Target::LinuxX64] {
             let mut f = walked(DOUBLES, "id", target);
-            run(core::slice::from_mut(&mut f), target);
+            run(core::slice::from_mut(&mut f), target, &BTreeMap::new());
             let t = text(&f);
             let parts: Vec<LoadKind> = f
                 .insts
@@ -773,5 +879,104 @@ mod tests {
             };
             assert_eq!(fp_mask.count(), 2, "{target:?}: {t}");
         }
+    }
+
+    /// A call returning in registers: its parts are read right after it,
+    /// in part order and per bank, stored into its result temporary, and
+    /// the call names no slot. A union keeps the call's own store.
+    #[test]
+    fn call_results_are_read_as_parts() {
+        const SRC: &str = "struct P { long a, b; }; struct P makep(long);\n\
+            struct M { double d; long l; }; struct M makem(long);\n\
+            union U { long l; double d; }; union U makeu(long);\n\
+            void pair(struct P *a) { *a = makep(1); }\n\
+            long mixed(void) { struct M m = makem(1); return m.l; }\n\
+            long un(void) { union U u = makeu(1); return u.l; }";
+        let parts_after_call = |f: &FunctionSsa| -> Vec<(u8, LoadKind)> {
+            let call = f
+                .insts
+                .iter()
+                .position(|i| matches!(i, Inst::Call { .. }))
+                .expect("a call");
+            f.insts[call + 1..]
+                .iter()
+                .map_while(|i| match i {
+                    Inst::RetPart { slot, kind } => Some((*slot, *kind)),
+                    _ => None,
+                })
+                .collect()
+        };
+        let slot_of = |f: &FunctionSsa| {
+            f.insts.iter().find_map(|i| match i {
+                Inst::Call { ret_slot_local, .. } => Some(*ret_slot_local),
+                _ => None,
+            })
+        };
+        for target in [Target::LinuxAarch64, Target::LinuxX64] {
+            let mut f = walked(SRC, "pair", target);
+            run(core::slice::from_mut(&mut f), target, &BTreeMap::new());
+            let t = text(&f);
+            assert_eq!(
+                parts_after_call(&f),
+                [(0, LoadKind::I64), (1, LoadKind::I64)],
+                "{target:?}: {t}"
+            );
+            assert_eq!(slot_of(&f), Some(0), "{target:?}: {t}");
+            let stores = f
+                .insts
+                .iter()
+                .filter(|i| matches!(i, Inst::Store { .. }))
+                .count();
+            assert!(stores >= 2, "{target:?}: {t}");
+            let mut f = walked(SRC, "un", target);
+            let before = slot_of(&f);
+            run(core::slice::from_mut(&mut f), target, &BTreeMap::new());
+            assert_eq!(slot_of(&f), before, "{target:?}: {}", text(&f));
+            assert!(parts_after_call(&f).is_empty(), "{target:?}");
+        }
+        // System V: the double in xmm0, the long in rax, each slot 0 of its bank.
+        let mut f = walked(SRC, "mixed", Target::LinuxX64);
+        run(
+            core::slice::from_mut(&mut f),
+            Target::LinuxX64,
+            &BTreeMap::new(),
+        );
+        assert_eq!(
+            parts_after_call(&f),
+            [(0, LoadKind::F64), (0, LoadKind::I64)],
+            "{}",
+            text(&f)
+        );
+    }
+
+    /// A direct call to a function on another convention reads the
+    /// convention the call emitters read: an `ms_abi` callee returning
+    /// eight bytes of `double` returns them in rax, not xmm0.
+    #[test]
+    fn a_foreign_convention_decides_the_part_registers() {
+        const SRC: &str = "struct D1 { double x; };\n\
+            __attribute__((ms_abi)) struct D1 msd(void);\n\
+            double f(void) { struct D1 d = msd(); return d.x; }";
+        let mut f = walked(SRC, "f", Target::LinuxX64);
+        let target_pc = f
+            .insts
+            .iter()
+            .find_map(|i| match i {
+                Inst::Call { target_pc, .. } => Some(*target_pc),
+                _ => None,
+            })
+            .expect("a direct call");
+        let conv_of: BTreeMap<usize, CallConv> = [(target_pc, CallConv::Ms)].into();
+        run(core::slice::from_mut(&mut f), Target::LinuxX64, &conv_of);
+        let t = text(&f);
+        let parts: Vec<LoadKind> = f
+            .insts
+            .iter()
+            .filter_map(|i| match i {
+                Inst::RetPart { kind, .. } => Some(*kind),
+                _ => None,
+            })
+            .collect();
+        assert!(parts.iter().all(|&k| k != LoadKind::F64), "{t}");
     }
 }

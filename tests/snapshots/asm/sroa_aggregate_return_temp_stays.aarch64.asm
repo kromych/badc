@@ -78,15 +78,14 @@ Disassembly of section .text:
                	stur	x0, [x29, #-0x8]
                	sub	x0, x29, #0x8
                	ldr	w1, [x0]
-               	ldr	w0, [x0, #0x4]
-               	lsl	x2, x1, #7
-               	lsr	x3, x0, #25
-               	orr	x2, x2, x3
+               	ldr	w2, [x0, #0x4]
+               	lsl	x3, x1, #7
+               	lsr	x4, x2, #25
+               	orr	x3, x3, x4
                	lsr	x1, x1, #25
-               	lsl	x0, x0, #7
-               	orr	x1, x1, x0
-               	sub	x0, x29, #0x10
-               	str	w2, [x0]
+               	lsl	x2, x2, #7
+               	orr	x1, x1, x2
+               	str	w3, [x0]
                	str	w1, [x0, #0x4]
                	ldr	x0, [x0]
                	bl	<addr>

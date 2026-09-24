@@ -413,6 +413,10 @@ fn store_ret_agg(
     let Some(ai) = ret_agg else {
         return false;
     };
+    // No result slot: the call's `RetPart`s read the registers.
+    if ret_slot_local == 0 {
+        return true;
+    }
     let base = local_slot_off(ret_slot_local, func, frame, abi);
     store_agg_return(code, &agg_descs[ai as usize], base, abi);
     true

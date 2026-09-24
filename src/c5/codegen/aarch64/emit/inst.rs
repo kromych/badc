@@ -68,8 +68,10 @@ pub(super) fn emit_inst(
         // holds, so it emits nothing either, and the return moves the
         // parts of an `AggParts`.
         Inst::AllocaInit(_) | Inst::LifetimeEnd(_) | Inst::AggParts { .. } => Ok(()),
-        Inst::ParamRef { .. } | Inst::ParamPart { .. } => {
-            emit_incoming(code, inst, v, dst, param_plan, alloc, frame, scratch)
+        Inst::ParamRef { .. } | Inst::ParamPart { .. } | Inst::RetPart { .. } => {
+            let src = super::ssa::reg_alloc::incoming_reg(param_plan, inst)
+                .or_else(|| super::ssa::reg_alloc::ret_part_reg(target, inst));
+            emit_incoming(code, inst, v, dst, src, alloc, frame, scratch)
         }
         Inst::Imm(value) => {
             let Some(rd) = int_or_spill_scratch(dst, scratch) else {
@@ -458,25 +460,27 @@ pub(super) fn emit_adrp_add(code: &mut Vec<u8>, rd: Reg) {
     emit(code, enc_add_imm(rd, rd, 0));
 }
 
-/// `Inst::ParamRef` / `Inst::ParamPart`: the incoming register the plan
-/// names into the value's place, an integer one converted from the low
-/// `kind` bytes per C99 6.3.1.3.
+/// `Inst::ParamRef` / `Inst::ParamPart` / `Inst::RetPart`: the argument
+/// or result register `src` names into the value's place, an integer one
+/// converted from the low `kind` bytes per C99 6.3.1.3.
 #[allow(clippy::too_many_arguments)]
 fn emit_incoming(
     code: &mut Vec<u8>,
     inst: &Inst,
     v: super::super::ir::ValueId,
     dst: Place,
-    param_plan: &[super::ArgPlacement],
+    src: Option<(bool, u8)>,
     alloc: &Allocation,
     frame: Frame,
     scratch: &ScratchPool,
 ) -> Emit {
-    let (Inst::ParamRef { kind, .. } | Inst::ParamPart { kind, .. }) = inst else {
-        return fail("incoming: not a parameter read");
+    let (Inst::ParamRef { kind, .. } | Inst::ParamPart { kind, .. } | Inst::RetPart { kind, .. }) =
+        inst
+    else {
+        return fail("incoming: not a register read");
     };
     let name = inst.variant_name();
-    let Some((is_fp, src)) = super::ssa::reg_alloc::incoming_reg(param_plan, inst) else {
+    let Some((is_fp, src)) = src else {
         return fail(alloc::format!("{name}: no incoming register"));
     };
     if matches!(kind, LoadKind::F32 | LoadKind::F64) {

@@ -168,10 +168,10 @@ pub(super) fn binop_imm_materializes(target: Target, op: BinOp, imm: i64, high_d
 /// to. That is ahead of the last instruction, or ahead of the compare a
 /// conditional terminator reads -- the emit may fuse that compare into
 /// the branch, which no unrelated instruction may come between. `None`
-/// when the position that leaves is a phi or a parameter read, neither of
-/// which a copy may precede: a phi belongs to the block's leading run,
-/// and a `ParamRef` or `ParamPart` reads an incoming argument register
-/// live until it.
+/// when the position that leaves is a phi or a register read, neither
+/// of which a copy may precede: a phi belongs to the block's leading run,
+/// and a `ParamRef`, a `ParamPart` or a `RetPart` reads an argument or
+/// result register live until it.
 fn insert_point(func: &FunctionSsa, b: BlockId) -> Option<ValueId> {
     let range = func.blocks[b as usize].inst_range.clone();
     if range.is_empty() {
@@ -188,7 +188,10 @@ fn insert_point(func: &FunctionSsa, b: BlockId) -> Option<ValueId> {
     let blocked = (at..range.end).any(|i| {
         matches!(
             func.insts[i as usize],
-            Inst::Phi { .. } | Inst::ParamRef { .. } | Inst::ParamPart { .. }
+            Inst::Phi { .. }
+                | Inst::ParamRef { .. }
+                | Inst::ParamPart { .. }
+                | Inst::RetPart { .. }
         )
     });
     if blocked { None } else { Some(at) }

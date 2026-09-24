@@ -322,6 +322,7 @@ fn fmt_inst(inst: &Inst) -> String {
                 fmt_load_kind(*kind)
             )
         }
+        RetPart { slot, kind } => format!("RetPart({slot}, kind={})", fmt_load_kind(*kind)),
         AggParts {
             desc,
             parts,

@@ -91,18 +91,17 @@ Disassembly of section .text:
                	movq	(%rdi), %rdi
                	callq	<addr>
                	movq	%rax, -0x8(%rbp)
-               	leaq	-0x8(%rbp), %rax
-               	movl	(%rax), %ecx
-               	movl	0x4(%rax), %eax
-               	movq	%rcx, %rdx
+               	leaq	-0x8(%rbp), %rdi
+               	movl	(%rdi), %eax
+               	movl	0x4(%rdi), %ecx
+               	movq	%rax, %rdx
                	shlq	$0x7, %rdx
-               	movq	%rax, %rsi
+               	movq	%rcx, %rsi
                	shrq	$0x19, %rsi
                	orq	%rsi, %rdx
-               	shrq	$0x19, %rcx
-               	shlq	$0x7, %rax
+               	shrq	$0x19, %rax
+               	shlq	$0x7, %rcx
                	orq	%rcx, %rax
-               	leaq	-0x10(%rbp), %rdi
                	movl	%edx, (%rdi)
                	movl	%eax, 0x4(%rdi)
                	movq	(%rdi), %rdi

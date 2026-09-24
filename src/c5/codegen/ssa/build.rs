@@ -475,6 +475,17 @@ impl SsaBuilder {
     /// Attach the per-argument aggregate map to the call instruction
     /// whose result is `v` (its index in `insts`). The metadata
     /// travels with the instruction through the optimizer.
+    /// Record the result object an out-pointer call writes through its
+    /// first argument, `ret_agg` left unset.
+    pub(crate) fn set_call_out_slot(&mut self, v: ValueId, slot: i64) {
+        if let Inst::Call { ret_slot_local, .. }
+        | Inst::CallIndirect { ret_slot_local, .. }
+        | Inst::CallExt { ret_slot_local, .. } = &mut self.func.insts[v as usize]
+        {
+            *ret_slot_local = slot;
+        }
+    }
+
     pub(crate) fn set_call_arg_aggs(&mut self, v: ValueId, arg_aggs: Vec<Option<u32>>) {
         match &mut self.func.insts[v as usize] {
             Inst::Call { arg_aggs: a, .. }

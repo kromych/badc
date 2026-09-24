@@ -1555,6 +1555,36 @@ pub(crate) fn site_registers(
     (free, held)
 }
 
+/// The direct-call targets on a convention other than the target's own,
+/// by entry: the unit's definitions and its cross-TU function
+/// declarations, the sources the call emitters read theirs from
+/// (`LowerTarget::note_callees`, `LowerTarget::note_extern_callee`).
+pub(crate) fn callee_conventions(
+    program: &super::super::program::Program,
+    funcs: &[super::super::ir::FunctionSsa],
+) -> alloc::collections::BTreeMap<usize, super::CallConv> {
+    let mut out: alloc::collections::BTreeMap<usize, super::CallConv> = funcs
+        .iter()
+        .filter(|f| f.conv != super::CallConv::Target)
+        .map(|f| (f.ent_pc, f.conv))
+        .collect();
+    let extern_pcs: alloc::collections::BTreeSet<usize> = program
+        .extern_function_imports
+        .iter()
+        .map(|(pc, _)| *pc)
+        .collect();
+    for sym in &program.symbols {
+        if sym.is_fun_entity()
+            && !sym.defined_here
+            && extern_pcs.contains(&(sym.val as usize))
+            && sym.conv != super::CallConv::Target
+        {
+            out.insert(sym.val as usize, sym.conv);
+        }
+    }
+    out
+}
+
 /// Accesses a transfer of `bytes` takes at `widest` bytes (a power of two)
 /// per access, the tail through halving widths.
 pub(crate) fn transfer_accesses(bytes: u32, widest: u32) -> u32 {
@@ -2177,7 +2207,8 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         // The register transfers of an aggregate parameter or return join
         // the tape, so the object below is one sroa can split.
         time_pass_arch("passes::agg_parts::run", B::ARCH, || {
-            super::super::passes::agg_parts::run(&mut ssa_funcs, target);
+            let conv_of = callee_conventions(program, &ssa_funcs);
+            super::super::passes::agg_parts::run(&mut ssa_funcs, target, &conv_of);
         });
         // Split address-taken local aggregates into per-field slots and
         // re-run mem2reg to promote them to SSA values, in every function

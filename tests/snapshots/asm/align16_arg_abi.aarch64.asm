@@ -358,8 +358,8 @@ Disassembly of section .text:
                	mov	x1, #0xb                // =11
                	bl	<addr>
                	stur	x0, [x29, #-0x10]
-               	stur	x1, [x29, #-0x8]
                	sub	x0, x29, #0x10
+               	str	x1, [x0, #0x8]
                	sub	x1, x29, #0x40
                	ldp	x16, x17, [x0]
                	stp	x16, x17, [x1]
@@ -367,10 +367,10 @@ Disassembly of section .text:
                	mov	x1, #0x28               // =40
                	bl	<addr>
                	stur	x0, [x29, #-0x10]
-               	stur	x1, [x29, #-0x8]
-               	sub	x1, x29, #0x10
+               	sub	x2, x29, #0x10
+               	str	x1, [x2, #0x8]
                	sub	x0, x29, #0x30
-               	ldp	x16, x17, [x1]
+               	ldp	x16, x17, [x2]
                	stp	x16, x17, [x0]
                	sub	x2, x29, #0x40
                	ldr	x1, [x2]
@@ -541,22 +541,21 @@ Disassembly of section .text:
                	ldr	x3, [x2, #0x8]
                	ldr	x2, [x2]
                	bl	<addr>
+               	mov	x20, x1
                	stur	x0, [x29, #-0x10]
-               	stur	x1, [x29, #-0x8]
                	sub	x0, x29, #0x10
-               	ldr	x20, [x0]
-               	ldr	x21, [x0, #0x8]
+               	str	x20, [x0, #0x8]
+               	ldr	x21, [x0]
                	mov	x0, #0xa                // =10
                	mov	x1, #0x19               // =25
                	bl	<addr>
                	stur	x0, [x29, #-0x10]
-               	stur	x1, [x29, #-0x8]
                	sub	x0, x29, #0x10
-               	ldr	x1, [x0]
-               	ldr	x0, [x0, #0x8]
-               	eor	x1, x20, x1
+               	str	x1, [x0, #0x8]
+               	ldr	x0, [x0]
                	eor	x0, x21, x0
-               	orr	x0, x1, x0
+               	eor	x1, x20, x1
+               	orr	x0, x0, x1
                	cbz	x0, <addr>
                	mov	x0, #0xa                // =10
                	ldp	x29, x30, [sp, #0x50]
@@ -568,22 +567,21 @@ Disassembly of section .text:
                	ldr	x3, [x2, #0x8]
                	ldr	x2, [x2]
                	bl	<addr>
+               	mov	x20, x1
                	stur	x0, [x29, #-0x10]
-               	stur	x1, [x29, #-0x8]
                	sub	x0, x29, #0x10
-               	ldr	x20, [x0]
-               	ldr	x21, [x0, #0x8]
+               	str	x20, [x0, #0x8]
+               	ldr	x21, [x0]
                	mov	x0, #-0x4               // =-4
                	mov	x1, #0x51               // =81
                	bl	<addr>
                	stur	x0, [x29, #-0x10]
-               	stur	x1, [x29, #-0x8]
                	sub	x0, x29, #0x10
-               	ldr	x1, [x0]
-               	ldr	x0, [x0, #0x8]
-               	eor	x1, x20, x1
+               	str	x1, [x0, #0x8]
+               	ldr	x0, [x0]
                	eor	x0, x21, x0
-               	orr	x0, x1, x0
+               	eor	x1, x20, x1
+               	orr	x0, x0, x1
                	cbz	x0, <addr>
                	mov	x0, #0xb                // =11
                	ldp	x29, x30, [sp, #0x50]

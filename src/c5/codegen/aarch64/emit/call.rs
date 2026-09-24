@@ -668,6 +668,10 @@ fn finish_call_result(
 ) {
     if let Some(ai) = ret_agg {
         use super::encode::STR_X;
+        // No result slot: the call's `RetPart`s read the registers.
+        if ret_slot_off == 0 {
+            return;
+        }
         let desc = &agg_descs[ai as usize];
         let size = desc.size;
         let slot = local_slot_off(ret_slot_off, func, frame);

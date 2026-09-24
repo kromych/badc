@@ -26,7 +26,7 @@ Disassembly of section .text:
                	sub	sp, sp, #0x10
                	mov	x1, #0x7                // =7
                	mov	x2, #0x8                // =8
-               	sub	x0, x29, #0x10
+               	sub	x0, x29, #0x8
                	str	w1, [x0]
                	str	w2, [x0, #0x4]
                	cmp	w1, #0x7

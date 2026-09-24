@@ -41,9 +41,6 @@ Disassembly of section .text:
                	movq	-0x8(%rbp), %rax
                	movl	$0x5, %edi
                	callq	*%rax
-               	movq	%rax, -0x10(%rbp)
-               	movq	%rdx, -0x8(%rbp)
-               	movq	-0x10(%rbp), %rax
                	cmpq	$0x5, %rax
                	je	<addr>
                	movl	$0x4, %eax

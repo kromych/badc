@@ -124,6 +124,7 @@ fn compute_high_observed_through(func: &FunctionSsa, collapsing: &[bool]) -> Vec
             | Inst::LifetimeEnd(_)
             | Inst::ParamRef { .. }
             | Inst::ParamPart { .. }
+            | Inst::RetPart { .. }
             | Inst::Extend { .. } => {}
             // A part is returned whole in its register.
             Inst::AggParts { parts, .. } => {

@@ -40,13 +40,11 @@ Disassembly of section .text:
                	subq	$0x10, %rsp
                	movl	$0xa, %edi
                	callq	<addr>
-               	movq	%rax, -0x8(%rbp)
-               	leaq	-0x8(%rbp), %rax
-               	movl	(%rax), %ecx
-               	movl	0x4(%rax), %eax
-               	cmpl	$0xa, %ecx
+               	movq	%rax, %rcx
+               	shrq	$0x20, %rcx
+               	cmpl	$0xa, %eax
                	jne	<addr>
-               	cmpl	$0x14, %eax
+               	cmpl	$0x14, %ecx
                	je	<addr>
                	movl	$0x2, %eax
                	leave

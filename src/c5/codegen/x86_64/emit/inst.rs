@@ -315,7 +315,9 @@ pub(super) fn emit_inst(
         // already holds; `ssa::slot_coalesce` reads it and no code
         // follows from it. The return moves the parts of an `AggParts`.
         Inst::LifetimeEnd(_) | Inst::AggParts { .. } => Ok(()),
-        Inst::ParamRef { .. } | Inst::ParamPart { .. } => emit_incoming(code, inst, dst, v, fcx),
+        Inst::ParamRef { .. } | Inst::ParamPart { .. } | Inst::RetPart { .. } => {
+            emit_incoming(code, inst, dst, v, fcx)
+        }
         Inst::Imm(value) => {
             let Some(rd) = int_or_spill_dst(dst) else {
                 return fail("Imm: dst not int reg / spill");
@@ -777,19 +779,21 @@ fn emit_incoming(
         alloc,
         frame,
         abi,
+        target,
         param_from_home,
         param_plan,
         ..
     } = *fcx;
     let (kind, home) = match inst {
         Inst::ParamRef { idx, kind } => (*kind, Some(*idx as usize)),
-        Inst::ParamPart { kind, .. } => (*kind, None),
-        _ => return fail("incoming: not a parameter read"),
+        Inst::ParamPart { kind, .. } | Inst::RetPart { kind, .. } => (*kind, None),
+        _ => return fail("incoming: not a register read"),
     };
     let name = inst.variant_name();
     let from_home = home.is_some_and(|i| param_from_home.get(i).copied().unwrap_or(false));
     let home_off = home.map_or(0, |i| param_home_off(i, func, frame, abi) as i32);
-    let incoming = super::ssa::reg_alloc::incoming_reg(param_plan, inst);
+    let incoming = super::ssa::reg_alloc::incoming_reg(param_plan, inst)
+        .or_else(|| super::ssa::reg_alloc::ret_part_reg(target, inst));
     if matches!(kind, LoadKind::F32 | LoadKind::F64) {
         // A `float` occupies the low 32 bits of the xmm; the body re-narrows
         // it through the f32 store the walker seeded, so a scalar copy

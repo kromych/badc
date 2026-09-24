@@ -189,6 +189,7 @@ impl<'a> Walker<'a> {
             false,
             fp_mask.shifted(1),
         );
+        b.set_call_out_slot(call, result_slot);
         if !arg_aggs.is_empty() {
             b.set_call_arg_aggs(call, after_out_ptr(&arg_aggs));
         }
@@ -504,6 +505,7 @@ impl<'a> Walker<'a> {
             shifted.push(out_arg);
             shifted.extend_from_slice(&args.vals);
             let call = b.call_ext(val, shifted, fp_mask.shifted(1), false);
+            b.set_call_out_slot(call, result_slot);
             if !arg_aggs.is_empty() {
                 b.set_call_arg_aggs(call, after_out_ptr(&arg_aggs));
             }
@@ -570,6 +572,7 @@ impl<'a> Walker<'a> {
             all_args.extend_from_slice(&args.vals);
             let fixed = all_args.len();
             let call = b.call_indirect(target, all_args, false, fixed, false, call_fp_mask, conv);
+            b.set_call_out_slot(call, result_slot);
             if !arg_aggs.is_empty() {
                 b.set_call_arg_aggs(call, after_out_ptr(&arg_aggs));
             }

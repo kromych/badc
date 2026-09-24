@@ -27,13 +27,10 @@ Disassembly of section .text:
                	sub	sp, sp, #0x10
                	mov	x0, #0xa                // =10
                	bl	<addr>
-               	stur	x0, [x29, #-0x8]
-               	sub	x0, x29, #0x8
-               	ldr	w1, [x0]
-               	ldr	w0, [x0, #0x4]
-               	cmp	w1, #0xa
+               	lsr	x1, x0, #32
+               	cmp	w0, #0xa
                	b.ne	<addr>
-               	cmp	w0, #0x14
+               	cmp	w1, #0x14
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	add	sp, sp, #0x10

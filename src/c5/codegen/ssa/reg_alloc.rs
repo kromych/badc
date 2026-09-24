@@ -904,6 +904,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     let fp_const = fp_constants(func, target, &reads);
     populate_return_hints(func, conv_target, &fp_const, &mut hints);
     populate_param_ref_hints(func, conv_target, &mut hints);
+    populate_ret_part_hints(func, target, &mut hints);
     populate_phi_hints(func, &mut hints);
     // The allocation banks stay the target's own, not the convention's:
     // a value live across a call has to sit in a register the *callee*
@@ -2029,6 +2030,42 @@ fn verify_allocation(
             }
         }
     }
+
+    // Result-register read: a `RetPart` follows a call in its block, and
+    // nothing between them sits in or implicitly writes its register.
+    let tls_call = tls_addr_is_call(target);
+    for block in &func.blocks {
+        for v in block.inst_range.clone() {
+            let Some((fp, reg)) = ret_part_reg(target, &func.insts[v as usize]) else {
+                continue;
+            };
+            let mut after_call = false;
+            for u in (block.inst_range.start..v).rev() {
+                let inst = &func.insts[u as usize];
+                if is_call_site(inst, tls_call) {
+                    after_call = true;
+                    break;
+                }
+                let held = match places.get(u as usize).copied().unwrap_or(Place::None) {
+                    Place::IntReg(r) => !fp && r == reg,
+                    Place::FpReg(r) => fp && r == reg,
+                    _ => false,
+                };
+                let implicit =
+                    target.is_x86_64() && !fp && x86_implicit_writes(inst) >> reg & 1 != 0;
+                if (held && produces_value(inst)) || implicit {
+                    report(alloc::format!(
+                        "ret-part-clobber: v{u} writes the result register RetPart v{v} reads"
+                    ));
+                }
+            }
+            if !after_call {
+                report(alloc::format!(
+                    "ret-part: v{v} follows no call in its block"
+                ));
+            }
+        }
+    }
 }
 
 /// Coloring constraints for one allocation node (a phi-congruence
@@ -2616,7 +2653,7 @@ fn result_kind(inst: &Inst) -> ResultKind {
         // A parameter seeded with an FP load kind arrives in an FP
         // argument register; classify it accordingly so the seed and
         // its consumers share the FP register file.
-        ParamRef { kind, .. } | ParamPart { kind, .. } => match kind {
+        ParamRef { kind, .. } | ParamPart { kind, .. } | RetPart { kind, .. } => match kind {
             LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128 => {
                 ResultKind::Fp
             }
@@ -3042,6 +3079,17 @@ pub(crate) fn incoming_reg(
     }
 }
 
+/// The result register an `Inst::RetPart` reads, as `(is_fp, reg)`.
+pub(crate) fn ret_part_reg(target: Target, inst: &Inst) -> Option<(bool, u8)> {
+    let Inst::RetPart { slot, kind } = inst else {
+        return None;
+    };
+    let (ints, fps) = agg_return_regs(target);
+    let fp = matches!(kind, LoadKind::F32 | LoadKind::F64);
+    let bank = if fp { fps } else { ints };
+    bank.get(*slot as usize).map(|&r| (fp, r))
+}
+
 /// The registers a return in registers delivers its parts in: the integer
 /// ones and the floating-point ones, each in part order.
 pub(crate) fn agg_return_regs(target: Target) -> (&'static [u8], &'static [u8]) {
@@ -3094,10 +3142,6 @@ fn compute_param_incoming_forbid(
     value_is_fp: &[bool],
 ) -> Vec<u64> {
     let mut forbid = alloc::vec![0u64; func.insts.len()];
-    if func.is_variadic {
-        return forbid;
-    }
-    let plan = param_incoming_plan(func, target);
     // Only protect parameters that are read: an unused `ParamRef` is not
     // materialized, so its incoming register need not survive.
     let mut used = alloc::vec![false; func.insts.len()];
@@ -3124,6 +3168,32 @@ fn compute_param_incoming_forbid(
             _ => {}
         }
     }
+    // A `RetPart` reads its call's result register, which stays live from
+    // the call to the part: a value defined between them stays off it.
+    let tls_call = tls_addr_is_call(target);
+    for block in &func.blocks {
+        for v in block.inst_range.clone() {
+            let Some((fp, reg)) = ret_part_reg(target, &func.insts[v as usize]) else {
+                continue;
+            };
+            if !used[v as usize] {
+                continue;
+            }
+            for u in (block.inst_range.start..v).rev() {
+                let inst = &func.insts[u as usize];
+                if is_call_site(inst, tls_call) {
+                    break;
+                }
+                if produces_value(inst) && value_is_fp[u as usize] == fp {
+                    forbid[u as usize] |= 1u64 << reg;
+                }
+            }
+        }
+    }
+    if func.is_variadic {
+        return forbid;
+    }
+    let plan = param_incoming_plan(func, target);
     // (value id, is_fp, incoming register) for each used `ParamRef` /
     // `ParamPart`, in value-id (materialization) order.
     let mut params: Vec<(usize, bool, u8)> = Vec::new();
@@ -3177,6 +3247,19 @@ fn populate_param_ref_hints(func: &FunctionSsa, target: Target, hints: &mut [Opt
     let plan = param_incoming_plan(func, target);
     for (idx, inst) in func.insts.iter().enumerate() {
         if let Some((_, r)) = incoming_reg(&plan, inst)
+            && idx < hints.len()
+            && hints[idx].is_none()
+        {
+            hints[idx] = Some(r);
+        }
+    }
+}
+
+/// Hint each `Inst::RetPart` to the result register it reads, so the part
+/// stays where the call left it.
+fn populate_ret_part_hints(func: &FunctionSsa, target: Target, hints: &mut [Option<u8>]) {
+    for (idx, inst) in func.insts.iter().enumerate() {
+        if let Some((_, r)) = ret_part_reg(target, inst)
             && idx < hints.len()
             && hints[idx].is_none()
         {
@@ -5779,6 +5862,85 @@ int main(void) { return 0; }
         }
     }
 
+    /// A `RetPart` names the `slot`-th result register of its bank, and a
+    /// value defined between the call and the part stays off that
+    /// register while one defined ahead of the call does not.
+    #[test]
+    fn a_result_register_stays_free_until_its_part() {
+        for (target, ints, fps) in [
+            (Target::LinuxAarch64, [0u8, 1], [0u8, 1]),
+            (Target::LinuxX64, [X86_RAX, X86_RDX], [0, 1]),
+        ] {
+            let part = |slot, kind| Inst::RetPart { slot, kind };
+            assert_eq!(
+                ret_part_reg(target, &part(1, LoadKind::I64)),
+                Some((false, ints[1]))
+            );
+            assert_eq!(
+                ret_part_reg(target, &part(1, LoadKind::F64)),
+                Some((true, fps[1]))
+            );
+            let call = Inst::Call {
+                target_pc: 0,
+                args: Vec::new(),
+                fixed_args: 0,
+                fp_return: false,
+                fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
+                arg_aggs: Vec::new(),
+                ret_agg: None,
+                ret_slot_local: 0,
+            };
+            let func = store_func(
+                vec![
+                    local_i64(2),
+                    call,
+                    Inst::Imm(9),
+                    part(0, LoadKind::I64),
+                    part(1, LoadKind::I64),
+                    Inst::Binop {
+                        op: BinOp::Add,
+                        lhs: 3,
+                        rhs: 4,
+                    },
+                    Inst::Binop {
+                        op: BinOp::Add,
+                        lhs: 5,
+                        rhs: 2,
+                    },
+                    Inst::Binop {
+                        op: BinOp::Add,
+                        lhs: 6,
+                        rhs: 0,
+                    },
+                ],
+                7,
+            );
+            let is_fp = vec![false; func.insts.len()];
+            let forbid = compute_param_incoming_forbid(&func, target, &is_fp);
+            let both = (1u64 << ints[0]) | (1u64 << ints[1]);
+            assert_eq!(forbid[2] & both, both, "{target:?}: the constant between");
+            assert_eq!(
+                forbid[3] & (1u64 << ints[1]),
+                1u64 << ints[1],
+                "{target:?}: part 0"
+            );
+            assert_eq!(forbid[0] & both, 0, "{target:?}: a value ahead of the call");
+            let a = with_pool_size_override(usize::MAX, usize::MAX, || allocate(&func, target));
+            assert_eq!(
+                a.places[3],
+                Place::IntReg(ints[0]),
+                "{target:?}: {:?}",
+                a.places
+            );
+            assert_eq!(
+                a.places[4],
+                Place::IntReg(ints[1]),
+                "{target:?}: {:?}",
+                a.places
+            );
+        }
+    }
+
     /// The parts of a return in registers are hinted to their class's
     /// registers on both targets, and a `ParamPart` to its incoming
     /// register, so a function passing a pair straight through moves
@@ -5808,7 +5970,11 @@ int main(void) { return 0; }
             let mut funcs =
                 crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, true, true)
                     .expect("ssa");
-            super::super::super::passes::agg_parts::run(&mut funcs, target);
+            super::super::super::passes::agg_parts::run(
+                &mut funcs,
+                target,
+                &alloc::collections::BTreeMap::new(),
+            );
             let ints = agg_return_regs(target).0;
             let args = target.abi().int_arg_regs;
             for (name, straight) in [("id", true), ("swap", false)] {

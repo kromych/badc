@@ -2056,7 +2056,10 @@ fn needs_param_agg_copy(c: &FunctionSsa) -> bool {
         Inst::StoreIndexed { .. } => true,
         Inst::StoreLocal { off, .. } => agg_slots.contains(off),
         Inst::AtomicRmw { .. } | Inst::AtomicCas { .. } | Inst::AtomicStore { .. } => true,
-        Inst::AtomicLoad { .. } | Inst::ParamPart { .. } | Inst::AggParts { .. } => false,
+        Inst::AtomicLoad { .. }
+        | Inst::ParamPart { .. }
+        | Inst::RetPart { .. }
+        | Inst::AggParts { .. } => false,
         Inst::Call { .. } | Inst::CallIndirect { .. } | Inst::CallExt { .. } | Inst::TailExt(_) => {
             true
         }

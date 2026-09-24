@@ -38,8 +38,6 @@ Disassembly of section .text:
                	movl	$0x2a, %edi
                	leaq	-0x8(%rbp), %rsi
                	callq	<addr>
-               	movq	%rax, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rax
                	cmpq	$0x2a, %rax
                	jne	<addr>
                	movq	-0x8(%rbp), %rax

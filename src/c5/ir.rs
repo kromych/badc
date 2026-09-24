@@ -313,9 +313,12 @@ pub(crate) enum Inst {
         /// `agg_descs[i]` by value; `None` for scalar / void.
         ret_agg: Option<u32>,
         /// Negative frame slot of the caller-allocated result
-        /// temporary an aggregate return materialises into. A frame
-        /// slot rather than a `ValueId` so it survives value
-        /// renumbering. `0` unless `ret_agg` is set.
+        /// temporary an aggregate return materialises into: through the
+        /// host ABI when `ret_agg` is set, else through the c5
+        /// out-pointer the call passes as `args[0]`. A frame slot rather
+        /// than a `ValueId` so it survives value renumbering. `0` for a
+        /// call returning no aggregate, and for one whose `RetPart`s read
+        /// the result registers.
         ret_slot_local: i64,
     },
     /// Indirect call: the target's address comes from `target`
@@ -515,6 +518,13 @@ pub(crate) enum Inst {
     /// per register for a parameter it takes out of its frame object,
     /// whose `param_local_slots` entry is then 0.
     ParamPart { idx: u32, part: u8, kind: LoadKind },
+    /// The value a call left in its `slot`-th result register of `kind`'s
+    /// bank: part of an aggregate the host ABI returns in registers, which
+    /// `passes::agg_parts` stores into the call's result temporary in the
+    /// tape, leaving the call no `ret_slot_local`. It follows its call in
+    /// the block with nothing between them that writes the result
+    /// registers; the allocator keeps what does stand there off them.
+    RetPart { slot: u8, kind: LoadKind },
     /// The aggregate `agg_descs[desc]` as the values of its register
     /// parts in class order, `fp_mask` naming the floating-point ones,
     /// for a `Terminator::Return` in registers. Produces no value. The
@@ -593,6 +603,7 @@ impl Inst {
                 | Inst::BitCount { .. }
                 | Inst::Copy { .. }
                 | Inst::ParamPart { .. }
+                | Inst::RetPart { .. }
         )
     }
 
@@ -650,6 +661,7 @@ impl Inst {
             Inst::LifetimeEnd(_) => "LifetimeEnd",
             Inst::ParamRef { .. } => "ParamRef",
             Inst::ParamPart { .. } => "ParamPart",
+            Inst::RetPart { .. } => "RetPart",
             Inst::AggParts { .. } => "AggParts",
             Inst::Phi { .. } => "Phi",
         }
@@ -676,7 +688,8 @@ impl Inst {
             | Inst::AllocaInit(_)
             | Inst::LifetimeEnd(_)
             | Inst::ParamRef { .. }
-            | Inst::ParamPart { .. } => {}
+            | Inst::ParamPart { .. }
+            | Inst::RetPart { .. } => {}
             Inst::AggParts { parts, .. } => parts.iter().for_each(|&v| f(v)),
             Inst::Load { addr, .. } => f(*addr),
             Inst::Store { addr, value, .. } => {
@@ -782,7 +795,8 @@ impl Inst {
             | Inst::AllocaInit(_)
             | Inst::LifetimeEnd(_)
             | Inst::ParamRef { .. }
-            | Inst::ParamPart { .. } => {}
+            | Inst::ParamPart { .. }
+            | Inst::RetPart { .. } => {}
             Inst::AggParts { parts, .. } => parts.iter_mut().for_each(f),
             Inst::Load { addr, .. } => f(addr),
             Inst::Store { addr, value, .. } => {
@@ -2158,6 +2172,7 @@ impl crate::c5::layout::DataOffsets for Inst {
             | Inst::LifetimeEnd { .. }
             | Inst::ParamRef { .. }
             | Inst::ParamPart { .. }
+            | Inst::RetPart { .. }
             | Inst::AggParts { .. }
             | Inst::Phi { .. } => {}
         }

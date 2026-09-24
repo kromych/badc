@@ -29,9 +29,6 @@ Disassembly of section .text:
                	ldur	x1, [x29, #-0x8]
                	mov	x0, #0x5                // =5
                	blr	x1
-               	stur	x0, [x29, #-0x10]
-               	stur	x1, [x29, #-0x8]
-               	ldur	x0, [x29, #-0x10]
                	cmp	x0, #0x5
                	b.eq	<addr>
                	mov	x0, #0x4                // =4

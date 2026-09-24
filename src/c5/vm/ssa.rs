@@ -1457,6 +1457,7 @@ fn run_inst<H: Host>(
         Inst::SegStore { .. } => "SegStore",
         // Emitted by the `-O` pipeline, which the interpreter's SSA skips.
         Inst::ParamPart { .. } => "ParamPart",
+        Inst::RetPart { .. } => "RetPart",
         Inst::AggParts { .. } => "AggParts",
         Inst::Phi { .. } => "Phi",
     };

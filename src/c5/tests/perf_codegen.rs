@@ -3714,3 +3714,96 @@ fn constant_parts_are_set_again_after_a_call() {
     });
     m.finish();
 }
+
+const CALL_RESULTS: &str = "struct S { long a, b, c, d; };\n\
+    struct P { long a, b; };\n\
+    struct S make(int);\n\
+    struct P makep(int);\n\
+    long use(struct S *);\n\
+    struct S *gp;\n\
+    void from_call(struct S *a) { *a = make(1); }\n\
+    void from_callp(struct P *a) { *a = makep(1); }\n\
+    long init_fresh(void) { struct S s = make(1); return use(&s); }\n\
+    long assign_local(void) { struct S s; s = make(1); return use(&s); }\n\
+    long escaped(void) { struct S s = make(0); gp = &s; s = make(1); return use(&s); }\n";
+
+/// An aggregate a call returns lands in its destination. Through a hidden
+/// result pointer the callee builds a fresh object, or a local whose
+/// address has not escaped, in place -- the pointer it takes (x8, rdi)
+/// is the address later passed on, and nothing is copied -- while a
+/// destination behind a pointer, or one whose address escaped before the
+/// call, keeps the temporary and its copy. A result in registers is
+/// stored through the destination pointer with no temporary.
+#[test]
+fn call_results_land_in_their_destination() {
+    let mut m = Misses::default();
+    // `ldp x16, x17` / `movups`: the copy out of a temporary.
+    let a64_copies = |ws: &[u32]| ws.iter().any(|&w| w & 0xFFC0_7FE0 == 0xA940_4400);
+    let x64_copies = |insns: &[X64Insn]| insns.iter().any(|i| i.op == 0x0F10);
+    for (name, copies) in [
+        ("from_call", true),
+        ("init_fresh", false),
+        ("assign_local", false),
+        ("from_callp", false),
+    ] {
+        let ws = a64(CALL_RESULTS, name);
+        m.expect(a64_copies(&ws) == copies, || {
+            format!("aarch64 {name}: copy {copies} expected: {ws:08x?}")
+        });
+        let insns = x64(CALL_RESULTS, name);
+        m.expect(x64_copies(&insns) == copies, || {
+            format!("x86-64 {name}: copy {copies} expected: {insns:x?}")
+        });
+    }
+    // `escaped` copies the second result only.
+    let ws = a64(CALL_RESULTS, "escaped");
+    let pairs = ws
+        .iter()
+        .filter(|&&w| w & 0xFFC0_7FE0 == 0xA940_4400)
+        .count();
+    m.expect(pairs == 2, || {
+        format!("aarch64 escaped: {pairs} ldp: {ws:08x?}")
+    });
+    // In place: the frame address set into x8 is the one passed to `use`.
+    for name in ["init_fresh", "assign_local"] {
+        let ws = a64(CALL_RESULTS, name);
+        let sub_fp = |rd: u32| {
+            ws.iter()
+                .find(|&&w| w & 0xFF80_03FF == 0xD100_03A0 | rd)
+                .map(|&w| (w >> 10) & 0xFFF)
+        };
+        m.expect(sub_fp(8).is_some() && sub_fp(8) == sub_fp(0), || {
+            format!("aarch64 {name}: x8 is not the object passed on: {ws:08x?}")
+        });
+        let insns = x64(CALL_RESULTS, name);
+        let rdi_lea: Vec<i64> = insns
+            .iter()
+            .filter(|i| i.op == 0x8D && i.regs().0 == 7)
+            .map(|i| i.disp)
+            .collect();
+        m.expect(rdi_lea.len() == 2 && rdi_lea[0] == rdi_lea[1], || {
+            format!("x86-64 {name}: rdi is not the object passed on: {insns:x?}")
+        });
+    }
+    // In registers: the result registers stored through the pointer.
+    let ws = a64(CALL_RESULTS, "from_callp");
+    let stores_reg = |rt: u32| {
+        ws.iter().any(|&w| {
+            (w & 0xFFC0_001F == 0xF900_0000 | rt) || (w & 0xFFC0_001F == 0xA900_0000 | rt)
+        })
+    };
+    m.expect(
+        stores_reg(0) && (stores_reg(1) || ws.iter().any(|&w| w & 0xFFC0_7C1F == 0xA900_0400)),
+        || format!("aarch64 from_callp: x0 / x1 not stored: {ws:08x?}"),
+    );
+    let insns = x64(CALL_RESULTS, "from_callp");
+    let stores = |r: u8| {
+        insns
+            .iter()
+            .any(|i| i.op == 0x89 && !i.reg_form() && i.regs().0 == r)
+    };
+    m.expect(stores(0) && stores(2), || {
+        format!("x86-64 from_callp: rax / rdx not stored: {insns:x?}")
+    });
+    m.finish();
+}

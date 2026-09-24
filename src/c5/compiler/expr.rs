@@ -3889,12 +3889,25 @@ impl Compiler {
         self.next()?;
         self.ast_psh();
         self.expr(op.rhs_lev as i64)?;
-        self.check_binary_operands(lhs_ty, self.ty, op.name)?;
-        self.ty = match self.vector_binop_ty(lhs_ty, self.ty, op.name) {
-            Some(vty) => vty,
-            None => self.arith_common_ty(lhs_ty, self.ty),
-        };
+        let rhs_ty = self.ty;
+        self.check_binary_operands(lhs_ty, rhs_ty, op.name)?;
+        if let Some(vty) = self.vector_binop_ty(lhs_ty, rhs_ty, op.name) {
+            self.ty = vty;
+            self.ast_binop(bop);
+            return Ok(());
+        }
+        let common = self.arith_common_ty(lhs_ty, rhs_ty);
+        self.ty = common;
         self.ast_binop(bop);
+        // An operand converted to an unsigned common type (C99 6.3.1.8)
+        // still sits sign-extended in the accumulator, and `|` and `^`
+        // carry its high bits into the result where `&` clears them.
+        if !matches!(bop, super::super::ir::BinOp::And)
+            && is_unsigned_ty(common)
+            && !(is_unsigned_ty(lhs_ty) && is_unsigned_ty(rhs_ty))
+        {
+            self.maybe_mask_to_unsigned_width(lhs_ty, rhs_ty);
+        }
         Ok(())
     }
 

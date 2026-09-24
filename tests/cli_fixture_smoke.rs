@@ -470,6 +470,7 @@ const LINKED_IMAGE_RUN_FIXTURES: &[(&str, i32)] = &[
     ("computed_include_pp_number.c", 0),
     ("pragma_pack_bitfield_layout.c", 0),
     ("addr_compare_disjoint_blocks.c", 0),
+    ("unsigned_bitwise_mixed_sign.c", 0),
 ];
 
 /// The sweep's target for this host, or `None` when the host cannot

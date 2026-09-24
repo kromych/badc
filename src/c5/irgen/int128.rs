@@ -433,6 +433,8 @@ impl<'a> Walker<'a> {
             let joined = b.binop(BinOp::Or, shifted, digit);
             b.binop(BinOp::Ugt, low, joined)
         };
+        // TODO: no block records that `lower` is rare, so the layout keeps it
+        // in the loop body and the common path branches past it per digit.
         b.branch_nonzero(over, lower, done);
 
         b.switch_to(lower);

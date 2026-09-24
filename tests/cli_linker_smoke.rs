@@ -3823,6 +3823,59 @@ fn outline_atomics_run_correct() {
     );
 }
 
+// A program calling the libgcc / compiler-rt __int128 division helpers
+// through their prototypes, as a gcc or clang object does. The expected
+// values are computed apart from badc's own division.
+#[cfg(not(windows))]
+const TI_DIVISION_SRC: &str = "\
+typedef unsigned __int128 u128; typedef __int128 s128; typedef unsigned long long u64;\n\
+extern u128 __udivti3(u128, u128);\n\
+extern u128 __umodti3(u128, u128);\n\
+extern s128 __divti3(s128, s128);\n\
+extern s128 __modti3(s128, s128);\n\
+extern u128 __udivmodti4(u128, u128, u128 *);\n\
+extern s128 __divmodti4(s128, s128, s128 *);\n\
+#define W(h, l) (((u128)(h) << 64) | (u64)(l))\n\
+int main(void) {\n\
+    u128 n = W(0x0123456789abcdefULL, 0xfedcba987654321fULL), d = W(3, 12345), r;\n\
+    s128 sr;\n\
+    if (__udivti3(n, d) != W(0, 0x006117228339449fULL)) return 1;\n\
+    if (__umodti3(n, d) != W(0, 0xb4e81b4e81b61ab8ULL)) return 2;\n\
+    if (__udivmodti4(n, 10, &r) != W(0x001d208a5a912e31ULL, 0x997c790f3f086b69ULL) || r != 5) return 3;\n\
+    if ((u128)__divti3(-(s128)n, 7) != W(0xffd663cca3309970ULL, 0x00299c335ccf668eULL)) return 4;\n\
+    if (__modti3(-(s128)n, 7) != -1) return 5;\n\
+    if (__divmodti4(-(s128)n, -(s128)d, &sr) != 0x006117228339449fLL) return 6;\n\
+    if ((u128)sr != W(0xffffffffffffffffULL, 0x4b17e4b17e49e548ULL)) return 7;\n\
+    return 0;\n\
+}\n";
+
+// The embedded compiler-rt object supplies the __int128 division helpers a
+// program references, with libgcc's results.
+#[cfg(not(windows))]
+#[test]
+fn int128_division_helpers_resolve_on_demand() {
+    let dir = tempdir("ti-division");
+    let src = write_source(&dir, "m.c", TI_DIVISION_SRC);
+    let exe = dir.join("m");
+    run(
+        Command::new(badc())
+            .arg("-o")
+            .arg(&exe)
+            .arg(&src)
+            .current_dir(&dir),
+        "link the __int128 division helpers",
+    );
+    let out = Command::new(&exe)
+        .output()
+        .expect("run the __int128 division helpers");
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "__int128 division helpers: stderr={:?}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+}
+
 // A program using the glibc entry points that live only in the static
 // libc_nonshared.a: atexit, at_quick_exit, pthread_atfork. The atexit handler
 // prints a marker so a run confirms it was registered and invoked.

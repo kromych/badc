@@ -665,6 +665,12 @@ impl Lexer {
         *self.pack_stack.last().unwrap_or(&DEFAULT_PACK)
     }
 
+    /// The pack value a `#pragma pack` directive put in effect, `None`
+    /// when none is.
+    pub fn pragma_pack(&self) -> Option<usize> {
+        Some(self.current_pack()).filter(|&p| p != DEFAULT_PACK)
+    }
+
     /// Apply one parsed `#pragma pack(...)` directive to the stack.
     /// Called from the lexer when it encounters the directive
     /// inline (the preprocessor passes pack pragmas through as

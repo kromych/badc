@@ -64,6 +64,16 @@ struct MemberBase {
 
 /// What the group's specifiers and this declarator's attributes fix about a
 /// member's placement, before its own type is consulted.
+/// How a packed re-layout clamps its members: the attribute drops every
+/// member's natural alignment to 1 and lets an explicit `aligned(N)`
+/// stand; `#pragma pack(N)` keeps each member's placed alignment, which
+/// the member placer already clamped to N, request included.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum Packing {
+    Attribute,
+    Pragma(usize),
+}
+
 struct MemberShape {
     is_union: bool,
     /// `__attribute__((packed))` on the aggregate or on the member.
@@ -1181,8 +1191,22 @@ impl Compiler {
         // non-bitfield member; the bit-level packing and the alignment-1
         // result come from the same re-lay the trailing form runs.
         if packed {
-            self.repack_struct(struct_id);
+            self.repack_struct(struct_id, Packing::Attribute);
+        } else if let Some(pack) = self.lex.pragma_pack()
+            && self.has_bitfield_members(struct_id)
+        {
+            // GCC and clang place bit-fields contiguously, straddling
+            // storage units, whenever a pack pragma is in effect,
+            // whatever its value; the natural placement above is the
+            // one that bumps a field to the next unit of its type.
+            // TODO: the MS layout, which a PE target's C ABI takes.
+            self.repack_struct(struct_id, Packing::Pragma(pack));
         }
+    }
+
+    fn has_bitfield_members(&self, struct_id: usize) -> bool {
+        let s = &self.structs[struct_id];
+        !s.anon_bitfields.is_empty() || s.fields.iter().any(|f| f.bit_width > 0)
     }
 
     /// Apply the attributes trailing an aggregate body
@@ -1192,7 +1216,7 @@ impl Compiler {
     /// padding, and every other attribute leaves the layout alone.
     pub(super) fn apply_post_body_attributes(&mut self, struct_id: usize) -> Result<(), C5Error> {
         if self.skip_attribute_specifiers()? {
-            self.repack_struct(struct_id);
+            self.repack_struct(struct_id, Packing::Attribute);
         }
         let transparent = core::mem::take(&mut self.pending.attr_transparent_union);
         let req = self.take_member_align()?;
@@ -1253,11 +1277,13 @@ impl Compiler {
     /// a non-bitfield member starts at the next byte boundary.
     /// A member carrying an explicit `aligned(N)` keeps that boundary:
     /// `packed` removes natural padding, not a requested alignment.
-    pub(super) fn repack_struct(&mut self, struct_id: usize) {
-        self.structs[struct_id].align = 1;
-        self.structs[struct_id].explicit_align = 0;
+    pub(super) fn repack_struct(&mut self, struct_id: usize, packing: Packing) {
+        if packing == Packing::Attribute {
+            self.structs[struct_id].align = 1;
+            self.structs[struct_id].explicit_align = 0;
+        }
         if self.structs[struct_id].is_union {
-            self.repack_union(struct_id);
+            self.repack_union(struct_id, packing);
             return;
         }
         let n = self.structs[struct_id].fields.len();
@@ -1285,7 +1311,10 @@ impl Compiler {
             // requests do not reach this aggregate.
             if mem_pos < members.len() && members[mem_pos].first as usize <= i {
                 let m = members[mem_pos];
-                let base = bit_cursor.div_ceil(8);
+                let mut base = bit_cursor.div_ceil(8);
+                if let Packing::Pragma(pack) = packing {
+                    base = round_up(base, self.structs[m.inner].align.min(pack).max(1));
+                }
                 bit_cursor = self.move_anon_member(struct_id, mem_pos, base) * 8;
                 mem_pos += 1;
                 i = i.max(m.first as usize + m.count as usize);
@@ -1295,9 +1324,15 @@ impl Compiler {
                 break;
             }
 
-            let (ty, array_size, bit_width, explicit_align) = {
+            let (ty, array_size, bit_width, explicit_align, placed_align) = {
                 let f = &self.structs[struct_id].fields[i];
-                (f.ty, f.array_size, f.bit_width, f.explicit_align as usize)
+                (
+                    f.ty,
+                    f.array_size,
+                    f.bit_width,
+                    f.explicit_align as usize,
+                    f.align as usize,
+                )
             };
             if bit_width > 0 {
                 // TODO: a field whose bits would span more than an
@@ -1311,15 +1346,20 @@ impl Compiler {
                 i += 1;
                 continue;
             }
-            // An explicit `aligned(N)` survives packing: it still places
-            // the member on its boundary and still raises the aggregate.
-            let mut offset = bit_cursor.div_ceil(8);
+            // Under the attribute an explicit `aligned(N)` survives packing:
+            // it still places the member on its boundary and still raises
+            // the aggregate. Under the pragma the member keeps the placed
+            // alignment, already clamped to the pack value.
+            let member_align = match packing {
+                Packing::Attribute => explicit_align.max(1),
+                Packing::Pragma(_) => placed_align.max(1),
+            };
+            let offset = round_up(bit_cursor.div_ceil(8), member_align);
             if explicit_align > 1 {
-                offset = round_up(offset, explicit_align);
                 max_explicit_align = max_explicit_align.max(explicit_align);
             }
             self.structs[struct_id].fields[i].offset = offset;
-            self.structs[struct_id].fields[i].align = explicit_align.max(1) as u32;
+            self.structs[struct_id].fields[i].align = member_align as u32;
             let storage = if array_size > 0 {
                 self.size_of_type(ty) * array_size as usize
             } else if array_size < 0 {
@@ -1336,33 +1376,69 @@ impl Compiler {
             anon_pos += 1;
         }
         let size = bit_cursor.div_ceil(8);
-        // Each bitfield's addressable unit is the smallest 1/2/4/8-byte
-        // window covering its bits, slid back when it would extend past
-        // the struct's tail (a packed struct has no tail padding to
-        // absorb the read-modify-write span).
         for (i, bit_start) in bitfields {
-            let width = self.structs[struct_id].fields[i].bit_width as usize;
-            let unit = (bit_start % 8 + width).div_ceil(8).next_power_of_two();
+            let f = &mut self.structs[struct_id].fields[i];
+            f.offset = bit_start / 8;
+            f.bit_offset = (bit_start % 8) as u32;
+        }
+        self.finish_repack(struct_id, packing, size, max_explicit_align);
+        self.fit_bitfield_windows(struct_id);
+    }
+
+    /// Each bitfield's addressable unit after a packed re-layout: the
+    /// smallest 1/2/4/8-byte window covering its bits, slid back when it
+    /// would extend past the aggregate's tail (a packed aggregate has no
+    /// tail padding to absorb the read-modify-write span). A window no
+    /// slide can fit stays at the field's own byte.
+    /// TODO: an access through a window wider than the aggregate reaches
+    /// past the object; such a field needs a split access.
+    fn fit_bitfield_windows(&mut self, struct_id: usize) {
+        let size = self.structs[struct_id].size;
+        for f in &mut self.structs[struct_id].fields {
+            if f.bit_width == 0 {
+                continue;
+            }
+            let bit_start = f.offset * 8 + f.bit_offset as usize;
+            let unit = (bit_start % 8 + f.bit_width as usize)
+                .div_ceil(8)
+                .next_power_of_two();
             let mut off = bit_start / 8;
             if off + unit > size && unit <= size {
                 off = size - unit;
             }
-            let f = &mut self.structs[struct_id].fields[i];
             f.offset = off;
             f.bit_offset = (bit_start - off * 8) as u32;
             f.bit_unit_size = unit as u8;
         }
-        // A surviving explicit member alignment raises the packed
-        // aggregate too, so an array of it keeps every member on its
-        // requested boundary.
-        self.structs[struct_id].align = max_explicit_align;
-        self.structs[struct_id].member_align = max_explicit_align;
-        self.structs[struct_id].explicit_align = if max_explicit_align > 1 {
-            max_explicit_align as u32
-        } else {
-            0
+    }
+
+    /// The aggregate's alignment and tail padding after a packed
+    /// re-layout. Under the attribute a surviving explicit member
+    /// alignment is all that raises the aggregate, so an array of it
+    /// keeps every member on its requested boundary; under the pragma
+    /// the alignment the body closed with, clamped to the pack value,
+    /// stands.
+    fn finish_repack(
+        &mut self,
+        struct_id: usize,
+        packing: Packing,
+        size: usize,
+        max_explicit_align: usize,
+    ) {
+        let align = match packing {
+            Packing::Attribute => {
+                self.structs[struct_id].align = max_explicit_align;
+                self.structs[struct_id].member_align = max_explicit_align;
+                self.structs[struct_id].explicit_align = if max_explicit_align > 1 {
+                    max_explicit_align as u32
+                } else {
+                    0
+                };
+                max_explicit_align
+            }
+            Packing::Pragma(_) => self.structs[struct_id].align.max(1),
         };
-        self.structs[struct_id].size = round_up(size, max_explicit_align);
+        self.structs[struct_id].size = round_up(size, align);
     }
 
     /// Re-size a union whose body was followed by
@@ -1370,7 +1446,7 @@ impl Compiler {
     /// so packing only drops the tail padding the natural alignment
     /// added: the size becomes the widest member's storage. A member
     /// carrying an explicit `aligned(N)` keeps raising the union.
-    fn repack_union(&mut self, struct_id: usize) {
+    fn repack_union(&mut self, struct_id: usize, packing: Packing) {
         let n = self.structs[struct_id].fields.len();
         let members = self.structs[struct_id].anon_members.clone();
         let mut mem_pos = 0usize;
@@ -1410,14 +1486,8 @@ impl Compiler {
         for a in &self.structs[struct_id].anon_bitfields {
             size = size.max((a.width as usize).div_ceil(8));
         }
-        self.structs[struct_id].align = max_explicit_align;
-        self.structs[struct_id].member_align = max_explicit_align;
-        self.structs[struct_id].explicit_align = if max_explicit_align > 1 {
-            max_explicit_align as u32
-        } else {
-            0
-        };
-        self.structs[struct_id].size = round_up(size, max_explicit_align);
+        self.finish_repack(struct_id, packing, size, max_explicit_align);
+        self.fit_bitfield_windows(struct_id);
     }
 
     /// Alignment an aggregate's width-zero unnamed bit-fields impose, or

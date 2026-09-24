@@ -909,6 +909,22 @@ impl Lexer {
         }
     }
 
+    /// C99 6.4.4.4p9: an octal or hexadecimal escape's value fits an
+    /// `unsigned char`, or the unsigned type of a wide element of
+    /// `elem_bytes` bytes.
+    fn check_escape_range(&self, esc: u8, val: i64, elem_bytes: usize) -> Result<(), C5Error> {
+        if (val as u64) >> (elem_bytes * 8).min(63) == 0 {
+            return Ok(());
+        }
+        let kind = if esc == b'x' { "hex" } else { "octal" };
+        Err(C5Error::at(
+            Code::INVALID_TOKEN,
+            &self.file,
+            self.line,
+            format!("{kind} escape sequence out of range"),
+        ))
+    }
+
     /// Fold one byte of a character constant into its value
     /// (C99 6.4.4.4p10).
     fn push_char_byte(&mut self, val: i64, count: &mut i64, acc: &mut i64) {
@@ -916,13 +932,12 @@ impl Lexer {
         *acc = (*acc << 8) | (val & 0xFF);
         // A single-character constant has the value of its char
         // interpreted as int. Sign-extend on signed-char targets so
-        // `'\x80'` is -128, matching a `char` lvalue read; a hex /
-        // octal escape that overran a byte keeps its wider value.
+        // `'\x80'` is -128, matching a `char` lvalue read.
         let v = if *count == 1 {
-            if self.char_signed && (0..=0xFF).contains(&val) {
+            if self.char_signed {
                 val as i8 as i64
             } else {
-                val
+                val & 0xFF
             }
         } else {
             *acc
@@ -999,7 +1014,7 @@ impl Lexer {
                                     b'A'..=b'F' => 10 + (h - b'A') as i64,
                                     _ => break,
                                 };
-                                acc = (acc << 4) | d;
+                                acc = acc.saturating_mul(16).saturating_add(d);
                                 self.pos += 1;
                                 count += 1;
                             }
@@ -1011,6 +1026,7 @@ impl Lexer {
                                     "\\x in wide literal needs at least one hex digit",
                                 ));
                             }
+                            self.check_escape_range(esc, acc, elem_bytes)?;
                             val = acc;
                         }
                         b'u' | b'U' => val = self.read_ucn(esc)? as i64,
@@ -1026,6 +1042,7 @@ impl Lexer {
                                 self.pos += 1;
                                 count += 1;
                             }
+                            self.check_escape_range(esc, acc, elem_bytes)?;
                             val = acc;
                         }
                         _ => val = esc as i64,
@@ -1169,10 +1186,8 @@ impl Lexer {
                         }
                         continue;
                     }
-                    // \xHH -- hex escape, 1+ hex digits, the C spec is
-                    // greedy ("as many hex digits as make sense") but
-                    // only the low byte matters for c5's char/string
-                    // streams.
+                    // \xHH -- hex escape, as many hex digits as follow
+                    // (C99 6.4.4.4p7).
                     b'x' => {
                         let mut acc: i64 = 0;
                         let mut count = 0;
@@ -1180,7 +1195,7 @@ impl Lexer {
                             let Some(d) = (self.src[self.pos] as char).to_digit(16) else {
                                 break;
                             };
-                            acc = (acc << 4) | d as i64;
+                            acc = acc.saturating_mul(16).saturating_add(d as i64);
                             self.pos += 1;
                             count += 1;
                         }
@@ -1192,6 +1207,7 @@ impl Lexer {
                                 "\\x escape needs at least one hex digit",
                             ));
                         }
+                        self.check_escape_range(esc, acc, 1)?;
                         val = acc;
                     }
                     // \NNN -- octal escape, 1..3 digits. Includes plain
@@ -1208,6 +1224,7 @@ impl Lexer {
                             self.pos += 1;
                             count += 1;
                         }
+                        self.check_escape_range(esc, acc, 1)?;
                         val = acc;
                     }
                     // Unknown escape -- C says undefined, GCC warns. Pass
@@ -2865,6 +2882,35 @@ mod tests {
         assert_eq!(lex_string_literal(r#""\101""#), vec![0o101]); // 'A'
         // Octal stops at the first non-octal digit.
         assert_eq!(lex_string_literal(r#""\18""#), vec![0o1, b'8']);
+    }
+
+    #[test]
+    fn escape_value_fits_the_element() {
+        // C99 6.4.4.4p9: an octal or hex escape is in the range of
+        // `unsigned char`, or of the unsigned wide element type.
+        assert_eq!(lex_string_literal(r#""\xff\377""#), vec![0xFF, 0xFF]);
+        assert_eq!(lex_string_literal(r#""\x000000000041""#), vec![0x41]);
+        assert_eq!(
+            lex_string_literal_w(r#"u"\xffff""#, 4),
+            vec![0xFF, 0xFF, 0, 0]
+        );
+        for (src, kind) in [
+            (r#""\x100""#, "hex"),
+            (r#""\x80a""#, "hex"),
+            (r#""\777""#, "octal"),
+            (r#"'\x100'"#, "hex"),
+            (r#"u8"\x100""#, "hex"),
+            (r#"u"\x10000""#, "hex"),
+            (r#"U"\x100000000""#, "hex"),
+            (r#"L'\x100000000'"#, "hex"),
+            (r#""\x10000000000000000000000""#, "hex"),
+        ] {
+            let err = lex_all(src).expect_err(src).to_string();
+            assert!(
+                err.contains(&format!("{kind} escape sequence out of range")),
+                "{src}: {err}"
+            );
+        }
     }
 
     #[test]

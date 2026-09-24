@@ -2042,20 +2042,19 @@ mod tests {
         );
     }
 
-    /// `int main(void) { return 7 + 3 * 2; }` -- the parser emits
-    /// `Imm 7; Psh; Imm 3; Psh; Imm 2; Mul; [mask]; Add; [mask]`.
-    /// `[mask]` is the C99 6.3.1.8 signed-int width truncation
-    /// pair `Psh; Imm 32; Shl; Psh; Imm 32; Shr` the parser drops
-    /// after every signed arithmetic op. Confirm the AST captures:
+    /// `int main(void) { return 7 + 3 * 2; }` -- the parser reduces each
+    /// signed `int` result to its width with a `Renormalize` node, marked
+    /// since the overflow of `+` and `*` is undefined. Confirm the AST
+    /// captures:
     ///   * three source-level IntLits (7, 3, 2) in source order,
     ///   * a `Binary{Mul, IntLit(3), IntLit(2)}` for the inner `*`,
-    ///   * a `Binary{Add, IntLit(7), <masked-Mul-result>}` for the
+    ///   * a `Binary{Add, IntLit(7), Unary{Renormalize, Mul}}` for the
     ///     outer `+`,
     /// and that the parser-side vstack didn't drift across the
-    /// intervening mask sequences.
+    /// intervening renormalizations.
     #[test]
     fn binop_three_operand_capture() {
-        use super::super::super::ast::Expr;
+        use super::super::super::ast::{Expr, UnOp};
         use super::super::super::ir::BinOp;
 
         let src = alloc::string::String::from("int main(void) { return 7 + 3 * 2; }\n");
@@ -2067,7 +2066,7 @@ mod tests {
             .exprs
             .iter()
             .filter_map(|e| match e {
-                Expr::IntLit { val, .. } if *val != 32 => Some(*val),
+                Expr::IntLit { val, .. } => Some(*val),
                 _ => None,
             })
             .collect();
@@ -2101,22 +2100,21 @@ mod tests {
                 "Add lhs not IntLit(7): {:?}",
                 ast.exprs[*lhs as usize],
             );
-            // The Add rhs reaches the inner Mul through one or
-            // more Shl/Shr masking binops -- chase the binop chain
-            // and confirm the leaf is the Mul.
-            let mut current = *rhs;
-            for _ in 0..6 {
-                match &ast.exprs[current as usize] {
-                    Expr::Binary { op: BinOp::Mul, .. } => return,
-                    Expr::Binary {
-                        op: BinOp::Shl | BinOp::Shr,
-                        lhs,
-                        ..
-                    } => current = *lhs,
-                    other => panic!("unexpected node walking Add rhs: {other:?}"),
-                }
+            match &ast.exprs[*rhs as usize] {
+                Expr::Unary {
+                    op: UnOp::Renormalize { nsw: true },
+                    child,
+                    ..
+                } => assert!(
+                    matches!(
+                        &ast.exprs[*child as usize],
+                        Expr::Binary { op: BinOp::Mul, .. }
+                    ),
+                    "Renormalize child not the Mul: {:?}",
+                    ast.exprs[*child as usize],
+                ),
+                other => panic!("Add rhs not a marked Renormalize: {other:?}"),
             }
-            panic!("did not reach Mul through Add rhs masking chain");
         }
     }
 
@@ -2280,12 +2278,11 @@ mod tests {
 
     /// `int add(int a, int b) { return a + b; }` -- the AST
     /// should land two distinct `Expr::Ident` nodes (one per
-    /// parameter), with an outer `Binary{Add, Ident, Ident}`
-    /// reaching the rhs Ident through the post-Add width-mask
-    /// chain.
+    /// parameter) under a `Binary{Add, Ident, Ident}`, which a
+    /// marked `Renormalize` node reduces to `int`.
     #[test]
     fn ident_load_captures_two_params() {
-        use super::super::super::ast::Expr;
+        use super::super::super::ast::{Expr, UnOp};
         use super::super::super::ir::BinOp;
 
         let src = alloc::string::String::from(
@@ -2319,27 +2316,25 @@ mod tests {
         let add = ast
             .exprs
             .iter()
-            .find(|e| matches!(e, Expr::Binary { op: BinOp::Add, .. }))
+            .position(|e| matches!(e, Expr::Binary { op: BinOp::Add, .. }))
             .expect("Add node missing");
-        if let Expr::Binary { lhs, rhs, .. } = add {
-            assert!(
-                matches!(&ast.exprs[*lhs as usize], Expr::Ident { .. }),
-                "Add lhs not an Ident: {:?}",
-                ast.exprs[*lhs as usize],
-            );
-            let mut current = *rhs;
-            for _ in 0..6 {
-                match &ast.exprs[current as usize] {
-                    Expr::Ident { .. } => return,
-                    Expr::Binary {
-                        op: BinOp::Shl | BinOp::Shr,
-                        lhs,
-                        ..
-                    } => current = *lhs,
-                    other => panic!("unexpected node walking Add rhs: {other:?}"),
-                }
+        if let Expr::Binary { lhs, rhs, .. } = &ast.exprs[add] {
+            for side in [*lhs, *rhs] {
+                assert!(
+                    matches!(&ast.exprs[side as usize], Expr::Ident { .. }),
+                    "Add operand not an Ident: {:?}",
+                    ast.exprs[side as usize],
+                );
             }
-            panic!("did not reach Ident through Add rhs masking chain");
         }
+        assert!(
+            ast.exprs.iter().any(|e| matches!(
+                e,
+                Expr::Unary { op: UnOp::Renormalize { nsw: true }, child, .. }
+                    if *child as usize == add
+            )),
+            "no marked Renormalize over the Add: {:?}",
+            ast.exprs,
+        );
     }
 }

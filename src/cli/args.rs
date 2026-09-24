@@ -88,6 +88,9 @@ pub(crate) struct FrontEnd {
     pub(crate) strict_flex_arrays: u8,
     pub(crate) short_wchar: bool,
     pub(crate) char_signed: Option<bool>,
+    /// `-fwrapv` / `-fno-strict-overflow` against `-fno-wrapv` /
+    /// `-fstrict-overflow`, the last one given winning.
+    pub(crate) wrapv: bool,
     pub(crate) auto_var_init: badc::AutoVarInit,
     pub(crate) nostdinc: bool,
     pub(crate) no_builtin: bool,
@@ -928,9 +931,11 @@ impl Parser {
             // reaches the front end rather than being dropped.
             "-fsigned-char" | "-fno-unsigned-char" => front.char_signed = Some(true),
             "-funsigned-char" | "-fno-signed-char" => front.char_signed = Some(false),
-            // Already unconditional: a signed result wraps to its width, and
-            // no pass derives a fact from overflow being undefined (C99 6.5p5).
-            "-fwrapv" | "-fno-strict-overflow" => {}
+            // gcc's signed-overflow pair, the last one given winning: gcc >= 8
+            // spells `-fno-strict-overflow` as `-fwrapv -fwrapv-pointer`, and
+            // badc derives nothing from pointer overflow (C99 6.5p5).
+            "-fwrapv" | "-fno-strict-overflow" => front.wrapv = true,
+            "-fno-wrapv" | "-fstrict-overflow" => front.wrapv = false,
             // gcc / clang `-fno-builtin` and `-ffreestanding`: a call
             // spelled with a library function's own name is an ordinary
             // call the compiler may not fold. `-ffreestanding` also drops
@@ -1997,6 +2002,7 @@ impl FrontEnd {
             .with_strict_flex_arrays(self.strict_flex_arrays)
             .with_short_wchar(self.short_wchar)
             .with_char_signed(self.char_signed)
+            .with_wrapv(self.wrapv)
             .with_auto_var_init(self.auto_var_init)
             .with_nostdinc(self.nostdinc)
             .with_no_builtin(self.no_builtin)
@@ -2716,8 +2722,21 @@ mod tests {
         assert!(cli.front.no_builtin);
         assert_eq!(cli.codegen.min_function_alignment, 16);
         assert!(parse(&["-fno-pic", "a.c"]).codegen.fno_pic);
-        // The wrapping the two flags ask for is what every build does.
-        parse(&["-fwrapv", "-fno-strict-overflow", "a.c"]);
+        // The overflow pair: the last spelling given wins.
+        assert!(!parse(&["a.c"]).front.wrapv);
+        for (args, wrapv) in [
+            (&["-fwrapv", "a.c"][..], true),
+            (&["-fno-strict-overflow", "a.c"][..], true),
+            (&["-fwrapv", "-fno-wrapv", "a.c"][..], false),
+            (
+                &["-fno-strict-overflow", "-fstrict-overflow", "a.c"][..],
+                false,
+            ),
+            (&["-fstrict-overflow", "-fwrapv", "a.c"][..], true),
+            (&["-fno-wrapv", "-fno-strict-overflow", "a.c"][..], true),
+        ] {
+            assert_eq!(parse(args).front.wrapv, wrapv, "{args:?}");
+        }
         assert_eq!(
             reject(&["-fstrict-flex-arrays=9", "a.c"]).0,
             "badc: error: `-fstrict-flex-arrays=` takes a level 0..=3, got `9`"

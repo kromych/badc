@@ -248,6 +248,7 @@ fn narrow_return_reextends_the_accumulator() {
     f.insts.push(Inst::Extend {
         value: 4,
         kind: LoadKind::I32,
+        nsw: false,
     });
     f.inst_src.push((0, 0));
     f.f32_values.push(false);

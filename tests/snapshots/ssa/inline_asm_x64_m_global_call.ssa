@@ -39,7 +39,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     v17  Extend { value=v15, kind=I32 }                   -> x2
     v18  Extend { value=v15, kind=I32 }                   -> x2
     v19  Binop { op=add, lhs=v3, rhs=v15 }                -> x0
-    v20  Extend { value=v19, kind=I32 }                   -> x1
+    v20  Extend { value=v19, kind=I32, nsw }              -> x1
     v21  Extend { value=v19, kind=I32 }                   -> x1
     terminator Return(v19)   (exit_acc=v19)
 ; --- SSA dump (ok=true) ent_pc=0 ---

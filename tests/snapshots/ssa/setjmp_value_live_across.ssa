@@ -20,10 +20,10 @@ fn ent_pc=7 n_params=2 variadic=false locals=0
     v4   Imm(0)                                           -> x0
     v5   Imm(0)                                           -> x0
     v6   BinopI { op=mul, lhs=v1, rhs_imm=7 }             -> x0
-    v7   Extend { value=v6, kind=I32 }                    -> x1
+    v7   Extend { value=v6, kind=I32, nsw }               -> x1
     v8   Imm(0)                                           -> x1
     v9   Binop { op=add, lhs=v6, rhs=v3 }                 -> x3
-    v10  Extend { value=v9, kind=I32 }                    -> x0
+    v10  Extend { value=v9, kind=I32, nsw }               -> x0
     v11  Imm(0)                                           -> x0
     v12  ImmData(16)                                      -> x7
     v13  CallExt { binding_idx=0, args=[v12], fp_arg_mask=0x0 } -> x0

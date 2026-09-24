@@ -71,7 +71,7 @@ fn ent_pc=1 n_params=3 variadic=false locals=64
     v171 Imm(0)                                           -> x6
     v172 Imm(3)                                           -> x6
     v173 BinopI { op=mul, lhs=v163, rhs_imm=3 }           -> x6
-    v174 Extend { value=v173, kind=I32 }                  -> x6
+    v174 Extend { value=v173, kind=I32, nsw }             -> x6
     v175 BinopI { op=add, lhs=v174, rhs_imm=1000 }        -> x6
     v176 StoreIndexed { base=v167, index=v163, scale=8, value=v175, kind=I64 } -> -
     v177 Extend { value=v163, kind=I32 }                  -> x1
@@ -392,7 +392,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v89  Binop { op=add, lhs=v87, rhs=v88 }               -> x2
     v90  Imm(3)                                           -> x6
     v91  BinopI { op=mul, lhs=v75, rhs_imm=3 }            -> x6
-    v92  Extend { value=v91, kind=I32 }                   -> x6
+    v92  Extend { value=v91, kind=I32, nsw }              -> x6
     v93  BinopI { op=add, lhs=v92, rhs_imm=1000 }         -> x6
     v94  Binop { op=add, lhs=v89, rhs=v93 }               -> x2
     v95  Binop { op=add, lhs=v76, rhs=v94 }               -> x1

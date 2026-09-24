@@ -114,13 +114,13 @@ fn ent_pc=1 n_params=2 variadic=false locals=2
     v69  Store { addr=v61, disp=11, value=v57, kind=I8 }  -> -
     v70  Imm(0)                                           -> x1
     v71  BinopI { op=add, lhs=v1, rhs_imm=6 }             -> x1
-    v72  Extend { value=v71, kind=I32 }                   -> x2
+    v72  Extend { value=v71, kind=I32, nsw }              -> x2
     v73  LocalAddr(-2)                                    -> x2
     v74  BinopI { op=add, lhs=v61, rhs_imm=12 }           -> x2
     v75  Store { addr=v61, disp=12, value=v71, kind=I32 } -> -
     v76  Imm(0)                                           -> x1
     v77  BinopI { op=add, lhs=v1, rhs_imm=4 }             -> x1
-    v78  Extend { value=v77, kind=I32 }                   -> x2
+    v78  Extend { value=v77, kind=I32, nsw }              -> x2
     v79  LocalAddr(-2)                                    -> x2
     v80  Store { addr=v61, disp=0, value=v77, kind=I32 }  -> -
     v81  LocalAddr(-2)                                    -> x1
@@ -175,7 +175,7 @@ fn ent_pc=1 n_params=2 variadic=false locals=2
     v103 Load { addr=v101, disp=12, kind=I32 }            -> x1
     v104 Imm(0)                                           -> x2
     v105 BinopI { op=add, lhs=v1, rhs_imm=6 }             -> x2
-    v106 Extend { value=v105, kind=I32 }                  -> x6
+    v106 Extend { value=v105, kind=I32, nsw }             -> x6
     v107 Binop { op=ne, lhs=v103, rhs=v105 }              -> x1
     v108 Imm(0)                                           -> x2
     terminator Bnz { cond=v107, target=b20, fall=b19 }   (exit_acc=v107)
@@ -184,7 +184,7 @@ fn ent_pc=1 n_params=2 variadic=false locals=2
     v111 Load { addr=v101, disp=0, kind=I32 }             -> x0
     v112 Imm(0)                                           -> x1
     v113 BinopI { op=add, lhs=v1, rhs_imm=4 }             -> x1
-    v114 Extend { value=v113, kind=I32 }                  -> x2
+    v114 Extend { value=v113, kind=I32, nsw }             -> x2
     v115 Binop { op=ne, lhs=v111, rhs=v113 }              -> x0
     v116 Imm(0)                                           -> x1
     v117 Imm(0)                                           -> x1

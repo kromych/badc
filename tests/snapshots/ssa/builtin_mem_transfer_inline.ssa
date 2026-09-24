@@ -1506,7 +1506,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=132
     v1368 Extend { value=v1364, kind=I32 }                 -> x2
     v1369 Binop { op=add, lhs=v1367, rhs=v1364 }           -> x2
     v1370 BinopI { op=mul, lhs=v1364, rhs_imm=3 }          -> x2
-    v1371 Extend { value=v1370, kind=I32 }                 -> x6
+    v1371 Extend { value=v1370, kind=I32, nsw }            -> x6
     v1372 BinopI { op=and, lhs=v1370, rhs_imm=255 }        -> x2
     v1373 StoreIndexed { base=v1367, index=v1364, scale=1, value=v1372, kind=I8 } -> -
     v1374 Extend { value=v1364, kind=I32 }                 -> x1
@@ -1532,7 +1532,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=132
     v1391 Binop { op=add, lhs=v1389, rhs=v1383 }           -> x2
     v1392 LoadIndexed { base=v1389, index=v1383, scale=1, kind=U8 } -> x1
     v1393 BinopI { op=mul, lhs=v1383, rhs_imm=3 }          -> x2
-    v1394 Extend { value=v1393, kind=I32 }                 -> x6
+    v1394 Extend { value=v1393, kind=I32, nsw }            -> x6
     v1395 BinopI { op=and, lhs=v1393, rhs_imm=255 }        -> x2
     v1396 Binop { op=ne, lhs=v1392, rhs=v1395 }            -> x1
     terminator Bz { cond=v1396, target=b73, fall=b83 }   (exit_acc=v1396)

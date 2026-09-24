@@ -141,11 +141,11 @@ fn ent_pc=4 n_params=0 variadic=false locals=18
     v76  BinopI { op=shl, lhs=v68, rhs_imm=3 }            -> x6
     v77  Binop { op=add, lhs=v74, rhs=v76 }               -> x7
     v78  BinopI { op=mul, lhs=v58, rhs_imm=3 }            -> x8
-    v79  Extend { value=v78, kind=I32 }                   -> x9
+    v79  Extend { value=v78, kind=I32, nsw }              -> x9
     v80  Binop { op=add, lhs=v78, rhs=v68 }               -> x8
-    v81  Extend { value=v80, kind=I32 }                   -> x9
+    v81  Extend { value=v80, kind=I32, nsw }              -> x9
     v82  BinopI { op=add, lhs=v80, rhs_imm=1 }            -> x8
-    v83  Extend { value=v82, kind=I32 }                   -> x8
+    v83  Extend { value=v82, kind=I32, nsw }              -> x8
     v84  FpCast { kind=IntToFp, value=v83 }               -> d0
     v85  Store { addr=v77, disp=0, value=v84, kind=F64 }  -> -
     v86  LocalAddr(-9)                                    -> x7

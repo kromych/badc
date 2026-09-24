@@ -21,7 +21,7 @@ fn ent_pc=1 n_params=4 variadic=false locals=0
     v15  Imm(0)                                           -> x0
     v16  Imm(0)                                           -> x0
     v17  Binop { op=add, lhs=v5, rhs=v7 }                 -> x0
-    v18  Extend { value=v17, kind=I32 }                   -> x1
+    v18  Extend { value=v17, kind=I32, nsw }              -> x1
     v19  Store { addr=v1, disp=8, value=v17, kind=I32 }   -> -
     v20  Imm(0)                                           -> x0
     terminator Return(v20)   (exit_acc=v20)

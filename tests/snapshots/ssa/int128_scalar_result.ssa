@@ -346,7 +346,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=2
     v280 Binop { op=or, lhs=v276, rhs=v279 }              -> x2
     v281 Extend { value=v280, kind=I32 }                  -> x6
     v282 BinopI { op=mul, lhs=v280, rhs_imm=3 }           -> x2
-    v283 Extend { value=v282, kind=I32 }                  -> x6
+    v283 Extend { value=v282, kind=I32, nsw }             -> x6
     v284 Extend { value=v282, kind=I32 }                  -> x6
     v285 Extend { value=v282, kind=I32 }                  -> x6
     v286 BinopI { op=ne, lhs=v282, rhs_imm=3 }            -> x2
@@ -367,7 +367,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=2
     v299 BinopI { op=eq, lhs=v298, rhs_imm=0 }            -> x2
     v300 Extend { value=v299, kind=I32 }                  -> x6
     v301 BinopI { op=mul, lhs=v299, rhs_imm=3 }           -> x2
-    v302 Extend { value=v301, kind=I32 }                  -> x6
+    v302 Extend { value=v301, kind=I32, nsw }             -> x6
     v303 Extend { value=v301, kind=I32 }                  -> x6
     v304 Extend { value=v301, kind=I32 }                  -> x6
     v305 BinopI { op=ne, lhs=v301, rhs_imm=0 }            -> x6
@@ -621,7 +621,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=2
     v532 Binop { op=or, lhs=v530, rhs=v531 }              -> x1
     v533 BinopI { op=ne, lhs=v532, rhs_imm=0 }            -> x1
     v534 BinopI { op=add, lhs=v533, rhs_imm=1 }           -> x1
-    v535 Extend { value=v534, kind=I32 }                  -> x2
+    v535 Extend { value=v534, kind=I32, nsw }             -> x2
     v536 BinopI { op=shl, lhs=v534, rhs_imm=2 }           -> x2
     v537 Binop { op=add, lhs=v486, rhs=v536 }             -> x2
     v538 LoadIndexed { base=v486, index=v534, scale=4, kind=I32 } -> x0

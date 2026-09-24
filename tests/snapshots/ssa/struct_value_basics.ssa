@@ -137,16 +137,16 @@ fn ent_pc=2 n_params=0 variadic=false locals=2
     v84  BinopI { op=add, lhs=v73, rhs_imm=4 }            -> x6
     v85  Load { addr=v73, disp=4, kind=I32 }              -> x0
     v86  Binop { op=add, lhs=v82, rhs=v85 }               -> x0
-    v87  Extend { value=v86, kind=I32 }                   -> x2
+    v87  Extend { value=v86, kind=I32, nsw }              -> x2
     v88  LocalAddr(-1)                                    -> x2
     v89  Load { addr=v77, disp=0, kind=I32 }              -> x2
     v90  Binop { op=add, lhs=v86, rhs=v89 }               -> x0
-    v91  Extend { value=v90, kind=I32 }                   -> x2
+    v91  Extend { value=v90, kind=I32, nsw }              -> x2
     v92  LocalAddr(-1)                                    -> x2
     v93  BinopI { op=add, lhs=v77, rhs_imm=4 }            -> x2
     v94  Load { addr=v77, disp=4, kind=I32 }              -> x1
     v95  Binop { op=add, lhs=v90, rhs=v94 }               -> x0
-    v96  Extend { value=v95, kind=I32 }                   -> x1
+    v96  Extend { value=v95, kind=I32, nsw }              -> x1
     v97  Imm(0)                                           -> x1
     v98  Imm(0)                                           -> x1
     v99  BinopI { op=ne, lhs=v95, rhs_imm=370 }           -> x0

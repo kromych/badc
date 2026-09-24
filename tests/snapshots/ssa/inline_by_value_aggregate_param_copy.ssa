@@ -131,11 +131,11 @@ fn ent_pc=5 n_params=0 variadic=false locals=1
     v106 Imm(0)                                           -> x0
     v107 BinopI { op=and, lhs=v99, rhs_imm=255 }          -> x0
     v108 BinopI { op=mul, lhs=v99, rhs_imm=10 }           -> x0
-    v109 Extend { value=v108, kind=I32 }                  -> x1
+    v109 Extend { value=v108, kind=I32, nsw }             -> x1
     v110 Imm(0)                                           -> x1
     v111 BinopI { op=and, lhs=v102, rhs_imm=255 }         -> x1
     v112 Binop { op=add, lhs=v108, rhs=v102 }             -> x0
-    v113 Extend { value=v112, kind=I32 }                  -> x1
+    v113 Extend { value=v112, kind=I32, nsw }             -> x1
     v114 Extend { value=v112, kind=I32 }                  -> x1
     v115 Extend { value=v112, kind=I32 }                  -> x1
     v116 BinopI { op=ne, lhs=v112, rhs_imm=33 }           -> x0

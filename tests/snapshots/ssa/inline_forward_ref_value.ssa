@@ -10,7 +10,7 @@ fn ent_pc=3 n_params=1 variadic=false locals=0
     v4   Extend { value=v1, kind=I32 }                    -> x0
     v5   Extend { value=v1, kind=I32 }                    -> x0
     v6   BinopI { op=add, lhs=v1, rhs_imm=1 }             -> x0
-    v7   Extend { value=v6, kind=I32 }                    -> x2
+    v7   Extend { value=v6, kind=I32, nsw }               -> x2
     v8   Extend { value=v7, kind=I32 }                    -> x1
     v9   Extend { value=v7, kind=I32 }                    -> x1
     v10  Imm(0)                                           -> x1
@@ -38,7 +38,7 @@ fn ent_pc=3 n_params=1 variadic=false locals=0
     v27  Extend { value=v22, kind=I32 }                   -> x7
     v28  Extend { value=v22, kind=I32 }                   -> x7
     v29  BinopI { op=add, lhs=v22, rhs_imm=1 }            -> x7
-    v30  Extend { value=v29, kind=I32 }                   -> x8
+    v30  Extend { value=v29, kind=I32, nsw }              -> x8
     v31  Extend { value=v29, kind=I32 }                   -> x8
     v32  Extend { value=v29, kind=I32 }                   -> x8
     v33  Store { addr=v26, disp=0, value=v29, kind=I32 }  -> -

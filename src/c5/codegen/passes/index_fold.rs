@@ -411,7 +411,7 @@ fn pre_normalize(insts: &[Inst], v: ValueId, store_width: u8) -> Option<ValueId>
     // The builder canonicalizes the signed `Shl K; Shr K` pair into
     // `Inst::Extend`; its low `kind`-width bits equal those of the
     // source, so a store no wider than that sees the same value.
-    if let Some(Inst::Extend { value: w, kind }) = insts.get(v as usize) {
+    if let Some(Inst::Extend { value: w, kind, .. }) = insts.get(v as usize) {
         let kind_bits = match kind {
             LoadKind::I8 => 8i64,
             LoadKind::I16 => 16,
@@ -682,6 +682,7 @@ mod tests {
             Inst::Extend {
                 value: 1,
                 kind: LoadKind::I32,
+                nsw: false,
             },
         ]
     }

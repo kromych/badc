@@ -1081,7 +1081,11 @@ fn narrow_load_replacement(kind: LoadKind, value: ValueId) -> Inst {
             lhs: value,
             rhs_imm: 0xffff_ffff,
         },
-        LoadKind::I8 | LoadKind::I16 | LoadKind::I32 => Inst::Extend { value, kind },
+        LoadKind::I8 | LoadKind::I16 | LoadKind::I32 => Inst::Extend {
+            value,
+            kind,
+            nsw: false,
+        },
         LoadKind::I64
         | LoadKind::F32
         | LoadKind::F64
@@ -2278,6 +2282,7 @@ mod tests {
                 Inst::Extend {
                     value: 0,
                     kind: LoadKind::I8,
+                    ..
                 }
             ),
             "load should become Extend, got {:?}",

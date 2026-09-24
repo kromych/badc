@@ -22,7 +22,7 @@ fn ent_pc=5 n_params=3 variadic=false locals=0
     v16  ImmData(16)                                      -> x0
     v17  Load { addr=v16, disp=0, kind=I32, volatile }    -> x2
     v18  BinopI { op=add, lhs=v17, rhs_imm=1 }            -> x2
-    v19  Extend { value=v18, kind=I32 }                   -> x8
+    v19  Extend { value=v18, kind=I32, nsw }              -> x8
     v20  Store { addr=v16, disp=0, value=v18, kind=I32, volatile } -> -
     v21  ImmData(24)                                      -> x0
     v22  Imm(0)                                           -> x2

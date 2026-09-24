@@ -3423,7 +3423,11 @@ fn splice_param_ref(
     new_f32: &mut Vec<bool>,
 ) -> ValueId {
     let inst = match kind {
-        LoadKind::I8 | LoadKind::I16 | LoadKind::I32 => Inst::Extend { value: arg, kind },
+        LoadKind::I8 | LoadKind::I16 | LoadKind::I32 => Inst::Extend {
+            value: arg,
+            kind,
+            nsw: false,
+        },
         LoadKind::U8 | LoadKind::U16 | LoadKind::U32 => Inst::BinopI {
             op: BinOp::And,
             lhs: arg,
@@ -6245,7 +6249,8 @@ mod tests {
             insts[0],
             Inst::Extend {
                 value: 5,
-                kind: LoadKind::I32
+                kind: LoadKind::I32,
+                ..
             }
         ));
         let (v, insts) = emit(LoadKind::U16);

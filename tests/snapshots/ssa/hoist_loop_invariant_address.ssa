@@ -248,21 +248,21 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v243 BinopI { op=shl, lhs=v238, rhs_imm=4 }           -> x1
     v244 Binop { op=add, lhs=v236, rhs=v243 }             -> x6
     v245 BinopI { op=add, lhs=v238, rhs_imm=1 }           -> x0
-    v246 Extend { value=v245, kind=I32 }                  -> x1
+    v246 Extend { value=v245, kind=I32, nsw }             -> x1
     v247 Store { addr=v244, disp=0, value=v245, kind=I32 } -> -
     v248 Extend { value=v238, kind=I32 }                  -> x1
     v249 BinopI { op=shl, lhs=v238, rhs_imm=4 }           -> x1
     v250 Binop { op=add, lhs=v236, rhs=v243 }             -> x1
     v251 BinopI { op=add, lhs=v244, rhs_imm=8 }           -> x1
     v252 BinopI { op=add, lhs=v238, rhs_imm=1 }           -> x1
-    v253 Extend { value=v245, kind=I32 }                  -> x1
+    v253 Extend { value=v245, kind=I32, nsw }             -> x1
     v254 BinopI { op=lt, lhs=v245, rhs_imm=24 }           -> x1
     terminator Bz { cond=v254, target=b3, fall=b2 }   (exit_acc=v254)
   block 2  start_pc=0
     v255 ImmData(216)                                     -> x1
     v256 Extend { value=v238, kind=I32 }                  -> x1
     v257 BinopI { op=add, lhs=v238, rhs_imm=1 }           -> x1
-    v258 Extend { value=v245, kind=I32 }                  -> x1
+    v258 Extend { value=v245, kind=I32, nsw }             -> x1
     v259 BinopI { op=shl, lhs=v245, rhs_imm=4 }           -> x1
     v260 Binop { op=add, lhs=v236, rhs=v259 }             -> x1
     v261 Imm(0)                                           -> x7
@@ -536,7 +536,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=0
     v214 Binop { op=add, lhs=v209, rhs=v213 }             -> x2
     v215 Load { addr=v51, disp=0, kind=I32, volatile }    -> x6
     v216 BinopI { op=add, lhs=v215, rhs_imm=2 }           -> x6
-    v217 Extend { value=v216, kind=I32 }                  -> x7
+    v217 Extend { value=v216, kind=I32, nsw }             -> x7
     v218 Store { addr=v51, disp=0, value=v216, kind=I32, volatile } -> -
     v219 Extend { value=v208, kind=I32 }                  -> x6
     v220 BinopI { op=add, lhs=v208, rhs_imm=1 }           -> x0

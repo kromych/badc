@@ -10,7 +10,7 @@ fn ent_pc=0 n_params=1 variadic=false locals=1
     v4   StoreLocal { off=-1, value=v3, kind=I32 }        -> -
     v5   Imm(0)                                           -> x0
     v6   BinopI { op=shl, lhs=v1, rhs_imm=1 }             -> x0
-    v7   Extend { value=v6, kind=I32 }                    -> x1
+    v7   Extend { value=v6, kind=I32, nsw }               -> x1
     v8   Imm(0)                                           -> x1
     v9   LocalAddr(-1)                                    -> x1
     v10  Imm(0)                                           -> x2
@@ -21,7 +21,7 @@ fn ent_pc=0 n_params=1 variadic=false locals=1
     v15  Imm(0)                                           -> x2
     v16  Imm(0)                                           -> x2
     v17  BinopI { op=add, lhs=v6, rhs_imm=0 }             -> x2
-    v18  Extend { value=v6, kind=I32 }                    -> x2
+    v18  Extend { value=v6, kind=I32, nsw }               -> x2
     v19  Store { addr=v9, disp=0, value=v6, kind=I32 }    -> -
     v20  Imm(0)                                           -> x2
     v21  Imm(1)                                           -> x2
@@ -33,7 +33,7 @@ fn ent_pc=0 n_params=1 variadic=false locals=1
     v27  Extend { value=v6, kind=I32 }                    -> x2
     v28  Imm(0)                                           -> x6
     v29  Binop { op=add, lhs=v27, rhs=v6 }                -> x2
-    v30  Extend { value=v29, kind=I32 }                   -> x6
+    v30  Extend { value=v29, kind=I32, nsw }              -> x6
     v31  Store { addr=v9, disp=0, value=v29, kind=I32 }   -> -
     v32  Imm(1)                                           -> x6
     v33  Imm(2)                                           -> x6
@@ -45,7 +45,7 @@ fn ent_pc=0 n_params=1 variadic=false locals=1
     v39  Extend { value=v29, kind=I32 }                   -> x2
     v40  Imm(0)                                           -> x6
     v41  Binop { op=add, lhs=v39, rhs=v6 }                -> x0
-    v42  Extend { value=v41, kind=I32 }                   -> x2
+    v42  Extend { value=v41, kind=I32, nsw }              -> x2
     v43  Store { addr=v9, disp=0, value=v41, kind=I32 }   -> -
     v44  Imm(2)                                           -> x0
     v45  Imm(3)                                           -> x0

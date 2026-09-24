@@ -294,7 +294,14 @@ fn take(
             true
         }
         Some(Reuse::Extended) => {
-            rewrites.push((i, Inst::Extend { value, kind }));
+            rewrites.push((
+                i,
+                Inst::Extend {
+                    value,
+                    kind,
+                    nsw: false,
+                },
+            ));
             false
         }
         None => false,
@@ -1062,7 +1069,8 @@ mod tests {
                 f.insts[3],
                 Inst::Extend {
                     value: 1,
-                    kind: LoadKind::I32
+                    kind: LoadKind::I32,
+                    ..
                 }
             ),
             "an I32 reload of an I32 store should become Extend(stored, I32)",
@@ -1537,7 +1545,8 @@ mod tests {
                 f.insts[2],
                 Inst::Extend {
                     value: 0,
-                    kind: LoadKind::I32
+                    kind: LoadKind::I32,
+                    ..
                 }
             ),
             "an I32 slot reload of an I32 store should become Extend(stored, I32)",
@@ -1718,7 +1727,8 @@ mod tests {
                 last,
                 Inst::Extend {
                     value: 2,
-                    kind: LoadKind::I8
+                    kind: LoadKind::I8,
+                    ..
                 }
             ),
             "a signed reload sign-extends the stored value: {last:?}"

@@ -114,7 +114,7 @@ fn eval_const(func: &FunctionSsa, v: ValueId, depth: u32) -> Option<i64> {
             let r = eval_const(func, *rhs, depth + 1)?;
             apply(*op, l, r)
         }
-        Inst::Extend { value, kind } => {
+        Inst::Extend { value, kind, .. } => {
             let x = eval_const(func, *value, depth + 1)?;
             Some(match kind {
                 LoadKind::I8 => x as i8 as i64,
@@ -260,7 +260,7 @@ impl Assembly<'_> {
                 let (lhs, keep) = (*lhs, *rhs_imm as u64);
                 self.clear(node, lhs, keep, shift, depth)
             }
-            Some(Inst::Extend { value, kind }) => match zext_mask(*kind) {
+            Some(Inst::Extend { value, kind, .. }) => match zext_mask(*kind) {
                 Some(keep) => {
                     let value = *value;
                     self.clear(node, value, keep, shift, depth)
@@ -480,7 +480,7 @@ fn resolve_stored_byte(func: &FunctionSsa, value: ValueId) -> (ValueId, u32) {
                 lhs,
                 rhs_imm,
             }) if byte_survives(*rhs_imm as u64, shift) => cur = *lhs,
-            Some(Inst::Extend { value, kind })
+            Some(Inst::Extend { value, kind, .. })
                 if extend_keeps_low(*kind).is_some_and(|w| shift + 8 <= w) =>
             {
                 cur = *value

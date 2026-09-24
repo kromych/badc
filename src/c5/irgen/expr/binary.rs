@@ -217,8 +217,8 @@ impl<'a> Walker<'a> {
             let rv = self.walk_expr_rvalue(b, rhs)?;
             return Ok(self.walk_fp_binop(b, op, lv, rv));
         }
-        // The signed renormalization the parser spells as `Shl K; Shr K`
-        // is one `Inst::Extend`, which the builder would otherwise reach
+        // The signed narrowing a cast spells as `Shl K; Shr K` is one
+        // `Inst::Extend`, which the builder would otherwise reach
         // only after materializing the shift, leaving it behind as a
         // dead instruction the later passes still walk.
         if let Some(v) = self.walk_sign_narrow_pair(b, op, lhs, rhs)? {
@@ -236,14 +236,14 @@ impl<'a> Walker<'a> {
         }
         let lv = self.walk_expr_rvalue(b, lhs)?;
         // The parser already pushes the narrowing (a mask, or a signed
-        // `Shl K; Shr K` pair) as further `Expr::Binary` nodes, so
-        // repeating it here would apply it twice.
+        // `Renormalize` node) as further nodes, so repeating it here
+        // would apply it twice.
         self.walk_int_binop(b, op, lv, lhs, rhs, ty)
     }
 
     /// `(x << K) >> K` with `K` one of 32 / 48 / 56 -- the signed
-    /// narrowing `convert::renormalize_to_width` and the cast lowering
-    /// emit -- read straight off the AST as `Inst::Extend` over `x`.
+    /// narrowing the cast lowering emits -- read straight off the AST as
+    /// `Inst::Extend` over `x`.
     fn walk_sign_narrow_pair(
         &mut self,
         b: &mut SsaBuilder,

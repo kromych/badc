@@ -257,12 +257,16 @@ impl<'a> Walker<'a> {
     pub(super) fn const_fold_int(&self, id: ExprId) -> Option<i64> {
         match self.ast.expr(id) {
             Expr::IntLit { val, .. } => Some(*val),
-            Expr::Unary { op, child, .. } => {
+            Expr::Unary { op, child, ty } => {
                 let v = self.const_fold_int(*child)?;
                 match op {
                     UnOp::Neg => Some(v.wrapping_neg()),
                     UnOp::BitNot => Some(!v),
                     UnOp::LogNot => Some((v == 0) as i64),
+                    UnOp::Renormalize { .. } => Some(crate::c5::vm::eval::eval_extend(
+                        v,
+                        super::access::load_kind_for(*ty, self.target),
+                    )),
                     UnOp::AddrOf | UnOp::Deref => None,
                 }
             }

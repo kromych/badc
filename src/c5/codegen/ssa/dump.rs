@@ -217,8 +217,12 @@ fn fmt_inst(inst: &Inst) -> String {
             c,
             neg_product,
         } => format!("MulAdd {{ a=v{a}, b=v{b}, c=v{c}, neg_product={neg_product} }}"),
-        Extend { value, kind } => {
-            format!("Extend {{ value=v{value}, kind={} }}", fmt_load_kind(*kind))
+        Extend { value, kind, nsw } => {
+            let mark = if *nsw { ", nsw" } else { "" };
+            format!(
+                "Extend {{ value=v{value}, kind={}{mark} }}",
+                fmt_load_kind(*kind)
+            )
         }
         Bswap { value, width } => format!("Bswap {{ value=v{value}, width={width} }}"),
         BitCount { op, value, width } => {

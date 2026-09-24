@@ -85,12 +85,12 @@ fn ent_pc=3 n_params=0 variadic=false locals=3
     v55  BinopI { op=add, lhs=v37, rhs_imm=4 }            -> x6
     v56  Load { addr=v37, disp=4, kind=I32 }              -> x1
     v57  Binop { op=add, lhs=v53, rhs=v56 }               -> x0
-    v58  Extend { value=v57, kind=I32 }                   -> x1
+    v58  Extend { value=v57, kind=I32, nsw }              -> x1
     v59  LocalAddr(-2)                                    -> x1
     v60  BinopI { op=add, lhs=v59, rhs_imm=8 }            -> x6
     v61  Load { addr=v59, disp=8, kind=I32 }              -> x1
     v62  Binop { op=add, lhs=v57, rhs=v61 }               -> x0
-    v63  Extend { value=v62, kind=I32 }                   -> x1
+    v63  Extend { value=v62, kind=I32, nsw }              -> x1
     v64  BinopI { op=ne, lhs=v62, rhs_imm=18 }            -> x0
     terminator Bz { cond=v64, target=b13, fall=b12 }   (exit_acc=v64)
   block 12  start_pc=0

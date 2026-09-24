@@ -27,7 +27,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=1
     v40  Extend { value=v38, kind=I32 }                   -> x0
     v41  LoadLocal { off=-1, kind=I32 }                   -> x0
     v42  Binop { op=add, lhs=v38, rhs=v41 }               -> x1
-    v43  Extend { value=v42, kind=I32 }                   -> x0
+    v43  Extend { value=v42, kind=I32, nsw }              -> x0
     v44  Imm(1)                                           -> x0
     terminator Jmp(b2)   (exit_acc=v44)
   block 2  start_pc=0

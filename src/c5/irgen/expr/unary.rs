@@ -51,6 +51,15 @@ impl<'a> Walker<'a> {
                 let v = self.walk_expr_rvalue(b, child)?;
                 Ok(b.binop_imm(BinOp::Eq, v, 0))
             }
+            UnOp::Renormalize { nsw } => {
+                let v = self.walk_expr_rvalue(b, child)?;
+                Ok(match load_kind_for(ty, self.target) {
+                    kind @ (LoadKind::I8 | LoadKind::I16 | LoadKind::I32) => {
+                        b.extend_marked(v, kind, nsw)
+                    }
+                    _ => v,
+                })
+            }
             UnOp::AddrOf => self.walk_expr_lvalue(b, child),
             UnOp::Deref => {
                 let addr = self.walk_expr_rvalue(b, child)?;

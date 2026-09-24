@@ -83,6 +83,11 @@ pub(crate) enum UnOp {
     AddrOf,
     /// `*expr` -- dereference a pointer. C99 6.5.3.2.
     Deref,
+    /// A signed integer result computed in the 64-bit register, reduced
+    /// to the width of the node's type by sign-extending its low bits.
+    /// `nsw` marks an operation whose overflow is undefined in this unit
+    /// (C99 6.5p5): `+ - *` and unary `-` without `-fwrapv`.
+    Renormalize { nsw: bool },
 }
 
 /// Memory transfer the compiler expands inline, from a GCC

@@ -78,7 +78,7 @@ fn is_bool_value(func: &FunctionSsa, v: ValueId, depth: u32) -> bool {
     match func.insts.get(v as usize) {
         Some(Inst::Imm(k)) => *k == 0 || *k == 1,
         Some(Inst::Binop { op, .. }) | Some(Inst::BinopI { op, .. }) => is_compare_op(*op),
-        Some(Inst::Extend { value, kind }) => {
+        Some(Inst::Extend { value, kind, .. }) => {
             !matches!(kind, LoadKind::F32 | LoadKind::F64) && is_bool_value(func, *value, depth - 1)
         }
         Some(Inst::Phi { incoming, kind }) => {
@@ -244,7 +244,7 @@ fn eval_with(
         return None;
     }
     match *func.insts.get(v as usize)? {
-        Inst::Extend { value, kind } => Some(eval::eval_extend(
+        Inst::Extend { value, kind, .. } => Some(eval::eval_extend(
             eval_with(func, value, pivot, bind, budget)?,
             kind,
         )),
@@ -784,7 +784,7 @@ fn fold_round(func: &mut FunctionSsa) -> bool {
             continue;
         }
         let new_inst = match &func.insts[idx] {
-            Inst::Extend { value, kind } => {
+            Inst::Extend { value, kind, .. } => {
                 imm_of(func, *value).map(|k| Inst::Imm(eval::eval_extend(k, *kind)))
             }
             Inst::Udiv128 { hi, lo, divisor } => {
@@ -1042,6 +1042,7 @@ mod tests {
             Inst::Extend {
                 value: 0,
                 kind: LoadKind::I8,
+                nsw: false,
             },
             Inst::BinopI {
                 op: BinOp::Mul,
@@ -1360,6 +1361,7 @@ mod tests {
             Inst::Extend {
                 value: 0,
                 kind: LoadKind::I32,
+                nsw: false,
             },
         ]);
         f.f32_values[0] = true;
@@ -1445,6 +1447,7 @@ mod tests {
             Inst::Extend {
                 value: 0,
                 kind: LoadKind::I16,
+                nsw: false,
             },
         ]);
         run_one(&mut f);

@@ -458,7 +458,7 @@ pub(super) fn emit_inst(
         Inst::Udiv128 { hi, lo, divisor } => {
             emit_udiv128(code, v, dst, *hi, *lo, *divisor, alloc, frame)
         }
-        Inst::Extend { value, kind } => emit_extend(code, dst, v, *value, *kind, alloc, frame),
+        Inst::Extend { value, kind, .. } => emit_extend(code, dst, v, *value, *kind, alloc, frame),
         Inst::Bswap { value, width } => emit_bswap(code, dst, *value, *width, alloc, frame),
         Inst::BitCount { op, value, width } => emit_bit_count(
             code,

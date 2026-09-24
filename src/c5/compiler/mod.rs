@@ -567,6 +567,10 @@ pub struct CompileOptions {
     /// the implementation. `None` keeps the target ABI's own choice; see
     /// [`Self::plain_char_signed`], the sole resolution of the pair.
     pub char_signed: Option<bool>,
+    /// `-fwrapv` / `-fno-strict-overflow`: a signed `+ - *` or unary `-` is
+    /// defined to wrap at its type's width. Off, its overflow is undefined
+    /// (C99 6.5p5) and the result is marked so.
+    pub wrapv: bool,
     /// `-ftrivial-auto-var-init=`: what an automatic object declared
     /// without an initializer holds on entry to its scope; see
     /// [`AutoVarInit`].
@@ -666,6 +670,12 @@ impl CompileOptions {
     /// search. The undeclared-function error stands instead.
     pub fn declines_auto_include(&self, name: &str) -> bool {
         self.nostdinc || self.no_builtin || self.no_builtin_fns.iter().any(|n| n == name)
+    }
+
+    /// Define signed overflow to wrap (`-fwrapv`). See [`Self::wrapv`].
+    pub fn with_wrapv(mut self, on: bool) -> Self {
+        self.wrapv = on;
+        self
     }
 
     /// Select plain `char`'s signedness (`-fsigned-char` /
@@ -2322,6 +2332,8 @@ pub struct Compiler {
     optimize: bool,
     /// Mirror of [`CompileOptions::nostdinc`], read where `no_builtin` is.
     nostdinc: bool,
+    /// Mirror of [`CompileOptions::wrapv`].
+    wrapv: bool,
     /// Mirror of [`CompileOptions::auto_var_init`]. Read where an
     /// automatic object without an initializer is bound.
     auto_var_init: AutoVarInit,
@@ -2966,6 +2978,7 @@ impl Compiler {
             no_builtin: opts.no_builtin,
             nostdinc: opts.nostdinc,
             auto_var_init: opts.auto_var_init,
+            wrapv: opts.wrapv,
             no_builtin_fns: opts.no_builtin_fns.clone(),
             optimize: opts.optimize,
             elf_class: opts.elf_class,

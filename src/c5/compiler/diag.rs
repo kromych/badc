@@ -242,12 +242,16 @@ impl Compiler {
             Expr::IntLit { val, .. } => Some(*val),
             Expr::Sizeof(s) => Some(s.size_bytes),
             Expr::Cast { child, .. } => self.expr_const_int(*child),
-            Expr::Unary { op, child, .. } => {
+            Expr::Unary { op, child, ty } => {
                 let v = self.expr_const_int(*child)?;
                 match op {
                     UnOp::Neg => Some(v.wrapping_neg()),
                     UnOp::BitNot => Some(!v),
                     UnOp::LogNot => Some((v == 0) as i64),
+                    UnOp::Renormalize { .. } => {
+                        let bytes = self.size_of_type(*ty);
+                        Some(super::types::narrow_const_int(bytes, false, false, v as i128) as i64)
+                    }
                     UnOp::AddrOf | UnOp::Deref => None,
                 }
             }

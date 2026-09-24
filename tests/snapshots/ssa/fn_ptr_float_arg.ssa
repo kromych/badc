@@ -27,7 +27,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     v17  Imm(3)                                           -> x6
     v18  FpCast { kind=FpToInt, value=v15 }               -> x2
     v19  BinopI { op=add, lhs=v18, rhs_imm=3 }            -> x2
-    v20  Extend { value=v19, kind=I32 }                   -> x6
+    v20  Extend { value=v19, kind=I32, nsw }              -> x6
     v21  Extend { value=v19, kind=I32 }                   -> x6
     v22  Extend { value=v19, kind=I32 }                   -> x6
     v23  BinopI { op=ne, lhs=v19, rhs_imm=7 }             -> x2
@@ -43,7 +43,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     v29  Imm(10)                                          -> x2
     v30  FpCast { kind=FpToInt, value=v3 }                -> x0
     v31  BinopI { op=add, lhs=v30, rhs_imm=10 }           -> x0
-    v32  Extend { value=v31, kind=I32 }                   -> x2
+    v32  Extend { value=v31, kind=I32, nsw }              -> x2
     v33  Extend { value=v31, kind=I32 }                   -> x2
     v34  Extend { value=v31, kind=I32 }                   -> x2
     v35  Extend { value=v31, kind=I32 }                   -> x2

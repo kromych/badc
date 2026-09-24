@@ -3131,7 +3131,7 @@ impl Compiler {
                 // Negating the type minimum overflows the width, so a 32-bit
                 // result is renormalized for a later 64-bit read.
                 if self.size_of_type(self.ty) == 4 {
-                    self.renormalize_to_width(self.ty);
+                    self.renormalize_overflow(self.ty);
                 }
             }
         }

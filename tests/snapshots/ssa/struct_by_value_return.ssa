@@ -63,7 +63,7 @@ fn ent_pc=2 n_params=1 variadic=false locals=0
     v20  Imm(1185161)                                     -> x0
     v21  Imm(0)                                           -> x0
     v22  BinopI { op=add, lhs=v1, rhs_imm=1185161 }       -> x0
-    v23  Extend { value=v22, kind=I32 }                   -> x1
+    v23  Extend { value=v22, kind=I32, nsw }              -> x1
     v24  Extend { value=v22, kind=I32 }                   -> x1
     terminator Return(v22)   (exit_acc=v22)
 ; --- SSA dump (ok=true) ent_pc=3 ---
@@ -88,7 +88,7 @@ fn ent_pc=3 n_params=2 variadic=false locals=0
     v14  Imm(0)                                           -> x2
     v15  Extend { value=v1, kind=I32 }                    -> x2
     v16  Binop { op=add, lhs=v0, rhs=v1 }                 -> x2
-    v17  Extend { value=v16, kind=I32 }                   -> x6
+    v17  Extend { value=v16, kind=I32, nsw }              -> x6
     v18  Imm(0)                                           -> x6
     v19  Imm(0)                                           -> x6
     v20  Imm(0)                                           -> x6
@@ -99,7 +99,7 @@ fn ent_pc=3 n_params=2 variadic=false locals=0
     v25  Imm(0)                                           -> x6
     v26  Extend { value=v8, kind=I32 }                    -> x6
     v27  Binop { op=add, lhs=v4, rhs=v8 }                 -> x0
-    v28  Extend { value=v27, kind=I32 }                   -> x1
+    v28  Extend { value=v27, kind=I32, nsw }              -> x1
     v29  Imm(0)                                           -> x1
     v30  Imm(0)                                           -> x1
     v31  BinopI { op=and, lhs=v16, rhs_imm=4294967295 }   -> x1
@@ -136,7 +136,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     v20  Extend { value=v19, kind=I32 }                   -> x1
     v21  Extend { value=v19, kind=I32 }                   -> x1
     v22  BinopI { op=add, lhs=v19, rhs_imm=1185161 }      -> x0
-    v23  Extend { value=v22, kind=I32 }                   -> x1
+    v23  Extend { value=v22, kind=I32, nsw }              -> x1
     v24  Extend { value=v22, kind=I32 }                   -> x1
     v25  Extend { value=v22, kind=I32 }                   -> x1
     v26  Imm(0)                                           -> x1
@@ -320,7 +320,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     v168 Imm(0)                                           -> x1
     v169 Extend { value=v147, kind=I32 }                  -> x1
     v170 Binop { op=add, lhs=v132, rhs=v147 }             -> x1
-    v171 Extend { value=v170, kind=I32 }                  -> x2
+    v171 Extend { value=v170, kind=I32, nsw }             -> x2
     v172 Imm(0)                                           -> x2
     v173 Imm(0)                                           -> x2
     v174 Imm(0)                                           -> x2
@@ -331,7 +331,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     v179 Imm(0)                                           -> x2
     v180 Extend { value=v150, kind=I32 }                  -> x2
     v181 Binop { op=add, lhs=v135, rhs=v150 }             -> x0
-    v182 Extend { value=v181, kind=I32 }                  -> x2
+    v182 Extend { value=v181, kind=I32, nsw }             -> x2
     v183 Imm(0)                                           -> x2
     v184 Imm(0)                                           -> x2
     v185 Imm(0)                                           -> x2

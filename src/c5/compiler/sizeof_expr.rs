@@ -573,7 +573,7 @@ impl Compiler {
                         .is_some_and(|s| s.is_global_register)
             }
             Expr::Unary {
-                op: UnOp::Neg | UnOp::BitNot | UnOp::LogNot,
+                op: UnOp::Neg | UnOp::BitNot | UnOp::LogNot | UnOp::Renormalize { .. },
                 child,
                 ..
             } => self.constant_p_operand_defers(*child),

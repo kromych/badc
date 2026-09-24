@@ -66,9 +66,9 @@ fn ent_pc=0 n_params=0 variadic=false locals=1
     v52  Load { addr=v50, disp=1, kind=U8 }               -> x6
     v53  BinopI { op=and, lhs=v52, rhs_imm=1 }            -> x6
     v54  BinopI { op=shl, lhs=v53, rhs_imm=3 }            -> x6
-    v55  Extend { value=v54, kind=I32 }                   -> x7
+    v55  Extend { value=v54, kind=I32, nsw }              -> x7
     v56  Binop { op=sub, lhs=v48, rhs=v54 }               -> x2
-    v57  Extend { value=v56, kind=I32 }                   -> x6
+    v57  Extend { value=v56, kind=I32, nsw }              -> x6
     v58  BinopI { op=ne, lhs=v56, rhs_imm=56 }            -> x2
     terminator Bz { cond=v58, target=b6, fall=b5 }   (exit_acc=v58)
   block 5  start_pc=0

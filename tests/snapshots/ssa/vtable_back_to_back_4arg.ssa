@@ -21,7 +21,7 @@ fn ent_pc=1 n_params=4 variadic=false locals=0
     v15  Imm(0)                                           -> x0
     v16  Imm(0)                                           -> x0
     v17  Binop { op=add, lhs=v5, rhs=v7 }                 -> x0
-    v18  Extend { value=v17, kind=I32 }                   -> x1
+    v18  Extend { value=v17, kind=I32, nsw }              -> x1
     v19  Store { addr=v1, disp=8, value=v17, kind=I32 }   -> -
     v20  Imm(0)                                           -> x0
     terminator Return(v20)   (exit_acc=v20)
@@ -42,7 +42,7 @@ fn ent_pc=2 n_params=3 variadic=false locals=0
     v9   BinopI { op=add, lhs=v1, rhs_imm=8 }             -> x1
     v10  Load { addr=v1, disp=8, kind=I32 }               -> x1
     v11  BinopI { op=add, lhs=v10, rhs_imm=100 }          -> x1
-    v12  Extend { value=v11, kind=I32 }                   -> x2
+    v12  Extend { value=v11, kind=I32, nsw }              -> x2
     v13  Store { addr=v3, disp=0, value=v11, kind=I32 }   -> -
     v14  Imm(0)                                           -> x1
     v15  Extend { value=v5, kind=I32 }                    -> x1

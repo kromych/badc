@@ -440,7 +440,7 @@ fn ent_pc=11 n_params=0 variadic=false locals=8
     v141 Extend { value=v137, kind=I32 }                  -> x2
     v142 Binop { op=add, lhs=v127, rhs=v137 }             -> x2
     v143 BinopI { op=add, lhs=v137, rhs_imm=1 }           -> x2
-    v144 Extend { value=v143, kind=I32 }                  -> x8
+    v144 Extend { value=v143, kind=I32, nsw }             -> x8
     v145 Extend { value=v143, kind=I8 }                   -> x8
     v146 StoreIndexed { base=v127, index=v137, scale=1, value=v143, kind=I8 } -> -
     v147 ImmData(16)                                      -> x8
@@ -474,7 +474,7 @@ fn ent_pc=11 n_params=0 variadic=false locals=8
   block 39  start_pc=0
     v180 Extend { value=v160, kind=I32 }                  -> x2
     v181 BinopI { op=add, lhs=v160, rhs_imm=1 }           -> x2
-    v182 Extend { value=v181, kind=I32 }                  -> x8
+    v182 Extend { value=v181, kind=I32, nsw }             -> x8
     v183 Extend { value=v181, kind=I8 }                   -> x8
     v184 Imm(0)                                           -> x8
     terminator Jmp(b40)   (exit_acc=v181)

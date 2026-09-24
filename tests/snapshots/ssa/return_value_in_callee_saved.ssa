@@ -16,10 +16,10 @@ fn ent_pc=0 n_params=1 variadic=false locals=0
   block 2  start_pc=0
     v7   Imm(0)                                           -> x1
     v8   BinopI { op=sub, lhs=v1, rhs_imm=1 }             -> x1
-    v9   Extend { value=v8, kind=I32 }                    -> x1
+    v9   Extend { value=v8, kind=I32, nsw }               -> x1
     v10  Extend { value=v8, kind=I32 }                    -> x1
     v11  BinopI { op=add, lhs=v8, rhs_imm=1 }             -> x1
-    v12  Extend { value=v11, kind=I32 }                   -> x1
+    v12  Extend { value=v11, kind=I32, nsw }              -> x1
     v13  Extend { value=v11, kind=I32 }                   -> x1
     v14  Extend { value=v11, kind=I32 }                   -> x1
     v15  Imm(0)                                           -> x1
@@ -35,7 +35,7 @@ fn ent_pc=1 n_params=1 variadic=false locals=0
     v2   Imm(0)                                           -> x0
     v3   Imm(0)                                           -> x0
     v4   BinopI { op=add, lhs=v1, rhs_imm=1 }             -> x0
-    v5   Extend { value=v4, kind=I32 }                    -> x1
+    v5   Extend { value=v4, kind=I32, nsw }               -> x1
     v6   Extend { value=v4, kind=I32 }                    -> x1
     terminator Return(v4)   (exit_acc=v4)
 ; --- SSA dump (ok=true) ent_pc=2 ---

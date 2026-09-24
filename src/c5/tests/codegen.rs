@@ -8561,13 +8561,21 @@ fn optimized_function(
     name: &str,
     target: crate::Target,
 ) -> (String, alloc::vec::Vec<(u32, String)>) {
-    use crate::{CompileOptions, Compiler, NativeOptions, OutputKind};
+    optimized_function_with(src, name, target, crate::CompileOptions::default())
+}
+
+/// [`optimized_function`] with the front end configured by `opts`.
+pub(super) fn optimized_function_with(
+    src: &str,
+    name: &str,
+    target: crate::Target,
+    opts: crate::CompileOptions,
+) -> (String, alloc::vec::Vec<(u32, String)>) {
+    use crate::{Compiler, NativeOptions, OutputKind};
     let program = Compiler::with_options(
         String::from(src),
         target,
-        CompileOptions::default()
-            .with_no_entry_point(true)
-            .with_optimize(true),
+        opts.with_no_entry_point(true).with_optimize(true),
     )
     .compile()
     .unwrap_or_else(|e| panic!("compile ({target:?}): {e}"));

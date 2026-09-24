@@ -31,13 +31,13 @@ fn ent_pc=2 n_params=0 variadic=false locals=1
   block 3  start_pc=0
     v26  LoadLocal { off=-1, kind=I32, volatile }         -> x0
     v27  BinopI { op=mul, lhs=v5, rhs_imm=100000 }        -> x0
-    v28  Extend { value=v27, kind=I32 }                   -> x1
+    v28  Extend { value=v27, kind=I32, nsw }              -> x1
     v29  BinopI { op=mul, lhs=v6, rhs_imm=10 }            -> x1
-    v30  Extend { value=v29, kind=I32 }                   -> x6
+    v30  Extend { value=v29, kind=I32, nsw }              -> x6
     v31  Binop { op=add, lhs=v27, rhs=v29 }               -> x0
-    v32  Extend { value=v31, kind=I32 }                   -> x1
+    v32  Extend { value=v31, kind=I32, nsw }              -> x1
     v33  Binop { op=add, lhs=v31, rhs=v2 }                -> x0
-    v34  Extend { value=v33, kind=I32 }                   -> x1
+    v34  Extend { value=v33, kind=I32, nsw }              -> x1
     v35  Extend { value=v33, kind=I32 }                   -> x1
     v36  Extend { value=v33, kind=I32 }                   -> x1
     v37  Imm(6900000)                                     -> x1

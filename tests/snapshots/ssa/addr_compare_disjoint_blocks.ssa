@@ -16,7 +16,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=3
     v10  Imm(0)                                           -> x0
     v11  Binop { op=eq, lhs=v6, rhs=v4 }                  -> x0
     v12  BinopI { op=mul, lhs=v11, rhs_imm=3 }            -> x0
-    v13  Extend { value=v12, kind=I32 }                   -> x7
+    v13  Extend { value=v12, kind=I32, nsw }              -> x7
     v14  Store { addr=v8, disp=0, value=v12, kind=I8 }    -> -
     v15  Extend { value=v12, kind=I8 }                    -> x1
     v16  LifetimeEnd(-1)                                  -> -

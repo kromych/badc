@@ -10,7 +10,7 @@ fn ent_pc=0 n_params=1 variadic=false locals=0
     v4   InlineAsm { template="1: nop\n.pushsection .discard.probe,\"a\"\n.balign 8\n.quad 1b\n.long 1b - .\n.long %c0\n.popsection\nnop", ops=1, args=[v3] } -> -
     v5   Imm(0)                                           -> x0
     v6   BinopI { op=add, lhs=v1, rhs_imm=1 }             -> x0
-    v7   Extend { value=v6, kind=I32 }                    -> x1
+    v7   Extend { value=v6, kind=I32, nsw }               -> x1
     v8   Extend { value=v6, kind=I32 }                    -> x1
     terminator Return(v6)   (exit_acc=v6)
 ; --- SSA dump (ok=true) ent_pc=1 ---
@@ -24,7 +24,7 @@ fn ent_pc=1 n_params=1 variadic=false locals=0
     v3   InlineAsm { template="nop\n.section .discard.other,\"a\"\n.asciz \"probe\"\n.previous\nnop", ops=0, args=[] } -> -
     v4   Imm(0)                                           -> x0
     v5   BinopI { op=add, lhs=v1, rhs_imm=1 }             -> x0
-    v6   Extend { value=v5, kind=I32 }                    -> x1
+    v6   Extend { value=v5, kind=I32, nsw }               -> x1
     v7   Extend { value=v5, kind=I32 }                    -> x1
     terminator Return(v5)   (exit_acc=v5)
 ; --- SSA dump (ok=true) ent_pc=2 ---

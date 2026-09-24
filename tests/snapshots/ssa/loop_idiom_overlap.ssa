@@ -176,7 +176,7 @@ fn ent_pc=7 n_params=0 variadic=false locals=0
     v60  ImmData(64)                                      -> x1
     v61  Extend { value=v57, kind=I32 }                   -> x1
     v62  BinopI { op=add, lhs=v57, rhs_imm=2 }            -> x1
-    v63  Extend { value=v62, kind=I32 }                   -> x2
+    v63  Extend { value=v62, kind=I32, nsw }              -> x2
     v64  Binop { op=add, lhs=v41, rhs=v62 }               -> x2
     v65  Binop { op=add, lhs=v41, rhs=v57 }               -> x2
     v66  LoadIndexed { base=v41, index=v57, scale=1, kind=I8 } -> x2

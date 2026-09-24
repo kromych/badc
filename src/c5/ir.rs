@@ -251,9 +251,17 @@ pub(crate) enum Inst {
     ///     lifts a narrow local slot whose frame round-trip sign
     ///     extended, or a load feeds a 64-bit use;
     ///   * renormalizing a signed integer result to its declared
-    ///     width after a 64-bit computation (C99 6.5p5) -- equivalent
-    ///     to the `Shl K; Shr K` pair the builder folds here.
-    Extend { value: ValueId, kind: LoadKind },
+    ///     width after a 64-bit computation (C99 6.5p5), from a
+    ///     `Renormalize` node or a `Shl K; Shr K` pair.
+    /// `nsw` marks the renormalization of an operation whose overflow is
+    /// undefined (`+ - *` and unary `-` without `-fwrapv`): in a defined
+    /// execution `value` fits `kind`. Two copies merge to the conjunction
+    /// of their marks.
+    Extend {
+        value: ValueId,
+        kind: LoadKind,
+        nsw: bool,
+    },
     /// Reverse the low `width` bytes of `value` (`__builtin_bswap16/32/64`,
     /// C99 has no operator; the builtin is the existing practice). `width`
     /// is 2, 4, or 8. Operand bits above `width * 8` do not affect the
@@ -2469,7 +2477,8 @@ mod tests {
             (
                 Inst::Extend {
                     value: 5,
-                    kind: LoadKind::I32
+                    kind: LoadKind::I32,
+                    nsw: false
                 },
                 alloc::vec![5]
             ),

@@ -31,12 +31,12 @@ fn ent_pc=0 n_params=2 variadic=false locals=0
     v25  Binop { op=add, lhs=v1, rhs=v12 }                -> x6
     v26  LoadIndexed { base=v1, index=v12, scale=1, kind=I8 } -> x0
     v27  Binop { op=add, lhs=v22, rhs=v26 }               -> x0
-    v28  Extend { value=v27, kind=I32 }                   -> x2
+    v28  Extend { value=v27, kind=I32, nsw }              -> x2
     v29  BinopI { op=sub, lhs=v3, rhs_imm=1 }             -> x2
     v30  Binop { op=add, lhs=v1, rhs=v17 }                -> x2
     v31  Extend { value=v19, kind=I8 }                    -> x1
     v32  Binop { op=add, lhs=v27, rhs=v31 }               -> x0
-    v33  Extend { value=v32, kind=I32 }                   -> x1
+    v33  Extend { value=v32, kind=I32, nsw }              -> x1
     terminator Return(v32)   (exit_acc=v32)
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=two_pages

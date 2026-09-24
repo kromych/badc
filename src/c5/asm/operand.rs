@@ -174,7 +174,7 @@ impl<'a> Folder<'a> {
                 Fold::Value(Folded::Addr { base: v, off: 0 })
             }
             Some(Inst::Copy { value, .. }) => self.fold(*value),
-            Some(Inst::Extend { value, kind }) => {
+            Some(Inst::Extend { value, kind, .. }) => {
                 let Some((w, signed)) = load_int_kind(*kind) else {
                     return Fold::NotConstant;
                 };

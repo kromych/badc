@@ -416,9 +416,12 @@ Compile knobs:
                            synonym. Without either flag the target ABI
                            decides: unsigned on AArch64 ELF, signed
                            elsewhere.
-  -fwrapv                  Accepted: signed arithmetic wraps in every
-  -fno-strict-overflow     build, and no optimization assumes it cannot
-                           overflow.
+  -fwrapv                  Signed integer arithmetic wraps at its type's
+  -fno-strict-overflow     width. Without either flag, -O may assume that
+                           a signed +, -, *, unary -, ++ or -- does not
+                           overflow (C99 6.5p5).
+  -fno-wrapv               Undo -fwrapv / -fno-strict-overflow; the last
+  -fstrict-overflow        of the four given wins.
 
 VM-only knobs (require --interp):
   --track-pointers         Allocation tracking + use-after-free guard.

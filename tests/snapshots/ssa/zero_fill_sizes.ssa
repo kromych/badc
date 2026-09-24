@@ -165,7 +165,7 @@ fn ent_pc=5 n_params=1 variadic=false locals=511
     v25  BinopI { op=add, lhs=v3, rhs_imm=4080 }          -> x2
     v26  Load { addr=v3, disp=4080, kind=I32 }            -> x1
     v27  Binop { op=add, lhs=v22, rhs=v26 }               -> x0
-    v28  Extend { value=v27, kind=I32 }                   -> x1
+    v28  Extend { value=v27, kind=I32, nsw }              -> x1
     v29  Extend { value=v27, kind=I32 }                   -> x1
     terminator Return(v27)   (exit_acc=v27)
 ; --- SSA dump (ok=true) ent_pc=6 ---

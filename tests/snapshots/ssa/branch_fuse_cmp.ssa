@@ -262,7 +262,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=2
     v62  ImmData(56)                                      -> x2
     v63  Load { addr=v58, disp=0, kind=I32 }              -> x2
     v64  BinopI { op=add, lhs=v63, rhs_imm=1 }            -> x2
-    v65  Extend { value=v64, kind=I32 }                   -> x6
+    v65  Extend { value=v64, kind=I32, nsw }              -> x6
     v66  Extend { value=v64, kind=I32 }                   -> x6
     v67  Imm(0)                                           -> x6
     v68  Extend { value=v64, kind=I32 }                   -> x6

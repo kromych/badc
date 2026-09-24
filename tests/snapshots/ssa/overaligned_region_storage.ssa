@@ -20,7 +20,7 @@ fn ent_pc=0 n_params=3 variadic=false locals=0
     v16  BinopI { op=and, lhs=v5, rhs_imm=4294967295 }    -> x1
     v17  Imm(3)                                           -> x1
     v18  BinopI { op=mul, lhs=v9, rhs_imm=3 }             -> x1
-    v19  Extend { value=v18, kind=I32 }                   -> x8
+    v19  Extend { value=v18, kind=I32, nsw }              -> x8
     v20  Binop { op=add, lhs=v5, rhs=v18 }                -> x1
     v21  BinopI { op=and, lhs=v20, rhs_imm=4294967295 }   -> x8
     v22  BinopI { op=and, lhs=v20, rhs_imm=255 }          -> x1
@@ -72,7 +72,7 @@ fn ent_pc=1 n_params=4 variadic=false locals=0
     v28  BinopI { op=and, lhs=v5, rhs_imm=4294967295 }    -> x8
     v29  Imm(3)                                           -> x8
     v30  BinopI { op=mul, lhs=v17, rhs_imm=3 }            -> x8
-    v31  Extend { value=v30, kind=I32 }                   -> x9
+    v31  Extend { value=v30, kind=I32, nsw }              -> x9
     v32  Binop { op=add, lhs=v5, rhs=v30 }                -> x8
     v33  BinopI { op=and, lhs=v32, rhs_imm=4294967295 }   -> x9
     v34  BinopI { op=and, lhs=v32, rhs_imm=255 }          -> x8

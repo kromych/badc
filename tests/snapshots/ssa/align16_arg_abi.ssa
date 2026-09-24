@@ -428,7 +428,7 @@ fn ent_pc=11 n_params=1 variadic=true locals=3
     v16  Load { addr=v15, disp=0, kind=I64 }              -> x2
     v17  Extend { value=v7, kind=I32 }                    -> x6
     v18  BinopI { op=add, lhs=v7, rhs_imm=1 }             -> x0
-    v19  Extend { value=v18, kind=I32 }                   -> x6
+    v19  Extend { value=v18, kind=I32, nsw }              -> x6
     v20  Binop { op=mul, lhs=v16, rhs=v18 }               -> x2
     v21  Binop { op=add, lhs=v8, rhs=v20 }                -> x1
     v22  Imm(0)                                           -> x2

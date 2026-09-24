@@ -10,7 +10,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=2
     v4   StoreLocal { off=-2, value=v3, kind=I32, volatile } -> -
     v5   LoadLocal { off=-2, kind=I32, volatile }         -> x0
     v6   BinopI { op=add, lhs=v5, rhs_imm=1 }             -> x0
-    v7   Extend { value=v6, kind=I32 }                    -> x1
+    v7   Extend { value=v6, kind=I32, nsw }               -> x1
     v8   StoreLocal { off=-2, value=v6, kind=I32, volatile } -> -
     v9   Imm(0)                                           -> x0
     v10  LoadLocal { off=-2, kind=I32, volatile }         -> x0
@@ -22,7 +22,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=2
     v16  StoreLocal { off=-1, value=v15, kind=I32, volatile } -> -
     v17  LoadLocal { off=-1, kind=I32, volatile }         -> x1
     v18  BinopI { op=add, lhs=v17, rhs_imm=1 }            -> x1
-    v19  Extend { value=v18, kind=I32 }                   -> x2
+    v19  Extend { value=v18, kind=I32, nsw }              -> x2
     v20  StoreLocal { off=-1, value=v18, kind=I32, volatile } -> -
     v21  LoadLocal { off=-1, kind=I32, volatile }         -> x1
     v22  Binop { op=add, lhs=v10, rhs=v21 }               -> x0

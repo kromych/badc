@@ -28,7 +28,7 @@ fn ent_pc=0 n_params=5 variadic=false locals=0
     v20  Imm(0)                                           -> x0
     v21  Imm(0)                                           -> x0
     v22  BinopI { op=sub, lhs=v9, rhs_imm=1 }             -> x8
-    v23  Extend { value=v22, kind=I32 }                   -> x0
+    v23  Extend { value=v22, kind=I32, nsw }              -> x0
     v24  Call { target_pc=0, args=[v1, v3, v5, v7, v22], fixed_args=5, fp_return=false, fp_arg_mask=0x0 } -> x0
     terminator Return(v24)   (exit_acc=v24)
   block 2  start_pc=0

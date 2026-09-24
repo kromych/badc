@@ -111,15 +111,15 @@ fn ent_pc=5 n_params=0 variadic=false locals=0
     v37  Extend { value=v36, kind=I32 }                   -> x1
     v38  Extend { value=v36, kind=I32 }                   -> x1
     v39  Binop { op=add, lhs=v22, rhs=v36 }               -> x3
-    v40  Extend { value=v39, kind=I32 }                   -> x0
+    v40  Extend { value=v39, kind=I32, nsw }              -> x0
     v41  Call { target_pc=3, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
     v42  Extend { value=v41, kind=I32 }                   -> x1
     v43  Binop { op=add, lhs=v39, rhs=v41 }               -> x3
-    v44  Extend { value=v43, kind=I32 }                   -> x0
+    v44  Extend { value=v43, kind=I32, nsw }              -> x0
     v45  Call { target_pc=4, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
     v46  Extend { value=v45, kind=I32 }                   -> x1
     v47  Binop { op=add, lhs=v43, rhs=v45 }               -> x0
-    v48  Extend { value=v47, kind=I32 }                   -> x1
+    v48  Extend { value=v47, kind=I32, nsw }              -> x1
     v49  Imm(0)                                           -> x1
     v50  Imm(0)                                           -> x1
     v51  BinopI { op=eq, lhs=v47, rhs_imm=4 }             -> x1

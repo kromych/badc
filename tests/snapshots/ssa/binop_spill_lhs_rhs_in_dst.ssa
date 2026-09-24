@@ -29,7 +29,7 @@ fn ent_pc=0 n_params=3 variadic=false locals=0
     v26  Binop { op=add, lhs=v1, rhs=v25 }                -> x9
     v27  LoadIndexed { base=v1, index=v24, scale=4, kind=I32 } -> x1
     v28  Binop { op=add, lhs=v17, rhs=v27 }               -> x0
-    v29  Extend { value=v28, kind=I32 }                   -> x1
+    v29  Extend { value=v28, kind=I32, nsw }              -> x1
     v30  Imm(0)                                           -> x1
     v31  Extend { value=v18, kind=I32 }                   -> x1
     v32  BinopI { op=add, lhs=v18, rhs_imm=1 }            -> x6
@@ -46,7 +46,7 @@ fn ent_pc=0 n_params=3 variadic=false locals=0
     v34  Extend { value=v17, kind=I32 }                   -> x1
     v35  Extend { value=v11, kind=I32 }                   -> x1
     v36  Binop { op=add, lhs=v17, rhs=v11 }               -> x0
-    v37  Extend { value=v36, kind=I32 }                   -> x1
+    v37  Extend { value=v36, kind=I32, nsw }              -> x1
     v38  Extend { value=v36, kind=I32 }                   -> x1
     terminator Return(v36)   (exit_acc=v36)
 ; --- SSA dump (ok=true) ent_pc=1 ---
@@ -93,7 +93,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=3
     v38  Binop { op=add, lhs=v1, rhs=v37 }                -> x6
     v39  LoadIndexed { base=v1, index=v32, scale=4, kind=I32 } -> x6
     v40  Binop { op=add, lhs=v31, rhs=v39 }               -> x0
-    v41  Extend { value=v40, kind=I32 }                   -> x6
+    v41  Extend { value=v40, kind=I32, nsw }              -> x6
     v42  Extend { value=v32, kind=I32 }                   -> x6
     v43  BinopI { op=add, lhs=v32, rhs_imm=1 }            -> x1
     terminator Jmp(b2)   (exit_acc=v43)
@@ -107,7 +107,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=3
     v44  Extend { value=v31, kind=I32 }                   -> x1
     v45  Extend { value=v29, kind=I32 }                   -> x1
     v46  Binop { op=add, lhs=v31, rhs=v29 }               -> x0
-    v47  Extend { value=v46, kind=I32 }                   -> x1
+    v47  Extend { value=v46, kind=I32, nsw }              -> x1
     v48  Extend { value=v46, kind=I32 }                   -> x1
     v49  Extend { value=v46, kind=I32 }                   -> x1
     v50  Extend { value=v46, kind=I32 }                   -> x1

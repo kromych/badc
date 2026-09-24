@@ -66,7 +66,7 @@ fn ent_pc=3 n_params=1 variadic=false locals=1
     v36  BinopI { op=add, lhs=v5, rhs_imm=8 }             -> x2
     v37  Load { addr=v5, disp=8, kind=I8 }                -> x1
     v38  Binop { op=add, lhs=v32, rhs=v37 }               -> x0
-    v39  Extend { value=v38, kind=I32 }                   -> x1
+    v39  Extend { value=v38, kind=I32, nsw }              -> x1
     v40  Extend { value=v38, kind=I32 }                   -> x1
     terminator Return(v38)   (exit_acc=v38)
 ; --- SSA dump (ok=true) ent_pc=6 ---
@@ -267,13 +267,13 @@ fn ent_pc=6 n_params=0 variadic=false locals=0
   block 28  start_pc=0
     v161 Extend { value=v52, kind=I32 }                   -> x0
     v162 BinopI { op=add, lhs=v52, rhs_imm=2 }            -> x1
-    v163 Extend { value=v162, kind=I32 }                  -> x0
+    v163 Extend { value=v162, kind=I32, nsw }             -> x0
     v164 Extend { value=v162, kind=I32 }                  -> x0
     terminator Jmp(b25)   (exit_acc=v162)
   block 29  start_pc=0
     v151 Extend { value=v47, kind=I32 }                   -> x0
     v152 BinopI { op=add, lhs=v47, rhs_imm=2 }            -> x1
-    v153 Extend { value=v152, kind=I32 }                  -> x0
+    v153 Extend { value=v152, kind=I32, nsw }             -> x0
     v154 Extend { value=v152, kind=I32 }                  -> x0
     terminator Jmp(b22)   (exit_acc=v152)
   block 30  start_pc=0

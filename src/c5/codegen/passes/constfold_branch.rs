@@ -183,6 +183,7 @@ pub(crate) fn strip_zero_test_conds(func: &mut FunctionSsa) -> bool {
         Inst::Extend {
             value,
             kind: LoadKind::I32 | LoadKind::U32,
+            ..
         }
         | Inst::BinopI {
             op: BinOp::And,
@@ -792,7 +793,11 @@ mod tests {
     #[test]
     fn branch_on_a_32_bit_extension_tests_the_low_word() {
         use crate::c5::ir::LoadKind;
-        let ext = |kind| Inst::Extend { value: 0, kind };
+        let ext = |kind| Inst::Extend {
+            value: 0,
+            kind,
+            nsw: false,
+        };
         let mask = Inst::BinopI {
             op: BinOp::And,
             lhs: 0,
@@ -843,6 +848,7 @@ mod tests {
                     Inst::Extend {
                         value: 0,
                         kind: LoadKind::I32,
+                        nsw: false,
                     },
                     Inst::BinopI {
                         op: BinOp::Ne,

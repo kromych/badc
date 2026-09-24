@@ -492,7 +492,7 @@ fn dedup_dominated_extends(func: &FunctionSsa, redirect: &mut [Option<ValueId>])
     }
     let mut groups: HashMap<(ValueId, LoadKind), Vec<ValueId>> = HashMap::new();
     for (idx, inst) in func.insts.iter().enumerate() {
-        let Inst::Extend { value, kind } = inst else {
+        let Inst::Extend { value, kind, .. } = inst else {
             continue;
         };
         if redirect[idx].is_some() {
@@ -733,7 +733,7 @@ fn drop_call_arg_reextends(funcs: &mut [FunctionSsa]) {
                 if arg_aggs.get(k).copied().flatten().is_some() {
                     continue;
                 }
-                let Some(Inst::Extend { value, kind }) = func.insts.get(a as usize) else {
+                let Some(Inst::Extend { value, kind, .. }) = func.insts.get(a as usize) else {
                     continue;
                 };
                 let (Some(ext_bits), Some(param_kind)) =
@@ -837,7 +837,7 @@ fn run_one(func: &mut FunctionSsa) {
     // the upper half then fails (2) instead of being redirected under it.
     let mut collapsing = alloc::vec![false; n];
     for (idx, inst) in func.insts.iter().enumerate() {
-        let Inst::Extend { value, kind } = inst else {
+        let Inst::Extend { value, kind, .. } = inst else {
             continue;
         };
         let Some(Inst::Extend { kind: inner, .. }) = func.insts.get(*value as usize) else {
@@ -858,7 +858,7 @@ fn run_one(func: &mut FunctionSsa) {
             redirect[idx] = Some(operand);
             continue;
         }
-        let Inst::Extend { value, kind } = inst else {
+        let Inst::Extend { value, kind, .. } = inst else {
             continue;
         };
         let load_covers = narrow_int_load(&func.insts, *value)
@@ -955,6 +955,7 @@ fn drop_fitting(func: &mut FunctionSsa) {
                 Inst::Extend {
                     value,
                     kind: kind @ (LoadKind::I8 | LoadKind::I16 | LoadKind::I32),
+                    ..
                 } => ranges.at(b, value).fits(kind).then_some(value),
                 Inst::BinopI {
                     op: BinOp::And,
@@ -1070,6 +1071,7 @@ mod tests {
                 Inst::Extend {
                     value: 1,
                     kind: LoadKind::I32,
+                    nsw: false,
                 },
             ],
             vec![Block {
@@ -1106,6 +1108,7 @@ mod tests {
                 Inst::Extend {
                     value: 1,
                     kind: LoadKind::I32,
+                    nsw: false,
                 },
             ],
             vec![Block {
@@ -1142,6 +1145,7 @@ mod tests {
                 Inst::Extend {
                     value: 1,
                     kind: LoadKind::I32,
+                    nsw: false,
                 },
             ],
             vec![Block {
@@ -1176,6 +1180,7 @@ mod tests {
                 Inst::Extend {
                     value: 1,
                     kind: LoadKind::I8,
+                    nsw: false,
                 },
             ],
             vec![Block {
@@ -1207,6 +1212,7 @@ mod tests {
                 Inst::Extend {
                     value: 1,
                     kind: LoadKind::I64,
+                    nsw: false,
                 },
             ],
             vec![Block {
@@ -1236,6 +1242,7 @@ mod tests {
                 Inst::Extend {
                     value: 1,
                     kind: LoadKind::I32,
+                    nsw: false,
                 },
             ],
             vec![Block {
@@ -1287,6 +1294,7 @@ mod tests {
                 Inst::Extend {
                     value: 2,
                     kind: LoadKind::I32,
+                    nsw: false,
                 },
                 Inst::Store {
                     addr: 0,
@@ -1680,14 +1688,26 @@ mod tests {
                     lhs: 0,
                     rhs: 0,
                 },
-                Inst::Extend { value: 1, kind: k0 },
-                Inst::Extend { value: 1, kind: k1 },
+                Inst::Extend {
+                    value: 1,
+                    kind: k0,
+                    nsw: false,
+                },
+                Inst::Extend {
+                    value: 1,
+                    kind: k1,
+                    nsw: false,
+                },
                 Inst::BinopI {
                     op: BinOp::Add,
                     lhs: 3,
                     rhs_imm: 1,
                 },
-                Inst::Extend { value: 1, kind: k0 },
+                Inst::Extend {
+                    value: 1,
+                    kind: k0,
+                    nsw: false,
+                },
                 Inst::BinopI {
                     op: BinOp::Add,
                     lhs: 5,
@@ -1761,6 +1781,7 @@ mod tests {
                 Inst::Extend {
                     value: 1,
                     kind: LoadKind::I8,
+                    nsw: false,
                 },
                 Inst::BinopI {
                     op: BinOp::Add,
@@ -1770,6 +1791,7 @@ mod tests {
                 Inst::Extend {
                     value: 1,
                     kind: LoadKind::I8,
+                    nsw: false,
                 },
                 Inst::BinopI {
                     op: BinOp::Add,
@@ -1828,10 +1850,12 @@ mod tests {
                 Inst::Extend {
                     value: 1,
                     kind: LoadKind::I8,
+                    nsw: false,
                 },
                 Inst::Extend {
                     value: 1,
                     kind: LoadKind::I8,
+                    nsw: false,
                 },
                 Inst::Call {
                     target_pc: 99,
@@ -1896,6 +1920,7 @@ mod tests {
                     'E' => Inst::Extend {
                         value: 0,
                         kind: LoadKind::I32,
+                        nsw: false,
                     },
                     _ => Inst::Call {
                         target_pc: 99,
@@ -2014,6 +2039,7 @@ mod tests {
                 Inst::Extend {
                     value: 1,
                     kind: LoadKind::I32,
+                    nsw: false,
                 },
                 Inst::Call {
                     target_pc: 7,
@@ -2102,6 +2128,7 @@ mod tests {
                 Inst::Extend {
                     value: 1,
                     kind: LoadKind::I32,
+                    nsw: false,
                 },
                 Inst::CallExt {
                     binding_idx: 0,
@@ -2155,6 +2182,7 @@ mod tests {
                 Inst::Extend {
                     value: 2,
                     kind: LoadKind::I32,
+                    nsw: false,
                 },
                 Inst::BinopI {
                     op: BinOp::Lt,
@@ -2193,6 +2221,7 @@ mod tests {
                 Inst::Extend {
                     value: 0,
                     kind: LoadKind::I32,
+                    nsw: false,
                 },
                 Inst::MulAdd {
                     a: 2,
@@ -2229,10 +2258,12 @@ mod tests {
                 Inst::Extend {
                     value: 1,
                     kind: inner,
+                    nsw: false,
                 },
                 Inst::Extend {
                     value: 2,
                     kind: outer,
+                    nsw: false,
                 },
             ],
             vec![Block {
@@ -2395,6 +2426,7 @@ mod tests {
             let tail = vec![Inst::Extend {
                 value: 3,
                 kind: LoadKind::I8,
+                nsw: false,
             }];
             let mut f = join(Inst::Imm(-3), v2, tail);
             drop_fitting(&mut f);
@@ -2403,6 +2435,7 @@ mod tests {
         let sext = Inst::Extend {
             value: 0,
             kind: LoadKind::I8,
+            nsw: false,
         };
         assert!(matches!(byte(sext), Terminator::Return(3)));
         // A masked byte reaches 0xff, which a signed char does not hold.
@@ -2424,6 +2457,7 @@ mod tests {
         let ext = |value| Inst::Extend {
             value,
             kind: LoadKind::I32,
+            nsw: false,
         };
         let store = |value| Inst::StoreLocal {
             off: -1,

@@ -14,9 +14,9 @@ fn ent_pc=0 n_params=2 variadic=false locals=0
   block 1  start_pc=0
     v12  BinopI { op=and, lhs=v8, rhs_imm=255 }           -> x1
     v13  BinopI { op=mul, lhs=v12, rhs_imm=3 }            -> x1
-    v14  Extend { value=v13, kind=I32 }                   -> x2
+    v14  Extend { value=v13, kind=I32, nsw }              -> x2
     v15  BinopI { op=add, lhs=v13, rhs_imm=1 }            -> x7
-    v16  Extend { value=v15, kind=I32 }                   -> x1
+    v16  Extend { value=v15, kind=I32, nsw }              -> x1
     v17  Imm(0)                                           -> x1
     v18  BinopI { op=and, lhs=v15, rhs_imm=255 }          -> x1
     v19  Extend { value=v7, kind=I32 }                    -> x1
@@ -49,9 +49,9 @@ fn ent_pc=1 n_params=2 variadic=false locals=0
   block 1  start_pc=0
     v12  BinopI { op=and, lhs=v8, rhs_imm=65535 }         -> x1
     v13  BinopI { op=mul, lhs=v12, rhs_imm=3 }            -> x1
-    v14  Extend { value=v13, kind=I32 }                   -> x2
+    v14  Extend { value=v13, kind=I32, nsw }              -> x2
     v15  BinopI { op=add, lhs=v13, rhs_imm=1 }            -> x7
-    v16  Extend { value=v15, kind=I32 }                   -> x1
+    v16  Extend { value=v15, kind=I32, nsw }              -> x1
     v17  Imm(0)                                           -> x1
     v18  BinopI { op=and, lhs=v15, rhs_imm=65535 }        -> x1
     v19  Extend { value=v7, kind=I32 }                    -> x1
@@ -118,7 +118,7 @@ fn ent_pc=3 n_params=2 variadic=false locals=0
   block 1  start_pc=0
     v12  Extend { value=v8, kind=I8 }                     -> x1
     v13  BinopI { op=sub, lhs=v12, rhs_imm=3 }            -> x7
-    v14  Extend { value=v13, kind=I32 }                   -> x1
+    v14  Extend { value=v13, kind=I32, nsw }              -> x1
     v15  Imm(0)                                           -> x1
     v16  Extend { value=v13, kind=I8 }                    -> x1
     v17  Extend { value=v7, kind=I32 }                    -> x1
@@ -152,7 +152,7 @@ fn ent_pc=4 n_params=2 variadic=false locals=0
   block 1  start_pc=0
     v12  Extend { value=v8, kind=I16 }                    -> x1
     v13  BinopI { op=sub, lhs=v12, rhs_imm=3 }            -> x7
-    v14  Extend { value=v13, kind=I32 }                   -> x1
+    v14  Extend { value=v13, kind=I32, nsw }              -> x1
     v15  Imm(0)                                           -> x1
     v16  Extend { value=v13, kind=I16 }                   -> x1
     v17  Extend { value=v7, kind=I32 }                    -> x1
@@ -186,7 +186,7 @@ fn ent_pc=5 n_params=2 variadic=false locals=0
   block 1  start_pc=0
     v12  Extend { value=v8, kind=I32 }                    -> x1
     v13  BinopI { op=sub, lhs=v8, rhs_imm=3 }             -> x7
-    v14  Extend { value=v13, kind=I32 }                   -> x1
+    v14  Extend { value=v13, kind=I32, nsw }              -> x1
     v15  Imm(0)                                           -> x1
     v16  Extend { value=v7, kind=I32 }                    -> x1
     v17  BinopI { op=add, lhs=v7, rhs_imm=1 }             -> x0

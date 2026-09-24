@@ -733,6 +733,7 @@ mod tests {
         let ext = Inst::Extend {
             value: 3,
             kind: LoadKind::I32,
+            nsw: false,
         };
         let mut f = merge_tested(1 << 32, ext);
         assert!(run_one(&mut f));

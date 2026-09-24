@@ -22,7 +22,7 @@ fn ent_pc=1 n_params=5 variadic=false locals=0
     v16  Imm(0)                                           -> x0
     v17  Load { addr=v3, disp=0, kind=I8 }                -> x2
     v18  Binop { op=add, lhs=v7, rhs=v17 }                -> x1
-    v19  Extend { value=v18, kind=I32 }                   -> x2
+    v19  Extend { value=v18, kind=I32, nsw }              -> x2
     v20  Store { addr=v9, disp=0, value=v18, kind=I32 }   -> -
     terminator Return(v16)   (exit_acc=v16)
 ; --- SSA dump (ok=true) ent_pc=3 ---

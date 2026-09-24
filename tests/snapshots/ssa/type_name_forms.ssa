@@ -8,7 +8,7 @@ fn ent_pc=1 n_params=1 variadic=false locals=0
     v2   Imm(0)                                           -> x0
     v3   Imm(0)                                           -> x0
     v4   BinopI { op=add, lhs=v1, rhs_imm=1 }             -> x0
-    v5   Extend { value=v4, kind=I32 }                    -> x1
+    v5   Extend { value=v4, kind=I32, nsw }               -> x1
     v6   Extend { value=v4, kind=I32 }                    -> x1
     terminator Return(v4)   (exit_acc=v4)
 ; --- SSA dump (ok=true) ent_pc=2 ---
@@ -49,7 +49,7 @@ fn ent_pc=2 n_params=1 variadic=true locals=3
     v33  BinopI { op=add, lhs=v22, rhs_imm=4 }            -> x1
     v34  Load { addr=v22, disp=4, kind=I32 }              -> x1
     v35  Binop { op=add, lhs=v29, rhs=v34 }               -> x0
-    v36  Extend { value=v35, kind=I32 }                   -> x0
+    v36  Extend { value=v35, kind=I32, nsw }              -> x0
     v37  Binop { op=add, lhs=v6, rhs=v36 }                -> x3
     v38  Imm(0)                                           -> x0
     terminator Jmp(b2)   (exit_acc=v37)

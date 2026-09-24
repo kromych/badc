@@ -283,7 +283,7 @@ impl Cone<'_> {
                 }
             }
             Inst::Imm(k) => ShadowExpr::Imm(*k),
-            Inst::Extend { value, kind }
+            Inst::Extend { value, kind, .. }
                 if matches!(kind, LoadKind::I8 | LoadKind::I16 | LoadKind::I32) =>
             {
                 ShadowExpr::Extend {

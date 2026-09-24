@@ -370,9 +370,9 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     v303 Imm(2)                                           -> x1
     v304 Extend { value=v301, kind=I32 }                  -> x1
     v305 BinopI { op=shl, lhs=v301, rhs_imm=1 }           -> x0
-    v306 Extend { value=v305, kind=I32 }                  -> x1
+    v306 Extend { value=v305, kind=I32, nsw }             -> x1
     v307 BinopI { op=add, lhs=v305, rhs_imm=1 }           -> x0
-    v308 Extend { value=v307, kind=I32 }                  -> x1
+    v308 Extend { value=v307, kind=I32, nsw }             -> x1
     v309 Extend { value=v307, kind=I32 }                  -> x1
     terminator Return(v307)   (exit_acc=v307)
   block 3  start_pc=0
@@ -399,9 +399,9 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     v311 Imm(2)                                           -> x1
     v312 Extend { value=v310, kind=I32 }                  -> x1
     v313 BinopI { op=shl, lhs=v310, rhs_imm=1 }           -> x0
-    v314 Extend { value=v313, kind=I32 }                  -> x1
+    v314 Extend { value=v313, kind=I32, nsw }             -> x1
     v315 BinopI { op=add, lhs=v313, rhs_imm=2 }           -> x0
-    v316 Extend { value=v315, kind=I32 }                  -> x1
+    v316 Extend { value=v315, kind=I32, nsw }             -> x1
     v317 Extend { value=v315, kind=I32 }                  -> x1
     terminator Return(v315)   (exit_acc=v315)
   block 6  start_pc=0

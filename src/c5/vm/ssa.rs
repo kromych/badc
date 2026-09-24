@@ -1311,7 +1311,7 @@ fn run_inst<H: Host>(
             };
             return Ok(());
         }
-        Inst::Extend { value, kind } => {
+        Inst::Extend { value, kind, .. } => {
             let raw = frame.regs[*value as usize];
             frame.regs[v as usize] = eval::eval_extend(raw, *kind);
             return Ok(());

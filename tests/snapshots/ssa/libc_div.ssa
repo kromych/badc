@@ -122,12 +122,12 @@ fn ent_pc=9 n_params=0 variadic=false locals=0
     v67  Imm(0)                                           -> x2
     v68  Extend { value=v43, kind=I32 }                   -> x2
     v69  BinopI { op=mul, lhs=v43, rhs_imm=5 }            -> x1
-    v70  Extend { value=v69, kind=I32 }                   -> x2
+    v70  Extend { value=v69, kind=I32, nsw }              -> x2
     v71  Imm(0)                                           -> x2
     v72  Imm(0)                                           -> x2
     v73  Extend { value=v49, kind=I32 }                   -> x2
     v74  Binop { op=add, lhs=v69, rhs=v49 }               -> x0
-    v75  Extend { value=v74, kind=I32 }                   -> x1
+    v75  Extend { value=v74, kind=I32, nsw }              -> x1
     v76  BinopI { op=ne, lhs=v74, rhs_imm=-17 }           -> x0
     terminator Bz { cond=v76, target=b8, fall=b7 }   (exit_acc=v76)
   block 7  start_pc=0

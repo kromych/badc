@@ -1203,6 +1203,12 @@ impl SsaBuilder {
     /// (`I8`, `I16`, `I32`). A constant operand folds to the
     /// sign-extended constant. See [`Inst::Extend`].
     pub(crate) fn extend(&mut self, value: ValueId, kind: LoadKind) -> ValueId {
+        self.extend_marked(value, kind, false)
+    }
+
+    /// [`Self::extend`] carrying the `nsw` mark of [`Inst::Extend`]. A
+    /// cached copy keeps the conjunction of the two marks.
+    pub(crate) fn extend_marked(&mut self, value: ValueId, kind: LoadKind, nsw: bool) -> ValueId {
         let bits = match kind {
             LoadKind::I8 => 8,
             LoadKind::I16 => 16,
@@ -1217,9 +1223,12 @@ impl SsaBuilder {
         }
         let key = PureKey::Extend { value, kind };
         if let Some(cached) = self.lookup_pure(key) {
+            if let Some(Inst::Extend { nsw: mark, .. }) = self.func.insts.get_mut(cached as usize) {
+                *mark &= nsw;
+            }
             return cached;
         }
-        let id = self.push(Inst::Extend { value, kind });
+        let id = self.push(Inst::Extend { value, kind, nsw });
         self.pure_cache.insert(key, id);
         id
     }
@@ -2195,7 +2204,7 @@ mod tests {
             b.return_(res);
             let func = b.finish();
             assert!(
-                matches!(func.insts[res as usize], Inst::Extend { value, kind: rk }
+                matches!(func.insts[res as usize], Inst::Extend { value, kind: rk, .. }
                     if value == v && rk == kind),
                 "Shr(Shl(v,{k}),{k}) must become Extend{{v, {kind:?}}}, got {:?}",
                 func.insts[res as usize],

@@ -576,7 +576,7 @@ fn key_of(inst: &Inst, vn: &[ValueId], is_f32: bool, sym: u32) -> Option<Key> {
             Some(Key::Binop(*op, a, b, is_f32))
         }
         Inst::BinopI { op, lhs, rhs_imm } => Some(Key::BinopI(*op, r(*lhs), *rhs_imm, is_f32)),
-        Inst::Extend { value, kind } => Some(Key::Extend(r(*value), *kind, is_f32)),
+        Inst::Extend { value, kind, .. } => Some(Key::Extend(r(*value), *kind, is_f32)),
         Inst::Bswap { value, width } => Some(Key::Bswap(r(*value), *width, is_f32)),
         Inst::BitCount { op, value, width } => Some(Key::BitCount(*op, r(*value), *width, is_f32)),
         Inst::Neg(v) => Some(Key::Neg(r(*v))),
@@ -721,6 +721,11 @@ fn run_one(func: &mut FunctionSsa, caps: BankCapacity) {
                         && leader < idx
                         && gate.pays(func, inst_block[leader as usize], b, leader, idx)
                     {
+                        if let Inst::Extend { nsw: false, .. } = func.insts[i]
+                            && let Inst::Extend { nsw, .. } = &mut func.insts[leader as usize]
+                        {
+                            *nsw = false;
+                        }
                         redirect[i] = Some(leader);
                         vn[i] = leader;
                         any = true;

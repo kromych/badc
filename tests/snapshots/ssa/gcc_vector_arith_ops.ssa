@@ -196,7 +196,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=8
     v191 Binop { op=add, lhs=v4, rhs=v181 }               -> x8
     v192 LoadIndexed { base=v4, index=v181, scale=1, kind=U8 } -> x8
     v193 Binop { op=add, lhs=v189, rhs=v192 }             -> x7
-    v194 Extend { value=v193, kind=I32 }                  -> x8
+    v194 Extend { value=v193, kind=I32, nsw }             -> x8
     v195 BinopI { op=and, lhs=v193, rhs_imm=255 }         -> x7
     v196 StoreIndexed { base=v63, index=v181, scale=1, value=v195, kind=I8 } -> -
     v197 Extend { value=v181, kind=I32 }                  -> x7
@@ -369,7 +369,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=8
     v215 Binop { op=add, lhs=v2332, rhs=v205 }            -> x8
     v216 LoadIndexed { base=v2332, index=v205, scale=1, kind=U8 } -> x8
     v217 Binop { op=sub, lhs=v213, rhs=v216 }             -> x7
-    v218 Extend { value=v217, kind=I32 }                  -> x8
+    v218 Extend { value=v217, kind=I32, nsw }             -> x8
     v219 BinopI { op=and, lhs=v217, rhs_imm=255 }         -> x7
     v220 StoreIndexed { base=v208, index=v205, scale=1, value=v219, kind=I8 } -> -
     v221 Extend { value=v205, kind=I32 }                  -> x6
@@ -542,7 +542,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=8
     v239 Binop { op=add, lhs=v2474, rhs=v229 }            -> x8
     v240 LoadIndexed { base=v2474, index=v229, scale=1, kind=U8 } -> x8
     v241 Binop { op=mul, lhs=v237, rhs=v240 }             -> x7
-    v242 Extend { value=v241, kind=I32 }                  -> x8
+    v242 Extend { value=v241, kind=I32, nsw }             -> x8
     v243 BinopI { op=and, lhs=v241, rhs_imm=255 }         -> x7
     v244 StoreIndexed { base=v232, index=v229, scale=1, value=v243, kind=I8 } -> -
     v245 Extend { value=v229, kind=I32 }                  -> x6
@@ -1324,7 +1324,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=8
     v380 Binop { op=add, lhs=v3073, rhs=v370 }            -> x8
     v381 LoadIndexed { base=v3073, index=v370, scale=1, kind=I8 } -> x8
     v382 Binop { op=add, lhs=v378, rhs=v381 }             -> x7
-    v383 Extend { value=v382, kind=I32 }                  -> x8
+    v383 Extend { value=v382, kind=I32, nsw }             -> x8
     v384 Extend { value=v382, kind=I8 }                   -> x8
     v385 StoreIndexed { base=v373, index=v370, scale=1, value=v382, kind=I8 } -> -
     v386 Extend { value=v370, kind=I32 }                  -> x6
@@ -1497,7 +1497,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=8
     v404 Binop { op=add, lhs=v3215, rhs=v394 }            -> x8
     v405 LoadIndexed { base=v3215, index=v394, scale=1, kind=I8 } -> x8
     v406 Binop { op=sub, lhs=v402, rhs=v405 }             -> x7
-    v407 Extend { value=v406, kind=I32 }                  -> x8
+    v407 Extend { value=v406, kind=I32, nsw }             -> x8
     v408 Extend { value=v406, kind=I8 }                   -> x8
     v409 StoreIndexed { base=v397, index=v394, scale=1, value=v406, kind=I8 } -> -
     v410 Extend { value=v394, kind=I32 }                  -> x6
@@ -1670,7 +1670,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=8
     v428 Binop { op=add, lhs=v3357, rhs=v418 }            -> x8
     v429 LoadIndexed { base=v3357, index=v418, scale=1, kind=I8 } -> x8
     v430 Binop { op=mul, lhs=v426, rhs=v429 }             -> x7
-    v431 Extend { value=v430, kind=I32 }                  -> x8
+    v431 Extend { value=v430, kind=I32, nsw }             -> x8
     v432 Extend { value=v430, kind=I8 }                   -> x8
     v433 StoreIndexed { base=v421, index=v418, scale=1, value=v430, kind=I8 } -> -
     v434 Extend { value=v418, kind=I32 }                  -> x6
@@ -2243,7 +2243,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=8
     v524 Binop { op=add, lhs=v3862, rhs=v518 }            -> x1
     v525 Load { addr=v524, disp=0, kind=U16 }             -> x1
     v526 Binop { op=add, lhs=v522, rhs=v525 }             -> x1
-    v527 Extend { value=v526, kind=I32 }                  -> x8
+    v527 Extend { value=v526, kind=I32, nsw }             -> x8
     v528 BinopI { op=and, lhs=v526, rhs_imm=65535 }       -> x1
     v529 Store { addr=v519, disp=0, value=v528, kind=I16 } -> -
     v530 Extend { value=v513, kind=I32 }                  -> x1
@@ -2361,7 +2361,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=8
     v549 Binop { op=add, lhs=v3948, rhs=v543 }            -> x1
     v550 Load { addr=v549, disp=0, kind=U16 }             -> x1
     v551 Binop { op=sub, lhs=v547, rhs=v550 }             -> x8
-    v552 Extend { value=v551, kind=I32 }                  -> x1
+    v552 Extend { value=v551, kind=I32, nsw }             -> x1
     v553 BinopI { op=and, lhs=v551, rhs_imm=65535 }       -> x1
     v554 Store { addr=v544, disp=0, value=v553, kind=I16 } -> -
     v555 Extend { value=v538, kind=I32 }                  -> x1
@@ -2479,7 +2479,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=8
     v574 Binop { op=add, lhs=v4034, rhs=v568 }            -> x1
     v575 Load { addr=v574, disp=0, kind=U16 }             -> x1
     v576 Binop { op=mul, lhs=v572, rhs=v575 }             -> x1
-    v577 Extend { value=v576, kind=I32 }                  -> x8
+    v577 Extend { value=v576, kind=I32, nsw }             -> x8
     v578 BinopI { op=and, lhs=v576, rhs_imm=65535 }       -> x1
     v579 Store { addr=v569, disp=0, value=v578, kind=I16 } -> -
     v580 Extend { value=v563, kind=I32 }                  -> x1
@@ -2849,7 +2849,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=8
     v649 Binop { op=add, lhs=v4308, rhs=v643 }            -> x1
     v650 Load { addr=v649, disp=0, kind=I16 }             -> x1
     v651 Binop { op=add, lhs=v647, rhs=v650 }             -> x1
-    v652 Extend { value=v651, kind=I32 }                  -> x8
+    v652 Extend { value=v651, kind=I32, nsw }             -> x8
     v653 Extend { value=v651, kind=I16 }                  -> x8
     v654 Store { addr=v644, disp=0, value=v651, kind=I16 } -> -
     v655 Extend { value=v638, kind=I32 }                  -> x1
@@ -2967,7 +2967,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=8
     v674 Binop { op=add, lhs=v4394, rhs=v668 }            -> x1
     v675 Load { addr=v674, disp=0, kind=I16 }             -> x1
     v676 Binop { op=sub, lhs=v672, rhs=v675 }             -> x8
-    v677 Extend { value=v676, kind=I32 }                  -> x1
+    v677 Extend { value=v676, kind=I32, nsw }             -> x1
     v678 Extend { value=v676, kind=I16 }                  -> x1
     v679 Store { addr=v669, disp=0, value=v676, kind=I16 } -> -
     v680 Extend { value=v663, kind=I32 }                  -> x1
@@ -3085,7 +3085,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=8
     v699 Binop { op=add, lhs=v4480, rhs=v693 }            -> x1
     v700 Load { addr=v699, disp=0, kind=I16 }             -> x1
     v701 Binop { op=mul, lhs=v697, rhs=v700 }             -> x1
-    v702 Extend { value=v701, kind=I32 }                  -> x8
+    v702 Extend { value=v701, kind=I32, nsw }             -> x8
     v703 Extend { value=v701, kind=I16 }                  -> x8
     v704 Store { addr=v694, disp=0, value=v701, kind=I16 } -> -
     v705 Extend { value=v688, kind=I32 }                  -> x1
@@ -3924,7 +3924,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=8
     v896 Binop { op=add, lhs=v5087, rhs=v890 }            -> x1
     v897 Load { addr=v896, disp=0, kind=I32 }             -> x1
     v898 Binop { op=add, lhs=v894, rhs=v897 }             -> x1
-    v899 Extend { value=v898, kind=I32 }                  -> x8
+    v899 Extend { value=v898, kind=I32, nsw }             -> x8
     v900 Store { addr=v891, disp=0, value=v898, kind=I32 } -> -
     v901 Extend { value=v885, kind=I32 }                  -> x1
     v902 BinopI { op=add, lhs=v885, rhs_imm=1 }           -> x0
@@ -4020,7 +4020,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=8
     v920 Binop { op=add, lhs=v5152, rhs=v914 }            -> x1
     v921 Load { addr=v920, disp=0, kind=I32 }             -> x1
     v922 Binop { op=sub, lhs=v918, rhs=v921 }             -> x8
-    v923 Extend { value=v922, kind=I32 }                  -> x1
+    v923 Extend { value=v922, kind=I32, nsw }             -> x1
     v924 Store { addr=v915, disp=0, value=v922, kind=I32 } -> -
     v925 Extend { value=v909, kind=I32 }                  -> x1
     v926 BinopI { op=add, lhs=v909, rhs_imm=1 }           -> x0
@@ -4116,7 +4116,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=8
     v944 Binop { op=add, lhs=v5217, rhs=v938 }            -> x1
     v945 Load { addr=v944, disp=0, kind=I32 }             -> x1
     v946 Binop { op=mul, lhs=v942, rhs=v945 }             -> x1
-    v947 Extend { value=v946, kind=I32 }                  -> x8
+    v947 Extend { value=v946, kind=I32, nsw }             -> x8
     v948 Store { addr=v939, disp=0, value=v946, kind=I32 } -> -
     v949 Extend { value=v933, kind=I32 }                  -> x1
     v950 BinopI { op=add, lhs=v933, rhs_imm=1 }           -> x0
@@ -5214,7 +5214,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=8
     v1249 Binop { op=add, lhs=v5898, rhs=v1239 }           -> x8
     v1250 LoadIndexed { base=v5898, index=v1239, scale=1, kind=U8 } -> x8
     v1251 Binop { op=add, lhs=v1247, rhs=v1250 }           -> x7
-    v1252 Extend { value=v1251, kind=I32 }                 -> x8
+    v1252 Extend { value=v1251, kind=I32, nsw }            -> x8
     v1253 BinopI { op=and, lhs=v1251, rhs_imm=255 }        -> x7
     v1254 StoreIndexed { base=v1242, index=v1239, scale=1, value=v1253, kind=I8 } -> -
     v1255 Extend { value=v1239, kind=I32 }                 -> x6
@@ -5331,7 +5331,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=8
     v1273 Binop { op=add, lhs=v5984, rhs=v1263 }           -> x8
     v1274 LoadIndexed { base=v5984, index=v1263, scale=1, kind=U8 } -> x8
     v1275 Binop { op=mul, lhs=v1271, rhs=v1274 }           -> x7
-    v1276 Extend { value=v1275, kind=I32 }                 -> x8
+    v1276 Extend { value=v1275, kind=I32, nsw }            -> x8
     v1277 BinopI { op=and, lhs=v1275, rhs_imm=255 }        -> x7
     v1278 StoreIndexed { base=v1266, index=v1263, scale=1, value=v1277, kind=I8 } -> -
     v1279 Extend { value=v1263, kind=I32 }                 -> x6
@@ -6596,7 +6596,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=8
     v1504 LoadIndexed { base=v6924, index=v1496, scale=1, kind=U8 } -> x6
     v1505 Imm(64)                                          -> x7
     v1506 BinopI { op=sub, lhs=v1504, rhs_imm=64 }         -> x6
-    v1507 Extend { value=v1506, kind=I32 }                 -> x7
+    v1507 Extend { value=v1506, kind=I32, nsw }            -> x7
     v1508 BinopI { op=and, lhs=v1506, rhs_imm=255 }        -> x6
     v1509 StoreIndexed { base=v1499, index=v1496, scale=1, value=v1508, kind=I8 } -> -
     v1510 Extend { value=v1496, kind=I32 }                 -> x2
@@ -6734,7 +6734,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=8
     v1526 LoadIndexed { base=v7033, index=v1518, scale=1, kind=U8 } -> x6
     v1527 Imm(100)                                         -> x7
     v1528 BinopI { op=add, lhs=v1526, rhs_imm=100 }        -> x6
-    v1529 Extend { value=v1528, kind=I32 }                 -> x7
+    v1529 Extend { value=v1528, kind=I32, nsw }            -> x7
     v1530 BinopI { op=and, lhs=v1528, rhs_imm=255 }        -> x6
     v1531 StoreIndexed { base=v1521, index=v1518, scale=1, value=v1530, kind=I8 } -> -
     v1532 Extend { value=v1518, kind=I32 }                 -> x2
@@ -6872,7 +6872,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=8
     v1548 LoadIndexed { base=v7142, index=v1540, scale=1, kind=U8 } -> x6
     v1549 Imm(7)                                           -> x7
     v1550 BinopI { op=mul, lhs=v1548, rhs_imm=7 }          -> x6
-    v1551 Extend { value=v1550, kind=I32 }                 -> x7
+    v1551 Extend { value=v1550, kind=I32, nsw }            -> x7
     v1552 BinopI { op=and, lhs=v1550, rhs_imm=255 }        -> x6
     v1553 StoreIndexed { base=v1543, index=v1540, scale=1, value=v1552, kind=I8 } -> -
     v1554 Extend { value=v1540, kind=I32 }                 -> x2
@@ -7762,7 +7762,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=8
     v1678 LoadIndexed { base=v7860, index=v1670, scale=1, kind=I8 } -> x6
     v1679 Imm(100)                                         -> x7
     v1680 BinopI { op=sub, lhs=v1678, rhs_imm=100 }        -> x6
-    v1681 Extend { value=v1680, kind=I32 }                 -> x7
+    v1681 Extend { value=v1680, kind=I32, nsw }            -> x7
     v1682 Extend { value=v1680, kind=I8 }                  -> x7
     v1683 StoreIndexed { base=v1673, index=v1670, scale=1, value=v1680, kind=I8 } -> -
     v1684 Extend { value=v1670, kind=I32 }                 -> x2
@@ -8271,7 +8271,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=8
     v1751 Load { addr=v1750, disp=0, kind=U16 }            -> x1
     v1752 Imm(1000)                                        -> x7
     v1753 BinopI { op=mul, lhs=v1751, rhs_imm=1000 }       -> x1
-    v1754 Extend { value=v1753, kind=I32 }                 -> x7
+    v1754 Extend { value=v1753, kind=I32, nsw }            -> x7
     v1755 BinopI { op=and, lhs=v1753, rhs_imm=65535 }      -> x1
     v1756 Store { addr=v1748, disp=0, value=v1755, kind=I16 } -> -
     v1757 Extend { value=v1742, kind=I32 }                 -> x1
@@ -8479,7 +8479,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=8
     v1794 Binop { op=add, lhs=v8427, rhs=v1786 }           -> x7
     v1795 LoadIndexed { base=v8427, index=v1786, scale=1, kind=U8 } -> x7
     v1796 Binop { op=sub, lhs=v1792, rhs=v1795 }           -> x6
-    v1797 Extend { value=v1796, kind=I32 }                 -> x7
+    v1797 Extend { value=v1796, kind=I32, nsw }            -> x7
     v1798 BinopI { op=and, lhs=v1796, rhs_imm=255 }        -> x6
     v1799 StoreIndexed { base=v1789, index=v1786, scale=1, value=v1798, kind=I8 } -> -
     v1800 Extend { value=v1786, kind=I32 }                 -> x2
@@ -8617,7 +8617,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=8
     v1816 Binop { op=add, lhs=v8536, rhs=v1808 }           -> x7
     v1817 LoadIndexed { base=v8536, index=v1808, scale=1, kind=I8 } -> x7
     v1818 Binop { op=sub, lhs=v1814, rhs=v1817 }           -> x6
-    v1819 Extend { value=v1818, kind=I32 }                 -> x7
+    v1819 Extend { value=v1818, kind=I32, nsw }            -> x7
     v1820 Extend { value=v1818, kind=I8 }                  -> x7
     v1821 StoreIndexed { base=v1811, index=v1808, scale=1, value=v1818, kind=I8 } -> -
     v1822 Extend { value=v1808, kind=I32 }                 -> x2
@@ -9904,7 +9904,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=8
     v2034 Binop { op=add, lhs=v9535, rhs=v2027 }           -> x6
     v2035 LoadIndexed { base=v9535, index=v2027, scale=1, kind=U8 } -> x6
     v2036 Neg(v2035)                                       -> x6
-    v2037 Extend { value=v2036, kind=I32 }                 -> x7
+    v2037 Extend { value=v2036, kind=I32, nsw }            -> x7
     v2038 BinopI { op=and, lhs=v2036, rhs_imm=255 }        -> x6
     v2039 StoreIndexed { base=v2030, index=v2027, scale=1, value=v2038, kind=I8 } -> -
     v2040 Extend { value=v2027, kind=I32 }                 -> x2
@@ -10039,7 +10039,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=8
     v2055 Binop { op=add, lhs=v9642, rhs=v2048 }           -> x6
     v2056 LoadIndexed { base=v9642, index=v2048, scale=1, kind=I8 } -> x6
     v2057 Neg(v2056)                                       -> x6
-    v2058 Extend { value=v2057, kind=I32 }                 -> x7
+    v2058 Extend { value=v2057, kind=I32, nsw }            -> x7
     v2059 Extend { value=v2057, kind=I8 }                  -> x7
     v2060 StoreIndexed { base=v2051, index=v2048, scale=1, value=v2057, kind=I8 } -> -
     v2061 Extend { value=v2048, kind=I32 }                 -> x2
@@ -10122,7 +10122,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=8
     v2077 Binop { op=add, lhs=v9749, rhs=v2074 }           -> x2
     v2078 Load { addr=v2077, disp=0, kind=I32 }            -> x2
     v2079 Neg(v2078)                                       -> x2
-    v2080 Extend { value=v2079, kind=I32 }                 -> x8
+    v2080 Extend { value=v2079, kind=I32, nsw }            -> x8
     v2081 Store { addr=v2075, disp=0, value=v2079, kind=I32 } -> -
     v2082 Extend { value=v2069, kind=I32 }                 -> x2
     v2083 BinopI { op=add, lhs=v2069, rhs_imm=1 }          -> x0
@@ -13120,7 +13120,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=8
     v2137 Binop { op=add, lhs=v12682, rhs=v2130 }          -> x2
     v2138 LoadIndexed { base=v12682, index=v2130, scale=1, kind=U8 } -> x2
     v2139 BinopI { op=sub, lhs=v2138, rhs_imm=192 }        -> x2
-    v2140 Extend { value=v2139, kind=I32 }                 -> x7
+    v2140 Extend { value=v2139, kind=I32, nsw }            -> x7
     v2141 BinopI { op=and, lhs=v2139, rhs_imm=255 }        -> x2
     v2142 StoreIndexed { base=v2133, index=v2130, scale=1, value=v2141, kind=I8 } -> -
     v2143 Extend { value=v2130, kind=I32 }                 -> x1
@@ -13453,14 +13453,14 @@ fn ent_pc=1 n_params=0 variadic=false locals=8
     v2161 Binop { op=add, lhs=v12984, rhs=v2151 }          -> x6
     v2162 LoadIndexed { base=v12984, index=v2151, scale=1, kind=U8 } -> x6
     v2163 Binop { op=add, lhs=v2159, rhs=v2162 }           -> x6
-    v2164 Extend { value=v2163, kind=I32 }                 -> x9
+    v2164 Extend { value=v2163, kind=I32, nsw }            -> x9
     v2165 BinopI { op=and, lhs=v2163, rhs_imm=255 }        -> x6
     v2166 BinopI { op=mul, lhs=v2165, rhs_imm=3 }          -> x6
-    v2167 Extend { value=v2166, kind=I32 }                 -> x9
+    v2167 Extend { value=v2166, kind=I32, nsw }            -> x9
     v2168 BinopI { op=and, lhs=v2166, rhs_imm=255 }        -> x6
     v2169 LoadIndexed { base=v12982, index=v2151, scale=1, kind=U8 } -> x9
     v2170 Binop { op=sub, lhs=v2168, rhs=v2159 }           -> x6
-    v2171 Extend { value=v2170, kind=I32 }                 -> x1
+    v2171 Extend { value=v2170, kind=I32, nsw }            -> x1
     v2172 BinopI { op=and, lhs=v2170, rhs_imm=255 }        -> x1
     v2173 StoreIndexed { base=v2154, index=v2151, scale=1, value=v2172, kind=I8 } -> -
     v2174 Extend { value=v2151, kind=I32 }                 -> x1
@@ -13603,12 +13603,12 @@ fn ent_pc=1 n_params=0 variadic=false locals=8
     v2195 BinopI { op=shru, lhs=v2194, rhs_imm=63 }        -> x8
     v2196 Binop { op=add, lhs=v2194, rhs=v2195 }           -> x2
     v2197 Neg(v2196)                                       -> x2
-    v2198 Extend { value=v2197, kind=I32 }                 -> x8
+    v2198 Extend { value=v2197, kind=I32, nsw }            -> x8
     v2199 Imm(0)                                           -> x8
     v2200 Binop { op=add, lhs=v13094, rhs=v2187 }          -> x1
     v2201 Load { addr=v2200, disp=0, kind=I32 }            -> x1
     v2202 Binop { op=add, lhs=v2197, rhs=v2201 }           -> x1
-    v2203 Extend { value=v2202, kind=I32 }                 -> x2
+    v2203 Extend { value=v2202, kind=I32, nsw }            -> x2
     v2204 Store { addr=v2188, disp=0, value=v2202, kind=I32 } -> -
     v2205 Extend { value=v2182, kind=I32 }                 -> x1
     v2206 BinopI { op=add, lhs=v2182, rhs_imm=1 }          -> x0
@@ -14090,7 +14090,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=8
     v2256 Binop { op=add, lhs=v13390, rhs=v2246 }          -> x8
     v2257 LoadIndexed { base=v13390, index=v2246, scale=1, kind=U8 } -> x8
     v2258 Binop { op=add, lhs=v2254, rhs=v2257 }           -> x7
-    v2259 Extend { value=v2258, kind=I32 }                 -> x8
+    v2259 Extend { value=v2258, kind=I32, nsw }            -> x8
     v2260 BinopI { op=and, lhs=v2258, rhs_imm=255 }        -> x7
     v2261 StoreIndexed { base=v2249, index=v2246, scale=1, value=v2260, kind=I8 } -> -
     v2262 Extend { value=v2246, kind=I32 }                 -> x6

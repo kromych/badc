@@ -66,7 +66,7 @@ fn ent_pc=2 n_params=2 variadic=false locals=2
     v121 Imm(0)                                           -> x1
     v122 Imm(0)                                           -> x1
     v123 BinopI { op=add, lhs=v1, rhs_imm=1 }             -> x1
-    v124 Extend { value=v123, kind=I32 }                  -> x2
+    v124 Extend { value=v123, kind=I32, nsw }             -> x2
     v125 Imm(0)                                           -> x1
     v126 LocalAddr(-2)                                    -> x1
     v127 Imm(0)                                           -> x9
@@ -389,9 +389,9 @@ fn ent_pc=3 n_params=2 variadic=false locals=0
   block 2  start_pc=0
     v13  Imm(0)                                           -> x0
     v14  BinopI { op=mul, lhs=v3, rhs_imm=3 }             -> x0
-    v15  Extend { value=v14, kind=I32 }                   -> x1
+    v15  Extend { value=v14, kind=I32, nsw }              -> x1
     v16  BinopI { op=add, lhs=v14, rhs_imm=2 }            -> x0
-    v17  Extend { value=v16, kind=I32 }                   -> x6
+    v17  Extend { value=v16, kind=I32, nsw }              -> x6
     v18  Imm(0)                                           -> x0
     terminator Jmp(b3)   (exit_acc=v17)
   block 3  start_pc=0
@@ -400,7 +400,7 @@ fn ent_pc=3 n_params=2 variadic=false locals=0
     v23  Imm(0)                                           -> x0
     v24  Imm(0)                                           -> x0
     v25  BinopI { op=add, lhs=v1, rhs_imm=1 }             -> x0
-    v26  Extend { value=v25, kind=I32 }                   -> x1
+    v26  Extend { value=v25, kind=I32, nsw }              -> x1
     v27  Imm(0)                                           -> x0
     v28  BinopI { op=ge, lhs=v1, rhs_imm=0 }              -> x0
     v29  Imm(0)                                           -> x2
@@ -416,15 +416,15 @@ fn ent_pc=3 n_params=2 variadic=false locals=0
     v35  Imm(100)                                         -> x0
     v36  Imm(0)                                           -> x0
     v37  BinopI { op=mul, lhs=v1, rhs_imm=7 }             -> x0
-    v38  Extend { value=v37, kind=I32 }                   -> x2
+    v38  Extend { value=v37, kind=I32, nsw }              -> x2
     v39  BinopI { op=add, lhs=v37, rhs_imm=100 }          -> x0
-    v40  Extend { value=v39, kind=I32 }                   -> x2
+    v40  Extend { value=v39, kind=I32, nsw }              -> x2
     v41  BinopI { op=add, lhs=v39, rhs_imm=1 }            -> x0
-    v42  Extend { value=v41, kind=I32 }                   -> x8
+    v42  Extend { value=v41, kind=I32, nsw }              -> x8
     v43  Imm(0)                                           -> x0
     v44  Imm(200)                                         -> x0
     v45  Binop { op=sub, lhs=v44, rhs=v1 }                -> x0
-    v46  Extend { value=v45, kind=I32 }                   -> x2
+    v46  Extend { value=v45, kind=I32, nsw }              -> x2
     v47  Imm(0)                                           -> x2
     terminator Jmp(b6)   (exit_acc=v45)
   block 6  start_pc=0
@@ -445,7 +445,7 @@ fn ent_pc=3 n_params=2 variadic=false locals=0
     v61  Imm(0)                                           -> x2
     v62  Imm(0)                                           -> x2
     v63  BinopI { op=mul, lhs=v26, rhs_imm=7 }            -> x2
-    v64  Extend { value=v63, kind=I32 }                   -> x2
+    v64  Extend { value=v63, kind=I32, nsw }              -> x2
     v65  Binop { op=add, lhs=v49, rhs=v64 }               -> x2
     v66  BinopI { op=add, lhs=v65, rhs_imm=1 }            -> x9
     v67  Imm(0)                                           -> x2
@@ -482,7 +482,7 @@ fn ent_pc=3 n_params=2 variadic=false locals=0
     v95  Imm(100)                                         -> x0
     v96  Imm(0)                                           -> x0
     v97  BinopI { op=add, lhs=v1, rhs_imm=100 }           -> x0
-    v98  Extend { value=v97, kind=I32 }                   -> x2
+    v98  Extend { value=v97, kind=I32, nsw }              -> x2
     v99  Imm(0)                                           -> x2
     terminator Jmp(b12)   (exit_acc=v97)
   block 12  start_pc=0

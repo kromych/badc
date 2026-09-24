@@ -69,7 +69,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v63  Load { addr=v57, disp=0, kind=I32 }              -> x1
     v64  Imm(12)                                          -> x2
     v65  BinopI { op=add, lhs=v63, rhs_imm=12 }           -> x1
-    v66  Extend { value=v65, kind=I32 }                   -> x2
+    v66  Extend { value=v65, kind=I32, nsw }              -> x2
     v67  BinopI { op=ne, lhs=v65, rhs_imm=23 }            -> x1
     terminator Bz { cond=v67, target=b2, fall=b1 }   (exit_acc=v67)
   block 1  start_pc=0

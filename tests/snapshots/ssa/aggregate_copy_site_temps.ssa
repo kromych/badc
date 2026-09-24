@@ -516,7 +516,7 @@ fn ent_pc=9 n_params=0 variadic=false locals=26
     v193 BinopI { op=add, lhs=v145, rhs_imm=61 }          -> x7
     v194 Load { addr=v145, disp=61, kind=I8 }             -> x0
     v195 BinopI { op=add, lhs=v194, rhs_imm=175 }         -> x0
-    v196 Extend { value=v195, kind=I32 }                  -> x7
+    v196 Extend { value=v195, kind=I32, nsw }             -> x7
     v197 Binop { op=ne, lhs=v181, rhs=v195 }              -> x0
     v198 Imm(0)                                           -> x6
     terminator Bnz { cond=v197, target=b99, fall=b59 }   (exit_acc=v197)

@@ -235,7 +235,7 @@ fn value_numbers(func: &FunctionSsa) -> Numbering {
             Inst::Imm(k) => (1, 0, 0, *k),
             Inst::LocalAddr(off) => (5, 0, 0, *off),
             Inst::ParamRef { idx, kind } => (7, (*idx), load_kind_code(*kind), 0),
-            Inst::Extend { value, kind } if !matches!(kind, LoadKind::F32 | LoadKind::F64) => {
+            Inst::Extend { value, kind, .. } if !matches!(kind, LoadKind::F32 | LoadKind::F64) => {
                 (8, c(*value), load_kind_code(*kind), 0)
             }
             Inst::BinopI { op, lhs, rhs_imm } if is_pure_int(*op) => {
@@ -268,7 +268,7 @@ fn key_of(func: &FunctionSsa, canon: &[ValueId], v: ValueId) -> Key {
     let narrow = super::narrow::is_cmp32(&func.cmp32, v);
     match func.insts.get(v as usize) {
         Some(Inst::Imm(k)) => (1, 0, 0, *k),
-        Some(Inst::Extend { value, kind }) => (2, c(*value), load_kind_code(*kind), 0),
+        Some(Inst::Extend { value, kind, .. }) => (2, c(*value), load_kind_code(*kind), 0),
         Some(Inst::BinopI { op, lhs, rhs_imm }) if is_pure_int(*op) => {
             (3, c(*lhs), cmp_code(*op, narrow), *rhs_imm)
         }
@@ -915,7 +915,7 @@ fn eval(inst: &Inst, params: &[Range], mut range_of: impl FnMut(ValueId) -> Rang
             kind: LoadKind::F32 | LoadKind::F64,
             ..
         } => UNIVERSE,
-        Inst::Extend { value, kind } => {
+        Inst::Extend { value, kind, .. } => {
             let src = range_of(*value);
             match extend_range(*kind) {
                 // The extension is the identity on a value that already
@@ -1126,7 +1126,7 @@ fn edge_bounds(
         // The extension the comparison read, where the function computes
         // it, and the value under an extension the comparison reads whole.
         match (width, func.insts.get(v as usize)) {
-            (Width::Full, Some(Inst::Extend { value, kind })) if *kind == LoadKind::I32 => {
+            (Width::Full, Some(Inst::Extend { value, kind, .. })) if *kind == LoadKind::I32 => {
                 let under = Bound {
                     width: Width::Sext32,
                     ..bound
@@ -2450,6 +2450,7 @@ mod tests {
             Inst::Extend {
                 value: 1,
                 kind: LoadKind::I32,
+                nsw: false,
             },
             Inst::BinopI {
                 op: BinOp::Add,
@@ -2505,6 +2506,7 @@ mod tests {
             Inst::Extend {
                 value: 1,
                 kind: LoadKind::I32,
+                nsw: false,
             },
             Inst::BinopI {
                 op: BinOp::Mod,
@@ -2717,6 +2719,7 @@ mod tests {
         let ext = Inst::Extend {
             value: 2,
             kind: LoadKind::I32,
+            nsw: false,
         };
         let insts = vec![
             init,
@@ -2949,6 +2952,7 @@ mod tests {
                 Inst::Extend {
                     value: 3,
                     kind: LoadKind::I32,
+                    nsw: false,
                 },
                 Inst::BinopI {
                     op: BinOp::Lt,
@@ -3428,6 +3432,7 @@ mod tests {
         let sext = Inst::Extend {
             value: 0,
             kind: LoadKind::I32,
+            nsw: false,
         };
         let insts = vec![
             Inst::ParamRef {

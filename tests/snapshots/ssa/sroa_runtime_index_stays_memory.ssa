@@ -141,7 +141,7 @@ fn ent_pc=0 n_params=2 variadic=false locals=8
     v135 LocalAddr(-8)                                    -> x2
     v136 Imm(0)                                           -> x2
     v137 BinopI { op=add, lhs=v3, rhs_imm=5 }             -> x2
-    v138 Extend { value=v137, kind=I32 }                  -> x6
+    v138 Extend { value=v137, kind=I32, nsw }             -> x6
     v139 BinopI { op=and, lhs=v137, rhs_imm=7 }           -> x2
     v140 BinopI { op=shl, lhs=v139, rhs_imm=3 }           -> x6
     v141 Binop { op=add, lhs=v84, rhs=v140 }              -> x6

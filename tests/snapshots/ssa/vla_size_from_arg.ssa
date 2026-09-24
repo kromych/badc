@@ -18,7 +18,7 @@ fn ent_pc=0 n_params=1 variadic=false locals=1
     v14  Extend { value=v9, kind=I32 }                    -> x1
     v15  Binop { op=add, lhs=v5, rhs=v9 }                 -> x1
     v16  BinopI { op=add, lhs=v9, rhs_imm=1 }             -> x1
-    v17  Extend { value=v16, kind=I32 }                   -> x6
+    v17  Extend { value=v16, kind=I32, nsw }              -> x6
     v18  Extend { value=v16, kind=I8 }                    -> x6
     v19  StoreIndexed { base=v5, index=v9, scale=1, value=v16, kind=I8 } -> -
     v20  Extend { value=v9, kind=I32 }                    -> x0

@@ -13,25 +13,25 @@ fn ent_pc=0 n_params=0 variadic=false locals=1
     v7   Imm(0)                                           -> x1
     v8   LoadLocal { off=-1, kind=I32, volatile }         -> x1
     v9   BinopI { op=add, lhs=v8, rhs_imm=1 }             -> x1
-    v10  Extend { value=v9, kind=I32 }                    -> x2
+    v10  Extend { value=v9, kind=I32, nsw }               -> x2
     v11  Imm(0)                                           -> x2
     v12  Imm(0)                                           -> x2
     v13  Imm(0)                                           -> x2
     v14  LoadLocal { off=-1, kind=I32, volatile }         -> x2
     v15  BinopI { op=add, lhs=v14, rhs_imm=2 }            -> x2
-    v16  Extend { value=v15, kind=I32 }                   -> x6
+    v16  Extend { value=v15, kind=I32, nsw }              -> x6
     v17  Imm(0)                                           -> x6
     v18  Imm(0)                                           -> x6
     v19  Imm(0)                                           -> x6
     v20  LoadLocal { off=-1, kind=I32, volatile }         -> x6
     v21  BinopI { op=add, lhs=v20, rhs_imm=3 }            -> x6
-    v22  Extend { value=v21, kind=I32 }                   -> x7
+    v22  Extend { value=v21, kind=I32, nsw }              -> x7
     v23  Imm(0)                                           -> x7
     v24  Imm(0)                                           -> x7
     v25  Imm(0)                                           -> x7
     v26  LoadLocal { off=-1, kind=I32, volatile }         -> x7
     v27  BinopI { op=add, lhs=v26, rhs_imm=100 }          -> x7
-    v28  Extend { value=v27, kind=I32 }                   -> x8
+    v28  Extend { value=v27, kind=I32, nsw }              -> x8
     v29  Imm(0)                                           -> x8
     v30  Imm(0)                                           -> x8
     v31  Imm(0)                                           -> x8
@@ -97,7 +97,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=1
     v77  Imm(0)                                           -> x1
     v78  LoadLocal { off=-1, kind=I32, volatile }         -> x1
     v79  BinopI { op=add, lhs=v78, rhs_imm=1 }            -> x1
-    v80  Extend { value=v79, kind=I32 }                   -> x2
+    v80  Extend { value=v79, kind=I32, nsw }              -> x2
     v81  Imm(0)                                           -> x2
     v82  Imm(0)                                           -> x2
     v83  Imm(0)                                           -> x2
@@ -159,7 +159,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=1
     v130 Imm(0)                                           -> x1
     v131 LoadLocal { off=-1, kind=I32, volatile }         -> x1
     v132 BinopI { op=add, lhs=v131, rhs_imm=2 }           -> x1
-    v133 Extend { value=v132, kind=I32 }                  -> x2
+    v133 Extend { value=v132, kind=I32, nsw }             -> x2
     v134 Imm(0)                                           -> x2
     v135 Imm(0)                                           -> x2
     v136 Imm(0)                                           -> x2
@@ -169,7 +169,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=1
     v140 Imm(0)                                           -> x2
     v141 LoadLocal { off=-1, kind=I32, volatile }         -> x2
     v142 BinopI { op=add, lhs=v141, rhs_imm=4 }           -> x2
-    v143 Extend { value=v142, kind=I32 }                  -> x6
+    v143 Extend { value=v142, kind=I32, nsw }             -> x6
     v144 Imm(0)                                           -> x6
     v145 Imm(0)                                           -> x6
     v146 Imm(0)                                           -> x6
@@ -256,7 +256,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=1
     v219 Imm(0)                                           -> x1
     v220 LoadLocal { off=-1, kind=I32, volatile }         -> x1
     v221 BinopI { op=add, lhs=v220, rhs_imm=1 }           -> x1
-    v222 Extend { value=v221, kind=I32 }                  -> x2
+    v222 Extend { value=v221, kind=I32, nsw }             -> x2
     v223 Imm(0)                                           -> x2
     v224 Imm(0)                                           -> x2
     v225 Imm(0)                                           -> x2
@@ -334,37 +334,37 @@ fn ent_pc=0 n_params=0 variadic=false locals=1
     v295 Imm(0)                                           -> x1
     v296 LoadLocal { off=-1, kind=I32, volatile }         -> x1
     v297 BinopI { op=add, lhs=v296, rhs_imm=1 }           -> x1
-    v298 Extend { value=v297, kind=I32 }                  -> x2
+    v298 Extend { value=v297, kind=I32, nsw }             -> x2
     v299 Imm(0)                                           -> x2
     v300 Imm(0)                                           -> x2
     v301 Imm(0)                                           -> x2
     v302 LoadLocal { off=-1, kind=I32, volatile }         -> x2
     v303 BinopI { op=add, lhs=v302, rhs_imm=2 }           -> x2
-    v304 Extend { value=v303, kind=I32 }                  -> x6
+    v304 Extend { value=v303, kind=I32, nsw }             -> x6
     v305 Imm(0)                                           -> x6
     v306 Imm(0)                                           -> x6
     v307 Imm(0)                                           -> x6
     v308 LoadLocal { off=-1, kind=I32, volatile }         -> x6
     v309 BinopI { op=add, lhs=v308, rhs_imm=3 }           -> x6
-    v310 Extend { value=v309, kind=I32 }                  -> x7
+    v310 Extend { value=v309, kind=I32, nsw }             -> x7
     v311 Imm(0)                                           -> x7
     v312 Imm(0)                                           -> x7
     v313 Imm(0)                                           -> x7
     v314 LoadLocal { off=-1, kind=I32, volatile }         -> x7
     v315 BinopI { op=add, lhs=v314, rhs_imm=4 }           -> x7
-    v316 Extend { value=v315, kind=I32 }                  -> x8
+    v316 Extend { value=v315, kind=I32, nsw }             -> x8
     v317 Imm(0)                                           -> x8
     v318 Imm(0)                                           -> x8
     v319 Imm(0)                                           -> x8
     v320 LoadLocal { off=-1, kind=I32, volatile }         -> x8
     v321 BinopI { op=add, lhs=v320, rhs_imm=5 }           -> x8
-    v322 Extend { value=v321, kind=I32 }                  -> x9
+    v322 Extend { value=v321, kind=I32, nsw }             -> x9
     v323 Imm(0)                                           -> x9
     v324 Imm(0)                                           -> x9
     v325 Imm(0)                                           -> x9
     v326 LoadLocal { off=-1, kind=I32, volatile }         -> x9
     v327 BinopI { op=add, lhs=v326, rhs_imm=6 }           -> x9
-    v328 Extend { value=v327, kind=I32 }                  -> x3
+    v328 Extend { value=v327, kind=I32, nsw }             -> x3
     v329 Imm(0)                                           -> x3
     v330 Imm(0)                                           -> x3
     v331 Imm(0)                                           -> x3
@@ -455,7 +455,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=1
     v396 Imm(0)                                           -> x0
     v397 LoadLocal { off=-1, kind=I32, volatile }         -> x0
     v398 BinopI { op=add, lhs=v397, rhs_imm=1 }           -> x0
-    v399 Extend { value=v398, kind=I32 }                  -> x1
+    v399 Extend { value=v398, kind=I32, nsw }             -> x1
     v400 Imm(0)                                           -> x1
     v401 Imm(0)                                           -> x1
     v402 Imm(0)                                           -> x1
@@ -464,7 +464,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=1
     v405 Imm(0)                                           -> x2
     v406 LoadLocal { off=-1, kind=I32, volatile }         -> x2
     v407 BinopI { op=add, lhs=v406, rhs_imm=2 }           -> x2
-    v408 Extend { value=v407, kind=I32 }                  -> x6
+    v408 Extend { value=v407, kind=I32, nsw }             -> x6
     v409 Imm(0)                                           -> x6
     v410 Imm(0)                                           -> x6
     v411 Imm(0)                                           -> x6

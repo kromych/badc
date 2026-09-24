@@ -16,7 +16,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v21  Extend { value=v4, kind=I32 }                    -> x6
     v22  Extend { value=v12, kind=I32 }                   -> x6
     v23  Binop { op=add, lhs=v4, rhs=v12 }                -> x6
-    v24  Extend { value=v23, kind=I32 }                   -> x6
+    v24  Extend { value=v23, kind=I32, nsw }              -> x6
     v25  Imm(3)                                           -> x7
     v26  BinopI { op=mul, lhs=v24, rhs_imm=1431655766 }   -> x7
     v27  BinopI { op=shr, lhs=v26, rhs_imm=32 }           -> x7

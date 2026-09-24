@@ -385,7 +385,7 @@ pub(super) fn emit_inst(
             alloc,
             frame,
         ),
-        Inst::Extend { value, kind } => {
+        Inst::Extend { value, kind, .. } => {
             emit_extend(code, dst, v, *value, *kind, alloc, frame, scratch)
         }
         Inst::Bswap { value, width } => {

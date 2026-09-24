@@ -61,6 +61,8 @@ mod native_elf_x64;
 mod native_pe_arm64;
 #[cfg(feature = "full")]
 mod native_pe_x64;
+#[cfg(feature = "full")]
+mod overflow;
 mod parser;
 #[cfg(feature = "full")]
 mod patchable_entry;

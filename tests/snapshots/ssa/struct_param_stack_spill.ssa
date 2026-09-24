@@ -76,13 +76,13 @@ fn ent_pc=1 n_params=9 variadic=false locals=2
     v28  LocalAddr(-2)                                    -> x0
     v29  Load { addr=v28, disp=0, kind=I32 }              -> x2
     v30  BinopI { op=mul, lhs=v29, rhs_imm=100 }          -> x2
-    v31  Extend { value=v30, kind=I32 }                   -> x2
+    v31  Extend { value=v30, kind=I32, nsw }              -> x2
     v32  Binop { op=add, lhs=v27, rhs=v31 }               -> x1
     v33  LocalAddr(-2)                                    -> x2
     v34  BinopI { op=add, lhs=v28, rhs_imm=4 }            -> x2
     v35  Load { addr=v28, disp=4, kind=I32 }              -> x2
     v36  BinopI { op=mul, lhs=v35, rhs_imm=10 }           -> x2
-    v37  Extend { value=v36, kind=I32 }                   -> x2
+    v37  Extend { value=v36, kind=I32, nsw }              -> x2
     v38  Binop { op=add, lhs=v32, rhs=v37 }               -> x1
     v39  LocalAddr(-2)                                    -> x2
     v40  BinopI { op=add, lhs=v28, rhs_imm=8 }            -> x2

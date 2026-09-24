@@ -890,11 +890,7 @@ impl Liveness {
             });
             for idx in (blk.inst_range.start..blk.inst_range.end).rev() {
                 let inst = &func.insts[idx as usize];
-                let is_call = matches!(
-                    inst,
-                    Inst::Call { .. } | Inst::CallIndirect { .. } | Inst::CallExt { .. }
-                ) || (tls_addr_is_call && matches!(inst, Inst::TlsAddr(_)))
-                    || super::reg_alloc::is_setjmp_barrier(inst);
+                let is_call = super::reg_alloc::is_call_site(inst, tls_addr_is_call);
                 if super::reg_alloc::produces_value(inst) {
                     live.unset(idx);
                 }

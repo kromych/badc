@@ -230,11 +230,11 @@ Disassembly of section .text:
                	popq	%r15
                	leave
                	retq
-               	movl	$0xd89e, %ebx           # imm = 0xD89E
                	leaq	<rip>, %rax
                	movq	0x30(%rax), %rdi
                	callq	<addr>
-               	cmpq	%rbx, %rax
+               	movl	$0xd89e, %ecx           # imm = 0xD89E
+               	cmpq	%rcx, %rax
                	je	<addr>
                	movl	$0x5, %eax
                	popq	%rbx
@@ -262,7 +262,7 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	<rip>, %rax
-               	movq	%rbx, (%rax)
+               	movq	$0xd89e, (%rax)         # imm = 0xD89E
                	xorl	%eax, %eax
                	popq	%rbx
                	popq	%r12

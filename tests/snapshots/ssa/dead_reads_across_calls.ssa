@@ -384,7 +384,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=0
     v172 Imm(0)                                           -> x0
     v173 Imm(27)                                          -> x0
     v174 Imm(28)                                          -> x0
-    v175 Imm(55454)                                       -> x3
+    v175 Imm(55454)                                       -> x0
     v176 Imm(0)                                           -> x0
     v177 Imm(4)                                           -> x0
     v178 Imm(5)                                           -> x0
@@ -397,37 +397,39 @@ fn ent_pc=5 n_params=0 variadic=false locals=0
     v185 Load { addr=v182, disp=48, kind=I64, volatile }  -> x7
     v186 Call { target_pc=4, args=[v185], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v187 Imm(0)                                           -> x1
-    v188 Binop { op=ne, lhs=v186, rhs=v175 }              -> x0
-    terminator Bz { cond=v188, target=b11, fall=b10 }   (exit_acc=v188)
+    v188 Imm(55454)                                       -> x1
+    v189 Binop { op=ne, lhs=v186, rhs=v188 }              -> x0
+    terminator Bz { cond=v189, target=b11, fall=b10 }   (exit_acc=v189)
   block 10  start_pc=0
-    v189 Imm(5)                                           -> x0
-    terminator Return(v189)   (exit_acc=v189)
+    v190 Imm(5)                                           -> x0
+    terminator Return(v190)   (exit_acc=v190)
   block 11  start_pc=0
-    v190 Imm(0)                                           -> x7
-    v191 Call { target_pc=4, args=[v190], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v192 BinopI { op=ne, lhs=v191, rhs_imm=0 }            -> x1
-    v193 Imm(0)                                           -> x1
-    terminator Bnz { cond=v191, target=b13, fall=b12 }   (exit_acc=v192)
+    v191 Imm(0)                                           -> x7
+    v192 Call { target_pc=4, args=[v191], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v193 BinopI { op=ne, lhs=v192, rhs_imm=0 }            -> x1
+    v194 Imm(0)                                           -> x1
+    terminator Bnz { cond=v192, target=b13, fall=b12 }   (exit_acc=v193)
   block 12  start_pc=0
-    v194 ImmData(8)                                       -> x0
-    v195 Imm(56)                                          -> x1
-    v196 BinopI { op=add, lhs=v194, rhs_imm=56 }          -> x1
-    v197 Load { addr=v194, disp=56, kind=I64, volatile }  -> x7
-    v198 Call { target_pc=4, args=[v197], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v199 BinopI { op=ne, lhs=v198, rhs_imm=4 }            -> x0
-    v200 Imm(0)                                           -> x1
+    v195 ImmData(8)                                       -> x0
+    v196 Imm(56)                                          -> x1
+    v197 BinopI { op=add, lhs=v195, rhs_imm=56 }          -> x1
+    v198 Load { addr=v195, disp=56, kind=I64, volatile }  -> x7
+    v199 Call { target_pc=4, args=[v198], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v200 BinopI { op=ne, lhs=v199, rhs_imm=4 }            -> x0
     v201 Imm(0)                                           -> x1
     v202 Imm(0)                                           -> x1
-    terminator Bz { cond=v199, target=b14, fall=b13 }   (exit_acc=v199)
+    v203 Imm(0)                                           -> x1
+    terminator Bz { cond=v200, target=b14, fall=b13 }   (exit_acc=v200)
   block 13  start_pc=0
-    v203 Imm(6)                                           -> x0
-    terminator Return(v203)   (exit_acc=v203)
+    v204 Imm(6)                                           -> x0
+    terminator Return(v204)   (exit_acc=v204)
   block 14  start_pc=0
-    v204 ImmData(80)                                      -> x0
-    v205 Imm(0)                                           -> x1
-    v206 Store { addr=v204, disp=0, value=v175, kind=I64, volatile } -> -
-    v207 Imm(0)                                           -> x0
-    terminator Return(v207)   (exit_acc=v207)
+    v205 ImmData(80)                                      -> x0
+    v206 Imm(0)                                           -> x1
+    v207 Imm(55454)                                       -> x1
+    v208 Store { addr=v205, disp=0, value=v207, kind=I64, volatile } -> -
+    v209 Imm(0)                                           -> x0
+    terminator Return(v209)   (exit_acc=v209)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

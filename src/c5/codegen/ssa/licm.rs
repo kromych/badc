@@ -43,7 +43,7 @@ use hashbrown::HashMap;
 use super::super::ir::{BinOp, BlockId, FunctionSsa, Inst, NO_VALUE, ValueId};
 use super::mem2reg::{dominators, predecessors};
 use super::reg_alloc::Allocation;
-use super::tape::{Insertion, Undo};
+use super::tape::{At, Insertion, Undo};
 use super::{FixedRegs, Target};
 use crate::c5::codegen::passes::drop_redundant_extend::{
     compute_high_clear, compute_high_observed,
@@ -140,7 +140,7 @@ fn addr_cost(target: Target) -> u32 {
 /// `high_dead` when no consumer reads the result above bit 31.
 /// The copy a hoist places is an integer `Inst::Imm`, so a float op --
 /// which has no immediate form to unfold on either target -- is not one.
-fn binop_imm_materializes(target: Target, op: BinOp, imm: i64, high_dead: bool) -> bool {
+pub(super) fn binop_imm_materializes(target: Target, op: BinOp, imm: i64, high_dead: bool) -> bool {
     if matches!(
         op,
         BinOp::Fadd
@@ -263,7 +263,7 @@ fn dominates(idom: &[BlockId], a: BlockId, b: BlockId) -> bool {
 }
 
 /// Symbol bound to each instruction in one of the extern-ref tables.
-fn sym_of(refs: &[(u32, u32)]) -> HashMap<u32, u32> {
+pub(super) fn sym_of(refs: &[(u32, u32)]) -> HashMap<u32, u32> {
     refs.iter().copied().collect()
 }
 
@@ -412,7 +412,7 @@ fn apply(func: &mut FunctionSsa, hoists: &[Hoist]) -> Undo {
     let ins: Vec<Insertion> = hoists
         .iter()
         .map(|h| Insertion {
-            at: h.at,
+            at: At::Before(h.at),
             inst: h.key.inst(),
             is_f32: h.key.is_f32(),
         })

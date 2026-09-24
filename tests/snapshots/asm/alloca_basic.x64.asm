@@ -270,8 +270,6 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x8, %rsp
-               	pushq	%rbx
                	callq	<addr>
                	testl	%eax, %eax
                	je	<addr>
@@ -279,23 +277,20 @@ Disassembly of section .text:
                	movb	$0x0, %al
                	callq	<addr>
                	movl	$0x1, %eax
-               	popq	%rbx
-               	leave
+               	popq	%rbp
                	retq
                	movl	$0xa, %edi
                	callq	<addr>
                	cmpl	$0x11d, %eax            # imm = 0x11D
                	je	<addr>
-               	leaq	<rip>, %rbx
                	movl	$0xa, %edi
                	callq	<addr>
                	movslq	%eax, %rsi
-               	movq	%rbx, %rdi
+               	leaq	<rip>, %rdi
                	movb	$0x0, %al
                	callq	<addr>
                	movl	$0x2, %eax
-               	popq	%rbx
-               	leave
+               	popq	%rbp
                	retq
                	callq	<addr>
                	testl	%eax, %eax
@@ -304,23 +299,20 @@ Disassembly of section .text:
                	movb	$0x0, %al
                	callq	<addr>
                	movl	$0x3, %eax
-               	popq	%rbx
-               	leave
+               	popq	%rbp
                	retq
                	movl	$0x32, %edi
                	callq	<addr>
                	cmpl	$0x4c9, %eax            # imm = 0x4C9
                	je	<addr>
-               	leaq	<rip>, %rbx
                	movl	$0x32, %edi
                	callq	<addr>
                	movslq	%eax, %rsi
-               	movq	%rbx, %rdi
+               	leaq	<rip>, %rdi
                	movb	$0x0, %al
                	callq	<addr>
                	movl	$0x4, %eax
-               	popq	%rbx
-               	leave
+               	popq	%rbp
                	retq
                	movl	$0x33, %edi
                	callq	<addr>
@@ -330,10 +322,8 @@ Disassembly of section .text:
                	movb	$0x0, %al
                	callq	<addr>
                	movl	$0x5, %eax
-               	popq	%rbx
-               	leave
+               	popq	%rbp
                	retq
                	xorl	%eax, %eax
-               	popq	%rbx
-               	leave
+               	popq	%rbp
                	retq

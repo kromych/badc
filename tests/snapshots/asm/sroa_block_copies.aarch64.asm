@@ -288,30 +288,27 @@ Disassembly of section .text:
                	brk	#0x1
 
 <copy_across_setjmp>:
-               	stp	x20, x21, [sp, #-0x30]!
-               	str	x22, [sp, #0x10]
-               	stp	x29, x30, [sp, #0x20]
-               	add	x29, sp, #0x20
+               	stp	x20, x21, [sp, #-0x20]!
+               	stp	x29, x30, [sp, #0x10]
+               	add	x29, sp, #0x10
                	mov	x20, x0
                	mov	x21, x1
-               	mov	x22, #0x5               // =5
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	bl	<addr>
                	sxtw	x0, w0
                	cbz	x0, <addr>
                	str	x21, [x20]
-               	str	x22, [x20, #0x8]
+               	mov	x0, #0x5                // =5
+               	str	x0, [x20, #0x8]
                	add	x0, x21, #0x5
-               	ldp	x29, x30, [sp, #0x20]
-               	ldr	x22, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0x30
+               	ldp	x29, x30, [sp, #0x10]
+               	ldp	x20, x21, [sp], #0x20
                	ret
                	bl	<addr>
                	mov	x0, #-0x1               // =-1
-               	ldp	x29, x30, [sp, #0x20]
-               	ldr	x22, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0x30
+               	ldp	x29, x30, [sp, #0x10]
+               	ldp	x20, x21, [sp], #0x20
                	ret
 
 <vla_copy>:

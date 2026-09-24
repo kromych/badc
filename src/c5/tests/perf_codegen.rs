@@ -2160,6 +2160,74 @@ return a + f(x, 6, 5, 4, 3, 2, 1);\n}\n";
     m.finish();
 }
 
+/// A constant read past a call by a contracted multiply-add, by a return
+/// and by a phi income through a split edge is set again after the call:
+/// no callee-saved register holds one, `ret` and `flag` save none, and
+/// `fm` builds its constant after the call.
+#[test]
+fn constant_read_past_a_call_is_set_again_after_it() {
+    const SRC: &str = "long f(long);\n\
+double fm(double a, double b) { double k0 = a * 2.0; double s = f((long)b); return s + k0; }\n\
+long ret(long x) { long r = 7; f(x); return r; }\n\
+int flag(long x) { int ok = 1; if (f(x)) ok = 0; return ok; }\n";
+    let mut m = Misses::default();
+    // `fmov Dd, #imm8`, and into d8..d15; `movz` / `movn` into x19..x28.
+    let fp_imm = |w: u32| w & 0xFFE0_1FE0 == 0x1E60_1000;
+    let fp_imm_to_saved = |w: u32| fp_imm(w) && (8..=15).contains(&(w & 31));
+    let imm_to_saved = |w: u32| {
+        w & 0x1F80_0000 == 0x1280_0000 && (w >> 29) & 3 != 3 && (19..=28).contains(&(w & 31))
+    };
+    for name in ["fm", "ret", "flag"] {
+        let ws = a64(SRC, name);
+        m.expect(
+            !ws.iter().any(|&w| fp_imm_to_saved(w) || imm_to_saved(w)),
+            || format!("aarch64 {name}: a constant in a callee-saved register: {ws:08x?}"),
+        );
+    }
+    let ws = a64(SRC, "fm");
+    let call = ws.iter().position(|&w| w & 0xFC00_0000 == 0x9400_0000);
+    let fmov = ws.iter().position(|&w| fp_imm(w));
+    m.expect(matches!((call, fmov), (Some(c), Some(k)) if k > c), || {
+        format!("aarch64 fm: the constant is not set after the call: {ws:08x?}")
+    });
+    for (name, len) in [("ret", 6), ("flag", 9)] {
+        let ws = a64(SRC, name);
+        m.expect(ws.len() == len, || {
+            format!(
+                "aarch64 {name}: {} instructions, not {len}: {ws:08x?}",
+                ws.len()
+            )
+        });
+    }
+    let callee_saved = |r: u8| matches!(r, 3 | 12..=15);
+    let imm_dst = |i: &X64Insn| match i.op {
+        0xB8..=0xBF => Some((i.op as u8 & 7) | ((i.rex & 1) << 3)),
+        0xC7 if i.reg_form() => Some(i.regs().1),
+        _ => None,
+    };
+    for name in ["fm", "ret", "flag"] {
+        let insns = x64(SRC, name);
+        m.expect(
+            !insns.iter().any(|i| imm_dst(i).is_some_and(callee_saved)),
+            || format!("x86-64 {name}: a constant in a callee-saved register: {insns:x?}"),
+        );
+        let pushes = insns.iter().filter(|i| matches!(i.op, 0x50..=0x57)).count();
+        m.expect(pushes == 1, || {
+            format!("x86-64 {name}: {pushes} pushes, not rbp alone: {insns:x?}")
+        });
+    }
+    let insns = x64(SRC, "fm");
+    let call = insns.iter().position(|i| i.op == 0xE8);
+    let movabs = insns
+        .iter()
+        .position(|i| matches!(i.op, 0xB8..=0xBF) && i.rex_w());
+    m.expect(
+        matches!((call, movabs), (Some(c), Some(k)) if k > c),
+        || format!("x86-64 fm: the constant is not set after the call: {insns:x?}"),
+    );
+    m.finish();
+}
+
 /// An indirect call whose target sits in a register the argument moves
 /// leave alone calls through it: no copy to a scratch, no spill. Here the
 /// target survives the first call in a callee-saved register.

@@ -29,22 +29,20 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x420, %rsp            # imm = 0x420
-               	pushq	%r13
-               	pushq	%rbx
-               	movabsq	$0x123456789abcdef, %rbx # imm = 0x123456789ABCDEF
-               	movabsq	$-0x123456789abcdf0, %r13 # imm = 0xFEDCBA9876543210
+               	movabsq	$0x123456789abcdef, %rcx # imm = 0x123456789ABCDEF
+               	movabsq	$-0x123456789abcdf0, %rsi # imm = 0xFEDCBA9876543210
                	leaq	-0x418(%rbp), %rax
-               	movq	%rbx, (%rax)
-               	movq	%r13, 0x8(%rax)
+               	movq	%rcx, (%rax)
+               	movq	%rsi, 0x8(%rax)
                	movl	$0xdeadbeef, 0x10(%rax) # imm = 0xDEADBEEF
                	movb	$0x5a, 0x14(%rax)
                	movb	$0x0, 0x15(%rax)
                	movw	$0x0, 0x16(%rax)
-               	cmpq	%rbx, %rbx
+               	cmpq	%rcx, %rcx
                	jne	<addr>
                	leaq	-0x418(%rbp), %rax
                	movq	0x8(%rax), %rcx
-               	cmpq	%r13, %rcx
+               	cmpq	%rsi, %rcx
                	jne	<addr>
                	movl	0x10(%rax), %eax
                	movl	$0xdeadbeef, %r11d      # imm = 0xDEADBEEF
@@ -55,8 +53,6 @@ Disassembly of section .text:
                	cmpl	$0x5a, %eax
                	je	<addr>
                	movl	$0x2, %eax
-               	popq	%rbx
-               	popq	%r13
                	leave
                	retq
                	leaq	<rip>, %rax
@@ -98,8 +94,6 @@ Disassembly of section .text:
                	cmpl	$0x11223344, %eax       # imm = 0x11223344
                	je	<addr>
                	movl	$0x3, %eax
-               	popq	%rbx
-               	popq	%r13
                	leave
                	retq
                	leaq	<rip>, %rax
@@ -159,8 +153,6 @@ Disassembly of section .text:
                	testl	%ecx, %ecx
                	je	<addr>
                	movl	$0x4, %eax
-               	popq	%rbx
-               	popq	%r13
                	leave
                	retq
                	movzbq	0x1(%rax), %rax
@@ -245,8 +237,6 @@ Disassembly of section .text:
                	cmpb	$0x0, 0x4(%rax)
                	je	<addr>
                	movl	$0xd, %eax
-               	popq	%rbx
-               	popq	%r13
                	leave
                	retq
                	movzbq	0x5(%rax), %rax
@@ -333,8 +323,6 @@ Disassembly of section .text:
                	testl	%ecx, %ecx
                	je	<addr>
                	movl	$0xe, %eax
-               	popq	%rbx
-               	popq	%r13
                	leave
                	retq
                	movzbq	0x1(%rax), %rax
@@ -444,13 +432,13 @@ Disassembly of section .text:
                	cmpl	$0x48, %eax
                	je	<addr>
                	movl	$0x9, %eax
-               	popq	%rbx
-               	popq	%r13
                	leave
                	retq
                	leaq	-0x418(%rbp), %rax
-               	movq	%rbx, (%rax)
-               	movq	%r13, 0x8(%rax)
+               	movabsq	$0x123456789abcdef, %rdx # imm = 0x123456789ABCDEF
+               	movq	%rdx, (%rax)
+               	movabsq	$-0x123456789abcdf0, %rsi # imm = 0xFEDCBA9876543210
+               	movq	%rsi, 0x8(%rax)
                	movl	$0xdeadbeef, 0x10(%rax) # imm = 0xDEADBEEF
                	movb	$0x5a, 0x14(%rax)
                	movb	$0x0, 0x15(%rax)
@@ -460,20 +448,14 @@ Disassembly of section .text:
                	movq	%rcx, 0x8(%rax)
                	movq	%rcx, 0x10(%rax)
                	leaq	-0x418(%rbp), %rax
-               	movq	%rbx, (%rax)
-               	movq	%r13, 0x8(%rax)
+               	movq	%rdx, (%rax)
+               	movq	%rsi, 0x8(%rax)
                	movq	%rcx, %rax
-               	popq	%rbx
-               	popq	%r13
                	leave
                	retq
                	movl	$0x8, %eax
-               	popq	%rbx
-               	popq	%r13
                	leave
                	retq
                	movl	$0x7, %eax
-               	popq	%rbx
-               	popq	%r13
                	leave
                	retq

@@ -18,16 +18,13 @@ Disassembly of section .text:
                	stp	x22, x23, [sp, #0x10]
                	stp	x29, x30, [sp, #0x80]
                	add	x29, sp, #0x80
-               	sub	x20, x29, #0x60
-               	mov	x21, #0x40              // =64
-               	adrp	x22, <page>
-               	add	x22, x22, <lo12>
                	bl	<addr>
                	sxtw	x0, w0
                	mov	x3, x0
-               	mov	x0, x20
-               	mov	x2, x22
-               	mov	x1, x21
+               	sub	x0, x29, #0x60
+               	mov	x1, #0x40               // =64
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
                	bl	<addr>
                	sub	x0, x29, #0x60
                	mov	x1, #0x42               // =66

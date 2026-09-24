@@ -462,27 +462,29 @@ Disassembly of section .text:
                	incq	%r12
                	cmpl	$0x8, %r12d
                	jl	<addr>
-               	leaq	<rip>, %rbx
-               	leaq	0x20(%rbx), %r12
+               	leaq	<rip>, %rsi
+               	leaq	0x20(%rsi), %rdi
                	xorl	%eax, %eax
                	leaq	0x1(%rax), %rcx
-               	movb	%cl, (%rbx,%rax)
+               	movb	%cl, (%rsi,%rax)
                	leaq	<rip>, %rdx
                	movb	%cl, (%rdx,%rax)
                	movq	%rcx, %rax
                	cmpl	$0x40, %eax
                	jl	<addr>
-               	movq	%rbx, %rax
-               	subq	%r12, %rax
+               	movq	%rsi, %rax
+               	subq	%rdi, %rax
                	cmpq	$0x9, %rax
                	jb	<addr>
                	movl	$0x9, %edx
-               	movq	%rbx, %rdi
-               	movq	%r12, %rsi
+               	xchgq	%rsi, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
-               	leaq	0x9(%rbx), %rdx
-               	leaq	0x9(%r12), %rax
+               	leaq	<rip>, %rax
+               	leaq	0x9(%rax), %rdx
+               	leaq	<rip>, %rax
+               	addq	$0x20, %rax
+               	addq	$0x9, %rax
                	movl	$0x2, %ecx
                	leaq	<rip>, %rdi
                	leaq	0x9(%rdi), %rcx
@@ -610,14 +612,14 @@ Disassembly of section .text:
                	popq	%r13
                	leave
                	retq
-               	movzbq	(%r12), %rax
-               	movb	%al, (%rbx)
-               	movzbq	0x1(%r12), %rax
-               	movb	%al, 0x1(%rbx)
-               	movzbq	0x2(%r12), %rax
-               	movb	%al, 0x2(%rbx)
-               	leaq	0x3(%rbx), %rax
-               	leaq	0x3(%r12), %rcx
+               	movzbq	(%rdi), %rax
+               	movb	%al, (%rsi)
+               	movzbq	0x1(%rdi), %rax
+               	movb	%al, 0x1(%rsi)
+               	movzbq	0x2(%rdi), %rax
+               	movb	%al, 0x2(%rsi)
+               	leaq	0x3(%rsi), %rax
+               	leaq	0x3(%rdi), %rcx
                	movzbq	(%rcx), %rdx
                	movb	%dl, (%rax)
                	movzbq	0x1(%rcx), %rdx

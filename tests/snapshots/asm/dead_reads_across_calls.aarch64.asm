@@ -206,12 +206,12 @@ Disassembly of section .text:
                	ldp	x22, x23, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x50
                	ret
-               	mov	x20, #0xd89e            // =55454
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	x0, [x0, #0x30]
                	bl	<addr>
-               	cmp	x0, x20
+               	mov	x1, #0xd89e             // =55454
+               	cmp	x0, x1
                	b.eq	<addr>
                	mov	x0, #0x5                // =5
                	ldp	x29, x30, [sp, #0x40]
@@ -238,7 +238,8 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	str	x20, [x0]
+               	mov	x1, #0xd89e             // =55454
+               	str	x1, [x0]
                	mov	x0, #0x0                // =0
                	ldp	x29, x30, [sp, #0x40]
                	ldr	x26, [sp, #0x30]

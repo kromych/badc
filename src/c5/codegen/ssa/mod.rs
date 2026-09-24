@@ -14,6 +14,7 @@ pub(crate) mod mem2reg;
 pub(crate) mod native;
 pub(crate) mod phi_class;
 pub(crate) mod reg_alloc;
+pub(crate) mod remat;
 pub(crate) mod shadow;
 pub(crate) mod slot_coalesce;
 pub(crate) mod split_ranges;

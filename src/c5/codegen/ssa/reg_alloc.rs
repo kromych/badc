@@ -439,7 +439,7 @@ fn operand_files(func: &FunctionSsa, inst: &Inst, f: &mut impl FnMut(ValueId, bo
 }
 
 /// Take the phi incomes an edge rebuilds from their bits off the use counts.
-fn drop_rebuilt_incomes(func: &FunctionSsa, use_counts: &mut [u32]) {
+pub(crate) fn drop_rebuilt_incomes(func: &FunctionSsa, use_counts: &mut [u32]) {
     for inst in &func.insts {
         let Inst::Phi { incoming, kind } = inst else {
             continue;
@@ -2493,6 +2493,18 @@ pub(crate) fn is_setjmp_barrier(inst: &Inst) -> bool {
         Inst::Intrinsic { kind, .. }
             if *kind == crate::c5::op::Intrinsic::SetjmpAArch64 as i64
     )
+}
+
+/// Whether the lowering of `inst` leaves the caller-saved registers
+/// undefined, so a value live across it needs a callee-saved one: a
+/// call, the inline setjmp, and a TLS address where the target's
+/// lowering calls ([`tls_addr_is_call`]).
+pub(crate) fn is_call_site(inst: &Inst, tls_addr_is_call: bool) -> bool {
+    matches!(
+        inst,
+        Inst::Call { .. } | Inst::CallIndirect { .. } | Inst::CallExt { .. }
+    ) || (tls_addr_is_call && matches!(inst, Inst::TlsAddr(_)))
+        || is_setjmp_barrier(inst)
 }
 
 /// Invoke `f` for each operand `ValueId` referenced by `inst`, for the

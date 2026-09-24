@@ -22,7 +22,7 @@
 use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::vec::Vec;
 
-use crate::c5::codegen::ssa::tape::{self, Insertion};
+use crate::c5::codegen::ssa::tape::{self, At, Insertion};
 use crate::c5::ir::{BinOp, FunctionSsa, Inst, LoadKind, Terminator, ValueId};
 use crate::c5::program::Program;
 use crate::c5::symbol::Linkage;
@@ -271,7 +271,7 @@ fn apply(func: &mut FunctionSsa, folds: &mut [(ValueId, Folded)]) -> bool {
         .iter()
         .filter_map(|&(at, f)| match f {
             Folded::Addr(a) if a.disp() != 0 => Some(Insertion {
-                at,
+                at: At::Before(at),
                 inst: a.base(),
                 is_f32: false,
             }),

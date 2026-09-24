@@ -31,7 +31,7 @@
 use super::value_range::{self, Range};
 use crate::c5::codegen::magic::{DivSink, lower_divmod, lower_udivmod};
 use crate::c5::codegen::ssa::shadow::ParamRanges;
-use crate::c5::codegen::ssa::tape::{self, Insertion};
+use crate::c5::codegen::ssa::tape::{self, At, Insertion};
 use crate::c5::ir::{BinOp, FunctionSsa, Inst, LoadKind, NO_VALUE, ValueId, is_divmod_op};
 use alloc::vec::Vec;
 use hashbrown::HashMap;
@@ -249,7 +249,7 @@ fn run_one(func: &mut FunctionSsa, params: &[Range]) {
         .iter()
         .flat_map(|e| {
             (0..e.inserted()).map(|_| Insertion {
-                at: e.at,
+                at: At::Before(e.at),
                 inst: Inst::Imm(0),
                 is_f32: false,
             })

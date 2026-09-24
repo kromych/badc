@@ -41,23 +41,21 @@ Disassembly of section .text:
                	pushq	%r13
                	pushq	%r12
                	pushq	%rbx
-               	xorl	%r12d, %r12d
                	movl	$0x2a, %edi
                	callq	<addr>
                	movq	%rax, %rbx
                	cmpl	$0x80, %ebx
                	jae	<addr>
-               	movq	%rbx, %r12
-               	andq	$0xff, %r12
+               	movq	%rbx, %rdx
+               	andq	$0xff, %rdx
                	movl	$0x1, %esi
                	cmpl	$0x1, %esi
                	jne	<addr>
-               	movq	%r12, %rax
+               	movq	%rdx, %rax
                	xorq	$0x2a, %rax
                	testl	%eax, %eax
                	je	<addr>
                	leaq	<rip>, %rdi
-               	movq	%r12, %rdx
                	movb	$0x0, %al
                	callq	<addr>
                	movl	$0x1, %eax
@@ -140,20 +138,18 @@ Disassembly of section .text:
                	popq	%r13
                	leave
                	retq
-               	xorl	%ebx, %ebx
                	movl	$0xc8, %edi
                	callq	<addr>
                	cmpl	$0x80, %eax
                	jae	<addr>
-               	movq	%rax, %rbx
-               	andq	$0xff, %rbx
+               	movq	%rax, %rdx
+               	andq	$0xff, %rdx
                	movl	$0x1, %esi
                	cmpl	$0x63, %esi
                	jne	<addr>
-               	testl	%ebx, %ebx
+               	testl	%edx, %edx
                	je	<addr>
                	leaq	<rip>, %rdi
-               	movq	%rbx, %rdx
                	movb	$0x0, %al
                	callq	<addr>
                	movl	$0x5, %eax
@@ -169,6 +165,7 @@ Disassembly of section .text:
                	leave
                	retq
                	movl	$0x63, %esi
+               	xorl	%edx, %edx
                	jmp	<addr>
                	movq	$-0x1, %rsi
                	jmp	<addr>
@@ -179,4 +176,5 @@ Disassembly of section .text:
                	movq	%rdi, %rdx
                	jmp	<addr>
                	movl	$0x63, %esi
+               	xorl	%edx, %edx
                	jmp	<addr>

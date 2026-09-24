@@ -2293,15 +2293,18 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         super::super::passes::constfold_branch::strip_zero_test_conds(f);
         crate::c5::asm::mark_static_operands(f);
     }
-    // At -O each function is allocated, then reallocated with the
-    // spilled values' call-free reuse runs split out; the split is kept
-    // only when it lowers the function's loop-weighted spill traffic.
+    // At -O the operand-free values are set again past the calls they
+    // would otherwise cross, then each function is allocated and
+    // reallocated with its loop-invariant materializations hoisted and
+    // with the spilled values' call-free reuse runs split out; a retry
+    // is kept only when it lowers the function's loop-weighted cost.
     let ssa_allocs: alloc::vec::Vec<super::reg_alloc::Allocation> =
         time_pass_arch("ssa::reg_alloc::allocate", B::ARCH, || {
             ssa_funcs
                 .iter_mut()
                 .map(|f| {
                     if native.optimize {
+                        super::remat::split_across_calls(f, target);
                         super::licm::allocate_hoisted(f, target, native.fixed_regs)
                     } else {
                         super::reg_alloc::allocate(f, target, native.fixed_regs)

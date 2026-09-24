@@ -128,11 +128,36 @@ fn rekey(k: &mut Keyed<'_>, remap: &[ValueId]) {
     }
 }
 
-/// One instruction to place ahead of tape index `at`, which must name an
-/// instruction inside a block. Operands are old value ids: [`insert`]
-/// maps them with the rest.
+/// Where an inserted instruction goes, in old tape indices.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum At {
+    /// Ahead of the instruction at this index, which a block holds.
+    Before(ValueId),
+    /// After the instruction at this index: the end of its block when
+    /// it is the block's last, which no `Before` names.
+    After(ValueId),
+    /// Into this block, which holds no instruction.
+    Empty(BlockId),
+}
+
+impl At {
+    /// Tape order of insertions: by the old index the instruction lands
+    /// ahead of, and at one index -- a block boundary -- those after the
+    /// preceding block's last instruction, then those of the empty
+    /// blocks there by block id, then those ahead of the index.
+    pub(crate) fn order(self, blocks: &[Block]) -> (ValueId, u8, BlockId) {
+        match self {
+            At::After(k) => (k + 1, 0, 0),
+            At::Empty(b) => (blocks[b as usize].inst_range.start, 1, b),
+            At::Before(k) => (k, 2, 0),
+        }
+    }
+}
+
+/// One instruction to place at `at`. Operands are old value ids:
+/// [`insert`] maps them with the rest.
 pub(crate) struct Insertion {
-    pub at: ValueId,
+    pub at: At,
     pub inst: Inst,
     /// `FunctionSsa::f32_values` entry for the inserted value.
     pub is_f32: bool,
@@ -172,11 +197,12 @@ impl Undo {
     }
 }
 
-/// Place `ins` -- ascending by `at` -- into the tape and move everything
-/// keyed by value id with it: the parallel tables, every block range,
-/// every operand, terminator and `exit_acc`, and the relocation tables.
-/// An inserted value takes the source position of the instruction it
-/// goes ahead of.
+/// Place `ins` -- ascending by [`At::order`] -- into the tape and move
+/// everything keyed by value id with it: the parallel tables, every
+/// block range, every operand, terminator and `exit_acc`, and the
+/// relocation tables. An inserted value takes the source position of
+/// the instruction it goes ahead of or after, or of the one after an
+/// empty block.
 pub(crate) fn insert(func: &mut FunctionSsa, ins: &[Insertion]) -> (Rewrite, Undo) {
     let mut k = keyed(func);
     let Keyed {
@@ -191,8 +217,12 @@ pub(crate) fn insert(func: &mut FunctionSsa, ins: &[Insertion]) -> (Rewrite, Und
         extern_tls_refs,
     } = &mut k;
     let n_old = insts.len();
-    debug_assert!(ins.windows(2).all(|w| w[0].at <= w[1].at));
-    debug_assert!(ins.iter().all(|i| (i.at as usize) < n_old));
+    let order = |i: &Insertion| i.at.order(blocks);
+    debug_assert!(ins.windows(2).all(|w| order(&w[0]) <= order(&w[1])));
+    debug_assert!(ins.iter().all(|i| match i.at {
+        At::Before(k) | At::After(k) => (k as usize) < n_old,
+        At::Empty(b) => blocks[b as usize].inst_range.is_empty(),
+    }));
     let undo = Undo {
         insts: Vec::new(),
         inst_src: Vec::new(),
@@ -204,18 +234,17 @@ pub(crate) fn insert(func: &mut FunctionSsa, ins: &[Insertion]) -> (Rewrite, Und
         extern_imm_data_refs: extern_imm_data_refs.clone(),
         extern_tls_refs: extern_tls_refs.clone(),
     };
-    // Insertions land strictly before their index, so a block's new
-    // bounds follow from its old ones. Index `n_old` closes the last
-    // block's range. The tape order is otherwise preserved: instructions
-    // covered by no block keep their slots, and blocks stay laid out as
-    // the pipeline left them.
-    let mut before: Vec<u32> = vec![0; n_old + 1];
-    for i in ins {
-        before[i.at as usize + 1] += 1;
-    }
-    for old in 0..n_old {
-        before[old + 1] += before[old];
-    }
+    // Blocks holding no instruction, by the index they sit at; those
+    // sharing an index follow each other by id. The tape order is
+    // otherwise preserved: instructions covered by no block keep their
+    // slots, and blocks stay laid out as the pipeline left them.
+    let mut empties: Vec<(u32, BlockId)> = blocks
+        .iter()
+        .enumerate()
+        .filter(|(_, b)| b.inst_range.is_empty())
+        .map(|(b, block)| (block.inst_range.start, b as BlockId))
+        .collect();
+    empties.sort_unstable();
     let mut new_insts: Vec<Inst> = Vec::with_capacity(n_old + ins.len());
     let mut new_src: Vec<(u32, u32)> = Vec::with_capacity(n_old + ins.len());
     let mut new_f32: Vec<bool> = Vec::with_capacity(n_old + ins.len());
@@ -224,26 +253,60 @@ pub(crate) fn insert(func: &mut FunctionSsa, ins: &[Insertion]) -> (Rewrite, Und
     let mut new_cmp: Vec<bool> = Vec::with_capacity(n_old + ins.len());
     let mut remap: Vec<ValueId> = vec![NO_VALUE; n_old];
     let mut ids: Vec<ValueId> = vec![NO_VALUE; ins.len()];
+    // Per old index: where a block ending there now ends, past the
+    // insertions after its last instruction, and where one starting
+    // there now starts, past the empty blocks at the index.
+    let mut end_at: Vec<u32> = vec![0; n_old + 1];
+    let mut start_at: Vec<u32> = vec![0; n_old + 1];
+    let mut ranges: Vec<core::ops::Range<u32>> =
+        blocks.iter().map(|b| b.inst_range.clone()).collect();
     let mut cur = 0usize;
-    for (old, slot) in remap.iter_mut().enumerate() {
+    let mut next_empty = 0usize;
+    for old in 0..=n_old {
         let src = inst_src.get(old).copied().unwrap_or((0, 0));
-        while cur < ins.len() && ins[cur].at as usize == old {
-            ids[cur] = new_insts.len() as ValueId;
-            new_insts.push(ins[cur].inst.clone());
-            new_src.push(src);
-            new_f32.push(ins[cur].is_f32);
-            new_cmp.push(false);
-            cur += 1;
+        let mut take = |rank: u8, block: BlockId, new_insts: &mut Vec<Inst>| {
+            while cur < ins.len() && order(&ins[cur]) == (old as u32, rank, block) {
+                ids[cur] = new_insts.len() as ValueId;
+                new_insts.push(ins[cur].inst.clone());
+                new_src.push(match ins[cur].at {
+                    At::Before(k) | At::After(k) => {
+                        inst_src.get(k as usize).copied().unwrap_or((0, 0))
+                    }
+                    At::Empty(_) => src,
+                });
+                new_f32.push(ins[cur].is_f32);
+                new_cmp.push(false);
+                cur += 1;
+            }
+        };
+        take(0, 0, &mut new_insts);
+        end_at[old] = new_insts.len() as u32;
+        while next_empty < empties.len() && empties[next_empty].0 as usize == old {
+            let b = empties[next_empty].1;
+            let start = new_insts.len() as u32;
+            take(1, b, &mut new_insts);
+            ranges[b as usize] = start..new_insts.len() as u32;
+            next_empty += 1;
         }
-        *slot = new_insts.len() as ValueId;
+        start_at[old] = new_insts.len() as u32;
+        take(2, 0, &mut new_insts);
+        if old == n_old {
+            break;
+        }
+        remap[old] = new_insts.len() as ValueId;
         new_insts.push(insts[old].clone());
         new_src.push(src);
         new_f32.push(f32_values.get(old).copied().unwrap_or(false));
         new_cmp.push(cmp32.get(old).copied().unwrap_or(false));
     }
-    for block in blocks.iter_mut() {
+    debug_assert_eq!(cur, ins.len());
+    for (block, range) in blocks.iter_mut().zip(ranges) {
         let (s, e) = (block.inst_range.start, block.inst_range.end);
-        block.inst_range = (s + before[s as usize])..(e + before[e as usize]);
+        block.inst_range = if s == e {
+            range
+        } else {
+            start_at[s as usize]..end_at[e as usize]
+        };
     }
     let undo = Undo {
         insts: core::mem::replace(*insts, new_insts),
@@ -410,7 +473,7 @@ mod tests {
         let (rw, _undo) = insert(
             &mut f,
             &[Insertion {
-                at: 0,
+                at: At::Before(0),
                 inst: Inst::Imm(5),
                 is_f32: true,
             }],
@@ -437,7 +500,7 @@ mod tests {
         let (_rw, undo) = insert(
             &mut f,
             &[Insertion {
-                at: 1,
+                at: At::Before(1),
                 inst: Inst::Imm(9),
                 is_f32: false,
             }],
@@ -448,6 +511,91 @@ mod tests {
         assert!(matches!(f.insts[1], Inst::Imm(2)));
         assert_eq!(f.blocks[0].inst_range, 0..2);
         assert_eq!(f.extern_imm_data_refs, alloc::vec![(1, 3)]);
+    }
+
+    /// At a block boundary, an insertion after the first block's last
+    /// instruction ends that block and one ahead of the second block's
+    /// first instruction opens the second, in that tape order.
+    #[test]
+    fn an_insertion_after_a_block_s_last_instruction_stays_in_the_block() {
+        let mut f = func_with(
+            alloc::vec![Inst::Imm(1), Inst::Imm(2)],
+            alloc::vec![
+                block(0..1, Terminator::Jmp(1)),
+                block(1..2, Terminator::Return(1)),
+            ],
+        );
+        let (rw, _undo) = insert(
+            &mut f,
+            &[
+                Insertion {
+                    at: At::After(0),
+                    inst: Inst::Imm(8),
+                    is_f32: false,
+                },
+                Insertion {
+                    at: At::Before(1),
+                    inst: Inst::Imm(9),
+                    is_f32: false,
+                },
+            ],
+        );
+        assert_eq!(rw.ids, alloc::vec![1, 2]);
+        assert_eq!(rw.remap, alloc::vec![0, 3]);
+        assert!(matches!(f.insts[1], Inst::Imm(8)));
+        assert!(matches!(f.insts[2], Inst::Imm(9)));
+        assert_eq!(f.blocks[0].inst_range, 0..2);
+        assert_eq!(f.blocks[1].inst_range, 2..4);
+        assert!(matches!(f.blocks[1].terminator, Terminator::Return(3)));
+    }
+
+    /// Two empty blocks at one index take their instructions in block
+    /// order, between the block ending there and the one starting there;
+    /// an empty block given nothing stays empty where it was.
+    #[test]
+    fn an_empty_block_takes_an_instruction_of_its_own() {
+        let mut f = func_with(
+            alloc::vec![Inst::Imm(1), Inst::Imm(2)],
+            alloc::vec![
+                block(0..1, Terminator::Jmp(1)),
+                block(1..1, Terminator::Jmp(3)),
+                block(1..1, Terminator::Jmp(3)),
+                block(1..2, Terminator::Return(1)),
+                block(2..2, Terminator::Return(NO_VALUE)),
+            ],
+        );
+        let (rw, _undo) = insert(
+            &mut f,
+            &[
+                Insertion {
+                    at: At::After(0),
+                    inst: Inst::Imm(7),
+                    is_f32: false,
+                },
+                Insertion {
+                    at: At::Empty(1),
+                    inst: Inst::Imm(8),
+                    is_f32: false,
+                },
+                Insertion {
+                    at: At::Empty(2),
+                    inst: Inst::Imm(9),
+                    is_f32: false,
+                },
+                Insertion {
+                    at: At::Before(1),
+                    inst: Inst::Imm(6),
+                    is_f32: false,
+                },
+            ],
+        );
+        assert_eq!(rw.ids, alloc::vec![1, 2, 3, 4]);
+        assert_eq!(rw.remap, alloc::vec![0, 5]);
+        let ranges: Vec<_> = f.blocks.iter().map(|b| b.inst_range.clone()).collect();
+        assert_eq!(ranges, alloc::vec![0..2, 2..3, 3..4, 4..6, 6..6]);
+        assert!(matches!(f.insts[2], Inst::Imm(8)));
+        assert!(matches!(f.insts[3], Inst::Imm(9)));
+        assert!(matches!(f.blocks[3].terminator, Terminator::Return(5)));
     }
 
     fn add(lhs: ValueId, rhs: ValueId) -> Inst {

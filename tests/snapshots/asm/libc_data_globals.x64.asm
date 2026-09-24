@@ -105,11 +105,10 @@ Disassembly of section .text:
                	popq	%r12
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rbx
                	movl	$0x1, %edi
                	callq	<addr>
                	movq	%rax, %rsi
-               	movq	%rbx, %rdi
+               	leaq	<rip>, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax

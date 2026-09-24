@@ -14,46 +14,44 @@ Disassembly of section .text:
                	brk	#0x1
 
 <main>:
-               	stp	x20, x21, [sp, #-0x30]!
-               	str	x22, [sp, #0x10]
-               	stp	x29, x30, [sp, #0x20]
-               	add	x29, sp, #0x20
-               	mov	x20, #0x0               // =0
+               	stp	x20, x21, [sp, #-0x20]!
+               	stp	x29, x30, [sp, #0x10]
+               	add	x29, sp, #0x10
+               	mov	x0, #0x10               // =16
+               	bl	<addr>
+               	mov	x20, x0
+               	str	xzr, [x20]
+               	str	xzr, [x20, #0x8]
                	mov	x0, #0x10               // =16
                	bl	<addr>
                	mov	x21, x0
-               	str	xzr, [x21]
+               	mov	x0, #0x1                // =1
+               	str	x0, [x21]
                	str	x20, [x21, #0x8]
                	mov	x0, #0x10               // =16
                	bl	<addr>
-               	mov	x22, x0
-               	mov	x0, #0x1                // =1
-               	str	x0, [x22]
-               	str	x21, [x22, #0x8]
+               	mov	x20, x0
+               	mov	x0, #0x2                // =2
+               	str	x0, [x20]
+               	str	x21, [x20, #0x8]
                	mov	x0, #0x10               // =16
                	bl	<addr>
                	mov	x21, x0
-               	mov	x0, #0x2                // =2
-               	str	x0, [x21]
-               	str	x22, [x21, #0x8]
-               	mov	x0, #0x10               // =16
-               	bl	<addr>
-               	mov	x22, x0
                	mov	x0, #0x3                // =3
-               	str	x0, [x22]
-               	str	x21, [x22, #0x8]
+               	str	x0, [x21]
+               	str	x20, [x21, #0x8]
                	mov	x0, #0x10               // =16
                	bl	<addr>
                	mov	x1, #0x4                // =4
                	str	x1, [x0]
-               	str	x22, [x0, #0x8]
+               	str	x21, [x0, #0x8]
+               	mov	x1, #0x0                // =0
                	cbz	x0, <addr>
-               	ldr	x1, [x0]
-               	add	x20, x20, x1
+               	ldr	x2, [x0]
+               	add	x1, x1, x2
                	ldr	x0, [x0, #0x8]
                	cbnz	x0, <addr>
-               	mov	x0, x20
-               	ldp	x29, x30, [sp, #0x20]
-               	ldr	x22, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0x30
+               	mov	x0, x1
+               	ldp	x29, x30, [sp, #0x10]
+               	ldp	x20, x21, [sp], #0x20
                	ret

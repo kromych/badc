@@ -50,7 +50,6 @@ Disassembly of section .text:
                	str	x20, [sp, #-0x50]!
                	stp	x29, x30, [sp, #0x40]
                	add	x29, sp, #0x40
-               	mov	x20, #0x0               // =0
                	sub	x0, x29, #0x28
                	bl	<addr>
                	sub	x0, x29, #0x18
@@ -171,3 +170,5 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x40]
                	ldr	x20, [sp], #0x50
                	ret
+               	mov	x20, #0x0               // =0
+               	b	<addr>

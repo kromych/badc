@@ -448,27 +448,32 @@ Disassembly of section .text:
                	add	x23, x23, #0x1
                	cmp	w23, #0x8
                	b.lt	<addr>
-               	adrp	x20, <page>
-               	add	x20, x20, <lo12>
-               	add	x21, x20, #0x20
+               	adrp	x3, <page>
+               	add	x3, x3, <lo12>
+               	add	x4, x3, #0x20
                	mov	x0, #0x0                // =0
                	add	x1, x0, #0x1
-               	strb	w1, [x20, x0]
+               	strb	w1, [x3, x0]
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	strb	w1, [x2, x0]
                	mov	x0, x1
                	cmp	w0, #0x40
                	b.lt	<addr>
-               	sub	x0, x20, x21
+               	sub	x0, x3, x4
                	cmp	x0, #0x9
                	b.lo	<addr>
                	mov	x2, #0x9                // =9
-               	mov	x0, x20
-               	mov	x1, x21
+               	mov	x0, x3
+               	mov	x1, x4
                	bl	<addr>
-               	add	x2, x20, #0x9
-               	add	x1, x21, #0x9
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	add	x2, x0, #0x9
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	add	x0, x0, #0x20
+               	add	x1, x0, #0x9
                	mov	x0, #0x2                // =2
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
@@ -625,14 +630,14 @@ Disassembly of section .text:
                	ldp	x22, x23, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x40
                	ret
-               	ldrb	w0, [x21]
-               	strb	w0, [x20]
-               	ldrb	w0, [x21, #0x1]
-               	strb	w0, [x20, #0x1]
-               	ldrb	w0, [x21, #0x2]
-               	strb	w0, [x20, #0x2]
-               	add	x0, x20, #0x3
-               	add	x1, x21, #0x3
+               	ldrb	w0, [x4]
+               	strb	w0, [x3]
+               	ldrb	w0, [x4, #0x1]
+               	strb	w0, [x3, #0x1]
+               	ldrb	w0, [x4, #0x2]
+               	strb	w0, [x3, #0x2]
+               	add	x0, x3, #0x3
+               	add	x1, x4, #0x3
                	ldrb	w2, [x1]
                	strb	w2, [x0]
                	ldrb	w2, [x1, #0x1]

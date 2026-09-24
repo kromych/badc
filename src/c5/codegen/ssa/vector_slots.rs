@@ -11,7 +11,7 @@ use super::super::abi_classify::ScalarKind;
 use super::super::ir::{
     AsmConstraint, FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind, Terminator, ValueId,
 };
-use super::tape::{Insertion, insert};
+use super::tape::{At, Insertion, insert};
 
 /// One rewritten access, by its tape index before the rewrite.
 enum Edit {
@@ -363,7 +363,7 @@ fn rewrite(func: &mut FunctionSsa, slots: &BTreeSet<i64>) {
     for e in &edits {
         let mut put = |at: ValueId, inst: Inst| {
             ins.push(Insertion {
-                at,
+                at: At::Before(at),
                 inst,
                 is_f32: false,
             })

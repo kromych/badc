@@ -130,7 +130,9 @@ ARCHES = {
         "make_target": "bzImage",
         "image": "arch/x86/boot/bzImage",
         "qemu": "qemu-system-x86_64",
-        "machine": [],
+        # TCG's default `qemu64` is below the x86-64-v3 baseline the kernel
+        # is compiled for; `Haswell-noTSX` carries it without `max`'s LA57.
+        "machine": ["-cpu", "Haswell-noTSX"],
         "console": "ttyS0",
         "extra_append": [],
         # The x86 boot path draws its displacement from RDRAND / the TSC /

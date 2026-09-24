@@ -17,6 +17,12 @@ import tempfile
 import threading
 import time
 
+# QEMU models that carry badc's instruction-set baseline: `max` for
+# ARMv8.4-A with the ARMv8.5-A additions, `Haswell-noTSX` for x86-64-v3,
+# which no named QEMU model spells and `max` over-provides (LA57 changes a
+# kernel's paging mode).
+BASELINE_CPU = {"x64": "Haswell-noTSX", "aarch64": "max"}
+
 # OVMF firmware locations, in priority order. `$OVMF_CODE`/`$OVMF_VARS` (x64)
 # and `$AAVMF_CODE`/`$AAVMF_VARS` (aarch64) override; then the common macOS
 # (Homebrew) and Linux distro install paths. An empty env value never matches
@@ -163,9 +169,10 @@ def run(efi, expect, arch="x64", timeout=30, extra_files=None, startup=None):
         "-drive", f"format=raw,file=fat:rw:{os.path.join(work, 'esp')}",
         "-serial", "stdio", "-no-reboot",
     ]
-    if arch == "aarch64":
-        cmd[1:1] = []  # machine set above; virt needs no extra here for OVMF
-        cmd += ["-cpu", "cortex-a57"]
+    # The guest CPU carries badc's instruction-set baseline
+    # (doc/native-compilation.md): a smaller model faults on the first
+    # baseline instruction the program selects, such as an LSE atomic.
+    cmd += ["-cpu", BASELINE_CPU[arch]]
     wants = [expect] if isinstance(expect, str) else list(expect)
     text = serial_until(cmd, wants, timeout)
     shutil.rmtree(work, ignore_errors=True)

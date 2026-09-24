@@ -1011,17 +1011,6 @@ typedef enum _COMPUTER_NAME_FORMAT {
 // winnt.h surrogate-bit predicate over the reparse tag; not an export.
 #define IsReparseTagNameSurrogate(tag) (((tag) & 0x20000000))
 #define BCRYPT_USE_SYSTEM_PREFERRED_RNG 0x00000002
-#define EXCEPTION_CONTINUE_SEARCH      0
-#define EXCEPTION_EXECUTE_HANDLER      1
-#define EXCEPTION_NONCONTINUABLE       0x1
-#define EXCEPTION_ACCESS_VIOLATION     0xC0000005
-#define EXCEPTION_IN_PAGE_ERROR        0xC0000006
-#define EXCEPTION_NONCONTINUABLE_EXCEPTION 0xC0000025
-#define EXCEPTION_FLT_DIVIDE_BY_ZERO   0xC000008E
-#define EXCEPTION_FLT_OVERFLOW         0xC0000091
-#define EXCEPTION_INT_DIVIDE_BY_ZERO   0xC0000094
-#define EXCEPTION_INT_OVERFLOW         0xC0000095
-#define EXCEPTION_STACK_OVERFLOW       0xC00000FD
 #define IO_REPARSE_TAG_MOUNT_POINT     0xA0000003
 #define IO_REPARSE_TAG_APPEXECLINK     0x8000001B
 #define SDDL_REVISION_1                1
@@ -1467,38 +1456,310 @@ typedef enum _FILE_INFO_BY_HANDLE_CLASS {
 #define LookupPrivilegeValue LookupPrivilegeValueW
 #define SE_RESTORE_NAME L"SeRestorePrivilege"
 
-// SEH exception codes sqlite checks against in its mmap recovery
-// hook. Spelled out because c5's preprocessor can't expand the
-// MSVC `EXCEPTION_*` enum the SDK headers normally provide.
-#define EXCEPTION_IN_PAGE_ERROR        0xC0000006
-#define EXCEPTION_ACCESS_VIOLATION     0xC0000005
-#define EXCEPTION_EXECUTE_HANDLER      1
-#define EXCEPTION_CONTINUE_SEARCH      0
-#define EXCEPTION_CONTINUE_EXECUTION   (-1)
+// Exception status codes (winnt.h) and their exception-record aliases
+// (minwinbase.h).
+#define STATUS_WAIT_0                    ((DWORD)0x00000000L)
+#define STATUS_ABANDONED_WAIT_0          ((DWORD)0x00000080L)
+#define STATUS_USER_APC                  ((DWORD)0x000000C0L)
+#define STATUS_TIMEOUT                   ((DWORD)0x00000102L)
+#define STATUS_SEGMENT_NOTIFICATION      ((DWORD)0x40000005L)
+#define STATUS_FATAL_APP_EXIT            ((DWORD)0x40000015L)
+#define STATUS_GUARD_PAGE_VIOLATION      ((DWORD)0x80000001L)
+#define STATUS_DATATYPE_MISALIGNMENT     ((DWORD)0x80000002L)
+#define STATUS_BREAKPOINT                ((DWORD)0x80000003L)
+#define STATUS_SINGLE_STEP               ((DWORD)0x80000004L)
+#define STATUS_LONGJUMP                  ((DWORD)0x80000026L)
+#define STATUS_UNWIND_CONSOLIDATE        ((DWORD)0x80000029L)
+#define STATUS_ACCESS_VIOLATION          ((DWORD)0xC0000005L)
+#define STATUS_IN_PAGE_ERROR             ((DWORD)0xC0000006L)
+#define STATUS_INVALID_HANDLE            ((DWORD)0xC0000008L)
+#define STATUS_INVALID_PARAMETER         ((DWORD)0xC000000DL)
+#define STATUS_NO_MEMORY                 ((DWORD)0xC0000017L)
+#define STATUS_ILLEGAL_INSTRUCTION       ((DWORD)0xC000001DL)
+#define STATUS_NONCONTINUABLE_EXCEPTION  ((DWORD)0xC0000025L)
+#define STATUS_INVALID_DISPOSITION       ((DWORD)0xC0000026L)
+#define STATUS_ARRAY_BOUNDS_EXCEEDED     ((DWORD)0xC000008CL)
+#define STATUS_FLOAT_DENORMAL_OPERAND    ((DWORD)0xC000008DL)
+#define STATUS_FLOAT_DIVIDE_BY_ZERO      ((DWORD)0xC000008EL)
+#define STATUS_FLOAT_INEXACT_RESULT      ((DWORD)0xC000008FL)
+#define STATUS_FLOAT_INVALID_OPERATION   ((DWORD)0xC0000090L)
+#define STATUS_FLOAT_OVERFLOW            ((DWORD)0xC0000091L)
+#define STATUS_FLOAT_STACK_CHECK         ((DWORD)0xC0000092L)
+#define STATUS_FLOAT_UNDERFLOW           ((DWORD)0xC0000093L)
+#define STATUS_INTEGER_DIVIDE_BY_ZERO    ((DWORD)0xC0000094L)
+#define STATUS_INTEGER_OVERFLOW          ((DWORD)0xC0000095L)
+#define STATUS_PRIVILEGED_INSTRUCTION    ((DWORD)0xC0000096L)
+#define STATUS_STACK_OVERFLOW            ((DWORD)0xC00000FDL)
+#define STATUS_DLL_NOT_FOUND             ((DWORD)0xC0000135L)
+#define STATUS_ORDINAL_NOT_FOUND         ((DWORD)0xC0000138L)
+#define STATUS_ENTRYPOINT_NOT_FOUND      ((DWORD)0xC0000139L)
+#define STATUS_DLL_INIT_FAILED           ((DWORD)0xC0000142L)
+#define STATUS_POSSIBLE_DEADLOCK         ((DWORD)0xC0000194L)
+#define STATUS_CONTROL_STACK_VIOLATION   ((DWORD)0xC00001B2L)
+#define STATUS_FLOAT_MULTIPLE_FAULTS     ((DWORD)0xC00002B4L)
+#define STATUS_FLOAT_MULTIPLE_TRAPS      ((DWORD)0xC00002B5L)
+#define STATUS_REG_NAT_CONSUMPTION       ((DWORD)0xC00002C9L)
+#define STATUS_HEAP_CORRUPTION           ((DWORD)0xC0000374L)
+#define STATUS_STACK_BUFFER_OVERRUN      ((DWORD)0xC0000409L)
+#define STATUS_INVALID_CRUNTIME_PARAMETER ((DWORD)0xC0000417L)
+#define STATUS_ASSERTION_FAILURE         ((DWORD)0xC0000420L)
+#define STATUS_ENCLAVE_VIOLATION         ((DWORD)0xC00004A2L)
+#define STATUS_INTERRUPTED               ((DWORD)0xC0000515L)
+#define STATUS_THREAD_NOT_RUNNING        ((DWORD)0xC0000516L)
+#define STATUS_ALREADY_REGISTERED        ((DWORD)0xC0000718L)
+#define STATUS_SXS_EARLY_DEACTIVATION    ((DWORD)0xC015000FL)
+#define STATUS_SXS_INVALID_DEACTIVATION  ((DWORD)0xC0150010L)
+#define EXCEPTION_ACCESS_VIOLATION          STATUS_ACCESS_VIOLATION
+#define EXCEPTION_DATATYPE_MISALIGNMENT     STATUS_DATATYPE_MISALIGNMENT
+#define EXCEPTION_BREAKPOINT                STATUS_BREAKPOINT
+#define EXCEPTION_SINGLE_STEP               STATUS_SINGLE_STEP
+#define EXCEPTION_ARRAY_BOUNDS_EXCEEDED     STATUS_ARRAY_BOUNDS_EXCEEDED
+#define EXCEPTION_FLT_DENORMAL_OPERAND      STATUS_FLOAT_DENORMAL_OPERAND
+#define EXCEPTION_FLT_DIVIDE_BY_ZERO        STATUS_FLOAT_DIVIDE_BY_ZERO
+#define EXCEPTION_FLT_INEXACT_RESULT        STATUS_FLOAT_INEXACT_RESULT
+#define EXCEPTION_FLT_INVALID_OPERATION     STATUS_FLOAT_INVALID_OPERATION
+#define EXCEPTION_FLT_OVERFLOW              STATUS_FLOAT_OVERFLOW
+#define EXCEPTION_FLT_STACK_CHECK           STATUS_FLOAT_STACK_CHECK
+#define EXCEPTION_FLT_UNDERFLOW             STATUS_FLOAT_UNDERFLOW
+#define EXCEPTION_INT_DIVIDE_BY_ZERO        STATUS_INTEGER_DIVIDE_BY_ZERO
+#define EXCEPTION_INT_OVERFLOW              STATUS_INTEGER_OVERFLOW
+#define EXCEPTION_PRIV_INSTRUCTION          STATUS_PRIVILEGED_INSTRUCTION
+#define EXCEPTION_IN_PAGE_ERROR             STATUS_IN_PAGE_ERROR
+#define EXCEPTION_ILLEGAL_INSTRUCTION       STATUS_ILLEGAL_INSTRUCTION
+#define EXCEPTION_NONCONTINUABLE_EXCEPTION  STATUS_NONCONTINUABLE_EXCEPTION
+#define EXCEPTION_STACK_OVERFLOW            STATUS_STACK_OVERFLOW
+#define EXCEPTION_INVALID_DISPOSITION       STATUS_INVALID_DISPOSITION
+#define EXCEPTION_GUARD_PAGE                STATUS_GUARD_PAGE_VIOLATION
+#define EXCEPTION_INVALID_HANDLE            STATUS_INVALID_HANDLE
+#define EXCEPTION_POSSIBLE_DEADLOCK         STATUS_POSSIBLE_DEADLOCK
+#define CONTROL_C_EXIT                      STATUS_CONTROL_C_EXIT
+#define EXCEPTION_NONCONTINUABLE         0x1
+#define EXCEPTION_MAXIMUM_PARAMETERS     15
+#define EXCEPTION_EXECUTE_HANDLER        1
+#define EXCEPTION_CONTINUE_SEARCH        0
+#define EXCEPTION_CONTINUE_EXECUTION     (-1)
 
-// SEH descriptor structs sqlite's mmap-recovery filter walks.
-// Layout pinned to the Win64 SDK so kernel-emitted records can
-// be read field-by-field. `ExceptionInformation` is the standard
-// 15-slot array; sqlite reads index 1 to recover the faulting
-// virtual address.
-struct _EXCEPTION_RECORD {
+typedef struct _EXCEPTION_RECORD {
     DWORD                     ExceptionCode;
     DWORD                     ExceptionFlags;
     struct _EXCEPTION_RECORD *ExceptionRecord;
-    void                     *ExceptionAddress;
+    PVOID                     ExceptionAddress;
     DWORD                     NumberParameters;
-    ULONG_PTR                 ExceptionInformation[15];
-};
-typedef struct _EXCEPTION_RECORD EXCEPTION_RECORD;
-typedef struct _EXCEPTION_RECORD *PEXCEPTION_RECORD;
+    ULONG_PTR                 ExceptionInformation[EXCEPTION_MAXIMUM_PARAMETERS];
+} EXCEPTION_RECORD;
+typedef EXCEPTION_RECORD *PEXCEPTION_RECORD;
 
-struct _EXCEPTION_POINTERS {
-    EXCEPTION_RECORD *ExceptionRecord;
-    void             *ContextRecord;
-};
-typedef struct _EXCEPTION_POINTERS EXCEPTION_POINTERS;
-typedef struct _EXCEPTION_POINTERS *PEXCEPTION_POINTERS;
-typedef struct _EXCEPTION_POINTERS *LPEXCEPTION_POINTERS;
+// CONTEXT (winnt.h): the thread state an exception handler or
+// RtlCaptureContext reads, at the SDK's 16-byte alignment.
+typedef struct __declspec(align(16)) _M128A {
+    ULONGLONG Low;
+    LONGLONG  High;
+} M128A, *PM128A;
+
+typedef struct __declspec(align(16)) _XSAVE_FORMAT {
+    WORD  ControlWord;
+    WORD  StatusWord;
+    BYTE  TagWord;
+    BYTE  Reserved1;
+    WORD  ErrorOpcode;
+    DWORD ErrorOffset;
+    WORD  ErrorSelector;
+    WORD  Reserved2;
+    DWORD DataOffset;
+    WORD  DataSelector;
+    WORD  Reserved3;
+    DWORD MxCsr;
+    DWORD MxCsr_Mask;
+    M128A FloatRegisters[8];
+    M128A XmmRegisters[16];
+    BYTE  Reserved4[96];
+} XSAVE_FORMAT, *PXSAVE_FORMAT;
+typedef XSAVE_FORMAT XMM_SAVE_AREA32, *PXMM_SAVE_AREA32;
+
+#define CONTEXT_AMD64           0x00100000L
+#define CONTEXT_ARM64           0x00400000L
+#define CONTEXT_ARM64_CONTROL             (CONTEXT_ARM64 | 0x1L)
+#define CONTEXT_ARM64_INTEGER             (CONTEXT_ARM64 | 0x2L)
+#define CONTEXT_ARM64_FLOATING_POINT      (CONTEXT_ARM64 | 0x4L)
+#define CONTEXT_ARM64_DEBUG_REGISTERS     (CONTEXT_ARM64 | 0x8L)
+#define CONTEXT_ARM64_X18                 (CONTEXT_ARM64 | 0x10L)
+#define CONTEXT_ARM64_FLOATING_POINT_LOW  (CONTEXT_ARM64 | 0x40L)
+#define CONTEXT_ARM64_FLOATING_POINT_HIGH (CONTEXT_ARM64 | 0x80L)
+#define CONTEXT_ARM64_FULL (CONTEXT_ARM64_CONTROL | CONTEXT_ARM64_INTEGER | CONTEXT_ARM64_FLOATING_POINT)
+#define CONTEXT_ARM64_ALL  (CONTEXT_ARM64_CONTROL | CONTEXT_ARM64_INTEGER | CONTEXT_ARM64_FLOATING_POINT | \
+                            CONTEXT_ARM64_DEBUG_REGISTERS | CONTEXT_ARM64_X18)
+#ifdef __aarch64__
+#define CONTEXT_CONTROL         CONTEXT_ARM64_CONTROL
+#define CONTEXT_INTEGER         CONTEXT_ARM64_INTEGER
+#define CONTEXT_FLOATING_POINT  CONTEXT_ARM64_FLOATING_POINT
+#define CONTEXT_DEBUG_REGISTERS CONTEXT_ARM64_DEBUG_REGISTERS
+#define CONTEXT_FULL            CONTEXT_ARM64_FULL
+#define CONTEXT_ALL             CONTEXT_ARM64_ALL
+#else
+#define CONTEXT_CONTROL         (CONTEXT_AMD64 | 0x00000001L)
+#define CONTEXT_INTEGER         (CONTEXT_AMD64 | 0x00000002L)
+#define CONTEXT_SEGMENTS        (CONTEXT_AMD64 | 0x00000004L)
+#define CONTEXT_FLOATING_POINT  (CONTEXT_AMD64 | 0x00000008L)
+#define CONTEXT_DEBUG_REGISTERS (CONTEXT_AMD64 | 0x00000010L)
+#define CONTEXT_FULL            (CONTEXT_CONTROL | CONTEXT_INTEGER | CONTEXT_FLOATING_POINT)
+#define CONTEXT_ALL             (CONTEXT_CONTROL | CONTEXT_INTEGER | CONTEXT_SEGMENTS | \
+                                 CONTEXT_FLOATING_POINT | CONTEXT_DEBUG_REGISTERS)
+#define CONTEXT_XSTATE          (CONTEXT_AMD64 | 0x00000040L)
+#define CONTEXT_KERNEL_CET      (CONTEXT_AMD64 | 0x00000080L)
+#endif
+
+#ifndef __aarch64__
+typedef struct __declspec(align(16)) _CONTEXT {
+    DWORD64 P1Home;
+    DWORD64 P2Home;
+    DWORD64 P3Home;
+    DWORD64 P4Home;
+    DWORD64 P5Home;
+    DWORD64 P6Home;
+    DWORD   ContextFlags;
+    DWORD   MxCsr;
+    WORD    SegCs;
+    WORD    SegDs;
+    WORD    SegEs;
+    WORD    SegFs;
+    WORD    SegGs;
+    WORD    SegSs;
+    DWORD   EFlags;
+    DWORD64 Dr0;
+    DWORD64 Dr1;
+    DWORD64 Dr2;
+    DWORD64 Dr3;
+    DWORD64 Dr6;
+    DWORD64 Dr7;
+    DWORD64 Rax;
+    DWORD64 Rcx;
+    DWORD64 Rdx;
+    DWORD64 Rbx;
+    DWORD64 Rsp;
+    DWORD64 Rbp;
+    DWORD64 Rsi;
+    DWORD64 Rdi;
+    DWORD64 R8;
+    DWORD64 R9;
+    DWORD64 R10;
+    DWORD64 R11;
+    DWORD64 R12;
+    DWORD64 R13;
+    DWORD64 R14;
+    DWORD64 R15;
+    DWORD64 Rip;
+    union {
+        XMM_SAVE_AREA32 FltSave;
+        struct {
+            M128A Header[2];
+            M128A Legacy[8];
+            M128A Xmm0;
+            M128A Xmm1;
+            M128A Xmm2;
+            M128A Xmm3;
+            M128A Xmm4;
+            M128A Xmm5;
+            M128A Xmm6;
+            M128A Xmm7;
+            M128A Xmm8;
+            M128A Xmm9;
+            M128A Xmm10;
+            M128A Xmm11;
+            M128A Xmm12;
+            M128A Xmm13;
+            M128A Xmm14;
+            M128A Xmm15;
+        };
+    };
+    M128A   VectorRegister[26];
+    DWORD64 VectorControl;
+    DWORD64 DebugControl;
+    DWORD64 LastBranchToRip;
+    DWORD64 LastBranchFromRip;
+    DWORD64 LastExceptionToRip;
+    DWORD64 LastExceptionFromRip;
+} CONTEXT, *PCONTEXT;
+#endif
+
+#define ARM64_MAX_BREAKPOINTS 8
+#define ARM64_MAX_WATCHPOINTS 2
+
+typedef union _ARM64_NT_NEON128 {
+    struct {
+        ULONGLONG Low;
+        LONGLONG  High;
+    };
+    double D[2];
+    float  S[4];
+    WORD   H[8];
+    BYTE   B[16];
+} ARM64_NT_NEON128, *PARM64_NT_NEON128;
+
+#ifdef __aarch64__
+#define _ARM64_NT_CONTEXT _CONTEXT
+#endif
+typedef struct __declspec(align(16)) _ARM64_NT_CONTEXT {
+    DWORD ContextFlags;
+    DWORD Cpsr;
+    union {
+        struct {
+            DWORD64 X0;
+            DWORD64 X1;
+            DWORD64 X2;
+            DWORD64 X3;
+            DWORD64 X4;
+            DWORD64 X5;
+            DWORD64 X6;
+            DWORD64 X7;
+            DWORD64 X8;
+            DWORD64 X9;
+            DWORD64 X10;
+            DWORD64 X11;
+            DWORD64 X12;
+            DWORD64 X13;
+            DWORD64 X14;
+            DWORD64 X15;
+            DWORD64 X16;
+            DWORD64 X17;
+            DWORD64 X18;
+            DWORD64 X19;
+            DWORD64 X20;
+            DWORD64 X21;
+            DWORD64 X22;
+            DWORD64 X23;
+            DWORD64 X24;
+            DWORD64 X25;
+            DWORD64 X26;
+            DWORD64 X27;
+            DWORD64 X28;
+            DWORD64 Fp;
+            DWORD64 Lr;
+        };
+        DWORD64 X[31];
+    };
+    DWORD64          Sp;
+    DWORD64          Pc;
+    ARM64_NT_NEON128 V[32];
+    DWORD            Fpcr;
+    DWORD            Fpsr;
+    DWORD            Bcr[ARM64_MAX_BREAKPOINTS];
+    DWORD64          Bvr[ARM64_MAX_BREAKPOINTS];
+    DWORD            Wcr[ARM64_MAX_WATCHPOINTS];
+    DWORD64          Wvr[ARM64_MAX_WATCHPOINTS];
+} ARM64_NT_CONTEXT, *PARM64_NT_CONTEXT;
+#ifdef __aarch64__
+#undef _ARM64_NT_CONTEXT
+typedef ARM64_NT_NEON128 NEON128, *PNEON128;
+typedef ARM64_NT_CONTEXT CONTEXT, *PCONTEXT;
+#endif
+
+typedef struct _EXCEPTION_POINTERS {
+    PEXCEPTION_RECORD ExceptionRecord;
+    PCONTEXT          ContextRecord;
+} EXCEPTION_POINTERS, *PEXCEPTION_POINTERS, *LPEXCEPTION_POINTERS;
+
+#pragma binding(kernel32::RtlCaptureContext, "RtlCaptureContext")
+VOID RtlCaptureContext(PCONTEXT ContextRecord);
 
 struct _SYSTEMTIME {
     WORD wYear;

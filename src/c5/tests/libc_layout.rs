@@ -953,3 +953,92 @@ fn windows_h_spells_the_sdk_types() {
         ],
     );
 }
+
+/// `CONTEXT` is winnt.h's thread state of each architecture: the x64 record
+/// at 1232 bytes with `Rip` at 248 and the XMM save area at 256, the AArch64
+/// record at 912 bytes with `Fp`, `Lr`, `Sp`, `Pc` and the NEON block. Both
+/// are 16-byte aligned, the tag is `_CONTEXT` on each, `ARM64_NT_CONTEXT`
+/// is declared on both, and `EXCEPTION_POINTERS` points at the record.
+#[test]
+fn windows_h_context_follows_the_sdk() {
+    const H: &[&str] = &["windows.h"];
+    for target in [Target::WindowsX64, Target::WindowsAarch64] {
+        check_values(
+            target,
+            H,
+            &[
+                ("_Alignof(CONTEXT)", 16),
+                ("sizeof(M128A)", 16),
+                ("_Alignof(M128A)", 16),
+                ("sizeof(XSAVE_FORMAT)", 512),
+                ("sizeof(ARM64_NT_NEON128)", 16),
+                ("sizeof(ARM64_NT_CONTEXT)", 912),
+                ("offsetof(ARM64_NT_CONTEXT, Pc)", 264),
+                (
+                    "_Generic((CONTEXT *)0, struct _CONTEXT *: 1, default: 0)",
+                    1,
+                ),
+                ("sizeof(EXCEPTION_RECORD)", 152),
+                ("offsetof(EXCEPTION_RECORD, ExceptionInformation)", 32),
+                ("sizeof(EXCEPTION_POINTERS)", 16),
+                (
+                    "_Generic(((EXCEPTION_POINTERS *)0)->ContextRecord, CONTEXT *: 1, default: 0)",
+                    1,
+                ),
+                ("EXCEPTION_BREAKPOINT == 0x80000003", 1),
+                ("EXCEPTION_SINGLE_STEP == 0x80000004", 1),
+                ("EXCEPTION_ACCESS_VIOLATION == 0xC0000005", 1),
+                ("EXCEPTION_STACK_OVERFLOW == 0xC00000FD", 1),
+                ("EXCEPTION_MAXIMUM_PARAMETERS", 15),
+            ],
+        );
+    }
+    check_values(
+        Target::WindowsX64,
+        H,
+        &[
+            ("sizeof(CONTEXT)", 1232),
+            ("offsetof(CONTEXT, ContextFlags)", 48),
+            ("offsetof(CONTEXT, SegCs)", 56),
+            ("offsetof(CONTEXT, EFlags)", 68),
+            ("offsetof(CONTEXT, Dr0)", 72),
+            ("offsetof(CONTEXT, Rax)", 120),
+            ("offsetof(CONTEXT, Rsp)", 152),
+            ("offsetof(CONTEXT, Rbp)", 160),
+            ("offsetof(CONTEXT, R15)", 240),
+            ("offsetof(CONTEXT, Rip)", 248),
+            ("offsetof(CONTEXT, FltSave)", 256),
+            ("offsetof(CONTEXT, Xmm0)", 416),
+            ("offsetof(CONTEXT, Xmm15)", 656),
+            ("offsetof(CONTEXT, VectorRegister)", 768),
+            ("offsetof(CONTEXT, VectorControl)", 1184),
+            ("offsetof(CONTEXT, LastExceptionFromRip)", 1224),
+            ("CONTEXT_FULL == 0x10000B", 1),
+            ("CONTEXT_ALL == 0x10001F", 1),
+        ],
+    );
+    check_values(
+        Target::WindowsAarch64,
+        H,
+        &[
+            ("sizeof(CONTEXT)", 912),
+            ("offsetof(CONTEXT, Cpsr)", 4),
+            ("offsetof(CONTEXT, X0)", 8),
+            ("offsetof(CONTEXT, X)", 8),
+            ("offsetof(CONTEXT, X28)", 232),
+            ("offsetof(CONTEXT, Fp)", 240),
+            ("offsetof(CONTEXT, Lr)", 248),
+            ("offsetof(CONTEXT, Sp)", 256),
+            ("offsetof(CONTEXT, Pc)", 264),
+            ("offsetof(CONTEXT, V)", 272),
+            ("offsetof(CONTEXT, Fpcr)", 784),
+            ("offsetof(CONTEXT, Fpsr)", 788),
+            ("offsetof(CONTEXT, Bcr)", 792),
+            ("offsetof(CONTEXT, Bvr)", 824),
+            ("offsetof(CONTEXT, Wcr)", 888),
+            ("offsetof(CONTEXT, Wvr)", 896),
+            ("CONTEXT_FULL == 0x400007", 1),
+            ("CONTEXT_ALL == 0x40001F", 1),
+        ],
+    );
+}

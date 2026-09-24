@@ -872,7 +872,7 @@ pub(super) fn emit_agg_store_fp_at(
 }
 
 /// A frame byte's displacements from fp in the static layout and from sp
-/// where sp stays at its prologue value (`Frame::sp_fixed`). An object in
+/// where sp keeps its prologue value (not `Frame::dynamic_sp`). An object in
 /// the realigned region (C11 6.7.5) has no fp form.
 #[derive(Clone, Copy, Debug)]
 pub(super) struct FrameLoc {
@@ -883,7 +883,7 @@ pub(super) struct FrameLoc {
 impl FrameLoc {
     /// The byte at `fp + disp` in the static layout.
     pub(super) fn at_fp(frame: Frame, disp: i64) -> Self {
-        let sp = frame.sp_fixed.then(|| disp + i64::from(frame.frame_bytes));
+        let sp = (!frame.dynamic_sp).then(|| disp + i64::from(frame.frame_bytes));
         Self { fp: Some(disp), sp }
     }
 

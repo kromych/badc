@@ -80,32 +80,41 @@ fn read_write_flag_tracks_the_plus_modifier() {
     assert_eq!(out("+m"), Some((AsmConstraint::Mem, true)));
 }
 
+/// A statement over a register operand and an operand bound to a register
+/// variable, then a bound output operand.
+fn sp_block(template: &str) -> crate::c5::ir::AsmBlock {
+    use crate::c5::ir::{AsmBlock, AsmOperand, AsmSeg};
+    AsmBlock {
+        template: template.as_bytes().to_vec(),
+        operands: [
+            (AsmConstraint::Reg, false),
+            (AsmConstraint::Bound(4), false),
+            (AsmConstraint::Bound(4), true),
+        ]
+        .iter()
+        .map(|&(constraint, is_output)| AsmOperand {
+            constraint,
+            is_output,
+            is_rw: false,
+            width: 8,
+            seg: AsmSeg::None,
+            static_arg: false,
+            value: false,
+            volatile_object: false,
+        })
+        .collect(),
+        clobber_regs: 0,
+        clobber_fp_regs: 0,
+        clobber_memory: true,
+        volatile: true,
+    }
+}
+
 /// A statement references the stack pointer through its text or through
 /// a `%N` naming a bound operand; a bound operand the template never names
 /// (the kernel's `ASM_CALL_CONSTRAINT`) is out of the template's reach.
 #[test]
 fn a_bound_operand_names_the_stack_pointer_only_when_the_template_names_it() {
-    use crate::c5::ir::{AsmBlock, AsmOperand, AsmSeg};
-    let block = |template: &str| AsmBlock {
-        template: template.as_bytes().to_vec(),
-        operands: [AsmConstraint::Reg, AsmConstraint::Bound(4)]
-            .iter()
-            .map(|&constraint| AsmOperand {
-                constraint,
-                is_output: false,
-                is_rw: false,
-                width: 8,
-                seg: AsmSeg::None,
-                static_arg: false,
-                value: false,
-                volatile_object: false,
-            })
-            .collect(),
-        clobber_regs: 0,
-        clobber_fp_regs: 0,
-        clobber_memory: true,
-        volatile: true,
-    };
     for (template, names, sp) in [
         ("call *%0", false, false),
         ("mov %1, %0", true, true),
@@ -115,9 +124,33 @@ fn a_bound_operand_names_the_stack_pointer_only_when_the_template_names_it() {
         ("add $1, %%rax # %%1", false, false),
         ("mov %0, %0", false, false),
     ] {
-        let b = block(template);
+        let b = sp_block(template);
         assert_eq!(b.names_operand(1), names, "{template}");
         assert_eq!(b.references_sp(), sp, "{template}");
+    }
+}
+
+/// A memory operand based on sp leaves it in place unless AArch64 writes the
+/// base back; sp as a register operand, or a named bound output operand, may
+/// be the destination.
+#[test]
+fn a_template_may_move_the_stack_pointer_unless_sp_is_a_kept_memory_base() {
+    for (template, moves) in [
+        ("lock addl $0,-4(%%rsp)", false),
+        ("mov 8( %%rsp ), %0", false),
+        ("mov rax, [rsp + 8]", false),
+        ("ldr %0, [sp, #8]\n\tldr %0, [ sp ]", false),
+        ("str %0, [sp, #-16]!", true),
+        ("ldr %0, [sp], #16", true),
+        ("mov sp, %0", true),
+        ("mov %0, %%rsp", true),
+        ("lea 8(%%rsp), %%rsp", true),
+        ("mov %%rsp, %0", true),
+        ("mov %1, %0", false),
+        ("mov %0, %2", true),
+        ("call *%0", false),
+    ] {
+        assert_eq!(sp_block(template).may_move_sp(), moves, "{template}");
     }
 }
 

@@ -35,10 +35,12 @@ pub(crate) struct Frame {
     /// A statement whose template writes rbp addresses it through rsp
     /// instead, at `[rsp + frame_bytes + asm_scratch_off]`.
     pub asm_scratch_off: i32,
-    /// The body moves rsp at runtime (`alloca` / C99 6.7.6.2 VLA), or the
-    /// prologue realigns rsp for an automatic object aligned above 16, so
-    /// spill slots are addressed through rbp and the epilogue re-establishes
-    /// rsp from rbp before tearing the frame down.
+    /// rsp does not keep its prologue value across the body: it moves at
+    /// run time (`alloca` / C99 6.7.6.2 VLA), the prologue realigns it for an
+    /// automatic object aligned above 16, or an inline asm statement may leave
+    /// it moved (`AsmBlock::may_move_sp`), as a stack switch does. Spill slots
+    /// are addressed through rbp and the epilogue re-establishes rsp from rbp
+    /// before tearing the frame down.
     pub dynamic_sp: bool,
     /// Alignment the prologue forces on rsp for automatic objects aligned
     /// above 16 (C11 6.7.5), a power of two > 16, or 0 when none. The
@@ -135,7 +137,7 @@ pub(crate) fn compute_frame(
     } else {
         0
     };
-    Frame {
+    let mut frame = Frame {
         frame_bytes,
         alloc_spill_base: upper_bytes,
         canary_bytes,
@@ -174,7 +176,10 @@ pub(crate) fn compute_frame(
         } else {
             0
         },
-    }
+    };
+    // A full leaf has nothing to address and no rbp to restore rsp from.
+    frame.dynamic_sp |= func.has_sp_moving_asm() && !is_full_leaf(func, frame, alloc, abi);
+    frame
 }
 
 /// Bytes of frame scratch one inline-asm statement needs: 16 per saved

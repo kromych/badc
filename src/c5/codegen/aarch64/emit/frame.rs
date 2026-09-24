@@ -46,15 +46,12 @@ pub(crate) struct Frame {
     /// The ABI the function was lowered against; the home map reads its
     /// argument-register banks.
     pub abi: super::Abi,
-    /// The body moves sp at runtime (`alloca`, C99 6.7.6.2 VLA) or the
-    /// prologue realigns sp: spill slots and locals are addressed through fp
-    /// and the epilogue re-establishes sp from fp.
+    /// sp does not keep its prologue value across the body: it moves at run
+    /// time (`alloca`, C99 6.7.6.2 VLA), the prologue realigns it, or an
+    /// inline asm statement may leave it moved (`AsmBlock::may_move_sp`), as
+    /// a stack switch does. Spill slots and locals are addressed through fp,
+    /// and each return re-establishes sp from fp.
     pub dynamic_sp: bool,
-    /// sp keeps its prologue value at every instruction boundary, so locals
-    /// may be addressed from it: the frame is not `dynamic_sp` and no inline
-    /// asm names sp. A statement that moves sp to switch stacks leaves it
-    /// moved, and the code after it reaches the locals through fp.
-    pub sp_fixed: bool,
     /// Alignment the prologue forces on sp for automatic objects aligned
     /// above 16 (C11 6.7.5), or 0. The realigned region sits below the static
     /// frame; the objects live at `[sp + region_off]`.
@@ -126,7 +123,7 @@ pub(crate) fn compute_frame(
     } else {
         0
     };
-    Frame {
+    let mut frame = Frame {
         frame_bytes,
         alloc_spill_base: upper_bytes,
         canary_bytes,
@@ -158,7 +155,6 @@ pub(crate) fn compute_frame(
         va_save_bytes,
         abi,
         dynamic_sp,
-        sp_fixed: !dynamic_sp && !func.has_sp_asm(),
         realign_align: if func.frame_align > 16 {
             func.frame_align as u32
         } else {
@@ -179,7 +175,10 @@ pub(crate) fn compute_frame(
         } else {
             0
         },
-    }
+    };
+    // A full leaf has nothing to address and no fp to restore sp from.
+    frame.dynamic_sp |= func.has_sp_moving_asm() && !is_full_leaf(frame, alloc);
+    frame
 }
 
 /// Frame scratch bytes of one inline-asm statement: 8 per operand

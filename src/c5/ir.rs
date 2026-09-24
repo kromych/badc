@@ -1445,36 +1445,54 @@ impl AsmBlock {
     /// not bounded by the CFG or the C block structure, and frame-storage
     /// sharing decisions must exclude the function.
     pub fn references_sp(&self) -> bool {
-        // An operand binding a storage-less register variable: the parser
-        // admits only the stack- and frame-pointer ones. A `%N` naming it
-        // reads or writes the register itself. One the template never
-        // names (`ASM_CALL_CONSTRAINT`, which declares a call inside the
-        // body) gives the template no way to reach it.
-        if self
-            .operands
-            .iter()
-            .enumerate()
-            .any(|(i, o)| matches!(o.constraint, AsmConstraint::Bound(_)) && self.names_operand(i))
-        {
-            return true;
-        }
+        self.names_bound_operand(false) || self.sp_tokens().next().is_some()
+    }
+
+    /// True when the template may leave the stack pointer moved, as a stack
+    /// switch does: it names sp other than as the base of a memory operand
+    /// that keeps it (x86 has no writeback; AArch64 writes the base back in
+    /// `[sp, #n]!` and `[sp], #n`), or names a bound output operand.
+    pub fn may_move_sp(&self) -> bool {
+        self.names_bound_operand(true)
+            || self
+                .sp_tokens()
+                .any(|(start, end)| !keeps_sp_base(&self.template, start, end))
+    }
+
+    /// An operand binding a storage-less register variable, an output one
+    /// when `output`: the parser admits only the stack- and frame-pointer
+    /// ones. A `%N` naming it reads or writes the register itself. One the
+    /// template never names (`ASM_CALL_CONSTRAINT`, which declares a call
+    /// inside the body) gives the template no way to reach it.
+    fn names_bound_operand(&self, output: bool) -> bool {
+        self.operands.iter().enumerate().any(|(i, o)| {
+            matches!(o.constraint, AsmConstraint::Bound(_))
+                && (o.is_output || !output)
+                && self.names_operand(i)
+        })
+    }
+
+    /// Byte ranges of the `sp` / `wsp` / `rsp` / `esp` tokens in the template.
+    fn sp_tokens(&self) -> impl Iterator<Item = (usize, usize)> + '_ {
         let is_word = |b: u8| b.is_ascii_alphanumeric() || b == b'_';
         let t = &self.template;
         let mut i = 0;
-        while i < t.len() {
-            if !is_word(t[i]) {
-                i += 1;
-                continue;
+        core::iter::from_fn(move || {
+            while i < t.len() {
+                if !is_word(t[i]) {
+                    i += 1;
+                    continue;
+                }
+                let start = i;
+                while i < t.len() && is_word(t[i]) {
+                    i += 1;
+                }
+                if matches!(&t[start..i], b"sp" | b"wsp" | b"rsp" | b"esp") {
+                    return Some((start, i));
+                }
             }
-            let start = i;
-            while i < t.len() && is_word(t[i]) {
-                i += 1;
-            }
-            if matches!(&t[start..i], b"sp" | b"wsp" | b"rsp" | b"esp") {
-                return true;
-            }
-        }
-        false
+            None
+        })
     }
 
     /// True when the template carries a `%N` / `%<modifier>N` reference to
@@ -1514,6 +1532,24 @@ impl AsmBlock {
             i = j;
         }
         false
+    }
+}
+
+/// Whether the stack-pointer token at `t[start..end]` is the base of a
+/// memory operand that leaves sp unchanged: `disp(%rsp)`, or `[sp ...]` with
+/// neither `!` nor a post-index after the bracket.
+fn keeps_sp_base(t: &[u8], start: usize, end: usize) -> bool {
+    let blank = |b: &u8| matches!(*b, b' ' | b'\t');
+    match t[..start].iter().rev().find(|&b| !blank(b) && *b != b'%') {
+        Some(b'(') => true,
+        Some(b'[') => match t[end..].iter().position(|&b| b == b']' || b == b'\n') {
+            Some(c) if t[end + c] == b']' => !matches!(
+                t[end + c + 1..].iter().find(|&b| !blank(b)),
+                Some(b'!' | b',')
+            ),
+            _ => false,
+        },
+        _ => false,
     }
 }
 
@@ -2103,6 +2139,15 @@ impl FunctionSsa {
     pub fn has_sp_asm(&self) -> bool {
         self.insts.iter().any(|i| match i {
             Inst::InlineAsm { asm, .. } => asm.references_sp(),
+            _ => false,
+        })
+    }
+
+    /// True when an inline-asm statement in the body may leave the stack
+    /// pointer moved (`AsmBlock::may_move_sp`).
+    pub fn has_sp_moving_asm(&self) -> bool {
+        self.insts.iter().any(|i| match i {
+            Inst::InlineAsm { asm, .. } => asm.may_move_sp(),
             _ => false,
         })
     }

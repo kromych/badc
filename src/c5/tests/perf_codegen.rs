@@ -3525,6 +3525,84 @@ fn a64_far_local_is_addressed_off_the_fixed_sp() {
     m.finish();
 }
 
+/// Four values live across a call made after an asm statement moves sp; with
+/// the integer bank capped to two registers they spill. `set_sp`, whose asm
+/// takes no operand to stage, is a full leaf: it has no frame and keeps sp
+/// where the asm leaves it.
+const SP_SWITCH: &str = "long mix(long);\n\
+    #if defined(__x86_64__)\n\
+    #define SET_SP(p) __asm__ volatile(\"mov %0, %%rsp\" : : \"r\"(p) : \"memory\")\n\
+    #define SET_SP_ARG0 __asm__ volatile(\"mov %%rdi, %%rsp\")\n\
+    #else\n\
+    #define SET_SP(p) __asm__ volatile(\"mov sp, %0\" : : \"r\"(p) : \"memory\")\n\
+    #define SET_SP_ARG0 __asm__ volatile(\"mov sp, x0\")\n\
+    #endif\n\
+    long switched(long s, void *top) {\n\
+        long a = s + 1, b = s * 3, c = s ^ 5, d = s * s;\n\
+        SET_SP(top);\n\
+        long m = mix(s);\n\
+        return a + 2 * b + 3 * c + 4 * d + m;\n\
+    }\n\
+    void set_sp(void *p) { (void)p; SET_SP_ARG0; }\n";
+
+/// After an asm statement moves sp, the spill slots are reached through the
+/// frame pointer and the epilogue re-establishes sp from it.
+#[test]
+fn spills_after_an_asm_sp_move_are_addressed_off_the_frame_pointer() {
+    let mut m = Misses::default();
+    let obj = object_with_pool(SP_SWITCH, Target::LinuxAarch64, (2, 2));
+    let ws = function_words(&obj, "switched");
+    let moved = ws
+        .iter()
+        .position(|&w| matches!(a64_add_sub_imm(w), Some((31, rn)) if rn != 31 && rn != 29));
+    let restored = ws
+        .iter()
+        .rposition(|&w| a64_add_sub_imm(w) == Some((31, 29)));
+    let off = |body: &[u32], base: u32| {
+        body.iter()
+            .filter(|&&w| a64_mem_imm(w).is_some_and(|(rn, _, _)| rn == base))
+            .count()
+    };
+    // `(off sp, off x29)` between the move and the restore; none without both.
+    let counts = match (moved, restored) {
+        (Some(a), Some(b)) if a < b => Some((off(&ws[a + 1..b], 31), off(&ws[a + 1..b], 29))),
+        _ => None,
+    };
+    m.expect(matches!(counts, Some((0, fp)) if fp > 0), || {
+        format!("aarch64: accesses after the move {counts:?}: {ws:08x?}")
+    });
+    let ws = function_words(&object_at(SP_SWITCH, Target::LinuxAarch64, true), "set_sp");
+    m.expect(!a64_has_frame_record(&ws), || {
+        format!("aarch64 set_sp: {ws:08x?}")
+    });
+
+    let obj = object_with_pool(SP_SWITCH, Target::LinuxX64, (2, 2));
+    let insns = x64_insns(&function_bytes(&obj, "switched"));
+    const RSP: u8 = 4;
+    let moved = insns.iter().position(|i| {
+        i.reg_form() && ((i.op == 0x89 && i.regs().1 == RSP) || (i.op == 0x8B && i.regs().0 == RSP))
+    });
+    let restored = insns
+        .iter()
+        .rposition(|i| i.op == 0x8D && i.regs().0 == RSP && i.mem_base() == Some(RBP));
+    let off =
+        |body: &[X64Insn], base: u8| body.iter().filter(|i| i.mem_base() == Some(base)).count();
+    let counts = match (moved, restored) {
+        (Some(a), Some(b)) if a < b => {
+            Some((off(&insns[a + 1..b], RSP), off(&insns[a + 1..b], RBP)))
+        }
+        _ => None,
+    };
+    m.expect(matches!(counts, Some((0, fp)) if fp > 0), || {
+        format!("x86-64: accesses after the move {counts:?}: {insns:x?}")
+    });
+    let insns = x64_at(SP_SWITCH, "set_sp", true);
+    m.expect(!x64_has_frame_record(&insns), || {
+        format!("x86-64 set_sp: {insns:x?}")
+    });
+    m.finish();
+}
+
 /// `fmov <Dd>, <Xn>` / `fmov <Sd>, <Wn>`: the general-to-vector transfers.
 fn a64_fmov_x_to_d(w: u32) -> bool {
     matches!(w & 0xFFFE_0000, 0x9E67_0000 | 0x1E27_0000)

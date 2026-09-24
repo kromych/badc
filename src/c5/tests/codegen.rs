@@ -8645,6 +8645,28 @@ fn wide_member_keeps_its_object_in_memory() {
     }
 }
 
+/// A `long double` conditional merges its arms' binary64 values as a
+/// double. Given the object's F80 / F128 kinds, the merge slot fell back to
+/// I64: it stayed in memory and the result reached the return through a
+/// general register.
+#[test]
+fn long_double_conditional_merges_in_the_fp_class() {
+    const SRC: &str = "long double pick(int c, long double a, double b) { return c ? a : b; }\n";
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        let (body, insts) = optimized_function(SRC, "pick", target);
+        assert!(
+            insts
+                .iter()
+                .any(|(_, i)| i.starts_with("Phi {") && i.contains("kind=F64")),
+            "{target:?}: the arms merge in a double phi: {body}"
+        );
+        assert!(
+            !insts.iter().any(|(_, i)| i.contains("kind=I64")),
+            "{target:?}: no integer slot carries the value: {body}"
+        );
+    }
+}
+
 /// Scalar promotion runs in every function holding an aggregate: a struct
 /// copied in from a pointer and read by field is split and lifted where
 /// neither the inliner nor the unroller changed the function.

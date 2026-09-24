@@ -346,6 +346,7 @@ pub(crate) struct LexerSnapshot {
     int_suffix_unsigned: bool,
     int_is_decimal: bool,
     float_suffix_f32: bool,
+    float_suffix_long: bool,
     num_is_char: bool,
     char_prefix: StrPrefix,
     str_is_wide: bool,
@@ -449,9 +450,12 @@ pub(crate) struct Lexer {
     /// `true` when the most recent `Token::FloatNum` carried an `f`/`F`
     /// suffix (C99 6.4.4.2p4: the constant has type `float`). `ival`
     /// then holds the value already rounded to single precision,
-    /// re-widened to f64 bits. An `l`/`L` suffix keeps the flag false:
-    /// c5 represents long double as f64.
+    /// re-widened to f64 bits.
     pub float_suffix_f32: bool,
+
+    /// `true` when it carried an `l`/`L` suffix: the constant has type
+    /// `long double`, its value in `ival` at binary64.
+    pub float_suffix_long: bool,
 
     /// `true` when the most recent `'"'` string-literal token came from
     /// a wide (`L"..."`, `u"..."`, `U"..."`) literal. The element width is
@@ -638,6 +642,7 @@ impl Lexer {
             int_suffix_unsigned: false,
             int_is_decimal: true,
             float_suffix_f32: false,
+            float_suffix_long: false,
             str_is_wide: false,
             str_elem_bytes: 4,
             str_prefix: StrPrefix::None,
@@ -762,10 +767,11 @@ impl Lexer {
         }
         let mut exp = if exp_neg { -exp } else { exp };
         // C99 6.4.4.2p4: `f`/`F` types the constant `float`, `l`/`L`
-        // long double (represented as f64 in c5). Record the float
-        // suffix; the value is rounded to single precision below.
+        // `long double`. A float value is rounded to single precision
+        // below.
         if self.pos < self.src.len() && matches!(self.src[self.pos], b'f' | b'F' | b'l' | b'L') {
             self.float_suffix_f32 = matches!(self.src[self.pos], b'f' | b'F');
+            self.float_suffix_long = !self.float_suffix_f32;
             self.pos += 1;
         }
         // Scale by 2^exp through exact doubling / halving so the
@@ -1372,6 +1378,7 @@ impl Lexer {
             int_suffix_unsigned: self.int_suffix_unsigned,
             int_is_decimal: self.int_is_decimal,
             float_suffix_f32: self.float_suffix_f32,
+            float_suffix_long: self.float_suffix_long,
             num_is_char: self.num_is_char,
             char_prefix: self.char_prefix,
             str_is_wide: self.str_is_wide,
@@ -1395,6 +1402,7 @@ impl Lexer {
         self.int_suffix_unsigned = s.int_suffix_unsigned;
         self.int_is_decimal = s.int_is_decimal;
         self.float_suffix_f32 = s.float_suffix_f32;
+        self.float_suffix_long = s.float_suffix_long;
         self.num_is_char = s.num_is_char;
         self.char_prefix = s.char_prefix;
         self.str_is_wide = s.str_is_wide;
@@ -1732,6 +1740,7 @@ impl Lexer {
         self.int_suffix_unsigned = false;
         self.int_is_decimal = true;
         self.float_suffix_f32 = false;
+        self.float_suffix_long = false;
         self.num_is_char = false;
         self.char_prefix = StrPrefix::None;
         loop {
@@ -2057,8 +2066,9 @@ impl Lexer {
                     {
                         // Floating-point suffix per C99 6.4.4.2p4:
                         // `f`/`F` types the constant `float`, `l`/`L`
-                        // long double (represented as f64 in c5).
+                        // `long double`.
                         self.float_suffix_f32 = matches!(self.src[self.pos], b'f' | b'F');
+                        self.float_suffix_long = !self.float_suffix_f32;
                         self.pos += 1;
                     }
                     let lit =
@@ -2326,9 +2336,9 @@ impl Lexer {
                             {
                                 // Floating-point suffix per C99
                                 // 6.4.4.2p4: `f`/`F` types the constant
-                                // `float`, `l`/`L` long double
-                                // (represented as f64 in c5).
+                                // `float`, `l`/`L` `long double`.
                                 self.float_suffix_f32 = matches!(self.src[self.pos], b'f' | b'F');
+                                self.float_suffix_long = !self.float_suffix_f32;
                                 self.pos += 1;
                             }
                             let lit = core::str::from_utf8(&self.src[int_start..body_end])

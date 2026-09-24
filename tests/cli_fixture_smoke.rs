@@ -500,6 +500,7 @@ const LINKED_IMAGE_RUN_FIXTURES: &[(&str, i32)] = &[
     ("induction_variable_steps.c", 0),
     ("wrap_signed.c", 0),
     ("long_double_parameter_shapes.c", 0),
+    ("long_double_usual_conversions.c", 0),
 ];
 
 /// The sweep's target for this host, or `None` when the host cannot

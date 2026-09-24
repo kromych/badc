@@ -195,13 +195,11 @@ const SEG_LVL_MASK: i64 = 0x1FF << SEG_LVL_SHIFT;
 pub(crate) const VOID_BIT: i64 = 1 << 28;
 
 /// High-bit flag marking a type tag whose base type was spelled `long
-/// double`. c5 gives `long double` the `double` band's binary64
-/// representation on every target (see doc/std-conformance.md), so the
-/// bit carries only the spelling. Stripped by [`strip_unsigned`] like
-/// the other orthogonal markers, which keeps every band classifier,
-/// layout query, and codegen path reading a plain `double`;
-/// identity-sensitive sites ([`is_long_double_ty`], the libc-argument
-/// ABI diagnostic) test the bit.
+/// double`: a `double`-band type whose storage follows the target
+/// (`Target::long_double`, see doc/std-conformance.md). Stripped by
+/// [`strip_unsigned`] like the other orthogonal markers, so band
+/// classifiers see a `double`; the layout, the load and store kinds and
+/// the identity-sensitive sites ([`is_long_double_ty`]) test the bit.
 ///
 /// Sits above [`SEG_LVL_MASK`]'s 9-bit field (bits 34..43).
 pub(crate) const LONG_DOUBLE_BIT: i64 = 1 << 43;
@@ -996,13 +994,13 @@ pub(super) fn pointee_size_no_struct(ty: i64) -> i64 {
     }
 }
 
-/// Result type for a binary FP operation. Both operands are
-/// floating-point scalars; if either is `double`, the result is
-/// `double`, otherwise `float`. Mirrors the C standard's "usual
-/// arithmetic conversions" for FP operands. Internally both flow
-/// through f64 ops anyway -- the type is purely for downstream
-/// type-warning bookkeeping.
+/// Result type for a binary operation with a floating operand: C99
+/// 6.3.1.8p1 takes `long double` if either operand is one, else `double`
+/// if either is, else `float`.
 pub(super) fn fp_result_ty(lhs: i64, rhs: i64) -> i64 {
+    if is_long_double_scalar(lhs) || is_long_double_scalar(rhs) {
+        return Ty::Double as i64 | LONG_DOUBLE_BIT;
+    }
     let lhs = strip_unsigned(lhs);
     let rhs = strip_unsigned(rhs);
     if lhs == Ty::Double as i64 || rhs == Ty::Double as i64 {

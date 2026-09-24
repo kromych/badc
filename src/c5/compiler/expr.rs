@@ -1393,11 +1393,14 @@ impl Compiler {
 
     fn parse_float_literal(&mut self) -> Result<(), C5Error> {
         // C99 6.4.4.2p4: unsuffixed is `double`, `f` is `float`, `l` is
-        // `long double` (binary64 here); the lexer stored the bits in `ival`.
+        // `long double`; the lexer stored the bits in `ival`, at binary64
+        // for a `long double`.
         let bits = self.lex.ival as u64;
         self.emit_imm(self.lex.ival);
         self.ty = if self.lex.float_suffix_f32 {
             Ty::Float as i64
+        } else if self.lex.float_suffix_long {
+            Ty::Double as i64 | super::types::LONG_DOUBLE_BIT
         } else {
             Ty::Double as i64
         };

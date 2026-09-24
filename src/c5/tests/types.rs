@@ -1414,6 +1414,26 @@ fn long_double_parameters_read_back_what_the_caller_passed() {
     }
 }
 
+/// An `L` constant, an arithmetic operation and a conditional with a
+/// `long double` operand have type `long double` (C99 6.4.4.2p4,
+/// 6.3.1.8p1, 6.5.15p5) on every target, as `_Generic` and `sizeof` see.
+#[test]
+fn long_double_operands_give_long_double_results() {
+    use super::Vm;
+    use crate::{Compiler, Target};
+    let src = super::load_fixture("long_double_usual_conversions.c");
+    for t in [
+        Target::LinuxX64,
+        Target::LinuxAarch64,
+        Target::MacOSAarch64,
+        Target::WindowsX64,
+        Target::WindowsAarch64,
+    ] {
+        let program = Compiler::with_target(src.clone(), t).compile().unwrap();
+        assert_eq!(Vm::new(program).run().unwrap(), 0, "{t:?}");
+    }
+}
+
 /// `long double` keeps `double`'s 53-bit significand through the compute
 /// path, so a value needing more than 53 bits does not round-trip even
 /// where the stored object could hold it (x87 80-bit has 64 significand

@@ -5586,6 +5586,149 @@ fn variadic_aggregates_cross_the_system_compiler_boundary() {
     );
 }
 
+/// The platform C compiler on Windows: `$CC` when set, else clang on the path
+/// or in LLVM's default install, provided it runs.
+#[cfg(windows)]
+fn windows_cc() -> Option<std::ffi::OsString> {
+    [
+        std::env::var_os("CC"),
+        Some("clang".into()),
+        Some(r"C:\Program Files\LLVM\bin\clang.exe".into()),
+    ]
+    .into_iter()
+    .flatten()
+    .find(|cc| {
+        Command::new(cc)
+            .arg("--version")
+            .output()
+            .is_ok_and(|o| o.status.success())
+    })
+}
+
+/// [`drive_across_the_system_compiler`] on Windows: the platform compiler links
+/// the module as a DLL without a C runtime, which the badc host loads.
+#[cfg(windows)]
+fn drive_across_the_windows_compiler(cc: &std::ffi::OsStr, test: &str, common: &str, fns: &str) {
+    let dir = tempdir(test);
+    let module = write_source(
+        &dir,
+        "module.c",
+        &format!(
+            "{common}__declspec(dllexport) struct fns sys_fns = {{ {fns} }};\n\
+             __declspec(dllexport) int sys_drive(const struct fns *f) {{ return drive(f, 10); }}\n"
+        ),
+    );
+    let host = write_source(
+        &dir,
+        "host.c",
+        &format!(
+            "#include <windows.h>\n{common}\
+             int main(int argc, char **argv) {{\n\
+               HMODULE h = LoadLibraryA(argv[1]);\n\
+               if (!h) return 1;\n\
+               const struct fns *sys = (const struct fns *)GetProcAddress(h, \"sys_fns\");\n\
+               int (*sys_drive)(const struct fns *) =\n\
+                 (int (*)(const struct fns *))GetProcAddress(h, \"sys_drive\");\n\
+               if (!sys || !sys_drive) return 2;\n\
+               int r = drive(sys, 20);\n\
+               if (r) return r;\n\
+               struct fns mine = {{ {fns} }};\n\
+               (void)argc;\n\
+               return sys_drive(&mine); }}\n"
+        ),
+    );
+    let dll = dir.join("module.dll");
+    let target = if cfg!(target_arch = "aarch64") {
+        "--target=aarch64-pc-windows-msvc"
+    } else {
+        "--target=x86_64-pc-windows-msvc"
+    };
+    run(
+        Command::new(cc)
+            .args([target, "-O2", "-shared", "-nostdlib", "-fuse-ld=lld"])
+            .args(["-Wl,-noentry", "-o"])
+            .arg(&dll)
+            .arg(&module)
+            .current_dir(&dir),
+        "build the platform-compiled module",
+    );
+    for opt in ["-O0", "-O"] {
+        let exe = dir.join(format!("host{opt}.exe"));
+        run(
+            Command::new(badc())
+                .arg(opt)
+                .arg("-o")
+                .arg(&exe)
+                .arg(&host)
+                .current_dir(&dir),
+            "link the badc host",
+        );
+        let out = Command::new(&exe)
+            .arg(&dll)
+            .output()
+            .expect("run the badc host");
+        assert_eq!(
+            out.status.code(),
+            Some(0),
+            "{test} host{opt}: a call crossed the boundary misplaced (stderr {:?})",
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+}
+
+// Win64 passes a variadic argument of other than 1, 2, 4 or 8 bytes by
+// reference, and Windows arm64 a composite over 16 bytes; there a 16-byte one
+// reached with x7 the last register left takes x7 and the first stack slot.
+// Both ways across the platform compiler boundary, but for clang's arm64 caller
+// of that split, which stores both halves on the stack and leaves x7 unset
+// while its own callee reads x7.
+#[cfg(windows)]
+#[test]
+fn variadic_aggregates_cross_the_windows_compiler_boundary() {
+    let Some(cc) = windows_cc() else {
+        eprintln!(
+            "skipping variadic_aggregates_cross_the_windows_compiler_boundary: no platform C compiler"
+        );
+        return;
+    };
+    let common = "#include <stdarg.h>\n\
+        typedef long long ll;\n\
+        struct s16 { ll a, b; };\n\
+        struct s24 { ll a, b, c; };\n\
+        struct pair { int x, y; };\n\
+        static ll take16(int n, ...)\n\
+        { va_list ap; va_start(ap, n); struct s16 s = va_arg(ap, struct s16);\n\
+          ll t = va_arg(ap, ll); va_end(ap); return s.a * 100 + s.b * 10 + t + n; }\n\
+        static ll take24(int n, ...)\n\
+        { va_list ap; va_start(ap, n); struct s24 s = va_arg(ap, struct s24);\n\
+          ll t = va_arg(ap, ll); va_end(ap); return s.a * 1000 + s.b * 100 + s.c * 10 + t + n; }\n\
+        static ll take8(int n, ...)\n\
+        { va_list ap; va_start(ap, n); struct pair p = va_arg(ap, struct pair);\n\
+          ll t = va_arg(ap, ll); va_end(ap); return p.x * 100 + p.y * 10 + t + n; }\n\
+        static ll at7(ll a0, ll a1, ll a2, ll a3, ll a4, ll a5, ll a6, ...)\n\
+        { va_list ap; va_start(ap, a6); struct s16 s = va_arg(ap, struct s16);\n\
+          ll t = va_arg(ap, ll); va_end(ap); return s.a * 100 + s.b * 10 + t + a0 + a6; }\n\
+        struct fns { ll (*take16)(int, ...); ll (*take24)(int, ...); ll (*take8)(int, ...);\n\
+          ll (*at7)(ll, ll, ll, ll, ll, ll, ll, ...); };\n\
+        static int drive(const struct fns *f, int base)\n\
+        { struct s16 s = { 3, 4 };\n\
+          struct s24 w = { 1, 2, 3 };\n\
+          struct pair p = { 7, 8 };\n\
+          if (f->take16(5, s, 6LL) != 351) return base + 1;\n\
+          if (f->take24(5, w, 6LL) != 1241) return base + 2;\n\
+          if (f->take8(5, p, 6LL) != 791) return base + 3;\n\
+        #if !(defined(__aarch64__) && defined(__clang__))\n\
+          if (f->at7(1, 0, 0, 0, 0, 0, 2, s, 6LL) != 349) return base + 4;\n\
+        #endif\n\
+          return 0; }\n";
+    drive_across_the_windows_compiler(
+        &cc,
+        "win-va-agg-interop",
+        common,
+        "take16, take24, take8, at7",
+    );
+}
+
 // A function returning an aggregate through the hidden result pointer takes that
 // pointer in the first integer register and its other arguments in their own
 // classes (System V AMD64 3.2.3), across the system compiler boundary both ways.

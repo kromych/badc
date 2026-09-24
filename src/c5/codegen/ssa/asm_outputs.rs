@@ -218,6 +218,7 @@ mod tests {
             static_arg: false,
             value: false,
             volatile_object: false,
+            early_clobber: false,
         }
     }
 

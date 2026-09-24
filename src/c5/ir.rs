@@ -1458,6 +1458,9 @@ pub(crate) struct AsmOperand {
     /// The operand's object is volatile-qualified, so the statement's write
     /// to it is an access the abstract machine performs (C99 6.7.3p6).
     pub volatile_object: bool,
+    /// `&` output: the template writes it before it has read every input,
+    /// so it may not share a register with one.
+    pub early_clobber: bool,
 }
 
 /// A parsed GCC extended-asm statement (`asm(template : outputs :

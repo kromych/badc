@@ -77,7 +77,7 @@ use intrinsic::*;
 use mem::*;
 
 pub(crate) use arith::binop_imm_materializes;
-pub(crate) use frame::{Frame, asm_site_write_masks, compute_frame};
+pub(crate) use frame::{Frame, asm_site_bound_values, asm_site_write_masks, compute_frame};
 pub(crate) use function::emit_function;
 pub(super) use inline_asm::a64_align_asm_stream;
 pub(crate) use inline_asm::encode_a64_file_asm_section_code;

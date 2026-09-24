@@ -1116,7 +1116,9 @@ fn x86_64_asm_vector_operands_live_in_registers_at_opt() {
 
 /// A caller whose pre-inline frame is past the inliner's absolute bound
 /// still absorbs the NEON wrappers: once its vectors are values a splice
-/// leaves no frame cell, so none of the calls stays out of line.
+/// leaves no frame cell, so none of the calls stays out of line, and with
+/// the wrappers' asm operands in their values' registers the function
+/// takes no frame at all.
 #[test]
 fn neon_wrappers_inline_into_a_large_frame() {
     let mut source = String::from(
@@ -1129,9 +1131,11 @@ fn neon_wrappers_inline_into_a_large_frame() {
     }
     source.push_str("    vst1q_u8(out, w);\n}\n");
     let stderr = dump_opt(&source, "linux-aarch64", "neon-large-frame");
-    let (body, report) = function_dump(&stderr, "fold");
+    let body = stderr
+        .split("; name=")
+        .find(|s| s.starts_with("fold\n"))
+        .unwrap_or_else(|| panic!("fold is not dumped:\n{stderr}"));
     assert!(!body.contains("Call {"), "a wrapper call remains:\n{body}");
-    for region in ["in locals", "over-aligned region"] {
-        assert!(!report.contains(region), "{report}");
-    }
+    let report = stderr.lines().find(|l| l.contains("function `fold`"));
+    assert!(report.is_none(), "{report:?}");
 }

@@ -42,9 +42,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x16, #0x2               // =2
-               	str	x16, [sp]
-               	ldr	x1, [sp]
-               	dup	v0.16b, w1
+               	dup	v0.16b, w16
                	saddlv	h0, v0.16b
                	umov	w0, v0.h[0]
                	cmp	w0, #0x20

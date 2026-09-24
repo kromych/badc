@@ -1843,6 +1843,10 @@ impl Compiler {
             }
             operand_exprs.push(e);
             operand_names.push(op_name);
+            let early_clobber = cstr
+                .chars()
+                .take_while(|c| matches!(c, '=' | '+' | '&' | '%'))
+                .any(|c| c == '&');
             operands.push(AsmOperand {
                 constraint,
                 is_output: stores_back,
@@ -1852,6 +1856,7 @@ impl Compiler {
                 static_arg: false,
                 value: false,
                 volatile_object,
+                early_clobber,
             });
             if is_output {
                 n_outputs += 1;

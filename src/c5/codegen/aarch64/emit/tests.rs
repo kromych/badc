@@ -2,11 +2,16 @@ mod asm_scratch_tests {
     use super::super::super::ir::{AsmBlock, AsmConstraint, AsmOperand, AsmSeg};
     use super::*;
 
-    fn asm_func(template: &str) -> FunctionSsa {
+    /// `asm(template :: "r"(0))`, or with `mem` the operand `"m"`.
+    fn asm_func(template: &str, mem: bool) -> FunctionSsa {
         let asm = AsmBlock {
             template: template.as_bytes().to_vec(),
             operands: alloc::vec![AsmOperand {
-                constraint: AsmConstraint::Reg,
+                constraint: if mem {
+                    AsmConstraint::Mem
+                } else {
+                    AsmConstraint::Reg
+                },
                 is_output: false,
                 is_rw: false,
                 width: 8,
@@ -14,6 +19,7 @@ mod asm_scratch_tests {
                 static_arg: false,
                 value: false,
                 volatile_object: false,
+                early_clobber: false,
             }],
             clobber_regs: 0,
             clobber_fp_regs: 0,
@@ -54,11 +60,13 @@ mod asm_scratch_tests {
     }
 
     /// A no-op template reserves no frame scratch; the same statement
-    /// with one instruction reserves the operand's save + capture slots.
+    /// with one instruction and a memory operand reserves its save and
+    /// capture slots, and one whose register operand binds to its value's
+    /// own register reserves none.
     #[test]
     fn noop_template_needs_no_scratch() {
-        let bytes = |t: &str| {
-            let func = asm_func(t);
+        let bytes = |t: &str, mem: bool| {
+            let func = asm_func(t, mem);
             let alloc = crate::c5::codegen::ssa::reg_alloc::allocate(
                 &func,
                 crate::c5::codegen::Target::LinuxAarch64,
@@ -66,9 +74,10 @@ mod asm_scratch_tests {
             );
             asm_scratch_bytes(&func, &alloc, crate::c5::codegen::FixedRegs::NONE)
         };
-        assert_eq!(bytes(""), 0);
-        assert_eq!(bytes("// note ;"), 0);
-        assert!(bytes("nop") > 0);
+        assert_eq!(bytes("", true), 0);
+        assert_eq!(bytes("// note ;", true), 0);
+        assert!(bytes("nop", true) > 0);
+        assert_eq!(bytes("nop", false), 0);
     }
 }
 

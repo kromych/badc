@@ -26,8 +26,6 @@ Disassembly of section .text:
                	ldr	x16, [sp]
                	str	d0, [x16]
                	ldur	d0, [x29, #-0x8]
-               	str	d0, [sp]
-               	ldr	d0, [sp]
                	fcvtzs	x0, d0
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10

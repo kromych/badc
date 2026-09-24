@@ -16,11 +16,9 @@ Disassembly of section .text:
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x20
+               	sub	sp, sp, #0x10
                	mov	x16, #0x41a80000        // =1101529088
-               	str	x16, [sp]
-               	ldr	x1, [sp]
-               	dup	v0.4s, w1
+               	dup	v0.4s, w16
                	fadd	v0.4s, v0.4s, v0.4s
                	fmov	w0, s0
                	stur	w0, [x29, #-0x8]
@@ -30,7 +28,7 @@ Disassembly of section .text:
                	fcmp	s0, s1
                	b.ne	<addr>
                	mov	x0, #0x2a               // =42
-               	add	sp, sp, #0x20
+               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x0                // =0

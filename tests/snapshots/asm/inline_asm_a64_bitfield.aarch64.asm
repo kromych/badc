@@ -17,13 +17,11 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	mov	x2, #0x0                // =0
+               	mov	x0, #0x0                // =0
                	mov	x16, #0x2a00            // =10752
-               	str	x16, [sp]
-               	ldr	x1, [sp]
-               	ubfx	x0, x1, #8, #8
-               	str	x2, [sp]
-               	str	x0, [sp, #0x8]
+               	ubfx	x1, x16, #8, #8
+               	str	x0, [sp]
+               	str	x1, [sp, #0x8]
                	ldr	x0, [sp]
                	ldr	x1, [sp, #0x8]
                	bfxil	x0, x1, #0, #8

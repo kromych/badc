@@ -1689,6 +1689,13 @@ fn asm_live_values(
             let (gpr, fpr) = match &func.insts[site as usize] {
                 Inst::InlineAsm { asm, args } => {
                     late_read_args(asm, args, &mut values);
+                    if target.is_aarch64() {
+                        values.extend(super::super::aarch64::emit::asm_site_bound_values(
+                            func, asm, args, site, fixed,
+                        ));
+                        values.sort_unstable();
+                        values.dedup();
+                    }
                     asm_write_masks(func, asm, args, target, fixed)
                 }
                 _ => (0, 0),
@@ -1716,7 +1723,8 @@ fn late_read_args(asm: &crate::c5::ir::AsmBlock, args: &[u32], values: &mut Vec<
 }
 
 /// One inline-asm site: the registers its lowering writes and the values
-/// live across it.
+/// that must not sit in one -- those live across it and, where its operands
+/// bind directly, the operands themselves.
 struct AsmSite {
     gpr: u32,
     fpr: u32,

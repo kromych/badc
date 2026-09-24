@@ -38,13 +38,9 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x16, #0x64              // =100
-               	str	x16, [sp]
-               	mov	x16, #0x3a              // =58
-               	str	x16, [sp, #0x8]
-               	ldr	x1, [sp]
-               	ldr	x2, [sp, #0x8]
-               	dup	v0.4s, w1
-               	dup	v1.4s, w2
+               	mov	x17, #0x3a              // =58
+               	dup	v0.4s, w16
+               	dup	v1.4s, w17
                	uabd	v0.4s, v0.4s, v1.4s
                	mov	w0, v0.s[0]
                	cmp	w0, #0x2a
@@ -54,9 +50,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x16, #0x7fffffff        // =2147483647
-               	str	x16, [sp]
-               	ldr	x1, [sp]
-               	dup	v0.4s, w1
+               	dup	v0.4s, w16
                	sqadd	v0.4s, v0.4s, v0.4s
                	mov	w0, v0.s[0]
                	mov	x17, #0x7fffffff        // =2147483647

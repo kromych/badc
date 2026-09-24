@@ -2471,6 +2471,58 @@ return v;\n}\n";
     m.finish();
 }
 
+/// The four-lane syndrome of the kernel's lib/raid6/neon.uc in its
+/// statement order: the wrappers' asm operands are their values' registers,
+/// so no memory access goes through sp and the inner loop moves no vector.
+/// Staged through a frame scratch, the kernel's function took 48 bytes.
+#[test]
+fn neon_intrinsic_chain_takes_no_frame() {
+    const SRC: &str = "#include <arm_neon.h>\n\
+void gen4(int disks, unsigned long bytes, unsigned char **dptr) {\n\
+    int z0 = disks - 3;\n\
+    unsigned char *p = dptr[z0 + 1], *q = dptr[z0 + 2];\n\
+    uint8x16_t wd0, wq0, wp0, w10, w20, wd1, wq1, wp1, w11, w21;\n\
+    uint8x16_t wd2, wq2, wp2, w12, w22, wd3, wq3, wp3, w13, w23;\n\
+    const uint8x16_t x1d = vdupq_n_u8(0x1d);\n\
+    for (unsigned long d = 0; d < bytes; d += 64) {\n\
+        wq0 = wp0 = vld1q_u8(&dptr[z0][d + 0 * 16]); wq1 = wp1 = vld1q_u8(&dptr[z0][d + 1 * 16]); wq2 = wp2 = vld1q_u8(&dptr[z0][d + 2 * 16]); wq3 = wp3 = vld1q_u8(&dptr[z0][d + 3 * 16]);\n\
+        for (int z = z0 - 1; z >= 0; z--) {\n\
+            wd0 = vld1q_u8(&dptr[z][d + 0 * 16]); wd1 = vld1q_u8(&dptr[z][d + 1 * 16]); wd2 = vld1q_u8(&dptr[z][d + 2 * 16]); wd3 = vld1q_u8(&dptr[z][d + 3 * 16]);\n\
+            wp0 = veorq_u8(wp0, wd0); wp1 = veorq_u8(wp1, wd1); wp2 = veorq_u8(wp2, wd2); wp3 = veorq_u8(wp3, wd3);\n\
+            w20 = (uint8x16_t)vshrq_n_s8((int8x16_t)wq0, 7); w21 = (uint8x16_t)vshrq_n_s8((int8x16_t)wq1, 7); w22 = (uint8x16_t)vshrq_n_s8((int8x16_t)wq2, 7); w23 = (uint8x16_t)vshrq_n_s8((int8x16_t)wq3, 7);\n\
+            w10 = vshlq_n_u8(wq0, 1); w11 = vshlq_n_u8(wq1, 1); w12 = vshlq_n_u8(wq2, 1); w13 = vshlq_n_u8(wq3, 1);\n\
+            w20 = vandq_u8(w20, x1d); w21 = vandq_u8(w21, x1d); w22 = vandq_u8(w22, x1d); w23 = vandq_u8(w23, x1d);\n\
+            w10 = veorq_u8(w10, w20); w11 = veorq_u8(w11, w21); w12 = veorq_u8(w12, w22); w13 = veorq_u8(w13, w23);\n\
+            wq0 = veorq_u8(w10, wd0); wq1 = veorq_u8(w11, wd1); wq2 = veorq_u8(w12, wd2); wq3 = veorq_u8(w13, wd3);\n\
+        }\n\
+        vst1q_u8(&p[d + 0 * 16], wp0); vst1q_u8(&p[d + 1 * 16], wp1); vst1q_u8(&p[d + 2 * 16], wp2); vst1q_u8(&p[d + 3 * 16], wp3);\n\
+        vst1q_u8(&q[d + 0 * 16], wq0); vst1q_u8(&q[d + 1 * 16], wq1); vst1q_u8(&q[d + 2 * 16], wq2); vst1q_u8(&q[d + 3 * 16], wq3);\n\
+    }\n\
+}\n";
+    let mut m = Misses::default();
+    let ws = a64(SRC, "gen4");
+    // A load or store whose base register is sp.
+    let sp_access = |w: u32| w & 0x0A00_0000 == 0x0800_0000 && (w >> 5) & 31 == 31;
+    m.expect(!ws.iter().any(|&w| sp_access(w)), || {
+        format!("aarch64 gen4: the frame is used: {ws:08x?}")
+    });
+    // `orr vD.16b, vN.16b, vN.16b`: a vector move.
+    let vmov = |w: u32| w & 0xFFE0_FC00 == 0x4EA0_1C00 && (w >> 16) & 31 == (w >> 5) & 31;
+    let inner = ws
+        .iter()
+        .enumerate()
+        .filter_map(|(i, &w)| match a64_branch(w, i) {
+            Some((t, _)) if t >= 0 && t as usize <= i => Some(t as usize..=i),
+            _ => None,
+        })
+        .min_by_key(|r| r.end() - r.start());
+    m.expect(
+        inner.is_some_and(|r| !ws[r].iter().any(|&w| vmov(w))),
+        || format!("aarch64 gen4: the inner loop moves vectors: {ws:08x?}"),
+    );
+    m.finish();
+}
+
 /// A constant read past a call by a contracted multiply-add, by a return
 /// and by a phi income through a split edge is set again after the call:
 /// no callee-saved register holds one, `ret` and `flag` save none, and

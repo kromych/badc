@@ -192,7 +192,9 @@ pub(super) fn asm_stmt_bytes(
     asm: &super::super::ir::AsmBlock,
     args: &[u32],
 ) -> Option<u32> {
-    if crate::c5::asm::asm_statement_is_noop(asm, crate::c5::asm::AsmComments::A64) {
+    if crate::c5::asm::asm_statement_is_noop(asm, crate::c5::asm::AsmComments::A64)
+        || asm_binds_directly(func, asm, args, fixed)
+    {
         return None;
     }
     let op_reg = asm_operand_regs(func, asm, args, fixed).ok()?;
@@ -326,10 +328,10 @@ pub(super) fn asm_save_masks(
 }
 
 /// The GP / SIMD registers one inline-asm site's lowering writes: the
-/// clobber list and the operand registers. A value live across the site
-/// must not sit in one. `(0, 0)` when the statement emits nothing or its
-/// operands do not assign, where the site writes nothing the allocator
-/// can see.
+/// clobber list and the operand registers, or the clobber list alone when
+/// the operands bind directly. A value live across the site must not sit
+/// in one. `(0, 0)` when the statement emits nothing or its operands do
+/// not assign, where the site writes nothing the allocator can see.
 pub(crate) fn asm_site_write_masks(
     func: &FunctionSsa,
     asm: &super::super::ir::AsmBlock,
@@ -339,10 +341,119 @@ pub(crate) fn asm_site_write_masks(
     if crate::c5::asm::asm_statement_is_noop(asm, crate::c5::asm::AsmComments::A64) {
         return (0, 0);
     }
+    if asm_binds_directly(func, asm, args, fixed) {
+        let gpr = asm.clobber_regs & 0x7FFF_FFFF & !0x0003_0000;
+        return (gpr & !fixed.gpr, asm.clobber_fp_regs & !fixed.fpr);
+    }
     let Ok(op_reg) = asm_operand_regs(func, asm, args, fixed) else {
         return (0, 0);
     };
     asm_save_masks(asm, &op_reg, fixed, (u32::MAX, u32::MAX)).unwrap_or((0, 0))
+}
+
+/// Whether a statement's register operands bind to the registers their
+/// values are given, as an instruction's do: each is an input value or the
+/// value output, none tied, read-write or early-clobbered, the clobbers
+/// spare the frame's registers, and scratch outside them can reload every
+/// input. Such a statement stages nothing and writes only its clobbers.
+pub(crate) fn asm_binds_directly(
+    func: &FunctionSsa,
+    asm: &super::super::ir::AsmBlock,
+    args: &[u32],
+    fixed: super::FixedRegs,
+) -> bool {
+    use super::super::ir::AsmConstraint as C;
+    // x18, x19, x29, x30 and sp: saved around the template when named.
+    const RESERVED: u32 = (1 << 18) | (1 << 19) | (1 << 29) | (1 << 30) | (1 << 31);
+    if func.is_naked || func.has_sp_asm() || asm.references_sp() || asm.clobber_regs & RESERVED != 0
+    {
+        return false;
+    }
+    let gp_free = [16u32, 17]
+        .iter()
+        .filter(|&&r| asm.clobber_regs & (1 << r) == 0)
+        .count();
+    let banks = super::super::ssa::reg_alloc::RegBanks::new(
+        crate::c5::codegen::Target::LinuxAarch64,
+        fixed,
+    );
+    let fp_free = banks
+        .fp_scratch
+        .iter()
+        .filter(|&&r| {
+            r != super::super::ssa::reg_alloc::NO_FP_SCRATCH && asm.clobber_fp_regs & (1 << r) == 0
+        })
+        .count();
+    let (mut gp_in, mut fp_in) = (0usize, 0usize);
+    let mut out_fp: Option<bool> = None;
+    for (i, op) in asm.operands.iter().enumerate() {
+        let arg = args.get(i).copied();
+        if op.is_output {
+            if !op.value || op.is_rw || op.early_clobber {
+                return false;
+            }
+            out_fp = Some(match op.constraint {
+                C::Reg if op.width <= 8 => false,
+                C::Fp if op.width == 16 => true,
+                _ => return false,
+            });
+            continue;
+        }
+        match op.constraint {
+            C::Imm => {}
+            C::RegOrImm { reg: None, imm }
+                if arg
+                    .and_then(|a| crate::c5::asm::asm_operand_const(func, a))
+                    .is_some_and(|v| crate::Compiler::aarch64_imm_alternative_accepts(imm, v)) => {}
+            C::Reg | C::RegOrImm { reg: None, .. } => {
+                gp_in += 1;
+                // A link-time address with an offset forms through a second scratch.
+                if op.static_arg
+                    && let Some(crate::c5::asm::StaticOperand::Addr { off, .. }) =
+                        arg.and_then(|a| crate::c5::asm::asm_operand_static(func, a))
+                    && off != 0
+                {
+                    gp_in += 1;
+                }
+            }
+            C::Fp if !op.static_arg && (op.width == 8 || (op.width == 16 && op.value)) => {
+                fp_in += 1
+            }
+            _ => return false,
+        }
+    }
+    let out_ok = match out_fp {
+        Some(true) => fp_free > 0,
+        Some(false) => gp_free > 0,
+        None => true,
+    };
+    gp_in <= gp_free && fp_in <= fp_free && out_ok
+}
+
+/// The values a directly bound statement reads or defines in their own
+/// registers, which its clobbers must spare.
+pub(crate) fn asm_site_bound_values(
+    func: &FunctionSsa,
+    asm: &super::super::ir::AsmBlock,
+    args: &[u32],
+    site: u32,
+    fixed: super::FixedRegs,
+) -> alloc::vec::Vec<u32> {
+    use super::super::ir::AsmConstraint as C;
+    if crate::c5::asm::asm_statement_is_noop(asm, crate::c5::asm::AsmComments::A64)
+        || !asm_binds_directly(func, asm, args, fixed)
+    {
+        return alloc::vec::Vec::new();
+    }
+    let mut out = alloc::vec::Vec::new();
+    for (op, &a) in asm.operands.iter().zip(args) {
+        if op.is_output {
+            out.push(site);
+        } else if !op.static_arg && !matches!(op.constraint, C::Imm) {
+            out.push(a);
+        }
+    }
+    out
 }
 
 /// The Windows-on-ARM64 integer register save area: x0..x7 at an 8-byte

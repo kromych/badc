@@ -25,28 +25,15 @@ Disassembly of section .text:
                	ldp	x16, x17, [x1, #0x10]
                	stp	x16, x17, [x0, #0x10]
                	sub	x16, x29, #0x28
-               	str	x16, [sp]
-               	ldr	x1, [sp]
-               	ldr	x0, [x1]
-               	mov	x2, x0
+               	ldr	x0, [x16]
                	sub	x16, x29, #0x28
-               	str	x16, [sp]
-               	ldr	x1, [sp]
-               	ldr	x0, [x1, #0x8]
-               	add	x2, x2, x0
+               	ldr	x1, [x16, #0x8]
+               	add	x0, x0, x1
                	sub	x16, x29, #0x28
-               	str	x16, [sp]
-               	str	x2, [sp, #0x8]
-               	ldr	x0, [sp]
-               	ldr	x1, [sp, #0x8]
-               	str	x1, [x0]
+               	str	x0, [x16]
                	stur	xzr, [x29, #-0x8]
                	sub	x16, x29, #0x8
-               	str	x16, [sp]
-               	str	x2, [sp, #0x8]
-               	ldr	x0, [sp]
-               	ldr	x1, [sp, #0x8]
-               	stlr	x1, [x0]
+               	stlr	x0, [x16]
                	sub	x16, x29, #0x8
                	str	x16, [sp]
                	ldr	x1, [sp]
@@ -58,25 +45,17 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x16, x29, #0x28
-               	str	x16, [sp]
-               	ldr	x1, [sp]
-               	ldur	x0, [x1, #0x10]
-               	mov	x2, x0
+               	ldur	x0, [x16, #0x10]
                	sub	x16, x29, #0x28
-               	str	x16, [sp]
-               	ldr	x1, [sp]
-               	ldtr	x0, [x1, #0x8]
-               	mov	x3, x0
+               	ldtr	x1, [x16, #0x8]
                	sub	x16, x29, #0x28
-               	str	x16, [sp]
-               	ldr	x1, [sp]
-               	ldtrsb	w0, [x1, #0x18]
-               	cmp	x2, #0x100
+               	ldtrsb	w2, [x16, #0x18]
+               	cmp	x0, #0x100
                	b.ne	<addr>
-               	cmp	x3, #0x2
+               	cmp	x1, #0x2
                	b.ne	<addr>
                	mov	x17, #-0x7              // =-7
-               	cmp	w0, w17
+               	cmp	w2, w17
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x40

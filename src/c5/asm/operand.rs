@@ -719,6 +719,7 @@ mod tests {
                     static_arg: false,
                     value: false,
                     volatile_object: false,
+                    early_clobber: false,
                 }],
                 clobber_regs: 0,
                 clobber_fp_regs: 0,
@@ -928,6 +929,7 @@ mod tests {
                     static_arg: false,
                     value: false,
                     volatile_object: false,
+                    early_clobber: false,
                 })
                 .collect()
         };

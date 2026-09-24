@@ -20,9 +20,7 @@ Disassembly of section .text:
                	mov	x0, #0x2a               // =42
                	stur	w0, [x29, #-0x10]
                	sub	x16, x29, #0x10
-               	str	x16, [sp]
-               	ldr	x1, [sp]
-               	ld1r	{ v0.4s }, [x1]
+               	ld1r	{ v0.4s }, [x16]
                	mov	w0, v0.s[3]
                	cmp	w0, #0x2a
                	b.eq	<addr>

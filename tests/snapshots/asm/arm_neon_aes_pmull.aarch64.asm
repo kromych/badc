@@ -475,9 +475,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x16, #0x0               // =0
-               	str	x16, [sp, #0x40]
-               	ldr	x0, [sp, #0x40]
-               	dup	v0.16b, w0
+               	dup	v0.16b, w16
                	sub	x7, x29, #0x70
                	str	q0, [x7]
                	sub	x0, x29, #0x80
@@ -510,9 +508,7 @@ Disassembly of section .text:
                	ldr	x16, [sp, #0x40]
                	ldr	q1, [x16]
                	aesmc	v0.16b, v1.16b
-               	str	q0, [sp, #0x40]
-               	ldr	q1, [sp, #0x40]
-               	aesimc	v0.16b, v1.16b
+               	aesimc	v0.16b, v0.16b
                	stur	q0, [x29, #-0x60]
                	sub	x0, x29, #0x60
                	sub	x1, x29, #0x80

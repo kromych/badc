@@ -19,16 +19,10 @@ Disassembly of section .text:
                	sub	sp, sp, #0x20
                	stur	xzr, [x29, #-0x10]
                	sub	x16, x29, #0x10
-               	str	x16, [sp]
-               	mov	x16, #0x5               // =5
-               	str	x16, [sp, #0x8]
-               	ldr	x0, [sp]
-               	ldr	x1, [sp, #0x8]
-               	str	x1, [x0]
+               	mov	x17, #0x5               // =5
+               	str	x17, [x16]
                	mov	x16, #0xa               // =10
-               	str	x16, [sp]
-               	ldr	x1, [sp]
-               	add	x0, x1, #0x7
+               	add	x0, x16, #0x7
                	cmp	x0, #0x11
                	b.eq	<addr>
                	mov	x0, #0x1                // =1

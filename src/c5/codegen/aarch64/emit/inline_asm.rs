@@ -861,8 +861,7 @@ impl AsmRegion {
         emit_spill_str_d_auto(code, self.frame, dt, off);
     }
 
-    /// A static operand formed in x16: a constant, a frame address, or a
-    /// link-time address plus its offset, carried in x17.
+    /// A static operand formed in x16, an address's offset carried in x17.
     fn remat_static(
         &self,
         out: &mut AsmSink,
@@ -870,57 +869,8 @@ impl AsmRegion {
         syms: &AsmSymbols,
         a: u32,
     ) -> Result<Reg, alloc::string::String> {
-        use crate::c5::asm::StaticOperand;
-        let rd = Reg(16);
-        let code = &mut *out.code;
-        match crate::c5::asm::asm_operand_static(ops.func, a) {
-            Some(StaticOperand::Const(c)) => load_imm64(code, rd, c as u64),
-            Some(StaticOperand::Frame(off)) => {
-                super::mem::emit_local_addr(code, Place::IntReg(16), off, ops.func, self.frame)
-                    .map_err(|e| alloc::string::String::from(e.reason()))?
-            }
-            Some(StaticOperand::Addr { base, off }) => {
-                let instr_offset = code.len();
-                match ops.func.insts.get(base as usize) {
-                    Some(Inst::ImmData(data_offset)) => {
-                        super::inst::emit_adrp_add(code, rd);
-                        match syms.extern_data_names.get(&base) {
-                            Some(name) => {
-                                out.user_extern_data_refs.push(super::UserExternDataRef {
-                                    instr_offset,
-                                    symbol_name: name.clone(),
-                                    direct_pcrel: None,
-                                })
-                            }
-                            None => out.data_fixups.push(DataFixup {
-                                instr_offset,
-                                data_offset: *data_offset as u64,
-                                part: AddrPart::Whole,
-                            }),
-                        }
-                    }
-                    Some(Inst::ImmCode(pc)) => {
-                        super::inst::emit_adrp_add(code, rd);
-                        out.pending_func_fixups.push((instr_offset, *pc));
-                    }
-                    _ => {
-                        return Err(alloc::string::String::from(
-                            "aarch64 inline asm: static operand names no address",
-                        ));
-                    }
-                }
-                if off != 0 {
-                    load_imm64(code, Reg(17), off as u64);
-                    emit(code, super::encode::enc_add_reg(rd, rd, Reg(17)));
-                }
-            }
-            None => {
-                return Err(alloc::string::String::from(
-                    "aarch64 inline asm: static operand without a value",
-                ));
-            }
-        }
-        Ok(rd)
+        form_static(out, ops.func, syms, self.frame, a, Reg(16), Reg(17))?;
+        Ok(Reg(16))
     }
 
     fn ldr_q(&self, code: &mut Vec<u8>, qt: u8, off: u32) {
@@ -1115,6 +1065,240 @@ impl AsmRegion {
         self.emit_restore(code);
         Ok(())
     }
+}
+
+impl AsmRegion {
+    /// A directly bound statement's: nothing to capture, save or restore.
+    fn bound(frame: Frame, n: usize) -> Self {
+        AsmRegion {
+            frame,
+            save_list: Vec::new(),
+            fp_save_list: Vec::new(),
+            needs_cap: alloc::vec![false; n],
+            cap_slot: alloc::vec![0; n],
+            n_cap: 0,
+            size: 0,
+            region_base: 0,
+        }
+    }
+}
+
+/// Static operand `a` formed in `rd`: a constant, a frame address, or a
+/// link-time address, whose offset is carried in `temp`.
+fn form_static(
+    out: &mut AsmSink,
+    func: &FunctionSsa,
+    syms: &AsmSymbols,
+    frame: Frame,
+    a: u32,
+    rd: Reg,
+    temp: Reg,
+) -> Result<(), alloc::string::String> {
+    use crate::c5::asm::StaticOperand;
+    let code = &mut *out.code;
+    match crate::c5::asm::asm_operand_static(func, a) {
+        Some(StaticOperand::Const(c)) => load_imm64(code, rd, c as u64),
+        Some(StaticOperand::Frame(off)) => {
+            super::mem::emit_local_addr(code, Place::IntReg(rd.0), off, func, frame)
+                .map_err(|e| alloc::string::String::from(e.reason()))?
+        }
+        Some(StaticOperand::Addr { base, off }) => {
+            let instr_offset = code.len();
+            match func.insts.get(base as usize) {
+                Some(Inst::ImmData(data_offset)) => {
+                    super::inst::emit_adrp_add(code, rd);
+                    match syms.extern_data_names.get(&base) {
+                        Some(name) => out.user_extern_data_refs.push(super::UserExternDataRef {
+                            instr_offset,
+                            symbol_name: name.clone(),
+                            direct_pcrel: None,
+                        }),
+                        None => out.data_fixups.push(DataFixup {
+                            instr_offset,
+                            data_offset: *data_offset as u64,
+                            part: AddrPart::Whole,
+                        }),
+                    }
+                }
+                Some(Inst::ImmCode(pc)) => {
+                    super::inst::emit_adrp_add(code, rd);
+                    out.pending_func_fixups.push((instr_offset, *pc));
+                }
+                _ => {
+                    return Err(alloc::string::String::from(
+                        "aarch64 inline asm: static operand names no address",
+                    ));
+                }
+            }
+            if off != 0 {
+                if temp == rd {
+                    return Err(alloc::string::String::from(
+                        "aarch64 inline asm: no scratch register for a static operand's offset",
+                    ));
+                }
+                load_imm64(code, temp, off as u64);
+                emit(code, super::encode::enc_add_reg(rd, rd, temp));
+            }
+        }
+        None => {
+            return Err(alloc::string::String::from(
+                "aarch64 inline asm: static operand without a value",
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// How a bound input without a register reaches its scratch.
+enum BoundLoad {
+    Vector(Place, u8),
+    Double(Place, u8),
+    Int(Place, u8),
+    Const(i64, u8),
+    Static(u32, u8, u8),
+}
+
+/// A directly bound statement's operand registers, its scratch loads, and
+/// whether the exit stores the value output from a scratch.
+struct BoundOperands {
+    op_reg: Vec<Option<u8>>,
+    loads: Vec<BoundLoad>,
+    out_scratch: bool,
+}
+
+/// Bind each input to the register its value occupies, or to a scratch;
+/// the value output to its own register, or to a scratch it may share with
+/// an input, which a template reads before it writes a non-`&` output. The
+/// SIMD inputs load first: a q / d reload may form its address in x16.
+fn bind_operands(
+    asm: &super::super::ir::AsmBlock,
+    args: &[u32],
+    func: &FunctionSsa,
+    alloc: &Allocation,
+    frame: Frame,
+    out_place: Place,
+) -> Result<BoundOperands, alloc::string::String> {
+    use super::super::ir::AsmConstraint as C;
+    let short =
+        || alloc::string::String::from("aarch64 inline asm: no scratch register for an operand");
+    let mut gp: Vec<u8> = [16u8, 17]
+        .into_iter()
+        .filter(|&r| asm.clobber_regs & (1 << r) == 0)
+        .collect();
+    let mut fp: Vec<u8> = frame
+        .fp_scratch
+        .iter()
+        .copied()
+        .filter(|&r| r != super::super::ssa::reg_alloc::NO_FP_SCRATCH)
+        .filter(|&r| asm.clobber_fp_regs & (1 << r) == 0)
+        .collect();
+    let (gp_any, fp_any) = (gp.first().copied(), fp.first().copied());
+    let take = |pool: &mut Vec<u8>| (!pool.is_empty()).then(|| pool.remove(0)).ok_or_else(short);
+    let takes_imm = |op: &super::super::ir::AsmOperand, a: u32| match op.constraint {
+        C::Imm => true,
+        C::RegOrImm { reg: None, imm } => crate::c5::asm::asm_operand_const(func, a)
+            .is_some_and(|v| crate::Compiler::aarch64_imm_alternative_accepts(imm, v)),
+        _ => false,
+    };
+    let mut op_reg: Vec<Option<u8>> = alloc::vec![None; asm.operands.len()];
+    let mut loads: Vec<BoundLoad> = Vec::new();
+    let inputs = || {
+        asm.operands
+            .iter()
+            .zip(args)
+            .enumerate()
+            .filter(|(_, (op, a))| !op.is_output && !takes_imm(op, **a))
+    };
+    for (i, (op, &a)) in inputs().filter(|(_, (op, _))| matches!(op.constraint, C::Fp)) {
+        let place = place_of(alloc, a);
+        op_reg[i] = Some(match place {
+            Place::FpReg(r) => r,
+            _ => {
+                let s = take(&mut fp)?;
+                loads.push(if op.width == 16 {
+                    BoundLoad::Vector(place, s)
+                } else {
+                    BoundLoad::Double(place, s)
+                });
+                s
+            }
+        });
+    }
+    let gp_inputs = || inputs().filter(|(_, (op, _))| !matches!(op.constraint, C::Fp));
+    for (i, (_, &a)) in gp_inputs().filter(|(_, (op, _))| op.static_arg) {
+        let rd = take(&mut gp)?;
+        loads.push(BoundLoad::Static(a, rd, gp.first().copied().unwrap_or(rd)));
+        op_reg[i] = Some(rd);
+    }
+    for (i, (_, &a)) in gp_inputs().filter(|(_, (op, _))| !op.static_arg) {
+        let place = place_of(alloc, a);
+        op_reg[i] = Some(match place {
+            Place::IntReg(r) => r,
+            Place::Spill(_) => {
+                let s = take(&mut gp)?;
+                loads.push(BoundLoad::Int(place, s));
+                s
+            }
+            _ => {
+                let c = crate::c5::asm::asm_operand_const(func, a).ok_or_else(|| {
+                    alloc::string::String::from("aarch64 inline asm: operand without a value")
+                })?;
+                let s = take(&mut gp)?;
+                loads.push(BoundLoad::Const(c, s));
+                s
+            }
+        });
+    }
+    let mut out_scratch = false;
+    if let Some(i) = asm.operands.iter().position(|o| o.is_output) {
+        let simd = matches!(asm.operands[i].constraint, C::Fp);
+        op_reg[i] = Some(match (simd, out_place) {
+            (true, Place::FpReg(r)) | (false, Place::IntReg(r)) => r,
+            (true, _) => {
+                out_scratch = true;
+                fp.first().copied().or(fp_any).ok_or_else(short)?
+            }
+            (false, _) => {
+                out_scratch = true;
+                gp.first().copied().or(gp_any).ok_or_else(short)?
+            }
+        });
+    }
+    Ok(BoundOperands {
+        op_reg,
+        loads,
+        out_scratch,
+    })
+}
+
+/// Emit the loads of [`bind_operands`], in their order.
+fn emit_bound_loads(
+    out: &mut AsmSink,
+    loads: &[BoundLoad],
+    func: &FunctionSsa,
+    frame: Frame,
+    syms: &AsmSymbols,
+) -> Result<(), alloc::string::String> {
+    let lost =
+        || alloc::string::String::from("aarch64 inline asm: operand not in a loadable place");
+    for load in loads {
+        match *load {
+            BoundLoad::Vector(place, s) => {
+                materialize_v128(out.code, place, s, frame, Reg(16)).ok_or_else(lost)?;
+            }
+            BoundLoad::Double(place, s) => {
+                materialize_fp(out.code, place, s, frame).ok_or_else(lost)?;
+            }
+            BoundLoad::Int(place, s) => {
+                materialize_int(out.code, place, Reg(s), frame).ok_or_else(lost)?;
+            }
+            BoundLoad::Const(c, s) => load_imm64(out.code, Reg(s), c as u64),
+            BoundLoad::Static(a, rd, temp) => {
+                form_static(out, func, syms, frame, a, Reg(rd), Reg(temp))?
+            }
+        }
+    }
+    Ok(())
 }
 
 /// The template text after the passes that run before the arch parser
@@ -1992,13 +2176,20 @@ fn lower_inline_asm(
 ) -> Result<Option<super::super::map_syms::MapClass>, alloc::string::String> {
     use super::asm::parse_template;
     let text = template_text(asm)?;
+    let out_place = place_of(alloc, site);
+    let bound = super::frame::asm_binds_directly(func, asm, args, frame.fixed_regs)
+        .then(|| bind_operands(asm, args, func, alloc, frame, out_place))
+        .transpose()?;
     // The GNU-as macro pass substitutes each reference with its register.
     let ops = AsmOperands {
         asm,
         args,
         func,
-        op_reg: super::frame::asm_operand_regs(func, asm, args, frame.fixed_regs)?,
-        out_place: place_of(alloc, site),
+        op_reg: match &bound {
+            Some(b) => b.op_reg.clone(),
+            None => super::frame::asm_operand_regs(func, asm, args, frame.fixed_regs)?,
+        },
+        out_place,
     };
     let gas = crate::c5::asm::expand_asm_gas_macros(&text, 4, &|tok| ops.gas_subst(tok))?;
     let text = gas.as_deref().unwrap_or(&text);
@@ -2016,19 +2207,27 @@ fn lower_inline_asm(
     // object writer applies them, where every definition is known.
     out.asm_sections.push_sym_decls(&sym_items)?;
     let insns = parse_template(code_text.as_bytes())?;
-    let region = AsmRegion::layout(
-        &ops,
-        frame,
-        alloc.asm_preserve,
-        super::frame::asm_region_offset(func, alloc, frame.fixed_regs, site as usize),
-    )?;
-    // An empty region means no entry or exit work.
+    let region = match &bound {
+        Some(_) => AsmRegion::bound(frame, asm.operands.len()),
+        None => AsmRegion::layout(
+            &ops,
+            frame,
+            alloc.asm_preserve,
+            super::frame::asm_region_offset(func, alloc, frame.fixed_regs, site as usize),
+        )?,
+    };
+    // An empty region means no entry or exit work but a bound operand's.
     let mut stream = TemplateStream::new(code_text, map_state);
-    if region.size > 0 {
+    if region.size > 0 || bound.as_ref().is_some_and(|b| !b.loads.is_empty()) {
         a64_align_asm_stream(out.code, out.text_data_ranges, &mut stream.map_state);
     }
-    region.emit_saves_and_captures(out, &ops, alloc, &syms)?;
-    region.emit_input_loads(out.code, &ops)?;
+    match &bound {
+        Some(b) => emit_bound_loads(out, &b.loads, func, frame, &syms)?,
+        None => {
+            region.emit_saves_and_captures(out, &ops, alloc, &syms)?;
+            region.emit_input_loads(out.code, &ops)?;
+        }
+    }
     // `%lK` indices the section items reference; with exit work their
     // relocs are rewritten to the trampoline a template branch takes.
     let goto_row: Option<&[super::super::ir::BlockId]> = goto_ctx.as_ref().map(|c| c.row);
@@ -2088,7 +2287,7 @@ fn lower_inline_asm(
     }
     // The fall-through exit: outputs are stored on every exit path (GCC 11
     // output semantics), so the sequence repeats on each goto trampoline.
-    if region.size > 0 {
+    if region.size > 0 || bound.as_ref().is_some_and(|b| b.out_scratch) {
         a64_align_asm_stream(out.code, out.text_data_ranges, &mut stream.map_state);
     }
     let exit_start = out.code.len();

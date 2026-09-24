@@ -101,6 +101,7 @@ fn sp_block(template: &str) -> crate::c5::ir::AsmBlock {
             static_arg: false,
             value: false,
             volatile_object: false,
+            early_clobber: false,
         })
         .collect(),
         clobber_regs: 0,

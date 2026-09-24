@@ -1543,6 +1543,15 @@ impl Compiler {
                 }
             }
         }
+        // A member reached through an address, `(&s)->m`, is read from
+        // storage. After any other value the token is the caller's.
+        if v.addr().is_some() && (self.lex.tk == Token::Arrow || self.lex.tk == Token::Dot) {
+            self.pending.const_expr_nonconst = true;
+            return Err(self.compile_err(
+                Code::CONSTANT_EXPRESSION,
+                "a member read through an address is not a constant expression",
+            ));
+        }
         Ok(v)
     }
 

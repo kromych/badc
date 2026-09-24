@@ -3026,6 +3026,26 @@ fn addresses_in_distinct_objects_have_no_constant_difference() {
 }
 
 #[test]
+fn a_member_read_through_an_address_is_not_a_constant() {
+    // `(&g)->p` reads `g.p` from storage (C99 6.5.2.3): no constant for a
+    // static initializer, which named the `->` a syntax error, and an
+    // ordinary read in an automatic one.
+    for init in ["void *x = (&g)->p;", "long x = ((struct S *)&g)->b;"] {
+        expect_compile_error(
+            &format!(
+                "struct S {{ int a; long b; void *p; }} g;\n{init}\nint main(void) {{ return 0; }}"
+            ),
+            "a member read through an address is not a constant expression",
+        );
+    }
+    let src = "struct S { int a; long b; void *p; } g = { 1, 2, &g };\n\
+               int main(void) { void *y = (&g)->p; long z = ((struct S *)&g)->b; \
+               return y == &g && z == 2 ? 0 : 1; }\n";
+    let program = Compiler::new(src.to_string()).compile().expect(src);
+    assert_eq!(super::Vm::new(program).run().unwrap(), 0, "{src}");
+}
+
+#[test]
 fn sizeof_of_an_incomplete_array_type_name_is_rejected() {
     // C99 6.5.3.4p1: `sizeof` does not apply to an incomplete type. An
     // array type name with an unspecified bound is one, written out or

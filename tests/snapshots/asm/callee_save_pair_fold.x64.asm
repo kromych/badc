@@ -26,22 +26,20 @@ Disassembly of section .text:
                	int3
 
 <sink>:
+               	testl	%edi, %edi
+               	jle	<addr>
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x8, %rsp
                	pushq	%rbx
                	movslq	%edi, %rbx
-               	testl	%ebx, %ebx
-               	jg	<addr>
-               	movl	$0x1, %eax
-               	popq	%rbx
-               	leave
-               	retq
                	leaq	-0x1(%rbx), %rdi
                	callq	<addr>
                	addq	%rbx, %rax
                	popq	%rbx
                	leave
+               	retq
+               	movl	$0x1, %eax
                	retq
 
 <quad>:

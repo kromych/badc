@@ -44,6 +44,8 @@ Disassembly of section .text:
                	retq
 
 <unread_in_loop>:
+               	testl	%edx, %edx
+               	jle	<addr>
                	pushq	%rbp
                	movq	%rsp, %rbp
                	pushq	%r14
@@ -54,8 +56,6 @@ Disassembly of section .text:
                	movq	%rdx, %r14
                	xorl	%ebx, %ebx
                	movq	%rbx, %r12
-               	cmpl	%r14d, %ebx
-               	jge	<addr>
                	leaq	(%r13,%rbx), %rdi
                	callq	<addr>
                	addq	%rax, %r12
@@ -68,6 +68,8 @@ Disassembly of section .text:
                	popq	%r13
                	popq	%r14
                	popq	%rbp
+               	retq
+               	movq	%rdi, %rax
                	retq
 
 <six>:
@@ -102,13 +104,13 @@ Disassembly of section .text:
                	retq
 
 <digit_calls>:
+               	testq	%rdi, %rdi
+               	jle	<addr>
                	pushq	%rbp
                	movq	%rsp, %rbp
                	pushq	%r12
                	pushq	%rbx
                	xorl	%ecx, %ecx
-               	testq	%rdi, %rdi
-               	jle	<addr>
                	movabsq	$0x6666666666666667, %rsi # imm = 0x6666666666666667
                	movq	%rdi, %rax
                	imulq	%rsi
@@ -129,6 +131,8 @@ Disassembly of section .text:
                	popq	%rbx
                	popq	%r12
                	popq	%rbp
+               	retq
+               	xorl	%eax, %eax
                	retq
 
 <main>:

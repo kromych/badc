@@ -487,15 +487,24 @@ fn counted_loop_is_entered_through_its_guard() {
 }
 
 /// Under `n >= 2` the decrement `n - 2` stays inside `int`, so only the
-/// parameter's entry extension remains.
+/// parameter's entry extension remains. The early return after the body
+/// extends its own result.
 #[test]
 fn guarded_decrement_is_not_renormalized() {
     let mut m = Misses::default();
     let ws = a64(FIB, "fib");
-    let n = ws.iter().filter(|&&w| a64_is_sxtw(w)).count();
+    let body = ws
+        .iter()
+        .position(|&w| w == 0xD65F_03C0)
+        .map_or(ws.len(), |r| r + 1);
+    let n = ws[..body].iter().filter(|&&w| a64_is_sxtw(w)).count();
     m.expect(n <= 1, || format!("aarch64: {n} sxtw: {ws:08x?}"));
     let insns = x64(FIB, "fib");
-    let n = insns.iter().filter(|i| i.is_movsxd_rr()).count();
+    let body = insns
+        .iter()
+        .position(|i| i.op == 0xC3)
+        .map_or(insns.len(), |r| r + 1);
+    let n = insns[..body].iter().filter(|i| i.is_movsxd_rr()).count();
     m.expect(n <= 1, || format!("x86-64: {n} movslq: {insns:x?}"));
     m.finish();
 }
@@ -1591,9 +1600,10 @@ fn signed_halving_reads_the_sign_bit_once() {
     m.finish();
 }
 
-/// The base case of `fib` reaches its `ret` without building the frame.
+/// The base case of `fib` reaches its `ret` without building the frame: the
+/// test comes ahead of the frame and the return it branches to touches no
+/// memory.
 #[test]
-#[ignore = "TODO: an early return pays the whole prologue and epilogue"]
 fn early_return_precedes_the_frame() {
     let mut m = Misses::default();
     let ws = a64(FIB, "fib");
@@ -1601,6 +1611,16 @@ fn early_return_precedes_the_frame() {
         .iter()
         .enumerate()
         .position(|(i, &w)| matches!(a64_branch(w, i), Some((_, false))));
+    let bare = guard.and_then(|g| {
+        let (t, _) = a64_branch(ws[g], g)?;
+        let t = usize::try_from(t).ok()?;
+        let r = t + ws.get(t..)?.iter().position(|&w| w == 0xD65F_03C0)?;
+        // Loads and stores have op0 bits 27 and 25 as 1 and 0.
+        Some(!ws[t..r].iter().any(|&w| (w >> 25) & 0b101 == 0b100))
+    });
+    m.expect(bare == Some(true), || {
+        format!("aarch64: the test's target is no bare return: {ws:08x?}")
+    });
     // A pre-indexed store or pair through sp, or `sub sp, sp, #imm`.
     let moves_sp = |w: u32| {
         let rn_sp = (w >> 5) & 31 == 31;
@@ -1614,6 +1634,17 @@ fn early_return_precedes_the_frame() {
     });
     let insns = x64(FIB, "fib");
     let guard = insns.iter().position(X64Insn::is_jcc);
+    let bare =
+        guard.and_then(|g| {
+            let t = insns.iter().position(|i| i.at == insns[g].target())?;
+            let r = t + insns[t..].iter().position(|i| i.op == 0xC3)?;
+            Some(!insns[t..r].iter().any(|i| {
+                matches!(i.op, 0x50..=0x5F | 0xC9) || i.modrm.is_some_and(|m| m >> 6 != 3)
+            }))
+        });
+    m.expect(bare == Some(true), || {
+        format!("x86-64: the test's target is no bare return: {insns:x?}")
+    });
     let frame = insns.iter().position(|i| matches!(i.op, 0x50..=0x57));
     m.expect(guard.is_some_and(|g| frame.is_none_or(|f| g < f)), || {
         format!("x86-64: the frame precedes the guard: {insns:x?}")

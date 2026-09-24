@@ -74,12 +74,14 @@ fn rsp_adjust(i: &X64Insn, modrm: u8) -> Option<u32> {
 
 /// What a framed function's prologue reserves: the bytes of its `sub` steps
 /// and the callee-saved registers it pushes, in push order, with the index
-/// of the first instruction past them.
+/// of the first instruction past them. `early` is the index of the return
+/// the entry's test branches to ahead of the frame.
 #[derive(Debug)]
 struct Frame {
     alloc: u32,
     pushes: Vec<u8>,
     body: usize,
+    early: Option<usize>,
 }
 
 impl Frame {
@@ -88,14 +90,32 @@ impl Frame {
     }
 }
 
-/// `None` for a function that opens with no `push rbp; mov rbp, rsp`.
+/// `None` for a function that builds no `push rbp; mov rbp, rsp` frame at
+/// its entry or past the test of an early return, which ends in a `jcc`.
 fn frame_of(insns: &[X64Insn], target: Target) -> Option<Frame> {
     // `endbr64`, the patchable NOPs, the `-mfentry` call or its NOP.
-    let mut i = insns
+    let entry = insns
         .iter()
         .position(|x| !matches!(x.op, 0x0F1E | 0x0F1F | 0x90 | 0xE8))?;
-    if !(insns[i].op == 0x55 && insns[i].rex == 0) {
-        return None;
+    let push_rbp = |x: &X64Insn| x.op == 0x55 && x.rex == 0;
+    let mut i = entry;
+    let mut early = None;
+    if !push_rbp(&insns[i]) {
+        let test = insns[i..]
+            .iter()
+            .position(|x| x.op == 0xC3 || x.is_jmp() || x.is_jcc())?
+            + i;
+        i = test + 1;
+        if !(insns[test].is_jcc() && insns.get(i).is_some_and(push_rbp)) {
+            return None;
+        }
+        let to = insns[test].target();
+        early = Some(
+            insns
+                .iter()
+                .position(|x| x.at == to)
+                .expect("the early return"),
+        );
     }
     let mov = insns[i + 1];
     assert!(
@@ -129,6 +149,7 @@ fn frame_of(insns: &[X64Insn], target: Target) -> Option<Frame> {
         alloc,
         pushes,
         body: i,
+        early,
     })
 }
 
@@ -194,7 +215,11 @@ fn check_object(obj: &[u8], target: Target, what: &str) -> usize {
             continue;
         };
         saving += usize::from(!frame.pushes.is_empty());
-        let exits = exits(&insns);
+        // An early return leaves without the frame, with nothing to restore.
+        let exits: Vec<usize> = exits(&insns)
+            .into_iter()
+            .filter(|&e| frame.early.is_none_or(|at| e < at))
+            .collect();
         for &e in &exits {
             check_exit(&insns, e, &frame, target, &what);
         }
@@ -248,7 +273,13 @@ fn pushes_alone_make_the_frame() {
     let insns = insns_of(&optimized(FIB, Target::LinuxX64), "fib");
     let frame = frame_of(&insns, Target::LinuxX64).expect("a frame");
     assert_eq!((frame.alloc, frame.pushes.len()), (0, 2), "{insns:x?}");
-    let e = *exits(&insns).last().expect("an exit");
+    let early = frame
+        .early
+        .expect("the base case returns ahead of the frame");
+    let e = *exits(&insns)
+        .iter()
+        .rfind(|&&e| e < early)
+        .expect("an exit");
     assert_eq!(insns[e - 1].op, 0x5D, "{insns:x?}");
     check_exit(&insns, e, &frame, Target::LinuxX64, "fib");
 }
@@ -467,7 +498,7 @@ fn a_spilled_return_value_is_read_ahead_of_the_pops() {
 fn decoded(obj: &[u8], name: &str) -> (crate::c5::codegen::FnUnwind, Vec<u8>) {
     let code = function_bytes(obj, name);
     let n = code.len() as u32;
-    let uw = crate::c5::codegen::decode_x86_64_prologue_unwind(&code, 0, n, n);
+    let uw = crate::c5::codegen::decode_x86_64_prologue_unwind(&code, 0, n, n, 0);
     (uw, code)
 }
 

@@ -104,7 +104,7 @@ const OPCODE_BASE: u8 = 13;
 use crate::c5::codegen::ssa::cfi::{
     DW_CFA_ADVANCE_LOC_HI, DW_CFA_ADVANCE_LOC1, DW_CFA_ADVANCE_LOC2, DW_CFA_ADVANCE_LOC4,
     DW_CFA_DEF_CFA, DW_CFA_DEF_CFA_OFFSET, DW_CFA_DEF_CFA_REGISTER, DW_CFA_NEGATE_RA_STATE,
-    DW_CFA_OFFSET_HI, DW_CFA_UNDEFINED, write_sleb128, write_uleb128,
+    DW_CFA_OFFSET_HI, DW_CFA_RESTORE_HI, DW_CFA_UNDEFINED, write_sleb128, write_uleb128,
 };
 
 const AARCH64_REG_X29: u8 = 29;
@@ -320,6 +320,9 @@ struct Subprog {
     prologue_size: u32,
     frame_rules: FrameRules,
     ra_signed_at: Option<u32>,
+    /// Offset of the return taken ahead of the frame, where the entry's
+    /// rules hold again.
+    early_return: Option<u32>,
     variables: Vec<SubprogVar>,
     /// False for a definition with internal linkage (C99 6.2.2p3), so the
     /// DIE drops `DW_AT_external`.
@@ -369,8 +372,9 @@ fn prologue_size_for(ent_pc: usize, low_pc: usize, build: &Build) -> u32 {
 /// Where the function at `low_pc` signs its return address, read off the
 /// emitted code rather than the option: only the a64 emitter decides which
 /// functions take the pair, and these are the same instruction words it
-/// wrote.
-fn paciasp_offset(build: &Build, low_pc: usize) -> Option<u32> {
+/// wrote. `PACIASP` opens the frame path: past the landing pad and the NOPs,
+/// or at `frame` where the test of an early return precedes it.
+fn paciasp_offset(build: &Build, low_pc: usize, frame: Option<u32>) -> Option<u32> {
     use crate::c5::codegen::aarch64::encode;
     let word = |at: usize| -> Option<u32> {
         build
@@ -380,11 +384,15 @@ fn paciasp_offset(build: &Build, low_pc: usize) -> Option<u32> {
             .map(u32::from_le_bytes)
     };
     let mut at = low_pc;
-    if word(at) == Some(encode::BTI_C) {
-        at += 4;
-    }
-    while word(at) == Some(encode::NOP) {
-        at += 4;
+    if let Some(frame) = frame {
+        at += frame as usize;
+    } else {
+        if word(at) == Some(encode::BTI_C) {
+            at += 4;
+        }
+        while word(at) == Some(encode::NOP) {
+            at += 4;
+        }
     }
     (word(at) == Some(encode::PACIASP)).then(|| (at - low_pc) as u32)
 }
@@ -617,13 +625,15 @@ fn collect_subprograms(
             })
             .collect();
 
+        let early = build.early_returns.iter().find(|e| e.begin as usize == lo);
         out.push(Subprog {
             name_off,
             low_pc: code_vmaddr + lo as u64,
             high_pc: code_vmaddr + hi as u64,
             prologue_size: prologue_size_for(ent_pc, lo, build),
             frame_rules: FrameRules::of(build, lo),
-            ra_signed_at: paciasp_offset(build, lo),
+            ra_signed_at: paciasp_offset(build, lo, early.map(|e| e.frame)),
+            early_return: early.map(|e| e.exit),
             variables,
             external: !internal_pcs.contains(&ent_pc),
         });
@@ -1826,6 +1836,25 @@ fn write_post_prologue_instructions(out: &mut Vec<u8>, arch: CfiArch) {
     }
 }
 
+/// The entry's rules again, where a return taken ahead of the frame follows
+/// the body: the CIE's CFA and register rules, the return address unsigned
+/// where it was `signed`. Not `DW_CFA_restore_state`: gdb 17 keeps the
+/// AArch64 return address signed across a state remembered before any
+/// `DW_CFA_AARCH64_negate_ra_state`.
+fn write_entry_rules(out: &mut Vec<u8>, arch: CfiArch, signed: bool) {
+    write_cie_initial_instructions(out, arch);
+    let saved: &[u8] = match arch {
+        CfiArch::Aarch64 => &[AARCH64_REG_X29, AARCH64_REG_X30],
+        CfiArch::X86_64 => &[X86_64_REG_RBP],
+    };
+    for &reg in saved {
+        out.push(DW_CFA_RESTORE_HI | reg);
+    }
+    if signed {
+        out.push(DW_CFA_NEGATE_RA_STATE);
+    }
+}
+
 /// The rules of an x86_64 frame, one per prologue instruction: past
 /// `push rbp` the CFA is `rsp + 16` with rbp saved at `CFA - 16`; past
 /// `mov rbp, rsp` the CFA is `rbp + 16`. The return address stays at
@@ -1985,16 +2014,21 @@ fn build_debug_frame(
 
     for sub in subs {
         let mut fde_body: Vec<u8> = Vec::new();
-        match sub.frame_rules {
-            FrameRules::Leaf => {}
+        // Where the rules below end, and whether they sign the return address.
+        let (ruled, signed) = match sub.frame_rules {
+            FrameRules::Leaf => (0, false),
             FrameRules::X86Frame {
                 push_rbp_end,
                 set_fpreg_end,
-            } => write_x86_64_frame_rules(&mut fde_body, push_rbp_end, set_fpreg_end),
+            } => {
+                write_x86_64_frame_rules(&mut fde_body, push_rbp_end, set_fpreg_end);
+                (set_fpreg_end, false)
+            }
             FrameRules::PostPrologue => {
                 let sign_end = sub.ra_signed_at.map(|at| at + 4);
+                let signed = sign_end.is_some_and(|end| sub.prologue_size >= end);
                 if let Some(end) = sign_end
-                    && sub.prologue_size >= end
+                    && signed
                 {
                     write_advance_loc(&mut fde_body, arch, end);
                     fde_body.push(DW_CFA_NEGATE_RA_STATE);
@@ -2003,7 +2037,12 @@ fn build_debug_frame(
                     write_advance_loc(&mut fde_body, arch, sub.prologue_size);
                 }
                 write_post_prologue_instructions(&mut fde_body, arch);
+                (sub.prologue_size, signed)
             }
+        };
+        if let Some(exit) = sub.early_return {
+            write_advance_loc(&mut fde_body, arch, exit - ruled);
+            write_entry_rules(&mut fde_body, arch, signed);
         }
 
         let mut fde = Vec::with_capacity(24 + fde_body.len());
@@ -2238,6 +2277,11 @@ pub(super) fn write_line_rows(
     func_starts.sort_unstable();
     func_starts.dedup();
     let mut func_start_iter = func_starts.iter().copied().peekable();
+    // `prologue_end` goes on a function's first row at or past its
+    // post-prologue anchor; a test ahead of the frame has rows before it.
+    let mut anchors: Vec<usize> = build.func_prologue_native.values().copied().collect();
+    anchors.sort_unstable();
+    let mut anchor_iter = anchors.into_iter().peekable();
     let mut prologue_end_pending = false;
     for &(native, line, file_idx) in &build.ssa_line_rows {
         if line == 0 {
@@ -2252,6 +2296,10 @@ pub(super) fn write_line_rows(
             }
             state.emit_row(buf, entry_addr, line as i64, file, false);
             func_start_iter.next();
+            while anchor_iter.next_if(|&at| at < fn_start).is_some() {}
+            prologue_end_pending = false;
+        }
+        while anchor_iter.next_if(|&at| at <= native).is_some() {
             prologue_end_pending = true;
         }
         state.emit_row(buf, target_addr, line as i64, file, prologue_end_pending);
@@ -2554,6 +2602,7 @@ mod tests {
             prologue_size: 12,
             frame_rules,
             ra_signed_at: None,
+            early_return: None,
             variables: Vec::new(),
             external: true,
         };
@@ -2610,6 +2659,7 @@ mod tests {
             prologue_size: 12,
             frame_rules: FrameRules::PostPrologue,
             ra_signed_at,
+            early_return: None,
             variables: Vec::new(),
             external: true,
         };
@@ -2644,6 +2694,85 @@ mod tests {
             &[DW_CFA_ADVANCE_LOC_HI | 3, DW_CFA_NEGATE_RA_STATE]
         );
         assert_eq!(&displaced[2..], &plain[1..], "same rules follow");
+    }
+
+    /// The frame path signs x30 at the `PACIASP` past the entry's test, where
+    /// the FDE flips the return-address state; the early return after the
+    /// body states the entry's rules again, the return address unsigned.
+    #[test]
+    fn debug_frame_signs_the_frame_path_past_an_early_return() {
+        use crate::c5::codegen::aarch64::encode;
+        let src = "long fib(int n) { if (n < 2) return n; return fib(n - 1) + fib(n - 2); }\n\
+                   int main(int argc, char **argv) { (void)argv; return (int)fib(argc); }\n";
+        let program = crate::Compiler::new(crate::c5::tests::with_prelude(src))
+            .compile()
+            .expect("compile");
+        let options = crate::NativeOptions {
+            optimize: true,
+            debug_info: true,
+            hardening: crate::Hardening {
+                bti: true,
+                pac_ret: true,
+                ..crate::Hardening::NONE
+            },
+            ..Default::default()
+        };
+        let build =
+            crate::c5::codegen::lower_for(&program, Target::LinuxAarch64, options).expect("lower");
+        let word = |at: usize| u32::from_le_bytes(build.text[at..at + 4].try_into().unwrap());
+        let subs = collect_subprograms(&program, &build, 0, &mut StrTable::new());
+        let fib = subs
+            .iter()
+            .find(|s| s.early_return.is_some())
+            .expect("fib returns ahead of its frame");
+        let lo = fib.low_pc as usize;
+        let early = build.early_returns[0];
+        assert_eq!(early.begin as usize, lo);
+        let (frame, exit) = (early.frame as usize, early.exit as usize);
+        assert_eq!(
+            word(lo),
+            encode::BTI_C,
+            "the landing pad opens the function"
+        );
+        assert_eq!(
+            word(lo + frame),
+            encode::PACIASP,
+            "the frame path signs first"
+        );
+        assert_eq!(fib.ra_signed_at, Some(frame as u32));
+        let ret = encode::enc_ret(encode::Reg(30));
+        assert_eq!(
+            word(fib.high_pc as usize - 4),
+            ret,
+            "the early return closes fib"
+        );
+        assert_eq!(word(lo + exit - 4), ret, "after the frame path's");
+        let out = build_debug_frame(Target::LinuxAarch64, core::slice::from_ref(fib), None, None);
+        let fde = 4 + u32::from_le_bytes(out[..4].try_into().unwrap()) as usize;
+        let len = u32::from_le_bytes(out[fde..fde + 4].try_into().unwrap()) as usize;
+        let mut body = out[fde + 24..fde + 4 + len].to_vec();
+        while body.last() == Some(&0) {
+            body.pop();
+        }
+        let unit = |bytes: usize| DW_CFA_ADVANCE_LOC_HI | (bytes / 4) as u8;
+        assert_eq!(
+            &body[..2],
+            &[unit(frame + 4), DW_CFA_NEGATE_RA_STATE],
+            "unsigned through the test"
+        );
+        assert_eq!(
+            &body[body.len() - 7..],
+            &[
+                unit(exit - fib.prologue_size as usize),
+                DW_CFA_DEF_CFA,
+                AARCH64_REG_SP,
+                0,
+                DW_CFA_RESTORE_HI | AARCH64_REG_X29,
+                DW_CFA_RESTORE_HI | AARCH64_REG_X30,
+                DW_CFA_NEGATE_RA_STATE,
+            ],
+            "the entry's rules at the early return"
+        );
     }
 
     #[test]
@@ -2827,6 +2956,7 @@ mod info_golden {
             prologue_size: 4,
             frame_rules: FrameRules::PostPrologue,
             ra_signed_at: None,
+            early_return: None,
             variables: alloc::vec![],
             external: true,
         }];

@@ -267,6 +267,9 @@ pub struct MergedNative {
     /// post-prologue CFA rule. Consulted by lookup only, so it is
     /// keyed by hash rather than ordered.
     pub prologue_ends: HashMap<u64, u64>,
+    /// The frame path and the early return of a function that returns ahead
+    /// of its frame, keyed as [`Self::prologue_ends`] (`NT_BADC_EARLY_RETURN`).
+    pub early_returns: HashMap<u64, (u64, u64)>,
     /// Defined `STT_FUNC STB_LOCAL` (static) functions as
     /// `(name, merged_text_offset)`, rebased by the per-unit text base.
     /// Kept as a flat list separate from `defined` -- which is
@@ -880,6 +883,8 @@ struct Link<'a> {
     absolute_defined: HashMap<&'a str, i64>,
     /// Function entry -> post-prologue offset, in merged text.
     prologue_ends: HashMap<u64, u64>,
+    /// Function entry -> (frame path, early return), in merged text.
+    early_returns: HashMap<u64, (u64, u64)>,
     /// `STT_FUNC` `STB_LOCAL` text symbols; a flat list, so two units'
     /// same-named statics both survive.
     local_funcs: Vec<(String, u64)>,
@@ -978,6 +983,7 @@ impl<'a> Link<'a> {
             defined: HashMap::new(),
             absolute_defined: HashMap::new(),
             prologue_ends: HashMap::new(),
+            early_returns: HashMap::new(),
             local_funcs: Vec::new(),
             imports: Vec::new(),
             import_idx_for_name: HashMap::new(),
@@ -1457,6 +1463,10 @@ impl<'a> Link<'a> {
             let base = self.text_bases[i] as u64;
             for &(entry, post) in &obj.prologue_ends {
                 self.prologue_ends.insert(base + entry, base + post);
+            }
+            for &(entry, frame, exit) in &obj.early_returns {
+                self.early_returns
+                    .insert(base + entry, (base + frame, base + exit));
             }
         }
     }
@@ -3052,6 +3062,7 @@ impl<'a> Link<'a> {
             debug_line_text_relocs: dbg.line.text_relocs,
             debug_info_data_relocs: dbg.info.data_relocs,
             prologue_ends: self.prologue_ends,
+            early_returns: self.early_returns,
             local_funcs: self.local_funcs,
             tls_data: self.tls_data,
             tls_init_size: self.tls_init_size,
@@ -3913,6 +3924,7 @@ mod tests {
             elf_tpoff_fixups: Vec::new(),
             copy_relocs: Vec::new(),
             prologue_ends: Vec::new(),
+            early_returns: Vec::new(),
             extern_data_names: Vec::new(),
             debug_info: Vec::new(),
             debug_abbrev: Vec::new(),
@@ -4967,6 +4979,7 @@ mod tests {
                 elf_tpoff_fixups: alloc::vec::Vec::new(),
                 copy_relocs: alloc::vec::Vec::new(),
                 prologue_ends: alloc::vec::Vec::new(),
+                early_returns: alloc::vec::Vec::new(),
                 extern_data_names: alloc::vec::Vec::new(),
                 debug_info: alloc::vec::Vec::new(),
                 debug_abbrev: alloc::vec::Vec::new(),

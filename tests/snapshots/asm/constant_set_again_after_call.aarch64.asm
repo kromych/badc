@@ -155,6 +155,8 @@ Disassembly of section .text:
                	ret
 
 <in_loop>:
+               	cmp	x0, #0x0
+               	b.le	<addr>
                	stp	x20, x21, [sp, #-0x30]!
                	str	x22, [sp, #0x10]
                	stp	x29, x30, [sp, #0x20]
@@ -162,8 +164,6 @@ Disassembly of section .text:
                	mov	x22, x0
                	mov	x20, #0x0               // =0
                	mov	x21, x20
-               	cmp	x20, x22
-               	b.ge	<addr>
                	mov	x0, x20
                	bl	<addr>
                	mov	x17, #0x3               // =3
@@ -177,6 +177,8 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x20]
                	ldr	x22, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x30
+               	ret
+               	mov	x0, #0x0                // =0
                	ret
 
 <two_runs>:

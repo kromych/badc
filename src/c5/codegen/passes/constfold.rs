@@ -652,7 +652,7 @@ fn same_operand_compare(op: BinOp) -> Option<i64> {
 /// `imm OP x` recast as `x OP' imm`: the op itself for commutative
 /// ops, the mirrored comparison for ordered compares. `None` for the
 /// non-commutative rest (Sub, shifts, division, FP).
-fn mirror(op: BinOp) -> Option<BinOp> {
+pub(crate) fn mirror(op: BinOp) -> Option<BinOp> {
     Some(match op {
         BinOp::Add | BinOp::Mul | BinOp::And | BinOp::Or | BinOp::Xor | BinOp::Eq | BinOp::Ne => op,
         BinOp::Lt => BinOp::Gt,

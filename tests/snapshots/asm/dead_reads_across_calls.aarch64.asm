@@ -32,6 +32,8 @@ Disassembly of section .text:
                	ret
 
 <unread_in_loop>:
+               	cmp	w2, #0x0
+               	b.le	<addr>
                	stp	x20, x21, [sp, #-0x30]!
                	stp	x22, x23, [sp, #0x10]
                	stp	x29, x30, [sp, #0x20]
@@ -40,8 +42,6 @@ Disassembly of section .text:
                	mov	x23, x2
                	mov	x20, #0x0               // =0
                	mov	x21, x20
-               	cmp	w20, w23
-               	b.ge	<addr>
                	add	x0, x22, x20
                	bl	<addr>
                	add	x21, x21, x0
@@ -52,6 +52,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x20]
                	ldp	x22, x23, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x30
+               	ret
                	ret
 
 <six>:
@@ -83,12 +84,12 @@ Disassembly of section .text:
                	ret
 
 <digit_calls>:
+               	cmp	x0, #0x0
+               	b.le	<addr>
                	stp	x20, x21, [sp, #-0x20]!
                	stp	x29, x30, [sp, #0x10]
                	add	x29, sp, #0x10
                	mov	x1, #0x0                // =0
-               	cmp	x0, #0x0
-               	b.le	<addr>
                	mov	x2, #0x6667             // =26215
                	movk	x2, #0x6666, lsl #16
                	movk	x2, #0x6666, lsl #32
@@ -110,6 +111,8 @@ Disassembly of section .text:
                	mov	x0, x1
                	ldp	x29, x30, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x20
+               	ret
+               	mov	x0, #0x0                // =0
                	ret
 
 <main>:

@@ -56,6 +56,7 @@ use super::*;
 
 mod arith;
 mod call;
+mod early_exit;
 mod frame;
 mod function;
 mod inline_asm;
@@ -67,6 +68,7 @@ mod tests;
 
 use arith::*;
 use call::*;
+use early_exit::*;
 use frame::*;
 use function::*;
 use inline_asm::*;

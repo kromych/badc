@@ -266,7 +266,20 @@ pub(crate) fn emit_function(
         param_plan: &param_plan,
         name2entpc,
     };
-    let plan = super::ssa::block_plan::BlockPlan::build(func, alloc, repeat_tests);
+    // A full leaf builds no frame to leave ahead of, and `-pg` without
+    // `-mfentry` calls `mcount` once the frame stands; the evaluation may
+    // need more temporaries than it has.
+    let mcount_frame = entry.profile.is_some_and(|call| call.after_prologue);
+    let early_exit = if repeat_tests && !mcount_frame && !is_full_leaf(func, frame, alloc, abi) {
+        super::ssa::early_exit::early_exit(func, alloc, &param_plan).filter(|exit| {
+            emit_early_test(&mut Vec::new(), exit).is_some()
+                && emit_early_return(&mut Vec::new(), exit, abi, &mut Vec::new())
+        })
+    } else {
+        None
+    };
+    let plan =
+        super::ssa::block_plan::BlockPlan::build(func, alloc, repeat_tests, early_exit.as_ref());
     let endbr_targets = if abi.hardening.cf_protection_branch {
         plan.landing_pads(func)
     } else {
@@ -286,6 +299,8 @@ pub(crate) fn emit_function(
         fcx,
         ret_tags,
         entry,
+        early_exit,
+        early_site: (0, 0),
         abs_jump_tables,
         endbr_targets,
         param_prebatched: alloc::vec![false; func.insts.len()],
@@ -314,6 +329,10 @@ struct FnEmit<'a, 'b> {
     fcx: FnCtx<'b>,
     ret_tags: &'b alloc::collections::BTreeMap<usize, i64>,
     entry: super::FunctionEntry,
+    /// The return taken ahead of the frame, when the function has one.
+    early_exit: Option<super::ssa::early_exit::EarlyExit>,
+    /// The test's branch displacement and the frame path's start.
+    early_site: (usize, usize),
     abs_jump_tables: bool,
     /// Offset of the function's first byte in `code`.
     start: usize,
@@ -365,6 +384,7 @@ impl FnEmit<'_, '_> {
         );
         self.place_entry_params()?;
         let body = self.emit_body()?;
+        self.emit_early_return();
         self.patch_block_addrs()?;
         for r in &func.label_data_relocs {
             self.out.cx.label_relocs.push(super::LabelReloc {
@@ -388,7 +408,7 @@ impl FnEmit<'_, '_> {
     /// The function entry: a naked function's body is its whole machine
     /// code, so it gets no prologue; otherwise `endbr64` under
     /// indirect-branch tracking, the patchable-entry NOPs, the `-mfentry`
-    /// call, and the prologue.
+    /// call, the test of the early return, and the prologue.
     fn emit_entry(&mut self) -> super::FnUnwind {
         let FnCtx {
             func,
@@ -421,6 +441,17 @@ impl FnEmit<'_, '_> {
                 self.out.cx.mcount_sites,
             );
         }
+        if let Some(exit) = &self.early_exit {
+            super::ssa::emit_common::record_test_src(
+                func,
+                exit.test_block,
+                code.len(),
+                self.out.cx.ssa_line_rows,
+            );
+            let site = emit_early_test(code, exit);
+            debug_assert!(site.is_some(), "the test fit its temporaries at planning");
+            self.early_site = (site.unwrap_or(0), code.len());
+        }
         emit_prologue(
             code,
             func,
@@ -430,6 +461,32 @@ impl FnEmit<'_, '_> {
             self.start,
             self.out.cx.user_extern_data_refs,
         )
+    }
+
+    /// The early return after the body, with the entry's test pointed at it
+    /// and the function recorded.
+    fn emit_early_return(&mut self) {
+        let Some(exit) = &self.early_exit else {
+            return;
+        };
+        let code = &mut *self.out.cx.code;
+        let exit_at = code.len();
+        super::ssa::emit_common::record_block_src(
+            self.fcx.func,
+            exit.exit_block,
+            exit_at,
+            self.out.cx.ssa_line_rows,
+        );
+        let emitted =
+            emit_early_return(code, exit, self.fcx.abi, self.out.cx.asm_extern_call_sites);
+        debug_assert!(emitted, "the return fit its temporaries at planning");
+        let (site, frame) = self.early_site;
+        patch_early_branch(code, site, exit_at);
+        self.out.cx.early_returns.push(super::EarlyReturn {
+            begin: self.start as u32,
+            frame: (frame - self.start) as u32,
+            exit: (exit_at - self.start) as u32,
+        });
     }
 
     /// Place the integer reads opening the entry block
@@ -508,7 +565,9 @@ impl FnEmit<'_, '_> {
                     self.assert_emits_nothing(block_idx)?;
                     continue;
                 }
-                self.emit_block(block_idx)?;
+                if !self.plan.is_dead(block_idx) {
+                    self.emit_block(block_idx)?;
+                }
             }
             // A block left out stands where its edges land, for every
             // reader of the offsets.
@@ -608,7 +667,9 @@ impl FnEmit<'_, '_> {
             target,
         );
         for v in block.inst_range.clone() {
-            self.emit_block_inst(block, v, tail_call)?;
+            if self.plan.lowers(block_idx, v) {
+                self.emit_block_inst(block, v, tail_call)?;
+            }
         }
         // Predecessor-exit moves for the phis at every successor's head.
         emit_phi_predecessor_moves(
@@ -723,6 +784,9 @@ impl FnEmit<'_, '_> {
             imports,
             ..
         } = self.fcx;
+        if let Some(arm) = self.plan.entry_jump(block_idx) {
+            return self.jump_unless_next(block_idx, arm);
+        }
         match block.terminator {
             // A naked function's inline-asm body provides its own return.
             Terminator::Return(_) if func.is_naked => Ok(()),
@@ -1835,7 +1899,7 @@ fn emit_profile_call(
 /// Function return. `-mfunction-return=thunk-extern` replaces `ret` with
 /// a jump to the external return thunk, which returns itself; the
 /// straight-line-speculation trap then has no `ret` to guard.
-fn emit_hardened_ret(
+pub(super) fn emit_hardened_ret(
     code: &mut Vec<u8>,
     abi: super::Abi,
     extern_sites: &mut Vec<super::UserExternCallSite>,

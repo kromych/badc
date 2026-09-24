@@ -97,6 +97,7 @@ struct EmitSnapshot {
     text_align: usize,
     asm_text_labels: usize,
     asm_section_text_refs: usize,
+    early_returns: usize,
     text_map_state: Option<super::super::map_syms::MapClass>,
 }
 
@@ -115,6 +116,12 @@ struct FunctionEmitter<'a, 'b> {
     fcx: FnCtx<'a>,
     abs_jump_tables: bool,
     entry: super::FunctionEntry,
+    /// The return taken ahead of the frame, when the function has one.
+    early_exit: Option<super::ssa::early_exit::EarlyExit>,
+    /// The entry's test branches to that return through a `B`.
+    early_far: bool,
+    /// The test's branch to patch, and where the frame path starts.
+    early_site: (usize, usize),
     snapshot: EmitSnapshot,
     /// Which blocks are emitted and where each branch lands.
     plan: super::ssa::block_plan::BlockPlan,
@@ -221,6 +228,18 @@ pub(crate) fn emit_function(
         .insert(func.ent_pc, frame_stack(func, frame, alloc));
     let scratch = ScratchPool::new();
     let param_plan = param_placements(func, abi);
+    // A full leaf builds no frame to leave ahead of; the evaluation may need
+    // more temporaries than it has.
+    let early_exit = if repeat_tests && !is_full_leaf(frame, alloc) {
+        super::ssa::early_exit::early_exit(func, alloc, &param_plan).filter(|exit| {
+            emit_early_test(&mut Vec::new(), exit, false).is_some()
+                && emit_early_return(&mut Vec::new(), exit)
+        })
+    } else {
+        None
+    };
+    let plan =
+        super::ssa::block_plan::BlockPlan::build(func, alloc, repeat_tests, early_exit.as_ref());
     let snapshot = EmitSnapshot {
         code: cx.code.len(),
         fixups: fixups.len(),
@@ -240,6 +259,7 @@ pub(crate) fn emit_function(
         text_align: *cx.text_align,
         asm_text_labels: asm_text_labels.len(),
         asm_section_text_refs: asm_section_text_refs.len(),
+        early_returns: cx.early_returns.len(),
         text_map_state: *text_map_state,
     };
     let mut em = FunctionEmitter {
@@ -269,8 +289,11 @@ pub(crate) fn emit_function(
         },
         abs_jump_tables,
         entry,
+        early_exit,
+        early_far: false,
+        early_site: (0, 0),
         snapshot,
-        plan: super::ssa::block_plan::BlockPlan::build(func, alloc, repeat_tests),
+        plan,
         prebatched: Vec::new(),
         block_offsets: alloc::vec![0; func.blocks.len()],
         branch_fixups: Vec::new(),
@@ -308,9 +331,12 @@ impl FunctionEmitter<'_, '_> {
             self.place_int_params()?;
             self.place_fp_params();
             self.emit_blocks()?;
-            if !self.mark_far_branches() {
+            let early_far = !self.emit_early_return();
+            let grew = self.mark_far_branches();
+            if !grew && !early_far {
                 return Ok(());
             }
+            self.early_far |= early_far;
             self.restore_outputs();
             self.block_offsets.fill(0);
             self.branch_fixups.clear();
@@ -320,6 +346,34 @@ impl FunctionEmitter<'_, '_> {
             self.fp_literals.clear();
             self.deferred_regions.clear();
         }
+    }
+
+    /// The early return after the body, the test pointed at it; `false`
+    /// where the test's conditional branch does not reach it.
+    fn emit_early_return(&mut self) -> bool {
+        let Some(exit) = &self.early_exit else {
+            return true;
+        };
+        let exit_at = self.cx.code.len();
+        super::ssa::emit_common::record_block_src(
+            self.fcx.func,
+            exit.exit_block,
+            exit_at,
+            self.cx.ssa_line_rows,
+        );
+        let emitted = emit_early_return(self.cx.code, exit);
+        debug_assert!(emitted, "the return fit its temporaries at planning");
+        let (site, frame) = self.early_site;
+        if !patch_early_branch(self.cx.code, site, exit_at, self.early_far) {
+            return false;
+        }
+        let begin = self.snapshot.code;
+        self.cx.early_returns.push(super::EarlyReturn {
+            begin: begin as u32,
+            frame: (frame - begin) as u32,
+            exit: (exit_at - begin) as u32,
+        });
+        true
     }
 
     /// Mark the owner of every conditional branch whose displacement does
@@ -372,6 +426,7 @@ impl FunctionEmitter<'_, '_> {
         *self.cx.text_align = s.text_align;
         self.asm_text_labels.truncate(s.asm_text_labels);
         self.asm_section_text_refs.truncate(s.asm_section_text_refs);
+        self.cx.early_returns.truncate(s.early_returns);
         *self.text_map_state = s.text_map_state;
     }
 
@@ -472,9 +527,9 @@ impl FunctionEmitter<'_, '_> {
         }
     }
 
-    /// The landing pad, patchable-entry NOPs, return-address signing and the
-    /// prologue. A naked function's inline-asm body is the whole function,
-    /// so it takes only the NOPs.
+    /// The landing pad, patchable-entry NOPs, the test of the early return,
+    /// return-address signing and the prologue. A naked function's inline-asm
+    /// body is the whole function, so it takes only the NOPs.
     fn emit_entry(&mut self) {
         let FnCtx {
             func,
@@ -492,7 +547,8 @@ impl FunctionEmitter<'_, '_> {
             // x16/x17, so it takes a `BTI C`; `PACIASP` accepts both BTYPEs
             // itself and stands in for the pad where it is the first
             // instruction.
-            if abi.hardening.bti && (self.entry.nops_after > 0 || !signs) {
+            let pad = self.entry.nops_after > 0 || !signs || self.early_exit.is_some();
+            if abi.hardening.bti && pad {
                 emit(self.cx.code, super::encode::BTI_C);
             }
         }
@@ -500,6 +556,17 @@ impl FunctionEmitter<'_, '_> {
         // precede the rest of the entry, as gcc orders them.
         for _ in 0..self.entry.nops_after {
             emit(self.cx.code, super::encode::NOP);
+        }
+        if let Some(exit) = &self.early_exit {
+            super::ssa::emit_common::record_test_src(
+                func,
+                exit.test_block,
+                self.cx.code.len(),
+                self.cx.ssa_line_rows,
+            );
+            let site = emit_early_test(self.cx.code, exit, self.early_far);
+            debug_assert!(site.is_some(), "the test fit its temporaries at planning");
+            self.early_site = (site.unwrap_or(0), self.cx.code.len());
         }
         if !func.is_naked {
             if signs {
@@ -654,6 +721,9 @@ impl FunctionEmitter<'_, '_> {
                 self.assert_emits_nothing(block_idx)?;
                 continue;
             }
+            if self.plan.is_dead(block_idx) {
+                continue;
+            }
             let bti = bti_targets.contains(&(block_idx as BlockId));
             if bti {
                 self.align_stream();
@@ -669,7 +739,9 @@ impl FunctionEmitter<'_, '_> {
                 emit(self.cx.code, super::encode::BTI_J);
             }
             for v in block.inst_range.clone() {
-                self.emit_block_inst(block, v)?;
+                if self.plan.lowers(block_idx, v) {
+                    self.emit_block_inst(block, v)?;
+                }
             }
             // The phi moves and the terminator are instructions, except for
             // a naked function's synthetic return, which emits nothing.
@@ -909,6 +981,9 @@ impl FunctionEmitter<'_, '_> {
             imports,
             ..
         } = self.fcx;
+        if let Some(arm) = self.plan.entry_jump(block_idx) {
+            return self.branch_unless_next(block_idx, arm);
+        }
         match block.terminator {
             // A naked function's inline-asm body provides its own return.
             Terminator::Return(_) if func.is_naked => {}

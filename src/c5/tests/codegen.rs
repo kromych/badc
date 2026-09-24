@@ -11126,6 +11126,64 @@ fn stack_protector_modes_select_the_shapes_gcc_selects() {
     );
 }
 
+/// A return taken ahead of the frame runs before the canary is stored and
+/// leaves without checking it: under `-fstack-protector-all` at `-O` the
+/// return after `fib`'s body touches no memory, and the frame path still
+/// checks the canary.
+#[test]
+#[cfg(feature = "full")]
+fn an_early_return_leaves_without_the_canary() {
+    use crate::{CompileOptions, NativeOptions, OutputKind, StackProtect, StackProtector, Target};
+    const SRC: &str = "long fib(int n) { if (n < 2) return n; return fib(n - 1) + fib(n - 2); }\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let program = crate::Compiler::with_options(
+            alloc::string::String::from(SRC),
+            target,
+            CompileOptions::default()
+                .with_no_entry_point(true)
+                .with_optimize(true),
+        )
+        .compile()
+        .unwrap_or_else(|e| panic!("compile: {e}"));
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            stack_protect: StackProtect {
+                mode: StackProtector::All,
+                ..StackProtect::OFF
+            },
+            ..NativeOptions::new().with_optimize()
+        };
+        let build = crate::c5::codegen::lower_for(&program, target, opts.clone())
+            .unwrap_or_else(|e| panic!("lower: {e}"));
+        let [early] = build.early_returns[..] else {
+            panic!(
+                "{target:?}: fib returns ahead of its frame: {:?}",
+                build.early_returns
+            );
+        };
+        let end = build.func_ends.first().copied().unwrap_or(build.text.len());
+        let stub = &build.text[(early.begin + early.exit) as usize..end];
+        let touches_memory = match target {
+            Target::LinuxX64 => super::perf_codegen::x64_insns(stub)
+                .iter()
+                .any(|i| i.modrm.is_some_and(|m| m >> 6 != 3)),
+            _ => stub
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .any(|w| (u32::from_le_bytes(*w) >> 25) & 0b101 == 0b100),
+        };
+        assert!(!touches_memory, "{target:?}: {stub:02x?}");
+        let obj = crate::emit_native_with_options(&program, target, opts)
+            .unwrap_or_else(|e| panic!("emit: {e}"));
+        assert_eq!(
+            functions_calling(&obj, "__stack_chk_fail"),
+            ["fib"],
+            "{target:?}"
+        );
+    }
+}
+
 #[test]
 #[cfg(feature = "full")]
 fn ssp_buffer_size_moves_the_character_array_threshold() {

@@ -663,6 +663,78 @@ fn lldb_backtrace_has_no_duplicate_caller_frame() {
     );
 }
 
+/// At `-O` the base case of `fib` returns without the frame: the entry's
+/// test branches to a return after the body. A stop at the test and one at
+/// that return each unwind through every caller once, and stepping out of
+/// the return lands in the calling `fib` with the returned value.
+#[test]
+fn lldb_steps_out_of_a_return_ahead_of_the_frame() {
+    const SRC: &str = r#"
+        long fib(int n) {
+            if (n < 2) return n;
+            return fib(n - 1) + fib(n - 2);
+        }
+        int main(void) { return (int)fib(5); }
+        "#;
+    let program = Compiler::new(super::with_prelude(SRC))
+        .compile()
+        .expect("compile");
+    let options = crate::NativeOptions::new()
+        .with_debug_info(true)
+        .with_optimize();
+    let build =
+        crate::c5::codegen::lower_for(&program, Target::MacOSAarch64, options).expect("lower");
+    let [early] = build.early_returns[..] else {
+        panic!(
+            "fib alone returns ahead of its frame: {:?}",
+            build.early_returns
+        );
+    };
+    let path = build_signed_mach_o_opt(SRC, "early_return_bt", true);
+    let at_return = alloc::format!(
+        "breakpoint set -n fib --skip-prologue false -R {}",
+        early.exit
+    );
+    let Some(out) = lldb_batch(
+        &path,
+        &[
+            "breakpoint set -n fib --skip-prologue false -c '(int)$x0 < 2'",
+            "run",
+            "bt",
+            "breakpoint delete 1",
+            &at_return,
+            "continue",
+            "bt",
+            "finish",
+            "bt",
+            "register read x0",
+        ],
+    ) else {
+        eprintln!("lldb not on PATH -- skipping early-return backtrace test");
+        let _ = std::fs::remove_file(&path);
+        return;
+    };
+    let _ = std::fs::remove_file(&path);
+    let frames = |bt: &str, name: &str| {
+        bt.lines()
+            .filter(|l| l.contains("frame #") && l.contains(&alloc::format!("`{name}")))
+            .count()
+    };
+    let counts: alloc::vec::Vec<(usize, usize)> = out
+        .split("(lldb) bt")
+        .skip(1)
+        .map(|t| t.split("(lldb) ").next().unwrap_or(""))
+        .map(|t| (frames(t, "fib"), frames(t, "main")))
+        .collect();
+    // fib(1) under fib(5)..fib(2) under main, at the test and at the return;
+    // then fib(2).
+    assert_eq!(counts, [(5, 1), (5, 1), (4, 1)], "{out}");
+    assert!(
+        out.contains("x0 = 0x0000000000000001"),
+        "fib(1) returned 1:\n{out}"
+    );
+}
+
 /// Per-statement granularity in the line program: a function with
 /// N straight-line statements must produce at least N distinct
 /// `(addr, line)` rows so a debugger can stop on each one. Before

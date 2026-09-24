@@ -67,6 +67,8 @@ pub(crate) struct EmitCtx<'a> {
         &'a mut alloc::collections::BTreeMap<usize, alloc::collections::BTreeMap<i64, Option<i64>>>,
     /// Offsets of the `-pg` call sites `-mrecord-mcount` records.
     pub(crate) mcount_sites: &'a mut alloc::vec::Vec<usize>,
+    /// The functions that return ahead of their frame.
+    pub(crate) early_returns: &'a mut alloc::vec::Vec<super::EarlyReturn>,
 }
 
 /// Round `n` up to the next 16-byte multiple. AAPCS64, SysV
@@ -1446,6 +1448,40 @@ pub(crate) fn record_inst_src(
     ssa_line_rows.push((code_len, line, file_idx));
 }
 
+/// The row of `block`'s test placed apart from it: the line of the value its
+/// branch reads.
+pub(crate) fn record_test_src(
+    func: &super::super::ir::FunctionSsa,
+    block: super::super::ir::BlockId,
+    code_len: usize,
+    ssa_line_rows: &mut alloc::vec::Vec<(usize, u32, u32)>,
+) {
+    use super::super::ir::Terminator;
+    if let Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } =
+        func.blocks[block as usize].terminator
+    {
+        record_inst_src(func, cond, code_len, ssa_line_rows);
+    }
+}
+
+/// The row of code placed apart from `block` that computes what it does:
+/// the line of the block's first instruction that carries one.
+pub(crate) fn record_block_src(
+    func: &super::super::ir::FunctionSsa,
+    block: super::super::ir::BlockId,
+    code_len: usize,
+    ssa_line_rows: &mut alloc::vec::Vec<(usize, u32, u32)>,
+) {
+    let sourced = |&v: &u32| {
+        func.inst_src
+            .get(v as usize)
+            .is_some_and(|&(line, _)| line != 0)
+    };
+    if let Some(v) = func.blocks[block as usize].inst_range.clone().find(sourced) {
+        record_inst_src(func, v, code_len, ssa_line_rows);
+    }
+}
+
 /// Record the byte offset of the first post-prologue instruction,
 /// keyed by the function's `ent_pc`. The DWARF CFI pass reads this
 /// to encode `DW_CFA_advance_loc <prologue bytes>` so the post-
@@ -1701,6 +1737,7 @@ pub(crate) struct LowerState {
     pub(crate) func_ends: alloc::vec::Vec<usize>,
     pub(crate) patchable_entries: alloc::vec::Vec<super::EntryArea>,
     pub(crate) mcount_sites: alloc::vec::Vec<usize>,
+    pub(crate) early_returns: alloc::vec::Vec<super::EarlyReturn>,
     pub(crate) func_names: alloc::vec::Vec<alloc::string::String>,
     pub(crate) func_prologue_native: alloc::collections::BTreeMap<usize, usize>,
     pub(crate) ssa_line_rows: alloc::vec::Vec<(usize, u32, u32)>,
@@ -1737,6 +1774,7 @@ impl LowerState {
             func_ends: alloc::vec::Vec::new(),
             patchable_entries: alloc::vec::Vec::new(),
             mcount_sites: alloc::vec::Vec::new(),
+            early_returns: alloc::vec::Vec::new(),
             func_names: alloc::vec::Vec::new(),
             func_prologue_native: alloc::collections::BTreeMap::new(),
             ssa_line_rows: alloc::vec::Vec::new(),
@@ -1790,6 +1828,7 @@ impl LowerState {
                 param_frame_offsets: &mut self.param_frame_offsets,
                 region_frame_offsets: &mut self.region_frame_offsets,
                 mcount_sites: &mut self.mcount_sites,
+                early_returns: &mut self.early_returns,
             },
             rodata: &mut self.rodata,
             asm_text_labels: &mut self.asm_text_labels,
@@ -2751,6 +2790,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         func_ends: st.func_ends,
         patchable_entries: st.patchable_entries,
         mcount_sites: st.mcount_sites,
+        early_returns: st.early_returns,
         func_names: st.func_names,
         func_prologue_native: st.func_prologue_native,
         promoted_local_slots,

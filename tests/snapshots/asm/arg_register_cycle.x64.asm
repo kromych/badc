@@ -26,21 +26,21 @@ Disassembly of section .text:
                	int3
 
 <rec>:
+               	testl	%edx, %edx
+               	je	<addr>
                	pushq	%rbp
                	movq	%rsp, %rbp
                	movslq	%edi, %rdi
                	movslq	%edx, %rdx
                	movslq	%esi, %rsi
-               	testl	%edx, %edx
-               	jne	<addr>
-               	movq	%rdi, %rax
-               	subq	%rsi, %rax
-               	popq	%rbp
-               	retq
                	decq	%rdx
                	xchgq	%rsi, %rdi
                	callq	<addr>
                	popq	%rbp
+               	retq
+               	movslq	%edi, %rax
+               	movslq	%esi, %r10
+               	subq	%r10, %rax
                	retq
 
 <main>:

@@ -179,6 +179,16 @@ fn synth_program_and_build(
     );
     let functions = function_table(merged, pc_to_native);
     let fn_unwind = x86_64_unwind(merged, target, &functions);
+    let mut early_returns: Vec<crate::c5::codegen::EarlyReturn> = merged
+        .early_returns
+        .iter()
+        .map(|(&begin, &(frame, exit))| crate::c5::codegen::EarlyReturn {
+            begin: begin as u32,
+            frame: (frame - begin) as u32,
+            exit: (exit - begin) as u32,
+        })
+        .collect();
+    early_returns.sort_unstable_by_key(|e| e.begin);
     let copy_relocs = synth_copy_relocs(merged, target)?;
     let dynamic_exports =
         synth_dynamic_exports(merged, target, output_kind, export_all, export_data);
@@ -236,6 +246,7 @@ fn synth_program_and_build(
         func_ends: Vec::new(),
         patchable_entries: Vec::new(),
         mcount_sites: Vec::new(),
+        early_returns,
         func_ent_pcs: functions.ent_pcs,
         func_names: functions.names,
         func_prologue_native: functions.prologue_native,
@@ -454,11 +465,16 @@ fn x86_64_unwind(
                 .get(&(begin as usize))
                 .map(|&p| p as u32)
                 .unwrap_or(begin);
+            let frame_start = merged
+                .early_returns
+                .get(&u64::from(begin))
+                .map_or(0, |&(frame, _)| frame as u32);
             crate::c5::codegen::decode_x86_64_prologue_unwind(
                 &merged.text,
                 begin,
                 end,
                 prologue_end,
+                frame_start,
             )
         })
         .collect()
@@ -1439,6 +1455,7 @@ mod tests {
             debug_info_data_relocs: alloc::vec![],
             debug_line_text_relocs: alloc::vec![],
             prologue_ends: hashbrown::HashMap::new(),
+            early_returns: hashbrown::HashMap::new(),
             local_funcs: alloc::vec::Vec::new(),
             tls_data: alloc::vec![],
             tls_init_size: 0,

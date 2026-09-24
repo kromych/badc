@@ -1905,6 +1905,8 @@ pub(crate) struct Build {
     /// Byte offsets of the profiling call sites `-mrecord-mcount`
     /// records, in emission order.
     pub mcount_sites: Vec<usize>,
+    /// The functions that return ahead of their frame, in emission order.
+    pub early_returns: Vec<EarlyReturn>,
     /// Source-level function names parallel to `func_ent_pcs`,
     /// populated from `FunctionSsa::name` during the per-arch
     /// emit loop. Empty entries surface for archive-reloaded
@@ -2295,6 +2297,18 @@ pub(crate) struct FnUnwind {
     /// Offset (from `begin`) past `sub rsp,N`. Set only when
     /// `frame_bytes > 0`.
     pub frame_alloc_end: u32,
+}
+
+/// A function whose entry test branches to a return placed after the body,
+/// ahead of the frame (`ssa::early_exit`). Offsets are from `begin`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(crate) struct EarlyReturn {
+    /// Byte offset of the function's first instruction in `text`.
+    pub begin: u32,
+    /// Where the frame path starts.
+    pub frame: u32,
+    /// Where the early return starts; it runs to the function's end.
+    pub exit: u32,
 }
 
 /// One macOS arm64 Thread-Local Variable. A 24-byte `__thread_vars`

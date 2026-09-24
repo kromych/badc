@@ -907,6 +907,9 @@ pub struct NativeObject {
     /// The merge pass rebases them into `MergedNative::prologue_ends`,
     /// where the merged-image frame writer reads the prologue extent.
     pub prologue_ends: Vec<(u64, u64)>,
+    /// Functions that return ahead of their frame (`NT_BADC_EARLY_RETURN`),
+    /// each `(entry, frame path, early return)` offsets in this unit's `.text`.
+    pub early_returns: Vec<(u64, u64, u64)>,
     /// Names this unit materialises the address of through an undefined
     /// symbol (`NT_BADC_EXTERN_DATA`) -- extern data, and an extern
     /// function whose address is taken, which shares that lowering.
@@ -1048,6 +1051,7 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         macho_tlv_fixups: note.macho_tlv_fixups,
         copy_relocs: note.copy_relocs,
         prologue_ends: note.prologue_ends,
+        early_returns: note.early_returns,
         extern_data_names: note.extern_data_names,
         debug_info: debug.info,
         debug_abbrev: debug.abbrev,
@@ -1764,6 +1768,9 @@ fn decode_init_arrays(
 ///   type=12 NT_BADC_EXTERN_DATA  -- NUL-separated names this unit
 ///                                  references as data through an
 ///                                  undefined symbol.
+///   type=13 NT_BADC_EARLY_RETURN -- (u64 entry_offset, u64
+///                                  frame_offset, u64 return_offset)
+///                                  `.text` triples.
 /// Records under namesz != "badc\0" are skipped silently so future
 /// vendor extensions can coexist.
 #[derive(Default)]
@@ -1779,6 +1786,7 @@ struct BadcNote {
     macho_tlv_descriptor_syms: Vec<(usize, String)>,
     elf_tpoff_fixups: Vec<(u64, ElfTpoffTarget)>,
     prologue_ends: Vec<(u64, u64)>,
+    early_returns: Vec<(u64, u64, u64)>,
     extern_data_names: Vec<String>,
 }
 
@@ -1942,6 +1950,15 @@ impl BadcNote {
                 }
             }
             12 => self.extern_data_names.extend(nul_separated(desc)),
+            13 => {
+                let word = |at: usize| u64::from_le_bytes(body[at..at + 8].try_into().unwrap());
+                let mut c = cur;
+                while c + 24 <= desc_end {
+                    self.early_returns
+                        .push((word(c), word(c + 8), word(c + 16)));
+                    c += 24;
+                }
+            }
             _ => {}
         }
     }

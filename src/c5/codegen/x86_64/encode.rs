@@ -1235,7 +1235,7 @@ impl Cc {
     /// elided: the branch must fire on the inverted predicate.
     /// Mirror of
     /// [`super::aarch64::Cond::flip`].
-    fn flip(self) -> Cc {
+    pub(crate) fn flip(self) -> Cc {
         match self {
             Cc::O => Cc::No,
             Cc::No => Cc::O,
@@ -2134,12 +2134,14 @@ fn apply_plt_call_fixups(
 /// are not described. A leaf emits none of the above, and any other
 /// shape is described as a frameless leaf -- safe (the unwinder returns
 /// off the top-of-stack RA) rather than codes that do not match the
-/// prologue.
+/// prologue. The test of a return taken ahead of the frame places `push rbp`
+/// at `frame_start` (0 when none), where the decode starts.
 pub(crate) fn decode_x86_64_prologue_unwind(
     text: &[u8],
     begin: u32,
     end: u32,
     prologue_end: u32,
+    frame_start: u32,
 ) -> super::FnUnwind {
     let mut uw = super::FnUnwind {
         begin,
@@ -2155,17 +2157,20 @@ pub(crate) fn decode_x86_64_prologue_unwind(
     let window = &text[b..pe];
     // Entry instructions that leave the stack alone: `endbr64`, the
     // one-byte NOP, the five-byte NOP of `-mnop-mcount`, `call rel32`.
-    let mut fp = 0usize;
-    loop {
-        let rest = &window[fp.min(window.len())..];
-        if rest.starts_with(&[0xF3, 0x0F, 0x1E, 0xFA]) {
-            fp += 4;
-        } else if rest.starts_with(&[0x90]) {
-            fp += 1;
-        } else if rest.starts_with(&[0x0F, 0x1F, 0x44, 0x00, 0x00]) || rest.starts_with(&[0xE8]) {
-            fp += 5;
-        } else {
-            break;
+    let mut fp = frame_start.saturating_sub(begin) as usize;
+    if fp == 0 {
+        loop {
+            let rest = &window[fp.min(window.len())..];
+            if rest.starts_with(&[0xF3, 0x0F, 0x1E, 0xFA]) {
+                fp += 4;
+            } else if rest.starts_with(&[0x90]) {
+                fp += 1;
+            } else if rest.starts_with(&[0x0F, 0x1F, 0x44, 0x00, 0x00]) || rest.starts_with(&[0xE8])
+            {
+                fp += 5;
+            } else {
+                break;
+            }
         }
     }
     if !window[fp.min(window.len())..].starts_with(&[0x55, 0x48, 0x89, 0xE5]) {
@@ -2575,7 +2580,7 @@ mod tests {
     /// window.
     fn decoded(prologue: &[u8]) -> super::super::FnUnwind {
         let n = prologue.len() as u32;
-        decode_x86_64_prologue_unwind(prologue, 0, n, n)
+        decode_x86_64_prologue_unwind(prologue, 0, n, n, 0)
     }
 
     #[test]

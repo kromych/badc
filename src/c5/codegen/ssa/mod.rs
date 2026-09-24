@@ -8,6 +8,7 @@ pub(crate) mod build;
 pub(crate) mod cfi;
 #[cfg(feature = "std")]
 pub(crate) mod dump;
+pub(crate) mod early_exit;
 pub(crate) mod emit_common;
 pub(crate) mod licm;
 pub(crate) mod liveness;

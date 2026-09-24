@@ -14,21 +14,19 @@ Disassembly of section .text:
                	brk	#0x1
 
 <fact>:
+               	cmp	w0, #0x2
+               	b.lt	<addr>
                	str	x20, [sp, #-0x20]!
                	stp	x29, x30, [sp, #0x10]
                	add	x29, sp, #0x10
                	sxtw	x20, w0
-               	cmp	w20, #0x2
-               	b.ge	<addr>
-               	mov	x0, #0x1                // =1
-               	ldp	x29, x30, [sp, #0x10]
-               	ldr	x20, [sp], #0x20
-               	ret
                	sub	x0, x20, #0x1
                	bl	<addr>
                	mul	x0, x20, x0
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x20, [sp], #0x20
+               	ret
+               	mov	x0, #0x1                // =1
                	ret
 
 <main>:

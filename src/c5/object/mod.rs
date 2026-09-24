@@ -55,9 +55,9 @@ pub(crate) use crate::c5::codegen::lower_for;
 #[cfg(feature = "native-emit")]
 pub(crate) use crate::c5::codegen::{
     Abi, AddrPart, Build, CopyRelocReq, DataFixup, DwarfTextReloc, DynamicExportSection,
-    ElfTpoffFixup, ElfTpoffTarget, FnUnwind, FuncFixup, GotFixup, Machine, MachoTlvDescriptor,
-    MachoTlvFixup, NativeOptions, OutputKind, ResolvedImport, ResolvedImports, Target,
-    TlsIndexFixup, aarch64, x86_64,
+    EarlyReturn, ElfTpoffFixup, ElfTpoffTarget, FnUnwind, FuncFixup, GotFixup, Machine,
+    MachoTlvDescriptor, MachoTlvFixup, NativeOptions, OutputKind, ResolvedImport, ResolvedImports,
+    Target, TlsIndexFixup, aarch64, x86_64,
 };
 
 /// Write the runtime address of a text-targeting DWARF placeholder over its
@@ -1175,6 +1175,7 @@ pub(crate) mod test_support {
             func_ends: Vec::new(),
             patchable_entries: Vec::new(),
             mcount_sites: Vec::new(),
+            early_returns: Vec::new(),
             func_names: Vec::new(),
             func_prologue_native: BTreeMap::new(),
             promoted_local_slots: BTreeMap::new(),

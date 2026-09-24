@@ -14,19 +14,14 @@ Disassembly of section .text:
                	brk	#0x1
 
 <solve>:
+               	cmp	w1, #0x8
+               	b.eq	<addr>
                	stp	x20, x21, [sp, #-0x30]!
                	stp	x22, x23, [sp, #0x10]
                	stp	x29, x30, [sp, #0x20]
                	add	x29, sp, #0x20
                	mov	x22, x0
                	sxtw	x21, w1
-               	cmp	w21, #0x8
-               	b.ne	<addr>
-               	mov	x0, #0x1                // =1
-               	ldp	x29, x30, [sp, #0x20]
-               	ldp	x22, x23, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0x30
-               	ret
                	mov	x20, #0x0               // =0
                	mov	x23, x20
                	mov	x2, #0x0                // =0
@@ -58,6 +53,8 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x20]
                	ldp	x22, x23, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x30
+               	ret
+               	mov	x0, #0x1                // =1
                	ret
 
 <main>:

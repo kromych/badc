@@ -118,6 +118,8 @@ Disassembly of section .text:
                	retq
 
 <tally>:
+               	testl	%edi, %edi
+               	jle	<addr>
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x8, %rsp
@@ -125,8 +127,6 @@ Disassembly of section .text:
                	movq	%rdi, %rbx
                	xorl	%edx, %edx
                	movq	%rdx, %rdi
-               	cmpl	%ebx, %edx
-               	jge	<addr>
                	xorl	%ecx, %ecx
                	movq	%rdx, %rax
                	testl	%eax, %eax
@@ -151,6 +151,8 @@ Disassembly of section .text:
                	movq	%rdi, %rax
                	popq	%rbx
                	leave
+               	retq
+               	xorl	%eax, %eax
                	retq
 
 <count_wanted>:

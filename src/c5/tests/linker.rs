@@ -5438,7 +5438,7 @@ fn cpuid_xgetbv_asm_emit_for_x86_64() {
     );
     let code = super::codegen::function_bytes(&bytes, "cpuid");
     let n = code.len() as u32;
-    let uw = crate::c5::codegen::decode_x86_64_prologue_unwind(&code, 0, n, n);
+    let uw = crate::c5::codegen::decode_x86_64_prologue_unwind(&code, 0, n, n, 0);
     assert!(!uw.leaf, "{code:02x?}");
     // `push rbx` directly after the frame allocation.
     let saves_at = uw.frame_alloc_end.max(uw.set_fpreg_end) as usize;
@@ -5675,6 +5675,43 @@ fn assembler_local_labels_stay_out_of_the_symbol_table() {
     }
 }
 
+/// The test of an early return moves `push rbp` off the entry; the note
+/// carries where it went and where the return is, so the merged-image
+/// decoder reads the frame the lowering built.
+#[test]
+fn a_frame_past_an_early_return_decodes_from_its_anchor() {
+    use crate::c5::linker::{link_native_objects, parse_native_elf};
+    let src = "long fib(int n) { if (n < 2) return n; return fib(n - 1) + fib(n - 2); }\n";
+    let obj = parse_native_elf(&reloc_tu(src, crate::c5::Target::LinuxX64, true)).expect("parse");
+    assert_eq!(obj.early_returns.len(), 1, "{:x?}", obj.early_returns);
+    let merged = link_native_objects(&[obj]).expect("link");
+    let entry = merged.defined.get("fib").expect("fib is defined").value;
+    let (at, exit) = merged.early_returns[&entry];
+    assert_eq!(
+        merged.text[exit as usize..].first(),
+        Some(&0x48),
+        "`movsxd rax, edi`"
+    );
+    let post = merged.prologue_ends[&entry];
+    let text = &merged.text;
+    assert_eq!(text[at as usize..at as usize + 4], [0x55, 0x48, 0x89, 0xE5]);
+    let n = text.len() as u32;
+    let decode = |frame_start| {
+        crate::c5::codegen::decode_x86_64_prologue_unwind(
+            text,
+            entry as u32,
+            n,
+            post as u32,
+            frame_start,
+        )
+    };
+    let uw = decode(at as u32);
+    assert!(!uw.leaf);
+    assert_eq!(uw.push_rbp_end, (at - entry) as u32 + 1);
+    // Without the anchor the entry reads as a frameless leaf.
+    assert!(decode(0).leaf);
+}
+
 #[test]
 fn typed_local_label_leaves_the_symbol_table_and_its_reference_reduces() {
     // `SYM_FUNC_START_LOCAL(.Lname)` spells a local label `@function` and
@@ -5809,6 +5846,7 @@ fn minimal_native_object(
         elf_tpoff_fixups: alloc::vec::Vec::new(),
         copy_relocs: alloc::vec::Vec::new(),
         prologue_ends: alloc::vec::Vec::new(),
+        early_returns: alloc::vec::Vec::new(),
         extern_data_names: alloc::vec::Vec::new(),
         debug_info: alloc::vec::Vec::new(),
         debug_abbrev: alloc::vec::Vec::new(),
@@ -6106,6 +6144,7 @@ fn aarch64_data_ref_object_ex(
         tls_bss_size: 0,
         tls_align: 1,
         prologue_ends: alloc::vec::Vec::new(),
+        early_returns: alloc::vec::Vec::new(),
         extern_data_names: alloc::vec::Vec::new(),
         symbols: alloc::vec![NativeSymbol {
             name: String::new(),
@@ -6361,6 +6400,7 @@ fn blank_aarch64_object() -> crate::c5::linker::NativeObject {
         tls_bss_size: 0,
         tls_align: 1,
         prologue_ends: alloc::vec::Vec::new(),
+        early_returns: alloc::vec::Vec::new(),
         extern_data_names: alloc::vec::Vec::new(),
         symbols: alloc::vec::Vec::new(),
         text_relocs: alloc::vec::Vec::new(),

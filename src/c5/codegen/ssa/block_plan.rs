@@ -10,6 +10,7 @@
 use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::vec::Vec;
 
+use super::early_exit::EarlyExit;
 use super::emit_common::{edge_moves, inst_emits_nothing};
 use super::mem2reg::successors;
 use super::reg_alloc::{Allocation, for_each_operand};
@@ -36,6 +37,11 @@ pub(crate) struct BlockPlan {
     decided: Vec<BlockId>,
     /// Instructions only a decided repeat's test reads.
     test_only: BTreeSet<ValueId>,
+    /// The arm the entry block's own test takes; set when the function ran
+    /// that test ahead of the frame and returned on the other arm.
+    entry_arm: BlockId,
+    /// Blocks no emitted edge reaches: the arm the early return took.
+    dead: Vec<bool>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -51,7 +57,14 @@ pub(crate) enum CondShape {
 }
 
 impl BlockPlan {
-    pub(crate) fn build(func: &FunctionSsa, alloc: &Allocation, repeat_tests: bool) -> BlockPlan {
+    /// The plan of `func`'s blocks; `early` is the return the function takes
+    /// ahead of its frame (`ssa::early_exit`), whose test the entry then skips.
+    pub(crate) fn build(
+        func: &FunctionSsa,
+        alloc: &Allocation,
+        repeat_tests: bool,
+        early: Option<&EarlyExit>,
+    ) -> BlockPlan {
         let n = func.blocks.len();
         let mut plan = BlockPlan {
             target: (0..n as BlockId).collect(),
@@ -61,6 +74,8 @@ impl BlockPlan {
             flip: alloc::vec![false; n],
             decided: alloc::vec![NO_BLOCK; n],
             test_only: BTreeSet::new(),
+            entry_arm: NO_BLOCK,
+            dead: alloc::vec![false; n],
         };
         // Neither emitter lowers anything but the asm of a naked function.
         if !func.is_naked {
@@ -78,15 +93,30 @@ impl BlockPlan {
                 }
             }
         }
+        // The entry takes the frame arm, with what only its test reads gone
+        // and the returning block left out.
+        if let Some(e) = early.filter(|e| e.test_block == 0) {
+            plan.entry_arm = e.frame_block;
+            plan.dead[e.exit_block as usize] = true;
+            plan.test_only.extend(test_only(func, alloc, 0));
+        }
         let mut next = NO_BLOCK;
         for b in (0..n).rev() {
             plan.next[b] = next;
-            if !plan.skipped[b] {
+            if !plan.skipped[b] && !plan.dead[b] {
                 next = b as BlockId;
             }
         }
         if repeat_tests && !func.is_naked {
             plan.plan_repeats(func, alloc);
+        }
+        // A repeat of the loop header's test at the entry takes the frame arm.
+        if let Some(e) = early.filter(|e| e.test_block != 0)
+            && plan.repeat[0] == plan.resolve(e.test_block)
+            && plan.decided[0] == NO_BLOCK
+        {
+            plan.decided[0] = e.frame_block;
+            plan.test_only.extend(test_only(func, alloc, e.test_block));
         }
         plan
     }
@@ -106,8 +136,26 @@ impl BlockPlan {
         self.test_only.contains(&v)
     }
 
+    /// Whether `b` lowers `v`: not a value only the entry's skipped test reads.
+    pub(crate) fn lowers(&self, b: usize, v: ValueId) -> bool {
+        !(b == 0 && self.entry_arm != NO_BLOCK && self.test_only.contains(&v))
+    }
+
+    pub(crate) fn is_dead(&self, b: usize) -> bool {
+        self.dead[b]
+    }
+
+    /// The arm block `b`'s code jumps along in place of its own terminator:
+    /// the entry's, where its test ran ahead of the frame.
+    pub(crate) fn entry_jump(&self, b: usize) -> Option<BlockId> {
+        (b == 0 && self.entry_arm != NO_BLOCK).then_some(self.entry_arm)
+    }
+
     /// The edge `b`'s code ends with a jump along.
     fn closing_jump(&self, func: &FunctionSsa, b: usize) -> Option<BlockId> {
+        if let Some(arm) = self.entry_jump(b) {
+            return (!self.falls_into(b, arm)).then_some(arm);
+        }
         let t = match func.blocks[b].terminator {
             Terminator::Jmp(t) | Terminator::FallThrough(t) => t,
             Terminator::Bz {
@@ -199,6 +247,9 @@ impl BlockPlan {
 
     /// The taken arm of `p`'s conditional when its code runs into neither.
     fn taken_arm(&self, func: &FunctionSsa, p: usize) -> Option<BlockId> {
+        if self.entry_jump(p).is_some() {
+            return None;
+        }
         let (Terminator::Bz {
             target,
             fall_through,
@@ -580,7 +631,7 @@ mod tests {
     #[test]
     fn a_chain_of_blocks_without_code_lands_on_its_end() {
         let (f, a) = chain(Place::IntReg(3));
-        let plan = BlockPlan::build(&f, &a, false);
+        let plan = BlockPlan::build(&f, &a, false, None);
         assert_eq!(skipped(&plan), [1, 2]);
         assert_eq!(
             (plan.resolve(1), plan.resolve(2), plan.resolve(3)),
@@ -592,12 +643,12 @@ mod tests {
     #[test]
     fn an_edge_that_moves_a_value_keeps_its_block() {
         let (f, a) = chain(Place::IntReg(4));
-        let plan = BlockPlan::build(&f, &a, false);
+        let plan = BlockPlan::build(&f, &a, false, None);
         // The move sits at the end of b1; the phi block behind it is silent.
         assert_eq!(skipped(&plan), [2]);
         assert_eq!((plan.resolve(1), plan.resolve(2)), (1, 3));
         let (f, a) = chain(Place::Spill(0));
-        assert_eq!(skipped(&BlockPlan::build(&f, &a, false)), [2]);
+        assert_eq!(skipped(&BlockPlan::build(&f, &a, false, None)), [2]);
     }
 
     #[test]
@@ -611,7 +662,7 @@ mod tests {
             ],
         );
         let a = alloc_with(alloc::vec![Place::IntReg(0), Place::FpReg(0)]);
-        assert!(skipped(&BlockPlan::build(&f, &a, false)).is_empty());
+        assert!(skipped(&BlockPlan::build(&f, &a, false, None)).is_empty());
     }
 
     #[test]
@@ -637,7 +688,7 @@ mod tests {
             );
             let mut a = alloc_with(alloc::vec![Place::IntReg(0), Place::IntReg(1)]);
             a.use_counts[1] = uses;
-            let plan = BlockPlan::build(&f, &a, false);
+            let plan = BlockPlan::build(&f, &a, false, None);
             assert_eq!(
                 plan.is_skipped(1),
                 silent,
@@ -667,7 +718,7 @@ mod tests {
                 block(1..1, Terminator::Jmp(1)),
             ],
         );
-        let plan = BlockPlan::build(&f, &alloc_with(alloc::vec![Place::IntReg(0)]), false);
+        let plan = BlockPlan::build(&f, &alloc_with(alloc::vec![Place::IntReg(0)]), false, None);
         assert!(skipped(&plan).is_empty());
         assert_eq!(
             (1..5).map(|b| plan.resolve(b)).collect::<Vec<_>>(),
@@ -686,7 +737,7 @@ mod tests {
     #[test]
     fn addressed_blocks_are_kept_and_direct_edges_pass_them() {
         let a = alloc_with(alloc::vec![Place::IntReg(0)]);
-        let plan = BlockPlan::build(&addressed(), &a, false);
+        let plan = BlockPlan::build(&addressed(), &a, false, None);
         assert_eq!(skipped(&plan), [1, 2, 3, 4, 5]);
 
         let mut f = addressed();
@@ -698,7 +749,7 @@ mod tests {
         f.jump_tables = alloc::vec![alloc::vec![3, 6], alloc::vec![5, 4]];
         f.blocks[0].terminator = Terminator::JumpTable { idx: 0, table: 0 };
         f.blocks[6].terminator = Terminator::AsmGoto { table: 1 };
-        let plan = BlockPlan::build(&f, &a, false);
+        let plan = BlockPlan::build(&f, &a, false, None);
         // A table slot names where its row lands; row entry 0 of the
         // `asm goto` is its fall-through, a direct edge.
         assert_eq!(skipped(&plan), [3, 5]);
@@ -714,7 +765,7 @@ mod tests {
         f.computed_goto_targets.clear();
         f.jump_tables[0] = alloc::vec![4, 2];
         assert_eq!(
-            BlockPlan::build(&f, &a, false)
+            BlockPlan::build(&f, &a, false, None)
                 .landing_pads(&f)
                 .into_iter()
                 .collect::<Vec<_>>(),
@@ -727,7 +778,7 @@ mod tests {
     fn a_naked_function_keeps_every_block() {
         let (mut f, a) = chain(Place::IntReg(3));
         f.is_naked = true;
-        let plan = BlockPlan::build(&f, &a, false);
+        let plan = BlockPlan::build(&f, &a, false, None);
         assert!(skipped(&plan).is_empty());
         assert_eq!(plan.resolve(1), 1);
     }
@@ -754,7 +805,7 @@ mod tests {
                 ],
             );
             let a = alloc_with(alloc::vec![Place::IntReg(0); 3]);
-            BlockPlan::build(&f, &a, false)
+            BlockPlan::build(&f, &a, false, None)
         };
         assert_eq!(build(4, 4).cond_shape(0, 1, 2, false), CondShape::Jump(4));
         // The taken arm lands on the next emitted block: the test inverts.
@@ -845,18 +896,18 @@ mod tests {
     #[test]
     fn a_jump_to_an_indirect_branch_repeats_it() {
         let (f, a) = dispatch(false);
-        let plan = BlockPlan::build(&f, &a, true);
+        let plan = BlockPlan::build(&f, &a, true, None);
         // b0 runs into the dispatch block; the label repeats its branch.
         assert_eq!(repeats(&plan), [(2, 1)]);
         assert_eq!(plan.repeated_at(2, 1), Some(1));
         assert_eq!(plan.repeated_at(0, 1), None);
-        assert!(repeats(&BlockPlan::build(&f, &a, false)).is_empty());
+        assert!(repeats(&BlockPlan::build(&f, &a, false, None)).is_empty());
     }
 
     #[test]
     fn an_indirect_branch_reached_by_repeats_alone_keeps_one_jump() {
         let (f, a) = dispatch(true);
-        let plan = BlockPlan::build(&f, &a, true);
+        let plan = BlockPlan::build(&f, &a, true, None);
         assert_eq!(repeats(&plan), [(1, 3)]);
     }
 
@@ -870,18 +921,18 @@ mod tests {
         f.f32_values.push(false);
         f.blocks[3] = block(at..at + 1, Terminator::Return(at));
         let a = alloc_with(a.places.iter().copied().chain([Place::IntReg(9)]).collect());
-        assert!(repeats(&BlockPlan::build(&f, &a, true)).is_empty());
+        assert!(repeats(&BlockPlan::build(&f, &a, true, None)).is_empty());
     }
 
     #[test]
     fn the_jump_into_a_rotated_loop_repeats_its_test() {
         let (f, a) = rotated(alloc::vec![compare()]);
-        let plan = BlockPlan::build(&f, &a, true);
+        let plan = BlockPlan::build(&f, &a, true, None);
         assert_eq!(repeats(&plan), [(0, 2)]);
         assert_eq!(plan.repeated_at(0, 2), Some(2));
         // The latch runs into the test and repeats nothing.
         assert_eq!(plan.repeated_at(1, 2), None);
-        assert!(repeats(&BlockPlan::build(&f, &a, false)).is_empty());
+        assert!(repeats(&BlockPlan::build(&f, &a, false, None)).is_empty());
     }
 
     #[test]
@@ -894,9 +945,9 @@ mod tests {
             align: 0,
         };
         let (f, a) = rotated(alloc::vec![load(false), compare()]);
-        assert_eq!(repeats(&BlockPlan::build(&f, &a, true)), [(0, 2)]);
+        assert_eq!(repeats(&BlockPlan::build(&f, &a, true, None)), [(0, 2)]);
         let (f, a) = rotated(alloc::vec![load(true), compare()]);
-        assert!(repeats(&BlockPlan::build(&f, &a, true)).is_empty());
+        assert!(repeats(&BlockPlan::build(&f, &a, true, None)).is_empty());
         let store = Inst::StoreLocal {
             off: -1,
             value: 0,
@@ -904,22 +955,22 @@ mod tests {
             volatile: false,
         };
         let (f, a) = rotated(alloc::vec![store, compare()]);
-        assert!(repeats(&BlockPlan::build(&f, &a, true)).is_empty());
+        assert!(repeats(&BlockPlan::build(&f, &a, true, None)).is_empty());
         let (f, a) = rotated(alloc::vec![Inst::BlockAddr(3), compare()]);
-        assert!(repeats(&BlockPlan::build(&f, &a, true)).is_empty());
+        assert!(repeats(&BlockPlan::build(&f, &a, true, None)).is_empty());
     }
 
     #[test]
     fn the_repeat_is_bounded_by_its_live_instructions() {
         let body = |n: usize| (0..n).map(|_| compare()).collect::<Vec<_>>();
         let (f, a) = rotated(body(MAX_REPEATED_INSTS));
-        assert_eq!(repeats(&BlockPlan::build(&f, &a, true)), [(0, 2)]);
+        assert_eq!(repeats(&BlockPlan::build(&f, &a, true, None)), [(0, 2)]);
         let (f, a) = rotated(body(MAX_REPEATED_INSTS + 1));
-        assert!(repeats(&BlockPlan::build(&f, &a, true)).is_empty());
+        assert!(repeats(&BlockPlan::build(&f, &a, true, None)).is_empty());
         // A value nobody reads emits nothing and does not count.
         let (f, mut a) = rotated(body(MAX_REPEATED_INSTS + 1));
         a.use_counts[2] = 0;
-        assert_eq!(repeats(&BlockPlan::build(&f, &a, true)), [(0, 2)]);
+        assert_eq!(repeats(&BlockPlan::build(&f, &a, true, None)), [(0, 2)]);
     }
 
     #[test]
@@ -932,7 +983,7 @@ mod tests {
         f.f32_values.push(false);
         f.blocks[3] = block(at..at + 1, Terminator::Return(at));
         a = alloc_with(a.places.iter().copied().chain([Place::IntReg(9)]).collect());
-        assert!(repeats(&BlockPlan::build(&f, &a, true)).is_empty());
+        assert!(repeats(&BlockPlan::build(&f, &a, true, None)).is_empty());
     }
 
     #[test]
@@ -940,7 +991,7 @@ mod tests {
         // The same blocks without the back edge: block 1 returns.
         let (mut f, a) = rotated(alloc::vec![compare()]);
         f.blocks[1].terminator = Terminator::Return(0);
-        assert!(repeats(&BlockPlan::build(&f, &a, true)).is_empty());
+        assert!(repeats(&BlockPlan::build(&f, &a, true, None)).is_empty());
     }
 
     /// A counted loop: `b0: v0 = init; Jmp b2 / b1: v1 = v2 + 1; Jmp b2 /
@@ -983,7 +1034,7 @@ mod tests {
 
     /// The arm the repeat at the end of `b0` takes.
     fn decided(f: &FunctionSsa, a: &Allocation) -> Option<BlockId> {
-        let plan = BlockPlan::build(f, a, true);
+        let plan = BlockPlan::build(f, a, true, None);
         assert_eq!(repeats(&plan), [(0, 2)], "the test is repeated");
         plan.decided_at(0)
     }
@@ -991,14 +1042,14 @@ mod tests {
     #[test]
     fn a_test_over_constants_is_decided_where_it_is_repeated() {
         let (f, a) = counted(Inst::Imm(0), alloc::vec![op_imm(BinOp::Lt, 2, 16)]);
-        let plan = BlockPlan::build(&f, &a, true);
+        let plan = BlockPlan::build(&f, &a, true, None);
         assert_eq!(plan.decided_at(0), Some(1), "0 < 16 enters the loop");
         assert!(plan.is_test_only(3) && !plan.is_test_only(2));
         assert_eq!(plan.decided_at(1), None, "the latch repeats nothing");
         let (f, a) = counted(Inst::Imm(20), alloc::vec![op_imm(BinOp::Lt, 2, 16)]);
         assert_eq!(decided(&f, &a), Some(3), "20 < 16 leaves it");
         // Without `-O` nothing is repeated, so nothing is decided.
-        assert_eq!(BlockPlan::build(&f, &a, false).decided_at(0), None);
+        assert_eq!(BlockPlan::build(&f, &a, false, None).decided_at(0), None);
     }
 
     #[test]
@@ -1119,13 +1170,13 @@ mod tests {
         );
         f.blocks[3].terminator = Terminator::Return(3);
         a.use_counts[3] = 2;
-        let plan = BlockPlan::build(&f, &a, true);
+        let plan = BlockPlan::build(&f, &a, true, None);
         assert_eq!(plan.decided_at(0), Some(1));
         assert!(plan.is_test_only(4) && !plan.is_test_only(3));
         // The same value read by the test alone goes with it.
         a.use_counts[3] = 1;
         f.blocks[3].terminator = Terminator::Return(2);
-        assert!(BlockPlan::build(&f, &a, true).is_test_only(3));
+        assert!(BlockPlan::build(&f, &a, true, None).is_test_only(3));
     }
 
     #[test]
@@ -1148,7 +1199,7 @@ mod tests {
         a.use_counts[4] = 0;
         a.sxtw_source[5] = 2;
         a.sxtw_k[5] = 32;
-        let plan = BlockPlan::build(&f, &a, true);
+        let plan = BlockPlan::build(&f, &a, true, None);
         assert_eq!(plan.decided_at(0), Some(1));
         let only: Vec<ValueId> = (3..8).filter(|&v| plan.is_test_only(v)).collect();
         assert_eq!(only, [5, 7], "v3 is still read by v6");
@@ -1199,16 +1250,16 @@ mod tests {
         };
         // The taken arm is the test: the arms swap and the jump to it repeats it.
         let (f, a) = build(2, 4);
-        let plan = BlockPlan::build(&f, &a, true);
+        let plan = BlockPlan::build(&f, &a, true, None);
         assert_eq!(repeats(&plan), [(0, 2)]);
         assert_eq!(plan.cond_shape(0, 2, 4, false), branch(4, 2, true));
         // The repeat's own branch, which runs into b1, keeps its sense.
         assert_eq!(plan.cond_shape(0, 3, 1, false), branch(3, 1, false));
-        let plain = BlockPlan::build(&f, &a, false);
+        let plain = BlockPlan::build(&f, &a, false, None);
         assert_eq!(plain.cond_shape(0, 2, 4, false), branch(2, 4, false));
         // The closing arm is the test already: nothing swaps.
         let (f, a) = build(4, 2);
-        let plan = BlockPlan::build(&f, &a, true);
+        let plan = BlockPlan::build(&f, &a, true, None);
         assert_eq!(repeats(&plan), [(0, 2)]);
         assert_eq!(plan.cond_shape(0, 4, 2, false), branch(4, 2, false));
     }
@@ -1234,6 +1285,6 @@ mod tests {
                 t => t,
             };
         }
-        assert!(repeats(&BlockPlan::build(&f, &a, true)).is_empty());
+        assert!(repeats(&BlockPlan::build(&f, &a, true, None)).is_empty());
     }
 }

@@ -92,6 +92,7 @@ const NT_BADC_MACHO_TLV_DESC_SYM: u32 = 9;
 const NT_BADC_ELF_TPOFF: u32 = 10;
 const NT_BADC_PROLOGUE_END: u32 = 11;
 const NT_BADC_EXTERN_DATA: u32 = 12;
+const NT_BADC_EARLY_RETURN: u32 = 13;
 const RODATA_SECTION: &str = ".rodata";
 const DATA_REL_RO_SECTION: &str = ".data.rel.ro";
 
@@ -1014,6 +1015,9 @@ struct Symtab<'a> {
     func_symidx_by_name: BTreeMap<String, u32>,
     asm_label_symidx: BTreeMap<&'a str, u32>,
     prologue_end_pairs: Vec<(u64, u64)>,
+    /// `(entry, frame path, early return)` `.text` offsets of each function
+    /// that returns ahead of its frame.
+    early_returns: Vec<(u64, u64, u64)>,
     alias_syms: Vec<Option<(u8, Elf64Sym)>>,
     defined_data_local_symidx: BTreeMap<&'a str, u64>,
     defined_tls_symidx: BTreeMap<&'a str, u64>,
@@ -2403,6 +2407,14 @@ impl<'a> RelocWriter<'a> {
             let (post_shndx, post_off) = self.text_place(post_native as u64);
             if fn_shndx == SHIDX_TEXT && post_shndx == SHIDX_TEXT {
                 self.syms.prologue_end_pairs.push((fn_off, post_off));
+            }
+        }
+        let build = self.build;
+        for e in &build.early_returns {
+            let place = |at: u32| self.text_place(u64::from(e.begin + at));
+            let [(a, entry), (b, frame), (c, exit)] = [place(0), place(e.frame), place(e.exit)];
+            if [a, b, c] == [SHIDX_TEXT; 3] {
+                self.syms.early_returns.push((entry, frame, exit));
             }
         }
         Ok(())
@@ -3830,6 +3842,7 @@ impl<'a> RelocWriter<'a> {
             &self.names.defined_tls_globals,
             &build.elf_tpoff_fixups,
             &self.syms.prologue_end_pairs,
+            &self.syms.early_returns,
             &self.names.user_extern_data_names,
         );
         let (layout, relocs) = (&self.layout, &self.relocs);
@@ -4591,6 +4604,7 @@ fn build_badc_note(
     tls_symbols: &[(&str, i64, u64)],
     elf_tpoff_fixups: &[super::ElfTpoffFixup],
     prologue_ends: &[(u64, u64)],
+    early_returns: &[(u64, u64, u64)],
     extern_data_names: &[&str],
 ) -> Vec<u8> {
     let mut out: Vec<u8> = Vec::new();
@@ -4713,6 +4727,16 @@ fn build_badc_note(
             desc.extend_from_slice(&post.to_le_bytes());
         }
         push_note_record(&mut out, NT_BADC_PROLOGUE_END, &desc);
+    }
+
+    if !early_returns.is_empty() {
+        let mut desc: Vec<u8> = Vec::new();
+        for &(entry, frame, exit) in early_returns {
+            for at in [entry, frame, exit] {
+                desc.extend_from_slice(&at.to_le_bytes());
+            }
+        }
+        push_note_record(&mut out, NT_BADC_EARLY_RETURN, &desc);
     }
 
     if !imports.data_bindings.is_empty() {

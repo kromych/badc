@@ -4,7 +4,8 @@
 use super::super::access::{load_kind_for, load_kind_width, load_place};
 use super::super::atomic::RmwOpen;
 use super::super::types::{
-    arg_value_ty, extend_scalar_call_result, is_float_ty, is_floating_scalar, low_word_param,
+    arg_value_ty, arg_width, extend_scalar_call_result, is_float_ty, is_floating_scalar,
+    low_word_param,
 };
 use super::super::*;
 /// A struct or union member access (C99 6.5.2.3), shared by the read and
@@ -189,8 +190,8 @@ impl<'a> Walker<'a> {
             false,
             fp_mask.shifted(1),
         );
-        let low = self.low_word_args(&self.symbols[sym as usize].params, named, 1);
-        b.set_call_low_word_args(call, low);
+        let params = Some(self.symbols[sym as usize].params.as_slice());
+        self.set_arg_widths(b, call, params, named, exprs, 1);
         b.set_call_out_slot(call, result_slot);
         if !arg_aggs.is_empty() {
             b.set_call_arg_aggs(call, after_out_ptr(&arg_aggs));
@@ -224,7 +225,7 @@ impl<'a> Walker<'a> {
         };
         let named = self.symbols[sym as usize].params.len();
         let arg_aggs = self.call_arg_aggs(b, &mut args, named, Some(sym), true);
-        let low = self.low_word_args(&self.symbols[sym as usize].params, fixed_args, 0);
+
         // C99 6.5.2.2p6: a variadic floating-point argument widens to
         // `double` under a host variadic ABI but stays FP-classed --
         // riding an FP argument register on the register-save hosts, and
@@ -239,7 +240,8 @@ impl<'a> Walker<'a> {
             let target_pc = self.live_fun_val(sym, val);
             let call =
                 emit_direct_call(b, target_pc, sym, args.vals, fixed_args, fp_return, fp_mask);
-            b.set_call_low_word_args(call, low);
+            let params = Some(self.symbols[sym as usize].params.as_slice());
+            self.set_arg_widths(b, call, params, fixed_args, args.exprs, 0);
             if !arg_aggs.is_empty() {
                 b.set_call_arg_aggs(call, arg_aggs);
             }
@@ -272,7 +274,8 @@ impl<'a> Walker<'a> {
             fp_return,
             call_fp_mask,
         );
-        b.set_call_low_word_args(call, low);
+        let params = Some(self.symbols[sym as usize].params.as_slice());
+        self.set_arg_widths(b, call, params, fixed_args, args.exprs, 0);
         if !arg_aggs.is_empty() {
             b.set_call_arg_aggs(call, arg_aggs);
         }
@@ -511,7 +514,7 @@ impl<'a> Walker<'a> {
             shifted.push(out_arg);
             shifted.extend_from_slice(&args.vals);
             let call = b.call_ext(val, shifted, fp_mask.shifted(1), false);
-            b.set_call_low_word_args(call, self.low_word_args(params, nparams, 1));
+            self.set_arg_widths(b, call, Some(params), nparams, args.exprs, 1);
             b.set_call_out_slot(call, result_slot);
             if !arg_aggs.is_empty() {
                 b.set_call_arg_aggs(call, after_out_ptr(&arg_aggs));
@@ -523,7 +526,7 @@ impl<'a> Walker<'a> {
         let ret_temp = self.call_ret_temp(b, args.conv, ty);
         let fp_return = is_floating_scalar(ty);
         let call = b.call_ext(val, args.vals, fp_mask, fp_return);
-        b.set_call_low_word_args(call, self.low_word_args(params, nparams, 0));
+        self.set_arg_widths(b, call, Some(params), nparams, args.exprs, 0);
         if !arg_aggs.is_empty() {
             b.set_call_arg_aggs(call, arg_aggs);
         }
@@ -554,7 +557,7 @@ impl<'a> Walker<'a> {
         // rather than on the stack the callee's va_arg walks. Carrying
         // the prototype on the pointer's type would close this.
         let (callee_variadic, callee_fixed) = self.indirect_callee_proto(callee, args.exprs.len());
-        let params = self.indirect_callee_params(callee).unwrap_or_default();
+        let params = self.indirect_callee_params(callee);
         // Every ABI question below is asked of the pointed-to function's
         // own convention, not the target's default.
         let abi = self.target.abi_for(conv);
@@ -581,7 +584,7 @@ impl<'a> Walker<'a> {
             all_args.extend_from_slice(&args.vals);
             let fixed = all_args.len();
             let call = b.call_indirect(target, all_args, false, fixed, false, call_fp_mask, conv);
-            b.set_call_low_word_args(call, self.low_word_args(params, callee_fixed, 1));
+            self.set_arg_widths(b, call, params, callee_fixed, args.exprs, 1);
             b.set_call_out_slot(call, result_slot);
             if !arg_aggs.is_empty() {
                 b.set_call_arg_aggs(call, after_out_ptr(&arg_aggs));
@@ -606,7 +609,7 @@ impl<'a> Walker<'a> {
                 fp_mask,
                 conv,
             );
-            b.set_call_low_word_args(call, self.low_word_args(params, callee_fixed, 0));
+            self.set_arg_widths(b, call, params, callee_fixed, args.exprs, 0);
             if !arg_aggs.is_empty() {
                 b.set_call_arg_aggs(call, arg_aggs);
             }
@@ -633,7 +636,7 @@ impl<'a> Walker<'a> {
             call_fp_mask,
             conv,
         );
-        b.set_call_low_word_args(call, self.low_word_args(params, callee_fixed, 0));
+        self.set_arg_widths(b, call, params, callee_fixed, args.exprs, 0);
         if !arg_aggs.is_empty() {
             b.set_call_arg_aggs(call, arg_aggs);
         }
@@ -659,6 +662,34 @@ impl<'a> Walker<'a> {
                 .map(|s| s.params.as_slice()),
             _ => None,
         }
+    }
+
+    /// Record `call`'s [`Inst::Call::low_word_args`] and
+    /// [`Inst::Call::arg_widths`]: `exprs` pass `named` of the parameters
+    /// `params`, the rest promoted, `shift` positions up past a hidden
+    /// leading argument. With the prototype unknown the parse converted
+    /// no argument, so each keeps its own type.
+    fn set_arg_widths(
+        &self,
+        b: &mut SsaBuilder,
+        call: ValueId,
+        params: Option<&[i64]>,
+        named: usize,
+        exprs: &[ExprId],
+        shift: usize,
+    ) {
+        let known = params.unwrap_or_default();
+        b.set_call_low_word_args(call, self.low_word_args(known, named, shift));
+        let mut widths = crate::c5::ir::ArgWidths::default();
+        for (i, &e) in exprs.iter().enumerate() {
+            let bytes = match known.get(i) {
+                Some(&ty) if i < named => arg_width(ty, self.target, false),
+                _ => arg_value_ty(self.ast.expr(e))
+                    .map_or(8, |ty| arg_width(ty, self.target, params.is_some())),
+            };
+            widths.set(i + shift, bytes);
+        }
+        b.set_call_arg_widths(call, widths);
     }
 
     /// [`Inst::Call::low_word_args`] for `named` of `params`, placed `shift`

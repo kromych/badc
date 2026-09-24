@@ -2875,20 +2875,29 @@ fn populate_call_arg_hints(
         .collect();
     for (pc, inst) in func.insts.iter().enumerate() {
         // An import's variadic count is unknown here; its arguments plan as fixed.
-        let (args, fixed, fp_arg_mask, arg_aggs, conv) = match inst {
+        let (args, fixed, fp_arg_mask, arg_aggs, widths, conv) = match inst {
             Inst::Call {
                 args,
                 fixed_args,
                 fp_arg_mask,
                 arg_aggs,
+                arg_widths,
                 ..
-            } => (args, *fixed_args, fp_arg_mask, arg_aggs, CallConv::Target),
+            } => (
+                args,
+                *fixed_args,
+                fp_arg_mask,
+                arg_aggs,
+                *arg_widths,
+                CallConv::Target,
+            ),
             Inst::CallIndirect {
                 args,
                 callee_variadic,
                 fixed_args,
                 fp_arg_mask,
                 arg_aggs,
+                arg_widths,
                 callee_conv,
                 ..
             } => {
@@ -2897,14 +2906,29 @@ fn populate_call_arg_hints(
                 } else {
                     args.len()
                 };
-                (args, fixed, fp_arg_mask, arg_aggs, *callee_conv)
+                (
+                    args,
+                    fixed,
+                    fp_arg_mask,
+                    arg_aggs,
+                    *arg_widths,
+                    *callee_conv,
+                )
             }
             Inst::CallExt {
                 args,
                 fp_arg_mask,
                 arg_aggs,
+                arg_widths,
                 ..
-            } => (args, args.len(), fp_arg_mask, arg_aggs, CallConv::Target),
+            } => (
+                args,
+                args.len(),
+                fp_arg_mask,
+                arg_aggs,
+                *arg_widths,
+                CallConv::Target,
+            ),
             _ => continue,
         };
         let abi = target.abi_for(conv);
@@ -2916,6 +2940,7 @@ fn populate_call_arg_hints(
             abi,
             &aggs,
             false,
+            widths,
         );
         // An aggregate address: its first integer slot's register, else a free one.
         let taken = plan
@@ -5083,6 +5108,7 @@ int main(void) { return 0; }
             cmp32: Vec::new(),
             low_word_tests: Vec::new(),
             param_fp_mask: crate::c5::ir::FpMask::EMPTY,
+            param_widths: crate::c5::ir::ArgWidths::default(),
             agg_descs: alloc::vec::Vec::new(),
             param_aggs: alloc::vec::Vec::new(),
             param_local_slots: alloc::vec::Vec::new(),
@@ -5322,6 +5348,7 @@ int main(void) { return 0; }
             cmp32: Vec::new(),
             low_word_tests: Vec::new(),
             param_fp_mask: crate::c5::ir::FpMask::EMPTY,
+            param_widths: crate::c5::ir::ArgWidths::default(),
             agg_descs: Vec::new(),
             param_aggs: Vec::new(),
             param_local_slots: Vec::new(),
@@ -5404,6 +5431,7 @@ int main(void) { return 0; }
             fp_return: false,
             fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
             low_word_args: 0,
+            arg_widths: crate::c5::ir::ArgWidths::default(),
             callee_conv: crate::c5::codegen::CallConv::Target,
             arg_aggs: Vec::new(),
             ret_agg: None,
@@ -5806,6 +5834,7 @@ int main(void) { return 0; }
                     fp_return: false,
                     fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
                     low_word_args: 0,
+                    arg_widths: crate::c5::ir::ArgWidths::default(),
                     arg_aggs: Vec::new(),
                     ret_agg: None,
                     ret_slot_local: 0,
@@ -5968,6 +5997,7 @@ int main(void) { return 0; }
                 fp_return: false,
                 fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
                 low_word_args: 0,
+                arg_widths: crate::c5::ir::ArgWidths::default(),
                 arg_aggs: Vec::new(),
                 ret_agg: None,
                 ret_slot_local: 0,

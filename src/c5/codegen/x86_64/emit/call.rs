@@ -523,12 +523,26 @@ pub(super) fn emit_call(
     // internal convention uses both banks; `fp_arg_mask` comes from the
     // argument types, since an FP constant rides an integer register.
     let (plan, site, xmm_count) = if callee_is_variadic && abi.position_indexed_args {
-        let plan =
-            super::plan_call_args_aggs(args.len(), fixed_args, fp_arg_mask, abi, &aggs, false);
+        let plan = super::plan_call_args_aggs(
+            args.len(),
+            fixed_args,
+            fp_arg_mask,
+            abi,
+            &aggs,
+            false,
+            crate::c5::ir::ArgWidths::default(),
+        );
         (plan, "Call (Win64 variadic)", None)
     } else if callee_is_variadic && abi.variadic_zero_xmm_count && !abi.position_indexed_args {
-        let plan =
-            super::plan_call_args_aggs(args.len(), fixed_args, fp_arg_mask, abi, &aggs, false);
+        let plan = super::plan_call_args_aggs(
+            args.len(),
+            fixed_args,
+            fp_arg_mask,
+            abi,
+            &aggs,
+            false,
+            crate::c5::ir::ArgWidths::default(),
+        );
         let xmm_used = xmm_arg_count(&plan);
         (plan, "Call (SysV variadic)", Some(xmm_used))
     } else if callee_is_variadic {
@@ -536,8 +550,15 @@ pub(super) fn emit_call(
         // without the host variadic register protocol.
         return fail("Call: variadic callee not matched by a host-ABI branch");
     } else {
-        let plan =
-            super::plan_call_args_aggs(args.len(), args.len(), fp_arg_mask, abi, &aggs, false);
+        let plan = super::plan_call_args_aggs(
+            args.len(),
+            args.len(),
+            fp_arg_mask,
+            abi,
+            &aggs,
+            false,
+            crate::c5::ir::ArgWidths::default(),
+        );
         (plan, "Call", None)
     };
     if plan.scratch_bytes > 0 {
@@ -599,7 +620,15 @@ pub(super) fn emit_call_ext(
     // `plan_call_args` placement; a tagged aggregate rides through the
     // host-ABI argument-register packing instead.
     let aggs = build_arg_aggs(arg_aggs, agg_descs, abi);
-    let plan = super::plan_call_args_aggs(args.len(), fixed, fp_arg_mask, abi, &aggs, false);
+    let plan = super::plan_call_args_aggs(
+        args.len(),
+        fixed,
+        fp_arg_mask,
+        abi,
+        &aggs,
+        false,
+        crate::c5::ir::ArgWidths::default(),
+    );
     let xmm_used = xmm_arg_count(&plan);
     if plan.scratch_bytes > 0 {
         emit_stack_alloc(code, plan.scratch_bytes, None);
@@ -677,6 +706,7 @@ pub(super) fn callee_abi(abi: super::Abi, target: Target, conv: super::CallConv)
         variadic_int_only: row.variadic_int_only,
         position_indexed_args: row.position_indexed_args,
         pair_align16_gprs: row.pair_align16_gprs,
+        packed_stack_args: row.packed_stack_args,
         natural_composite_align: row.natural_composite_align,
         variadic_zero_xmm_count: row.variadic_zero_xmm_count,
         ..abi
@@ -715,7 +745,15 @@ pub(super) fn emit_call_indirect(
     // A tagged by-value aggregate rides `plan_call_args_aggs`; with none the
     // plan is the scalar placement.
     let aggs = build_arg_aggs(arg_aggs, agg_descs, abi);
-    let plan = super::plan_call_args_aggs(args.len(), fixed, fp_arg_mask, abi, &aggs, false);
+    let plan = super::plan_call_args_aggs(
+        args.len(),
+        fixed,
+        fp_arg_mask,
+        abi,
+        &aggs,
+        false,
+        crate::c5::ir::ArgWidths::default(),
+    );
     // The staged target must avoid every register the marshal reads (the
     // argument sources) or writes (every integer register the plan fills,
     // and the r10 staging scratch).

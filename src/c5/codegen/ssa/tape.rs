@@ -58,6 +58,7 @@ fn keyed(func: &mut FunctionSsa) -> Keyed<'_> {
         cmp32,
         low_word_tests: _,
         param_fp_mask: _,
+        param_widths: _,
         agg_descs: _,
         param_aggs: _,
         param_local_slots: _,

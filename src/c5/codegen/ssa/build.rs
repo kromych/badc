@@ -197,6 +197,7 @@ impl SsaBuilder {
             cmp32: Vec::new(),
             low_word_tests: Vec::new(),
             param_fp_mask: crate::c5::ir::FpMask::EMPTY,
+            param_widths: crate::c5::ir::ArgWidths::default(),
             agg_descs: alloc::vec::Vec::new(),
             param_aggs: alloc::vec::Vec::new(),
             param_local_slots: alloc::vec::Vec::new(),
@@ -399,6 +400,11 @@ impl SsaBuilder {
         self.func.n_params = n;
     }
 
+    /// Record [`FunctionSsa::param_widths`].
+    pub(crate) fn set_param_widths(&mut self, widths: crate::c5::ir::ArgWidths) {
+        self.func.param_widths = widths;
+    }
+
     /// Record that the function returns a floating-point scalar. See
     /// [`FunctionSsa::ret_is_fp`].
     pub(crate) fn set_ret_is_fp(&mut self, is_fp: bool) {
@@ -483,6 +489,16 @@ impl SsaBuilder {
         | Inst::CallExt { ret_slot_local, .. } = &mut self.func.insts[v as usize]
         {
             *ret_slot_local = slot;
+        }
+    }
+
+    /// Record the call's [`Inst::Call::arg_widths`].
+    pub(crate) fn set_call_arg_widths(&mut self, v: ValueId, widths: crate::c5::ir::ArgWidths) {
+        match &mut self.func.insts[v as usize] {
+            Inst::Call { arg_widths, .. }
+            | Inst::CallIndirect { arg_widths, .. }
+            | Inst::CallExt { arg_widths, .. } => *arg_widths = widths,
+            _ => {}
         }
     }
 
@@ -1353,6 +1369,7 @@ impl SsaBuilder {
             fp_return,
             fp_arg_mask,
             low_word_args: 0,
+            arg_widths: crate::c5::ir::ArgWidths::default(),
             arg_aggs: alloc::vec::Vec::new(),
             ret_agg: None,
             ret_slot_local: 0,
@@ -1379,6 +1396,7 @@ impl SsaBuilder {
             fp_return,
             fp_arg_mask,
             low_word_args: 0,
+            arg_widths: crate::c5::ir::ArgWidths::default(),
             arg_aggs: alloc::vec::Vec::new(),
             ret_agg: None,
             ret_slot_local: 0,
@@ -1408,6 +1426,7 @@ impl SsaBuilder {
             fp_return,
             fp_arg_mask,
             low_word_args: 0,
+            arg_widths: crate::c5::ir::ArgWidths::default(),
             callee_conv,
             arg_aggs: alloc::vec::Vec::new(),
             ret_agg: None,
@@ -1629,6 +1648,7 @@ impl SsaBuilder {
             args,
             fp_arg_mask,
             low_word_args: 0,
+            arg_widths: crate::c5::ir::ArgWidths::default(),
             fp_return,
             arg_aggs: alloc::vec::Vec::new(),
             ret_agg: None,

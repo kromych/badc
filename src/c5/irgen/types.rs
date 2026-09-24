@@ -122,6 +122,28 @@ pub(super) fn extend_scalar_call_result(
     }
 }
 
+/// The width `Inst::Call::arg_widths` records for an argument of type `ty`:
+/// its size below 8 bytes, as the default argument promotions leave it when
+/// `promoted` (C99 6.5.2.2p6).
+pub(super) fn arg_width(ty: i64, target: Target, promoted: bool) -> u32 {
+    if is_pointer_ty(ty) {
+        return 8;
+    }
+    if is_float_ty(ty) {
+        return if promoted { 8 } else { 4 };
+    }
+    match type_size_bytes(ty, target) {
+        n @ 1..=4 if !is_floating_scalar(ty) => {
+            if promoted {
+                4
+            } else {
+                n as u32
+            }
+        }
+        _ => 8,
+    }
+}
+
 /// Whether a parameter of type `ty` is read in the low 32 bits alone
 /// (`Inst::Call::low_word_args`).
 pub(super) fn low_word_param(ty: i64, target: Target) -> bool {

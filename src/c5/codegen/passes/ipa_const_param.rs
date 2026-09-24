@@ -397,6 +397,7 @@ mod tests {
                         fp_return: false,
                         fp_arg_mask: FpMask::EMPTY,
                         low_word_args,
+                        arg_widths: crate::c5::ir::ArgWidths::default(),
                         arg_aggs: Vec::new(),
                         ret_agg: None,
                         ret_slot_local: 0,

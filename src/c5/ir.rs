@@ -327,6 +327,9 @@ pub(crate) enum Inst {
         /// V AMD64 3.2.3, AAPCS64 6.8.2); a narrower one still arrives
         /// extended to 32 bits (Apple arm64). Clear past bit 63.
         low_word_args: u64,
+        /// The width of each argument narrower than 8 bytes: a named
+        /// parameter's type, past the prototype the promoted argument's.
+        arg_widths: ArgWidths,
         /// Host-ABI aggregate metadata. Parallel to `args`:
         /// `arg_aggs[k] = Some(i)` marks `args[k]` as the address of
         /// an aggregate laid out by the function's `agg_descs[i]`,
@@ -367,6 +370,8 @@ pub(crate) enum Inst {
         fp_arg_mask: FpMask,
         /// See [`Self::Call::low_word_args`].
         low_word_args: u64,
+        /// See [`Self::Call::arg_widths`].
+        arg_widths: ArgWidths,
         /// Calling convention the pointed-to function follows, read off
         /// the callee pointer's declared type
         /// (`__attribute__((ms_abi))` / `((sysv_abi))`). Selects the
@@ -387,6 +392,8 @@ pub(crate) enum Inst {
         fp_arg_mask: FpMask,
         /// See [`Self::Call::low_word_args`].
         low_word_args: u64,
+        /// See [`Self::Call::arg_widths`].
+        arg_widths: ArgWidths,
         /// True when the callee returns a floating-point scalar, so the
         /// result is delivered in the FP return register (d0 / xmm0) and
         /// the value is FP-classed. Mirrors [`Self::Call::fp_return`];
@@ -1726,6 +1733,41 @@ pub(crate) struct Block {
     pub exit_acc: ValueId,
 }
 
+/// The byte width of each scalar argument, or parameter, narrower than 8
+/// bytes: where a convention places stack arguments at their own size and
+/// alignment (Apple arm64), this is the size. Two bits per position below
+/// 64, 0 for 8 bytes and 1, 2, 3 for 1, 2, 4.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(crate) struct ArgWidths(u128);
+
+impl ArgWidths {
+    pub(crate) fn set(&mut self, i: usize, bytes: u32) {
+        if i < 64 {
+            let code: u128 = match bytes {
+                1 => 1,
+                2 => 2,
+                4 => 3,
+                _ => 0,
+            };
+            self.0 = self.0 & !(3 << (2 * i)) | code << (2 * i);
+        }
+    }
+
+    pub(crate) fn bytes(self, i: usize) -> u32 {
+        match self.0.checked_shr(2 * i as u32).unwrap_or(0) & 3 {
+            1 => 1,
+            2 => 2,
+            3 => 4,
+            _ => 8,
+        }
+    }
+
+    /// Every position moved up by `by`, for a hidden leading argument.
+    pub(crate) fn shifted(self, by: usize) -> ArgWidths {
+        ArgWidths(self.0.checked_shl(2 * by as u32).unwrap_or(0))
+    }
+}
+
 /// The positions of a call's arguments, or of a function's parameters, that
 /// hold a floating-point scalar, for any argument count.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -1973,6 +2015,9 @@ pub(crate) struct FunctionSsa {
     /// banks rather than by absolute parameter index. Empty for SSA built
     /// outside the walker.
     pub param_fp_mask: FpMask,
+    /// The width of each parameter narrower than 8 bytes, as the caller's
+    /// `Inst::Call::arg_widths` gives it.
+    pub param_widths: ArgWidths,
     /// Interned aggregate layouts referenced by the call
     /// instructions' `arg_aggs` / `ret_agg` and this function's
     /// `param_aggs` / `ret_agg`. Empty for SSA built outside the
@@ -2343,6 +2388,7 @@ impl crate::c5::layout::DataOffsets for FunctionSsa {
             cmp32: _,
             low_word_tests: _,
             param_fp_mask: _,
+            param_widths: _,
             agg_descs: _,
             param_aggs: _,
             param_local_slots: _,

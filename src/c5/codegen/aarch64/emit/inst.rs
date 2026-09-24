@@ -234,6 +234,7 @@ pub(super) fn emit_inst(
             fixed_args,
             fp_return,
             fp_arg_mask,
+            arg_widths,
             arg_aggs,
             ret_agg,
             ret_slot_local,
@@ -245,6 +246,7 @@ pub(super) fn emit_inst(
             CallOperands {
                 args,
                 fp_arg_mask,
+                arg_widths: *arg_widths,
                 arg_aggs,
                 ret_agg: *ret_agg,
                 ret_slot_off: *ret_slot_local,
@@ -259,6 +261,7 @@ pub(super) fn emit_inst(
             binding_idx,
             args,
             fp_arg_mask,
+            arg_widths,
             arg_aggs,
             ret_agg,
             ret_slot_local,
@@ -271,6 +274,7 @@ pub(super) fn emit_inst(
             CallOperands {
                 args,
                 fp_arg_mask,
+                arg_widths: *arg_widths,
                 arg_aggs,
                 ret_agg: *ret_agg,
                 ret_slot_off: *ret_slot_local,
@@ -285,6 +289,7 @@ pub(super) fn emit_inst(
             fixed_args,
             fp_return,
             fp_arg_mask,
+            arg_widths,
             arg_aggs,
             ret_agg,
             ret_slot_local,
@@ -296,6 +301,7 @@ pub(super) fn emit_inst(
             CallOperands {
                 args,
                 fp_arg_mask,
+                arg_widths: *arg_widths,
                 arg_aggs,
                 ret_agg: *ret_agg,
                 ret_slot_off: *ret_slot_local,

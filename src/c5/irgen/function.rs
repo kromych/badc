@@ -2,7 +2,7 @@
 //! the incoming parameters (C99 6.9.1).
 
 use super::access::{load_kind_for, seg_copy_bytes, store_kind_for};
-use super::types::is_floating_scalar;
+use super::types::{arg_width, is_floating_scalar};
 use super::*;
 use crate::c5::codegen::{ArgAgg, CallConv, CallPlan};
 use crate::c5::compiler::{StructDef, StructReturnAbi};
@@ -265,11 +265,18 @@ impl<'a> ParamEntry<'a> {
                 }
             }
         }
+        let mut widths = crate::c5::ir::ArgWidths::default();
+        for (i, &pty) in param_tys.iter().enumerate() {
+            let arrives = fun.param_arrival_tys.get(i).copied().unwrap_or(pty);
+            widths.set(shift + i, arg_width(arrives, target, false));
+        }
+        b.set_param_widths(widths);
         let plan = plan_param_regs_aggs(
             shift + param_tys.len(),
             b.param_fp_mask(),
             abi_target.abi(),
             &arg_aggs,
+            widths,
         );
         Self {
             structs,

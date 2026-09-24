@@ -5627,6 +5627,130 @@ fn hidden_result_pointer_calls_cross_the_system_compiler_boundary() {
     drive_across_the_system_compiler(&cc, "hidden-ptr-interop", common, "mix, floats, spill");
 }
 
+// Arguments past the registers cross the system compiler boundary both ways at
+// the offsets the platform puts them: Apple arm64 packs a named stack argument
+// at its own size and alignment, a homogeneous floating-point aggregate too,
+// while other composites take multiples of 8 and a variadic tail 8-byte slots
+// from the next multiple of 8; AAPCS64 and System V AMD64 give every one 8. An
+// old-style definition takes its arguments promoted, and a callee that inlines
+// a multi-block function reads its own where they arrive. Each side checks the
+// other's result against its own copy of the callee.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn stack_arguments_cross_the_system_compiler_boundary() {
+    let Some(cc) = host_cc() else {
+        eprintln!(
+            "skipping stack_arguments_cross_the_system_compiler_boundary: no system C compiler"
+        );
+        return;
+    };
+    let common = "#include <stdarg.h>\n\
+        typedef long L;\n\
+        typedef double D;\n\
+        struct c3 { char c[3]; };\n\
+        struct c12 { char c[12]; };\n\
+        struct f2 { float a, b; };\n\
+        struct f3 { float a, b, c; };\n\
+        struct d1 { double a; };\n\
+        struct s2 { short a; };\n\
+        static L scalars(L a0, L a1, L a2, L a3, L a4, L a5, L a6, L a7, char c, short s,\n\
+          int i, char c2, L l, unsigned char uc, _Bool b, unsigned short us, float f)\n\
+        { return a7 + c + s * 3 + i * 5 + c2 * 7 + l * 11 + uc * 13 + b * 17 + us * 19\n\
+            + (L)(f * 2); }\n\
+        static L agg3(L a0, L a1, L a2, L a3, L a4, L a5, L a6, L a7, struct c3 x, char y)\n\
+        { return a0 + x.c[0] + x.c[1] * 3 + x.c[2] * 5 + y * 7; }\n\
+        static L agg12(L a0, L a1, L a2, L a3, L a4, L a5, L a6, L a7, char y, struct c12 x,\n\
+          char z)\n\
+        { return a1 + y + x.c[0] * 3 + x.c[11] * 5 + z * 7; }\n\
+        static L agg_s2(L a0, L a1, L a2, L a3, L a4, L a5, L a6, L a7, char y, struct s2 x,\n\
+          char z)\n\
+        { return a2 + y + x.a * 3 + z * 5; }\n\
+        static D hfa(D d0, D d1, D d2, D d3, D d4, D d5, D d6, D d7, float f, struct f2 h,\n\
+          float g, struct f3 t, struct d1 dd, float k)\n\
+        { return d7 + f + h.a * 3 + h.b * 5 + g * 7 + t.a * 11 + t.c * 13 + dd.a * 17\n\
+            + k * 19; }\n\
+        static D fps(D d0, D d1, D d2, D d3, D d4, D d5, D d6, D d7, float f, D d, float g,\n\
+          float h)\n\
+        { return d0 + f + d * 3 + g * 5 + h * 7; }\n\
+        static L mixed(L a0, L a1, L a2, L a3, L a4, L a5, L a6, L a7, D d0, D d1, D d2, D d3,\n\
+          D d4, D d5, D d6, D d7, float f, char c, D d, short s, int i)\n\
+        { return a3 + (L)(f * 2) + c * 3 + (L)(d * 5) + s * 7 + i * 11; }\n\
+        static L vnamed(L a0, L a1, L a2, L a3, L a4, L a5, L a6, L a7, char c, short s,\n\
+          int n, ...)\n\
+        { va_list ap; L r = a4 + c + s * 3; va_start(ap, n);\n\
+          for (int i = 0; i < n; i++) r += va_arg(ap, L) * (5 + i);\n\
+          r += (L)(va_arg(ap, D) * 2); va_end(ap); return r; }\n\
+        static L vint(L a0, L a1, L a2, L a3, L a4, L a5, L a6, L a7, int n, ...)\n\
+        { va_list ap; L r = a1; va_start(ap, n);\n\
+          for (int i = 0; i < n; i++) r += va_arg(ap, L) * (5 + i);\n\
+          r += (L)(va_arg(ap, D) * 2); va_end(ap); return r; }\n\
+        static L kr(a0, a1, a2, a3, a4, a5, a6, a7, d0, d1, d2, d3, d4, d5, d6, d7, c, s, f,\n\
+          uc)\n\
+          L a0, a1, a2, a3, a4, a5, a6, a7; D d0, d1, d2, d3, d4, d5, d6, d7; char c; short s;\n\
+          float f; unsigned char uc;\n\
+        { return a5 + (L)d6 + c + s * 3 + (L)(f * 4) + uc * 5; }\n\
+        static int pick(int c, int x, int y) { if (c) return x * 3; return y - 1; }\n\
+        static L inl(L a0, L a1, L a2, L a3, L a4, L a5, L a6, L a7, char c, short s, int i)\n\
+        { return a6 + pick(c > 0, s, i) * 5 + c; }\n\
+        struct fns {\n\
+          L (*scalars)(L, L, L, L, L, L, L, L, char, short, int, char, L, unsigned char,\n\
+            _Bool, unsigned short, float);\n\
+          L (*agg3)(L, L, L, L, L, L, L, L, struct c3, char);\n\
+          L (*agg12)(L, L, L, L, L, L, L, L, char, struct c12, char);\n\
+          L (*agg_s2)(L, L, L, L, L, L, L, L, char, struct s2, char);\n\
+          D (*hfa)(D, D, D, D, D, D, D, D, float, struct f2, float, struct f3, struct d1,\n\
+            float);\n\
+          D (*fps)(D, D, D, D, D, D, D, D, float, D, float, float);\n\
+          L (*mixed)(L, L, L, L, L, L, L, L, D, D, D, D, D, D, D, D, float, char, D, short,\n\
+            int);\n\
+          L (*vnamed)(L, L, L, L, L, L, L, L, char, short, int, ...);\n\
+          L (*kr)(L, L, L, L, L, L, L, L, D, D, D, D, D, D, D, D, int, int, D, int);\n\
+          L (*inl)(L, L, L, L, L, L, L, L, char, short, int);\n\
+          L (*vint)(L, L, L, L, L, L, L, L, int, ...); };\n\
+        static int drive(const struct fns *f, int base)\n\
+        { struct c3 x3 = { { 1, -2, 3 } };\n\
+          struct c12 x12 = { { 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -6 } };\n\
+          struct s2 xs = { -300 };\n\
+          struct f2 h = { 2.5f, -3.5f };\n\
+          struct f3 t = { 4.5f, 0.5f, -5.5f };\n\
+          struct d1 dd = { 6.25 };\n\
+          if (f->scalars(0, 1, 2, 3, 4, 5, 6, 7, 'a', -300, 70000, -5, 1234567890123L, 200, 1,\n\
+                60000, 1.5f)\n\
+              != scalars(0, 1, 2, 3, 4, 5, 6, 7, 'a', -300, 70000, -5, 1234567890123L, 200, 1,\n\
+                60000, 1.5f)) return base + 1;\n\
+          if (f->agg3(8, 1, 2, 3, 4, 5, 6, 7, x3, 'y') != agg3(8, 1, 2, 3, 4, 5, 6, 7, x3, 'y'))\n\
+            return base + 2;\n\
+          if (f->agg12(0, 9, 2, 3, 4, 5, 6, 7, -7, x12, 'z')\n\
+              != agg12(0, 9, 2, 3, 4, 5, 6, 7, -7, x12, 'z')) return base + 3;\n\
+          if (f->agg_s2(0, 1, 10, 3, 4, 5, 6, 7, 'q', xs, -9)\n\
+              != agg_s2(0, 1, 10, 3, 4, 5, 6, 7, 'q', xs, -9)) return base + 4;\n\
+          if (f->hfa(0, 1, 2, 3, 4, 5, 6, 7.5, 0.75f, h, -1.25f, t, dd, 2.0f)\n\
+              != hfa(0, 1, 2, 3, 4, 5, 6, 7.5, 0.75f, h, -1.25f, t, dd, 2.0f)) return base + 5;\n\
+          if (f->fps(0.5, 1, 2, 3, 4, 5, 6, 7, 1.25f, -2.5, 3.75f, -4.5f)\n\
+              != fps(0.5, 1, 2, 3, 4, 5, 6, 7, 1.25f, -2.5, 3.75f, -4.5f)) return base + 6;\n\
+          if (f->mixed(0, 1, 2, 11, 4, 5, 6, 7, 0, 1, 2, 3, 4, 5, 6, 7, 2.5f, -3, 4.5, -700,\n\
+                123456)\n\
+              != mixed(0, 1, 2, 11, 4, 5, 6, 7, 0, 1, 2, 3, 4, 5, 6, 7, 2.5f, -3, 4.5, -700,\n\
+                123456)) return base + 7;\n\
+          if (f->vnamed(0, 1, 2, 3, 12, 5, 6, 7, 'c', -2, 2, 30L, 40L, 2.5)\n\
+              != vnamed(0, 1, 2, 3, 12, 5, 6, 7, 'c', -2, 2, 30L, 40L, 2.5)) return base + 8;\n\
+          if (f->kr(0L, 1L, 2L, 3L, 4L, 13L, 6L, 7L, 0., 1., 2., 3., 4., 5., 6.5, 7., 'k', -300,\n\
+                2.25f, 250)\n\
+              != kr(0L, 1L, 2L, 3L, 4L, 13L, 6L, 7L, 0., 1., 2., 3., 4., 5., 6.5, 7., 'k', -300,\n\
+                2.25f, 250)) return base + 9;\n\
+          if (f->inl(0, 1, 2, 3, 4, 5, 16, 7, 'x', -300, 70000)\n\
+              != inl(0, 1, 2, 3, 4, 5, 16, 7, 'x', -300, 70000)) return base + 10;\n\
+          if (f->vint(0, 9, 2, 3, 4, 5, 6, 7, 2, 30L, 40L, 2.5)\n\
+              != vint(0, 9, 2, 3, 4, 5, 6, 7, 2, 30L, 40L, 2.5)) return base + 11;\n\
+          return 0; }\n";
+    drive_across_the_system_compiler(
+        &cc,
+        "stack-args-interop",
+        common,
+        "scalars, agg3, agg12, agg_s2, hfa, fps, mixed, vnamed, kr, inl, vint",
+    );
+}
+
 // A parameter of 32 bits or less is read in the low word, across the system
 // compiler boundary both ways: each side calls the other's callees through
 // 64-bit parameter types, an upper half set, then through their own types

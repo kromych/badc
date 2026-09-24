@@ -404,6 +404,7 @@ pub(super) fn emit_va_arg_aapcs64(
 pub(super) struct CallOperands<'a> {
     pub(super) args: &'a [u32],
     pub(super) fp_arg_mask: &'a crate::c5::ir::FpMask,
+    pub(super) arg_widths: crate::c5::ir::ArgWidths,
     pub(super) arg_aggs: &'a [Option<u32>],
     pub(super) ret_agg: Option<u32>,
     pub(super) ret_slot_off: i64,
@@ -435,6 +436,7 @@ pub(super) fn emit_call_ext(
     let CallOperands {
         args,
         fp_arg_mask,
+        arg_widths,
         arg_aggs,
         ret_agg,
         ret_slot_off,
@@ -453,7 +455,15 @@ pub(super) fn emit_call_ext(
         args.len()
     };
     let aggs = build_arg_aggs(arg_aggs, agg_descs, abi);
-    let plan = super::plan_call_args_aggs(args.len(), fixed, fp_arg_mask, abi, &aggs, false);
+    let plan = super::plan_call_args_aggs(
+        args.len(),
+        fixed,
+        fp_arg_mask,
+        abi,
+        &aggs,
+        false,
+        arg_widths,
+    );
     emit_stack_alloc(code, plan.scratch_bytes, None);
     marshal_args(
         code, &plan, args, alloc, scratch, frame, arg_aggs, agg_descs, abi,
@@ -578,6 +588,7 @@ pub(super) fn emit_call(
     let CallOperands {
         args,
         fp_arg_mask,
+        arg_widths,
         arg_aggs,
         ret_agg,
         ret_slot_off,
@@ -596,7 +607,15 @@ pub(super) fn emit_call(
         return fail("Call: variadic callee not matched by a host-ABI branch");
     }
     let fixed = super::named_args(abi, callee_is_variadic, fixed_args, args.len());
-    let plan = super::plan_call_args_aggs(args.len(), fixed, fp_arg_mask, abi, &aggs, false);
+    let plan = super::plan_call_args_aggs(
+        args.len(),
+        fixed,
+        fp_arg_mask,
+        abi,
+        &aggs,
+        false,
+        arg_widths,
+    );
     emit_stack_alloc(code, plan.scratch_bytes, None);
     marshal_args(
         code, &plan, args, alloc, scratch, frame, arg_aggs, agg_descs, abi,
@@ -776,6 +795,7 @@ pub(super) fn emit_call_indirect(
     let CallOperands {
         args,
         fp_arg_mask,
+        arg_widths,
         arg_aggs,
         ret_agg,
         ret_slot_off,
@@ -795,8 +815,15 @@ pub(super) fn emit_call_indirect(
     // call plans every argument as fixed, which also serves a prototype the
     // walker could not recover.
     let plan_fixed = super::named_args(abi, callee_variadic, fixed_args, args.len());
-    let mut plan =
-        super::plan_call_args_aggs(args.len(), plan_fixed, fp_arg_mask, abi, &aggs, false);
+    let mut plan = super::plan_call_args_aggs(
+        args.len(),
+        plan_fixed,
+        fp_arg_mask,
+        abi,
+        &aggs,
+        false,
+        arg_widths,
+    );
     // A target in a register the marshal does not write is called where it
     // is: no argument lands in it, and it is neither the scratch pair, x19,
     // which a lowering may take as a third scratch, nor x8, which carries an
@@ -914,19 +941,29 @@ impl CallArgs<'_> {
                 continue;
             };
             let ap = self.arg_place(i);
+            let bytes = self.plan.stack_widths.bytes(i);
             if let Place::FpReg(_) = ap {
                 let Some(dn) =
                     materialize_fp_shifted(code, ap, 0u8, self.frame, self.plan.scratch_bytes)
                 else {
                     return fail("Call: FP stack arg not fp reg / spill");
                 };
-                let op = super::encode::STR_D;
+                let op = if bytes == 4 {
+                    super::encode::STR_S
+                } else {
+                    super::encode::STR_D
+                };
                 emit_mem(code, op, dn, Reg(31), off.into(), self.scratch.primary);
             } else {
                 let Some(src) = self.arg_int(code, i, self.scratch.primary) else {
                     return fail("Call: stack arg not int reg / spill");
                 };
-                let op = super::encode::STR_X;
+                let op = match bytes {
+                    1 => super::encode::STRB,
+                    2 => super::encode::STRH,
+                    4 => super::encode::STR_W,
+                    _ => super::encode::STR_X,
+                };
                 emit_mem(code, op, src.0, Reg(31), off.into(), self.scratch.secondary);
             }
         }

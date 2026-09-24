@@ -12720,6 +12720,74 @@ fn expect_words(ws: &[u32], want: &[u32], what: &str) {
     }
 }
 
+/// Apple arm64 stores a named stack argument at its own size and alignment,
+/// `char`, `short`, `int`, `char`, `long` past eight `long`s at 0, 2, 4, 8
+/// and 16, and a variadic one in an 8-byte slot from the next multiple of 8;
+/// the callee loads each from there. AAPCS64 gives every one 8 bytes.
+#[test]
+fn apple_arm64_packs_narrow_stack_arguments() {
+    use crate::Target;
+    const SRC: &str = "typedef long L;\n\
+        L take(L a0, L a1, L a2, L a3, L a4, L a5, L a6, L a7, char c, short s, int i,\n\
+            char c2, L l) { return c + s * 3 + i * 5 + c2 * 7 + l * 11; }\n\
+        L ext(L a0, L a1, L a2, L a3, L a4, L a5, L a6, L a7, char c, short s, int i,\n\
+            char c2, L l);\n\
+        L ext_va(L a0, L a1, L a2, L a3, L a4, L a5, L a6, L a7, int n, ...);\n\
+        L give(char c, short s, int i) { return ext(0, 1, 2, 3, 4, 5, 6, 7, c, s, i, c, 9); }\n\
+        L give_va(char c) { return ext_va(0, 1, 2, 3, 4, 5, 6, 7, 1, c); }\n";
+    // (bytes, offset) of each general-register store, or load of either
+    // extension, at `[base, #offset]` (unsigned offset: size 111 0 01 opc
+    // imm12 Rn Rt, opc 00 a store), in offset order.
+    let accesses = |ws: &[u32], base: u32, load: bool| {
+        let mut got: alloc::vec::Vec<(u32, u32)> = ws
+            .iter()
+            .filter(|&&w| {
+                w & 0x3f00_0000 == 0x3900_0000
+                    && ((w >> 22) & 3 != 0) == load
+                    && (w >> 5) & 0x1f == base
+            })
+            .map(|&w| (1 << (w >> 30), ((w >> 10) & 0xfff) << (w >> 30)))
+            .collect();
+        got.sort_by_key(|&(_, off)| off);
+        got
+    };
+    let packed = [(1, 0), (2, 2), (4, 4), (1, 8), (8, 16)];
+    for (target, named, variadic) in [
+        (Target::MacOSAarch64, &packed, [(4, 0), (8, 8)]),
+        (
+            Target::LinuxAarch64,
+            &[(8, 0), (8, 8), (8, 16), (8, 24), (8, 32)],
+            [(8, 0), (8, 8)],
+        ),
+    ] {
+        let obj = relocatable_object(SRC, target);
+        let give = function_words(&obj, "give");
+        assert_eq!(
+            accesses(&give, 31, false),
+            named,
+            "{target:?} give: {give:08x?}"
+        );
+        let give_va = function_words(&obj, "give_va");
+        assert_eq!(
+            accesses(&give_va, 31, false),
+            variadic,
+            "{target:?} give_va: {give_va:08x?}"
+        );
+        // Each at its type's width, above the frame record.
+        let take = function_words(&obj, "take");
+        let from_fp: alloc::vec::Vec<(u32, u32)> = named
+            .iter()
+            .zip([1, 2, 4, 1, 8])
+            .map(|(&(_, off), bytes)| (bytes, off + 16))
+            .collect();
+        assert_eq!(
+            accesses(&take, 29, true),
+            from_fp,
+            "{target:?} take: {take:08x?}"
+        );
+    }
+}
+
 /// Arguments with 16-byte alignment: AAPCS64 C.10 starts one at an even
 /// general register, which the Apple arm64 convention does not, and C.14 and
 /// System V AMD64 3.5.7 align its stack slot and its `va_arg` read to 16.

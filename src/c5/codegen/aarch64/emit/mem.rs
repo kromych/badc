@@ -432,7 +432,9 @@ pub(super) fn int_unit_ops(width: u32) -> (MemOp, MemOp) {
 }
 
 /// One load / store pair of `width` bytes (8, 4, 2 or 1) moving
-/// `[sbase + soff]` to `[dbase + doff]` through `temp`.
+/// `[sbase + soff]` to `[dbase + doff]` through `temp`; an offset the
+/// width does not divide takes the unscaled form, which the caller has
+/// checked reaches it.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_copy_unit(
     code: &mut Vec<u8>,
@@ -444,8 +446,9 @@ pub(super) fn emit_copy_unit(
     doff: u32,
 ) {
     let (ld, st) = int_unit_ops(width);
-    emit(code, enc_mem(ld, temp.0, sbase, ld.scaled(soff)));
-    emit(code, enc_mem(st, temp.0, dbase, st.scaled(doff)));
+    let at = |op: MemOp, off: u32| op.offset(off.into()).unwrap_or_else(|| op.scaled(off));
+    emit(code, enc_mem(ld, temp.0, sbase, at(ld, soff)));
+    emit(code, enc_mem(st, temp.0, dbase, at(st, doff)));
 }
 
 /// Bytes one window of [`emit_block_copy`] spans through single units:

@@ -1226,7 +1226,15 @@ pub(crate) fn param_plan(
     named: usize,
 ) -> super::CallPlan {
     let aggs = build_arg_aggs(&func.param_aggs, &func.agg_descs, abi);
-    super::plan_call_args_aggs(func.n_params, named, &func.param_fp_mask, abi, &aggs, false)
+    super::plan_call_args_aggs(
+        func.n_params,
+        named,
+        &func.param_fp_mask,
+        abi,
+        &aggs,
+        false,
+        func.param_widths,
+    )
 }
 
 /// Resolve each call argument's aggregate descriptor to its ABI classification

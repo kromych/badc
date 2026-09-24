@@ -50,9 +50,10 @@ impl Compiler {
     /// the lexer restored when the tokens are an ordinary declarator.
     pub(super) fn try_parse_block_fn_prototype(
         &mut self,
-        lbt: i64,
+        base: super::redeclaration::Spelled,
         is_static: bool,
     ) -> Result<bool, C5Error> {
+        let lbt = base.ty;
         // Snapshot before the speculative `*` walk so a plain pointer
         // declaration with multiple declarators (`int *p, *q;`) keeps
         // its leading `*` for the caller's declarator loop.
@@ -74,6 +75,14 @@ impl Compiler {
             let params = self.parse_function_params();
             self.pending.parsing_fn_ptr_proto = saved_proto;
             let params = params?;
+            let ret = lbt + ret_ptr_levels * Ty::Ptr as i64;
+            let declared = super::redeclaration::Params::of(&params, false);
+            let spelled = super::redeclaration::Spelled {
+                ty: ret,
+                enum_tag: base.enum_tag,
+            };
+            let declared = super::redeclaration::DeclaredType::Function(spelled, declared);
+            self.declare_linked(id_idx, declared, self.lex.line)?;
             // Bind only an as-yet-undeclared name; one already bound to a
             // libc binding, a function, or a variable is the same entity.
             let c = self.symbols[id_idx].class;
@@ -89,7 +98,7 @@ impl Compiler {
                 let sym = &mut self.symbols[id_idx];
                 sym.class = Token::Fun as i64;
                 sym.scoped_fn_decl = true;
-                sym.type_ = lbt + ret_ptr_levels * Ty::Ptr as i64;
+                sym.type_ = ret;
                 sym.params = params.types;
                 sym.is_variadic = params.is_variadic;
                 sym.is_extern_decl = true;

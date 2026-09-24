@@ -168,6 +168,8 @@ pub(super) struct DeclStorage {
     /// The base type is an `enum`; a typedef of it records that an enum
     /// bitfield declared through the alias reads unsigned.
     pub base_is_enum: bool,
+    /// No type specifier was given, so the base type is the implicit `int`.
+    pub implicit_int: bool,
 }
 
 /// The pointer part of an abstract declarator (C99 6.7.6): the type it
@@ -1901,6 +1903,7 @@ impl Compiler {
         }
 
         let base_tok = self.lex.tk;
+        let mut enum_tag = None;
         let mut bt = if let Some(inner) = atomic_base {
             inner
         } else if self.lex.tk == Token::Typeof {
@@ -1920,7 +1923,9 @@ impl Compiler {
             if let Some(s) = storage.as_deref_mut() {
                 s.base_is_enum = true;
             }
-            self.parse_enum_decl()?
+            let (ty, tag) = self.parse_enum_decl()?;
+            enum_tag = tag;
+            ty
         } else if self.lex.tk == Token::Struct || self.lex.tk == Token::Union {
             self.parse_aggregate_base_type()?
         } else if self.is_lex_int128_spelling() {
@@ -1940,12 +1945,15 @@ impl Compiler {
             // `unsigned` / `short` / `long` / `signed`, so once an int
             // modifier is seen the identifier here is the declarator name (a
             // redeclaration), not a second type specifier.
-            self.typedef_name_base_type()?
+            let (ty, tag) = self.typedef_name_base_type()?;
+            enum_tag = tag;
+            ty
         } else if m.saw_int_mod {
             // Bare `unsigned x;` / `long x;` / `long long x;` / `short x;`
             // -- the implicit-int rule for int-modifier-only declarations.
             m.int_base()
-        } else if storage.is_some() {
+        } else if let Some(s) = storage.as_deref_mut() {
+            s.implicit_int = true;
             self.implicit_int_base_type()?
         } else {
             return Err(self.compile_err(Code::SYNTAX, "type expected"));
@@ -1982,6 +1990,9 @@ impl Compiler {
         if let Some(m) = self.pending.attr_mode.take() {
             bt = self.apply_mode_to_type(bt, m)?;
         }
+        // Written after the base type is complete, so a nested parse inside
+        // it (a parameter list in an aggregate body) leaves nothing behind.
+        self.pending.base_enum_tag = enum_tag;
 
         Ok(apply_qual_bits(bt, qual_bits))
     }
@@ -1994,6 +2005,7 @@ impl Compiler {
         self.pending.base_was_void = false;
         self.pending.base_is_function_type = false;
         self.pending.base_was_long_double = false;
+        self.pending.base_enum_tag = None;
         self.pending.typedef_base_array_size = 0;
         self.pending.typedef_base_zero_len = false;
         self.pending.type_align = 0;
@@ -2093,9 +2105,13 @@ impl Compiler {
     /// debug info, the calling convention, the fn-pointer lineage and
     /// prototype, the array dimensions (C99 6.7.7p3) and the type alignment.
     /// Consumes the identifier.
-    fn typedef_name_base_type(&mut self) -> Result<i64, C5Error> {
+    fn typedef_name_base_type(&mut self) -> Result<(i64, Option<u32>), C5Error> {
         let idx = self.lex.curr_id_idx;
-        let aliased = self.symbols[idx].type_;
+        let spelled = self.resolve_spelling(super::redeclaration::Spelled {
+            ty: self.symbols[idx].type_,
+            enum_tag: self.symbols[idx].incomplete_enum_tag,
+        });
+        let aliased = spelled.ty;
         // The alias resolves to its underlying type here, so the spelling
         // would otherwise be lost; DWARF 4 5.3 names it with a
         // DW_TAG_typedef DIE.
@@ -2144,7 +2160,7 @@ impl Compiler {
             self.pending.type_align = typedef_align;
         }
         self.next()?;
-        Ok(aliased)
+        Ok((aliased, spelled.enum_tag))
     }
 
     /// Consume the specifiers that may trail the base-type keyword: int

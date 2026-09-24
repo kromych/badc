@@ -864,7 +864,7 @@ impl Compiler {
             // shared parse_enum_decl captures the tag + body for DWARF.
             // An enum bitfield reads unsigned, so field_base_is_enum
             // drives the zero-extend.
-            let enum_field_ty = self.parse_enum_decl()?;
+            let (enum_field_ty, _) = self.parse_enum_decl()?;
             field_base_is_enum = true;
             enum_field_ty
         } else if self.is_lex_int128_spelling() {

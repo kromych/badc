@@ -416,6 +416,11 @@ pub(crate) struct Symbol {
     /// the unsigned (zero-extending) extraction.
     pub is_enum_typedef: bool,
 
+    /// For a typedef naming an enum tag declared before the tag's
+    /// definition: the tag, whose definition the alias reads once there is
+    /// one.
+    pub incomplete_enum_tag: Option<u32>,
+
     /// Explicit alignment (bytes) a typedef's type carries from a GNU
     /// `__attribute__((aligned(N)))` type attribute, or 0 for the
     /// type's natural alignment. Unlike `_Alignas` on an object or
@@ -850,6 +855,7 @@ impl crate::c5::layout::DataOffsets for Symbol {
             returns_void: _,
             is_void_typedef: _,
             is_enum_typedef: _,
+            incomplete_enum_tag: _,
             type_align: _,
             h_type_align: _,
             linkage: _,

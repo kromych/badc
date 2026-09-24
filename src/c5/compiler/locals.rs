@@ -416,6 +416,7 @@ impl Compiler {
         }
         let lbt = apply_qual_bits(base, qual_bits);
         let base_spelling = self.take_base_spelling();
+        let base_enum_tag = self.pending.base_enum_tag.take();
         // A typedef-carried type alignment applies to every declarator of
         // this declaration; an initializer's own type parses (casts,
         // `sizeof`) reset the pending carrier, so capture it once here.
@@ -439,7 +440,11 @@ impl Compiler {
             self.pending.typedef_fn_proto = base_typedef_fn_proto;
             self.pending.fn_ptr_param_types = base_fn_ptr_param_types.clone();
             // Any declarator of the list may declare a function (C99 6.7p1).
-            if self.try_parse_block_fn_prototype(lbt, is_static)? {
+            let base = super::redeclaration::Spelled {
+                ty: lbt,
+                enum_tag: base_enum_tag,
+            };
+            if self.try_parse_block_fn_prototype(base, is_static)? {
                 self.accept_declarator_separator()?;
                 continue;
             }
@@ -531,6 +536,16 @@ impl Compiler {
                 ));
             }
 
+            if is_extern {
+                let zero_len = array_size < 0 && self.pending.declarator_zero_len_array;
+                let bounds = self.declared_bounds(loc_idx, array_size, zero_len);
+                let spelled = super::redeclaration::Spelled {
+                    ty,
+                    enum_tag: base_enum_tag,
+                };
+                let declared = super::redeclaration::DeclaredType::Object(spelled, bounds);
+                self.declare_linked(loc_idx, declared, self.lex.line)?;
+            }
             // A block-scope `extern` allocates no storage (C11 6.7.5).
             let decl_align = if is_extern {
                 None
@@ -769,6 +784,14 @@ impl Compiler {
             self.accept_declarator_separator()?;
             return Ok(true);
         }
+        let types = params
+            .iter()
+            .copied()
+            .map(super::redeclaration::Spelled::plain);
+        let carried = super::redeclaration::Params::Carried(types.collect(), is_variadic);
+        let ret = super::redeclaration::Spelled::plain(ty - Ty::Ptr as i64);
+        let declared = super::redeclaration::DeclaredType::Function(ret, carried);
+        self.declare_linked(loc_idx, declared, self.lex.line)?;
         let c = self.symbols[loc_idx].class;
         let known = c == Token::Sys as i64
             || c == Token::Fun as i64

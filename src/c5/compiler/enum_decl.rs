@@ -64,12 +64,13 @@ fn enumerator_constant_ty(v: i64, enum_ty: i64) -> i64 {
 
 impl Compiler {
     /// Parse an `enum` type reference / definition and return its underlying
-    /// integer type. A plain enum takes `enum_compatible_ty` (C99
-    /// 6.7.2.2p4 leaves the choice open; `int` when every value fits); an
-    /// `enum __attribute__((packed))` (per-enum `-fshort-enums`) uses the
-    /// smallest integer type holding its enumerators, which changes the
-    /// layout of any struct that embeds it, so the size is honored here.
-    pub(super) fn parse_enum_decl(&mut self) -> Result<i64, C5Error> {
+    /// integer type, with the tag when it has no definition yet. A plain
+    /// enum takes `enum_compatible_ty` (C99 6.7.2.2p4 leaves the choice
+    /// open; `int` when every value fits); an `enum __attribute__((packed))`
+    /// (per-enum `-fshort-enums`) uses the smallest integer type holding its
+    /// enumerators, which changes the layout of any struct that embeds it,
+    /// so the size is honored here.
+    pub(super) fn parse_enum_decl(&mut self) -> Result<(i64, Option<u32>), C5Error> {
         self.next()?;
         // An attribute may sit between `enum` and the tag / body
         // (`enum __attribute__((packed)) { ... }`) or after the tag; either
@@ -77,13 +78,13 @@ impl Compiler {
         let mut packed = self.skip_attribute_specifiers()?;
         // Optional tag name; a definition registers its `EnumDef` under
         // it, empty for an untagged enum.
-        let tag_name = if self.lex.tk == Token::Id {
+        let (tag_name, tag_idx) = if self.lex.tk == Token::Id {
             let id_idx = self.lex.curr_id_idx;
             let name = self.symbols[id_idx].name.clone();
             self.next()?;
-            name
+            (name, Some(id_idx as u32))
         } else {
-            String::new()
+            (String::new(), None)
         };
         packed = self.skip_attribute_specifiers()? || packed;
         if self.lex.tk == '{' {
@@ -122,17 +123,29 @@ impl Compiler {
                     underlying_ty: underlying,
                 });
             }
-            return Ok(underlying);
+            return Ok((underlying, None));
         }
         // A bare `enum Tag` reference reuses the underlying type recorded at
         // the tag's definition, so a packed enum keeps its sub-int width for
-        // sizeof / _Alignof and struct-field layout. Untagged definitions
-        // are recorded under the empty name and cannot be referenced.
-        let tagged = |e: &&EnumDef| !e.name.is_empty() && e.name == tag_name;
-        if let Some(def) = self.enums.iter().rev().find(tagged) {
-            return Ok(def.underlying_ty);
+        // sizeof / _Alignof and struct-field layout.
+        if let Some(underlying) = self.enum_tag_underlying(&tag_name) {
+            return Ok((underlying, None));
         }
-        Ok(Ty::Int as i64)
+        // GNU: a use of the tag before its definition. It takes `int` and
+        // carries the tag, which the redeclaration check reads once the
+        // definition fixes the type.
+        // TODO: a pointer to the type keeps `int`'s width past the definition.
+        Ok((Ty::Int as i64, tag_idx))
+    }
+
+    /// The underlying type the definition of enum tag `name` chose. Untagged
+    /// definitions are recorded under the empty name and never match.
+    pub(super) fn enum_tag_underlying(&self, name: &str) -> Option<i64> {
+        if name.is_empty() {
+            return None;
+        }
+        let def = self.enums.iter().rev().find(|e| e.name == name);
+        def.map(|e| e.underlying_ty)
     }
 
     /// The smallest integer type that represents `[min, max]`, matching

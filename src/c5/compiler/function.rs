@@ -37,6 +37,31 @@ pub(super) struct ParsedParams {
     pub(super) types: Vec<i64>,
     pub(super) is_variadic: bool,
     pub(super) form: ParamForm,
+    /// Positions declared through an enum tag that had no definition yet.
+    pub(super) enum_tags: Vec<(usize, u32)>,
+}
+
+impl ParsedParams {
+    /// The types as declared, each with the incomplete enum tag it named.
+    pub(super) fn spelled(&self) -> Vec<super::redeclaration::Spelled> {
+        let tag = |pos: usize| {
+            self.enum_tags
+                .iter()
+                .find(|(p, _)| *p == pos)
+                .map(|&(_, t)| t)
+        };
+        let spell = |(pos, &ty): (usize, &i64)| super::redeclaration::Spelled {
+            ty,
+            enum_tag: tag(pos),
+        };
+        self.types.iter().enumerate().map(spell).collect()
+    }
+
+    /// Record the tag position `pos` was declared through, if any.
+    pub(super) fn note_enum_tag(&mut self, pos: usize, tag: Option<u32>) {
+        self.enum_tags.retain(|(p, _)| *p != pos);
+        self.enum_tags.extend(tag.map(|t| (pos, t)));
+    }
 }
 
 /// How a function declarator specified its parameters (C99 6.7.5.3p14).
@@ -83,6 +108,7 @@ impl Compiler {
     fn parse_function_params_inner(&mut self) -> Result<ParsedParams, C5Error> {
         let mut args = Vec::new();
         let mut types = Vec::new();
+        let mut enum_tags = Vec::new();
         let mut is_variadic = false;
         // An empty list declares no prototype; `(void)` declares one with
         // no parameters. A list is an identifier list until a parameter
@@ -142,6 +168,7 @@ impl Compiler {
                 Ty::Int as i64
             };
             let base_spelling = self.take_base_spelling();
+            let base_enum_tag = self.pending.base_enum_tag.take();
             // `(void)` via a typedef alias. The early check above
             // matches only the bare `void` keyword; aliases reach
             // here with `base_was_void` set by `parse_decl_base_type`.
@@ -236,6 +263,7 @@ impl Compiler {
                 // fn-pointer carriers its base (a fn-pointer typedef) seeded.
                 let _ = self.take_param_fn_ptr_carriers();
                 self.ty = ty;
+                enum_tags.extend(base_enum_tag.map(|t| (types.len(), t)));
                 types.push(ty);
                 if !self.parameter_separator()? {
                     break;
@@ -304,6 +332,7 @@ impl Compiler {
             // name that shadows an enclosing prototype's parameter must not
             // trip the duplicate-parameter check.
             if param_idx == usize::MAX || self.pending.parsing_fn_ptr_proto {
+                enum_tags.extend(base_enum_tag.map(|t| (types.len(), t)));
                 types.push(full_ty);
                 if !self.parameter_separator()? {
                     break;
@@ -363,6 +392,7 @@ impl Compiler {
             self.symbols[param_idx].conv = param_conv;
 
             args.push(param_idx);
+            enum_tags.extend(base_enum_tag.map(|t| (types.len(), t)));
             types.push(full_ty);
             if !self.parameter_separator()? {
                 break;
@@ -381,6 +411,7 @@ impl Compiler {
             types,
             is_variadic,
             form,
+            enum_tags,
         })
     }
 

@@ -28,6 +28,7 @@ mod global_init;
 mod initializer;
 mod locals;
 mod loop_idiom;
+mod redeclaration;
 mod run_compile;
 mod sizeof_expr;
 mod stmt;
@@ -852,6 +853,10 @@ pub(in crate::c5::compiler) struct Pending {
     /// the distinction is libc-ABI-only.
     pub base_was_long_double: bool,
 
+    /// Side channel from `parse_decl_base_type`: the base type named an
+    /// enum tag that has no definition yet, so it took `int`.
+    pub base_enum_tag: Option<u32>,
+
     /// Side channel from `parse_declarator` to `run_compile`: when
     /// the declarator's nested-paren branch encounters a "function
     /// returning function pointer" shape (`T (*name(args1))(args2)`),
@@ -1489,6 +1494,7 @@ impl Pending {
             spell_base_restrict: core::mem::take(&mut self.spell_base_restrict),
             spell_base_typedef: self.spell_base_typedef.take(),
             base_was_long_double: core::mem::take(&mut self.base_was_long_double),
+            base_enum_tag: self.base_enum_tag.take(),
             base_is_function_type: core::mem::take(&mut self.base_is_function_type),
             fn_ptr_indirection: self.fn_ptr_indirection.take(),
             fn_ptr_ret_indirection: core::mem::take(&mut self.fn_ptr_ret_indirection),
@@ -1509,6 +1515,7 @@ impl Pending {
         self.spell_base_restrict = s.spell_base_restrict;
         self.spell_base_typedef = s.spell_base_typedef;
         self.base_was_long_double = s.base_was_long_double;
+        self.base_enum_tag = s.base_enum_tag;
         self.base_is_function_type = s.base_is_function_type;
         self.fn_ptr_indirection = s.fn_ptr_indirection;
         self.fn_ptr_ret_indirection = s.fn_ptr_ret_indirection;
@@ -1532,6 +1539,7 @@ pub(super) struct DeclTypeCarriers {
     spell_base_restrict: bool,
     spell_base_typedef: Option<u32>,
     base_was_long_double: bool,
+    base_enum_tag: Option<u32>,
     base_is_function_type: bool,
     fn_ptr_indirection: Option<i64>,
     fn_ptr_ret_indirection: i64,
@@ -1553,6 +1561,7 @@ impl Default for Pending {
             spell_base_restrict: false,
             spell_base_typedef: None,
             base_was_long_double: false,
+            base_enum_tag: None,
             fn_params: None,
             fn_ptr_indirection: None,
             fn_ptr_ret_indirection: 0,
@@ -2241,6 +2250,9 @@ pub struct Compiler {
     /// return-type prototype (implicit int). Dedupes the diagnostic to
     /// one per callee.
     warned_implicit_ret: alloc::collections::BTreeSet<usize>,
+    /// The composite type and the function body of each identifier with
+    /// linkage, by symbol index.
+    linked_entities: hashbrown::HashMap<usize, redeclaration::LinkedEntity>,
 
     /// The native target this compilation is producing for.
     /// Drives data-model picks: `long` is 8 bytes on LP64
@@ -2853,6 +2865,7 @@ impl Compiler {
             deferred_error,
             dylibs,
             warned_implicit_ret: alloc::collections::BTreeSet::new(),
+            linked_entities: hashbrown::HashMap::new(),
             target,
             next_ent_pc: 0,
             data,

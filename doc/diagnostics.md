@@ -53,7 +53,7 @@ regenerates.
 | B2004 | `unused-function` | ignore | controllable | all | a function with internal linkage that is defined and never referenced |
 | B2005 | `implicit-function-declaration` | warning | controllable | default | a function used before a prototype declares it, so its return type is `int` |
 | B2006 | `undefined-function` | warning | controllable | default | an initializer names a `static` function this unit declares and never defines |
-| B2007 | `redeclaration-mismatch` | warning | controllable | default | a redeclaration whose signature differs from the previous one |
+| B2007 | `redeclaration-mismatch` | warning | controllable | default | a function redeclaration incompatible under C99 that GNU C accepts: a qualified return type, an implicit `int` body for a `void` declaration, an old-style definition matching its prototype only before promotion |
 | B2008 | `attributes` | warning | controllable | default | an attribute the declaration cannot carry, so it is ignored |
 | B2009 | `ignored-asm-label` | warning | controllable | default | an assembler name on a declaration that has no symbol to rename |
 | B2010 | `shadowed-binding` | warning | controllable | default | a `#pragma binding` for a name an earlier binding already claimed |

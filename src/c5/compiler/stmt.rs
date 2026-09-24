@@ -529,6 +529,7 @@ impl Compiler {
         self.pending.attr_align = 0;
         self.pending.attr_alignas = 0;
         let lbt = self.parse_decl_base_type()?;
+        let base_enum_tag = self.pending.base_enum_tag.take();
         while self.lex.tk != ';' {
             let (id_idx, mut ty, mut td_array) = self.parse_declarator(lbt)?;
             if id_idx == usize::MAX {
@@ -594,6 +595,7 @@ impl Compiler {
             self.symbols[id_idx].class = Token::Typedef as i64;
             self.symbols[id_idx].type_ = typedef_ty;
             self.symbols[id_idx].val = 0;
+            self.symbols[id_idx].incomplete_enum_tag = base_enum_tag;
             // A declarator-position `transparent_union` binds to the
             // aliased union, as at file scope.
             if declarator_transparent && super::types::is_struct_value_ty(typedef_ty) {

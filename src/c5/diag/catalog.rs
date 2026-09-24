@@ -107,7 +107,7 @@ catalog! {
         "an initializer names a `static` function this unit declares and never defines";
     2007, "redeclaration-mismatch", [], Warning, Controllable,
         [DEFAULT], Live,
-        "a redeclaration whose signature differs from the previous one";
+        "a function redeclaration incompatible under C99 that GNU C accepts: a qualified return type, an implicit `int` body for a `void` declaration, an old-style definition matching its prototype only before promotion";
     2008, "attributes", ["ignored-attributes"], Warning, Controllable,
         [DEFAULT], Live,
         "an attribute the declaration cannot carry, so it is ignored";

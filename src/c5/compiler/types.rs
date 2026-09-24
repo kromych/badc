@@ -414,6 +414,14 @@ pub(crate) fn strip_unsigned(ty: i64) -> i64 {
         | CONST_BIT)
 }
 
+/// `ty`, declared through an enum tag before its definition and so built on
+/// `int`, over the integer type `underlying` the definition chose: the same
+/// derivations and qualifiers.
+pub(crate) fn rebase_placeholder_int(ty: i64, underlying: i64) -> i64 {
+    let bare = strip_unsigned(ty);
+    (bare - Ty::Int as i64 + strip_unsigned(underlying)) | (ty ^ bare) | (underlying & UNSIGNED_BIT)
+}
+
 /// The scalar `void` type tag.
 pub(crate) fn void_ty() -> i64 {
     Ty::Char as i64 | UNSIGNED_BIT | VOID_BIT
@@ -490,6 +498,21 @@ pub(super) fn format_type(ty: i64, structs: &[super::StructDef]) -> alloc::strin
     if bare >= STRUCT_BASE {
         let id = struct_id_of(bare);
         let depth = struct_ptr_depth(bare) as usize;
+        // The aggregate that models a pointer-to-array pointee.
+        if let Some(f) = structs.get(id).filter(|s| s.is_array).map(|s| &s.fields[0]) {
+            let dims = if f.array_dims.len() >= 2 {
+                f.array_dims.clone()
+            } else {
+                alloc::vec![f.array_size]
+            };
+            let dim = |&d: &i64| if d < 0 { "[]".into() } else { format!("[{d}]") };
+            let dims: alloc::string::String = dims.iter().map(dim).collect();
+            return format!(
+                "{} ({}){dims}",
+                format_type(f.ty, structs),
+                "*".repeat(depth)
+            );
+        }
         let name = structs
             .get(id)
             .map(|s| s.name.as_str())
@@ -501,7 +524,11 @@ pub(super) fn format_type(ty: i64, structs: &[super::StructDef]) -> alloc::strin
     let (base, leaf) = if in_band(bare, Ty::Float as i64) {
         (Ty::Float as i64, "float")
     } else if in_band(bare, Ty::Double as i64) {
-        (Ty::Double as i64, "double")
+        let long = ty & LONG_DOUBLE_BIT != 0;
+        (
+            Ty::Double as i64,
+            if long { "long double" } else { "double" },
+        )
     } else if in_band(bare, Ty::Long as i64) {
         (Ty::Long as i64, "long")
     } else if in_band(bare, Ty::Short as i64) {

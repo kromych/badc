@@ -2996,6 +2996,36 @@ fn an_address_constant_initializes_only_an_object_that_holds_it() {
 }
 
 #[test]
+fn addresses_in_distinct_objects_have_no_constant_difference() {
+    // C99 6.5.6p9 and 6.5.8p5 define the difference and order of two
+    // addresses only within one object; the fold used their `.data`
+    // offsets. Within one object both fold; elsewhere the expression
+    // evaluates at run time, and an array bound over it is variable.
+    for init in [
+        "long x = (char *)&a - (char *)&b;",
+        "int x = &a < &b;",
+        "long x = \"ab\" - \"cd\";",
+    ] {
+        expect_compile_error(
+            &format!("int a, b;\n{init}\nint main(void) {{ return 0; }}"),
+            "addresses in distinct objects have no constant difference or order",
+        );
+    }
+    let src = "int a, b, arr[4];\n\
+               long within = &arr[3] - &arr[1];\n\
+               int before = &arr[1] < &arr[2];\n\
+               int main(void) {\n\
+               \tlong d = (char *)&a - (char *)&b;\n\
+               \tchar vla[(char *)&a - (char *)&b != 0 ? 4 : 8];\n\
+               \tif (d != (long)((char *)&a - (char *)&b) || d == 0) return 1;\n\
+               \tif (sizeof vla != 4) return 3;\n\
+               \treturn within == 2 && before == 1 ? 0 : 2;\n\
+               }\n";
+    let program = Compiler::new(src.to_string()).compile().expect(src);
+    assert_eq!(super::Vm::new(program).run().unwrap(), 0, "{src}");
+}
+
+#[test]
 fn sizeof_of_an_incomplete_array_type_name_is_rejected() {
     // C99 6.5.3.4p1: `sizeof` does not apply to an incomplete type. An
     // array type name with an unspecified bound is one, written out or

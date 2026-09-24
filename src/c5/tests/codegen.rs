@@ -6965,12 +6965,13 @@ fn rolled_back_compound_literal_leaves_no_symbol_behind() {
     use crate::{CompileOptions, Compiler, Target};
 
     // The scalar's initializer folds to an integer, so the address path
-    // stages both literals and then restores its checkpoint; the table
-    // that follows is allocated over the reclaimed bytes.
+    // stages the literal in the arm it does not take and then restores its
+    // checkpoint; the table that follows is allocated over the reclaimed
+    // bytes.
     const SRC: &str = "struct s { int a; int b; };\n\
          struct e { const char *n; const struct s *p; };\n\
          static const long delta =\n\
-         (long)&((struct s){ 1, 2 }).b - (long)&((struct s){ 1, 2 }).a;\n\
+         1 ? 4 : (long)&((struct s){ 1, 2 }).a;\n\
          static const struct e tab[] = {\n\
          { \"a\", &(struct s){ .a = 1 } },\n\
          { \"b\", &(struct s){ .a = 2 } },\n\

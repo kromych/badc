@@ -281,7 +281,7 @@ impl Compiler {
     /// in an evaluated operand is a compile error (6.6p4); signed
     /// overflow wraps, matching the runtime lowering.
     fn const_int_binop(
-        &self,
+        &mut self,
         op: ConstBinOp,
         l: ConstVal,
         r: ConstVal,
@@ -295,6 +295,19 @@ impl Compiler {
             && let Some(v) = self.const_addr_binop(op, l, r)
         {
             return Ok(v);
+        }
+        // The linker places distinct objects, so their addresses have no
+        // constant difference or order (C99 6.5.6p9, 6.5.8p5); at run
+        // time the expression is still evaluated.
+        if l.is_symbolic_addr()
+            && r.is_symbolic_addr()
+            && matches!(op, B::Sub | B::Lt | B::Le | B::Gt | B::Ge)
+        {
+            self.pending.const_expr_nonconst = true;
+            return Err(self.compile_err(
+                Code::CONSTANT_EXPRESSION,
+                "addresses in distinct objects have no constant difference or order",
+            ));
         }
         // The integer fold below reads an address operand's byte
         // displacement. That is a meaningful value for a data or function

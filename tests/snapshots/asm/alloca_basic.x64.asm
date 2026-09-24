@@ -285,7 +285,7 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0xa, %edi
                	callq	<addr>
-               	movslq	%eax, %rsi
+               	movq	%rax, %rsi
                	leaq	<rip>, %rdi
                	movb	$0x0, %al
                	callq	<addr>
@@ -307,7 +307,7 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x32, %edi
                	callq	<addr>
-               	movslq	%eax, %rsi
+               	movq	%rax, %rsi
                	leaq	<rip>, %rdi
                	movb	$0x0, %al
                	callq	<addr>

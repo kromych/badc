@@ -46,7 +46,6 @@ Disassembly of section .text:
                	cbz	w0, <addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	mov	w1, w1
                	bl	<addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp, #0x30]
@@ -76,7 +75,6 @@ Disassembly of section .text:
                	cbz	w0, <addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	mov	w1, w1
                	bl	<addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp, #0x30]

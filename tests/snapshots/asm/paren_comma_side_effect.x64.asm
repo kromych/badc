@@ -57,7 +57,7 @@ Disassembly of section .text:
                	movl	$0x0, (%rax)
                	movl	$0x7, %ecx
                	movl	%ecx, (%rax)
-               	movslq	%ecx, %rbx
+               	movq	%rcx, %rbx
                	cmpl	$0x7, %ebx
                	je	<addr>
                	movl	$0x2, %edi
@@ -75,7 +75,7 @@ Disassembly of section .text:
                	movl	$0xb, (%rax)
                	movl	$0xd, %ecx
                	movl	%ecx, (%rax)
-               	movslq	%ecx, %rbx
+               	movq	%rcx, %rbx
                	cmpl	$0xd, %ebx
                	je	<addr>
                	movl	$0x2, %edi

@@ -35,7 +35,6 @@ Disassembly of section .text:
                	pushq	%rbx
                	xorl	%eax, %eax
                	callq	<addr>
-               	movslq	%eax, %rax
                	movq	%rax, %rcx
                	leaq	-0x60(%rbp), %rdi
                	movl	$0x40, %esi

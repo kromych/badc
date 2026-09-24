@@ -324,8 +324,10 @@ pub(crate) enum Inst {
         /// Bit `i` set when the callee reads argument `i` in the low 32
         /// bits alone: a named integer parameter no wider than 32 bits,
         /// whose upper half every supported ABI leaves unspecified (System
-        /// V AMD64 3.2.3, AAPCS64 6.8.2); a narrower one still arrives
-        /// extended to 32 bits (Apple arm64). Clear past bit 63.
+        /// V AMD64 3.2.3, AAPCS64 6.8.2), or such an argument past the
+        /// prototype, which `va_arg` reads as a promoted `int`; a narrower
+        /// one still arrives extended to 32 bits (Apple arm64). Clear past
+        /// bit 63.
         low_word_args: u64,
         /// The width of each argument narrower than 8 bytes: a named
         /// parameter's type, past the prototype the promoted argument's.

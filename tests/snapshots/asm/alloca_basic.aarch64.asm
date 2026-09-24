@@ -257,7 +257,7 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0xa                // =10
                	bl	<addr>
-               	sxtw	x1, w0
+               	mov	x1, x0
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	bl	<addr>
@@ -278,7 +278,7 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x32               // =50
                	bl	<addr>
-               	sxtw	x1, w0
+               	mov	x1, x0
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	bl	<addr>

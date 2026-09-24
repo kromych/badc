@@ -668,7 +668,7 @@ impl<'a> Walker<'a> {
     /// [`Inst::Call::arg_widths`]: `exprs` pass `named` of the parameters
     /// `params`, the rest promoted, `shift` positions up past a hidden
     /// leading argument. With the prototype unknown the parse converted
-    /// no argument, so each keeps its own type.
+    /// no argument, so each keeps its own type and its whole register.
     fn set_arg_widths(
         &self,
         b: &mut SsaBuilder,
@@ -679,28 +679,22 @@ impl<'a> Walker<'a> {
         shift: usize,
     ) {
         let known = params.unwrap_or_default();
-        b.set_call_low_word_args(call, self.low_word_args(known, named, shift));
-        let mut widths = crate::c5::ir::ArgWidths::default();
+        let (mut low, mut widths) = (0u64, crate::c5::ir::ArgWidths::default());
         for (i, &e) in exprs.iter().enumerate() {
-            let bytes = match known.get(i) {
-                Some(&ty) if i < named => arg_width(ty, self.target, false),
-                _ => arg_value_ty(self.ast.expr(e))
-                    .map_or(8, |ty| arg_width(ty, self.target, params.is_some())),
+            let param = known.get(i).filter(|_| i < named).copied();
+            let promoted = param.is_none() && params.is_some();
+            let Some(ty) = param.or_else(|| arg_value_ty(self.ast.expr(e))) else {
+                continue;
             };
-            widths.set(i + shift, bytes);
+            widths.set(i + shift, arg_width(ty, self.target, promoted));
+            // `va_arg` of an `int` reads four bytes on every target, so a
+            // promoted argument is read in the low word as a parameter is.
+            if (param.is_some() || promoted) && i + shift < 64 && low_word_param(ty, self.target) {
+                low |= 1 << (i + shift);
+            }
         }
+        b.set_call_low_word_args(call, low);
         b.set_call_arg_widths(call, widths);
-    }
-
-    /// [`Inst::Call::low_word_args`] for `named` of `params`, placed `shift`
-    /// positions up past a hidden leading argument.
-    fn low_word_args(&self, params: &[i64], named: usize, shift: usize) -> u64 {
-        params
-            .iter()
-            .take(named)
-            .enumerate()
-            .filter(|&(i, &ty)| i + shift < 64 && low_word_param(ty, self.target))
-            .fold(0, |mask, (i, _)| mask | 1 << (i + shift))
     }
 
     /// Allocate the result object a c5 out-pointer return writes through,

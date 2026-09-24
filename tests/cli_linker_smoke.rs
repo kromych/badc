@@ -5754,7 +5754,7 @@ fn stack_arguments_cross_the_system_compiler_boundary() {
 // A parameter of 32 bits or less is read in the low word, across the system
 // compiler boundary both ways: each side calls the other's callees through
 // 64-bit parameter types, an upper half set, then through their own types
-// with arguments its 64-bit arithmetic narrowed.
+// with arguments its 64-bit arithmetic narrowed, a variadic `int` among them.
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 #[test]
 fn low_word_arguments_cross_the_system_compiler_boundary() {
@@ -5764,7 +5764,8 @@ fn low_word_arguments_cross_the_system_compiler_boundary() {
         );
         return;
     };
-    let common = "typedef unsigned long long u64;\n\
+    let common = "#include <stdarg.h>\n\
+        typedef unsigned long long u64;\n\
         typedef long long s64;\n\
         static s64 widen_i(int x) { return x; }\n\
         static u64 widen_u(unsigned x) { return x; }\n\
@@ -5773,9 +5774,13 @@ fn low_word_arguments_cross_the_system_compiler_boundary() {
         static s64 pick(const s64 *t, int i) { return t[i]; }\n\
         static s64 byte(signed char c) { return c; }\n\
         static u64 half(unsigned short h) { return h; }\n\
+        static s64 vsum(int n, ...)\n\
+        { va_list ap; s64 s = 0; va_start(ap, n);\n\
+          for (int i = 0; i < n; i++) s += (s64)va_arg(ap, int) * (i + 1);\n\
+          va_end(ap); return s; }\n\
         struct fns { s64 (*widen_i)(int); u64 (*widen_u)(unsigned); u64 (*halve)(unsigned);\n\
           s64 (*sum)(int, int); s64 (*pick)(const s64 *, int); s64 (*byte)(signed char);\n\
-          u64 (*half)(unsigned short); };\n\
+          u64 (*half)(unsigned short); s64 (*vsum)(int, ...); };\n\
         typedef u64 (*wide1)(u64);\n\
         typedef s64 (*wide2)(u64, u64);\n\
         typedef s64 (*wide_pick)(const s64 *, u64);\n\
@@ -5796,12 +5801,15 @@ fn low_word_arguments_cross_the_system_compiler_boundary() {
           if (f->pick(table + 4, (int)h - 5) != 13) return base + 11;\n\
           if (f->byte((signed char)(h + 0x81)) != -123) return base + 12;\n\
           if (f->half((unsigned short)(n + 3)) != 0xffff) return base + 13;\n\
+          if (f->vsum(3, (int)h, (int)n - 1, (signed char)(h + 0x81)) != -375) return base + 14;\n\
+          if (f->vsum(9, (int)h, (int)n - 1, (int)h, (int)n - 1, (int)h, (int)n - 1, (int)h,\n\
+                (int)n - 1, (signed char)(h + 0x81)) != -1143) return base + 15;\n\
           return 0; }\n";
     drive_across_the_system_compiler(
         &cc,
         "low-word-args-interop",
         common,
-        "widen_i, widen_u, halve, sum, pick, byte, half",
+        "widen_i, widen_u, halve, sum, pick, byte, half, vsum",
     );
 }
 

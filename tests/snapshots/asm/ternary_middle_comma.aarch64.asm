@@ -104,12 +104,12 @@ Disassembly of section .text:
                	b.ne	<addr>
                	cmp	w0, #0x3
                	b.eq	<addr>
-               	adrp	x5, <page>
-               	add	x5, x5, <lo12>
-               	sxtw	x2, w22
-               	sxtw	x3, w21
-               	sxtw	x4, w0
-               	mov	x0, x5
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
+               	mov	x3, x21
+               	mov	x4, x0
+               	mov	x0, x2
+               	mov	x2, x22
                	bl	<addr>
                	mov	x0, #0x4                // =4
                	ldp	x29, x30, [sp, #0x20]

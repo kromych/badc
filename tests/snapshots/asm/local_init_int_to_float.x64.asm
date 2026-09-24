@@ -101,11 +101,10 @@ Disassembly of section .text:
                	retq
                	movl	$0x406ccccd, %eax       # imm = 0x406CCCCD
                	movq	%rax, %xmm14
-               	cvttss2si	%xmm14, %rax
-               	cmpl	$0x3, %eax
+               	cvttss2si	%xmm14, %rsi
+               	cmpl	$0x3, %esi
                	je	<addr>
                	leaq	<rip>, %rdi
-               	movslq	%eax, %rsi
                	movb	$0x0, %al
                	callq	<addr>
                	movl	$0x5, %eax
@@ -113,11 +112,10 @@ Disassembly of section .text:
                	retq
                	movabsq	$-0x3ff8cccccccccccd, %rax # imm = 0xC007333333333333
                	movq	%rax, %xmm14
-               	cvttsd2si	%xmm14, %rax
-               	cmpl	$-0x2, %eax
+               	cvttsd2si	%xmm14, %rsi
+               	cmpl	$-0x2, %esi
                	je	<addr>
                	leaq	<rip>, %rdi
-               	movslq	%eax, %rsi
                	movb	$0x0, %al
                	callq	<addr>
                	movl	$0x6, %eax

@@ -21,11 +21,10 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	sub	x1, x29, #0x80
                	bl	<addr>
-               	cbz	w0, <addr>
-               	adrp	x2, <page>
-               	add	x2, x2, <lo12>
-               	sxtw	x1, w0
-               	mov	x0, x2
+               	mov	x1, x0
+               	cbz	w1, <addr>
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
                	bl	<addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x80

@@ -50,13 +50,12 @@ Disassembly of section .text:
                	pushq	%rbx
                	movl	$0x64, %edi
                	callq	<addr>
-               	addq	$0x5, %rax
-               	movq	%rax, %rcx
-               	xorq	$0x69, %rcx
-               	testl	%ecx, %ecx
+               	leaq	0x5(%rax), %rsi
+               	movq	%rsi, %rax
+               	xorq	$0x69, %rax
+               	testl	%eax, %eax
                	je	<addr>
                	leaq	<rip>, %rdi
-               	movl	%eax, %esi
                	movb	$0x0, %al
                	callq	<addr>
                	movl	$0x1, %eax
@@ -81,13 +80,12 @@ Disassembly of section .text:
                	movl	$0x502, %edi            # imm = 0x502
                	callq	<addr>
                	subq	$0x363, %rax            # imm = 0x363
-               	addq	%rbx, %rax
-               	movq	%rax, %rcx
-               	xorq	$0x5bb, %rcx            # imm = 0x5BB
-               	testl	%ecx, %ecx
+               	leaq	(%rbx,%rax), %rsi
+               	movq	%rsi, %rax
+               	xorq	$0x5bb, %rax            # imm = 0x5BB
+               	testl	%eax, %eax
                	je	<addr>
                	leaq	<rip>, %rdi
-               	movl	%eax, %esi
                	movb	$0x0, %al
                	callq	<addr>
                	movl	$0x1, %eax

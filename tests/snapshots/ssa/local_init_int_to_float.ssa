@@ -116,15 +116,15 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v86  Imm(1080872141)                                  -> x0 [f32]
     v87  Imm(0)                                           -> x1
     v88  Imm(0)                                           -> x1 [f32]
-    v89  FpCast { kind=FpToInt, value=v86 }               -> x0
-    v90  Imm(0)                                           -> x1
-    v91  Extend { value=v89, kind=I32 }                   -> x1
-    v92  BinopI { op=ne, lhs=v89, rhs_imm=3 }             -> x1
+    v89  FpCast { kind=FpToInt, value=v86 }               -> x6
+    v90  Imm(0)                                           -> x0
+    v91  Extend { value=v89, kind=I32 }                   -> x0
+    v92  BinopI { op=ne, lhs=v89, rhs_imm=3 }             -> x0
     terminator Bz { cond=v92, target=b14, fall=b13 }   (exit_acc=v92)
   block 13  start_pc=0
     v93  ImmData(107)                                     -> x7
-    v94  Extend { value=v89, kind=I32 }                   -> x6
-    v95  CallExt { binding_idx=0, args=[v93, v94], fp_arg_mask=0x0 } -> x0
+    v94  Extend { value=v89, kind=I32 }                   -> x0
+    v95  CallExt { binding_idx=0, args=[v93, v89], fp_arg_mask=0x0 } -> x0
     v96  Imm(5)                                           -> x0
     terminator Return(v96)   (exit_acc=v96)
   block 14  start_pc=0
@@ -132,15 +132,15 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v98  Imm(-4609659398595071181)                        -> x0
     v99  Imm(0)                                           -> x1
     v100 Imm(0)                                           -> x1
-    v101 FpCast { kind=FpToInt, value=v98 }               -> x0
-    v102 Imm(0)                                           -> x1
-    v103 Extend { value=v101, kind=I32 }                  -> x1
-    v104 BinopI { op=ne, lhs=v101, rhs_imm=-2 }           -> x1
+    v101 FpCast { kind=FpToInt, value=v98 }               -> x6
+    v102 Imm(0)                                           -> x0
+    v103 Extend { value=v101, kind=I32 }                  -> x0
+    v104 BinopI { op=ne, lhs=v101, rhs_imm=-2 }           -> x0
     terminator Bz { cond=v104, target=b16, fall=b15 }   (exit_acc=v104)
   block 15  start_pc=0
     v105 ImmData(130)                                     -> x7
-    v106 Extend { value=v101, kind=I32 }                  -> x6
-    v107 CallExt { binding_idx=0, args=[v105, v106], fp_arg_mask=0x0 } -> x0
+    v106 Extend { value=v101, kind=I32 }                  -> x0
+    v107 CallExt { binding_idx=0, args=[v105, v101], fp_arg_mask=0x0 } -> x0
     v108 Imm(6)                                           -> x0
     terminator Return(v108)   (exit_acc=v108)
   block 16  start_pc=0

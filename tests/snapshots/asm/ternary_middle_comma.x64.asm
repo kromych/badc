@@ -127,9 +127,9 @@ Disassembly of section .text:
                	cmpl	$0x3, %eax
                	je	<addr>
                	leaq	<rip>, %rdi
-               	movslq	%r13d, %rdx
-               	movslq	%r12d, %rcx
-               	movslq	%eax, %r8
+               	movq	%r13, %rdx
+               	movq	%rax, %r8
+               	movq	%r12, %rcx
                	movb	$0x0, %al
                	callq	<addr>
                	movl	$0x4, %eax

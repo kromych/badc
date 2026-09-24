@@ -1850,10 +1850,10 @@ fn narrow_parameter_converts_in_its_entry_move() {
     m.finish();
 }
 
-/// No `int` extension or `unsigned` mask precedes a direct, indirect or
-/// library call taking the argument in the low word (`wrap` of
+/// No `int` extension or `unsigned` mask precedes a direct, indirect,
+/// library or variadic call taking the argument in the low word (`wrap` of
 /// `tail_call_outside_return_block.c`); a narrower argument keeps its
-/// extension to 32 bits, a variadic one its full width.
+/// extension to 32 bits.
 #[test]
 fn a_32_bit_argument_is_passed_without_extension() {
     const SRC: &str = "#include <stdio.h>\n\
@@ -1889,7 +1889,7 @@ fn a_32_bit_argument_is_passed_without_extension() {
         ("through", 0),
         ("fill", 0),
         ("narrow", 1),
-        ("show", 1),
+        ("show", 0),
     ] {
         let ws = a64(SRC, name);
         let masks = ws.iter().filter(|&&w| a64_is_mask(w)).count();

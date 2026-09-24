@@ -55,12 +55,8 @@ Disassembly of section .text:
                	sub	x0, x29, #0x78
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x2]
-               	str	x10, [x0]
-               	ldr	x10, [x2, #0x8]
-               	str	x10, [x0, #0x8]
-               	ldr	x10, [sp], #0x10
+               	ldp	x16, x17, [x2]
+               	stp	x16, x17, [x0]
                	adrp	x3, <page>
                	add	x3, x3, <lo12>
                	sub	x2, x29, #0x88
@@ -72,10 +68,8 @@ Disassembly of section .text:
                	sub	x5, x29, #0x68
                	adrp	x6, <page>
                	add	x6, x6, <lo12>
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x6]
-               	str	x10, [x5]
-               	ldr	x10, [sp], #0x10
+               	ldr	x16, [x6]
+               	str	x16, [x5]
                	ldr	x6, [x3]
                	cmp	x2, x6
                	b.eq	<addr>
@@ -100,12 +94,8 @@ Disassembly of section .text:
                	sub	x5, x29, #0x60
                	adrp	x6, <page>
                	add	x6, x6, <lo12>
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x6]
-               	str	x10, [x5]
-               	ldr	x10, [x6, #0x8]
-               	str	x10, [x5, #0x8]
-               	ldr	x10, [sp], #0x10
+               	ldp	x16, x17, [x6]
+               	stp	x16, x17, [x5]
                	ldr	x6, [x3]
                	cmp	x2, x6
                	b.eq	<addr>
@@ -130,14 +120,10 @@ Disassembly of section .text:
                	sub	x5, x29, #0x50
                	adrp	x6, <page>
                	add	x6, x6, <lo12>
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x6]
-               	str	x10, [x5]
-               	ldr	x10, [x6, #0x8]
-               	str	x10, [x5, #0x8]
-               	ldr	x10, [x6, #0x10]
-               	str	x10, [x5, #0x10]
-               	ldr	x10, [sp], #0x10
+               	ldp	x16, x17, [x6]
+               	stp	x16, x17, [x5]
+               	ldr	x16, [x6, #0x10]
+               	str	x16, [x5, #0x10]
                	ldr	x3, [x3]
                	cmp	x2, x3
                	b.eq	<addr>
@@ -162,12 +148,8 @@ Disassembly of section .text:
                	sub	x1, x29, #0x38
                	adrp	x3, <page>
                	add	x3, x3, <lo12>
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x3]
-               	str	x10, [x1]
-               	ldr	x10, [x3, #0x8]
-               	str	x10, [x1, #0x8]
-               	ldr	x10, [sp], #0x10
+               	ldp	x16, x17, [x3]
+               	stp	x16, x17, [x1]
                	mov	x16, x2
                	mov	x2, x0
                	mov	x0, x16
@@ -188,12 +170,8 @@ Disassembly of section .text:
                	sub	x3, x29, #0x28
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x0]
-               	str	x10, [x3]
-               	ldr	x10, [x0, #0x8]
-               	str	x10, [x3, #0x8]
-               	ldr	x10, [sp], #0x10
+               	ldp	x16, x17, [x0]
+               	stp	x16, x17, [x3]
                	sub	x0, x29, #0x80
                	adrp	x4, <page>
                	add	x4, x4, <lo12>
@@ -223,10 +201,8 @@ Disassembly of section .text:
                	sub	x3, x29, #0x18
                	adrp	x6, <page>
                	add	x6, x6, <lo12>
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x6]
-               	str	x10, [x3]
-               	ldr	x10, [sp], #0x10
+               	ldr	x16, [x6]
+               	str	x16, [x3]
                	ldr	x6, [x4]
                	cmp	x2, x6
                	b.eq	<addr>
@@ -251,12 +227,8 @@ Disassembly of section .text:
                	sub	x3, x29, #0x10
                	adrp	x5, <page>
                	add	x5, x5, <lo12>
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x5]
-               	str	x10, [x3]
-               	ldr	x10, [x5, #0x8]
-               	str	x10, [x3, #0x8]
-               	ldr	x10, [sp], #0x10
+               	ldp	x16, x17, [x5]
+               	stp	x16, x17, [x3]
                	adrp	x5, <page>
                	add	x5, x5, <lo12>
                	ldr	x6, [x5]

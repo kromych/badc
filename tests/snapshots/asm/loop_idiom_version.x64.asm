@@ -579,24 +579,14 @@ Disassembly of section .text:
                	retq
                	leaq	<rip>, %rdi
                	leaq	<rip>, %rax
-               	pushq	%rcx
-               	movq	(%rax), %rcx
-               	movq	%rcx, (%rdi)
-               	movq	0x8(%rax), %rcx
-               	movq	%rcx, 0x8(%rdi)
-               	movq	0x10(%rax), %rcx
-               	movq	%rcx, 0x10(%rdi)
-               	movq	0x18(%rax), %rcx
-               	movq	%rcx, 0x18(%rdi)
-               	movq	0x20(%rax), %rcx
-               	movq	%rcx, 0x20(%rdi)
-               	movq	0x28(%rax), %rcx
-               	movq	%rcx, 0x28(%rdi)
-               	movq	0x30(%rax), %rcx
-               	movq	%rcx, 0x30(%rdi)
-               	movq	0x38(%rax), %rcx
-               	movq	%rcx, 0x38(%rdi)
-               	popq	%rcx
+               	movups	(%rax), %xmm14
+               	movups	%xmm14, (%rdi)
+               	movups	0x10(%rax), %xmm14
+               	movups	%xmm14, 0x10(%rdi)
+               	movups	0x20(%rax), %xmm14
+               	movups	%xmm14, 0x20(%rdi)
+               	movups	0x30(%rax), %xmm14
+               	movups	%xmm14, 0x30(%rdi)
                	leaq	0x20(%rdi), %rsi
                	movl	$0x3, %edx
                	callq	<addr>

@@ -1460,6 +1460,40 @@ pub(crate) fn extern_fn_targets(
     out
 }
 
+/// The registers of `candidates` a lowering may write at `v`, in the
+/// candidates' order and split in two: the free ones -- none of `taken`,
+/// none `-ffixed-` reserves, none holding a value live across `v`
+/// (`Allocation::holds_live_across`) -- and the ones holding a live value,
+/// which a save around the lowering can still borrow.
+pub(crate) fn site_registers(
+    alloc: &super::reg_alloc::Allocation,
+    v: super::super::ir::ValueId,
+    candidates: &[u8],
+    taken: &[u8],
+    fixed: super::super::FixedRegs,
+) -> (alloc::vec::Vec<u8>, alloc::vec::Vec<u8>) {
+    let mut free = alloc::vec::Vec::new();
+    let mut held = alloc::vec::Vec::new();
+    for &r in candidates {
+        if taken.contains(&r) || fixed.has_gpr(r) {
+            continue;
+        }
+        if alloc.holds_live_across(v, r) {
+            held.push(r);
+        } else {
+            free.push(r);
+        }
+    }
+    (free, held)
+}
+
+/// Accesses a transfer of `bytes` takes at `widest` bytes (a power of two)
+/// per access, the tail through halving widths.
+pub(crate) fn transfer_accesses(bytes: u32, widest: u32) -> u32 {
+    debug_assert!(widest.is_power_of_two());
+    bytes / widest + (bytes % widest).count_ones()
+}
+
 /// True when an SSA inst can be skipped entirely because its
 /// result has no consumers and the inst itself has no side effects.
 /// Per-arch emit dispatch checks this before invoking `emit_inst`;

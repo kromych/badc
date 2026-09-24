@@ -309,6 +309,7 @@ pub(super) fn emit_inst(
             align,
         } => emit_mcpy(
             code,
+            v,
             dst,
             *d,
             *s,

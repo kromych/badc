@@ -291,10 +291,8 @@ Disassembly of section .text:
                	pushq	%rbx
                	leaq	-0x38(%rbp), %rdi
                	leaq	<rip>, %rax
-               	pushq	%rcx
-               	movq	(%rax), %rcx
-               	movq	%rcx, (%rdi)
-               	popq	%rcx
+               	movq	(%rax), %r10
+               	movq	%r10, (%rdi)
                	xorl	%esi, %esi
                	callq	<addr>
                	testq	%rax, %rax
@@ -314,24 +312,12 @@ Disassembly of section .text:
                	retq
                	leaq	-0x30(%rbp), %rbx
                	leaq	<rip>, %rax
-               	pushq	%rcx
-               	movq	(%rax), %rcx
-               	movq	%rcx, (%rbx)
-               	movq	0x8(%rax), %rcx
-               	movq	%rcx, 0x8(%rbx)
-               	movq	0x10(%rax), %rcx
-               	movq	%rcx, 0x10(%rbx)
-               	movq	0x18(%rax), %rcx
-               	movq	%rcx, 0x18(%rbx)
-               	movzbq	0x20(%rax), %rcx
-               	movb	%cl, 0x20(%rbx)
-               	movzbq	0x21(%rax), %rcx
-               	movb	%cl, 0x21(%rbx)
-               	movzbq	0x22(%rax), %rcx
-               	movb	%cl, 0x22(%rbx)
-               	movzbq	0x23(%rax), %rcx
-               	movb	%cl, 0x23(%rbx)
-               	popq	%rcx
+               	movups	(%rax), %xmm14
+               	movups	%xmm14, (%rbx)
+               	movups	0x10(%rax), %xmm14
+               	movups	%xmm14, 0x10(%rbx)
+               	movl	0x20(%rax), %r10d
+               	movl	%r10d, 0x20(%rbx)
                	xorl	%esi, %esi
                	movl	$0x8, %edx
                	movl	$0x4, %ecx

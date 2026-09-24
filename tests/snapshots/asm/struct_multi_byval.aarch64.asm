@@ -25,14 +25,10 @@ Disassembly of section .text:
                	stur	x6, [x29, #-0x28]
                	sub	x0, x29, #0x48
                	ldr	x1, [x29, #0x10]
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x1]
-               	str	x10, [x0]
-               	ldr	x10, [x1, #0x8]
-               	str	x10, [x0, #0x8]
-               	ldr	x10, [x1, #0x10]
-               	str	x10, [x0, #0x10]
-               	ldr	x10, [sp], #0x10
+               	ldp	x16, x17, [x1]
+               	stp	x16, x17, [x0]
+               	ldr	x16, [x1, #0x10]
+               	str	x16, [x0, #0x10]
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	sub	x1, x29, #0x8
@@ -86,58 +82,32 @@ Disassembly of section .text:
                	sub	x0, x29, #0x48
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x1]
-               	str	x10, [x0]
-               	ldr	x10, [sp], #0x10
+               	ldr	x16, [x1]
+               	str	x16, [x0]
                	sub	x2, x29, #0x38
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x1]
-               	str	x10, [x2]
-               	ldrb	w10, [x1, #0x8]
-               	strb	w10, [x2, #0x8]
-               	ldrb	w10, [x1, #0x9]
-               	strb	w10, [x2, #0x9]
-               	ldrb	w10, [x1, #0xa]
-               	strb	w10, [x2, #0xa]
-               	ldrb	w10, [x1, #0xb]
-               	strb	w10, [x2, #0xb]
-               	ldr	x10, [sp], #0x10
+               	ldr	x16, [x1]
+               	str	x16, [x2]
+               	ldr	w16, [x1, #0x8]
+               	str	w16, [x2, #0x8]
                	sub	x4, x29, #0x40
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	str	x10, [sp, #-0x10]!
-               	ldrb	w10, [x1]
-               	strb	w10, [x4]
-               	ldrb	w10, [x1, #0x1]
-               	strb	w10, [x4, #0x1]
-               	ldrb	w10, [x1, #0x2]
-               	strb	w10, [x4, #0x2]
-               	ldrb	w10, [x1, #0x3]
-               	strb	w10, [x4, #0x3]
-               	ldr	x10, [sp], #0x10
+               	ldr	w16, [x1]
+               	str	w16, [x4]
                	sub	x5, x29, #0x28
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x1]
-               	str	x10, [x5]
-               	ldr	x10, [x1, #0x8]
-               	str	x10, [x5, #0x8]
-               	ldr	x10, [sp], #0x10
+               	ldp	x16, x17, [x1]
+               	stp	x16, x17, [x5]
                	sub	x3, x29, #0x18
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x1]
-               	str	x10, [x3]
-               	ldr	x10, [x1, #0x8]
-               	str	x10, [x3, #0x8]
-               	ldr	x10, [x1, #0x10]
-               	str	x10, [x3, #0x10]
-               	ldr	x10, [sp], #0x10
+               	ldp	x16, x17, [x1]
+               	stp	x16, x17, [x3]
+               	ldr	x16, [x1, #0x10]
+               	str	x16, [x3, #0x10]
                	mov	x1, #0x3e8              // =1000
                	mov	x7, #0x7d0              // =2000
                	mov	x6, #0xbb8              // =3000

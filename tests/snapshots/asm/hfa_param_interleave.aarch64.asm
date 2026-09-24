@@ -68,44 +68,28 @@ Disassembly of section .text:
                	sub	x7, x29, #0x28
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x0]
-               	str	x10, [x7]
-               	ldr	x10, [sp], #0x10
+               	ldr	x16, [x0]
+               	str	x16, [x7]
                	sub	x1, x29, #0x20
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x0]
-               	str	x10, [x1]
-               	ldr	x10, [sp], #0x10
+               	ldr	x16, [x0]
+               	str	x16, [x1]
                	sub	x2, x29, #0x18
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x0]
-               	str	x10, [x2]
-               	ldr	x10, [sp], #0x10
+               	ldr	x16, [x0]
+               	str	x16, [x2]
                	sub	x3, x29, #0x8
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x0]
-               	str	x10, [x3]
-               	ldr	x10, [sp], #0x10
+               	ldr	x16, [x0]
+               	str	x16, [x3]
                	sub	x0, x29, #0x10
                	adrp	x4, <page>
                	add	x4, x4, <lo12>
-               	str	x10, [sp, #-0x10]!
-               	ldrb	w10, [x4]
-               	strb	w10, [x0]
-               	ldrb	w10, [x4, #0x1]
-               	strb	w10, [x0, #0x1]
-               	ldrb	w10, [x4, #0x2]
-               	strb	w10, [x0, #0x2]
-               	ldrb	w10, [x4, #0x3]
-               	strb	w10, [x0, #0x3]
-               	ldr	x10, [sp], #0x10
+               	ldr	w16, [x4]
+               	str	w16, [x0]
                	fmov	s0, #9.50000000
                	sub	sp, sp, #0x10
                	str	d0, [sp]

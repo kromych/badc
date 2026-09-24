@@ -972,7 +972,7 @@ impl CallArgs<'_> {
             if from > 0 {
                 emit(code, enc_add_imm(sbase, sbase, from));
             }
-            emit_block_copy(code, unit, temp, sbase, dbase, size - from);
+            emit_block_copy(code, unit, &[temp], sbase, dbase, size - from);
             emit(code, enc_ldr_post(dbase, Reg(31), 16));
         }
         Ok(())

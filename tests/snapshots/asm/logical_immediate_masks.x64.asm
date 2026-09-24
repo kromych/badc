@@ -523,16 +523,8 @@ Disassembly of section .text:
                	retq
                	leaq	-0x30(%rbp), %rdi
                	leaq	<rip>, %rax
-               	pushq	%rcx
-               	movzbq	(%rax), %rcx
-               	movb	%cl, (%rdi)
-               	movzbq	0x1(%rax), %rcx
-               	movb	%cl, 0x1(%rdi)
-               	movzbq	0x2(%rax), %rcx
-               	movb	%cl, 0x2(%rdi)
-               	movzbq	0x3(%rax), %rcx
-               	movb	%cl, 0x3(%rdi)
-               	popq	%rcx
+               	movl	(%rax), %r10d
+               	movl	%r10d, (%rdi)
                	movl	$0x12345, -0x28(%rbp)   # imm = 0x12345
                	movl	-0x28(%rbp), %esi
                	callq	<addr>

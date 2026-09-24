@@ -348,8 +348,9 @@ struct FnCtx<'a> {
     frame: Frame,
     abi: super::Abi,
     target: Target,
-    /// The FP register a zero fill may write (`reg_alloc::free_fp_register`).
-    zero_fill_fp: Option<u8>,
+    /// The xmm register a zero fill or a copy moves 16 bytes through
+    /// (`reg_alloc::free_fp_register`).
+    bulk_xmm: Option<u8>,
     imports: &'a super::ResolvedImports,
     variadic_targets: &'a alloc::collections::BTreeSet<usize>,
     /// Callee ent_pc -> the convention that callee declares, for the

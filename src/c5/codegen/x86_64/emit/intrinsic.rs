@@ -997,25 +997,43 @@ pub(super) fn emit_mzero(
     Ok(())
 }
 
+/// The registers a copy takes its temporaries among, in order: the writer's
+/// scratch, which holds no value, then rax and the argument registers of the
+/// function's own convention, its volatile bank.
+fn copy_temps(abi: super::Abi) -> Vec<u8> {
+    [SCRATCH_R10.0, SCRATCH_R11.0, Reg::RAX.0]
+        .into_iter()
+        .chain(abi.int_arg_regs.iter().copied())
+        .collect()
+}
+
+/// Copy `size` bytes from `src_val` to `dst_val` through registers free at
+/// the site ([`SiteRegs`]): a `movups` per 16 bytes through `xmm` where the
+/// alignment allows, else one unit per access, the tail through halving
+/// widths. Up to `MAX_MEM_FILL_ACCESSES` accesses are written in place; a
+/// larger copy loops cursors over the whole units and copies the tail past
+/// them. A base whose register holds nothing after the copy, or a spill's
+/// reload, serves as its own cursor.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_mcpy(
     code: &mut Vec<u8>,
+    v: super::super::ir::ValueId,
     dst_place: Place,
     dst_val: u32,
     src_val: u32,
     size: i64,
     align: u32,
+    xmm: Option<u8>,
     strict_align: bool,
     alloc: &Allocation,
     frame: Frame,
+    abi: super::Abi,
 ) -> Emit {
-    if size < 0 {
-        return fail("Mcpy: negative size");
-    }
+    let Ok(bytes) = u32::try_from(size) else {
+        return fail("Mcpy: size outside 32 bits");
+    };
     let dst_in = place_of(alloc, dst_val);
     let src_in = place_of(alloc, src_val);
-    // Both bases go to r10 / r11; rcx is in the caller pool and may hold a
-    // live value.
     let Some(dst_r) = materialize_int(code, dst_in, SCRATCH_R10, frame) else {
         return fail("Mcpy: dst base not int reg / spill");
     };
@@ -1027,38 +1045,116 @@ pub(super) fn emit_mcpy(
     let Some(src_r) = materialize_int(code, src_in, src_scratch, frame) else {
         return fail("Mcpy: src base not int reg / spill");
     };
-    // The per-iteration temp is a pool register distinct from both bases,
-    // preserved with a push / pop pair around the loop.
-    let temp = if dst_r.0 != Reg::RAX.0 && src_r.0 != Reg::RAX.0 {
-        Reg::RAX
-    } else if dst_r.0 != Reg::RCX.0 && src_r.0 != Reg::RCX.0 {
-        Reg::RCX
-    } else {
-        // rax and rcx are taken by the bases (one of which may sit in
-        // r10 / r11); fall back to rdx, also in the caller pool.
-        Reg::RDX
-    };
-    emit_push_r(code, temp);
-    let bytes = size as u32;
     let unit = super::super::access_chunk(align, strict_align, 8);
-    let words = bytes / unit;
-    for w in 0..words {
-        // After push, [base + off] still resolves correctly
-        // because the bases are register-typed (not sp-relative).
-        let off = (w * unit) as i32;
-        emit_copy_unit(code, unit, temp, src_r, dst_r, off);
+    let xmm = xmm.filter(|_| unit == 8 && bytes >= 16).map(Reg);
+    let widest = if xmm.is_some() { 16 } else { unit };
+    let candidates = copy_temps(abi);
+    let taken = [dst_r.0, src_r.0];
+    let mut regs = SiteRegs::new(alloc, v, &candidates, &taken, frame.fixed_regs);
+    let width = |left: u32| {
+        let mut w = widest;
+        while w > left {
+            w /= 2;
+        }
+        w
+    };
+    let access = |code: &mut Vec<u8>, w: u32, temp: Option<Reg>, s: Reg, d: Reg, off: i32| match (
+        w, xmm, temp,
+    ) {
+        (16, Some(x), _) => {
+            emit_movups_xmm_mem(code, x, s, off);
+            emit_movups_mem_xmm(code, d, off, x);
+        }
+        (_, _, Some(t)) => emit_copy_unit(code, w, t, s, d, off),
+        _ => unreachable!("ICE: Mcpy: a unit access without its temporary"),
+    };
+    let inline = super::ssa::emit_common::transfer_accesses(bytes, widest)
+        <= crate::c5::ast::MAX_MEM_FILL_ACCESSES as u32;
+    // The units below 16 bytes go through a general register.
+    let needs_temp = xmm.is_none() || bytes % 16 != 0;
+    let temp = if needs_temp {
+        let Some(t) = regs.take(code) else {
+            return fail("Mcpy: no register for the copy");
+        };
+        Some(t)
+    } else {
+        None
+    };
+    // The copy's value is the destination; a cursor run over a spilled one
+    // reloads it.
+    let mut reload = false;
+    if inline {
+        let mut off = 0u32;
+        while off < bytes {
+            let w = width(bytes - off);
+            access(code, w, temp, src_r, dst_r, off as i32);
+            off += w;
+        }
+    } else {
+        let step = widest;
+        let looped = bytes - bytes % step;
+        let dead = |place: Place, r: Reg| {
+            matches!(place, Place::Spill(_))
+                || (!alloc.holds_live_across(v, r.0) && !frame.fixed_regs.has_gpr(r.0))
+        };
+        let cursor = |code: &mut Vec<u8>, regs: &mut SiteRegs, base: Reg| {
+            let c = regs.take(code)?;
+            emit_mov_rr(code, c, base);
+            Some(c)
+        };
+        let s = if src_r.0 != dst_r.0 && dead(src_in, src_r) {
+            src_r
+        } else {
+            let Some(s) = cursor(code, &mut regs, src_r) else {
+                return fail("Mcpy: no register for the copy");
+            };
+            s
+        };
+        let d = if dead(dst_in, dst_r)
+            && (dst_place == Place::None || matches!(dst_in, Place::Spill(_)))
+        {
+            dst_r
+        } else {
+            let Some(d) = cursor(code, &mut regs, dst_r) else {
+                return fail("Mcpy: no register for the copy");
+            };
+            d
+        };
+        let Some(e) = regs.take(code) else {
+            return fail("Mcpy: no register for the copy");
+        };
+        match i32::try_from(looped) {
+            Ok(disp) => emit_lea_r_mem(code, e, s, disp),
+            Err(_) => {
+                emit_mov_r_imm64(code, e, i64::from(looped));
+                emit_rr(code, Mnem::Add, 8, e, s);
+            }
+        }
+        let top = code.len();
+        access(code, step, temp, s, d, 0);
+        emit_ri(code, Mnem::Add, 8, s, step as i32);
+        emit_ri(code, Mnem::Add, 8, d, step as i32);
+        emit_rr(code, Mnem::Cmp, 8, s, e);
+        let back = top as i64 - (code.len() as i64 + 2);
+        debug_assert!(back >= -128, "Mcpy: loop body of {} bytes", -back);
+        emit_jcc_rel8(code, Cc::Ne, back as i8);
+        let mut off = 0u32;
+        while off < bytes - looped {
+            let w = width(bytes - looped - off);
+            access(code, w, temp, s, d, off as i32);
+            off += w;
+        }
+        reload = d.0 == dst_r.0 && dst_place != Place::None;
     }
-    let tail_start = words * unit;
-    for i in 0..(bytes - tail_start) {
-        let off = (tail_start + i) as i32;
-        super::encode::emit_movzx_r_mem8(code, temp, src_r, off);
-        super::encode::emit_mov_mem8_r(code, dst_r, off, temp);
-    }
-    emit_pop_r(code, temp);
-    // memcpy returns dst; propagate into the inst's dst.
+    regs.restore(code);
+    let result = if reload {
+        materialize_int(code, dst_in, SCRATCH_R10, frame).unwrap_or(dst_r)
+    } else {
+        dst_r
+    };
     match dst_place {
-        Place::IntReg(r) if r != dst_r.0 => emit_mov_rr(code, Reg(r), dst_r),
-        Place::Spill(_) => spill_dst_to_slot(code, dst_place, dst_r, frame),
+        Place::IntReg(r) if r != result.0 => emit_mov_rr(code, Reg(r), result),
+        Place::Spill(_) => spill_dst_to_slot(code, dst_place, result, frame),
         _ => {}
     }
     Ok(())

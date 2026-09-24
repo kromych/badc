@@ -87,10 +87,8 @@ Disassembly of section .text:
                	sub	x21, x29, #0x8
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x0]
-               	str	x10, [x21]
-               	ldr	x10, [sp], #0x10
+               	ldr	x16, [x0]
+               	str	x16, [x21]
                	mov	x1, #0x0                // =0
                	mov	x0, x20
                	bl	<addr>

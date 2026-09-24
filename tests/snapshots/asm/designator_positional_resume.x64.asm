@@ -41,18 +41,10 @@ Disassembly of section .text:
                	jl	<addr>
                	leaq	-0x10(%rbp), %rcx
                	leaq	<rip>, %rax
-               	pushq	%rdx
-               	movq	(%rax), %rdx
-               	movq	%rdx, (%rcx)
-               	movzbq	0x8(%rax), %rdx
-               	movb	%dl, 0x8(%rcx)
-               	movzbq	0x9(%rax), %rdx
-               	movb	%dl, 0x9(%rcx)
-               	movzbq	0xa(%rax), %rdx
-               	movb	%dl, 0xa(%rcx)
-               	movzbq	0xb(%rax), %rdx
-               	movb	%dl, 0xb(%rcx)
-               	popq	%rdx
+               	movq	(%rax), %r10
+               	movq	%r10, (%rcx)
+               	movl	0x8(%rax), %r10d
+               	movl	%r10d, 0x8(%rcx)
                	leaq	<rip>, %rdx
                	xorl	%eax, %eax
                	movsbq	(%rcx,%rax), %rsi

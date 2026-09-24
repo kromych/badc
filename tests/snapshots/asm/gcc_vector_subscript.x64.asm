@@ -31,12 +31,8 @@ Disassembly of section .text:
                	subq	$0x40, %rsp
                	leaq	-0x40(%rbp), %rax
                	leaq	<rip>, %rcx
-               	pushq	%rdx
-               	movq	(%rcx), %rdx
-               	movq	%rdx, (%rax)
-               	movq	0x8(%rcx), %rdx
-               	movq	%rdx, 0x8(%rax)
-               	popq	%rdx
+               	movups	(%rcx), %xmm14
+               	movups	%xmm14, (%rax)
                	movb	$0x63, 0x3(%rax)
                	movb	$-0x38, 0xa(%rax)
                	xorl	%eax, %eax

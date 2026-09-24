@@ -408,33 +408,124 @@ pub(super) fn emit_copy_unit(
     emit(code, enc_mem(st, temp.0, dbase, st.scaled(doff)));
 }
 
-/// Bytes one window of [`emit_block_copy`] spans: 8-aligned and below 4096.
+/// Bytes one window of [`emit_block_copy`] spans through single units:
+/// 8-aligned and below 4096, the reach of the `add` that advances a base.
 pub(super) const COPY_WINDOW: u32 = 4088;
 
-/// Copy `size` bytes from `[sbase]` to `[dbase]` through `temp`; both
-/// bases advance past every window but the last.
+/// The bytes a load or store pair of `unit`-byte registers moves; the pair
+/// forms take words and doublewords only.
+pub(super) fn pair_bytes(unit: u32) -> Option<u32> {
+    (unit >= 4).then_some(2 * unit)
+}
+
+/// The widest access of a copy at `unit` through `temps` registers: a pair
+/// when two are given and the pair forms take the unit, else the unit.
+pub(super) fn copy_widest(unit: u32, temps: usize) -> u32 {
+    match pair_bytes(unit) {
+        Some(bytes) if temps >= 2 => bytes,
+        _ => unit,
+    }
+}
+
+/// Copy `size` bytes from `[sbase]` to `[dbase]` through `temps`: a pair
+/// per [`copy_widest`] access when two are given, else one unit per access,
+/// the tail through halving widths. Past one window the bases advance,
+/// which the result reports.
 pub(super) fn emit_block_copy(
     code: &mut Vec<u8>,
     unit: u32,
-    temp: Reg,
+    temps: &[Reg],
     sbase: Reg,
     dbase: Reg,
     size: u32,
-) {
+) -> bool {
+    let widest = copy_widest(unit, temps.len());
+    // A pair's scaled offset reaches 63 units, so 32 pairs stay inside it.
+    let window = if widest > unit {
+        32 * widest
+    } else {
+        COPY_WINDOW
+    };
     let mut pos = 0u32;
+    let mut advanced = false;
     while pos < size {
-        let run = (size - pos).min(COPY_WINDOW);
-        let whole = run - run % unit;
-        for off in (0..whole).step_by(unit as usize) {
-            emit_copy_unit(code, unit, temp, sbase, off, dbase, off);
-        }
-        for off in whole..run {
-            emit_copy_unit(code, 1, temp, sbase, off, dbase, off);
+        let run = (size - pos).min(window);
+        let mut off = 0u32;
+        while off < run {
+            let mut w = widest;
+            while w > run - off {
+                w /= 2;
+            }
+            if w > unit {
+                let (t1, t2) = (temps[0], temps[1]);
+                emit(code, enc_ldp_unit_off(unit, t1, t2, sbase, off as i32));
+                emit(code, enc_stp_unit_off(unit, t1, t2, dbase, off as i32));
+            } else {
+                emit_copy_unit(code, w, temps[0], sbase, off, dbase, off);
+            }
+            off += w;
         }
         pos += run;
         if pos < size {
             emit(code, enc_add_imm(sbase, sbase, run));
             emit(code, enc_add_imm(dbase, dbase, run));
+            advanced = true;
+        }
+    }
+    advanced
+}
+
+/// Registers a lowering borrows at one site: the free ones of its
+/// candidate list (`site_registers`) first, then ones holding a live
+/// value, each saved below sp and restored by [`Self::restore`].
+pub(super) struct SiteRegs {
+    free: Vec<u8>,
+    held: Vec<u8>,
+    next_free: usize,
+    saved: Vec<Reg>,
+}
+
+impl SiteRegs {
+    pub(super) fn new(
+        alloc: &Allocation,
+        v: super::super::ir::ValueId,
+        candidates: &[u8],
+        taken: &[u8],
+        fixed: super::FixedRegs,
+    ) -> Self {
+        let (free, held) =
+            super::ssa::emit_common::site_registers(alloc, v, candidates, taken, fixed);
+        Self {
+            free,
+            held,
+            next_free: 0,
+            saved: Vec::new(),
+        }
+    }
+
+    /// The next free register, if any.
+    pub(super) fn free(&mut self) -> Option<Reg> {
+        let r = self.free.get(self.next_free).copied()?;
+        self.next_free += 1;
+        Some(Reg(r))
+    }
+
+    /// The next free register, else one saved on the stack; none once the
+    /// candidates are exhausted.
+    pub(super) fn take(&mut self, code: &mut Vec<u8>) -> Option<Reg> {
+        if let Some(r) = self.free() {
+            return Some(r);
+        }
+        let r = Reg(self.held.get(self.saved.len()).copied()?);
+        emit(code, enc_str_pre(r, Reg(31), -16));
+        self.saved.push(r);
+        Some(r)
+    }
+
+    /// Restore the saved registers, the last saved first.
+    pub(super) fn restore(&self, code: &mut Vec<u8>) {
+        for &r in self.saved.iter().rev() {
+            emit(code, enc_ldr_post(r, Reg(31), 16));
         }
     }
 }

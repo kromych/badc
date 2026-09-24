@@ -1021,6 +1021,62 @@ pub(super) fn emit_copy_unit(
     emit_store_unit(code, width, dst, disp, temp);
 }
 
+/// Registers a lowering borrows at one site: the free ones of its
+/// candidate list (`site_registers`) first, then ones holding a live
+/// value, each pushed and popped again by [`Self::restore`]. No call
+/// intervenes, so the transient stack misalignment is harmless.
+pub(super) struct SiteRegs {
+    free: Vec<u8>,
+    held: Vec<u8>,
+    next_free: usize,
+    saved: Vec<Reg>,
+}
+
+impl SiteRegs {
+    pub(super) fn new(
+        alloc: &Allocation,
+        v: super::super::ir::ValueId,
+        candidates: &[u8],
+        taken: &[u8],
+        fixed: super::FixedRegs,
+    ) -> Self {
+        let (free, held) =
+            super::ssa::emit_common::site_registers(alloc, v, candidates, taken, fixed);
+        Self {
+            free,
+            held,
+            next_free: 0,
+            saved: Vec::new(),
+        }
+    }
+
+    /// The next free register, if any.
+    pub(super) fn free(&mut self) -> Option<Reg> {
+        let r = self.free.get(self.next_free).copied()?;
+        self.next_free += 1;
+        Some(Reg(r))
+    }
+
+    /// The next free register, else one pushed on the stack; none once the
+    /// candidates are exhausted.
+    pub(super) fn take(&mut self, code: &mut Vec<u8>) -> Option<Reg> {
+        if let Some(r) = self.free() {
+            return Some(r);
+        }
+        let r = Reg(self.held.get(self.saved.len()).copied()?);
+        emit_push_r(code, r);
+        self.saved.push(r);
+        Some(r)
+    }
+
+    /// Pop the saved registers, the last pushed first.
+    pub(super) fn restore(&self, code: &mut Vec<u8>) {
+        for &r in self.saved.iter().rev() {
+            emit_pop_r(code, r);
+        }
+    }
+}
+
 /// Store the low `width` bytes (8, 4, 2 or 1) of `src` to
 /// `[base + disp]`.
 pub(super) fn emit_store_unit(code: &mut Vec<u8>, width: u32, base: Reg, disp: i32, src: Reg) {

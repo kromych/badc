@@ -34,12 +34,8 @@ Disassembly of section .text:
                	xorl	%edx, %edx
                	leaq	-0x18(%rbp), %rax
                	leaq	<rip>, %rcx
-               	pushq	%rdx
-               	movzbq	(%rcx), %rdx
-               	movb	%dl, (%rax)
-               	movzbq	0x1(%rcx), %rdx
-               	movb	%dl, 0x1(%rax)
-               	popq	%rdx
+               	movzwq	(%rcx), %r10
+               	movw	%r10w, (%rax)
                	leaq	-0x10(%rbp), %rdi
                	movq	%rax, (%rdi)
                	movq	%rdx, 0x8(%rdi)

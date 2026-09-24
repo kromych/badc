@@ -95,10 +95,8 @@ Disassembly of section .text:
                	stur	x0, [x29, #-0x10]
                	sub	x1, x29, #0x10
                	sub	x0, x29, #0x8
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x1]
-               	str	x10, [x0]
-               	ldr	x10, [sp], #0x10
+               	ldr	x16, [x1]
+               	str	x16, [x0]
                	add	x3, x20, #0x8
                	ldr	w2, [x3]
                	ldr	w1, [x3, #0x4]

@@ -422,6 +422,7 @@ fn every_fixture_compiles_standalone_for_linux() {
 /// Values are these programs' own exit codes, checked here rather than
 /// copied from another table, so a wrong one fails instead of drifting.
 const LINKED_IMAGE_RUN_FIXTURES: &[(&str, i32)] = &[
+    ("aggregate_copy_site_temps.c", 0),
     ("data_reloc_one_past_end.c", 10),
     ("static_init_cast_funcptr.c", 0),
     ("static_init_paren_relocation.c", 0),

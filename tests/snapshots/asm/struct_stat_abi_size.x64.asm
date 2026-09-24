@@ -32,22 +32,12 @@ Disassembly of section .text:
                	pushq	%rbx
                	leaq	-0xa8(%rbp), %rdi
                	leaq	<rip>, %rax
-               	pushq	%rcx
-               	movq	(%rax), %rcx
-               	movq	%rcx, (%rdi)
-               	movq	0x8(%rax), %rcx
-               	movq	%rcx, 0x8(%rdi)
-               	movzbq	0x10(%rax), %rcx
-               	movb	%cl, 0x10(%rdi)
-               	movzbq	0x11(%rax), %rcx
-               	movb	%cl, 0x11(%rdi)
-               	movzbq	0x12(%rax), %rcx
-               	movb	%cl, 0x12(%rdi)
-               	movzbq	0x13(%rax), %rcx
-               	movb	%cl, 0x13(%rdi)
-               	movzbq	0x14(%rax), %rcx
-               	movb	%cl, 0x14(%rdi)
-               	popq	%rcx
+               	movups	(%rax), %xmm14
+               	movups	%xmm14, (%rdi)
+               	movl	0x10(%rax), %r10d
+               	movl	%r10d, 0x10(%rdi)
+               	movzbq	0x14(%rax), %r10
+               	movb	%r10b, 0x14(%rdi)
                	xorl	%eax, %eax
                	callq	<addr>
                	movq	%rax, %rbx

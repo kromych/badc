@@ -23,12 +23,8 @@ Disassembly of section .text:
                	add	x3, sp, #0x10
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x0]
-               	str	x10, [x3]
-               	ldr	x10, [x0, #0x8]
-               	str	x10, [x3, #0x8]
-               	ldr	x10, [sp], #0x10
+               	ldp	x16, x17, [x0]
+               	stp	x16, x17, [x3]
                	mov	x0, #0x9                // =9
                	str	x0, [sp]
                	adrp	x1, <page>

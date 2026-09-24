@@ -48,16 +48,8 @@ Disassembly of section .text:
                	movl	$0x0, -0x28(%rbp)
                	leaq	-0x20(%rbp), %rax
                	leaq	<rip>, %rcx
-               	pushq	%rdx
-               	movzbq	(%rcx), %rdx
-               	movb	%dl, (%rax)
-               	movzbq	0x1(%rcx), %rdx
-               	movb	%dl, 0x1(%rax)
-               	movzbq	0x2(%rcx), %rdx
-               	movb	%dl, 0x2(%rax)
-               	movzbq	0x3(%rcx), %rdx
-               	movb	%dl, 0x3(%rax)
-               	popq	%rdx
+               	movl	(%rcx), %r10d
+               	movl	%r10d, (%rax)
                	leaq	-0x18(%rbp), %rax
                	xorl	%ebx, %ebx
                	invept	(%rax), %rbx

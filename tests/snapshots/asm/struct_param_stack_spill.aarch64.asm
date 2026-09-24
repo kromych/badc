@@ -84,12 +84,8 @@ Disassembly of section .text:
                	sub	x8, x29, #0x20
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x0]
-               	str	x10, [x8]
-               	ldr	x10, [x0, #0x8]
-               	str	x10, [x8, #0x8]
-               	ldr	x10, [sp], #0x10
+               	ldp	x16, x17, [x0]
+               	stp	x16, x17, [x8]
                	ldur	x0, [x29, #-0x10]
                	mov	x2, #0x3                // =3
                	mov	x3, #0x4                // =4

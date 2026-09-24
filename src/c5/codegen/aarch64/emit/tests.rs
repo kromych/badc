@@ -1574,6 +1574,104 @@ fn indexed_access(
     (func, access, alloc)
 }
 
+/// The function of `src` holding a copy, the copy's id and the allocation.
+fn copy_of(src: &str, target: Target) -> (FunctionSsa, u32, Allocation) {
+    use crate::c5::ir::Inst;
+    let program = Compiler::with_target(
+        alloc::format!("{src} int main(void){{ return 0; }}"),
+        target,
+    )
+    .compile()
+    .expect("compile");
+    let funcs = crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+        .expect("ssa");
+    let is_copy = |i: &Inst| matches!(i, Inst::Mcpy { .. });
+    let func = funcs
+        .into_iter()
+        .find(|f| f.insts.iter().any(is_copy))
+        .expect("a function with a copy");
+    let v = func.insts.iter().position(is_copy).expect("the copy") as u32;
+    let mut alloc =
+        super::super::ssa::reg_alloc::allocate(&func, target, crate::c5::codegen::FixedRegs::NONE);
+    alloc.spill_count = alloc.spill_count.max(2);
+    (func, v, alloc)
+}
+
+/// A copy takes its temporaries among the registers free at its site: the
+/// encoder scratch while the bases sit in value registers, the first bank
+/// register the record leaves free when a base's reload takes a scratch,
+/// one word at a time when only a scratch is free, and a save only when
+/// every candidate holds a live value. Under strict alignment a 4-aligned
+/// object moves in word pairs. Encodings are clang's.
+#[test]
+fn copy_temporaries_are_free_at_the_site() {
+    use crate::c5::ir::Inst;
+    let target = Target::LinuxAarch64;
+    let (func, v, mut alloc) = copy_of(
+        "typedef struct { long v, tag; } Value; void copy(Value *d, const Value *s) { *d = *s; }",
+        target,
+    );
+    let Inst::Mcpy { dst, src, .. } = func.insts[v as usize] else {
+        panic!("{:?}", func.insts[v as usize])
+    };
+    let scratch = ScratchPool::new();
+    let emit = |alloc: &Allocation, size: i64, align: u32, strict: bool| {
+        let frame = compute_frame(&func, alloc, target.abi(), target);
+        let mut code = Vec::new();
+        emit_mcpy(
+            &mut code,
+            v,
+            Place::None,
+            dst,
+            src,
+            size,
+            align,
+            strict,
+            alloc,
+            frame,
+            &scratch,
+        )
+        .expect("emit_mcpy");
+        words_of(&code)
+    };
+    alloc.implicit_live = alloc::vec![0; func.insts.len()];
+    alloc.places[dst as usize] = Place::IntReg(1);
+    alloc.places[src as usize] = Place::IntReg(2);
+    // ldp x16, x17, [x2]; stp x16, x17, [x1]
+    assert_eq!(emit(&alloc, 16, 8, false), [0xA940_4450, 0xA900_4430]);
+    // ldp w16, w17, [x2]; stp w16, w17, [x1]; ldr w16, [x2, #8]; str w16, [x1, #8]
+    assert_eq!(
+        emit(&alloc, 12, 4, true),
+        [0x2940_4450, 0x2900_4430, 0xB940_0850, 0xB900_0830]
+    );
+    // The destination reloads into x16: ldp x17, x9, [x2]; stp x17, x9, [x16]
+    alloc.places[dst as usize] = Place::Spill(0);
+    let ws = emit(&alloc, 16, 8, false);
+    assert_eq!(&ws[ws.len() - 2..], &[0xA940_2451, 0xA900_2611]);
+    // Every bank register held: ldr x17, [x2]; str x17, [x16]; ... at #8
+    alloc.implicit_live[v as usize] = 0xFFFF;
+    let ws = emit(&alloc, 16, 8, false);
+    assert_eq!(
+        &ws[ws.len() - 4..],
+        &[0xF940_0051, 0xF900_0211, 0xF940_0451, 0xF900_0611]
+    );
+    // Both bases reloaded and every bank register held: x9 is saved around
+    // the copy: str x9, [sp, #-16]!; ldr x9, [x17]; str x9, [x16]; ...; ldr x9, [sp], #16
+    alloc.places[src as usize] = Place::Spill(1);
+    let ws = emit(&alloc, 16, 8, false);
+    assert_eq!(
+        &ws[ws.len() - 6..],
+        &[
+            0xF81F_0FE9,
+            0xF940_0229,
+            0xF900_0209,
+            0xF940_0629,
+            0xF900_0609,
+            0xF841_07E9
+        ]
+    );
+}
+
 fn words_of(code: &[u8]) -> Vec<u32> {
     code.as_chunks::<4>()
         .0

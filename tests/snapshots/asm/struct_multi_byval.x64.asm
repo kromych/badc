@@ -95,54 +95,28 @@ Disassembly of section .text:
                	pushq	%rbx
                	leaq	-0x48(%rbp), %rdi
                	leaq	<rip>, %rax
-               	pushq	%rcx
-               	movq	(%rax), %rcx
-               	movq	%rcx, (%rdi)
-               	popq	%rcx
+               	movq	(%rax), %r10
+               	movq	%r10, (%rdi)
                	leaq	-0x38(%rbp), %rdx
                	leaq	<rip>, %rax
-               	pushq	%rcx
-               	movq	(%rax), %rcx
-               	movq	%rcx, (%rdx)
-               	movzbq	0x8(%rax), %rcx
-               	movb	%cl, 0x8(%rdx)
-               	movzbq	0x9(%rax), %rcx
-               	movb	%cl, 0x9(%rdx)
-               	movzbq	0xa(%rax), %rcx
-               	movb	%cl, 0xa(%rdx)
-               	movzbq	0xb(%rax), %rcx
-               	movb	%cl, 0xb(%rdx)
-               	popq	%rcx
+               	movq	(%rax), %r10
+               	movq	%r10, (%rdx)
+               	movl	0x8(%rax), %r10d
+               	movl	%r10d, 0x8(%rdx)
                	leaq	-0x40(%rbp), %r8
                	leaq	<rip>, %rax
-               	pushq	%rcx
-               	movzbq	(%rax), %rcx
-               	movb	%cl, (%r8)
-               	movzbq	0x1(%rax), %rcx
-               	movb	%cl, 0x1(%r8)
-               	movzbq	0x2(%rax), %rcx
-               	movb	%cl, 0x2(%r8)
-               	movzbq	0x3(%rax), %rcx
-               	movb	%cl, 0x3(%r8)
-               	popq	%rcx
+               	movl	(%rax), %r10d
+               	movl	%r10d, (%r8)
                	leaq	-0x28(%rbp), %rax
                	leaq	<rip>, %rcx
-               	pushq	%rdx
-               	movq	(%rcx), %rdx
-               	movq	%rdx, (%rax)
-               	movq	0x8(%rcx), %rdx
-               	movq	%rdx, 0x8(%rax)
-               	popq	%rdx
+               	movups	(%rcx), %xmm14
+               	movups	%xmm14, (%rax)
                	leaq	-0x18(%rbp), %rcx
                	leaq	<rip>, %rsi
-               	pushq	%rax
-               	movq	(%rsi), %rax
-               	movq	%rax, (%rcx)
-               	movq	0x8(%rsi), %rax
-               	movq	%rax, 0x8(%rcx)
-               	movq	0x10(%rsi), %rax
-               	movq	%rax, 0x10(%rcx)
-               	popq	%rax
+               	movups	(%rsi), %xmm14
+               	movups	%xmm14, (%rcx)
+               	movq	0x10(%rsi), %r10
+               	movq	%r10, 0x10(%rcx)
                	movl	$0x3e8, %esi            # imm = 0x3E8
                	movl	$0x7d0, %r9d            # imm = 0x7D0
                	movl	$0xbb8, %ebx            # imm = 0xBB8

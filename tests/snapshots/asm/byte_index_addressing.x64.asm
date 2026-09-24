@@ -134,10 +134,8 @@ Disassembly of section .text:
 <across_copy>:
                	movslq	%edx, %rdx
                	movzbq	(%rdi,%rdx), %rax
-               	pushq	%rax
-               	movq	(%rsi), %rax
-               	movq	%rax, (%rdi)
-               	popq	%rax
+               	movq	(%rsi), %r10
+               	movq	%r10, (%rdi)
                	imulq	$0x64, %rax, %rax
                	movzbq	(%rdi,%rdx), %rcx
                	addq	%rcx, %rax
@@ -547,16 +545,12 @@ Disassembly of section .text:
                	retq
                	leaq	-0x18(%rbp), %rdi
                	leaq	<rip>, %rax
-               	pushq	%rcx
-               	movq	(%rax), %rcx
-               	movq	%rcx, (%rdi)
-               	popq	%rcx
+               	movq	(%rax), %r10
+               	movq	%r10, (%rdi)
                	leaq	-0x10(%rbp), %rsi
                	leaq	<rip>, %rax
-               	pushq	%rcx
-               	movq	(%rax), %rcx
-               	movq	%rcx, (%rsi)
-               	popq	%rcx
+               	movq	(%rax), %r10
+               	movq	%r10, (%rsi)
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	leaq	0x3(%rax), %rdx

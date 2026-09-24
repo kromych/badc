@@ -32,12 +32,8 @@ Disassembly of section .text:
                	sub	x7, x29, #0x90
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x0]
-               	str	x10, [x7]
-               	ldr	x10, [x0, #0x8]
-               	str	x10, [x7, #0x8]
-               	ldr	x10, [sp], #0x10
+               	ldp	x16, x17, [x0]
+               	stp	x16, x17, [x7]
                	ldr	q0, [x7]
                	bl	<addr>
                	stur	q0, [x29, #-0x20]

@@ -618,6 +618,101 @@ mod two_address_tests {
         );
     }
 
+    /// The function of `src` holding a copy, the copy's id and the allocation.
+    fn copy_of(src: &str) -> (FunctionSsa, u32, Allocation) {
+        let target = Target::LinuxX64;
+        let program = crate::Compiler::with_target(
+            alloc::format!("{src} int main(void){{ return 0; }}"),
+            target,
+        )
+        .compile()
+        .expect("compile");
+        let funcs =
+            crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+                .expect("ssa");
+        let is_copy = |i: &Inst| matches!(i, Inst::Mcpy { .. });
+        let func = funcs
+            .into_iter()
+            .find(|f| f.insts.iter().any(is_copy))
+            .expect("a function with a copy");
+        let v = func.insts.iter().position(is_copy).expect("the copy") as u32;
+        let mut alloc = super::super::ssa::reg_alloc::allocate(
+            &func,
+            target,
+            crate::c5::codegen::FixedRegs::NONE,
+        );
+        alloc.spill_count = alloc.spill_count.max(2);
+        (func, v, alloc)
+    }
+
+    /// A copy moves 16 bytes through the xmm the zero fill uses and takes
+    /// a general register only for the units below that: the writer's
+    /// scratch while the bases sit in value registers, the first bank
+    /// register the record leaves free when both reloads take the scratch,
+    /// and a push / pop only when every candidate holds a live value.
+    /// Encodings are clang's.
+    #[test]
+    fn copy_temporaries_are_free_at_the_site() {
+        let target = Target::LinuxX64;
+        let (func, v, mut alloc) = copy_of(
+            "typedef struct { long v, tag; } Value; void copy(Value *d, const Value *s) { *d = *s; }",
+        );
+        let Inst::Mcpy { dst, src, .. } = func.insts[v as usize] else {
+            panic!("{:?}", func.insts[v as usize])
+        };
+        let reg = |r: Reg| Place::IntReg(r.0);
+        let emit = |alloc: &Allocation, xmm: Option<u8>| {
+            let frame = compute_frame(&func, alloc, target.abi(), target);
+            let mut code = Vec::new();
+            emit_mcpy(
+                &mut code,
+                v,
+                Place::None,
+                dst,
+                src,
+                16,
+                8,
+                xmm,
+                false,
+                alloc,
+                frame,
+                target.abi(),
+            )
+            .expect("emit_mcpy");
+            code
+        };
+        alloc.implicit_live = alloc::vec![0; func.insts.len()];
+        alloc.places[dst as usize] = reg(Reg::RDI);
+        alloc.places[src as usize] = reg(Reg::RSI);
+        // movups xmm14, [rsi]; movups [rdi], xmm14
+        assert_eq!(
+            emit(&alloc, Some(14)),
+            [0x44, 0x0F, 0x10, 0x36, 0x44, 0x0F, 0x11, 0x37]
+        );
+        // mov r10, [rsi]; mov [rdi], r10; mov r10, [rsi + 8]; mov [rdi + 8], r10
+        let through_r10 = [
+            0x4C, 0x8B, 0x16, 0x4C, 0x89, 0x17, 0x4C, 0x8B, 0x56, 0x08, 0x4C, 0x89, 0x57, 0x08,
+        ];
+        assert_eq!(emit(&alloc, None), through_r10);
+        alloc.places[dst as usize] = Place::Spill(0);
+        alloc.places[src as usize] = Place::Spill(1);
+        // mov rax, [r11]; mov [r10], rax; mov rax, [r11 + 8]; mov [r10 + 8], rax
+        let through_rax = [
+            0x49, 0x8B, 0x03, 0x49, 0x89, 0x02, 0x49, 0x8B, 0x43, 0x08, 0x49, 0x89, 0x42, 0x08,
+        ];
+        assert!(emit(&alloc, None).ends_with(&through_rax));
+        alloc.implicit_live[v as usize] = 0xFFFF;
+        let code = emit(&alloc, None);
+        let mut saved = alloc::vec![0x50];
+        saved.extend(through_rax);
+        saved.push(0x58);
+        assert!(code.ends_with(&saved), "{code:02x?}");
+        // movups xmm14, [r11]; movups [r10], xmm14: no general register, no save.
+        assert!(
+            emit(&alloc, Some(14)).ends_with(&[0x45, 0x0F, 0x10, 0x33, 0x45, 0x0F, 0x11, 0x32])
+        );
+    }
+
     /// A division saves rax / rdx exactly for the values the allocation
     /// records live in them across it, never over its own result; without
     /// a record, any value placed there counts. Encodings are clang's.
@@ -648,7 +743,7 @@ mod two_address_tests {
             emit_binop(&mut code, op, v, reg(dst), lhs, rhs, alloc, frame).expect("emit_binop");
             code
         };
-        let (rax, rdx) = (1u16 << Reg::RAX.0, 1u16 << Reg::RDX.0);
+        let (rax, rdx) = (1u32 << Reg::RAX.0, 1u32 << Reg::RDX.0);
         // mov rax, rdi; cqo; idiv rsi
         let divide = [0x48, 0x89, 0xF8, 0x48, 0x99, 0x48, 0xF7, 0xFE];
         let with = |pre: &[u8], post: &[u8], tail: &[u8]| {

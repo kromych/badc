@@ -108,10 +108,8 @@ Disassembly of section .text:
                	retq
                	leaq	-0x8(%rbp), %r12
                	leaq	<rip>, %rax
-               	pushq	%rcx
-               	movq	(%rax), %rcx
-               	movq	%rcx, (%r12)
-               	popq	%rcx
+               	movq	(%rax), %r10
+               	movq	%r10, (%r12)
                	xorl	%esi, %esi
                	movq	%rbx, %rdi
                	callq	<addr>

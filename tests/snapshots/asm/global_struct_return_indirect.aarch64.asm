@@ -24,18 +24,10 @@ Disassembly of section .text:
                	mov	x16, x0
                	sub	x17, x29, #0x8
                	ldr	x17, [x17]
-               	ldr	x0, [x16]
-               	str	x0, [x17]
-               	ldr	x0, [x16, #0x8]
-               	str	x0, [x17, #0x8]
-               	ldrb	w0, [x16, #0x10]
-               	strb	w0, [x17, #0x10]
-               	ldrb	w0, [x16, #0x11]
-               	strb	w0, [x17, #0x11]
-               	ldrb	w0, [x16, #0x12]
-               	strb	w0, [x17, #0x12]
-               	ldrb	w0, [x16, #0x13]
-               	strb	w0, [x17, #0x13]
+               	ldp	x0, x1, [x16]
+               	stp	x0, x1, [x17]
+               	ldr	w0, [x16, #0x10]
+               	str	w0, [x17, #0x10]
                	mov	x0, x17
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10

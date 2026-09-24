@@ -2091,8 +2091,8 @@ fn emit_aggregate_return(
     emit(code, enc_ldr_imm(dst, dst, 0));
     // The caller's object bounds the transfer unit.
     let unit = super::super::access_chunk(desc.align, abi.strict_align, 8);
-    emit_block_copy(code, unit, Reg(0), base, dst, size);
-    if size > COPY_WINDOW {
+    // x0 and x1 carry nothing until the pointer moves into x0.
+    if emit_block_copy(code, unit, &[Reg(0), Reg(1)], base, dst, size) {
         // The advanced `dst` no longer names the caller's buffer; re-read
         // the saved indirect-result pointer to return it.
         let _ = emit_local_addr_fp(

@@ -3363,3 +3363,73 @@ fn a_floating_store_of_a_general_register_value_stays_in_the_bank() {
     }
     m.finish();
 }
+
+/// `ldp` / `stp` of two general registers off a register other than sp, in
+/// the signed-offset or the post-indexed form: a copy's pair, not a frame's.
+fn a64_copy_pair(w: u32) -> Option<bool> {
+    let load = match w & 0xFFC0_0000 {
+        0xA940_0000 | 0xA8C0_0000 => true,
+        0xA900_0000 | 0xA880_0000 => false,
+        _ => return None,
+    };
+    ((w >> 5) & 31 != 31).then_some(load)
+}
+
+/// `str <Xt>, [sp, #imm]!`: a register saved around a lowering.
+fn a64_single_save(w: u32) -> bool {
+    w & 0xFFE0_0C00 == 0xF800_0C00 && (w >> 5) & 31 == 31
+}
+
+const COPIES: &str = "typedef struct { long v; long tag; } Value;\n\
+    void push_value(Value **psp, const Value *src) { Value *sp = *psp; *sp = *src; *psp = sp + 1; }\n\
+    long arr(int k) { long a[4] = {1,2,3,4}; return a[k & 3]; }\n\
+    struct big { char x[1000]; };\n\
+    void copy_big(struct big *d, const struct big *s) { *d = *s; }\n";
+
+/// An aggregate copy takes its temporaries among the registers free at its
+/// site and moves 16 bytes per access: no save around it, one pair
+/// (aarch64) or one `movups` (x86-64) per 16 bytes written in place, and
+/// past the inline bound a loop of one such access.
+#[test]
+fn aggregate_copy_saves_nothing_and_moves_sixteen_bytes() {
+    let mut m = Misses::default();
+    for (name, accesses, looped, frame) in [
+        ("push_value", 1, false, false),
+        ("arr", 2, false, true),
+        ("copy_big", 1, true, false),
+    ] {
+        let ws = a64(COPIES, name);
+        m.expect(!ws.iter().any(|&w| a64_single_save(w)), || {
+            format!("aarch64 {name}: a save around the copy: {ws:08x?}")
+        });
+        let (loads, stores) =
+            ws.iter()
+                .filter_map(|&w| a64_copy_pair(w))
+                .fold(
+                    (0, 0),
+                    |(l, s), load| if load { (l + 1, s) } else { (l, s + 1) },
+                );
+        m.expect(loads == accesses && stores == accesses, || {
+            format!("aarch64 {name}: {loads} ldp and {stores} stp, not {accesses}: {ws:08x?}")
+        });
+        m.expect(
+            a64_in_loop(&ws, |w| a64_copy_pair(w).is_some()) == looped,
+            || format!("aarch64 {name}: the pairs and the loop: {ws:08x?}"),
+        );
+        let insns = x64(COPIES, name);
+        let pushes = insns.iter().filter(|i| matches!(i.op, 0x50..=0x57)).count();
+        let pops = insns.iter().filter(|i| matches!(i.op, 0x58..=0x5F)).count();
+        m.expect(pushes == usize::from(frame) && pops == 0, || {
+            format!("x86-64 {name}: {pushes} pushes and {pops} pops: {insns:x?}")
+        });
+        let loads = insns.iter().filter(|i| i.op == 0x0F10).count();
+        let stores = insns.iter().filter(|i| i.op == 0x0F11).count();
+        m.expect(loads == accesses && stores == accesses, || {
+            format!("x86-64 {name}: {loads} movups loads and {stores} stores, not {accesses}: {insns:x?}")
+        });
+        m.expect(x64_in_loop(&insns, |i| i.op == 0x0F10) == looped, || {
+            format!("x86-64 {name}: the moves and the loop: {insns:x?}")
+        });
+    }
+    m.finish();
+}

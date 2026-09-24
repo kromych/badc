@@ -732,6 +732,7 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("libc_basic.c", 0),
     ("memset_mcmp.c", 42),
     ("memcpy_basic.c", 'A' as i32),
+    ("aggregate_copy_site_temps.c", 0),
     // C99 7.13 setjmp / longjmp round-trip. On macOS / Linux
     // the binding hits host libc; on Windows x86_64 it routes
     // through msvcrt; on Windows AArch64 the inline
@@ -1474,6 +1475,7 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("libc_basic.c", 0),
     ("memset_mcmp.c", 42),
     ("memcpy_basic.c", 'A' as i32),
+    ("aggregate_copy_site_temps.c", 0),
     ("struct_basic.c", 25),
     ("struct_linked_list.c", 10),
     ("global_initializer_int.c", 141),
@@ -2373,6 +2375,7 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("libc_basic.c", 0),
     ("memset_mcmp.c", 42),
     ("memcpy_basic.c", 'A' as i32),
+    ("aggregate_copy_site_temps.c", 0),
     ("struct_basic.c", 25),
     ("struct_linked_list.c", 10),
     ("global_initializer_int.c", 141),
@@ -3045,6 +3048,7 @@ pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("static_init_cast_funcptr.c", 0),
     ("memset_mcmp.c", 42),
     ("memcpy_basic.c", 'A' as i32),
+    ("aggregate_copy_site_temps.c", 0),
     ("struct_basic.c", 25),
     ("struct_linked_list.c", 10),
     ("global_initializer_int.c", 141),
@@ -3644,6 +3648,7 @@ pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("static_init_cast_funcptr.c", 0),
     ("memset_mcmp.c", 42),
     ("memcpy_basic.c", 'A' as i32),
+    ("aggregate_copy_site_temps.c", 0),
     ("struct_basic.c", 25),
     ("struct_linked_list.c", 10),
     ("global_initializer_int.c", 141),
@@ -4286,6 +4291,7 @@ pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
     ("libc_basic.c", 0),
     ("memset_mcmp.c", 42),
     ("memcpy_basic.c", 'A' as i32),
+    ("aggregate_copy_site_temps.c", 0),
     ("struct_basic.c", 25),
     ("struct_linked_list.c", 10),
     ("global_initializer_int.c", 141),

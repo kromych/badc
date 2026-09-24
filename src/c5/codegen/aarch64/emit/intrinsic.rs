@@ -661,7 +661,7 @@ pub(super) fn emit_mzero(
         emit(code, super::encode::enc_stp_post(zero, zero, cursor, 32));
         -3
     } else {
-        let post = super::encode::enc_str_w_post(unit as u8, zero, cursor, unit as i32);
+        let post = enc_str_w_post(unit as u8, zero, cursor, unit as i32);
         emit(code, post);
         -2
     };
@@ -676,9 +676,21 @@ pub(super) fn emit_mzero(
     Ok(())
 }
 
+/// The registers a copy takes its temporaries among, in order: the encoder
+/// scratch, which holds no value, then the caller-saved bank. x18 is the
+/// platform register.
+const COPY_TEMPS: [u8; 18] = [16, 17, 9, 10, 11, 12, 13, 14, 15, 0, 1, 2, 3, 4, 5, 6, 7, 8];
+
+/// Copy `size` bytes from `src_val` to `dst_val` through registers free at
+/// the site ([`SiteRegs`]): a pair per two units where the pair forms take
+/// the unit, the tail through halving widths. Up to `MAX_MEM_FILL_ACCESSES`
+/// accesses are written in place; a larger copy loops cursors over the
+/// whole units and copies the tail past them. A base whose register holds
+/// nothing after the copy, or a spill's reload, serves as its own cursor.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_mcpy(
     code: &mut Vec<u8>,
+    v: super::super::ir::ValueId,
     dst_place: Place,
     dst_val: u32,
     src_val: u32,
@@ -689,62 +701,104 @@ pub(super) fn emit_mcpy(
     frame: Frame,
     scratch: &ScratchPool,
 ) -> Emit {
-    if size < 0 {
-        return fail("Mcpy: negative size");
-    }
-    let dst_place_in = place_of(alloc, dst_val);
-    let src_place_in = place_of(alloc, src_val);
-    let dst_r = match materialize_int(code, dst_place_in, scratch.primary, frame) {
-        Some(r) => r,
-        None => return fail("Mcpy: dst not int reg / spill"),
+    let Ok(bytes) = u32::try_from(size) else {
+        return fail("Mcpy: size outside 32 bits");
     };
-    let src_r = match materialize_int(code, src_place_in, scratch.secondary, frame) {
-        Some(r) => r,
-        None => return fail("Mcpy: src not int reg / spill"),
+    let dst_in = place_of(alloc, dst_val);
+    let src_in = place_of(alloc, src_val);
+    let Some(dst_r) = materialize_int(code, dst_in, scratch.primary, frame) else {
+        return fail("Mcpy: dst not int reg / spill");
     };
-    // The data temp is x10, x11 or x12, whichever aliases neither base,
-    // saved and restored around the copy since the allocator may hold a
-    // live value in it.
-    let temp = if dst_r.0 != 10 && src_r.0 != 10 {
-        Reg(10)
-    } else if dst_r.0 != 11 && src_r.0 != 11 {
-        Reg(11)
-    } else {
-        Reg(12)
+    let Some(src_r) = materialize_int(code, src_in, scratch.secondary, frame) else {
+        return fail("Mcpy: src not int reg / spill");
     };
-    let bytes = size as u32;
-    emit(code, enc_str_pre(temp, Reg(31), -16));
     let unit = super::super::access_chunk(align, strict_align, 8);
-    if bytes <= COPY_WINDOW {
-        emit_block_copy(code, unit, temp, src_r, dst_r, bytes);
-    } else {
-        // Working copies keep `dst_r` (the memcpy return value) and `src_r`
-        // unchanged; two more registers, saved and restored.
-        let mut picks = [Reg(9), Reg(9)];
-        let mut n = 0;
-        for cand in [9u8, 13, 14, 15, 12, 11] {
-            if cand != dst_r.0 && cand != src_r.0 && cand != temp.0 && n < 2 {
-                picks[n] = Reg(cand);
-                n += 1;
-            }
+    let pairs = pair_bytes(unit).is_some();
+    let widest = copy_widest(unit, if pairs { 2 } else { 1 });
+    let taken = [dst_r.0, src_r.0];
+    let mut regs = SiteRegs::new(alloc, v, &COPY_TEMPS, &taken, frame.fixed_regs);
+    let inline = super::ssa::emit_common::transfer_accesses(bytes, widest)
+        <= crate::c5::ast::MAX_MEM_FILL_ACCESSES as u32;
+    // The copy's value is the destination; a cursor run over a spilled one
+    // reloads it.
+    let mut reload = false;
+    if inline {
+        let Some(t1) = regs.take(code) else {
+            return fail("Mcpy: no register for the copy");
+        };
+        let mut temps = [t1, t1];
+        let mut n = 1;
+        if pairs && let Some(t2) = regs.free() {
+            temps[1] = t2;
+            n = 2;
         }
-        let (wsrc, wdst) = (picks[0], picks[1]);
-        emit(code, enc_str_pre(wsrc, Reg(31), -16));
-        emit(code, enc_str_pre(wdst, Reg(31), -16));
-        emit_mov_reg(code, wsrc, src_r);
-        emit_mov_reg(code, wdst, dst_r);
-        emit_block_copy(code, unit, temp, wsrc, wdst, bytes);
-        emit(code, enc_ldr_post(wdst, Reg(31), 16));
-        emit(code, enc_ldr_post(wsrc, Reg(31), 16));
+        emit_block_copy(code, unit, &temps[..n], src_r, dst_r, bytes);
+    } else {
+        let step = widest;
+        let looped = bytes - bytes % step;
+        let dead = |place: Place, r: Reg| {
+            matches!(place, Place::Spill(_))
+                || (!alloc.holds_live_across(v, r.0) && !frame.fixed_regs.has_gpr(r.0))
+        };
+        let cursor = |code: &mut Vec<u8>, regs: &mut SiteRegs, base: Reg| {
+            let c = regs.take(code)?;
+            emit_mov_reg(code, c, base);
+            Some(c)
+        };
+        let s = if src_r.0 != dst_r.0 && dead(src_in, src_r) {
+            src_r
+        } else {
+            let Some(s) = cursor(code, &mut regs, src_r) else {
+                return fail("Mcpy: no register for the copy");
+            };
+            s
+        };
+        let d = if dead(dst_in, dst_r)
+            && (dst_place == Place::None || matches!(dst_in, Place::Spill(_)))
+        {
+            dst_r
+        } else {
+            let Some(d) = cursor(code, &mut regs, dst_r) else {
+                return fail("Mcpy: no register for the copy");
+            };
+            d
+        };
+        let (Some(e), Some(t1)) = (regs.take(code), regs.take(code)) else {
+            return fail("Mcpy: no register for the copy");
+        };
+        if looped < 4096 {
+            emit(code, enc_add_imm(e, s, looped));
+        } else {
+            load_imm64(code, e, u64::from(looped));
+            emit(code, enc_add_reg(e, s, e));
+        }
+        if pairs {
+            let Some(t2) = regs.take(code) else {
+                return fail("Mcpy: no register for the copy");
+            };
+            emit(code, enc_ldp_unit_post(unit, t1, t2, s, step as i32));
+            emit(code, enc_stp_unit_post(unit, t1, t2, d, step as i32));
+        } else {
+            emit(code, enc_ldr_w_post(unit as u8, t1, s, step as i32));
+            emit(code, enc_str_w_post(unit as u8, t1, d, step as i32));
+        }
+        emit(code, enc_cmp_reg(s, e));
+        emit(code, enc_b_cond(Cond::Ne, -3));
+        emit_block_copy(code, unit, &[t1], s, d, bytes - looped);
+        reload = d.0 == dst_r.0 && dst_place != Place::None;
     }
-    emit(code, enc_ldr_post(temp, Reg(31), 16));
-    // memcpy returns dst -- propagate into the Inst's `dst_place`.
+    regs.restore(code);
+    let result = if reload {
+        materialize_int(code, dst_in, scratch.primary, frame).unwrap_or(dst_r)
+    } else {
+        dst_r
+    };
     if let Some(rd) = int_reg(dst_place) {
-        if rd.0 != dst_r.0 {
-            emit_mov_reg(code, rd, dst_r);
+        if rd.0 != result.0 {
+            emit_mov_reg(code, rd, result);
         }
     } else {
-        store_spilled_int(code, frame, dst_place, dst_r);
+        store_spilled_int(code, frame, dst_place, result);
     }
     Ok(())
 }

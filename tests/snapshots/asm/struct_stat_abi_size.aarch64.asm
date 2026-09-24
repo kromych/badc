@@ -20,22 +20,12 @@ Disassembly of section .text:
                	sub	x0, x29, #0x98
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x1]
-               	str	x10, [x0]
-               	ldr	x10, [x1, #0x8]
-               	str	x10, [x0, #0x8]
-               	ldrb	w10, [x1, #0x10]
-               	strb	w10, [x0, #0x10]
-               	ldrb	w10, [x1, #0x11]
-               	strb	w10, [x0, #0x11]
-               	ldrb	w10, [x1, #0x12]
-               	strb	w10, [x0, #0x12]
-               	ldrb	w10, [x1, #0x13]
-               	strb	w10, [x0, #0x13]
-               	ldrb	w10, [x1, #0x14]
-               	strb	w10, [x0, #0x14]
-               	ldr	x10, [sp], #0x10
+               	ldp	x16, x17, [x1]
+               	stp	x16, x17, [x0]
+               	ldr	w16, [x1, #0x10]
+               	str	w16, [x0, #0x10]
+               	ldrb	w16, [x1, #0x14]
+               	strb	w16, [x0, #0x14]
                	bl	<addr>
                	mov	x20, x0
                	cmp	w20, #0x0

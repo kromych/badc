@@ -42,12 +42,8 @@ Disassembly of section .text:
                	subq	$0x90, %rsp
                	leaq	-0x90(%rbp), %r9
                	leaq	<rip>, %rax
-               	pushq	%rcx
-               	movq	(%rax), %rcx
-               	movq	%rcx, (%r9)
-               	movq	0x8(%rax), %rcx
-               	movq	%rcx, 0x8(%r9)
-               	popq	%rcx
+               	movups	(%rax), %xmm14
+               	movups	%xmm14, (%r9)
                	movq	%r9, %r10
                	movups	(%r10), %xmm0
                	callq	<addr>

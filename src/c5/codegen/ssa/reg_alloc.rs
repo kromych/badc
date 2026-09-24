@@ -150,11 +150,12 @@ pub(crate) struct Allocation {
     pub imm_store: Vec<bool>,
     /// Per value: an `Imm` placed in the FP file ([`fp_constants`]).
     pub fp_const: Vec<bool>,
-    /// Per x86-64 instruction that writes registers besides its result
-    /// ([`x86_implicit_writes`]): those of them that hold a value live
-    /// across it, a shift count left in rcx excepted, which the emitter
-    /// saves around it. Empty elsewhere.
-    pub implicit_live: Vec<u16>,
+    /// Per instruction whose lowering writes registers besides its result,
+    /// the mask of those holding a value live across it: the fixed registers
+    /// of an x86-64 shift or division ([`x86_implicit_writes`]), a count
+    /// left in rcx excepted, which the emitter saves when named; every
+    /// register for a copy, which takes its temporaries among the free ones.
+    pub implicit_live: Vec<u32>,
     /// Per-value coalescing hint: the physical register the
     /// allocator should prefer when one is set and free at the
     /// pick site. The pick-reg path honours the hint only when it
@@ -238,8 +239,8 @@ impl Allocation {
         self.use_counts.get(v as usize).is_some_and(|&n| n == 0)
     }
 
-    /// Whether register `r`, which the x86-64 lowering of `v` writes, holds
-    /// a value live across `v` (`implicit_live`). Without the record any
+    /// Whether register `r`, which the lowering of `v` may write, holds a
+    /// value live across `v` (`implicit_live`). Without the record any
     /// value placed in `r` counts.
     pub(crate) fn holds_live_across(&self, v: ValueId, r: u8) -> bool {
         match self.implicit_live.get(v as usize) {
@@ -1039,24 +1040,33 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     );
     places = coloring.places;
     let spill_count = coloring.spill_count;
-    let mut implicit_live: Vec<u16> = Vec::new();
-    if target.is_x86_64() {
-        implicit_live = vec![0; func.insts.len()];
-        let writes = |inst: &Inst| x86_implicit_writes(inst) != 0;
-        for (site, live) in liveness.values_live_after(func, &writes) {
-            let inst = &func.insts[site as usize];
-            // A shift reads its count in cl and leaves it there.
-            let kept = match *inst {
-                Inst::Binop { op, rhs, .. } if is_shift_op(op) => rhs,
-                _ => NO_VALUE,
-            };
-            let regs = x86_implicit_writes(inst);
-            for u in live.into_iter().filter(|&u| u != kept) {
-                if let Place::IntReg(r) = places[u as usize]
-                    && (regs >> r) & 1 != 0
-                {
-                    implicit_live[site as usize] |= 1 << r;
-                }
+    // A copy may take any register as a temporary, so its record covers
+    // them all; the x86-64 shift and division records cover the registers
+    // they write.
+    let site_regs = |inst: &Inst| -> u32 {
+        if matches!(inst, Inst::Mcpy { .. }) {
+            u32::MAX
+        } else if target.is_x86_64() {
+            u32::from(x86_implicit_writes(inst))
+        } else {
+            0
+        }
+    };
+    let mut implicit_live: Vec<u32> = vec![0; func.insts.len()];
+    let is_site = |inst: &Inst| site_regs(inst) != 0;
+    for (site, live) in liveness.values_live_after(func, &is_site) {
+        let inst = &func.insts[site as usize];
+        // A shift reads its count in cl and leaves it there.
+        let kept = match *inst {
+            Inst::Binop { op, rhs, .. } if is_shift_op(op) && target.is_x86_64() => rhs,
+            _ => NO_VALUE,
+        };
+        let regs = site_regs(inst);
+        for u in live.into_iter().filter(|&u| u != kept) {
+            if let Place::IntReg(r) = places[u as usize]
+                && (regs >> r) & 1 != 0
+            {
+                implicit_live[site as usize] |= 1u32 << r;
             }
         }
     }
@@ -5419,7 +5429,8 @@ int main(void) { return 0; }
         }
         assert_ne!(x64.places[4], x64.places[3]);
         assert!(!x64.holds_live_across(3, X86_RCX));
-        assert!(full(Target::LinuxAarch64).implicit_live.is_empty());
+        let a64 = full(Target::LinuxAarch64);
+        assert!(a64.implicit_live.iter().all(|&m| m == 0));
     }
 
     /// With two caller-saved registers a value live across the shift ends
@@ -5548,7 +5559,7 @@ int main(void) { return 0; }
             }
             assert!(!x64.holds_live_across(3, X86_RAX) && !x64.holds_live_across(3, X86_RDX));
             let a64 = allocate(&rdx_rax_func(op), Target::LinuxAarch64);
-            assert!(a64.implicit_live.is_empty());
+            assert!(a64.implicit_live.iter().all(|&m| m == 0));
         }
     }
 
@@ -5584,6 +5595,53 @@ int main(void) { return 0; }
         assert!(held(X86_RAX) || held(X86_RDX), "{:?}", x64.places);
         for r in [X86_RAX, X86_RDX] {
             assert_eq!(x64.holds_live_across(4, r), held(r), "{:?}", x64.places);
+        }
+    }
+
+    /// A copy's record names the registers of the values live after it on
+    /// either target -- the destination read again, two values read past
+    /// the copy -- and not the source's, which the copy may take as a
+    /// temporary.
+    #[test]
+    fn registers_held_across_a_copy_are_recorded() {
+        let add = |lhs, rhs| Inst::Binop {
+            op: BinOp::Add,
+            lhs,
+            rhs,
+        };
+        let func = store_func(
+            vec![
+                local_i64(2),
+                local_i64(3),
+                local_i64(4),
+                local_i64(5),
+                Inst::Mcpy {
+                    dst: 0,
+                    src: 1,
+                    size: 16,
+                    align: 8,
+                },
+                add(2, 3),
+                add(5, 0),
+            ],
+            6,
+        );
+        for target in [Target::LinuxX64, Target::LinuxAarch64] {
+            let a = with_pool_size_override(usize::MAX, usize::MAX, || allocate(&func, target));
+            let reg_of = |v: usize| match a.places[v] {
+                Place::IntReg(r) => r,
+                p => panic!("{target:?}: v{v} {p:?}"),
+            };
+            for v in [0, 2, 3] {
+                assert!(a.holds_live_across(4, reg_of(v)), "{target:?}: v{v}");
+            }
+            assert!(!a.holds_live_across(4, reg_of(1)), "{target:?}: the source");
+            assert_eq!(
+                a.implicit_live[4].count_ones(),
+                3,
+                "{target:?}: {:?}",
+                a.places
+            );
         }
     }
 

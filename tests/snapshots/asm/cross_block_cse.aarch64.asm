@@ -144,20 +144,12 @@ Disassembly of section .text:
                	sub	x2, x29, #0x30
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x0]
-               	str	x10, [x2]
-               	ldr	x10, [x0, #0x8]
-               	str	x10, [x2, #0x8]
-               	ldr	x10, [x0, #0x10]
-               	str	x10, [x2, #0x10]
-               	ldr	x10, [x0, #0x18]
-               	str	x10, [x2, #0x18]
-               	ldr	x10, [x0, #0x20]
-               	str	x10, [x2, #0x20]
-               	ldr	x10, [x0, #0x28]
-               	str	x10, [x2, #0x28]
-               	ldr	x10, [sp], #0x10
+               	ldp	x16, x17, [x0]
+               	stp	x16, x17, [x2]
+               	ldp	x16, x17, [x0, #0x10]
+               	stp	x16, x17, [x2, #0x10]
+               	ldp	x16, x17, [x0, #0x20]
+               	stp	x16, x17, [x2, #0x20]
                	mov	x4, #0x3                // =3
                	mov	x0, #0x0                // =0
                	mov	x1, x0

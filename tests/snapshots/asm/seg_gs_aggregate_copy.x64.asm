@@ -179,16 +179,10 @@ Disassembly of section .text:
                	movq	%rdi, 0x10(%rcx)
                	movq	%rsi, 0x18(%rcx)
                	movq	-0x40(%rbp), %rax
-               	pushq	%rdx
-               	movq	(%rcx), %rdx
-               	movq	%rdx, (%rax)
-               	movq	0x8(%rcx), %rdx
-               	movq	%rdx, 0x8(%rax)
-               	movq	0x10(%rcx), %rdx
-               	movq	%rdx, 0x10(%rax)
-               	movq	0x18(%rcx), %rdx
-               	movq	%rdx, 0x18(%rax)
-               	popq	%rdx
+               	movups	(%rcx), %xmm14
+               	movups	%xmm14, (%rax)
+               	movups	0x10(%rcx), %xmm14
+               	movups	%xmm14, 0x10(%rax)
                	leave
                	retq
 
@@ -448,16 +442,10 @@ Disassembly of section .text:
                	movabsq	$0x123456789abcdef, %r8 # imm = 0x123456789ABCDEF
                	movq	%r8, 0x18(%rcx)
                	leaq	-0x20(%rbp), %rdx
-               	pushq	%rax
-               	movq	(%rcx), %rax
-               	movq	%rax, (%rdx)
-               	movq	0x8(%rcx), %rax
-               	movq	%rax, 0x8(%rdx)
-               	movq	0x10(%rcx), %rax
-               	movq	%rax, 0x10(%rdx)
-               	movq	0x18(%rcx), %rax
-               	movq	%rax, 0x18(%rdx)
-               	popq	%rax
+               	movups	(%rcx), %xmm14
+               	movups	%xmm14, (%rdx)
+               	movups	0x10(%rcx), %xmm14
+               	movups	%xmm14, 0x10(%rdx)
                	movq	%rdi, %gs:(%rax)
                	movq	0x8(%rdx), %r9
                	movl	$0x8, %edi

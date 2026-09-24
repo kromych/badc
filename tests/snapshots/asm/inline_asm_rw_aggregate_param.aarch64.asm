@@ -102,12 +102,8 @@ Disassembly of section .text:
                	bl	<addr>
                	stur	q0, [x29, #-0x40]
                	sub	x0, x29, #0x40
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x0]
-               	str	x10, [x21]
-               	ldr	x10, [x0, #0x8]
-               	str	x10, [x21, #0x8]
-               	ldr	x10, [sp], #0x10
+               	ldp	x16, x17, [x0]
+               	stp	x16, x17, [x21]
                	mov	x0, #0x0                // =0
                	ldrb	w1, [x21, x0]
                	add	x2, x0, #0xa
@@ -159,12 +155,8 @@ Disassembly of section .text:
                	bl	<addr>
                	stur	q0, [x29, #-0x40]
                	sub	x0, x29, #0x40
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x0]
-               	str	x10, [x20]
-               	ldr	x10, [x0, #0x8]
-               	str	x10, [x20, #0x8]
-               	ldr	x10, [sp], #0x10
+               	ldp	x16, x17, [x0]
+               	stp	x16, x17, [x20]
                	mov	x0, #0x0                // =0
                	ldrb	w1, [x20, x0]
                	add	x2, x0, #0x14

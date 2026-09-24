@@ -100,21 +100,13 @@ Disassembly of section .text:
                	sub	x20, x29, #0x150
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x0]
-               	str	x10, [x20]
-               	ldr	x10, [x0, #0x8]
-               	str	x10, [x20, #0x8]
-               	ldr	x10, [sp], #0x10
+               	ldp	x16, x17, [x0]
+               	stp	x16, x17, [x20]
                	sub	x1, x29, #0x140
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x0]
-               	str	x10, [x1]
-               	ldr	x10, [x0, #0x8]
-               	str	x10, [x1, #0x8]
-               	ldr	x10, [sp], #0x10
+               	ldp	x16, x17, [x0]
+               	stp	x16, x17, [x1]
                	mov	x0, #0x0                // =0
                	sub	x2, x29, #0x80
                	ldrb	w3, [x20, x0]
@@ -219,12 +211,8 @@ Disassembly of section .text:
                	ret
                	sub	x0, x29, #0x150
                	sub	x7, x29, #0x130
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x0]
-               	str	x10, [x7]
-               	ldr	x10, [x0, #0x8]
-               	str	x10, [x7, #0x8]
-               	ldr	x10, [sp], #0x10
+               	ldp	x16, x17, [x0]
+               	stp	x16, x17, [x7]
                	sub	x0, x29, #0x140
                	ldr	x1, [x7]
                	ldr	x2, [x0]
@@ -245,12 +233,8 @@ Disassembly of section .text:
                	ret
                	sub	x7, x29, #0x130
                	sub	x0, x29, #0x150
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x0]
-               	str	x10, [x7]
-               	ldr	x10, [x0, #0x8]
-               	str	x10, [x7, #0x8]
-               	ldr	x10, [sp], #0x10
+               	ldp	x16, x17, [x0]
+               	stp	x16, x17, [x7]
                	sub	x0, x29, #0x140
                	ldr	x1, [x7]
                	ldr	x2, [x0]
@@ -271,12 +255,8 @@ Disassembly of section .text:
                	ret
                	sub	x7, x29, #0x130
                	sub	x0, x29, #0x150
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x0]
-               	str	x10, [x7]
-               	ldr	x10, [x0, #0x8]
-               	str	x10, [x7, #0x8]
-               	ldr	x10, [sp], #0x10
+               	ldp	x16, x17, [x0]
+               	stp	x16, x17, [x7]
                	sub	x0, x29, #0x140
                	ldr	x1, [x7]
                	ldr	x2, [x0]
@@ -318,10 +298,8 @@ Disassembly of section .text:
                	sub	x0, x29, #0xa8
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x1]
-               	str	x10, [x0]
-               	ldr	x10, [sp], #0x10
+               	ldr	x16, [x1]
+               	str	x16, [x0]
                	mov	x1, #0x2fe              // =766
                	movk	x1, #0x4fc, lsl #16
                	movk	x1, #0x6fa, lsl #32

@@ -142,88 +142,88 @@ pub(crate) fn enc_bl(imm26: i32) -> u32 {
     0x9400_0000 | ((imm26 as u32) & 0x03FF_FFFF)
 }
 
-/// `STP <Xt1>, <Xt2>, [<Xn|SP>, #imm]!` -- store-pair, pre-indexed.
-/// `imm` is the byte offset; it must be a multiple of 8 (the stp encoding
-/// scales the on-disk imm7 by 8) and fit in `[-512, 504]` after scaling.
-///
-/// Used in function prologues: `stp x29, x30, [sp, #-16]!` saves the
-/// caller's frame pointer + link register and bumps sp in one go.
-pub(crate) fn enc_stp_pre(rt: Reg, rt2: Reg, rn: Reg, imm: i32) -> u32 {
-    assert!(imm % 8 == 0, "stp: imm must be 8-byte aligned, got {imm}");
-    let imm7 = imm / 8;
+/// The addressing forms of the general-register `LDP` / `STP`.
+#[derive(Clone, Copy)]
+enum PairForm {
+    Offset = 0x2900_0000,
+    Post = 0x2880_0000,
+    Pre = 0x2980_0000,
+}
+
+/// `LDP` / `STP` of two `width`-byte (8 or 4) general registers at `rn`:
+/// `imm` is the byte offset, a multiple of `width` whose scaled value fits
+/// the 7-bit field, so 8-byte pairs reach `[-512, 504]` and 4-byte pairs
+/// `[-256, 252]`.
+fn enc_pair(load: bool, form: PairForm, width: u32, rt: Reg, rt2: Reg, rn: Reg, imm: i32) -> u32 {
+    debug_assert!(matches!(width, 4 | 8));
+    assert!(
+        imm % width as i32 == 0,
+        "ldp/stp: imm {imm} is not a multiple of {width}"
+    );
+    let imm7 = imm / width as i32;
     assert!(
         (-64..64).contains(&imm7),
-        "stp: offset {imm} (scaled {imm7}) out of range"
+        "ldp/stp: offset {imm} (scaled {imm7}) out of range"
     );
-    0xA980_0000
+    let opc = if width == 8 { 0x8000_0000 } else { 0 };
+    opc | form as u32
+        | (u32::from(load) << 22)
         | (((imm7 as u32) & 0x7F) << 15)
         | ((rt2.0 as u32) << 10)
         | ((rn.0 as u32) << 5)
         | (rt.0 as u32)
+}
+
+/// `STP <Xt1>, <Xt2>, [<Xn|SP>, #imm]!` -- store-pair, pre-indexed.
+///
+/// Used in function prologues: `stp x29, x30, [sp, #-16]!` saves the
+/// caller's frame pointer + link register and bumps sp in one go.
+pub(crate) fn enc_stp_pre(rt: Reg, rt2: Reg, rn: Reg, imm: i32) -> u32 {
+    enc_pair(false, PairForm::Pre, 8, rt, rt2, rn, imm)
 }
 
 /// `LDP <Xt1>, <Xt2>, [<Xn|SP>], #imm` -- load-pair, post-indexed.
 /// Mirror of [`enc_stp_pre`] for function epilogues:
 /// `ldp x29, x30, [sp], #16` restores fp/lr and bumps sp back.
 pub(crate) fn enc_ldp_post(rt: Reg, rt2: Reg, rn: Reg, imm: i32) -> u32 {
-    assert!(imm % 8 == 0, "ldp: imm must be 8-byte aligned, got {imm}");
-    let imm7 = imm / 8;
-    assert!(
-        (-64..64).contains(&imm7),
-        "ldp: offset {imm} (scaled {imm7}) out of range"
-    );
-    0xA8C0_0000
-        | (((imm7 as u32) & 0x7F) << 15)
-        | ((rt2.0 as u32) << 10)
-        | ((rn.0 as u32) << 5)
-        | (rt.0 as u32)
+    enc_pair(true, PairForm::Post, 8, rt, rt2, rn, imm)
 }
 
-/// `STP <Xt1>, <Xt2>, [<Xn|SP>], #imm` -- store-pair, post-indexed; scaled as [`enc_stp_pre`].
+/// `STP <Xt1>, <Xt2>, [<Xn|SP>], #imm` -- store-pair, post-indexed.
 pub(crate) fn enc_stp_post(rt: Reg, rt2: Reg, rn: Reg, imm: i32) -> u32 {
-    assert!(imm % 8 == 0, "stp: imm must be 8-byte aligned, got {imm}");
-    let imm7 = imm / 8;
-    assert!(
-        (-64..64).contains(&imm7),
-        "stp: offset {imm} (scaled {imm7}) out of range"
-    );
-    0xA880_0000
-        | (((imm7 as u32) & 0x7F) << 15)
-        | ((rt2.0 as u32) << 10)
-        | ((rn.0 as u32) << 5)
-        | (rt.0 as u32)
+    enc_pair(false, PairForm::Post, 8, rt, rt2, rn, imm)
 }
 
 /// `STP <Xt1>, <Xt2>, [<Xn|SP>, #imm]` -- store-pair, signed offset
-/// (no writeback). Same scaling / range as [`enc_stp_pre`].
+/// (no writeback).
 pub(crate) fn enc_stp_off(rt: Reg, rt2: Reg, rn: Reg, imm: i32) -> u32 {
-    assert!(imm % 8 == 0, "stp: imm must be 8-byte aligned, got {imm}");
-    let imm7 = imm / 8;
-    assert!(
-        (-64..64).contains(&imm7),
-        "stp: offset {imm} (scaled {imm7}) out of range"
-    );
-    0xA900_0000
-        | (((imm7 as u32) & 0x7F) << 15)
-        | ((rt2.0 as u32) << 10)
-        | ((rn.0 as u32) << 5)
-        | (rt.0 as u32)
+    enc_pair(false, PairForm::Offset, 8, rt, rt2, rn, imm)
 }
 
 /// `LDP <Xt1>, <Xt2>, [<Xn|SP>, #imm]` -- load-pair, signed offset
 /// (no writeback). Mirror of [`enc_stp_off`].
 pub(crate) fn enc_ldp_off(rt: Reg, rt2: Reg, rn: Reg, imm: i32) -> u32 {
-    assert!(imm % 8 == 0, "ldp: imm must be 8-byte aligned, got {imm}");
-    let imm7 = imm / 8;
-    assert!(
-        (-64..64).contains(&imm7),
-        "ldp: offset {imm} (scaled {imm7}) out of range"
-    );
-    0xA940_0000
-        | (((imm7 as u32) & 0x7F) << 15)
-        | ((rt2.0 as u32) << 10)
-        | ((rn.0 as u32) << 5)
-        | (rt.0 as u32)
+    enc_pair(true, PairForm::Offset, 8, rt, rt2, rn, imm)
+}
+
+/// `LDP` of two `width`-byte (8 or 4) registers at `[rn, #imm]`.
+pub(crate) fn enc_ldp_unit_off(width: u32, rt: Reg, rt2: Reg, rn: Reg, imm: i32) -> u32 {
+    enc_pair(true, PairForm::Offset, width, rt, rt2, rn, imm)
+}
+
+/// `STP` of two `width`-byte (8 or 4) registers at `[rn, #imm]`.
+pub(crate) fn enc_stp_unit_off(width: u32, rt: Reg, rt2: Reg, rn: Reg, imm: i32) -> u32 {
+    enc_pair(false, PairForm::Offset, width, rt, rt2, rn, imm)
+}
+
+/// `LDP` of two `width`-byte (8 or 4) registers at `[rn], #imm`, post-indexed.
+pub(crate) fn enc_ldp_unit_post(width: u32, rt: Reg, rt2: Reg, rn: Reg, imm: i32) -> u32 {
+    enc_pair(true, PairForm::Post, width, rt, rt2, rn, imm)
+}
+
+/// `STP` of two `width`-byte (8 or 4) registers at `[rn], #imm`, post-indexed.
+pub(crate) fn enc_stp_unit_post(width: u32, rt: Reg, rt2: Reg, rn: Reg, imm: i32) -> u32 {
+    enc_pair(false, PairForm::Post, width, rt, rt2, rn, imm)
 }
 
 /// Shared field packer for the LDP / STP (SIMD&FP, 64-bit) forms below.
@@ -1927,6 +1927,11 @@ pub(crate) fn enc_ldr_post(rt: Reg, rn: Reg, imm: i32) -> u32 {
     0xF840_0400 | (imm9 << 12) | ((rn.0 as u32) << 5) | (rt.0 as u32)
 }
 
+/// `LDR <Wt>, [<Xn|SP>], #imm` / `LDRH` / `LDRB` -- post-indexed load of `width` 4, 2 or 1.
+pub(crate) fn enc_ldr_w_post(width: u8, rt: Reg, rn: Reg, imm: i32) -> u32 {
+    enc_str_w_post(width, rt, rn, imm) | 0x0040_0000
+}
+
 /// `STR <Wt>, [<Xn|SP>], #imm` / `STRH` / `STRB` -- post-indexed store of `width` 4, 2 or 1.
 pub(crate) fn enc_str_w_post(width: u8, rt: Reg, rn: Reg, imm: i32) -> u32 {
     assert!(
@@ -2693,6 +2698,28 @@ mod tests {
     fn ldp_post_fp_lr_plus_16() {
         // ldp x29, x30, [sp], #16  ->  0xA8C17BFD
         assert_eq!(enc_ldp_post(Reg::X29, Reg::X30, Reg::SP, 16), 0xA8C1_7BFD);
+    }
+
+    /// The pair forms at both widths and the post-indexed narrow loads,
+    /// against clang's encodings.
+    #[test]
+    fn pair_and_post_indexed_unit_forms() {
+        let (x1, x2, x3) = (Reg(1), Reg(2), Reg(3));
+        // ldp w1, w2, [x3, #8]; stp w1, w2, [x3, #-8]
+        assert_eq!(enc_ldp_unit_off(4, x1, x2, x3, 8), 0x2941_0861);
+        assert_eq!(enc_stp_unit_off(4, x1, x2, x3, -8), 0x293F_0861);
+        // ldp x16, x17, [x1, #504]
+        assert_eq!(enc_ldp_unit_off(8, Reg(16), Reg(17), x1, 504), 0xA95F_C430);
+        // ldp x1, x2, [x3], #16; stp x1, x2, [x3], #16
+        assert_eq!(enc_ldp_unit_post(8, x1, x2, x3, 16), 0xA8C1_0861);
+        assert_eq!(enc_stp_unit_post(8, x1, x2, x3, 16), 0xA881_0861);
+        // ldp w1, w2, [x3], #8; stp w1, w2, [x3], #8
+        assert_eq!(enc_ldp_unit_post(4, x1, x2, x3, 8), 0x28C1_0861);
+        assert_eq!(enc_stp_unit_post(4, x1, x2, x3, 8), 0x2881_0861);
+        // ldr w1, [x3], #4; ldrh w1, [x3], #2; ldrb w1, [x3], #1
+        assert_eq!(enc_ldr_w_post(4, x1, x3, 4), 0xB840_4461);
+        assert_eq!(enc_ldr_w_post(2, x1, x3, 2), 0x7840_2461);
+        assert_eq!(enc_ldr_w_post(1, x1, x3, 1), 0x3840_1461);
     }
 
     #[test]

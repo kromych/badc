@@ -121,14 +121,10 @@ Disassembly of section .text:
                	retq
                	leaq	-0x30(%rbp), %rdi
                	leaq	<rip>, %rax
-               	pushq	%rcx
-               	movq	(%rax), %rcx
-               	movq	%rcx, (%rdi)
-               	movq	0x8(%rax), %rcx
-               	movq	%rcx, 0x8(%rdi)
-               	movq	0x10(%rax), %rcx
-               	movq	%rcx, 0x10(%rdi)
-               	popq	%rcx
+               	movups	(%rax), %xmm14
+               	movups	%xmm14, (%rdi)
+               	movq	0x10(%rax), %r10
+               	movq	%r10, 0x10(%rdi)
                	callq	<addr>
                	movslq	(%rax), %rcx
                	cmpl	$0x1, %ecx

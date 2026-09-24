@@ -480,14 +480,10 @@ Disassembly of section .text:
                	retq
                	leaq	-0x98(%rbp), %rax
                	leaq	<rip>, %rcx
-               	pushq	%rdx
-               	movzbq	(%rcx), %rdx
-               	movb	%dl, (%rax)
-               	movzbq	0x1(%rcx), %rdx
-               	movb	%dl, 0x1(%rax)
-               	movzbq	0x2(%rcx), %rdx
-               	movb	%dl, 0x2(%rax)
-               	popq	%rdx
+               	movzwq	(%rcx), %r10
+               	movw	%r10w, (%rax)
+               	movzbq	0x2(%rcx), %r10
+               	movb	%r10b, 0x2(%rax)
                	movl	(%rax), %ecx
                	andq	$0x3fffff, %rcx         # imm = 0x3FFFFF
                	shlq	$0x2a, %rcx

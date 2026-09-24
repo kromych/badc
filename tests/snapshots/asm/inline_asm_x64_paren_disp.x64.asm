@@ -99,10 +99,8 @@ Disassembly of section .text:
                	retq
                	leaq	-0x10(%rbp), %rax
                	leaq	<rip>, %rcx
-               	pushq	%rdx
-               	movq	(%rcx), %rdx
-               	movq	%rdx, (%rax)
-               	popq	%rdx
+               	movq	(%rcx), %r10
+               	movq	%r10, (%rax)
                	leaq	-0x10(%rbp), %rbx
                	movl	0x4(%rbx), %eax
                	movl	%eax, -0x8(%rbp)

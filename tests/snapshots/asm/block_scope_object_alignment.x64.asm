@@ -33,12 +33,8 @@ Disassembly of section .text:
                	andq	$-0x20, %rsp
                	leaq	0x10(%rsp), %rdx
                	leaq	<rip>, %rax
-               	pushq	%rcx
-               	movq	(%rax), %rcx
-               	movq	%rcx, (%rdx)
-               	movq	0x8(%rax), %rcx
-               	movq	%rcx, 0x8(%rdx)
-               	popq	%rcx
+               	movups	(%rax), %xmm14
+               	movups	%xmm14, (%rdx)
                	movq	$0x9, (%rsp)
                	leaq	<rip>, %rax
                	testb	$0xf, %al

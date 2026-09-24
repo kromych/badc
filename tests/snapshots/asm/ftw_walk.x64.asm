@@ -41,20 +41,10 @@ Disassembly of section .text:
                	subq	$0x120, %rsp            # imm = 0x120
                	leaq	-0x118(%rbp), %rdi
                	leaq	<rip>, %rax
-               	pushq	%rcx
-               	movq	(%rax), %rcx
-               	movq	%rcx, (%rdi)
-               	movq	0x8(%rax), %rcx
-               	movq	%rcx, 0x8(%rdi)
-               	movzbq	0x10(%rax), %rcx
-               	movb	%cl, 0x10(%rdi)
-               	movzbq	0x11(%rax), %rcx
-               	movb	%cl, 0x11(%rdi)
-               	movzbq	0x12(%rax), %rcx
-               	movb	%cl, 0x12(%rdi)
-               	movzbq	0x13(%rax), %rcx
-               	movb	%cl, 0x13(%rdi)
-               	popq	%rcx
+               	movups	(%rax), %xmm14
+               	movups	%xmm14, (%rdi)
+               	movl	0x10(%rax), %r10d
+               	movl	%r10d, 0x10(%rdi)
                	xorl	%eax, %eax
                	callq	<addr>
                	testq	%rax, %rax

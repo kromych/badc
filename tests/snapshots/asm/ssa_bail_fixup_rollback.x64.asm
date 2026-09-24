@@ -100,10 +100,8 @@ Disassembly of section .text:
                	subq	$0x70, %rsp
                	leaq	-0x28(%rbp), %rax
                	leaq	<rip>, %rcx
-               	pushq	%rdx
-               	movq	(%rcx), %rdx
-               	movq	%rdx, (%rax)
-               	popq	%rdx
+               	movq	(%rcx), %r10
+               	movq	%r10, (%rax)
                	xorl	%eax, %eax
                	leaq	-0x20(%rbp), %rcx
                	movb	%al, (%rcx,%rax)

@@ -182,6 +182,20 @@ impl Compiler {
         }
     }
 
+    /// The types an old-style definition's arguments arrive as, which its
+    /// entry converts to the declared ones (C99 6.9.1p10): those of a prior
+    /// prototype (6.7.5.3p15), else the declared types after the default
+    /// argument promotions (6.5.2.2p6).
+    pub(super) fn old_style_arrival_tys(&self, idx: usize, declared: &[i64]) -> Vec<i64> {
+        match self.linked_entities.get(&idx).map(|e| &e.ty) {
+            Some(DeclaredType::Function(
+                _,
+                Params::Prototype(t, false) | Params::Carried(t, false),
+            )) if t.len() == declared.len() => t.iter().map(|s| self.spelled_ty(*s)).collect(),
+            _ => declared.iter().map(|&t| promoted(t)).collect(),
+        }
+    }
+
     /// An initializer fixed an unspecified array bound (C99 6.7.8p22).
     pub(super) fn complete_linked_bound(&mut self, idx: usize) {
         let count = match self.symbols[idx].array_dims.as_slice() {

@@ -806,6 +806,10 @@ pub(crate) struct FinishedFunction {
     /// callee copies the bytes into its own local slot before
     /// the body runs. Empty when there were no parameters.
     pub param_tys: alloc::vec::Vec<i64>,
+    /// The type each argument arrives as, which the entry converts to the
+    /// parameter's (C99 6.9.1p10): an old-style definition's promoted
+    /// types or its prior prototype's; `param_tys` otherwise.
+    pub param_arrival_tys: alloc::vec::Vec<i64>,
     /// Per-parameter local-slot offsets the parser allocated
     /// for the callee's local copy of each struct-by-value
     /// param. Slot `0` (= no offset) means the param is a
@@ -1317,6 +1321,7 @@ impl crate::c5::layout::DataOffsets for FinishedFunction {
             conv: _,
             n_locals: _,
             param_tys: _,
+            param_arrival_tys: _,
             param_local_slots: _,
             returns_struct: _,
             return_struct_size: _,

@@ -5681,6 +5681,34 @@ fn low_word_arguments_cross_the_system_compiler_boundary() {
     );
 }
 
+// An old-style definition receives its arguments promoted (C99 6.9.1p7, p10),
+// across the system compiler boundary both ways: `float` as `double` and `char`
+// as `int`, through the prototype of the promoted types (6.7.5.3p15), which a
+// prior declaration may also name.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn old_style_definitions_cross_the_system_compiler_boundary() {
+    let Some(cc) = host_cc() else {
+        eprintln!(
+            "skipping old_style_definitions_cross_the_system_compiler_boundary: no system C compiler"
+        );
+        return;
+    };
+    let common = "typedef double D;\n\
+        static D scale(a, x, c) int a; float x; char c;\n\
+        { return a + x * 2 + c; }\n\
+        static D halve(D, int);\n\
+        static D halve(x, c) float x; char c; { return x / 2 + c; }\n\
+        struct fns { D (*scale)(int, D, int); D (*halve)(D, int); };\n\
+        static int drive(const struct fns *f, int base)\n\
+        { if (f->scale(1, 1.5f, 300) != 48.0) return base + 1;\n\
+          if (scale(1, 1.5f, 300) != 48.0) return base + 2;\n\
+          if (f->halve(5.0, 1) != 3.5) return base + 3;\n\
+          if (halve(5.0, 1) != 3.5) return base + 4;\n\
+          return 0; }\n";
+    drive_across_the_system_compiler(&cc, "old-style-interop", common, "scale, halve");
+}
+
 // `-Map=FILE` / `-Map FILE` / `-M` produce a GNU-ld-style link map.
 // Emitting a Linux ELF needs no matching host, so these run anywhere.
 #[test]

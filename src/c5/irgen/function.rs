@@ -180,6 +180,8 @@ impl ReturnAbi {
 struct ParamEntry<'a> {
     structs: &'a [StructDef],
     param_tys: &'a [i64],
+    /// [`FinishedFunction::param_arrival_tys`].
+    arrival_tys: &'a [i64],
     param_local_slots: &'a [i64],
     /// True when the definition takes its parameters under the host ABI.
     /// A variadic or all-integer out-pointer definition keeps the c5 cdecl shape.
@@ -272,6 +274,7 @@ impl<'a> ParamEntry<'a> {
         Self {
             structs,
             param_tys,
+            arrival_tys: &fun.param_arrival_tys,
             param_local_slots: &fun.param_local_slots,
             host_abi,
             arg_slot_base: if ret_outptr { 3 } else { 2 },
@@ -391,19 +394,36 @@ impl<'a> ParamEntry<'a> {
             if stripped != Ty::Float as i64 {
                 continue;
             }
+            let arrives = self
+                .arrival_tys
+                .get(i)
+                .map_or(stripped, |&t| strip_unsigned(t));
+            let kind = if arrives == Ty::Double as i64 {
+                LoadKind::F64
+            } else {
+                LoadKind::F32
+            };
             if self.host_abi && self.in_fp_reg(i) {
-                // The argument arrives at single precision in an FP
-                // argument register (C99 6.2.5p10) and never
-                // round-trips through the positive c5 cdecl cell, whose
-                // spill the prologue then elides.
-                let pr = b.param_ref((self.shift + i) as u32, LoadKind::F32);
-                b.mark_f32(pr);
-                b.store_local(local_slot, pr, StoreKind::F32);
+                // The argument arrives in an FP argument register (C99
+                // 6.2.5p10) and never round-trips through the positive c5
+                // cdecl cell, whose spill the prologue then elides.
+                let pr = b.param_ref((self.shift + i) as u32, kind);
+                let val = if kind == LoadKind::F32 {
+                    b.mark_f32(pr)
+                } else {
+                    b.fp_narrow_to_f32(pr)
+                };
+                b.store_local(local_slot, val, StoreKind::F32);
             } else if !b.param_fp_mask().is_empty() {
                 // Host-stack-overflow `float` under the FP-register ABI:
-                // the caller pushed it at single precision into the c5
-                // cdecl cell. Read the cell as `F32` and narrow back.
-                let val = b.load_local(arg_slot, LoadKind::F32);
+                // the caller pushed it into the c5 cdecl cell at the width
+                // it arrives at.
+                let val = b.load_local(arg_slot, kind);
+                let val = if kind == LoadKind::F32 {
+                    val
+                } else {
+                    b.fp_narrow_to_f32(val)
+                };
                 b.store_local(local_slot, val, StoreKind::F32);
             } else {
                 // The c5 cdecl shape: the caller widened the `float` to an

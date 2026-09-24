@@ -1178,8 +1178,14 @@ impl Compiler {
             ));
         }
         self.parse_kr_parameter_declarations(&mut params)?;
+        // C99 6.9.1p7: an identifier list is no prototype; calls pass what arrives.
+        let arrival = if params.form == super::function::ParamForm::IdentifierList {
+            self.old_style_arrival_tys(id_idx, &params.types)
+        } else {
+            params.types.clone()
+        };
         self.define_linked_function(id_idx, def, Params::of(&params, true))?;
-        self.symbols[id_idx].params = params.types.clone();
+        self.symbols[id_idx].params = arrival.clone();
 
         if self.lex.tk != '{' {
             return Err(self.compile_err(Code::SYNTAX, "bad function definition"));
@@ -1189,7 +1195,7 @@ impl Compiler {
         let ent_pc = self.open_function_body(id_idx, &params);
         self.copy_by_value_parameters(&params)?;
         self.parse_function_body_items()?;
-        self.finish_function_body(ent_pc, &params)?;
+        self.finish_function_body(ent_pc, &params, arrival)?;
         // The capture runs before the scope unwind restores the outer bindings.
         // DWARF 5 3.3.4 groups the DIEs by the subprogram's entry pc and locates
         // each at `fp_slot * 8`; slots 0 and 1 are the saved frame and return
@@ -1548,6 +1554,7 @@ impl Compiler {
         &mut self,
         ent_pc: usize,
         params: &super::function::ParsedParams,
+        arrival_tys: Vec<i64>,
     ) -> Result<(), C5Error> {
         self.emit_dead_stores_and_flush();
         let n_params = params.indices.len();
@@ -1600,6 +1607,7 @@ impl Compiler {
             n_params,
             is_variadic,
             param_tys,
+            arrival_tys,
             param_local_slots,
             returns_struct_finish,
             return_struct_size_finish,

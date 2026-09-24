@@ -403,34 +403,43 @@ pub(crate) enum Inst {
         align: u32,
     },
     /// Atomic read-modify-write on the `width`-byte object at `addr`
-    /// (C11 7.17.7.2-7.17.7.5). `op` selects the operator; the operand
-    /// is `value`. The defined value is the object's prior contents
-    /// (C11 7.17.7p2). The per-arch lowering emits a genuine atomic
-    /// sequence (Intel SDM Vol.2 LOCK XADD / XCHG / CMPXCHG retry on
-    /// x86_64; ARM ARM LDAXR / STLXR retry on aarch64).
+    /// (C11 7.17.7.2-7.17.7.5), carrying `order`. `op` selects the
+    /// operator; the operand is `value`. The defined value is the
+    /// object's prior contents (C11 7.17.7p2), of which only the low
+    /// `width` bytes are defined. One instruction on aarch64, the LSE
+    /// `LDADD` / `LDCLR` / `LDEOR` / `LDSET` / `SWP` with the order's
+    /// acquire and release bits (ARM ARM C6.2); on x86_64 `LOCK XADD`,
+    /// `XCHG`, and for the bitwise operators a `LOCK` op when the prior
+    /// contents are unread, else a `LOCK CMPXCHG` retry (Intel SDM Vol.2).
     AtomicRmw {
         op: AtomicRmwOp,
         addr: ValueId,
         value: ValueId,
         width: u8,
+        order: MemOrder,
     },
     /// Atomic compare-and-exchange on the `width`-byte object at `addr`
-    /// (C11 7.17.7.4). Compares `*addr` against `*expected_addr`; on a
-    /// match stores `desired` and yields 1, otherwise stores the
-    /// current `*addr` into `*expected_addr` and yields 0. Lowered to
-    /// LOCK CMPXCHG on x86_64 and an LDAXR / STLXR retry on aarch64.
+    /// (C11 7.17.7.4): the low `width` bytes of `*addr` are compared with
+    /// those of `expected` and on a match replaced by those of `desired`.
+    /// The defined value is the prior contents, zero-extended; the
+    /// exchange happened when they equal `expected`'s low bytes. `order`
+    /// is the one the instruction carries on either outcome
+    /// ([`MemOrder::with_failure`]). `CAS` on aarch64 (LSE), `LOCK
+    /// CMPXCHG` on x86_64.
     AtomicCas {
         addr: ValueId,
-        expected_addr: ValueId,
+        expected: ValueId,
         desired: ValueId,
         width: u8,
+        order: MemOrder,
     },
     /// Atomic load of the `width`-byte object at `addr` (C11 7.17.7.2),
     /// zero-extended. `order` selects the access: on aarch64 a plain
-    /// load for relaxed and `ldar` otherwise; on x86_64 a plain `mov`
-    /// for every order, which is an acquire and, against the `xchg`
-    /// seq_cst store, sequentially consistent. Never pure: an atomic
-    /// access happens whatever its order (C11 7.17.3p16).
+    /// load for relaxed, the RCpc `ldapr` for acquire and `ldar` for
+    /// seq_cst; on x86_64 a plain `mov` for every order, which is an
+    /// acquire and, against the `xchg` seq_cst store, sequentially
+    /// consistent. Never pure: an atomic access happens whatever its
+    /// order (C11 7.17.3p16).
     AtomicLoad {
         addr: ValueId,
         width: u8,
@@ -762,12 +771,12 @@ impl Inst {
             Inst::AtomicLoad { addr, .. } => f(*addr),
             Inst::AtomicCas {
                 addr,
-                expected_addr,
+                expected,
                 desired,
                 ..
             } => {
                 f(*addr);
-                f(*expected_addr);
+                f(*expected);
                 f(*desired);
             }
             Inst::Phi { incoming, .. } => {
@@ -866,12 +875,12 @@ impl Inst {
             Inst::AtomicLoad { addr, .. } => f(addr),
             Inst::AtomicCas {
                 addr,
-                expected_addr,
+                expected,
                 desired,
                 ..
             } => {
                 f(addr);
-                f(expected_addr);
+                f(expected);
                 f(desired);
             }
             Inst::Phi { incoming, .. } => {
@@ -1185,6 +1194,42 @@ pub(crate) enum MemOrder {
 }
 
 impl MemOrder {
+    /// Whether the access acquires: acquire, acq_rel and seq_cst.
+    pub(crate) fn acquires(self) -> bool {
+        matches!(
+            self,
+            MemOrder::Acquire | MemOrder::AcqRel | MemOrder::SeqCst
+        )
+    }
+
+    /// Whether the access releases: release, acq_rel and seq_cst.
+    pub(crate) fn releases(self) -> bool {
+        matches!(
+            self,
+            MemOrder::Release | MemOrder::AcqRel | MemOrder::SeqCst
+        )
+    }
+
+    /// The order one compare-exchange instruction carries for success
+    /// order `self` and failure order `failure`: it acquires when either
+    /// does and releases when the success order does (C11 7.17.7.4p2).
+    /// A failure order the standard excludes, release or acq_rel, makes
+    /// both seq_cst, as gcc does.
+    pub(crate) fn with_failure(self, failure: MemOrder) -> Self {
+        if matches!(failure, MemOrder::Release | MemOrder::AcqRel)
+            || self == MemOrder::SeqCst
+            || failure == MemOrder::SeqCst
+        {
+            return MemOrder::SeqCst;
+        }
+        match (self.acquires() || failure.acquires(), self.releases()) {
+            (false, false) => MemOrder::Relaxed,
+            (true, false) => MemOrder::Acquire,
+            (false, true) => MemOrder::Release,
+            (true, true) => MemOrder::AcqRel,
+        }
+    }
+
     /// The order a `memory_order` / `__ATOMIC_*` constant names.
     pub(crate) fn from_c11(v: i64) -> Option<Self> {
         Some(match v {
@@ -2382,16 +2427,18 @@ mod tests {
                     op: AtomicRmwOp::Add,
                     addr: 1,
                     value: 2,
-                    width: 8
+                    width: 8,
+                    order: MemOrder::SeqCst
                 },
                 alloc::vec![1, 2]
             ),
             (
                 Inst::AtomicCas {
                     addr: 1,
-                    expected_addr: 2,
+                    expected: 2,
                     desired: 3,
-                    width: 8
+                    width: 8,
+                    order: MemOrder::SeqCst
                 },
                 alloc::vec![1, 2, 3]
             ),

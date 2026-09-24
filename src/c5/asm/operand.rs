@@ -463,11 +463,7 @@ fn may_write_slot(func: &FunctionSsa, inst: &Inst, off: i64, exposed: bool) -> b
         Inst::AtomicRmw { addr, .. } | Inst::AtomicStore { addr, .. } => {
             exposed || names_slot(*addr)
         }
-        Inst::AtomicCas {
-            addr,
-            expected_addr,
-            ..
-        } => exposed || names_slot(*addr) || names_slot(*expected_addr),
+        Inst::AtomicCas { addr, .. } => exposed || names_slot(*addr),
         Inst::InlineAsm { asm, args } => {
             // An asm that neither clobbers memory nor writes an output
             // operand writes nothing.
@@ -507,10 +503,10 @@ fn slot_exposed(func: &FunctionSsa, off: i64) -> bool {
             Inst::AtomicLoad { addr, .. } => *addr == v,
             Inst::AtomicCas {
                 addr,
-                expected_addr,
+                expected,
                 desired,
                 ..
-            } => (*addr == v || *expected_addr == v) && *desired != v,
+            } => *addr == v && *expected != v && *desired != v,
             Inst::InlineAsm { asm, args } => {
                 args.len() == asm.operands.len()
                     && args.iter().zip(&asm.operands).all(|(&a, o)| {

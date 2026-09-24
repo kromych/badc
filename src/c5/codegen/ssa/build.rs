@@ -1402,16 +1402,17 @@ impl SsaBuilder {
     }
 
     /// `Inst::AtomicRmw` -- atomic read-modify-write on the `width`-byte
-    /// object at `addr` (C11 7.17.7). Returns the inst's id; its value
-    /// is the object's prior contents. Atomics are not pure and must
-    /// not be CSE'd, and they write through `addr` (which may alias an
-    /// escaped local), so the CSE cache is invalidated.
+    /// object at `addr` (C11 7.17.7) carrying `order`. Returns the inst's
+    /// id; its value is the object's prior contents. Atomics are not pure
+    /// and must not be CSE'd, and they write through `addr` (which may
+    /// alias an escaped local), so the CSE cache is invalidated.
     pub(crate) fn atomic_rmw(
         &mut self,
         op: AtomicRmwOp,
         addr: ValueId,
         value: ValueId,
         width: u8,
+        order: MemOrder,
     ) -> ValueId {
         self.local_cache.clear();
         self.push(Inst::AtomicRmw {
@@ -1419,6 +1420,7 @@ impl SsaBuilder {
             addr,
             value,
             width,
+            order,
         })
     }
 
@@ -1451,23 +1453,25 @@ impl SsaBuilder {
     }
 
     /// `Inst::AtomicCas` -- atomic compare-and-exchange on the
-    /// `width`-byte object at `addr` (C11 7.17.7.4). Returns the inst's
-    /// id; its value is 1 on success and 0 on failure, where a failure
-    /// stores the current `*addr` into `*expected_addr`. Writes through
-    /// both pointers, so the CSE cache is invalidated.
+    /// `width`-byte object at `addr` (C11 7.17.7.4) carrying `order`.
+    /// Returns the inst's id; its value is the prior contents,
+    /// zero-extended. Writes through `addr`, so the CSE cache is
+    /// invalidated.
     pub(crate) fn atomic_cas(
         &mut self,
         addr: ValueId,
-        expected_addr: ValueId,
+        expected: ValueId,
         desired: ValueId,
         width: u8,
+        order: MemOrder,
     ) -> ValueId {
         self.local_cache.clear();
         self.push(Inst::AtomicCas {
             addr,
-            expected_addr,
+            expected,
             desired,
             width,
+            order,
         })
     }
 

@@ -790,6 +790,13 @@ impl Compiler {
         let pos = self.ast_src_pos();
 
         let seq = MemOrder::SeqCst;
+        let rmw_order = |this: &Self| {
+            if name.starts_with("__sync_") {
+                seq
+            } else {
+                order_at(this, 2)
+            }
+        };
         let (kind, op_args, result_ty, order): (AtomicKind, Vec<ExprId>, i64, MemOrder) = match name
         {
             "__atomic_load_n" => (
@@ -827,31 +834,63 @@ impl Compiler {
                     order_at(self, 2).for_store(),
                 )
             }
-            // The read-modify-write and compare-exchange forms lower to
-            // the seq_cst sequence whatever order they name.
+            // A read-modify-write carries the order its `__atomic_*` form
+            // names (any of the six, C11 7.17.7.2-7.17.7.5); a `__sync_*`
+            // form is a full barrier, `__sync_lock_test_and_set` an
+            // acquire barrier (gcc's documentation of the family).
             "__atomic_exchange_n" | "__sync_lock_test_and_set" => {
                 let v = self.require_gcc_arg(val1, name)?;
-                (AtomicKind::Exchange, alloc::vec![ptr, v], elem_ty, seq)
+                let order = if name == "__atomic_exchange_n" {
+                    order_at(self, 2)
+                } else {
+                    MemOrder::Acquire
+                };
+                (AtomicKind::Exchange, alloc::vec![ptr, v], elem_ty, order)
             }
             "__atomic_fetch_add" | "__sync_fetch_and_add" => {
                 let v = self.require_gcc_arg(val1, name)?;
-                (AtomicKind::FetchAdd, alloc::vec![ptr, v], elem_ty, seq)
+                (
+                    AtomicKind::FetchAdd,
+                    alloc::vec![ptr, v],
+                    elem_ty,
+                    rmw_order(self),
+                )
             }
             "__atomic_fetch_sub" | "__sync_fetch_and_sub" => {
                 let v = self.require_gcc_arg(val1, name)?;
-                (AtomicKind::FetchSub, alloc::vec![ptr, v], elem_ty, seq)
+                (
+                    AtomicKind::FetchSub,
+                    alloc::vec![ptr, v],
+                    elem_ty,
+                    rmw_order(self),
+                )
             }
             "__atomic_fetch_and" | "__sync_fetch_and_and" => {
                 let v = self.require_gcc_arg(val1, name)?;
-                (AtomicKind::FetchAnd, alloc::vec![ptr, v], elem_ty, seq)
+                (
+                    AtomicKind::FetchAnd,
+                    alloc::vec![ptr, v],
+                    elem_ty,
+                    rmw_order(self),
+                )
             }
             "__atomic_fetch_or" | "__sync_fetch_and_or" => {
                 let v = self.require_gcc_arg(val1, name)?;
-                (AtomicKind::FetchOr, alloc::vec![ptr, v], elem_ty, seq)
+                (
+                    AtomicKind::FetchOr,
+                    alloc::vec![ptr, v],
+                    elem_ty,
+                    rmw_order(self),
+                )
             }
             "__atomic_fetch_xor" | "__sync_fetch_and_xor" => {
                 let v = self.require_gcc_arg(val1, name)?;
-                (AtomicKind::FetchXor, alloc::vec![ptr, v], elem_ty, seq)
+                (
+                    AtomicKind::FetchXor,
+                    alloc::vec![ptr, v],
+                    elem_ty,
+                    rmw_order(self),
+                )
             }
             // The C11 `__atomic_*_fetch` forms return the new (post-op)
             // value and take a memory-order argument; the `__sync_*_and_fetch`
@@ -859,24 +898,52 @@ impl Compiler {
             // read-modify-write returning the updated value.
             "__atomic_add_fetch" | "__sync_add_and_fetch" => {
                 let v = self.require_gcc_arg(val1, name)?;
-                (AtomicKind::AddFetch, alloc::vec![ptr, v], elem_ty, seq)
+                (
+                    AtomicKind::AddFetch,
+                    alloc::vec![ptr, v],
+                    elem_ty,
+                    rmw_order(self),
+                )
             }
             "__atomic_sub_fetch" | "__sync_sub_and_fetch" => {
                 let v = self.require_gcc_arg(val1, name)?;
-                (AtomicKind::SubFetch, alloc::vec![ptr, v], elem_ty, seq)
+                (
+                    AtomicKind::SubFetch,
+                    alloc::vec![ptr, v],
+                    elem_ty,
+                    rmw_order(self),
+                )
             }
             "__atomic_and_fetch" | "__sync_and_and_fetch" => {
                 let v = self.require_gcc_arg(val1, name)?;
-                (AtomicKind::AndFetch, alloc::vec![ptr, v], elem_ty, seq)
+                (
+                    AtomicKind::AndFetch,
+                    alloc::vec![ptr, v],
+                    elem_ty,
+                    rmw_order(self),
+                )
             }
             "__atomic_or_fetch" | "__sync_or_and_fetch" => {
                 let v = self.require_gcc_arg(val1, name)?;
-                (AtomicKind::OrFetch, alloc::vec![ptr, v], elem_ty, seq)
+                (
+                    AtomicKind::OrFetch,
+                    alloc::vec![ptr, v],
+                    elem_ty,
+                    rmw_order(self),
+                )
             }
             "__atomic_xor_fetch" | "__sync_xor_and_fetch" => {
                 let v = self.require_gcc_arg(val1, name)?;
-                (AtomicKind::XorFetch, alloc::vec![ptr, v], elem_ty, seq)
+                (
+                    AtomicKind::XorFetch,
+                    alloc::vec![ptr, v],
+                    elem_ty,
+                    rmw_order(self),
+                )
             }
+            // `(p, expected, desired, weak, success, failure)`; a weak
+            // exchange is lowered as a strong one, which C11 7.17.7.4p4
+            // permits.
             "__atomic_compare_exchange_n" => {
                 let exp = self.require_gcc_arg(val1, name)?;
                 let des = self.require_gcc_arg(val2, name)?;
@@ -884,7 +951,7 @@ impl Compiler {
                     AtomicKind::CompareExchangeStrong,
                     alloc::vec![ptr, exp, des],
                     int_ty,
-                    seq,
+                    order_at(self, 4).with_failure(order_at(self, 5)),
                 )
             }
             "__sync_val_compare_and_swap" => {
@@ -911,7 +978,12 @@ impl Compiler {
             // yield the prior contents (callers test for non-zero).
             "__atomic_test_and_set" => {
                 let one = self.ast.push_expr(Expr::IntLit { val: 1, ty: int_ty }, pos);
-                (AtomicKind::Exchange, alloc::vec![ptr, one], elem_ty, seq)
+                (
+                    AtomicKind::Exchange,
+                    alloc::vec![ptr, one],
+                    elem_ty,
+                    order_at(self, 1),
+                )
             }
             // `__atomic_clear(ptr, mo)` / `__sync_lock_release(ptr)` --
             // store 0 to the object; the `__sync` form is a release.

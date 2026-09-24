@@ -1079,6 +1079,16 @@ impl SiteRegs {
             emit_pop_r(code, r);
         }
     }
+
+    /// Whether `r` is a pushed register, which the restore overwrites.
+    pub(super) fn borrowed(&self, r: Reg) -> bool {
+        self.saved.contains(&r)
+    }
+
+    /// The bytes the pushes moved rsp down by.
+    pub(super) fn saved_bytes(&self) -> u32 {
+        8 * self.saved.len() as u32
+    }
 }
 
 /// Store the low `width` bytes (8, 4, 2 or 1) of `src` to

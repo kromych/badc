@@ -662,6 +662,30 @@ pub(crate) fn emit_lock_cmpxchg_mem_r(
     emit_modrm_mem(code, reg, base, disp);
 }
 
+/// `LOCK AND` / `OR` / `XOR [base + disp], reg` -- combine the memory
+/// operand with `reg` atomically, keeping no prior contents (Intel SDM
+/// Vol.2, the r/m, r forms with the `F0` LOCK prefix). Encoding: `F0 [66]
+/// [REX] 20/21, 08/09 or 30/31 /r`, the byte opcode first.
+pub(crate) fn emit_lock_alu_mem_r(
+    code: &mut Vec<u8>,
+    mnem: Mnem,
+    base: Reg,
+    disp: i32,
+    reg: Reg,
+    width: u8,
+) {
+    let opcode = match mnem {
+        Mnem::And => 0x20,
+        Mnem::Or => 0x08,
+        Mnem::Xor => 0x30,
+        _ => unreachable!("ICE: LOCK takes no {mnem:?} form here"),
+    };
+    emit_byte(code, 0xF0);
+    atomic_prefix(code, width, reg, base);
+    emit_byte(code, if width == 1 { opcode } else { opcode + 1 });
+    emit_modrm_mem(code, reg, base, disp);
+}
+
 // ---- SSE2 floating-point. ----
 //
 // XMM registers share the 0..15 register-id field with GPRs; the
@@ -2803,6 +2827,42 @@ mod tests {
         assert_eq!(
             assemble(|c| emit_lock_cmpxchg_mem_r(c, Reg::RCX, 0, Reg::RDX, 8)),
             vec![0xF0, 0x48, 0x0F, 0xB1, 0x11]
+        );
+    }
+
+    // clang: `lock andl %esi, (%rdi)` = F0 21 37, `lock orq %rsi, (%rdi)` =
+    // F0 48 09 37, `lock xorq %r9, 0x10(%rax)` = F0 4C 31 48 10, `lock andb
+    // %sil, (%r10)` = F0 41 20 32; `lock orw %cx, (%rax)` = 66 F0 09 08 and
+    // `lock xorb %al, (%rdi)` = F0 30 07, which the prefix order and the
+    // byte form's REX byte here respell without changing the instruction.
+    #[test]
+    fn lock_alu_mem_r_forms() {
+        let lock = |mnem, base, disp, reg, width| {
+            assemble(|c| emit_lock_alu_mem_r(c, mnem, base, disp, reg, width))
+        };
+        assert_eq!(
+            lock(Mnem::And, Reg::RDI, 0, Reg::RSI, 4),
+            [0xF0, 0x21, 0x37]
+        );
+        assert_eq!(
+            lock(Mnem::Or, Reg::RDI, 0, Reg::RSI, 8),
+            [0xF0, 0x48, 0x09, 0x37]
+        );
+        assert_eq!(
+            lock(Mnem::Xor, Reg::RAX, 0x10, Reg(9), 8),
+            [0xF0, 0x4C, 0x31, 0x48, 0x10]
+        );
+        assert_eq!(
+            lock(Mnem::And, Reg(10), 0, Reg::RSI, 1),
+            [0xF0, 0x41, 0x20, 0x32]
+        );
+        assert_eq!(
+            lock(Mnem::Or, Reg::RAX, 0, Reg::RCX, 2),
+            [0xF0, 0x66, 0x09, 0x08]
+        );
+        assert_eq!(
+            lock(Mnem::Xor, Reg::RDI, 0, Reg::RAX, 1),
+            [0xF0, 0x40, 0x30, 0x07]
         );
     }
 

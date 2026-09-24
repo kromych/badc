@@ -2854,13 +2854,12 @@ fn int128_scalar_conversions_run_correctly() {
     );
 }
 
-/// ARM ARM C6.2: the aarch64 atomic read-modify-write lowering uses an
-/// LDAXR / STLXR exclusive-monitor retry loop. Confirm both opcodes are
-/// present by their fixed bit patterns, independent of register fields:
-/// LDAXR is `_x011000_010_11111_1_11111 Rn Rt` and STLXR is
-/// `_x011000_000 Rs 1_11111 Rn Rt`.
+/// ARM ARM C6.2: the aarch64 atomic read-modify-write lowering is one LSE
+/// instruction, for a seq_cst fetch-add the acquire-release `LDADDAL`.
+/// Match it by the bits that do not depend on the registers:
+/// `11_111000_1_1_1 Rs 0_000_00 Rn Rt`.
 #[test]
-fn atomic_rmw_emits_ldaxr_stlxr_aarch64() {
+fn atomic_rmw_emits_ldaddal_aarch64() {
     use crate::{NativeOptions, Target, emit_native_with_options};
     let program = super::compile_str_bare(
         "#include <stdatomic.h>\n\
@@ -2869,23 +2868,13 @@ fn atomic_rmw_emits_ldaxr_stlxr_aarch64() {
     );
     let bytes = emit_native_with_options(&program, Target::MacOSAarch64, NativeOptions::default())
         .expect("emit MacOSAarch64");
-    // Match the 32-bit little-endian instruction words by the fixed bits
-    // that do not depend on the chosen registers (size / L / o0 / Rt2 and
-    // the LDAXR all-ones Rs).
-    let words = || {
-        bytes
-            .windows(4)
-            .map(|w| u32::from_le_bytes([w[0], w[1], w[2], w[3]]))
-    };
-    let any_ldaxr = words().any(|w| (w & 0x3FFF_FC00) == (0x085F_FC00 & 0x3FFF_FC00));
-    let any_stlxr = words().any(|w| (w & 0x3FE0_FC00) == (0x0800_FC00 & 0x3FE0_FC00));
+    let any_ldaddal = bytes
+        .windows(4)
+        .map(|w| u32::from_le_bytes([w[0], w[1], w[2], w[3]]))
+        .any(|w| w & 0xFFE0_FC00 == 0xF8E0_0000);
     assert!(
-        any_ldaxr,
-        "expected an LDAXR opcode word in the aarch64 image",
-    );
-    assert!(
-        any_stlxr,
-        "expected an STLXR opcode word in the aarch64 image",
+        any_ldaddal,
+        "expected an LDADDAL opcode word in the aarch64 image",
     );
 }
 

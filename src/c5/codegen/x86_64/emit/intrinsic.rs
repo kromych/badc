@@ -1270,15 +1270,44 @@ pub(super) fn emit_atomic_store(
     Ok(())
 }
 
-/// C11 7.17.7.2-7.17.7.5 atomic read-modify-write: `XCHG` for exchange,
-/// `LOCK XADD` for add / sub (the operand negated for sub), and a `LOCK
-/// CMPXCHG` retry loop for the bitwise operators, which have no
-/// fetch-and-return-old form. The result is the prior contents. The
-/// address rides r11 and the operand r10; rax and a loop temp are
-/// borrowed with push / pop.
+/// An operand in rax, which a `CMPXCHG` takes as its accumulator, moved
+/// to `scratch`; any other register stays.
+fn off_rax(code: &mut Vec<u8>, r: Reg, scratch: Reg) -> Reg {
+    if r == Reg::RAX {
+        emit_mov_rr(code, scratch, r);
+        scratch
+    } else {
+        r
+    }
+}
+
+/// Write the atomic result `r` to `dst` and pop what `regs` pushed, the
+/// last first. A result in a pushed register leaves through r10, which
+/// the consumed operands no longer need.
+fn finish_atomic(code: &mut Vec<u8>, regs: &[&SiteRegs], dst: Place, r: Reg, frame: Frame) {
+    let r = if regs.iter().any(|s| s.borrowed(r)) {
+        emit_mov_rr(code, SCRATCH_R10, r);
+        SCRATCH_R10
+    } else {
+        r
+    };
+    for s in regs.iter().rev() {
+        s.restore(code);
+    }
+    write_atomic_result(code, dst, r, frame);
+}
+
+/// C11 7.17.7.2-7.17.7.5 read-modify-write (Intel SDM Vol.2): `XCHG` for
+/// exchange and `LOCK XADD` for addition and subtraction, the operand
+/// negated, both leaving the prior contents in their register; for the
+/// bitwise operators a `LOCK AND` / `OR` / `XOR` when the prior contents
+/// are unread, else a `LOCK CMPXCHG` retry on rax. A locked instruction
+/// is a full barrier, so every order lowers alike (the x86 mapping of
+/// C11 atomics). The address rides its own register or r11.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_atomic_rmw(
     code: &mut Vec<u8>,
+    v: super::super::ir::ValueId,
     dst: Place,
     op: super::super::ir::AtomicRmwOp,
     addr: super::super::ir::ValueId,
@@ -1286,117 +1315,113 @@ pub(super) fn emit_atomic_rmw(
     width: u8,
     alloc: &Allocation,
     frame: Frame,
+    abi: super::Abi,
 ) -> Emit {
     use super::super::ir::AtomicRmwOp as Op;
-    let a = SCRATCH_R11;
-    let val = SCRATCH_R10;
-    match op {
-        Op::Xchg => {
-            // No RAX involved: XCHG with a memory operand is implicitly
-            // locked. Operands ride the reserved scratches; rsp stable.
-            if operand_into(code, addr, a, frame, 0, alloc).is_none()
-                || operand_into(code, value, val, frame, 0, alloc).is_none()
-            {
+    let Some(a) = materialize_int(code, place_of(alloc, addr), SCRATCH_R11, frame) else {
+        return fail("AtomicRmw: address not int reg / spill");
+    };
+    let mnem = match op {
+        Op::Xchg | Op::Add | Op::Sub => {
+            // The exchanged register: the result's own, unless the
+            // address rides it.
+            let t = match dst {
+                Place::IntReg(r) if r != a.0 => Reg(r),
+                _ => SCRATCH_R10,
+            };
+            let Some(x) = materialize_int(code, place_of(alloc, value), t, frame) else {
                 return fail("AtomicRmw: operand not int reg / spill");
+            };
+            emit_mov_rr(code, t, x);
+            if op == Op::Sub {
+                emit_unary_r(code, Mnem::Neg, 8, t);
             }
-            emit_xchg_mem_r(code, a, 0, val, width);
-            write_atomic_result(code, dst, val, frame);
-            Ok(())
+            if op == Op::Xchg {
+                emit_xchg_mem_r(code, a, 0, t, width);
+            } else {
+                emit_lock_xadd_mem_r(code, a, 0, t, width);
+            }
+            write_atomic_result(code, dst, t, frame);
+            return Ok(());
         }
-        Op::Add | Op::Sub => {
-            emit_push_r(code, Reg::RAX);
-            if operand_into(code, addr, a, frame, 8, alloc).is_none()
-                || operand_into(code, value, val, frame, 8, alloc).is_none()
-            {
-                return fail("AtomicRmw: operand not int reg / spill");
-            }
-            emit_mov_rr(code, Reg::RAX, val);
-            if matches!(op, Op::Sub) {
-                emit_unary_r(code, Mnem::Neg, 8, Reg::RAX);
-            }
-            emit_lock_xadd_mem_r(code, a, 0, Reg::RAX, width);
-            // RAX now holds the prior contents; stash it before the pop.
-            emit_mov_rr(code, val, Reg::RAX);
-            emit_pop_r(code, Reg::RAX);
-            write_atomic_result(code, dst, val, frame);
-            Ok(())
-        }
-        Op::And | Op::Or | Op::Xor => {
-            // CMPXCHG retry: load the current value into RAX, compute the
-            // new value in a temp, and conditionally publish it; repeat
-            // until the store succeeds (ZF set by CMPXCHG).
-            let temp = Reg::RCX;
-            emit_push_r(code, Reg::RAX);
-            emit_push_r(code, temp);
-            if operand_into(code, addr, a, frame, 16, alloc).is_none()
-                || operand_into(code, value, val, frame, 16, alloc).is_none()
-            {
-                return fail("AtomicRmw: operand not int reg / spill");
-            }
-            emit_mov_r_mem_width(code, Reg::RAX, a, width);
-            let loop_start = code.len();
-            emit_mov_rr(code, temp, Reg::RAX);
-            match op {
-                Op::And => emit_rr(code, Mnem::And, 8, temp, val),
-                Op::Or => emit_rr(code, Mnem::Or, 8, temp, val),
-                Op::Xor => emit_rr(code, Mnem::Xor, 8, temp, val),
-                _ => unreachable!(),
-            }
-            emit_lock_cmpxchg_mem_r(code, a, 0, temp, width);
-            // Branch back when the store lost the race (ZF == 0). The
-            // rel8 field is measured from the byte after the 2-byte Jcc.
-            let rel = (loop_start as i64) - (code.len() as i64 + 2);
-            emit_jcc_rel8(code, Cc::Ne, rel as i8);
-            emit_mov_rr(code, val, Reg::RAX);
-            emit_pop_r(code, temp);
-            emit_pop_r(code, Reg::RAX);
-            write_atomic_result(code, dst, val, frame);
-            Ok(())
-        }
+        Op::And => Mnem::And,
+        Op::Or => Mnem::Or,
+        Op::Xor => Mnem::Xor,
+    };
+    let Some(x) = materialize_int(code, place_of(alloc, value), SCRATCH_R10, frame) else {
+        return fail("AtomicRmw: operand not int reg / spill");
+    };
+    if dst == Place::None {
+        super::encode::emit_lock_alu_mem_r(code, mnem, a, 0, x, width);
+        return Ok(());
     }
+    let a = off_rax(code, a, SCRATCH_R11);
+    let x = off_rax(code, x, SCRATCH_R10);
+    let fixed = frame.fixed_regs;
+    let mut acc = SiteRegs::new(alloc, v, &[Reg::RAX.0], &[a.0, x.0], fixed);
+    if acc.take(code) != Some(Reg::RAX) {
+        return fail("AtomicRmw: rax is reserved");
+    }
+    let mut taken = alloc::vec![a.0, x.0, Reg::RAX.0];
+    if let Place::IntReg(r) = dst {
+        taken.push(r);
+    }
+    let mut temps = SiteRegs::new(alloc, v, &copy_temps(abi), &taken, fixed);
+    let Some(t) = temps.take(code) else {
+        return fail("AtomicRmw: no register for the retry");
+    };
+    emit_mov_r_mem_width(code, Reg::RAX, a, width);
+    let retry = code.len();
+    emit_mov_rr(code, t, Reg::RAX);
+    emit_rr(code, mnem, 8, t, x);
+    emit_lock_cmpxchg_mem_r(code, a, 0, t, width);
+    // Back while the object changed under the retry (ZF clear); the rel8
+    // counts from the byte past the 2-byte Jcc.
+    let rel = (retry as i64) - (code.len() as i64 + 2);
+    emit_jcc_rel8(code, Cc::Ne, rel as i8);
+    finish_atomic(code, &[&acc, &temps], dst, Reg::RAX, frame);
+    Ok(())
 }
 
-/// C11 7.17.7.4 compare-and-exchange as `LOCK CMPXCHG`: rax holds
-/// `*expected`; on a match `desired` is stored and the result is 1, else
-/// the current contents go back into `*expected` and the result is 0. The
-/// flag comes from the CMPXCHG ZF, which the intervening `mov` keeps.
+/// C11 7.17.7.4 compare-and-exchange as `LOCK CMPXCHG` (Intel SDM Vol.2),
+/// a full barrier whatever the order: rax takes the comparand
+/// zero-extended from `width` bytes and leaves with the prior contents,
+/// which a match leaves equal to it. The address rides its own register
+/// or r11, `desired` its own or r10.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_atomic_cas(
     code: &mut Vec<u8>,
+    v: super::super::ir::ValueId,
     dst: Place,
     addr: super::super::ir::ValueId,
-    expected_addr: super::super::ir::ValueId,
+    expected: super::super::ir::ValueId,
     desired: super::super::ir::ValueId,
     width: u8,
     alloc: &Allocation,
     frame: Frame,
 ) -> Emit {
-    let a = SCRATCH_R11;
-    let des = SCRATCH_R10;
-    let exp = Reg::RCX;
-    emit_push_r(code, Reg::RAX);
-    emit_push_r(code, exp);
-    // Materialise addr / desired before clobbering RCX with the
-    // expected pointer (their Places may name RCX).
-    if operand_into(code, addr, a, frame, 16, alloc).is_none()
-        || operand_into(code, desired, des, frame, 16, alloc).is_none()
-        || operand_into(code, expected_addr, exp, frame, 16, alloc).is_none()
-    {
+    let a = materialize_int(code, place_of(alloc, addr), SCRATCH_R11, frame);
+    let d = materialize_int(code, place_of(alloc, desired), SCRATCH_R10, frame);
+    let (Some(a), Some(d)) = (a, d) else {
         return fail("AtomicCas: operand not int reg / spill");
+    };
+    let a = off_rax(code, a, SCRATCH_R11);
+    let d = off_rax(code, d, SCRATCH_R10);
+    let mut acc = SiteRegs::new(alloc, v, &[Reg::RAX.0], &[a.0, d.0], frame.fixed_regs);
+    if acc.take(code) != Some(Reg::RAX) {
+        return fail("AtomicCas: rax is reserved");
     }
-    emit_mov_r_mem_width(code, Reg::RAX, exp, width);
-    emit_lock_cmpxchg_mem_r(code, a, 0, des, width);
-    // On failure (ZF == 0) write the observed value back to *expected.
-    // Build the conditional body separately to size the forward Jcc.
-    let mut fail_path = Vec::new();
-    emit_mov_mem_r_width(&mut fail_path, exp, Reg::RAX, width);
-    emit_jcc_rel8(code, Cc::E, fail_path.len() as i8);
-    code.extend_from_slice(&fail_path);
-    // Result = ZF from the CMPXCHG. Reuse `a` (addr no longer needed).
-    emit_setcc_r8(code, Cc::E, a);
-    emit_movzx_r_r8(code, a, a);
-    emit_pop_r(code, exp);
-    emit_pop_r(code, Reg::RAX);
-    write_atomic_result(code, dst, a, frame);
+    let e_place = place_of(alloc, expected);
+    let Some(e) = materialize_int_shifted(code, e_place, Reg::RAX, frame, acc.saved_bytes()) else {
+        return fail("AtomicCas: comparand not int reg / spill");
+    };
+    match width {
+        1 => emit_movzx_r_r8(code, Reg::RAX, e),
+        2 => super::encode::emit_movzx_r_r16(code, Reg::RAX, e),
+        4 => super::encode::emit_mov_r32_r32(code, Reg::RAX, e),
+        _ => emit_mov_rr(code, Reg::RAX, e),
+    }
+    emit_lock_cmpxchg_mem_r(code, a, 0, d, width);
+    finish_atomic(code, &[&acc], dst, Reg::RAX, frame);
     Ok(())
 }

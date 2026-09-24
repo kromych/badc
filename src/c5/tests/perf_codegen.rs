@@ -224,6 +224,7 @@ pub(super) fn x64_insns(code: &[u8]) -> Vec<X64Insn> {
             | 0x0F90..=0x0F9F
             | 0x0FA3
             | 0x0FAB
+            | 0x0FAE
             | 0x0FAF
             | 0x0FB0
             | 0x0FB1
@@ -3887,5 +3888,64 @@ fn call_results_land_in_their_destination() {
     m.expect(stores(0) && stores(2), || {
         format!("x86-64 from_callp: rax / rdx not stored: {insns:x?}")
     });
+    m.finish();
+}
+
+const LEAF_ATOMICS: &str = "long add(long *p) { return __atomic_fetch_add(p, 1, __ATOMIC_SEQ_CST); }\n\
+    long acq(long *p) { return __atomic_load_n(p, __ATOMIC_ACQUIRE); }\n\
+    int cas(long *p, long e, long d) {\n\
+        return __atomic_compare_exchange_n(p, &e, d, 0, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST);\n\
+    }\n";
+
+/// A leaf atomic is its one instruction, with no register saved and no
+/// stack access: on aarch64 `mov x1, #1; ldaddal x1, x0, [x0]; ret`,
+/// `ldapr x0, [x0]; ret`, and a `casal` on a copy of the comparand; on
+/// x86-64 `movl $1, %eax; lock xaddq %rax, (%rdi); retq`, one `movq`, and
+/// one `lock cmpxchgq` on a copy of the comparand in rax.
+#[test]
+fn leaf_atomics_are_one_instruction() {
+    let mut m = Misses::default();
+    let add = a64(LEAF_ATOMICS, "add");
+    m.expect(
+        add.len() == 3 && add[1] & 0xFFE0_FC00 == 0xF8E0_0000,
+        || format!("aarch64 add: not mov / ldaddal / ret: {add:08x?}"),
+    );
+    let acq = a64(LEAF_ATOMICS, "acq");
+    m.expect(
+        acq.len() == 2 && acq[0] & 0xFFFF_FC00 == 0xF8BF_C000,
+        || format!("aarch64 acq: not ldapr / ret: {acq:08x?}"),
+    );
+    // mov, casal, cmp, cset, ret: no save and no stack access.
+    let cas = a64(LEAF_ATOMICS, "cas");
+    m.expect(
+        cas.len() == 5 && cas[1] & 0xFFE0_FC00 == 0xC8E0_FC00,
+        || format!("aarch64 cas: not mov / casal / cmp / cset / ret: {cas:08x?}"),
+    );
+    let bytes = |name: &str| function_bytes(&object_at(LEAF_ATOMICS, Target::LinuxX64, true), name);
+    let locked = |code: &[u8], i: &X64Insn| code[i.at] == 0xF0;
+    let add = bytes("add");
+    let insns = x64_insns(&add);
+    m.expect(
+        insns.len() == 3
+            && insns[0].op == 0xB8
+            && insns[0].imm == 1
+            && insns[1].op == 0x0FC1
+            && locked(&add, &insns[1])
+            && insns[2].op == 0xC3,
+        || format!("x86-64 add: not movl $1 / lock xaddq / retq: {insns:x?}"),
+    );
+    let acq = x64(LEAF_ATOMICS, "acq");
+    m.expect(acq.len() == 2 && acq[0].op == 0x8B, || {
+        format!("x86-64 acq: not movq / retq: {acq:x?}")
+    });
+    let cas = bytes("cas");
+    let insns = x64_insns(&cas);
+    let stack = insns
+        .iter()
+        .any(|i| matches!(i.op, 0x50..=0x5F) || i.mem_base() == Some(4));
+    m.expect(
+        insns.iter().any(|i| i.op == 0x0FB1 && locked(&cas, i)) && !stack && insns.len() <= 6,
+        || format!("x86-64 cas: not one lock cmpxchgq off the stack: {insns:x?}"),
+    );
     m.finish();
 }

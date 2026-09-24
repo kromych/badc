@@ -242,20 +242,31 @@ fn compute_high_observed_through(func: &FunctionSsa, collapsing: &[bool]) -> Vec
                 observe(&mut hi, &mut work, *src);
             }
             Inst::Mzero { dst, .. } => observe(&mut hi, &mut work, *dst),
-            Inst::AtomicRmw { addr, value, .. } | Inst::AtomicStore { addr, value, .. } => {
+            // A narrow atomic reads only its operands' low `width` bytes.
+            Inst::AtomicRmw {
+                addr, value, width, ..
+            }
+            | Inst::AtomicStore {
+                addr, value, width, ..
+            } => {
                 observe(&mut hi, &mut work, *addr);
-                observe(&mut hi, &mut work, *value);
+                if *width == 8 {
+                    observe(&mut hi, &mut work, *value);
+                }
             }
             Inst::AtomicLoad { addr, .. } => observe(&mut hi, &mut work, *addr),
             Inst::AtomicCas {
                 addr,
-                expected_addr,
+                expected,
                 desired,
+                width,
                 ..
             } => {
                 observe(&mut hi, &mut work, *addr);
-                observe(&mut hi, &mut work, *expected_addr);
-                observe(&mut hi, &mut work, *desired);
+                if *width == 8 {
+                    observe(&mut hi, &mut work, *expected);
+                    observe(&mut hi, &mut work, *desired);
+                }
             }
             Inst::Phi { .. } => {}
         }

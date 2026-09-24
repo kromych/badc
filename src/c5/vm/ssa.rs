@@ -1157,10 +1157,11 @@ fn run_inst<H: Host>(
             addr,
             value,
             width,
+            ..
         } => {
             // C11 7.17.7. The interpreter is single-threaded, so a
-            // load-op-store reproduces the architectural effect; the
-            // prior contents are the result (7.17.7p2).
+            // load-op-store reproduces the architectural effect, whatever
+            // the order; the prior contents are the result (7.17.7p2).
             let a = frame.regs[*addr as usize];
             let operand = frame.regs[*value as usize];
             atomic_addr_check(a, "AtomicRmw")?;
@@ -1182,33 +1183,30 @@ fn run_inst<H: Host>(
         }
         Inst::AtomicCas {
             addr,
-            expected_addr,
+            expected,
             desired,
             width,
+            ..
         } => {
-            // C11 7.17.7.4. Single-threaded: load-compare-store. On a
-            // mismatch the current contents are written back into
-            // `*expected_addr` and the result is 0; on a match
-            // `desired` is stored and the result is 1.
+            // C11 7.17.7.4. Single-threaded: load, compare the low `width`
+            // bytes with the comparand's, store `desired` on a match. The
+            // prior contents, zero-extended, are the result.
             let a = frame.regs[*addr as usize];
-            let exp = frame.regs[*expected_addr as usize];
-            let des = frame.regs[*desired as usize];
             atomic_addr_check(a, "AtomicCas")?;
-            atomic_addr_check(exp, "AtomicCas")?;
-            let (lk, sk) = atomic_kinds(*width);
+            let (_, sk) = atomic_kinds(*width);
             mem.check_data_access(a as usize, *width as usize, AccessKind::Read)?;
             mem.check_data_access(a as usize, *width as usize, AccessKind::Write)?;
-            mem.check_data_access(exp as usize, *width as usize, AccessKind::Read)?;
-            mem.check_data_access(exp as usize, *width as usize, AccessKind::Write)?;
-            let cur = load_from_memory(mem, a as usize, lk)?;
-            let ecur = load_from_memory(mem, exp as usize, lk)?;
-            if cur == ecur {
-                store_to_memory(mem, a as usize, narrow_store(des, sk), sk)?;
-                frame.regs[v as usize] = 1;
+            let cur = load_from_memory(mem, a as usize, atomic_load_kind(*width))?;
+            let mask = if *width < 8 {
+                (1i64 << (8 * *width)) - 1
             } else {
-                store_to_memory(mem, exp as usize, narrow_store(cur, sk), sk)?;
-                frame.regs[v as usize] = 0;
+                -1
+            };
+            if cur == frame.regs[*expected as usize] & mask {
+                let des = frame.regs[*desired as usize];
+                store_to_memory(mem, a as usize, narrow_store(des, sk), sk)?;
             }
+            frame.regs[v as usize] = cur;
             return Ok(());
         }
         // C11 7.17.7.1 / 7.17.7.2. The order has no effect in the

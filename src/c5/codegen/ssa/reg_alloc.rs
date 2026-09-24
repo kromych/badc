@@ -37,7 +37,8 @@ use alloc::vec::Vec;
 use core::cmp::Reverse;
 
 use super::super::ir::{
-    BinOp, FpCastKind, FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind, Terminator, ValueId,
+    AtomicRmwOp, BinOp, FpCastKind, FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind, Terminator,
+    ValueId,
 };
 use super::{FixedRegs, Target};
 
@@ -479,7 +480,8 @@ fn is_rdx_rax_op(op: BinOp) -> bool {
 
 /// The registers x86-64's lowering of `inst` writes besides its result, as
 /// a mask: rcx for a shift or rotate by a count no immediate form takes,
-/// rdx:rax for a division, a remainder and a high multiply.
+/// rdx:rax for a division, a remainder and a high multiply, rax for the
+/// `CMPXCHG` of a compare-exchange and of a bitwise read-modify-write.
 pub(crate) fn x86_implicit_writes(inst: &Inst) -> u16 {
     match *inst {
         Inst::Binop { op, .. } if is_shift_op(op) => 1 << X86_RCX,
@@ -487,8 +489,50 @@ pub(crate) fn x86_implicit_writes(inst: &Inst) -> u16 {
             1 << X86_RCX
         }
         Inst::Binop { op, .. } if is_rdx_rax_op(op) => (1 << X86_RAX) | (1 << X86_RDX),
+        Inst::AtomicCas { .. } => 1 << X86_RAX,
+        Inst::AtomicRmw { op, .. } if cmpxchg_rmw(op) => 1 << X86_RAX,
         _ => 0,
     }
+}
+
+/// Keep an atomic's result off the registers of the operands its lowering
+/// reads after writing the result's register: a compare-exchange puts its
+/// comparand there ahead of reading the address and the desired value,
+/// and on x86-64 a read-modify-write stages its operand there ahead of
+/// reading the address, and a `CMPXCHG` retry rereads the operand.
+fn atomic_apart(
+    func: &FunctionSsa,
+    target: Target,
+    node_of: &[ValueId],
+    apart: &mut Vec<Vec<ValueId>>,
+) {
+    for (v, inst) in func.insts.iter().enumerate() {
+        let (first, second) = match *inst {
+            Inst::AtomicCas { addr, desired, .. } => (addr, desired),
+            Inst::AtomicRmw {
+                op, addr, value, ..
+            } if target.is_x86_64() => (addr, if cmpxchg_rmw(op) { value } else { addr }),
+            _ => continue,
+        };
+        if apart.is_empty() {
+            apart.resize(func.insts.len(), Vec::new());
+        }
+        let a = node_of[v];
+        for o in [first, second] {
+            let b = node_of[o as usize];
+            if a != b && !apart[a as usize].contains(&b) {
+                apart[a as usize].push(b);
+                apart[b as usize].push(a);
+            }
+        }
+    }
+}
+
+/// Whether x86-64 lowers a read-modify-write of `op` whose prior contents
+/// are read as a `CMPXCHG` retry: the bitwise operators, which have no
+/// fetching locked form.
+pub(crate) fn cmpxchg_rmw(op: AtomicRmwOp) -> bool {
+    matches!(op, AtomicRmwOp::And | AtomicRmwOp::Or | AtomicRmwOp::Xor)
 }
 
 /// x86-64 register preferences the colorer honours among free caller-saved
@@ -515,6 +559,16 @@ fn x86_preferences(
     };
     let mut is_count = vec![false; n];
     for (v, inst) in func.insts.iter().enumerate() {
+        // A `CMPXCHG` leaves the prior contents in rax.
+        match *inst {
+            Inst::AtomicCas { .. } => {
+                hints[v].get_or_insert(X86_RAX);
+            }
+            Inst::AtomicRmw { op, .. } if cmpxchg_rmw(op) => {
+                hints[v].get_or_insert(X86_RAX);
+            }
+            _ => {}
+        }
         let Some((op, lhs, rhs)) = binop(inst) else {
             continue;
         };
@@ -987,11 +1041,12 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     let node_of: Vec<ValueId> = (0..func.insts.len() as ValueId)
         .map(|v| classes.find(v))
         .collect();
-    let (apart, avoid) = if target.is_x86_64() {
+    let (mut apart, avoid) = if target.is_x86_64() {
         x86_preferences(func, &liveness, &node_of, &mut hints)
     } else {
         (Vec::new(), Vec::new())
     };
+    atomic_apart(func, target, &node_of, &mut apart);
     let value_is_fp: Vec<bool> = func
         .insts
         .iter()
@@ -1046,11 +1101,14 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     );
     places = coloring.places;
     let spill_count = coloring.spill_count;
-    // A copy may take any register as a temporary, so its record covers
-    // them all; the x86-64 shift and division records cover the registers
-    // they write.
+    // A copy or an atomic read-modify-write may take any register as a
+    // temporary, so its record covers them all; the x86-64 shift and
+    // division records cover the registers they write.
     let site_regs = |inst: &Inst| -> u32 {
-        if matches!(inst, Inst::Mcpy { .. }) {
+        if matches!(
+            inst,
+            Inst::Mcpy { .. } | Inst::AtomicRmw { .. } | Inst::AtomicCas { .. }
+        ) {
             u32::MAX
         } else if target.is_x86_64() {
             u32::from(x86_implicit_writes(inst))
@@ -1421,7 +1479,9 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     // whose defined value is unread. c5 store ops leave the stored value
     // in the accumulator and a copy yields its destination; if nothing
     // downstream reads it, the emit path's mov-to-dst is dead work.
-    // Setting the Place to None makes the propagate skip.
+    // Setting the Place to None makes the propagate skip. An atomic's
+    // unread prior contents take no register either, which lets a bitwise
+    // read-modify-write keep none.
     for (v, inst) in func.insts.iter().enumerate() {
         if use_counts[v] == 0
             && matches!(
@@ -1431,6 +1491,8 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
                     | Inst::StoreIndexed { .. }
                     | Inst::SegStore { .. }
                     | Inst::Mcpy { .. }
+                    | Inst::AtomicRmw { .. }
+                    | Inst::AtomicCas { .. }
             )
         {
             places[v] = Place::None;
@@ -4650,6 +4712,8 @@ int main(void) { return 0; }
                         | Inst::StoreIndexed { .. }
                         | Inst::SegStore { .. }
                         | Inst::Mcpy { .. }
+                        | Inst::AtomicRmw { .. }
+                        | Inst::AtomicCas { .. }
                 ) && alloc.use_counts.get(i).copied().unwrap_or(0) == 0;
                 match kind {
                     ResultKind::None => assert_eq!(*p, Place::None),

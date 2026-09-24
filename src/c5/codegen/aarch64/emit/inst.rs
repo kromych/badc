@@ -342,22 +342,18 @@ pub(super) fn emit_inst(
             addr,
             value,
             width,
-        } => emit_atomic_rmw(code, dst, *op, *addr, *value, *width, alloc, frame, scratch),
+            order,
+        } => emit_atomic_rmw(
+            code, v, dst, *op, *addr, *value, *width, *order, alloc, frame, scratch,
+        ),
         Inst::AtomicCas {
             addr,
-            expected_addr,
+            expected,
             desired,
             width,
+            order,
         } => emit_atomic_cas(
-            code,
-            dst,
-            *addr,
-            *expected_addr,
-            *desired,
-            *width,
-            alloc,
-            frame,
-            scratch,
+            code, v, dst, *addr, *expected, *desired, *width, *order, alloc, frame, scratch,
         ),
         Inst::AtomicLoad { addr, width, order } => {
             emit_atomic_load(code, dst, *addr, *width, *order, alloc, frame, scratch)

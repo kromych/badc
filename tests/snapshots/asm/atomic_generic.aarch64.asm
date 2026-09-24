@@ -88,7 +88,7 @@ Disassembly of section .text:
                	stur	x2, [x29, #-0x8]
                	stur	x0, [x29, #-0x30]
                	sub	x2, x29, #0x8
-               	ldar	x2, [x2]
+               	ldapr	x2, [x2]
                	str	x2, [x1]
                	ldur	x1, [x29, #-0x30]
                	mov	x17, #0x1000            // =4096

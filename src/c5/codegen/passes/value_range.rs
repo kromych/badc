@@ -996,9 +996,19 @@ fn eval(inst: &Inst, params: &[Range], mut range_of: impl FnMut(ValueId) -> Rang
             _ => UNIVERSE,
         },
         // A width-limited read cannot produce a value outside the width
-        // it extends from.
+        // it extends from, nor can a narrow atomic load or the prior
+        // contents a compare-exchange zero-extends.
         Inst::Load { kind, .. } | Inst::LoadLocal { kind, .. } => {
             extend_range(*kind).unwrap_or(UNIVERSE)
+        }
+        Inst::AtomicLoad { width, .. } | Inst::AtomicCas { width, .. } => {
+            let kind = match width {
+                1 => LoadKind::U8,
+                2 => LoadKind::U16,
+                4 => LoadKind::U32,
+                _ => LoadKind::I64,
+            };
+            extend_range(kind).unwrap_or(UNIVERSE)
         }
         // A floating parameter's value is not an integer, so an
         // interprocedural bound does not describe it.

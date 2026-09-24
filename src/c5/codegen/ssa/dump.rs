@@ -276,14 +276,19 @@ fn fmt_inst(inst: &Inst) -> String {
             addr,
             value,
             width,
-        } => format!("AtomicRmw {{ op={op:?}, addr=v{addr}, value=v{value}, width={width} }}"),
+            order,
+        } => format!(
+            "AtomicRmw {{ op={op:?}, addr=v{addr}, value=v{value}, width={width}, order={order:?} }}"
+        ),
         AtomicCas {
             addr,
-            expected_addr,
+            expected,
             desired,
             width,
+            order,
         } => format!(
-            "AtomicCas {{ addr=v{addr}, expected_addr=v{expected_addr}, desired=v{desired}, width={width} }}"
+            "AtomicCas {{ addr=v{addr}, expected=v{expected}, desired=v{desired}, width={width}, \
+             order={order:?} }}"
         ),
         AtomicLoad { addr, width, order } => {
             format!("AtomicLoad {{ addr=v{addr}, width={width}, order={order:?} }}")

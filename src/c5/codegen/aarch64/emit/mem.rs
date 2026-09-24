@@ -568,6 +568,16 @@ impl SiteRegs {
             emit(code, enc_ldr_post(r, Reg(31), 16));
         }
     }
+
+    /// Whether `r` is a saved register, which the restore overwrites.
+    pub(super) fn borrowed(&self, r: Reg) -> bool {
+        self.saved.contains(&r)
+    }
+
+    /// The bytes the saves moved sp down by.
+    pub(super) fn saved_bytes(&self) -> u32 {
+        16 * self.saved.len() as u32
+    }
 }
 
 fn enc_load_unit(width: u32, rt: Reg, base: Reg, off: u32) -> u32 {

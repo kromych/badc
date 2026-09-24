@@ -5,6 +5,8 @@ use super::access::{load_kind_for, load_place, store_kind_for, store_kind_width,
 use super::bitfield::{bitfield_load_kind, bitfield_mask_halves, merge_into_bitfield};
 use super::types::{is_float_ty, is_floating_scalar, type_size_bytes};
 use super::*;
+use crate::c5::ast::expr_ty;
+use crate::c5::compiler::types::pointee_ty;
 
 /// The zero-extending integer load of `width` bytes, the access an
 /// `Inst::AtomicLoad` performs.
@@ -28,11 +30,9 @@ fn int_store_kind(width: u8) -> StoreKind {
 }
 
 impl<'a> Walker<'a> {
-    /// Lower a C11 7.17 atomic operation. Load and store lower to
-    /// `Inst::AtomicLoad` / `Inst::AtomicStore` carrying `order`; the
-    /// read-modify-write and compare-exchange forms to `Inst::AtomicRmw`
-    /// / `Inst::AtomicCas`, whose per-arch sequence is seq_cst (C11
-    /// 7.17.7).
+    /// Lower a C11 7.17 atomic operation to `Inst::AtomicLoad`,
+    /// `Inst::AtomicStore`, `Inst::AtomicRmw` or `Inst::AtomicCas`, each
+    /// carrying `order`.
     pub(super) fn walk_atomic(
         &mut self,
         b: &mut SsaBuilder,
@@ -120,16 +120,35 @@ impl<'a> Walker<'a> {
                 // instruction sets only the low `width` bytes; normalize
                 // to the element type's representation (C99 6.3.1.3), the
                 // same sign / zero extension a load of `elem_ty` performs.
-                let old = b.atomic_rmw(op, addr, value, width);
+                let old = b.atomic_rmw(op, addr, value, width, order);
                 Ok(self.extend_atomic_result(b, old, elem_ty))
             }
             AtomicKind::CompareExchangeStrong => {
-                // C11 7.17.7.4: yield 1 on a match (after storing
-                // `desired`), else store the current contents into
-                // `*expected` and yield 0.
-                let exp_addr = self.walk_expr_rvalue(b, args[1])?;
+                // C11 7.17.7.4: on a match store `desired` and yield 1,
+                // else write the prior contents into `*expected` and yield
+                // 0. The exchange takes the comparand by value; the
+                // write-back is a branch, as the abstract machine leaves
+                // `*expected` alone on a match.
+                let float = is_floating_scalar(elem_ty);
+                let (lk, sk) = if float {
+                    (int_load_kind(width), int_store_kind(width))
+                } else {
+                    (load_kind, store_kind)
+                };
+                let (place, vol) = self.cas_expected(b, args[1], elem_ty)?;
+                let expected = place.load(b, lk, vol);
                 let desired = self.walk_expr_rvalue(b, args[2])?;
-                Ok(b.atomic_cas(addr, exp_addr, desired, width))
+                let desired = self.atomic_bits_of(b, desired, elem_ty);
+                let old = b.atomic_cas(addr, expected, desired, width, order);
+                let ok = self.cas_matched(b, old, expected, width);
+                let write_back = b.new_block();
+                let done = b.new_block();
+                b.branch_zero(ok, write_back, done);
+                b.switch_to(write_back);
+                place.store(b, old, sk, vol);
+                b.jmp(done);
+                b.switch_to(done);
+                Ok(ok)
             }
             AtomicKind::AddFetch
             | AtomicKind::SubFetch
@@ -148,29 +167,90 @@ impl<'a> Walker<'a> {
                     AtomicKind::XorFetch => (AtomicRmwOp::Xor, BinOp::Xor),
                     _ => unreachable!(),
                 };
-                let old = b.atomic_rmw(rmw, addr, value, width);
+                let old = b.atomic_rmw(rmw, addr, value, width, order);
                 let old = self.extend_atomic_result(b, old, elem_ty);
                 let new = b.binop(bin, old, value);
                 Ok(self.extend_atomic_result(b, new, elem_ty))
             }
             AtomicKind::SyncCasVal | AtomicKind::SyncCasBool => {
-                // GCC `__sync_val/bool_compare_and_swap(p, old, new)`. The
-                // existing CAS expects the comparand by address and writes
-                // the current `*p` back through it on failure, so after the
-                // CAS the scratch slot holds the prior `*p` in both cases.
+                // GCC `__sync_val/bool_compare_and_swap(p, old, new)`: the
+                // prior `*p`, or whether it matched `old`.
                 let old_val = self.walk_expr_rvalue(b, args[1])?;
+                let old_val = self.atomic_bits_of(b, old_val, elem_ty);
                 let new_val = self.walk_expr_rvalue(b, args[2])?;
-                let slot = b.alloc_synthetic_local();
-                let exp_addr = b.local_addr(slot);
-                b.store(exp_addr, old_val, store_kind);
-                let swapped = b.atomic_cas(addr, exp_addr, new_val, width);
+                let new_val = self.atomic_bits_of(b, new_val, elem_ty);
+                let prior = b.atomic_cas(addr, old_val, new_val, width, order);
                 if matches!(kind, AtomicKind::SyncCasBool) {
-                    Ok(swapped)
+                    Ok(self.cas_matched(b, prior, old_val, width))
                 } else {
-                    Ok(b.load(exp_addr, load_kind))
+                    Ok(self.atomic_value_from_bits(b, prior, elem_ty))
                 }
             }
         }
+    }
+
+    /// The object a compare-exchange's `expected` operand points to, as a
+    /// read-modify-write place, and whether its accesses are volatile.
+    /// `&x` of an integer local of the object's width names the slot, so
+    /// an `x` whose address goes nowhere else stays promotable.
+    fn cas_expected(
+        &mut self,
+        b: &mut SsaBuilder,
+        expected: ExprId,
+        elem_ty: i64,
+    ) -> Result<(RmwPlace, bool), WalkError> {
+        let width = type_size_bytes(elem_ty, self.target);
+        if let Expr::Unary {
+            op: UnOp::AddrOf,
+            child,
+            ..
+        } = self.ast.expr(expected)
+            && let Expr::Ident {
+                ty,
+                class,
+                is_thread_local: false,
+                array_size: 0,
+                ..
+            } = self.ast.expr(*child)
+            && *class == Token::Loc as i64
+            && !is_floating_scalar(elem_ty)
+            && !is_floating_scalar(*ty)
+            && !is_struct_value_ty(*ty)
+            && type_size_bytes(*ty, self.target) == width
+        {
+            let (child, ty) = (*child, *ty);
+            let place = self.rmw_place(b, child, ty)?;
+            let vol = self.rmw_is_volatile(&place, ty, child);
+            return Ok((place, vol));
+        }
+        let vol = expr_ty(self.ast.expr(expected))
+            .is_some_and(|t| is_pointer_ty(t) && is_volatile_ty(pointee_ty(t)));
+        let addr = self.walk_expr_rvalue(b, expected)?;
+        Ok((
+            RmwPlace::Addr {
+                addr,
+                seg: AsmSeg::None,
+                align: width as u8,
+            },
+            vol,
+        ))
+    }
+
+    /// Whether a compare-exchange's zero-extended prior contents `prior`
+    /// match the low `width` bytes of the comparand, the bytes it compared.
+    fn cas_matched(
+        &self,
+        b: &mut SsaBuilder,
+        prior: ValueId,
+        comparand: ValueId,
+        width: u8,
+    ) -> ValueId {
+        let comparand = if width < 8 {
+            b.binop_imm(BinOp::And, comparand, (1i64 << (8 * width)) - 1)
+        } else {
+            comparand
+        };
+        b.binop(BinOp::Eq, prior, comparand)
     }
 
     /// Narrow an integer value of type `src_ty` to `to_ty`'s storage

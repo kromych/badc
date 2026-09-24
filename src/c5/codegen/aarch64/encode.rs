@@ -1671,15 +1671,13 @@ pub(crate) fn enc_strb_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
     enc_mem(STRB, rt.0, rn, STRB.scaled(imm))
 }
 
-// ---- Exclusive-monitor load / store (ARM ARM C6.2). Used by the
-//      atomic read-modify-write and compare-exchange lowering: a
-//      LDAXR / STLXR retry loop needs no feature detection, unlike the
-//      LSE atomics. `width` selects the access size variant
-//      (B / H / W / X). The acquire (LDAXR) / release (STLXR) ordering
-//      gives the sequentially-consistent semantics C11 7.17.3 requires
-//      for the default memory order.
+// ---- Ordered and atomic accesses (ARM ARM C6.2): load-acquire and
+//      store-release registers, the RCpc load-acquire (FEAT_LRCPC) and
+//      the LSE read-modify-writes and compare-exchange (FEAT_LSE), all in
+//      the ARMv8.4-A baseline. `width` selects the access size variant
+//      (B / H / W / X).
 
-/// Size field (bits[31:30]) for an exclusive load / store of `width`
+/// Size field (bits[31:30]) for an ordered or atomic access of `width`
 /// bytes: 00 byte, 01 halfword, 10 word, 11 doubleword.
 fn excl_size(width: u8) -> u32 {
     match width {
@@ -1690,21 +1688,69 @@ fn excl_size(width: u8) -> u32 {
     }
 }
 
-/// `LDAXR{B,H} <Wt>, [<Xn|SP>]` / `LDAXR <Wt|Xt>, [<Xn|SP>]` --
-/// load-acquire exclusive register of `width` bytes. No offset.
-pub(crate) fn enc_ldaxr(rt: Reg, rn: Reg, width: u8) -> u32 {
-    0x085F_FC00 | (excl_size(width) << 30) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+/// An LSE atomic memory operation (ARM ARM C6.2, FEAT_LSE).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum LseOp {
+    /// `LDADD`: add.
+    Add,
+    /// `LDCLR`: clear the operand's bits, an and with its complement.
+    Clr,
+    /// `LDEOR`: exclusive or.
+    Eor,
+    /// `LDSET`: set the operand's bits, an or.
+    Set,
+    /// `SWP`: exchange.
+    Swp,
 }
 
-/// `STLXR{B,H} <Ws>, <Wt>, [<Xn|SP>]` / `STLXR <Ws>, <Wt|Xt>,
-/// [<Xn|SP>]` -- store-release exclusive register of `width` bytes.
-/// `rs` receives 0 on success and 1 when the monitor was lost.
-pub(crate) fn enc_stlxr(rs: Reg, rt: Reg, rn: Reg, width: u8) -> u32 {
-    0x0800_FC00
+/// `LD<op>{A}{L}{B,H} <Ws>, <Wt>, [<Xn|SP>]`, `SWP{A}{L}{B,H}` and the X
+/// forms -- combine the `width`-byte memory at `rn` with `rs` and load
+/// its prior contents, zero-extended, into `rt`. `acq` / `rel` select the
+/// acquire and release forms; a load into the zero register does not
+/// acquire.
+pub(crate) fn enc_lse(
+    op: LseOp,
+    acq: bool,
+    rel: bool,
+    rs: Reg,
+    rt: Reg,
+    rn: Reg,
+    width: u8,
+) -> u32 {
+    let opc = match op {
+        LseOp::Add => 0x0000,
+        LseOp::Clr => 0x1000,
+        LseOp::Eor => 0x2000,
+        LseOp::Set => 0x3000,
+        LseOp::Swp => 0x8000,
+    };
+    0x3820_0000
         | (excl_size(width) << 30)
+        | (u32::from(acq) << 23)
+        | (u32::from(rel) << 22)
+        | ((rs.0 as u32) << 16)
+        | opc
+        | ((rn.0 as u32) << 5)
+        | (rt.0 as u32)
+}
+
+/// `CAS{A}{L}{B,H} <Ws>, <Wt>, [<Xn|SP>]` and the X form -- compare the
+/// `width`-byte memory at `rn` with `rs`, store `rt` on a match, and load
+/// the prior contents, zero-extended, into `rs` (FEAT_LSE).
+pub(crate) fn enc_cas(acq: bool, rel: bool, rs: Reg, rt: Reg, rn: Reg, width: u8) -> u32 {
+    0x08A0_7C00
+        | (excl_size(width) << 30)
+        | (u32::from(acq) << 22)
+        | (u32::from(rel) << 15)
         | ((rs.0 as u32) << 16)
         | ((rn.0 as u32) << 5)
         | (rt.0 as u32)
+}
+
+/// `LDAPR{B,H} <Wt>, [<Xn|SP>]` / `LDAPR <Xt>, [<Xn|SP>]` -- load-acquire
+/// RCpc register of `width` bytes, zero-extended (FEAT_LRCPC).
+pub(crate) fn enc_ldapr(rt: Reg, rn: Reg, width: u8) -> u32 {
+    0x38BF_C000 | (excl_size(width) << 30) | ((rn.0 as u32) << 5) | (rt.0 as u32)
 }
 
 /// `LDAR{B,H} <Wt>, [<Xn|SP>]` / `LDAR <Wt|Xt>, [<Xn|SP>]` --
@@ -3212,27 +3258,56 @@ mod tests {
         }
     }
 
-    // The exclusive-monitor encodings below were cross-checked against
-    // `clang -target aarch64-linux-gnu` + `objdump -d`:
-    //   ldaxr x1,[x2]=c85ffc41  ldaxr w1,[x2]=885ffc41
-    //   ldaxrh w1,[x2]=485ffc41 ldaxrb w1,[x2]=085ffc41
-    //   stlxr w0,x1,[x2]=c800fc41  stlxr w0,w1,[x2]=8800fc41
-    //   stlxrh w0,w1,[x2]=4800fc41 stlxrb w0,w1,[x2]=0800fc41
-
+    // The LSE and RCpc encodings below were cross-checked against
+    // `clang -target aarch64-linux-gnu -march=armv8.4-a -c` + `objdump -d`.
     #[test]
-    fn ldaxr_all_widths() {
-        assert_eq!(enc_ldaxr(Reg(1), Reg(2), 8), 0xC85F_FC41);
-        assert_eq!(enc_ldaxr(Reg(1), Reg(2), 4), 0x885F_FC41);
-        assert_eq!(enc_ldaxr(Reg(1), Reg(2), 2), 0x485F_FC41);
-        assert_eq!(enc_ldaxr(Reg(1), Reg(2), 1), 0x085F_FC41);
+    fn lse_rmw_orders_widths_and_operations() {
+        let lse = |op, acq, rel, s, t, n, w| enc_lse(op, acq, rel, Reg(s), Reg(t), Reg(n), w);
+        // ldadd / ldadda / ldaddl / ldaddal x1, x0, [x0]
+        assert_eq!(lse(LseOp::Add, false, false, 1, 0, 0, 8), 0xF821_0000);
+        assert_eq!(lse(LseOp::Add, true, false, 1, 0, 0, 8), 0xF8A1_0000);
+        assert_eq!(lse(LseOp::Add, false, true, 1, 0, 0, 8), 0xF861_0000);
+        assert_eq!(lse(LseOp::Add, true, true, 1, 0, 0, 8), 0xF8E1_0000);
+        // ldaddalb / ldaddalh / ldaddal w3, w4, [x5]
+        assert_eq!(lse(LseOp::Add, true, true, 3, 4, 5, 1), 0x38E3_00A4);
+        assert_eq!(lse(LseOp::Add, true, true, 3, 4, 5, 2), 0x78E3_00A4);
+        assert_eq!(lse(LseOp::Add, true, true, 3, 4, 5, 4), 0xB8E3_00A4);
+        // ldclral / ldeoral / ldsetal / swpal x9, x10, [x11]
+        assert_eq!(lse(LseOp::Clr, true, true, 9, 10, 11, 8), 0xF8E9_116A);
+        assert_eq!(lse(LseOp::Eor, true, true, 9, 10, 11, 8), 0xF8E9_216A);
+        assert_eq!(lse(LseOp::Set, true, true, 9, 10, 11, 8), 0xF8E9_316A);
+        assert_eq!(lse(LseOp::Swp, true, true, 9, 10, 11, 8), 0xF8E9_816A);
+        // swpb / swpah w9, w10, [x11]; swpl w9, w10, [sp]
+        assert_eq!(lse(LseOp::Swp, false, false, 9, 10, 11, 1), 0x3829_816A);
+        assert_eq!(lse(LseOp::Swp, true, false, 9, 10, 11, 2), 0x78A9_816A);
+        assert_eq!(lse(LseOp::Swp, false, true, 9, 10, 31, 4), 0xB869_83EA);
+        // stadd x1, [x0] / staddl w1, [x2]: the zero register as Rt.
+        assert_eq!(lse(LseOp::Add, false, false, 1, 31, 0, 8), 0xF821_001F);
+        assert_eq!(lse(LseOp::Add, false, true, 1, 31, 2, 4), 0xB861_005F);
     }
 
     #[test]
-    fn stlxr_all_widths() {
-        assert_eq!(enc_stlxr(Reg(0), Reg(1), Reg(2), 8), 0xC800_FC41);
-        assert_eq!(enc_stlxr(Reg(0), Reg(1), Reg(2), 4), 0x8800_FC41);
-        assert_eq!(enc_stlxr(Reg(0), Reg(1), Reg(2), 2), 0x4800_FC41);
-        assert_eq!(enc_stlxr(Reg(0), Reg(1), Reg(2), 1), 0x0800_FC41);
+    fn cas_orders_and_widths() {
+        let cas = |acq, rel, s, t, n, w| enc_cas(acq, rel, Reg(s), Reg(t), Reg(n), w);
+        // cas / casa / casl / casal x8, x2, [x0]
+        assert_eq!(cas(false, false, 8, 2, 0, 8), 0xC8A8_7C02);
+        assert_eq!(cas(true, false, 8, 2, 0, 8), 0xC8E8_7C02);
+        assert_eq!(cas(false, true, 8, 2, 0, 8), 0xC8A8_FC02);
+        assert_eq!(cas(true, true, 8, 2, 0, 8), 0xC8E8_FC02);
+        // casalb / casalh / casal w8, w2, [x0]; casb w17, w16, [x15]
+        assert_eq!(cas(true, true, 8, 2, 0, 1), 0x08E8_FC02);
+        assert_eq!(cas(true, true, 8, 2, 0, 2), 0x48E8_FC02);
+        assert_eq!(cas(true, true, 8, 2, 0, 4), 0x88E8_FC02);
+        assert_eq!(cas(false, false, 17, 16, 15, 1), 0x08B1_7DF0);
+    }
+
+    #[test]
+    fn ldapr_widths() {
+        assert_eq!(enc_ldapr(Reg(0), Reg(0), 8), 0xF8BF_C000);
+        assert_eq!(enc_ldapr(Reg(1), Reg(2), 4), 0xB8BF_C041);
+        assert_eq!(enc_ldapr(Reg(1), Reg(2), 2), 0x78BF_C041);
+        assert_eq!(enc_ldapr(Reg(1), Reg(2), 1), 0x38BF_C041);
+        assert_eq!(enc_ldapr(Reg(3), Reg(31), 8), 0xF8BF_C3E3);
     }
 
     // Cross-checked against `clang -c` + `otool -t` (aarch64):

@@ -427,6 +427,8 @@ const LINKED_IMAGE_RUN_FIXTURES: &[(&str, i32)] = &[
     ("aggregate_copy_site_temps.c", 0),
     ("aggregate_register_parts.c", 0),
     ("call_result_in_place.c", 0),
+    ("atomic_orders.c", 0),
+    ("atomic_contention.c", 0),
     ("data_reloc_one_past_end.c", 10),
     ("constant_set_again_after_call.c", 0),
     ("asm_register_outputs.c", 0),

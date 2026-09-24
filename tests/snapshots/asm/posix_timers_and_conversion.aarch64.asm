@@ -62,8 +62,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x180
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x17, x29, #0x170
-               	str	wzr, [x17]
+               	str	wzr, [sp, #0x10]
                	sub	x0, x29, #0x170
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
@@ -77,8 +76,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x180
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x16, x29, #0x170
-               	ldr	w0, [x16]
+               	ldr	w0, [sp, #0x10]
                	cmp	w0, #0x7a
                	b.eq	<addr>
                	mov	x0, #0x5                // =5
@@ -97,8 +95,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x180
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x16, x29, #0x168
-               	ldrb	w0, [x16]
+               	ldrb	w0, [sp, #0x18]
                	mov	x17, #0x7a              // =122
                	eor	x0, x0, x17
                	cbz	w0, <addr>
@@ -159,14 +156,11 @@ Disassembly of section .text:
                	strb	w1, [x0]
                	mov	x1, #0x69               // =105
                	strb	w1, [x0, #0x1]
-               	sub	x17, x29, #0x118
-               	str	x0, [x17]
+               	str	x0, [sp, #0x68]
                	sub	x0, x29, #0x120
-               	sub	x17, x29, #0x110
-               	str	x0, [x17]
+               	str	x0, [sp, #0x70]
                	mov	x0, #0x2                // =2
-               	sub	x17, x29, #0x108
-               	str	x0, [x17]
+               	str	x0, [sp, #0x78]
                	mov	x0, #0x8                // =8
                	stur	x0, [x29, #-0x100]
                	sub	x1, x29, #0x118
@@ -183,8 +177,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x180
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x16, x29, #0x108
-               	ldr	x0, [x16]
+               	ldr	x0, [sp, #0x78]
                	cbnz	x0, <addr>
                	ldur	x0, [x29, #-0x100]
                	cmp	x0, #0x6

@@ -23,16 +23,14 @@ Disassembly of section .text:
 <half_from_big>:
                	ldrb	w1, [x0, #0x3]
                	add	x17, x0, #0x9, lsl #12  // =0x9000
-               	add	x17, x17, #0xc40
-               	ldrh	w0, [x17]
+               	ldrh	w0, [x17, #0xc40]
                	add	x0, x1, x0
                	ret
 
 <word_from_big>:
                	ldrb	w1, [x0, #0x5]
                	add	x17, x0, #0x9, lsl #12  // =0x9000
-               	add	x17, x17, #0xc44
-               	ldr	w0, [x17]
+               	ldr	w0, [x17, #0xc44]
                	add	x0, x1, x0
                	mov	w0, w0
                	ret
@@ -40,8 +38,7 @@ Disassembly of section .text:
 <wide_from_big>:
                	ldrb	w1, [x0, #0x7]
                	add	x17, x0, #0x9, lsl #12  // =0x9000
-               	add	x17, x17, #0xc48
-               	ldr	x0, [x17]
+               	ldr	x0, [x17, #0xc48]
                	add	x0, x1, x0
                	ret
 

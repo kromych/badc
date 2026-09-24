@@ -47,9 +47,14 @@ pub(crate) struct Frame {
     /// argument-register banks.
     pub abi: super::Abi,
     /// The body moves sp at runtime (`alloca`, C99 6.7.6.2 VLA) or the
-    /// prologue realigns sp: spill slots are addressed through fp and the
-    /// epilogue re-establishes sp from fp.
+    /// prologue realigns sp: spill slots and locals are addressed through fp
+    /// and the epilogue re-establishes sp from fp.
     pub dynamic_sp: bool,
+    /// sp keeps its prologue value at every instruction boundary, so locals
+    /// may be addressed from it: the frame is not `dynamic_sp` and no inline
+    /// asm names sp. A statement that moves sp to switch stacks leaves it
+    /// moved, and the code after it reaches the locals through fp.
+    pub sp_fixed: bool,
     /// Alignment the prologue forces on sp for automatic objects aligned
     /// above 16 (C11 6.7.5), or 0. The realigned region sits below the static
     /// frame; the objects live at `[sp + region_off]`.
@@ -108,6 +113,7 @@ pub(crate) fn compute_frame(
         + x19_save_bytes
         + asm_bytes
         + static_region_bytes;
+    let dynamic_sp = super::ssa::emit_common::uses_dynamic_alloca(func) || func.frame_align > 16;
     // A host variadic callee reserves its register save area above the
     // saved fp/lr, where its top edge meets the caller's stack arguments:
     // the Windows cursor `va_list` walks the two as one region. Windows on
@@ -151,7 +157,8 @@ pub(crate) fn compute_frame(
         param_home_needed: param_home_needed(func, alloc, abi),
         va_save_bytes,
         abi,
-        dynamic_sp: super::ssa::emit_common::uses_dynamic_alloca(func) || func.frame_align > 16,
+        dynamic_sp,
+        sp_fixed: !dynamic_sp && !func.has_sp_asm(),
         realign_align: if func.frame_align > 16 {
             func.frame_align as u32
         } else {

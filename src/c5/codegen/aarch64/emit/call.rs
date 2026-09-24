@@ -458,7 +458,7 @@ pub(super) fn emit_call_ext(
     marshal_args(
         code, &plan, args, alloc, scratch, frame, arg_aggs, agg_descs, abi,
     )?;
-    setup_indirect_result(code, ret_agg, ret_slot_off, agg_descs, func, frame);
+    setup_indirect_result(code, ret_agg, ret_slot_off, agg_descs, func, frame, &plan);
     plt_call_fixups.push(PltCallFixup {
         instr_offset: code.len(),
         import_index,
@@ -601,7 +601,7 @@ pub(super) fn emit_call(
     marshal_args(
         code, &plan, args, alloc, scratch, frame, arg_aggs, agg_descs, abi,
     )?;
-    setup_indirect_result(code, ret_agg, ret_slot_off, agg_descs, func, frame);
+    setup_indirect_result(code, ret_agg, ret_slot_off, agg_descs, func, frame, &plan);
     fixups.push(Fixup {
         native_offset: code.len(),
         target_ent_pc: target_pc,
@@ -626,7 +626,7 @@ pub(super) fn emit_call(
 
 /// Point x8 at the caller's result temp before a call returning an
 /// aggregate larger than 16 bytes (AAPCS64 6.9), after `marshal_args`
-/// has set the argument registers.
+/// has set the argument registers; sp stands below the argument area.
 fn setup_indirect_result(
     code: &mut Vec<u8>,
     ret_agg: Option<u32>,
@@ -634,6 +634,7 @@ fn setup_indirect_result(
     agg_descs: &[super::super::ir::AggDesc],
     func: &FunctionSsa,
     frame: Frame,
+    plan: &super::CallPlan,
 ) {
     if let Some(ai) = ret_agg
         && agg_descs[ai as usize].size > 16
@@ -645,7 +646,8 @@ fn setup_indirect_result(
     {
         // An HFA larger than 16 bytes (three or four members) still returns
         // in v-registers, not through x8.
-        let _ = emit_local_addr_fp(code, Place::IntReg(8), ret_slot_off, func, frame);
+        let slot = local_slot(ret_slot_off, func, frame).sp_lowered(plan.scratch_bytes);
+        let _ = emit_frame_addr(code, Place::IntReg(8), slot, frame);
     }
 }
 
@@ -674,14 +676,14 @@ fn finish_call_result(
         }
         let desc = &agg_descs[ai as usize];
         let size = desc.size;
-        let slot = local_slot_off(ret_slot_off, func, frame);
+        let slot = local_slot(ret_slot_off, func, frame);
         if let Some(members) = super::abi_classify::fp_member_layout(desc.size, &desc.fields) {
             // AAPCS64 6.9: an HFA result arrives with member k in v[k], a
             // Short Vector result whole in v0.
             let accesses = members
                 .iter()
                 .map(|&(off, msize)| (fp_store_op(msize), off));
-            let (base, disp) = object_base(code, Reg(29), slot, accesses, scratch.primary);
+            let (base, disp) = frame_object_base(code, slot, accesses, scratch.primary);
             for (k, &(off, msize)) in members.iter().enumerate() {
                 emit_agg_store_fp_at(
                     code,
@@ -698,7 +700,7 @@ fn finish_call_result(
         } else if size <= 16 {
             let words = 1 + u32::from(size > 8);
             let accesses = (0..words).map(|k| (STR_X, k * 8));
-            let (base, disp) = object_base(code, Reg(29), slot, accesses, scratch.primary);
+            let (base, disp) = frame_object_base(code, slot, accesses, scratch.primary);
             for k in 0..words {
                 let at = disp + i64::from(k * 8);
                 emit_mem(code, STR_X, k as u8, base, at, scratch.primary);
@@ -847,7 +849,7 @@ pub(super) fn emit_call_indirect(
     marshal_args(
         code, &plan, args, alloc, scratch, frame, arg_aggs, agg_descs, abi,
     )?;
-    setup_indirect_result(code, ret_agg, ret_slot_off, agg_descs, func, frame);
+    setup_indirect_result(code, ret_agg, ret_slot_off, agg_descs, func, frame, &plan);
     // The marshal consumed every argument source, so x9 is free
     // to carry the staged pointer to the blr.
     let call_reg = match staged_off {

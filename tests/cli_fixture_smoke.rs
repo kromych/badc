@@ -422,6 +422,7 @@ fn every_fixture_compiles_standalone_for_linux() {
 /// Values are these programs' own exit codes, checked here rather than
 /// copied from another table, so a wrong one fails instead of drifting.
 const LINKED_IMAGE_RUN_FIXTURES: &[(&str, i32)] = &[
+    ("far_frame_slots.c", 0),
     ("overaligned_region_storage.c", 0),
     ("aggregate_copy_site_temps.c", 0),
     ("aggregate_register_parts.c", 0),

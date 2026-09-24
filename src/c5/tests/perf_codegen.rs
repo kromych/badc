@@ -3442,6 +3442,88 @@ fn a_local_access_folds_only_where_the_slot_form_says_the_same_thing() {
     m.finish();
 }
 
+/// `(rd, rn)` of a 64-bit `add` / `sub` (immediate), either shift.
+fn a64_add_sub_imm(w: u32) -> Option<(u32, u32)> {
+    matches!(w & 0xFF80_0000, 0x9100_0000 | 0xD100_0000).then_some((w & 31, (w >> 5) & 31))
+}
+
+/// Loads and stores at an immediate offset from a register built off `base`
+/// by the instruction ahead of them, and those whose register took two. An
+/// access off sp follows the frame allocation, not an address build.
+fn a64_built_accesses(ws: &[u32], base: u32) -> (usize, usize) {
+    let mut built = (0, 0);
+    for i in 1..ws.len() {
+        let Some((rn, _, _)) = a64_mem_imm(ws[i]).filter(|&(rn, _, _)| rn != 31) else {
+            continue;
+        };
+        match a64_add_sub_imm(ws[i - 1]) {
+            Some((rd, src)) if rd == rn && src == base => built.0 += 1,
+            Some((rd, src))
+                if rd == rn
+                    && src == rn
+                    && i >= 2
+                    && a64_add_sub_imm(ws[i - 2]) == Some((rn, base)) =>
+            {
+                built.1 += 1
+            }
+            _ => {}
+        }
+    }
+    built
+}
+
+/// Twelve volatile accesses to locals the layout places past a 4 KiB array,
+/// more than 4 KiB below fp; `moving` also calls alloca, and `switched`
+/// moves sp to another stack the way libmill's `go()` does.
+const FAR_SLOTS: &str = "void use(void *);\n\
+    long fixed(long n) {\n\
+        char pad[4096];\n\
+        volatile long v = n; volatile int w = (int)n; volatile double d = (double)n;\n\
+        use(pad);\n\
+        v += 3; w += 5; d *= 2.0;\n\
+        return v + w + (long)d;\n\
+    }\n\
+    long moving(long n) {\n\
+        char pad[4096];\n\
+        volatile long v = n; volatile int w = (int)n; volatile double d = (double)n;\n\
+        use(pad); use(__builtin_alloca(n));\n\
+        v += 3; w += 5; d *= 2.0;\n\
+        return v + w + (long)d;\n\
+    }\n\
+    long switched(long n, void *top) {\n\
+        char pad[4096];\n\
+        volatile long v = n; volatile int w = (int)n; volatile double d = (double)n;\n\
+        use(pad);\n\
+        __asm__ volatile(\"mov sp, %0\" : : \"r\"(top));\n\
+        v += 3; w += 5; d *= 2.0;\n\
+        return v + w + (long)d;\n\
+    }\n";
+
+/// A local far below fp is one load or store off sp where sp stays where
+/// the prologue left it; with alloca or an asm sp move it stays on fp, one
+/// instruction building the 4 KiB multiple and the access holding the rest.
+#[test]
+fn a64_far_local_is_addressed_off_the_fixed_sp() {
+    let mut m = Misses::default();
+    let ws = a64(FAR_SLOTS, "fixed");
+    let off_sp = ws
+        .iter()
+        .filter(|&&w| a64_mem_imm(w).is_some_and(|(rn, _, _)| rn == 31))
+        .count();
+    let built = [29, 31].map(|base| a64_built_accesses(&ws, base));
+    m.expect(off_sp >= 12 && built == [(0, 0); 2], || {
+        format!("aarch64 fixed: {off_sp} accesses off sp, built {built:?}: {ws:08x?}")
+    });
+    for name in ["moving", "switched"] {
+        let ws = a64(FAR_SLOTS, name);
+        let built = a64_built_accesses(&ws, 29);
+        m.expect(built.0 >= 12 && built.1 == 0, || {
+            format!("aarch64 {name}: built off fp {built:?}: {ws:08x?}")
+        });
+    }
+    m.finish();
+}
+
 /// `fmov <Dd>, <Xn>` / `fmov <Sd>, <Wn>`: the general-to-vector transfers.
 fn a64_fmov_x_to_d(w: u32) -> bool {
     matches!(w & 0xFFFE_0000, 0x9E67_0000 | 0x1E27_0000)

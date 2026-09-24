@@ -68,6 +68,7 @@
 /// pointers resolve to native offsets via `FuncFixup`, so fixtures
 /// that exercise those paths run end-to-end.
 pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
+    ("far_frame_slots.c", 0),
     ("overaligned_region_storage.c", 0),
     ("static_local_shadows_file_scope.c", 0),
     // A declared `long double` object takes the target ABI's storage
@@ -1215,6 +1216,7 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
 /// stay in sync because both backends should faithfully execute the
 /// same fixtures; if they drift, one of them has a bug.
 pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
+    ("far_frame_slots.c", 0),
     ("overaligned_region_storage.c", 0),
     ("static_local_shadows_file_scope.c", 0),
     // A declared `long double` object takes the target ABI's storage
@@ -2059,6 +2061,7 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
 ];
 
 pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
+    ("far_frame_slots.c", 0),
     ("overaligned_region_storage.c", 0),
     ("static_local_shadows_file_scope.c", 0),
     ("x86_simd_intrinsics.c", 0),
@@ -2880,6 +2883,7 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
 /// Subset of the cross-arch fixture corpus that doesn't lean on
 /// POSIX-only semantics.
 pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
+    ("far_frame_slots.c", 0),
     ("overaligned_region_storage.c", 0),
     ("asm_register_outputs.c", 0),
     ("static_local_shadows_file_scope.c", 0),
@@ -3483,6 +3487,7 @@ pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
 /// limitations (POSIX-only setenv shape, dlopen-against-libc-soname)
 /// are arch-independent.
 pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
+    ("far_frame_slots.c", 0),
     ("overaligned_region_storage.c", 0),
     ("asm_register_outputs.c", 0),
     ("static_local_shadows_file_scope.c", 0),
@@ -4027,6 +4032,7 @@ pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
 ];
 
 pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
+    ("far_frame_slots.c", 0),
     ("overaligned_region_storage.c", 0),
     ("asm_register_outputs.c", 0),
     ("static_local_shadows_file_scope.c", 0),

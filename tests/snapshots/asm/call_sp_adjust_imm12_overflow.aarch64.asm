@@ -19,8 +19,7 @@ Disassembly of section .text:
                	sub	sp, sp, #0x1, lsl #12   // =0x1000
                	str	xzr, [sp]
                	sub	sp, sp, #0x10
-               	sub	x16, x29, #0x1, lsl #12 // =0x1000
-               	sub	x16, x16, #0x10
+               	mov	x16, sp
                	ldr	x17, [x29, #0x10]
                	str	x17, [x16]
                	ldr	x17, [x29, #0x18]
@@ -1312,8 +1311,7 @@ Disassembly of section .text:
                	add	x0, x0, x1
                	add	x1, x6, x7
                	add	x1, x0, x1
-               	sub	x0, x29, #0x1, lsl #12  // =0x1000
-               	sub	x0, x0, #0x10
+               	mov	x0, sp
                	ldr	x2, [x0]
                	ldr	x0, [x0, #0x8]
                	add	x0, x2, x0

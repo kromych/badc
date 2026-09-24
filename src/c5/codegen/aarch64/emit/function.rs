@@ -1414,14 +1414,8 @@ fn emit_prologue(
     if func.indirect_result_slot != 0 {
         // AAPCS64 6.9: save the caller-supplied x8 indirect-result pointer
         // into its body local; `return s;` writes the aggregate through it.
-        let _ = emit_local_addr_fp(
-            code,
-            Place::IntReg(16),
-            func.indirect_result_slot,
-            func,
-            frame,
-        );
-        emit(code, enc_str_imm(Reg(8), Reg(16), 0));
+        let slot = local_slot(func.indirect_result_slot, func, frame);
+        emit_frame_mem(code, super::encode::STR_X, 8, slot, Reg(16));
     }
     // The canary slot is fp-relative, so it is stored before the sp
     // realignment (C11 6.7.5), which uses x16 alone and so leaves the
@@ -1482,24 +1476,19 @@ fn emit_param_homes(code: &mut Vec<u8>, func: &FunctionSsa, alloc: &Allocation, 
         if dead[i] {
             continue;
         }
-        let home = param_home_off(i, func, frame);
+        // An FP register stores its low 8 bytes, the bytes an `fmov`ed
+        // general register would; x17 builds an address past the offset forms.
+        let home = FrameLoc::at_fp(frame, param_home_off(i, func, frame));
         match *placement {
-            super::ArgPlacement::IntReg(r) => emit_fp_store_x(code, Reg(r), home),
-            super::ArgPlacement::FpReg(d) => emit_fp_store_d(code, d, home),
+            super::ArgPlacement::IntReg(r) => {
+                emit_frame_mem(code, super::encode::STR_X, r, home, Reg(17))
+            }
+            super::ArgPlacement::FpReg(d) => {
+                emit_frame_mem(code, super::encode::STR_D, d, home, Reg(17))
+            }
             _ => {}
         }
     }
-}
-
-/// Store `rt` at `[fp + off]`, through x17 past the offset forms.
-fn emit_fp_store_x(code: &mut Vec<u8>, rt: Reg, off: i64) {
-    emit_mem(code, super::encode::STR_X, rt.0, Reg(29), off, Reg(17));
-}
-
-/// Store the low 8 bytes of `dt` at `[fp + off]`. Same bytes as a
-/// `fmov`ed general register, without the transfer.
-fn emit_fp_store_d(code: &mut Vec<u8>, dt: u8, off: i64) {
-    emit_mem(code, super::encode::STR_D, dt, Reg(29), off, Reg(17));
 }
 
 /// Store each register-passed aggregate parameter's argument registers
@@ -1550,8 +1539,8 @@ fn emit_struct_param_scatter(
                         (super::encode::STR_X, (k as u32) * 8)
                     }
                 });
-                let (base, disp) = local_slot_base(slot, func, frame);
-                let (base, disp) = object_base(code, base, disp, accesses, Reg(16));
+                let (base, disp) =
+                    frame_object_base(code, local_slot(slot, func, frame), accesses, Reg(16));
                 for (k, cr) in regs.iter().enumerate() {
                     if cr.is_fp {
                         let (off, msize) = member(k);
@@ -2145,28 +2134,15 @@ fn emit_aggregate_return(
         return Ok(());
     }
     let dst = scratch.secondary;
-    let _ = emit_local_addr_fp(
-        code,
-        Place::IntReg(dst.0),
-        func.indirect_result_slot,
-        func,
-        frame,
-    );
-    emit(code, enc_ldr_imm(dst, dst, 0));
+    let slot = local_slot(func.indirect_result_slot, func, frame);
+    emit_frame_mem(code, super::encode::LDR_X, dst.0, slot, dst);
     // The caller's object bounds the transfer unit.
     let unit = super::super::access_chunk(desc.align, abi.strict_align, 8);
     // x0 and x1 carry nothing until the pointer moves into x0.
     if emit_block_copy(code, unit, &[Reg(0), Reg(1)], base, dst, size) {
         // The advanced `dst` no longer names the caller's buffer; re-read
         // the saved indirect-result pointer to return it.
-        let _ = emit_local_addr_fp(
-            code,
-            Place::IntReg(dst.0),
-            func.indirect_result_slot,
-            func,
-            frame,
-        );
-        emit(code, enc_ldr_imm(dst, dst, 0));
+        emit_frame_mem(code, super::encode::LDR_X, dst.0, slot, dst);
     }
     emit_mov_reg(code, Reg(0), dst);
     Ok(())

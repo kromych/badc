@@ -1065,7 +1065,8 @@
 "class": "builtin",
 "defines": [
 "CONFIG_64=1",
-"ANSI=1"
+"ANSI=1",
+"HAVE_UINT128_T=1"
 ],
 "includes": [
 "Modules/_decimal/libmpdec"
@@ -1616,7 +1617,8 @@
 "class": "core",
 "defines": [
 "CONFIG_64=1",
-"ANSI=1"
+"ANSI=1",
+"HAVE_UINT128_T=1"
 ],
 "includes": [
 "Modules/_decimal/libmpdec"
@@ -1627,7 +1629,8 @@
 "class": "core",
 "defines": [
 "CONFIG_64=1",
-"ANSI=1"
+"ANSI=1",
+"HAVE_UINT128_T=1"
 ],
 "includes": [
 "Modules/_decimal/libmpdec"
@@ -1638,7 +1641,8 @@
 "class": "core",
 "defines": [
 "CONFIG_64=1",
-"ANSI=1"
+"ANSI=1",
+"HAVE_UINT128_T=1"
 ],
 "includes": [
 "Modules/_decimal/libmpdec"
@@ -1649,7 +1653,8 @@
 "class": "core",
 "defines": [
 "CONFIG_64=1",
-"ANSI=1"
+"ANSI=1",
+"HAVE_UINT128_T=1"
 ],
 "includes": [
 "Modules/_decimal/libmpdec"
@@ -1660,7 +1665,8 @@
 "class": "core",
 "defines": [
 "CONFIG_64=1",
-"ANSI=1"
+"ANSI=1",
+"HAVE_UINT128_T=1"
 ],
 "includes": [
 "Modules/_decimal/libmpdec"
@@ -1671,7 +1677,8 @@
 "class": "core",
 "defines": [
 "CONFIG_64=1",
-"ANSI=1"
+"ANSI=1",
+"HAVE_UINT128_T=1"
 ],
 "includes": [
 "Modules/_decimal/libmpdec"
@@ -1682,7 +1689,8 @@
 "class": "core",
 "defines": [
 "CONFIG_64=1",
-"ANSI=1"
+"ANSI=1",
+"HAVE_UINT128_T=1"
 ],
 "includes": [
 "Modules/_decimal/libmpdec"
@@ -1693,7 +1701,8 @@
 "class": "core",
 "defines": [
 "CONFIG_64=1",
-"ANSI=1"
+"ANSI=1",
+"HAVE_UINT128_T=1"
 ],
 "includes": [
 "Modules/_decimal/libmpdec"
@@ -1704,7 +1713,8 @@
 "class": "core",
 "defines": [
 "CONFIG_64=1",
-"ANSI=1"
+"ANSI=1",
+"HAVE_UINT128_T=1"
 ],
 "includes": [
 "Modules/_decimal/libmpdec"
@@ -1715,7 +1725,8 @@
 "class": "core",
 "defines": [
 "CONFIG_64=1",
-"ANSI=1"
+"ANSI=1",
+"HAVE_UINT128_T=1"
 ],
 "includes": [
 "Modules/_decimal/libmpdec"
@@ -1726,7 +1737,8 @@
 "class": "core",
 "defines": [
 "CONFIG_64=1",
-"ANSI=1"
+"ANSI=1",
+"HAVE_UINT128_T=1"
 ],
 "includes": [
 "Modules/_decimal/libmpdec"
@@ -1737,7 +1749,8 @@
 "class": "core",
 "defines": [
 "CONFIG_64=1",
-"ANSI=1"
+"ANSI=1",
+"HAVE_UINT128_T=1"
 ],
 "includes": [
 "Modules/_decimal/libmpdec"
@@ -1748,7 +1761,8 @@
 "class": "core",
 "defines": [
 "CONFIG_64=1",
-"ANSI=1"
+"ANSI=1",
+"HAVE_UINT128_T=1"
 ],
 "includes": [
 "Modules/_decimal/libmpdec"
@@ -1759,7 +1773,8 @@
 "class": "core",
 "defines": [
 "CONFIG_64=1",
-"ANSI=1"
+"ANSI=1",
+"HAVE_UINT128_T=1"
 ],
 "includes": [
 "Modules/_decimal/libmpdec"

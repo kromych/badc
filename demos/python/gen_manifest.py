@@ -74,11 +74,6 @@ manifest = list(bysrc.values())
 for m in manifest:
     if m["src"].endswith("getbuildinfo.c"):
         m["defines"] = ['GITVERSION=""', 'GITTAG=""', 'GITBRANCH=""']
-    # badc divides an __int128 by a 64-bit word with a 128-step loop, so the
-    # HAVE_UINT128_T path is slower than the portable double-word one (CONFIG_64 +
-    # ANSI). TODO: a 128-by-64 division without the loop lifts this.
-    if "_decimal/" in m["src"] or m["src"].endswith("_decimal.c"):
-        m["defines"] = [d for d in m["defines"] if not d.startswith("HAVE_UINT128_T")]
     # zlib is not built into the interpreter; binascii's CRC uses its built-in
     # table rather than zlib's crc32.
     if m["src"].endswith("binascii.c"):

@@ -72,33 +72,33 @@ fn ent_pc=3 n_params=2 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   ParamPart(0, part=0, kind=I64)                   -> x7
-    v1   Imm(0)                                           -> x0
+    v1   ParamPart(1, part=0, kind=I64)                   -> x6
     v2   Imm(0)                                           -> x0
-    v3   BinopI { op=shru, lhs=v0, rhs_imm=32 }           -> x0
-    v4   Imm(0)                                           -> x1
-    v5   ParamPart(1, part=0, kind=I64)                   -> x6
+    v3   Imm(0)                                           -> x0
+    v4   BinopI { op=shru, lhs=v0, rhs_imm=32 }           -> x0
+    v5   Imm(0)                                           -> x1
     v6   Imm(0)                                           -> x1
     v7   Imm(0)                                           -> x1
-    v8   BinopI { op=shru, lhs=v5, rhs_imm=32 }           -> x1
+    v8   BinopI { op=shru, lhs=v1, rhs_imm=32 }           -> x1
     v9   Imm(0)                                           -> x2
     v10  AllocaInit(0)                                    -> -
     v11  Imm(0)                                           -> x2
     v12  Imm(0)                                           -> x2
     v13  Extend { value=v0, kind=I32 }                    -> x2
     v14  Imm(0)                                           -> x2
-    v15  Extend { value=v5, kind=I32 }                    -> x2
-    v16  Binop { op=add, lhs=v0, rhs=v5 }                 -> x2
+    v15  Extend { value=v1, kind=I32 }                    -> x2
+    v16  Binop { op=add, lhs=v0, rhs=v1 }                 -> x2
     v17  Extend { value=v16, kind=I32 }                   -> x6
     v18  Imm(0)                                           -> x6
     v19  Imm(0)                                           -> x6
     v20  Imm(0)                                           -> x6
     v21  Imm(0)                                           -> x6
     v22  Imm(0)                                           -> x6
-    v23  Extend { value=v3, kind=I32 }                    -> x6
+    v23  Extend { value=v4, kind=I32 }                    -> x6
     v24  Imm(0)                                           -> x6
     v25  Imm(0)                                           -> x6
     v26  Extend { value=v8, kind=I32 }                    -> x6
-    v27  Binop { op=add, lhs=v3, rhs=v8 }                 -> x0
+    v27  Binop { op=add, lhs=v4, rhs=v8 }                 -> x0
     v28  Extend { value=v27, kind=I32 }                   -> x1
     v29  Imm(0)                                           -> x1
     v30  Imm(0)                                           -> x1

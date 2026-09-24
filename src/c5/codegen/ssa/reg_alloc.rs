@@ -1549,7 +1549,15 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
         }
     }
     #[cfg(feature = "codegen_test")]
-    verify_allocation(func, &places, target, &banks, &liveness, &fp_const);
+    verify_allocation(
+        func,
+        &places,
+        target,
+        &banks,
+        &liveness,
+        &fp_const,
+        &use_counts,
+    );
 
     let asm_preserve = asm_preserve_masks(func, target);
     Allocation {
@@ -1792,6 +1800,7 @@ fn verify_allocation(
     banks: &RegBanks,
     liveness: &super::liveness::Liveness,
     fp_const: &[bool],
+    use_counts: &[u32],
 ) {
     if std::env::var("BADC_VERIFY_ALLOC").is_err() {
         return;
@@ -1935,16 +1944,18 @@ fn verify_allocation(
 
     // Parameter shuffle clobber: the entry placement moves each
     // parameter from its distinct incoming argument register to its home.
-    // When all homes are distinct the emit runs it as a parallel copy
-    // that reads every source before any write, so a home equal to
-    // another parameter's incoming register is harmless. When two
-    // parameters share a home the emit falls back to placing each
-    // ParamRef in program order, and then any value defined before a
-    // ParamRef -- an earlier parameter, a constant -- whose register is
-    // that ParamRef's incoming register overwrites it before the ParamRef
-    // reads it. This models that exact condition (the witnesses are the
-    // four-parameter `param_incoming_reg_clobber.c` shape and the
-    // constant of `param_incoming_reg_constant_clobber.c`).
+    // When the homes of the reads opening the entry block
+    // (`emit_common::entry_read_run`) are distinct the emit runs them as a
+    // parallel copy that reads every source before any write, so a home
+    // equal to another parameter's incoming register is harmless. Every
+    // other read -- all of them when two of those homes coincide -- is
+    // placed at its position, and then any value defined before it -- an
+    // earlier parameter, a constant -- whose register is its incoming
+    // register overwrites it before it is read. This models that exact
+    // condition (the witnesses are the four-parameter
+    // `param_incoming_reg_clobber.c` shape, the constant of
+    // `param_incoming_reg_constant_clobber.c` and the parts of
+    // `struct_multi_byval.c`).
     if !func.is_variadic {
         let mut used = alloc::vec![false; func.insts.len()];
         for (v, inst) in func.insts.iter().enumerate() {
@@ -1980,7 +1991,8 @@ fn verify_allocation(
         // `ParamRef` / `ParamPart` placed in a register or spill slot.
         let mut params: Vec<(usize, Place, u8)> = Vec::new();
         for (vid, inst) in func.insts.iter().enumerate() {
-            if !used[vid] || !covered(vid) {
+            // An unread read emits nothing.
+            if !used[vid] || !covered(vid) || use_counts.get(vid) == Some(&0) {
                 continue;
             }
             let Some((false, incoming)) = incoming_reg(&plan, inst) else {
@@ -1991,21 +2003,28 @@ fn verify_allocation(
                 params.push((vid, home, incoming));
             }
         }
-        let homes_distinct = (0..params.len())
-            .all(|a| ((a + 1)..params.len()).all(|b| key(params[a].1) != key(params[b].1)));
-        if !homes_distinct {
-            for &(vid, _, incoming) in &params {
-                for v in (0..vid).filter(|&v| covered(v) && produces_value(&func.insts[v])) {
-                    let home = places.get(v).copied().unwrap_or(Place::None);
-                    if matches!(home, Place::IntReg(r) if r == incoming) {
-                        report(alloc::format!(
-                            "param-shuffle-clobber: v{} home {:?} is the incoming register \
-                             of later ParamRef v{}; per-inst placement clobbers it",
-                            v,
-                            home,
-                            vid
-                        ));
-                    }
+        let run = super::emit_common::entry_read_run(func, use_counts);
+        let batch: Vec<Place> = params
+            .iter()
+            .filter(|p| run.contains(&p.0))
+            .map(|p| p.1)
+            .collect();
+        let batched = (0..batch.len())
+            .all(|a| ((a + 1)..batch.len()).all(|b| key(batch[a]) != key(batch[b])));
+        for &(vid, _, incoming) in &params {
+            if batched && run.contains(&vid) {
+                continue;
+            }
+            for v in (0..vid).filter(|&v| covered(v) && produces_value(&func.insts[v])) {
+                let home = places.get(v).copied().unwrap_or(Place::None);
+                if matches!(home, Place::IntReg(r) if r == incoming) {
+                    report(alloc::format!(
+                        "param-shuffle-clobber: v{} home {:?} is the incoming register \
+                         of later ParamRef v{}; per-inst placement clobbers it",
+                        v,
+                        home,
+                        vid
+                    ));
                 }
             }
         }

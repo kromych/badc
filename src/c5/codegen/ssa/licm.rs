@@ -168,9 +168,10 @@ pub(super) fn binop_imm_materializes(target: Target, op: BinOp, imm: i64, high_d
 /// to. That is ahead of the last instruction, or ahead of the compare a
 /// conditional terminator reads -- the emit may fuse that compare into
 /// the branch, which no unrelated instruction may come between. `None`
-/// when the position that leaves is a phi or a `ParamRef`, neither of
+/// when the position that leaves is a phi or a parameter read, neither of
 /// which a copy may precede: a phi belongs to the block's leading run,
-/// and a `ParamRef` reads an incoming argument register live until it.
+/// and a `ParamRef` or `ParamPart` reads an incoming argument register
+/// live until it.
 fn insert_point(func: &FunctionSsa, b: BlockId) -> Option<ValueId> {
     let range = func.blocks[b as usize].inst_range.clone();
     if range.is_empty() {
@@ -187,7 +188,7 @@ fn insert_point(func: &FunctionSsa, b: BlockId) -> Option<ValueId> {
     let blocked = (at..range.end).any(|i| {
         matches!(
             func.insts[i as usize],
-            Inst::Phi { .. } | Inst::ParamRef { .. }
+            Inst::Phi { .. } | Inst::ParamRef { .. } | Inst::ParamPart { .. }
         )
     });
     if blocked { None } else { Some(at) }
@@ -966,10 +967,17 @@ mod tests {
         };
         let f = loop_func_pre(vec![param.clone(), local(3), local(4)], body.clone());
         assert_eq!(plan(&f, Target::LinuxAarch64)[0].at, PRE_AT);
-        // Nothing may precede a `ParamRef`, so a destination that ends
-        // in one offers no position and the sites stay where they are.
-        let trailing = loop_func_pre(vec![local(2), local(3), param], body);
-        assert!(plan(&trailing, Target::LinuxAarch64).is_empty());
+        // Nothing may precede a parameter read, so a destination that
+        // ends in one offers no position and the sites stay where they are.
+        let part = Inst::ParamPart {
+            idx: 0,
+            part: 0,
+            kind: LoadKind::I64,
+        };
+        for read in [param, part] {
+            let trailing = loop_func_pre(vec![local(2), local(3), read], body.clone());
+            assert!(plan(&trailing, Target::LinuxAarch64).is_empty());
+        }
     }
 
     #[test]

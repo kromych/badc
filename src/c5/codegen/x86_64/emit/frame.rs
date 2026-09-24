@@ -680,10 +680,10 @@ fn param_home_masks(
 
 /// The register parameters the per-inst `Inst::ParamRef` path lowers
 /// after an earlier `ParamRef`'s write clobbered their incoming argument
-/// register. The entry parallel copy places every integer register
-/// parameter at once when their homes are pairwise distinct, so the mask
-/// is empty then; otherwise the marked parameters read their
-/// prologue-stored home. The mask depends only on `alloc.places` and the
+/// register. The entry parallel copy places the integer reads opening the
+/// entry block (`emit_common::entry_read_run`) at once when their homes
+/// are pairwise distinct; every other read is placed at its position, and
+/// the marked parameters among them read their prologue-stored home. The mask depends only on `alloc.places` and the
 /// `ParamRef` order, so the elidability scan and the prologue consult it
 /// without a fixpoint.
 fn param_home_clobber_set(
@@ -735,28 +735,41 @@ fn param_home_clobber_set(
     }
     // The entry parallel copy's eligibility and `homes_distinct` gate,
     // mirrored.
+    let mut batch: alloc::vec::Vec<usize> = alloc::vec::Vec::new();
     let mut batch_homes: alloc::vec::Vec<Place> = alloc::vec::Vec::new();
-    for vid in 0..func.insts.len() {
+    for vid in super::ssa::emit_common::entry_read_run(func, &alloc.use_counts) {
         if live_read(vid).is_none() || !matches!(incoming(vid), Some((false, _))) {
             continue;
         }
         let dst = alloc.places.get(vid).copied().unwrap_or(Place::None);
         if matches!(dst, Place::IntReg(_) | Place::Spill(_)) {
+            batch.push(vid);
             batch_homes.push(dst);
         }
     }
     let homes_distinct = (0..batch_homes.len()).all(|a| {
         ((a + 1)..batch_homes.len()).all(|b| !place_same_loc(batch_homes[a], batch_homes[b]))
     });
-    if !batch_homes.is_empty() && homes_distinct {
-        return mask;
+    if !homes_distinct {
+        batch.clear();
+        batch_homes.clear();
     }
     // Per-inst path: a later parameter whose argument register was
-    // already written by an earlier read's placement is clobbered before
-    // it can be read. Only integer registers take part; an FP parameter's
-    // incoming xmm register is disjoint from `int_arg_regs`.
-    let mut written: alloc::collections::BTreeSet<u8> = alloc::collections::BTreeSet::new();
+    // already written, by the copy or by an earlier read's placement, is
+    // clobbered before it can be read. Only integer registers take part;
+    // an FP parameter's incoming xmm register is disjoint from
+    // `int_arg_regs`.
+    let mut written: alloc::collections::BTreeSet<u8> = batch_homes
+        .iter()
+        .filter_map(|&h| match h {
+            Place::IntReg(r) => Some(r),
+            _ => None,
+        })
+        .collect();
     for vid in 0..func.insts.len() {
+        if batch.contains(&vid) {
+            continue;
+        }
         let Some((home, _)) = live_read(vid) else {
             continue;
         };

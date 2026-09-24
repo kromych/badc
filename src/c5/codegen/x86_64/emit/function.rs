@@ -432,11 +432,12 @@ impl FnEmit<'_, '_> {
         )
     }
 
-    /// Place the entry `Inst::ParamRef` values from their argument registers
-    /// as one parallel copy when their integer / spill homes are distinct;
-    /// otherwise each `ParamRef` is placed in program order, which the
-    /// allocator's self-home hint keeps sound (`verify_allocation` checks it
-    /// under `codegen_test`).
+    /// Place the integer reads opening the entry block
+    /// (`emit_common::entry_read_run`) from their argument registers as one
+    /// parallel copy when their integer / spill homes are distinct;
+    /// otherwise, and for every other read, each is placed at its position,
+    /// where the allocator's incoming-register forbid keeps its source
+    /// intact (`verify_allocation` checks it under `codegen_test`).
     fn place_entry_params(&mut self) -> Emit {
         let FnCtx {
             func,
@@ -449,7 +450,8 @@ impl FnEmit<'_, '_> {
         let mut moves: Vec<PlaceMove> = Vec::new();
         let mut vids: Vec<usize> = Vec::new();
         let mut homes: Vec<Place> = Vec::new();
-        for (vid, inst) in func.insts.iter().enumerate() {
+        for vid in super::ssa::emit_common::entry_read_run(func, &alloc.use_counts) {
+            let inst = &func.insts[vid];
             let (Inst::ParamRef { kind, .. } | Inst::ParamPart { kind, .. }) = inst else {
                 continue;
             };

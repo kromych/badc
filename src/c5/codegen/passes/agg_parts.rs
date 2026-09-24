@@ -342,6 +342,13 @@ fn run_one(func: &mut FunctionSsa, target: Target) {
             .filter(|parts| tape_carries(parts, desc.fields.len()))
             .map(|parts| (ai, parts))
     });
+    // The parts are read at the head of the entry block and stored past
+    // the reads opening it, so the entry parallel copy places every read
+    // (`emit_common::entry_read_run`).
+    let counts = crate::c5::codegen::ssa::reg_alloc::compute_use_counts(func);
+    let reads = crate::c5::codegen::ssa::emit_common::entry_read_run(func, &counts);
+    let store_at = reads.last().map_or(entry_at, |&v| At::After(v as ValueId));
+    let mut stores = Vec::new();
     let mut taken: Vec<usize> = Vec::new();
     for (i, agg) in func.param_aggs.iter().enumerate() {
         let (Some(d), Some(&slot)) = (agg, func.param_local_slots.get(i)) else {
@@ -361,9 +368,9 @@ fn run_one(func: &mut FunctionSsa, target: Target) {
             continue;
         }
         let split = splits_by_fields(func, slot, ret_parts.is_some());
-        let mut addr = None;
-        for (k, p) in parts.iter().enumerate() {
-            let kind = part_kind(p);
+        let mut values = Vec::new();
+        for (k, p) in parts.into_iter().enumerate() {
+            let kind = part_kind(&p);
             let value = plan.push(
                 entry_at,
                 Inst::ParamPart {
@@ -373,9 +380,19 @@ fn run_one(func: &mut FunctionSsa, target: Target) {
                 },
                 kind == LoadKind::F32,
             );
-            scatter(&mut plan, entry_at, slot, &mut addr, value, p, desc, split);
+            values.push((value, p));
         }
+        stores.push((slot, *d as usize, split, values));
         taken.push(i);
+    }
+    for (slot, d, split, values) in &stores {
+        let mut addr = None;
+        for (value, p) in values {
+            let desc = &func.agg_descs[*d];
+            scatter(
+                &mut plan, store_at, *slot, &mut addr, *value, p, desc, *split,
+            );
+        }
     }
     let mut bundles: Vec<(usize, ValueId)> = Vec::new();
     if let Some((ai, parts)) = ret_parts {
@@ -515,6 +532,33 @@ mod tests {
                 );
             }
             assert_eq!(f.param_local_slots[0], 0, "{t}");
+        }
+    }
+
+    /// The parts of several parameters, the scalars between them and the
+    /// scalars' reads all open the entry block ahead of the first store,
+    /// so the entry parallel copy places every read.
+    #[test]
+    fn every_read_opens_the_entry_block() {
+        const SRC: &str = "struct p1 { int a; }; struct p2 { int a, b; }; \
+            struct p3 { int a, b, c; }; \
+            long long take(struct p2 a, int s0, struct p3 b, struct p1 c, int s1) \
+            { return a.a + a.b + s0 + b.a + b.b + b.c + c.a + s1; }";
+        for target in [Target::LinuxAarch64, Target::LinuxX64, Target::WindowsX64] {
+            let mut f = walked(SRC, "take", target);
+            run(core::slice::from_mut(&mut f), target);
+            let t = text(&f);
+            let reads: Vec<usize> = (0..f.insts.len())
+                .filter(|&v| matches!(f.insts[v], Inst::ParamRef { .. } | Inst::ParamPart { .. }))
+                .collect();
+            let parts = reads
+                .iter()
+                .filter(|&&v| matches!(f.insts[v], Inst::ParamPart { .. }))
+                .count();
+            assert!(parts >= 2, "{target:?}: {t}");
+            let counts = crate::c5::codegen::ssa::reg_alloc::compute_use_counts(&f);
+            let run = crate::c5::codegen::ssa::emit_common::entry_read_run(&f, &counts);
+            assert_eq!(run, reads, "{target:?}: {t}");
         }
     }
 

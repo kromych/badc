@@ -521,12 +521,14 @@ impl FunctionEmitter<'_, '_> {
         );
     }
 
-    /// Place the integer `Inst::ParamRef` values from their argument
-    /// registers into the allocator's homes as one parallel copy, so no home
-    /// clobbers a later parameter's incoming register. Applies only when the
-    /// homes are distinct; otherwise `emit_inst` places each in program order,
-    /// which the allocator's self-home hint keeps sound
-    /// (`param-shuffle-clobber` in `verify_allocation`).
+    /// Place the integer reads opening the entry block
+    /// (`emit_common::entry_read_run`) from their argument registers into
+    /// the allocator's homes as one parallel copy, so no home clobbers a
+    /// later parameter's incoming register. Applies only when the homes are
+    /// distinct; otherwise, and for every other read, `emit_inst` places
+    /// each at its position, where the allocator's incoming-register forbid
+    /// keeps its source intact (`param-shuffle-clobber` in
+    /// `verify_allocation`).
     fn place_int_params(&mut self) -> Emit {
         let FnCtx {
             func,
@@ -539,7 +541,8 @@ impl FunctionEmitter<'_, '_> {
         let mut moves: Vec<PlaceMove> = Vec::new();
         let mut vids: Vec<usize> = Vec::new();
         let mut homes: Vec<Place> = Vec::new();
-        for (vid, inst) in func.insts.iter().enumerate() {
+        for vid in super::ssa::emit_common::entry_read_run(func, &alloc.use_counts) {
+            let inst = &func.insts[vid];
             let (Inst::ParamRef { kind, .. } | Inst::ParamPart { kind, .. }) = inst else {
                 continue;
             };
@@ -588,7 +591,8 @@ impl FunctionEmitter<'_, '_> {
         let mut fp_moves: Vec<(Place, Place, bool)> = Vec::new();
         let mut fp_vids: Vec<usize> = Vec::new();
         let mut fp_homes: Vec<Place> = Vec::new();
-        for (vid, inst) in func.insts.iter().enumerate() {
+        for vid in super::ssa::emit_common::entry_read_run(func, &alloc.use_counts) {
+            let inst = &func.insts[vid];
             let (Inst::ParamRef { kind, .. } | Inst::ParamPart { kind, .. }) = inst else {
                 continue;
             };

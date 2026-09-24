@@ -45,9 +45,9 @@ Disassembly of section .text:
                	pushq	%r12
                	pushq	%rbx
                	movq	%rdi, %rbx
-               	movq	%r8, %r13
                	xorl	%r12d, %r12d
                	movl	$0x40, %eax
+               	movq	%r8, %r13
                	leaq	-0x50(%rbp), %rdx
                	movq	%r12, (%rdx)
                	movq	%r12, 0x8(%rdx)

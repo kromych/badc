@@ -1576,6 +1576,37 @@ pub(crate) fn is_dead_pure(
     is_dead_pure_counts(inst, v, &alloc.use_counts)
 }
 
+/// The parameter reads the entry parallel copy may place: the `ParamRef`s
+/// and `ParamPart`s opening the entry block, ahead of every instruction
+/// that writes a register the allocator hands out. The allocator reckons a
+/// read from its own position, so a read written at entry past such an
+/// instruction can share its home with a value defined there. `use_counts`
+/// name the unread instructions, which write none.
+pub(crate) fn entry_read_run(
+    func: &super::super::ir::FunctionSsa,
+    use_counts: &[u32],
+) -> alloc::vec::Vec<usize> {
+    use super::super::ir::Inst;
+    let mut run = alloc::vec::Vec::new();
+    let Some(entry) = func.blocks.first() else {
+        return run;
+    };
+    for v in entry.inst_range.clone() {
+        let inst = &func.insts[v as usize];
+        let unread = use_counts.get(v as usize) == Some(&0);
+        match inst {
+            Inst::ParamRef { .. } | Inst::ParamPart { .. } => run.push(v as usize),
+            Inst::AllocaInit(_) | Inst::LifetimeEnd(_) => {}
+            // A frame store writes a register besides the scratch only
+            // when its value is read.
+            Inst::StoreLocal { .. } if unread => {}
+            _ if unread && inst.is_pure() => {}
+            _ => break,
+        }
+    }
+    run
+}
+
 /// Whether `inst` lowers to no machine code and records nothing: a phi,
 /// whose value the predecessors' exit moves place, or a dead pure value.
 /// The one definition both emitters skip by and the block plan reads, so a
@@ -2770,6 +2801,59 @@ fn record_coalesced_slots(
 mod tests {
     use super::super::super::ir::LoadKind;
     use super::super::reg_alloc::Place;
+
+    /// The run ends at the first instruction that writes a register: a
+    /// value the body reads, or a frame store whose value is read. A
+    /// marker, an unread store and an unread pure value leave it open.
+    #[test]
+    fn entry_read_run_ends_at_the_first_register_write() {
+        use super::super::super::ir::{Block, FunctionSsa, Inst, StoreKind, Terminator};
+        use super::super::reg_alloc::compute_use_counts;
+        let part = |idx| Inst::ParamPart {
+            idx,
+            part: 0,
+            kind: LoadKind::I64,
+        };
+        let insts = alloc::vec![
+            Inst::AllocaInit(0),
+            part(0),
+            Inst::StoreLocal {
+                off: -1,
+                value: 1,
+                kind: StoreKind::I64,
+                volatile: false,
+            },
+            Inst::Imm(7),
+            Inst::ParamRef {
+                idx: 1,
+                kind: LoadKind::I64,
+            },
+            Inst::LocalAddr(-2),
+            part(2),
+            Inst::Store {
+                addr: 5,
+                disp: 0,
+                value: 6,
+                kind: StoreKind::I64,
+                volatile: false,
+                align: 0,
+            },
+        ];
+        let func = |ret| FunctionSsa {
+            blocks: alloc::vec![Block {
+                start_pc: 0,
+                inst_range: 0..insts.len() as u32,
+                terminator: Terminator::Return(ret),
+                exit_acc: ret,
+            }],
+            insts: insts.clone(),
+            ..Default::default()
+        };
+        let f = func(4);
+        assert_eq!(super::entry_read_run(&f, &compute_use_counts(&f)), [1, 4]);
+        let f = func(2);
+        assert_eq!(super::entry_read_run(&f, &compute_use_counts(&f)), [1]);
+    }
     use super::{EmitBackend, PlaceMove, Unsupported, schedule_place_moves, unsupported_error};
     use alloc::vec::Vec;
 

@@ -17,15 +17,15 @@ fn ent_pc=1 n_params=1 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   ParamPart(0, part=0, kind=I64)                   -> x0
-    v1   Imm(0)                                           -> x1
+    v1   ParamPart(0, part=1, kind=I64)                   -> x2
     v2   Imm(0)                                           -> x1
-    v3   ParamPart(0, part=1, kind=I64)                   -> x2
+    v3   Imm(0)                                           -> x1
     v4   Imm(0)                                           -> x1
     v5   AllocaInit(0)                                    -> -
     v6   Imm(0)                                           -> x1
     v7   Imm(0)                                           -> x1
     v8   Imm(0)                                           -> x1
-    v9   AggParts { desc=0, parts=[v0, v3], fp_mask=0x0 } -> -
+    v9   AggParts { desc=0, parts=[v0, v1], fp_mask=0x0 } -> -
     terminator Return(v9)   (exit_acc=v6)
 ; --- SSA dump (ok=true) ent_pc=3 ---
 ; name=id_pair_hint
@@ -33,15 +33,15 @@ fn ent_pc=3 n_params=1 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   ParamPart(0, part=0, kind=I64)                   -> x0
-    v1   Imm(0)                                           -> x1
+    v1   ParamPart(0, part=1, kind=I64)                   -> x2
     v2   Imm(0)                                           -> x1
-    v3   ParamPart(0, part=1, kind=I64)                   -> x2
+    v3   Imm(0)                                           -> x1
     v4   Imm(0)                                           -> x1
     v5   AllocaInit(0)                                    -> -
     v6   Imm(0)                                           -> x1
     v7   Imm(0)                                           -> x1
     v8   Imm(0)                                           -> x1
-    v9   AggParts { desc=0, parts=[v0, v3], fp_mask=0x0 } -> -
+    v9   AggParts { desc=0, parts=[v0, v1], fp_mask=0x0 } -> -
     terminator Return(v9)   (exit_acc=v6)
 ; --- SSA dump (ok=true) ent_pc=6 ---
 ; name=use_word

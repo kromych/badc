@@ -42,8 +42,8 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x400, %rsp            # imm = 0x400
-               	movslq	%edx, %rdx
                	movl	$0x3e8, %esi            # imm = 0x3E8
+               	movslq	%edx, %rdx
                	xorl	%eax, %eax
                	cmpl	$0x2, %edi
                	jl	<addr>

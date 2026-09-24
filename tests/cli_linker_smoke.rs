@@ -5781,6 +5781,88 @@ fn hidden_result_pointer_calls_cross_the_system_compiler_boundary() {
     drive_across_the_system_compiler(&cc, "hidden-ptr-interop", common, "mix, floats, spill");
 }
 
+// A `long double` crosses the system compiler boundary both ways as the
+// platform passes it: System V AMD64 3.2.3 gives it and an aggregate of one
+// the X87 + X87UP classes, in memory as an argument, fixed or variadic, and
+// in st(0) as a return value; a larger aggregate, or one whose x87 eightbyte
+// is shared, is MEMORY both ways. `pass1` returns its operand's bytes, so a
+// value binary64 cannot hold comes back exactly.
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+#[test]
+fn long_double_calls_cross_the_system_compiler_boundary() {
+    let Some(cc) = host_cc() else {
+        eprintln!(
+            "skipping long_double_calls_cross_the_system_compiler_boundary: no system C compiler"
+        );
+        return;
+    };
+    let common = "#include <stdarg.h>\n\
+        #include <stdio.h>\n\
+        #include <string.h>\n\
+        typedef long double ld;\n\
+        struct ld1 { ld x; };\n\
+        struct ld2 { ld x, y; };\n\
+        struct ldi { ld x; int i; };\n\
+        union ldu { ld x; double d; };\n\
+        static ld ident(ld v) { return v; }\n\
+        static ld mix(int a, ld b, double c, ld d, int e) { return a + b * 2 + c * 4 + d * 8 + e * 16; }\n\
+        static ld past(double d0, double d1, double d2, double d3, double d4, double d5,\n\
+          double d6, double d7, double d8, ld x, int i0, int i1, int i2, int i3, int i4,\n\
+          int i5, int i6, ld y)\n\
+        { return d0 + d8 + x * 10 + i0 + i6 * 100 + y * 1000 + d7 + i5; }\n\
+        static struct ld1 mk1(ld v) { struct ld1 s = { v }; return s; }\n\
+        static ld take1(struct ld1 s, int k) { return s.x * k; }\n\
+        static struct ld1 pass1(struct ld1 s) { return s; }\n\
+        static struct ld2 mk2(ld a, ld b) { struct ld2 s = { a, b }; return s; }\n\
+        static struct ldi mki(struct ldi s, union ldu u) { s.x += u.x; s.i *= 2; return s; }\n\
+        static union ldu mku(ld v) { union ldu u; u.x = v; return u; }\n\
+        static ld vsum(int n, ...)\n\
+        { va_list ap; ld s = 0; va_start(ap, n);\n\
+          for (int i = 0; i < n; i++) s += va_arg(ap, ld);\n\
+          va_end(ap); return s; }\n\
+        static ld vmix(int n, ld first, ...)\n\
+        { va_list ap; ld s = first; va_start(ap, first);\n\
+          for (int i = 0; i < n; i++) { s += va_arg(ap, int); s += va_arg(ap, ld);\n\
+            s += va_arg(ap, double); }\n\
+          va_end(ap); return s; }\n\
+        struct fns { ld (*ident)(ld); ld (*mix)(int, ld, double, ld, int);\n\
+          ld (*past)(double, double, double, double, double, double, double, double, double,\n\
+            ld, int, int, int, int, int, int, int, ld);\n\
+          struct ld1 (*mk1)(ld); ld (*take1)(struct ld1, int); struct ld1 (*pass1)(struct ld1);\n\
+          struct ld2 (*mk2)(ld, ld); struct ldi (*mki)(struct ldi, union ldu);\n\
+          union ldu (*mku)(ld); ld (*vsum)(int, ...); ld (*vmix)(int, ld, ...); };\n\
+        static int drive(const struct fns *f, int base)\n\
+        { struct ld1 s = { 1.25L };\n\
+          struct ld1 fine = { 1.0L + 0x1p-60L };\n\
+          char buf[32];\n\
+          if (f->ident(2.5L) != 2.5L || f->ident(0.5) != 0.5L) return base + 1;\n\
+          if (f->mix(1, 2.0L, 3.0, 4.0L, 5) != 129.0L) return base + 2;\n\
+          if (f->past(1, 2, 3, 4, 5, 6, 7, 8, 9, 0.5L, 1, 0, 0, 0, 0, 2, 3, 0.25L) != 576.0L)\n\
+            return base + 3;\n\
+          if (f->mk1(6.5L).x != 6.5L) return base + 4;\n\
+          if (f->take1(s, 4) != 5.0L) return base + 5;\n\
+          if (f->pass1(fine).x != fine.x) return base + 6;\n\
+          struct ld2 p = f->mk2(1.5L, -2.0L);\n\
+          if (p.x != 1.5L || p.y != -2.0L) return base + 7;\n\
+          struct ldi q = { 1.5L, 3 };\n\
+          union ldu u = f->mku(0.25L);\n\
+          q = f->mki(q, u);\n\
+          if (q.x != 1.75L || q.i != 6) return base + 12;\n\
+          if (f->vsum(3, 1.0L, 2.0L, 0.5L) != 3.5L) return base + 8;\n\
+          if (f->vsum(9, 1.0L, 1.0L, 1.0L, 1.0L, 1.0L, 1.0L, 1.0L, 1.0L, 1.0L) != 9.0L)\n\
+            return base + 9;\n\
+          if (f->vmix(2, 0.5L, 1, 2.0L, 3.0, 4, 5.0L, 6.0) != 21.5L) return base + 10;\n\
+          snprintf(buf, sizeof buf, \"%.2Lf %d %.1Lf\", f->ident(2.5L), 7, 0.25L);\n\
+          if (strcmp(buf, \"2.50 7 0.2\") != 0) return base + 11;\n\
+          return 0; }\n";
+    drive_across_the_system_compiler(
+        &cc,
+        "long-double-interop",
+        common,
+        "ident, mix, past, mk1, take1, pass1, mk2, mki, mku, vsum, vmix",
+    );
+}
+
 // Arguments past the registers cross the system compiler boundary both ways at
 // the offsets the platform puts them: Apple arm64 packs a named stack argument
 // at its own size and alignment, a homogeneous floating-point aggregate too,

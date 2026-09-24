@@ -1433,9 +1433,10 @@ impl Compiler {
             self.symbols[idx].val = local_val;
         }
 
-        // A `long double` wider than `double` arrives as the binary64 badc
-        // computes with, in one 8-byte cell. The walker converts it at entry
-        // into a local of the platform format the body reads.
+        // A `long double` wider than `double` takes a local of the platform
+        // format the body reads. The callee fills it from the image the
+        // convention passes, or converts the binary64 an 8-byte cell holds
+        // where badc still passes that.
         if self.target.long_double() != crate::c5::codegen::LongDoubleKind::F64 {
             for &idx in params.indices.iter() {
                 let pty = self.symbols[idx].type_;

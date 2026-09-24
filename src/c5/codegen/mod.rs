@@ -357,37 +357,27 @@ impl Target {
         }
     }
 
-    /// The `long double` storage format badc gives the type. System V
-    /// x86-64 gives it the x87 80-bit format in a 16-byte object;
-    /// macOS/arm64 and both Windows targets define it as binary64.
-    ///
-    /// AArch64 Linux defines it as IEEE binary128, which badc does not
-    /// yet store: the format has no hardware support there, so a load
-    /// and a store are open-coded conversions the aarch64 emitter does
-    /// not implement. Reporting 16 bytes while storing a binary64 would
-    /// make every foreign reader misdecode the object, so the type
-    /// stays binary64 there -- a uniform divergence
-    /// doc/std-conformance.md records, with the call-site diagnostic
-    /// naming the platform format.
     /// The `long double` format the target's platform ABI moves across
     /// a call, when badc does not move it the same way; `None` when the
-    /// two agree. System V x86-64 passes the type in a 16-byte stack
-    /// slot and returns it in `st(0)`, and AAPCS64 passes binary128 in
-    /// a vector register, while badc passes the binary64 it computes
-    /// with in the FP argument bank. Read by the libc-argument
-    /// diagnostic; independent of [`Self::long_double`], which answers
-    /// what a declared object stores.
-    /// TODO: extended-precision long double -- the SysV x87 and AAPCS64
-    /// binary128 argument / return conventions.
+    /// two agree. AAPCS64 passes binary128 in a vector register, while
+    /// badc passes the binary64 it computes with in the FP argument bank.
+    /// Read by the libc-argument diagnostic; independent of
+    /// [`Self::long_double`], which answers what a declared object stores.
+    /// TODO: extended-precision long double -- the AAPCS64 binary128
+    /// argument / return convention.
     pub fn platform_long_double_abi(self) -> Option<&'static str> {
         match self {
-            Target::LinuxX64 => Some("x87 80-bit"),
             Target::LinuxAarch64 => Some("IEEE binary128"),
-            Target::MacOSAarch64 | Target::WindowsX64 | Target::WindowsAarch64 => None,
+            Target::LinuxX64
+            | Target::MacOSAarch64
+            | Target::WindowsX64
+            | Target::WindowsAarch64 => None,
         }
     }
 
-    /// In-memory format a declared `long double` object takes.
+    /// In-memory format a declared `long double` object takes: x87 80-bit
+    /// in 16 bytes on System V x86-64, IEEE binary128 on AArch64 Linux,
+    /// binary64 on macOS/arm64 and both Windows targets.
     pub fn long_double(self) -> LongDoubleKind {
         match self {
             Target::LinuxX64 => LongDoubleKind::X87,
@@ -933,6 +923,7 @@ pub(super) fn plan_call_args_aggs(
                                         is_fp: false,
                                     }
                                 }
+                                RegClass::X87 => unreachable!("an argument is never X87-classed"),
                                 RegClass::Sse | RegClass::Vector => {
                                     let r = fp_idx as u8;
                                     fp_idx += 1;

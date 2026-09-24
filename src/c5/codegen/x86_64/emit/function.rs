@@ -1529,7 +1529,7 @@ fn emit_return(
     };
     // A register-returned aggregate (System V AMD64 3.2.3): `value` is its
     // address, staged through rcx across the restore; the eightbytes load
-    // into rax:rdx / xmm0:xmm1 after it.
+    // into rax:rdx / xmm0:xmm1 after it, an x87 pair into st(0).
     if let Some(ai) = func.ret_agg {
         let desc = &func.agg_descs[ai as usize];
         let eb_classes = reg_slot_classes(desc, abi, true);
@@ -1556,7 +1556,9 @@ fn emit_return(
         let mut off = 0i32;
         for class in eb_classes.iter() {
             let width = class.width() as i32;
-            if *class != super::abi_classify::RegClass::Integer {
+            if *class == super::abi_classify::RegClass::X87 {
+                super::encode::emit_fld_m80(code, Reg::RCX, off);
+            } else if *class != super::abi_classify::RegClass::Integer {
                 emit_agg_load_slot_sse(
                     code,
                     *class,

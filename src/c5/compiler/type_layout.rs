@@ -911,6 +911,30 @@ pub(crate) fn flatten_struct_fields(
     }
 }
 
+/// The host-ABI descriptor a `long double` crosses a call as where the
+/// convention moves it as a 16-byte object in the storage format: System
+/// V AMD64 classifies it X87 + X87UP, memory as an argument and `st(0)` as
+/// a return value (3.2.3). `None` where the type is `double`.
+pub(crate) fn long_double_agg_desc(
+    target: Target,
+    conv: crate::c5::codegen::CallConv,
+) -> Option<AggDesc> {
+    let kind = match (target.abi_row(conv), target.long_double()) {
+        (Target::LinuxX64, crate::c5::codegen::LongDoubleKind::X87) => ScalarKind::F80,
+        _ => return None,
+    };
+    Some(AggDesc {
+        size: 16,
+        align: 16,
+        member_align: 16,
+        fields: alloc::vec![FlatField {
+            offset: 0,
+            size: 16,
+            kind,
+        }],
+    })
+}
+
 /// Build the host-ABI [`AggDesc`] for a by-value aggregate of `ty`,
 /// or `None` when `ty` is not a by-value struct the current phase
 /// routes through the host ABI. Phase 1 covers AArch64 aggregates of
@@ -941,6 +965,9 @@ pub(crate) fn host_abi_agg_desc_conv(
             | Target::WindowsX64
     ) {
         return None;
+    }
+    if is_long_double_scalar(ty) {
+        return long_double_agg_desc(target, conv);
     }
     if !is_struct_ty(ty) || struct_ptr_depth(ty) != 0 {
         return None;
@@ -1081,6 +1108,10 @@ pub(crate) fn struct_return_abi_conv(
     ty: i64,
 ) -> StructReturnAbi {
     let row = target.abi_row(conv);
+    if is_long_double_scalar(ty) {
+        return long_double_agg_desc(target, conv)
+            .map_or(StructReturnAbi::NotStruct, StructReturnAbi::Regs);
+    }
     if !is_struct_ty(ty) || struct_ptr_depth(ty) != 0 {
         return StructReturnAbi::NotStruct;
     }
@@ -1104,10 +1135,24 @@ pub(crate) fn struct_return_abi_conv(
     let member_align = (structs[id].member_align.max(1)) as u32;
     let mut fields = Vec::new();
     flatten_struct_fields(structs, target, id, 0, &mut fields);
-    // TODO: extended-precision long double -- a sole x87 member returns
-    // in st(0) and a binary128 member in a vector register; until those
-    // return slots exist the aggregate keeps the out-pointer path (the
-    // AAPCS64 > 16-byte x8 case below is already the memory convention).
+    // System V AMD64 3.2.3 returns a sole x87 member in st(0).
+    if matches!(row, Target::LinuxX64)
+        && size == 16
+        && matches!(fields.as_slice(), [f] if f.offset == 0
+            && f.kind == crate::c5::codegen::abi_classify::ScalarKind::F80)
+    {
+        return StructReturnAbi::Regs(AggDesc {
+            size,
+            align,
+            member_align,
+            fields,
+        });
+    }
+    // TODO: extended-precision long double -- a binary128 member returns
+    // in a vector register; until that return slot exists the aggregate
+    // keeps the out-pointer path, as does any other x87 aggregate, which
+    // System V returns in memory (the AAPCS64 > 16-byte x8 case below is
+    // already the memory convention).
     if fields.iter().any(|f| {
         matches!(
             f.kind,

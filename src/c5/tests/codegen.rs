@@ -8645,6 +8645,98 @@ fn wide_member_keeps_its_object_in_memory() {
     }
 }
 
+/// System V AMD64 passes a `long double` in memory and returns it in
+/// `st(0)` (3.2.3): the caller stores the argument's x87 image in a
+/// temporary it passes as an aggregate, not in an FP argument register, the
+/// callee returns the address of its result's image, and the caller reads
+/// the result from the temporary the call fills.
+#[test]
+fn long_double_crosses_a_system_v_call_as_its_image() {
+    const SRC: &str = "__attribute__((noinline)) long double f(long double x) { return x * 2; }\n\
+        long double g(long double y) { return f(y) + 1; }\n";
+    let target = crate::Target::LinuxX64;
+    let (body, insts) = optimized_function(SRC, "g", target);
+    let call = insts
+        .iter()
+        .find(|(_, i)| i.starts_with("Call {"))
+        .unwrap_or_else(|| panic!("no call: {body}"));
+    assert!(
+        call.1.contains("fp_arg_mask=0x0") && call.1.contains("fp_return=false"),
+        "neither the argument nor the result rides an FP register: {body}"
+    );
+    let arg = call
+        .1
+        .split("args=[v")
+        .nth(1)
+        .and_then(|r| r.split(']').next());
+    fn stored_at(i: &str) -> Option<&str> {
+        i.split("addr=v").nth(1).and_then(|r| r.split(',').next())
+    }
+    assert!(
+        insts.iter().any(|(_, i)| i.starts_with("Store {")
+            && i.contains("kind=F80")
+            && stored_at(i) == arg),
+        "the argument is the address of its x87 image: {body}"
+    );
+    assert!(
+        insts
+            .iter()
+            .any(|(v, i)| *v > call.0 && i.contains("Load") && i.contains("kind=F80")),
+        "the result is read from its image: {body}"
+    );
+    let (body, insts) = optimized_function(SRC, "f", target);
+    let ret = body
+        .split("Return(v")
+        .nth(1)
+        .and_then(|r| r.split(')').next())
+        .and_then(|r| r.parse::<u32>().ok());
+    assert!(
+        insts
+            .iter()
+            .any(|(v, i)| Some(*v) == ret && i.starts_with("LocalAddr")),
+        "the callee returns its result's image: {body}"
+    );
+}
+
+/// An inlined callee reads a `long double` parameter from its cell with a
+/// `LoadLocal`, which binding the cell to the caller's argument address
+/// does not reach: the splice copies the argument's image into the cell.
+/// Bound, the cell was never written and `pick` read garbage at -O. So
+/// every cell a `LoadLocal` reads is written, through its address or
+/// directly.
+#[test]
+fn inlined_long_double_parameter_reads_the_argument_copy() {
+    const SRC: &str = "static long double pick(int c, long double a, long double b)\n\
+        { if (c) return a; return b; }\n\
+        long double f(int c, double x) { return pick(c, x, 5); }\n";
+    let (body, insts) = optimized_function(SRC, "f", crate::Target::LinuxX64);
+    assert!(
+        !insts.iter().any(|(_, i)| i.starts_with("Call {")),
+        "pick is inlined: {body}"
+    );
+    let reads: alloc::vec::Vec<&str> = insts
+        .iter()
+        .filter(|(_, i)| i.starts_with("LoadLocal") && i.contains("kind=F80"))
+        .filter_map(|(_, i)| i.split("off=").nth(1)?.split(',').next())
+        .collect();
+    assert!(!reads.is_empty(), "the parameters are read: {body}");
+    for off in reads {
+        let addr = alloc::format!("LocalAddr({off})");
+        let through_addr = |i: &str| {
+            insts.iter().any(|(v, a)| {
+                *a == addr
+                    && (i.starts_with("Mcpy {") && i.contains(alloc::format!("dst=v{v},").as_str())
+                        || i.starts_with("Store {")
+                            && i.contains(alloc::format!("addr=v{v},").as_str()))
+            })
+        };
+        let written = insts.iter().any(|(_, i)| {
+            through_addr(i) || i.starts_with(alloc::format!("StoreLocal {{ off={off},").as_str())
+        });
+        assert!(written, "cell {off} is written before it is read: {body}");
+    }
+}
+
 /// A `long double` conditional merges its arms' binary64 values as a
 /// double. Given the object's F80 / F128 kinds, the merge slot fell back to
 /// I64: it stayed in memory and the result reached the return through a

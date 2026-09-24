@@ -387,7 +387,9 @@ fn store_agg_return(
     for class in eb_classes.iter() {
         let disp = (base + off) as i32;
         off += class.width() as i64;
-        if *class == super::abi_classify::RegClass::Integer {
+        if *class == super::abi_classify::RegClass::X87 {
+            super::encode::emit_fstp_m80(code, Reg::RBP, disp);
+        } else if *class == super::abi_classify::RegClass::Integer {
             emit_mov_mem_r(code, Reg::RBP, disp, int_ret[int_i]);
             int_i += 1;
         } else {
@@ -656,32 +658,16 @@ pub(super) fn emit_call_ext(
         emit_add_rsp(code, plan.scratch_bytes);
     }
     // A register-returned aggregate (System V AMD64 3.2.3) stores into the
-    // caller's result temp; > 16-byte returns take the out-pointer path.
+    // caller's result temp -- a `long double` from st(0) among them; > 16-byte
+    // returns take the out-pointer path.
     if store_ret_agg(code, ret_agg, agg_descs, ret_slot_local, func, frame, abi) {
         return Ok(());
     }
     // A sub-word integer return is extended into rax; an FP return arrives
-    // in xmm0 and routes to the allocated place. A System V long double
-    // arrives in st0: `fstp QWORD PTR [rsp]` rounds it to the f64 c5 stores
-    // in its 8-byte slot.
+    // in xmm0 and routes to the allocated place.
     use crate::c5::compiler::types as ty_helpers;
     let return_type_tag = imp.return_type_tag;
     let bare = ty_helpers::strip_unsigned(return_type_tag);
-    let returns_long_double = imp.returns_long_double;
-    if returns_long_double && matches!(target, Target::LinuxX64) {
-        emit_sub_rsp(code, 16);
-        // fstp QWORD PTR [rsp] -- `DD /3`, mod=00, rm=100 (SIB
-        // follows), SIB = 0x24 (base = rsp, no index).
-        code.extend_from_slice(&[0xDD, 0x1C, 0x24]);
-        let scratch = match dst {
-            Place::IntReg(r) if r != Reg::RAX.0 => Reg(r),
-            _ => SCRATCH_R10,
-        };
-        emit_mov_r_mem(code, scratch, Reg::RSP, 0);
-        emit_add_rsp(code, 16);
-        int_result_to_dst(code, dst, scratch, frame);
-        return Ok(());
-    }
     if ty_helpers::is_float_ty(bare) || ty_helpers::is_double_ty(bare) {
         // An f32 result is the single in the low 32 bits of xmm0, the form the
         // FP casts and `StoreLocal F32` consume, so it routes without widening.
@@ -888,7 +874,8 @@ pub(super) fn emit_va_arg_sysv(
         _ => return fail("VaArg: descriptor operand is not a constant"),
     };
     let desc = crate::c5::op::VaArgDesc::unpack(descriptor);
-    let is_fp = desc.kind != crate::c5::op::VaArgDesc::INT;
+    let memory = desc.kind == crate::c5::op::VaArgDesc::MEMORY;
+    let is_fp = desc.kind != crate::c5::op::VaArgDesc::INT && !memory;
     // Cursor pointer (struct address) held in r11, outside the
     // allocator's banks. The result address is computed in r10; both
     // are disjoint from the allocator-chosen `dst`.
@@ -921,8 +908,8 @@ pub(super) fn emit_va_arg_sysv(
     // The sequence touches only r10 / r11 and the in-memory fields, so no
     // allocated value is clobbered.
     let mut jmp_rel32_at = None;
-    // A MEMORY-class aggregate (3.2.3) is passed on the stack alone.
-    if is_fp || desc.size <= 16 {
+    // A MEMORY-class argument (3.2.3) is passed on the stack alone.
+    if !memory && (is_fp || desc.size <= 16) {
         super::encode::emit_mov_r32_mem(code, SCRATCH_R10, ap, off_disp);
         // cmp r10d, bound ; jae use_overflow
         super::encode::emit_ri(code, Mnem::Cmp, 8, SCRATCH_R10, bound);

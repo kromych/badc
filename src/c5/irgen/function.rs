@@ -152,11 +152,12 @@ impl ReturnAbi {
         return_ty: i64,
     ) -> Self {
         let abi = crate::c5::compiler::struct_return_abi_conv(structs, target, conv, return_ty);
+        let agg = matches!(abi, StructReturnAbi::Regs(_) | StructReturnAbi::Indirect(_));
         if let StructReturnAbi::Regs(desc) | StructReturnAbi::Indirect(desc) = &abi {
             let idx = b.intern_agg_desc(desc.clone());
             b.set_ret_agg(idx);
         }
-        b.set_ret_is_fp(is_floating_scalar(return_ty));
+        b.set_ret_is_fp(is_floating_scalar(return_ty) && !agg);
         b.set_ret_type_tag(return_ty);
         let indirect = matches!(abi, StructReturnAbi::Indirect(_));
         let indirect_result_slot = if indirect {
@@ -260,7 +261,8 @@ impl<'a> ParamEntry<'a> {
         if !int_only {
             for (i, &pty) in param_tys.iter().enumerate() {
                 let stripped = strip_unsigned(pty);
-                if stripped == Ty::Float as i64 || stripped == Ty::Double as i64 {
+                let agg = arg_aggs.get(shift + i).is_some_and(Option::is_some);
+                if (stripped == Ty::Float as i64 || stripped == Ty::Double as i64) && !agg {
                     b.mark_param_fp(shift + i);
                 }
             }
@@ -364,8 +366,8 @@ impl<'a> ParamEntry<'a> {
     /// Copy each by-address aggregate parameter into the body local the
     /// parser reserved for it -- the c5 convention passes the source's
     /// address in the parameter's argument cell -- narrow each `float`
-    /// parameter into its narrow-storage local, and widen each binary64
-    /// `long double` argument into its local of the platform format. A
+    /// parameter into its narrow-storage local, and widen each `long
+    /// double` passed as binary64 into its local of the platform format. A
     /// negative `param_local_slots` entry marks all three kinds.
     fn emit_entry_copies(&self, b: &mut SsaBuilder) {
         for i in 0..self.param_tys.len() {
@@ -400,6 +402,10 @@ impl<'a> ParamEntry<'a> {
                 continue;
             }
             if is_long_double_scalar(pty) {
+                // One passed as its image arrives the way an aggregate does.
+                if self.aggs.get(self.shift + i).copied().flatten().is_some() {
+                    continue;
+                }
                 let val = if self.host_abi && self.in_fp_reg(i) {
                     b.param_ref((self.shift + i) as u32, LoadKind::F64)
                 } else {

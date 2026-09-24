@@ -81,8 +81,7 @@ impl<'a> Walker<'a> {
         for (i, a) in args.iter().enumerate() {
             arg_vals.push(self.walk_copy_operand(b, *a)?);
             if arg_value_ty(self.ast.expr(*a))
-                .map(is_floating_scalar)
-                .unwrap_or(false)
+                .is_some_and(|t| self.crosses_in_fp_reg(callee_conv, t))
             {
                 fp_arg_mask.set(i);
             }
@@ -144,7 +143,7 @@ impl<'a> Walker<'a> {
             let arg_ty = arg_value_ty(self.ast.expr(*a));
             if hidden {
                 vals.push(self.walk_copy_operand(b, *a)?);
-                if arg_ty.map(is_floating_scalar).unwrap_or(false) {
+                if arg_ty.is_some_and(|t| self.crosses_in_fp_reg(conv, t)) {
                     fp_mask.set(i);
                 }
                 continue;
@@ -236,7 +235,7 @@ impl<'a> Walker<'a> {
             && (abi.variadic_on_stack || abi.sysv_host_variadic() || abi.aarch64_host_variadic())
         {
             self.widen_variadic_fp(b, &mut args, fixed_args);
-            let fp_return = is_floating_scalar(ty);
+            let fp_return = self.crosses_in_fp_reg(conv, ty);
             let target_pc = self.live_fun_val(sym, val);
             let call =
                 emit_direct_call(b, target_pc, sym, args.vals, fixed_args, fp_return, fp_mask);
@@ -259,7 +258,7 @@ impl<'a> Walker<'a> {
         };
         // C99 6.2.5p10: a floating-point return rides the FP return
         // register; tag the call so the codegen reads it there.
-        let fp_return = is_floating_scalar(ty);
+        let fp_return = self.crosses_in_fp_reg(conv, ty);
         let target_pc = self.live_fun_val(sym, val);
         // The aggregate return temp is reserved before the call: its
         // frame slot rides on the call instruction rather than as an SSA
@@ -350,13 +349,13 @@ impl<'a> Walker<'a> {
     }
 
     /// Record argument `i`'s host-ABI aggregate layout in `aggs`, which
-    /// stays empty until some argument needs one. Inert on the ABIs and
-    /// sizes the classifier declines.
+    /// stays empty until some argument needs one, and pass a `long double`
+    /// as its image. Inert on the ABIs and sizes the classifier declines.
     fn record_arg_agg(
         &self,
         b: &mut SsaBuilder,
         aggs: &mut alloc::vec::Vec<Option<u32>>,
-        args: &CallArgs<'_>,
+        args: &mut CallArgs<'_>,
         i: usize,
         ty_tag: i64,
     ) {
@@ -370,6 +369,9 @@ impl<'a> Walker<'a> {
         };
         if aggs.is_empty() {
             *aggs = alloc::vec![None; args.vals.len()];
+        }
+        if is_long_double_scalar(ty_tag) {
+            args.vals[i] = self.long_double_image(b, args.vals[i], ty_tag);
         }
         aggs[i] = Some(b.intern_agg_desc(desc));
     }
@@ -410,7 +412,12 @@ impl<'a> Walker<'a> {
     ) -> ValueId {
         if let Some((ridx, slot)) = ret_temp {
             b.set_call_ret_agg(call, ridx, slot);
-            return b.local_addr(slot);
+            let addr = b.local_addr(slot);
+            // A `long double` returns its image.
+            if is_long_double_scalar(ty) {
+                return b.load(addr, load_kind_for(ty, self.target));
+            }
+            return addr;
         }
         if is_float_ty(ty) {
             return b.mark_f32(call);
@@ -464,7 +471,7 @@ impl<'a> Walker<'a> {
         b: &mut SsaBuilder,
         sym: u32,
         val: i64,
-        args: CallArgs<'a>,
+        mut args: CallArgs<'a>,
     ) -> Result<ValueId, WalkError> {
         // A returns-twice callee (the setjmp family, vfork) disables
         // spill-slot sharing in this function.
@@ -486,12 +493,15 @@ impl<'a> Walker<'a> {
                     None => continue,
                 }
             };
-            if is_struct_value_ty(arg_ty)
+            if (is_struct_value_ty(arg_ty) || is_long_double_scalar(arg_ty))
                 && let Some(desc) =
                     crate::c5::compiler::host_abi_agg_desc(self.structs, self.target, arg_ty)
             {
                 if arg_aggs.is_empty() {
                     arg_aggs = alloc::vec![None; args.vals.len()];
+                }
+                if is_long_double_scalar(arg_ty) {
+                    args.vals[i] = self.long_double_image(b, args.vals[i], arg_ty);
                 }
                 arg_aggs[i] = Some(b.intern_agg_desc(desc));
             }
@@ -524,7 +534,7 @@ impl<'a> Walker<'a> {
         // A floating-point return is FP-classed (C99 6.2.5p10) so the
         // result rides d0 / xmm0 without a GPR bridge.
         let ret_temp = self.call_ret_temp(b, args.conv, ty);
-        let fp_return = is_floating_scalar(ty);
+        let fp_return = self.crosses_in_fp_reg(args.conv, ty);
         let call = b.call_ext(val, args.vals, fp_mask, fp_return);
         self.set_arg_widths(b, call, Some(params), nparams, args.exprs, 0);
         if !arg_aggs.is_empty() {
@@ -565,7 +575,7 @@ impl<'a> Walker<'a> {
             Some(t) => t,
             None => self.walk_expr_rvalue(b, callee)?,
         };
-        let fp_return = is_floating_scalar(ty);
+        let fp_return = self.crosses_in_fp_reg(conv, ty);
         let out_ptr = self.returns_through_out_ptr(conv, ty);
         let hidden = out_ptr && !callee_variadic && self.hidden_result_ptr_is_host(conv);
         let arg_aggs = self.call_arg_aggs(b, &mut args, callee_fixed, None, !out_ptr || hidden);

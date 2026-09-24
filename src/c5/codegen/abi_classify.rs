@@ -63,13 +63,17 @@ pub(crate) enum RegClass {
     /// Short Vector (6.4.2) both occupy one register across their full
     /// width, so the slot is 16 bytes wide rather than 8.
     Vector,
+    /// The top of the x87 register stack, `st(0)`: System V AMD64 3.2.3
+    /// returns an X87 + X87UP pair there, a sole `long double`. No argument
+    /// takes it.
+    X87,
 }
 
 impl RegClass {
     /// Bytes the slot transfers.
     pub(crate) fn width(self) -> u32 {
         match self {
-            RegClass::Vector => 16,
+            RegClass::Vector | RegClass::X87 => 16,
             _ => 8,
         }
     }
@@ -192,14 +196,16 @@ fn classify_sysv(size: u32, fields: &[FlatField], is_return: bool) -> AggClass {
         return AggClass::Regs(alloc::vec![c]);
     }
     // An eightbyte covering an x87 field is X87/X87UP, which sends the
-    // whole aggregate to memory as an argument (3.2.3 rule 5). As a
-    // return value gcc leaves a sole `long double` member in st(0).
-    // TODO: extended-precision long double -- st(0) struct returns.
+    // whole aggregate to memory as an argument (3.2.3 rule 5). A return
+    // value that is one X87 + X87UP pair comes back in st(0); an x87 field
+    // sharing an eightbyte merges to MEMORY.
     if fields.iter().any(|f| f.kind == ScalarKind::F80) {
-        return if is_return {
-            AggClass::ReturnIndirect
-        } else {
-            AggClass::ByStack
+        return match fields {
+            [f] if is_return && f.offset == 0 && size == 16 => {
+                AggClass::Regs(alloc::vec![RegClass::X87])
+            }
+            _ if is_return => AggClass::ReturnIndirect,
+            _ => AggClass::ByStack,
         };
     }
     if size > 16 {
@@ -339,7 +345,8 @@ pub(crate) fn register_parts(
     let AggClass::Regs(classes) = classify_aggregate(size, 0, fields, abi, is_return) else {
         return None;
     };
-    if classes.is_empty() || classes.contains(&RegClass::Vector) {
+    if classes.is_empty() || classes.contains(&RegClass::Vector) || classes.contains(&RegClass::X87)
+    {
         return None;
     }
     let layout: alloc::vec::Vec<(u32, u32, RegClass)> = match hfa_member_layout(fields) {
@@ -458,6 +465,33 @@ mod tests {
         );
         assert_eq!(
             classify_aggregate(24, 8, &f, sysv(), true),
+            AggClass::ReturnIndirect
+        );
+    }
+
+    #[test]
+    fn sysv_long_double_is_memory_as_argument_and_st0_as_return() {
+        // `long double`, bare or as a struct's only member: X87 + X87UP.
+        let f = [ff(0, 16, ScalarKind::F80)];
+        assert_eq!(
+            classify_aggregate(16, 16, &f, sysv(), false),
+            AggClass::ByStack
+        );
+        assert_eq!(
+            classify_aggregate(16, 16, &f, sysv(), true),
+            AggClass::Regs(alloc::vec![RegClass::X87])
+        );
+        // A union with a `double`: the eightbyte merges X87 and SSE to
+        // MEMORY, returned through the hidden pointer.
+        let u = [ff(0, 16, ScalarKind::F80), ff(0, 8, ScalarKind::F64)];
+        assert_eq!(
+            classify_aggregate(16, 16, &u, sysv(), true),
+            AggClass::ReturnIndirect
+        );
+        // Two members exceed two eightbytes with no SSE first: MEMORY.
+        let two = [ff(0, 16, ScalarKind::F80), ff(16, 16, ScalarKind::F80)];
+        assert_eq!(
+            classify_aggregate(32, 16, &two, sysv(), true),
             AggClass::ReturnIndirect
         );
     }

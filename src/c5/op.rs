@@ -308,6 +308,9 @@ impl VaArgDesc {
     pub(crate) const INT: u8 = 0;
     pub(crate) const FLOAT: u8 = 1;
     pub(crate) const VECTOR: u8 = 2;
+    /// Passed in memory whatever registers are left: the System V MEMORY
+    /// class a `long double` takes (X87 + X87UP).
+    pub(crate) const MEMORY: u8 = 3;
 
     pub(crate) fn pack(self) -> i64 {
         (i64::from(self.by_ref) << 25)

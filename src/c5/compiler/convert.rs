@@ -23,8 +23,8 @@
 
 use super::Compiler;
 use super::types::{
-    is_bool_ty, is_float_ty, is_floating_scalar, is_integer_scalar_ty, is_pointer_ty, is_struct_ty,
-    is_unsigned_ty,
+    is_bool_ty, is_float_ty, is_floating_scalar, is_integer_scalar_ty, is_long_double_scalar,
+    is_pointer_ty, is_struct_ty, is_unsigned_ty,
 };
 
 impl Compiler {
@@ -79,10 +79,16 @@ impl Compiler {
             self.ast_fpcast();
             self.ast_apply_assign_conv(dest_ty);
             self.ty = dest_ty;
-        } else if dest_is_fp && src_is_fp && is_float_ty(dest_ty) != is_float_ty(self.ty) {
+        } else if dest_is_fp
+            && src_is_fp
+            && (is_float_ty(dest_ty) != is_float_ty(self.ty)
+                || is_long_double_scalar(dest_ty) != is_long_double_scalar(self.ty))
+        {
             // `double` -> `float` (narrow) or `float` -> `double`
             // (widen). The walker's `Expr::Cast` arm emits the matching
-            // `Inst::FpCast(F64ToF32 / F32ToF64)` per C99 6.3.1.5.
+            // `Inst::FpCast(F64ToF32 / F32ToF64)` per C99 6.3.1.5. A
+            // `long double` to or from `double` changes no value, only
+            // the type, which decides how an argument crosses a call.
             self.ast_apply_assign_conv(dest_ty);
             self.ty = dest_ty;
         }

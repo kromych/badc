@@ -41,8 +41,8 @@ pub(crate) use emit::SCOPE_UNWIND;
 pub(crate) use initializer::INIT_BOOKKEEPING;
 pub(crate) use initializer::PendingLabelReloc;
 pub(crate) use type_layout::{
-    StructReturnAbi, host_abi_agg_desc, host_abi_agg_desc_conv, struct_return_abi,
-    struct_return_abi_conv,
+    StructReturnAbi, host_abi_agg_desc, host_abi_agg_desc_conv, long_double_agg_desc,
+    struct_return_abi, struct_return_abi_conv,
 };
 pub(crate) mod types;
 

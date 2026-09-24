@@ -695,6 +695,10 @@ impl<'a> Walker<'a> {
             if self.is_int128_value_ty(self.scalar_return_ty) && !self.expr_is_int128_value(e) {
                 let pair = self.int128_operand(b, e)?;
                 Some(self.int128_materialize(b, pair))
+            } else if self.ret_in_regs && is_long_double_scalar(self.scalar_return_ty) {
+                // A `long double` returned as its image.
+                let v = self.walk_copy_operand(b, e)?;
+                Some(self.long_double_image(b, v, self.scalar_return_ty))
             } else {
                 None
             };

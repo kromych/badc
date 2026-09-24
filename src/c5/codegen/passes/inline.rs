@@ -2037,7 +2037,9 @@ fn param_agg_slots(c: &FunctionSsa) -> BTreeSet<i64> {
 /// writes the caller's object for the body's duration (C99 6.5.2.2p4:
 /// the parameter holds the argument's value as of the call). The pass
 /// has no alias analysis, so any write the body makes outside its own
-/// frame slots is taken to reach that object and forces the copy.
+/// frame slots is taken to reach that object and forces the copy. The
+/// binding reaches the cell's `LocalAddr` reads only, so a `LoadLocal` of
+/// the cell -- a `long double` parameter's read -- forces it too.
 ///
 /// The match is exhaustive by design: a new instruction must be
 /// classified here rather than defaulting to "cannot write".
@@ -2059,7 +2061,7 @@ fn needs_param_agg_copy(c: &FunctionSsa) -> bool {
         Inst::Copy { .. } => false,
         // A scaled index can leave the base object.
         Inst::StoreIndexed { .. } => true,
-        Inst::StoreLocal { off, .. } => agg_slots.contains(off),
+        Inst::StoreLocal { off, .. } | Inst::LoadLocal { off, .. } => agg_slots.contains(off),
         Inst::AtomicRmw { .. } | Inst::AtomicCas { .. } | Inst::AtomicStore { .. } => true,
         Inst::AtomicLoad { .. }
         | Inst::ParamPart { .. }
@@ -2094,7 +2096,6 @@ fn needs_param_agg_copy(c: &FunctionSsa) -> bool {
         | Inst::LocalAddr(_)
         | Inst::TlsAddr(_)
         | Inst::Load { .. }
-        | Inst::LoadLocal { .. }
         | Inst::LoadIndexed { .. }
         | Inst::SegLoad { .. }
         | Inst::Binop { .. }

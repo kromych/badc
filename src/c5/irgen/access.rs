@@ -109,6 +109,25 @@ impl<'a> Walker<'a> {
     /// own storage, so its top-level qualifier governs (C99 6.7.5.1p1);
     /// a place reached through an address keeps the whole-tag reading,
     /// which over-approximates the level the qualifier sits at.
+    /// The 16-byte object a `long double` value `v` of `ty` crosses a call
+    /// as where the ABI moves it that way (`long_double_agg_desc`): the
+    /// value in the storage format. Yields its address.
+    pub(super) fn long_double_image(&self, b: &mut SsaBuilder, v: ValueId, ty: i64) -> ValueId {
+        let slot = b.alloc_synthetic_struct(16);
+        let addr = b.local_addr(slot);
+        b.store(addr, v, store_kind_for(ty, self.target));
+        addr
+    }
+
+    /// Whether a value of type `ty` crosses a call on `conv`, as an argument
+    /// or the result, in the FP register bank rather than as a `long double`
+    /// image.
+    pub(super) fn crosses_in_fp_reg(&self, conv: crate::c5::codegen::CallConv, ty: i64) -> bool {
+        super::types::is_floating_scalar(ty)
+            && !(is_long_double_scalar(ty)
+                && crate::c5::compiler::long_double_agg_desc(self.target, conv).is_some())
+    }
+
     pub(super) fn rmw_is_volatile(&self, place: &RmwPlace, ty: i64, lvalue: ExprId) -> bool {
         match place {
             RmwPlace::Slot(_) => is_volatile_object_ty(ty),

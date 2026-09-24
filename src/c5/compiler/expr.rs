@@ -1923,14 +1923,32 @@ impl Compiler {
     }
 
     /// The type a variadic argument of type `ty` travels as: a `long double`
-    /// wider than `double` is passed as the binary64 badc computes with.
+    /// wider than `double` that the convention does not pass as its image is
+    /// passed as the binary64 badc computes with.
     fn va_arg_slot_ty(&self, ty: i64) -> i64 {
         if super::types::is_long_double_scalar(ty)
             && self.target.long_double() != crate::c5::codegen::LongDoubleKind::F64
+            && super::long_double_agg_desc(self.target, self.current_func_conv).is_none()
         {
             Ty::Double as i64
         } else {
             ty
+        }
+    }
+
+    /// The `va_arg` class of a `long double` passed as its image, by its
+    /// classification: memory on System V.
+    fn long_double_va_kind(&self, ty: i64) -> Option<u8> {
+        use crate::c5::codegen::abi_classify::{AggClass, classify_aggregate};
+        if !super::types::is_long_double_scalar(ty) {
+            return None;
+        }
+        let conv = self.current_func_conv;
+        let desc = super::long_double_agg_desc(self.target, conv)?;
+        let abi = self.target.abi_for(conv);
+        match classify_aggregate(desc.size, desc.align, &desc.fields, abi, false) {
+            AggClass::ByStack => Some(crate::c5::op::VaArgDesc::MEMORY),
+            _ => None,
         }
     }
 
@@ -1975,6 +1993,8 @@ impl Compiler {
             !is_pointer && super::type_layout::va_arg_by_ref(&self.structs, self.target, arg_ty);
         let (kind, align) = if is_pointer || by_ref {
             (VaArgDesc::INT, 8)
+        } else if let Some(kind) = self.long_double_va_kind(arg_ty) {
+            (kind, 16)
         } else if is_vector_ty(&self.structs, arg_ty) && matches!(size, 8 | 16) {
             (
                 VaArgDesc::VECTOR,

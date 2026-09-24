@@ -4830,14 +4830,11 @@ fn win64_xmm_scratch_callee_save() {
 }
 
 #[test]
-#[ignore = "TODO: c5 VM has no shim for strtold / ldexpl; the fixture verifies the SysV x86_64 long-double libc-return convention through the native lane via NATIVE_FIXTURES"]
+#[ignore = "TODO: c5 VM has no shim for strtold / ldexpl; the Linux native fixture tables run the fixture"]
 fn long_double_libc_return_round_trips() {
-    // SysV x86_64 ABI: `long double` libc returns ride in
-    // x87 `st(0)`, not XMM0. The libc-call lowering spills
-    // st(0) and reloads as double; the fixture asserts that
-    // strtold and ldexpl yield the right bit pattern after
-    // the round trip. Pre-fix the path read XMM0 and got
-    // -0.0 for every call.
+    // A `long double` libc return arrives in x87 `st(0)` on System V
+    // x86-64 and in `v0` as binary128 on AAPCS64, not where a `double`
+    // returns.
     assert_eq!(run_fixture("long_double_libc_return.c"), 0);
 }
 

@@ -1434,6 +1434,20 @@ fn long_double_operands_give_long_double_results() {
     }
 }
 
+/// A `long double` argument, result, variadic argument and aggregate member
+/// crosses a call unchanged on every target, System V's x87 image in memory
+/// and `st(0)` included.
+#[test]
+fn long_double_call_shapes_keep_their_values() {
+    use super::Vm;
+    use crate::{Compiler, Target};
+    let src = super::load_fixture("long_double_call_shapes.c");
+    for t in [Target::LinuxX64, Target::LinuxAarch64, Target::MacOSAarch64] {
+        let program = Compiler::with_target(src.clone(), t).compile().unwrap();
+        assert_eq!(Vm::new(program).run().unwrap(), 0, "{t:?}");
+    }
+}
+
 /// `long double` keeps `double`'s 53-bit significand through the compute
 /// path, so a value needing more than 53 bits does not round-trip even
 /// where the stored object could hold it (x87 80-bit has 64 significand
@@ -1455,11 +1469,12 @@ fn long_double_carries_only_the_binary64_significand() {
 }
 
 /// A `long double` handed to a platform-libc import is read by the
-/// callee in the target ABI's format. badc passes the binary64 it
-/// stores, so on the two Linux targets the callee decodes a different
-/// object; the mismatch is announced at compile time instead of
-/// surfacing as a wrong value at run time. macOS/arm64 and Windows x64
-/// define `long double` as binary64, so nothing is lost there.
+/// callee in the target ABI's format. On linux-aarch64 badc passes the
+/// binary64 it computes with, so the callee decodes a different object;
+/// the mismatch is announced at compile time instead of surfacing as a
+/// wrong value at run time. linux-x64 passes the x87 image the ABI
+/// names, and macOS/arm64 and Windows define `long double` as binary64,
+/// so nothing is lost there.
 #[test]
 fn long_double_libc_argument_warns_where_the_platform_abi_is_wider() {
     use crate::Compiler;
@@ -1480,17 +1495,13 @@ fn long_double_libc_argument_warns_where_the_platform_abi_is_wider() {
             w.to_string().contains("`long double` argument") && w.to_string().contains(needle)
         })
     };
-    let x64 = warns(src, Target::LinuxX64);
-    assert!(
-        hit(&x64, "x87 80-bit"),
-        "LinuxX64 must name the x87 format, got: {x64:?}"
-    );
     let a64 = warns(src, Target::LinuxAarch64);
     assert!(
         hit(&a64, "IEEE binary128"),
         "LinuxAarch64 must name the binary128 format, got: {a64:?}"
     );
     for t in [
+        Target::LinuxX64,
         Target::MacOSAarch64,
         Target::WindowsX64,
         Target::WindowsAarch64,
@@ -1499,16 +1510,16 @@ fn long_double_libc_argument_warns_where_the_platform_abi_is_wider() {
         assert!(
             !ws.iter()
                 .any(|w| w.to_string().contains("`long double` argument")),
-            "{t:?} defines long double as binary64 and must not warn, got: {ws:?}"
+            "{t:?} passes long double as the platform does and must not warn, got: {ws:?}"
         );
     }
     // Exactly one argument is at issue: the `double` call must stay quiet.
     assert_eq!(
-        x64.iter()
+        a64.iter()
             .filter(|w| w.to_string().contains("`long double` argument"))
             .count(),
         1,
-        "only the `%Lf` argument may warn, got: {x64:?}"
+        "only the `%Lf` argument may warn, got: {a64:?}"
     );
     // <math.h> defines the `l` entry points over their `double` counterparts,
     // so no `long double` reaches a platform callee and nothing may warn.

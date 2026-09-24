@@ -74,22 +74,22 @@ Disassembly of section .text:
 <branches>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x430
+               	sub	sp, sp, #0x220
                	str	x20, [sp]
                	sxtw	x0, w0
                	mov	x20, x1
                	cbz	x0, <addr>
-               	sub	x0, x29, #0x420
+               	sub	x0, x29, #0x210
                	mov	x1, #0x210              // =528
                	mov	x2, x20
                	bl	<addr>
-               	sub	x0, x29, #0x420
+               	sub	x0, x29, #0x210
                	mov	x1, #0x210              // =528
                	mov	x3, #0x10               // =16
                	mov	x2, x20
                	bl	<addr>
                	ldr	x20, [sp]
-               	add	sp, sp, #0x430
+               	add	sp, sp, #0x220
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x0, x29, #0x210
@@ -102,7 +102,7 @@ Disassembly of section .text:
                	mov	x3, #0x10               // =16
                	bl	<addr>
                	ldr	x20, [sp]
-               	add	sp, sp, #0x430
+               	add	sp, sp, #0x220
                	ldp	x29, x30, [sp], #0x10
                	ret
 

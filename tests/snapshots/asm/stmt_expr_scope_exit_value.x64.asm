@@ -56,8 +56,8 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	movq	%rsp, %rcx
                	movl	$0x5, -0x10(%rbp)
+               	movq	%rsp, %rcx
                	movl	$0xc, %edx
                	movq	%rdx, %r11
                	addq	$0xf, %r11

@@ -11,7 +11,7 @@ use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::vec::Vec;
 
 use super::early_exit::EarlyExit;
-use super::emit_common::{edge_moves, inst_emits_nothing};
+use super::emit_common::edge_moves;
 use super::mem2reg::successors;
 use super::reg_alloc::{Allocation, for_each_operand};
 use crate::c5::codegen::passes::layout::JumpChains;
@@ -286,7 +286,7 @@ impl BlockPlan {
         let range = block.inst_range.clone();
         let computes = |v: ValueId| {
             let inst = &func.insts[v as usize];
-            inst_emits_nothing(inst, v, alloc)
+            emits_nothing(inst, v, alloc)
                 || matches!(
                     inst,
                     Inst::Imm(_) | Inst::Binop { .. } | Inst::BinopI { .. } | Inst::Extend { .. }
@@ -420,7 +420,7 @@ fn test_only(func: &FunctionSsa, alloc: &Allocation, h: BlockId) -> Vec<ValueId>
     let mut only = Vec::new();
     for v in range.clone().rev() {
         let inst = &func.insts[v as usize];
-        if inst_emits_nothing(inst, v, alloc) || readers[(v - range.start) as usize] != 0 {
+        if emits_nothing(inst, v, alloc) || readers[(v - range.start) as usize] != 0 {
             continue;
         }
         only.push(v);
@@ -439,6 +439,12 @@ fn test_only(func: &FunctionSsa, alloc: &Allocation, h: BlockId) -> Vec<ValueId>
 }
 
 /// `b` emits nothing and its one unconditional edge moves nothing.
+/// Whether `inst` lowers to no code: `emit_common::inst_emits_nothing`, or a
+/// lifetime marker, which only bounds a slot's sharing.
+fn emits_nothing(inst: &Inst, v: ValueId, alloc: &Allocation) -> bool {
+    matches!(inst, Inst::LifetimeEnd(_)) || super::emit_common::inst_emits_nothing(inst, v, alloc)
+}
+
 fn forwards_to(func: &FunctionSsa, alloc: &Allocation, b: BlockId) -> Option<BlockId> {
     let block = &func.blocks[b as usize];
     let (Terminator::Jmp(t) | Terminator::FallThrough(t)) = block.terminator else {
@@ -447,7 +453,7 @@ fn forwards_to(func: &FunctionSsa, alloc: &Allocation, b: BlockId) -> Option<Blo
     let silent = block
         .inst_range
         .clone()
-        .all(|v| inst_emits_nothing(&func.insts[v as usize], v, alloc));
+        .all(|v| emits_nothing(&func.insts[v as usize], v, alloc));
     (t != b && silent && edge_moves(func, alloc, b, t).is_empty()).then_some(t)
 }
 
@@ -476,7 +482,7 @@ fn repeatable_arms(
     let mut live = 0;
     for v in block.inst_range.clone() {
         let inst = &func.insts[v as usize];
-        if inst_emits_nothing(inst, v, alloc) {
+        if emits_nothing(inst, v, alloc) {
             continue;
         }
         let recomputable = matches!(
@@ -512,7 +518,7 @@ fn repeatable_indirect(func: &FunctionSsa, alloc: &Allocation, h: BlockId) -> bo
         && block
             .inst_range
             .clone()
-            .all(|v| inst_emits_nothing(&func.insts[v as usize], v, alloc))
+            .all(|v| emits_nothing(&func.insts[v as usize], v, alloc))
         && func
             .computed_goto_targets
             .iter()

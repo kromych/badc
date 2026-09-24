@@ -942,8 +942,8 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
     }
     let mut g_read = alloc::vec![0u64; nb * gwords];
     let mut g_event = alloc::vec![0u64; nb * gwords];
-    // Per block: the scoped groups whose lifetime ends in it.
-    let mut g_end = alloc::vec![0u64; nb * gwords];
+    // Per block: the groups whose last event in it is the end marker.
+    let mut g_end_last = alloc::vec![0u64; nb * gwords];
     // The scoped groups, as a mask over the shareable index space.
     let mut scoped_mask = alloc::vec![0u64; gwords];
     for (i, &g) in sidx.iter().enumerate() {
@@ -953,49 +953,46 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
     }
     for (b, evs) in block_events.iter().enumerate() {
         for &(_, sg, kind) in evs {
-            g_event[b * gwords + sg / 64] |= 1u64 << (sg % 64);
+            let bit = 1u64 << (sg % 64);
+            g_event[b * gwords + sg / 64] |= bit;
             if kind & READ != 0 {
-                g_read[b * gwords + sg / 64] |= 1u64 << (sg % 64);
+                g_read[b * gwords + sg / 64] |= bit;
             }
             if kind & END != 0 {
-                g_end[b * gwords + sg / 64] |= 1u64 << (sg % 64);
+                g_end_last[b * gwords + sg / 64] |= bit;
+            } else {
+                g_end_last[b * gwords + sg / 64] &= !bit;
             }
         }
     }
     // A scoped group's storage is reached through addresses this pass
     // does not follow, so only the end of the object's lifetime bounds
-    // it. `ended_in[b]` is the must-relation "every path from entry to
-    // `b` has run this group's end marker": the group is busy wherever
-    // an event has reached and no marker has yet run on every path.
-    // Least-fixed-point from the top, over a worklist; a block the entry
-    // does not reach keeps the top, which executes nothing.
-    let mut ended_in = alloc::vec![u64::MAX; nb * gwords];
-    if nb > 0 {
-        ended_in[..gwords].fill(0);
-        let mut work: Vec<usize> = (1..nb).collect();
-        let mut queued = alloc::vec![true; nb];
-        queued[0] = false;
-        while let Some(b) = work.pop() {
-            queued[b] = false;
-            let mut shrank = false;
+    // it. `dead_in[b]` is the must-relation "on every path to `b` the end
+    // marker ran after the group's last event, or none ran": a path that
+    // never entered the object's block carries nothing of it, and the
+    // function's entry edge carries nothing at all. Greatest fixed point,
+    // swept in reverse postorder until stable -- a gen/kill problem settles
+    // in a pass per loop level plus two, where a worklist re-walks the
+    // blocks after each late bit; an unreachable block keeps the top.
+    let dead_out = |dead_in: &[u64], b: usize, w: usize| {
+        (dead_in[b * gwords + w] & !g_event[b * gwords + w]) | g_end_last[b * gwords + w]
+    };
+    let mut dead_in = alloc::vec![u64::MAX; nb * gwords];
+    let mut rpo = graph.postorder();
+    rpo.reverse();
+    let mut changed = true;
+    while changed {
+        changed = false;
+        for &b in &rpo {
+            let b = b as usize;
             for w in 0..gwords {
                 let mut v = u64::MAX;
                 for &p in graph.preds_of(b as BlockId) {
-                    let p = p as usize;
-                    v &= ended_in[p * gwords + w] | g_end[p * gwords + w];
+                    v &= dead_out(&dead_in, p as usize, w);
                 }
-                if v != ended_in[b * gwords + w] {
-                    ended_in[b * gwords + w] = v;
-                    shrank = true;
-                }
-            }
-            if shrank {
-                for &t in graph.of(b as BlockId) {
-                    let t = t as usize;
-                    if t != 0 && !queued[t] {
-                        queued[t] = true;
-                        work.push(t);
-                    }
+                if v != dead_in[b * gwords + w] {
+                    dead_in[b * gwords + w] = v;
+                    changed = true;
                 }
             }
         }
@@ -1095,10 +1092,9 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
             first_ev.entry(sg).or_insert(pc);
         }
         let mut live = r_out[b * gwords..(b + 1) * gwords].to_vec();
-        // A scoped group is busy at the block's exit unless a marker has
-        // run on every path through it.
+        // A scoped group is busy at the block's exit unless dead there.
         for w in 0..gwords {
-            live[w] |= scoped_mask[w] & !(ended_in[b * gwords + w] | g_end[b * gwords + w]);
+            live[w] |= scoped_mask[w] & !dead_out(&dead_in, b, w);
         }
         let mut i = evs.len();
         while i > 0 {
@@ -1137,9 +1133,10 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
                 if kind & READ != 0 {
                     live[sg / 64] |= 1u64 << (sg % 64);
                 }
-                // Before its marker the scoped group is busy, unless a
-                // marker already ran on every path into this block.
-                if kind & END != 0 && ended_in[b * gwords + sg / 64] & (1u64 << (sg % 64)) == 0 {
+                // Before its marker the scoped group is busy, unless dead on
+                // entry to the block with no earlier event in it.
+                let dead = dead_in[b * gwords + sg / 64] & (1u64 << (sg % 64)) != 0;
+                if kind & END != 0 && (!dead || first_ev.get(&sg).is_some_and(|&fp| fp < pc)) {
                     live[sg / 64] |= 1u64 << (sg % 64);
                 }
             }
@@ -2268,6 +2265,62 @@ mod tests {
         let mut dead = build(false);
         coalesce(&mut dead, true, false);
         assert_eq!(dead.locals, 4, "with no later read the two objects share");
+    }
+
+    /// Two escaped objects, each bounded by its end marker. B's lifetime lies
+    /// in the entry block; A starts in the block after it and ends only on
+    /// the exit, so on the loop's back edge into the entry A is still live
+    /// where B is: they keep separate storage. With A ended on that edge
+    /// too, they share.
+    #[test]
+    fn a_back_edge_into_the_entry_carries_a_live_object() {
+        let escape = |addr: ValueId| Inst::Store {
+            addr,
+            disp: 0,
+            value: addr,
+            kind: StoreKind::I64,
+            volatile: false,
+            align: 0,
+        };
+        let build = |end_on_back_edge: bool| {
+            let mut insts = alloc::vec![
+                Inst::LocalAddr(-8),
+                escape(0),
+                Inst::LifetimeEnd(-8),
+                Inst::LocalAddr(-4),
+                escape(3),
+            ];
+            if end_on_back_edge {
+                insts.push(Inst::LifetimeEnd(-4));
+            }
+            let back = insts.len() as u32;
+            insts.push(Inst::LifetimeEnd(-4));
+            let blocks = alloc::vec![
+                (0, 3, Terminator::Jmp(1)),
+                (
+                    3,
+                    back,
+                    Terminator::Bz {
+                        cond: NO_VALUE,
+                        target: 0,
+                        fall_through: 2,
+                    },
+                ),
+                (back, back + 1, Terminator::Return(NO_VALUE)),
+            ];
+            let mut f = multi_block(insts, blocks, 8);
+            f.multi_cell_slots = alloc::vec![(-8, 4), (-4, 4)];
+            f
+        };
+        let mut live = build(false);
+        coalesce(&mut live, true, false);
+        assert_eq!(live.locals, 8, "A is live in the entry block's second run");
+        let mut ended = build(true);
+        coalesce(&mut ended, true, false);
+        assert_eq!(
+            ended.locals, 4,
+            "ended before the back edge, A shares with B"
+        );
     }
 
     /// Group lifetimes are reachability relations, settled by one sweep

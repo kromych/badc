@@ -148,6 +148,24 @@ struct SwitchLabels {
     default: Option<BlockId>,
 }
 
+/// Where `break` and `continue` go, and the `Walker::scopes` depth each keeps.
+#[derive(Clone, Copy)]
+struct LoopCtx {
+    brk: BlockId,
+    cont: BlockId,
+    brk_depth: usize,
+    cont_depth: usize,
+}
+
+/// A block (`Stmt::Compound`) or VLA scope (`Stmt::VlaScopeEnter`) the walk
+/// is inside: the lifetimes leaving it ends (C99 6.2.4p2), the sp it restores.
+#[derive(Clone, Copy)]
+struct OpenScope<'a> {
+    id: StmtId,
+    ends: &'a [i64],
+    vla_save: Option<i64>,
+}
+
 /// Per-walk context. Mutable so the walker can stack break /
 /// continue targets across nested loops + switches and intern
 /// `LabelId -> BlockId` for cross-stmt gotos.
@@ -156,10 +174,12 @@ struct Walker<'a> {
     symbols: &'a [Symbol],
     structs: &'a [crate::c5::compiler::StructDef],
     target: Target,
-    /// Stack of `(break_target, continue_target)` block ids, one
-    /// frame per enclosing loop / switch. Break/Continue stmts
-    /// jump to the top-of-stack entries.
-    loop_ctx: alloc::vec::Vec<(BlockId, BlockId)>,
+    /// The enclosing loops / switches and open scopes, innermost last.
+    loop_ctx: alloc::vec::Vec<LoopCtx>,
+    scopes: alloc::vec::Vec<OpenScope<'a>>,
+    /// Per `LabelId`, the ids of the scopes enclosing it; `None` inside a
+    /// statement expression.
+    label_scopes: alloc::vec::Vec<Option<alloc::vec::Vec<StmtId>>>,
     /// SSA block reserved for each AST label's body, indexed by
     /// `LabelId`. Filled lazily by a Goto's forward reference or by the
     /// matching Labeled stmt, both of which see the same block.

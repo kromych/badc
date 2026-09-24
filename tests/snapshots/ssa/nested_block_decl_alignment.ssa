@@ -27,6 +27,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     v18  Phi { incoming=[b3:v4, b1:v15], kind=I64 }       -> x0
     v19  Imm(0)                                           -> x1
     v20  Extend { value=v18, kind=I32 }                   -> x1
+    v21  LifetimeEnd(-3)                                  -> -
     terminator Return(v18)   (exit_acc=v18)
   block 3  start_pc=0
     terminator Jmp(b2)
@@ -61,6 +62,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     v20  Phi { incoming=[b3:v4, b1:v17], kind=I64 }       -> x0
     v21  Imm(0)                                           -> x1
     v22  Extend { value=v20, kind=I32 }                   -> x1
+    v23  LifetimeEnd(-10)                                 -> -
     terminator Return(v20)   (exit_acc=v20)
   block 3  start_pc=0
     terminator Jmp(b2)

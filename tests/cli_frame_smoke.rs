@@ -842,6 +842,64 @@ void two16(int c) { if (c) { struct st16 a; use16(&a); } else { struct st16 b; u
     }
 }
 
+/// Every edge that leaves a block ends the lifetimes of the objects it
+/// declared (C99 6.2.4p2), so two 512-byte arrays in disjoint blocks share
+/// one 512-byte cell whether the blocks fall through, return, break,
+/// continue or goto out, and when a path never enters the first block. A
+/// `for` statement is a block (C99 6.8.5p5): the kernel's `scoped_ksimd()`
+/// declares its 528-byte state in one, left by `return` or by `break`, and
+/// the two states take one over-aligned region block.
+#[test]
+fn an_object_left_by_any_edge_shares_its_storage() {
+    const SRC: &str = r#"
+void g(char *);
+int fall(int c) { if (c) { char a[512]; g(a); } else { char b[512]; g(b); } return 0; }
+int ret(int c) { if (c) { char a[512]; g(a); return 1; } else { char b[512]; g(b); return 2; } }
+void skip(int c) { if (c) { char a[512]; g(a); } { char b[512]; g(b); } }
+void sw(int k) { switch (k) { case 0: { char a[512]; g(a); } case 1: { char b[512]; g(b); break; } } }
+void brk(int n) { for (int i = 0; i < n; i++) { char a[512]; g(a); if (a[0]) break; } { char b[512]; g(b); } }
+void cont(int n) {
+    for (int i = 0; i < n; i++) { char a[512]; g(a); if (a[0]) continue; g(a + 1); }
+    { char b[512]; g(b); }
+}
+void jump(int c) { { char a[512]; g(a); if (c) goto out; g(a + 1); } out: { char b[512]; g(b); } }
+struct st { _Alignas(16) unsigned char v[512]; unsigned int fpsr, fpcr; };
+void use_st(struct st *);
+int ksimd(int c) {
+    if (c) { for (struct st s;;) { use_st(&s); return 1; } }
+    else { for (struct st t;;) { use_st(&t); break; } }
+    return 0;
+}
+"#;
+    let dir = tempdir("scope_exits");
+    for target in ["linux-aarch64", "linux-x64"] {
+        let arg = format!("--target={target}");
+        let frames = frame_reports(&dir, "scope_exits", SRC, &[arg.as_str()]);
+        for f in ["fall", "ret", "skip", "sw", "brk", "cont", "jump"] {
+            let (bytes, parts) = frames
+                .get(f)
+                .unwrap_or_else(|| panic!("{target} {f}: {frames:?}"));
+            let locals = parts.split(", ").find(|p| p.ends_with(" in locals"));
+            assert_eq!(
+                locals,
+                Some("512 in locals"),
+                "{target} {f}: {bytes} bytes: {parts}"
+            );
+        }
+        let (bytes, parts) = frames
+            .get("ksimd")
+            .unwrap_or_else(|| panic!("{target} ksimd: {frames:?}"));
+        let region = parts
+            .split(", ")
+            .find(|p| p.ends_with(" in an over-aligned region"));
+        assert_eq!(
+            region,
+            Some("528 in an over-aligned region"),
+            "{target} ksimd: {bytes} bytes: {parts}"
+        );
+    }
+}
+
 /// The SIMD intrinsic wrappers are `static inline` bodies of one
 /// instruction over a pair of by-value vector parameters and a vector
 /// return. At -O each splices into its caller on the flat path: the

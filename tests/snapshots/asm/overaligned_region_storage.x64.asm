@@ -84,17 +84,17 @@ Disassembly of section .text:
 <branches>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x428, %rsp            # imm = 0x428
+               	subq	$0x218, %rsp            # imm = 0x218
                	pushq	%rbx
                	movslq	%edi, %rdi
                	movq	%rsi, %rbx
                	testq	%rdi, %rdi
                	je	<addr>
-               	leaq	-0x420(%rbp), %rdi
+               	leaq	-0x210(%rbp), %rdi
                	movl	$0x210, %esi            # imm = 0x210
                	movq	%rbx, %rdx
                	callq	<addr>
-               	leaq	-0x420(%rbp), %rdi
+               	leaq	-0x210(%rbp), %rdi
                	movl	$0x210, %esi            # imm = 0x210
                	movl	$0x10, %ecx
                	movq	%rbx, %rdx

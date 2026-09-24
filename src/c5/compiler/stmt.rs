@@ -461,15 +461,23 @@ impl Compiler {
             for cv in pending {
                 self.push_cleanup_call(&cv);
             }
-            self.coalesce_exit_since(for_stmt_start);
         }
         self.cleanup_scopes.pop();
+        // C99 6.8.5p5: the for statement is a block, whose end ends the
+        // lifetimes of the objects its init clause declared.
+        let for_init_symbols = self.block_scopes.pop().unwrap();
+        let slots = self.block_lifetime_slots(&for_init_symbols, &[], None);
+        if !slots.is_empty() {
+            let pos = self.ast_src_pos();
+            self.ast
+                .push_stmt(super::super::ast::Stmt::ScopeEnd(slots), pos);
+        }
+        self.coalesce_exit_since(for_stmt_start);
 
         // Restore symbols shadowed by the for-init declaration so
         // the binding's scope ends with the for statement
         // (C99 6.8.5.3 / 6.8p3). Restore in reverse order to
         // unwind multiple shadows in declaration order.
-        let for_init_symbols = self.block_scopes.pop().unwrap();
         self.capture_block_locals(&for_init_symbols);
         for b in for_init_symbols.into_iter().rev() {
             self.restore_block_shadow(b);
@@ -893,9 +901,9 @@ impl Compiler {
 
         let mut top_level_ids: alloc::vec::Vec<super::super::ast::StmtId> = alloc::vec::Vec::new();
         // C99 6.2.4p2: a VLA declared directly in this block has its
-        // storage reclaimed on block exit. Track whether any appears so
-        // the block is bracketed with the stack save / restore.
-        let mut block_has_vla = false;
+        // storage reclaimed on block exit. The stack pointer is saved at the
+        // first one, which a jump may not pass (C99 6.8.6.1p1).
+        let mut first_vla_item: Option<usize> = None;
         let mut at_block_start = true;
         while self.lex.tk != '}' {
             if self.lex.tk == Token::LocalLabel {
@@ -936,8 +944,8 @@ impl Compiler {
                 let item_before = self.ast_stmts_snapshot();
                 let vla_before = self.func_vla_decls;
                 self.parse_local_decl(leading_maybe_unused)?;
-                if self.func_vla_decls > vla_before {
-                    block_has_vla = true;
+                if self.func_vla_decls > vla_before && first_vla_item.is_none() {
+                    first_vla_item = Some(top_level_ids.len());
                 }
                 let item_after = self.ast.stmts.len();
                 // A local decl pushes one stmt-id-wrapping Decl
@@ -997,10 +1005,9 @@ impl Compiler {
             }
         }
         self.cleanup_scopes.pop();
-        // C99 6.2.4p2: bracket a VLA-declaring block so the stack
-        // pointer is snapshotted on entry and restored on exit,
-        // reclaiming the VLA storage (per iteration for a loop body).
-        if block_has_vla {
+        // Bracket the VLA scope so the stack pointer is restored on exit,
+        // reclaiming the storage (per iteration for a loop body).
+        if let Some(at) = first_vla_item {
             let save_slot = self.reserve_slots(1);
             let pos = self.ast_src_pos();
             let enter = self
@@ -1009,12 +1016,9 @@ impl Compiler {
             let exit = self
                 .ast
                 .push_stmt(super::super::ast::Stmt::VlaScopeExit { save_slot }, pos);
-            let mut bracketed = alloc::vec::Vec::with_capacity(top_level_ids.len() + 2);
-            bracketed.push(enter);
-            bracketed.extend_from_slice(&top_level_ids);
-            bracketed.push(exit);
-            top_level_ids = bracketed;
-            value_item = value_item.map(|i| i + 1);
+            top_level_ids.insert(at, enter);
+            top_level_ids.push(exit);
+            value_item = value_item.map(|i| if i >= at { i + 1 } else { i });
         }
         let block_symbols = self.block_scopes.pop().unwrap();
         // C99 6.2.4p2: every automatic object this block declared is

@@ -270,10 +270,10 @@ fn ent_pc=5 n_params=0 variadic=false locals=0
     v183 BinopI { op=ne, lhs=v182, rhs_imm=0 }            -> x2
     terminator Bz { cond=v182, target=b2, fall=b1 }   (low word)   (exit_acc=v183)
   block 1  start_pc=0
-    v191 Imm(8)                                           -> x0
-    terminator Return(v191)   (exit_acc=v191)
+    v192 Imm(8)                                           -> x0
+    terminator Return(v192)   (exit_acc=v192)
   block 2  start_pc=0
-    v192 Imm(0)                                           -> x1
+    v193 Imm(0)                                           -> x1
     terminator Return(v166)   (exit_acc=v166)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit

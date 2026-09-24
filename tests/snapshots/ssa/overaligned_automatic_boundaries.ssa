@@ -348,6 +348,7 @@ fn ent_pc=8 n_params=1 variadic=false locals=0
     v27  Phi { incoming=[b3:v18, b1:v24], kind=I64 }      -> x0
     v28  Imm(0)                                           -> x1
     v29  Extend { value=v27, kind=I32 }                   -> x1
+    v30  LifetimeEnd(-20)                                 -> -
     terminator Return(v27)   (exit_acc=v27)
   block 3  start_pc=0
     terminator Jmp(b2)

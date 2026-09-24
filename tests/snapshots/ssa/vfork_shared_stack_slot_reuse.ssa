@@ -465,12 +465,14 @@ fn ent_pc=8 n_params=0 variadic=false locals=1
     v561 Extend { value=v558, kind=I32 }                  -> x0
     v562 CallExt { binding_idx=0, args=[v560, v558], fp_arg_mask=0x0 } -> x0
     v563 Imm(1)                                           -> x0
+    v564 LifetimeEnd(-1)                                  -> -
     terminator Return(v563)   (exit_acc=v563)
   block 32  start_pc=0
-    v564 ImmData(41)                                      -> x7
-    v565 CallExt { binding_idx=0, args=[v564], fp_arg_mask=0x0 } -> x0
-    v566 Imm(0)                                           -> x0
-    terminator Return(v566)   (exit_acc=v566)
+    v565 ImmData(41)                                      -> x7
+    v566 CallExt { binding_idx=0, args=[v565], fp_arg_mask=0x0 } -> x0
+    v567 Imm(0)                                           -> x0
+    v568 LifetimeEnd(-1)                                  -> -
+    terminator Return(v567)   (exit_acc=v567)
   block 33  start_pc=0
     terminator Jmp(b30)
   block 34  start_pc=0

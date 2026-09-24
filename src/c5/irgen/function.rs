@@ -56,6 +56,8 @@ pub(crate) fn walk_function(
         structs,
         target,
         loop_ctx: alloc::vec::Vec::new(),
+        scopes: alloc::vec::Vec::new(),
+        label_scopes: alloc::vec::Vec::new(),
         label_blocks: alloc::vec![None; ast.goto_targets.len()],
         switch_dispatch: alloc::vec::Vec::new(),
         returns_struct: fun.returns_struct,
@@ -69,7 +71,10 @@ pub(crate) fn walk_function(
         jump_tables,
     };
     let terminated = match ast.body {
-        Some(root) => ctx.walk_stmt(&mut b, root)?,
+        Some(root) => {
+            ctx.label_scopes = ctx.label_scope_chains(root);
+            ctx.walk_stmt(&mut b, root)?
+        }
         None => false,
     };
     // A body that fell off the end leaves the current block open.

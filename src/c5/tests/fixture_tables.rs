@@ -69,6 +69,7 @@
 /// that exercise those paths run end-to-end.
 pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("call_arg_low_word.c", 0),
+    ("scope_exit_storage.c", 0),
     ("early_return_before_frame.c", 0),
     ("inline_asm_stack_switch_spill.c", 0),
     ("int128_divide_edges.c", 0),
@@ -1231,6 +1232,7 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
 /// same fixtures; if they drift, one of them has a bug.
 pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("call_arg_low_word.c", 0),
+    ("scope_exit_storage.c", 0),
     ("early_return_before_frame.c", 0),
     ("inline_asm_stack_switch_spill.c", 0),
     ("int128_divide_edges.c", 0),
@@ -2090,6 +2092,7 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
 
 pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("call_arg_low_word.c", 0),
+    ("scope_exit_storage.c", 0),
     ("early_return_before_frame.c", 0),
     ("inline_asm_stack_switch_spill.c", 0),
     ("int128_divide_edges.c", 0),
@@ -2926,6 +2929,7 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
 /// POSIX-only semantics.
 pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("call_arg_low_word.c", 0),
+    ("scope_exit_storage.c", 0),
     ("early_return_before_frame.c", 0),
     ("inline_asm_stack_switch_spill.c", 0),
     ("int128_divide_edges.c", 0),
@@ -3544,6 +3548,7 @@ pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
 /// are arch-independent.
 pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("call_arg_low_word.c", 0),
+    ("scope_exit_storage.c", 0),
     ("early_return_before_frame.c", 0),
     ("inline_asm_stack_switch_spill.c", 0),
     ("int128_divide_edges.c", 0),
@@ -4103,6 +4108,7 @@ pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
 
 pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
     ("call_arg_low_word.c", 0),
+    ("scope_exit_storage.c", 0),
     ("early_return_before_frame.c", 0),
     ("inline_asm_stack_switch_spill.c", 0),
     ("int128_divide_edges.c", 0),

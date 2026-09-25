@@ -1292,6 +1292,7 @@ impl Compiler {
         self.current_func_returns_void = self.symbols[id_idx].returns_void;
         self.current_function_name = self.symbols[id_idx].name.clone();
         self.current_func_conv = self.symbols[id_idx].conv;
+        self.current_func_is_noreturn = self.symbols[id_idx].is_noreturn;
 
         // Callers push right to left, so the i'th declared parameter sits at slot
         // i + 2 and the variadic tail follows it. A struct return through the

@@ -8898,6 +8898,43 @@ fn inlined_long_double_parameter_reads_the_argument_copy() {
     }
 }
 
+/// A call to a function that never returns stays out of line at -O: the
+/// callee declared `_Noreturn`, and the one whose body no path returns
+/// from, whether it ends in a call to a `_Noreturn` function or in a loop
+/// without an exit. A mandatory request is spliced as before.
+#[test]
+fn a_call_to_a_function_that_never_returns_survives_at_opt() {
+    const SRC: &str = "extern int g;\n\
+        static _Noreturn void die(int x) { g = x; for (;;) {} }\n\
+        static __attribute__((always_inline)) _Noreturn void die_now(int x)\n\
+        { g = x + 1; for (;;) {} }\n\
+        static void seal(int x) { g = x + 2; die(x); }\n\
+        static void spin(int x) { g = x + 3; for (;;) {} }\n\
+        int f(int t) { if (t == 3) die(t); return t + 1; }\n\
+        int f_now(int t) { if (t == 4) die_now(t); return t + 1; }\n\
+        int f_seal(int t) { if (t == 5) seal(t); return t + 1; }\n\
+        int f_spin(int t) { if (t == 6) spin(t); return t + 1; }\n";
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        let calls = |name: &str| {
+            let (body, insts) = optimized_function(SRC, name, target);
+            let n = insts
+                .iter()
+                .filter(|(_, i)| i.starts_with("Call {"))
+                .count();
+            (body, n)
+        };
+        for name in ["f", "f_seal", "f_spin"] {
+            let (body, n) = calls(name);
+            assert_eq!(n, 1, "{target:?}: {name} keeps its call: {body}");
+        }
+        let (body, n) = calls("f_now");
+        assert_eq!(
+            n, 0,
+            "{target:?}: f_now splices its always_inline callee: {body}"
+        );
+    }
+}
+
 /// A `long double` conditional merges its arms' binary64 values as a
 /// double. Given the object's F80 / F128 kinds, the merge slot fell back to
 /// I64: it stayed in memory and the result reached the return through a

@@ -1112,6 +1112,7 @@ impl Compiler {
             is_always_inline: self.pending_is_always_inline,
             is_noinline: self.pending_is_noinline,
             is_naked: self.pending_is_naked,
+            is_noreturn: self.current_func_is_noreturn,
             conv: self.current_func_conv,
             n_locals: self.max_loc_offs,
             name: self.current_function_name.clone(),
@@ -1137,6 +1138,7 @@ impl Compiler {
         self.pending_is_noinline = false;
         self.pending_is_naked = false;
         self.current_func_conv = crate::c5::codegen::CallConv::Target;
+        self.current_func_is_noreturn = false;
         self.finished_functions.push(finished);
     }
 

@@ -39,6 +39,7 @@ fn keyed(func: &mut FunctionSsa) -> Keyed<'_> {
         is_always_inline: _,
         is_noinline: _,
         is_naked: _,
+        is_noreturn: _,
         conv: _,
         is_weak: _,
         is_internal: _,

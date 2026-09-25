@@ -1921,6 +1921,11 @@ pub(crate) struct FunctionSsa {
     /// prologue/epilogue and no implicit return; the body (inline asm) is the
     /// function's entire machine code. Used for interrupt service routines.
     pub is_naked: bool,
+    /// True if any declaration of the function carried `_Noreturn` /
+    /// `noreturn` (C11 6.7.4): a call to it ends the path it is on. The
+    /// inliner keeps such a call out of line unless the request is
+    /// mandatory.
+    pub is_noreturn: bool,
     /// Calling convention the definition follows when it is not the
     /// target's own: `__attribute__((ms_abi))` /
     /// `__attribute__((sysv_abi))`. The prologue binds the incoming
@@ -2379,6 +2384,7 @@ impl crate::c5::layout::DataOffsets for FunctionSsa {
             is_always_inline: _,
             is_noinline: _,
             is_naked: _,
+            is_noreturn: _,
             conv: _,
             is_weak: _,
             is_internal: _,

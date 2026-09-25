@@ -2229,6 +2229,10 @@ pub struct Compiler {
     /// its symbol at the opening brace. Propagated onto
     /// `FinishedFunction::conv`.
     current_func_conv: crate::c5::codegen::CallConv,
+    /// `_Noreturn` (C11 6.7.4) on any declaration of the function whose
+    /// body is being parsed, taken off its symbol at the opening brace.
+    /// Propagated onto `FinishedFunction::is_noreturn`.
+    current_func_is_noreturn: bool,
 
     /// Preprocessor failure (e.g. unterminated `#if`) deferred from
     /// `with_target` until `compile` runs, so the construction API
@@ -2952,6 +2956,7 @@ impl Compiler {
             current_func_return_ty: 0,
             current_func_returns_void: false,
             current_func_conv: crate::c5::codegen::CallConv::Target,
+            current_func_is_noreturn: false,
             pending: Pending::default(),
             pending_store_symbols: Vec::new(),
             warn_dead_store,

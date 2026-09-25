@@ -17,6 +17,8 @@
 //!   which is what a site pays;
 //! * callee runs none of the `va_start` family, so a variadic one reads
 //!   only its named parameters;
+//! * callee returns: one declared `_Noreturn`, or whose body no path
+//!   returns from, stays out of line unless the request is mandatory;
 //! * callee's body contains no `TailExt` and no aggregate-returning
 //!   nested call -- otherwise the straight-line shapes whose
 //!   `for_each_operand` walks a known set of `ValueId` fields. A
@@ -953,11 +955,21 @@ fn is_inline_candidate(
             | Terminator::Bnz { .. } => {}
         }
     }
-    // A body no path returns from -- every exit traps or calls a
-    // `_Noreturn` function -- has no value to merge into the call's
-    // result and splices as-is, leaving the site's continuation
-    // unreachable. Admitted for a void callee only: the call then
-    // defines no value a spliced body would have to supply.
+    // A call to a function that never returns ends the path it is on.
+    // gcc (PRED_NORETURN) and clang (the unreachable heuristic) predict
+    // that path cold and keep the call: the body would grow the caller
+    // for nothing on the paths that return, and the annotations that
+    // describe it name the out-of-line function. Held out of line for a
+    // callee declared `_Noreturn` (C11 6.7.4) and for one no path
+    // returns from -- every exit traps or calls a `_Noreturn` function --
+    // unless the request is mandatory.
+    if (func.is_noreturn || return_blocks == 0) && !func.is_always_inline {
+        say(format_args!("never returns"));
+        return false;
+    }
+    // A mandatory request for a body no path returns from splices it
+    // as-is, leaving the site's continuation unreachable. It has no value
+    // to merge into the call's result, so a void callee only.
     if return_blocks == 0 && !crate::c5::compiler::types::is_void_ty(func.ret_type_tag) {
         say(format_args!("no Return block"));
         return false;
@@ -3353,6 +3365,7 @@ fn splice_multi_block(
         no_instrument: original.no_instrument,
         no_stack_protector: original.no_stack_protector,
         is_naked: original.is_naked,
+        is_noreturn: original.is_noreturn,
         conv: original.conv,
         is_weak: original.is_weak,
         is_internal: original.is_internal,
@@ -6023,6 +6036,52 @@ mod tests {
             Some(&mut reason)
         ));
         assert_eq!(reason, "naked function");
+    }
+
+    /// A callee that never returns stays out of line: one declared
+    /// `_Noreturn`, whatever its body's shape, and one whose body has no
+    /// `Return` block. A mandatory request overrides both.
+    #[test]
+    fn a_callee_that_never_returns_is_not_inlined_unless_mandatory() {
+        let abi = Target::LinuxX64.abi();
+        let leaf =
+            |terminator: Terminator, is_noreturn: bool, is_always_inline: bool| FunctionSsa {
+                is_noreturn,
+                is_always_inline,
+                ret_type_tag: crate::c5::compiler::types::void_ty(),
+                insts: alloc::vec![Inst::Imm(0)],
+                inst_src: alloc::vec![(0, 0)],
+                f32_values: alloc::vec![false],
+                blocks: alloc::vec![Block {
+                    start_pc: 0,
+                    inst_range: 0..1,
+                    terminator,
+                    exit_acc: NO_VALUE,
+                }],
+                ..Default::default()
+            };
+        let mut reason = alloc::string::String::new();
+        let candidate = |f: &FunctionSsa, reason: &mut alloc::string::String| {
+            is_inline_candidate(f, 32, abi, Some(reason))
+        };
+        let returns = Terminator::Return(NO_VALUE);
+        assert!(
+            candidate(&leaf(returns, false, false), &mut reason),
+            "{reason}"
+        );
+        assert!(!candidate(&leaf(returns, true, false), &mut reason));
+        assert_eq!(reason, "never returns");
+        assert!(
+            candidate(&leaf(returns, true, true), &mut reason),
+            "{reason}"
+        );
+        let sealed = Terminator::Unreachable;
+        assert!(!candidate(&leaf(sealed, false, false), &mut reason));
+        assert_eq!(reason, "never returns");
+        assert!(
+            candidate(&leaf(sealed, false, true), &mut reason),
+            "{reason}"
+        );
     }
 
     /// `unhonoured_inline` flags a called-but-uninlinable always_inline

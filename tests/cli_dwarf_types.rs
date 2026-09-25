@@ -45,6 +45,10 @@ const DW_AT_TYPE: u64 = 0x49;
 const DW_AT_DATA_MEMBER_LOCATION: u64 = 0x38;
 const DW_AT_PROTOTYPED: u64 = 0x27;
 const DW_AT_DECL_LINE: u64 = 0x3b;
+const DW_AT_ENCODING: u64 = 0x3e;
+
+const DW_ATE_SIGNED_CHAR: u64 = 0x06;
+const DW_ATE_UNSIGNED_CHAR: u64 = 0x08;
 
 const DW_OP_ADDR: u8 = 0x03;
 const DW_OP_CONST8U: u8 = 0x0e;
@@ -778,6 +782,45 @@ fn void_pointer_has_no_pointee_type() {
     );
     let c = u.type_of(u.member(vp, "c"));
     assert_eq!(u.type_of(c).name(), Some("char"));
+}
+
+/// C99 6.2.5p15: `char`, `signed char` and `unsigned char` are three
+/// types, so a unit declaring all three describes three base types, with
+/// `char` at the target's signedness (`DW_ATE_signed_char` on x86-64,
+/// `DW_ATE_unsigned_char` on AArch64), as gcc 16.2.1 and clang 22.1.8 emit.
+#[test]
+fn the_three_character_types_have_their_own_base_types() {
+    for (target, plain) in [
+        ("linux-x64", DW_ATE_SIGNED_CHAR),
+        ("linux-aarch64", DW_ATE_UNSIGNED_CHAR),
+    ] {
+        let u = compile_unit_for(
+            &format!("chars-{target}"),
+            target,
+            "struct chars { char c; signed char sc; unsigned char uc; };\n\
+             int use(void) { struct chars v; return v.c + v.sc + v.uc; }\n",
+        );
+        let s = u.named(DW_TAG_STRUCTURE_TYPE, "chars");
+        for (member, name, encoding) in [
+            ("c", "char", plain),
+            ("sc", "signed char", DW_ATE_SIGNED_CHAR),
+            ("uc", "unsigned char", DW_ATE_UNSIGNED_CHAR),
+        ] {
+            let t = u.type_of(u.member(s, member));
+            assert_eq!(t.tag, DW_TAG_BASE_TYPE, "{target} {member}");
+            assert_eq!(t.name(), Some(name), "{target} {member}");
+            assert_eq!(
+                t.at(DW_AT_ENCODING).map(Val::as_uint),
+                Some(encoding),
+                "{target} {member}"
+            );
+            assert_eq!(
+                t.at(DW_AT_BYTE_SIZE).map(Val::as_uint),
+                Some(1),
+                "{target} {member}"
+            );
+        }
+    }
 }
 
 /// After a badc link, a static-storage object's `DW_OP_addr` holds the

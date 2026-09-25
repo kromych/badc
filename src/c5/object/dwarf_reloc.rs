@@ -2041,7 +2041,7 @@ impl TypeKey {
 
 /// Split a c5 type tag into its catalog key.
 fn decompose_pointer_chain(type_tag: i64) -> Option<TypeKey> {
-    use crate::c5::compiler::types::{UNSIGNED_BIT, VOID_BIT};
+    use crate::c5::compiler::types::{PLAIN_CHAR_BIT, UNSIGNED_BIT, VOID_BIT};
     const TY_PTR: i64 = Ty::Ptr as i64;
     const BAND_SIZE: i64 = 100;
     const STRUCT_BASE: i64 = 1000;
@@ -2089,10 +2089,11 @@ fn decompose_pointer_chain(type_tag: i64) -> Option<TypeKey> {
     } else {
         return None;
     };
-    // The unsigned and void markers ride the leaf so `unsigned char` and
-    // `char` get distinct DIEs and `void *` stays distinguishable from
-    // `unsigned char *`.
-    let leaf = if unsigned { leaf | UNSIGNED_BIT } else { leaf } | (type_tag & VOID_BIT);
+    // The signedness, plain-char and void markers ride the leaf so the
+    // three character types get distinct DIEs and `void *` stays
+    // distinguishable from `unsigned char *`.
+    let leaf = if unsigned { leaf | UNSIGNED_BIT } else { leaf }
+        | (type_tag & (VOID_BIT | PLAIN_CHAR_BIT));
     Some(TypeKey::Scalar { leaf, depth })
 }
 

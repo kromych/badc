@@ -158,8 +158,7 @@ impl Compiler {
     pub(super) fn string_literal_elem_ty(&self) -> i64 {
         match self.prefixed_char_ty(self.lex.str_prefix) {
             Some(ty) if self.lex.str_is_wide => ty,
-            _ if self.lex.char_signed => Ty::Char as i64,
-            _ => Ty::Char as i64 | UNSIGNED_BIT,
+            _ => super::types::plain_char_ty(self.lex.char_signed),
         }
     }
 
@@ -479,6 +478,11 @@ impl Compiler {
         }
         self.mark_emit_other();
         let ty = match row.ret.lane_ty() {
+            // The headers' `__v16qi` is a vector of plain `char`.
+            Some(Ty::Char) => {
+                let lane = super::types::plain_char_ty(self.lex.char_signed);
+                self.make_vector_type(lane, 16)
+            }
             Some(lane) => self.make_vector_type(lane as i64, 16),
             None if row.ret == Ret::Void => super::types::void_ty(),
             None => Ty::Int as i64,
@@ -1495,7 +1499,7 @@ impl Compiler {
         let offset = self.intern_func_name();
         self.emit_data_imm(offset);
         self.next()?;
-        self.ty = Ty::Char as i64 + Ty::Ptr as i64;
+        self.ty = super::types::plain_char_ty(self.lex.char_signed) + Ty::Ptr as i64;
         // The array size reaches an enclosing `sizeof` as for any decayed
         // array.
         self.pending.last_array_decay_size = self.current_function_name.len() as i64 + 1;
@@ -3046,7 +3050,9 @@ impl Compiler {
     /// adds a cast to the operand's own type, a union from a member's type,
     /// and a cast involving a vector.
     fn check_cast(&self, to: i64, from: i64) -> Result<(), C5Error> {
-        let bare = |ty: i64| super::types::unqualified_object_ty(ty) & !UNSIGNED_BIT;
+        let bare = |ty: i64| {
+            super::types::unqualified_object_ty(ty) & !(UNSIGNED_BIT | super::types::PLAIN_CHAR_BIT)
+        };
         let fits = match (self.operand(to), self.operand(from)) {
             (Operand::Pointer, Operand::Floating) | (Operand::Floating, Operand::Pointer) => false,
             (Operand::Other, _) | (_, Operand::Other) => {

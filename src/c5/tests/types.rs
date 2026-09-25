@@ -2235,3 +2235,104 @@ fn an_integer_constant_expression_rejects_a_floating_result() {
     let program = Compiler::new(src.to_string()).compile().expect(src);
     assert_eq!(Vm::new(program).run().unwrap(), 18, "{src}");
 }
+
+/// C99 6.2.5p15: plain `char` is a type distinct from `signed char` and
+/// `unsigned char`, with the representation of one of them. Generic
+/// selection (C11 6.5.1.1) and `__builtin_types_compatible_p` see three
+/// types on every target and under `-fsigned-char` / `-funsigned-char`,
+/// a string literal's element is plain `char`, and its value follows the
+/// target's signedness: what gcc 16.2.1 and clang 22.1.8 give on x86_64
+/// and aarch64.
+#[test]
+fn plain_char_is_a_third_character_type() {
+    use super::Vm;
+    use crate::{CompileOptions, Compiler, Target};
+    const SRC: &str = "#define WHICH(x) _Generic((x), signed char: 1, char: 2, unsigned char: 3, default: 0)\n\
+         char pc; signed char sc; unsigned char uc;\n\
+         int main(void) {\n\
+         \tint literal = \"\\xff\"[0];\n\
+         \treturn WHICH(sc) + WHICH(pc) * 10 + WHICH(uc) * 100 + WHICH(\"a\"[0]) * 1000\n\
+         \t    + WHICH((__typeof__(pc))0) * 10000 + WHICH(pc + 0) * 100000\n\
+         \t    + (__builtin_types_compatible_p(char, signed char)\n\
+         \t       + __builtin_types_compatible_p(char, unsigned char)\n\
+         \t       + __builtin_types_compatible_p(char *, unsigned char *)) * 1000000\n\
+         \t    + (literal == 255) * 10000000 + (literal == -1) * 20000000;\n\
+         }\n";
+    let run = |t: Target, sel: Option<bool>| -> i64 {
+        let opts = CompileOptions::default().with_char_signed(sel);
+        Vm::new(
+            Compiler::with_options(SRC.to_string(), t, opts)
+                .compile()
+                .unwrap(),
+        )
+        .run()
+        .unwrap()
+    };
+    // 1, 2, 3, the literal's element 2, `typeof` 2, the promoted value
+    // `int`, no compatible pair, then the element's value.
+    const SIGNED: i64 = 20_022_321;
+    const UNSIGNED: i64 = 10_022_321;
+    for (t, dflt) in [
+        (Target::LinuxX64, SIGNED),
+        (Target::LinuxAarch64, UNSIGNED),
+        (Target::MacOSAarch64, SIGNED),
+        (Target::WindowsX64, SIGNED),
+        (Target::WindowsAarch64, SIGNED),
+    ] {
+        assert_eq!(run(t, None), dflt, "{t:?} ABI default");
+        assert_eq!(run(t, Some(true)), SIGNED, "{t:?} under -fsigned-char");
+        assert_eq!(run(t, Some(false)), UNSIGNED, "{t:?} under -funsigned-char");
+    }
+}
+
+/// The three character types are incompatible (C99 6.2.7p1), so a
+/// redeclaration that swaps one for another conflicts, on the target whose
+/// plain `char` shares the other's representation too, and a diagnostic
+/// spells each as declared; gcc 16.2.1 and clang 22.1.8 report the same on
+/// x86_64 and aarch64.
+#[test]
+fn character_types_are_told_apart_by_compatibility_and_diagnostics() {
+    use crate::{Compiler, Target};
+    let err = |t: Target, src: &str| -> String {
+        Compiler::with_target(src.to_string(), t)
+            .compile()
+            .expect_err(src)
+            .to_string()
+    };
+    for t in [Target::LinuxX64, Target::LinuxAarch64] {
+        for other in ["signed char", "unsigned char"] {
+            let src =
+                format!("void f(char *p);\nvoid f({other} *p);\nint main(void) {{ return 0; }}\n");
+            let e = err(t, &src);
+            assert!(
+                e.contains("conflicting types for `f`")
+                    && e.contains("previous: void (char*)")
+                    && e.contains(&format!("now:      void ({other}*)")),
+                "{t:?}: {e}"
+            );
+        }
+        for spelled in ["char", "signed char", "unsigned char"] {
+            let src = format!(
+                "struct S {{ int a; }} s; {spelled} c;\nint f(void) {{ return s + c; }}\n\
+                 int main(void) {{ return 0; }}\n"
+            );
+            let e = err(t, &src);
+            assert!(
+                e.contains(&format!(
+                    "invalid operands to binary `+` (`struct S` and `{spelled}`)"
+                )),
+                "{t:?}: {e}"
+            );
+            let src = format!(
+                "{spelled} c = ({spelled})(long)\"abc\";\nint main(void) {{ return 0; }}\n"
+            );
+            let e = err(t, &src);
+            assert!(
+                e.contains(&format!(
+                    "an address constant does not fit an object of type `{spelled}`"
+                )),
+                "{t:?}: {e}"
+            );
+        }
+    }
+}

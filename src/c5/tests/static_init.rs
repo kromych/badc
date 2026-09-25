@@ -499,6 +499,9 @@ const REJECTED: &[Reject] = &[
     reject!("address_of_thread_local", "_Thread_local int t; int *x = &t;", "address of thread-local `t` is not a constant expression"),
     reject!("automatic_compound_literal", "int *f(void) { static int *x = (int[]){1}; return x; }", "address of a compound literal with automatic storage duration is not a constant expression"),
     reject!("part_of_relocated_slot", "static int g; static const union { long v; int half[2]; } u = {(long)&g}; int x = u.half[0];", "constant integer expected (got identifier `u`)"),
+    // The read has the literal's element type, plain `char`, on every
+    // target; `unsigned char` is another type (C99 6.2.5p15).
+    reject!("unsigned_char_read_of_a_literal", "int x = ((const unsigned char *)\"\\xff\")[0];", "a read through this pointer is not a constant expression"),
 ];
 
 /// Initializers badc accepts where clang rejects them, pinned to what badc
@@ -570,15 +573,4 @@ fn rejected_initializers() {
 fn where_badc_and_clang_disagree() {
     check_table(ACCEPTED_ONLY_BY_BADC);
     check_rejections(REJECTED_ONLY_BY_BADC);
-    // TODO: on linux-aarch64 plain `char` and `unsigned char` are one type,
-    // so the read has the literal's element type there and folds; clang
-    // rejects it on both targets.
-    let src = "int x = ((const unsigned char *)\"\\xff\")[0];";
-    let e = object(src, Target::LinuxX64).expect_err("folded on linux-x64");
-    assert!(
-        e.contains("a read through this pointer is not a constant expression"),
-        "{e}"
-    );
-    let obj = object(src, Target::LinuxAarch64).expect("rejected on linux-aarch64");
-    assert_eq!(hex(&read_x(&obj).0), "ff000000");
 }

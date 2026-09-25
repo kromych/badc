@@ -565,7 +565,7 @@ impl Compiler {
             name: sym_name,
             token: Token::Id as i64,
             class: Token::Glo as i64,
-            type_: Ty::Char as i64,
+            type_: super::types::plain_char_ty(self.lex.char_signed),
             val: off,
             data_byte_size: bytes.max(0),
             array_size: bytes.max(0),

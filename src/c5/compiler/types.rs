@@ -67,6 +67,21 @@ pub(crate) fn is_unsigned_ty(ty: i64) -> bool {
     (ty & UNSIGNED_BIT) != 0
 }
 
+/// High-bit flag marking a character type spelled plain `char`. C99
+/// 6.2.5p15 makes it a type distinct from `signed char` and `unsigned
+/// char` with the representation of one of them, so the tag keeps the
+/// target's [`UNSIGNED_BIT`] for loads, stores and promotions and this
+/// bit for identity: generic selection, compatibility and type names
+/// see three types. Stripped by [`strip_unsigned`] like the other
+/// markers. Sits above [`CONST_BIT`].
+pub(crate) const PLAIN_CHAR_BIT: i64 = 1 << 61;
+
+/// The tag of plain `char`, `signed` on a target whose plain char is.
+pub(crate) fn plain_char_ty(signed: bool) -> i64 {
+    let ty = Ty::Char as i64 | PLAIN_CHAR_BIT;
+    if signed { ty } else { ty | UNSIGNED_BIT }
+}
+
 /// High-bit flag marking a type tag `volatile`-qualified (C99 6.7.3).
 /// Orthogonal to the band scheme like [`UNSIGNED_BIT`]: stripped by
 /// [`strip_unsigned`] before any band classifier consults the tag. The
@@ -393,8 +408,9 @@ pub(crate) fn narrow_const_int(bytes: usize, unsigned: bool, is_bool: bool, v: i
     }
 }
 
-/// Drop the qualifier bits (`UNSIGNED_BIT`, `VOLATILE_BIT`,
-/// `VOLATILE_INNER_BIT`, `VOID_BIT`, the segment and `const` fields).
+/// Drop the qualifier bits (`UNSIGNED_BIT`, `PLAIN_CHAR_BIT`,
+/// `VOLATILE_BIT`, `VOLATILE_INNER_BIT`, `VOID_BIT`, the segment and
+/// `const` fields).
 /// Use to recover the bare band-encoded type before
 /// consulting a helper that classifies by band. Most of the helpers in
 /// this module call this at their entry; outside callers only need it
@@ -402,6 +418,7 @@ pub(crate) fn narrow_const_int(bytes: usize, unsigned: bool, is_bool: bool, v: i
 /// (e.g., switch-table comparisons against `Ty::Int as i64`).
 pub(crate) fn strip_unsigned(ty: i64) -> i64 {
     ty & !(UNSIGNED_BIT
+        | PLAIN_CHAR_BIT
         | VOLATILE_BIT
         | VOLATILE_INNER_BIT
         | SEG_MASK
@@ -541,11 +558,21 @@ pub(super) fn format_type(ty: i64, structs: &[super::StructDef]) -> alloc::strin
     } else if in_band(bare, Ty::Bool as i64) {
         (Ty::Bool as i64, "_Bool")
     } else if (0..100).contains(&bare) {
-        // Integer family: char = 0, int = 1, then +2 per `*` level.
+        // Integer family: char = 0, int = 1, then +2 per `*` level. Each
+        // character type spells its own signedness.
         let depth = (bare / 2) as usize;
-        let leaf_char = bare % 2 == 0;
-        let name = if leaf_char { "char" } else { "int" };
-        return format!("{prefix}{name}{}", ptr_suffix(ty, depth));
+        let suffix = ptr_suffix(ty, depth);
+        if bare % 2 != 0 {
+            return format!("{prefix}int{suffix}");
+        }
+        let name = if ty & PLAIN_CHAR_BIT != 0 {
+            "char"
+        } else if unsigned {
+            "unsigned char"
+        } else {
+            "signed char"
+        };
+        return format!("{base_const}{name}{suffix}");
     } else {
         return format!("{prefix}ty@{bare}");
     };

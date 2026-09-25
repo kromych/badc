@@ -1273,6 +1273,14 @@ fn generic_selection() {
 }
 
 #[test]
+fn plain_char_distinct_type() {
+    // C99 6.2.5p15: `char`, `signed char` and `unsigned char` are three
+    // types; `_Generic`, `__builtin_types_compatible_p`, `typeof` and the
+    // element type of a string literal tell them apart on every target.
+    assert_eq!(run_fixture("plain_char_distinct_type.c"), 0);
+}
+
+#[test]
 fn generic_selection_qualified() {
     // C11 6.5.1.1p2 / 6.7.3p9 through `_Generic` and
     // `__builtin_types_compatible_p`: a `const` on the object itself is

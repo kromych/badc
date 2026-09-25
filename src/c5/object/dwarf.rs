@@ -846,7 +846,6 @@ impl TypeCatalog {
 
 /// Resolve a c5 type tag to its catalog entry.
 fn classify(ty: i64, target: Target) -> CatalogEntry {
-    let unsigned = types::is_unsigned_ty(ty);
     let bare = types::strip_unsigned(ty);
 
     if bare >= types::STRUCT_BASE {
@@ -892,11 +891,7 @@ fn classify(ty: i64, target: Target) -> CatalogEntry {
         return CatalogEntry::VoidStar;
     };
 
-    let leaf_signed = if unsigned {
-        leaf_tag | types::UNSIGNED_BIT
-    } else {
-        leaf_tag
-    };
+    let leaf_signed = leaf_tag | (ty & (types::UNSIGNED_BIT | types::PLAIN_CHAR_BIT));
     let leaf_key = match base_key_for_leaf(leaf_signed, target, 8) {
         Some(k) => k,
         None => return CatalogEntry::VoidStar,
@@ -930,8 +925,16 @@ pub(super) fn base_key_for_leaf(
             encoding: DW_ATE_BOOLEAN,
         }
     } else if bare == Ty::Char as i64 {
+        // C99 6.2.5p15: three types; plain `char` is named as spelled at
+        // the target's signedness.
         BaseTypeKey {
-            name: if unsigned { "unsigned char" } else { "char" },
+            name: if leaf_tag & types::PLAIN_CHAR_BIT != 0 {
+                "char"
+            } else if unsigned {
+                "unsigned char"
+            } else {
+                "signed char"
+            },
             byte_size: 1,
             encoding: if unsigned {
                 DW_ATE_UNSIGNED_CHAR
@@ -2514,12 +2517,30 @@ mod tests {
     }
 
     #[test]
-    fn classify_char_uses_signed_char_encoding() {
+    fn classify_names_the_three_character_types() {
         let signed = base_of(Ty::Char as i64, Target::LinuxX64);
         let unsigned = base_of(Ty::Char as i64 | types::UNSIGNED_BIT, Target::LinuxX64);
-        assert_eq!(signed.byte_size, 1);
-        assert_eq!(signed.encoding, DW_ATE_SIGNED_CHAR);
-        assert_eq!(unsigned.encoding, DW_ATE_UNSIGNED_CHAR);
+        let plain_x64 = base_of(types::plain_char_ty(true), Target::LinuxX64);
+        let plain_a64 = base_of(types::plain_char_ty(false), Target::LinuxAarch64);
+        for k in [signed, unsigned, plain_x64, plain_a64] {
+            assert_eq!(k.byte_size, 1);
+        }
+        assert_eq!(
+            (signed.name, signed.encoding),
+            ("signed char", DW_ATE_SIGNED_CHAR)
+        );
+        assert_eq!(
+            (unsigned.name, unsigned.encoding),
+            ("unsigned char", DW_ATE_UNSIGNED_CHAR)
+        );
+        assert_eq!(
+            (plain_x64.name, plain_x64.encoding),
+            ("char", DW_ATE_SIGNED_CHAR)
+        );
+        assert_eq!(
+            (plain_a64.name, plain_a64.encoding),
+            ("char", DW_ATE_UNSIGNED_CHAR)
+        );
     }
 
     #[test]

@@ -136,24 +136,17 @@ impl IntModifiers {
         }
     }
 
-    /// Pick the `char` tag. `signed char` is always signed and
-    /// `unsigned char` always unsigned; plain `char` follows the
-    /// target's implementation-defined signedness
-    /// ([`Target::plain_char_signed`], C99 6.2.5p15). The signedness
-    /// is encoded as the presence/absence of `UNSIGNED_BIT`, which
-    /// drives the load extension in `load_kind_for`.
+    /// Pick the `char` tag: `signed char`, `unsigned char`, or plain
+    /// `char`, the third character type of C99 6.2.5p15, whose loads
+    /// extend by the target's implementation-defined signedness
+    /// ([`Target::plain_char_signed`]).
     pub fn char_tag(&self, plain_char_signed: bool) -> i64 {
-        let signed = if self.saw_signed {
-            true
-        } else if self.saw_unsigned {
-            false
-        } else {
-            plain_char_signed
-        };
-        if signed {
+        if self.saw_signed {
             Ty::Char as i64
-        } else {
+        } else if self.saw_unsigned {
             Ty::Char as i64 | UNSIGNED_BIT
+        } else {
+            super::types::plain_char_ty(plain_char_signed)
         }
     }
 }

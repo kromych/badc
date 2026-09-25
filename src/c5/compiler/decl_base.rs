@@ -1673,8 +1673,8 @@ impl Compiler {
     /// `float` / `double`) given the modifiers already collected in
     /// `m`, consuming the keyword. Returns `None` without consuming
     /// when the current token is not one of these. Sets the
-    /// `base_was_void` / `base_was_long_double` side channels the
-    /// function-declaration path reads. C99 6.7.2.
+    /// `base_was_void` side channel the function-declaration path reads.
+    /// C99 6.7.2.
     pub(super) fn parse_scalar_base_specifier(
         &mut self,
         m: &IntModifiers,
@@ -1697,13 +1697,8 @@ impl Compiler {
             Ty::Float as i64
         } else if self.lex.tk == Token::Double {
             self.next()?;
-            // `long double` collapses to the f64 `double` encoding.
-            // `base_was_long_double` lets the prototype path stamp a libc
-            // binding's return convention (SysV x86_64 returns long double
-            // in x87 st(0), not XMM0); `LONG_DOUBLE_BIT` keeps the spelling
-            // on the tag itself, which the libc-argument ABI diagnostic reads.
+            // `long double` is the `double` band with `LONG_DOUBLE_BIT`.
             if m.saw_long() {
-                self.pending.base_was_long_double = true;
                 Ty::Double as i64 | super::types::LONG_DOUBLE_BIT
             } else {
                 Ty::Double as i64
@@ -1938,7 +1933,6 @@ impl Compiler {
             } else if base_tok == Token::Char {
                 bt = m.char_tag(self.lex.char_signed);
             } else if base_tok == Token::Double && m.saw_long() {
-                self.pending.base_was_long_double = true;
                 bt |= super::types::LONG_DOUBLE_BIT;
             } else if m.saw_unsigned && self.is_int128_ty(bt) {
                 // Trailing modifier form `__int128 unsigned`.
@@ -1969,7 +1963,6 @@ impl Compiler {
     fn reset_base_type_carriers(&mut self) {
         self.pending.base_was_void = false;
         self.pending.base_is_function_type = false;
-        self.pending.base_was_long_double = false;
         self.pending.base_enum_tag = None;
         self.pending.typedef_base_array_size = 0;
         self.pending.typedef_base_zero_len = false;

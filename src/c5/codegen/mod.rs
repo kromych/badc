@@ -359,16 +359,13 @@ impl Target {
 
     /// The `long double` format the target's platform ABI moves across
     /// a call, when badc does not move it the same way; `None` when the
-    /// two agree. AAPCS64 passes binary128 in a vector register, while
-    /// badc passes the binary64 it computes with in the FP argument bank.
-    /// Read by the libc-argument diagnostic; independent of
-    /// [`Self::long_double`], which answers what a declared object stores.
-    /// TODO: extended-precision long double -- the AAPCS64 binary128
-    /// argument / return convention.
+    /// two agree, as they do on every target. Read by the libc-argument
+    /// diagnostic; independent of [`Self::long_double`], which answers
+    /// what a declared object stores.
     pub fn platform_long_double_abi(self) -> Option<&'static str> {
         match self {
-            Target::LinuxAarch64 => Some("IEEE binary128"),
             Target::LinuxX64
+            | Target::LinuxAarch64
             | Target::MacOSAarch64
             | Target::WindowsX64
             | Target::WindowsAarch64 => None,
@@ -1257,14 +1254,6 @@ pub(crate) struct ResolvedImport {
     /// prototype seen") falls through with no extension, as does
     /// `void`, which the tag's void bit names.
     pub return_type_tag: i64,
-    /// Prototype's return type was spelled `long double`. The
-    /// SysV x86_64 ABI returns long double in x87 `st(0)`; c5's
-    /// generic FP-return path reads XMM0 (where plain `double`
-    /// returns land), so without this flag the binding's first
-    /// caller reads -0.0 or whatever XMM0 had on entry. Plumbed
-    /// from `Binding::returns_long_double` through
-    /// `apply_fold_to_binding`.
-    pub returns_long_double: bool,
     /// Per-fixed-parameter type tags from the prototype. Carried
     /// from `Binding::param_types`; the DWARF emitter
     /// uses these to give every PLT trampoline a
@@ -1458,7 +1447,6 @@ impl ResolvedImports {
             is_variadic: b.is_variadic,
             fixed_args: b.fixed_args,
             return_type_tag: b.return_type_tag,
-            returns_long_double: b.returns_long_double,
             param_types: b.param_types.clone(),
         });
         Ok(())
@@ -1596,7 +1584,6 @@ impl ResolvedImports {
                 is_variadic: b.is_variadic,
                 fixed_args: b.fixed_args,
                 return_type_tag: b.return_type_tag,
-                returns_long_double: b.returns_long_double,
                 param_types: b.param_types.clone(),
             });
         }
@@ -3863,20 +3850,6 @@ pub(crate) fn lower_for_with_prebuilt(
     // relocatable objects record the list for the linker.
     if matches!(target, Target::MacOSAarch64) && !program.tls_data.is_empty() {
         imports.ensure_dylib("libSystem", program, target);
-    }
-    // Linux aarch64 long-double libc returns. AAPCS64 returns
-    // binary128 in v0 (full Q register); the c5 compute path carries
-    // the value as binary64, so any libc call whose prototype is
-    // `long double f(...)` needs a `__trunctfdf2` follow-up that
-    // truncates v0 to d0 before the c5 accumulator reads it. Force
-    // the binding in if any in-scope binding carries
-    // `returns_long_double`; otherwise the codegen has no import
-    // slot to record a fixup against. No-op when nothing in the
-    // program calls a `long double`-returning libc function.
-    if matches!(target, Target::LinuxAarch64)
-        && imports.imports.iter().any(|i| i.returns_long_double)
-    {
-        imports.force_include_by_name("__trunctfdf2", program)?;
     }
     let mut build = match target {
         Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => {

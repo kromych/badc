@@ -921,11 +921,6 @@ impl Compiler {
             self.record_function_declaration(id_idx, static_seen, extern_seen);
         }
         let declarator_line = self.lex.line;
-        // Capture the long-double return-type marker
-        // before parameter parsing, which calls
-        // `parse_decl_base_type` per param and clears
-        // the side channel as part of its reset.
-        let ret_was_long_double = self.pending.base_was_long_double;
         let mut params = if let Some(pp) = preconsumed_params {
             pp
         } else {
@@ -995,7 +990,7 @@ impl Compiler {
         // instead of consulting the symbol table at
         // codegen time -- it is out of scope by then.
         if was_sys {
-            self.update_libc_binding(id_idx, &params, ty, ret_was_long_double);
+            self.update_libc_binding(id_idx, &params, ty);
         }
 
         if self.lex.tk == ';' || self.lex.tk == ',' {
@@ -1071,7 +1066,6 @@ impl Compiler {
         id_idx: usize,
         params: &super::function::ParsedParams,
         ret_ty: i64,
-        ret_is_long_double: bool,
     ) {
         let name = self.symbols[id_idx].name.clone();
         let fixed = params.types.len();
@@ -1086,7 +1080,6 @@ impl Compiler {
                     binding.is_variadic = variadic;
                     binding.fixed_args = fixed;
                     binding.return_type_tag = ret_ty;
-                    binding.returns_long_double = ret_is_long_double;
                     // Per-param types for the
                     // DWARF subprogram DIE the codegen
                     // emits over each PLT trampoline.
@@ -1435,8 +1428,8 @@ impl Compiler {
 
         // A `long double` wider than `double` takes a local of the platform
         // format the body reads. The callee fills it from the image the
-        // convention passes, or converts the binary64 an 8-byte cell holds
-        // where badc still passes that.
+        // convention passes; under `ms_abi`, which has no image descriptor,
+        // it converts the binary64 the caller passes in one 8-byte cell.
         if self.target.long_double() != crate::c5::codegen::LongDoubleKind::F64 {
             for &idx in params.indices.iter() {
                 let pty = self.symbols[idx].type_;

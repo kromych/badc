@@ -252,7 +252,13 @@ fn classify_sysv(size: u32, fields: &[FlatField], is_return: bool) -> AggClass {
 /// or via the x8 indirect-result register (return).
 fn classify_aapcs64(size: u32, fields: &[FlatField], is_return: bool) -> AggClass {
     if let Some(n) = hfa_member_count(fields) {
-        return AggClass::Regs(alloc::vec![RegClass::Sse; n]);
+        // A binary128 member fills a whole vector register.
+        let class = if fields[0].kind == ScalarKind::F128 {
+            RegClass::Vector
+        } else {
+            RegClass::Sse
+        };
+        return AggClass::Regs(alloc::vec![class; n]);
     }
     if size == 0 {
         return AggClass::Regs(alloc::vec::Vec::new());
@@ -272,17 +278,15 @@ fn classify_aapcs64(size: u32, fields: &[FlatField], is_return: bool) -> AggClas
 
 /// Return `Some(n)` (1..=4) when the flattened fields form a
 /// homogeneous floating-point aggregate: every leaf is the same FP
-/// type (all `F32` or all `F64`) and there are between one and four
-/// of them. `None` otherwise (any integer field, mixed precision,
-/// empty, or more than four members).
+/// type (all `F32`, all `F64` or all `F128`) and there are between one
+/// and four of them. `None` otherwise (any integer field, mixed
+/// precision, empty, or more than four members).
 fn hfa_member_count(fields: &[FlatField]) -> Option<usize> {
     if fields.is_empty() || fields.len() > 4 {
         return None;
     }
     let first = fields[0].kind;
-    // TODO: extended-precision long double -- binary128 members form
-    // HFAs (AAPCS64 6.4.2) once a 16-byte FP register slot exists.
-    if !matches!(first, ScalarKind::F32 | ScalarKind::F64) {
+    if !matches!(first, ScalarKind::F32 | ScalarKind::F64 | ScalarKind::F128) {
         return None;
     }
     if fields.iter().all(|f| f.kind == first) {
@@ -518,6 +522,33 @@ mod tests {
         assert_eq!(
             classify_aggregate(16, 8, &f, aapcs(), true),
             AggClass::Regs(alloc::vec![RegClass::Sse, RegClass::Sse])
+        );
+    }
+
+    #[test]
+    fn aapcs_long_double_hfa_takes_whole_vector_registers() {
+        // `long double`, bare or as a struct's only member: one quad.
+        let one = [ff(0, 16, ScalarKind::F128)];
+        assert_eq!(
+            classify_aggregate(16, 16, &one, aapcs(), false),
+            AggClass::Regs(alloc::vec![RegClass::Vector])
+        );
+        let four = [
+            ff(0, 16, ScalarKind::F128),
+            ff(16, 16, ScalarKind::F128),
+            ff(32, 16, ScalarKind::F128),
+            ff(48, 16, ScalarKind::F128),
+        ];
+        assert_eq!(
+            classify_aggregate(64, 16, &four, aapcs(), true),
+            AggClass::Regs(alloc::vec![RegClass::Vector; 4])
+        );
+        // Beside a `double` it is no HFA: the 32-byte composite goes by
+        // reference.
+        let mixed = [ff(0, 16, ScalarKind::F128), ff(16, 8, ScalarKind::F64)];
+        assert_eq!(
+            classify_aggregate(32, 16, &mixed, aapcs(), false),
+            AggClass::ByRef
         );
     }
 

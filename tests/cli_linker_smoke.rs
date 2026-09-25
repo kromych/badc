@@ -5782,12 +5782,15 @@ fn hidden_result_pointer_calls_cross_the_system_compiler_boundary() {
 }
 
 // A `long double` crosses the system compiler boundary both ways as the
-// platform passes it: System V AMD64 3.2.3 gives it and an aggregate of one
+// platform passes it. System V AMD64 3.2.3 gives it and an aggregate of one
 // the X87 + X87UP classes, in memory as an argument, fixed or variadic, and
 // in st(0) as a return value; a larger aggregate, or one whose x87 eightbyte
-// is shared, is MEMORY both ways. `pass1` returns its operand's bytes, so a
-// value binary64 cannot hold comes back exactly.
-#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+// is shared, is MEMORY both ways. AAPCS64 passes and returns binary128 in a
+// whole vector register, fixed or variadic, and an aggregate of up to four
+// as an HFA. `pass1` returns its operand's bytes, so a value binary64
+// cannot hold comes back exactly. Linux only: elsewhere `long double` is
+// `double`.
+#[cfg(target_os = "linux")]
 #[test]
 fn long_double_calls_cross_the_system_compiler_boundary() {
     let Some(cc) = host_cc() else {
@@ -5798,10 +5801,12 @@ fn long_double_calls_cross_the_system_compiler_boundary() {
     };
     let common = "#include <stdarg.h>\n\
         #include <stdio.h>\n\
+        #include <stdlib.h>\n\
         #include <string.h>\n\
         typedef long double ld;\n\
         struct ld1 { ld x; };\n\
         struct ld2 { ld x, y; };\n\
+        struct ld4 { ld a, b, c, d; };\n\
         struct ldi { ld x; int i; };\n\
         union ldu { ld x; double d; };\n\
         static ld ident(ld v) { return v; }\n\
@@ -5814,6 +5819,8 @@ fn long_double_calls_cross_the_system_compiler_boundary() {
         static ld take1(struct ld1 s, int k) { return s.x * k; }\n\
         static struct ld1 pass1(struct ld1 s) { return s; }\n\
         static struct ld2 mk2(ld a, ld b) { struct ld2 s = { a, b }; return s; }\n\
+        static struct ld4 flip4(struct ld4 s, ld k)\n\
+        { struct ld4 r = { s.d * k, s.c, s.b, s.a }; return r; }\n\
         static struct ldi mki(struct ldi s, union ldu u) { s.x += u.x; s.i *= 2; return s; }\n\
         static union ldu mku(ld v) { union ldu u; u.x = v; return u; }\n\
         static ld vsum(int n, ...)\n\
@@ -5829,7 +5836,8 @@ fn long_double_calls_cross_the_system_compiler_boundary() {
           ld (*past)(double, double, double, double, double, double, double, double, double,\n\
             ld, int, int, int, int, int, int, int, ld);\n\
           struct ld1 (*mk1)(ld); ld (*take1)(struct ld1, int); struct ld1 (*pass1)(struct ld1);\n\
-          struct ld2 (*mk2)(ld, ld); struct ldi (*mki)(struct ldi, union ldu);\n\
+          struct ld2 (*mk2)(ld, ld); struct ld4 (*flip4)(struct ld4, ld);\n\
+          struct ldi (*mki)(struct ldi, union ldu);\n\
           union ldu (*mku)(ld); ld (*vsum)(int, ...); ld (*vmix)(int, ld, ...); };\n\
         static int drive(const struct fns *f, int base)\n\
         { struct ld1 s = { 1.25L };\n\
@@ -5848,18 +5856,22 @@ fn long_double_calls_cross_the_system_compiler_boundary() {
           union ldu u = f->mku(0.25L);\n\
           q = f->mki(q, u);\n\
           if (q.x != 1.75L || q.i != 6) return base + 12;\n\
+          struct ld4 in4 = { 1.0L, 2.0L, 3.0L, 4.0L };\n\
+          struct ld4 r4 = f->flip4(in4, 0.5L);\n\
+          if (r4.a != 2.0L || r4.b != 3.0L || r4.c != 2.0L || r4.d != 1.0L) return base + 14;\n\
           if (f->vsum(3, 1.0L, 2.0L, 0.5L) != 3.5L) return base + 8;\n\
           if (f->vsum(9, 1.0L, 1.0L, 1.0L, 1.0L, 1.0L, 1.0L, 1.0L, 1.0L, 1.0L) != 9.0L)\n\
             return base + 9;\n\
           if (f->vmix(2, 0.5L, 1, 2.0L, 3.0, 4, 5.0L, 6.0) != 21.5L) return base + 10;\n\
           snprintf(buf, sizeof buf, \"%.2Lf %d %.1Lf\", f->ident(2.5L), 7, 0.25L);\n\
           if (strcmp(buf, \"2.50 7 0.2\") != 0) return base + 11;\n\
+          if (strtold(\"2.75\", 0) != 2.75L) return base + 13;\n\
           return 0; }\n";
     drive_across_the_system_compiler(
         &cc,
         "long-double-interop",
         common,
-        "ident, mix, past, mk1, take1, pass1, mk2, mki, mku, vsum, vmix",
+        "ident, mix, past, mk1, take1, pass1, mk2, flip4, mki, mku, vsum, vmix",
     );
 }
 

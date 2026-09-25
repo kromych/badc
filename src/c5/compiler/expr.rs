@@ -1937,9 +1937,9 @@ impl Compiler {
     }
 
     /// The `va_arg` class of a `long double` passed as its image, by its
-    /// classification: memory on System V.
+    /// classification: memory on System V, a vector register on AAPCS64.
     fn long_double_va_kind(&self, ty: i64) -> Option<u8> {
-        use crate::c5::codegen::abi_classify::{AggClass, classify_aggregate};
+        use crate::c5::codegen::abi_classify::{AggClass, RegClass, classify_aggregate};
         if !super::types::is_long_double_scalar(ty) {
             return None;
         }
@@ -1948,6 +1948,7 @@ impl Compiler {
         let abi = self.target.abi_for(conv);
         match classify_aggregate(desc.size, desc.align, &desc.fields, abi, false) {
             AggClass::ByStack => Some(crate::c5::op::VaArgDesc::MEMORY),
+            AggClass::Regs(c) if c == [RegClass::Vector] => Some(crate::c5::op::VaArgDesc::VECTOR),
             _ => None,
         }
     }

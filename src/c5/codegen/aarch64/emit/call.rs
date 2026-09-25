@@ -477,28 +477,6 @@ pub(super) fn emit_call_ext(
     });
     // The patcher rewrites only imm26, so the placeholder must be `bl`.
     emit(code, enc_bl(0));
-    // AAPCS64 returns `long double` (binary128) in v0; the c5 compute path
-    // carries binary64, so a LinuxAarch64 import returning one is followed
-    // by a `bl __trunctfdf2` (binary128 in v0 to double in d0), an import
-    // the codegen pre-includes. macOS and Windows alias `long double` to
-    // `double`.
-    if imp.returns_long_double && target == Target::LinuxAarch64 {
-        let trunc_idx = imports
-            .imports
-            .iter()
-            .position(|i| i.local_name == "__trunctfdf2")
-            .unwrap_or(usize::MAX);
-        if trunc_idx == usize::MAX {
-            return fail("CallExt: returns_long_double but __trunctfdf2 not in imports");
-        }
-        plt_call_fixups.push(PltCallFixup {
-            instr_offset: code.len(),
-            import_index: trunc_idx,
-            is_tail: false,
-            is_addr: false,
-        });
-        emit(code, enc_bl(0));
-    }
     emit_add_sp_imm(code, plan.scratch_bytes);
     if ret_agg.is_some() {
         finish_call_result(
@@ -525,14 +503,9 @@ pub(super) fn emit_call_ext(
         move_call_result(code, dst, frame, true);
         return Ok(());
     }
-    // `long double` is not FP-classed and bridges through x0 like an
-    // integer; sub-word integer returns take the pool path's extension.
-    if imp.returns_long_double {
-        emit(code, enc_fmov_d_to_x(Reg(0), 0));
-    } else {
-        let ext = super::call_result_extension(return_type_tag, target, alloc, v);
-        emit_extend_x0_for_return(code, ext);
-    }
+    // A sub-word integer return takes the pool path's extension.
+    let ext = super::call_result_extension(return_type_tag, target, alloc, v);
+    emit_extend_x0_for_return(code, ext);
     if let Some(rd) = int_reg(dst) {
         if rd.0 != 0 {
             emit_mov_reg(code, rd, Reg(0));

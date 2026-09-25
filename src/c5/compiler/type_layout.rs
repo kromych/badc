@@ -914,13 +914,15 @@ pub(crate) fn flatten_struct_fields(
 /// The host-ABI descriptor a `long double` crosses a call as where the
 /// convention moves it as a 16-byte object in the storage format: System
 /// V AMD64 classifies it X87 + X87UP, memory as an argument and `st(0)` as
-/// a return value (3.2.3). `None` where the type is `double`.
+/// a return value (3.2.3); AAPCS64 gives it a whole vector register, as a
+/// one-member HFA of binary128 (6.8.2). `None` where the type is `double`.
 pub(crate) fn long_double_agg_desc(
     target: Target,
     conv: crate::c5::codegen::CallConv,
 ) -> Option<AggDesc> {
     let kind = match (target.abi_row(conv), target.long_double()) {
         (Target::LinuxX64, crate::c5::codegen::LongDoubleKind::X87) => ScalarKind::F80,
+        (Target::LinuxAarch64, crate::c5::codegen::LongDoubleKind::Binary128) => ScalarKind::F128,
         _ => return None,
     };
     Some(AggDesc {
@@ -992,17 +994,6 @@ pub(crate) fn host_abi_agg_desc_conv(
     // all the same FP type) passes in the FP argument bank, up to four
     // registers -- a four-`double` HFA is 32 bytes, past the by-reference
     // threshold. Admit it on AArch64 ahead of the size / FP-class gates.
-    // TODO: extended-precision long double -- an AAPCS64 binary128
-    // member rides a full vector register; until a 16-byte FP slot
-    // exists such an aggregate keeps the by-address convention. The
-    // System V x87 member stays: its classes are memory-only.
-    if aarch64
-        && fields
-            .iter()
-            .any(|f| f.kind == crate::c5::codegen::abi_classify::ScalarKind::F128)
-    {
-        return None;
-    }
     let is_hfa = aarch64 && crate::c5::codegen::abi_classify::hfa_member_layout(&fields).is_some();
     if !is_hfa {
         if matches!(row, Target::WindowsX64) {
@@ -1148,18 +1139,10 @@ pub(crate) fn struct_return_abi_conv(
             fields,
         });
     }
-    // TODO: extended-precision long double -- a binary128 member returns
-    // in a vector register; until that return slot exists the aggregate
-    // keeps the out-pointer path, as does any other x87 aggregate, which
-    // System V returns in memory (the AAPCS64 > 16-byte x8 case below is
-    // already the memory convention).
-    if fields.iter().any(|f| {
-        matches!(
-            f.kind,
-            crate::c5::codegen::abi_classify::ScalarKind::F80
-                | crate::c5::codegen::abi_classify::ScalarKind::F128
-        )
-    }) && (size <= 16 || !aarch64)
+    // Any other x87 aggregate returns in memory, the out-pointer path.
+    if fields
+        .iter()
+        .any(|f| f.kind == crate::c5::codegen::abi_classify::ScalarKind::F80)
     {
         return StructReturnAbi::OutPtr;
     }

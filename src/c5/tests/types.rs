@@ -1469,14 +1469,11 @@ fn long_double_carries_only_the_binary64_significand() {
 }
 
 /// A `long double` handed to a platform-libc import is read by the
-/// callee in the target ABI's format. On linux-aarch64 badc passes the
-/// binary64 it computes with, so the callee decodes a different object;
-/// the mismatch is announced at compile time instead of surfacing as a
-/// wrong value at run time. linux-x64 passes the x87 image the ABI
-/// names, and macOS/arm64 and Windows define `long double` as binary64,
-/// so nothing is lost there.
+/// callee in the target ABI's format, which is the one badc passes on
+/// every target: the x87 image on linux-x64, binary128 on linux-aarch64,
+/// binary64 where the type is `double`. No argument is announced.
 #[test]
-fn long_double_libc_argument_warns_where_the_platform_abi_is_wider() {
+fn long_double_libc_argument_draws_no_abi_warning() {
     use crate::Compiler;
     use crate::Target;
     let warns = |src: &str, t: Target| -> alloc::vec::Vec<alloc::string::String> {
@@ -1490,18 +1487,9 @@ fn long_double_libc_argument_warns_where_the_platform_abi_is_wider() {
     };
     let src = "int main(void){ long double x = 1.0L; double d = 2.0;\n\
                printf(\"%Lf\\n\", x); printf(\"%f\\n\", d); return 0; }";
-    let hit = |ws: &[alloc::string::String], needle: &str| {
-        ws.iter().any(|w| {
-            w.to_string().contains("`long double` argument") && w.to_string().contains(needle)
-        })
-    };
-    let a64 = warns(src, Target::LinuxAarch64);
-    assert!(
-        hit(&a64, "IEEE binary128"),
-        "LinuxAarch64 must name the binary128 format, got: {a64:?}"
-    );
     for t in [
         Target::LinuxX64,
+        Target::LinuxAarch64,
         Target::MacOSAarch64,
         Target::WindowsX64,
         Target::WindowsAarch64,
@@ -1513,14 +1501,6 @@ fn long_double_libc_argument_warns_where_the_platform_abi_is_wider() {
             "{t:?} passes long double as the platform does and must not warn, got: {ws:?}"
         );
     }
-    // Exactly one argument is at issue: the `double` call must stay quiet.
-    assert_eq!(
-        a64.iter()
-            .filter(|w| w.to_string().contains("`long double` argument"))
-            .count(),
-        1,
-        "only the `%Lf` argument may warn, got: {a64:?}"
-    );
     // <math.h> defines the `l` entry points over their `double` counterparts,
     // so no `long double` reaches a platform callee and nothing may warn.
     let prototyped = "#include <math.h>\n\

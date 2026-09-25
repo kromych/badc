@@ -56,37 +56,26 @@ for bit including the noncanonical encodings; on linux-aarch64, which
 has no quad-precision unit, through open-coded integer sequences that
 match gcc's `__extenddftf2` / `__trunctfdf2` bit for bit.
 
-Calls follow each platform's convention on linux-x64: System V AMD64
-passes a `long double`, and an aggregate whose only member is one, in
-memory as its x87 image -- fixed or variadic, 16-byte aligned -- and
-returns it in `st(0)`. So the type crosses the boundary with code built
-by the platform toolchain, `printf("%Lf", x)` and `strtold` included.
+Calls follow each platform's convention. System V AMD64 passes a `long
+double`, and an aggregate whose only member is one, in memory as its x87
+image -- fixed or variadic, 16-byte aligned -- and returns it in `st(0)`.
+AAPCS64 passes and returns binary128 in a whole vector register, fixed or
+variadic, and an aggregate of up to four as a homogeneous floating-point
+aggregate. So the type crosses the boundary with code built by the
+platform toolchain, `printf("%Lf", x)` and `strtold` included.
 
-Two consequences remain:
+One consequence remains:
 
 * **Precision.** Arithmetic is carried out at binary64 precision on
   every target, so a value needing more than 53 significand bits does
   not round-trip -- `(unsigned long long)(long double)((1ULL<<53)+1)`
-  loses the low bit where the platform types keep it. On linux-x64 the
-  stored object holds the full 64-bit significand, but a value that
-  passes through the compute path has already been rounded.
-* **Argument passing on linux-aarch64.** Where a `long double` reaches a
-  platform-libc callee still typed `long double`, the callee decodes it
-  as AAPCS64 passes it, binary128 in a vector register, while badc
-  supplies the binary64 it computes with in the FP argument bank. That
-  is the variadic tail: `printf("%Lf", 1.0L)` prints `0.000000`. Each
-  such argument draws a compile-time warning naming the platform
-  format, so the mismatch is not silent. The fixed parameters are
-  unaffected -- `<math.h>` binds the two `l` entry points it declares,
-  `ldexpl` and `fabsl`, to their `double` counterparts, so the argument
-  converts to a `double` parameter exactly and the ABI matches. The rest
-  of C99 7.12's `l` family is not declared. A return from libc is
-  narrowed from `v0` through a `__trunctfdf2` libgcc call, so `strtold`
-  round-trips to binary64 precision.
+  loses the low bit where the platform types keep it. The stored object
+  holds the full significand of its format, but a value that passes
+  through the compute path has already been rounded. The rest of C99
+  7.12's `l` family is not declared: `<math.h>` binds `ldexpl` and
+  `fabsl` to their `double` counterparts.
 
-The remaining work is the AAPCS64 argument / return convention (a Q
-register) and extended-precision arithmetic. TODO: extended-precision
-`long double`.
+TODO: extended-precision `long double`.
 
 Byte order is little-endian on every target: `__BYTE_ORDER__` expands to
 `__ORDER_LITTLE_ENDIAN__` and `__LITTLE_ENDIAN__` is defined.

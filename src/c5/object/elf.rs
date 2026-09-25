@@ -3507,7 +3507,6 @@ mod tests {
                 is_variadic: false,
                 fixed_args: 1,
                 return_type_tag: 0,
-                returns_long_double: false,
                 param_types: Vec::new(),
             }],
             dylibs: vec![ResolvedDylib {

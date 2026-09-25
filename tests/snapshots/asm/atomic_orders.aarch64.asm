@@ -5429,46 +5429,24 @@ Disassembly of section .text:
                	mov	x29, sp
                	bl	<addr>
                	sxtw	x0, w0
-               	mov	x1, #0x1                // =1
                	cbnz	x0, <addr>
                	bl	<addr>
-               	cmp	w0, #0x0
-               	cset	x1, ne
-               	mov	x2, #0x1                // =1
-               	cbnz	x1, <addr>
-               	bl	<addr>
-               	cmp	w0, #0x0
-               	cset	x2, ne
-               	mov	x1, #0x1                // =1
-               	cbnz	x2, <addr>
-               	bl	<addr>
-               	cmp	w0, #0x0
-               	cset	x1, ne
-               	mov	x2, #0x1                // =1
-               	cbnz	x1, <addr>
-               	bl	<addr>
-               	cmp	w0, #0x0
-               	cset	x2, ne
-               	mov	x1, #0x1                // =1
-               	cbnz	x2, <addr>
-               	bl	<addr>
-               	cmp	w0, #0x0
-               	cset	x1, ne
-               	mov	x2, #0x1                // =1
-               	cbnz	x1, <addr>
-               	bl	<addr>
-               	cmp	w0, #0x0
-               	cset	x2, ne
-               	mov	x1, #0x1                // =1
-               	cbnz	x2, <addr>
-               	bl	<addr>
-               	cmp	w0, #0x0
-               	cset	x1, ne
                	cbnz	w0, <addr>
                	bl	<addr>
-               	sxtw	x1, w0
-               	mov	x0, x1
-               	cbz	x1, <addr>
+               	cbnz	w0, <addr>
+               	bl	<addr>
+               	cbnz	w0, <addr>
+               	bl	<addr>
+               	cbnz	w0, <addr>
+               	bl	<addr>
+               	cbnz	w0, <addr>
+               	bl	<addr>
+               	cbnz	w0, <addr>
+               	bl	<addr>
+               	cbnz	w0, <addr>
+               	bl	<addr>
+               	sxtw	x0, w0
+               	cbz	x0, <addr>
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x0                // =0

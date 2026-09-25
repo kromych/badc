@@ -5928,61 +5928,32 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	callq	<addr>
                	movslq	%eax, %rax
-               	movl	$0x1, %ecx
                	testq	%rax, %rax
                	jne	<addr>
                	callq	<addr>
                	testl	%eax, %eax
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	movl	$0x1, %edx
-               	testq	%rcx, %rcx
                	jne	<addr>
                	callq	<addr>
                	testl	%eax, %eax
-               	setne	%dl
-               	movzbq	%dl, %rdx
-               	movl	$0x1, %ecx
-               	testq	%rdx, %rdx
                	jne	<addr>
                	callq	<addr>
                	testl	%eax, %eax
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	movl	$0x1, %edx
-               	testq	%rcx, %rcx
                	jne	<addr>
                	callq	<addr>
                	testl	%eax, %eax
-               	setne	%dl
-               	movzbq	%dl, %rdx
-               	movl	$0x1, %ecx
-               	testq	%rdx, %rdx
                	jne	<addr>
                	callq	<addr>
                	testl	%eax, %eax
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	movl	$0x1, %edx
-               	testq	%rcx, %rcx
                	jne	<addr>
                	callq	<addr>
                	testl	%eax, %eax
-               	setne	%dl
-               	movzbq	%dl, %rdx
-               	movl	$0x1, %ecx
-               	testq	%rdx, %rdx
                	jne	<addr>
                	callq	<addr>
                	testl	%eax, %eax
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	testl	%eax, %eax
                	jne	<addr>
                	callq	<addr>
-               	movslq	%eax, %rcx
-               	movq	%rcx, %rax
-               	testq	%rcx, %rcx
+               	movslq	%eax, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	popq	%rbp
                	retq

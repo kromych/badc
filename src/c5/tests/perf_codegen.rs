@@ -569,7 +569,7 @@ pub(super) fn x64_in_loop(insns: &[X64Insn], pred: impl Fn(&X64Insn) -> bool) ->
 
 /// Whether the control flow of `insns` has a cycle, which a backward branch
 /// from a block placed past the return does not make.
-fn x64_has_cycle(insns: &[X64Insn]) -> bool {
+pub(super) fn x64_has_cycle(insns: &[X64Insn]) -> bool {
     let index = |at: usize| insns.iter().position(|i| i.at == at);
     let successors = |k: usize| {
         let i = &insns[k];

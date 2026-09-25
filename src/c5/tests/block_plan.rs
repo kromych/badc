@@ -4,6 +4,7 @@
 
 use super::perf_codegen::{
     X64Insn, a64_at, a64_branch, a64_branches_land_on_code, x64_at, x64_branches_land_on_code,
+    x64_has_cycle,
 };
 
 /// The `if` arm only renames, so its block is empty and its edge to the
@@ -11,6 +12,91 @@ use super::perf_codegen::{
 const SWAP_WALK: &str = "long swap_walk(long a, long b, int n) {\n\
     for (int i = 0; i < n; i++) { if (i & 1) { long t = a; a = b; b = t; } }\n\
     return a * 3 + b;\n}\n";
+
+/// The kernel's scoped user access: run-once loops sharing `done`, whose
+/// body assigns `len`, read after them. `scoped` adds the kernel's cleanup
+/// variable and an `asm goto` with an output that leaves for an error label.
+const RUN_ONCE: &str = "extern int get(int *p);\n\
+    extern void mark(int **p);\n\
+    extern int bad(void);\n\
+    static void end(int **p) { mark(p); }\n\
+    int once(int *uptr, int klen) {\n\
+        int len = 0;\n\
+        for (_Bool done = 0; !done; done = 1)\n\
+            for (int *t = uptr; !done; done = 1) {\n\
+                len = get(t);\n\
+                if (len > klen) len = klen;\n\
+            }\n\
+        return len;\n\
+    }\n\
+    int scoped(int *uptr, int klen) {\n\
+        int len;\n\
+        for (_Bool done = 0; !done; done = 1)\n\
+            for (int *t = uptr; !done; done = 1)\n\
+                for (int *u __attribute__((cleanup(end))) = t; !done; done = 1) {\n\
+                    asm goto(\"\" : \"=r\"(len) : \"r\"(u) : : fault);\n\
+                    if (len > klen) len = klen;\n\
+                    if (len >= 0) *u = klen;\n\
+                }\n\
+        return len;\n\
+    fault:\n\
+        return bad();\n\
+    }\n";
+
+/// Whether the control flow of the words `ws` has a cycle.
+fn a64_has_cycle(ws: &[u32]) -> bool {
+    const RET: u32 = 0xD65F_03C0;
+    let successors = |i: usize| -> Vec<usize> {
+        let next = i + 1;
+        match a64_branch(ws[i], i) {
+            Some((t, true)) => vec![t as usize],
+            Some((t, false)) => vec![next, t as usize],
+            None if ws[i] == RET => Vec::new(),
+            None => vec![next],
+        }
+        .into_iter()
+        .filter(|&n| n < ws.len())
+        .collect()
+    };
+    let (mut on_path, mut seen) = (vec![false; ws.len()], vec![false; ws.len()]);
+    let mut stack = vec![(0usize, false)];
+    while let Some((k, leaving)) = stack.pop() {
+        if leaving {
+            on_path[k] = false;
+            continue;
+        }
+        if seen[k] {
+            continue;
+        }
+        (seen[k], on_path[k]) = (true, true);
+        stack.push((k, true));
+        for n in successors(k) {
+            if on_path[n] {
+                return true;
+            }
+            stack.push((n, false));
+        }
+    }
+    false
+}
+
+/// A run-once loop is decided at its latch, which leaves for the exit with
+/// the values the body assigned: none of the three stays a loop.
+#[test]
+fn run_once_loops_leave_no_cycle() {
+    for name in ["once", "scoped"] {
+        let ws = a64_at(RUN_ONCE, name, true);
+        assert!(
+            !a64_has_cycle(&ws),
+            "aarch64 {name}: a loop survives: {ws:08x?}"
+        );
+        let insns = x64_at(RUN_ONCE, name, true);
+        assert!(
+            !x64_has_cycle(&insns),
+            "x86-64 {name}: a loop survives: {insns:x?}"
+        );
+    }
+}
 
 /// `mov xd, xm` (`orr xd, xzr, xm`).
 fn a64_mov_rr(w: u32) -> Option<(u32, u32)> {

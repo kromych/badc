@@ -464,31 +464,13 @@ Disassembly of section .text:
                	incq	%rax
                	cmpl	$0x40, %eax
                	jb	<addr>
-               	leaq	<rip>, %r8
-               	xorl	%ecx, %ecx
-               	movb	%cl, (%r8)
                	leaq	<rip>, %rax
-               	movb	%cl, (%rax)
-               	movl	$0x1, %edi
-               	movq	%rcx, %rsi
-               	movq	%rdx, %rax
-               	xorq	%rax, %rsi
-               	movq	%rax, %rdi
-               	shlq	%rdi
-               	testb	$-0x80, %al
-               	je	<addr>
-               	movl	$0x1d, %eax
-               	jmp	<addr>
-               	movq	%rcx, %rax
-               	xorq	%rdi, %rax
-               	andq	$0xff, %rax
-               	movq	%rcx, %rdi
-               	testq	%rdi, %rdi
-               	jne	<addr>
-               	movb	%sil, 0x1(%r8)
-               	leaq	<rip>, %r9
-               	movl	$0x10, %eax
                	xorl	%edi, %edi
+               	movb	%dil, (%rax)
+               	leaq	<rip>, %r9
+               	movb	%dil, (%r9)
+               	movb	$-0x3d, 0x1(%rax)
+               	movl	$0x10, %eax
                	movq	%rdi, %rcx
                	movq	%rdx, %rsi
                	testb	$0x1, %al

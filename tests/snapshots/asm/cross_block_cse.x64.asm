@@ -41,22 +41,14 @@ Disassembly of section .text:
                	movl	$0x31, 0x1c(%rsi)
                	movl	$0x40, 0x20(%rsi)
                	movl	$0x51, 0x24(%rsi)
-               	movl	$0x7, %ecx
-               	xorl	%edx, %edx
-               	movq	%rdx, %rax
-               	movslq	(%rsi,%rcx,4), %rcx
-               	addq	%rcx, %rax
+               	movslq	0x1c(%rsi), %rax
                	cmpl	$0xc8, %eax
-               	jg	<addr>
-               	movq	%rdx, %rcx
-               	testl	%ecx, %ecx
-               	jg	<addr>
-               	cmpl	$0x31, %eax
-               	je	<addr>
+               	jle	<addr>
                	movl	$0x2, %eax
                	leave
                	retq
-               	leaq	-0x28(%rbp), %rsi
+               	cmpl	$0x31, %eax
+               	jne	<addr>
                	movl	$0x99, %ecx
                	xorl	%eax, %eax
                	imulq	$0x1999999a, %rcx, %rdx # imm = 0x1999999A

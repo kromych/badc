@@ -49,8 +49,6 @@ Disassembly of section .text:
                	movq	%rbx, %rdx
                	andq	$0xff, %rdx
                	movl	$0x1, %esi
-               	cmpl	$0x1, %esi
-               	jne	<addr>
                	movq	%rdx, %rax
                	xorq	$0x2a, %rax
                	testl	%eax, %eax
@@ -65,91 +63,24 @@ Disassembly of section .text:
                	leave
                	retq
                	xorl	%edi, %edi
-               	cmpl	$0x80, %ebx
-               	jae	<addr>
-               	movq	%rbx, %rdx
-               	andq	$0xff, %rdx
-               	movl	$0x1, %esi
-               	cmpl	$0x1, %esi
-               	jne	<addr>
-               	movq	%rdx, %rax
-               	xorq	$0x2a, %rax
-               	testl	%eax, %eax
-               	je	<addr>
-               	leaq	<rip>, %rdi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movl	$0x2, %eax
-               	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	leave
-               	retq
-               	cmpl	$0x80, %ebx
-               	jae	<addr>
-               	movq	%rbx, %rdx
-               	andq	$0xff, %rdx
-               	movl	$0x1, %esi
-               	cmpl	$0x1, %esi
-               	jne	<addr>
-               	movq	%rdx, %rax
-               	xorq	$0x2a, %rax
-               	testl	%eax, %eax
-               	je	<addr>
-               	leaq	<rip>, %rdi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movl	$0x3, %eax
-               	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	leave
-               	retq
-               	callq	<addr>
-               	movq	%rax, %r13
-               	xorl	%edi, %edi
                	callq	<addr>
                	movq	%rax, %r12
                	xorl	%edi, %edi
                	callq	<addr>
+               	movq	%rax, %r13
+               	xorl	%edi, %edi
+               	callq	<addr>
+               	movq	%rax, %r8
                	testl	%ebx, %ebx
                	jle	<addr>
-               	movl	$0x1, %r13d
-               	movl	$0x2, %r12d
-               	movl	$0x3, %eax
-               	movl	$0x6, %esi
-               	cmpl	$0x6, %esi
-               	jne	<addr>
-               	cmpl	$0x1, %r13d
-               	jne	<addr>
-               	cmpl	$0x2, %r12d
-               	jne	<addr>
-               	cmpl	$0x3, %eax
-               	je	<addr>
-               	leaq	<rip>, %rdi
-               	movq	%r13, %rdx
-               	movq	%rax, %r8
-               	movq	%r12, %rcx
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movl	$0x4, %eax
-               	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	leave
-               	retq
                	movl	$0xc8, %edi
                	callq	<addr>
                	cmpl	$0x80, %eax
                	jae	<addr>
                	movq	%rax, %rdx
                	andq	$0xff, %rdx
-               	movl	$0x1, %esi
-               	cmpl	$0x63, %esi
-               	jne	<addr>
-               	testl	%edx, %edx
-               	je	<addr>
                	leaq	<rip>, %rdi
+               	movl	$0x1, %esi
                	movb	$0x0, %al
                	callq	<addr>
                	movl	$0x5, %eax
@@ -164,17 +95,18 @@ Disassembly of section .text:
                	popq	%r13
                	leave
                	retq
-               	movl	$0x63, %esi
-               	xorl	%edx, %edx
-               	jmp	<addr>
+               	leaq	<rip>, %rdi
                	movq	$-0x1, %rsi
-               	jmp	<addr>
-               	movl	$0x63, %esi
-               	movq	%rdi, %rdx
-               	jmp	<addr>
-               	movl	$0x63, %esi
-               	movq	%rdi, %rdx
-               	jmp	<addr>
+               	movq	%r12, %rdx
+               	movq	%r13, %rcx
+               	movb	$0x0, %al
+               	callq	<addr>
+               	movl	$0x4, %eax
+               	popq	%rbx
+               	popq	%r12
+               	popq	%r13
+               	leave
+               	retq
                	movl	$0x63, %esi
                	xorl	%edx, %edx
                	jmp	<addr>

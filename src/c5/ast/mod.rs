@@ -909,29 +909,12 @@ pub(crate) struct Ast {
     /// is `Some(StmtId)` once the matching labelled statement is
     /// seen; `None` while the label is still pending.
     pub goto_targets: Vec<Option<StmtId>>,
-    /// Indirect-call callees whose pointed-to function is variadic, keyed
-    /// by the callee's `ExprId` with the count of fixed (pre-ellipsis)
-    /// parameters. Populated when the callee's prototype is not
-    /// recoverable from its symbol alone -- a struct-field, array-element,
-    /// or dereferenced function pointer. The walker reads it to split a
-    /// variadic call's arguments at the fixed count so the host variadic
-    /// ABI places the tail correctly (C99 6.5.2.2; macOS/AAPCS64 Darwin
-    /// passes the tail on the stack). Sparse: empty unless a variadic
-    /// indirect call appears in the function.
-    pub variadic_indirect_callees: Vec<(ExprId, u32)>,
-    /// Indirect-call callees whose pointed-to function declares a
-    /// calling convention other than the target's
-    /// (`__attribute__((ms_abi))` / `((sysv_abi))`), keyed by the
-    /// callee's `ExprId`. Recorded at parse time, where the callee's
-    /// declared type is in scope; the walker reads it to pick the
-    /// argument placement, shadow space and callee-clobber shape the
-    /// call site marshals to. Sparse: empty unless such a call appears
-    /// in the function.
-    pub conv_indirect_callees: Vec<(ExprId, crate::c5::codegen::CallConv)>,
-    /// The parameter types of an indirect call's pointed-to prototype,
-    /// keyed by the callee's `ExprId`, recorded while the prototype is in
-    /// scope; empty for a pointer to a function without one.
-    pub indirect_callee_params: alloc::collections::BTreeMap<ExprId, Vec<i64>>,
+    /// The function type of a call's callee expression, keyed by its
+    /// `ExprId`, for every call other than one naming a function: what
+    /// the parse converted the arguments to, and the fixed count and
+    /// convention the walker places them by. Absent where the callee's
+    /// type carries no function type.
+    pub callee_types: alloc::collections::BTreeMap<ExprId, crate::c5::symbol::FnType>,
     /// `Expr::Ident` nodes that reference a block-scope `extern` which
     /// shadows an enclosing bound name (a local, parameter, or enum
     /// constant). The shadowed binding is restored at block exit, so the

@@ -391,6 +391,11 @@ pub(crate) struct Symbol {
     pub fn_ptr_ret_indirection: i64,
     /// Scope-restore shadow for `fn_ptr_ret_indirection`.
     pub h_fn_ptr_ret_indirection: i64,
+    /// `FnType::ret` of the function this symbol names or points to: the
+    /// function type a call's result points to.
+    pub ret_fn: Option<(alloc::boxed::Box<FnType>, i64)>,
+    /// Scope-restore shadow for `ret_fn`.
+    pub h_ret_fn: Option<(alloc::boxed::Box<FnType>, i64)>,
     /// True for a typedef of a function TYPE (`typedef RET F(args)`),
     /// as opposed to a function POINTER (`typedef RET (*F)(args)`). The
     /// type encoding pre-decays both to a function pointer (`RET` plus
@@ -654,6 +659,20 @@ pub(crate) struct Symbol {
     pub maybe_unused: bool,
 }
 
+/// The part of a function type its `i64` tag, the return type's, leaves
+/// out: what a call converts its arguments to (C99 6.5.2.2p7) and passes
+/// them by, and the function type a returned pointer points to.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub(crate) struct FnType {
+    /// Parameter types, empty when the type declares none.
+    pub params: Vec<i64>,
+    pub variadic: bool,
+    pub conv: crate::c5::codegen::CallConv,
+    /// The function type the returned value points to, and the pointer
+    /// levels from the value down to it (1 for a pointer to function).
+    pub ret: Option<(alloc::boxed::Box<FnType>, i64)>,
+}
+
 /// Recorded initializer value of a block-scope `const` scalar arithmetic
 /// object (see `Symbol::const_object_value`). Floats carry the f64 bit
 /// pattern so the type stays `Copy + Eq` for the shadow-slot machinery.
@@ -860,6 +879,8 @@ impl crate::c5::layout::DataOffsets for Symbol {
             h_fn_ptr_indirection: _,
             fn_ptr_ret_indirection: _,
             h_fn_ptr_ret_indirection: _,
+            ret_fn: _,
+            h_ret_fn: _,
             is_function_type: _,
             returns_void: _,
             is_void_typedef: _,

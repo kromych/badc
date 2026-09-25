@@ -430,6 +430,7 @@ impl Compiler {
         let base_is_function_type = self.pending.base_is_function_type;
         let base_typedef_fn_proto = self.pending.typedef_fn_proto;
         let base_fn_ptr_param_types = self.pending.fn_ptr_param_types.clone();
+        let base_fn_ptr_ret_fn = self.pending.fn_ptr_ret_fn.clone();
         // A leading `cleanup(fn)` or `uninitialized` applies to every
         // declarator; one written after a declarator applies to it alone.
         let leading_cleanup = self.pending.attr_cleanup.take();
@@ -440,6 +441,7 @@ impl Compiler {
             self.pending.base_is_function_type = base_is_function_type;
             self.pending.typedef_fn_proto = base_typedef_fn_proto;
             self.pending.fn_ptr_param_types = base_fn_ptr_param_types.clone();
+            self.pending.fn_ptr_ret_fn = base_fn_ptr_ret_fn.clone();
             // Any declarator of the list may declare a function (C99 6.7p1).
             let base = super::redeclaration::Spelled {
                 ty: lbt,
@@ -477,6 +479,7 @@ impl Compiler {
             // Take the fn-pointer carriers before any initializer is parsed:
             // an initializer cast runs a base-type parse that clears them,
             // which would drop a variadic fn-pointer's prototype.
+            let ret_fn = self.take_decl_ret_fn(false);
             let fn_ptr_indirection = self.pending.fn_ptr_indirection.take().unwrap_or(0);
             let fn_ptr_ret_indirection = core::mem::take(&mut self.pending.fn_ptr_ret_indirection);
             let fnptr_proto = self.pending.typedef_fn_proto.take();
@@ -581,6 +584,7 @@ impl Compiler {
                     array_size == -1 && self.symbols[loc_idx].array_size == 0;
                 self.symbols[loc_idx].fn_ptr_indirection = fn_ptr_indirection;
                 self.symbols[loc_idx].fn_ptr_ret_indirection = fn_ptr_ret_indirection;
+                self.symbols[loc_idx].ret_fn = ret_fn;
                 if let Some(types) = fnptr_param_types {
                     self.symbols[loc_idx].params = types;
                     self.symbols[loc_idx].is_variadic = matches!(fnptr_proto, Some((_, true)));

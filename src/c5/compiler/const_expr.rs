@@ -2648,7 +2648,8 @@ impl Compiler {
                 // dimensions (C99 6.7.7).
                 let mut array_pointee = None;
                 if self.lex.tk == '(' {
-                    let (levels, _, dims) = self.parse_abstract_ptr_declarator(false)?;
+                    let abs = self.parse_abstract_ptr_declarator(false)?;
+                    let (levels, dims) = (abs.levels, abs.dims);
                     if levels == 1 && !dims.is_empty() && dims.iter().all(|&d| d > 0) {
                         array_pointee = Some(self.array_agg_type(target_ty, &dims));
                     }

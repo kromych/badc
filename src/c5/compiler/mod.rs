@@ -23,6 +23,7 @@ mod diag;
 mod emit;
 mod enum_decl;
 mod expr;
+mod fn_types;
 mod function;
 mod global_init;
 mod initializer;
@@ -378,6 +379,9 @@ pub struct StructField {
     /// from it so `(*s.cb(x))(y)`-style chains decay instead of
     /// loading through the returned function pointer.
     pub fn_ptr_ret_indirection: i64,
+    /// `FnType::ret` of the function a function-pointer field points to
+    /// (mirrors `Symbol::ret_fn`).
+    pub(crate) ret_fn: Option<(alloc::boxed::Box<crate::c5::symbol::FnType>, i64)>,
     /// Parameter type tags of a function-pointer field, captured from
     /// the field declarator's prototype (mirrors `Symbol::params`).
     /// Empty for a non-function-pointer field or one declared without a
@@ -906,6 +910,22 @@ pub(in crate::c5::compiler) struct Pending {
     /// `fn_ptr_indirection`.
     pub fn_ptr_group_resolved: bool,
 
+    /// Set by a declarator frame before it parses its parenthesised inner
+    /// declarator, which then continues the same entity's function types.
+    pub declarator_in_group: bool,
+    /// The signatures a declarator spells past its entity's own, innermost
+    /// first, with the pointer levels from the previous result to each
+    /// (`int (*(*f)(void))(int)` spells `(int)` one level past `(void)`).
+    pub fn_ret_chain: alloc::vec::Vec<(alloc::vec::Vec<i64>, bool, i64)>,
+    /// Pointer levels of the entity's declarator the own signature and
+    /// `fn_ret_chain` account for.
+    pub fn_chain_levels: i64,
+    /// The declarator spelled its entity's own signature.
+    pub fn_own_sig: bool,
+    /// The base type's function type at the entity's declarator start,
+    /// the result of the last signature the declarator adds.
+    pub fn_decl_base: Option<(crate::c5::symbol::FnType, i64)>,
+
     /// Set when the base type of the declarator currently being parsed
     /// came from a function-TYPE typedef (`typedef RET F(args)`), so the
     /// declarator absorbs the first `*` (it forms the pointer-to-function
@@ -1063,50 +1083,18 @@ pub(in crate::c5::compiler) struct Pending {
     /// instead of applying the default argument promotions. `None` when
     /// the prototype carries no types (an empty parameter list).
     pub fn_ptr_param_types: Option<alloc::vec::Vec<i64>>,
-    /// Parameter type tags of the function pointer that an in-progress
-    /// postfix indirect call (`tbl[i](args)`, `(*fp)(args)`) will call.
-    /// The flat type tag in the accumulator carries only the callee's
-    /// return type, not its parameter list, so this side-channel ferries
-    /// the parameters from the producing symbol (a function-pointer array
-    /// element or a dereferenced function-pointer variable) to the call's
-    /// argument loop, which narrows each argument to its declared type
-    /// (C99 6.5.2.2p7) the same way the direct-identifier call path does.
-    /// Set at the array-decay and identifier-load sites, preserved across
-    /// a subscript index parse, cleared at a `.`/`->` field access and at
-    /// each statement boundary so it cannot reach an unrelated call.
-    pub indirect_callee_params: Option<alloc::vec::Vec<i64>>,
-    /// True when the indirect callee whose parameter types are held in
-    /// `indirect_callee_params` is variadic. Threaded alongside the
-    /// parameter list so an indirect variadic call recovers the
-    /// pre-ellipsis (fixed) argument count and places the variadic tail
-    /// per the host variadic ABI (C99 6.5.2.2; the macOS/AAPCS64 Darwin
-    /// variant passes the tail on the stack). Set and cleared at the same
-    /// sites as `indirect_callee_params`.
-    pub indirect_callee_is_variadic: bool,
-    /// Calling convention of the function `indirect_callee_params`
-    /// describes (`__attribute__((ms_abi))` / `((sysv_abi))`). Set and
-    /// cleared at the same sites as `indirect_callee_params`; the call
-    /// arm records it on the callee `ExprId` so the walker can pick the
-    /// convention long after the declaration went out of scope.
-    pub indirect_callee_conv: crate::c5::codegen::CallConv,
-    /// Pointer depth of the value whose prototype is held in
-    /// `indirect_callee_params`, in `Symbol::fn_ptr_indirection`'s
-    /// convention (1: the value is the function pointer). Threaded at the
-    /// same sites; `typeof` reads it to spell the operand's indirection.
-    pub indirect_callee_fn_ptr_depth: i64,
-    /// Fn-pointer lineage of the indirect callee's return value, in the
-    /// same plus-1 convention (`Symbol::fn_ptr_ret_indirection`).
-    /// Threaded at the same sites; the postfix call arm takes it to
-    /// seed `fn_ptr_chain_depth` when the call result is itself a
-    /// function pointer, matching the direct-call arm.
+    /// `FnType::ret` of the function type the fn-pointer carriers
+    /// (`fn_ptr_param_types`, `typedef_fn_proto`) describe: a typedef or
+    /// `typeof` base's, or the signatures a declarator spells past the
+    /// declared entity's own. Taken with them.
+    pub fn_ptr_ret_fn: Option<(alloc::boxed::Box<crate::c5::symbol::FnType>, i64)>,
+    /// Fn-pointer lineage of the return value of the function pointer an
+    /// in-progress postfix call will call (`tbl[i](args)`, `(*fp)(args)`),
+    /// in `Symbol::fn_ptr_ret_indirection`'s plus-1 convention. Set at the
+    /// identifier, array-decay and member sites, kept across a subscript
+    /// index and cleared at each statement; the postfix call arm takes it
+    /// to seed `fn_ptr_chain_depth` when the result is a function pointer.
     pub indirect_callee_ret_fn_ptr: i64,
-    /// Signature of the last completed function-pointer cast: (cast
-    /// result tag, parameter types, variadic, pointer depth). The flat
-    /// tag carries only the return type, so `typeof(<cast>)` recovers
-    /// the prototype from here, keyed to the cast node so a larger
-    /// operand does not inherit it. Taken by
-    /// `parse_unevaluated_expr_ty`.
-    pub last_fn_ptr_cast: Option<(i64, alloc::vec::Vec<i64>, bool, i64)>,
     /// Set while parsing a function-pointer declarator's parameter list.
     /// The parameters form a prototype: their names are irrelevant, so
     /// `parse_function_params` records each type without binding the name
@@ -1516,6 +1504,7 @@ impl Pending {
             fn_ptr_ret_indirection: core::mem::take(&mut self.fn_ptr_ret_indirection),
             typedef_fn_proto: self.typedef_fn_proto.take(),
             fn_ptr_param_types: self.fn_ptr_param_types.take(),
+            fn_ptr_ret_fn: self.fn_ptr_ret_fn.take(),
             typedef_base_array_size: core::mem::take(&mut self.typedef_base_array_size),
             typedef_base_array_dims: core::mem::take(&mut self.typedef_base_array_dims),
             typedef_base_zero_len: core::mem::take(&mut self.typedef_base_zero_len),
@@ -1537,6 +1526,7 @@ impl Pending {
         self.fn_ptr_ret_indirection = s.fn_ptr_ret_indirection;
         self.typedef_fn_proto = s.typedef_fn_proto;
         self.fn_ptr_param_types = s.fn_ptr_param_types;
+        self.fn_ptr_ret_fn = s.fn_ptr_ret_fn;
         self.typedef_base_array_size = s.typedef_base_array_size;
         self.typedef_base_array_dims = s.typedef_base_array_dims;
         self.typedef_base_zero_len = s.typedef_base_zero_len;
@@ -1561,6 +1551,7 @@ pub(super) struct DeclTypeCarriers {
     fn_ptr_ret_indirection: i64,
     typedef_fn_proto: Option<(usize, bool)>,
     fn_ptr_param_types: Option<alloc::vec::Vec<i64>>,
+    fn_ptr_ret_fn: Option<(alloc::boxed::Box<crate::c5::symbol::FnType>, i64)>,
     typedef_base_array_size: i64,
     typedef_base_zero_len: bool,
     typedef_base_array_dims: alloc::vec::Vec<i64>,
@@ -1582,6 +1573,11 @@ impl Default for Pending {
             fn_ptr_indirection: None,
             fn_ptr_ret_indirection: 0,
             fn_ptr_group_resolved: false,
+            declarator_in_group: false,
+            fn_ret_chain: alloc::vec::Vec::new(),
+            fn_chain_levels: 0,
+            fn_own_sig: false,
+            fn_decl_base: None,
             base_is_function_type: false,
             bare_function_type_declarator: false,
             index_stride: 0,
@@ -1604,12 +1600,8 @@ impl Default for Pending {
             const_expr_compound_literal: false,
             typedef_fn_proto: None,
             fn_ptr_param_types: None,
-            indirect_callee_params: None,
-            indirect_callee_is_variadic: false,
-            indirect_callee_conv: crate::c5::codegen::CallConv::Target,
-            indirect_callee_fn_ptr_depth: 0,
             indirect_callee_ret_fn_ptr: 0,
-            last_fn_ptr_cast: None,
+            fn_ptr_ret_fn: None,
             parsing_fn_ptr_proto: false,
             member_decl_save: None,
             in_member_declarator: false,
@@ -1972,6 +1964,11 @@ pub struct Compiler {
     /// expression site doesn't produce an AST node (address-only
     /// producers that the call-site path consumes directly).
     pub(super) ast_acc: Option<super::ast::ExprId>,
+
+    /// The function type of each expression of the current AST that has
+    /// one, and its pointer depth: the prototype a call through it takes.
+    pub(super) expr_fns:
+        alloc::collections::BTreeMap<super::ast::ExprId, (super::symbol::FnType, i64)>,
 
     /// ExprIds matching values on the c5 stack-machine stack --
     /// the stack push records the current `ast_acc` here;
@@ -2918,6 +2915,7 @@ impl Compiler {
             static_duration_init: 0,
             ast: super::ast::Ast::new(),
             ast_acc: None,
+            expr_fns: alloc::collections::BTreeMap::new(),
             ast_vstack: Vec::new(),
             finished_functions: Vec::new(),
             synthetic_ssa_funcs: Vec::new(),

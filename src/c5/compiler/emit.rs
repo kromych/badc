@@ -794,6 +794,7 @@ impl Compiler {
         s.h_val = s.val;
         s.h_fn_ptr_indirection = s.fn_ptr_indirection;
         s.h_fn_ptr_ret_indirection = s.fn_ptr_ret_indirection;
+        s.h_ret_fn = s.ret_fn.clone();
         s.h_params = s.params.clone();
         s.h_is_variadic = s.is_variadic;
         s.h_conv = s.conv;
@@ -866,6 +867,7 @@ impl Compiler {
         sym.val = sym.h_val;
         sym.fn_ptr_indirection = sym.h_fn_ptr_indirection;
         sym.fn_ptr_ret_indirection = sym.h_fn_ptr_ret_indirection;
+        sym.ret_fn = sym.h_ret_fn.take();
         sym.params = core::mem::take(&mut sym.h_params);
         sym.is_variadic = sym.h_is_variadic;
         sym.conv = sym.h_conv;
@@ -908,6 +910,7 @@ impl Compiler {
             && sym.val == sym.h_val
             && sym.fn_ptr_indirection == sym.h_fn_ptr_indirection
             && sym.fn_ptr_ret_indirection == sym.h_fn_ptr_ret_indirection
+            && sym.ret_fn == sym.h_ret_fn
             && sym.params == sym.h_params
             && sym.is_variadic == sym.h_is_variadic
             && sym.conv == sym.h_conv
@@ -1056,6 +1059,7 @@ impl Compiler {
     /// entry.
     pub(super) fn ast_reset(&mut self) {
         self.ast = super::super::ast::Ast::new();
+        self.expr_fns.clear();
         self.ast_acc = None;
         self.ast_vstack.clear();
         self.pending_label_relocs.clear();
@@ -1097,6 +1101,7 @@ impl Compiler {
         // invariant would fail.
         self.next_ent_pc += 1;
         self.rewrite_loop_idioms();
+        self.expr_fns.clear();
         let finished = super::super::ast::FinishedFunction {
             ast: core::mem::take(&mut self.ast),
             ent_pc,
@@ -1191,7 +1196,8 @@ impl Compiler {
     /// node -- the conversion is implicit in the AST shape.
     pub(super) fn ast_emit_ident(&mut self, sym: u32, ty: i64) -> ExprId {
         let pos = self.ast_src_pos();
-        let s = &self.symbols[sym as usize];
+        let idx = sym as usize;
+        let s = &self.symbols[idx];
         let class = s.class;
         let val = s.val;
         let is_thread_local = s.is_thread_local;
@@ -1231,6 +1237,7 @@ impl Compiler {
         if block_extern {
             self.ast.block_extern_refs.push(id);
         }
+        self.record_ident_fn(id, idx);
         self.ast_acc = Some(id);
         id
     }
@@ -1569,7 +1576,7 @@ impl Compiler {
         let val = s.val;
         let is_thread_local = s.is_thread_local;
         let array_size = s.array_size;
-        self.ast.push_expr(
+        let id = self.ast.push_expr(
             Expr::Ident {
                 sym,
                 ty,
@@ -1579,7 +1586,9 @@ impl Compiler {
                 array_size,
             },
             pos,
-        )
+        );
+        self.record_ident_fn(id, sym as usize);
+        id
     }
 
     /// Snapshot the current `ast.stmts` length. Used by the

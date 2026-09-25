@@ -2600,6 +2600,14 @@ fn kr_old_style_def() {
 }
 
 #[test]
+fn callee_function_types() {
+    // A call converts its arguments by its callee expression's function
+    // type, whatever form the callee takes: a dereferenced designator, a
+    // conditional, a comma, a member, an element, a cast, a call's result.
+    assert_eq!(run_fixture("callee_function_types.c"), 0);
+}
+
+#[test]
 fn indirect_call_prototypes() {
     // A call through a pointer converts or promotes its arguments by the
     // pointed-to type, however the callee is spelled.

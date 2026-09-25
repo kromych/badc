@@ -284,36 +284,12 @@ impl<'a> Walker<'a> {
         self.live_fun_sym(sym).map_or(0, |s| s.params.len())
     }
 
-    /// Resolve an indirect call's callee to the pointed-to function's
-    /// `(is_variadic, fixed_arg_count)`. The prototype is recoverable
-    /// from a direct function name, from a function-pointer variable
-    /// whose declaration inherited it from a typedef, and through a
-    /// comma operator's right operand. Any other callee defaults to
-    /// non-variadic with every argument fixed, which places its
-    /// arguments as a plain call's are placed.
+    /// An indirect call's `(is_variadic, fixed_arg_count)`, from the
+    /// callee's function type the parse recorded; with none, every
+    /// argument is fixed.
     fn indirect_callee_proto(&self, callee: ExprId, arg_count: usize) -> (bool, usize) {
-        // A variadic callee whose prototype was not recoverable from its
-        // symbol -- a struct-field, array-element, or dereferenced
-        // function pointer -- is recorded at parse time with its fixed
-        // (pre-ellipsis) parameter count, keyed by the callee ExprId.
-        if let Some(&(_, fixed)) = self
-            .ast
-            .variadic_indirect_callees
-            .iter()
-            .find(|(c, _)| *c == callee)
-        {
-            return (true, fixed as usize);
-        }
-        match self.ast.expr(callee) {
-            Expr::Ident { sym, .. } => {
-                let idx = *sym as usize;
-                if idx < self.symbols.len() && self.symbols[idx].is_variadic {
-                    (true, self.symbols[idx].params.len())
-                } else {
-                    (false, arg_count)
-                }
-            }
-            Expr::Comma { rhs, .. } => self.indirect_callee_proto(*rhs, arg_count),
+        match self.ast.callee_types.get(&callee) {
+            Some(f) if f.variadic => (true, f.params.len()),
             _ => (false, arg_count),
         }
     }
@@ -333,23 +309,12 @@ impl<'a> Walker<'a> {
     }
 
     /// Calling convention the pointed-to function of an indirect call
-    /// follows, recorded at parse time on the callee's `ExprId` when its
-    /// declared type carries `__attribute__((ms_abi))` /
-    /// `((sysv_abi))`. The entry is normalised against the target, so
-    /// anything listed differs from it.
+    /// follows, from the callee's function type the parse recorded.
     fn indirect_callee_conv(&self, callee: ExprId) -> crate::c5::codegen::CallConv {
-        if let Some(&(_, conv)) = self
-            .ast
-            .conv_indirect_callees
-            .iter()
-            .find(|(c, _)| *c == callee)
-        {
-            return conv;
-        }
-        match self.ast.expr(callee) {
-            Expr::Comma { rhs, .. } => self.indirect_callee_conv(*rhs),
-            _ => crate::c5::codegen::CallConv::Target,
-        }
+        self.ast
+            .callee_types
+            .get(&callee)
+            .map_or(crate::c5::codegen::CallConv::Target, |f| f.conv)
     }
 
     /// Resolve a `Token::Glo` address producer to an intra-unit data

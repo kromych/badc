@@ -42,6 +42,7 @@ struct FileScopeDecl {
     base_is_function_type: bool,
     base_typedef_fn_proto: Option<(usize, bool)>,
     base_fn_ptr_param_types: Option<alloc::vec::Vec<i64>>,
+    base_fn_ptr_ret_fn: Option<(alloc::boxed::Box<crate::c5::symbol::FnType>, i64)>,
 }
 
 /// What one file-scope declarator supplied: the bound symbol, the type its
@@ -451,6 +452,7 @@ impl Compiler {
             base_is_function_type: self.pending.base_is_function_type,
             base_typedef_fn_proto: self.pending.typedef_fn_proto,
             base_fn_ptr_param_types: self.pending.fn_ptr_param_types.clone(),
+            base_fn_ptr_ret_fn: self.pending.fn_ptr_ret_fn.clone(),
         };
         let mut declarator_count = 0usize;
         while self.lex.tk != ';' && self.lex.tk != '}' {
@@ -485,6 +487,7 @@ impl Compiler {
         self.pending.base_is_function_type = decl.base_is_function_type;
         self.pending.typedef_fn_proto = decl.base_typedef_fn_proto;
         self.pending.fn_ptr_param_types = decl.base_fn_ptr_param_types.clone();
+        self.pending.fn_ptr_ret_fn = decl.base_fn_ptr_ret_fn.clone();
         // The declarator's own line -- the name and its parameter
         // list -- for diagnostics that would otherwise point at the
         // function body's opening brace parsed further below.
@@ -535,6 +538,10 @@ impl Compiler {
         // the declarator (or its typedef base type)
         // recorded, and store it on the symbol so a later
         // identifier load can seed the chain-depth tracker.
+        let own_signature = self.lex.tk == '(' || self.pending.fn_params.is_some();
+        if let Some(ret) = self.take_decl_ret_fn(own_signature) {
+            self.symbols[id_idx].ret_fn = Some(ret);
+        }
         let fn_ptr_indirection = self.pending.fn_ptr_indirection.take().unwrap_or(0);
         let fn_ptr_ret_indirection = core::mem::take(&mut self.pending.fn_ptr_ret_indirection);
         // C99 6.7.7p3: an array typedef contributes its dimension to a declarator

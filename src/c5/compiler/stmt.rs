@@ -58,6 +58,7 @@ pub(super) struct BlockShadow {
     val: i64,
     fn_ptr_indirection: i64,
     fn_ptr_ret_indirection: i64,
+    ret_fn: Option<(alloc::boxed::Box<crate::c5::symbol::FnType>, i64)>,
     params: Vec<i64>,
     is_variadic: bool,
     array_size: i64,
@@ -100,6 +101,7 @@ impl Compiler {
             val: s.val,
             fn_ptr_indirection: s.fn_ptr_indirection,
             fn_ptr_ret_indirection: s.fn_ptr_ret_indirection,
+            ret_fn: s.ret_fn.clone(),
             params: s.params.clone(),
             is_variadic: s.is_variadic,
             array_size: s.array_size,
@@ -148,6 +150,7 @@ impl Compiler {
         s.val = b.val;
         s.fn_ptr_indirection = b.fn_ptr_indirection;
         s.fn_ptr_ret_indirection = b.fn_ptr_ret_indirection;
+        s.ret_fn = b.ret_fn;
         s.params = b.params;
         s.is_variadic = b.is_variadic;
         s.array_size = b.array_size;
@@ -549,6 +552,7 @@ impl Compiler {
             let declarator_transparent = core::mem::take(&mut self.pending.attr_transparent_union);
             let fn_ptr_indirection = self.pending.fn_ptr_indirection.take().unwrap_or(0);
             let fn_ptr_ret_indirection = core::mem::take(&mut self.pending.fn_ptr_ret_indirection);
+            let ret_fn = self.take_decl_ret_fn(self.lex.tk == '(');
             let bare_fn_type = core::mem::take(&mut self.pending.bare_function_type_declarator);
             // C99 function-type typedef: `typedef RET NAME(args);`
             // declared at block scope. Same handling as run_compile's
@@ -595,6 +599,7 @@ impl Compiler {
             self.symbols[id_idx].class = Token::Typedef as i64;
             self.symbols[id_idx].type_ = typedef_ty;
             self.symbols[id_idx].val = 0;
+            self.symbols[id_idx].ret_fn = ret_fn;
             self.symbols[id_idx].incomplete_enum_tag = base_enum_tag;
             // A declarator-position `transparent_union` binds to the
             // aliased union, as at file scope.
@@ -2948,13 +2953,8 @@ impl Compiler {
     }
 
     fn stmt_inner(&mut self) -> Result<(), C5Error> {
-        // Function-pointer callee parameters captured for a postfix
-        // indirect call never span a statement: drop any left set by a
-        // producer whose call did not consume them so they cannot reach an
-        // unrelated call in a later statement.
-        self.pending.indirect_callee_params = None;
-        self.pending.indirect_callee_is_variadic = false;
-        self.pending.indirect_callee_fn_ptr_depth = 0;
+        // The return lineage captured for a postfix indirect call never
+        // spans a statement, so it cannot reach an unrelated call.
         self.pending.indirect_callee_ret_fn_ptr = 0;
         // The function-pointer-decay depth (C99 6.3.2.1p4) is intra-
         // expression state: a function name used as a call argument seeds

@@ -643,25 +643,14 @@ impl<'a> Walker<'a> {
         Ok(self.call_result(b, call, ret_temp, ty, true))
     }
 
-    /// The parameter types of a pointer callee's prototype, empty for a
-    /// pointer without one, `None` where the parse did not carry the
-    /// pointer's type. A block-scope binding's symbol no longer holds its
-    /// own by the walk.
-    ///
-    /// TODO: a call's result, a conditional or a comma operand as the callee
-    /// carries no prototype.
+    /// The parameter types of a pointer callee's function type, empty
+    /// for one without a prototype, `None` where the callee's type
+    /// carried no function type.
     fn indirect_callee_params(&self, callee: ExprId) -> Option<&'a [i64]> {
-        if let Some(params) = self.ast.indirect_callee_params.get(&callee) {
-            return Some(params);
-        }
-        match self.ast.expr(callee) {
-            Expr::Ident { sym, class, .. } if *class != Token::Loc as i64 => self
-                .symbols
-                .get(*sym as usize)
-                .filter(|s| s.fn_ptr_indirection >= 1)
-                .map(|s| s.params.as_slice()),
-            _ => None,
-        }
+        self.ast
+            .callee_types
+            .get(&callee)
+            .map(|f| f.params.as_slice())
     }
 
     /// Record `call`'s [`Inst::Call::low_word_args`] and

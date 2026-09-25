@@ -64,6 +64,16 @@ impl ParsedParams {
     }
 }
 
+/// A parameter's function-pointer carriers: indirection, return lineage,
+/// pointee parameter types, variadic flag, and `FnType::ret`.
+type ParamFnCarriers = (
+    i64,
+    i64,
+    Option<Vec<i64>>,
+    bool,
+    Option<(alloc::boxed::Box<crate::c5::symbol::FnType>, i64)>,
+);
+
 /// How a function declarator specified its parameters (C99 6.7.5.3p14).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum ParamForm {
@@ -85,13 +95,14 @@ impl Compiler {
     /// declarator to bind it) leaks into the next declaration -- e.g. the
     /// first field of a following struct definition would record a phantom
     /// function-pointer prototype.
-    fn take_param_fn_ptr_carriers(&mut self) -> (i64, i64, Option<Vec<i64>>, bool) {
+    fn take_param_fn_ptr_carriers(&mut self) -> ParamFnCarriers {
+        let ret_fn = self.take_decl_ret_fn(false);
         let indirection = self.pending.fn_ptr_indirection.take().unwrap_or(0);
         let ret_indirection = core::mem::take(&mut self.pending.fn_ptr_ret_indirection);
         let params = self.pending.fn_ptr_param_types.take();
         let variadic = matches!(self.pending.typedef_fn_proto.take(), Some((_, true)));
         self.pending.base_is_function_type = false;
-        (indirection, ret_indirection, params, variadic)
+        (indirection, ret_indirection, params, variadic, ret_fn)
     }
 
     /// A parameter's own `ms_abi` / `sysv_abi` describes that
@@ -100,8 +111,36 @@ impl Compiler {
     /// list the way the other declarator carriers are.
     pub(super) fn parse_function_params(&mut self) -> Result<ParsedParams, C5Error> {
         let outer_conv = core::mem::take(&mut self.pending.attr_call_conv);
+        // The enclosing declarator's function-pointer carriers and function
+        // types, which each parameter's own declarator starts afresh.
+        let p = &mut self.pending;
+        let outer = (
+            p.fn_ptr_indirection.take(),
+            core::mem::take(&mut p.fn_ptr_ret_indirection),
+            p.typedef_fn_proto.take(),
+            p.fn_ptr_param_types.take(),
+            p.fn_ptr_ret_fn.take(),
+            core::mem::take(&mut p.base_is_function_type),
+        );
+        let outer_chain = core::mem::take(&mut p.fn_ret_chain);
+        let outer_levels = core::mem::take(&mut p.fn_chain_levels);
+        let outer_own = core::mem::take(&mut p.fn_own_sig);
+        let outer_base = p.fn_decl_base.take();
         let r = self.parse_function_params_inner();
-        self.pending.attr_call_conv = outer_conv;
+        let p = &mut self.pending;
+        p.attr_call_conv = outer_conv;
+        (
+            p.fn_ptr_indirection,
+            p.fn_ptr_ret_indirection,
+            p.typedef_fn_proto,
+            p.fn_ptr_param_types,
+            p.fn_ptr_ret_fn,
+            p.base_is_function_type,
+        ) = outer;
+        p.fn_ret_chain = outer_chain;
+        p.fn_chain_levels = outer_levels;
+        p.fn_own_sig = outer_own;
+        p.fn_decl_base = outer_base;
         r
     }
 
@@ -320,7 +359,7 @@ impl Compiler {
             // populated. Drained even if the declarator didn't
             // set anything so they don't leak into the next
             // parameter or expression.
-            let (fn_ptr_indirection, fn_ptr_ret_indirection, fnptr_pp, fnptr_variadic) =
+            let (fn_ptr_indirection, fn_ptr_ret_indirection, fnptr_pp, fnptr_variadic, ret_fn) =
                 self.take_param_fn_ptr_carriers();
             // Drained per parameter so one parameter's convention cannot
             // leak into the next.
@@ -380,6 +419,7 @@ impl Compiler {
             // decay no-op to the unary `*` handler.
             self.symbols[param_idx].fn_ptr_indirection = fn_ptr_indirection;
             self.symbols[param_idx].fn_ptr_ret_indirection = fn_ptr_ret_indirection;
+            self.symbols[param_idx].ret_fn = ret_fn;
             // A function-pointer parameter records its pointee signature's
             // parameter types so an indirect call through it narrows each
             // argument to its declared type (the common callback shape).

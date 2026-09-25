@@ -33,6 +33,18 @@ use super::super::token::{Token, Ty};
 use super::Compiler;
 use super::types::{add_ptr_level, apply_qual_bits, is_decl_modifier, strip_unsigned};
 
+/// An abstract declarator in a type name (C99 6.7.6).
+#[derive(Default)]
+pub(super) struct AbstractDecl {
+    /// Every pointer level it spells.
+    pub(super) levels: i64,
+    /// Per function level, innermost first: the pointer levels above the
+    /// function type, and its parameters when captured.
+    pub(super) fns: alloc::vec::Vec<(i64, Option<super::function::ParsedParams>)>,
+    /// The pointee dimensions of a pointer to an array.
+    pub(super) dims: alloc::vec::Vec<i64>,
+}
+
 impl Compiler {
     /// Record the array shape `idx` holds before this declarator
     /// overwrites it, for the scope save that runs after the declarator.
@@ -58,6 +70,7 @@ impl Compiler {
         // declaration with multiple declarators (`int *p, *q;`) keeps
         // its leading `*` for the caller's declarator loop.
         let proto_snap = self.lex.snapshot();
+        let base_fn = self.carriers_fn_type();
         let mut ret_ptr_levels: i64 = 0;
         while self.lex.tk == Token::MulOp {
             ret_ptr_levels += 1;
@@ -101,6 +114,8 @@ impl Compiler {
                 sym.type_ = ret;
                 sym.params = params.types;
                 sym.is_variadic = params.is_variadic;
+                // A function-pointer base is the result's function type.
+                sym.ret_fn = base_fn.map(|(f, d)| (alloc::boxed::Box::new(f), d + ret_ptr_levels));
                 sym.is_extern_decl = true;
                 sym.linkage = if is_static {
                     crate::c5::symbol::Linkage::Internal
@@ -146,92 +161,79 @@ impl Compiler {
     /// Parse an abstract parenthesized declarator tail that follows a
     /// base type in a type-name (C99 6.7.6): the `(*)(args)` of
     /// `int (*)(int)`, the `(*)[N]` of `int (*)[N]`, and their nested
-    /// forms. The leading `(` must be the current token. c5's flat type
-    /// tag records only a base type plus a pointer level, so the entire
-    /// declarator collapses to the pointer levels named by the inner
-    /// `*`s, returned first (0 when the parentheses enclose no `*`). The
-    /// `[N]` suffixes of a pointer to an array come back as its
-    /// dimensions. With `capture_proto` the plain fn-pointer shape's
-    /// `(args)` list is parsed and returned so a cast expression can
-    /// record the pointee prototype (parameter types, variadic split) for
-    /// a following call. Nested declarator shapes keep the skip behaviour.
+    /// forms, the leading `(` current. With `capture_proto` each function
+    /// level's parameter list is parsed, else skipped.
     pub(super) fn parse_abstract_ptr_declarator(
         &mut self,
         capture_proto: bool,
-    ) -> Result<
-        (
-            i64,
-            Option<super::function::ParsedParams>,
-            alloc::vec::Vec<i64>,
-        ),
-        C5Error,
-    > {
+    ) -> Result<AbstractDecl, C5Error> {
         debug_assert!(self.lex.tk == '(');
-        let mut depth: i64 = 1;
         self.next()?;
-        let mut nested_ptrs: i64 = 0;
-        // The plain fn-pointer shape holds only `*`s (and qualifiers)
-        // inside one paren level; anything else is a nested declarator
-        // whose trailing `(args)` is not the pointee prototype.
-        let mut plain = true;
-        while depth > 0 && self.lex.tk != 0 {
-            if self.lex.tk == '(' {
-                depth += 1;
-                plain = false;
-            } else if self.lex.tk == ')' {
-                depth -= 1;
-                if depth == 0 {
-                    self.next()?;
-                    break;
-                }
-            } else if self.lex.tk == Token::MulOp && depth == 1 {
-                nested_ptrs += 1;
-            } else if self.lex.tk != Token::TypeQual {
-                plain = false;
-            }
+        self.parse_abstract_group(capture_proto)
+    }
+
+    /// `abstract-declarator )` and the suffixes after it, the `(` consumed:
+    /// a group's pointers sit above the function its first suffix spells.
+    fn parse_abstract_group(&mut self, capture_proto: bool) -> Result<AbstractDecl, C5Error> {
+        let mut ptrs: i64 = 0;
+        while self.lex.tk == Token::MulOp || self.lex.tk == Token::TypeQual {
+            ptrs += i64::from(self.lex.tk == Token::MulOp);
             self.next()?;
         }
-        // After the inner `)`: a `(args)` arg-list for the
-        // function-pointer / function-returning-fn shape, or one or more
-        // `[N]` / `[]` suffixes for the pointer-to-array shape
-        // (`T (*)[N][M]`). Both are no-ops at c5's type-tag granularity.
-        let mut proto = None;
-        if self.lex.tk == '(' {
+        let mut d = if self.lex.tk == '(' && !self.paren_opens_param_type_list() {
             self.next()?;
-            if capture_proto && plain && nested_ptrs > 0 {
+            self.parse_abstract_group(capture_proto)?
+        } else {
+            AbstractDecl::default()
+        };
+        // TODO: an array of pointers (`int (*[3])(int)`) keeps no dimension.
+        while self.lex.tk == Token::Brak {
+            self.next()?;
+            self.skip_array_dimension_expr()?;
+            self.next()?;
+        }
+        if self.lex.tk != ')' {
+            return Err(self.compile_err(Code::SYNTAX, "close paren expected in type name"));
+        }
+        self.next()?;
+        d.levels += ptrs;
+        let mut depth = ptrs;
+        while self.lex.tk == '(' {
+            self.next()?;
+            let pp = if capture_proto {
                 // C99 6.2.1p4: the parameter names of a function declarator
-                // that is not part of a function definition have no scope.
-                // Record the pointee prototype's types without binding the
-                // names -- binding one that matches an enclosing local would
-                // overwrite the single-slot shadow the enclosing scope
-                // restores from at block / function exit.
+                // that is not part of a function definition have no scope,
+                // so their types are recorded without binding the names.
                 let saved = self.pending.parsing_fn_ptr_proto;
                 self.pending.parsing_fn_ptr_proto = true;
-                let pp = self.parse_function_params()?;
+                let pp = self.parse_function_params();
                 self.pending.parsing_fn_ptr_proto = saved;
-                proto = Some(pp);
+                Some(pp?)
             } else {
                 self.skip_balanced_parens_after_open()?;
-            }
+                None
+            };
+            d.fns.push((depth, pp));
+            depth = 0;
         }
         // The pointee dimensions of `T (*)[M1]...[Mn]`: the caller folds
         // them into an aggregate-backed tag so the pointee keeps its size.
         // An unspecified bound (`T (*)[]`, C99 6.7.5.2p4 incomplete array
         // type) records the -1 sentinel.
-        let mut dims: alloc::vec::Vec<i64> = alloc::vec::Vec::new();
         while self.lex.tk == Token::Brak {
             self.next()?;
             if self.lex.tk == ']' {
-                dims.push(-1);
+                d.dims.push(-1);
                 self.next()?;
             } else {
                 // A type-name dimension: the const-object fold stays
                 // masked (see `with_const_object_fold_masked`).
-                dims.push(self.with_const_object_fold_masked(|c| c.parse_constant_int())?);
+                d.dims
+                    .push(self.with_const_object_fold_masked(|c| c.parse_constant_int())?);
                 self.accept(']')?;
             }
         }
-        Ok((nested_ptrs, proto, dims))
+        Ok(d)
     }
 
     /// Parse a single declarator: zero-or-more `*` (pointer levels)
@@ -255,6 +257,13 @@ impl Compiler {
         // Taken once so it scopes to this parameter's own declarator, not
         // any nested one (a function-pointer parameter's prototype).
         let param_ctx = core::mem::take(&mut self.pending.param_decl_context);
+        // An entity's declarator starts its function types from the base.
+        if !core::mem::take(&mut self.pending.declarator_in_group) {
+            self.pending.fn_ret_chain.clear();
+            self.pending.fn_chain_levels = 0;
+            self.pending.fn_own_sig = false;
+            self.pending.fn_decl_base = self.carriers_fn_type();
+        }
         let mut ty = base;
         // A calling-convention decoration may precede the declarator
         // (`RET __stdcall name(args)`) or sit just inside the parentheses
@@ -407,6 +416,7 @@ impl Compiler {
             // the identifier's fn-pointer lineage, so this frame's
             // pointer levels describe the return type instead.
             core::mem::take(&mut self.pending.fn_ptr_group_resolved);
+            self.pending.declarator_in_group = true;
             let (idx, mut inner_ty, inner_array_size) = self.parse_declarator(ty)?;
             let inner_resolved = core::mem::take(&mut self.pending.fn_ptr_group_resolved);
             // Pending count right after the inner declarator: a fn-pointer
@@ -455,6 +465,8 @@ impl Compiler {
                 // so on return we're already past the inner args1.
                 let params = self.parse_function_params()?;
                 self.pending.fn_params = Some(params);
+                self.pending.fn_own_sig = true;
+                self.pending.fn_chain_levels = 0;
                 saw_fn_signature = true;
             }
             if self.lex.tk != ')' {
@@ -524,8 +536,22 @@ impl Compiler {
                         }
                         self.pending.typedef_fn_proto = Some((pp.types.len(), pp.is_variadic));
                         self.pending.fn_ptr_param_types = Some(pp.types);
+                        self.pending.fn_own_sig = true;
+                        self.pending.fn_chain_levels = inner_ptr_levels;
                     } else {
-                        self.skip_balanced_parens_after_open()?;
+                        // A later signature is the function type the
+                        // previous one's result points to.
+                        let saved_proto = self.pending.parsing_fn_ptr_proto;
+                        self.pending.parsing_fn_ptr_proto = true;
+                        let pp = self.parse_function_params()?;
+                        self.pending.parsing_fn_ptr_proto = saved_proto;
+                        for &pidx in &pp.indices {
+                            Self::restore_shadowed_symbol(&mut self.symbols[pidx]);
+                        }
+                        let depth = inner_ptr_levels - self.pending.fn_chain_levels;
+                        self.pending.fn_chain_levels = inner_ptr_levels;
+                        let level = (pp.types, pp.is_variadic, depth);
+                        self.pending.fn_ret_chain.push(level);
                     }
                     saw_fn_signature = true;
                 } else if self.lex.tk == Token::Brak {
@@ -667,6 +693,7 @@ impl Compiler {
             self.pending.typedef_fn_proto = Some((pp.types.len(), pp.is_variadic));
             self.pending.fn_ptr_param_types = Some(pp.types);
             self.pending.fn_ptr_indirection = Some(1);
+            self.pending.fn_own_sig = true;
             return Ok((idx, ty + Ty::Ptr as i64, 0));
         }
 

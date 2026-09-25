@@ -12,6 +12,7 @@ use alloc::vec::Vec;
 use super::super::diag::Code;
 use super::super::error::C5Error;
 use super::super::ir::{LoadKind, MemOrder};
+use super::super::symbol::FnType;
 use super::super::token::{Token, Ty};
 use super::CODE_BASE;
 use super::Compiler;
@@ -2351,22 +2352,10 @@ impl Compiler {
         // object and yields its address as the call's value.
         let callee_ty = self.symbols[id_idx].type_;
         let callee_id = self.ast_synthesize_callee(id_idx as u32, callee_ty);
-        // A variadic function-pointer variable records its fixed count now,
-        // while its block-scope binding is live (C99 6.2.1p4); the walker
-        // runs after the scope is gone.
-        if is_var_call && self.symbols[id_idx].is_variadic {
-            self.ast
-                .variadic_indirect_callees
-                .push((callee_id, self.symbols[id_idx].params.len() as u32));
-        }
-        if is_var_call && self.symbols[id_idx].conv != crate::c5::codegen::CallConv::Target {
-            self.ast
-                .conv_indirect_callees
-                .push((callee_id, self.symbols[id_idx].conv));
-        }
-        if is_var_call {
-            let params = self.symbols[id_idx].params.clone();
-            self.ast.indirect_callee_params.insert(callee_id, params);
+        // Recorded while a block-scope binding is live (C99 6.2.1p4); the
+        // walker runs after the scope is gone.
+        if is_var_call && let Some(f) = self.callee_fn(Some(callee_id)) {
+            self.ast.callee_types.insert(callee_id, f);
         }
         self.ast_emit_call(callee_id, ast_arg_ids.clone(), result_ty);
         // A struct result is its temp's address (the address-as-value rule).
@@ -2489,16 +2478,9 @@ impl Compiler {
             self.symbols[id_idx].array_size != 0 || self.symbols[id_idx].is_zero_len_array;
         let is_vla_var = self.symbols[id_idx].is_vla;
         self.pending.object_ref = self.declared_object_ref(id_idx);
-        // A function-pointer variable carries its prototype, or the lack of
-        // one, so `(*fp)(args)`, which reaches the postfix call, converts or
-        // promotes each argument (C99 6.5.2.2p6, p7).
+        // A function-pointer variable's return lineage reaches `(*fp)(args)`.
         let fn_ptr = self.symbols[id_idx].fn_ptr_indirection >= 1;
-        if !is_array_var && !is_struct_value && (fn_ptr || !self.symbols[id_idx].params.is_empty())
-        {
-            self.pending.indirect_callee_params = Some(self.symbols[id_idx].params.clone());
-            self.pending.indirect_callee_is_variadic = self.symbols[id_idx].is_variadic;
-            self.pending.indirect_callee_conv = self.symbols[id_idx].conv;
-            self.pending.indirect_callee_fn_ptr_depth = self.symbols[id_idx].fn_ptr_indirection;
+        if !is_array_var && !is_struct_value && fn_ptr {
             self.pending.indirect_callee_ret_fn_ptr = self.symbols[id_idx].fn_ptr_ret_indirection;
         }
         if is_vla_var {
@@ -2592,11 +2574,7 @@ impl Compiler {
             self.pending.fn_ptr_chain_depth = fpi - 1;
             self.pending.fn_ptr_depth_is_array_elem = true;
         }
-        if fpi > 0 || !self.symbols[id_idx].params.is_empty() {
-            self.pending.indirect_callee_params = Some(self.symbols[id_idx].params.clone());
-            self.pending.indirect_callee_is_variadic = self.symbols[id_idx].is_variadic;
-            self.pending.indirect_callee_conv = self.symbols[id_idx].conv;
-            self.pending.indirect_callee_fn_ptr_depth = fpi;
+        if fpi > 0 {
             self.pending.indirect_callee_ret_fn_ptr = self.symbols[id_idx].fn_ptr_ret_indirection;
         }
     }
@@ -2769,28 +2747,36 @@ impl Compiler {
         {
             self.pending.fn_ptr_chain_depth = fpi - 1;
         }
-        // C99 6.5.2.2p7: a call through the cast uses the cast's prototype,
-        // whatever the operand declared; `typeof(<cast>)` recovers it
-        // through `last_fn_ptr_cast`.
-        if let Some(pp) = type_name.proto {
-            self.pending.last_fn_ptr_cast = Some((
-                t,
-                pp.types.clone(),
-                pp.is_variadic,
-                type_name.fn_ptr_indirection.unwrap_or(1).max(1),
-            ));
-            self.pending.indirect_callee_is_variadic = pp.is_variadic;
-            self.pending.indirect_callee_conv = core::mem::take(&mut self.pending.attr_call_conv);
-            self.pending.indirect_callee_fn_ptr_depth =
-                type_name.fn_ptr_indirection.unwrap_or(1).max(1);
+        // C99 6.5.2.2p7: a call through the cast uses the cast's function
+        // type, whatever the operand declared.
+        let cast_fn = if let Some(pp) = type_name.proto {
+            let depth = type_name.fn_ptr_indirection.unwrap_or(1).max(1);
+            let f = FnType {
+                params: pp.types,
+                variadic: pp.is_variadic,
+                conv: core::mem::take(&mut self.pending.attr_call_conv),
+                ret: type_name.fn_ty.and_then(|f| f.ret),
+            };
+            Some((f, depth))
+        } else {
+            type_name.fn_ty.filter(|f| f.ptr_depth >= 1).map(|f| {
+                let depth = f.ptr_depth as i64;
+                let f = FnType {
+                    params: f.params.unwrap_or_default(),
+                    variadic: f.variadic,
+                    conv: core::mem::take(&mut self.pending.attr_call_conv),
+                    ret: f.ret,
+                };
+                (f, depth)
+            })
+        };
+        if let Some((f, depth)) = cast_fn {
             self.pending.indirect_callee_ret_fn_ptr = 0;
-            self.pending.indirect_callee_params = Some(pp.types);
-        } else if let Some(f) = type_name.fn_ty.filter(|f| f.ptr_depth >= 1) {
-            // A typedef names the pointer type: its parameter types.
-            self.pending.indirect_callee_is_variadic = f.variadic;
-            self.pending.indirect_callee_fn_ptr_depth = f.ptr_depth as i64;
-            self.pending.indirect_callee_ret_fn_ptr = 0;
-            self.pending.indirect_callee_params = Some(f.params.unwrap_or_default());
+            if cast_child_ast.is_some()
+                && let Some(id) = self.ast_acc
+            {
+                self.set_expr_fn(id, f, depth);
+            }
         }
         Ok(())
     }
@@ -3337,13 +3323,11 @@ impl Compiler {
         let fp_temp = self.reserve_slots(1);
         self.mark_emit_other();
         // Arguments are evaluated left to right into staging slots and
-        // converted to the declared parameter types the operand carried
-        // (C99 6.5.2.2p7), as for a direct call.
-        let callee_params = self.pending.indirect_callee_params.take();
-        let callee_is_variadic = core::mem::take(&mut self.pending.indirect_callee_is_variadic);
-        let callee_conv = core::mem::take(&mut self.pending.indirect_callee_conv);
+        // converted to the parameter types of the callee expression's
+        // function type (C99 6.5.2.2p7), as for a direct call.
+        let callee_fn = self.callee_fn(callee_ast);
+        let callee_params = callee_fn.as_ref().map(|f| f.params.clone());
         let callee_ret_fn_ptr = core::mem::take(&mut self.pending.indirect_callee_ret_fn_ptr);
-        let callee_fixed = callee_params.as_ref().map_or(0, |p| p.len()) as u32;
         let mut arg_idx: usize = 0;
         if self.lex.tk != ')' {
             loop {
@@ -3380,14 +3364,7 @@ impl Compiler {
         }
         self.drop_operand_array_decay();
         self.ast_vstack.truncate(ast_vstack_snapshot);
-        self.emit_indirect_call_ast(
-            callee_ast,
-            indirect_arg_ids,
-            callee_params,
-            callee_is_variadic,
-            callee_fixed,
-            callee_conv,
-        );
+        self.emit_indirect_call_ast(callee_ast, indirect_arg_ids, callee_fn);
         Ok(())
     }
 
@@ -3395,10 +3372,7 @@ impl Compiler {
         &mut self,
         callee_ast: Option<super::super::ast::ExprId>,
         indirect_arg_ids: alloc::vec::Vec<Option<super::super::ast::ExprId>>,
-        callee_params: Option<alloc::vec::Vec<i64>>,
-        callee_is_variadic: bool,
-        callee_fixed: u32,
-        callee_conv: crate::c5::codegen::CallConv,
+        callee_fn: Option<FnType>,
     ) {
         let return_ty = self.ty;
         if let Some(callee_id) = callee_ast {
@@ -3416,22 +3390,9 @@ impl Compiler {
                 }
             }
             if all_some {
-                // A variadic callee records its fixed count for the walker, whose
-                // symbol (a member, element or dereferenced pointer) carries none.
-                if callee_is_variadic {
-                    self.ast
-                        .variadic_indirect_callees
-                        .push((callee_id, callee_fixed));
-                }
-                // A calling convention other than the target's is recorded on the
-                // callee node; the declaration's scope is gone by the walk.
-                if callee_conv != crate::c5::codegen::CallConv::Target {
-                    self.ast
-                        .conv_indirect_callees
-                        .push((callee_id, callee_conv));
-                }
-                if let Some(params) = callee_params {
-                    self.ast.indirect_callee_params.insert(callee_id, params);
+                // The walker places the arguments by it after the scope is gone.
+                if let Some(f) = callee_fn {
+                    self.ast.callee_types.insert(callee_id, f);
                 }
                 let id = self.ast.push_expr(
                     super::super::ast::Expr::Call {
@@ -3850,6 +3811,15 @@ impl Compiler {
         let mut else_ast = self.ast_acc;
         let else_ty = self.ty;
         let result_ty = self.conditional_result_ty(then_ty, else_ty, then_ast, else_ast);
+        // C99 6.5.15p6: pointers to compatible function types compose; a
+        // prototype, where either arm has one, is the result's.
+        let arm_fns = [then_ast, else_ast].map(|a| a.and_then(|a| self.expr_fn(a)));
+        let [then_fn, else_fn] = arm_fns;
+        let result_fn = match (then_fn, else_fn) {
+            (Some(t), Some(e)) if t.0.params.is_empty() => Some(e),
+            (Some(t), _) => Some(t),
+            (None, e) => e,
+        };
         // Both arms convert to the result type, so the join stores one
         // width and signedness.
         if then_ty != result_ty && then_ast.is_some() {
@@ -3885,6 +3855,9 @@ impl Compiler {
                 pos,
             );
             self.ast_acc = Some(id);
+            if let Some((f, depth)) = result_fn {
+                self.set_expr_fn(id, f, depth);
+            }
         }
         self.drop_operand_array_decay();
         self.ty = result_ty;
@@ -4646,13 +4619,9 @@ impl Compiler {
         let multi_dim_stride = self.pending.index_stride;
         let saved_tail = core::mem::take(&mut self.pending.index_strides_tail);
         self.pending.index_stride = 0;
-        // The element keeps the callee prototype and decay depth the array
+        // The element keeps the return lineage and decay depth the array
         // decay left; the index expression must neither consume nor clear
         // them.
-        let saved_callee_params = self.pending.indirect_callee_params.take();
-        let saved_callee_variadic = core::mem::take(&mut self.pending.indirect_callee_is_variadic);
-        let saved_callee_conv = core::mem::take(&mut self.pending.indirect_callee_conv);
-        let saved_callee_depth = core::mem::take(&mut self.pending.indirect_callee_fn_ptr_depth);
         let saved_callee_ret = core::mem::take(&mut self.pending.indirect_callee_ret_fn_ptr);
         let saved_fn_ptr_chain = self.pending.fn_ptr_chain_depth;
         let saved_fn_ptr_elem = self.pending.fn_ptr_depth_is_array_elem;
@@ -4680,10 +4649,6 @@ impl Compiler {
                 fn_ptr_depth_is_array_elem: self.pending.fn_ptr_depth_is_array_elem,
             });
         }
-        self.pending.indirect_callee_params = saved_callee_params;
-        self.pending.indirect_callee_is_variadic = saved_callee_variadic;
-        self.pending.indirect_callee_conv = saved_callee_conv;
-        self.pending.indirect_callee_fn_ptr_depth = saved_callee_depth;
         self.pending.indirect_callee_ret_fn_ptr = saved_callee_ret;
         self.pending.fn_ptr_chain_depth = saved_fn_ptr_chain;
         self.pending.fn_ptr_depth_is_array_elem = saved_fn_ptr_elem;
@@ -4762,25 +4727,9 @@ impl Compiler {
         };
         let step = base.map(|b| self.object_ref_member(b, sid, field_idx));
 
-        // A function-pointer member carries its prototype for a following
-        // call (C99 6.5.2.2p7); any other member clears the channel.
+        // A function-pointer member's return lineage reaches a following
+        // call; any other member clears it.
         let field_is_fn_ptr = field.fn_ptr_indirection > 0 || !field.params.is_empty();
-        self.pending.indirect_callee_params = if field_is_fn_ptr {
-            Some(field.params.clone())
-        } else {
-            None
-        };
-        self.pending.indirect_callee_is_variadic = field_is_fn_ptr && field.is_variadic;
-        self.pending.indirect_callee_conv = if field_is_fn_ptr {
-            field.conv
-        } else {
-            crate::c5::codegen::CallConv::Target
-        };
-        self.pending.indirect_callee_fn_ptr_depth = if field_is_fn_ptr {
-            field.fn_ptr_indirection
-        } else {
-            0
-        };
         self.pending.indirect_callee_ret_fn_ptr = if field_is_fn_ptr {
             field.fn_ptr_ret_indirection
         } else {
@@ -4821,6 +4770,20 @@ impl Compiler {
         {
             let mty = self.ty;
             self.ast_emit_member(obj, field.offset as i64, None, mty, field.array_size);
+            if field_is_fn_ptr && let Some(id) = self.ast_acc {
+                let f = FnType {
+                    params: field.params.clone(),
+                    variadic: field.is_variadic,
+                    conv: field.conv,
+                    ret: field.ret_fn.clone(),
+                };
+                let dims = if field.array_size == 0 {
+                    0
+                } else {
+                    field.array_dims.len().max(1) as i64
+                };
+                self.set_expr_fn(id, f, field.fn_ptr_indirection.max(1) + dims);
+            }
         }
         Ok(())
     }
@@ -5367,11 +5330,13 @@ impl Compiler {
         let base_variadic = matches!(self.pending.typedef_fn_proto.take(), Some((_, true)));
         let base_params = self.pending.fn_ptr_param_types.take();
         self.pending.fn_ptr_ret_indirection = 0;
+        let base_ret = self.pending.fn_ptr_ret_fn.take();
         let mut fn_ptr_indirection = self.pending.fn_ptr_indirection.take();
         let mut fn_ty = fn_ptr_indirection.map(|depth| FnTypeName {
             ptr_depth: if base_is_fn { 0 } else { depth.max(0) as usize },
             params: Some(base_params.unwrap_or_default()),
             variadic: base_variadic,
+            ret: base_ret,
         });
         let type_align = core::mem::take(&mut self.pending.type_align);
         let base_extent = core::mem::take(&mut self.pending.typedef_base_array_size);
@@ -5426,37 +5391,69 @@ impl Compiler {
         // pointer to an array, whose pointee keeps its dimensions.
         let mut proto = None;
         if self.lex.tk == '(' {
-            let (levels, pp, ptr_dims) = if self.lex.peek_after_whitespace(b'*') {
+            let abs = if self.lex.peek_after_whitespace(b'*') {
                 self.parse_abstract_ptr_declarator(true)?
             } else if fn_ty.is_none() {
                 self.next()?;
-                (
-                    0,
-                    Some(self.parse_type_name_params()?),
-                    alloc::vec::Vec::new(),
-                )
+                let pp = self.parse_type_name_params()?;
+                super::declarator::AbstractDecl {
+                    fns: alloc::vec![(0, Some(pp))],
+                    ..Default::default()
+                }
             } else {
-                (0, None, alloc::vec::Vec::new())
+                super::declarator::AbstractDecl::default()
             };
-            if let Some(pp) = pp {
+            let levels = abs.levels;
+            let mut fns = abs.fns.into_iter();
+            if let Some((own_depth, Some(pp))) = fns.next() {
                 ty += levels.max(1) * Ty::Ptr as i64;
                 dims.clear();
+                // A function-pointer base is the result of the outermost
+                // function level; each level is the result of the one inside.
+                let mut ret = fn_ty.take().map(|f| {
+                    let depth = f.ptr_depth as i64;
+                    let base = FnType {
+                        params: f.params.unwrap_or_default(),
+                        variadic: f.variadic,
+                        conv: crate::c5::codegen::CallConv::Target,
+                        ret: f.ret,
+                    };
+                    (alloc::boxed::Box::new(base), depth)
+                });
+                for (depth, level) in fns.rev() {
+                    let (params, variadic) = level.map_or((alloc::vec::Vec::new(), false), |p| {
+                        (p.types, p.is_variadic)
+                    });
+                    let conv = crate::c5::codegen::CallConv::Target;
+                    let f = FnType {
+                        params,
+                        variadic,
+                        conv,
+                        ret,
+                    };
+                    ret = Some((alloc::boxed::Box::new(f), depth));
+                }
                 fn_ty = Some(FnTypeName {
-                    ptr_depth: levels as usize,
+                    ptr_depth: own_depth as usize,
                     params: (pp.form != super::function::ParamForm::Empty)
                         .then(|| pp.types.clone()),
                     variadic: pp.is_variadic,
+                    ret,
                 });
                 proto = Some(pp);
-            } else if !ptr_dims.is_empty() && levels > 0 {
-                let mut pointee = ptr_dims;
+                if own_depth > 0 {
+                    fn_ptr_indirection = Some(own_depth);
+                }
+            } else if !abs.dims.is_empty() && levels > 0 {
+                let mut pointee = abs.dims;
                 pointee.append(&mut dims);
                 ty = self.array_agg_type(ty, &pointee) + levels * Ty::Ptr as i64;
+                fn_ptr_indirection = Some(levels);
             } else {
                 ty += levels * Ty::Ptr as i64;
-            }
-            if levels > 0 {
-                fn_ptr_indirection = Some(levels);
+                if levels > 0 {
+                    fn_ptr_indirection = Some(levels);
+                }
             }
             ptr_levels += levels;
         }
@@ -5885,6 +5882,8 @@ pub(super) struct FnTypeName {
     /// declarator is spelled out.
     params: Option<alloc::vec::Vec<i64>>,
     variadic: bool,
+    /// `FnType::ret` of the function type.
+    ret: Option<(alloc::boxed::Box<FnType>, i64)>,
 }
 
 /// C99 6.7.5.3p15 function-type compatibility, given that the caller has

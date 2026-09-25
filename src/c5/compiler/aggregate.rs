@@ -246,6 +246,7 @@ impl Compiler {
         // does (an inline declarator prototype still overrides it).
         let base_field_typedef_fn_proto = self.pending.typedef_fn_proto;
         let base_field_fn_ptr_param_types = self.pending.fn_ptr_param_types.clone();
+        let base_field_fn_ptr_ret_fn = self.pending.fn_ptr_ret_fn.clone();
         loop {
             // Anonymous bitfield (`int :N;`) -- skips a name and
             // just reserves bits for padding. Detected by `:`
@@ -280,6 +281,7 @@ impl Compiler {
             self.pending.base_is_function_type = base_field_is_function_type;
             self.pending.typedef_fn_proto = base_field_typedef_fn_proto;
             self.pending.fn_ptr_param_types = base_field_fn_ptr_param_types.clone();
+            self.pending.fn_ptr_ret_fn = base_field_fn_ptr_ret_fn.clone();
             // Confine `packed` to this declarator: a member-level
             // `__attribute__((packed))` (trailing the declarator, so
             // consumed inside `parse_declarator` or just below) sets
@@ -358,6 +360,7 @@ impl Compiler {
             let field_fn_ptr_indirection = self.pending.fn_ptr_indirection.take().unwrap_or(0);
             let field_fn_ptr_ret_indirection =
                 core::mem::take(&mut self.pending.fn_ptr_ret_indirection);
+            let field_ret_fn = self.take_decl_ret_fn(false);
             // Capture the function-pointer field's parameter prototype
             // (set by the same declarator branch) so a later
             // `s.fp(args)` narrows its arguments. Always consume the
@@ -432,6 +435,7 @@ impl Compiler {
                 bit_unit_size: if bit_width > 0 { bit_unit as u8 } else { 0 },
                 fn_ptr_indirection: field_fn_ptr_indirection,
                 fn_ptr_ret_indirection: field_fn_ptr_ret_indirection,
+                ret_fn: field_ret_fn,
                 params: field_params,
                 is_variadic: field_is_variadic,
                 conv: field_conv,
@@ -1135,6 +1139,7 @@ impl Compiler {
                 bit_unit_size: inner_field.bit_unit_size,
                 fn_ptr_indirection: inner_field.fn_ptr_indirection,
                 fn_ptr_ret_indirection: inner_field.fn_ptr_ret_indirection,
+                ret_fn: inner_field.ret_fn,
                 params: inner_field.params,
                 is_variadic: inner_field.is_variadic,
                 conv: inner_field.conv,

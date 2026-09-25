@@ -448,6 +448,7 @@ fn parse_object(path: &Path) -> Unit {
                     0x07 => Val::Uint(u64le(r.take(8), 0)),         // data8
                     0x08 => Val::Str(r.cstr()),                     // string
                     0x0b => Val::Uint(r.u8() as u64),               // data1
+                    0x0c => Val::Uint(r.u8() as u64),               // flag
                     0x0e => {
                         let at = r.p as u64;
                         let slot = u32le(r.take(4), 0) as u64;
@@ -726,7 +727,7 @@ fn function_pointer_members_have_a_subroutine_type() {
     assert_eq!(fn_ptr.at(DW_AT_BYTE_SIZE).unwrap().as_uint(), 8);
     let sub = u.type_of(fn_ptr);
     assert_eq!(sub.tag, DW_TAG_SUBROUTINE_TYPE);
-    assert!(sub.at(DW_AT_PROTOTYPED).is_some());
+    assert_eq!(sub.at(DW_AT_PROTOTYPED).unwrap().as_uint(), 1);
     assert_eq!(u.type_of(sub).name(), Some("int"), "return type");
     let params = u.children(sub);
     assert_eq!(params.len(), 2);
@@ -1113,7 +1114,7 @@ fn function_pointer_locals_have_a_subroutine_type() {
     assert_eq!(ptr.tag, DW_TAG_POINTER_TYPE);
     let sub = u.type_of(ptr);
     assert_eq!(sub.tag, DW_TAG_SUBROUTINE_TYPE);
-    assert!(sub.at(DW_AT_PROTOTYPED).is_some());
+    assert_eq!(sub.at(DW_AT_PROTOTYPED).unwrap().as_uint(), 1);
     assert_eq!(u.type_of(sub).name(), Some("int"), "return type");
     let params: Vec<&str> = u
         .children(sub)

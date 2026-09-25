@@ -196,6 +196,19 @@ impl Compiler {
         }
     }
 
+    /// Whether a definition's function type has a prototype (C99 6.9.1p7):
+    /// a parameter type list, its own or a prior declaration's.
+    pub(super) fn has_prototype(&self, idx: usize, params: &ParsedParams) -> bool {
+        !matches!(params.form, ParamForm::Empty | ParamForm::IdentifierList)
+            || matches!(
+                self.linked_entities.get(&idx).map(|e| &e.ty),
+                Some(DeclaredType::Function(
+                    _,
+                    Params::Prototype(..) | Params::Carried(..)
+                ))
+            )
+    }
+
     /// An initializer fixed an unspecified array bound (C99 6.7.8p22).
     pub(super) fn complete_linked_bound(&mut self, idx: usize) {
         let count = match self.symbols[idx].array_dims.as_slice() {

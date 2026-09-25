@@ -1191,6 +1191,7 @@ impl Compiler {
         } else {
             params.types.clone()
         };
+        self.symbols[id_idx].unprototyped_def = !self.has_prototype(id_idx, &params);
         self.define_linked_function(id_idx, def, Params::of(&params, true))?;
         self.symbols[id_idx].params = arrival.clone();
 

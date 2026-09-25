@@ -411,6 +411,10 @@ pub(crate) struct Symbol {
     /// and by the fall-off diagnostic, which such a function never takes.
     pub returns_void: bool,
 
+    /// Set on a function defined with an empty or identifier list and no
+    /// prototype before it, whose type then has none (C99 6.9.1p7).
+    pub unprototyped_def: bool,
+
     /// Set on a `Token::Typedef` symbol whose alias chain ends
     /// at the bare `void` keyword. Because `void` and
     /// `unsigned char` share the same type encoding, the
@@ -883,6 +887,7 @@ impl crate::c5::layout::DataOffsets for Symbol {
             h_ret_fn: _,
             is_function_type: _,
             returns_void: _,
+            unprototyped_def: _,
             is_void_typedef: _,
             is_enum_typedef: _,
             incomplete_enum_tag: _,

@@ -2349,15 +2349,17 @@ fn multi_tu_link_emits_array_type_for_local_arrays() {
     );
 }
 
-/// Every c5-emitted subprogram has DW_AT_prototyped set per
-/// DWARF 4 section 3.3.3.7 -- c5 rejects K&R-style identifier-
-/// list declarators (C99 6.7.6.3p14) so every function is
-/// prototyped at the source level. Debuggers rely on this flag
-/// to know the formal-parameter list is authoritative.
+/// DW_AT_prototyped (DWARF 4 3.3.3.7) is true on a subprogram whose type
+/// has a prototype and false on an old-style definition's (C99 6.9.1p7);
+/// a debugger calling the function promotes its arguments by it.
 #[test]
 fn multi_tu_link_emits_prototyped_flag_on_subprograms() {
     let dir = tempdir("multi-tu-prototyped");
-    write_source(&dir, "helper.c", "int helper(int x) { return x + 1; }\n");
+    write_source(
+        &dir,
+        "helper.c",
+        "int helper(int x) { return x + 1; }\nint old_style(x) int x; { return x - 1; }\n",
+    );
     write_source(
         &dir,
         "main.c",
@@ -2405,9 +2407,18 @@ fn multi_tu_link_emits_prototyped_flag_on_subprograms() {
             }
         }
     };
-    assert!(
-        out_text.contains("DW_AT_prototyped"),
-        "expected DW_AT_prototyped on at least one subprogram:\n{out_text}",
+    // The flag follows the subprogram's name in its DIE.
+    let flag_after = |name: &str| {
+        let at = out_text.find(&format!("DW_AT_name\t(\"{name}\")"))?;
+        let rest = &out_text[at..];
+        let p = rest.find("DW_AT_prototyped\t(")? + "DW_AT_prototyped\t(".len();
+        Some(rest[p..].split(')').next()?.to_string())
+    };
+    assert_eq!(flag_after("helper").as_deref(), Some("0x01"), "{out_text}");
+    assert_eq!(
+        flag_after("old_style").as_deref(),
+        Some("0x00"),
+        "{out_text}"
     );
 }
 

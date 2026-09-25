@@ -149,6 +149,7 @@ const DW_FORM_SEC_OFFSET: u8 = 0x17;
 const DW_FORM_EXPRLOC: u8 = 0x18;
 const DW_FORM_REF4: u8 = 0x13;
 const DW_FORM_UDATA: u8 = 0x0f;
+const DW_FORM_FLAG: u8 = 0x0c;
 const DW_FORM_FLAG_PRESENT: u8 = 0x19;
 const DW_FORM_SDATA: u8 = 0x0d;
 
@@ -332,7 +333,7 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
             (DW_AT_LOW_PC, DW_FORM_ADDR),
             (DW_AT_HIGH_PC, DW_FORM_DATA8),
             (DW_AT_EXTERNAL, DW_FORM_FLAG_PRESENT),
-            (DW_AT_PROTOTYPED, DW_FORM_FLAG_PRESENT),
+            (DW_AT_PROTOTYPED, DW_FORM_FLAG),
             (DW_AT_CALLING_CONVENTION, DW_FORM_DATA1),
             (DW_AT_TYPE, DW_FORM_REF4),
         ],
@@ -346,7 +347,7 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
             (DW_AT_LOW_PC, DW_FORM_ADDR),
             (DW_AT_HIGH_PC, DW_FORM_DATA8),
             (DW_AT_EXTERNAL, DW_FORM_FLAG_PRESENT),
-            (DW_AT_PROTOTYPED, DW_FORM_FLAG_PRESENT),
+            (DW_AT_PROTOTYPED, DW_FORM_FLAG),
             (DW_AT_CALLING_CONVENTION, DW_FORM_DATA1),
             (DW_AT_TYPE, DW_FORM_REF4),
             (DW_AT_FRAME_BASE, DW_FORM_EXPRLOC),
@@ -360,7 +361,7 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
             (DW_AT_NAME, DW_FORM_STRP),
             (DW_AT_LOW_PC, DW_FORM_ADDR),
             (DW_AT_HIGH_PC, DW_FORM_DATA8),
-            (DW_AT_PROTOTYPED, DW_FORM_FLAG_PRESENT),
+            (DW_AT_PROTOTYPED, DW_FORM_FLAG),
             (DW_AT_CALLING_CONVENTION, DW_FORM_DATA1),
             (DW_AT_TYPE, DW_FORM_REF4),
         ],
@@ -373,7 +374,7 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
             (DW_AT_NAME, DW_FORM_STRP),
             (DW_AT_LOW_PC, DW_FORM_ADDR),
             (DW_AT_HIGH_PC, DW_FORM_DATA8),
-            (DW_AT_PROTOTYPED, DW_FORM_FLAG_PRESENT),
+            (DW_AT_PROTOTYPED, DW_FORM_FLAG),
             (DW_AT_CALLING_CONVENTION, DW_FORM_DATA1),
             (DW_AT_TYPE, DW_FORM_REF4),
             (DW_AT_FRAME_BASE, DW_FORM_EXPRLOC),
@@ -540,21 +541,19 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
         ],
     },
     // subroutine_type -- the pointee of a function pointer (DWARF 4 5.7).
-    // DW_AT_prototyped is always set (c5 rejects K&R identifier lists).
+    // TODO: DW_AT_prototyped is set for a pointee without a prototype too;
+    // the symbol tables do not tell its empty list from `(void)`.
     AbbrevDecl {
         code: ABBREV_SUBROUTINE_TYPE,
         tag: DW_TAG_SUBROUTINE_TYPE,
         has_children: true,
-        attrs: &[
-            (DW_AT_PROTOTYPED, DW_FORM_FLAG_PRESENT),
-            (DW_AT_TYPE, DW_FORM_REF4),
-        ],
+        attrs: &[(DW_AT_PROTOTYPED, DW_FORM_FLAG), (DW_AT_TYPE, DW_FORM_REF4)],
     },
     AbbrevDecl {
         code: ABBREV_SUBROUTINE_TYPE_VOID,
         tag: DW_TAG_SUBROUTINE_TYPE,
         has_children: true,
-        attrs: &[(DW_AT_PROTOTYPED, DW_FORM_FLAG_PRESENT)],
+        attrs: &[(DW_AT_PROTOTYPED, DW_FORM_FLAG)],
     },
     // formal_parameter of a subroutine_type: a type with no name and no
     // location, since a function type has no storage.
@@ -647,7 +646,7 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
             (DW_AT_LOW_PC, DW_FORM_ADDR),
             (DW_AT_HIGH_PC, DW_FORM_DATA8),
             (DW_AT_EXTERNAL, DW_FORM_FLAG_PRESENT),
-            (DW_AT_PROTOTYPED, DW_FORM_FLAG_PRESENT),
+            (DW_AT_PROTOTYPED, DW_FORM_FLAG),
             (DW_AT_CALLING_CONVENTION, DW_FORM_DATA1),
         ],
     },
@@ -660,7 +659,7 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
             (DW_AT_LOW_PC, DW_FORM_ADDR),
             (DW_AT_HIGH_PC, DW_FORM_DATA8),
             (DW_AT_EXTERNAL, DW_FORM_FLAG_PRESENT),
-            (DW_AT_PROTOTYPED, DW_FORM_FLAG_PRESENT),
+            (DW_AT_PROTOTYPED, DW_FORM_FLAG),
             (DW_AT_CALLING_CONVENTION, DW_FORM_DATA1),
             (DW_AT_FRAME_BASE, DW_FORM_EXPRLOC),
         ],
@@ -673,7 +672,7 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
             (DW_AT_NAME, DW_FORM_STRP),
             (DW_AT_LOW_PC, DW_FORM_ADDR),
             (DW_AT_HIGH_PC, DW_FORM_DATA8),
-            (DW_AT_PROTOTYPED, DW_FORM_FLAG_PRESENT),
+            (DW_AT_PROTOTYPED, DW_FORM_FLAG),
             (DW_AT_CALLING_CONVENTION, DW_FORM_DATA1),
         ],
     },
@@ -685,7 +684,7 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
             (DW_AT_NAME, DW_FORM_STRP),
             (DW_AT_LOW_PC, DW_FORM_ADDR),
             (DW_AT_HIGH_PC, DW_FORM_DATA8),
-            (DW_AT_PROTOTYPED, DW_FORM_FLAG_PRESENT),
+            (DW_AT_PROTOTYPED, DW_FORM_FLAG),
             (DW_AT_CALLING_CONVENTION, DW_FORM_DATA1),
             (DW_AT_FRAME_BASE, DW_FORM_EXPRLOC),
         ],
@@ -781,6 +780,8 @@ fn push_attr(out: &mut Vec<u8>, name: u8, form: u8) {
 struct FnFacts {
     is_variadic: bool,
     external: bool,
+    /// The definition's type has a prototype (C99 6.9.1p7).
+    prototyped: bool,
     ret: Option<TypeId>,
 }
 
@@ -912,6 +913,7 @@ impl RelocInfoUnit<'_> {
                 FnFacts {
                     is_variadic: sym.is_some_and(|s| s.is_variadic),
                     external: sym.is_none_or(|s| s.linkage != crate::c5::symbol::Linkage::Internal),
+                    prototyped: sym.is_none_or(|s| !s.unprototyped_def),
                     ret: match sym {
                         Some(s) => catalog.of_return(s.type_, s.decl_spelling),
                         None => Some(catalog.unspecified()),
@@ -1060,6 +1062,7 @@ impl RelocInfoUnit<'_> {
             let FnFacts {
                 is_variadic,
                 external,
+                prototyped,
                 ret,
             } = self.fn_facts[i];
             let vars: Vec<(&super::super::program::VariableInfo, TypeId)> = program
@@ -1086,6 +1089,7 @@ impl RelocInfoUnit<'_> {
             self.reloc(addr_width, DwarfRelocTarget::Text, lo as i64);
             push_addr_slot(&mut self.body, addr_width);
             self.body.extend_from_slice(&size.to_le_bytes());
+            self.body.push(u8::from(prototyped));
             self.body.push(DW_CC_NORMAL);
             if let Some(r) = ret {
                 let off = self.type_offsets[r];
@@ -1942,9 +1946,13 @@ fn build_type_die(catalog: &mut TypeCatalog, node: &TypeNode, strs: &mut StrPool
             match ret {
                 Some(r) => {
                     write_uleb128(&mut die.bytes, ABBREV_SUBROUTINE_TYPE);
+                    die.bytes.push(1);
                     die.push_ref(*r);
                 }
-                None => write_uleb128(&mut die.bytes, ABBREV_SUBROUTINE_TYPE_VOID),
+                None => {
+                    write_uleb128(&mut die.bytes, ABBREV_SUBROUTINE_TYPE_VOID);
+                    die.bytes.push(1);
+                }
             }
             for p in params {
                 write_uleb128(&mut die.bytes, ABBREV_FORMAL_PARAMETER_TYPE);
@@ -2109,19 +2117,19 @@ mod abbrev_golden {
             .collect();
         assert_eq!(
             hex,
-            "011101250e130b030e1b0e1101120710170000022e00030e110112073f192719360b\
-             49130000032e01030e110112073f192719360b4913401800001e2e00030e11011207\
-             2719360b491300001f2e01030e110112072719360b491340180000040500030e0218\
+            "011101250e130b030e1b0e1101120710170000022e00030e110112073f19270c360b\
+             49130000032e01030e110112073f19270c360b4913401800001e2e00030e11011207\
+             270c360b491300001f2e01030e11011207270c360b491340180000040500030e0218\
              49133a0f3b0f0000053400030e021849133a0f3b0f0000062400030e0b0b3e0b0000\
              070f000b0b49130000081301030e0b0f0000091701030e0b0f00000a0d00030e4913\
              380f00001d0d004913380f00000b0d00030e49136b0f0d0f00000c180000000d0101\
              491300000e21002f0f00000f0401030e0b0b00002e04010b0b0000102800030e1c0d\
              00001113010b0f00001217010b0f0000131300030e3c190000141700030e3c190000\
-             15150127194913000016150127190000170500491300001821000000190f000b0b00\
+             151501270c49130000161501270c0000170500491300001821000000190f000b0b00\
              001a3b0000001b3400030e49133f1902183a0f3b0f00001c3400030e491302183a0f\
              3b0f0000203400030e49133f193a0f3b0f0000213400030e49133a0f3b0f0000222e\
-             00030e110112073f192719360b0000232e01030e110112073f192719360b40180000\
-             242e00030e110112072719360b0000252e01030e110112072719360b401800002616\
+             00030e110112073f19270c360b0000232e01030e110112073f19270c360b40180000\
+             242e00030e11011207270c360b0000252e01030e11011207270c360b401800002616\
              00030e49130000271600030e00002826004913000029260000002a3500491300002b\
              350000002c3700491300002d3700000000"
         );

@@ -72,6 +72,7 @@ const DW_FORM_DATA4: u32 = 0x06;
 const DW_FORM_DATA8: u32 = 0x07;
 const DW_FORM_STRP: u32 = 0x0e;
 const DW_FORM_STRING: u32 = 0x08;
+const DW_FORM_FLAG: u32 = 0x0c;
 const DW_FORM_FLAG_PRESENT: u32 = 0x19;
 const DW_FORM_SEC_OFFSET: u32 = 0x17;
 const DW_FORM_REF4: u32 = 0x13;
@@ -327,6 +328,8 @@ struct Subprog {
     /// False for a definition with internal linkage (C99 6.2.2p3), so the
     /// DIE drops `DW_AT_external`.
     external: bool,
+    /// The definition's type has a prototype (C99 6.9.1p7).
+    prototyped: bool,
 }
 
 /// One PLT-trampoline subprogram.
@@ -490,17 +493,17 @@ fn collect_subprograms(
     };
     // A `static` definition's name is not visible outside the compilation
     // unit (C99 6.2.2p3), so its DIE drops DW_AT_external.
-    let internal_pcs: alloc::collections::BTreeSet<usize> = {
+    let fun_pcs = |keep: fn(&crate::c5::symbol::Symbol) -> bool| {
         use crate::c5::token::Token;
         program
             .symbols
             .iter()
-            .filter(|s| {
-                s.class == Token::Fun as i64 && s.linkage == crate::c5::symbol::Linkage::Internal
-            })
+            .filter(|s| s.class == Token::Fun as i64 && keep(s))
             .map(|s| s.val as usize)
-            .collect()
+            .collect::<alloc::collections::BTreeSet<usize>>()
     };
+    let internal_pcs = fun_pcs(|s| s.linkage == crate::c5::symbol::Linkage::Internal);
+    let unprototyped_pcs = fun_pcs(|s| s.unprototyped_def);
     let func_name_by_pc: BTreeMap<usize, alloc::string::String> = build
         .func_ent_pcs
         .iter()
@@ -636,6 +639,7 @@ fn collect_subprograms(
             early_return: early.map(|e| e.exit),
             variables,
             external: !internal_pcs.contains(&ent_pc),
+            prototyped: !unprototyped_pcs.contains(&ent_pc),
         });
     }
 
@@ -1050,7 +1054,7 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
         ],
     },
     // subprogram with variable / parameter children. DW_AT_prototyped is
-    // always set: c5 rejects K&R declarators per C99 6.7.6.3p14.
+    // false for a definition whose type has no prototype (C99 6.9.1p7).
     AbbrevDecl {
         code: ABBREV_SUBPROGRAM,
         tag: DW_TAG_SUBPROGRAM,
@@ -1060,7 +1064,7 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
             (DW_AT_LOW_PC, DW_FORM_ADDR),
             (DW_AT_HIGH_PC, DW_FORM_DATA8),
             (DW_AT_EXTERNAL, DW_FORM_FLAG_PRESENT),
-            (DW_AT_PROTOTYPED, DW_FORM_FLAG_PRESENT),
+            (DW_AT_PROTOTYPED, DW_FORM_FLAG),
             (DW_AT_CALLING_CONVENTION, DW_FORM_DATA1),
             (DW_AT_FRAME_BASE, DW_FORM_EXPRLOC),
         ],
@@ -1073,7 +1077,7 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
             (DW_AT_NAME, DW_FORM_STRP),
             (DW_AT_LOW_PC, DW_FORM_ADDR),
             (DW_AT_HIGH_PC, DW_FORM_DATA8),
-            (DW_AT_PROTOTYPED, DW_FORM_FLAG_PRESENT),
+            (DW_AT_PROTOTYPED, DW_FORM_FLAG),
             (DW_AT_CALLING_CONVENTION, DW_FORM_DATA1),
             (DW_AT_FRAME_BASE, DW_FORM_EXPRLOC),
         ],
@@ -1512,6 +1516,7 @@ impl InfoUnit<'_> {
             body.extend_from_slice(&s.name_off.to_le_bytes());
             body.extend_from_slice(&s.low_pc.to_le_bytes());
             body.extend_from_slice(&(s.high_pc - s.low_pc).to_le_bytes());
+            body.push(u8::from(s.prototyped));
             body.push(DW_CC_NORMAL);
             write_uleb128(body, 2);
             body.push(frame_base_breg);
@@ -2360,8 +2365,8 @@ mod tests {
             .collect();
         assert_eq!(
             hex,
-            "011101250e130b030e1b0e1101120710170000022e01030e110112073f192719360b\
-             40180000132e01030e110112072719360b40180000032400030e0b0b3e0b00000434\
+            "011101250e130b030e1b0e1101120710170000022e01030e110112073f19270c360b\
+             40180000132e01030e11011207270c360b40180000032400030e0b0b3e0b00000434\
              00030e491302183a0f3b0f0000050500030e491302183a0f3b0f0000060f000b0b49\
              130000071301030e0b060000081701030e0b060000090d00030e4913380600000a0d\
              00030e49136b0f0d0f00000b2e01030e110112073f19491300000c0500030e491300\
@@ -2605,6 +2610,7 @@ mod tests {
             early_return: None,
             variables: Vec::new(),
             external: true,
+            prototyped: true,
         };
         let body = |rules| {
             let out = build_debug_frame(Target::LinuxX64, &[sub(rules)], None, None);
@@ -2662,6 +2668,7 @@ mod tests {
             early_return: None,
             variables: Vec::new(),
             external: true,
+            prototyped: true,
         };
         let body = |ra_signed| {
             let out = build_debug_frame(Target::LinuxAarch64, &[sub(ra_signed)], None, None);
@@ -2959,6 +2966,7 @@ mod info_golden {
             early_return: None,
             variables: alloc::vec![],
             external: true,
+            prototyped: true,
         }];
         let plt_subs: alloc::vec::Vec<PltSub> = alloc::vec![];
         let structs: alloc::vec::Vec<StructDef> = alloc::vec![];
@@ -2981,8 +2989,8 @@ mod info_golden {
         let hex: alloc::string::String = info.iter().map(|b| alloc::format!("{b:02x}")).collect();
         assert_eq!(
             hex,
-            "440000000400000000000801010000000c0c0000000b0000000010000000000000\
-             10000000000000000000000002100000000010000000000000100000000000000001\
+            "450000000400000000000801010000000c0c0000000b000000001000000000000010\
+             00000000000000000000000210000000001000000000000010000000000000000101\
              0276000000"
         );
         let info_a64 = build_debug_info(

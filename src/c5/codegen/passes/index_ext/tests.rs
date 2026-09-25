@@ -52,6 +52,7 @@ fn load(base: u32, index: u32, scale: u8, kind: LoadKind) -> Inst {
         index_ext: IndexExt::None,
         scale,
         kind,
+        abs_base: false,
     }
 }
 
@@ -63,6 +64,7 @@ fn store(base: u32, index: u32, scale: u8, value: u32, kind: StoreKind) -> Inst 
         scale,
         value,
         kind,
+        abs_base: false,
     }
 }
 

@@ -7,6 +7,38 @@
 
 use super::*;
 
+/// `encode_into_disp32` names the displacement of a base-less indexed
+/// operand: the four bytes ahead of the immediate, if any.
+#[test]
+fn disp32_field_precedes_the_immediate() {
+    let disp: i32 = 0x1122_3344;
+    let at = |scale: u8, width: u8| Opnd::IndexMem {
+        index: 1,
+        scale,
+        disp,
+        width,
+    };
+    let cases = [
+        (Mnem::Mov, Some(8), [r(10, 8), at(8, 8)], 0),
+        (Mnem::Movzx, None, [r(0, 8), at(1, 1)], 0),
+        (Mnem::Mov, Some(4), [at(4, 4), r(6, 4)], 0),
+        (Mnem::Mov, Some(2), [at(2, 2), Opnd::Imm(7)], 2),
+        (Mnem::Mov, Some(8), [at(8, 8), Opnd::Imm(-1)], 4),
+        (Mnem::Cmp, Some(4), [at(4, 4), Opnd::Imm(0)], 1),
+        (Mnem::Cmp, Some(1), [at(1, 1), Opnd::Imm(0)], 1),
+    ];
+    for (mnem, width, ops, imm) in cases {
+        let mut code = alloc::vec![0xcc];
+        let field = encode_into_disp32(&mut code, mnem, width, &ops);
+        assert_eq!(
+            code[field..field + 4],
+            disp.to_le_bytes(),
+            "{mnem:?} {ops:?}"
+        );
+        assert_eq!(code.len(), field + 4 + imm, "{mnem:?} {ops:?}");
+    }
+}
+
 fn enc(mnem: &str, ops: &[Opnd]) -> Vec<u8> {
     let m = Mnem::from_name(mnem).unwrap_or_else(|| panic!("no such mnemonic `{mnem}`"));
     encode(m, None, ops).unwrap_or_else(|e| panic!("{mnem}: {e}"))

@@ -189,10 +189,12 @@ pub(crate) fn emit_function(
     asm_section_text_refs: &mut Vec<super::AsmSectionTextRef>,
     asm_text_abs_refs: &mut Vec<super::AsmTextAbsRef>,
     asm_text_labels: &mut Vec<super::AsmTextLabel>,
+    abs_addr_refs: &mut Vec<super::AbsAddrRef>,
     no_fp_regs: bool,
     strict_align: bool,
     rodata: &mut super::RodataBuild,
     abs_jump_tables: bool,
+    abs32_addrs: bool,
     hardening: super::Hardening,
     stack_protect: super::StackProtect,
     entry: super::FunctionEntry,
@@ -285,12 +287,15 @@ pub(crate) fn emit_function(
     } else {
         alloc::collections::BTreeSet::new()
     };
+    // The absolute table load reads an 8-byte entry.
+    debug_assert!(!abs32_addrs || abs_jump_tables);
     let out = Out {
         cx,
         fixups,
         asm_section_text_refs,
         asm_text_abs_refs,
         asm_text_labels,
+        abs_addr_refs,
     };
     let entry_mark = out.mark();
     let mut fe = FnEmit {
@@ -302,6 +307,7 @@ pub(crate) fn emit_function(
         early_exit,
         early_site: (0, 0),
         abs_jump_tables,
+        abs32_addrs,
         endbr_targets,
         param_prebatched: alloc::vec![false; func.insts.len()],
         plan,
@@ -334,6 +340,9 @@ struct FnEmit<'a, 'b> {
     /// The test's branch displacement and the frame path's start.
     early_site: (usize, usize),
     abs_jump_tables: bool,
+    /// A table dispatch carries the table's address as its load's
+    /// displacement ([`super::NativeOptions::abs32_addrs`]).
+    abs32_addrs: bool,
     /// Offset of the function's first byte in `code`.
     start: usize,
     /// Blocks an indirect branch can enter; each opens with `endbr64`.
@@ -352,7 +361,8 @@ struct FnEmit<'a, 'b> {
     /// `(lea_start, target_block)` per `Inst::BlockAddr`; the disp32 resolves
     /// against `block_offsets` once the layout is final.
     block_addr_fixups: Vec<(usize, u32)>,
-    /// `(lea_start, table_idx)` per `Terminator::JumpTable`; each table is
+    /// `(site, table_idx)` per `Terminator::JumpTable`, the site the `lea`
+    /// or, under `abs32_addrs`, the load's displacement field; each table is
     /// materialized into the read-only blob once the layout is final.
     jump_table_fixups: Vec<(usize, u32)>,
 }
@@ -846,17 +856,23 @@ impl FnEmit<'_, '_> {
                     return fail("JumpTable: idx Place not int reg / spill");
                 };
                 // rt is an allocated register or r10, never r11. The lea's
-                // disp32 reaches into the blob; the writer patches it.
-                let lea_start = code.len();
-                super::encode::emit_lea_r_rip32(code, SCRATCH_R11, 0);
-                if self.abs_jump_tables {
-                    super::encode::emit_mov_r_sib(code, SCRATCH_R10, SCRATCH_R11, rt, 8);
+                // disp32 reaches into the blob; the writer patches it. A
+                // static link indexes the table by its address instead.
+                let site = if self.abs32_addrs {
+                    super::encode::emit_load_index_abs(code, LoadKind::I64, SCRATCH_R10, rt, 8)
                 } else {
-                    super::encode::emit_movsxd_r_sib(code, SCRATCH_R10, SCRATCH_R11, rt, 4);
-                    super::encode::emit_rr(code, Mnem::Add, 8, SCRATCH_R10, SCRATCH_R11);
-                }
+                    let lea_start = code.len();
+                    super::encode::emit_lea_r_rip32(code, SCRATCH_R11, 0);
+                    if self.abs_jump_tables {
+                        super::encode::emit_mov_r_sib(code, SCRATCH_R10, SCRATCH_R11, rt, 8);
+                    } else {
+                        super::encode::emit_movsxd_r_sib(code, SCRATCH_R10, SCRATCH_R11, rt, 4);
+                        super::encode::emit_rr(code, Mnem::Add, 8, SCRATCH_R10, SCRATCH_R11);
+                    }
+                    lea_start
+                };
                 emit_hardened_jmp_r(code, SCRATCH_R10, abi, self.out.cx.asm_extern_call_sites);
-                self.jump_table_fixups.push((lea_start, table));
+                self.jump_table_fixups.push((site, table));
                 Ok(())
             }
             // The label branches were lowered inside the `Inst::InlineAsm`;
@@ -1064,15 +1080,22 @@ impl FnEmit<'_, '_> {
     /// difference, or the relocatable form's 8-byte absolute address).
     fn materialize_jump_tables(&mut self, rodata: &mut super::RodataBuild) {
         let width: usize = if self.abs_jump_tables { 8 } else { 4 };
-        for &(lea_start, table) in &self.jump_table_fixups {
+        for &(site, table) in &self.jump_table_fixups {
             while !rodata.bytes.len().is_multiple_of(width) {
                 rodata.bytes.push(0);
             }
             let base = rodata.bytes.len() as u64;
-            rodata.addr_fixups.push(super::RodataAddrFixup {
-                code_offset: lea_start,
-                rodata_offset: base,
-            });
+            if self.abs32_addrs {
+                self.out.abs_addr_refs.push(super::AbsAddrRef {
+                    field_offset: site,
+                    target: super::AbsAddrTarget::Rodata(base),
+                });
+            } else {
+                rodata.addr_fixups.push(super::RodataAddrFixup {
+                    code_offset: site,
+                    rodata_offset: base,
+                });
+            }
             for (i, &t) in self.fcx.func.jump_tables[table as usize].iter().enumerate() {
                 let slot_offset = base + (i * width) as u64;
                 let text_offset = self.block_offsets[t as usize] as u64;

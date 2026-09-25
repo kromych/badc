@@ -3584,6 +3584,163 @@ fn a_placed_image_lays_out_two_loads_without_page_padding() {
     }
 }
 
+/// A freestanding x86-64 program over a switch dispatch, a computed-goto
+/// table and indexed arrays, one of them defined by a second unit; the
+/// exit status counts the wrong results.
+const ABS_FORMS_MAIN: &str = r#"
+long sys_call3(long nr, long a, long b, long c);
+__asm__(".text
+.globl _start
+_start:
+  xor %ebp, %ebp
+  and $-16, %rsp
+"
+        "  call start_c
+  hlt
+"
+        ".globl sys_call3
+sys_call3:
+  mov %rdi, %rax
+  mov %rsi, %rdi
+"
+        "  mov %rdx, %rsi
+  mov %rcx, %rdx
+  syscall
+  ret
+");
+extern const int squares[];
+static long acc[8];
+static unsigned char seen[8];
+__attribute__((noinline)) static int pick(int x) {
+    switch (x) {
+    case 0: return 10; case 1: return 11; case 2: return 12; case 3: return 13;
+    case 4: return 14; case 5: return 15; case 6: return 16; case 7: return 17;
+    default: return -1;
+    }
+}
+__attribute__((noinline)) static int hop(unsigned i) {
+    static const void *const t[] = { &&a, &&b, &&c, &&d };
+    goto *t[i & 3];
+a: return 1;
+b: return 2;
+c: return 3;
+d: return 4;
+}
+void start_c(void) {
+    long bad = 0;
+    for (int i = 0; i < 8; i++) {
+        acc[i] = pick(i) + hop(i) + squares[i];
+        seen[i] = 1;
+    }
+    for (int i = 0; i < 8; i++)
+        if (!seen[i] || acc[i] != 10 + i + (i & 3) + 1 + i * i)
+            bad++;
+    sys_call3(231, bad, 0, 0);
+    for (;;) {}
+}
+"#;
+
+// `-fno-pic` and the kernel code model compile for a static link, so a
+// switch table, a label table and an indexed object are addressed by their
+// link-time address (`R_X86_64_32S`). A placed image resolves the field
+// and runs; a position-independent image has no load-time form for it,
+// and the hosted link refuses it as GNU ld does, while the default `-c`
+// object of the same unit keeps linking there.
+#[test]
+fn static_link_objects_address_tables_absolutely() {
+    let dir = tempdir("static-link-absolute");
+    let main = write_source(&dir, "main.c", ABS_FORMS_MAIN);
+    let sq = write_source(
+        &dir,
+        "sq.c",
+        "const int squares[8] = {0, 1, 4, 9, 16, 25, 36, 49};
+",
+    );
+    let compile = |flags: &[&str], src: &Path, obj: &Path| {
+        run(
+            Command::new(badc())
+                .args(["-q", "--target=linux-x64", "-O", "-c"])
+                .args(flags)
+                .arg(src)
+                .arg("-o")
+                .arg(obj),
+            "compile",
+        );
+    };
+    for (tag, flag) in [("nopic", "-fno-pic"), ("kernel", "-mcmodel=kernel")] {
+        let objs = [
+            dir.join(format!("main-{tag}.o")),
+            dir.join(format!("sq-{tag}.o")),
+        ];
+        compile(&[flag], &main, &objs[0]);
+        compile(&[flag], &sq, &objs[1]);
+        let exe = dir.join(format!("placed-{tag}"));
+        run(
+            Command::new(badc())
+                .args([
+                    "-q",
+                    "--freestanding",
+                    "--entry=_start",
+                    "--target=linux-x64",
+                ])
+                .args(&objs)
+                .arg("-o")
+                .arg(&exe),
+            "placed link",
+        );
+        if host_linux_target() == "linux-x64" {
+            let out = Command::new(&exe).output().expect("run the image");
+            assert_eq!(out.status.code(), Some(0), "{tag}: wrong results");
+        }
+    }
+
+    let hosted = write_source(
+        &dir,
+        "hosted.c",
+        "int main(int argc, char **argv) {
+         	(void)argv;
+         	switch (argc) {
+         	case 1: return 0; case 2: return 3; case 3: return 4; case 4: return 5;
+         	case 5: return 6; case 6: return 7; case 7: return 8; case 8: return 9;
+         	default: return 99;
+         	}
+         }
+",
+    );
+    let link = |obj: &Path, exe: &Path| {
+        Command::new(badc())
+            .args(["-q", "--target=linux-x64"])
+            .arg(obj)
+            .arg("-o")
+            .arg(exe)
+            .output()
+            .expect("run badc")
+    };
+    let nopic = dir.join("hosted-nopic.o");
+    compile(&["-fno-pic"], &hosted, &nopic);
+    let refused = link(&nopic, &dir.join("hosted-nopic"));
+    let stderr = String::from_utf8_lossy(&refused.stderr);
+    assert!(
+        !refused.status.success()
+            && stderr.contains("R_X86_64_32S")
+            && stderr.contains("position-independent executable"),
+        "the hosted link must refuse the absolute field; got: {stderr:?}"
+    );
+    let default = dir.join("hosted.o");
+    compile(&[], &hosted, &default);
+    let exe = dir.join("hosted");
+    let linked = link(&default, &exe);
+    assert!(
+        linked.status.success(),
+        "the default object links hosted: {}",
+        String::from_utf8_lossy(&linked.stderr)
+    );
+    if host_linux_target() == "linux-x64" {
+        let out = Command::new(&exe).output().expect("run the image");
+        assert_eq!(out.status.code(), Some(0), "the hosted dispatch");
+    }
+}
+
 /// The `--target` name of this host when it is a Linux one.
 fn host_linux_target() -> &'static str {
     match (cfg!(target_os = "linux"), cfg!(target_arch = "x86_64")) {

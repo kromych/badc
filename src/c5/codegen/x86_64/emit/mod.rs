@@ -383,6 +383,7 @@ struct Out<'a, 'b> {
     asm_section_text_refs: &'b mut Vec<super::AsmSectionTextRef>,
     asm_text_abs_refs: &'b mut Vec<super::AsmTextAbsRef>,
     asm_text_labels: &'b mut Vec<super::AsmTextLabel>,
+    abs_addr_refs: &'b mut Vec<super::AbsAddrRef>,
 }
 
 /// The length of every output buffer at one point of the emission.
@@ -405,6 +406,7 @@ struct OutputMark {
     asm_section_text_refs: usize,
     asm_text_abs_refs: usize,
     asm_text_labels: usize,
+    abs_addr_refs: usize,
 }
 
 impl Out<'_, '_> {
@@ -428,6 +430,7 @@ impl Out<'_, '_> {
             asm_section_text_refs: self.asm_section_text_refs.len(),
             asm_text_abs_refs: self.asm_text_abs_refs.len(),
             asm_text_labels: self.asm_text_labels.len(),
+            abs_addr_refs: self.abs_addr_refs.len(),
         }
     }
 
@@ -455,5 +458,6 @@ impl Out<'_, '_> {
         self.asm_section_text_refs.truncate(m.asm_section_text_refs);
         self.asm_text_abs_refs.truncate(m.asm_text_abs_refs);
         self.asm_text_labels.truncate(m.asm_text_labels);
+        self.abs_addr_refs.truncate(m.abs_addr_refs);
     }
 }

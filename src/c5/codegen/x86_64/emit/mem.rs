@@ -760,17 +760,9 @@ pub(super) fn emit_zero_test_of_load(code: &mut Vec<u8>, inst: &Inst, fcx: &FnCt
     Ok(())
 }
 
-/// A store the allocator marked in `Allocation::imm_store`: `mov mem, imm`
-/// of the constant's low bytes at the store's width. The `Imm` was never
-/// materialized, and the store's own value is unread.
-pub(super) fn emit_store_of_imm(
-    code: &mut Vec<u8>,
-    inst: &Inst,
-    func: &FunctionSsa,
-    alloc: &Allocation,
-    frame: Frame,
-    abi: super::Abi,
-) -> Emit {
+/// The width and the immediate of a store the allocator marked in
+/// `Allocation::imm_store`.
+fn store_imm_operand(inst: &Inst, func: &FunctionSsa) -> Emit<(u8, i32)> {
     let (value, kind) = match inst {
         Inst::Store { value, kind, .. }
         | Inst::SegStore { value, kind, .. }
@@ -795,6 +787,21 @@ pub(super) fn emit_store_of_imm(
         },
         _ => return fail("immediate store: value not an Imm"),
     };
+    Ok((width, imm))
+}
+
+/// A store the allocator marked in `Allocation::imm_store`: `mov mem, imm`
+/// of the constant's low bytes at the store's width. The `Imm` was never
+/// materialized, and the store's own value is unread.
+pub(super) fn emit_store_of_imm(
+    code: &mut Vec<u8>,
+    inst: &Inst,
+    func: &FunctionSsa,
+    alloc: &Allocation,
+    frame: Frame,
+    abi: super::Abi,
+) -> Emit {
+    let (width, imm) = store_imm_operand(inst, func)?;
     match inst {
         Inst::Store {
             addr, disp, align, ..
@@ -842,6 +849,114 @@ pub(super) fn emit_store_of_imm(
         }
         _ => unreachable!(),
     }
+    Ok(())
+}
+
+/// The `ImmData` an `abs_base` access names, through the copies a hoist or
+/// a live-range split may have placed in front of it.
+fn abs_base_data(func: &FunctionSsa, mut v: u32) -> Option<u32> {
+    for _ in 0..func.insts.len() {
+        match func.insts.get(v as usize)? {
+            Inst::ImmData(_) => return Some(v),
+            Inst::Copy { value, .. } => v = *value,
+            _ => return None,
+        }
+    }
+    None
+}
+
+/// Lower an indexed access marked `abs_base`: the base's link-time address
+/// is the displacement of `sym(,%index,scale)`, recorded in `refs` for the
+/// writer's `R_X86_64_32S`. The allocator's fused forms apply as to the
+/// register-based access: a zero test and an immediate store.
+pub(super) fn emit_abs_indexed(
+    code: &mut Vec<u8>,
+    refs: &mut Vec<super::AbsAddrRef>,
+    inst: &Inst,
+    v: u32,
+    dst: Place,
+    fcx: &FnCtx,
+) -> Emit {
+    let FnCtx {
+        func,
+        alloc,
+        frame,
+        extern_data_names,
+        ..
+    } = *fcx;
+    let (base, index, scale, width) = match inst {
+        Inst::LoadIndexed {
+            base,
+            index,
+            index_ext: IndexExt::None,
+            scale,
+            kind,
+            ..
+        } => (*base, *index, *scale, int_load_shape(*kind).0),
+        Inst::StoreIndexed {
+            base,
+            index,
+            index_ext: IndexExt::None,
+            scale,
+            kind,
+            ..
+        } => (*base, *index, *scale, int_store_width(*kind)),
+        _ => return fail("indexed access: absolute base on a widening index"),
+    };
+    if width == 0 || u32::from(scale) != width {
+        return fail("indexed access: absolute base on a non-integer or rescaled access");
+    }
+    let target = match abs_base_data(func, base) {
+        Some(d) => match (extern_data_names.get(&d), &func.insts[d as usize]) {
+            (Some(name), _) => super::AbsAddrTarget::Extern(name.clone()),
+            (None, Inst::ImmData(off)) => super::AbsAddrTarget::Data(*off as u64),
+            (None, _) => unreachable!(),
+        },
+        None => return fail("indexed access: absolute base not a data address"),
+    };
+    let Some(ri) = materialize_int(code, place_of(alloc, index), SCRATCH_R10, frame) else {
+        return fail("indexed access: index not int reg / spill");
+    };
+    let marked = |set: &[bool]| set.get(v as usize).copied().unwrap_or(false);
+    let width = width as u8;
+    let field = if marked(&alloc.branch_fused) {
+        super::encode::emit_mi_index_abs(code, Mnem::Cmp, width, (ri, scale), 0)
+    } else if marked(&alloc.imm_store) {
+        let (_, imm) = store_imm_operand(inst, func)?;
+        super::encode::emit_mi_index_abs(code, Mnem::Mov, width, (ri, scale), imm)
+    } else {
+        match inst {
+            Inst::LoadIndexed { kind, .. } => {
+                let Some(rd) = int_or_spill_dst(dst) else {
+                    return fail("LoadIndexed: dst not int reg / spill");
+                };
+                let field = super::encode::emit_load_index_abs(code, *kind, rd, ri, scale);
+                spill_dst_to_slot(code, dst, rd, frame);
+                field
+            }
+            Inst::StoreIndexed { value, kind, .. } => {
+                // r11 is free: the index took r10 at most.
+                let rv = match place_of(alloc, *value) {
+                    Place::FpReg(x) if *kind == StoreKind::I64 => {
+                        super::encode::emit_movq_r_xmm(code, SCRATCH_R11, Reg(x));
+                        SCRATCH_R11
+                    }
+                    p => match materialize_int(code, p, SCRATCH_R11, frame) {
+                        Some(r) => r,
+                        None => return fail("StoreIndexed: value not int reg / spill"),
+                    },
+                };
+                let field = super::encode::emit_store_index_abs(code, width, ri, scale, rv);
+                mirror_int_dst(code, dst, rv, frame);
+                field
+            }
+            _ => unreachable!(),
+        }
+    };
+    refs.push(super::AbsAddrRef {
+        field_offset: field,
+        target,
+    });
     Ok(())
 }
 

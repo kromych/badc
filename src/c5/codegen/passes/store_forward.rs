@@ -520,6 +520,7 @@ fn run_one(func: &mut FunctionSsa) {
                     index_ext,
                     scale,
                     kind,
+                    ..
                 } => {
                     let (base, index, ext, scale, kind) =
                         (*base, *index, *index_ext, *scale, *kind);
@@ -558,6 +559,7 @@ fn run_one(func: &mut FunctionSsa) {
                     scale,
                     value,
                     kind,
+                    ..
                 } => {
                     table.clear();
                     indexed.clear();
@@ -1668,6 +1670,7 @@ mod tests {
             index_ext: IndexExt::None,
             scale,
             kind,
+            abs_base: false,
         }
     }
 
@@ -1679,6 +1682,7 @@ mod tests {
             scale,
             value,
             kind,
+            abs_base: false,
         }
     }
 

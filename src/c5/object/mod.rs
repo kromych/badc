@@ -1059,6 +1059,11 @@ fn write_for(program: &Program, build: &Build, target: Target) -> Result<Vec<u8>
             "Relocatable output requires the `std` feature",
         ));
     }
+    if !build.abs_addr_refs.is_empty() {
+        return Err(C5Error::internal(
+            "an absolute address field reached an image writer",
+        ));
+    }
     match target {
         Target::MacOSAarch64 => mach_o::write(program, build),
         Target::LinuxAarch64 => elf::write(program, build, Machine::Aarch64),
@@ -1144,6 +1149,7 @@ pub(crate) mod test_support {
             asm_sections: Vec::new(),
             asm_section_text_refs: Vec::new(),
             asm_text_abs_refs: Vec::new(),
+            abs_addr_refs: Vec::new(),
             asm_sym_fixups: Vec::new(),
             asm_text_labels: Vec::new(),
             asm_sym_decls: Vec::new(),

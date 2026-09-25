@@ -2651,24 +2651,37 @@ pub(crate) fn is_call_site(inst: &Inst, tls_addr_is_call: bool) -> bool {
 /// Invoke `f` for each operand `ValueId` referenced by `inst`, for the
 /// allocator's use counting.
 ///
-/// The traversal itself is `Inst::for_each_operand`; the one deviation is
+/// The traversal itself is `Inst::for_each_operand`, with two deviations:
 /// the `VaArg` intrinsic's second operand, a compile-time packed type
-/// descriptor (`VaArgDesc`) the per-target emit reads straight
-/// off the constant `Inst::Imm`. It is never a runtime value, so counting
-/// it would force the descriptor into a register instead of letting it
-/// stay dead.
+/// descriptor (`VaArgDesc`) the per-target emit reads straight off the
+/// constant `Inst::Imm`, and the base of an indexed access carrying it as
+/// its displacement (`abs_base`). Neither is a runtime value, so counting
+/// one would force it into a register instead of letting it stay dead.
 pub(crate) fn for_each_operand(inst: &Inst, mut f: impl FnMut(ValueId)) {
-    if let Inst::Intrinsic { kind, args } = inst
-        && *kind == crate::c5::op::Intrinsic::VaArg as i64
-    {
-        for (i, &a) in args.iter().enumerate() {
-            if i != 1 {
-                f(a);
+    match inst {
+        Inst::Intrinsic { kind, args } if *kind == crate::c5::op::Intrinsic::VaArg as i64 => {
+            for (i, &a) in args.iter().enumerate() {
+                if i != 1 {
+                    f(a);
+                }
             }
         }
-        return;
+        Inst::LoadIndexed {
+            index,
+            abs_base: true,
+            ..
+        } => f(*index),
+        Inst::StoreIndexed {
+            index,
+            value,
+            abs_base: true,
+            ..
+        } => {
+            f(*index);
+            f(*value);
+        }
+        _ => inst.for_each_operand(f),
     }
-    inst.for_each_operand(f);
 }
 
 /// Whether an instruction defines an int / FP value or none at all.

@@ -183,6 +183,7 @@ pub(crate) fn compile_function_to_bytes(
             let mut asm_sections = crate::c5::asm::AsmSectionSink::default();
             let mut asm_section_text_refs: Vec<super::AsmSectionTextRef> = Vec::new();
             let mut asm_text_abs_refs: Vec<super::AsmTextAbsRef> = Vec::new();
+            let mut abs_addr_refs: Vec<super::AbsAddrRef> = Vec::new();
             let mut asm_text_labels: Vec<super::AsmTextLabel> = Vec::new();
             let mut asm_extern_call_sites = Vec::new();
             let mut asm_sym_fixups: Vec<super::AsmSymFixup> = Vec::new();
@@ -240,9 +241,11 @@ pub(crate) fn compile_function_to_bytes(
                     &mut asm_section_text_refs,
                     &mut asm_text_abs_refs,
                     &mut asm_text_labels,
+                    &mut abs_addr_refs,
                     false,
                     false,
                     &mut rodata,
+                    false,
                     false,
                     super::super::Hardening::NONE,
                     super::super::StackProtect::OFF,
@@ -261,6 +264,7 @@ pub(crate) fn compile_function_to_bytes(
                 + data_fixups.len()
                 + asm_section_text_refs.len()
                 + asm_text_abs_refs.len()
+                + abs_addr_refs.len()
                 + asm_text_labels.len()
                 + pending_func_fixups.len()
                 + tls_index_fixups.len()

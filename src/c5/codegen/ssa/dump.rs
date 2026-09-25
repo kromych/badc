@@ -174,8 +174,10 @@ fn fmt_inst(inst: &Inst) -> String {
             index_ext,
             scale,
             kind,
+            abs_base,
         } => format!(
-            "LoadIndexed {{ base=v{base}, index=v{index}{}, scale={scale}, kind={} }}",
+            "LoadIndexed {{ base=v{base}{}, index=v{index}{}, scale={scale}, kind={} }}",
+            fmt_abs_base(*abs_base),
             fmt_index_ext(*index_ext),
             fmt_load_kind(*kind),
         ),
@@ -186,8 +188,10 @@ fn fmt_inst(inst: &Inst) -> String {
             scale,
             value,
             kind,
+            abs_base,
         } => format!(
-            "StoreIndexed {{ base=v{base}, index=v{index}{}, scale={scale}, value=v{value}, kind={} }}",
+            "StoreIndexed {{ base=v{base}{}, index=v{index}{}, scale={scale}, value=v{value}, kind={} }}",
+            fmt_abs_base(*abs_base),
             fmt_index_ext(*index_ext),
             fmt_store_kind(*kind),
         ),
@@ -417,6 +421,11 @@ fn fmt_place(p: Place) -> String {
 /// Rendered only when set so non-volatile dumps are unchanged.
 fn fmt_volatile(v: bool) -> &'static str {
     if v { ", volatile" } else { "" }
+}
+
+/// ` abs` for a base carried as the access's absolute displacement.
+fn fmt_abs_base(abs: bool) -> &'static str {
+    if abs { " abs" } else { "" }
 }
 
 /// Follows the index operand; empty for a full-width index.

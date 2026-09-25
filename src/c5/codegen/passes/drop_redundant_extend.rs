@@ -1585,6 +1585,7 @@ mod tests {
                 index_ext: IndexExt::None,
                 scale: 4,
                 kind: LoadKind::I32,
+                abs_base: false,
             },
             Inst::CallExt {
                 binding_idx: 0,

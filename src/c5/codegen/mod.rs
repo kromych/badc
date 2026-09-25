@@ -2194,6 +2194,8 @@ pub(crate) struct Build {
     /// absolute immediate (`pushq $1f`). The relocatable ELF writer emits one
     /// `R_X86_64_32S` per entry against the `.text` symbol.
     pub asm_text_abs_refs: Vec<AsmTextAbsRef>,
+    /// Absolute address fields of the x86-64 code; see [`AbsAddrRef`].
+    pub abs_addr_refs: Vec<AbsAddrRef>,
     /// Named labels an inline-asm template defines in the main code stream.
     /// Each is a definition the unit owns, so the writers emit a local
     /// `.text` symbol and bind a C reference to the same name against it.
@@ -2433,6 +2435,29 @@ pub(crate) struct AsmTextAbsRef {
     pub field_offset: usize,
     /// Byte offset within `Build::text` of the referenced label.
     pub target_offset: usize,
+}
+
+/// An x86-64 instruction field holding a link-time address as a
+/// sign-extended 32-bit displacement: the table of a switch dispatch or the
+/// base of an indexed access, `sym(,%index,scale)`. Only a relocatable
+/// object for a static link carries one ([`NativeOptions::abs32_addrs`]);
+/// the ELF writer emits an `R_X86_64_32S` per field.
+#[derive(Debug, Clone)]
+pub(crate) struct AbsAddrRef {
+    /// Byte offset within `Build::text` of the 4-byte field.
+    pub field_offset: usize,
+    pub target: AbsAddrTarget,
+}
+
+/// What an [`AbsAddrRef`] addresses.
+#[derive(Debug, Clone)]
+pub(crate) enum AbsAddrTarget {
+    /// Offset into `Build::data`.
+    Data(u64),
+    /// A data symbol another unit defines.
+    Extern(alloc::string::String),
+    /// Offset into `RodataBuild::bytes`, a switch table.
+    Rodata(u64),
 }
 
 /// Address-materialisation site in `Build::text` reaching a byte of
@@ -3607,6 +3632,19 @@ impl Default for NativeOptions {
 }
 
 impl NativeOptions {
+    /// Whether an x86-64 instruction may carry a link-time address as a
+    /// sign-extended 32-bit displacement: a relocatable LP64 object linked
+    /// statically, where the kernel code model places every symbol in the
+    /// top 2 GiB and the small one in the bottom 2 GiB. A position-
+    /// independent link resolves no such field.
+    pub(crate) fn abs32_addrs(&self, target: Target) -> bool {
+        target == Target::LinuxX64
+            && self.output_kind == OutputKind::Relocatable
+            && !self.pic
+            && !self.pic_link
+            && self.elf_class == ElfClass::Elf64
+    }
+
     /// Convenience builder. `NativeOptions::new().with_optimize()`.
     pub const fn new() -> Self {
         Self {

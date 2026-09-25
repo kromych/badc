@@ -185,6 +185,7 @@ pub(super) fn emit_inst(
             index_ext,
             scale,
             kind,
+            ..
         } => emit_load_indexed(
             code,
             dst,
@@ -203,6 +204,7 @@ pub(super) fn emit_inst(
             scale,
             value,
             kind,
+            ..
         } => emit_store_indexed(
             code,
             v,

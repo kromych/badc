@@ -2479,9 +2479,14 @@ pub(crate) fn lower_unit<B: LowerTarget>(
     // Branch on a zero test's operand directly. Immediately before
     // allocation so every mid-end fold keyed on the compare shape has
     // run.
+    let abs32 = native.abs32_addrs(target);
+    let extern_abs = abs32 && native.code_model == super::super::CodeModel::Kernel;
     for f in ssa_funcs.iter_mut() {
         super::super::passes::constfold_branch::strip_zero_test_conds(f);
         crate::c5::asm::mark_static_operands(f);
+        if abs32 {
+            super::super::passes::index_fold::mark_abs_bases(f, extern_abs);
+        }
     }
     // At -O the operand-free values are set again past the calls they
     // would otherwise cross, then each function is allocated and
@@ -2770,6 +2775,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         text_data_ranges: st.text_data_ranges,
         asm_section_text_refs: st.asm_section_text_refs,
         asm_text_abs_refs: alloc::vec::Vec::new(),
+        abs_addr_refs: alloc::vec::Vec::new(),
         asm_sym_fixups: st.asm_sym_fixups,
         asm_text_labels: st.asm_text_labels,
         copy_relocs: alloc::vec::Vec::new(),

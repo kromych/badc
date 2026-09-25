@@ -421,6 +421,11 @@ mod jit_impl {
         // Resolve the blob's address fixups and entry slots against
         // the mapped base: each table entry holds `target -
         // table_base`, both inside this mapping.
+        if !build.abs_addr_refs.is_empty() {
+            return Err(C5Error::internal(
+                "JIT: absolute address fields reached an in-memory build",
+            ));
+        }
         if !build.rodata.bytes.is_empty() {
             // The absolute-slot form is relocatable-only.
             if !build.rodata.abs64.is_empty() {

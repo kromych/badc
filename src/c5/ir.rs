@@ -146,13 +146,17 @@ pub(crate) enum Inst {
     /// natural width of `kind` (1 for I8/U8, 2 for I16/U16, 4 for
     /// I32/U32, 8 for I64). Carries no volatile flag: `index_fold`
     /// leaves volatile accesses on the plain `Load` / `Store` forms.
-    /// `index_ext` selects how much of `index` is read.
+    /// `index_ext` selects how much of `index` is read. With `abs_base`
+    /// the base is an `ImmData` whose link-time address the access carries
+    /// as its displacement (x86-64 static-link code models), so no
+    /// register holds it.
     LoadIndexed {
         base: ValueId,
         index: ValueId,
         index_ext: IndexExt,
         scale: u8,
         kind: LoadKind,
+        abs_base: bool,
     },
     /// Store to `base + index * scale`. Companion to
     /// [`Self::LoadIndexed`].
@@ -163,6 +167,7 @@ pub(crate) enum Inst {
         scale: u8,
         value: ValueId,
         kind: StoreKind,
+        abs_base: bool,
     },
     /// Load through an x86 named-address-space pointer (`__seg_gs` /
     /// `__seg_fs`): the memory reference rides a segment-override prefix
@@ -2487,7 +2492,8 @@ mod tests {
                     index: 2,
                     index_ext: IndexExt::None,
                     scale: 8,
-                    kind: LoadKind::I64
+                    kind: LoadKind::I64,
+                    abs_base: false,
                 },
                 alloc::vec![1, 2]
             ),
@@ -2498,7 +2504,8 @@ mod tests {
                     index_ext: IndexExt::Sxtw,
                     scale: 8,
                     value: 3,
-                    kind: StoreKind::I64
+                    kind: StoreKind::I64,
+                    abs_base: false,
                 },
                 alloc::vec![1, 2, 3]
             ),

@@ -341,6 +341,9 @@ pub(super) fn emit_inst(
             spill_dst_to_slot(code, dst, rd, frame);
             Ok(())
         }
+        Inst::LoadIndexed { abs_base: true, .. } | Inst::StoreIndexed { abs_base: true, .. } => {
+            emit_abs_indexed(code, &mut *out.abs_addr_refs, inst, v, dst, fcx)
+        }
         Inst::Load { .. }
         | Inst::Store { .. }
         | Inst::SegLoad { .. }
@@ -604,6 +607,7 @@ fn emit_mem_inst(
             index_ext,
             scale,
             kind,
+            ..
         } => emit_load_indexed(
             code,
             dst,
@@ -621,6 +625,7 @@ fn emit_mem_inst(
             scale,
             value,
             kind,
+            ..
         } => emit_store_indexed(
             code,
             dst,

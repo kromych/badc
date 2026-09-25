@@ -314,6 +314,7 @@ fn load_expr_key(insts: &[Inst], canon: &[ValueId], v: ValueId) -> Option<Key> {
             index_ext,
             scale,
             kind,
+            ..
         }) => Some((
             7,
             c(*base),
@@ -384,6 +385,7 @@ fn stored_facts(
             scale,
             value,
             kind,
+            ..
         } => (load_kinds_of_store(*kind), *value, &|k| {
             (7, c(*base), c(*index), indexed_key(*index_ext, *scale, k))
         }),

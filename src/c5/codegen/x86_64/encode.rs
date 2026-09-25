@@ -174,6 +174,84 @@ fn msib(base: Reg, index: Reg, scale: u8, width: u8) -> super::table::Opnd {
     }
 }
 
+/// A `disp32(,%index,scale)` reference of the given width: no base
+/// register, the displacement a link-time address.
+fn mindex(index: Reg, scale: u8, width: u8) -> super::table::Opnd {
+    super::table::Opnd::IndexMem {
+        index: index.0,
+        scale,
+        disp: 0,
+        width,
+    }
+}
+
+/// Load of `kind` from `disp32(,%index,scale)` into `dst`, extended as the
+/// SIB loads below extend; returns the offset of the displacement field.
+pub(crate) fn emit_load_index_abs(
+    code: &mut Vec<u8>,
+    kind: crate::c5::ir::LoadKind,
+    dst: Reg,
+    index: Reg,
+    scale: u8,
+) -> usize {
+    use crate::c5::ir::LoadKind;
+    let (mnem, width_override, dst_width, width) = match kind {
+        LoadKind::I64 => (Mnem::Mov, Some(8), 8, 8),
+        LoadKind::I32 => (Mnem::Movsxd, None, 8, 4),
+        LoadKind::U32 => (Mnem::Mov, Some(4), 4, 4),
+        LoadKind::I16 => (Mnem::Movsx, None, 8, 2),
+        LoadKind::U16 => (Mnem::Movzx, None, 8, 2),
+        LoadKind::I8 => (Mnem::Movsx, None, 8, 1),
+        LoadKind::U8 => (Mnem::Movzx, None, 8, 1),
+        LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128 => {
+            unreachable!("indexed load of a floating kind")
+        }
+    };
+    super::table::encode_into_disp32(
+        code,
+        mnem,
+        width_override,
+        &[rw(dst, dst_width), mindex(index, scale, width)],
+    )
+}
+
+/// Store of the low `width` bytes of `src` to `disp32(,%index,scale)`;
+/// returns the offset of the displacement field.
+pub(crate) fn emit_store_index_abs(
+    code: &mut Vec<u8>,
+    width: u8,
+    index: Reg,
+    scale: u8,
+    src: Reg,
+) -> usize {
+    super::table::encode_into_disp32(
+        code,
+        Mnem::Mov,
+        Some(width),
+        &[mindex(index, scale, width), rw(src, width)],
+    )
+}
+
+/// `op disp32(,%index,scale), imm`: [`emit_mi_sib`] with no base register;
+/// returns the offset of the displacement field.
+pub(crate) fn emit_mi_index_abs(
+    code: &mut Vec<u8>,
+    mnem: Mnem,
+    width: u8,
+    (index, scale): (Reg, u8),
+    imm: i32,
+) -> usize {
+    super::table::encode_into_disp32(
+        code,
+        mnem,
+        Some(width),
+        &[
+            mindex(index, scale, width),
+            super::table::Opnd::Imm(imm as i64),
+        ],
+    )
+}
+
 fn emit_byte(code: &mut Vec<u8>, b: u8) {
     code.push(b);
 }
@@ -1766,6 +1844,7 @@ struct X64Lower<'p> {
     fixups: Vec<Fixup>,
     fn_unwind: Vec<super::FnUnwind>,
     asm_text_abs_refs: Vec<super::AsmTextAbsRef>,
+    abs_addr_refs: Vec<super::AbsAddrRef>,
     /// Per-callee calling convention, for the callees that declare one
     /// (`__attribute__((ms_abi))` / `((sysv_abi))`). A direct call site
     /// reads it to marshal into that convention's argument window.
@@ -1786,6 +1865,7 @@ impl<'p> X64Lower<'p> {
             fixups: Vec::new(),
             fn_unwind: Vec::new(),
             asm_text_abs_refs: Vec::new(),
+            abs_addr_refs: Vec::new(),
             conv_targets: alloc::collections::BTreeMap::new(),
             ret_tags: alloc::collections::BTreeMap::new(),
             fn_name_by_pc: program
@@ -1905,10 +1985,12 @@ impl super::ssa::emit_common::LowerTarget for X64Lower<'_> {
             fe.asm_section_text_refs,
             &mut self.asm_text_abs_refs,
             fe.asm_text_labels,
+            &mut self.abs_addr_refs,
             native.no_fp_regs,
             native.strict_align,
             fe.rodata,
             native.output_kind == super::OutputKind::Relocatable && !native.pic,
+            native.abs32_addrs(target),
             native.hardening,
             native.stack_protect.resolved_for(target),
             entry,
@@ -1987,6 +2069,7 @@ impl super::ssa::emit_common::LowerTarget for X64Lower<'_> {
     fn install(&mut self, build: &mut Build) {
         build.fn_unwind = core::mem::take(&mut self.fn_unwind);
         build.asm_text_abs_refs = core::mem::take(&mut self.asm_text_abs_refs);
+        build.abs_addr_refs = core::mem::take(&mut self.abs_addr_refs);
     }
 }
 

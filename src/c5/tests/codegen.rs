@@ -7703,7 +7703,10 @@ fn freestanding_builtin_mem_transfer_binds_its_own_fallback() {
 /// per 8-byte entry against the `.text` section symbol with the
 /// target's offset as the addend -- the shape jump-table discovery in
 /// unwind tooling keys on -- and relocates the dispatch's base
-/// materialization against that section's STT_SECTION symbol.
+/// materialization against that section's STT_SECTION symbol. The object
+/// is the driver's default `-c` one, for a link that relocates it after
+/// mapping; a static link's form is
+/// `static_link_switch_dispatch_indexes_the_table_by_its_address`.
 #[test]
 fn switch_table_lands_in_rodata_section_of_object() {
     use crate::{
@@ -7734,6 +7737,7 @@ fn switch_table_lands_in_rodata_section_of_object() {
     .unwrap_or_else(|e| panic!("compile dense switch: {e}"));
     let opts = NativeOptions {
         output_kind: OutputKind::Relocatable,
+        pic_link: true,
         ..NativeOptions::default()
     };
     let bytes = emit_native_with_options(&prog, Target::LinuxX64, opts)
@@ -8077,6 +8081,158 @@ fn dense_switch_object(target: crate::Target, pic: bool, jump_tables: bool) -> a
         ..NativeOptions::default()
     };
     emit_native_with_options(&prog, target, opts).unwrap_or_else(|e| panic!("emit object: {e}"))
+}
+
+/// A relocatable x86-64 object for `opts`, compiled at `-O`.
+fn x64_object_at_o(src: &str, opts: crate::NativeOptions) -> alloc::vec::Vec<u8> {
+    use crate::{CompileOptions, Compiler, Target, emit_native_with_options};
+    let prog = Compiler::with_options(
+        src.to_string(),
+        Target::LinuxX64,
+        CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .unwrap_or_else(|e| panic!("compile: {e}"));
+    let opts = crate::NativeOptions {
+        output_kind: crate::OutputKind::Relocatable,
+        ..opts.with_optimize()
+    };
+    emit_native_with_options(&prog, Target::LinuxX64, opts)
+        .unwrap_or_else(|e| panic!("emit object: {e}"))
+}
+
+/// `.rela.text` as `(offset, type, target, addend)`, a section symbol
+/// named by its section.
+fn text_rela_by_target(bytes: &[u8]) -> alloc::vec::Vec<(usize, u32, String, u64)> {
+    let elf = ElfView::new(bytes);
+    let Some(rela) = elf.find(".rela.text") else {
+        return alloc::vec::Vec::new();
+    };
+    elf.rela_rows(rela)
+        .into_iter()
+        .map(|r| {
+            let target = if elf.sym_type(r.sym) == 3 {
+                elf.name_of(elf.sym_shndx(r.sym))
+            } else {
+                elf.sym_name(r.sym)
+            };
+            (r.offset as usize, r.rtype, target.to_string(), r.addend)
+        })
+        .collect()
+}
+
+/// Whether the four bytes at `at` are the displacement of a base-less
+/// SIB operand: ModRM mod=00 rm=100, SIB base=101.
+fn indexes_by_address(text: &[u8], at: usize) -> bool {
+    text[at - 2] & 0xc7 == 0x04 && text[at - 1] & 0x07 == 0x05
+}
+
+/// A link that resolves the relocations statically (`pic_link` clear:
+/// `-fno-pic`, the kernel code model) takes an absolute field, so the
+/// dispatch loads its entry through the table's address, `mov
+/// table(,%idx,8), %r10`: one `R_X86_64_32S` at that load's displacement
+/// against the table section's STT_SECTION symbol and no `lea`. objtool
+/// reads a PC32 table reference as a compiler quirk and stops reporting
+/// unreachable instructions for the whole object.
+#[test]
+fn static_link_switch_dispatch_indexes_the_table_by_its_address() {
+    use crate::c5::object::elf_reloc_types::R_X86_64_32S;
+    use crate::{CodeModel, NativeOptions};
+    for code_model in [CodeModel::Small, CodeModel::Kernel] {
+        let opts = NativeOptions {
+            code_model,
+            ..NativeOptions::default()
+        };
+        let bytes = x64_object_at_o(DENSE_SWITCH_SRC, opts);
+        let text = elf_text(&bytes);
+        let rows: alloc::vec::Vec<_> = text_rela_by_target(&bytes)
+            .into_iter()
+            .filter(|r| r.2 == ".rodata.jump_tables")
+            .collect();
+        assert_eq!(rows.len(), 1, "{code_model:?}: one reference to the table");
+        let (at, rtype, _, addend) = rows[0];
+        assert_eq!(rtype, R_X86_64_32S, "{code_model:?}: reference type");
+        assert_eq!(addend, 0, "{code_model:?}: the table opens its section");
+        assert!(
+            indexes_by_address(&text, at),
+            "{code_model:?}: operand form"
+        );
+        // REX.W 8b /r at scale 8.
+        assert_eq!(text[at - 4] & 0xf8, 0x48, "{code_model:?}: REX.W");
+        assert_eq!(text[at - 3], 0x8b, "{code_model:?}: mov opcode");
+        assert_eq!(text[at - 1] >> 6, 3, "{code_model:?}: scale 8");
+    }
+}
+
+/// Under a static link an indexed access to an object reads it through
+/// the object's address, `sym(,%idx,scale)` with `R_X86_64_32S` at the
+/// displacement: a load, a store, an immediate store, a zero test and a
+/// computed-goto table, and under the kernel code model an object of
+/// another unit, which the small model reaches through the GOT. A link
+/// that relocates after mapping keeps every access RIP-relative.
+#[test]
+fn static_link_indexes_data_by_its_address() {
+    use crate::c5::object::elf_reloc_types::{R_X86_64_32S, R_X86_64_PC32, R_X86_64_REX_GOTPCRELX};
+    use crate::{CodeModel, NativeOptions};
+    const SRC: &str = "static long tab[16];\n\
+        static short half[16];\n\
+        extern unsigned long ext_arr[];\n\
+        long ld(unsigned i) { return tab[i]; }\n\
+        void st(unsigned i, long v) { tab[i] = v; }\n\
+        void sti(unsigned i) { half[i] = 7; }\n\
+        int zt(unsigned i) { if (half[i]) return 3; return 5; }\n\
+        unsigned long ex(unsigned i) { return ext_arr[i]; }\n\
+        int cg(unsigned i) {\n\
+            static const void *const t[] = { &&a, &&b };\n\
+            goto *t[i & 1];\n\
+        a: return 1;\n\
+        b: return 2;\n\
+        }\n";
+    for code_model in [CodeModel::Kernel, CodeModel::Small] {
+        let kernel = code_model == CodeModel::Kernel;
+        let opts = NativeOptions {
+            code_model,
+            ..NativeOptions::default()
+        };
+        let bytes = x64_object_at_o(SRC, opts);
+        let text = elf_text(&bytes);
+        let rows = text_rela_by_target(&bytes);
+        let mut abs: alloc::vec::Vec<&str> = alloc::vec::Vec::new();
+        for (at, rtype, target, _) in &rows {
+            if *rtype == R_X86_64_32S {
+                assert!(
+                    indexes_by_address(&text, *at),
+                    "{code_model:?}: `{target}` at {at:#x} is not a base-less index"
+                );
+                abs.push(target);
+            }
+            assert!(
+                !(*rtype == R_X86_64_PC32 && (target == ".bss" || target == ".rodata")),
+                "{code_model:?}: `{target}` still addressed RIP-relative at {at:#x}"
+            );
+        }
+        abs.sort_unstable();
+        let mut want = alloc::vec![".bss", ".bss", ".bss", ".bss", ".rodata"];
+        if kernel {
+            want.push("ext_arr");
+        }
+        assert_eq!(abs, want, "{code_model:?}: absolute fields by target");
+        let got = rows
+            .iter()
+            .any(|r| r.1 == R_X86_64_REX_GOTPCRELX && r.2 == "ext_arr");
+        assert_eq!(got, !kernel, "{code_model:?}: `ext_arr` through the GOT");
+    }
+    let opts = NativeOptions {
+        pic_link: true,
+        ..NativeOptions::default()
+    };
+    let bytes = x64_object_at_o(SRC, opts);
+    assert!(
+        !text_rela_by_target(&bytes)
+            .iter()
+            .any(|r| r.1 == R_X86_64_32S),
+        "a link relocating after mapping takes no absolute field"
+    );
 }
 
 /// aarch64 twin of `switch_table_lands_in_rodata_section_of_object`:

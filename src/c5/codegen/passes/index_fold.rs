@@ -95,6 +95,55 @@ fn int_store_width(kind: StoreKind) -> Option<u8> {
     }
 }
 
+/// Mark the indexed integer accesses whose base is a data address to carry
+/// that address as their displacement (`abs_base`), for an x86-64 object
+/// linked at fixed addresses
+/// ([`crate::c5::codegen::NativeOptions::abs32_addrs`]). A base another
+/// unit defines qualifies only with `extern_bases`: the kernel code model
+/// addresses one absolutely, the small model through the GOT.
+pub(crate) fn mark_abs_bases(func: &mut FunctionSsa, extern_bases: bool) {
+    let foreign: alloc::collections::BTreeSet<ValueId> =
+        func.extern_imm_data_refs.iter().map(|&(v, _)| v).collect();
+    let gpr = |w: Option<u8>| w.filter(|&w| w <= 8);
+    let marks: Vec<usize> = func
+        .insts
+        .iter()
+        .enumerate()
+        .filter_map(|(i, inst)| {
+            let (base, ext, scale, width) = match inst {
+                Inst::LoadIndexed {
+                    base,
+                    index_ext,
+                    scale,
+                    kind,
+                    ..
+                } => (*base, *index_ext, *scale, gpr(int_load_width(*kind))?),
+                Inst::StoreIndexed {
+                    base,
+                    index_ext,
+                    scale,
+                    kind,
+                    ..
+                } => (*base, *index_ext, *scale, gpr(int_store_width(*kind))?),
+                _ => return None,
+            };
+            let data = matches!(func.insts.get(base as usize), Some(Inst::ImmData(_)));
+            (ext == IndexExt::None
+                && scale == width
+                && data
+                && (extern_bases || !foreign.contains(&base)))
+            .then_some(i)
+        })
+        .collect();
+    for i in marks {
+        if let Inst::LoadIndexed { abs_base, .. } | Inst::StoreIndexed { abs_base, .. } =
+            &mut func.insts[i]
+        {
+            *abs_base = true;
+        }
+    }
+}
+
 /// Count uses of every value across instructions, terminators, and
 /// block exit accumulators.
 fn use_counts(func: &FunctionSsa) -> Vec<u32> {
@@ -502,6 +551,7 @@ pub(crate) fn run(funcs: &mut [FunctionSsa]) {
                                 index_ext: IndexExt::None,
                                 scale,
                                 kind: *kind,
+                                abs_base: false,
                             },
                         ));
                     } else if let Some(&(base, disp)) = displaced.get(addr) {
@@ -539,6 +589,7 @@ pub(crate) fn run(funcs: &mut [FunctionSsa]) {
                                 scale,
                                 value: *value,
                                 kind: *kind,
+                                abs_base: false,
                             },
                         ));
                     } else if let Some(&(base, disp)) = displaced.get(addr) {
@@ -705,7 +756,8 @@ mod tests {
                 index: 2,
                 index_ext: IndexExt::None,
                 scale: 1,
-                kind: LoadKind::U8
+                kind: LoadKind::U8,
+                ..
             }
         ));
         assert!(matches!(
@@ -716,7 +768,8 @@ mod tests {
                 index_ext: IndexExt::None,
                 scale: 1,
                 value: 4,
-                kind: StoreKind::I8
+                kind: StoreKind::I8,
+                ..
             }
         ));
         assert!(matches!(
@@ -726,7 +779,8 @@ mod tests {
                 index: 2,
                 index_ext: IndexExt::None,
                 scale: 1,
-                kind: LoadKind::I8
+                kind: LoadKind::I8,
+                ..
             }
         ));
     }
@@ -905,7 +959,8 @@ mod tests {
                 index: 2,
                 index_ext: IndexExt::None,
                 scale: 4,
-                kind: LoadKind::I32
+                kind: LoadKind::I32,
+                ..
             }
         ));
         assert!(matches!(shifted(true)[5], Inst::Load { addr: 4, .. }));

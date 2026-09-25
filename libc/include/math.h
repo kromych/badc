@@ -105,6 +105,55 @@
 #pragma binding(libc::log1pf,     "_log1pf")
 #pragma binding(libc::expm1f,     "_expm1f")
 #pragma binding(libc::remainderf, "_remainderf")
+// C99 7.12 `long double` variants: `long double` is `double` here, so
+// each binds to the double entry point.
+#pragma binding(libc::logl, "_log")
+#pragma binding(libc::log10l, "_log10")
+#pragma binding(libc::log2l, "_log2")
+#pragma binding(libc::exp2l, "_exp2")
+#pragma binding(libc::expl, "_exp")
+#pragma binding(libc::roundl, "_round")
+#pragma binding(libc::sinl, "_sin")
+#pragma binding(libc::cosl, "_cos")
+#pragma binding(libc::tanl, "_tan")
+#pragma binding(libc::atanl, "_atan")
+#pragma binding(libc::asinl, "_asin")
+#pragma binding(libc::acosl, "_acos")
+#pragma binding(libc::sinhl, "_sinh")
+#pragma binding(libc::coshl, "_cosh")
+#pragma binding(libc::tanhl, "_tanh")
+#pragma binding(libc::asinhl, "_asinh")
+#pragma binding(libc::acoshl, "_acosh")
+#pragma binding(libc::atanhl, "_atanh")
+#pragma binding(libc::tgammal, "_tgamma")
+#pragma binding(libc::erfl, "_erf")
+#pragma binding(libc::erfcl, "_erfc")
+#pragma binding(libc::nearbyintl, "_nearbyint")
+#pragma binding(libc::rintl, "_rint")
+#pragma binding(libc::cbrtl, "_cbrt")
+#pragma binding(libc::log1pl, "_log1p")
+#pragma binding(libc::expm1l, "_expm1")
+#pragma binding(libc::sqrtl, "_sqrt")
+#pragma binding(libc::fabsl, "_fabs")
+#pragma binding(libc::floorl, "_floor")
+#pragma binding(libc::ceill, "_ceil")
+#pragma binding(libc::truncl, "_trunc")
+#pragma binding(libc::powl, "_pow")
+#pragma binding(libc::fmodl, "_fmod")
+#pragma binding(libc::atan2l, "_atan2")
+#pragma binding(libc::hypotl, "_hypot")
+#pragma binding(libc::fminl, "_fmin")
+#pragma binding(libc::fmaxl, "_fmax")
+#pragma binding(libc::nextafterl, "_nextafter")
+#pragma binding(libc::remainderl, "_remainder")
+#pragma binding(libc::ldexpl, "_ldexp")
+#pragma binding(libc::frexpl, "_frexp")
+#pragma binding(libc::modfl, "_modf")
+#pragma binding(libc::ilogbl, "_ilogb")
+#pragma binding(libc::lroundl, "_lround")
+#pragma binding(libc::llroundl, "_llround")
+#pragma binding(libc::lrintl, "_lrint")
+#pragma binding(libc::llrintl, "_llrint")
 #endif
 
 #ifdef __linux__
@@ -196,6 +245,60 @@
 #pragma binding(libm::log1pf,     "log1pf")
 #pragma binding(libm::expm1f,     "expm1f")
 #pragma binding(libm::remainderf, "remainderf")
+// C99 7.12 `long double` variants, binary128 on AArch64 and the x87 format
+// on x86-64, as libm's `l` entry points take them.
+#pragma binding(libm::logl, "logl")
+#pragma binding(libm::log10l, "log10l")
+#pragma binding(libm::log2l, "log2l")
+#pragma binding(libm::exp2l, "exp2l")
+#pragma binding(libm::expl, "expl")
+#pragma binding(libm::roundl, "roundl")
+#pragma binding(libm::sinl, "sinl")
+#pragma binding(libm::cosl, "cosl")
+#pragma binding(libm::tanl, "tanl")
+#pragma binding(libm::atanl, "atanl")
+#pragma binding(libm::asinl, "asinl")
+#pragma binding(libm::acosl, "acosl")
+#pragma binding(libm::sinhl, "sinhl")
+#pragma binding(libm::coshl, "coshl")
+#pragma binding(libm::tanhl, "tanhl")
+#pragma binding(libm::asinhl, "asinhl")
+#pragma binding(libm::acoshl, "acoshl")
+#pragma binding(libm::atanhl, "atanhl")
+#pragma binding(libm::tgammal, "tgammal")
+#pragma binding(libm::erfl, "erfl")
+#pragma binding(libm::erfcl, "erfcl")
+#pragma binding(libm::nearbyintl, "nearbyintl")
+#pragma binding(libm::rintl, "rintl")
+#pragma binding(libm::cbrtl, "cbrtl")
+#pragma binding(libm::log1pl, "log1pl")
+#pragma binding(libm::expm1l, "expm1l")
+#pragma binding(libm::sqrtl, "sqrtl")
+#pragma binding(libm::fabsl, "fabsl")
+#pragma binding(libm::floorl, "floorl")
+#pragma binding(libm::ceill, "ceill")
+#pragma binding(libm::truncl, "truncl")
+#pragma binding(libm::powl, "powl")
+#pragma binding(libm::fmodl, "fmodl")
+#pragma binding(libm::atan2l, "atan2l")
+#pragma binding(libm::hypotl, "hypotl")
+#pragma binding(libm::fminl, "fminl")
+#pragma binding(libm::fmaxl, "fmaxl")
+#pragma binding(libm::nextafterl, "nextafterl")
+#pragma binding(libm::remainderl, "remainderl")
+#pragma binding(libm::ldexpl, "ldexpl")
+#pragma binding(libm::frexpl, "frexpl")
+#pragma binding(libm::modfl, "modfl")
+#pragma binding(libm::ilogbl, "ilogbl")
+#pragma binding(libm::lroundl, "lroundl")
+#pragma binding(libm::llroundl, "llroundl")
+#pragma binding(libm::lrintl, "lrintl")
+#pragma binding(libm::llrintl, "llrintl")
+#pragma binding(libm::scalbnl, "scalbnl")
+#pragma binding(libm::scalblnl, "scalblnl")
+#pragma binding(libm::copysignl, "copysignl")
+#pragma binding(libm::fdiml, "fdiml")
+#pragma binding(libm::fmal, "fmal")
 #endif
 
 #ifdef _WIN32
@@ -258,7 +361,6 @@
 // C99 log2 / round only landed in the Universal CRT.
 #pragma binding(ucrtbase::log2,  "log2")
 #pragma binding(ucrtbase::round, "round")
-double exp2(double x);
 float exp2f(float x);
 #pragma binding(ucrtbase::pow,   "pow")
 #pragma binding(ucrtbase::fmin,  "fmin")
@@ -322,6 +424,55 @@ float exp2f(float x);
 #pragma binding(ucrtbase::log1pf,     "log1pf")
 #pragma binding(ucrtbase::expm1f,     "expm1f")
 #pragma binding(ucrtbase::remainderf, "remainderf")
+// C99 7.12 `long double` variants: `long double` is `double` here, so
+// each binds to the double entry point.
+#pragma binding(msvcrt::logl, "log")
+#pragma binding(msvcrt::log10l, "log10")
+#pragma binding(ucrtbase::log2l, "log2")
+#pragma binding(ucrtbase::exp2l, "exp2")
+#pragma binding(msvcrt::expl, "exp")
+#pragma binding(ucrtbase::roundl, "round")
+#pragma binding(msvcrt::sinl, "sin")
+#pragma binding(msvcrt::cosl, "cos")
+#pragma binding(msvcrt::tanl, "tan")
+#pragma binding(msvcrt::atanl, "atan")
+#pragma binding(msvcrt::asinl, "asin")
+#pragma binding(msvcrt::acosl, "acos")
+#pragma binding(msvcrt::sinhl, "sinh")
+#pragma binding(msvcrt::coshl, "cosh")
+#pragma binding(msvcrt::tanhl, "tanh")
+#pragma binding(ucrtbase::asinhl, "asinh")
+#pragma binding(ucrtbase::acoshl, "acosh")
+#pragma binding(ucrtbase::atanhl, "atanh")
+#pragma binding(ucrtbase::tgammal, "tgamma")
+#pragma binding(ucrtbase::erfl, "erf")
+#pragma binding(ucrtbase::erfcl, "erfc")
+#pragma binding(ucrtbase::nearbyintl, "nearbyint")
+#pragma binding(ucrtbase::rintl, "rint")
+#pragma binding(ucrtbase::cbrtl, "cbrt")
+#pragma binding(ucrtbase::log1pl, "log1p")
+#pragma binding(ucrtbase::expm1l, "expm1")
+#pragma binding(msvcrt::sqrtl, "sqrt")
+#pragma binding(msvcrt::fabsl, "fabs")
+#pragma binding(msvcrt::floorl, "floor")
+#pragma binding(msvcrt::ceill, "ceil")
+#pragma binding(ucrtbase::truncl, "trunc")
+#pragma binding(ucrtbase::powl, "pow")
+#pragma binding(msvcrt::fmodl, "fmod")
+#pragma binding(msvcrt::atan2l, "atan2")
+#pragma binding(msvcrt::hypotl, "_hypot")
+#pragma binding(ucrtbase::fminl, "fmin")
+#pragma binding(ucrtbase::fmaxl, "fmax")
+#pragma binding(msvcrt::nextafterl, "_nextafter")
+#pragma binding(ucrtbase::remainderl, "remainder")
+#pragma binding(msvcrt::ldexpl, "ldexp")
+#pragma binding(ucrtbase::frexpl, "frexp")
+#pragma binding(msvcrt::modfl, "modf")
+#pragma binding(ucrtbase::ilogbl, "ilogb")
+#pragma binding(ucrtbase::lroundl, "lround")
+#pragma binding(ucrtbase::llroundl, "llround")
+#pragma binding(ucrtbase::lrintl, "lrint")
+#pragma binding(ucrtbase::llrintl, "llrint")
 #endif
 
 // IEEE-754 sentinel values. The c5 lexer accepts the typical
@@ -341,6 +492,9 @@ float exp2f(float x);
 #endif
 #ifndef HUGE_VALF
 #define HUGE_VALF INFINITY
+#endif
+#ifndef HUGE_VALL
+#define HUGE_VALL ((long double)INFINITY)
 #endif
 
 #ifndef M_PI
@@ -438,6 +592,7 @@ double sqrt(double x);
 double log(double x);
 double log10(double x);
 double log2(double x);
+double exp2(double x);
 double exp(double x);
 double pow(double base, double exp);
 double floor(double x);
@@ -463,11 +618,6 @@ double log1p(double x);
 double expm1(double x);
 double remainder(double x, double y);
 double fabs(double x);
-// C99 7.12.7.2 long-double form. c5 represents `long double` in binary64,
-// so the `double` function computes it exactly; the same holds for ldexpl.
-static inline long double fabsl(long double x) {
-    return fabs(x);
-}
 double fmod(double x, double y);
 // C99 7.12.7.3: hypot(x, y) = sqrt(x*x + y*y) without overflow for
 // representable results. C99 7.12.12.2 / 7.12.12.1: fmin / fmax return
@@ -508,10 +658,6 @@ static inline float scalbnf(float x, int n) {
 }
 static inline float scalblnf(float x, long n) {
     return (float) ldexp((double) x, (int) n);
-}
-// C99 7.12.6.6 long-double form.
-static inline long double ldexpl(long double x, int exp) {
-    return ldexp(x, exp);
 }
 // C99 7.12.6.4: frexp(x, *exp) splits x into a normalised
 // significand in [0.5, 1.0) and an integer exponent.
@@ -576,6 +722,80 @@ float remainderf(float x, float y);
 #pragma intrinsic("fmaf")
 double fma(double x, double y, double z);
 float fmaf(float x, float y, float z);
+
+// C99 7.12 `long double` variants.
+long double logl(long double x);
+long double log10l(long double x);
+long double log2l(long double x);
+long double exp2l(long double x);
+long double expl(long double x);
+long double roundl(long double x);
+long double sinl(long double x);
+long double cosl(long double x);
+long double tanl(long double x);
+long double atanl(long double x);
+long double asinl(long double x);
+long double acosl(long double x);
+long double sinhl(long double x);
+long double coshl(long double x);
+long double tanhl(long double x);
+long double asinhl(long double x);
+long double acoshl(long double x);
+long double atanhl(long double x);
+long double tgammal(long double x);
+long double erfl(long double x);
+long double erfcl(long double x);
+long double nearbyintl(long double x);
+long double rintl(long double x);
+long double cbrtl(long double x);
+long double log1pl(long double x);
+long double expm1l(long double x);
+long double sqrtl(long double x);
+long double fabsl(long double x);
+long double floorl(long double x);
+long double ceill(long double x);
+long double truncl(long double x);
+long double powl(long double x, long double y);
+long double fmodl(long double x, long double y);
+long double atan2l(long double x, long double y);
+long double hypotl(long double x, long double y);
+long double fminl(long double x, long double y);
+long double fmaxl(long double x, long double y);
+long double nextafterl(long double x, long double y);
+long double remainderl(long double x, long double y);
+long double ldexpl(long double x, int exp);
+long double frexpl(long double x, int *exp);
+long double modfl(long double x, long double *iptr);
+int ilogbl(long double x);
+long lroundl(long double x);
+long long llroundl(long double x);
+long lrintl(long double x);
+long long llrintl(long double x);
+#ifdef __linux__
+long double scalbnl(long double x, int n);
+long double scalblnl(long double x, long n);
+long double copysignl(long double x, long double y);
+long double fdiml(long double x, long double y);
+long double fmal(long double x, long double y, long double z);
+#else
+// The double forms below are header definitions; `long double` is
+// `double` here.
+static inline long double scalbnl(long double x, int n) {
+    return scalbn(x, n);
+}
+static inline long double scalblnl(long double x, long n) {
+    return scalbln(x, n);
+}
+static inline long double copysignl(long double x, long double y) {
+    return copysign(x, y);
+}
+static inline long double fdiml(long double x, long double y) {
+    return fdim(x, y);
+}
+static inline long double fmal(long double x, long double y, long double z) {
+    return fma(x, y, z);
+}
+#endif
 
 // Math functions that map to a single FP instruction lower to it
 // rather than a library call (C99 7.12.7.5 / 7.12.7.2 / 7.12.9.2 /

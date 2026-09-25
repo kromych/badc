@@ -2483,11 +2483,11 @@ mod tests {
     #[test]
     fn a_selector_names_one_row_by_name_alias_or_code() {
         use badc::diag::Level;
-        // `long-double-abi` carries the gcc alias `psabi` and the code
-        // B3006; all three spellings reach the same row.
-        for sel in ["long-double-abi", "psabi", "B3006"] {
+        // `attributes` carries the gcc alias `ignored-attributes` and the
+        // code B2008; all three spellings reach the same row.
+        for sel in ["attributes", "ignored-attributes", "B2008"] {
             assert_eq!(
-                level(&[&format!("-Wno-{sel}"), "a.c"], "long-double-abi"),
+                level(&[&format!("-Wno-{sel}"), "a.c"], "attributes"),
                 Level::Ignore,
                 "-Wno-{sel}"
             );

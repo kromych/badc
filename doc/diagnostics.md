@@ -66,7 +66,7 @@ regenerates.
 | B3003 | `return-type` | ignore | controllable | all | control reaches the end of a value-returning function |
 | B3004 | `too-few-arguments` | warning | controllable | default | a call passing fewer arguments than the prototype declares |
 | B3005 | `too-many-arguments` | warning | controllable | default | a call passing more arguments than the prototype declares |
-| B3006 | `long-double-abi` | warning | controllable | default | a `long double` argument passed in a format this target's ABI does not use |
+| B3006 | `long-double-abi (retired)` | warning | controllable | default | a `long double` argument passed in a format this target's ABI does not use |
 | B3007 | `dead-store` | ignore | controllable | - | a value assigned to a local and replaced before any read |
 | B3020 | `invalid-operands` | error | hard | - | an operator applied to operands its constraints reject, or a non-lvalue where an lvalue is required |
 | B3021 | `constant-expression` | error | hard | - | an expression that must be constant and is not, or one the compiler cannot evaluate at translation time |

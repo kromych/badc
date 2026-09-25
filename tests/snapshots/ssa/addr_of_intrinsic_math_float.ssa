@@ -1,6 +1,6 @@
-; --- SSA dump (ok=true) ent_pc=15 ---
+; --- SSA dump (ok=true) ent_pc=13 ---
 ; name=main
-fn ent_pc=15 n_params=0 variadic=false locals=0
+fn ent_pc=13 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -70,11 +70,11 @@ fn ent_pc=15 n_params=0 variadic=false locals=0
   block 10  start_pc=0
     v45  Imm(0)                                           -> x0
     v46  Imm(0)                                           -> x0
-    v47  ImmCode(ent_pc=16)                               -> x0
+    v47  ImmCode(ent_pc=14)                               -> x0
     v48  Imm(0)                                           -> x0
-    v49  ImmCode(ent_pc=17)                               -> x0
+    v49  ImmCode(ent_pc=15)                               -> x0
     v50  Imm(0)                                           -> x0
-    v51  ImmCode(ent_pc=18)                               -> x0
+    v51  ImmCode(ent_pc=16)                               -> x0
     v52  Imm(0)                                           -> x0
     v53  Imm(1117913088)                                  -> x0 [f32]
     v54  Imm(0)                                           -> x1
@@ -86,7 +86,7 @@ fn ent_pc=15 n_params=0 variadic=false locals=0
     v60  Imm(0)                                           -> x1
     v61  Imm(0)                                           -> x1
     v62  Imm(0)                                           -> x1 [f32]
-    v63  Call { target_pc=16, args=[v53], fixed_args=1, fp_return=true, fp_arg_mask=0x1 } -> d0 [f32]
+    v63  Call { target_pc=14, args=[v53], fixed_args=1, fp_return=true, fp_arg_mask=0x1 } -> d0 [f32]
     v64  Imm(1091567616)                                  -> x0 [f32]
     v65  Binop { op=fne, lhs=v63, rhs=v64 }               -> x0
     terminator Bz { cond=v65, target=b12, fall=b11 }   (exit_acc=v65)
@@ -100,7 +100,7 @@ fn ent_pc=15 n_params=0 variadic=false locals=0
     v70  Imm(0)                                           -> x0
     v71  Imm(0)                                           -> x0 [f32]
     v72  Imm(1086115021)                                  -> x0 [f32]
-    v73  Call { target_pc=17, args=[v72], fixed_args=1, fp_return=true, fp_arg_mask=0x1 } -> d0 [f32]
+    v73  Call { target_pc=15, args=[v72], fixed_args=1, fp_return=true, fp_arg_mask=0x1 } -> d0 [f32]
     v74  Imm(1084227584)                                  -> x0 [f32]
     v75  Binop { op=fne, lhs=v73, rhs=v74 }               -> x0
     terminator Bz { cond=v75, target=b14, fall=b13 }   (exit_acc=v75)
@@ -114,7 +114,7 @@ fn ent_pc=15 n_params=0 variadic=false locals=0
     v80  Imm(0)                                           -> x0
     v81  Imm(0)                                           -> x0 [f32]
     v82  Imm(1074161254)                                  -> x0 [f32]
-    v83  Call { target_pc=18, args=[v82], fixed_args=1, fp_return=true, fp_arg_mask=0x1 } -> d0 [f32]
+    v83  Call { target_pc=16, args=[v82], fixed_args=1, fp_return=true, fp_arg_mask=0x1 } -> d0 [f32]
     v84  Imm(1077936128)                                  -> x0 [f32]
     v85  Binop { op=fne, lhs=v83, rhs=v84 }               -> x0
     terminator Bz { cond=v85, target=b16, fall=b15 }   (exit_acc=v85)
@@ -142,23 +142,23 @@ fn ent_pc=15 n_params=0 variadic=false locals=0
   block 20  start_pc=0
     v97  Imm(0)                                           -> x0
     terminator Return(v97)   (exit_acc=v97)
-; --- SSA dump (ok=true) ent_pc=16 ---
+; --- SSA dump (ok=true) ent_pc=14 ---
 ; name=__c5_sys_sqrtf
-fn ent_pc=16 n_params=0 variadic=false locals=0
+fn ent_pc=14 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     terminator TailExt(47)
-; --- SSA dump (ok=true) ent_pc=17 ---
+; --- SSA dump (ok=true) ent_pc=15 ---
 ; name=__c5_sys_floorf
-fn ent_pc=17 n_params=0 variadic=false locals=0
+fn ent_pc=15 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     terminator TailExt(49)
-; --- SSA dump (ok=true) ent_pc=18 ---
+; --- SSA dump (ok=true) ent_pc=16 ---
 ; name=__c5_sys_ceilf
-fn ent_pc=18 n_params=0 variadic=false locals=0
+fn ent_pc=16 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -

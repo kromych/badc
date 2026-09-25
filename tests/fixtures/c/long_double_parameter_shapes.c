@@ -1,9 +1,8 @@
 // A `long double` value reaches a callee unchanged through each way a
 // parameter arrives: an FP argument register, the stack past the FP
-// registers, the bundled `fabsl`, and `va_arg`. The exit code names the
+// registers, a conditional on it, and `va_arg`. The exit code names the
 // first check that fails.
 
-#include <math.h>
 #include <stdarg.h>
 
 #define NOINLINE __attribute__((noinline))
@@ -11,6 +10,8 @@
 NOINLINE static double ident(long double v) { return (double)v; }
 
 NOINLINE static long double twice(long double v) { return v + v; }
+
+NOINLINE static long double magnitude(long double v) { return v < 0 ? -v : v; }
 
 // Eight doubles take the FP argument registers; `x` goes past them.
 NOINLINE static double ninth(double d0, double d1, double d2, double d3, double d4, double d5,
@@ -64,7 +65,7 @@ int main(void)
     if (ninth(1, 2, 3, 4, 5, 6, 7, 8, 0.5L) != 36.5) return 3;
     if (mixed(1, 2.0L, 3.0, 4.0L) != 10.0) return 4;
     if (through_address(three) != 3.0) return 5;
-    if ((double)fabsl(neg) != 2.5) return 6;
+    if ((double)magnitude(neg) != 2.5) return 6;
     if (vsum(3, (long double)1.0, (long double)2.5, (long double)4.0) != 7.5) return 7;
     if (vmixed(1, 0.5, (long double)2.0, 3, (long double)4.0) != 10.5) return 8;
     // Past the FP argument registers the variadic values go on the stack.

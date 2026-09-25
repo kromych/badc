@@ -71,9 +71,10 @@ One consequence remains:
   not round-trip -- `(unsigned long long)(long double)((1ULL<<53)+1)`
   loses the low bit where the platform types keep it. The stored object
   holds the full significand of its format, but a value that passes
-  through the compute path has already been rounded. The rest of C99
-  7.12's `l` family is not declared: `<math.h>` binds `ldexpl` and
-  `fabsl` to their `double` counterparts.
+  through the compute path has already been rounded. `<math.h>` binds
+  C99 7.12's `l` functions to libm's `l` entry points on Linux, so the
+  library computes at the format's precision, and the caller rounds the
+  result to binary64 as it reads it.
 
 TODO: extended-precision `long double`.
 

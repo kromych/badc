@@ -100,7 +100,9 @@ fn a_group_selector_raises_its_rows_only() {
         let mut config = Config::new();
         config.enable_group(group);
         for row in rows() {
-            let expected = if row.class == Class::Controllable && row.groups.contains(group) {
+            let expected = if row.status == Status::Retired {
+                Level::Ignore
+            } else if row.class == Class::Controllable && row.groups.contains(group) {
                 row.default_level.max(Level::Warning)
             } else {
                 row.default_level

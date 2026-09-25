@@ -357,21 +357,6 @@ impl Target {
         }
     }
 
-    /// The `long double` format the target's platform ABI moves across
-    /// a call, when badc does not move it the same way; `None` when the
-    /// two agree, as they do on every target. Read by the libc-argument
-    /// diagnostic; independent of [`Self::long_double`], which answers
-    /// what a declared object stores.
-    pub fn platform_long_double_abi(self) -> Option<&'static str> {
-        match self {
-            Target::LinuxX64
-            | Target::LinuxAarch64
-            | Target::MacOSAarch64
-            | Target::WindowsX64
-            | Target::WindowsAarch64 => None,
-        }
-    }
-
     /// In-memory format a declared `long double` object takes: x87 80-bit
     /// in 16 bytes on System V x86-64, IEEE binary128 on AArch64 Linux,
     /// binary64 on macOS/arm64 and both Windows targets.

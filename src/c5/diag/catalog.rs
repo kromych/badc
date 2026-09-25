@@ -145,7 +145,7 @@ catalog! {
         [DEFAULT], Live,
         "a call passing more arguments than the prototype declares";
     3006, "long-double-abi", ["psabi"], Warning, Controllable,
-        [DEFAULT], Live,
+        [DEFAULT], Retired,
         "a `long double` argument passed in a format this target's ABI does not use";
     3007, "dead-store", [], Ignore, Controllable,
         [], Live,

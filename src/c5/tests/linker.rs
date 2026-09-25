@@ -5064,38 +5064,51 @@ fn windows_hypotf_imports_underscored_ucrtbase_export() {
     }
 }
 
-/// `<math.h>` defines `fabsl` and `ldexpl` over `fabs` and `ldexp`, exact for
-/// c5's binary64 `long double`; no long-double library entry point is called.
+/// `<math.h>` binds C99 7.12's `long double` functions to libm's `l` entry
+/// points on Linux, where the type is wider than `double`, and to the
+/// `double` entry points on macOS and Windows, where it is `double`. The
+/// unit defines none of them.
 #[test]
-fn fabsl_and_ldexpl_are_defined_over_the_double_functions() {
-    use crate::c5::Target;
-    use crate::c5::ir::Inst;
+fn long_double_math_binds_the_platform_entry_points() {
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
     let src = "#include <math.h>\n\
-               int main(void) { volatile long double x = -1.5L; return (int) (fabsl(x) + ldexpl(x, 1)); }\n";
-    for target in Target::ALL {
+               #pragma export(use_l)\n\
+               long double use_l(long double x, int e)\n\
+               { return fabsl(x) + ldexpl(x, e) + sinl(x) + powl(x, x) + HUGE_VALL; }\n";
+    let linux = ["fabsl", "ldexpl", "sinl", "powl"];
+    for (target, names) in [
+        (Target::LinuxX64, linux),
+        (Target::LinuxAarch64, linux),
+        (Target::MacOSAarch64, ["_fabs", "_ldexp", "_sin", "_pow"]),
+        (Target::WindowsX64, ["fabs", "ldexp", "sin", "pow"]),
+        (Target::WindowsAarch64, ["fabs", "ldexp", "sin", "pow"]),
+    ] {
         let program = Compiler::with_target(src.to_string(), target)
             .compile()
             .unwrap_or_else(|e| panic!("{target:?}: {e}"));
         let funcs =
             crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
                 .expect("ssa");
-        let insts = |name: &str| {
-            let f = funcs.iter().find(|f| f.name == name);
-            f.unwrap_or_else(|| panic!("{target:?}: `{name}` is not defined in the unit"))
-                .insts
-                .iter()
-        };
-        let internal_calls = insts("main")
-            .filter(|i| matches!(i, Inst::Call { .. }))
-            .count();
-        assert_eq!(
-            internal_calls, 2,
-            "{target:?}: `main` calls both definitions"
-        );
         assert!(
-            insts("ldexpl").any(|i| matches!(i, Inst::CallExt { .. })),
-            "{target:?}: `ldexpl` calls the `ldexp` export"
+            funcs.iter().all(|f| f.name == "use_l"),
+            "{target:?}: the unit defines only `use_l`"
         );
+        let obj = emit_native_with_options(
+            &program,
+            target,
+            NativeOptions {
+                output_kind: OutputKind::Relocatable,
+                ..Default::default()
+            },
+        )
+        .expect("emit object");
+        let contains = |needle: &[u8]| obj.windows(needle.len()).any(|w| w == needle);
+        for name in names {
+            assert!(
+                contains(alloc::format!("\0{name}\0").as_bytes()),
+                "{target:?}: the call binds to `{name}`"
+            );
+        }
     }
 }
 

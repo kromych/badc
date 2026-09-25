@@ -1402,7 +1402,7 @@ fn long_double_storage_round_trips_through_its_abi_format() {
 }
 
 /// A `long double` parameter reads back what its caller passed on every
-/// target, through a register, the stack, `fabsl` or `va_arg`.
+/// target, through a register, the stack or `va_arg`.
 #[test]
 fn long_double_parameters_read_back_what_the_caller_passed() {
     use super::Vm;
@@ -1466,53 +1466,6 @@ fn long_double_carries_only_the_binary64_significand() {
         7,
         "2^53 is representable and must round-trip"
     );
-}
-
-/// A `long double` handed to a platform-libc import is read by the
-/// callee in the target ABI's format, which is the one badc passes on
-/// every target: the x87 image on linux-x64, binary128 on linux-aarch64,
-/// binary64 where the type is `double`. No argument is announced.
-#[test]
-fn long_double_libc_argument_draws_no_abi_warning() {
-    use crate::Compiler;
-    use crate::Target;
-    let warns = |src: &str, t: Target| -> alloc::vec::Vec<alloc::string::String> {
-        Compiler::with_target(super::with_prelude(src), t)
-            .compile()
-            .unwrap()
-            .warnings
-            .iter()
-            .map(|w| w.to_string())
-            .collect()
-    };
-    let src = "int main(void){ long double x = 1.0L; double d = 2.0;\n\
-               printf(\"%Lf\\n\", x); printf(\"%f\\n\", d); return 0; }";
-    for t in [
-        Target::LinuxX64,
-        Target::LinuxAarch64,
-        Target::MacOSAarch64,
-        Target::WindowsX64,
-        Target::WindowsAarch64,
-    ] {
-        let ws = warns(src, t);
-        assert!(
-            !ws.iter()
-                .any(|w| w.to_string().contains("`long double` argument")),
-            "{t:?} passes long double as the platform does and must not warn, got: {ws:?}"
-        );
-    }
-    // <math.h> defines the `l` entry points over their `double` counterparts,
-    // so no `long double` reaches a platform callee and nothing may warn.
-    let prototyped = "#include <math.h>\n\
-                      int main(void){ return (int)ldexpl((long double)1.0, 53); }";
-    for t in [Target::LinuxX64, Target::LinuxAarch64] {
-        let ws = warns(prototyped, t);
-        assert!(
-            !ws.iter()
-                .any(|w| w.to_string().contains("`long double` argument")),
-            "{t:?}: a `double` parameter takes the value exactly and must not warn, got: {ws:?}"
-        );
-    }
 }
 
 /// A failed unit's error carries the diagnostics reported before the

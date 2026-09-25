@@ -69,6 +69,7 @@
 /// that exercise those paths run end-to-end.
 pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("neon_raid6_checksum.c", 0),
+    ("long_double_math.c", 0),
     ("long_double_call_shapes.c", 0),
     ("long_double_usual_conversions.c", 0),
     ("long_double_parameter_shapes.c", 0),
@@ -1239,6 +1240,7 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
 /// same fixtures; if they drift, one of them has a bug.
 pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("neon_raid6_checksum.c", 0),
+    ("long_double_math.c", 0),
     ("long_double_libc_return.c", 0),
     ("long_double_call_shapes.c", 0),
     ("long_double_usual_conversions.c", 0),
@@ -2104,6 +2106,7 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
 
 pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("neon_raid6_checksum.c", 0),
+    ("long_double_math.c", 0),
     ("long_double_libc_return.c", 0),
     ("long_double_call_shapes.c", 0),
     ("long_double_usual_conversions.c", 0),
@@ -2949,6 +2952,7 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
 /// POSIX-only semantics.
 pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("neon_raid6_checksum.c", 0),
+    ("long_double_math.c", 0),
     ("long_double_call_shapes.c", 0),
     ("long_double_usual_conversions.c", 0),
     ("long_double_parameter_shapes.c", 0),
@@ -3575,6 +3579,7 @@ pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
 /// are arch-independent.
 pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("neon_raid6_checksum.c", 0),
+    ("long_double_math.c", 0),
     ("long_double_call_shapes.c", 0),
     ("long_double_usual_conversions.c", 0),
     ("long_double_parameter_shapes.c", 0),
@@ -4142,6 +4147,7 @@ pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
 
 pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
     ("neon_raid6_checksum.c", 0),
+    ("long_double_math.c", 0),
     ("long_double_call_shapes.c", 0),
     ("long_double_usual_conversions.c", 0),
     ("long_double_parameter_shapes.c", 0),

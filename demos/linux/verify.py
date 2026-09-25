@@ -134,7 +134,10 @@ ARCHES = {
         # is compiled for; `Haswell-noTSX` carries it without `max`'s LA57.
         "machine": ["-cpu", "Haswell-noTSX"],
         "console": "ttyS0",
-        "extra_append": [],
+        # Linux 7.1's TSC watchdog can deadlock an emulated boot: its skew check
+        # waits with IRQs off on a timeout read from jiffies. The kernel skips
+        # the watchdog itself on a CPU with an invariant TSC, which TCG lacks.
+        "extra_append": ["tsc=nowatchdog"],
         # The x86 boot path draws its displacement from RDRAND / the TSC /
         # the i8254 counter and takes no seed from outside; see kaslr.py.
         "kaslr_seed_dtb": False,

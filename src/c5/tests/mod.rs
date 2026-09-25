@@ -1026,6 +1026,15 @@ pub fn run_str(src: &str) -> i64 {
         .unwrap()
 }
 
+/// [`run_str`] for an explicit target, whose assembler syntax an inline
+/// asm template is written in.
+pub fn run_str_for(src: &str, target: crate::Target) -> i64 {
+    let program = Compiler::with_options(with_prelude(src), target, Default::default())
+        .compile()
+        .unwrap();
+    Vm::new(program).with_pointer_tracking().run().unwrap()
+}
+
 /// Compile + run a fixture.
 pub fn run_fixture(name: &str) -> i64 {
     run_str(&load_fixture(name))

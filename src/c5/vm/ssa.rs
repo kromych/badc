@@ -19,6 +19,8 @@ use super::super::ir::{
 };
 use super::eval::{self, round_if_f32};
 
+mod asm_a64;
+
 /// `Inst::ImmCode` results are tagged with this bit set so
 /// `Inst::CallIndirect` can distinguish a function pointer from
 /// a real memory address. The low bits hold the callee's
@@ -389,10 +391,12 @@ struct Program<'a> {
     /// the TLS block is appended onto the data segment per C11
     /// 7.5p1 (single-thread `_Thread_local` storage duration).
     tls_base: usize,
+    /// The inline asm templates are AArch64's, not x86-64's.
+    aarch64: bool,
 }
 
 impl<'a> Program<'a> {
-    fn new(funcs: &'a [FunctionSsa]) -> Self {
+    fn new(funcs: &'a [FunctionSsa], target: crate::c5::codegen::Target) -> Self {
         let ent_pc_to_idx = funcs
             .iter()
             .enumerate()
@@ -403,6 +407,7 @@ impl<'a> Program<'a> {
             ent_pc_to_idx,
             binding_names: &[],
             tls_base: 0,
+            aarch64: target.is_aarch64(),
         }
     }
 
@@ -522,7 +527,8 @@ impl Frame<'_> {
 pub(super) fn run_ssa(func: &FunctionSsa) -> Result<i64, C5Error> {
     let funcs = core::slice::from_ref(func);
     let mut host = NullHost;
-    run_program(funcs, &[], &[], func.ent_pc, &mut host)
+    let target = crate::c5::codegen::Target::host();
+    run_program(funcs, &[], &[], func.ent_pc, &mut host, target)
 }
 
 /// Multi-function entry: pick the function at `entry_pc` and run
@@ -538,8 +544,9 @@ pub(super) fn run_program<H: Host>(
     binding_names: &[alloc::string::String],
     entry_pc: usize,
     host: &mut H,
+    target: crate::c5::codegen::Target,
 ) -> Result<i64, C5Error> {
-    run_program_with_args(funcs, data, binding_names, 0, entry_pc, host, &[])
+    run_program_with_args(funcs, data, binding_names, 0, entry_pc, host, &[], target)
 }
 
 /// Multi-function entry that stages `args` as `argv` for the
@@ -549,6 +556,7 @@ pub(super) fn run_program<H: Host>(
 /// (frame slot 2) and `argv` at param slot 1 (frame slot 3).
 /// When `args` is empty both pass through as 0; C99 5.1.2.2.1
 /// allows that shape for a hosted program.
+#[allow(clippy::too_many_arguments)]
 pub(super) fn run_program_with_args<H: Host>(
     funcs: &[FunctionSsa],
     data: &[u8],
@@ -557,6 +565,7 @@ pub(super) fn run_program_with_args<H: Host>(
     entry_pc: usize,
     host: &mut H,
     args: &[alloc::string::String],
+    target: crate::c5::codegen::Target,
 ) -> Result<i64, C5Error> {
     run_program_with_args_tracked(
         funcs,
@@ -569,6 +578,7 @@ pub(super) fn run_program_with_args<H: Host>(
         false,
         &[],
         &[],
+        target,
     )
 }
 
@@ -588,8 +598,9 @@ pub(super) fn run_program_with_args_tracked<H: Host>(
     track_pointers: bool,
     init_pcs: &[usize],
     fini_pcs: &[usize],
+    target: crate::c5::codegen::Target,
 ) -> Result<i64, C5Error> {
-    let prog = Program::new(funcs)
+    let prog = Program::new(funcs, target)
         .with_bindings(binding_names)
         .with_tls_base(tls_base);
     let (data_with_argv, argc, argv_addr) = stage_argv(data, args);
@@ -1417,7 +1428,11 @@ fn run_inst<H: Host>(
             return Ok(());
         }
         Inst::InlineAsm { asm, args } => {
-            run_inline_asm(mem, frame, asm, args, v)?;
+            if prog.aarch64 {
+                asm_a64::run(mem, frame, asm, args, v)?;
+            } else {
+                run_inline_asm(mem, frame, asm, args, v)?;
+            }
             return Ok(());
         }
         Inst::LifetimeEnd(_) => {
@@ -3568,6 +3583,7 @@ mod tests {
             &binding_names,
             program.entry_pc,
             &mut host,
+            super::super::super::Target::MacOSAarch64,
         )
         .expect("ssa run")
     }
@@ -3626,8 +3642,15 @@ mod tests {
         )
         .expect("ssa lift");
         let mut host = super::super::super::host::StdHost::default();
-        let err = run_program(&funcs, &program.data, &[], program.entry_pc, &mut host)
-            .expect_err("recursion past the stack region must fail");
+        let err = run_program(
+            &funcs,
+            &program.data,
+            &[],
+            program.entry_pc,
+            &mut host,
+            super::super::super::Target::MacOSAarch64,
+        )
+        .expect_err("recursion past the stack region must fail");
         match err {
             crate::C5Error::Runtime(m) => assert!(m.contains("stack overflow"), "{m}"),
             other => panic!("expected Runtime, got {other:?}"),
@@ -3848,6 +3871,7 @@ mod tests {
             &binding_names,
             program.entry_pc,
             &mut host,
+            super::super::super::Target::MacOSAarch64,
         )
         .expect("ssa run");
         assert_eq!(rc, 'Z' as i64);
@@ -3929,6 +3953,7 @@ mod tests {
             &binding_names,
             program.entry_pc,
             &mut host,
+            super::super::super::Target::MacOSAarch64,
         )
         .expect_err("strlen should land in the unimplemented arm");
         match err {

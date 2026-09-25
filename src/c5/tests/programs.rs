@@ -3,6 +3,7 @@
 
 use super::compile_str;
 use super::run_fixture;
+use super::run_fixture_for;
 use super::run_str;
 
 #[test]
@@ -254,7 +255,10 @@ fn inline_asm_memory_operand() {
     // interlocked `lock cmpxchg` / `lock xadd` (edk2 BaseSynchronizationLib)
     // read and write the memory object, not a register (a `lock` on a
     // register destination is an invalid encoding that faults at runtime).
-    assert_eq!(run_fixture("inline_asm_memory_operand.c"), 0);
+    assert_eq!(
+        run_fixture_for("inline_asm_memory_operand.c", crate::Target::LinuxX64),
+        0
+    );
 }
 
 #[test]
@@ -265,7 +269,13 @@ fn inline_asm_x64_callee_saved_operands() {
     // usable GP file, including rbx / r12..r15, not just the caller-saved
     // half, or it reports a spurious "out of registers"; the emitter already
     // saves and restores each operand register around the block.
-    assert_eq!(run_fixture("inline_asm_x64_callee_saved_operands.c"), 0);
+    assert_eq!(
+        run_fixture_for(
+            "inline_asm_x64_callee_saved_operands.c",
+            crate::Target::LinuxX64
+        ),
+        0
+    );
 }
 
 #[test]
@@ -412,7 +422,10 @@ fn rdtsc_host_ticks() {
     // The x86-64 `rdtsc` inline-asm shape (a common host-tick counter):
     // two register-tied outputs, no inputs. The VM zeroes the counter (no
     // host clock); native x86-64 emits `rdtsc`.
-    assert_eq!(run_fixture("rdtsc_host_ticks.c"), 0);
+    assert_eq!(
+        run_fixture_for("rdtsc_host_ticks.c", crate::Target::LinuxX64),
+        0
+    );
 }
 
 #[test]
@@ -420,7 +433,13 @@ fn inline_asm_fixed_reg_output_width() {
     // A fixed-register output stores back at the width of its C object:
     // a `long` operand of a 32-bit instruction takes all eight bytes, a
     // 16-bit operand takes two and leaves its neighbours alone.
-    assert_eq!(run_fixture("inline_asm_fixed_reg_output_width.c"), 0);
+    assert_eq!(
+        run_fixture_for(
+            "inline_asm_fixed_reg_output_width.c",
+            crate::Target::LinuxX64
+        ),
+        0
+    );
 }
 
 #[test]
@@ -428,7 +447,10 @@ fn cpuid_partial_outputs() {
     // A `cpuid` asm with one output and the remaining implicit outputs
     // listed as clobbers takes the same generic extended-asm path as the
     // full four-output form; the VM zeroes every register cpuid defines.
-    assert_eq!(run_fixture("cpuid_partial_outputs.c"), 0);
+    assert_eq!(
+        run_fixture_for("cpuid_partial_outputs.c", crate::Target::LinuxX64),
+        0
+    );
 }
 
 #[test]
@@ -436,7 +458,10 @@ fn cpuid_xgetbv_output_width() {
     // `cpuid` / `xgetbv` outputs store back at the width of the C
     // operand: a `long` output takes all eight bytes (the instruction
     // clears the register's upper half), an `unsigned` output four.
-    assert_eq!(run_fixture("cpuid_xgetbv_output_width.c"), 0);
+    assert_eq!(
+        run_fixture_for("cpuid_xgetbv_output_width.c", crate::Target::LinuxX64),
+        0
+    );
 }
 
 #[test]
@@ -445,6 +470,70 @@ fn get_cpuid_leaf_checks() {
     // __get_cpuid_max, select the extended maximum for leaves with bit 31 set,
     // and leave the outputs untouched when they reject one.
     assert_eq!(run_fixture("get_cpuid_leaf_checks.c"), 0);
+}
+
+/// The interpreter runs an inline asm template in the assembler syntax of
+/// the target the program was compiled for: AArch64 integer instructions on
+/// the general registers, x86-64's on its register model. Each fixture
+/// computes under both targets the value its native build returns.
+#[test]
+fn the_interpreter_runs_inline_asm_in_the_targets_syntax() {
+    for (name, want) in [
+        ("inline_asm_a64_integer_ops.c", 0),
+        ("asm_register_outputs.c", 0),
+        ("file_scope_asm_decls.c", 0),
+        ("inline_asm_a64_bitfield.c", 42),
+        ("inline_asm_a64_hvc_inout.c", 0),
+        ("inline_asm_clobber_probe.c", 42),
+        ("inline_asm_constraint_alternatives.c", 42),
+        ("inline_asm_hint.c", 0),
+        ("inline_asm_named_operands.c", 42),
+        ("inline_asm_reg_var.c", 42),
+        ("inline_asm_reg_var_inout.c", 42),
+        ("inline_asm_sp_reg_var.c", 42),
+        ("register_var_typeof_stmt_expr.c", 0),
+    ] {
+        for target in [crate::Target::LinuxAarch64, crate::Target::LinuxX64] {
+            assert_eq!(run_fixture_for(name, target), want, "{name} for {target:?}");
+        }
+    }
+}
+
+/// An AArch64 template the interpreter does not model is refused with a
+/// diagnostic naming what it met, never evaluated as another architecture's.
+#[test]
+fn the_interpreter_refuses_an_unmodelled_aarch64_template() {
+    use crate::{Compiler, Target};
+    for (template, what) in [
+        (
+            "cmp %1, #0\n\tcset %w0, eq",
+            "`cmp`, which uses the condition flags,",
+        ),
+        ("ldr %0, [%1]", "`ldr`"),
+        ("mrs %0, midr_el1", "`mrs`"),
+        ("mov %0, sp", "the stack pointer"),
+        ("dup v0.16b, %w1\n\tmov %0, %1", "`dup`"),
+        (
+            ".inst 0x8b010000\n\tmov %0, %1",
+            "an instruction word other than a hint or a barrier",
+        ),
+        ("b 1f\n1:\tmov %0, %1", "`b`"),
+    ] {
+        let src = format!(
+            "int main(void) {{ unsigned long x = 1, y; \
+             __asm__(\"{template}\" : \"=r\"(y) : \"r\"(&x)); return (int)y; }}"
+        );
+        let program = Compiler::with_options(src.clone(), Target::LinuxAarch64, Default::default())
+            .compile()
+            .expect(&src);
+        let err = super::Vm::new(program).run().expect_err(&src).to_string();
+        assert!(
+            err.contains(&format!(
+                "inline asm: {what} is not supported under --interp"
+            )),
+            "{src}: {err}"
+        );
+    }
 }
 
 #[test]
@@ -2979,14 +3068,19 @@ fn inline_asm_raw_bytes() {
     // Raw machine bytes emitted from a template (`.byte` directive and the
     // bare hex-byte run) encode a no-op per target; the interpreter models
     // them as opaque and the surrounding computation is unaffected.
-    assert_eq!(run_fixture("inline_asm_raw_bytes.c"), 0);
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        assert_eq!(run_fixture_for("inline_asm_raw_bytes.c", target), 0);
+    }
 }
 
 #[test]
 fn inline_asm_x64_align_padding_opaque() {
     // `.align` / `.p2align` / `.balign` padding in the code stream has no
     // modelled effect; the surrounding computation is unaffected.
-    assert_eq!(run_fixture("inline_asm_x64_align.c"), 42);
+    assert_eq!(
+        run_fixture_for("inline_asm_x64_align.c", crate::Target::LinuxX64),
+        42
+    );
 }
 
 #[test]
@@ -6230,7 +6324,7 @@ fn inline_asm_byte_width_keeps_upper_bits() {
             return 42;
         }
     ";
-    assert_eq!(run_str(src), 42);
+    assert_eq!(super::run_str_for(src, crate::Target::LinuxX64), 42);
 }
 
 #[test]
@@ -6251,7 +6345,7 @@ fn inline_asm_shld_double_shift() {
             return got == want ? 42 : 1;
         }
     ";
-    assert_eq!(run_str(src), 42);
+    assert_eq!(super::run_str_for(src, crate::Target::LinuxX64), 42);
 }
 
 #[test]
@@ -6269,7 +6363,7 @@ fn inline_asm_shrd_double_shift() {
             return got == want ? 42 : 1;
         }
     ";
-    assert_eq!(run_str(src), 42);
+    assert_eq!(super::run_str_for(src, crate::Target::LinuxX64), 42);
 }
 
 #[test]
@@ -6286,7 +6380,7 @@ fn inline_asm_bswap_matching_constraint() {
             return bswap32(x) == 0x44332211u ? 42 : 1;
         }
     ";
-    assert_eq!(run_str(src), 42);
+    assert_eq!(super::run_str_for(src, crate::Target::LinuxX64), 42);
 }
 
 #[test]
@@ -6331,7 +6425,7 @@ fn inline_asm_bswap_size_modifier() {
             return bswap64(x) == 0x0807060504030201ULL ? 42 : 1;
         }
     ";
-    assert_eq!(run_str(src), 42);
+    assert_eq!(super::run_str_for(src, crate::Target::LinuxX64), 42);
 }
 
 #[test]
@@ -6352,7 +6446,7 @@ fn inline_asm_rdtscp_sequence_fixed_regs() {
             return rdtscp_read() == 0 ? 42 : 1;
         }
     ";
-    assert_eq!(run_str(src), 42);
+    assert_eq!(super::run_str_for(src, crate::Target::LinuxX64), 42);
 }
 
 #[test]

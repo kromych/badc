@@ -2193,6 +2193,59 @@ fn pointer_arithmetic_rejects_an_incomplete_pointee() {
     assert_eq!(Vm::new(program).run().unwrap(), 8, "{src}");
 }
 
+/// C99 6.5.3.2p3: the address of an array-typed lvalue is a pointer to
+/// that array type. A row of a multi-dimensional array, an array member
+/// and a row of one, a row of a pointer to an array and the array `*p`
+/// reaches, a string literal and a compound literal each address as their
+/// array type, so a further subscript steps by the row, `sizeof` and
+/// `typeof` of the pointee see the array, and the address compares equal
+/// to the arithmetic that reaches it. A row selected by `*` leaves no
+/// shape of the whole array behind, so `typeof(*m)` is the row, and an
+/// operator other than a subscript or a member access leaves none at all:
+/// `typeof(a - b)` is the difference's type, `sizeof(p = arr)` a pointer's.
+/// An array parameter is a pointer (6.7.5.3p7), so its address is a pointer
+/// to a pointer.
+#[test]
+fn the_address_of_an_array_lvalue_is_a_pointer_to_the_array() {
+    use super::Vm;
+    use crate::Compiler;
+    let src = "static int m[5][2] = {{1, 2}, {3, 4}};\n\
+               static int t[2][3][4];\n\
+               struct S { int a[3]; int mm[2][3]; int (*pa)[3]; };\n\
+               int (*pa)[2] = m;\n\
+               int (*p3)[3][4] = t;\n\
+               static int f(int p[3], int r[2][3][4]) {\n\
+               \treturn (sizeof(*&p) == sizeof(int *) && (&p)[0] == p)\n\
+               \t\t+ 2 * ((&r[1])[0][2][3] == 42 && sizeof(*&r[1][2]) == sizeof(int[4]));\n\
+               }\n\
+               int main(void) {\n\
+               \tstruct S s = {{1, 2, 3}, {{1, 2, 3}, {4, 5, 6}}, 0};\n\
+               \tint bits = 0;\n\
+               \ts.pa = s.mm;\n\
+               \tt[1][2][3] = 42;\n\
+               \tbits |= ((&m[1])[0][1] == 4 && (*&m[1])[1] == 4) << 0;\n\
+               \tbits |= (sizeof(*&m[1]) == sizeof(int[2]) && sizeof(*&t[1]) == sizeof(int[3][4])\n\
+               \t\t&& sizeof(*&t[1][2]) == sizeof(int[4])) << 1;\n\
+               \tbits |= ((&t[1])[0][2][3] == 42 && (&t[1][2])[0][3] == 42) << 2;\n\
+               \tbits |= (sizeof(*&*m) == sizeof(int[2]) && sizeof(__typeof__(*m)) == sizeof(int[2])) << 3;\n\
+               \tbits |= ((&s.mm[1])[0][2] == 6 && sizeof(*&s.mm[1]) == sizeof(int[3])\n\
+               \t\t&& (&s.pa[1])[0][1] == 5 && (&s.a)[0][2] == 3) << 4;\n\
+               \tbits |= ((&*pa)[1][0] == 3 && (&pa[1])[0][1] == 4 && sizeof(*&p3[1][1]) == sizeof(int[4])) << 5;\n\
+               \tbits |= (&m[1] == &m[0] + 1 && &m[1] - &m[0] == 1\n\
+               \t\t&& (char *)(&m[0] + 1) - (char *)m == sizeof(int[2])) << 6;\n\
+               \tbits |= (sizeof(*&\"abc\") == 4 && (&\"abc\")[0][2] == 'c'\n\
+               \t\t&& sizeof(*&(int[]){1, 2, 3}) == sizeof(int[3])) << 7;\n\
+               \tbits |= (__builtin_types_compatible_p(__typeof__(&m[1]), int (*)[2])\n\
+               \t\t&& sizeof(!m) == sizeof(int)) << 8;\n\
+               \tbits |= f(m[0], t) << 9;\n\
+               \tbits |= (sizeof(__typeof__(m[0] - m[1])) == sizeof(m[0] - m[1]) && sizeof(pa = m) == sizeof(int (*)[2])\n\
+               \t\t&& sizeof(__typeof__(m[0] + 1)) == sizeof(int *) && sizeof(!m) == sizeof(int)) << 11;\n\
+               \treturn bits;\n\
+               }\n";
+    let program = Compiler::new(src.to_string()).compile().expect(src);
+    assert_eq!(Vm::new(program).run().unwrap(), 0xfff, "{src}");
+}
+
 /// C99 6.6p6: a context that requires an integer constant expression -- a
 /// `case` label or range, an enumerator, an array size, a bit-field width,
 /// a designator, `_Alignas` and the C11 `_Static_assert` -- rejects one

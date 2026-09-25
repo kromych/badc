@@ -143,8 +143,7 @@ impl Compiler {
                 had_paren = false;
             }
             let lev = Token::Inc as i64;
-            self.pending.last_array_decay_size = 0;
-            self.pending.last_array_decay_bytes = 0;
+            self.drop_operand_array_decay();
             self.expr_or_void(lev)?;
             let array_count = self.pending.last_array_decay_size;
             let array_bytes = self.pending.last_array_decay_bytes;
@@ -153,8 +152,7 @@ impl Compiler {
             self.next_ent_pc = saved_text_len;
             self.clear_recent_emits();
             self.code_reloc_sym_idx.truncate(saved_code_reloc_sym_idx);
-            self.pending.last_array_decay_size = 0;
-            self.pending.last_array_decay_bytes = 0;
+            self.drop_operand_array_decay();
             if function {
                 self.function_type_layout(true)
             } else if array_bytes > 0 {
@@ -206,8 +204,7 @@ impl Compiler {
         let saved_reloc = self.code_reloc_sym_idx.len();
         let saved_acc = self.ast_acc.take();
         let vstack_depth = self.ast_vstack.len();
-        self.pending.last_array_decay_size = 0;
-        self.pending.last_array_decay_bytes = 0;
+        self.drop_operand_array_decay();
         self.pending.object_size_operands += 1;
         let parsed = self.expr(Token::Assign as i64);
         self.pending.object_size_operands -= 1;
@@ -218,8 +215,7 @@ impl Compiler {
         self.code_reloc_sym_idx.truncate(saved_reloc);
         self.ast_vstack.truncate(vstack_depth);
         self.ast_acc = saved_acc;
-        self.pending.last_array_decay_size = 0;
-        self.pending.last_array_decay_bytes = 0;
+        self.drop_operand_array_decay();
         self.ty = saved_ty;
         if self.lex.tk != ',' {
             return Err(self.compile_err(Code::SYNTAX, "`,` expected in `__builtin_object_size`"));

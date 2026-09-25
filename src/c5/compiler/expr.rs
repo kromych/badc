@@ -1263,7 +1263,7 @@ impl Compiler {
     /// so `sizeof` / `typeof` of the result read the result type, not the
     /// operand's array shape (C99 6.3.2.1p3). Mirrors the cast and binary-
     /// operator sites.
-    fn drop_operand_array_decay(&mut self) {
+    pub(super) fn drop_operand_array_decay(&mut self) {
         self.pending.last_array_decay_size = 0;
         self.pending.last_array_decay_bytes = 0;
         self.pending.last_array_decay_dims.clear();
@@ -1293,10 +1293,11 @@ impl Compiler {
     /// loop, except a call on a bare identifier, which the identifier arm
     /// takes so it can read the callee's declaration.
     fn parse_unary(&mut self) -> Result<(), C5Error> {
-        // A fresh operand designates no object until one of the arms
-        // below says so; the arms that pass an operand's designator
-        // through are the ones listed here.
+        // A fresh operand designates no object and has no array shape until
+        // one of the arms below says so; the arms that pass an operand's
+        // designator through are the ones listed here.
         self.pending.object_ref = None;
+        self.drop_operand_array_decay();
         let designates = self.lex.tk == '('
             || self.lex.tk == '"'
             || self.lex.tk == Token::Id
@@ -2761,8 +2762,7 @@ impl Compiler {
         self.ty = t;
         // C99 6.5.4: the value has the cast type, so an operand's array
         // shape does not reach an enclosing `sizeof` / `typeof`.
-        self.pending.last_array_decay_size = 0;
-        self.pending.last_array_decay_bytes = 0;
+        self.drop_operand_array_decay();
         // The cast node replaces the conversion's intermediate nodes, which
         // have no consumer.
         if let Some(child) = cast_child_ast {
@@ -2851,7 +2851,10 @@ impl Compiler {
         } else if leftover_stride > 0 {
             // `*p` on a pointer-to-array row is `p[0]`: no load, the head
             // stride is consumed and the rest queued for a following `[k]`;
-            // the row size reaches an enclosing `sizeof`.
+            // the row size reaches an enclosing `sizeof`, and the operand's
+            // own shape, which the row does not have, is dropped.
+            self.pending.last_array_decay_size = 0;
+            self.pending.last_array_decay_dims.clear();
             self.pending.last_array_decay_bytes = leftover_stride;
             self.retag_expr_fn_depth(|d| if d >= 2 { d - 1 } else { d });
             let mut tail = leftover_tail;
@@ -2895,8 +2898,7 @@ impl Compiler {
             }
             // `*arr` is the first element, not the array: an enclosing
             // `sizeof` reads `sizeof(T)`.
-            self.pending.last_array_decay_size = 0;
-            self.pending.last_array_decay_bytes = 0;
+            self.drop_operand_array_decay();
         }
         // `*e` is element 0 of what `e` points at: of the object the
         // operand designates when its value is that address, and of an
@@ -2939,7 +2941,17 @@ impl Compiler {
     fn parse_address_of(&mut self) -> Result<(), C5Error> {
         self.next()?;
         // The operand is designated, not read: `&*p` takes a `void *` `p`.
+        // The strides its parse left unconsumed are read from the
+        // end-of-expression snapshot, as under unary `*`; the enclosing
+        // snapshot is kept.
+        let saved_eos_stride = core::mem::take(&mut self.pending.end_of_expr_stride);
+        let saved_eos_tail = core::mem::take(&mut self.pending.end_of_expr_strides_tail);
         self.expr_or_void(Token::Inc as i64)?;
+        let mut strides = alloc::vec![core::mem::take(&mut self.pending.end_of_expr_stride)];
+        strides.append(&mut self.pending.end_of_expr_strides_tail);
+        strides.retain(|&s| s > 0);
+        self.pending.end_of_expr_stride = saved_eos_stride;
+        self.pending.end_of_expr_strides_tail = saved_eos_tail;
         // The result type is set before the trailing load is dropped, so
         // the `AddrOf` node built there carries the pointer type. A struct
         // value's address is already the value, and a load emitted earlier
@@ -2952,6 +2964,14 @@ impl Compiler {
         // carries the pointer tag -- so the result is the operand's own
         // type and no level is added.
         let addr_of_function = self.pending.value_is_fn_designator;
+        // The shape of a decayed array operand, read before the load that
+        // produced its value is considered: `&*p` on a pointer to an array
+        // keeps the load of `p`, whose value is the array's address.
+        let decayed_array = if is_pointer_ty(pre_addr_ty) {
+            self.decayed_array_dims(pre_addr_ty - Ty::Ptr as i64, &strides)
+        } else {
+            None
+        };
         self.ty += Ty::Ptr as i64;
         if is_struct_value_ty(pre_addr_ty) {
             // The address stands; an `AddrOf` node over the lvalue forms the
@@ -2980,30 +3000,22 @@ impl Compiler {
             // The designator's value is already the function's address.
             self.ty = pre_addr_ty;
             self.retag_expr_fn_depth(|_| 1);
+        } else if let Some(dims) = decayed_array {
+            // A decayed array: its address was the value already, so `&` emits
+            // nothing. C99 6.5.3.2p3: the type is pointer to the array, rebuilt
+            // from the shape the decay left -- a whole array, a row of one or
+            // of a pointer to one, a string literal -- so `(*p)[i]`, `p[i][j]`,
+            // `p + 1`, `sizeof(&arr)` and `typeof(&arr)` see it. The strides
+            // belonged to the decayed operand; the pointer seeds its own.
+            let elem_ty = pre_addr_ty - Ty::Ptr as i64;
+            let agg = self.array_agg_type(elem_ty, &dims);
+            self.ty = agg + Ty::Ptr as i64;
+            self.drop_operand_array_decay();
+            self.retag_expr_fn_depth(|d| d + 1);
         } else if self.pop_trailing_scalar_load() {
             // A scalar or pointer lvalue: dropping the load leaves its address.
         } else if is_pointer_ty(pre_addr_ty) {
-            // A decayed array: its address was the value already, so `&` emits
-            // nothing. C99 6.5.3.2p3: the type is pointer to the array, rebuilt
-            // for a known-size 1D array (`index_stride == 0`) so `(*p)[i]`,
-            // `sizeof(&arr)` and `typeof(&arr)` see it.
-            let n = self.pending.last_array_decay_size;
-            let decay_dims = core::mem::take(&mut self.pending.last_array_decay_dims);
-            if decay_dims.len() >= 2 {
-                // For a multi-dimensional array the pointee is the whole aggregate;
-                // the seeded strides belong to the decayed operand and are cleared.
-                let elem_ty = pre_addr_ty - Ty::Ptr as i64;
-                let agg = self.array_agg_type(elem_ty, &decay_dims);
-                self.ty = agg + Ty::Ptr as i64;
-                self.pending.index_stride = 0;
-                self.pending.index_strides_tail.clear();
-            } else if n > 0 && self.pending.index_stride == 0 {
-                let elem_ty = pre_addr_ty - Ty::Ptr as i64;
-                let agg = self.array_agg_type(elem_ty, &[n]);
-                self.ty = agg + Ty::Ptr as i64;
-            }
-            self.pending.last_array_decay_size = 0;
-            self.pending.last_array_decay_bytes = 0;
+            // A pointer value with no shape on record and no load to drop.
             self.retag_expr_fn_depth(|d| d + 1);
         } else if matches!(
             self.ast_acc,
@@ -3089,6 +3101,9 @@ impl Compiler {
         )?;
         self.emit_binop_with_imm(crate::c5::ir::BinOp::Eq, 0);
         self.ty = Ty::Int as i64;
+        // The result is an `int` value, not the array a pointer operand
+        // decayed from.
+        self.drop_operand_array_decay();
         Ok(())
     }
 
@@ -3280,9 +3295,7 @@ impl Compiler {
         let lhs_ty = self.ty;
         // An operator consumes the operand, so its array shape does not
         // reach an enclosing `sizeof`.
-        self.pending.last_array_decay_size = 0;
-        self.pending.last_array_decay_bytes = 0;
-        self.pending.last_array_decay_dims.clear();
+        self.drop_operand_array_decay();
         let object_ref = self.pending.object_ref.take();
         // The postfix steps that keep designating an object re-set the
         // channel; every other operator consumes the operand, so what
@@ -3292,6 +3305,11 @@ impl Compiler {
             || self.lex.tk == Token::Dot
             || self.lex.tk == Token::AddOp
             || self.lex.tk == Token::SubOp;
+        // A subscript or a member access may select an array, whose shape
+        // it records; every other operator yields a value that is not one
+        // (C99 6.3.2.1p3), whatever its right operand decayed from.
+        let selects =
+            self.lex.tk == Token::Brak || self.lex.tk == Token::Arrow || self.lex.tk == Token::Dot;
         let applied = if self.lex.tk == '(' {
             self.parse_indirect_call()
         } else if self.lex.tk == Token::Assign {
@@ -3319,6 +3337,9 @@ impl Compiler {
         };
         if !designates {
             self.pending.object_ref = None;
+        }
+        if !selects {
+            self.drop_operand_array_decay();
         }
         applied
     }
@@ -5049,6 +5070,37 @@ impl Compiler {
         // for `typeof` / `&` recovery of the undecayed array type.
         self.pending.last_array_decay_dims = dims;
         self.ty = elem_ty + Ty::Ptr as i64;
+    }
+
+    /// The dimensions, outermost first, of the array the value just parsed
+    /// decayed from (C99 6.3.2.1p3), or `None` when it did not decay from
+    /// one. A bound is -1 when unspecified and 0 for a zero-length array.
+    /// The decay recorded either the exact dimensions, the byte count of a
+    /// row over the strides it left unconsumed (`strides`, head first), or
+    /// the element count of a 1D array, with -1 for a count of zero.
+    fn decayed_array_dims(&self, elem_ty: i64, strides: &[i64]) -> Option<alloc::vec::Vec<i64>> {
+        let p = &self.pending;
+        if !p.last_array_decay_dims.is_empty() {
+            return Some(p.last_array_decay_dims.clone());
+        }
+        if p.last_array_decay_bytes > 0 {
+            let elem_size = self.size_of_type(elem_ty) as i64;
+            let mut dims = alloc::vec::Vec::with_capacity(strides.len() + 1);
+            let mut bytes = p.last_array_decay_bytes;
+            for &below in strides.iter().chain(core::iter::once(&elem_size)) {
+                if below <= 0 || bytes % below != 0 {
+                    return None;
+                }
+                dims.push(bytes / below);
+                bytes = below;
+            }
+            return Some(dims);
+        }
+        match p.last_array_decay_size {
+            n if n > 0 => Some(alloc::vec![n]),
+            n if n < 0 => Some(alloc::vec![0]),
+            _ => None,
+        }
     }
 
     /// The subscript strides of an N-dimensional array of `elem_size`

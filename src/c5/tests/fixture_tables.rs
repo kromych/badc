@@ -715,6 +715,7 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("int_times_double_into_local.c", 0),
     ("ptr_diff_plus_ptr.c", 0),
     ("fn_ptr_arith_byte_stride.c", 0),
+    ("addr_of_array_lvalue.c", 0),
     ("anonymous_aggregates.c", 0),
     ("unnamed_field_tagged_type.c", 0),
     ("const_strlen_literal.c", 0),
@@ -2114,6 +2115,7 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("dead_arm_static_callee.c", 0),
     ("param_incoming_reg_constant_clobber.c", 0),
     ("fn_ptr_arith_byte_stride.c", 0),
+    ("addr_of_array_lvalue.c", 0),
     ("callee_function_types.c", 0),
     ("inline_asm_a64_integer_ops.c", 0),
     // Plain `char` is a type distinct from `signed char` and `unsigned
@@ -2967,6 +2969,7 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("dead_arm_static_callee.c", 0),
     ("param_incoming_reg_constant_clobber.c", 0),
     ("fn_ptr_arith_byte_stride.c", 0),
+    ("addr_of_array_lvalue.c", 0),
     ("callee_function_types.c", 0),
     ("inline_asm_a64_integer_ops.c", 0),
     // Plain `char` is a type distinct from `signed char` and `unsigned
@@ -3602,6 +3605,7 @@ pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("dead_arm_static_callee.c", 0),
     ("param_incoming_reg_constant_clobber.c", 0),
     ("fn_ptr_arith_byte_stride.c", 0),
+    ("addr_of_array_lvalue.c", 0),
     ("callee_function_types.c", 0),
     ("inline_asm_a64_integer_ops.c", 0),
     // Plain `char` is a type distinct from `signed char` and `unsigned
@@ -4182,6 +4186,7 @@ pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("dead_arm_static_callee.c", 0),
     ("param_incoming_reg_constant_clobber.c", 0),
     ("fn_ptr_arith_byte_stride.c", 0),
+    ("addr_of_array_lvalue.c", 0),
     ("callee_function_types.c", 0),
     ("inline_asm_a64_integer_ops.c", 0),
     // Plain `char` is a type distinct from `signed char` and `unsigned
@@ -5071,6 +5076,7 @@ pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
     ("dead_arm_static_callee.c", 0),
     ("param_incoming_reg_constant_clobber.c", 0),
     ("fn_ptr_arith_byte_stride.c", 0),
+    ("addr_of_array_lvalue.c", 0),
     ("callee_function_types.c", 0),
     ("inline_asm_a64_integer_ops.c", 0),
     // Plain `char` is a type distinct from `signed char` and `unsigned

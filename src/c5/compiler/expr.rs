@@ -4564,8 +4564,18 @@ impl Compiler {
         } else {
             return Err(self.compile_err(Code::SYNTAX, "close bracket expected"));
         }
+        // C99 6.5.2.1p1: one operand is a pointer to an object type. A
+        // function designator decays to a pointer to a function.
         if !is_pointer_ty(lhs_ty) {
-            return Err(self.compile_err(Code::INVALID_OPERANDS, "pointer type expected"));
+            let ty = format_type(lhs_ty, &self.structs);
+            return Err(self.subscripted_value_err(ty, "not a pointer or an array"));
+        }
+        if let Some((f, _)) = array_ast
+            .and_then(|a| self.expr_fn(a))
+            .filter(|&(_, d)| d <= 1)
+        {
+            let ty = self.fn_type_text(lhs_ty, &f, 1);
+            return Err(self.subscripted_value_err(ty, "a pointer to a function"));
         }
         self.require_category(
             idx_ty,
@@ -4651,6 +4661,13 @@ impl Compiler {
             _ => None,
         };
         Ok(())
+    }
+
+    fn subscripted_value_err(&self, ty: alloc::string::String, what: &str) -> C5Error {
+        self.compile_err(
+            Code::INVALID_OPERANDS,
+            format!("subscripted value has type `{ty}`, {what}"),
+        )
     }
 
     fn parse_subscript_index(&mut self, lhs_ty: i64) -> Result<SubscriptIndex, C5Error> {

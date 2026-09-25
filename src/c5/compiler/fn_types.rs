@@ -9,7 +9,9 @@ use super::super::ir::BinOp;
 use super::super::symbol::FnType;
 use super::super::token::Token;
 use super::Compiler;
-use super::types::{is_pointer_ty, is_struct_ty, struct_id_of, struct_ptr_depth};
+use super::types::{
+    format_fn_type, is_pointer_ty, is_struct_ty, pointee_ty, struct_id_of, struct_ptr_depth,
+};
 
 impl Compiler {
     /// The function type symbol `idx` names, or a function pointer
@@ -148,6 +150,20 @@ impl Compiler {
             }
             _ => None,
         }
+    }
+
+    /// The spelling of a pointer to `f`, `depth` levels above it, for a
+    /// value tagged `tag`: the tag holds the return type plus a pointer
+    /// level for each pointer in the chain, one for a designator.
+    pub(super) fn fn_type_text(&self, tag: i64, f: &FnType, depth: i64) -> alloc::string::String {
+        let mut levels = depth.max(1);
+        let mut next = f.ret.as_ref();
+        while let Some((r, d)) = next {
+            levels += d;
+            next = r.ret.as_ref();
+        }
+        let ret = (0..levels).fold(tag, |t, _| pointee_ty(t));
+        format_fn_type(ret, f, depth, &self.structs)
     }
 
     /// The function type a call through `callee` has: the callee's, when

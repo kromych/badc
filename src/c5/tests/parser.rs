@@ -3836,7 +3836,7 @@ fn initializers_are_separated_by_commas() {
             "int a[4] = { [0] = V [1] = 2 }",
             "`[`",
             separator("`[`"),
-            "pointer type expected [B3020]",
+            "subscripted value has type `int`, not a pointer or an array [B3020]",
         ),
     ] {
         let constant = decl.replace('V', "1");

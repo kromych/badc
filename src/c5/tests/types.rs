@@ -2077,7 +2077,7 @@ fn a_subscript_takes_the_integer_on_either_side() {
         ),
         (
             "int t(int i, int j) { return i[j]; }",
-            "pointer type expected",
+            "subscripted value has type `int`, not a pointer or an array",
         ),
     ] {
         let src = format!("{body}\nint main(void) {{ return 0; }}\n");
@@ -2088,6 +2088,59 @@ fn a_subscript_takes_the_integer_on_either_side() {
             "{src}{msg}"
         );
     }
+}
+
+/// C99 6.5.2.1p1: the pointer operand of `[]` points to an object type. A
+/// pointer to a function does not, however it is spelled, and a function
+/// designator decays to one; the diagnostic names its type. An element of
+/// an array of function pointers, of a pointer to one, or of an array
+/// parameter, which C99 6.7.5.3p7 makes such a pointer, is an object.
+#[test]
+fn a_subscript_rejects_a_pointer_to_a_function() {
+    use super::Vm;
+    use crate::Compiler;
+    let decls = "static double twice(double x) { return x * 2; }\n\
+                 static double (*getfp(void))(double) { return twice; }\n\
+                 struct s { double (*m)(double); double (*a[2])(double); };\n\
+                 double (*(*lp)(void))(double) = getfp;\n\
+                 static double elem(double (*const t[])(double)) { return t[1](3); }\n\
+                 int main(void) {\n\
+                 \tdouble (*fp)(double) = twice, (**pp)(double) = &fp;\n\
+                 \tdouble (*arr[2])(double) = { twice, twice };\n\
+                 \tstruct s s = { twice, { twice, twice } };\n";
+    let fp = "`double (*)(double)`, a pointer to a function";
+    for (expr, text) in [
+        ("(&twice)[0](3)", fp),
+        ("fp[0](3)", fp),
+        ("0[fp](3)", fp),
+        ("twice[0](3)", fp),
+        ("(*fp)[0](3)", fp),
+        ("(*pp)[0](3)", fp),
+        ("s.m[0](3)", fp),
+        ("getfp()[0](3)", fp),
+        ("(fp + 1)[0](3)", fp),
+        ("(0, fp)[0](3)", fp),
+        ("(1 ? fp : twice)[0](3)", fp),
+        ("((double (*)(double))0)[0](3)", fp),
+        (
+            "lp[0]()(3)",
+            "`double (*(*)(void))(double)`, a pointer to a function",
+        ),
+    ] {
+        let src = format!("{decls}\treturn {expr} == 6.0;\n}}\n");
+        let err = Compiler::new(src.clone())
+            .compile()
+            .expect_err(&src)
+            .to_string();
+        assert!(
+            err.contains(&format!("subscripted value has type {text} [B3020]")),
+            "{src}{err}"
+        );
+    }
+    let src =
+        format!("{decls}\treturn pp[0](3) + arr[1](3) + s.a[1](3) + elem(arr) == 24.0;\n}}\n");
+    let program = Compiler::new(src.clone()).compile().expect(&src);
+    assert_eq!(Vm::new(program).run().unwrap(), 1, "{src}");
 }
 
 /// C99 6.6p6: a context that requires an integer constant expression -- a

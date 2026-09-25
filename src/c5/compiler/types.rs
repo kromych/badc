@@ -559,22 +559,53 @@ pub(super) fn format_signature(
     is_variadic: bool,
     structs: &[super::StructDef],
 ) -> alloc::string::String {
-    use alloc::format;
-    use alloc::string::ToString;
+    alloc::format!(
+        "{} ({})",
+        format_type(return_ty, structs),
+        format_params(params, is_variadic, structs)
+    )
+}
+
+/// Render function type `f` with `depth` pointer levels above it, whose
+/// innermost return type is `ret`: `double (*)(double)`.
+pub(super) fn format_fn_type(
+    ret: i64,
+    f: &crate::c5::symbol::FnType,
+    depth: i64,
+    structs: &[super::StructDef],
+) -> alloc::string::String {
+    let mut decl = alloc::string::String::new();
+    let mut level = Some((f, depth));
+    while let Some((f, depth)) = level {
+        let params = format_params(&f.params, f.variadic, structs);
+        decl = if depth == 0 && decl.is_empty() {
+            alloc::format!("({params})")
+        } else {
+            alloc::format!("({}{decl})({params})", "*".repeat(depth as usize))
+        };
+        level = f.ret.as_ref().map(|(r, d)| (&**r, *d));
+    }
+    alloc::format!("{} {decl}", format_type(ret, structs))
+}
+
+/// A parameter list as a prototype spells it; an empty one is `void`.
+/// TODO: `FnType` does not record whether its list is a prototype, so
+/// a pointer declared `T (*)()` prints as `T (*)(void)`.
+fn format_params(
+    params: &[i64],
+    is_variadic: bool,
+    structs: &[super::StructDef],
+) -> alloc::string::String {
     let mut parts: alloc::vec::Vec<alloc::string::String> =
         params.iter().map(|&p| format_type(p, structs)).collect();
     if is_variadic {
-        parts.push("...".to_string());
+        parts.push("...".into());
     }
-    let inside = if parts.is_empty() {
-        // Empty here means "explicit zero-param" at the call site --
-        // C99's "no information" prototype is filtered out before
-        // we get here; just print `(void)` for clarity.
-        "void".to_string()
+    if parts.is_empty() {
+        "void".into()
     } else {
         parts.join(", ")
-    };
-    format!("{} ({inside})", format_type(return_ty, structs))
+    }
 }
 
 pub(crate) fn is_struct_ty(ty: i64) -> bool {

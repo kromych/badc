@@ -30,19 +30,22 @@ fn clamp_pack(n: usize) -> usize {
     }
 }
 
-/// One parsed `#pragma pack(...)` directive. The lexer scans the
-/// directive inline and folds it into [`Lexer::pack_stack`] via
-/// [`Lexer::apply_pack_directive`].
-#[derive(Debug, Clone, Copy)]
+/// One parsed `#pragma pack(...)` directive, in the forms gcc, clang and
+/// MSVC share. The lexer scans the directive inline and folds it into
+/// the pack state via [`Lexer::apply_pack_directive`].
+#[derive(Debug, Clone)]
 enum PackDirective {
-    /// `#pragma pack(N)` -- replace top of stack with N.
+    /// `#pragma pack(N)` -- the value in effect becomes N.
     Set(usize),
-    /// `#pragma pack()` -- replace top with DEFAULT_PACK.
+    /// `#pragma pack()` -- the value in effect becomes the default.
     Reset,
-    /// `#pragma pack(push, N)` -- push N onto the stack.
-    Push(usize),
-    /// `#pragma pack(pop)` -- pop one frame (no-op if at bottom).
-    Pop,
+    /// `#pragma pack(push[, id][, N])` -- save the value in effect under
+    /// the label, then set N when one is given.
+    Push(Option<alloc::string::String>, Option<usize>),
+    /// `#pragma pack(pop[, id][, N])` -- restore the value the nearest
+    /// push (with that label, when one is named) saved, then set N when
+    /// one is given.
+    Pop(Option<alloc::string::String>, Option<usize>),
 }
 
 /// One parsed `#pragma GCC visibility` directive, folded into
@@ -279,11 +282,11 @@ fn parse_line_marker(body: &[u8]) -> Option<LineMarker> {
 /// other shape (including malformed-pack and non-pack pragmas)
 /// so the caller can fall back to "skip the line silently".
 ///
-/// Accepts the four MSVC-compatible shapes:
-///   * `pragma pack(N)`            -> [`PackDirective::Set`]
-///   * `pragma pack()`             -> [`PackDirective::Reset`]
-///   * `pragma pack(push, N)`      -> [`PackDirective::Push`]
-///   * `pragma pack(pop)`          -> [`PackDirective::Pop`]
+/// Accepts the shapes gcc, clang and MSVC share:
+///   * `pragma pack(N)`                 -> [`PackDirective::Set`]
+///   * `pragma pack()`                  -> [`PackDirective::Reset`]
+///   * `pragma pack(push[, id][, N])`   -> [`PackDirective::Push`]
+///   * `pragma pack(pop[, id][, N])`    -> [`PackDirective::Pop`]
 ///
 /// The arg whitespace is liberal -- any combination of spaces /
 /// tabs is accepted between tokens to match how cpp / msvc
@@ -298,15 +301,38 @@ fn parse_pragma_pack_line(body: &[u8]) -> Option<PackDirective> {
     if inner.is_empty() {
         return Some(PackDirective::Reset);
     }
-    if inner == "pop" {
-        return Some(PackDirective::Pop);
+    let mut args = inner.split(',').map(str::trim);
+    let head = args.next()?;
+    if head != "push" && head != "pop" {
+        return inner.parse::<usize>().ok().map(PackDirective::Set);
     }
-    if let Some(rest) = inner.strip_prefix("push") {
-        let rest = rest.trim_start();
-        let rest = rest.strip_prefix(',')?.trim_start();
-        return rest.parse::<usize>().ok().map(PackDirective::Push);
+    let mut id = None;
+    let mut n = None;
+    for arg in args {
+        if let Ok(value) = arg.parse::<usize>() {
+            if n.is_some() {
+                return None;
+            }
+            n = Some(value);
+        } else if id.is_none() && n.is_none() && is_pack_label(arg) {
+            id = Some(alloc::string::String::from(arg));
+        } else {
+            return None;
+        }
     }
-    inner.parse::<usize>().ok().map(PackDirective::Set)
+    Some(if head == "push" {
+        PackDirective::Push(id, n)
+    } else {
+        PackDirective::Pop(id, n)
+    })
+}
+
+fn is_pack_label(arg: &str) -> bool {
+    let mut chars = arg.chars();
+    chars
+        .next()
+        .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+        && chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
 }
 
 /// Parse a single `#`-prefix-stripped line as `pragma GCC visibility
@@ -528,10 +554,13 @@ pub(crate) struct Lexer {
     /// stripping like other pragmas, since pack is position-
     /// dependent within the source and can't be batched up the way
     /// `#pragma binding(...)` is).
-    pack_stack: Vec<usize>,
+    pack: usize,
+    /// The values `#pragma pack(push)` saved, each under its label,
+    /// innermost last.
+    pack_saved: Vec<(Option<alloc::string::String>, usize)>,
     /// Stack of `#pragma GCC visibility push(...)` frames; the top holds
     /// whether the visibility currently in effect is non-preemptible.
-    /// Scanned inline like `pack_stack`, and read by the declaration
+    /// Scanned inline like `pack`, and read by the declaration
     /// paths as the default for a declaration that carries no explicit
     /// `visibility` attribute.
     visibility_stack: Vec<bool>,
@@ -655,7 +684,8 @@ impl Lexer {
             // caps struct alignment at 8, and that's the implicit
             // upper bound here too. Real `#pragma pack(N)` updates
             // happen via `apply_pack_directive`.
-            pack_stack: vec![DEFAULT_PACK],
+            pack: DEFAULT_PACK,
+            pack_saved: Vec::new(),
             visibility_stack: vec![false],
         }
     }
@@ -674,7 +704,7 @@ impl Lexer {
     /// default 8 matches c5's pre-existing struct-layout behaviour
     /// (no packing); any explicit `#pragma pack(N)` lowers it.
     pub fn current_pack(&self) -> usize {
-        *self.pack_stack.last().unwrap_or(&DEFAULT_PACK)
+        self.pack
     }
 
     /// The pack value a `#pragma pack` directive put in effect, `None`
@@ -1262,30 +1292,30 @@ impl Lexer {
 
     fn apply_pack_directive(&mut self, dir: PackDirective) {
         match dir {
-            PackDirective::Set(n) => {
-                let n = clamp_pack(n);
-                if let Some(top) = self.pack_stack.last_mut() {
-                    *top = n;
-                } else {
-                    self.pack_stack.push(n);
+            PackDirective::Set(n) => self.pack = clamp_pack(n),
+            PackDirective::Reset => self.pack = DEFAULT_PACK,
+            PackDirective::Push(id, n) => {
+                self.pack_saved.push((id, self.pack));
+                if let Some(n) = n {
+                    self.pack = clamp_pack(n);
                 }
             }
-            PackDirective::Reset => {
-                if let Some(top) = self.pack_stack.last_mut() {
-                    *top = DEFAULT_PACK;
-                } else {
-                    self.pack_stack.push(DEFAULT_PACK);
+            PackDirective::Pop(id, n) => {
+                // A pop without a matching push restores nothing; gcc
+                // and MSVC warn and continue.
+                let at = match &id {
+                    Some(id) => self
+                        .pack_saved
+                        .iter()
+                        .rposition(|(label, _)| label.as_deref() == Some(id.as_str())),
+                    None => self.pack_saved.len().checked_sub(1),
+                };
+                if let Some(at) = at {
+                    self.pack = self.pack_saved[at].1;
+                    self.pack_saved.truncate(at);
                 }
-            }
-            PackDirective::Push(n) => {
-                self.pack_stack.push(clamp_pack(n));
-            }
-            PackDirective::Pop => {
-                // Always keep one frame so `current_pack()` always
-                // has an answer. Popping past the bottom is a
-                // user error in real cpp; we silently ignore here.
-                if self.pack_stack.len() > 1 {
-                    self.pack_stack.pop();
+                if let Some(n) = n {
+                    self.pack = clamp_pack(n);
                 }
             }
         }
@@ -1767,7 +1797,7 @@ impl Lexer {
                 //     verbatim (they're source-position-dependent,
                 //     unlike the binding / dylib / export pragmas the
                 //     preprocessor batches). Parse the args and fold
-                //     into `pack_stack` / `visibility_stack`.
+                //     into the pack state / `visibility_stack`.
                 //   * Any other `#` line -- (shebangs,
                 //     unrecognised pragmas, stray `#`s the
                 //     preprocessor didn't consume). Skip to EOL.

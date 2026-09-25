@@ -3102,15 +3102,17 @@ impl Compiler {
             }
             self.ast_apply_unary(super::super::ast::UnOp::BitNot);
         } else {
-            self.emit_binop_with_imm(crate::c5::ir::BinOp::Xor, -1);
             // C99 6.5.3.3p4: the result has the promoted operand type, so a
-            // `long` keeps its width and signedness for a following `>>`. A
+            // `long` keeps its width and signedness for a following `>>`.
+            // The node is built under that type: a `~` over a promoted
+            // `uint8_t` is an `int` whose consumers convert it as one. A
             // 4-byte unsigned result is masked back: the xor set all 64 bits.
             let promoted = integer_promote(self.ty);
+            self.ty = promoted;
+            self.emit_binop_with_imm(crate::c5::ir::BinOp::Xor, -1);
             if is_unsigned_ty(promoted) && self.size_of_type(promoted) == 4 {
                 self.emit_binop_with_imm(crate::c5::ir::BinOp::And, 0xffff_ffff);
             }
-            self.ty = promoted;
         }
         Ok(())
     }

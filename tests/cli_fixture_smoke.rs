@@ -484,6 +484,7 @@ const LINKED_IMAGE_RUN_FIXTURES: &[(&str, i32)] = &[
     ("computed_include_pp_number.c", 0),
     ("pragma_pack_bitfield_layout.c", 0),
     ("pragma_pack_push_pop_forms.c", 0),
+    ("bitnot_promoted_compare.c", 0),
     ("addr_compare_disjoint_blocks.c", 0),
     ("unsigned_bitwise_mixed_sign.c", 0),
     ("dead_arm_static_callee.c", 0),

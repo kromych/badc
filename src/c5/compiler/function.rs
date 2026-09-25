@@ -330,6 +330,8 @@ impl Compiler {
             if array_size != 0 {
                 full_ty += Ty::Ptr as i64;
             }
+            let adjusted = array_size != 0
+                || (self.pending.typedef_base_array_size != 0 && leading_ptr_count == 0);
             // Per C99 6.7.5.3p7, a named array parameter is
             // adjusted to a pointer to the element type. The
             // same rule applies when the base type is a typedef
@@ -361,6 +363,10 @@ impl Compiler {
             // parameter or expression.
             let (fn_ptr_indirection, fn_ptr_ret_indirection, fnptr_pp, fnptr_variadic, ret_fn) =
                 self.take_param_fn_ptr_carriers();
+            // The adjusted pointer is one more level above a function-pointer
+            // element, as `fn_t *p` counts it.
+            let fn_ptr_indirection =
+                fn_ptr_indirection + i64::from(adjusted && fn_ptr_indirection > 0);
             // Drained per parameter so one parameter's convention cannot
             // leak into the next.
             let param_conv = core::mem::take(&mut self.pending.attr_call_conv);

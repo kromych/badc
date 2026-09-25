@@ -2692,10 +2692,15 @@ impl Compiler {
             // `(row[2]){...}` with `typedef int row[3]` is `int[2][3]`
             // (C99 6.7.7); a `*` absorbed the typedef array into the
             // pointee instead.
-            let literal = self.parse_block_compound_literal(type_name.ty, &type_name.dims);
+            self.parse_block_compound_literal(type_name.ty, &type_name.dims)?;
             // gcc answers unknown for a compound literal's object.
             self.pending.object_ref = None;
-            return literal;
+            if let Some(id) = self.ast_acc
+                && let Some((f, depth)) = self.type_name_fn(type_name)
+            {
+                self.set_expr_fn(id, f, depth);
+            }
+            return Ok(());
         }
         self.parse_cast_operand(type_name)
     }
@@ -2768,28 +2773,7 @@ impl Compiler {
         }
         // C99 6.5.2.2p7: a call through the cast uses the cast's function
         // type, whatever the operand declared.
-        let cast_fn = if let Some(pp) = type_name.proto {
-            let depth = type_name.fn_ptr_indirection.unwrap_or(1).max(1);
-            let f = FnType {
-                params: pp.types,
-                variadic: pp.is_variadic,
-                conv: core::mem::take(&mut self.pending.attr_call_conv),
-                ret: type_name.fn_ty.and_then(|f| f.ret),
-            };
-            Some((f, depth))
-        } else {
-            type_name.fn_ty.filter(|f| f.ptr_depth >= 1).map(|f| {
-                let depth = f.ptr_depth as i64;
-                let f = FnType {
-                    params: f.params.unwrap_or_default(),
-                    variadic: f.variadic,
-                    conv: core::mem::take(&mut self.pending.attr_call_conv),
-                    ret: f.ret,
-                };
-                (f, depth)
-            })
-        };
-        if let Some((f, depth)) = cast_fn {
+        if let Some((f, depth)) = self.type_name_fn(type_name) {
             self.pending.indirect_callee_ret_fn_ptr = 0;
             if cast_child_ast.is_some()
                 && let Some(id) = self.ast_acc
@@ -2798,6 +2782,35 @@ impl Compiler {
             }
         }
         Ok(())
+    }
+
+    /// The function type a value of type `type_name` has and its depth,
+    /// when it is a pointer to a function; an array value decays one
+    /// level further per dimension.
+    fn type_name_fn(&mut self, type_name: TypeName) -> Option<(FnType, i64)> {
+        let dims = type_name.dims.len() as i64;
+        let (f, depth) = if let Some(pp) = type_name.proto {
+            let depth = type_name.fn_ptr_indirection.unwrap_or(1).max(1);
+            let f = FnType {
+                params: pp.types,
+                variadic: pp.is_variadic,
+                ret: type_name.fn_ty.and_then(|f| f.ret),
+                ..FnType::default()
+            };
+            (f, depth)
+        } else {
+            let f = type_name.fn_ty.filter(|f| f.ptr_depth >= 1)?;
+            let depth = f.ptr_depth as i64;
+            let f = FnType {
+                params: f.params.unwrap_or_default(),
+                variadic: f.variadic,
+                ret: f.ret,
+                ..FnType::default()
+            };
+            (f, depth)
+        };
+        let conv = core::mem::take(&mut self.pending.attr_call_conv);
+        Some((FnType { conv, ..f }, depth + dims))
     }
 
     fn parse_deref(&mut self) -> Result<(), C5Error> {
@@ -2819,13 +2832,16 @@ impl Compiler {
             // the array, which decays to the element pointer (C99 6.3.2.1p3)
             // with no load.
             self.decay_ptr_array_value(id);
-        } else if self.pending.fn_ptr_chain_depth == 0 && !self.pending.fn_ptr_depth_is_array_elem {
+            self.retag_expr_fn_depth(|d| if d >= 2 { d - 1 } else { d });
+        } else if self.value_is_function_pointer() {
             // C99 6.5.3.2p4: `*` on a pointer to a function yields the
             // function designator, which 6.3.2.1p4 decays right back to the
             // same pointer; the depth stays 0 so further `*`s decay too. A
             // decayed array of function pointers is not one: `*arr` is its
-            // first element, loaded below.
+            // first element, loaded below. The operand's node stands for
+            // the designator.
             self.pending.value_is_fn_designator = true;
+            self.retag_expr_fn_depth(|_| 0);
         } else if let Some(id) = self.ptr_array_id_depth1(self.ty) {
             self.decay_ptr_array_value(id);
         } else if leftover_stride > 0 {
@@ -2833,6 +2849,7 @@ impl Compiler {
             // stride is consumed and the rest queued for a following `[k]`;
             // the row size reaches an enclosing `sizeof`.
             self.pending.last_array_decay_bytes = leftover_stride;
+            self.retag_expr_fn_depth(|d| if d >= 2 { d - 1 } else { d });
             let mut tail = leftover_tail;
             self.pending.index_stride = if tail.is_empty() { 0 } else { tail.remove(0) };
             self.pending.index_strides_tail = tail;
@@ -2958,6 +2975,7 @@ impl Compiler {
         } else if addr_of_function {
             // The designator's value is already the function's address.
             self.ty = pre_addr_ty;
+            self.retag_expr_fn_depth(|_| 1);
         } else if self.pop_trailing_scalar_load() {
             // A scalar or pointer lvalue: dropping the load leaves its address.
         } else if is_pointer_ty(pre_addr_ty) {
@@ -2982,6 +3000,7 @@ impl Compiler {
             }
             self.pending.last_array_decay_size = 0;
             self.pending.last_array_decay_bytes = 0;
+            self.retag_expr_fn_depth(|d| d + 1);
         } else if matches!(
             self.ast_acc,
             Some(id) if matches!(
@@ -3874,8 +3893,9 @@ impl Compiler {
                 pos,
             );
             self.ast_acc = Some(id);
+            // A designator arm decays (C99 6.3.2.1p4).
             if let Some((f, depth)) = result_fn {
-                self.set_expr_fn(id, f, depth);
+                self.set_expr_fn(id, f, depth.max(1));
             }
         }
         self.drop_operand_array_decay();
@@ -4566,6 +4586,7 @@ impl Compiler {
                 self.emit_binop_with_imm(crate::c5::ir::BinOp::Mul, row);
             }
             self.ast_binop(crate::c5::ir::BinOp::Add);
+            self.record_row_fn(array_ast);
             self.decay_ptr_array_value(id);
             // The row's address is the value: no indirection level is
             // consumed, so the operand's decay depth stands.
@@ -4574,6 +4595,7 @@ impl Compiler {
         } else if multi_dim_stride > 0 {
             self.emit_binop_with_imm(crate::c5::ir::BinOp::Mul, multi_dim_stride);
             self.ast_binop(crate::c5::ir::BinOp::Add);
+            self.record_row_fn(array_ast);
             // A row of a multi-dimensional array keeps the pointer level; the
             // innermost subscript decays to the element.
             self.ty = lhs_ty;
@@ -4801,7 +4823,8 @@ impl Compiler {
                 } else {
                     field.array_dims.len().max(1) as i64
                 };
-                self.set_expr_fn(id, f, field.fn_ptr_indirection.max(1) + dims);
+                let depth = field.fn_ptr_indirection.max(1) + dims;
+                self.set_expr_fn(id, f, depth + self.pointee_array_levels(field.ty));
             }
         }
         Ok(())

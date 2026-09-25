@@ -1161,13 +1161,26 @@ impl Compiler {
         Ok(())
     }
 
-    /// The value type of a statement expression: the type of the block
-    /// item at `value_item`, labels stripped, or `Ty::Int` when that
-    /// item is not an expression statement.
+    /// The value type of a statement expression: the type of its value
+    /// expression, or `Ty::Int` when it has none.
     fn stmt_expr_result_ty(&self, block: super::super::ast::StmtId, value_item: u32) -> i64 {
+        self.stmt_expr_value(block, value_item)
+            .map_or(super::super::token::Ty::Int as i64, |e| {
+                self.ast.expr_value_ty(e)
+            })
+    }
+
+    /// The value expression of a statement expression: the expression
+    /// statement at block item `value_item`, labels stripped, `None` when
+    /// that item is not one.
+    pub(super) fn stmt_expr_value(
+        &self,
+        block: super::super::ast::StmtId,
+        value_item: u32,
+    ) -> Option<super::super::ast::ExprId> {
         use super::super::ast::{BlockItem, Stmt};
         if value_item == super::super::ast::NO_VALUE_ITEM {
-            return super::super::token::Ty::Int as i64;
+            return None;
         }
         let mut last = match self.ast.stmt(block) {
             // A single-item block yields the bare statement (see
@@ -1176,7 +1189,7 @@ impl Compiler {
             // value.
             Stmt::Compound(items) => match items.get(value_item as usize) {
                 Some(BlockItem::Stmt(s)) => *s,
-                _ => return super::super::token::Ty::Int as i64,
+                _ => return None,
             },
             _ => block,
         };
@@ -1185,10 +1198,10 @@ impl Compiler {
         while let Stmt::Labeled { body, .. } = self.ast.stmt(last) {
             last = *body;
         }
-        if let Stmt::Expr(e) = self.ast.stmt(last) {
-            return self.ast.expr_value_ty(*e);
+        match self.ast.stmt(last) {
+            Stmt::Expr(e) => Some(*e),
+            _ => None,
         }
-        super::super::token::Ty::Int as i64
     }
 
     /// True when statement-arena entry `id` belongs to a statement

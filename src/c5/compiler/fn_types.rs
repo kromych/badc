@@ -9,6 +9,7 @@ use super::super::ir::BinOp;
 use super::super::symbol::FnType;
 use super::super::token::Token;
 use super::Compiler;
+use super::types::{is_pointer_ty, is_struct_ty, struct_id_of, struct_ptr_depth};
 
 impl Compiler {
     /// The function type symbol `idx` names, or a function pointer
@@ -29,6 +30,41 @@ impl Compiler {
         self.expr_fns.insert(id, (f, depth));
     }
 
+    /// Re-record the value in hand at the depth `to` gives: `*` and `&`
+    /// between a function and a pointer to it, between an array and its
+    /// address and between an array of arrays and its first row add no
+    /// node.
+    pub(super) fn retag_expr_fn_depth(&mut self, to: impl Fn(i64) -> i64) {
+        if let Some(id) = self.ast_acc
+            && let Some((f, d)) = self.expr_fn(id)
+        {
+            self.set_expr_fn(id, f, to(d));
+        }
+    }
+
+    /// A row a subscript selects from an array of arrays, built as an
+    /// addition, is one level below `array`.
+    pub(super) fn record_row_fn(&mut self, array: Option<ExprId>) {
+        if let (Some(row), Some(array)) = (self.ast_acc, array)
+            && let Some((f, d)) = self.expr_fn(array).filter(|&(_, d)| d >= 2)
+        {
+            self.set_expr_fn(row, f, d - 1);
+        }
+    }
+
+    /// The dimensions of the array a pointer-to-array tag points to, each a
+    /// level between the pointer and a function-pointer element.
+    pub(super) fn pointee_array_levels(&self, tag: i64) -> i64 {
+        if !is_struct_ty(tag) || struct_ptr_depth(tag) == 0 {
+            return 0;
+        }
+        let s = &self.structs[struct_id_of(tag)];
+        match s.fields.first().filter(|_| s.is_array) {
+            Some(f) => f.array_dims.len().max(1) as i64,
+            None => 0,
+        }
+    }
+
     /// Record an identifier's function type: a function's, a function
     /// pointer object's, or an array's of them, whose value decays one
     /// level further per dimension.
@@ -37,12 +73,14 @@ impl Compiler {
         let depth = if s.class == Token::Fun as i64 || s.class == Token::Sys as i64 {
             0
         } else if s.fn_ptr_indirection >= 1 {
+            // An array parameter, adjusted to a pointer, keeps its inner
+            // bounds in `array_dims`; a pointer to an array in its tag.
             let dims = if s.array_size == 0 {
-                0
+                s.array_dims.len().saturating_sub(1)
             } else {
-                s.array_dims.len().max(1) as i64
+                s.array_dims.len().max(1)
             };
-            s.fn_ptr_indirection + dims
+            s.fn_ptr_indirection + dims as i64 + self.pointee_array_levels(s.type_)
         } else {
             return;
         };
@@ -73,17 +111,34 @@ impl Compiler {
                 .expr_fn(*array)
                 .filter(|&(_, d)| d >= 2)
                 .map(|(f, d)| (f, d - 1)),
+            // GNU C steps a pointer to a function by bytes; the result
+            // keeps its type. A pointer difference is an integer.
             Expr::Binary {
                 op: BinOp::Add | BinOp::Sub,
                 lhs,
                 rhs,
-                ..
-            } => self
+                ty,
+            } if is_pointer_ty(*ty) => self
                 .expr_fn(*lhs)
                 .or_else(|| self.expr_fn(*rhs))
-                .filter(|&(_, d)| d >= 2),
-            Expr::Comma { rhs, .. } => self.expr_fn(*rhs),
-            Expr::Assign { lhs, .. } => self.expr_fn(*lhs),
+                .map(|(f, d)| (f, d.max(1))),
+            Expr::CompoundAssign {
+                op: BinOp::Add | BinOp::Sub,
+                lhs,
+                ty,
+                ..
+            } if is_pointer_ty(*ty) => self.expr_fn(*lhs),
+            Expr::Assign { lhs, .. }
+            | Expr::PreInc { lvalue: lhs, .. }
+            | Expr::PostInc { lvalue: lhs, .. } => self.expr_fn(*lhs),
+            // The operands of these decay (C99 6.3.2.1p4).
+            Expr::Comma { rhs, .. } => self.expr_fn(*rhs).map(|(f, d)| (f, d.max(1))),
+            Expr::StmtExpr {
+                block, value_item, ..
+            } => self
+                .stmt_expr_value(*block, *value_item)
+                .and_then(|e| self.expr_fn(e))
+                .map(|(f, d)| (f, d.max(1))),
             Expr::Call { callee, .. } => {
                 let (f, d) = self.expr_fn(*callee)?;
                 if d > 1 {

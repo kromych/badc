@@ -59,16 +59,17 @@ impl Compiler {
         is_pointer_ty(ptr_ty) && self.pointee_size(ptr_ty) > 1
     }
 
-    /// True when the value the parser just produced is a pointer to a
-    /// function. C99 6.5.6 admits additive operands only for pointers to
-    /// complete object types, so it leaves this case open; GCC and Clang
-    /// define it with a one-byte stride and the Linux kernel depends on
-    /// that. badc encodes a function pointer as "return type plus one
-    /// pointer level", so the flat `ty` tag cannot tell one from a data
-    /// pointer; the fn-pointer lineage the parser already tracks for the
-    /// 6.3.2.1p4 decay no-op answers it. Depth 0 is "the value itself".
+    /// True when the value the parser just produced is a function
+    /// designator or a pointer to a function: its expression's function
+    /// type, or the lineage an identifier load seeds. The additive
+    /// operators step it by one byte, as GNU C does and the Linux kernel
+    /// relies on; C99 6.5.6p2 admits pointers to object types only.
     pub(super) fn value_is_function_pointer(&self) -> bool {
-        self.pending.fn_ptr_chain_depth == 0 && !self.pending.fn_ptr_depth_is_array_elem
+        (self.pending.fn_ptr_chain_depth == 0 && !self.pending.fn_ptr_depth_is_array_elem)
+            || self
+                .ast_acc
+                .and_then(|id| self.expr_fn(id))
+                .is_some_and(|(_, d)| d <= 1)
     }
 
     /// Step size used by `++` / `--` on a value of `ty`: the

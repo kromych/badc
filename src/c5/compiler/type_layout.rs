@@ -899,10 +899,17 @@ pub(crate) fn flatten_struct_fields(
     for f in &sd.fields {
         let elem_ty = f.ty;
         let is_struct_value = is_struct_value_ty(elem_ty);
-        let elem_size = if is_struct_value {
-            structs[struct_id_of(elem_ty)].size as u32
+        // A bit-field occupies the bytes its bits span from its unit;
+        // placed contiguously under `#pragma pack`, they can run past
+        // the base type's width.
+        let (elem_off, elem_size) = if f.bit_width > 0 {
+            let first = f.bit_offset / 8;
+            let last = (f.bit_offset + f.bit_width).div_ceil(8);
+            (f.offset as u32 + first, last - first)
+        } else if is_struct_value {
+            (f.offset as u32, structs[struct_id_of(elem_ty)].size as u32)
         } else {
-            flat_scalar_size(elem_ty, target)
+            (f.offset as u32, flat_scalar_size(elem_ty, target))
         };
         let count = if f.array_size > 0 {
             f.array_size as u32
@@ -910,7 +917,7 @@ pub(crate) fn flatten_struct_fields(
             1
         };
         for i in 0..count {
-            let off = base_off + f.offset as u32 + i * elem_size;
+            let off = base_off + elem_off + i * elem_size;
             if is_struct_value {
                 flatten_struct_fields(structs, target, struct_id_of(elem_ty), off, out);
             } else {

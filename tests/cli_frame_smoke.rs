@@ -17,14 +17,18 @@
 //! dumper `dwarfdump`, then `llvm-dwarfdump`. A missing tool skips the
 //! check that needs it.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::Command;
 
 mod common;
 use common::TempDir;
 
-fn badc() -> PathBuf {
-    PathBuf::from(env!("CARGO_BIN_EXE_badc"))
+/// The compiler under test with the register-pressure caps of a `codegen_test`
+/// run cleared: the frame shapes asserted here hold over the full banks.
+fn badc() -> Command {
+    let mut cmd = Command::new(env!("CARGO_BIN_EXE_badc"));
+    cmd.env_remove("BADC_MAX_GPR").env_remove("BADC_MAX_FPR");
+    cmd
 }
 
 fn tempdir(name: &str) -> TempDir {
@@ -279,7 +283,7 @@ fn x86_64_prologue_and_epilogue_keep_the_return_address_in_place() {
         for opt in [&[][..], &["-O"][..]] {
             let obj = dir.join(format!("shapes-{target}{}.o", opt.join("")));
             run(
-                Command::new(badc())
+                badc()
                     .arg(format!("--target={target}"))
                     .args(opt)
                     .arg("-c")
@@ -344,7 +348,7 @@ fn aarch64_homes_the_parameters_inside_the_frame() {
         for opt in [&[][..], &["-O"][..]] {
             let obj = dir.join(format!("shapes-{target}{}.o", opt.join("")));
             run(
-                Command::new(badc())
+                badc()
                     .arg(format!("--target={target}"))
                     .args(opt)
                     .arg("-c")
@@ -517,7 +521,7 @@ fn each_parameter_home_is_written_once() {
         for opt in [&[][..], &["-O"][..]] {
             let obj = dir.join(format!("homes-{target}{}.o", opt.join("")));
             run(
-                Command::new(badc())
+                badc()
                     .arg(format!("--target={target}"))
                     .args(opt)
                     .arg("-c")
@@ -580,7 +584,7 @@ fn x86_64_debug_frame_follows_each_prologue_instruction() {
     for opt in [&[][..], &["-O"][..]] {
         let exe = dir.join(format!("shapes{}", opt.join("")));
         run(
-            Command::new(badc())
+            badc()
                 .arg("--target=linux-x64")
                 .arg("-g")
                 .args(opt)
@@ -729,7 +733,7 @@ fn frame_reports(
 ) -> std::collections::BTreeMap<String, (u64, String)> {
     let src = dir.join(format!("{stem}.c"));
     std::fs::write(&src, source).expect("write source");
-    let out = Command::new(badc())
+    let out = badc()
         .args(["-O", "-c", "-Wframe-larger-than=0"])
         .args(args)
         .arg("-o")
@@ -934,7 +938,7 @@ fn simd_wrappers_inline_at_opt() {
     )
     .expect("write source");
     let out = run(
-        Command::new(badc())
+        badc()
             .args(["-q", "-O", "-c", "--target=linux-x64", "--dump-ssa"])
             .arg("-Wframe-larger-than=0")
             .arg("-o")
@@ -973,7 +977,7 @@ fn dump_opt(source: &str, target: &str, name: &str) -> String {
     let src = dir.join("k.c");
     std::fs::write(&src, source).expect("write source");
     let out = run(
-        Command::new(badc())
+        badc()
             .args(["-q", "-O", "-c", "--dump-ssa", "-Wframe-larger-than=0"])
             .arg(format!("--target={target}"))
             .arg("-o")

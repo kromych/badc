@@ -517,7 +517,12 @@ pub(super) fn format_type(ty: i64, structs: &[super::StructDef]) -> alloc::strin
             .filter(|n| !n.is_empty())
             .map(alloc::string::ToString::to_string)
             .unwrap_or_else(|| format!("@{id}"));
-        return format!("{prefix}struct {name}{}", ptr_suffix(ty, depth));
+        let kw = if structs.get(id).is_some_and(|s| s.is_union) {
+            "union"
+        } else {
+            "struct"
+        };
+        return format!("{prefix}{kw} {name}{}", ptr_suffix(ty, depth));
     }
     let (base, leaf) = if in_band(bare, Ty::Float as i64) {
         (Ty::Float as i64, "float")

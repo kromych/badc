@@ -2143,6 +2143,56 @@ fn a_subscript_rejects_a_pointer_to_a_function() {
     assert_eq!(Vm::new(program).run().unwrap(), 1, "{src}");
 }
 
+/// C99 6.5.2.1p1, 6.5.6p2: a subscript and the additive operators step by
+/// the pointee's size, so a pointer to a struct or union without its body,
+/// or to an array of unknown bound, is rejected with its type named. A
+/// pointer to `void` steps by one byte as GNU C defines it, the element of
+/// a pointer to an incomplete array is an object, and the comparisons take
+/// any object pointer.
+#[test]
+fn pointer_arithmetic_rejects_an_incomplete_pointee() {
+    use super::Vm;
+    use crate::Compiler;
+    let decls = "struct S; union U;\n\
+                 long f(struct S *p, struct S *q, union U *u, int (*pa)[], void *vp) {\n";
+    let s = "`struct S*`, a pointer to an incomplete type";
+    for (body, text) in [
+        (
+            "return (long)&p[1];",
+            format!("subscripted value has type {s}"),
+        ),
+        ("return (long)(p + 1);", format!("`+` operand has type {s}")),
+        ("return (long)(1 + p);", format!("`+` operand has type {s}")),
+        ("return p - q;", format!("`-` operand has type {s}")),
+        ("p++; return 0;", format!("`++` operand has type {s}")),
+        ("--p; return 0;", format!("`--` operand has type {s}")),
+        ("p += 2; return 0;", format!("`+=` operand has type {s}")),
+        ("p -= 2; return 0;", format!("`-=` operand has type {s}")),
+        (
+            "return (long)(u - 1);",
+            "`-` operand has type `union U*`, a pointer to an incomplete type".into(),
+        ),
+        (
+            "return (long)&pa[1];",
+            "subscripted value has type `int (*)[]`, a pointer to an incomplete type".into(),
+        ),
+    ] {
+        let src = format!("{decls}\t{body}\n}}\nint main(void) {{ return 0; }}\n");
+        let err = Compiler::new(src.clone())
+            .compile()
+            .expect_err(&src)
+            .to_string();
+        assert!(err.contains(&format!("{text} [B3020]")), "{src}{err}");
+    }
+    let src = "struct S;\n\
+               int f(struct S *p, struct S *q, int (*pa)[], void *vp) {\n\
+               \treturn (p == q) + (*pa)[1] + (int)((char *)(vp + 3) - (char *)vp);\n\
+               }\n\
+               int main(void) { int a[2] = { 0, 4 }; return f(0, 0, &a, a); }\n";
+    let program = Compiler::new(src.to_string()).compile().expect(src);
+    assert_eq!(Vm::new(program).run().unwrap(), 8, "{src}");
+}
+
 /// C99 6.6p6: a context that requires an integer constant expression -- a
 /// `case` label or range, an enumerator, an array size, a bit-field width,
 /// a designator, `_Alignas` and the C11 `_Static_assert` -- rejects one

@@ -3180,6 +3180,7 @@ impl Compiler {
         if let Some((lvalue, ty)) = self.direct_inc_lvalue() {
             return self.emit_direct_inc_dec(lvalue, ty, is_inc, false);
         }
+        self.require_complete_pointee(self.ty, if is_inc { "++" } else { "--" })?;
         let (lvalue, fn_ptr_step) = self.inc_dec_lvalue("pre-increment")?;
         let step = if fn_ptr_step {
             1
@@ -3759,6 +3760,12 @@ impl Compiler {
             && is_pointer_ty(lhs_ty)
             && !is_floating_scalar(lhs_ty)
         {
+            let op = if binop == Token::AddOp as i64 {
+                "+="
+            } else {
+                "-="
+            };
+            self.require_complete_pointee(lhs_ty, op)?;
             let elem_ty = pointee_ty(lhs_ty);
             let elem_size = self.size_of_type(elem_ty) as i64;
             if !lhs_fn_ptr && elem_size > 1 {
@@ -4191,6 +4198,8 @@ impl Compiler {
         let displaced = self.additive_object_ref(lhs_ty, lhs_stride, op.tok, object_ref);
         let fn_ptr_arith = lhs_fn_ptr || self.value_is_function_pointer();
         self.check_binary_operands(lhs_ty, self.ty, op.name)?;
+        self.require_complete_pointee(lhs_ty, op.name)?;
+        self.require_complete_pointee(self.ty, op.name)?;
         if let Some(vty) = self.vector_binop_ty(lhs_ty, self.ty, op.name) {
             self.ty = vty;
             self.ast_binop(int);
@@ -4498,6 +4507,7 @@ impl Compiler {
         if let Some((lvalue, ty)) = self.direct_inc_lvalue() {
             return self.emit_direct_inc_dec(lvalue, ty, is_inc, true);
         }
+        self.require_complete_pointee(self.ty, if is_inc { "++" } else { "--" })?;
         let (lvalue, fn_ptr_step) = self.inc_dec_lvalue("post-increment")?;
         self.emit_imm(if fn_ptr_step {
             1
@@ -4576,6 +4586,10 @@ impl Compiler {
         {
             let ty = self.fn_type_text(lhs_ty, &f, 1);
             return Err(self.subscripted_value_err(ty, "a pointer to a function"));
+        }
+        if self.points_to_incomplete(lhs_ty) {
+            let ty = format_type(lhs_ty, &self.structs);
+            return Err(self.subscripted_value_err(ty, "a pointer to an incomplete type"));
         }
         self.require_category(
             idx_ty,

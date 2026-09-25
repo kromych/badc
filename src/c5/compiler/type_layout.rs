@@ -657,6 +657,34 @@ impl Compiler {
         (is_struct_value_ty(ty) && !self.structs[sid].is_complete).then_some(sid)
     }
 
+    /// Whether `ptr_ty` points to an incomplete type, which a subscript and
+    /// the additive operators cannot step over (C99 6.5.2.1p1, 6.5.6p2): a
+    /// struct or union without its body, or an array of unknown bound.
+    /// GNU C steps a pointer to `void` or to a function by one byte.
+    pub(super) fn points_to_incomplete(&self, ptr_ty: i64) -> bool {
+        if !is_struct_ty(ptr_ty) || struct_ptr_depth(ptr_ty) != 1 {
+            return false;
+        }
+        let s = &self.structs[struct_id_of(ptr_ty)];
+        match s.fields.first().filter(|_| s.is_array) {
+            Some(f) if f.array_dims.len() >= 2 => f.array_dims[0] < 0,
+            Some(f) => f.array_size < 0,
+            None => !s.is_complete,
+        }
+    }
+
+    /// Reject an operand of `op` that [`Self::points_to_incomplete`].
+    pub(super) fn require_complete_pointee(&self, ty: i64, op: &str) -> Result<(), C5Error> {
+        if !self.points_to_incomplete(ty) {
+            return Ok(());
+        }
+        let ty = super::types::format_type(ty, &self.structs);
+        Err(self.compile_err(
+            Code::INVALID_OPERANDS,
+            alloc::format!("`{op}` operand has type `{ty}`, a pointer to an incomplete type"),
+        ))
+    }
+
     /// Size in bytes of a value of the given `ty`.
     ///   * pointers (any base type)  -> 8
     ///   * scalar `char`             -> 1

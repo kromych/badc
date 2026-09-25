@@ -2580,16 +2580,23 @@ impl Compiler {
         let elem_ty = self.symbols[id_idx].type_;
         let elem_size = self.size_of_type(elem_ty) as i64;
         let dims = self.symbols[id_idx].array_dims.clone();
-        // The dimension list lets `&arr` and `typeof` rebuild the array
-        // type; a zero-length array records its bound so `typeof` reads
-        // `T[0]`.
-        self.pending.last_array_decay_dims =
-            if dims.is_empty() && self.symbols[id_idx].is_zero_len_array {
-                alloc::vec![0]
-            } else {
-                dims.clone()
-            };
         self.seed_multi_dim_strides(&dims, elem_size);
+        // The dimension list lets `&arr` and `typeof` rebuild the array
+        // type: a zero-length array records its bound so `typeof` reads
+        // `T[0]`, and an unspecified outer bound (C99 6.7.5.2p4, `extern
+        // T x[]`) is -1, where the symbol holds the 0 placeholder.
+        let mut shape = dims;
+        if self.symbols[id_idx].is_zero_len_array {
+            if shape.is_empty() {
+                shape.push(0);
+            }
+        } else if self.symbols[id_idx].array_size < 0 {
+            match shape.first_mut() {
+                Some(outer) => *outer = -1,
+                None => shape.push(-1),
+            }
+        }
+        self.pending.last_array_decay_dims = shape;
         // A function-pointer element keeps its prototype for `arr[i](args)`
         // and its decay depth for `(*arr[i])(...)`: the subscript consumes
         // an array level, not an indirection level.
@@ -5019,10 +5026,19 @@ impl Compiler {
                 // `-1` sentinel as for a zero-length array object.
                 self.pending.last_array_decay_size = -1;
                 // A multi-dimensional flexible member records a 0 placeholder for
-                // its outer dimension; the strides read only the inner ones.
+                // its outer dimension; the strides read only the inner ones. The
+                // dimension list spells that bound as unspecified, or as 0 for a
+                // member declared `[0]`, so `&s->fa` is `T (*)[]` or `T (*)[0]`.
                 let dims = field.array_dims.clone();
                 let elem_size = self.size_of_type(field.ty) as i64;
                 self.seed_multi_dim_strides(&dims, elem_size);
+                let mut shape = dims;
+                let outer = if field.zero_len { 0 } else { -1 };
+                match shape.first_mut() {
+                    Some(d) => *d = outer,
+                    None => shape.push(outer),
+                }
+                self.pending.last_array_decay_dims = shape;
             }
         } else if !field_is_struct_value {
             self.mark_emit_scalar_load();

@@ -165,6 +165,13 @@ Disassembly of section .text:
                	movq	%r10, (%rax)
                	movl	0x8(%rcx), %r10d
                	movl	%r10d, 0x8(%rax)
+               	leaq	<rip>, %rax
+               	movslq	0x4(%rax), %rax
+               	cmpl	$0x6, %eax
+               	je	<addr>
+               	movl	$0x12, %eax
+               	leave
+               	retq
                	leaq	<rip>, %rcx
                	leaq	0x8(%rcx), %rax
                	movslq	0x4(%rax), %rsi

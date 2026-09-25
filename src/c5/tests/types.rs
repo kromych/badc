@@ -2246,6 +2246,59 @@ fn the_address_of_an_array_lvalue_is_a_pointer_to_the_array() {
     assert_eq!(Vm::new(program).run().unwrap(), 0xfff, "{src}");
 }
 
+/// C99 6.5.3.2p3 with 6.7.5.2p4: the address of an array of unknown bound
+/// -- an `extern` array or a flexible array member -- is a pointer to an
+/// incomplete array type, so a subscript or arithmetic on it is rejected
+/// as on any pointer to an incomplete type (6.5.2.1p1, 6.5.6p2). The array
+/// reached through `*` still subscripts.
+#[test]
+fn the_address_of_an_array_of_unknown_bound_is_a_pointer_to_an_incomplete_array() {
+    use super::Vm;
+    use crate::Compiler;
+    let decls = "extern int ua[];\nstruct F { int n; int fa[]; };\n";
+    let ty = "`int (*)[]`, a pointer to an incomplete type";
+    for (body, text) in [
+        (
+            "return (&ua)[1][0];",
+            format!("subscripted value has type {ty}"),
+        ),
+        (
+            "return (long)(&ua + 1);",
+            format!("`+` operand has type {ty}"),
+        ),
+        (
+            "return (long)(&ua - 1);",
+            format!("`-` operand has type {ty}"),
+        ),
+        (
+            "return (&f->fa)[1][0];",
+            format!("subscripted value has type {ty}"),
+        ),
+        (
+            "return (long)(&f->fa + 1);",
+            format!("`+` operand has type {ty}"),
+        ),
+    ] {
+        let src = format!(
+            "{decls}long g(struct F *f) {{\n\t{body}\n}}\nint ua[3];\nint main(void) {{ return 0; }}\n"
+        );
+        let err = Compiler::new(src.clone())
+            .compile()
+            .expect_err(&src)
+            .to_string();
+        assert!(err.contains(&format!("{text} [B3020]")), "{src}{err}");
+    }
+    let src = "extern int ua[];\n\
+               struct F { int n; int fa[]; };\n\
+               int g(struct F *f) {\n\
+               \treturn (*&ua)[1] * 10 + (*&f->fa)[1] + (int)(sizeof(&ua) == sizeof(int *));\n\
+               }\n\
+               int ua[3] = {5, 6, 7};\n\
+               int main(void) { return g((struct F *)ua); }\n";
+    let program = Compiler::new(src.to_string()).compile().expect(src);
+    assert_eq!(Vm::new(program).run().unwrap(), 68, "{src}");
+}
+
 /// C99 6.6p6: a context that requires an integer constant expression -- a
 /// `case` label or range, an enumerator, an array size, a bit-field width,
 /// a designator, `_Alignas` and the C11 `_Static_assert` -- rejects one

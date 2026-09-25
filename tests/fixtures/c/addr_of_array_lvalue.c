@@ -1,15 +1,16 @@
 // The address of an array-typed lvalue is a pointer to that array type
 // (C99 6.5.3.2p3): a row of a multi-dimensional array, an array member
 // and a row of one, a row of a pointer to an array and the array `*p`
-// reaches, a string literal and a compound literal. An array parameter
-// is a pointer (6.7.5.3p7), so its address is a pointer to a pointer.
-// `sizeof`, `typeof`, the subscript stride, arithmetic and a comparison
-// follow the type.
+// reaches, a string literal, a compound literal and an array of unknown
+// bound. An array parameter is a pointer (6.7.5.3p7), so its address is
+// a pointer to a pointer. `sizeof`, `typeof`, the subscript stride,
+// arithmetic and a comparison follow the type.
 static int m[2][2] = {{1, 2}, {3, 4}};
 static int t[2][3][4];
 static int arr[3] = {1, 2, 3};
 static int *q = arr + 1;
 static int buf[3] = {0, 8, 9};
+extern int ua[];
 struct S { int a[3]; int mm[2][3]; int (*pa)[3]; };
 struct F { int n; int fa[]; };
 int (*pa)[2] = m;
@@ -80,6 +81,8 @@ int main(void) {
         return 16;
     if (sizeof(*&(int[]){1, 2, 3}) != sizeof(int[3]) || (&(int[]){1, 2, 3})[0][2] != 3)
         return 17;
+    if (sizeof(&ua) != sizeof(int *) || (*&ua)[1] != 6)
+        return 18;
 
     {
         __typeof__(&m[1]) r = &m[1];
@@ -102,3 +105,5 @@ int main(void) {
         return rc;
     return 0;
 }
+
+int ua[3] = {5, 6, 7};

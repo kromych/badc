@@ -169,6 +169,15 @@ Disassembly of section .text:
                	str	x16, [x1]
                	ldr	w16, [x2, #0x8]
                	str	w16, [x1, #0x8]
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	ldrsw	x1, [x1, #0x4]
+               	cmp	w1, #0x6
+               	b.eq	<addr>
+               	mov	x0, #0x12               // =18
+               	add	sp, sp, #0x50
+               	ldp	x29, x30, [sp], #0x10
+               	ret
                	ldrsw	x1, [x3, #0x4]
                	cmp	w1, #0x4
                	b.ne	<addr>

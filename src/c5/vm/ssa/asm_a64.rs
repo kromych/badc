@@ -45,7 +45,7 @@ fn is_hint(word: u32) -> bool {
 /// barrier words.
 fn check_words(bytes: &mut alloc::vec::Vec<u8>) -> Result<(), C5Error> {
     let words = bytes.chunks(4);
-    if bytes.len() % 4 != 0
+    if !bytes.len().is_multiple_of(4)
         || words
             .map(|w| u32::from_le_bytes(w.try_into().unwrap()))
             .any(|w| !is_hint(w))

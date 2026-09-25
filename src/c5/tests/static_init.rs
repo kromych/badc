@@ -525,6 +525,11 @@ const REJECTED_ONLY_BY_BADC: &[Reject] = &[
     // warn and drop it.
     reject!("string_too_long", "char x[3] = \"abcdef\";", "too many initializers for array `x` (6 > 3)"),
     reject!("excess_elements", "int x[2] = {1, 2, 3};", "too many initializers for array `x` (3 > 2)"),
+    // A union has one object to initialize (6.7.8p17); clang and gcc
+    // keep the first value, badc's fill wrote the excess over it.
+    reject!("excess_union_members", "union u { int a; int b; }; union u x = {1, 2};", "too many initializers for union u"),
+    reject!("excess_union_member", "union v { int a; }; union v x = {1, 2};", "too many initializers for union v"),
+    reject!("excess_union_after_designator", "union w { int a; int b; }; union w x = {.a = 1, 2};", "too many initializers for union w"),
     reject!("excess_scalar_braces", "int x = {1, 2};", "must hold a single value"),
     // TODO: the constant folder carries floating values as `f64`, so a
     // `long double` element does not fold; gcc and clang fold it.

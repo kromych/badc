@@ -2822,6 +2822,35 @@ fn struct_array_compound_literal_counts_elements_not_leaves() {
 }
 
 #[test]
+fn union_initializer_list_rejects_a_second_positional_value() {
+    // C99 6.7.8p17: a union's initializer list initializes its first
+    // named member, so a second positional value has no object (6.7.8p2).
+    // The fill had stored it over the first member's storage.
+    expect_compile_error(
+        "int main(void) { union u { int a; int b; } x = {1, 2}; return x.a; }",
+        "too many initializers for union u",
+    );
+    expect_compile_error(
+        "int main(void) { union u { int a; int b; } x = {.a = 1, 2}; return x.a; }",
+        "too many initializers for union u",
+    );
+    // 6.7.8p19: a later designator overrides; brace elision inside a
+    // struct still hands the union exactly one value.
+    let prog = Compiler::new(
+        "struct s { union u { int a; int b; } m; int n; };\n\
+         int main(void) {\n\
+             union u x = {.a = 1, .b = 2};\n\
+             struct s v = {1, 2};\n\
+             return (x.b == 2 && x.a == 2 && v.m.a == 1 && v.n == 2) ? 0 : 1;\n\
+         }"
+        .to_string(),
+    )
+    .compile()
+    .expect("designated overrides and brace elision stay legal");
+    assert_eq!(crate::c5::Vm::new(prog).run().unwrap(), 0);
+}
+
+#[test]
 fn address_of_a_thread_local_is_not_a_constant_expression() {
     // C11 6.7.9p4: an object with static storage duration is initialized
     // by constant expressions, and a thread-local object's address is not

@@ -3606,9 +3606,23 @@ impl Compiler {
         let var_offset = target.base();
         let n_fields = self.structs[struct_id].fields.len();
         let mut pos: usize = 0;
+        let mut items = 0usize;
         while self.lex.tk != '}' && (braced || pos < n_fields) {
             // Designator?
             let designated = self.lex.tk == Token::Dot;
+            // C99 6.7.8p2, p17: a union holds one object to initialize,
+            // so a positional initializer after the list's first item
+            // names nothing; a designated one overrides (p19).
+            if !designated && items > 0 && self.structs[struct_id].is_union {
+                return Err(self.compile_err(
+                    Code::INVALID_INITIALIZER,
+                    format!(
+                        "too many initializers for union {}",
+                        self.structs[struct_id].name
+                    ),
+                ));
+            }
+            items += 1;
             let field_idx = if self.lex.tk == Token::Dot {
                 self.next()?;
                 if self.lex.tk != Token::Id {
@@ -3660,10 +3674,15 @@ impl Compiler {
                 pos
             };
             if field_idx >= self.structs[struct_id].fields.len() {
+                let kind = if self.structs[struct_id].is_union {
+                    "union"
+                } else {
+                    "struct"
+                };
                 return Err(self.compile_err(
                     Code::INVALID_INITIALIZER,
                     format!(
-                        "too many initializers for struct {}",
+                        "too many initializers for {kind} {}",
                         self.structs[struct_id].name
                     ),
                 ));

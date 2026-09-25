@@ -135,9 +135,9 @@ ARCHES = {
         # less the three features TCG does not implement (qemu_efi.py).
         "machine": ["-cpu", "Haswell-noTSX,-pcid,-invpcid,-tsc-deadline"],
         "console": "ttyS0",
-        # Linux 7.1's TSC watchdog can deadlock an emulated boot: its skew check
-        # waits with IRQs off on a timeout read from jiffies. The kernel skips
-        # the watchdog itself on a CPU with an invariant TSC, which TCG lacks.
+        # Linux 7.1's TSC watchdog can deadlock an emulated boot; the kernel
+        # skips it on a CPU with an invariant TSC, which TCG lacks. TODO: drop
+        # once the pinned release bounds the watchdog's skew-check wait.
         "extra_append": ["tsc=nowatchdog"],
         # The x86 boot path draws its displacement from RDRAND / the TSC /
         # the i8254 counter and takes no seed from outside; see kaslr.py.

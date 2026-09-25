@@ -757,6 +757,7 @@ REFERENCE_GUARD = (
     "-Werror=implicit-int",
     "-Werror=int-conversion",
     "-Werror=incompatible-pointer-types",
+    "-Werror=excess-initializers",
     "-fsanitize=undefined,address",
     "-fno-sanitize=alignment",
     "-fno-sanitize-recover=all",
@@ -801,7 +802,10 @@ def run(argv, timeout):
 
 
 def build(cc, flags, out):
-    return run([cc, *flags, "-w", "-I", INCLUDE, "-o", out, SRC], COMPILE_TIMEOUT)
+    # `-w` silences the guard's `-Werror=` diagnostics too, so only the
+    # compiler under test builds quietly.
+    quiet = ["-w"] if cc == BADC else []
+    return run([cc, *flags, *quiet, "-I", INCLUDE, "-o", out, SRC], COMPILE_TIMEOUT)
 
 
 def checksum(out, timeout):
@@ -875,7 +879,8 @@ def main():
     sys.exit(0)
 
 
-main()
+if __name__ == "__main__":
+    main()
 """
 
 
@@ -1622,7 +1627,13 @@ def self_test() -> int:
     )
     check("the test names the verdict", "VERDICT = 'compile-panic'" in test_text, True)
     check("the test carries no placeholder", "@" in test_text.split("CHECKSUM_RE")[0], False)
-    compile(test_text, "test.py", "exec")
+    rendered: dict[str, object] = {"__name__": "rendered"}
+    exec(compile(test_text, "test.py", "exec"), rendered)
+    rendered["run"] = lambda argv, timeout: (argv, "")
+    build = rendered["build"]
+    assert callable(build)
+    check("the reference build keeps its guard", "-w" in build("clang", ["-O0"], "ref0")[0], False)
+    check("badc builds quietly", "-w" in build("/usr/bin/badc", ["-O0"], "out")[0], True)
     with tempfile.TemporaryDirectory() as tmp:
         kept = Path(tmp) / "case.c"
         kept.write_text("int main(void) { return 0; }\n", encoding="utf-8")

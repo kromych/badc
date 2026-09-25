@@ -43,6 +43,26 @@ impl Compiler {
         }
     }
 
+    /// GNU C gives a function type size 1, the step of the pointer
+    /// arithmetic it admits on pointers to functions, and the alignment
+    /// of an instruction; C99 6.5.3.4p1 admits neither operator.
+    fn function_type_layout(&self, sizeof: bool) -> i64 {
+        if sizeof || self.target.is_x86_64() {
+            1
+        } else {
+            4
+        }
+    }
+
+    /// Whether the unevaluated operand just parsed is a function
+    /// designator rather than a pointer to one.
+    fn operand_is_function(&self) -> bool {
+        match self.ast_acc {
+            Some(id) => self.expr_fn(id).is_some_and(|(_, d)| d == 0),
+            None => self.pending.value_is_fn_designator,
+        }
+    }
+
     /// The byte count of a `sizeof` operand, the keyword consumed: a
     /// parenthesized type name, a bare identifier, or a unary-expression
     /// parsed unevaluated. `self.ty` is restored on return.
@@ -78,6 +98,12 @@ impl Compiler {
             let idx = self.lex.curr_id_idx;
             let var_ty = self.symbols[idx].type_;
             let arr = self.symbols[idx].array_size;
+            let class = self.symbols[idx].class;
+            if class == Token::Fun as i64 || class == Token::Sys as i64 {
+                self.next()?;
+                self.ty = saved_ty;
+                return self.close_sizeof_paren(had_paren, self.function_type_layout(true));
+            }
             // An array declared with an unspecified bound (`extern T x[];`,
             // C99 6.7.5.2p4) has no size here either; a zero-length array
             // is a complete type.
@@ -123,12 +149,15 @@ impl Compiler {
             let array_count = self.pending.last_array_decay_size;
             let array_bytes = self.pending.last_array_decay_bytes;
             let expr_ty = self.ty;
+            let function = self.operand_is_function();
             self.next_ent_pc = saved_text_len;
             self.clear_recent_emits();
             self.code_reloc_sym_idx.truncate(saved_code_reloc_sym_idx);
             self.pending.last_array_decay_size = 0;
             self.pending.last_array_decay_bytes = 0;
-            if array_bytes > 0 {
+            if function {
+                self.function_type_layout(true)
+            } else if array_bytes > 0 {
                 // A row of a pointer to an array or of a multi-dimensional array:
                 // its byte count, which the flat type cannot express.
                 array_bytes
@@ -146,6 +175,11 @@ impl Compiler {
                 self.size_of_type(expr_ty) as i64
             }
         };
+        self.ty = saved_ty;
+        self.close_sizeof_paren(had_paren, total)
+    }
+
+    fn close_sizeof_paren(&mut self, had_paren: bool, total: i64) -> Result<i64, C5Error> {
         if had_paren {
             if self.lex.tk == ')' {
                 self.next()?;
@@ -153,7 +187,6 @@ impl Compiler {
                 return Err(self.compile_err(Code::SYNTAX, "close paren expected in sizeof"));
             }
         }
-        self.ty = saved_ty;
         Ok(total)
     }
 
@@ -617,10 +650,14 @@ impl Compiler {
             let saved_reloc = self.code_reloc_sym_idx.len();
             self.expr_or_void(Token::Inc as i64)?;
             let expr_ty = self.ty;
+            let function = self.operand_is_function();
             self.next_ent_pc = saved_text_len;
             self.clear_recent_emits();
             self.code_reloc_sym_idx.truncate(saved_reloc);
             self.ty = saved_ty;
+            if function {
+                return Ok(self.function_type_layout(false));
+            }
             self.require_complete_operand(expr_ty, "_Alignof")?;
             return Ok(self.align_of_type(expr_ty) as i64);
         }
@@ -636,6 +673,7 @@ impl Compiler {
             let saved_reloc = self.code_reloc_sym_idx.len();
             self.expr_or_void(Token::Assign as i64)?;
             let expr_ty = self.ty;
+            let function = self.operand_is_function();
             self.next_ent_pc = saved_text_len;
             self.clear_recent_emits();
             self.code_reloc_sym_idx.truncate(saved_reloc);
@@ -644,6 +682,9 @@ impl Compiler {
                 return Err(self.compile_err(Code::SYNTAX, "`)` expected to close `_Alignof`"));
             }
             self.next()?;
+            if function {
+                return Ok(self.function_type_layout(false));
+            }
             self.require_complete_operand(expr_ty, "_Alignof")?;
             return Ok(self.align_of_type(expr_ty) as i64);
         }
@@ -652,6 +693,9 @@ impl Compiler {
             return Err(self.compile_err(Code::SYNTAX, "`)` expected to close `_Alignof`"));
         }
         self.next()?;
+        if type_name.names_function() {
+            return Ok(self.function_type_layout(false));
+        }
         // A typedef base may carry an explicit type alignment (GNU
         // `aligned(N)`). It applies to the type and to an array of it
         // (C11 6.2.8: an array's alignment is its element's), but a
@@ -671,6 +715,9 @@ impl Compiler {
     /// size times every array bound; an unspecified bound is an
     /// incomplete type.
     fn sizeof_type_name(&mut self, type_name: &TypeName) -> Result<i64, C5Error> {
+        if type_name.names_function() {
+            return Ok(self.function_type_layout(true));
+        }
         if type_name.ptr_levels == 0 {
             self.require_complete_operand(type_name.ty, "sizeof")?;
             if type_name.dims.iter().any(|&d| d < 0) {

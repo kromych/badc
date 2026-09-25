@@ -5927,6 +5927,13 @@ pub(super) struct TypeName {
     pub type_align: i64,
 }
 
+impl TypeName {
+    /// Whether the name denotes a function type, not a pointer to one.
+    pub(super) fn names_function(&self) -> bool {
+        self.dims.is_empty() && self.fn_ty.as_ref().is_some_and(|f| f.ptr_depth == 0)
+    }
+}
+
 /// A function type named by a type name. The flat type tag carries only
 /// the return type, so C99 6.7.5.3 compatibility needs the parameter list
 /// and the indirection above the function alongside it.

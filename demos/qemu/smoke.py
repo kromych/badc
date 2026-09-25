@@ -741,7 +741,7 @@ def maybe_boot(binp: Path, arch: str) -> None:
     machine = "virt" if arch == "aarch64" else "q35"
     # The guest runs badc output, so its CPU carries the instruction-set
     # baseline (doc/native-compilation.md; `qemu_efi.BASELINE_CPU`).
-    cpu = "max" if arch == "aarch64" else "Haswell-noTSX"
+    cpu = "max" if arch == "aarch64" else "Haswell-noTSX,-pcid,-invpcid,-tsc-deadline"
     # aarch64 boots THROUGH the AAVMF firmware when it is published (env set),
     # matching the x86_64 OVMF path. acpi=off forces the device tree so the
     # kernel probes the PL011 as ttyAMA0: QEMU's ACPI provides only an SPCR

@@ -131,8 +131,9 @@ ARCHES = {
         "image": "arch/x86/boot/bzImage",
         "qemu": "qemu-system-x86_64",
         # TCG's default `qemu64` is below the x86-64-v3 baseline the kernel
-        # is compiled for; `Haswell-noTSX` carries it without `max`'s LA57.
-        "machine": ["-cpu", "Haswell-noTSX"],
+        # is compiled for; `Haswell-noTSX` carries it without `max`'s LA57,
+        # less the three features TCG does not implement (qemu_efi.py).
+        "machine": ["-cpu", "Haswell-noTSX,-pcid,-invpcid,-tsc-deadline"],
         "console": "ttyS0",
         # Linux 7.1's TSC watchdog can deadlock an emulated boot: its skew check
         # waits with IRQs off on a timeout read from jiffies. The kernel skips

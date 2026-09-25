@@ -20,8 +20,9 @@ import time
 # QEMU models that carry badc's instruction-set baseline: `max` for
 # ARMv8.4-A with the ARMv8.5-A additions, `Haswell-noTSX` for x86-64-v3,
 # which no named QEMU model spells and `max` over-provides (LA57 changes a
-# kernel's paging mode).
-BASELINE_CPU = {"x64": "Haswell-noTSX", "aarch64": "max"}
+# kernel's paging mode). The x64 model drops the three features TCG does
+# not implement, which QEMU would otherwise drop with a warning per boot.
+BASELINE_CPU = {"x64": "Haswell-noTSX,-pcid,-invpcid,-tsc-deadline", "aarch64": "max"}
 
 # OVMF firmware locations, in priority order. `$OVMF_CODE`/`$OVMF_VARS` (x64)
 # and `$AAVMF_CODE`/`$AAVMF_VARS` (aarch64) override; then the common macOS

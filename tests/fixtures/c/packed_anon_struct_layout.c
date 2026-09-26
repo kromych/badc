@@ -7,8 +7,9 @@
 // only `char`/`short`/`int`, whose sizes do not vary across the supported
 // targets; the `long` shape is checked against its named counterpart only.
 // The PE targets lay bit-fields out by the MS rules, where a bit-field keeps a
-// whole unit of its declared type under `packed` as well; their absolute
-// values for the bit-field shapes are clang's for the windows-msvc triples.
+// whole unit of its declared type under `packed` as well, and an alignment a
+// member's type asks for stands under `packed`; their absolute values for
+// those shapes are clang's for the windows-msvc triples.
 //
 // A non-zero exit code is the ordinal of the failing check.
 
@@ -190,17 +191,29 @@ int main(void) {
     SAME(struct al_anon, struct al_named);
     CHECK(offsetof(struct al_anon, a) == offsetof(struct al_named, m.a));
     CHECK(offsetof(struct al_anon, t) == offsetof(struct al_named, t));
+#if defined(_WIN32)
+    CHECK(sizeof(struct al_anon) == 24);
+    CHECK(_Alignof(struct al_anon) == 8);
+    CHECK(offsetof(struct al_anon, a) == 8);
+#else
     CHECK(sizeof(struct al_anon) == 10);
     CHECK(_Alignof(struct al_anon) == 1);
     CHECK(offsetof(struct al_anon, a) == 1);
+#endif
 
     SAME(struct in_anon, struct in_named);
     CHECK(offsetof(struct in_anon, a) == offsetof(struct in_named, m.a));
     CHECK(offsetof(struct in_anon, b) == offsetof(struct in_named, m.b));
     CHECK(offsetof(struct in_anon, t) == offsetof(struct in_named, t));
+#if defined(_WIN32)
+    CHECK(sizeof(struct in_anon) == 64);
+    CHECK(_Alignof(struct in_anon) == 16);
+    CHECK(offsetof(struct in_anon, b) == 32);
+#else
     CHECK(sizeof(struct in_anon) == 34);
     CHECK(_Alignof(struct in_anon) == 1);
     CHECK(offsetof(struct in_anon, b) == 17);
+#endif
 
     SAME(union w_anon, union w_named);
     CHECK(offsetof(union w_anon, a) == offsetof(union w_named, m.a));

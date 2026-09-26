@@ -430,6 +430,7 @@ pub struct StructField {
     /// field's natural alignment but not an explicit request (GCC and
     /// clang both keep an `aligned(64)` member 64-aligned inside a
     /// packed struct), so the re-lay path needs the request preserved.
+    /// The MS layout adds what the field's type requires.
     pub explicit_align: u32,
     /// Alignment the layout placed this field at, including a
     /// typedef-carried `aligned(N)` the flat field type cannot express.

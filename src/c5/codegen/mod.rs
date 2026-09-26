@@ -311,9 +311,9 @@ impl Target {
         matches!(self, Target::LinuxAarch64)
     }
 
-    /// Whether aggregates holding bit-fields take the MS layout, the PE
-    /// targets' C ABI (MSVC, and clang for a windows-msvc triple).
-    pub fn ms_bitfields(self) -> bool {
+    /// Whether aggregates take the MS record layout, the PE targets' C ABI
+    /// (MSVC, and clang for a windows-msvc triple).
+    pub fn ms_layout(self) -> bool {
         self.is_windows()
     }
 

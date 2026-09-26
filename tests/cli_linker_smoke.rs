@@ -6247,6 +6247,51 @@ fn small_fp_aggregates_cross_the_windows_compiler_boundary() {
     );
 }
 
+// The platform compiler keeps an alignment a member or its type asks for under
+// `#pragma pack`, which lowers only the natural alignment. Structs of that
+// shape cross the boundary by value, as results and through a pointer.
+#[cfg(windows)]
+#[test]
+fn aligned_members_cross_the_windows_compiler_boundary() {
+    let Some(cc) = windows_cc() else {
+        eprintln!(
+            "skipping aligned_members_cross_the_windows_compiler_boundary: no platform C compiler"
+        );
+        return;
+    };
+    let common = "typedef long long ll;\n\
+        typedef __declspec(align(8)) int i8;\n\
+        #pragma pack(push, 1)\n\
+        struct am { char c; __declspec(align(8)) int m; char d; };\n\
+        struct at { char c; i8 m; short s; };\n\
+        struct an { char c; struct { char a; __declspec(align(16)) int b; } n; char t; };\n\
+        #pragma pack(pop)\n\
+        static ll layout(void)\n\
+        { return sizeof(struct am) + 100 * (sizeof(struct at) + 100 * (ll)sizeof(struct an)); }\n\
+        static struct am make_am(int m, char c, char d)\n\
+        { struct am v; v.c = c; v.m = m; v.d = d; return v; }\n\
+        static int read_at(struct at v) { return v.c * 1000000 + v.m * 1000 + v.s; }\n\
+        static void set_an(struct an *p, int b, char t) { p->n.b = b; p->t = t; }\n\
+        struct fns { ll (*layout)(void); struct am (*make_am)(int, char, char);\n\
+          int (*read_at)(struct at); void (*set_an)(struct an *, int, char); };\n\
+        static int drive(const struct fns *f, int base)\n\
+        { struct am a = f->make_am(123456, 'x', 'y');\n\
+          struct at t = { 7, 654, 321 };\n\
+          struct an n = { 1, { 2, 3 }, 4 };\n\
+          if (f->layout() != layout()) return base + 1;\n\
+          if (a.c != 'x' || a.m != 123456 || a.d != 'y') return base + 2;\n\
+          if (f->read_at(t) != 7654321) return base + 3;\n\
+          f->set_an(&n, 99, 5);\n\
+          if (n.c != 1 || n.n.a != 2 || n.n.b != 99 || n.t != 5) return base + 4;\n\
+          return 0; }\n";
+    drive_across_the_windows_compiler(
+        &cc,
+        "win-aligned-interop",
+        common,
+        "layout, make_am, read_at, set_an",
+    );
+}
+
 // A function returning an aggregate through the hidden result pointer takes that
 // pointer in the first integer register and its other arguments in their own
 // classes (System V AMD64 3.2.3), across the system compiler boundary both ways.

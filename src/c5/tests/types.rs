@@ -1578,9 +1578,7 @@ fn unnamed_bitfield_alignment_follows_the_target_abi() {
 /// on every row without a GNU attribute.
 #[test]
 fn bitfields_take_the_ms_layout_on_pe_targets() {
-    use super::Vm;
-    use crate::{Compiler, Target};
-    use alloc::{format, string::String};
+    use crate::Target;
     const SHAPES: &[&str] = &[
         "|struct { char c; unsigned :1; }|8/4|c@0",
         "|struct { char c; int :4; char d; }|12/4|c@0 d@64",
@@ -1641,14 +1639,91 @@ fn bitfields_take_the_ms_layout_on_pe_targets() {
         "|struct { char a:4; char :0; char b:4; }|2/1|a@0 b@8",
         "|struct { long long a:3; int b:3; char c:3; }|16/8|a@0 b@64 c@96",
     ];
-    let mut src = String::from(
-        "static int pos(const unsigned char *b, int n) {\n\
+    layout_rows_hold("", SHAPES, &[Target::WindowsX64, Target::WindowsAarch64]);
+}
+
+/// The MS layout lowers only a member's natural alignment for `#pragma
+/// pack` and `packed`: an alignment the member or its type asks for, by
+/// `__declspec(align)` or `aligned`, stands, and it raises the aggregate. A
+/// typedef's own alignment neither lowers the member below its type's nor
+/// yields to the pack value. GCC's rule, which the other targets keep, packs
+/// the requested alignment too. The rows are clang 21's record layouts for
+/// both windows-msvc triples and for x86_64-linux-gnu, the latter only where
+/// the two rules part.
+#[test]
+fn explicit_alignment_survives_packing_in_the_ms_layout() {
+    use crate::Target;
+    const PRELUDE: &str = "typedef __declspec(align(8)) int i8;\n\
+        typedef int __attribute__((aligned(1))) i1;\n\
+        typedef struct __declspec(align(8)) al8 { char a; } ali8;\n";
+    const MS: &[&str] = &[
+        "1|struct { char c; int m __attribute__((aligned(8))); }|16/8|c@0 m@64",
+        "1|struct { char c; __declspec(align(8)) int m; }|16/8|c@0 m@64",
+        "2|struct { char c; int m __attribute__((aligned(4))); }|8/4|c@0 m@32",
+        "1|struct { char c; int m __attribute__((aligned(2))); }|6/2|c@0 m@16",
+        "1|struct { char c; long long d; }|9/1|c@0 d@8",
+        "4|struct { char c; long long x; }|12/4|c@0 x@32",
+        "4|struct { char c; __declspec(align(16)) long long m; }|32/16|c@0 m@128",
+        "|struct { char c; int m __attribute__((aligned(8))); } __attribute__((packed))|16/8|c@0 m@64",
+        "|struct { char c; int m __attribute__((aligned(2))); } __attribute__((packed))|6/2|c@0 m@16",
+        "|struct __attribute__((packed)) { char c; int m __attribute__((aligned(8))); char d; }|16/8|c@0 m@64 d@96",
+        "1|struct { char c; struct { int x; } __attribute__((aligned(8))) m; }|16/8|c@0 m.x@64",
+        "1|struct { char c; struct { char a; __declspec(align(16)) int b; } m; char t; }|64/16|c@0 m.a@128 m.b@256 t@384",
+        "|struct { char h; struct { char a; int b; } __attribute__((aligned(8))) m; char t; } __attribute__((packed))|24/8|h@0 m.a@64 m.b@96 t@128",
+        "|struct { char h; struct { char a; int b __attribute__((aligned(16))); } m; char t; } __attribute__((packed))|64/16|h@0 m.a@128 m.b@256 t@384",
+        "2|struct { char c; __declspec(align(8)) int a; short s; }|16/8|c@0 a@64 s@96",
+        "1|union { char c; __declspec(align(8)) int m; }|8/8|c@0 m@0",
+        "|union { char c; int m __attribute__((aligned(8))); } __attribute__((packed))|8/8|c@0 m@0",
+        "8|struct { __declspec(align(2)) char c; char d; }|2/2|c@0 d@8",
+        "1|struct { char c; i8 x; }|16/8|c@0 x@64",
+        "|struct { char c; i8 x; } __attribute__((packed))|16/8|c@0 x@64",
+        "|struct { char c; i1 x; }|8/4|c@0 x@32",
+        "1|struct { char c; i1 x; }|5/1|c@0 x@8",
+        "1|struct { char c; ali8 x; }|16/8|c@0 x.a@64",
+        "|struct { char c; ali8 x; } __attribute__((packed))|16/8|c@0 x.a@64",
+        "1|struct { char c; ali8 x[2]; char d; }|32/8|c@0 x[1].a@128 d@192",
+        "1|struct __declspec(align(4)) { char c; __declspec(align(8)) int m; }|16/8|c@0 m@64",
+        "2|union { char c; __declspec(align(4)) short m; char d[5]; }|8/4|c@0 m@0 d[4]@32",
+    ];
+    const SYSV: &[&str] = &[
+        "1|struct { char c; int m __attribute__((aligned(8))); }|5/1|c@0 m@8",
+        "1|struct { char c; __declspec(align(8)) int m; }|5/1|c@0 m@8",
+        "2|struct { char c; int m __attribute__((aligned(4))); }|6/2|c@0 m@16",
+        "1|struct { char c; int m __attribute__((aligned(2))); }|5/1|c@0 m@8",
+        "4|struct { char c; __declspec(align(16)) long long m; }|12/4|c@0 m@32",
+        "1|struct { char c; struct { int x; } __attribute__((aligned(8))) m; }|9/1|c@0 m.x@8",
+        "1|struct { char c; struct { char a; __declspec(align(16)) int b; } m; char t; }|7/1|c@0 m.a@8 m.b@16 t@48",
+        "|struct { char h; struct { char a; int b; } __attribute__((aligned(8))) m; char t; } __attribute__((packed))|10/1|h@0 m.a@8 m.b@40 t@72",
+        "|struct { char h; struct { char a; int b __attribute__((aligned(16))); } m; char t; } __attribute__((packed))|34/1|h@0 m.a@8 m.b@136 t@264",
+        "2|struct { char c; __declspec(align(8)) int a; short s; }|8/2|c@0 a@16 s@48",
+        "1|union { char c; __declspec(align(8)) int m; }|4/1|c@0 m@0",
+        "1|struct { char c; i8 x; }|5/1|c@0 x@8",
+        "|struct { char c; i8 x; } __attribute__((packed))|5/1|c@0 x@8",
+        "|struct { char c; i1 x; }|5/1|c@0 x@8",
+        "1|struct { char c; ali8 x; }|9/1|c@0 x.a@8",
+        "|struct { char c; ali8 x; } __attribute__((packed))|9/1|c@0 x.a@8",
+        "1|struct { char c; ali8 x[2]; char d; }|18/1|c@0 x[1].a@72 d@136",
+        "1|struct __declspec(align(4)) { char c; __declspec(align(8)) int m; }|8/4|c@0 m@8",
+        "2|union { char c; __declspec(align(4)) short m; char d[5]; }|6/2|c@0 m@0 d[4]@32",
+    ];
+    layout_rows_hold(PRELUDE, MS, &[Target::WindowsX64, Target::WindowsAarch64]);
+    layout_rows_hold(PRELUDE, SYSV, &[Target::LinuxX64, Target::LinuxAarch64]);
+}
+
+/// Check layout rows `pack|declaration|size/alignment|member@bit ...` for
+/// each target through the interpreter, the bit being the lowest one a
+/// member set to 1 occupies. `prelude` declares the types the rows name.
+fn layout_rows_hold(prelude: &str, rows: &[&str], targets: &[crate::Target]) {
+    use super::Vm;
+    use crate::Compiler;
+    use alloc::{format, string::String};
+    let mut src = String::from(prelude);
+    src += "static int pos(const unsigned char *b, int n) {\n\
          for (int i = 0; i < n; i++) if (b[i]) { int k = 0; while (!((b[i] >> k) & 1)) k++;\n\
          return i * 8 + k; }\n\
-         return -1; }\n",
-    );
+         return -1; }\n";
     let mut body = String::new();
-    for (n, row) in SHAPES.iter().enumerate() {
+    for (n, row) in rows.iter().enumerate() {
         let mut parts = row.split('|');
         let (pack, decl, layout, members) = (
             parts.next().unwrap(),
@@ -1683,13 +1758,11 @@ fn bitfields_take_the_ms_layout_on_pe_targets() {
         body += "}\n";
     }
     src += &format!("int main(void) {{\n{body}return 0; }}\n");
-    for t in [Target::WindowsX64, Target::WindowsAarch64] {
+    for &t in targets {
         let got = Vm::new(Compiler::with_target(src.clone(), t).compile().unwrap())
             .run()
             .unwrap();
-        let row = (got as usize / 16)
-            .checked_sub(1)
-            .and_then(|r| SHAPES.get(r));
+        let row = (got as usize / 16).checked_sub(1).and_then(|r| rows.get(r));
         assert_eq!(got, 0, "{t:?}: check {} of {row:?}", got % 16);
     }
 }

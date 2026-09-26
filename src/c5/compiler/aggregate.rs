@@ -97,6 +97,9 @@ struct MemberPlacement {
     ty: i64,
     offset: usize,
     align: usize,
+    /// The alignment attributes on the member ask for; in the MS layout
+    /// also what its type requires, which no packing lowers.
+    required: usize,
     bit_offset: u32,
     bit_width: u32,
     bit_unit: usize,
@@ -441,7 +444,7 @@ impl Compiler {
                 conv: field_conv,
                 anon_union_group: 0,
                 anon_struct_group: 0,
-                explicit_align: group_align.max(decl_align) as u32,
+                explicit_align: placement.required as u32,
                 align: placed_align as u32,
                 decl_spelling: field_spelling,
             });
@@ -548,6 +551,8 @@ impl Compiler {
         let mut bit_offset: u32 = 0;
         let mut bit_unit: usize = 0;
         let placed_align: usize;
+        let required: usize;
+        let ms = self.target.ms_layout();
         let field_offset: usize;
         // `int x:N` packs N bits into a shared storage unit; the layout's bit
         // cursor says whether a run of them is already open.
@@ -597,6 +602,7 @@ impl Compiler {
             }
             .max(group_align)
             .max(decl_align);
+            required = group_align.max(decl_align);
             // C99 6.7.2.1: an enum bitfield reads as unsigned (a
             // non-negative enum's underlying type is unsigned),
             // so the extraction zero-extends. A full-width enum
@@ -687,29 +693,38 @@ impl Compiler {
             // through a pointer declarator or under `packed`,
             // which drops a type attribute to 1 (a member
             // `_Alignas` survives packing via `decl_align`).
+            let typedef_align = type_align_override > 0 && !is_pointer_ty(field_ty);
             let natural_align = if attr_packed {
                 1
-            } else if type_align_override > 0 && !is_pointer_ty(field_ty) {
+            } else if typedef_align && !ms {
                 type_align_override
             } else {
                 self.align_of_type(field_ty)
             };
-            let field_align = natural_align.max(group_align).max(decl_align).min(pack);
-            placed_align = field_align;
-            if field_align > layout.align {
-                layout.align = field_align;
-            }
-            layout.natural = layout.natural.max(self.unattributed_align_of(field_ty));
             // The field's explicit alignment sources; a nested
             // aggregate contributes its own attribute-derived part.
             let mut fe = group_align.max(decl_align);
-            if type_align_override > 0 && !is_pointer_ty(field_ty) && !attr_packed {
+            if typedef_align && (ms || !attr_packed) {
                 fe = fe.max(type_align_override);
             }
             if is_struct_value_ty(field_ty) {
                 fe = fe.max(self.structs[struct_id_of(field_ty)].explicit_align as usize);
             }
-            layout.explicit = layout.explicit.max(fe.min(pack).min(field_align.max(1)));
+            // The MS layout packs only the natural alignment: what the
+            // member or its type asks for stands (MSVC's `align` rule).
+            let field_align = if ms {
+                natural_align.min(pack).max(fe)
+            } else {
+                natural_align.max(group_align).max(decl_align).min(pack)
+            };
+            placed_align = field_align;
+            required = if ms { fe } else { group_align.max(decl_align) };
+            if field_align > layout.align {
+                layout.align = field_align;
+            }
+            layout.natural = layout.natural.max(self.unattributed_align_of(field_ty));
+            let fe = if ms { fe } else { fe.min(pack) };
+            layout.explicit = layout.explicit.max(fe.min(field_align.max(1)));
             field_offset = if is_union {
                 0
             } else {
@@ -726,6 +741,7 @@ impl Compiler {
             ty: field_ty,
             offset: field_offset,
             align: placed_align,
+            required,
             bit_offset,
             bit_width,
             bit_unit,
@@ -1018,7 +1034,10 @@ impl Compiler {
 
         let inner_size = self.structs[inner_id].size;
         let pack = if packed { 1 } else { self.lex.current_pack() };
-        let inner_align = self.structs[inner_id].align.min(pack);
+        let mut inner_align = self.structs[inner_id].align.min(pack);
+        if self.target.ms_layout() {
+            inner_align = inner_align.max(self.structs[inner_id].explicit_align as usize);
+        }
         if inner_align > layout.align {
             layout.align = inner_align;
         }
@@ -1127,10 +1146,15 @@ impl Compiler {
         // rejected at its declaration -- the frame uses 8-byte slots and
         // does not realign. Struct layout, static locals and globals honor
         // the full range.
+        let pack = if self.target.ms_layout() {
+            usize::MAX
+        } else {
+            self.lex.current_pack()
+        };
         let struct_align = layout
             .align
             .min(super::MAX_STATIC_ALIGN)
-            .min(self.lex.current_pack())
+            .min(pack)
             .max(self.anon_zero_bitfield_align(struct_id));
         // Pad the struct's tail up to its alignment so consecutive
         // elements of an array preserve every field's natural
@@ -1152,7 +1176,7 @@ impl Compiler {
         // result come from the same re-lay the trailing form runs.
         if packed {
             self.repack_struct(struct_id, Packing::Attribute);
-        } else if self.target.ms_bitfields() && self.has_bitfield_members(struct_id) {
+        } else if self.target.ms_layout() && self.has_bitfield_members(struct_id) {
             self.ms_relayout(struct_id, self.lex.pragma_pack().map(Packing::Pragma));
         } else if let Some(pack) = self.lex.pragma_pack()
             && self.has_bitfield_members(struct_id)
@@ -1239,7 +1263,7 @@ impl Compiler {
     /// A member carrying an explicit `aligned(N)` keeps that boundary:
     /// `packed` removes natural padding, not a requested alignment.
     pub(super) fn repack_struct(&mut self, struct_id: usize, packing: Packing) {
-        if self.target.ms_bitfields() && self.has_bitfield_members(struct_id) {
+        if self.target.ms_layout() {
             self.ms_relayout(struct_id, Some(packing));
             return;
         }
@@ -1484,7 +1508,9 @@ impl Compiler {
             }
             if mem_pos < members.len() && members[mem_pos].first as usize <= i {
                 let m = members[mem_pos];
-                let base = cur.member(m.size, self.structs[m.inner].align.min(cap).max(1));
+                let inner = &self.structs[m.inner];
+                let align = inner.align.min(cap).max(inner.explicit_align as usize);
+                let base = cur.member(m.size, align.max(1));
                 self.move_anon_member(struct_id, mem_pos, base);
                 mem_pos += 1;
                 i = i.max(m.first as usize + m.count as usize);

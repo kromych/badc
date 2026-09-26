@@ -4044,9 +4044,15 @@ impl Compiler {
             let elem_size = self.size_of_type(field.ty);
             let mut idx: usize = 0;
             while (idx as i64) < field.array_size && self.lex.tk != '}' {
-                let (value, reloc) = self.parse_constant_init_value()?;
                 let here = field_base + idx * elem_size;
-                self.write_init_value(here, elem_size, value, reloc, field.ty)?;
+                // An aggregate element takes its own members from the same
+                // list, its braces elided too.
+                if self.is_traversable_aggregate_ty(field.ty) {
+                    self.init_struct_array_element(struct_id_of(field.ty), here as i64)?;
+                } else {
+                    let (value, reloc) = self.parse_constant_init_value()?;
+                    self.write_init_value(here, elem_size, value, reloc, field.ty)?;
+                }
                 idx += 1;
                 if !self.initializer_separator(idx as i64 >= field.array_size)? {
                     break;

@@ -3009,7 +3009,14 @@ impl Compiler {
             if self.lex.tk == '}' {
                 break;
             }
-            self.emit_array_leaf_runtime(local_val, base + k * elem_size, ty)?;
+            // An aggregate element takes its own members from the same list
+            // (C99 6.7.8p20), its braces elided too.
+            if self.is_traversable_aggregate_ty(ty) {
+                let sid = super::types::struct_id_of(ty);
+                self.emit_struct_array_element_runtime(local_val, base + k * elem_size, sid)?;
+            } else {
+                self.emit_array_leaf_runtime(local_val, base + k * elem_size, ty)?;
+            }
             k += 1;
             if !self.initializer_separator(k >= n)? {
                 break;

@@ -2759,6 +2759,13 @@ fn array_typedef_derivations() {
 }
 
 #[test]
+fn struct_array_member_brace_elision() {
+    // C99 6.7.8p20: an aggregate element of an array member takes its
+    // members from the enclosing list when its braces are elided.
+    assert_eq!(run_fixture("struct_array_member_brace_elision.c"), 0);
+}
+
+#[test]
 fn indirect_call_prototypes() {
     // A call through a pointer converts or promotes its arguments by the
     // pointed-to type, however the callee is spelled.

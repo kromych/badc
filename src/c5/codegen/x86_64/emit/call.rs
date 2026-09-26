@@ -59,18 +59,6 @@ fn agg_base_reg(regs: &[super::ClassReg; 4], n: u8) -> Option<u8> {
         .map(|c| c.reg)
 }
 
-/// Class of register slot `k` of an aggregate. The planner builds the
-/// `regs` array from this same list, so the index is always in range.
-fn slot_class(
-    classes: &[super::abi_classify::RegClass],
-    k: usize,
-) -> super::abi_classify::RegClass {
-    classes
-        .get(k)
-        .copied()
-        .unwrap_or(super::abi_classify::RegClass::Sse)
-}
-
 impl Marshal<'_> {
     fn arg_place(&self, i: usize) -> Place {
         place_of(self.alloc, self.args[i])
@@ -212,21 +200,18 @@ impl Marshal<'_> {
             if self.arg_into(code, i, SCRATCH_R10).is_err() {
                 return self.fail("fp aggregate base not in int reg / spill");
             }
-            let classes = self.arg_classes(i);
-            let mut disp = 0i32;
-            for (k, cr) in regs.iter().take(n as usize).enumerate() {
-                let class = slot_class(classes, k);
+            let slots = super::abi_classify::register_slots(self.arg_classes(i));
+            for ((class, off), cr) in slots.zip(regs.iter().take(n as usize)) {
                 emit_agg_load_slot_sse(
                     code,
                     class,
                     Reg(cr.reg),
                     SCRATCH_R10,
-                    disp,
+                    off as i32,
                     align,
                     self.abi.strict_align,
                     SCRATCH_R11,
                 );
-                disp += class.width() as i32;
             }
         }
         Ok(())
@@ -299,33 +284,38 @@ impl Marshal<'_> {
     /// `sse_aggs` takes it.
     fn agg_eightbytes(&self, code: &mut Vec<u8>) {
         let strict = self.abi.strict_align;
-        for &placement in self.plan.placements.iter() {
+        for (i, &placement) in self.plan.placements.iter().enumerate() {
             let super::ArgPlacement::StructRegs { regs, n, align } = placement else {
                 continue;
             };
             let Some(base) = agg_base_reg(&regs, n) else {
                 continue;
             };
-            for (k, cr) in regs.iter().take(n as usize).enumerate() {
+            let slots: Vec<(super::ClassReg, i32)> =
+                super::abi_classify::register_slots(self.arg_classes(i))
+                    .zip(regs.iter().take(n as usize))
+                    .map(|((_, off), &cr)| (cr, off as i32))
+                    .collect();
+            for &(cr, off) in &slots {
                 if cr.is_fp {
                     emit_agg_load_sse(
                         code,
                         Reg(cr.reg),
                         Reg(base),
-                        (k as i32) * 8,
+                        off,
                         align,
                         strict,
                         SCRATCH_R10,
                     );
                 }
             }
-            for (k, cr) in regs.iter().take(n as usize).enumerate().rev() {
+            for &(cr, off) in slots.iter().rev() {
                 if !cr.is_fp && cr.reg != base {
                     emit_agg_load_int(
                         code,
                         Reg(cr.reg),
                         Reg(base),
-                        (k as i32) * 8,
+                        off,
                         8,
                         align,
                         strict,
@@ -333,12 +323,10 @@ impl Marshal<'_> {
                     );
                 }
             }
-            let base_off = regs
+            let disp = slots
                 .iter()
-                .take(n as usize)
-                .position(|c| !c.is_fp && c.reg == base)
-                .unwrap_or(0);
-            let disp = (base_off as i32) * 8;
+                .find(|(cr, _)| !cr.is_fp && cr.reg == base)
+                .map_or(0, |&(_, off)| off);
             // The base's own eightbyte overwrites the base, so a composed
             // one accumulates in scratch first.
             if super::super::access_unit(disp as u32, 8, align, strict) == 8 {
@@ -377,17 +365,15 @@ fn store_agg_return(
     let int_ret = [Reg::RAX, Reg::RDX];
     let mut int_i = 0usize;
     let mut sse_i = 0u8;
-    let mut off = 0i64;
-    for class in eb_classes.iter() {
-        let disp = (base + off) as i32;
-        off += class.width() as i64;
-        if *class == super::abi_classify::RegClass::X87 {
+    for (class, off) in super::abi_classify::register_slots(&eb_classes) {
+        let disp = (base + i64::from(off)) as i32;
+        if class == super::abi_classify::RegClass::X87 {
             super::encode::emit_fstp_m80(code, Reg::RBP, disp);
-        } else if *class == super::abi_classify::RegClass::Integer {
+        } else if class == super::abi_classify::RegClass::Integer {
             emit_mov_mem_r(code, Reg::RBP, disp, int_ret[int_i]);
             int_i += 1;
         } else {
-            emit_agg_store_slot_sse(code, *class, Reg::RBP, disp, Reg(Reg::XMM0.0 + sse_i));
+            emit_agg_store_slot_sse(code, class, Reg::RBP, disp, Reg(Reg::XMM0.0 + sse_i));
             sse_i += 1;
         }
     }

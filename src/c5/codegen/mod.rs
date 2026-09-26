@@ -540,8 +540,9 @@ pub(crate) enum ArgPlacement {
     /// An aggregate passed by value in up to four register slots
     /// (`regs[0..n]`), one per eightbyte / HFA member. Each
     /// [`ClassReg`] names the concrete register and whether it is an
-    /// integer or FP register; the emitter loads the k-th slot from
-    /// `[arg_addr + 8*k]`. C99 aggregates pass at most two GPRs
+    /// integer or FP register; the emitter loads the k-th slot from the
+    /// offset `abi_classify::register_slots` gives it (System V) or from
+    /// the HFA member's own. C99 aggregates pass at most two GPRs
     /// (System V eightbytes) or four FP registers (AAPCS64 HFA), so
     /// four slots suffice and the placement stays `Copy`. `align` is
     /// the aggregate's own alignment, the bound on the width of an
@@ -882,7 +883,10 @@ pub(super) fn plan_call_args_aggs(
             let placement = match &agg.class {
                 AggClass::Regs(classes) => {
                     let need_int = classes.iter().filter(|c| **c == RegClass::Integer).count();
-                    let need_fp = classes.iter().filter(|c| **c != RegClass::Integer).count();
+                    let need_fp = classes
+                        .iter()
+                        .filter(|c| matches!(c, RegClass::Sse | RegClass::Vector))
+                        .count();
                     if need_int > 0 && need_fp == 0 {
                         int_idx = pair_align16(int_idx, int_max, agg, abi);
                     }
@@ -892,7 +896,7 @@ pub(super) fn plan_call_args_aggs(
                             is_fp: false,
                         }; 4];
                         let mut n = 0u8;
-                        for c in classes {
+                        for (c, _) in abi_classify::register_slots(classes) {
                             regs[n as usize] = match c {
                                 RegClass::Integer => {
                                     let r = abi.int_arg_regs[int_idx];
@@ -902,7 +906,9 @@ pub(super) fn plan_call_args_aggs(
                                         is_fp: false,
                                     }
                                 }
-                                RegClass::X87 => unreachable!("an argument is never X87-classed"),
+                                RegClass::X87 | RegClass::NoClass => {
+                                    unreachable!("an argument register is never {c:?}")
+                                }
                                 RegClass::Sse | RegClass::Vector => {
                                     let r = fp_idx as u8;
                                     fp_idx += 1;

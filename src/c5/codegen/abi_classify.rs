@@ -115,6 +115,9 @@ pub(crate) enum RegClass {
     /// returns an X87 + X87UP pair there, a sole `long double`. No argument
     /// takes it.
     X87,
+    /// A System V eightbyte no field overlaps (3.2.3 NO_CLASS): it takes no
+    /// register, and the slots after it keep their offsets.
+    NoClass,
 }
 
 impl RegClass {
@@ -125,6 +128,20 @@ impl RegClass {
             _ => 8,
         }
     }
+}
+
+/// The System V slots of `classes` that take a register, in register order,
+/// each with the offset of the bytes it carries: the slots tile the
+/// aggregate from offset 0, `width()` bytes apiece.
+pub(crate) fn register_slots(classes: &[RegClass]) -> impl Iterator<Item = (RegClass, u32)> + '_ {
+    classes
+        .iter()
+        .scan(0u32, |off, &class| {
+            let at = *off;
+            *off += class.width();
+            Some((class, at))
+        })
+        .filter(|&(class, _)| class != RegClass::NoClass)
 }
 
 /// How an aggregate is passed as an argument or produced as a
@@ -224,17 +241,15 @@ fn classify_win64(size: u32, is_return: bool) -> AggClass {
     }
 }
 
-/// System V AMD64 (3.2.3): aggregates larger than 16 bytes (or with
-/// an unaligned/straddling field, not represented here) are MEMORY
-/// class. Otherwise the aggregate is split into one or two
-/// eightbytes; an eightbyte is SSE iff every field overlapping it is
-/// floating-point, else INTEGER.
+/// System V AMD64 (3.2.3): aggregates larger than 16 bytes are MEMORY
+/// class. Otherwise each of the one or two eightbytes starts NO_CLASS and
+/// merges the classes of the fields overlapping it, the high half of a
+/// 16-byte vector being SSEUP. SSE followed by SSEUP is one vector
+/// register, and an eightbyte left NO_CLASS takes none.
+/// TODO: an aggregate with a misaligned field is MEMORY class (rule 1).
 fn classify_sysv(size: u32, fields: &[FlatField], is_return: bool) -> AggClass {
     if size == 0 {
         return AggClass::Regs(alloc::vec::Vec::new());
-    }
-    if let Some(c) = sole_vector_width(size, fields).and_then(vector_reg_class) {
-        return AggClass::Regs(alloc::vec![c]);
     }
     // An eightbyte covering an x87 field is X87/X87UP, which sends the
     // whole aggregate to memory as an argument (3.2.3 rule 5). A return
@@ -257,32 +272,63 @@ fn classify_sysv(size: u32, fields: &[FlatField], is_return: bool) -> AggClass {
         };
     }
     let n = size.div_ceil(8) as usize; // 1 or 2 eightbytes
-    let mut classes = alloc::vec::Vec::with_capacity(n);
-    for eb in 0..n {
-        let lo = (eb as u32) * 8;
-        let hi = lo + 8;
-        let mut any = false;
-        let mut all_fp = true;
-        for f in fields {
-            let f_lo = f.offset;
-            let f_hi = f.offset + f.size;
-            if f_lo < hi && f_hi > lo {
-                any = true;
-                if f.kind == ScalarKind::Int {
-                    all_fp = false;
-                }
+    let mut eightbytes = [Eightbyte::NoClass; 2];
+    for f in fields {
+        for (k, eb) in eightbytes.iter_mut().enumerate().take(n) {
+            let lo = 8 * k as u32;
+            if f.offset >= lo + 8 || f.offset + f.size <= lo {
+                continue;
             }
+            let class = match f.kind {
+                ScalarKind::Int => Eightbyte::Integer,
+                // The high half of a 16-byte vector.
+                ScalarKind::Vector | ScalarKind::F128 if lo > f.offset => Eightbyte::SseUp,
+                _ => Eightbyte::Sse,
+            };
+            *eb = eb.merge(class);
         }
-        // A pure-padding eightbyte is conservatively INTEGER; in
-        // practice every eightbyte of a real aggregate of this size
-        // has at least one field.
-        classes.push(if any && all_fp {
-            RegClass::Sse
-        } else {
-            RegClass::Integer
+    }
+    let mut classes = alloc::vec::Vec::with_capacity(n);
+    let mut k = 0;
+    while k < n {
+        classes.push(match eightbytes[k] {
+            Eightbyte::Integer => RegClass::Integer,
+            Eightbyte::NoClass => RegClass::NoClass,
+            Eightbyte::Sse if eightbytes.get(k + 1) == Some(&Eightbyte::SseUp) => {
+                k += 1;
+                RegClass::Vector
+            }
+            // Rule 5: SSEUP after anything but SSE is SSE.
+            Eightbyte::Sse | Eightbyte::SseUp => RegClass::Sse,
         });
+        k += 1;
+    }
+    while classes.last() == Some(&RegClass::NoClass) {
+        classes.pop();
     }
     AggClass::Regs(classes)
+}
+
+/// A System V eightbyte's class while the fields overlapping it merge.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Eightbyte {
+    NoClass,
+    Integer,
+    Sse,
+    SseUp,
+}
+
+impl Eightbyte {
+    /// 3.2.3 rule 4: equal classes stay, NO_CLASS yields to the other,
+    /// INTEGER takes precedence, and any other pair is SSE.
+    fn merge(self, other: Self) -> Self {
+        match (self, other) {
+            (a, b) if a == b => a,
+            (Eightbyte::NoClass, c) | (c, Eightbyte::NoClass) => c,
+            (Eightbyte::Integer, _) | (_, Eightbyte::Integer) => Eightbyte::Integer,
+            _ => Eightbyte::Sse,
+        }
+    }
 }
 
 /// AAPCS64 (6.8.2): a homogeneous floating-point aggregate is passed /
@@ -361,13 +407,8 @@ pub(crate) fn register_parts(
             .into_iter()
             .map(|(off, msize)| (off, msize, RegClass::Sse))
             .collect(),
-        _ => classes
-            .iter()
-            .enumerate()
-            .map(|(k, &class)| {
-                let off = 8 * k as u32;
-                (off, (size - off).min(8), class)
-            })
+        _ => register_slots(&classes)
+            .map(|(class, off)| (off, (size - off).min(8), class))
             .collect(),
     };
     Some(
@@ -492,6 +533,72 @@ mod tests {
         assert_eq!(
             classify_aggregate(&desc(24, &f), sysv(), true),
             AggClass::ReturnIndirect
+        );
+    }
+
+    /// An eightbyte no field overlaps is NO_CLASS and takes no register:
+    /// `struct __attribute__((aligned(16))) { double d; }` is one SSE
+    /// register, and a NO_CLASS eightbyte ahead of a field keeps the field's
+    /// offset.
+    #[test]
+    fn sysv_padding_eightbyte_takes_no_register() {
+        for (kind, class) in [
+            (ScalarKind::F64, RegClass::Sse),
+            (ScalarKind::Int, RegClass::Integer),
+        ] {
+            for is_return in [false, true] {
+                assert_eq!(
+                    classify_aggregate(&desc(16, &[ff(0, 8, kind)]), sysv(), is_return),
+                    AggClass::Regs(alloc::vec![class])
+                );
+            }
+        }
+        let high = [ff(8, 8, ScalarKind::F64)];
+        let AggClass::Regs(classes) = classify_aggregate(&desc(16, &high), sysv(), false) else {
+            panic!("in registers")
+        };
+        assert_eq!(classes, [RegClass::NoClass, RegClass::Sse]);
+        assert_eq!(
+            register_slots(&classes).collect::<alloc::vec::Vec<_>>(),
+            [(RegClass::Sse, 8)]
+        );
+        let parts = register_parts(&desc(16, &high), sysv(), true).expect("one register");
+        assert_eq!(
+            parts
+                .iter()
+                .map(|p| (p.class, p.offset, p.fields.len()))
+                .collect::<alloc::vec::Vec<_>>(),
+            [(RegClass::Sse, 8, 1)]
+        );
+    }
+
+    /// The overlapping members of a union merge per eightbyte: two doubles
+    /// are one SSE eightbyte, a 16-byte vector beside a double one whole
+    /// vector register (SSE + SSEUP), four floats beside the vector two SSE
+    /// eightbytes, and an integer member makes its eightbyte INTEGER.
+    #[test]
+    fn sysv_union_members_merge_per_eightbyte() {
+        let two_doubles = [ff(0, 8, ScalarKind::F64), ff(0, 8, ScalarKind::F64)];
+        assert_eq!(
+            classify_aggregate(&desc(8, &two_doubles), sysv(), true),
+            AggClass::Regs(alloc::vec![RegClass::Sse])
+        );
+        let vector_double = [ff(0, 16, ScalarKind::Vector), ff(0, 8, ScalarKind::F64)];
+        assert_eq!(
+            classify_aggregate(&desc(16, &vector_double), sysv(), false),
+            AggClass::Regs(alloc::vec![RegClass::Vector])
+        );
+        let mut floats_vector: alloc::vec::Vec<FlatField> =
+            (0..4).map(|i| ff(4 * i, 4, ScalarKind::F32)).collect();
+        floats_vector.push(ff(0, 16, ScalarKind::Vector));
+        assert_eq!(
+            classify_aggregate(&desc(16, &floats_vector), sysv(), false),
+            AggClass::Regs(alloc::vec![RegClass::Sse, RegClass::Sse])
+        );
+        let double_long = [ff(0, 8, ScalarKind::F64), ff(0, 8, ScalarKind::Int)];
+        assert_eq!(
+            classify_aggregate(&desc(8, &double_long), sysv(), false),
+            AggClass::Regs(alloc::vec![RegClass::Integer])
         );
     }
 

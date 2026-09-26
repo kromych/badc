@@ -1499,18 +1499,14 @@ fn emit_struct_param_scatter(
         let (base_reg, base) = local_slot_base_disp(slot, func, frame, abi);
         let desc = &func.agg_descs[agg.unwrap() as usize];
         let classes = reg_slot_classes(desc, abi, false);
-        let mut disp = base;
-        for (k, cr) in regs.iter().take(*n as usize).enumerate() {
-            let class = classes
-                .get(k)
-                .copied()
-                .unwrap_or(super::abi_classify::RegClass::Integer);
+        let slots = super::abi_classify::register_slots(&classes);
+        for ((class, off), cr) in slots.zip(regs.iter().take(*n as usize)) {
+            let disp = (base + i64::from(off)) as i32;
             if cr.is_fp {
-                emit_agg_store_slot_sse(code, class, base_reg, disp as i32, Reg(cr.reg));
+                emit_agg_store_slot_sse(code, class, base_reg, disp, Reg(cr.reg));
             } else {
-                super::encode::emit_mov_mem_r(code, base_reg, disp as i32, Reg(cr.reg));
+                super::encode::emit_mov_mem_r(code, base_reg, disp, Reg(cr.reg));
             }
-            disp += class.width() as i64;
         }
     }
 }
@@ -1570,15 +1566,14 @@ fn emit_return(
         let int_ret = [Reg::RAX, Reg::RDX];
         let mut int_i = 0usize;
         let mut sse_i = 0u8;
-        let mut off = 0i32;
-        for class in eb_classes.iter() {
-            let width = class.width() as i32;
-            if *class == super::abi_classify::RegClass::X87 {
+        for (class, off) in super::abi_classify::register_slots(&eb_classes) {
+            let off = off as i32;
+            if class == super::abi_classify::RegClass::X87 {
                 super::encode::emit_fld_m80(code, Reg::RCX, off);
-            } else if *class != super::abi_classify::RegClass::Integer {
+            } else if class != super::abi_classify::RegClass::Integer {
                 emit_agg_load_slot_sse(
                     code,
-                    *class,
+                    class,
                     Reg(Reg::XMM0.0 + sse_i),
                     Reg::RCX,
                     off,
@@ -1600,7 +1595,6 @@ fn emit_return(
                 );
                 int_i += 1;
             }
-            off += width;
         }
         emit_epilogue_ret(code, func, frame, alloc, abi, extern_sites);
         return Ok(());

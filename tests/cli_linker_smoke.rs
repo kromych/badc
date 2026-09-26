@@ -6184,6 +6184,87 @@ fn homogeneous_aggregates_cross_the_system_compiler_boundary() {
     );
 }
 
+// Aggregates whose eightbytes merge several fields or none cross the system
+// compiler boundary both ways. System V AMD64 3.2.3 gives an eightbyte no
+// field overlaps no register, and a union's 16-byte vector beside a double
+// or another vector one whole xmm register; each call checks the argument
+// after the aggregate as well.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn eightbyte_classes_cross_the_system_compiler_boundary() {
+    let Some(cc) = host_cc() else {
+        eprintln!(
+            "skipping eightbyte_classes_cross_the_system_compiler_boundary: no system C compiler"
+        );
+        return;
+    };
+    // TODO: AAPCS64 passes a homogeneous short-vector aggregate (`a6`) in
+    // SIMD registers; badc passes it as a plain composite.
+    let common = "typedef float v4f __attribute__((vector_size(16)));\n\
+        #if defined(__aarch64__)\n\
+        #define HVA 0\n\
+        #else\n\
+        #define HVA 1\n\
+        #endif\n\
+        struct __attribute__((aligned(16))) a1 { double d; };\n\
+        struct __attribute__((aligned(16))) a2 { int a; };\n\
+        union a3 { double d; __attribute__((aligned(16))) char c; };\n\
+        union a4 { struct __attribute__((aligned(16))) { double d; } s; double e; };\n\
+        union a5 { v4f v; double d; };\n\
+        union a6 { v4f v; v4f w; };\n\
+        static long take_a1(struct a1 t, long n, double x)\n\
+        { return (long)(t.d * 100) + n * 10 + (long)x; }\n\
+        static long take_a2(struct a2 t, long n, double x) { return t.a * 100 + n * 10 + (long)x; }\n\
+        static long take_a3(union a3 t, long n, double x)\n\
+        { return (long)(t.d * 100) + n * 10 + (long)x; }\n\
+        static long take_a4(union a4 t, long n, double x)\n\
+        { return (long)(t.e * 100) + n * 10 + (long)x; }\n\
+        static long take_a5(union a5 t, long n, double x)\n\
+        { return (long)(t.v[0] * 1000 + t.v[3] * 100) + n * 10 + (long)x; }\n\
+        static long take_a6(long n, union a6 t, double x)\n\
+        { return (long)(t.w[1] * 1000 + t.v[2] * 100) + n * 10 + (long)x; }\n\
+        static struct a1 make_a1(double v) { struct a1 r = { v }; return r; }\n\
+        static struct a2 make_a2(int v) { struct a2 r = { v }; return r; }\n\
+        static union a3 make_a3(double v) { union a3 r; r.d = v; return r; }\n\
+        static union a4 make_a4(double v) { union a4 r; r.s.d = v; return r; }\n\
+        static union a5 make_a5(float a, float b) { union a5 r; r.v = (v4f){ a, 0, 0, b }; return r; }\n\
+        static union a6 make_a6(float a, float b) { union a6 r; r.v = (v4f){ 0, a, b, 0 }; return r; }\n\
+        struct fns {\n\
+          long (*take_a1)(struct a1, long, double); long (*take_a2)(struct a2, long, double);\n\
+          long (*take_a3)(union a3, long, double); long (*take_a4)(union a4, long, double);\n\
+          long (*take_a5)(union a5, long, double); long (*take_a6)(long, union a6, double);\n\
+          struct a1 (*make_a1)(double); struct a2 (*make_a2)(int); union a3 (*make_a3)(double);\n\
+          union a4 (*make_a4)(double); union a5 (*make_a5)(float, float);\n\
+          union a6 (*make_a6)(float, float); };\n\
+        static int drive(const struct fns *f, int base)\n\
+        { struct a1 t1 = { 3 };\n\
+          struct a2 t2 = { 3 };\n\
+          union a3 t3; union a4 t4; union a5 t5; union a6 t6;\n\
+          t3.d = 3; t4.e = 3; t5.v = (v4f){ 3, 0, 0, 4 }; t6.v = (v4f){ 0, 3, 4, 0 };\n\
+          if (f->take_a1(t1, 4, 5.5) != 345) return base + 1;\n\
+          if (f->take_a2(t2, 4, 5.5) != 345) return base + 2;\n\
+          if (f->take_a3(t3, 4, 5.5) != 345) return base + 3;\n\
+          if (f->take_a4(t4, 4, 5.5) != 345) return base + 4;\n\
+          if (f->take_a5(t5, 5, 6.5) != 3456) return base + 5;\n\
+          if (HVA && f->take_a6(5, t6, 6.5) != 3456) return base + 6;\n\
+          if (f->make_a1(2.5).d != 2.5) return base + 7;\n\
+          if (f->make_a2(7).a != 7) return base + 8;\n\
+          if (f->make_a3(2.5).d != 2.5) return base + 9;\n\
+          if (f->make_a4(2.5).e != 2.5) return base + 10;\n\
+          t5 = f->make_a5(1.5f, 2.5f);\n\
+          if (t5.v[0] != 1.5f || t5.v[3] != 2.5f) return base + 11;\n\
+          if (HVA) { t6 = f->make_a6(1.5f, 2.5f);\n\
+            if (t6.w[1] != 1.5f || t6.w[2] != 2.5f) return base + 12; }\n\
+          return 0; }\n";
+    drive_across_the_system_compiler(
+        &cc,
+        "eightbyte-interop",
+        common,
+        "take_a1, take_a2, take_a3, take_a4, take_a5, take_a6, \
+         make_a1, make_a2, make_a3, make_a4, make_a5, make_a6",
+    );
+}
+
 // Arguments past the registers cross the system compiler boundary both ways at
 // the offsets the platform puts them: Apple arm64 packs a named stack argument
 // at its own size and alignment, a homogeneous floating-point aggregate too,

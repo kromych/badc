@@ -5616,6 +5616,99 @@ fn homogeneous_aggregate_elements_follow_the_members() {
     }
 }
 
+/// System V AMD64 3.2.3: an eightbyte no field overlaps takes no register,
+/// and a union's 16-byte vector beside a double or another vector takes one
+/// whole xmm register. The argument after each aggregate lands in the
+/// register past the ones the aggregate takes, and the result takes as many.
+#[test]
+fn sysv_eightbyte_classes_place_the_following_argument() {
+    use crate::Target;
+    use crate::c5::codegen::ArgPlacement;
+    use crate::c5::codegen::abi_classify::{AggClass, classify_aggregate, register_slots};
+    use crate::c5::codegen::ssa::emit_common::param_placements_common;
+    // (type, the next parameter's type, whether it is FP, its register index,
+    // the result's register count)
+    const SHAPES: &[(&str, &str, bool, usize, usize)] = &[
+        (
+            "struct __attribute__((aligned(16))) { double d; }",
+            "long",
+            false,
+            0,
+            1,
+        ),
+        (
+            "struct __attribute__((aligned(16))) { int a; }",
+            "long",
+            false,
+            1,
+            1,
+        ),
+        (
+            "union { double d; __attribute__((aligned(16))) char c; }",
+            "long",
+            false,
+            1,
+            1,
+        ),
+        (
+            "union { struct __attribute__((aligned(16))) { double d; } s; double e; }",
+            "long",
+            false,
+            0,
+            1,
+        ),
+        ("union { v4f v; double d; }", "double", true, 1, 1),
+        ("union { v4f v; v4f w; }", "double", true, 1, 1),
+        ("union { float f[4]; v4f v; }", "double", true, 2, 2),
+        ("union { double a; double b; }", "double", true, 1, 1),
+        ("struct { double d; long l; }", "long", false, 1, 2),
+    ];
+    let mut src =
+        alloc::string::String::from("typedef float v4f __attribute__((vector_size(16)));\n");
+    for (i, (ty, next, _, _, _)) in SHAPES.iter().enumerate() {
+        src += &alloc::format!(
+            "typedef {ty} T{i};\n\
+             {next} take{i}(T{i} t, {next} x) {{ (void)t; return x; }}\n\
+             T{i} make{i}(T{i} *p) {{ return *p; }}\n"
+        );
+    }
+    let target = Target::LinuxX64;
+    let abi = target.abi();
+    let program = crate::Compiler::with_options(
+        src,
+        target,
+        crate::CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .unwrap_or_else(|e| panic!("compile: {e}"));
+    let funcs = crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+        .expect("ssa");
+    let func = |name: &str| funcs.iter().find(|f| f.name == name).expect(name);
+    for (i, &(ty, _, fp, reg, ret_regs)) in SHAPES.iter().enumerate() {
+        let want = if fp {
+            ArgPlacement::FpReg(reg as u8)
+        } else {
+            ArgPlacement::IntReg(abi.int_arg_regs[reg])
+        };
+        let take = func(&alloc::format!("take{i}"));
+        assert_eq!(
+            param_placements_common(take, abi).get(1),
+            Some(&want),
+            "`{ty}`: the next argument's register"
+        );
+        let make = func(&alloc::format!("make{i}"));
+        let desc = &make.agg_descs[make.ret_agg.expect("an aggregate return") as usize];
+        let AggClass::Regs(classes) = classify_aggregate(desc, abi, true) else {
+            panic!("`{ty}`: returned in registers")
+        };
+        assert_eq!(
+            register_slots(&classes).count(),
+            ret_regs,
+            "`{ty}`: the result's registers"
+        );
+    }
+}
+
 /// C99 6.2.2: a static object nothing reachable references is
 /// unobservable. `.data` is packed before lowering, from the pre-inline
 /// call graph, so an object whose last reference the inliner removes --

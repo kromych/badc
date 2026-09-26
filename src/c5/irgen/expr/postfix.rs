@@ -338,8 +338,11 @@ impl<'a> Walker<'a> {
         matches!(
             crate::c5::codegen::abi_classify::classify_aggregate(&desc, abi, false),
             crate::c5::codegen::abi_classify::AggClass::Regs(ref c)
-                if c.iter()
-                    .any(|r| *r != crate::c5::codegen::abi_classify::RegClass::Integer)
+                if c.iter().any(|r| matches!(
+                    r,
+                    crate::c5::codegen::abi_classify::RegClass::Sse
+                        | crate::c5::codegen::abi_classify::RegClass::Vector
+                ))
         )
     }
 

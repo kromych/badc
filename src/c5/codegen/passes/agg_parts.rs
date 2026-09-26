@@ -87,7 +87,7 @@ fn tape_carries(parts: &[RegPart], n_fields: usize) -> bool {
                 && f.size == p.width
                 && matches!((f.kind, f.size), (ScalarKind::F64, 8) | (ScalarKind::F32, 4))
         ),
-        RegClass::Vector | RegClass::X87 => false,
+        RegClass::Vector | RegClass::X87 | RegClass::NoClass => false,
     })
 }
 

@@ -677,6 +677,81 @@ fn warn_unused_variable_parameter_function() {
     );
 }
 
+/// A binding starts with no uses and the outer one keeps its own: `n` is
+/// unused in `second` and ends no lifetime there, the outer `k` stays unread.
+#[test]
+fn a_binding_starts_with_no_uses() {
+    use crate::c5::ir::Inst;
+    let src = "void g(int *p);\n\
+               int first(void) { int n = 1; g(&n); return n; }\n\
+               void second(void) { { int n = 2; } }\n\
+               int third(void) {\n\
+                   int k = 1;\n\
+                   { int k = 2; return k; }\n\
+               }\n\
+               int main(void) { return 0; }\n";
+    let p = super::compile_str_bare_with_diags(src, &["all"]);
+    let unused: alloc::vec::Vec<(u32, &str)> = p
+        .warnings
+        .iter()
+        .filter(|w| w.text.starts_with("unused variable"))
+        .map(|w| (w.loc.as_ref().map_or(0, |l| l.line), w.text.as_str()))
+        .collect();
+    assert_eq!(
+        unused,
+        [(3, "unused variable `n`"), (5, "unused variable `k`")],
+        "{:?}",
+        p.warnings
+    );
+    let mut k_lines: alloc::vec::Vec<u32> = p
+        .variables
+        .iter()
+        .filter(|v| v.name == "k")
+        .map(|v| v.decl_line)
+        .collect();
+    k_lines.sort_unstable();
+    assert_eq!(k_lines, [5, 6]);
+    let funcs =
+        crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&p, crate::Target::host(), false, true)
+            .expect("ssa");
+    let second = funcs.iter().find(|f| f.name == "second").expect("second");
+    assert!(
+        !second
+            .insts
+            .iter()
+            .any(|i| matches!(i, Inst::LifetimeEnd(_))),
+        "no address of `n` is taken in `second`: {:?}",
+        second.insts
+    );
+}
+
+/// A local named like a static function keeps its uses apart from the
+/// function's; a call through a block-scope declaration uses the function.
+#[test]
+fn a_local_named_like_a_static_function_keeps_its_uses_apart() {
+    let src = "static int helper(void) { return 1; }\n\
+               int a(void) { return helper(); }\n\
+               int b(void) { int helper = 0; return 0; }\n\
+               static int lonely(void) { return 2; }\n\
+               int c(void) { int lonely = 3; return lonely; }\n\
+               static int hidden(void) { return 4; }\n\
+               int d(void) { { int hidden(void); return hidden(); } }\n\
+               int main(void) { return 0; }\n";
+    let p = super::compile_str_bare_with_diags(src, &["all"]);
+    let unused: alloc::vec::Vec<&str> = p
+        .warnings
+        .iter()
+        .filter(|w| w.text.starts_with("unused"))
+        .map(|w| w.text.as_str())
+        .collect();
+    assert_eq!(
+        unused,
+        ["unused variable `helper`", "unused function `lonely`"],
+        "{:?}",
+        p.warnings
+    );
+}
+
 /// Per-store dead-store analysis: when `-Wdead-store` is on, each
 /// store whose value never reaches a read fires a `dead store:
 /// value assigned to X is never read` diagnostic at the store's
@@ -706,11 +781,16 @@ fn warn_dead_store_per_store_when_enabled() {
         "expected two dead-store warnings on `a` (initializer + a = 2;), got: {:?}",
         dead
     );
-    // No false positives: branch-straddling, self-referencing
-    // RHS, and address-escape cases must not fire.
+    let e_warns = dead.iter().filter(|w| w.contains("`e`")).count();
+    assert_eq!(
+        e_warns, 2,
+        "expected two dead-store warnings on `e`, got: {dead:?}"
+    );
+    // No false positives: branch-straddling, self-referencing RHS,
+    // address-escape and shadowed-binding cases must not fire.
     for w in &dead {
         assert!(
-            !w.contains("`b`") && !w.contains("`c`") && !w.contains("`d`"),
+            !["`b`", "`c`", "`d`", "`f`"].iter().any(|n| w.contains(n)),
             "unexpected dead-store warning: {w}"
         );
     }

@@ -915,7 +915,7 @@ impl RelocInfoUnit<'_> {
                     external: sym.is_none_or(|s| s.linkage != crate::c5::symbol::Linkage::Internal),
                     prototyped: sym.is_none_or(|s| !s.unprototyped_def),
                     ret: match sym {
-                        Some(s) => catalog.of_return(s.type_, s.decl_spelling),
+                        Some(s) => catalog.of_return(s.type_, s.binding.decl_spelling),
                         None => Some(catalog.unspecified()),
                     },
                 }
@@ -1039,8 +1039,8 @@ impl RelocInfoUnit<'_> {
                     self.body.push(DW_OP_GNU_PUSH_TLS_ADDRESS);
                 }
             }
-            write_uleb128(&mut self.body, sym.decl_file as u64 + 1);
-            write_uleb128(&mut self.body, sym.decl_line as u64);
+            write_uleb128(&mut self.body, sym.binding.decl_file as u64 + 1);
+            write_uleb128(&mut self.body, sym.binding.decl_line as u64);
         }
     }
 
@@ -1666,10 +1666,10 @@ impl<'a> TypeCatalog<'a> {
                 sym.fn_ptr_indirection,
                 &sym.params,
                 sym.is_variadic,
-                sym.decl_spelling,
+                sym.binding.decl_spelling,
             )
         } else {
-            self.of_declared(sym.type_, sym.decl_spelling)
+            self.of_declared(sym.type_, sym.binding.decl_spelling)
         };
         let dims = array_dims(sym.array_size, &sym.array_dims);
         if dims.is_empty() {

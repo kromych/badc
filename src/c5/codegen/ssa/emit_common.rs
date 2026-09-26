@@ -2030,12 +2030,12 @@ fn function_loc(
         s.class == Token::Fun as i64
             && s.defined_here
             && s.val as usize == ent_pc
-            && s.decl_line > 0
+            && s.binding.decl_line > 0
     })?;
-    let file = program.source_files.get(sym.decl_file as usize)?;
+    let file = program.source_files.get(sym.binding.decl_file as usize)?;
     Some(crate::c5::diag::Loc::new(
         file.clone(),
-        sym.decl_line as u32,
+        sym.binding.decl_line as u32,
     ))
 }
 

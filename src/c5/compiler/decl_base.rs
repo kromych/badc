@@ -379,7 +379,7 @@ impl Compiler {
                 self.pending.typedef_base_array_size = self.symbols[idx].array_size;
                 self.pending.typedef_base_array_dims = self.symbols[idx].array_dims.clone();
                 self.pending.typeof_operand_was_array = true;
-                self.symbols[idx].was_referenced = true;
+                self.symbols[idx].binding.was_referenced = true;
                 self.next()?; // identifier
                 self.next()?; // )
                 return Ok(finish(ty));
@@ -856,7 +856,7 @@ impl Compiler {
         sym.array_size = 0;
         sym.asm_register = Some(reg);
         sym.is_global_register = true;
-        sym.decl_line = self.lex.line;
+        sym.binding.decl_line = self.lex.line;
         // The binding is the outermost scope: make the shadow slots hold
         // the binding itself so the per-function `Loc` cleanup restore
         // (and any block-scope shadowing) round-trips back to it.
@@ -866,6 +866,7 @@ impl Compiler {
         sym.h_array_size = 0;
         sym.h_asm_register = sym.asm_register;
         sym.h_is_global_register = true;
+        sym.h_binding = sym.binding.clone();
         Ok(())
     }
 

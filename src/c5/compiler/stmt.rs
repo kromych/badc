@@ -80,6 +80,7 @@ pub(super) struct BlockShadow {
     is_global_register: bool,
     const_object_value: Option<crate::c5::symbol::ConstObjectValue>,
     static_local_record: Option<u32>,
+    binding: crate::c5::symbol::BindingInfo,
 }
 
 impl Compiler {
@@ -90,6 +91,7 @@ impl Compiler {
     pub(super) fn capture_block_shadow(&mut self, idx: usize) -> BlockShadow {
         self.scope_bound.push(idx as u32);
         let prior = self.take_prior_shape(idx);
+        let binding = Self::save_binding(&mut self.symbols[idx].binding);
         let s = &self.symbols[idx];
         let (inner_array_size, array_dims) =
             prior.unwrap_or_else(|| (s.inner_array_size, s.array_dims.clone()));
@@ -122,6 +124,7 @@ impl Compiler {
             is_global_register: s.is_global_register,
             const_object_value: s.const_object_value,
             static_local_record: s.static_local_record,
+            binding,
         };
         // The inner binding is not (yet) a block-scope static; its own
         // promotion re-sets the record.
@@ -143,6 +146,8 @@ impl Compiler {
             s.static_local_record = b.static_local_record;
             return;
         }
+        let same_function = s.class == Token::Fun as i64 && b.class == Token::Fun as i64;
+        Self::restore_binding(&mut s.binding, b.binding, same_function);
         s.class = b.class;
         s.type_ = b.type_;
         s.val = b.val;
@@ -197,14 +202,14 @@ impl Compiler {
                         type_tag: sym.type_,
                         fp_slot: sym.val,
                         is_parameter: false,
-                        decl_line: sym.decl_line as u32,
+                        decl_line: sym.binding.decl_line as u32,
                         array_size: sym.array_size.max(0) as u32,
-                        decl_file: sym.decl_file,
+                        decl_file: sym.binding.decl_file,
                         fn_ptr_indirection: sym.fn_ptr_indirection,
                         params: sym.params.clone(),
                         is_variadic: sym.is_variadic,
                         array_dims: sym.array_dims.clone(),
-                        decl_spelling: sym.decl_spelling,
+                        decl_spelling: sym.binding.decl_spelling,
                     });
             }
         }
@@ -245,7 +250,7 @@ impl Compiler {
             .iter()
             .filter_map(|b| {
                 let sym = &self.symbols[b.idx];
-                let addressed = sym.address_escaped
+                let addressed = sym.binding.address_escaped
                     || sym.array_size != 0
                     || super::types::is_struct_value_ty(sym.type_);
                 (sym.class == Token::Loc as i64 && sym.val < 0 && !sym.is_vla && addressed)
@@ -468,6 +473,7 @@ impl Compiler {
         // the binding's scope ends with the for statement
         // (C99 6.8.5.3 / 6.8p3). Restore in reverse order to
         // unwind multiple shadows in declaration order.
+        self.emit_scope_dead_stores(&for_init_symbols);
         self.capture_block_locals(&for_init_symbols);
         for b in for_init_symbols.into_iter().rev() {
             self.restore_block_shadow(b);
@@ -674,9 +680,9 @@ impl Compiler {
     /// The variable and the function are marked referenced so neither
     /// draws an unused diagnostic.
     pub(super) fn register_cleanup_var(&mut self, var_sym: usize, fn_sym: usize) {
-        self.symbols[var_sym].was_read = true;
-        self.symbols[var_sym].was_referenced = true;
-        self.symbols[fn_sym].was_referenced = true;
+        self.symbols[var_sym].binding.was_read = true;
+        self.symbols[var_sym].binding.was_referenced = true;
+        self.symbols[fn_sym].binding.was_referenced = true;
         let s = &self.symbols[var_sym];
         let cv = CleanupVar {
             var_sym,
@@ -1050,23 +1056,23 @@ impl Compiler {
             let sym = &self.symbols[b.idx];
             if sym.class != Token::Loc as i64
                 || sym.val >= 0
-                || !sym.decl_in_main_source
-                || sym.address_escaped
-                || sym.was_read
-                || sym.maybe_unused
+                || !sym.binding.decl_in_main_source
+                || sym.binding.address_escaped
+                || sym.binding.was_read
+                || sym.binding.maybe_unused
                 || sym.name.starts_with('_')
             {
                 continue;
             }
             let name = sym.name.clone();
-            let line = sym.decl_line;
+            let line = sym.binding.decl_line;
             // `was_referenced` is true when the parser emitted any
             // expression mention (assignment LHS, increment, ...).
             // Without it the only "write" possible is the
             // declaration initializer, which the dead-store
             // diagnostic should treat as "unused" rather than
             // "set but never used".
-            let (code, msg) = if sym.was_referenced && sym.was_written {
+            let (code, msg) = if sym.binding.was_referenced && sym.binding.was_written {
                 (
                     Code::UNUSED_BUT_SET_VARIABLE,
                     alloc::format!("variable `{name}` set but never used"),
@@ -1080,6 +1086,7 @@ impl Compiler {
             self.warn_at(code, line, msg);
         }
 
+        self.emit_scope_dead_stores(&block_symbols);
         self.capture_block_locals(&block_symbols);
 
         // Restore shadowed bindings on block exit. A block-scope `extern`

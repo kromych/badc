@@ -2238,7 +2238,7 @@ impl Compiler {
                     idx = self.ensure_sys_trampoline_sym(idx);
                 }
                 let value = self.symbols[idx].val;
-                self.symbols[idx].was_referenced = true;
+                self.symbols[idx].binding.was_referenced = true;
                 self.next()?;
                 return Ok(ConstDesig {
                     value,
@@ -2464,7 +2464,7 @@ impl Compiler {
             self.restore_init_checkpoint(cp);
             return Ok(None);
         };
-        self.symbols[idx].was_referenced = true;
+        self.symbols[idx].binding.was_referenced = true;
         Ok(Some(v))
     }
 
@@ -2806,8 +2806,8 @@ impl Compiler {
                 let ty = sym.type_;
                 // A folded reference reads the object's value: keep the
                 // unused-binding report quiet even though no load emits.
-                self.symbols[idx].was_referenced = true;
-                self.symbols[idx].was_read = true;
+                self.symbols[idx].binding.was_referenced = true;
+                self.symbols[idx].binding.was_read = true;
                 self.next()?;
                 return Ok(match v {
                     crate::c5::symbol::ConstObjectValue::Int(i) => self.const_int_of(i as i128, ty),
@@ -2832,7 +2832,7 @@ impl Compiler {
                 if (1..=8).contains(&size) && off + size <= self.data.len() {
                     let v = self.read_const_slot(off, size, ty);
                     if let Some(v) = v {
-                        self.symbols[idx].was_referenced = true;
+                        self.symbols[idx].binding.was_referenced = true;
                         self.next()?;
                         return Ok(v);
                     }
@@ -2877,7 +2877,7 @@ impl Compiler {
                     } else {
                         idx
                     };
-                    self.symbols[idx].was_referenced = true;
+                    self.symbols[idx].binding.was_referenced = true;
                     let pointee = (!is_fn).then(|| {
                         let s = &self.symbols[idx];
                         let (elem, dims) = (s.type_, s.array_dims.clone());

@@ -398,7 +398,7 @@ impl Compiler {
                     if is_extern_data {
                         let name: alloc::string::String = t.link_name().into();
                         let addend = value - self.symbols[sym_idx].val;
-                        self.symbols[sym_idx].was_referenced = true;
+                        self.symbols[sym_idx].binding.was_referenced = true;
                         self.extern_data_relocs
                             .push(crate::c5::program::ExternDataReloc {
                                 data_offset: here as u64,
@@ -2114,7 +2114,7 @@ impl Compiler {
             self.pending.const_expr_nonconst = nonconst;
         }
         if class == Token::Fun as i64 {
-            self.symbols[idx].was_referenced = true;
+            self.symbols[idx].binding.was_referenced = true;
             let ent_pc = self.symbols[idx].val;
             self.next()?;
             return Ok((ent_pc as i128, InitElemReloc::Code(idx)));

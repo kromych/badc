@@ -302,10 +302,6 @@ pub(crate) struct Symbol {
     /// Shadow slot for `is_zero_len_array`. See `h_array_size`.
     pub h_is_zero_len_array: bool,
 
-    /// How the declaration spelled the type; see [`DeclSpelling`].
-    /// Debug info only.
-    pub decl_spelling: DeclSpelling,
-
     /// True for a `const`-qualified plain integer object with static
     /// storage (`static const int N = ...`, a file-scope `const`). C99 6.6
     /// does not make it a constant expression, but GCC and common practice
@@ -587,6 +583,20 @@ pub(crate) struct Symbol {
     /// which has static storage duration wherever it appears (C99 6.4.5p5).
     pub is_string_literal: bool,
 
+    /// The current binding's declaration site and uses.
+    pub binding: BindingInfo,
+    /// Shadow slot for `binding` (see `h_class`).
+    pub h_binding: BindingInfo,
+}
+
+/// One binding of a name: its declaration site and its uses. Each binding
+/// starts with a fresh one and gives it up at its scope's exit.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct BindingInfo {
+    /// How the declaration spelled the type; see [`DeclSpelling`].
+    /// Debug info only.
+    pub decl_spelling: DeclSpelling,
+
     /// True once the parser has emitted any reference to this
     /// symbol after its declaration -- a read, a write, an
     /// address-of, or a decay. Set by the expression parser's
@@ -664,6 +674,15 @@ pub(crate) struct Symbol {
     /// and dead-store diagnostics for this symbol, matching the
     /// documented effect of the attribute.
     pub maybe_unused: bool,
+}
+
+impl BindingInfo {
+    pub(crate) fn absorb_uses(&mut self, inner: &BindingInfo) {
+        self.was_referenced |= inner.was_referenced;
+        self.was_read |= inner.was_read;
+        self.was_written |= inner.was_written;
+        self.address_escaped |= inner.address_escaped;
+    }
 }
 
 /// A function type's parameter information (C99 6.7.5.3p14).
@@ -900,7 +919,6 @@ impl crate::c5::layout::DataOffsets for Symbol {
             h_vla_size_slot: _,
             is_zero_len_array: _,
             h_is_zero_len_array: _,
-            decl_spelling: _, // debug-info spelling, not an offset
             is_const_qualified: _,
             h_is_const_qualified: _,
             const_object_value: _,
@@ -946,15 +964,8 @@ impl crate::c5::layout::DataOffsets for Symbol {
             h_static_local_record: _, // scope-restore shadow
             is_compound_literal: _,
             is_string_literal: _,
-            was_referenced: _,
-            was_read: _,
-            was_written: _,
-            address_escaped: _,
-            pending_stores: _,
-            decl_line: _,
-            decl_file: _,
-            decl_in_main_source: _,
-            maybe_unused: _,
+            binding: _, // declaration site and uses, not an offset
+            h_binding: _,
         } = self;
         if *class != crate::c5::token::Token::Glo as i64
             || !*defined_here

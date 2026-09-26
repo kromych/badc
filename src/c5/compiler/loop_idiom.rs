@@ -752,7 +752,7 @@ impl Compiler {
         };
         let guard = self.disjoint_guard(walk.dst, walk.src, bytes, pos);
         let ptr_ty = Ty::Char as i64 + UNSIGNED_BIT + Ty::Ptr as i64;
-        self.symbols[callee].was_referenced = true;
+        self.symbols[callee].binding.was_referenced = true;
         let callee_ty = self.symbols[callee].type_;
         let callee = self.ast_synthesize_callee(callee as u32, callee_ty);
         let call = self.ast.push_expr(
@@ -1160,7 +1160,7 @@ impl Compiler {
             ),
             None => self.trip_bytes(loop_, xfer.width, pos),
         };
-        self.symbols[callee].was_referenced = true;
+        self.symbols[callee].binding.was_referenced = true;
         let callee_ty = self.symbols[callee].type_;
         let callee = self.ast_synthesize_callee(callee as u32, callee_ty);
         Some(self.ast.push_expr(

@@ -17,20 +17,18 @@ fn ent_pc=6 n_params=0 variadic=false locals=2
     v11  BinopI { op=add, lhs=v10, rhs_imm=0 }            -> x1
     v12  Extend { value=v10, kind=I32, nsw }              -> x1
     v13  Extend { value=v10, kind=I32 }                   -> x1
-    v14  LifetimeEnd(-2)                                  -> -
-    v15  Imm(3)                                           -> x1
-    v16  StoreLocal { off=-1, value=v15, kind=I32, volatile } -> -
-    v17  LoadLocal { off=-1, kind=I32, volatile }         -> x1
-    v18  BinopI { op=add, lhs=v17, rhs_imm=1 }            -> x1
-    v19  Extend { value=v18, kind=I32, nsw }              -> x2
-    v20  StoreLocal { off=-1, value=v18, kind=I32, volatile } -> -
-    v21  LoadLocal { off=-1, kind=I32, volatile }         -> x1
-    v22  Binop { op=add, lhs=v10, rhs=v21 }               -> x0
-    v23  Extend { value=v22, kind=I32, nsw }              -> x1
-    v24  Extend { value=v22, kind=I32 }                   -> x1
-    v25  LifetimeEnd(-1)                                  -> -
-    v26  Extend { value=v22, kind=I32 }                   -> x1
-    terminator Return(v22)   (exit_acc=v22)
+    v14  Imm(3)                                           -> x1
+    v15  StoreLocal { off=-1, value=v14, kind=I32, volatile } -> -
+    v16  LoadLocal { off=-1, kind=I32, volatile }         -> x1
+    v17  BinopI { op=add, lhs=v16, rhs_imm=1 }            -> x1
+    v18  Extend { value=v17, kind=I32, nsw }              -> x2
+    v19  StoreLocal { off=-1, value=v17, kind=I32, volatile } -> -
+    v20  LoadLocal { off=-1, kind=I32, volatile }         -> x1
+    v21  Binop { op=add, lhs=v10, rhs=v20 }               -> x0
+    v22  Extend { value=v21, kind=I32, nsw }              -> x1
+    v23  Extend { value=v21, kind=I32 }                   -> x1
+    v24  Extend { value=v21, kind=I32 }                   -> x1
+    terminator Return(v21)   (exit_acc=v21)
 ; --- SSA dump (ok=true) ent_pc=7 ---
 ; name=main
 fn ent_pc=7 n_params=0 variadic=false locals=11

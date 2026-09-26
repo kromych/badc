@@ -687,7 +687,7 @@ impl Compiler {
             }
         };
         let idx = self.builtin_library_symbol(idx);
-        self.symbols[idx].was_referenced = true;
+        self.symbols[idx].binding.was_referenced = true;
         self.flush_pending_stores();
         self.pending.last_emit_was_indirect_call = false;
         self.mark_emit_other();
@@ -2294,7 +2294,7 @@ impl Compiler {
         {
             // A binding the unit defines later becomes one of its
             // functions, so a call made while it was bound counts too.
-            self.symbols[id_idx].was_referenced = true;
+            self.symbols[id_idx].binding.was_referenced = true;
             self.flush_pending_stores();
             self.pending.last_emit_was_indirect_call = false;
             self.ast_acc = None;
@@ -2304,8 +2304,8 @@ impl Compiler {
             // A call through a function-pointer variable: the read counts for
             // the dead-store diagnostic.
             if self.symbols[id_idx].class == Token::Loc as i64 {
-                self.symbols[id_idx].was_referenced = true;
-                self.symbols[id_idx].was_read = true;
+                self.symbols[id_idx].binding.was_referenced = true;
+                self.symbols[id_idx].binding.was_read = true;
             } else {
                 self.glo_imm_refs.push(id_idx);
             }
@@ -2506,7 +2506,7 @@ impl Compiler {
     /// import has no compile-time address; the walker materializes its stub.
     fn parse_function_designator(&mut self, id_idx: usize) -> Result<(), C5Error> {
         if self.symbols[id_idx].class == Token::Fun as i64 {
-            self.symbols[id_idx].was_referenced = true;
+            self.symbols[id_idx].binding.was_referenced = true;
             // The `CODE_BASE` bias tells the VM a function pointer from a data
             // pointer; the walker resolves the address on the SSA side.
             self.emit_imm(CODE_BASE as i64 + self.symbols[id_idx].val);
@@ -2544,8 +2544,8 @@ impl Compiler {
                 ),
             ));
         }
-        self.symbols[id_idx].was_referenced = true;
-        self.symbols[id_idx].was_read = true;
+        self.symbols[id_idx].binding.was_referenced = true;
+        self.symbols[id_idx].binding.was_read = true;
         self.mark_emit_other();
         self.ty = self.symbols[id_idx].type_;
         let kind = match self.symbols[id_idx].asm_register {
@@ -2572,7 +2572,7 @@ impl Compiler {
     fn parse_variable(&mut self, id_idx: usize) -> Result<(), C5Error> {
         let identifier_is_local = self.symbols[id_idx].class == Token::Loc as i64;
         if identifier_is_local {
-            self.symbols[id_idx].was_referenced = true;
+            self.symbols[id_idx].binding.was_referenced = true;
             self.emit_lea(self.symbols[id_idx].val);
         } else if self.symbols[id_idx].class == Token::Glo as i64
             && self.symbols[id_idx].is_thread_local
@@ -2612,7 +2612,7 @@ impl Compiler {
             if identifier_is_local {
                 // A struct object's value is its address, with no load to track a
                 // read by; the object counts as address-escaped.
-                self.symbols[id_idx].address_escaped = true;
+                self.symbols[id_idx].binding.address_escaped = true;
             }
             self.ast_emit_ident(id_idx as u32, self.ty);
         } else {
@@ -2656,7 +2656,7 @@ impl Compiler {
         if identifier_is_local {
             // The decayed address may be indexed, passed or stored, none of
             // which is tracked; the array counts as address-escaped.
-            self.symbols[id_idx].address_escaped = true;
+            self.symbols[id_idx].binding.address_escaped = true;
         }
         self.ty += Ty::Ptr as i64;
         self.ast_emit_ident(id_idx as u32, self.ty);
@@ -2713,10 +2713,10 @@ impl Compiler {
             // restores `was_read` and the pending stores through
             // `last_loaded_local`.
             self.pending.last_loaded_local = Some(id_idx);
-            self.pending.last_loaded_local_prior_was_read = self.symbols[id_idx].was_read;
+            self.pending.last_loaded_local_prior_was_read = self.symbols[id_idx].binding.was_read;
             self.pending.last_loaded_local_prior_pending =
-                core::mem::take(&mut self.symbols[id_idx].pending_stores);
-            self.symbols[id_idx].was_read = true;
+                core::mem::take(&mut self.symbols[id_idx].binding.pending_stores);
+            self.symbols[id_idx].binding.was_read = true;
         }
         // `mark_emit_scalar_load` cleared the decay depth; the load consumed
         // one indirection level of the symbol's `fn_ptr_indirection`.
@@ -3331,8 +3331,8 @@ impl Compiler {
         })?;
         let line = self.lex.line;
         if let Some(idx) = self.take_last_loaded_local() {
-            self.symbols[idx].was_read = true;
-            self.symbols[idx].was_written = true;
+            self.symbols[idx].binding.was_read = true;
+            self.symbols[idx].binding.was_written = true;
             self.record_local_read(idx);
             self.record_local_store(idx, line);
         }
@@ -3599,7 +3599,7 @@ impl Compiler {
             let line = self.lex.line;
             let assigned_local = self.take_last_loaded_local();
             if let Some(idx) = assigned_local {
-                self.symbols[idx].was_written = true;
+                self.symbols[idx].binding.was_written = true;
             }
             self.expr(Token::Assign as i64)?;
             let rhs_is_zero = self.last_emit_is_zero();
@@ -3858,8 +3858,8 @@ impl Compiler {
         let line = self.lex.line;
         let assigned_local = self.take_last_loaded_local();
         if let Some(idx) = assigned_local {
-            self.symbols[idx].was_read = true;
-            self.symbols[idx].was_written = true;
+            self.symbols[idx].binding.was_read = true;
+            self.symbols[idx].binding.was_written = true;
             self.record_local_read(idx);
         }
         self.mark_emit_other();

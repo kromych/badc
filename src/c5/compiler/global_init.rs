@@ -121,7 +121,7 @@ impl Compiler {
         let target_idx = self.symbols[target_idx]
             .static_local_record
             .map_or(target_idx, |r| r as usize);
-        self.symbols[target_idx].was_referenced = true;
+        self.symbols[target_idx].binding.was_referenced = true;
         if !is_thread_local {
             self.note_init_reloc(var_offset as usize);
         }
@@ -205,7 +205,7 @@ impl Compiler {
                 }
             },
             InitElemReloc::Code(sym_idx) => {
-                self.symbols[sym_idx].was_referenced = true;
+                self.symbols[sym_idx].binding.was_referenced = true;
                 self.tls_code_relocs.push(crate::c5::program::CodeReloc {
                     data_offset: off as u64,
                     target_ent_pc: value as u64,
@@ -321,7 +321,7 @@ impl Compiler {
             if self.symbols[sym_idx].class == Token::Sys as i64 {
                 sym_idx = self.ensure_sys_trampoline_sym(sym_idx);
             }
-            self.symbols[sym_idx].was_referenced = true;
+            self.symbols[sym_idx].binding.was_referenced = true;
             let ent_pc = self.symbols[sym_idx].val;
             self.next()?;
             let reloc = InitElemReloc::Code(sym_idx);
@@ -588,7 +588,7 @@ impl Compiler {
             && self.size_of_type(var_ty) == 8
         {
             if matches!(a.root, super::const_expr::ConstRoot::Code(_)) {
-                self.symbols[sym_idx].was_referenced = true;
+                self.symbols[sym_idx].binding.was_referenced = true;
                 let ent_pc = self.symbols[sym_idx].val;
                 let bytes = (ent_pc as u64).to_le_bytes();
                 let reloc = crate::c5::program::CodeReloc {

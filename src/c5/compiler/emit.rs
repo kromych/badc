@@ -19,7 +19,7 @@ use super::super::ast::{Expr, ExprId, SrcPos, UnOp};
 use super::super::diag::Code;
 use super::super::error::C5Error;
 use super::super::ir::LoadKind;
-use super::super::symbol::Symbol;
+use super::super::symbol::{BindingInfo, Symbol};
 use super::super::token::{Token, Ty};
 use super::Compiler;
 use super::types::{is_bool_ty, is_struct_ty, is_struct_value_ty, is_unsigned_ty, load_op_for};
@@ -532,13 +532,13 @@ impl Compiler {
     /// only.
     pub(super) fn take_last_loaded_local(&mut self) -> Option<usize> {
         let idx = self.pending.last_loaded_local.take()?;
-        self.symbols[idx].was_read = self.pending.last_loaded_local_prior_was_read;
-        self.symbols[idx].pending_stores =
+        self.symbols[idx].binding.was_read = self.pending.last_loaded_local_prior_was_read;
+        self.symbols[idx].binding.pending_stores =
             core::mem::take(&mut self.pending.last_loaded_local_prior_pending);
         // If the restored list is non-empty, make sure the
         // symbol is back on the function-level pending list so a
         // later control-flow op can flush it.
-        if !self.symbols[idx].pending_stores.is_empty()
+        if !self.symbols[idx].binding.pending_stores.is_empty()
             && !self.pending_store_symbols.contains(&idx)
         {
             self.pending_store_symbols.push(idx);
@@ -566,7 +566,7 @@ impl Compiler {
         // the resulting pointer can escape into surrounding
         // code that the unused-symbol analysis can't follow.
         if let Some(idx) = self.take_last_loaded_local() {
-            self.symbols[idx].address_escaped = true;
+            self.symbols[idx].binding.address_escaped = true;
         }
         // The address producer's value now stays in the
         // accumulator; wrap it in `Expr::Unary { op: AddrOf,
@@ -844,6 +844,7 @@ impl Compiler {
         s.const_object_value = None;
         s.h_static_local_record = s.static_local_record;
         s.static_local_record = None;
+        s.h_binding = Self::save_binding(&mut s.binding);
     }
 
     /// Inverse of [`Self::shadow_symbol`]: restore the saved outer
@@ -863,6 +864,8 @@ impl Compiler {
             sym.static_local_record = sym.h_static_local_record;
             return;
         }
+        let same_function = sym.class == Token::Fun as i64 && sym.h_class == Token::Fun as i64;
+        Self::restore_binding(&mut sym.binding, sym.h_binding.clone(), same_function);
         sym.class = sym.h_class;
         sym.type_ = sym.h_type;
         sym.val = sym.h_val;
@@ -898,6 +901,22 @@ impl Compiler {
         sym.block_extern_active = false;
         // The register-asm binding belongs to the block-scope local
         // being unbound, never to the restored outer symbol.
+    }
+
+    /// Take the outer binding's info, dropping its pending stores as a branch does.
+    pub(super) fn save_binding(live: &mut BindingInfo) -> BindingInfo {
+        let mut outer = core::mem::take(live);
+        outer.pending_stores.clear();
+        outer
+    }
+
+    /// Restore the outer binding's info. A function declaration names the
+    /// function it shadows (C99 6.2.2p4-p5), which keeps the uses made through it.
+    pub(super) fn restore_binding(live: &mut BindingInfo, outer: BindingInfo, same_function: bool) {
+        let inner = core::mem::replace(live, outer);
+        if same_function {
+            live.absorb_uses(&inner);
+        }
     }
 
     /// Whether [`Self::restore_shadowed_symbol`] would leave `sym`

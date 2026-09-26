@@ -342,9 +342,7 @@ impl Compiler {
             // A parameter may carry a trailing attribute
             // (`PyObject *op __attribute__((unused))`).
             self.skip_attribute_specifiers()?;
-            if self.pending.attr_maybe_unused && param_idx != usize::MAX {
-                self.symbols[param_idx].maybe_unused = true;
-            }
+            let param_maybe_unused = self.pending.attr_maybe_unused;
             if array_size != 0 {
                 full_ty += Ty::Ptr as i64;
             }
@@ -428,13 +426,10 @@ impl Compiler {
             self.shadow_symbol(param_idx);
             self.symbols[param_idx].class = Token::Loc as i64;
             self.symbols[param_idx].type_ = full_ty;
-            self.symbols[param_idx].decl_spelling = self.decl_spelling(base_spelling);
+            self.symbols[param_idx].binding.decl_spelling = self.decl_spelling(base_spelling);
+            self.symbols[param_idx].binding.maybe_unused = param_maybe_unused;
             self.symbols[param_idx].array_size = 0;
-            self.symbols[param_idx].was_referenced = false;
-            self.symbols[param_idx].decl_line = self.lex.line;
-            let decl_file = self.intern_source_file() as u32;
-            self.symbols[param_idx].decl_file = decl_file;
-            self.symbols[param_idx].decl_in_main_source = self.in_main_source();
+            self.set_decl_site(param_idx);
             // Unconditional write: a regular scalar/pointer
             // parameter must not inherit a stale fn-ptr lineage
             // from a prior binding of the same name (the

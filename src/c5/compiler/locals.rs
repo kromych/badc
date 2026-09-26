@@ -471,9 +471,6 @@ impl Compiler {
             let cleanup_fn = self.pending.attr_cleanup.take().or(leading_cleanup);
             let uninitialized =
                 core::mem::take(&mut self.pending.attr_uninitialized) || leading_uninitialized;
-            if maybe_unused && loc_idx != usize::MAX {
-                self.symbols[loc_idx].maybe_unused = true;
-            }
             // Take the fn-pointer carriers before any initializer is parsed:
             // an initializer cast runs a base-type parse that clears them,
             // which would drop a variadic fn-pointer's prototype.
@@ -524,6 +521,9 @@ impl Compiler {
             // never-declared name is deliberately left bound past the scope.
             if !is_extern || extern_shadows_binding {
                 self.save_scope_binding(loc_idx);
+            }
+            if maybe_unused {
+                self.symbols[loc_idx].binding.maybe_unused = true;
             }
 
             // C99 6.7p7: an object declared with no linkage must have a
@@ -608,6 +608,16 @@ impl Compiler {
         Ok(())
     }
 
+    pub(super) fn set_decl_site(&mut self, idx: usize) {
+        let (line, file, in_main) = (
+            self.lex.line,
+            self.intern_source_file() as u32,
+            self.in_main_source(),
+        );
+        let b = &mut self.symbols[idx].binding;
+        (b.decl_line, b.decl_file, b.decl_in_main_source) = (line, file, in_main);
+    }
+
     /// Bind one block-scope declarator to storage: a block-scope `extern`
     /// names an entity and reserves nothing (C11 6.7.5), a `static` takes a
     /// `.data` or thread-local slot, and an automatic object takes a frame
@@ -617,7 +627,8 @@ impl Compiler {
             if d.convert_extern {
                 self.symbols[d.loc_idx].class = Token::Glo as i64;
                 self.symbols[d.loc_idx].type_ = d.ty;
-                self.symbols[d.loc_idx].decl_spelling = self.decl_spelling(d.base_spelling);
+                self.symbols[d.loc_idx].binding.decl_spelling = self.decl_spelling(d.base_spelling);
+                self.set_decl_site(d.loc_idx);
                 // Record the dimension so a subscript sees an array
                 // (6.7.6.2). `-1` (unsized `extern T name[];`) is kept as
                 // at file scope: an incomplete array still decays to a
@@ -645,7 +656,8 @@ impl Compiler {
         } else if d.is_static {
             self.symbols[d.loc_idx].class = Token::Glo as i64;
             self.symbols[d.loc_idx].type_ = d.ty;
-            self.symbols[d.loc_idx].decl_spelling = self.decl_spelling(d.base_spelling);
+            self.symbols[d.loc_idx].binding.decl_spelling = self.decl_spelling(d.base_spelling);
+            self.set_decl_site(d.loc_idx);
             self.symbols[d.loc_idx].is_thread_local = d.is_thread_local;
             // C99 6.2.2p6: the block-scope object has no linkage; an
             // outer extern declaration's mark must not classify it.
@@ -690,12 +702,8 @@ impl Compiler {
             }
             self.symbols[d.loc_idx].class = Token::Loc as i64;
             self.symbols[d.loc_idx].type_ = d.ty;
-            self.symbols[d.loc_idx].decl_spelling = self.decl_spelling(d.base_spelling);
-            self.symbols[d.loc_idx].was_referenced = false;
-            self.symbols[d.loc_idx].decl_line = self.lex.line;
-            let decl_file = self.intern_source_file() as u32;
-            self.symbols[d.loc_idx].decl_file = decl_file;
-            self.symbols[d.loc_idx].decl_in_main_source = self.in_main_source();
+            self.symbols[d.loc_idx].binding.decl_spelling = self.decl_spelling(d.base_spelling);
+            self.set_decl_site(d.loc_idx);
             // Unconditional write so a reused symbol slot does not leak
             // a stale binding from an outer name.
             self.symbols[d.loc_idx].asm_register = d.asm_reg;
@@ -914,10 +922,13 @@ impl Compiler {
             type_align: src.type_align,
             is_const_qualified: src.is_const_qualified,
             const_object_value: src.const_object_value,
-            decl_spelling: src.decl_spelling,
-            decl_line: src.decl_line,
-            decl_file: src.decl_file,
-            decl_in_main_source: src.decl_in_main_source,
+            binding: crate::c5::symbol::BindingInfo {
+                decl_spelling: src.binding.decl_spelling,
+                decl_line: src.binding.decl_line,
+                decl_file: src.binding.decl_file,
+                decl_in_main_source: src.binding.decl_in_main_source,
+                ..Default::default()
+            },
             ..Default::default()
         });
         self.symbols[loc_idx].static_local_record = Some(record_idx as u32);
@@ -1436,8 +1447,8 @@ impl Compiler {
         s.array_size = 0;
         s.vla_ptr_slot = ptr_slot;
         s.vla_size_slot = size_slot;
-        s.was_written = true;
-        s.address_escaped = true;
+        s.binding.was_written = true;
+        s.binding.address_escaped = true;
         self.func_vla_decls += 1;
         self.note_jump_barrier(loc_idx, true);
         // The VLA storage comes from the per-frame alloca arena, so the
@@ -1715,7 +1726,7 @@ impl Compiler {
         // size) routes through the same flag without per-branch
         // bookkeeping.
         if self.lex.tk == Token::Assign {
-            self.symbols[loc_idx].was_written = true;
+            self.symbols[loc_idx].binding.was_written = true;
             self.record_local_store(loc_idx, self.lex.line);
         }
         if declared_array_size == -1 {

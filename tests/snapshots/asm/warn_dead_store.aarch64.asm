@@ -38,6 +38,15 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
 
+<block_local_dies>:
+               	mov	x0, #0x1                // =1
+               	ret
+
+<shadowed_outer_is_read>:
+               	add	x0, x0, #0x1
+               	add	x0, x0, #0x1
+               	ret
+
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
@@ -45,6 +54,8 @@ Disassembly of section .text:
                	mov	x0, #0x1                // =1
                	stur	w0, [x29, #-0x8]
                	add	x0, x0, #0x9
+               	add	x0, x0, #0x1
+               	add	x0, x0, #0x3
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret

@@ -855,7 +855,7 @@ impl Compiler {
         self.symbols[id_idx].type_ = ty;
         // For an object the spelling is the object's; for a function it is
         // the return type's.
-        self.symbols[id_idx].decl_spelling = self.decl_spelling(base_spelling);
+        self.symbols[id_idx].binding.decl_spelling = self.decl_spelling(base_spelling);
         // An explicit return type replaces the implicit-`int`
         // default (Sys binding without a prior prototype).
         self.symbols[id_idx].implicit_return_int = false;
@@ -1007,9 +1007,9 @@ impl Compiler {
     /// 6.7.4p6-p7 and GNU89), and the linkage that census implies so far.
     fn record_function_declaration(&mut self, id_idx: usize, static_seen: bool, extern_seen: bool) {
         self.symbols[id_idx].class = Token::Fun as i64;
-        if self.symbols[id_idx].decl_line == 0 {
-            self.symbols[id_idx].decl_line = self.lex.line;
-            self.symbols[id_idx].decl_in_main_source = self.in_main_source();
+        if self.symbols[id_idx].binding.decl_line == 0 {
+            self.symbols[id_idx].binding.decl_line = self.lex.line;
+            self.symbols[id_idx].binding.decl_in_main_source = self.in_main_source();
         }
         // Census one file-scope declaration of this name for
         // the inline linkage models (C99 6.7.4p6-p7 and
@@ -1105,7 +1105,7 @@ impl Compiler {
                 self.unwind_scope_bound(bound);
                 return Ok(());
             };
-            self.symbols[tgt].was_referenced = true;
+            self.symbols[tgt].binding.was_referenced = true;
             self.symbols[id_idx].val = self.symbols[tgt].val;
             // Defined-through-the-target: keeps the TU-end
             // extern-import pass from re-assigning a
@@ -1149,9 +1149,9 @@ impl Compiler {
     ) -> Result<(), C5Error> {
         // The definition's position replaces the first declaration's, so a
         // report about the function points at its body.
-        self.symbols[id_idx].decl_line = def.line;
-        self.symbols[id_idx].decl_file = self.intern_source_file() as u32;
-        self.symbols[id_idx].decl_in_main_source = self.in_main_source();
+        self.symbols[id_idx].binding.decl_line = def.line;
+        self.symbols[id_idx].binding.decl_file = self.intern_source_file() as u32;
+        self.symbols[id_idx].binding.decl_in_main_source = self.in_main_source();
         // C99 6.9.1p5: a definition names every parameter it declares.
         if params.indices.len() != params.types.len() {
             return Err(self.compile_err_at(
@@ -1686,9 +1686,9 @@ impl Compiler {
                     type_tag: sym.type_,
                     fp_slot: sym.val,
                     is_parameter,
-                    decl_line: sym.decl_line as u32,
+                    decl_line: sym.binding.decl_line as u32,
                     array_size,
-                    decl_file: sym.decl_file,
+                    decl_file: sym.binding.decl_file,
                     fn_ptr_indirection: sym.fn_ptr_indirection,
                     params: sym.params.clone(),
                     is_variadic: sym.is_variadic,
@@ -1697,7 +1697,7 @@ impl Compiler {
                     } else {
                         sym.array_dims.clone()
                     },
-                    decl_spelling: sym.decl_spelling,
+                    decl_spelling: sym.binding.decl_spelling,
                 });
             }
         }
@@ -1807,10 +1807,10 @@ impl Compiler {
             let i = bi as usize;
             let sym = &self.symbols[i];
             if sym.class != Token::Loc as i64
-                || !sym.decl_in_main_source
-                || sym.address_escaped
-                || sym.was_read
-                || sym.maybe_unused
+                || !sym.binding.decl_in_main_source
+                || sym.binding.address_escaped
+                || sym.binding.was_read
+                || sym.binding.maybe_unused
                 || sym.name.is_empty()
                 || sym.name.starts_with('_')
             {
@@ -1828,14 +1828,14 @@ impl Compiler {
             // `was_referenced` separates "never mentioned" from "mentioned, but every
             // mention was a write" -- the dead-store case. A parameter is written at
             // call entry, so it takes the unused-parameter diagnostic instead.
-            let kind = if sym.was_referenced && sym.was_written && !is_param {
+            let kind = if sym.binding.was_referenced && sym.binding.was_written && !is_param {
                 UnusedKind::ValueSet
             } else if is_param {
                 UnusedKind::Parameter
             } else {
                 UnusedKind::Variable
             };
-            unused.push((sym.decl_line, sym.name.clone(), kind));
+            unused.push((sym.binding.decl_line, sym.name.clone(), kind));
         }
         for (line, name, kind) in unused {
             let (code, msg) = match kind {
@@ -1996,10 +1996,10 @@ impl Compiler {
         self.symbols[id_idx].class = Token::Glo as i64;
         // First declaration wins the source position, as it does
         // for functions; it feeds DW_AT_decl_file / decl_line.
-        if self.symbols[id_idx].decl_line == 0 {
-            self.symbols[id_idx].decl_line = self.lex.line;
-            self.symbols[id_idx].decl_file = self.intern_source_file() as u32;
-            self.symbols[id_idx].decl_in_main_source = self.in_main_source();
+        if self.symbols[id_idx].binding.decl_line == 0 {
+            self.symbols[id_idx].binding.decl_line = self.lex.line;
+            self.symbols[id_idx].binding.decl_file = self.intern_source_file() as u32;
+            self.symbols[id_idx].binding.decl_in_main_source = self.in_main_source();
         }
         if !was_tentative_glo {
             self.symbols[id_idx].is_thread_local = thread_local;
@@ -2735,7 +2735,7 @@ impl Compiler {
                     format!("alias target `{target}` is not {kind} defined in this unit"),
                 ));
             };
-            self.symbols[tgt].was_referenced = true;
+            self.symbols[tgt].binding.was_referenced = true;
             if !is_object && self.symbols[id_idx].is_weak {
                 let name = self.symbols[id_idx].link_name().into();
                 self.function_aliases
@@ -2888,8 +2888,8 @@ impl Compiler {
                 // An inline definition is internal but externally
                 // declared; another unit may still call the name.
                 || sym.is_inline_definition
-                || sym.was_referenced
-                || !sym.decl_in_main_source
+                || sym.binding.was_referenced
+                || !sym.binding.decl_in_main_source
                 || sym.name.is_empty()
                 || sym.name.starts_with('_')
                 || sym.name == "main"
@@ -2898,7 +2898,7 @@ impl Compiler {
             {
                 continue;
             }
-            unused.push((sym.decl_line, sym.name.clone()));
+            unused.push((sym.binding.decl_line, sym.name.clone()));
         }
         for (line, name) in unused {
             self.warn_at(

@@ -2706,6 +2706,15 @@ fn callee_function_types() {
 }
 
 #[test]
+fn type_name_array_derivations() {
+    // C99 6.7.6: a bound inside a group of a type name's abstract
+    // declarator makes an array, of pointers to functions or to data;
+    // `sizeof`, a compound literal, a cast and a call through an element
+    // read it. A group without a function names a data pointer.
+    assert_eq!(run_fixture("type_name_array_derivations.c"), 0);
+}
+
+#[test]
 fn indirect_call_prototypes() {
     // A call through a pointer converts or promotes its arguments by the
     // pointed-to type, however the callee is spelled.

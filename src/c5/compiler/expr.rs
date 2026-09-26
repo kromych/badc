@@ -16,6 +16,7 @@ use super::super::symbol::FnType;
 use super::super::token::{Token, Ty};
 use super::CODE_BASE;
 use super::Compiler;
+use super::declarator::Derivation;
 use super::diag::{Category, Operand};
 
 /// Largest byte count `__builtin_memcpy` is expanded inline for; gcc's
@@ -2800,26 +2801,15 @@ impl Compiler {
     /// level further per dimension.
     fn type_name_fn(&mut self, type_name: TypeName) -> Option<(FnType, i64)> {
         let dims = type_name.dims.len() as i64;
-        let (f, depth) = if let Some(pp) = type_name.proto {
-            let depth = type_name.fn_ptr_indirection.unwrap_or(1).max(1);
-            let f = FnType {
-                params: pp.fn_params(),
-                ret: type_name.fn_ty.and_then(|f| f.ret),
-                ..FnType::default()
-            };
-            (f, depth)
-        } else {
-            let f = type_name.fn_ty.filter(|f| f.ptr_depth >= 1)?;
-            let depth = f.ptr_depth as i64;
-            let f = FnType {
-                params: f.params,
-                ret: f.ret,
-                ..FnType::default()
-            };
-            (f, depth)
-        };
+        let f = type_name.fn_ty.filter(|f| f.ptr_depth >= 1)?;
+        let depth = f.ptr_depth as i64;
         let conv = core::mem::take(&mut self.pending.attr_call_conv);
-        Some((FnType { conv, ..f }, depth + dims))
+        let f = FnType {
+            params: f.params,
+            conv,
+            ret: f.ret,
+        };
+        Some((f, depth + dims))
     }
 
     fn parse_deref(&mut self) -> Result<(), C5Error> {
@@ -5476,22 +5466,16 @@ impl Compiler {
         self.pending.typedef_base_array_dims.clear();
         self.pending.typedef_base_zero_len = false;
         let base = self.parse_decl_base_type()?;
-        let mut ty = base;
-        let base_is_fn = core::mem::take(&mut self.pending.base_is_function_type);
+        let is_function = core::mem::take(&mut self.pending.base_is_function_type);
         let base_params = self.pending.fn_ptr_params.take();
         self.pending.fn_ptr_ret_indirection = 0;
         let base_ret = self.pending.fn_ptr_ret_fn.take();
-        let mut fn_ptr_indirection = self.pending.fn_ptr_indirection.take();
-        let mut fn_ty = fn_ptr_indirection.map(|depth| FnTypeName {
-            ptr_depth: if base_is_fn { 0 } else { depth.max(0) as usize },
-            params: base_params.unwrap_or_default(),
-            ret: base_ret,
-        });
+        let fn_ptr_indirection = self.pending.fn_ptr_indirection.take();
         let type_align = core::mem::take(&mut self.pending.type_align);
         let base_extent = core::mem::take(&mut self.pending.typedef_base_array_size);
         let base_dims = core::mem::take(&mut self.pending.typedef_base_array_dims);
         let base_zero_len = core::mem::take(&mut self.pending.typedef_base_zero_len);
-        let mut dims = if base_extent == 0 && !base_zero_len {
+        let dims = if base_extent == 0 && !base_zero_len {
             alloc::vec::Vec::new()
         } else if !base_dims.is_empty() {
             base_dims
@@ -5500,115 +5484,64 @@ impl Compiler {
         } else {
             alloc::vec![if base_extent > 0 { base_extent } else { -1 }]
         };
-        // A function-type typedef already encodes one pointer level, so
-        // the first `*` forms the pointer to function rather than adding
-        // a level to the tag, as the declarator path reads it; the named
-        // function type is then one indirection down.
-        let mut absorb_fn_type_ptr = base_is_fn;
-        let mut ptr_levels: i64 = 0;
+        // An array typedef's bounds are levels above its element's function
+        // type, as a declared bound is.
+        let fn_ty = fn_ptr_indirection.map(|depth| FnTypeName {
+            ptr_depth: if is_function {
+                0
+            } else {
+                depth.max(0) as usize
+            } + dims.len(),
+            params: base_params.unwrap_or_default(),
+            ret: base_ret,
+        });
+        let mut t = DerivedType {
+            ty: base,
+            own_bounds: dims.len(),
+            dims,
+            fn_ty,
+            is_function,
+            fn_ptr_indirection,
+            ptr_levels: 0,
+        };
+        // The leading pointers are the declarator's last derivations, so
+        // they apply to the base type first (C99 6.7.5.1).
         while self.lex.tk == Token::MulOp {
             self.next()?;
-            if absorb_fn_type_ptr {
-                absorb_fn_type_ptr = false;
-                if let Some(f) = fn_ty.as_mut() {
-                    f.ptr_depth += 1;
-                }
-            } else {
-                // `A *` over an array base names a pointer to the array
-                // (C99 6.7.7p3): the extent folds into the pointee.
-                if !dims.is_empty() {
-                    ty = self.array_agg_type(ty, &dims);
-                    dims.clear();
-                }
-                ty = add_ptr_level(ty);
-                ptr_levels += 1;
-                if let Some(f) = fn_ty.as_mut() {
-                    f.ptr_depth += 1;
-                }
-                if let Some(fpi) = fn_ptr_indirection.as_mut() {
-                    *fpi += 1;
-                }
-            }
+            self.derive_pointer(&mut t);
             while self.lex.tk == Token::TypeQual {
-                ty = apply_qual_bits(ty, self.lex_qualifier_bits());
+                t.ty = apply_qual_bits(t.ty, self.lex_qualifier_bits());
                 self.next()?;
             }
         }
-        // Abstract function declarator (C99 6.7.6): `T (*)(params)` names
-        // a pointer to function, `T (params)` the function type itself,
-        // spelled as the return type at one pointer level; `T (*)[N]` a
-        // pointer to an array, whose pointee keeps its dimensions.
-        let mut proto = None;
+        // `T (*)(params)` names a pointer to function, `T (params)` the
+        // function type itself, `T (*)[N]` a pointer to an array and
+        // `T (*[N])(params)` an array of pointers to functions (C99 6.7.6).
         if self.lex.tk == '(' {
             let abs = if self.lex.peek_after_whitespace(b'*') {
                 self.parse_abstract_ptr_declarator(true)?
-            } else if fn_ty.is_none() {
+            } else if t.fn_ty.is_none() {
                 self.next()?;
                 let pp = self.parse_type_name_params()?;
-                super::declarator::AbstractDecl {
-                    fns: alloc::vec![(0, Some(pp))],
-                    ..Default::default()
-                }
+                let derivations = alloc::vec![Derivation::Function(Some(pp))];
+                super::declarator::AbstractDecl { derivations }
             } else {
                 super::declarator::AbstractDecl::default()
             };
-            let levels = abs.levels;
-            let mut fns = abs.fns.into_iter();
-            if let Some((own_depth, Some(pp))) = fns.next() {
-                ty += levels.max(1) * Ty::Ptr as i64;
-                dims.clear();
-                // A function-pointer base is the result of the outermost
-                // function level; each level is the result of the one inside.
-                let conv = crate::c5::codegen::CallConv::Target;
-                let mut ret = fn_ty.take().map(|f| {
-                    let depth = f.ptr_depth as i64;
-                    let base = FnType {
-                        params: f.params,
-                        conv,
-                        ret: f.ret,
-                    };
-                    (alloc::boxed::Box::new(base), depth)
-                });
-                for (depth, level) in fns.rev() {
-                    let params = level.map(|p| p.fn_params()).unwrap_or_default();
-                    let f = FnType { params, conv, ret };
-                    ret = Some((alloc::boxed::Box::new(f), depth));
-                }
-                fn_ty = Some(FnTypeName {
-                    ptr_depth: own_depth as usize,
-                    params: pp.fn_params(),
-                    ret,
-                });
-                proto = Some(pp);
-                if own_depth > 0 {
-                    fn_ptr_indirection = Some(own_depth);
-                }
-            } else if !abs.dims.is_empty() && levels > 0 {
-                let mut pointee = abs.dims;
-                pointee.append(&mut dims);
-                ty = self.array_agg_type(ty, &pointee) + levels * Ty::Ptr as i64;
-                fn_ptr_indirection = Some(levels);
-            } else {
-                ty += levels * Ty::Ptr as i64;
-                if levels > 0 {
-                    fn_ptr_indirection = Some(levels);
+            for step in abs.derivations.into_iter().rev() {
+                match step {
+                    Derivation::Pointer => self.derive_pointer(&mut t),
+                    Derivation::Array(n) => self.derive_array(&mut t, n)?,
+                    Derivation::Function(pp) => self.derive_function(&mut t, pp)?,
                 }
             }
-            ptr_levels += levels;
         }
-        // Abstract array declarator `T []` / `T [N]`. Only the outermost
-        // bound may be omitted (C99 6.7.5.2p1: the element type shall be
-        // complete); an array typedef base supplies the inner bounds.
+        // Abstract array declarator `T []` / `T [N]`, outermost bound first;
+        // an array typedef base supplies the inner bounds.
         let mut outer = alloc::vec::Vec::new();
         while self.lex.tk == Token::Brak {
             self.next()?;
             let n = if self.lex.tk == ']' {
-                if !outer.is_empty() {
-                    return Err(self.compile_err(
-                        Code::INVALID_DECLARATION,
-                        "array type has an incomplete inner dimension",
-                    ));
-                }
                 -1
             } else {
                 let n = self.with_const_object_fold_masked(|c| c.parse_constant_int())?;
@@ -5628,20 +5561,99 @@ impl Compiler {
             self.next()?;
             outer.push(n);
         }
-        if !outer.is_empty() {
-            outer.append(&mut dims);
-            dims = outer;
+        for n in outer.into_iter().rev() {
+            self.derive_array(&mut t, n)?;
+        }
+        if let Some(f) = t.fn_ty.as_mut() {
+            f.ptr_depth -= t.own_bounds;
         }
         Ok(TypeName {
             base,
-            ty,
-            dims,
-            ptr_levels,
-            fn_ty,
-            proto,
-            fn_ptr_indirection,
+            ty: t.ty,
+            dims: t.dims,
+            ptr_levels: t.ptr_levels,
+            fn_ty: t.fn_ty,
+            fn_ptr_indirection: t.fn_ptr_indirection,
             type_align,
         })
+    }
+
+    /// A pointer to the type `t` holds. The first one above a function type
+    /// is the level its pre-decayed tag already has; one above an array
+    /// folds the bounds into the aggregate-backed pointee (C99 6.7.7p3).
+    fn derive_pointer(&mut self, t: &mut DerivedType) {
+        if t.is_function {
+            t.is_function = false;
+        } else {
+            if !t.dims.is_empty() {
+                t.ty = self.array_agg_type(t.ty, &t.dims);
+                t.dims.clear();
+                t.own_bounds = 0;
+            }
+            t.ty = add_ptr_level(t.ty);
+            if let Some(fpi) = t.fn_ptr_indirection.as_mut() {
+                *fpi += 1;
+            }
+        }
+        if let Some(f) = t.fn_ty.as_mut() {
+            f.ptr_depth += 1;
+        }
+        t.ptr_levels += 1;
+    }
+
+    /// An array of `n` of the type `t` holds; only its outermost bound may
+    /// be unspecified (C99 6.7.5.2p1), and its element is no function.
+    fn derive_array(&mut self, t: &mut DerivedType, n: i64) -> Result<(), C5Error> {
+        if t.is_function {
+            return Err(self.compile_err(Code::INVALID_DECLARATION, "array of functions"));
+        }
+        if t.dims.first().is_some_and(|&d| d < 0) {
+            return Err(self.compile_err(
+                Code::INVALID_DECLARATION,
+                "array type has an incomplete inner dimension",
+            ));
+        }
+        t.dims.insert(0, n);
+        t.own_bounds += 1;
+        if let Some(f) = t.fn_ty.as_mut() {
+            f.ptr_depth += 1;
+        }
+        Ok(())
+    }
+
+    /// A function returning the type `t` holds, which is spelled as that
+    /// type one pointer level up; the function type `t` leads to becomes
+    /// the returned pointer's (C99 6.7.5.3p1: no array or function result).
+    fn derive_function(
+        &mut self,
+        t: &mut DerivedType,
+        params: Option<super::function::ParsedParams>,
+    ) -> Result<(), C5Error> {
+        if t.is_function || !t.dims.is_empty() {
+            return Err(self.compile_err(
+                Code::INVALID_DECLARATION,
+                "function returning an array or a function",
+            ));
+        }
+        let conv = crate::c5::codegen::CallConv::Target;
+        let ret = t.fn_ty.take().map(|f| {
+            let depth = f.ptr_depth as i64;
+            let f = FnType {
+                params: f.params,
+                conv,
+                ret: f.ret,
+            };
+            (alloc::boxed::Box::new(f), depth)
+        });
+        t.fn_ty = Some(FnTypeName {
+            ptr_depth: 0,
+            params: params.map(|p| p.fn_params()).unwrap_or_default(),
+            ret,
+        });
+        t.ty += Ty::Ptr as i64;
+        t.is_function = true;
+        t.fn_ptr_indirection = Some(1);
+        Ok(())
     }
 
     /// The parameter list of an abstract function declarator, entered
@@ -5997,14 +6009,26 @@ pub(super) struct TypeName {
     pub ptr_levels: i64,
     /// The function type the name denotes or points to.
     pub fn_ty: Option<FnTypeName>,
-    /// The parameter list of a `(*)(params)` declarator, for a call
-    /// through a cast value.
-    pub proto: Option<super::function::ParsedParams>,
     /// Function-pointer lineage of the named type, as
-    /// `Symbol::fn_ptr_indirection` counts it.
+    /// `Symbol::fn_ptr_indirection` counts it; `None` without a function type.
     pub fn_ptr_indirection: Option<i64>,
     /// Explicit alignment a typedef base carries (GNU `aligned(N)`).
     pub type_align: i64,
+}
+
+/// The type a type name derives, from its base type outward.
+struct DerivedType {
+    /// The tag; the element's when `dims` is not empty.
+    ty: i64,
+    /// Bounds of the array the type is, outermost first.
+    dims: alloc::vec::Vec<i64>,
+    /// Of `dims`, how many `fn_ty`'s depth counts.
+    own_bounds: usize,
+    fn_ty: Option<FnTypeName>,
+    /// The type is `fn_ty` itself, whose tag is pre-decayed.
+    is_function: bool,
+    fn_ptr_indirection: Option<i64>,
+    ptr_levels: i64,
 }
 
 impl TypeName {
@@ -6018,8 +6042,8 @@ impl TypeName {
 /// the return type, so C99 6.7.5.3 compatibility needs the parameter list
 /// and the indirection above the function alongside it.
 pub(super) struct FnTypeName {
-    /// Pointer levels applied to the function type: 0 names a function
-    /// type, 1 a pointer to function.
+    /// Pointer and array levels applied to the function type: 0 names a
+    /// function type, 1 a pointer to function.
     ptr_depth: usize,
     params: crate::c5::symbol::FnParams,
     /// `FnType::ret` of the function type.

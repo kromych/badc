@@ -716,12 +716,12 @@ impl Compiler {
         }
         if type_name.ptr_levels == 0 {
             self.require_complete_operand(type_name.ty, "sizeof")?;
-            if type_name.dims.iter().any(|&d| d < 0) {
-                return Err(self.compile_err(
-                    Code::INVALID_DECLARATION,
-                    "`sizeof` applied to an incomplete type",
-                ));
-            }
+        }
+        if type_name.dims.iter().any(|&d| d < 0) {
+            return Err(self.compile_err(
+                Code::INVALID_DECLARATION,
+                "`sizeof` applied to an incomplete type",
+            ));
         }
         let elem_size = self.size_of_type(type_name.ty) as i64;
         Ok(type_name.dims.iter().fold(elem_size, |n, &d| n * d))

@@ -3285,6 +3285,25 @@ fn type_name_array_bound_constraints() {
          int main(void) { return (int)_Alignof(struct t[2]); }",
         "applied to an incomplete type",
     );
+    // A bound inside a group derives the same array, of pointers here
+    // (C99 6.7.6); 6.7.5.2p1 and 6.7.5.3p1 rule out an array of functions
+    // and a function returning an array.
+    for (type_name, needle) in [
+        ("int *[]", "`sizeof` applied to an incomplete type"),
+        ("int (*[])(int)", "`sizeof` applied to an incomplete type"),
+        ("int (*[3][])(int)", "incomplete inner dimension"),
+        ("int (*[-1])(int)", "must not be negative"),
+        ("int (*([3])(int))", "array of functions"),
+        (
+            "int (*)(void)[3]",
+            "function returning an array or a function",
+        ),
+    ] {
+        expect_compile_error(
+            &alloc::format!("int main(void) {{ return (int)sizeof({type_name}); }}"),
+            needle,
+        );
+    }
 }
 
 #[test]

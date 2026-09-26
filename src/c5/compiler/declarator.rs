@@ -33,16 +33,46 @@ use super::super::token::{Token, Ty};
 use super::Compiler;
 use super::types::{add_ptr_level, apply_qual_bits, is_decl_modifier, strip_unsigned};
 
-/// An abstract declarator in a type name (C99 6.7.6).
+/// One derivation an abstract declarator spells (C99 6.7.6).
+pub(super) enum Derivation {
+    Pointer,
+    /// An array of the bound, `-1` when it is unspecified.
+    Array(i64),
+    /// A function with its parameters, when captured.
+    Function(Option<super::function::ParsedParams>),
+}
+
+/// An abstract declarator in a type name (C99 6.7.6): its derivations from
+/// the position of the omitted identifier outward, so each applies to the
+/// type the ones after it derive from the base type.
 #[derive(Default)]
 pub(super) struct AbstractDecl {
-    /// Every pointer level it spells.
-    pub(super) levels: i64,
-    /// Per function level, innermost first: the pointer levels above the
-    /// function type, and its parameters when captured.
-    pub(super) fns: alloc::vec::Vec<(i64, Option<super::function::ParsedParams>)>,
-    /// The pointee dimensions of a pointer to an array.
-    pub(super) dims: alloc::vec::Vec<i64>,
+    pub(super) derivations: alloc::vec::Vec<Derivation>,
+}
+
+impl AbstractDecl {
+    pub(super) fn pointer_levels(&self) -> i64 {
+        let pointers = self.derivations.iter();
+        pointers
+            .filter(|d| matches!(d, Derivation::Pointer))
+            .count() as i64
+    }
+
+    /// The bounds of the array a pointer to an array (`T (*)[M1]...[Mn]`)
+    /// points to, or `None` for any other type.
+    pub(super) fn pointee_dims(&self) -> Option<alloc::vec::Vec<i64>> {
+        let [Derivation::Pointer, rest @ ..] = self.derivations.as_slice() else {
+            return None;
+        };
+        let bound = |d: &Derivation| match d {
+            Derivation::Array(n) => Some(*n),
+            _ => None,
+        };
+        rest.iter()
+            .map(bound)
+            .collect::<Option<_>>()
+            .filter(|b: &alloc::vec::Vec<i64>| !b.is_empty())
+    }
 }
 
 impl Compiler {
@@ -171,12 +201,14 @@ impl Compiler {
         self.parse_abstract_group(capture_proto)
     }
 
-    /// `abstract-declarator )` and the suffixes after it, the `(` consumed:
-    /// a group's pointers sit above the function its first suffix spells.
+    /// `abstract-declarator )` and the suffixes after it, the `(` consumed.
+    /// The derivations of a nested group come first, then the suffixes of
+    /// the omitted identifier (`[3]` in `(*[3])`), the group's pointers and
+    /// the group's own suffixes (C99 6.7.5p4).
     fn parse_abstract_group(&mut self, capture_proto: bool) -> Result<AbstractDecl, C5Error> {
-        let mut ptrs: i64 = 0;
+        let mut ptrs = 0usize;
         while self.lex.tk == Token::MulOp || self.lex.tk == Token::TypeQual {
-            ptrs += i64::from(self.lex.tk == Token::MulOp);
+            ptrs += usize::from(self.lex.tk == Token::MulOp);
             self.next()?;
         }
         let mut d = if self.lex.tk == '(' && !self.paren_opens_param_type_list() {
@@ -185,54 +217,65 @@ impl Compiler {
         } else {
             AbstractDecl::default()
         };
-        // TODO: an array of pointers (`int (*[3])(int)`) keeps no dimension.
-        while self.lex.tk == Token::Brak {
-            self.next()?;
-            self.skip_array_dimension_expr()?;
-            self.next()?;
-        }
+        self.parse_abstract_suffixes(capture_proto, &mut d)?;
         if self.lex.tk != ')' {
             return Err(self.compile_err(Code::SYNTAX, "close paren expected in type name"));
         }
         self.next()?;
-        d.levels += ptrs;
-        let mut depth = ptrs;
-        while self.lex.tk == '(' {
-            self.next()?;
-            let pp = if capture_proto {
-                // C99 6.2.1p4: the parameter names of a function declarator
-                // that is not part of a function definition have no scope,
-                // so their types are recorded without binding the names.
-                let saved = self.pending.parsing_fn_ptr_proto;
-                self.pending.parsing_fn_ptr_proto = true;
-                let pp = self.parse_function_params();
-                self.pending.parsing_fn_ptr_proto = saved;
-                Some(pp?)
-            } else {
-                self.skip_balanced_parens_after_open()?;
-                None
-            };
-            d.fns.push((depth, pp));
-            depth = 0;
-        }
-        // The pointee dimensions of `T (*)[M1]...[Mn]`: the caller folds
-        // them into an aggregate-backed tag so the pointee keeps its size.
-        // An unspecified bound (`T (*)[]`, C99 6.7.5.2p4 incomplete array
-        // type) records the -1 sentinel.
-        while self.lex.tk == Token::Brak {
-            self.next()?;
-            if self.lex.tk == ']' {
-                d.dims.push(-1);
-                self.next()?;
-            } else {
-                // A type-name dimension: the const-object fold stays
-                // masked (see `with_const_object_fold_masked`).
-                d.dims
-                    .push(self.with_const_object_fold_masked(|c| c.parse_constant_int())?);
-                self.accept(']')?;
-            }
-        }
+        d.derivations
+            .extend(core::iter::repeat_with(|| Derivation::Pointer).take(ptrs));
+        self.parse_abstract_suffixes(capture_proto, &mut d)?;
         Ok(d)
+    }
+
+    /// The function and array suffixes of an abstract declarator. With
+    /// `capture_proto` a parameter list is parsed, else skipped. An
+    /// unspecified bound records `-1` (C99 6.7.5.2p4).
+    fn parse_abstract_suffixes(
+        &mut self,
+        capture_proto: bool,
+        d: &mut AbstractDecl,
+    ) -> Result<(), C5Error> {
+        loop {
+            let step = if self.lex.tk == '(' {
+                self.next()?;
+                if !capture_proto {
+                    self.skip_balanced_parens_after_open()?;
+                    Derivation::Function(None)
+                } else {
+                    // C99 6.2.1p4: the parameter names of a function
+                    // declarator that is not part of a function definition
+                    // have no scope, so their types are recorded without
+                    // binding the names.
+                    let saved = self.pending.parsing_fn_ptr_proto;
+                    self.pending.parsing_fn_ptr_proto = true;
+                    let pp = self.parse_function_params();
+                    self.pending.parsing_fn_ptr_proto = saved;
+                    Derivation::Function(Some(pp?))
+                }
+            } else if self.lex.tk == Token::Brak {
+                self.next()?;
+                if self.lex.tk == ']' {
+                    self.next()?;
+                    Derivation::Array(-1)
+                } else {
+                    // A type-name bound: the const-object fold stays masked
+                    // (see `with_const_object_fold_masked`).
+                    let n = self.with_const_object_fold_masked(|c| c.parse_constant_int())?;
+                    if n < 0 {
+                        return Err(self.compile_err(
+                            Code::INVALID_DECLARATION,
+                            "array dimension in a type name must not be negative",
+                        ));
+                    }
+                    self.accept(']')?;
+                    Derivation::Array(n)
+                }
+            } else {
+                return Ok(());
+            };
+            d.derivations.push(step);
+        }
     }
 
     /// Parse a single declarator: zero-or-more `*` (pointer levels)

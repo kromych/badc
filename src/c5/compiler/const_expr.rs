@@ -2649,11 +2649,10 @@ impl Compiler {
                 let mut array_pointee = None;
                 if self.lex.tk == '(' {
                     let abs = self.parse_abstract_ptr_declarator(false)?;
-                    let (levels, dims) = (abs.levels, abs.dims);
-                    if levels == 1 && !dims.is_empty() && dims.iter().all(|&d| d > 0) {
+                    if let Some(dims) = abs.pointee_dims().filter(|d| d.iter().all(|&d| d > 0)) {
                         array_pointee = Some(self.array_agg_type(target_ty, &dims));
                     }
-                    target_ty += levels * Ty::Ptr as i64;
+                    target_ty += abs.pointer_levels() * Ty::Ptr as i64;
                     while self.lex.tk == Token::TypeQual {
                         self.next()?;
                     }

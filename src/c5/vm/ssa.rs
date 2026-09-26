@@ -104,6 +104,8 @@ struct Memory {
     /// `run_program_with_args_tracked` (or the
     /// `Vm::with_pointer_tracking` constructor).
     track_pointers: bool,
+    /// Base of the stdio block ([`STDIO_ERRNO`]), 0 until first use.
+    stdio: usize,
 }
 
 /// Metadata for one heap allocation. The SSA-VM never reuses
@@ -159,7 +161,22 @@ impl Memory {
             allocations: Vec::new(),
             next_alloc_id: 1,
             track_pointers: false,
+            stdio: 0,
         }
+    }
+
+    /// The stdio block, allocated on first use.
+    fn stdio(&mut self) -> usize {
+        if self.stdio == 0 {
+            let base = self.heap_alloc(STDIO_ERRNO + 8);
+            for i in 0..3 {
+                let file = (base + i * STDIO_FILE_BYTES) as u64;
+                let slot = base + STDIO_SLOTS + i * 8;
+                self.bytes[slot..slot + 8].copy_from_slice(&file.to_le_bytes());
+            }
+            self.stdio = base;
+        }
+        self.stdio
     }
 
     fn with_track_pointers(mut self, on: bool) -> Self {
@@ -1492,6 +1509,43 @@ fn run_inst<H: Host>(
     Err(C5Error::Runtime(format!("vm_ssa: {name} not implemented",)))
 }
 
+/// The stdio block: a record per standard stream, as far apart as the bundled
+/// `<stdio.h>` steps from `__iob_func()` on Windows, then the `FILE *` object
+/// each stream's data symbol names, then the `errno` cell.
+const STDIO_FILE_BYTES: usize = 48;
+const STDIO_SLOTS: usize = 3 * STDIO_FILE_BYTES;
+const STDIO_ERRNO: usize = STDIO_SLOTS + 3 * 8;
+
+fn std_stream_index(sym: &str) -> Option<usize> {
+    match sym {
+        "stdin" | "__stdinp" => Some(0),
+        "stdout" | "__stdoutp" => Some(1),
+        "stderr" | "__stderrp" => Some(2),
+        _ => None,
+    }
+}
+
+/// The descriptor of the standard stream argument `idx` of `name` names.
+fn stdio_fd(name: &str, args: &[i64], idx: usize, mem: &Memory) -> Result<i64, C5Error> {
+    let stream = args.get(idx).copied().unwrap_or(0);
+    let off = (stream as usize).wrapping_sub(mem.stdio);
+    if mem.stdio != 0 && off < STDIO_SLOTS && off.is_multiple_of(STDIO_FILE_BYTES) {
+        return Ok((off / STDIO_FILE_BYTES) as i64);
+    }
+    Err(C5Error::Runtime(format!(
+        "vm_ssa: {name}: 0x{stream:x} is not a standard stream"
+    )))
+}
+
+fn cstring_arg(name: &str, args: &[i64], idx: usize, mem: &Memory) -> Result<Vec<u8>, C5Error> {
+    match args.get(idx).copied() {
+        Some(addr) if addr >= 0 => read_cstring_bytes(mem, addr as usize),
+        _ => Err(C5Error::Runtime(format!(
+            "vm_ssa: {name}: bad string argument"
+        ))),
+    }
+}
+
 /// Dispatch a libc binding by name. Implementations land here
 /// as they're ported off the `Vm<H>` host-bridge into the
 /// byte-addressed `Memory` model. Unimplemented bindings
@@ -1659,19 +1713,48 @@ fn dispatch_callext<H: Host>(
         // writes the bytes to stdout via the host. Returns the
         // number of bytes transmitted (7.19.6.3p3).
         "printf" => {
-            let fmt_addr = *args
-                .first()
-                .ok_or_else(|| C5Error::Runtime("vm_ssa: printf: missing fmt".to_string()))?;
-            if fmt_addr < 0 {
-                return Err(C5Error::Runtime(format!(
-                    "vm_ssa: printf: bad fmt addr 0x{fmt_addr:x}",
-                )));
-            }
-            let fmt = read_cstring_bytes(mem, fmt_addr as usize)?;
+            let fmt = cstring_arg(name, args, 0, mem)?;
             let out = format_printf(&fmt, &args[1..], mem)?;
             let _ = host.write(1, &out);
             Ok(out.len() as i64)
         }
+        // The bundled headers reach a stream through its data symbol (`dlsym`
+        // below) or `__iob_func()`, and `errno` through `errno_location()`.
+        "__iob_func" => Ok(mem.stdio() as i64),
+        "errno_location" => Ok((mem.stdio() + STDIO_ERRNO) as i64),
+        "fprintf" => {
+            let fd = stdio_fd(name, args, 0, mem)?;
+            let fmt = cstring_arg(name, args, 1, mem)?;
+            let out = format_printf(&fmt, args.get(2..).unwrap_or_default(), mem)?;
+            let _ = host.write(fd, &out);
+            Ok(out.len() as i64)
+        }
+        "fputs" => {
+            let fd = stdio_fd(name, args, 1, mem)?;
+            let _ = host.write(fd, &cstring_arg(name, args, 0, mem)?);
+            Ok(0)
+        }
+        "puts" => {
+            let mut line = cstring_arg(name, args, 0, mem)?;
+            line.push(b'\n');
+            let _ = host.write(1, &line);
+            Ok(0)
+        }
+        "fputc" | "putc" => {
+            let fd = stdio_fd(name, args, 1, mem)?;
+            let byte = args.first().copied().unwrap_or(-1) as u8;
+            let _ = host.write(fd, &[byte]);
+            Ok(i64::from(byte))
+        }
+        "fwrite" => {
+            let fd = stdio_fd(name, args, 3, mem)?;
+            let (buf, size, n) = libc_three_arg(name, args)?;
+            let bytes = mem.read_bytes(buf, size.saturating_mul(n))?.to_vec();
+            let _ = host.write(fd, &bytes);
+            Ok(if size == 0 { 0 } else { n as i64 })
+        }
+        "fflush" => Ok(0),
+        "fileno" => stdio_fd(name, args, 0, mem),
         // `int putchar(int c)` -- write one byte to stdout, returns
         // the byte (or EOF on error; we return the byte unconditionally).
         "putchar" => {
@@ -1802,6 +1885,9 @@ fn dispatch_callext<H: Host>(
                 )));
             }
             let sym = read_cstring(mem, name_addr as usize)?;
+            if let Some(i) = std_stream_index(&sym) {
+                return Ok((mem.stdio() + STDIO_SLOTS + i * 8) as i64);
+            }
             Ok(host.dlsym(handle, &sym))
         }
         // `int dlclose(void *handle)` -- pure host bridge.
@@ -3673,6 +3759,15 @@ mod tests {
             crate::C5Error::Runtime(m) => assert!(m.contains(needle), "`{m}` lacks `{needle}`"),
             other => panic!("expected Runtime, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn stream_call_on_other_memory_is_diagnosed() {
+        expect_runtime_err(
+            "#include <stdio.h>\n\
+             int main(void) { char b[48]; return fputs(\"x\", (FILE *)b); }",
+            "is not a standard stream",
+        );
     }
 
     #[test]

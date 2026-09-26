@@ -999,6 +999,28 @@ fn strict_flex_arrays_level_selects_the_bounded_members() {
     );
 }
 
+// The interpreter holds the standard streams and `errno` itself, where the
+// host would resolve the C library's data symbol or `__iob_func()` outside its
+// memory. Each write lands on its stream's descriptor, in order.
+#[test]
+fn interp_writes_to_the_standard_streams() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let src = fixtures_dir().join("standard_streams_and_errno.c");
+    let out = Command::new(badc)
+        .arg("--interp")
+        .arg(&src)
+        .output()
+        .expect("run badc --interp");
+    assert_eq!(
+        String::from_utf8_lossy(&out.stderr),
+        "err: fputs\nerr: fprintf 2\n!\nerr: fwrite\n"
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&out.stdout),
+        "out: fputs\nout: puts\nout: x\nexit(0)\n"
+    );
+}
+
 // `--install <dir>` writes every embedded header under <dir>/include
 // (recreating subdirectories) and the runtime source under <dir>/lib.
 #[test]

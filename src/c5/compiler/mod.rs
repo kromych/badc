@@ -1021,13 +1021,11 @@ pub(in crate::c5::compiler) struct Pending {
     /// occupy no storage; only the zero-length form is a complete type,
     /// so `sizeof` through it is 0 instead of a diagnostic.
     pub typedef_base_zero_len: bool,
-    /// Count of leading `*` levels the most recent declarator added.
-    /// A use of an array typedef folds the typedef's dimension onto the
-    /// object (`typedef T A[N]; A x;` -> `x` is `T[N]`) unless the
-    /// declarator turned it into a pointer (`A *p` -> pointer to `T[N]`);
-    /// that is `> 0` here, distinct from the typedef's own element type
-    /// being a pointer (`typedef T *A[N]; A x;` still folds).
-    pub declarator_leading_ptr_count: i64,
+    /// A derivation of the current declarator applies to an array-typedef
+    /// base: a pointer to the array or an array of it (C99 6.7.5p4). The
+    /// declared entity has the base's array type only when none did
+    /// (6.7.7p3): `A x` is `T[N]`, `A *p` and `A *(*f)(void)` are not.
+    pub base_array_taken: bool,
     /// Whether a `const` follows the declarator's outermost `*`
     /// (`T *const p`, `T *const a[]`). That qualifier applies to the
     /// declared object itself, unlike a `const` in the specifiers of a
@@ -1576,7 +1574,7 @@ impl Default for Pending {
             typedef_base_array_size: 0,
             typedef_base_zero_len: false,
             typedef_base_array_dims: alloc::vec::Vec::new(),
-            declarator_leading_ptr_count: 0,
+            base_array_taken: false,
             declarator_outer_const: false,
             declarator_outer_restrict: false,
             vla_allowed: false,

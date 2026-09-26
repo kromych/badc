@@ -596,6 +596,15 @@ impl Compiler {
         flat_matches(a, b) || flat_matches(b, a)
     }
 
+    /// The bounds of the array-typedef base, outermost first.
+    pub(super) fn typedef_base_dims(&self) -> Vec<i64> {
+        if self.pending.typedef_base_array_dims.len() >= 2 {
+            self.pending.typedef_base_array_dims.clone()
+        } else {
+            alloc::vec![self.pending.typedef_base_array_size]
+        }
+    }
+
     /// Build the pointer-to-array tag for a declarator with
     /// `ptr_levels` leading `*`s over an array-typedef base: the
     /// aggregate-backed pointee plus one pointer level per `*`. The
@@ -609,11 +618,7 @@ impl Compiler {
         ty: i64,
         ptr_levels: i64,
     ) -> i64 {
-        let dims: Vec<i64> = if self.pending.typedef_base_array_dims.len() >= 2 {
-            self.pending.typedef_base_array_dims.clone()
-        } else {
-            alloc::vec![self.pending.typedef_base_array_size]
-        };
+        let dims = self.typedef_base_dims();
         let agg = self.array_agg_type(elem_ty, &dims);
         (agg + ptr_levels * (Ty::Ptr as i64)) | (ty & (VOLATILE_MASK | CONST_PTR_LVL_MASK))
     }

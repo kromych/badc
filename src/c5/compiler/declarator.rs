@@ -319,6 +319,7 @@ impl Compiler {
             self.pending.fn_chain_array_levels = 0;
             self.pending.fn_own_sig = false;
             self.pending.fn_decl_base = self.carriers_fn_type();
+            self.pending.base_array_taken = false;
         }
         let mut ty = base;
         // A calling-convention decoration may precede the declarator
@@ -370,11 +371,6 @@ impl Compiler {
         }
         self.pending.declarator_outer_const = outer_const;
         self.pending.declarator_outer_restrict = outer_restrict;
-        // Record the leading `*` count so a use of an array typedef can
-        // tell `A x` (fold the dimension onto `x`) from `A *p` (pointer to
-        // the array) even when the typedef's element type is itself a
-        // pointer.
-        self.pending.declarator_leading_ptr_count = leading_ptr_count;
         // C99 6.7.7p3 + 6.7.6.1: `A *p` for an array typedef `A` declares
         // a pointer to the array. Rebuild the flat tag into the
         // aggregate-backed pointer-to-array form so the array layer rides
@@ -382,9 +378,13 @@ impl Compiler {
         // unspecified bound (`typedef T X[]`, carried as `-1`) is an
         // incomplete array type (6.7.5.2p4), and `T (*)[]` is a pointer to
         // it: `*p` still decays to `T *` under 6.3.2.1p3, which does not
-        // require a complete type.
-        if leading_ptr_count > 0 && self.pending.typedef_base_array_size != 0 {
-            ty = self.ptr_to_array_typedef_ty(base, ty, leading_ptr_count);
+        // require a complete type. Only the first derivation applies to the
+        // array: in `A *(*f)(void)` the group's `*` points to that pointer.
+        if leading_ptr_count > 0 {
+            if self.pending.typedef_base_array_size != 0 && !self.pending.base_array_taken {
+                ty = self.ptr_to_array_typedef_ty(base, ty, leading_ptr_count);
+            }
+            self.pending.base_array_taken = true;
         }
         // Fn-pointer lineage propagation: if the caller pre-seeded
         // `pending_fn_ptr_indirection` from a typedef-of-fn-ptr
@@ -472,6 +472,10 @@ impl Compiler {
         {
             self.next()?; // consume the outer `(`
             let outer_ty_before_inner = ty;
+            // The group's suffixes derive from this frame's type before its
+            // content does (C99 6.7.5p4): an array typedef no derivation
+            // took yet is the operand of the first.
+            let base_array_open = !self.pending.base_array_taken;
             // Discard any stale marker, then read what this recursion's
             // subtree produced: true when an inner group already fixed
             // the identifier's fn-pointer lineage, so this frame's
@@ -690,7 +694,11 @@ impl Compiler {
                     // the pointee dimensions into the aggregate-backed
                     // tag, one pointer level per inner `*`. Also covers
                     // the abstract form `T (*)[N]` (no symbol) and a
-                    // function's result (`T (*f(void))[N]`).
+                    // function's result (`T (*f(void))[N]`). An array
+                    // typedef base adds its bounds inside these.
+                    if base_array_open && self.pending.typedef_base_array_size > 0 {
+                        pointee_dims.extend(self.typedef_base_dims());
+                    }
                     self.pending.fn_chain_array_levels += pointee_dims.len() as i64;
                     inner_ty = (self.array_agg_type(outer_ty_before_inner, &pointee_dims)
                         + inner_ptr_levels * (Ty::Ptr as i64))
@@ -917,7 +925,8 @@ impl Compiler {
             // declaration's base type is parsed. The caller
             // observes `array_size != 0` and skips its own
             // typedef-dim fold to avoid double application.
-            if array_size != 0 {
+            if array_size != 0 && !self.pending.base_array_taken {
+                self.pending.base_array_taken = true;
                 let typedef_dim = self.pending.typedef_base_array_size;
                 if typedef_dim > 0 {
                     if self.pending.typedef_base_array_dims.len() >= 2 {

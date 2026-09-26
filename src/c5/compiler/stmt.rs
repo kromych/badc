@@ -635,7 +635,7 @@ impl Compiler {
                 typedef_dim,
                 self.pending.type_align,
             )?;
-            if typedef_dim != 0 && td_array == 0 {
+            if typedef_dim != 0 && td_array == 0 && !self.pending.base_array_taken {
                 td_array = typedef_dim;
             }
             self.symbols[id_idx].array_size = td_array;

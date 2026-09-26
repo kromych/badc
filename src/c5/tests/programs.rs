@@ -2752,6 +2752,13 @@ fn function_returning_pointer_to_array() {
 }
 
 #[test]
+fn array_typedef_derivations() {
+    // C99 6.7.7p3: a declarator's first derivation applies to the whole
+    // array an array typedef names, whatever derivations follow it.
+    assert_eq!(run_fixture("array_typedef_derivations.c"), 0);
+}
+
+#[test]
 fn indirect_call_prototypes() {
     // A call through a pointer converts or promotes its arguments by the
     // pointed-to type, however the callee is spelled.

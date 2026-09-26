@@ -316,10 +316,10 @@ impl Compiler {
             // A typedef whose alias is an array contributes
             // its dimension when the declarator stayed at the
             // typedef's element type (`jmp_buf b;` ->
-            // `long b[64];`). A declarator that added a
-            // pointer level (`jmp_buf *p;`) names a pointer
-            // to the element type; the array dimension is
-            // part of the pointee and must not re-apply.
+            // `long b[64];`). A declarator that derived a
+            // pointer from it (`jmp_buf *p;`) points to the
+            // array; the array dimension is part of the
+            // pointee and must not re-apply.
             // Peek the carrier without clearing so every
             // field in a comma list sees the dimension; the
             // carrier is reset when the next field's base
@@ -339,10 +339,7 @@ impl Compiler {
             // (`typedef T A[]`) aliases, and a member of either
             // occupies no storage while still placing at the element
             // type's alignment.
-            if typedef_dim != 0
-                && field_array_size == 0
-                && self.pending.declarator_leading_ptr_count == 0
-            {
+            if typedef_dim != 0 && field_array_size == 0 && !self.pending.base_array_taken {
                 field_array_size = typedef_dim;
                 field_zero_len = typedef_dim < 0 && self.pending.typedef_base_zero_len;
                 if id_idx != usize::MAX {

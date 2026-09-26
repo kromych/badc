@@ -3217,3 +3217,36 @@ fn a_group_holding_the_parameter_list_derives_the_function_result() {
         assert!(err.contains(text), "{src}{err}");
     }
 }
+
+/// C99 6.7.7p3: an array typedef names the whole array type, so the first
+/// derivation of a declarator applies to it -- a pointer to the array, an
+/// array of such pointers, a function returning one -- in every context.
+#[test]
+fn a_derivation_applies_to_the_whole_array_an_array_typedef_names() {
+    compile_str(
+        "typedef int A[3];\n\
+         A *v[2];\n\
+         A (*pa)[2];\n\
+         A *(*pf)(void);\n\
+         typedef A *PA2[2];\n\
+         struct M { A *m[2]; A *(*f)(void); };\n\
+         _Static_assert(__builtin_types_compatible_p(__typeof__(v), int (*[2])[3]), \"v\");\n\
+         _Static_assert(sizeof(v) == 2 * sizeof(void *), \"v\");\n\
+         _Static_assert(__builtin_types_compatible_p(__typeof__(pa), int (*)[2][3]), \"pa\");\n\
+         _Static_assert(sizeof(*pa) == 6 * sizeof(int), \"pa\");\n\
+         _Static_assert(__builtin_types_compatible_p(__typeof__(pf), int (*(*)(void))[3]), \"pf\");\n\
+         _Static_assert(__builtin_types_compatible_p(PA2, int (*[2])[3]), \"PA2\");\n\
+         _Static_assert(sizeof(((struct M *)0)->m) == 2 * sizeof(void *), \"m\");\n\
+         static int use(A *p[2]) {\n\
+             _Static_assert(sizeof(p) == sizeof(void *), \"p\");\n\
+             return (*p[1])[0];\n\
+         }\n\
+         int main(void) {\n\
+             typedef A *PA;\n\
+             A *(pp);\n\
+             _Static_assert(__builtin_types_compatible_p(PA, int (*)[3]), \"PA\");\n\
+             _Static_assert(__builtin_types_compatible_p(__typeof__(pp), int (*)[3]), \"pp\");\n\
+             return use(v) * 0;\n\
+         }\n",
+    );
+}

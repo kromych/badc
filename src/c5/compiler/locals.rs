@@ -492,15 +492,13 @@ impl Compiler {
             let fn_ptr_indirection = self.pending.fn_ptr_indirection.take().unwrap_or(0);
             let fn_ptr_ret_indirection = core::mem::take(&mut self.pending.fn_ptr_ret_indirection);
             let fnptr_params = self.pending.fn_ptr_params.take();
-            // C99 6.7.7p3 + 6.7.6.1: an array typedef contributes its
-            // dimension only when the declarator stayed at the element type;
-            // a `*` names a pointer-to-element and the dimension belongs to
-            // the pointee. Peek without clearing so the rest of the comma
-            // list keeps it.
+            // C99 6.7.7p3: an array typedef contributes its dimension only
+            // when no derivation of the declarator applied to it; `A *p`
+            // points to the array. Peek without clearing so the rest of the
+            // comma list keeps it.
             let typedef_dim = self.pending.typedef_base_array_size;
             self.check_array_elem_align(array_size, ty, typedef_dim, base_type_align)?;
-            if typedef_dim > 0 && array_size == 0 && self.pending.declarator_leading_ptr_count == 0
-            {
+            if typedef_dim > 0 && array_size == 0 && !self.pending.base_array_taken {
                 array_size = typedef_dim;
                 self.apply_typedef_array_dims(loc_idx);
             }

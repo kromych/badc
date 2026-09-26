@@ -5016,8 +5016,9 @@ impl Compiler {
                 } else {
                     field.array_dims.len().max(1) as i64
                 };
-                let depth = field.fn_ptr_indirection.max(1) + dims;
-                self.set_expr_fn(id, f, depth + self.pointee_array_levels(field.ty));
+                let levels = field.fn_ptr_indirection.max(1);
+                let arrays = self.pointee_array_levels(field.ty, levels);
+                self.set_expr_fn(id, f, levels + dims + arrays);
             }
         }
         Ok(())

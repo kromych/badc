@@ -144,9 +144,12 @@ impl Compiler {
     }
 
     /// The dimensions of the array a pointer-to-array tag points to, each a
-    /// level between the pointer and a function-pointer element.
-    pub(super) fn pointee_array_levels(&self, tag: i64) -> i64 {
-        if !is_struct_ty(tag) || struct_ptr_depth(tag) == 0 {
+    /// level between the pointer and a function-pointer element: only when
+    /// the array lies above the function, `fn_levels` pointer levels down,
+    /// and not in its result (`A *(*pf)(void)`).
+    pub(super) fn pointee_array_levels(&self, tag: i64, fn_levels: i64) -> i64 {
+        let depth = struct_ptr_depth(tag);
+        if !is_struct_ty(tag) || depth == 0 || depth >= fn_levels {
             return 0;
         }
         let s = &self.structs[struct_id_of(tag)];
@@ -171,8 +174,10 @@ impl Compiler {
         } else {
             s.array_dims.len().max(1)
         };
-        (s.fn_ptr_indirection >= 1)
-            .then(|| s.fn_ptr_indirection + dims as i64 + self.pointee_array_levels(s.type_))
+        (s.fn_ptr_indirection >= 1).then(|| {
+            let arrays = self.pointee_array_levels(s.type_, s.fn_ptr_indirection);
+            s.fn_ptr_indirection + dims as i64 + arrays
+        })
     }
 
     /// Record an identifier's function type: a function's, a function

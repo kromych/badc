@@ -543,8 +543,8 @@ impl Compiler {
         let fn_ptr_ret_indirection = core::mem::take(&mut self.pending.fn_ptr_ret_indirection);
         // C99 6.7.7p3: an array typedef contributes its dimension to a declarator
         // that supplied none. It belongs to the base type, so every declarator of
-        // the list reads it; one that added a pointer level names a pointer to the
-        // element type and does not (6.7.6.1). TODO: compose the multi-dimensional
+        // the list reads it; one whose derivations applied to it (`A *p` points to
+        // the array) does not (6.7.5p4). TODO: compose the multi-dimensional
         // case (`arr_t four[4]` -> `long four[4][64]`) through `array_dims`.
         let typedef_dim = self.pending.typedef_base_array_size;
         // Declarator-added dimensions over an over-aligned element
@@ -554,7 +554,7 @@ impl Compiler {
         // typedef (`typedef T X[]`, carried as `-1`) makes the object
         // a deferred array whose size the initializer fixes.
         let mut zero_len_array = self.pending.declarator_zero_len_array;
-        if typedef_dim != 0 && array_size == 0 && self.pending.declarator_leading_ptr_count == 0 {
+        if typedef_dim != 0 && array_size == 0 && !self.pending.base_array_taken {
             array_size = typedef_dim;
             zero_len_array = self.pending.typedef_base_zero_len;
             self.apply_typedef_array_dims(id_idx);

@@ -5823,11 +5823,23 @@ fn variadic_fp_aggregates_cross_the_system_compiler_boundary() {
     drive_across_the_system_compiler(&cc, "va-fp-agg-interop", common, "d2s, f3s, lds, mix, lxs");
 }
 
-/// The platform C compiler on Windows: `$CC` when set, else clang on the path
-/// or in LLVM's default install, provided it runs.
+/// A platform C compiler on Windows: a clang driver, or MSVC's `cl` with the
+/// environment its `vcvarsall.bat` sets up.
 #[cfg(windows)]
-fn windows_cc() -> Option<std::ffi::OsString> {
-    [
+enum WindowsCc {
+    Clang(std::ffi::OsString),
+    Msvc {
+        cl: PathBuf,
+        env: Vec<(String, String)>,
+    },
+}
+
+/// The platform C compiler on Windows: `$CC` when set, else clang on the path
+/// or in LLVM's default install, provided it runs, else the `cl` of the newest
+/// Visual Studio vswhere reports, for the host architecture.
+#[cfg(windows)]
+fn windows_cc() -> Option<WindowsCc> {
+    let clang = [
         std::env::var_os("CC"),
         Some("clang".into()),
         Some(r"C:\Program Files\LLVM\bin\clang.exe".into()),
@@ -5839,13 +5851,62 @@ fn windows_cc() -> Option<std::ffi::OsString> {
             .arg("--version")
             .output()
             .is_ok_and(|o| o.status.success())
-    })
+    });
+    clang.map(WindowsCc::Clang).or_else(msvc_cl)
+}
+
+/// MSVC's `cl` for the host architecture and the environment `vcvarsall.bat`
+/// gives it, read back through `set` in UTF-16 (`cmd /u`).
+#[cfg(windows)]
+fn msvc_cl() -> Option<WindowsCc> {
+    use std::os::windows::process::CommandExt;
+    let vswhere = Path::new(&std::env::var_os("ProgramFiles(x86)")?)
+        .join(r"Microsoft Visual Studio\Installer\vswhere.exe");
+    let out = Command::new(vswhere)
+        .args(["-latest", "-products", "*", "-find"])
+        .arg(r"VC\Auxiliary\Build\vcvarsall.bat")
+        .output()
+        .ok()?;
+    let vcvarsall = String::from_utf8(out.stdout)
+        .ok()?
+        .lines()
+        .next()?
+        .trim()
+        .to_string();
+    let arch = if cfg!(target_arch = "aarch64") {
+        "arm64"
+    } else {
+        "x64"
+    };
+    let out = Command::new("cmd")
+        .raw_arg(format!(
+            "/d /u /s /c \"\"{vcvarsall}\" {arch} >nul && set\""
+        ))
+        .output()
+        .ok()?;
+    let wide: Vec<u16> = out
+        .stdout
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|b| u16::from_le_bytes(*b))
+        .collect();
+    let env: Vec<(String, String)> = String::from_utf16_lossy(&wide)
+        .lines()
+        .filter_map(|l| l.split_once('='))
+        .map(|(k, v)| (k.to_string(), v.to_string()))
+        .collect();
+    let path = &env.iter().find(|(k, _)| k.eq_ignore_ascii_case("PATH"))?.1;
+    let cl = std::env::split_paths(path)
+        .map(|d| d.join("cl.exe"))
+        .find(|p| p.is_file())?;
+    Some(WindowsCc::Msvc { cl, env })
 }
 
 /// [`drive_across_the_system_compiler`] on Windows: the platform compiler links
 /// the module as a DLL without a C runtime, which the badc host loads.
 #[cfg(windows)]
-fn drive_across_the_windows_compiler(cc: &std::ffi::OsStr, test: &str, common: &str, fns: &str) {
+fn drive_across_the_windows_compiler(cc: &WindowsCc, test: &str, common: &str, fns: &str) {
     let dir = tempdir(test);
     let module = write_source(
         &dir,
@@ -5880,13 +5941,27 @@ fn drive_across_the_windows_compiler(cc: &std::ffi::OsStr, test: &str, common: &
     } else {
         "--target=x86_64-pc-windows-msvc"
     };
+    let mut build = match cc {
+        WindowsCc::Clang(cc) => {
+            let mut c = Command::new(cc);
+            c.args([target, "-O2", "-shared", "-nostdlib", "-fuse-ld=lld"])
+                .args(["-Wl,-noentry", "-o"])
+                .arg(&dll)
+                .arg(&module);
+            c
+        }
+        WindowsCc::Msvc { cl, env } => {
+            let mut c = Command::new(cl);
+            c.envs(env.iter().map(|(k, v)| (k, v)))
+                .args(["/nologo", "/O2", "/GS-", "/LD"])
+                .arg(&module)
+                .arg(format!("/Fe{}", dll.display()))
+                .args(["/link", "/NOENTRY", "/NODEFAULTLIB"]);
+            c
+        }
+    };
     run(
-        Command::new(cc)
-            .args([target, "-O2", "-shared", "-nostdlib", "-fuse-ld=lld"])
-            .args(["-Wl,-noentry", "-o"])
-            .arg(&dll)
-            .arg(&module)
-            .current_dir(&dir),
+        build.current_dir(&dir),
         "build the platform-compiled module",
     );
     for opt in ["-O0", "-O"] {

@@ -2795,6 +2795,13 @@ fn comma_operator_decay() {
 }
 
 #[test]
+fn typeof_row_bounds() {
+    // C23 6.7.2.5: `typeof` of a row of a multi-dimensional array keeps the
+    // row's inner bounds.
+    assert_eq!(run_fixture("typeof_row_bounds.c"), 0);
+}
+
+#[test]
 fn indirect_call_prototypes() {
     // A call through a pointer converts or promotes its arguments by the
     // pointed-to type, however the callee is spelled.

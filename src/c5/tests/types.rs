@@ -3741,3 +3741,20 @@ fn a_comma_result_is_the_decayed_right_operand() {
          }\n",
     );
 }
+
+/// C23 6.7.2.5: `typeof` of a row of a multi-dimensional array, of a
+/// member array's row and of a row reached through a pointer to an array
+/// names the row's array type with its inner bounds.
+#[test]
+fn typeof_a_row_keeps_its_inner_bounds() {
+    compile_str(
+        "int t[2][3][4];\n\
+         struct { int m[2][2][5]; } s;\n\
+         int (*p)[3][4] = t;\n\
+         _Static_assert(__builtin_types_compatible_p(__typeof__(t[1]), int[3][4]), \"row\");\n\
+         _Static_assert(__builtin_types_compatible_p(__typeof__(t[1][2]), int[4]), \"inner\");\n\
+         _Static_assert(__builtin_types_compatible_p(__typeof__(s.m[1]), int[2][5]), \"member\");\n\
+         _Static_assert(__builtin_types_compatible_p(__typeof__(p[1]), int[3][4]), \"pointer\");\n\
+         int main(void) { return 0; }\n",
+    );
+}

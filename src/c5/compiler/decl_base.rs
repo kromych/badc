@@ -599,14 +599,34 @@ impl Compiler {
         // Capture the byte-width marker only for a 1D-reducible row: a
         // pending multi-dim stride means the row is itself multi-dim and
         // not expressible as a single element count.
-        self.pending.typeof_operand_array_bytes =
-            if self.pending.index_stride == 0 && self.pending.index_strides_tail.is_empty() {
-                self.pending.last_array_decay_bytes
-            } else {
-                0
-            };
-        self.pending.typeof_operand_array_dims =
-            core::mem::replace(&mut self.pending.last_array_decay_dims, saved_decay_dims);
+        let p = &self.pending;
+        let (head, tail) = if p.index_stride > 0 {
+            (p.index_stride, &p.index_strides_tail)
+        } else {
+            (p.end_of_expr_stride, &p.end_of_expr_strides_tail)
+        };
+        let row_strides: alloc::vec::Vec<i64> = if head > 0 {
+            core::iter::once(head).chain(tail.iter().copied()).collect()
+        } else {
+            alloc::vec::Vec::new()
+        };
+        self.pending.typeof_operand_array_bytes = if row_strides.is_empty() {
+            self.pending.last_array_decay_bytes
+        } else {
+            0
+        };
+        // The bounds the operand decayed from; a multi-dimensional row's come
+        // from the strides it left unconsumed, as `&` rebuilds them.
+        let row = self.pending.last_array_decay_bytes > 0 && !row_strides.is_empty();
+        let dims = if row && self.pending.last_array_decay_dims.is_empty() {
+            let elem = self.ty - Ty::Ptr as i64;
+            self.decayed_array_dims(elem, &row_strides)
+                .unwrap_or_default()
+        } else {
+            core::mem::take(&mut self.pending.last_array_decay_dims)
+        };
+        self.pending.last_array_decay_dims = saved_decay_dims;
+        self.pending.typeof_operand_array_dims = dims;
         self.pending.last_array_decay_size = saved_decay;
         self.pending.last_array_decay_bytes = saved_decay_bytes;
         self.pending.indirect_callee_ret_fn_ptr = saved_callee_ret;

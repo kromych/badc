@@ -5332,7 +5332,11 @@ impl Compiler {
     /// The decay recorded either the exact dimensions, the byte count of a
     /// row over the strides it left unconsumed (`strides`, head first), or
     /// the element count of a 1D array, with -1 for a count of zero.
-    fn decayed_array_dims(&self, elem_ty: i64, strides: &[i64]) -> Option<alloc::vec::Vec<i64>> {
+    pub(super) fn decayed_array_dims(
+        &self,
+        elem_ty: i64,
+        strides: &[i64],
+    ) -> Option<alloc::vec::Vec<i64>> {
         let p = &self.pending;
         if !p.last_array_decay_dims.is_empty() {
             return Some(p.last_array_decay_dims.clone());

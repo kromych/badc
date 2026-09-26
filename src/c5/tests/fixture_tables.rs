@@ -1265,6 +1265,7 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("static_initializer_address_casts.c", 0),
     ("typeof_function_types.c", 0),
     ("comma_operator_decay.c", 0),
+    ("typeof_row_bounds.c", 0),
     ("inline_asm_a64_integer_ops.c", 0),
     // Plain `char` is a type distinct from `signed char` and `unsigned
     // char` (C99 6.2.5p15) at the target's signedness.
@@ -2179,6 +2180,7 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("static_initializer_address_casts.c", 0),
     ("typeof_function_types.c", 0),
     ("comma_operator_decay.c", 0),
+    ("typeof_row_bounds.c", 0),
     ("inline_asm_a64_integer_ops.c", 0),
     // Plain `char` is a type distinct from `signed char` and `unsigned
     // char` (C99 6.2.5p15) at the target's signedness.
@@ -3069,6 +3071,7 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("static_initializer_address_casts.c", 0),
     ("typeof_function_types.c", 0),
     ("comma_operator_decay.c", 0),
+    ("typeof_row_bounds.c", 0),
     ("inline_asm_a64_integer_ops.c", 0),
     // Plain `char` is a type distinct from `signed char` and `unsigned
     // char` (C99 6.2.5p15) at the target's signedness.
@@ -3740,6 +3743,7 @@ pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("static_initializer_address_casts.c", 0),
     ("typeof_function_types.c", 0),
     ("comma_operator_decay.c", 0),
+    ("typeof_row_bounds.c", 0),
     ("inline_asm_a64_integer_ops.c", 0),
     // Plain `char` is a type distinct from `signed char` and `unsigned
     // char` (C99 6.2.5p15) at the target's signedness.
@@ -4356,6 +4360,7 @@ pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("static_initializer_address_casts.c", 0),
     ("typeof_function_types.c", 0),
     ("comma_operator_decay.c", 0),
+    ("typeof_row_bounds.c", 0),
     ("inline_asm_a64_integer_ops.c", 0),
     // Plain `char` is a type distinct from `signed char` and `unsigned
     // char` (C99 6.2.5p15) at the target's signedness.
@@ -5281,6 +5286,7 @@ pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
     ("static_initializer_address_casts.c", 0),
     ("typeof_function_types.c", 0),
     ("comma_operator_decay.c", 0),
+    ("typeof_row_bounds.c", 0),
     ("inline_asm_a64_integer_ops.c", 0),
     // Plain `char` is a type distinct from `signed char` and `unsigned
     // char` (C99 6.2.5p15) at the target's signedness.

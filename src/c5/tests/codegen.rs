@@ -5709,6 +5709,52 @@ fn sysv_eightbyte_classes_place_the_following_argument() {
     }
 }
 
+/// System V AMD64 3.2.3: overlapping `long double` members merge to one
+/// X87 + X87UP pair, which returns in st(0); beside an integer member, or
+/// beside a `double`, the aggregate is MEMORY class and returns through the
+/// hidden pointer.
+#[test]
+fn sysv_x87_aggregates_return_as_their_eightbytes_merge() {
+    use crate::Target;
+    use crate::c5::codegen::abi_classify::{AggClass, RegClass, classify_aggregate};
+    const SHAPES: &[(&str, bool)] = &[
+        ("union { long double a; long double b; }", true),
+        ("union { long double x; long double y[1]; }", true),
+        (
+            "struct { union { long double a; long double b; } u; }",
+            true,
+        ),
+        ("struct { long double x; }", true),
+        ("union { long double x; long long l; }", false),
+        ("union { long double x; double d; }", false),
+    ];
+    let mut src = alloc::string::String::new();
+    for (i, (ty, _)) in SHAPES.iter().enumerate() {
+        src += &alloc::format!("typedef {ty} T{i};\nT{i} make{i}(T{i} *p) {{ return *p; }}\n");
+    }
+    let target = Target::LinuxX64;
+    let program = crate::Compiler::with_options(
+        src,
+        target,
+        crate::CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .unwrap_or_else(|e| panic!("compile: {e}"));
+    let funcs = crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+        .expect("ssa");
+    for (i, &(ty, in_st0)) in SHAPES.iter().enumerate() {
+        let make = funcs
+            .iter()
+            .find(|f| f.name == alloc::format!("make{i}"))
+            .expect("make");
+        let class = make
+            .ret_agg
+            .map(|ai| classify_aggregate(&make.agg_descs[ai as usize], target.abi(), true));
+        let want = in_st0.then(|| AggClass::Regs(alloc::vec![RegClass::X87]));
+        assert_eq!(class, want, "`{ty}`");
+    }
+}
+
 /// C99 6.2.2: a static object nothing reachable references is
 /// unobservable. `.data` is packed before lowering, from the pre-inline
 /// call graph, so an object whose last reference the inliner removes --

@@ -244,32 +244,22 @@ fn classify_win64(size: u32, is_return: bool) -> AggClass {
 /// System V AMD64 (3.2.3): aggregates larger than 16 bytes are MEMORY
 /// class. Otherwise each of the one or two eightbytes starts NO_CLASS and
 /// merges the classes of the fields overlapping it, the high half of a
-/// 16-byte vector being SSEUP. SSE followed by SSEUP is one vector
-/// register, and an eightbyte left NO_CLASS takes none.
+/// 16-byte vector being SSEUP and of an x87 value X87UP. SSE followed by
+/// SSEUP is one vector register, X87 followed by X87UP the x87 register
+/// stack's top, which only a return value takes, and an eightbyte left
+/// NO_CLASS takes no register.
 /// TODO: an aggregate with a misaligned field is MEMORY class (rule 1).
 fn classify_sysv(size: u32, fields: &[FlatField], is_return: bool) -> AggClass {
+    let memory = if is_return {
+        AggClass::ReturnIndirect
+    } else {
+        AggClass::ByStack
+    };
     if size == 0 {
         return AggClass::Regs(alloc::vec::Vec::new());
     }
-    // An eightbyte covering an x87 field is X87/X87UP, which sends the
-    // whole aggregate to memory as an argument (3.2.3 rule 5). A return
-    // value that is one X87 + X87UP pair comes back in st(0); an x87 field
-    // sharing an eightbyte merges to MEMORY.
-    if fields.iter().any(|f| f.kind == ScalarKind::F80) {
-        return match fields {
-            [f] if is_return && f.offset == 0 && size == 16 => {
-                AggClass::Regs(alloc::vec![RegClass::X87])
-            }
-            _ if is_return => AggClass::ReturnIndirect,
-            _ => AggClass::ByStack,
-        };
-    }
     if size > 16 {
-        return if is_return {
-            AggClass::ReturnIndirect
-        } else {
-            AggClass::ByStack
-        };
+        return memory;
     }
     let n = size.div_ceil(8) as usize; // 1 or 2 eightbytes
     let mut eightbytes = [Eightbyte::NoClass; 2];
@@ -279,14 +269,35 @@ fn classify_sysv(size: u32, fields: &[FlatField], is_return: bool) -> AggClass {
             if f.offset >= lo + 8 || f.offset + f.size <= lo {
                 continue;
             }
+            // `high`: not the field's first eightbyte.
+            let high = lo > f.offset;
             let class = match f.kind {
                 ScalarKind::Int => Eightbyte::Integer,
-                // The high half of a 16-byte vector.
-                ScalarKind::Vector | ScalarKind::F128 if lo > f.offset => Eightbyte::SseUp,
+                ScalarKind::F80 if high => Eightbyte::X87Up,
+                ScalarKind::F80 => Eightbyte::X87,
+                ScalarKind::Vector | ScalarKind::F128 if high => Eightbyte::SseUp,
                 _ => Eightbyte::Sse,
             };
             *eb = eb.merge(class);
         }
+    }
+    let eightbytes = &eightbytes[..n];
+    // Rule 5: MEMORY anywhere, an X87UP not after X87 or an X87 not before
+    // X87UP sends the whole aggregate to memory, and an x87 argument goes
+    // there too.
+    let x87_pair = |k: usize| {
+        eightbytes[k] == Eightbyte::X87 && eightbytes.get(k + 1) == Some(&Eightbyte::X87Up)
+    };
+    let stray_x87 = (0..n).any(|k| match eightbytes[k] {
+        Eightbyte::X87 => !x87_pair(k),
+        Eightbyte::X87Up => k == 0 || !x87_pair(k - 1),
+        _ => false,
+    });
+    if eightbytes.contains(&Eightbyte::Memory)
+        || stray_x87
+        || (!is_return && eightbytes.contains(&Eightbyte::X87))
+    {
+        return memory;
     }
     let mut classes = alloc::vec::Vec::with_capacity(n);
     let mut k = 0;
@@ -300,6 +311,11 @@ fn classify_sysv(size: u32, fields: &[FlatField], is_return: bool) -> AggClass {
             }
             // Rule 5: SSEUP after anything but SSE is SSE.
             Eightbyte::Sse | Eightbyte::SseUp => RegClass::Sse,
+            Eightbyte::X87 => {
+                k += 1;
+                RegClass::X87
+            }
+            Eightbyte::X87Up | Eightbyte::Memory => unreachable!("sent to memory above"),
         });
         k += 1;
     }
@@ -316,16 +332,23 @@ enum Eightbyte {
     Integer,
     Sse,
     SseUp,
+    X87,
+    X87Up,
+    Memory,
 }
 
 impl Eightbyte {
-    /// 3.2.3 rule 4: equal classes stay, NO_CLASS yields to the other,
-    /// INTEGER takes precedence, and any other pair is SSE.
+    /// 3.2.3 rule 4, in its order: equal classes stay, NO_CLASS yields to
+    /// the other, then MEMORY, then INTEGER takes precedence, an x87 class
+    /// beside any other is MEMORY, and any other pair is SSE.
     fn merge(self, other: Self) -> Self {
+        use Eightbyte::{Integer, Memory, NoClass, X87, X87Up};
         match (self, other) {
             (a, b) if a == b => a,
-            (Eightbyte::NoClass, c) | (c, Eightbyte::NoClass) => c,
-            (Eightbyte::Integer, _) | (_, Eightbyte::Integer) => Eightbyte::Integer,
+            (NoClass, c) | (c, NoClass) => c,
+            (Memory, _) | (_, Memory) => Memory,
+            (Integer, _) | (_, Integer) => Integer,
+            (X87 | X87Up, _) | (_, X87 | X87Up) => Memory,
             _ => Eightbyte::Sse,
         }
     }
@@ -626,6 +649,32 @@ mod tests {
         assert_eq!(
             classify_aggregate(&desc(32, &two), sysv(), true),
             AggClass::ReturnIndirect
+        );
+    }
+
+    /// Overlapping x87 members merge to the same X87 + X87UP pair, so
+    /// `union { long double a, b; }` returns in st(0) and is passed in
+    /// memory. An integer member takes the low eightbyte INTEGER, which
+    /// leaves X87UP after something other than X87: MEMORY both ways.
+    #[test]
+    fn sysv_union_of_long_doubles_returns_in_st0() {
+        let u = [ff(0, 16, ScalarKind::F80), ff(0, 16, ScalarKind::F80)];
+        assert_eq!(
+            classify_aggregate(&desc(16, &u), sysv(), true),
+            AggClass::Regs(alloc::vec![RegClass::X87])
+        );
+        assert_eq!(
+            classify_aggregate(&desc(16, &u), sysv(), false),
+            AggClass::ByStack
+        );
+        let with_long = [ff(0, 16, ScalarKind::F80), ff(0, 8, ScalarKind::Int)];
+        assert_eq!(
+            classify_aggregate(&desc(16, &with_long), sysv(), true),
+            AggClass::ReturnIndirect
+        );
+        assert_eq!(
+            classify_aggregate(&desc(16, &with_long), sysv(), false),
+            AggClass::ByStack
         );
     }
 

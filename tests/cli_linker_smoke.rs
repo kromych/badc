@@ -5995,10 +5995,10 @@ fn hidden_result_pointer_calls_cross_the_system_compiler_boundary() {
 }
 
 // A `long double` crosses the system compiler boundary both ways as the
-// platform passes it. System V AMD64 3.2.3 gives it and an aggregate of one
-// the X87 + X87UP classes, in memory as an argument, fixed or variadic, and
-// in st(0) as a return value; a larger aggregate, or one whose x87 eightbyte
-// is shared, is MEMORY both ways. AAPCS64 passes and returns binary128 in a
+// platform passes it. System V AMD64 3.2.3 gives it and an aggregate of one,
+// or of overlapping ones, the X87 + X87UP classes, in memory as an argument,
+// fixed or variadic, and in st(0) as a return value; a larger aggregate, or
+// one whose x87 eightbyte is shared, is MEMORY both ways. AAPCS64 passes and returns binary128 in a
 // whole vector register, fixed or variadic, and an aggregate of up to four
 // as an HFA. `pass1` returns its operand's bytes, so a value binary64
 // cannot hold comes back exactly. Linux only: elsewhere `long double` is
@@ -6022,6 +6022,9 @@ fn long_double_calls_cross_the_system_compiler_boundary() {
         struct ld4 { ld a, b, c, d; };\n\
         struct ldi { ld x; int i; };\n\
         union ldu { ld x; double d; };\n\
+        union ldu2 { ld a; ld b; };\n\
+        struct lds { union { ld a; ld b; } u; };\n\
+        union ldm { ld x; long long l; };\n\
         static ld ident(ld v) { return v; }\n\
         static ld mix(int a, ld b, double c, ld d, int e) { return a + b * 2 + c * 4 + d * 8 + e * 16; }\n\
         static ld past(double d0, double d1, double d2, double d3, double d4, double d5,\n\
@@ -6036,6 +6039,11 @@ fn long_double_calls_cross_the_system_compiler_boundary() {
         { struct ld4 r = { s.d * k, s.c, s.b, s.a }; return r; }\n\
         static struct ldi mki(struct ldi s, union ldu u) { s.x += u.x; s.i *= 2; return s; }\n\
         static union ldu mku(ld v) { union ldu u; u.x = v; return u; }\n\
+        static union ldu2 mku2(ld v) { union ldu2 u; u.a = v; return u; }\n\
+        static ld takeu2(union ldu2 u, int k) { return u.b * k; }\n\
+        static union ldu2 passu2(union ldu2 u) { return u; }\n\
+        static struct lds mks(ld v, int k) { struct lds s; s.u.a = v * k; return s; }\n\
+        static union ldm addm(union ldm m, int k) { m.x += k; return m; }\n\
         static ld vsum(int n, ...)\n\
         { va_list ap; ld s = 0; va_start(ap, n);\n\
           for (int i = 0; i < n; i++) s += va_arg(ap, ld);\n\
@@ -6051,7 +6059,9 @@ fn long_double_calls_cross_the_system_compiler_boundary() {
           struct ld1 (*mk1)(ld); ld (*take1)(struct ld1, int); struct ld1 (*pass1)(struct ld1);\n\
           struct ld2 (*mk2)(ld, ld); struct ld4 (*flip4)(struct ld4, ld);\n\
           struct ldi (*mki)(struct ldi, union ldu);\n\
-          union ldu (*mku)(ld); ld (*vsum)(int, ...); ld (*vmix)(int, ld, ...); };\n\
+          union ldu (*mku)(ld); ld (*vsum)(int, ...); ld (*vmix)(int, ld, ...);\n\
+          union ldu2 (*mku2)(ld); ld (*takeu2)(union ldu2, int); union ldu2 (*passu2)(union ldu2);\n\
+          struct lds (*mks)(ld, int); union ldm (*addm)(union ldm, int); };\n\
         static int drive(const struct fns *f, int base)\n\
         { struct ld1 s = { 1.25L };\n\
           struct ld1 fine = { 1.0L + 0x1p-60L };\n\
@@ -6079,12 +6089,21 @@ fn long_double_calls_cross_the_system_compiler_boundary() {
           snprintf(buf, sizeof buf, \"%.2Lf %d %.1Lf\", f->ident(2.5L), 7, 0.25L);\n\
           if (strcmp(buf, \"2.50 7 0.2\") != 0) return base + 11;\n\
           if (strtold(\"2.75\", 0) != 2.75L) return base + 13;\n\
+          union ldu2 u2 = f->mku2(0.75L);\n\
+          if (u2.b != 0.75L) return base + 15;\n\
+          if (f->takeu2(u2, 4) != 3.0L) return base + 16;\n\
+          union ldu2 w; w.a = fine.x;\n\
+          if (f->passu2(w).b != fine.x) return base + 17;\n\
+          if (f->mks(1.25L, 3).u.b != 3.75L) return base + 18;\n\
+          union ldm m; m.x = 0.5L;\n\
+          if (f->addm(m, 2).x != 2.5L) return base + 19;\n\
           return 0; }\n";
     drive_across_the_system_compiler(
         &cc,
         "long-double-interop",
         common,
-        "ident, mix, past, mk1, take1, pass1, mk2, flip4, mki, mku, vsum, vmix",
+        "ident, mix, past, mk1, take1, pass1, mk2, flip4, mki, mku, vsum, vmix, mku2, takeu2, \
+         passu2, mks, addm",
     );
 }
 

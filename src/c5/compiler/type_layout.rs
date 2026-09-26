@@ -1238,27 +1238,6 @@ pub(crate) fn struct_return_abi_conv(
     let member_align = (structs[id].member_align.max(1)) as u32;
     let mut fields = Vec::new();
     flatten_struct_fields(structs, target, id, 0, &mut fields);
-    // System V AMD64 3.2.3 returns a sole x87 member in st(0).
-    if matches!(row, Target::LinuxX64)
-        && size == 16
-        && matches!(fields.as_slice(), [f] if f.offset == 0
-            && f.kind == crate::c5::codegen::abi_classify::ScalarKind::F80)
-    {
-        return StructReturnAbi::Regs(AggDesc {
-            size,
-            align,
-            member_align,
-            fields,
-            hfa: None,
-        });
-    }
-    // Any other x87 aggregate returns in memory, the out-pointer path.
-    if fields
-        .iter()
-        .any(|f| f.kind == crate::c5::codegen::abi_classify::ScalarKind::F80)
-    {
-        return StructReturnAbi::OutPtr;
-    }
     // AAPCS64 6.9: a homogeneous floating-point aggregate returns in up to
     // four consecutive FP registers (v0..v3), independent of the 16-byte
     // integer-register threshold -- a four-`double` HFA is 32 bytes.
@@ -1273,11 +1252,6 @@ pub(crate) fn struct_return_abi_conv(
     if hfa.is_some() {
         return StructReturnAbi::Regs(desc);
     }
-    // A <=16B aggregate returns in registers: System V AMD64 3.2.3 places
-    // each eightbyte in the integer (rax/rdx) or SSE (xmm0/xmm1) bank per its
-    // classification, and the emit reads the per-eightbyte class to pick the
-    // bank. An eightbyte shared by integer and FP members classifies as
-    // Integer and returns in the integer registers bit-for-bit.
     if win64 {
         // Win64: a 1-, 2-, 4-, or 8-byte aggregate returns by value in
         // rax; any other size returns through a caller-allocated buffer
@@ -1289,18 +1263,21 @@ pub(crate) fn struct_return_abi_conv(
         } else {
             StructReturnAbi::OutPtr
         }
+    } else if !aarch64 {
+        // System V AMD64 3.2.3: the eightbyte classes place the value in
+        // rax/rdx, xmm0/xmm1 or st(0). A MEMORY-class one returns through
+        // the hidden pointer the caller passes as the first integer
+        // argument, which the c5 out-pointer convention matches.
+        match crate::c5::codegen::abi_classify::classify_aggregate(&desc, row.abi(), true) {
+            crate::c5::codegen::abi_classify::AggClass::ReturnIndirect => StructReturnAbi::OutPtr,
+            _ => StructReturnAbi::Regs(desc),
+        }
     } else if size <= 16 {
-        // AAPCS64 6.9 x0/x1; System V AMD64 3.2.3 rax/rdx.
+        // AAPCS64 6.9 x0/x1.
         StructReturnAbi::Regs(desc)
-    } else if aarch64 {
+    } else {
         // AAPCS64: > 16 bytes returns through the x8 indirect-result
         // register.
         StructReturnAbi::Indirect(desc)
-    } else {
-        // System V AMD64 MEMORY class: the caller passes a hidden
-        // result pointer as the first integer argument and the callee
-        // returns it -- the c5 out-pointer convention already matches,
-        // so keep it.
-        StructReturnAbi::OutPtr
     }
 }

@@ -380,61 +380,68 @@ pub(crate) struct LexerSnapshot {
     str_prefix: StrPrefix,
 }
 
-/// Resolved (file, line) -> byte span answers; `None` when no run
-/// holds the line.
-type LineSpanMemo = alloc::collections::BTreeMap<(u32, u32), Option<(u32, u32)>>;
-
 /// A run of consecutive lines between two preprocessor line markers:
-/// the lines in `Lexer::src[start..end]` are numbered `first_line`,
-/// `first_line + 1`, ... in `LineIndex::files[file_id]`.
+/// the `lines` lines in `Lexer::src[start..end]` are numbered
+/// `first_line`, `first_line + 1`, ... in `LineIndex::files[file_id]`.
 struct LineRun {
     file_id: u32,
     first_line: u32,
+    lines: u32,
     start: u32,
     end: u32,
+    /// The lines' offsets, tabulated when the run first answers.
+    starts: core::cell::OnceCell<Vec<u32>>,
+}
+
+impl LineRun {
+    fn new(file_id: u32, first_line: u32, lines: u32, start: usize, end: usize) -> Self {
+        Self {
+            file_id,
+            first_line,
+            lines,
+            start: start as u32,
+            end: end as u32,
+            starts: core::cell::OnceCell::new(),
+        }
+    }
 }
 
 /// Marker-aware view of the preprocessed buffer, mapping (file, line) to
-/// the line's byte span in `Lexer::src`. One entry per line marker, not
-/// per line: the buffers run to hundreds of thousands of lines and a
-/// compile asks single-digit questions of them. The first run holding a
-/// (file, line) pair answers it, matching the sequential-scan semantics
-/// this replaces. Built once, on the first diagnostic that echoes a
-/// source line; the source buffer never changes after construction.
+/// the line's byte span in `Lexer::src`. One entry per line marker; a
+/// run's line offsets are tabulated when it first answers, so the index
+/// grows with the runs diagnostics point into rather than with the
+/// buffer, and no question walks a run twice. The first run holding a
+/// (file, line) pair answers it. Built once, on the first diagnostic
+/// that echoes a source line; the source buffer never changes after
+/// construction.
 struct LineIndex {
     files: Vec<String>,
     runs: Vec<LineRun>,
-    /// Spans already resolved, so a diagnostic repeated on a discarded
-    /// trial-parse path walks no run twice.
-    memo: core::cell::RefCell<LineSpanMemo>,
 }
 
 impl LineIndex {
     /// Byte span of `line` in `files[file_id]`, or `None` when no run
     /// holds it.
     fn span_of(&self, src: &[u8], file_id: u32, line: u32) -> Option<(u32, u32)> {
-        let nl = |from: usize, to: usize| src[from..to].iter().position(|&b| b == b'\n');
-        for run in &self.runs {
-            if run.file_id != file_id || line < run.first_line {
-                continue;
-            }
-            let end = run.end as usize;
-            let mut pos = run.start as usize;
-            let mut skip = line - run.first_line;
-            while skip > 0 && pos < end {
-                match nl(pos, end) {
-                    Some(k) => pos += k + 1,
-                    None => pos = end,
-                }
-                skip -= 1;
-            }
-            if skip > 0 || pos >= end {
-                continue;
-            }
-            let stop = pos + nl(pos, end).unwrap_or(end - pos);
-            return Some((pos as u32, stop as u32));
-        }
-        None
+        let run = self.runs.iter().find(|r| {
+            r.file_id == file_id && line.checked_sub(r.first_line).is_some_and(|k| k < r.lines)
+        })?;
+        let text = &src[run.start as usize..run.end as usize];
+        let starts = run.starts.get_or_init(|| {
+            let after_newline = text
+                .iter()
+                .enumerate()
+                .filter(|&(k, &b)| b == b'\n' && k + 1 < text.len());
+            core::iter::once(run.start)
+                .chain(after_newline.map(|(k, _)| run.start + k as u32 + 1))
+                .collect()
+        });
+        let pos = starts[(line - run.first_line) as usize];
+        let stop = text[(pos - run.start) as usize..]
+            .iter()
+            .position(|&b| b == b'\n')
+            .map_or(run.end, |k| pos + k as u32);
+        Some((pos, stop))
     }
 }
 
@@ -1654,9 +1661,6 @@ impl Lexer {
         Ok(())
     }
 
-    /// Advance to the next token. Identifiers are interned into `symbols`
-    /// (with `index` kept in sync); string literals are appended to `data`
-    /// and `ival` is set to their start address.
     /// The byte span of source line `target` in the current file
     /// (`self.file`), recovered by walking the `#line` markers the
     /// preprocessor embedded in the buffer so the original (file, line)
@@ -1674,6 +1678,7 @@ impl Lexer {
             let mut file_id: u32 = 0;
             let mut first_line: u32 = 1;
             let mut start = 0usize;
+            let mut lines: u32 = 0;
             let mut i = 0usize;
             while i < n {
                 let j = match src[i..].iter().position(|&b| b == b'\n') {
@@ -1684,13 +1689,9 @@ impl Lexer {
                     && let Some(marker) = parse_line_marker(&src[i + 1..j])
                 {
                     if i > start {
-                        runs.push(LineRun {
-                            file_id,
-                            first_line,
-                            start: start as u32,
-                            end: i as u32,
-                        });
+                        runs.push(LineRun::new(file_id, first_line, lines, start, i));
                     }
+                    lines = 0;
                     first_line = marker.line as u32;
                     if let Some(f) = marker.file {
                         file_id = match files.iter().position(|x| *x == f) {
@@ -1702,34 +1703,18 @@ impl Lexer {
                         };
                     }
                     start = j + 1;
+                } else {
+                    lines += 1;
                 }
                 i = j + 1;
             }
             if start < n {
-                runs.push(LineRun {
-                    file_id,
-                    first_line,
-                    start: start as u32,
-                    end: n as u32,
-                });
+                runs.push(LineRun::new(file_id, first_line, lines, start, n));
             }
-            LineIndex {
-                files,
-                runs,
-                memo: core::cell::RefCell::new(LineSpanMemo::new()),
-            }
+            LineIndex { files, runs }
         });
         let file_id = index.files.iter().position(|f| *f == self.file)? as u32;
-        let key = (file_id, target as u32);
-        let cached = index.memo.borrow().get(&key).copied();
-        match cached {
-            Some(hit) => hit,
-            None => {
-                let span = index.span_of(&self.src, key.0, key.1);
-                index.memo.borrow_mut().insert(key, span);
-                span
-            }
-        }
+        index.span_of(&self.src, file_id, u32::try_from(target).ok()?)
     }
 
     /// The text of source line `target`, trailing whitespace trimmed.
@@ -1756,6 +1741,17 @@ impl Lexer {
         self.line_index.get().map_or(0, |i| i.runs.len())
     }
 
+    /// Runs of the line index whose line offsets are tabulated.
+    #[cfg(test)]
+    pub(crate) fn line_tables(&self) -> usize {
+        self.line_index.get().map_or(0, |i| {
+            i.runs.iter().filter(|r| r.starts.get().is_some()).count()
+        })
+    }
+
+    /// Advance to the next token. Identifiers are interned into `symbols`
+    /// (with `index` kept in sync); string literals are appended to `data`
+    /// and `ival` is set to their start address.
     pub fn next(
         &mut self,
         symbols: &mut Vec<Symbol>,

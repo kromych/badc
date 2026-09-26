@@ -291,6 +291,31 @@ pub(crate) struct PendingLabelReloc {
     pub label: crate::c5::ast::LabelId,
 }
 
+/// Remove the entries of `items` that `pick` selects, with their
+/// counterparts in the parallel list `tags`, in order.
+fn take_where<T>(
+    items: &mut Vec<T>,
+    tags: &mut Vec<usize>,
+    pick: impl Fn(&T) -> bool,
+) -> Vec<(T, usize)> {
+    debug_assert_eq!(items.len(), tags.len());
+    let mut taken = Vec::new();
+    let mut kept = (Vec::with_capacity(items.len()), Vec::new());
+    for (item, tag) in core::mem::take(items)
+        .into_iter()
+        .zip(core::mem::take(tags))
+    {
+        if pick(&item) {
+            taken.push((item, tag));
+        } else {
+            kept.0.push(item);
+            kept.1.push(tag);
+        }
+    }
+    (*items, *tags) = kept;
+    taken
+}
+
 impl Compiler {
     /// C99 6.2.8 placement alignment of an object with static storage
     /// duration: the alignment the declaration settled on when it is
@@ -354,6 +379,77 @@ impl Compiler {
     pub(super) fn reserve_literal_bytes(&mut self, ty: i64, bytes: usize) -> i64 {
         let align = self.align_of_type(ty).max(8);
         self.reserve_data_bytes(DataStore::Static, align, bytes)
+    }
+
+    /// Move the image an initializer staged in `.data` for the
+    /// `_Thread_local` object `id_idx` into fresh thread-local storage on
+    /// `align`. C11 6.7.9 gives an object with thread storage duration the
+    /// initializers of one with static duration, and the initializer walk
+    /// writes `.data`; the object's reservation there is its staging area.
+    pub(super) fn move_to_thread_local_storage(
+        &mut self,
+        id_idx: usize,
+        align: usize,
+    ) -> Result<(), C5Error> {
+        let stage = self.symbols[id_idx].val as usize;
+        let bytes = self.symbols[id_idx].reserved_data_bytes as usize;
+        let tls_off = self.reserve_data_bytes(DataStore::ThreadLocal, align, bytes);
+        self.move_staged_image(stage, bytes, tls_off as usize)?;
+        self.symbols[id_idx].val = tls_off;
+        Ok(())
+    }
+
+    /// Move `bytes` staged at `.data` offset `stage` into the thread-local
+    /// template at `tls_off`, with the relocations recorded inside them,
+    /// and clear the staging area, which goes back when nothing follows it.
+    pub(super) fn move_staged_image(
+        &mut self,
+        stage: usize,
+        bytes: usize,
+        tls_off: usize,
+    ) -> Result<(), C5Error> {
+        let span = stage as u64..(stage + bytes) as u64;
+        if self
+            .pending_label_relocs
+            .iter()
+            .any(|r| span.contains(&r.data_offset))
+        {
+            return Err(self.compile_err(
+                Code::UNSUPPORTED,
+                "a label address in a `_Thread_local` initializer is not supported",
+            ));
+        }
+        self.tls_data[tls_off..tls_off + bytes].copy_from_slice(&self.data[stage..stage + bytes]);
+        let to_tls = |off: u64| off - span.start + tls_off as u64;
+        let staged = |r: &crate::c5::program::DataReloc| span.contains(&r.data_offset);
+        for (mut r, sym) in take_where(&mut self.data_relocs, &mut self.data_reloc_sym_idx, staged)
+        {
+            r.data_offset = to_tls(r.data_offset);
+            self.tls_data_relocs.push(r);
+            self.tls_data_reloc_sym_idx.push(sym);
+        }
+        let staged = |r: &crate::c5::program::CodeReloc| span.contains(&r.data_offset);
+        for (mut r, sym) in take_where(&mut self.code_relocs, &mut self.code_reloc_sym_idx, staged)
+        {
+            r.data_offset = to_tls(r.data_offset);
+            self.tls_code_relocs.push(r);
+            self.tls_code_reloc_sym_idx.push(sym);
+        }
+        let (moved, kept) = core::mem::take(&mut self.extern_data_relocs)
+            .into_iter()
+            .partition::<Vec<_>, _>(|r| span.contains(&r.data_offset));
+        self.extern_data_relocs = kept;
+        for mut r in moved {
+            r.data_offset = to_tls(r.data_offset);
+            self.tls_extern_data_relocs.push(r);
+        }
+        self.forget_init_relocs_in(stage, stage + bytes);
+        self.tls_init_size = self.tls_init_size.max(tls_off + bytes);
+        self.data[stage..stage + bytes].fill(0);
+        if self.data.len() == stage + bytes {
+            self.truncate_data(stage);
+        }
+        Ok(())
     }
 
     /// Push the relocation entry that an initializer element needs

@@ -1060,10 +1060,13 @@ impl Compiler {
         }
         self.symbols[loc_idx].array_size = array_size.max(0);
         // A `static _Thread_local` local lives in the TLS block (`.tdata` /
-        // `.tbss`), like a file-scope thread-local, not in `.data`.
+        // `.tbss`), like a file-scope thread-local, not in `.data`. One with
+        // an initializer is laid out in `.data` as a static local is, the
+        // initializer's staging area, and moved to the TLS block after.
         let is_tls = self.symbols[loc_idx].is_thread_local;
+        let staged = is_tls && self.lex.tk == Token::Assign;
         if array_size != -1 {
-            let store = if is_tls {
+            let store = if is_tls && !staged {
                 DataStore::ThreadLocal
             } else {
                 DataStore::Static
@@ -1071,216 +1074,227 @@ impl Compiler {
             let align = self.static_local_placement_align(loc_idx, ty);
             let off = self.reserve_data_bytes(store, align, bytes as usize);
             self.symbols[loc_idx].val = off;
-            if !is_tls {
+            if !is_tls || staged {
                 self.symbols[loc_idx].reserved_data_bytes = bytes;
             }
         }
-
-        // TODO: the initializer path below writes into `.data` while a
-        // thread-local's slot is in `tls_data`, so an initialized
-        // block-scope thread-local is rejected rather than mis-placed.
-        if is_tls && self.lex.tk == Token::Assign {
-            return Err(self.compile_err(
-                Code::UNSUPPORTED,
-                "an initializer on a block-scope `_Thread_local` object is not yet supported",
-            ));
-        }
         if self.lex.tk == Token::Assign {
             self.next()?;
-            // A `&&label` element (GCC labels as values) is a link-time
-            // constant: the data image gets a label relocation, as it
-            // does for `&func`. Only a genuinely non-constant element
-            // alongside one still needs stores at the declaration point.
-            if self.lex.tk == '{'
-                && self.array_init_has_label_addr()?
-                && self.array_init_needs_runtime()?
-            {
-                return self.emit_static_array_init_runtime(loc_idx, ty, array_size);
-            }
-            if array_size == -1 {
-                if self.is_traversable_aggregate_ty(ty) {
-                    // Static-local of struct array, deferred size:
-                    // `static struct T xs[] = { {...}, {...}, ... };`
-                    // Pre-scan the source for the element count so
-                    // each element's storage stays contiguous even if
-                    // an element's parse appends a string literal to
-                    // `self.data`.
-                    let elem_size = self.size_of_type(ty);
-                    if self.lex.tk != '{' {
-                        return Err(self.compile_err(
-                            Code::INVALID_INITIALIZER,
-                            "array initializer must start with `{{`",
-                        ));
-                    }
-                    let sid = struct_id_of(ty);
-                    // Elements below the outer (deferred) dimension: for a 2D
-                    // struct array `T xs[][M]` each top-level brace is a row of
-                    // `inner_dim` structs. 1 for a plain `T xs[]`.
-                    let inner_dim: i64 = self.symbols[loc_idx]
-                        .array_dims
-                        .get(1..)
-                        .map(|s| s.iter().product::<i64>())
-                        .unwrap_or(1)
-                        .max(1);
-                    // C99 6.7.8p20 brace elision: with no per-element
-                    // braces the flat value list fills consecutive struct
-                    // elements, each consuming the struct's slot count.
-                    let groups = self.lex.count_top_level_groups_in_array();
-                    let count = if groups > 0 {
-                        // `[N]` designators can push the size past the
-                        // positional group count (C99 6.7.8p22).
-                        self.designated_array_count(groups as i64, 1)?
-                    } else {
-                        let items = self.lex.count_top_level_items_in_array();
-                        let slots = self.struct_flat_init_slots(sid).max(1);
-                        items.div_ceil(slots) as i64
-                    };
-                    // Reserve before consuming `{`: lexing the first element
-                    // token may append a string literal's bytes, whose
-                    // parser-added NUL must land right after them.
-                    let reserved = count * inner_dim * elem_size as i64;
-                    let align = self.static_local_placement_align(loc_idx, ty);
-                    let off = self.reserve_data_bytes(DataStore::Static, align, reserved as usize);
-                    self.symbols[loc_idx].val = off;
-                    self.symbols[loc_idx].reserved_data_bytes = reserved;
-                    self.next()?;
-                    // Multi-dimensional struct array: fill the rows below the
-                    // deferred outer dimension through the shared struct-array
-                    // walker (designators at every level). The pre-scan counts
-                    // each top-level entry as a row, but an entry after a
-                    // chained designator resumes mid-row (C99 6.7.8p17), so
-                    // the walker's extent is the real outer count (p22).
-                    if inner_dim > 1 {
-                        let mut dims = alloc::vec::Vec::new();
-                        dims.push(count);
-                        dims.extend_from_slice(&self.symbols[loc_idx].array_dims[1..]);
-                        let high = self.collect_struct_array_entries(ty, off, &dims)?;
-                        let rows = (high + inner_dim - 1) / inner_dim;
-                        if rows < count
-                            && self.data.len() as i64 == off + count * inner_dim * elem_size as i64
-                        {
-                            self.truncate_data(
-                                (off + rows * inner_dim * elem_size as i64) as usize,
-                            );
-                            self.symbols[loc_idx].reserved_data_bytes =
-                                rows * inner_dim * elem_size as i64;
-                        }
-                        self.set_deferred_static_local_count(loc_idx, rows * inner_dim);
-                        if let Some(first) = self.symbols[loc_idx].array_dims.first_mut()
-                            && *first == 0
-                        {
-                            *first = rows;
-                        }
-                        while !self.data.len().is_multiple_of(8) {
-                            self.data.push(0);
-                        }
-                        return Ok(());
-                    }
-                    let mut i: i64 = 0;
-                    while self.lex.tk != '}' {
-                        // C99 6.7.8p7 `[N] =` (or GNU `[lo ... hi] =`)
-                        // designator jumps the cursor; `[N].field... =`
-                        // initializes one member of each designated element.
-                        if let Some((lo, hi, chain)) = self.take_array_element_designator(count)? {
-                            if chain || hi > lo {
-                                self.fill_element_range(
-                                    sid,
-                                    ty,
-                                    off,
-                                    elem_size as i64,
-                                    lo..=hi,
-                                    chain,
-                                )?;
-                                i = hi + 1;
-                                self.list_separator('}', "initializer")?;
-                                continue;
-                            }
-                            i = lo;
-                        }
-                        let here = off + i * elem_size as i64;
-                        self.init_struct_array_element(sid, here)?;
-                        i += 1;
-                        self.list_separator('}', "initializer")?;
-                    }
-                    self.next()?;
-                    self.set_deferred_static_local_count(loc_idx, count);
-                    while !self.data.len().is_multiple_of(8) {
-                        self.data.push(0);
-                    }
-                    return Ok(());
-                }
-                self.pending.init_inner_dims = self.inner_dims_of(loc_idx);
-                let elements = self.collect_array_initializer(ty)?;
-                let final_size = elements.len() as i64;
-                let total_bytes = (self.size_of_type(ty) as i64) * final_size;
-                let aligned = ((total_bytes + 7) / 8) * 8;
+            self.parse_static_local_initializer(loc_idx, ty, array_size)?;
+            if staged {
                 let align = self.static_local_placement_align(loc_idx, ty);
-                let off = self.reserve_data_bytes(DataStore::Static, align, aligned as usize);
-                self.symbols[loc_idx].val = off;
-                self.symbols[loc_idx].reserved_data_bytes = aligned;
-                self.write_array_init_into_data(off, ty, &elements)?;
-                self.set_deferred_static_local_count(loc_idx, final_size);
-            } else if array_size > 0 && self.is_traversable_aggregate_ty(ty) {
-                // Known-size static-local array of structs: the shared
-                // struct-array walker fills the brace list (designators at
-                // every level, positional resume at the designated rank,
-                // C99 6.7.8p17); the generic array collector below would
-                // treat the struct element as a scalar and write past the
-                // pre-allocated region.
-                let var_offset = self.symbols[loc_idx].val;
-                let inner_dims = self.inner_dims_of(loc_idx);
-                let inner_product: i64 = inner_dims.iter().product::<i64>().max(1);
-                let group_count = array_size / inner_product;
+                self.move_to_thread_local_storage(loc_idx, align)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// The initializer of a static local, entered past its `=`: the
+    /// file-scope forms, into the storage reserved in `.data` (reserved
+    /// here for a deferred-size array).
+    fn parse_static_local_initializer(
+        &mut self,
+        loc_idx: usize,
+        ty: i64,
+        array_size: i64,
+    ) -> Result<(), C5Error> {
+        // A `&&label` element (GCC labels as values) is a link-time
+        // constant: the data image gets a label relocation, as it
+        // does for `&func`. Only a genuinely non-constant element
+        // alongside one still needs stores at the declaration point.
+        if self.lex.tk == '{'
+            && self.array_init_has_label_addr()?
+            && self.array_init_needs_runtime()?
+        {
+            if self.symbols[loc_idx].is_thread_local {
+                return Err(self.compile_err(
+                    Code::UNSUPPORTED,
+                    "a label address in a `_Thread_local` initializer is not supported",
+                ));
+            }
+            return self.emit_static_array_init_runtime(loc_idx, ty, array_size);
+        }
+        if array_size == -1 {
+            if self.is_traversable_aggregate_ty(ty) {
+                // Static-local of struct array, deferred size:
+                // `static struct T xs[] = { {...}, {...}, ... };`
+                // Pre-scan the source for the element count so
+                // each element's storage stays contiguous even if
+                // an element's parse appends a string literal to
+                // `self.data`.
+                let elem_size = self.size_of_type(ty);
                 if self.lex.tk != '{' {
                     return Err(self.compile_err(
                         Code::INVALID_INITIALIZER,
                         "array initializer must start with `{{`",
                     ));
                 }
-                self.next()?;
-                let mut full_dims = alloc::vec::Vec::with_capacity(inner_dims.len() + 1);
-                full_dims.push(group_count);
-                full_dims.extend_from_slice(&inner_dims);
-                self.collect_struct_array_entries(ty, var_offset, &full_dims)?;
-            } else if array_size > 0 {
-                self.pending.init_inner_dims = self.inner_dims_of(loc_idx);
-                self.pending.init_target_array_size = array_size;
-                let elements = self.collect_array_initializer(ty)?;
-                // C99 6.7.8p2: the initializer may not provide a value for an
-                // object outside the entity being initialized. The storage
-                // reserved above holds `array_size` elements, so a longer list
-                // would be written past it (the file-scope, automatic and
-                // compound-literal paths reject it here too).
-                if elements.len() as i64 > array_size {
-                    return Err(self.compile_err(
-                        Code::INVALID_INITIALIZER,
-                        format!(
-                            "too many initializers for array `{}` ({} > {})",
-                            self.symbols[loc_idx].name,
-                            elements.len(),
-                            array_size
-                        ),
-                    ));
-                }
-                let var_offset = self.symbols[loc_idx].val;
-                self.write_array_init_into_data(var_offset, ty, &elements)?;
-            } else if self.is_traversable_aggregate_ty(ty) {
                 let sid = struct_id_of(ty);
-                let var_offset = self.symbols[loc_idx].val;
-                // C99 6.5.2.5: `static T s = (T){ ... };` names its own
-                // type; drop the redundant cast so the brace list fills
-                // the struct, matching the file-scope allocator.
-                self.skip_opt_compound_literal_cast()?;
-                let cl_parens = core::mem::take(&mut self.pending.compound_lit_close_parens);
-                self.collect_struct_initializer(sid, var_offset)?;
-                for _ in 0..cl_parens {
-                    self.accept(')')?;
+                // Elements below the outer (deferred) dimension: for a 2D
+                // struct array `T xs[][M]` each top-level brace is a row of
+                // `inner_dim` structs. 1 for a plain `T xs[]`.
+                let inner_dim: i64 = self.symbols[loc_idx]
+                    .array_dims
+                    .get(1..)
+                    .map(|s| s.iter().product::<i64>())
+                    .unwrap_or(1)
+                    .max(1);
+                // C99 6.7.8p20 brace elision: with no per-element
+                // braces the flat value list fills consecutive struct
+                // elements, each consuming the struct's slot count.
+                let groups = self.lex.count_top_level_groups_in_array();
+                let count = if groups > 0 {
+                    // `[N]` designators can push the size past the
+                    // positional group count (C99 6.7.8p22).
+                    self.designated_array_count(groups as i64, 1)?
+                } else {
+                    let items = self.lex.count_top_level_items_in_array();
+                    let slots = self.struct_flat_init_slots(sid).max(1);
+                    items.div_ceil(slots) as i64
+                };
+                // Reserve before consuming `{`: lexing the first element
+                // token may append a string literal's bytes, whose
+                // parser-added NUL must land right after them.
+                let reserved = count * inner_dim * elem_size as i64;
+                let align = self.static_local_placement_align(loc_idx, ty);
+                let off = self.reserve_data_bytes(DataStore::Static, align, reserved as usize);
+                self.symbols[loc_idx].val = off;
+                self.symbols[loc_idx].reserved_data_bytes = reserved;
+                self.next()?;
+                // Multi-dimensional struct array: fill the rows below the
+                // deferred outer dimension through the shared struct-array
+                // walker (designators at every level). The pre-scan counts
+                // each top-level entry as a row, but an entry after a
+                // chained designator resumes mid-row (C99 6.7.8p17), so
+                // the walker's extent is the real outer count (p22).
+                if inner_dim > 1 {
+                    let mut dims = alloc::vec::Vec::new();
+                    dims.push(count);
+                    dims.extend_from_slice(&self.symbols[loc_idx].array_dims[1..]);
+                    let high = self.collect_struct_array_entries(ty, off, &dims)?;
+                    let rows = (high + inner_dim - 1) / inner_dim;
+                    if rows < count
+                        && self.data.len() as i64 == off + count * inner_dim * elem_size as i64
+                    {
+                        self.truncate_data((off + rows * inner_dim * elem_size as i64) as usize);
+                        self.symbols[loc_idx].reserved_data_bytes =
+                            rows * inner_dim * elem_size as i64;
+                    }
+                    self.set_deferred_static_local_count(loc_idx, rows * inner_dim);
+                    if let Some(first) = self.symbols[loc_idx].array_dims.first_mut()
+                        && *first == 0
+                    {
+                        *first = rows;
+                    }
+                    while !self.data.len().is_multiple_of(8) {
+                        self.data.push(0);
+                    }
+                    return Ok(());
                 }
-            } else {
-                let var_offset = self.symbols[loc_idx].val;
-                let target_fn = self.object_fn_type(loc_idx);
-                self.parse_global_initializer(ty, var_offset, false, &target_fn)?;
+                let mut i: i64 = 0;
+                while self.lex.tk != '}' {
+                    // C99 6.7.8p7 `[N] =` (or GNU `[lo ... hi] =`)
+                    // designator jumps the cursor; `[N].field... =`
+                    // initializes one member of each designated element.
+                    if let Some((lo, hi, chain)) = self.take_array_element_designator(count)? {
+                        if chain || hi > lo {
+                            self.fill_element_range(
+                                sid,
+                                ty,
+                                off,
+                                elem_size as i64,
+                                lo..=hi,
+                                chain,
+                            )?;
+                            i = hi + 1;
+                            self.list_separator('}', "initializer")?;
+                            continue;
+                        }
+                        i = lo;
+                    }
+                    let here = off + i * elem_size as i64;
+                    self.init_struct_array_element(sid, here)?;
+                    i += 1;
+                    self.list_separator('}', "initializer")?;
+                }
+                self.next()?;
+                self.set_deferred_static_local_count(loc_idx, count);
+                while !self.data.len().is_multiple_of(8) {
+                    self.data.push(0);
+                }
+                return Ok(());
             }
+            self.pending.init_inner_dims = self.inner_dims_of(loc_idx);
+            let elements = self.collect_array_initializer(ty)?;
+            let final_size = elements.len() as i64;
+            let total_bytes = (self.size_of_type(ty) as i64) * final_size;
+            let aligned = ((total_bytes + 7) / 8) * 8;
+            let align = self.static_local_placement_align(loc_idx, ty);
+            let off = self.reserve_data_bytes(DataStore::Static, align, aligned as usize);
+            self.symbols[loc_idx].val = off;
+            self.symbols[loc_idx].reserved_data_bytes = aligned;
+            self.write_array_init_into_data(off, ty, &elements)?;
+            self.set_deferred_static_local_count(loc_idx, final_size);
+        } else if array_size > 0 && self.is_traversable_aggregate_ty(ty) {
+            // Known-size static-local array of structs: the shared
+            // struct-array walker fills the brace list (designators at
+            // every level, positional resume at the designated rank,
+            // C99 6.7.8p17); the generic array collector below would
+            // treat the struct element as a scalar and write past the
+            // pre-allocated region.
+            let var_offset = self.symbols[loc_idx].val;
+            let inner_dims = self.inner_dims_of(loc_idx);
+            let inner_product: i64 = inner_dims.iter().product::<i64>().max(1);
+            let group_count = array_size / inner_product;
+            if self.lex.tk != '{' {
+                return Err(self.compile_err(
+                    Code::INVALID_INITIALIZER,
+                    "array initializer must start with `{{`",
+                ));
+            }
+            self.next()?;
+            let mut full_dims = alloc::vec::Vec::with_capacity(inner_dims.len() + 1);
+            full_dims.push(group_count);
+            full_dims.extend_from_slice(&inner_dims);
+            self.collect_struct_array_entries(ty, var_offset, &full_dims)?;
+        } else if array_size > 0 {
+            self.pending.init_inner_dims = self.inner_dims_of(loc_idx);
+            self.pending.init_target_array_size = array_size;
+            let elements = self.collect_array_initializer(ty)?;
+            // C99 6.7.8p2: the initializer may not provide a value for an
+            // object outside the entity being initialized. The storage
+            // reserved above holds `array_size` elements, so a longer list
+            // would be written past it (the file-scope, automatic and
+            // compound-literal paths reject it here too).
+            if elements.len() as i64 > array_size {
+                return Err(self.compile_err(
+                    Code::INVALID_INITIALIZER,
+                    format!(
+                        "too many initializers for array `{}` ({} > {})",
+                        self.symbols[loc_idx].name,
+                        elements.len(),
+                        array_size
+                    ),
+                ));
+            }
+            let var_offset = self.symbols[loc_idx].val;
+            self.write_array_init_into_data(var_offset, ty, &elements)?;
+        } else if self.is_traversable_aggregate_ty(ty) {
+            let sid = struct_id_of(ty);
+            let var_offset = self.symbols[loc_idx].val;
+            // C99 6.5.2.5: `static T s = (T){ ... };` names its own
+            // type; drop the redundant cast so the brace list fills
+            // the struct, matching the file-scope allocator.
+            self.skip_opt_compound_literal_cast()?;
+            let cl_parens = core::mem::take(&mut self.pending.compound_lit_close_parens);
+            self.collect_struct_initializer(sid, var_offset)?;
+            for _ in 0..cl_parens {
+                self.accept(')')?;
+            }
+        } else {
+            let var_offset = self.symbols[loc_idx].val;
+            let target_fn = self.object_fn_type(loc_idx);
+            self.parse_global_initializer(ty, var_offset, false, &target_fn)?;
         }
 
         Ok(())

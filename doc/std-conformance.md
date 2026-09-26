@@ -348,9 +348,11 @@ Microsoft x64 convention places both by size.
   `__DATA,__thread_vars` descriptor whose getter slot dyld binds to
   libSystem's `__tlv_bootstrap`, with the per-thread image in
   `__thread_data` / `__thread_bss` (libSystem is added to the dylib list
-  when nothing else pulls it in). File-scope initializers are limited to
-  scalars and NULL, and an initializer on a block-scope `_Thread_local`
-  object is rejected.
+  when nothing else pulls it in). A thread-local object takes the
+  initializers of an object with static storage duration (C11 6.7.9) at
+  file and block scope -- arrays, a deferred size, structs, string
+  literals and address constants -- into the per-thread image every
+  thread starts from, except a label address.
 - Anonymous `struct` / `union` members (C11 6.7.2.1p13).
 - The `u8` encoding prefix (C11 6.4.5p2), alongside C99's `L` and C11's
   `u` and `U`; a universal character name in a literal encodes as UTF-8

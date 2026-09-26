@@ -474,6 +474,7 @@ const LINKED_IMAGE_RUN_FIXTURES: &[(&str, i32)] = &[
     ("thread_local_image_alignment.c", 0),
     ("thread_local_tentative_array.c", 0),
     ("thread_local_tentative_completed_later.c", 0),
+    ("thread_local_aggregate_initializers.c", 0),
     ("switch_jump_table_dense.c", 0),
     ("switch_jump_table_sparse_kept.c", 0),
     ("computed_goto_static_table.c", 0),

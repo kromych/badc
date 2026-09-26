@@ -2241,16 +2241,33 @@ impl Compiler {
                 prior_array_size,
             );
         }
-        if thread_local {
-            return Err(self.compile_err(
-                Code::UNSUPPORTED,
-                "deferred-size `_Thread_local` arrays are not supported",
-            ));
-        }
         self.next()?;
+        // A thread-local array is laid out in `.data` as a static one is,
+        // its initializer's staging area, and moved to thread-local storage
+        // once the initializer fixed its size.
+        let reuse_tentative = was_tentative_glo && !thread_local;
         if self.is_traversable_aggregate_ty(ty) {
-            return self.define_deferred_struct_array(id_idx, ty, decl_align, was_tentative_glo);
+            self.define_deferred_struct_array(id_idx, ty, decl_align, reuse_tentative)?;
+        } else {
+            self.define_deferred_scalar_array(id_idx, ty, decl_align, reuse_tentative)?;
         }
+        if thread_local {
+            let obj_align = self.symbols[id_idx].data_align.max(1) as usize;
+            let align = self.data_placement_align(ty, decl_align.max(obj_align));
+            self.move_to_thread_local_storage(id_idx, align)?;
+        }
+        Ok(())
+    }
+
+    /// A deferred-size array of scalars: the initializer's element count
+    /// sizes the storage, reserved once the list is parsed.
+    fn define_deferred_scalar_array(
+        &mut self,
+        id_idx: usize,
+        ty: i64,
+        decl_align: usize,
+        was_tentative_glo: bool,
+    ) -> Result<(), C5Error> {
         self.pending.init_inner_dims = self.inner_dims_of(id_idx);
         let elements = self.collect_array_initializer(ty)?;
         let final_size = elements.len() as i64;
@@ -2622,15 +2639,27 @@ impl Compiler {
 
     /// The initializer of a file-scope object: a brace list for an array or
     /// an aggregate, else the restricted constant-expression form (C99
-    /// 6.7.8p4). The storage is already reserved and zeroed.
+    /// 6.7.8p4). The storage at `slot`, in `.data` or in the thread-local
+    /// template, is already reserved and zeroed.
     fn parse_object_initializer(
         &mut self,
         id_idx: usize,
         ty: i64,
         array_size: i64,
-        var_offset: i64,
+        slot: i64,
         thread_local: bool,
     ) -> Result<(), C5Error> {
+        // A thread-local aggregate's image is staged in `.data`, which the
+        // aggregate walk writes, and moved into its thread-local slot. The
+        // staging area is reserved before the lexer moves on: a string
+        // literal it lexes is staged in `.data` too.
+        let staged = thread_local && (array_size > 0 || self.is_traversable_aggregate_ty(ty));
+        let bytes = self.symbols[id_idx].reserved_data_bytes as usize;
+        let var_offset = if staged {
+            self.reserve_data_bytes(DataStore::Static, 8, bytes)
+        } else {
+            slot
+        };
         self.next()?;
         // C99 6.5.2.5: `static T g = (T){ ... }` initialises the aggregate from a
         // compound literal of its own type; dropping the redundant cast leaves the
@@ -2648,12 +2677,6 @@ impl Compiler {
             0
         };
         if array_size > 0 && self.is_traversable_aggregate_ty(ty) {
-            if thread_local {
-                return Err(self.compile_err(
-                    Code::UNSUPPORTED,
-                    "array `_Thread_local` initialisers are not supported",
-                ));
-            }
             // Known-size struct array: the shared
             // struct-array walker fills the brace list
             // into the pre-allocated slot (designators
@@ -2678,12 +2701,6 @@ impl Compiler {
                 self.accept(')')?;
             }
         } else if array_size > 0 {
-            if thread_local {
-                return Err(self.compile_err(
-                    Code::UNSUPPORTED,
-                    "array `_Thread_local` initialisers are not supported",
-                ));
-            }
             self.pending.init_inner_dims = self.inner_dims_of(id_idx);
             self.pending.init_target_array_size = array_size;
             let elements = self.collect_array_initializer(ty)?;
@@ -2703,12 +2720,6 @@ impl Compiler {
                 self.accept(')')?;
             }
         } else if self.is_traversable_aggregate_ty(ty) {
-            if thread_local {
-                return Err(self.compile_err(
-                    Code::UNSUPPORTED,
-                    "struct `_Thread_local` initialisers are not supported",
-                ));
-            }
             let sid = struct_id_of(ty);
             // A parenthesized compound literal `((T){...})`
             // left grouping parens for the brace list to
@@ -2725,6 +2736,9 @@ impl Compiler {
             for _ in 0..cl_parens {
                 self.accept(')')?;
             }
+        }
+        if staged {
+            self.move_staged_image(var_offset as usize, bytes, slot as usize)?;
         }
         self.symbols[id_idx].has_initializer = true;
         Ok(())

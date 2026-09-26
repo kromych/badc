@@ -323,6 +323,38 @@ fn an_internal_linkage_data_alias_names_its_target() {
 }
 
 #[test]
+fn a_thread_local_aggregate_initializer_fills_the_thread_local_template() {
+    // C11 6.7.9: the image of an initialized thread-local array or struct
+    // is the `.tdata` template, with its address constants relocated there;
+    // `.data` keeps only the objects of static storage duration.
+    let a = compile_obj(
+        "int g[2] = { 7, 8 };\n\
+         _Thread_local int ta[3] = { 1, 2, 3 };\n\
+         _Thread_local struct { int x; int *p; } ts = { 5, &g[1] };\n\
+         int *use(void) { static _Thread_local int b[2] = { 9, 10 }; return b; }\n",
+        "a.o",
+    );
+    let sec = |n: &str| {
+        a.sections
+            .iter()
+            .find(|s| s.name == n)
+            .unwrap_or_else(|| panic!("`{n}` missing"))
+    };
+    let tdata = sec(".tdata");
+    let words: Vec<u32> = tdata
+        .bytes
+        .chunks(4)
+        .map(|c| u32::from_le_bytes([c[0], c[1], c[2], c[3]]))
+        .collect();
+    assert_eq!(&words[..3], &[1, 2, 3], "ta");
+    assert_eq!(words[4], 5, "ts.x");
+    assert_eq!(&words[8..10], &[9, 10], "the block-scope array");
+    assert_eq!(tdata.relocs.len(), 1, "ts.p");
+    assert_eq!(tdata.relocs[0].offset, 24);
+    assert_eq!(sec(".data").bytes.len(), 16, "the null guard and g alone");
+}
+
+#[test]
 fn a_tentative_definition_takes_the_storage_of_its_completed_type() {
     // C99 6.9.2p2: an object declared while its type was incomplete is
     // defined with the type the unit ends with. Its symbol spans that type

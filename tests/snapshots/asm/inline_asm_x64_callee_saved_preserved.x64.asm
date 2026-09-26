@@ -134,8 +134,7 @@ Disassembly of section .text:
                	addq	%r14, %r9
                	addq	%r9, %r9
                	addq	%r15, %r9
-               	movq	%r9, %rax
-               	cmpq	$0x211f, %rax           # imm = 0x211F
+               	cmpq	$0x211f, %r9            # imm = 0x211F
                	je	<addr>
                	movl	$0x2, %eax
                	popq	%rbx

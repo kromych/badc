@@ -78,7 +78,9 @@ use arith::*;
 use call::*;
 use early_exit::*;
 use frame::*;
-pub(crate) use frame::{Frame, asm_site_write_masks, compute_frame};
+pub(crate) use frame::{
+    Frame, asm_binds_directly, asm_site_bound_values, asm_site_write_masks, compute_frame,
+};
 pub(crate) use function::emit_function;
 use function::*;
 use inline_asm::*;

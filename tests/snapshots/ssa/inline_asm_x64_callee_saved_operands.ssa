@@ -11,7 +11,7 @@ fn ent_pc=2 n_params=1 variadic=false locals=0
 ; --- SSA dump (ok=true) ent_pc=4 ---
 ; name=main
 fn ent_pc=4 n_params=0 variadic=false locals=9
-  spill_count=2 gpr_used=[3, 13, 14, 15, 12] fp_used=[]
+  spill_count=1 gpr_used=[3, 12, 13, 14, 15] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(10)                                          -> x0
@@ -93,26 +93,26 @@ fn ent_pc=4 n_params=0 variadic=false locals=9
     v71  Imm(3)                                           -> x7
     v72  ImmData(8)                                       -> x0
     v73  Load { addr=v72, disp=0, kind=I64, volatile }    -> x0
-    v74  CallIndirect { target=v73, args=[v71], callee_variadic=false, fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x13
+    v74  CallIndirect { target=v73, args=[v71], callee_variadic=false, fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x3
     v75  Imm(5)                                           -> x7
     v76  ImmData(8)                                       -> x0
     v77  Load { addr=v76, disp=0, kind=I64, volatile }    -> x0
-    v78  CallIndirect { target=v77, args=[v75], callee_variadic=false, fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x14
+    v78  CallIndirect { target=v77, args=[v75], callee_variadic=false, fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x12
     v79  Imm(7)                                           -> x7
     v80  ImmData(8)                                       -> x0
     v81  Load { addr=v80, disp=0, kind=I64, volatile }    -> x0
-    v82  CallIndirect { target=v81, args=[v79], callee_variadic=false, fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x15
+    v82  CallIndirect { target=v81, args=[v79], callee_variadic=false, fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x13
     v83  Imm(11)                                          -> x7
     v84  ImmData(8)                                       -> x0
     v85  Load { addr=v84, disp=0, kind=I64, volatile }    -> x0
-    v86  CallIndirect { target=v85, args=[v83], callee_variadic=false, fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> [spill 0]
+    v86  CallIndirect { target=v85, args=[v83], callee_variadic=false, fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x14
     v87  Imm(13)                                          -> x7
     v88  ImmData(8)                                       -> x0
     v89  Load { addr=v88, disp=0, kind=I64, volatile }    -> x0
-    v90  CallIndirect { target=v89, args=[v87], callee_variadic=false, fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> [spill 1]
+    v90  CallIndirect { target=v89, args=[v87], callee_variadic=false, fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x15
     v91  Imm(1000)                                        -> x0
     v92  Imm(2000)                                        -> x1
-    v93  InlineAsm { template="addq %1, %0\n\taddq $17, %0", ops=2, args=[v91, v92] } -> x3
+    v93  InlineAsm { template="addq %1, %0\n\taddq $17, %0", ops=2, args=[v91, v92] } -> [spill 0]
     v94  ImmData(8)                                       -> x0
     v95  Load { addr=v94, disp=0, kind=I64, volatile }    -> x0
     v96  CallIndirect { target=v95, args=[v74], callee_variadic=false, fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0

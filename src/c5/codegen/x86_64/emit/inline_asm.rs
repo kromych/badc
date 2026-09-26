@@ -1640,6 +1640,7 @@ fn prepare_template(
     asm_sections: &mut crate::c5::asm::AsmSectionSink,
     goto_row: Option<&[super::super::ir::BlockId]>,
     section_goto_ks: &core::cell::RefCell<alloc::vec::Vec<usize>>,
+    bound_regs: Option<&[Option<u8>]>,
 ) -> Emit<AsmTemplate> {
     let asm = stmt.asm;
     let Ok(raw_text) = core::str::from_utf8(&asm.template) else {
@@ -1663,11 +1664,15 @@ fn prepare_template(
     // The register assignment serves the code stream and, ahead of it, the
     // macro pass and a replacement instruction referencing a template
     // operand (`popcntl %1, %0`).
-    let op_reg =
-        match super::frame::asm_operand_regs(stmt.func, asm, stmt.args, stmt.frame.fixed_regs) {
-            Ok(r) => r,
-            Err(m) => return fail(m),
-        };
+    let op_reg = match bound_regs {
+        Some(r) => r.to_vec(),
+        None => {
+            match super::frame::asm_operand_regs(stmt.func, asm, stmt.args, stmt.frame.fixed_regs) {
+                Ok(r) => r,
+                Err(m) => return fail(m),
+            }
+        }
+    };
     let gas = match crate::c5::asm::expand_asm_gas_macros(text, 4, &|tok| {
         gas_operand_subst(stmt, &op_reg, tok)
     }) {
@@ -1792,6 +1797,189 @@ struct AsmScratch {
     /// The bridge register, never an operand's: memory and static sources
     /// load through it, and a cycle of operand moves through a GPR breaks there.
     stage: Reg,
+    /// The operands bind to their values' registers: no save, no restore,
+    /// the moves of [`bind_operands`] ahead of the template and its output
+    /// store behind.
+    bound: Option<BoundOperands>,
+}
+
+/// A directly bound statement: its operand registers, the moves ahead of
+/// the template, and the scratch a value output without a register is
+/// stored from.
+struct BoundOperands {
+    op_reg: alloc::vec::Vec<Option<u8>>,
+    moves: alloc::vec::Vec<Transfer>,
+    /// `(register, place, vector)` of a value output held in a scratch.
+    out_store: Option<(u8, Place, bool)>,
+}
+
+/// Bind each input to the register its value occupies, or to a scratch it
+/// is loaded into; the value output to the register its value is given, or
+/// to a scratch it is stored from, which a non-`&` output may share with an
+/// input, as GCC's operand model allows. A read-write output's input moves
+/// into the output's register; an input bound there is parked in a scratch
+/// first.
+fn bind_operands(stmt: &AsmStmt) -> Emit<BoundOperands> {
+    use super::super::ir::AsmConstraint as C;
+    let asm = stmt.asm;
+    let fixed = stmt.frame.fixed_regs;
+    let Some(shape) = super::frame::bound_shape(stmt.func, asm, stmt.args, fixed, stmt.fcx.target)
+    else {
+        return fail("inline asm: the operands do not bind directly");
+    };
+    let mut gp = super::frame::bound_gp_scratch(asm, fixed, shape.gp_need());
+    let mut fp = super::frame::bound_fp_scratch(asm, fixed, stmt.fcx.target);
+    let (gp_any, fp_any) = (gp.first().copied(), fp.first().copied());
+    let short = "inline asm: no scratch register for a bound operand";
+    let take = |pool: &mut alloc::vec::Vec<u8>| -> Emit<u8> {
+        if pool.is_empty() {
+            return fail(short);
+        }
+        Ok(pool.remove(0))
+    };
+    let mut op_reg: alloc::vec::Vec<Option<u8>> = alloc::vec![None; asm.operands.len()];
+    let mut moves: alloc::vec::Vec<Transfer> = alloc::vec::Vec::new();
+    for (i, op) in asm.operands.iter().enumerate() {
+        if op.is_output {
+            continue;
+        }
+        let imm = match op.constraint {
+            C::Imm => true,
+            C::RegOrImm { reg: None, imm } => stmt
+                .const_of(i as u8)
+                .is_some_and(|v| crate::Compiler::x86_imm_alternative_accepts(imm, v)),
+            _ => false,
+        };
+        if imm {
+            continue;
+        }
+        let vector = matches!(op.constraint, C::Fp);
+        let src = arg_source(stmt, i)?;
+        op_reg[i] = Some(match (vector, src) {
+            (true, ArgSrc::Xmm(x)) => x,
+            (false, ArgSrc::Gpr(r)) => r,
+            (true, src) => {
+                let s = take(&mut fp)?;
+                moves.push(Transfer {
+                    dst: XMM_UNIFIED + s,
+                    src,
+                    kind: TransferKind::V128,
+                });
+                s
+            }
+            (false, src) => {
+                let s = take(&mut gp)?;
+                moves.push(Transfer {
+                    dst: s,
+                    src,
+                    kind: TransferKind::Value,
+                });
+                s
+            }
+        });
+    }
+    let mut out_store = None;
+    if let Some(i) = asm.operands.iter().position(|o| o.is_output) {
+        let op = &asm.operands[i];
+        let vector = matches!(op.constraint, C::Fp);
+        let place = place_of(stmt.alloc, stmt.site);
+        let r = match (vector, place) {
+            (true, Place::FpReg(x)) => x,
+            (false, Place::IntReg(x)) => x,
+            _ => {
+                let (pool, any) = if vector {
+                    (&mut fp, fp_any)
+                } else {
+                    (&mut gp, gp_any)
+                };
+                let s = if op.is_rw {
+                    take(pool)?
+                } else {
+                    match pool.first().copied().or(any) {
+                        Some(s) => s,
+                        None => return fail(short),
+                    }
+                };
+                out_store = Some((s, place, vector));
+                s
+            }
+        };
+        op_reg[i] = Some(r);
+        if op.is_rw {
+            let src = arg_source(stmt, i)?;
+            let (dst, kind) = if vector {
+                (XMM_UNIFIED + r, TransferKind::V128)
+            } else {
+                (r, TransferKind::Value)
+            };
+            if src.reads() != Some(dst) {
+                let displaced: alloc::vec::Vec<usize> = (0..asm.operands.len())
+                    .filter(|&j| {
+                        j != i
+                            && op_reg[j] == Some(r)
+                            && matches!(asm.operands[j].constraint, C::Fp) == vector
+                    })
+                    .collect();
+                if !displaced.is_empty() {
+                    let p = take(if vector { &mut fp } else { &mut gp })?;
+                    moves.push(Transfer {
+                        dst: if vector { XMM_UNIFIED + p } else { p },
+                        src: if vector {
+                            ArgSrc::Xmm(r)
+                        } else {
+                            ArgSrc::Gpr(r)
+                        },
+                        kind,
+                    });
+                    for j in displaced {
+                        op_reg[j] = Some(p);
+                    }
+                }
+                moves.push(Transfer { dst, src, kind });
+            }
+        }
+    }
+    Ok(BoundOperands {
+        op_reg,
+        moves,
+        out_store,
+    })
+}
+
+/// Where operand `i`'s argument comes from: its place or its static form.
+fn arg_source(stmt: &AsmStmt, i: usize) -> Emit<ArgSrc> {
+    use crate::c5::asm::StaticOperand;
+    let (Some(op), Some(&a)) = (stmt.asm.operands.get(i), stmt.args.get(i)) else {
+        return fail("inline asm: operand past the argument list");
+    };
+    if op.static_arg {
+        return match crate::c5::asm::asm_operand_static(stmt.func, a) {
+            Some(StaticOperand::Const(c)) => Ok(ArgSrc::Const(c)),
+            Some(StaticOperand::Addr { base, off }) => Ok(ArgSrc::Addr { base, off }),
+            Some(StaticOperand::Frame(off)) => {
+                let (base, bytes) =
+                    super::mem::local_slot_base_disp(off, stmt.func, stmt.frame, stmt.fcx.abi);
+                match i32::try_from(bytes) {
+                    Ok(disp) => Ok(ArgSrc::Frame(base, disp)),
+                    Err(_) => fail("inline asm: frame offset doesn't fit in disp32"),
+                }
+            }
+            None => fail("inline asm: static operand without a value"),
+        };
+    }
+    match stmt.alloc.places.get(a as usize).copied() {
+        Some(Place::IntReg(r)) => Ok(ArgSrc::Gpr(r)),
+        Some(Place::FpReg(x)) => Ok(ArgSrc::Xmm(x)),
+        Some(Place::Spill(s)) => {
+            let (base, disp) = if op.value && op.width == 16 {
+                v128_spill_addr(stmt.frame, s)
+            } else {
+                spill_slot_addr(stmt.frame, s)
+            };
+            Ok(ArgSrc::Mem(base, disp))
+        }
+        _ => fail("inline asm: operand place missing"),
+    }
 }
 
 /// Where an operand argument comes from: its place or its static form. `Mem`
@@ -1894,7 +2082,26 @@ fn order_transfers(
 }
 
 impl AsmScratch {
-    fn new(stmt: &AsmStmt, op_reg: &[Option<u8>]) -> Emit<AsmScratch> {
+    fn new(
+        stmt: &AsmStmt,
+        op_reg: &[Option<u8>],
+        bound: Option<BoundOperands>,
+    ) -> Emit<AsmScratch> {
+        if bound.is_some() {
+            let stage = super::frame::bound_gp_scratch(stmt.asm, stmt.frame.fixed_regs, 1)
+                .first()
+                .copied()
+                .unwrap_or(Reg::R10.0);
+            return Ok(AsmScratch {
+                anchor: Reg::RBP,
+                base: 0,
+                fp_area: 0,
+                save_list: alloc::vec::Vec::new(),
+                fp_save_list: alloc::vec::Vec::new(),
+                stage: Reg(stage),
+                bound,
+            });
+        }
         let preserve = stmt.alloc.asm_preserve;
         let (used, fp_used, stage) =
             match asm_save_masks_and_stage(stmt.asm, op_reg, stmt.frame.fixed_regs, preserve) {
@@ -1927,6 +2134,7 @@ impl AsmScratch {
                 stmt.func,
                 stmt.alloc,
                 stmt.frame.fixed_regs,
+                stmt.fcx.target,
                 stmt.site as usize,
             ) as i32;
         debug_assert!(
@@ -1945,6 +2153,7 @@ impl AsmScratch {
             save_list,
             fp_save_list,
             stage,
+            bound: None,
         })
     }
 
@@ -1959,6 +2168,9 @@ impl AsmScratch {
     /// instead, which is the same address for the same reason.
     fn goto_direct(&self, asm: &super::super::ir::AsmBlock) -> bool {
         use super::super::ir::AsmConstraint;
+        if let Some(b) = &self.bound {
+            return b.out_store.is_none();
+        }
         self.save_list.is_empty()
             && self.fp_save_list.is_empty()
             && !asm.operands.iter().any(|op| {
@@ -1982,38 +2194,7 @@ impl AsmScratch {
     }
 
     fn arg_src(&self, stmt: &AsmStmt, i: usize) -> Emit<ArgSrc> {
-        use crate::c5::asm::StaticOperand;
-        let (Some(op), Some(&a)) = (stmt.asm.operands.get(i), stmt.args.get(i)) else {
-            return fail("inline asm: operand past the argument list");
-        };
-        if op.static_arg {
-            return match crate::c5::asm::asm_operand_static(stmt.func, a) {
-                Some(StaticOperand::Const(c)) => Ok(ArgSrc::Const(c)),
-                Some(StaticOperand::Addr { base, off }) => Ok(ArgSrc::Addr { base, off }),
-                Some(StaticOperand::Frame(off)) => {
-                    let (base, bytes) =
-                        super::mem::local_slot_base_disp(off, stmt.func, stmt.frame, stmt.fcx.abi);
-                    match i32::try_from(bytes) {
-                        Ok(disp) => Ok(ArgSrc::Frame(base, disp)),
-                        Err(_) => fail("inline asm: frame offset doesn't fit in disp32"),
-                    }
-                }
-                None => fail("inline asm: static operand without a value"),
-            };
-        }
-        match stmt.alloc.places.get(a as usize).copied() {
-            Some(Place::IntReg(r)) => Ok(ArgSrc::Gpr(r)),
-            Some(Place::FpReg(x)) => Ok(ArgSrc::Xmm(x)),
-            Some(Place::Spill(s)) => {
-                let (base, disp) = if op.value && op.width == 16 {
-                    v128_spill_addr(stmt.frame, s)
-                } else {
-                    spill_slot_addr(stmt.frame, s)
-                };
-                Ok(ArgSrc::Mem(base, disp))
-            }
-            _ => fail("inline asm: operand place missing"),
-        }
+        arg_source(stmt, i)
     }
 
     /// [`Self::arg_src`] for a read after the template started, which may move
@@ -2127,10 +2308,12 @@ impl AsmScratch {
     /// Emit the transfers reading a register in [`order_transfers`]' order, then
     /// those reading memory or forming a constant through the stage.
     fn emit_inputs(&self, out: &mut Out, stmt: &AsmStmt, op_reg: &[Option<u8>]) -> Emit {
-        let (from_regs, later): (alloc::vec::Vec<Transfer>, alloc::vec::Vec<Transfer>) = self
-            .transfers(stmt, op_reg)?
-            .into_iter()
-            .partition(|t| t.src.reads().is_some());
+        let transfers = match &self.bound {
+            Some(b) => b.moves.clone(),
+            None => self.transfers(stmt, op_reg)?,
+        };
+        let (from_regs, later): (alloc::vec::Vec<Transfer>, alloc::vec::Vec<Transfer>) =
+            transfers.into_iter().partition(|t| t.src.reads().is_some());
         for step in order_transfers(from_regs, self.stage.0)? {
             match step {
                 Step::Transfer(t) => self.emit_transfer(out, stmt, t)?,
@@ -2186,6 +2369,22 @@ impl AsmScratch {
     /// register holds (`reg_alloc::late_read_args`); a memory operand needs none.
     fn emit_outputs(&self, out: &mut Out, stmt: &AsmStmt, op_reg: &[Option<u8>]) -> Emit {
         use super::super::ir::AsmConstraint;
+        if let Some(b) = &self.bound {
+            if let Some((s, Place::Spill(slot), vector)) = b.out_store {
+                let (base, disp) = if vector {
+                    v128_spill_addr(stmt.frame, slot)
+                } else {
+                    spill_slot_addr(stmt.frame, slot)
+                };
+                let (base, disp) = self.late_base(stmt, base, disp);
+                if vector {
+                    super::encode::emit_movups_mem_xmm(out.cx.code, base, disp, Reg(s));
+                } else {
+                    super::encode::emit_mov_mem_r(out.cx.code, base, disp, Reg(s));
+                }
+            }
+            return Ok(());
+        }
         for (i, op) in stmt.asm.operands.iter().enumerate() {
             if !op.is_output
                 || op.value
@@ -3799,7 +3998,17 @@ fn emit_inline_asm_once(
     } else {
         alloc::vec::Vec::new()
     };
-    let tpl = prepare_template(&stmt, out.cx.asm_sections, goto_row, &section_goto_ks)?;
+    let bound =
+        super::frame::asm_binds_directly(fcx.func, asm, args, fcx.frame.fixed_regs, fcx.target)
+            .then(|| bind_operands(&stmt))
+            .transpose()?;
+    let tpl = prepare_template(
+        &stmt,
+        out.cx.asm_sections,
+        goto_row,
+        &section_goto_ks,
+        bound.as_ref().map(|b| b.op_reg.as_slice()),
+    )?;
     let label_names = super::asm::scan_label_names(&tpl.code);
     let weak_names = crate::c5::asm::asm_weak_only_names(&tpl.blocks, out.cx.asm_sections);
     let stream_defs: alloc::vec::Vec<(u32, usize)> = tpl
@@ -3808,7 +4017,7 @@ fn emit_inline_asm_once(
         .enumerate()
         .filter_map(|(ii, insn)| insn.label_def.map(|n| (n, ii)))
         .collect();
-    let scratch = AsmScratch::new(&stmt, &tpl.op_reg)?;
+    let scratch = AsmScratch::new(&stmt, &tpl.op_reg, bound)?;
     let goto_direct = scratch.goto_direct(asm);
     scratch.emit_saves(out.cx.code);
     scratch.emit_inputs(out, &stmt, &tpl.op_reg)?;

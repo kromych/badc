@@ -4,10 +4,10 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
   spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   InlineAsm { template="movl $0x1234, %0\n\tmovl $0, %%eax\n\tmovl $0, %%ebx\n\tmovl $0, %%ecx\n\tmovl $0, %%edx\n\t", ops=1, args=[-] } -> x0
-    v2   Extend { value=v1, kind=I32 }                    -> x1
-    v3   Extend { value=v1, kind=I32 }                    -> x1
-    v4   Extend { value=v1, kind=I32 }                    -> x1
+    v1   InlineAsm { template="movl $0x1234, %0\n\tmovl $0, %%eax\n\tmovl $0, %%ebx\n\tmovl $0, %%ecx\n\tmovl $0, %%edx\n\t", ops=1, args=[-] } -> x6
+    v2   Extend { value=v1, kind=I32 }                    -> x0
+    v3   Extend { value=v1, kind=I32 }                    -> x0
+    v4   Extend { value=v1, kind=I32 }                    -> x0
     v5   BinopI { op=eq, lhs=v1, rhs_imm=4660 }           -> x0
     terminator Bz { cond=v5, target=b3, fall=b1 }   (exit_acc=v5)
   block 1  start_pc=0

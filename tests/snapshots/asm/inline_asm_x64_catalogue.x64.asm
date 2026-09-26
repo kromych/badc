@@ -31,36 +31,34 @@ Disassembly of section .text:
                	subq	$0x18, %rsp
                	pushq	%rbx
                	movq	$-0x14, %rax
-               	negq	%rax
                	movq	%rax, %rcx
+               	negq	%rcx
                	movq	$-0x8, %rax
-               	notq	%rax
                	movq	%rax, %rdx
+               	notq	%rdx
                	movl	$0x64, %eax
                	movq	$0xf, -0x8(%rbp)
                	movq	-0x8(%rbp), %rbx
                	xchgq	%rbx, %rax
                	movq	%rbx, -0x8(%rbp)
-               	movq	%rax, %rsi
-               	movl	$0x5, %eax
-               	rolq	%rax
-               	movq	%rax, %rdi
-               	movl	$0x14, %eax
-               	movl	$0x16, %ebx
-               	addq	$0x0, %rax
-               	adcq	%rbx, %rax
+               	movl	$0x5, %esi
+               	rolq	%rsi
+               	movl	$0x14, %edi
+               	movl	$0x16, %r10d
+               	addq	$0x0, %rdi
+               	adcq	%r10, %rdi
                	cmpq	$0x14, %rcx
                	jne	<addr>
                	cmpq	$0x7, %rdx
                	jne	<addr>
-               	cmpq	$0xf, %rsi
+               	cmpq	$0xf, %rax
                	jne	<addr>
-               	movq	-0x8(%rbp), %rcx
-               	cmpq	$0x64, %rcx
+               	movq	-0x8(%rbp), %rax
+               	cmpq	$0x64, %rax
                	jne	<addr>
-               	cmpq	$0xa, %rdi
+               	cmpq	$0xa, %rsi
                	jne	<addr>
-               	cmpq	$0x2a, %rax
+               	cmpq	$0x2a, %rdi
                	jne	<addr>
                	movl	$0x2a, %eax
                	popq	%rbx

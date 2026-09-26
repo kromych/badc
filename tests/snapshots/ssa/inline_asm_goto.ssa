@@ -42,26 +42,26 @@ fn ent_pc=2 n_params=1 variadic=false locals=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I32)                            -> x7
     v2   Imm(0)                                           -> x0
-    v3   Imm(0)                                           -> x1
-    v4   Imm(0)                                           -> x0
+    v3   Imm(0)                                           -> x0
+    v4   Imm(0)                                           -> x1
     terminator Jmp(b1)   (exit_acc=v3)
   block 1  start_pc=0
-    v5   Phi { incoming=[b0:v3, b2:v8], kind=I64 }        -> x1
+    v5   Phi { incoming=[b0:v3, b2:v8], kind=I64 }        -> x0
     v6   Phi { incoming=[b0:v1, b2:v11], kind=I64 }       -> x7
-    v7   Extend { value=v5, kind=I32 }                    -> x0
-    v8   BinopI { op=add, lhs=v5, rhs_imm=1 }             -> x1
-    v9   Extend { value=v8, kind=I32, nsw }               -> x0
-    v10  Extend { value=v6, kind=I32 }                    -> x0
+    v7   Extend { value=v5, kind=I32 }                    -> x1
+    v8   BinopI { op=add, lhs=v5, rhs_imm=1 }             -> x0
+    v9   Extend { value=v8, kind=I32, nsw }               -> x1
+    v10  Extend { value=v6, kind=I32 }                    -> x1
     v11  BinopI { op=add, lhs=v6, rhs_imm=-1 }            -> x7
-    v12  Extend { value=v11, kind=I32, nsw }              -> x0
-    v13  Extend { value=v11, kind=I32 }                   -> x0
+    v12  Extend { value=v11, kind=I32, nsw }              -> x1
+    v13  Extend { value=v11, kind=I32 }                   -> x1
     v14  InlineAsm { template="testl %0, %0; jnz %l0", ops=1, args=[v13] } -> -
     terminator AsmGoto { table=0 }   [b3, b2]
   block 2  start_pc=0
     terminator Jmp(b1)
   block 3  start_pc=0
-    v15  Extend { value=v8, kind=I32 }                    -> x0
-    v16  Extend { value=v8, kind=I32 }                    -> x0
+    v15  Extend { value=v8, kind=I32 }                    -> x1
+    v16  Extend { value=v8, kind=I32 }                    -> x1
     terminator Return(v8)   (exit_acc=v8)
 ; --- SSA dump (ok=true) ent_pc=3 ---
 ; name=same_target
@@ -111,27 +111,27 @@ fn ent_pc=6 n_params=1 variadic=false locals=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I32)                            -> x7
     v2   Imm(0)                                           -> x0
-    v3   Imm(5)                                           -> x1
-    v4   Imm(0)                                           -> x0
-    v5   Imm(0)                                           -> x0
-    v6   BinopI { op=gt, lhs=v1, rhs_imm=10 }             -> x0
+    v3   Imm(5)                                           -> x0
+    v4   Imm(0)                                           -> x1
+    v5   Imm(0)                                           -> x1
+    v6   BinopI { op=gt, lhs=v1, rhs_imm=10 }             -> x1
     terminator Bz { cond=v6, target=b3, fall=b1 }   (exit_acc=v6)
   block 1  start_pc=0
-    v7   Imm(9)                                           -> x1
-    v8   Imm(0)                                           -> x0
+    v7   Imm(9)                                           -> x0
+    v8   Imm(0)                                           -> x1
     terminator Jmp(b2)   (exit_acc=v7)
   block 2  start_pc=0
-    v11  Phi { incoming=[b1:v7, b5:v3, b4:v14], kind=I64 } -> x1
-    v12  Extend { value=v11, kind=I32 }                   -> x0
-    v13  Extend { value=v11, kind=I32 }                   -> x0
+    v11  Phi { incoming=[b1:v7, b5:v3, b4:v14], kind=I64 } -> x0
+    v12  Extend { value=v11, kind=I32 }                   -> x1
+    v13  Extend { value=v11, kind=I32 }                   -> x1
     terminator Return(v11)   (exit_acc=v11)
   block 3  start_pc=0
-    v9   Imm(0)                                           -> x0
+    v9   Imm(0)                                           -> x1
     v10  InlineAsm { template="testl %0, %0; jnz %l0", ops=1, args=[v1] } -> -
     terminator AsmGoto { table=0 }   [b4, b5]
   block 4  start_pc=0
-    v14  Imm(7)                                           -> x1
-    v15  Imm(0)                                           -> x0
+    v14  Imm(7)                                           -> x0
+    v15  Imm(0)                                           -> x1
     terminator Jmp(b2)   (exit_acc=v14)
   block 5  start_pc=0
     terminator Jmp(b2)
@@ -178,19 +178,19 @@ fn ent_pc=7 n_params=0 variadic=false locals=0
   block 8  start_pc=0
     v40  Imm(20)                                          -> x0
     v41  Imm(7)                                           -> x0
-    v42  Imm(7)                                           -> x1
-    v43  Imm(0)                                           -> x2
+    v42  Imm(7)                                           -> x0
+    v43  Imm(0)                                           -> x1
     terminator Jmp(b9)   (exit_acc=v43)
   block 9  start_pc=0
-    v47  Phi { incoming=[b8:v43, b10:v50], kind=I64 }     -> x2
-    v48  Phi { incoming=[b8:v42, b10:v53], kind=I64 }     -> x1
-    v49  Extend { value=v47, kind=I32 }                   -> x0
-    v50  BinopI { op=add, lhs=v47, rhs_imm=1 }            -> x2
-    v51  Extend { value=v50, kind=I32, nsw }              -> x0
-    v52  Extend { value=v48, kind=I32 }                   -> x0
-    v53  BinopI { op=add, lhs=v48, rhs_imm=-1 }           -> x1
-    v54  Extend { value=v53, kind=I32, nsw }              -> x0
-    v55  Extend { value=v53, kind=I32 }                   -> x0
+    v47  Phi { incoming=[b8:v43, b10:v50], kind=I64 }     -> x1
+    v48  Phi { incoming=[b8:v42, b10:v53], kind=I64 }     -> x0
+    v49  Extend { value=v47, kind=I32 }                   -> x2
+    v50  BinopI { op=add, lhs=v47, rhs_imm=1 }            -> x1
+    v51  Extend { value=v50, kind=I32, nsw }              -> x2
+    v52  Extend { value=v48, kind=I32 }                   -> x2
+    v53  BinopI { op=add, lhs=v48, rhs_imm=-1 }           -> x0
+    v54  Extend { value=v53, kind=I32, nsw }              -> x2
+    v55  Extend { value=v53, kind=I32 }                   -> x2
     v56  InlineAsm { template="testl %0, %0; jnz %l0", ops=1, args=[v55] } -> -
     terminator AsmGoto { table=4 }   [b11, b10]
   block 10  start_pc=0

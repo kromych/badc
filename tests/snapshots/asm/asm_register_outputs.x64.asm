@@ -32,8 +32,7 @@ Disassembly of section .text:
                	pushq	%rbx
                	leaq	<rip>, %rax
                	movq	(%rax), %rax
-               	movq	%rax, %rbx
-               	movq	%rbx, %rax
+               	movq	%rax, %rax
                	cmpq	$0x7, %rax
                	je	<addr>
                	movl	$0x1, %eax
@@ -43,10 +42,8 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movq	0x8(%rax), %rcx
                	movq	0x10(%rax), %rax
-               	movq	%rax, %rbx
-               	movq	%rcx, %rax
-               	addq	%rbx, %rax
-               	cmpq	$0x8, %rax
+               	addq	%rax, %rcx
+               	cmpq	$0x8, %rcx
                	je	<addr>
                	movl	$0x2, %eax
                	popq	%rbx
@@ -69,17 +66,12 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	<rip>, %rax
-               	movq	0x20(%rax), %rcx
-               	movq	%rcx, %rax
-               	andq	$0xff, %rax
-               	movq	%rax, %rbx
-               	movb	%bl, %al
-               	movq	%rax, %rdx
-               	movq	%rcx, %rax
+               	movq	0x20(%rax), %rax
+               	movq	%rax, %rcx
+               	andq	$0xff, %rcx
+               	movb	%cl, %cl
                	andq	$0xffff, %rax           # imm = 0xFFFF
-               	movq	%rax, %rbx
-               	movw	%bx, %ax
-               	movq	%rdx, %rcx
+               	movw	%ax, %ax
                	andq	$0xff, %rcx
                	andq	$0xffff, %rax           # imm = 0xFFFF
                	addq	%rcx, %rax
@@ -91,13 +83,10 @@ Disassembly of section .text:
                	retq
                	leaq	<rip>, %rax
                	movq	0x28(%rax), %rax
-               	movq	%rax, %rbx
-               	movq	%rbx, %rax
+               	movq	%rax, %rax
                	movq	%rax, %rcx
-               	movq	%rcx, %rbx
-               	movq	%rbx, %rax
-               	addq	$0x1, %rax
-               	imulq	$0x64, %rcx, %rcx
+               	addq	$0x1, %rcx
+               	imulq	$0x64, %rax, %rax
                	addq	%rcx, %rax
                	cmpq	$0x1093, %rax           # imm = 0x1093
                	je	<addr>
@@ -106,16 +95,15 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	<rip>, %rax
-               	movq	0x30(%rax), %rax
+               	movq	0x30(%rax), %rcx
                	movq	$0x0, -0x10(%rbp)
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rax
                	leaq	-0x10(%rbp), %rdx
-               	movq	%rdx, (%rcx)
-               	movq	%rax, %rbx
-               	movq	%rbx, %rax
-               	movq	%rax, -0x10(%rbp)
-               	movq	(%rcx), %rcx
-               	movq	(%rcx), %rcx
+               	movq	%rdx, (%rax)
+               	movq	%rcx, %rcx
+               	movq	%rcx, -0x10(%rbp)
+               	movq	(%rax), %rax
+               	movq	(%rax), %rax
                	addq	%rcx, %rax
                	cmpq	$0x16, %rax
                	je	<addr>

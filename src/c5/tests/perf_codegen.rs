@@ -2471,6 +2471,37 @@ return v;\n}\n";
     m.finish();
 }
 
+/// Two statements over `r` operands on x86-64: each operand is its value's
+/// register, so `add2` is the read-write input's move into the return
+/// register, the template and `ret`, and `mix` the template and `ret`.
+/// Staged, each took a frame, a `%rbx` save and a move per operand.
+#[test]
+fn x86_asm_register_operands_bind_to_their_values() {
+    const SRC: &str = "unsigned long add2(unsigned long x, unsigned long y) {\n\
+        __asm__(\"add %1, %0\" : \"+r\"(x) : \"r\"(y));\n\
+        return x;\n\
+        }\n\
+        unsigned long mix(unsigned long a, unsigned long b, unsigned long c) {\n\
+        unsigned long r;\n\
+        __asm__(\"lea (%1,%2), %0\\n\\txor %3, %0\" : \"=r\"(r) : \"r\"(a), \"r\"(b), \"r\"(c));\n\
+        return r;\n\
+        }\n";
+    let obj = object_at(SRC, Target::LinuxX64, true);
+    let mut m = Misses::default();
+    let add2 = function_bytes(&obj, "add2");
+    // mov %rdi,%rax; add %rsi,%rax; ret
+    m.expect(add2 == [0x48, 0x89, 0xf8, 0x48, 0x01, 0xf0, 0xc3], || {
+        format!("x86-64 add2: {add2:02x?}")
+    });
+    let mix = function_bytes(&obj, "mix");
+    // lea (%rdi,%rsi),%rax; xor %rdx,%rax; ret
+    m.expect(
+        mix == [0x48, 0x8d, 0x04, 0x37, 0x48, 0x31, 0xd0, 0xc3],
+        || format!("x86-64 mix: {mix:02x?}"),
+    );
+    m.finish();
+}
+
 /// The four-lane syndrome of the kernel's lib/raid6/neon.uc in its
 /// statement order: the wrappers' asm operands are their values' registers,
 /// so no memory access goes through sp and the inner loop moves no vector.

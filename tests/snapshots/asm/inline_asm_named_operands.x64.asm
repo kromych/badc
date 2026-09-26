@@ -26,41 +26,19 @@ Disassembly of section .text:
                	int3
 
 <move_named>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x8, %rsp
-               	pushq	%rbx
                	movslq	%edi, %rdi
-               	movq	%rdi, %rbx
-               	movl	%ebx, %eax
-               	popq	%rbx
-               	leave
+               	movl	%edi, %eax
                	retq
 
 <add_mixed>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x8, %rsp
-               	pushq	%rbx
-               	movq	%rdi, %rbx
-               	movq	%rsi, %rcx
-               	movq	%rbx, %rax
-               	addq	%rcx, %rax
-               	popq	%rbx
-               	leave
+               	movq	%rdi, %rax
+               	addq	%rsi, %rax
                	retq
 
 <modifier_named>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x8, %rsp
-               	pushq	%rbx
                	movslq	%edi, %rdi
-               	movq	%rdi, %rbx
-               	movl	%ebx, %eax
-               	addl	%ebx, %eax
-               	popq	%rbx
-               	leave
+               	movl	%edi, %eax
+               	addl	%edi, %eax
                	retq
 
 <rw_named>:
@@ -69,46 +47,32 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x8, %rsp
-               	pushq	%rbx
-               	movl	$0x7, %ebx
-               	movl	%ebx, %eax
+               	movl	$0x7, %r10d
+               	movl	%r10d, %eax
                	cmpl	$0x7, %eax
                	je	<addr>
                	movl	$0x1, %eax
-               	popq	%rbx
-               	leave
                	retq
-               	movl	$0x1e, %ebx
-               	movl	$0xc, %ecx
-               	movq	%rbx, %rax
-               	addq	%rcx, %rax
+               	movl	$0x1e, %r10d
+               	movl	$0xc, %r11d
+               	movq	%r10, %rax
+               	addq	%r11, %rax
                	cmpq	$0x2a, %rax
                	je	<addr>
                	movl	$0x2, %eax
-               	popq	%rbx
-               	leave
                	retq
-               	movl	$0x15, %ebx
-               	movl	%ebx, %eax
-               	addl	%ebx, %eax
+               	movl	$0x15, %r10d
+               	movl	%r10d, %eax
+               	addl	%r10d, %eax
                	cmpl	$0x2a, %eax
                	je	<addr>
                	movl	$0x3, %eax
-               	popq	%rbx
-               	leave
                	retq
                	movl	$0x25, %eax
                	addl	$0x5, %eax
                	cmpl	$0x2a, %eax
                	je	<addr>
                	movl	$0x4, %eax
-               	popq	%rbx
-               	leave
                	retq
                	movl	$0x2a, %eax
-               	popq	%rbx
-               	leave
                	retq

@@ -110,7 +110,7 @@ pub(crate) fn compute_frame(
     let asm_bytes = if func.is_naked {
         0
     } else {
-        asm_scratch_bytes(func, alloc, abi.fixed_regs)
+        asm_scratch_bytes(func, alloc, abi.fixed_regs, target)
     };
     let asm_scratch_off = if asm_bytes > 0 {
         -((upper_bytes + alloc_spill_bytes + va_save_bytes + asm_bytes) as i32)
@@ -189,10 +189,13 @@ fn asm_stmt_bytes(
     func: &FunctionSsa,
     alloc: &Allocation,
     fixed: super::FixedRegs,
+    target: Target,
     asm: &super::super::ir::AsmBlock,
     args: &[u32],
 ) -> Option<u32> {
-    if crate::c5::asm::asm_statement_is_noop(asm, crate::c5::asm::AsmComments::X86) {
+    if crate::c5::asm::asm_statement_is_noop(asm, crate::c5::asm::AsmComments::X86)
+        || asm_binds_directly(func, asm, args, fixed, target)
+    {
         return None;
     }
     let op_reg = asm_operand_regs(func, asm, args, fixed).ok()?;
@@ -224,6 +227,7 @@ pub(super) fn asm_scratch_bytes(
     func: &FunctionSsa,
     alloc: &Allocation,
     fixed: super::FixedRegs,
+    target: Target,
 ) -> u32 {
     let private = asm_regions_are_private(func);
     let mut bytes = 0u32;
@@ -231,7 +235,7 @@ pub(super) fn asm_scratch_bytes(
         let Inst::InlineAsm { asm, args } = inst else {
             continue;
         };
-        let Some(n) = asm_stmt_bytes(func, alloc, fixed, asm, args) else {
+        let Some(n) = asm_stmt_bytes(func, alloc, fixed, target, asm, args) else {
             continue;
         };
         bytes = if private { bytes + n } else { bytes.max(n) };
@@ -245,6 +249,7 @@ pub(super) fn asm_region_offset(
     func: &FunctionSsa,
     alloc: &Allocation,
     fixed: super::FixedRegs,
+    target: Target,
     site: usize,
 ) -> u32 {
     if !asm_regions_are_private(func) {
@@ -255,7 +260,7 @@ pub(super) fn asm_region_offset(
         let Inst::InlineAsm { asm, args } = inst else {
             continue;
         };
-        off += asm_stmt_bytes(func, alloc, fixed, asm, args).unwrap_or(0);
+        off += asm_stmt_bytes(func, alloc, fixed, target, asm, args).unwrap_or(0);
     }
     off
 }
@@ -347,18 +352,25 @@ pub(super) fn asm_save_masks_and_stage(
 }
 
 /// The GP / FP registers one inline-asm site's lowering writes: the
-/// clobber list, the operand registers and the staging register. A value
-/// live across the site must not sit in one. `(0, 0)` when the statement
-/// emits nothing or its operands do not assign, where the site writes
-/// nothing the allocator can see.
+/// clobber list, and the operand and staging registers or, when the
+/// operands bind directly, the scratch. A value live across the site must
+/// not sit in one. `(0, 0)` when the statement emits nothing or its
+/// operands do not assign, where the site writes nothing the allocator can see.
 pub(crate) fn asm_site_write_masks(
     func: &FunctionSsa,
     asm: &super::super::ir::AsmBlock,
     args: &[u32],
     fixed: super::FixedRegs,
+    target: Target,
 ) -> (u32, u32) {
     if crate::c5::asm::asm_statement_is_noop(asm, crate::c5::asm::AsmComments::X86) {
         return (0, 0);
+    }
+    if let Some(shape) = bound_shape(func, asm, args, fixed, target) {
+        return (
+            (asm.clobber_regs | shape.gp_scratch_mask(asm, fixed)) & !fixed.gpr,
+            asm.clobber_fp_regs & !fixed.fpr,
+        );
     }
     let Ok(op_reg) = asm_operand_regs(func, asm, args, fixed) else {
         return (0, 0);
@@ -367,6 +379,177 @@ pub(crate) fn asm_site_write_masks(
         Ok((used, fp_used, _)) => (used, fp_used),
         Err(_) => (0, 0),
     }
+}
+
+/// A bound statement's operand scratch: r10 and r11, outside the banks,
+/// then registers volatile under both x86-64 conventions.
+const BOUND_SCRATCH: [u8; 7] = [10, 11, 9, 8, 2, 1, 0];
+
+/// The register operands of a statement whose operands bind directly.
+pub(super) struct BoundShape {
+    gp_in: usize,
+    fp_in: usize,
+    /// The value output, `Some(true)` for an `x` one.
+    out_fp: Option<bool>,
+    rw: bool,
+}
+
+impl BoundShape {
+    /// One scratch per input, one for a read-write output (its own when
+    /// spilled, else a displaced input's), and one for a spilled output.
+    pub(super) fn gp_need(&self) -> usize {
+        Self::need(self.gp_in, self.out_fp == Some(false), self.rw)
+    }
+
+    fn fp_need(&self) -> usize {
+        Self::need(self.fp_in, self.out_fp == Some(true), self.rw)
+    }
+
+    fn need(inputs: usize, out: bool, rw: bool) -> usize {
+        (inputs + usize::from(out && rw)).max(usize::from(out))
+    }
+
+    fn gp_scratch_mask(&self, asm: &super::super::ir::AsmBlock, fixed: super::FixedRegs) -> u32 {
+        bound_gp_scratch(asm, fixed, self.gp_need())
+            .iter()
+            .fold(0u32, |m, &r| m | 1 << r)
+    }
+}
+
+/// The shape of a statement whose register operands bind to their values'
+/// registers, as an instruction's do, or `None`: each operand is an
+/// immediate, an `r` or `x` input value, or the one value output, none `&`
+/// or segment-qualified; the clobbers spare rsp and rbp; and the scratch
+/// outside them can hold every operand that has no register.
+pub(super) fn bound_shape(
+    func: &FunctionSsa,
+    asm: &super::super::ir::AsmBlock,
+    args: &[u32],
+    fixed: super::FixedRegs,
+    target: Target,
+) -> Option<BoundShape> {
+    use super::super::ir::{AsmConstraint as C, AsmSeg};
+    const RESERVED: u32 = (1 << 4) | (1 << 5);
+    if func.is_naked || func.has_sp_asm() || asm.clobber_regs & RESERVED != 0 {
+        return None;
+    }
+    let mut shape = BoundShape {
+        gp_in: 0,
+        fp_in: 0,
+        out_fp: None,
+        rw: false,
+    };
+    for (i, op) in asm.operands.iter().enumerate() {
+        if op.seg != AsmSeg::None {
+            return None;
+        }
+        if op.is_output {
+            if !op.value || op.early_clobber || shape.out_fp.is_some() {
+                return None;
+            }
+            shape.out_fp = Some(match op.constraint {
+                C::Reg if op.width <= 8 => false,
+                C::Fp if op.width == 16 => true,
+                _ => return None,
+            });
+            shape.rw = op.is_rw;
+            continue;
+        }
+        match op.constraint {
+            C::Imm => {}
+            C::RegOrImm { reg: None, imm }
+                if asm_operand_const_at(func, args, i)
+                    .is_some_and(|v| crate::Compiler::x86_imm_alternative_accepts(imm, v)) => {}
+            C::Reg | C::RegOrImm { reg: None, .. } if op.width <= 8 => shape.gp_in += 1,
+            C::Fp if op.value && op.width == 16 && !op.static_arg => shape.fp_in += 1,
+            _ => return None,
+        }
+    }
+    let gp = bound_gp_scratch(asm, fixed, shape.gp_need()).len();
+    let fp = bound_fp_scratch(asm, fixed, target).len();
+    (gp >= shape.gp_need() && fp >= shape.fp_need()).then_some(shape)
+}
+
+/// The first `need` of [`BOUND_SCRATCH`] the statement neither clobbers
+/// nor `fixed` names.
+pub(super) fn bound_gp_scratch(
+    asm: &super::super::ir::AsmBlock,
+    fixed: super::FixedRegs,
+    need: usize,
+) -> alloc::vec::Vec<u8> {
+    BOUND_SCRATCH
+        .iter()
+        .copied()
+        .filter(|&r| asm.clobber_regs & (1 << r) == 0 && !fixed.has_gpr(r))
+        .take(need)
+        .collect()
+}
+
+/// The FP scratch outside the clobber list: the two reload registers, which
+/// a function with vector work saves where they are callee-saved.
+pub(super) fn bound_fp_scratch(
+    asm: &super::super::ir::AsmBlock,
+    fixed: super::FixedRegs,
+    target: Target,
+) -> alloc::vec::Vec<u8> {
+    super::ssa::reg_alloc::RegBanks::new(target, fixed).fp_scratch[..2]
+        .iter()
+        .copied()
+        .filter(|&r| {
+            r != super::ssa::reg_alloc::NO_FP_SCRATCH && asm.clobber_fp_regs & (1 << r) == 0
+        })
+        .collect()
+}
+
+/// Whether [`bound_shape`] binds the statement's operands.
+pub(crate) fn asm_binds_directly(
+    func: &FunctionSsa,
+    asm: &super::super::ir::AsmBlock,
+    args: &[u32],
+    fixed: super::FixedRegs,
+    target: Target,
+) -> bool {
+    bound_shape(func, asm, args, fixed, target).is_some()
+}
+
+/// A bound statement's operand values with the GP and FP registers each
+/// avoids: an input the clobbers and the scratch; the output, written once
+/// the inputs are read, the clobbers, and the scratch too when its input
+/// moves in ahead of the loads; that input, read by the move, the scratch.
+pub(crate) fn asm_site_bound_values(
+    func: &FunctionSsa,
+    asm: &super::super::ir::AsmBlock,
+    args: &[u32],
+    site: u32,
+    fixed: super::FixedRegs,
+    target: Target,
+) -> alloc::vec::Vec<(u32, u32, u32)> {
+    use super::super::ir::AsmConstraint as C;
+    let mut out = alloc::vec::Vec::new();
+    if crate::c5::asm::asm_statement_is_noop(asm, crate::c5::asm::AsmComments::X86) {
+        return out;
+    }
+    let Some(shape) = bound_shape(func, asm, args, fixed, target) else {
+        return out;
+    };
+    let scratch = shape.gp_scratch_mask(asm, fixed) & !fixed.gpr;
+    let (gpr, fpr) = (
+        asm.clobber_regs & !fixed.gpr,
+        asm.clobber_fp_regs & !fixed.fpr,
+    );
+    for (op, &a) in asm.operands.iter().zip(args) {
+        if !op.is_output {
+            if !op.static_arg && !matches!(op.constraint, C::Imm) {
+                out.push((a, gpr | scratch, fpr));
+            }
+        } else if op.is_rw {
+            out.push((site, gpr | scratch, fpr));
+            out.push((a, scratch, 0));
+        } else {
+            out.push((site, gpr, fpr));
+        }
+    }
+    out
 }
 
 /// A variadic callee under the Win64 host variadic ABI, the only x86_64

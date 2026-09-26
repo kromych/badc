@@ -30,10 +30,10 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x1c8, %rsp            # imm = 0x1C8
                	pushq	%rbx
-               	movl	$0x13, %ebx
-               	movl	$0x17, %ecx
-               	movd	%ebx, %xmm0
-               	movd	%ecx, %xmm1
+               	movl	$0x13, %r10d
+               	movl	$0x17, %r11d
+               	movd	%r10d, %xmm0
+               	movd	%r11d, %xmm1
                	paddd	%xmm1, %xmm0
                	movd	%xmm0, %eax
                	cmpl	$0x2a, %eax
@@ -70,8 +70,8 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	movl	$0x15, %ebx
-               	movd	%ebx, %xmm0
+               	movl	$0x15, %r10d
+               	movd	%r10d, %xmm0
                	pslld	$0x1, %xmm0
                	movd	%xmm0, %eax
                	cmpl	$0x2a, %eax
@@ -80,10 +80,10 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	movl	$0x7, %ebx
-               	movl	$0x2a, %ecx
-               	movd	%ebx, %xmm0
-               	movd	%ecx, %xmm1
+               	movl	$0x7, %r10d
+               	movl	$0x2a, %r11d
+               	movd	%r10d, %xmm0
+               	movd	%r11d, %xmm1
                	punpckldq	%xmm1, %xmm0    # xmm0 = xmm0[0],xmm1[0],xmm0[1],xmm1[1]
                	pshufd	$0x1, %xmm0, %xmm0      # xmm0 = xmm0[1,0,0,0]
                	movd	%xmm0, %eax
@@ -93,8 +93,8 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	movl	$0x2a, %ebx
-               	movq	%rbx, %xmm0
+               	movl	$0x2a, %r10d
+               	movq	%r10, %xmm0
                	movq	%xmm0, %rax
                	cmpq	$0x2a, %rax
                	je	<addr>

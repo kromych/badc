@@ -91,13 +91,132 @@ mod asm_scratch_tests {
                 crate::c5::codegen::Target::LinuxX64,
                 crate::c5::codegen::FixedRegs::NONE,
             );
-            asm_scratch_bytes(&func, &alloc, crate::c5::codegen::FixedRegs::NONE)
+            asm_scratch_bytes(
+                &func,
+                &alloc,
+                crate::c5::codegen::FixedRegs::NONE,
+                crate::c5::codegen::Target::LinuxX64,
+            )
         };
         assert_eq!(bytes("", 0), 0);
         assert_eq!(bytes("/* note */ ;", 0), 0);
         assert_eq!(bytes("nop", 0), 0);
         assert_eq!(bytes("nop", 1 << 5), 16);
         assert_eq!(bytes("", 1 << 5), 0);
+    }
+
+    /// A statement of `r` inputs and one value output binds its operands
+    /// to their values' registers and writes only its clobbers and the
+    /// scratch its loads may take: r10 and r11, then the caller-saved
+    /// registers as more inputs need them, none the statement clobbers. Its
+    /// inputs avoid both; a `=` output the clobbers alone, a `+` output both
+    /// and its input the scratch alone. A fixed, early-clobber or memory
+    /// operand, or a clobbered frame register, keeps the staged lowering,
+    /// whose operand registers the site writes.
+    #[test]
+    fn register_operands_bind_to_their_values() {
+        let target = crate::c5::codegen::Target::LinuxX64;
+        let fixed = crate::c5::codegen::FixedRegs::NONE;
+        let operand = |constraint: AsmConstraint, is_output: bool| AsmOperand {
+            constraint,
+            is_output,
+            is_rw: false,
+            width: 8,
+            seg: AsmSeg::None,
+            static_arg: false,
+            value: is_output,
+            volatile_object: false,
+            early_clobber: false,
+        };
+        let statement = |operands: alloc::vec::Vec<AsmOperand>, clobber_regs: u32| {
+            let n = operands.len();
+            let asm = AsmBlock {
+                template: b"nop".to_vec(),
+                operands,
+                clobber_regs,
+                clobber_fp_regs: 0,
+                clobber_memory: false,
+                volatile: true,
+            };
+            let mut insts: alloc::vec::Vec<Inst> = (0..n as i64).map(Inst::Imm).collect();
+            insts.push(Inst::InlineAsm {
+                asm: alloc::boxed::Box::new(asm),
+                args: (0..n as u32).collect(),
+            });
+            FunctionSsa {
+                insts,
+                ..Default::default()
+            }
+        };
+        let masks = |func: &FunctionSsa| {
+            let Inst::InlineAsm { asm, args } = &func.insts[func.insts.len() - 1] else {
+                unreachable!()
+            };
+            (
+                asm_binds_directly(func, asm, args, fixed, target),
+                asm_site_write_masks(func, asm, args, fixed, target),
+            )
+        };
+        let reg = |out: bool| operand(AsmConstraint::Reg, out);
+        let two_in = alloc::vec![reg(true), reg(false), reg(false)];
+        assert_eq!(
+            masks(&statement(two_in.clone(), 0)),
+            (true, ((1 << 10) | (1 << 11), 0))
+        );
+        let three_in = alloc::vec![reg(true), reg(false), reg(false), reg(false)];
+        assert_eq!(
+            masks(&statement(three_in.clone(), 0)),
+            (true, ((1 << 10) | (1 << 11) | (1 << 9), 0))
+        );
+        // r10 and r11 clobbered: the three inputs take r9, r8 and rdx.
+        let r10_r11 = (1 << 10) | (1 << 11);
+        let scratch = (1 << 9) | (1 << 8) | (1 << 2);
+        assert_eq!(
+            masks(&statement(three_in.clone(), r10_r11)),
+            (true, (r10_r11 | scratch, 0))
+        );
+        let avoid = |func: &FunctionSsa| {
+            let site = func.insts.len() - 1;
+            let Inst::InlineAsm { asm, args } = &func.insts[site] else {
+                unreachable!()
+            };
+            asm_site_bound_values(func, asm, args, site as u32, fixed, target)
+        };
+        let all = r10_r11 | scratch;
+        assert_eq!(
+            avoid(&statement(three_in.clone(), r10_r11)),
+            [(4, r10_r11, 0), (1, all, 0), (2, all, 0), (3, all, 0)]
+        );
+        let mut rw = alloc::vec![reg(true), reg(false)];
+        rw[0].is_rw = true;
+        assert_eq!(
+            avoid(&statement(rw, 1)),
+            [(2, 1 | r10_r11, 0), (0, r10_r11, 0), (1, 1 | r10_r11, 0)]
+        );
+        // Two `x` inputs bind; a third would need the FMA scratch, which a
+        // Win64 prologue saves only around a fused multiply-add.
+        let x = || AsmOperand {
+            width: 16,
+            value: true,
+            ..operand(AsmConstraint::Fp, false)
+        };
+        assert!(masks(&statement(alloc::vec![x(), x()], 0)).0);
+        assert!(!masks(&statement(alloc::vec![x(), x(), x()], 0)).0);
+        // rsp / rbp clobbered, a fixed register, an early-clobber output
+        // and a memory operand stage.
+        assert!(!masks(&statement(two_in.clone(), 1 << 5)).0);
+        assert!(!masks(&statement(two_in.clone(), 1 << 4)).0);
+        let mut fixed_in = two_in.clone();
+        fixed_in[1].constraint = AsmConstraint::Fixed(0);
+        assert!(!masks(&statement(fixed_in, 0)).0);
+        let mut early = two_in.clone();
+        early[0].early_clobber = true;
+        assert!(!masks(&statement(early, 0)).0);
+        let mut mem = two_in.clone();
+        mem[2].constraint = AsmConstraint::Mem;
+        let (bound, (gpr, _)) = masks(&statement(mem, 0));
+        assert!(!bound);
+        assert_ne!(gpr & 1, 0, "the staged lowering's first operand is rax");
     }
 }
 

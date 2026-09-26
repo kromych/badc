@@ -588,10 +588,10 @@ fn x86_c_operand_memory_reference_encodings_match_the_assembler() {
             "__asm__ volatile(\"movq %c1, %0\" : \"=r\"(v) : \"i\"(16));",
             &[0x48, 0x8B, 0x04, 0x25, 0x10, 0x00, 0x00, 0x00],
         ),
-        // movq %rax, %gs:0x18
+        // movq %r10, %gs:0x18 -- the constant loads into the operand scratch
         (
             "__asm__ volatile(\"movq %0, %%gs:%c1\" : : \"r\"(v), \"i\"(24) : \"memory\");",
-            &[0x65, 0x48, 0x89, 0x04, 0x25, 0x18, 0x00, 0x00, 0x00],
+            &[0x65, 0x4C, 0x89, 0x14, 0x25, 0x18, 0x00, 0x00, 0x00],
         ),
         // movl %gs:0x10, %eax -- the access width follows the suffix
         (
@@ -992,7 +992,8 @@ fn x86_register_or_immediate_operand_takes_a_constant_as_the_immediate() {
             &[0x49, 0x89, 0xC8],
             None,
         ),
-        // movq %r, %r8: `ri` with a non-constant, `rm` with a constant
+        // movq %r, %r8: `ri` with a non-constant; movq %r10, %r8: `rm` with a
+        // constant, loaded into the operand scratch
         (
             "__asm__ volatile(\"movq %0, %%r8\" : : \"ri\"(v) : \"r8\");",
             &[0x49, 0x89, 0xC0],
@@ -1000,8 +1001,8 @@ fn x86_register_or_immediate_operand_takes_a_constant_as_the_immediate() {
         ),
         (
             "__asm__ volatile(\"movq %0, %%r8\" : : \"rm\"(9L) : \"r8\");",
-            &[0x49, 0x89, 0xC0],
-            Some((2, 0xC7)),
+            &[0x4D, 0x89, 0xD0],
+            None,
         ),
         // addq $3, %r: 3 is within `I`
         (

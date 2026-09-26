@@ -35,8 +35,7 @@ Disassembly of section .text:
                	movl	$0x0, %ebx
                	movl	$0x0, %ecx
                	movl	$0x0, %edx
-               	movq	%rsi, %rax
-               	cmpl	$0x1234, %eax           # imm = 0x1234
+               	cmpl	$0x1234, %esi           # imm = 0x1234
                	jne	<addr>
                	movl	$0x2a, %eax
                	popq	%rbx

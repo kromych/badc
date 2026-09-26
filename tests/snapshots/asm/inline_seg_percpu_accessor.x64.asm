@@ -107,33 +107,33 @@ Disassembly of section .text:
                	retq
                	movq	(%rcx), %rcx
                	movq	(%rax), %rax
-               	addq	%rax, %rcx
-               	movq	%gs:(%rcx), %rdx
+               	addq	%rcx, %rax
+               	movq	%gs:(%rax), %rcx
                	pushfq
-               	popq	%rax
-               	movq	%gs:(%rcx), %rsi
+               	popq	%rdx
+               	movq	%gs:(%rax), %rsi
                	movabsq	$0x1122334455667788, %r11 # imm = 0x1122334455667788
-               	movq	%rdx, %rdi
-               	cmpq	%r11, %rdx
+               	movq	%rcx, %rdi
+               	cmpq	%r11, %rcx
                	jne	<addr>
-               	cmpq	%rdx, %rsi
+               	cmpq	%rcx, %rsi
                	je	<addr>
                	movl	$0xe, %eax
                	retq
-               	testq	%rax, %rax
+               	testq	%rdx, %rdx
                	jne	<addr>
                	movl	$0xf, %eax
                	retq
-               	movabsq	$-0x5a5a5a5a5a5a5a5b, %rax # imm = 0xA5A5A5A5A5A5A5A5
-               	leaq	0x38(%rcx), %rdx
-               	movq	%rax, %gs:(%rdx)
+               	movabsq	$-0x5a5a5a5a5a5a5a5b, %rcx # imm = 0xA5A5A5A5A5A5A5A5
+               	leaq	0x38(%rax), %rdx
+               	movq	%rcx, %gs:(%rdx)
                	pushfq
-               	popq	%rax
-               	testq	%rax, %rax
+               	popq	%rcx
+               	testq	%rcx, %rcx
                	jne	<addr>
                	movl	$0x10, %eax
                	retq
-               	leaq	0x38(%rcx), %rax
+               	addq	$0x38, %rax
                	movq	%gs:(%rax), %rcx
                	incq	%rcx
                	movq	%rcx, %gs:(%rax)

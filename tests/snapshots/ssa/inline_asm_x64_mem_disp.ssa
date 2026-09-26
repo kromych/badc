@@ -1,7 +1,7 @@
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=main
 fn ent_pc=0 n_params=0 variadic=false locals=0
-  spill_count=0 gpr_used=[3, 12, 13] fp_used=[]
+  spill_count=0 gpr_used=[12, 13] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ImmData(16)                                      -> x0
@@ -93,8 +93,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
   block 16  start_pc=0
     v56  ImmData(16)                                      -> x1
     v57  Imm(256)                                         -> x1
-    v58  BinopI { op=add, lhs=v44, rhs_imm=256 }          -> x1
-    v59  Imm(-1148998387256922099)                        -> x0
+    v58  BinopI { op=add, lhs=v44, rhs_imm=256 }          -> x0
+    v59  Imm(-1148998387256922099)                        -> x1
     v60  InlineAsm { template="mov %0, %%r12\n\tmov %0, %%r13\n\tmovq %1, (%%r12)\n\tmovq %1, 8(%%r12)\n\tmovq %1, 16(%%r13)\n\tmovq %1, -8(%%r13)\n\t", ops=2, args=[v58, v59] } -> -
     v61  Load { addr=v58, disp=0, kind=I64 }              -> x0
     v62  BinopI { op=ne, lhs=v61, rhs_imm=-1148998387256922099 } -> x0
@@ -144,9 +144,9 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v88  Imm(13)                                          -> x0
     terminator Return(v88)   (exit_acc=v88)
   block 26  start_pc=0
-    v89  ImmData(528)                                     -> x1
+    v89  ImmData(528)                                     -> x0
     v90  InlineAsm { template="mov %%rax, (%%rax)", ops=1, args=[v89] } -> -
-    v91  Load { addr=v89, disp=0, kind=I64 }              -> x0
+    v91  Load { addr=v89, disp=0, kind=I64 }              -> x1
     v92  Binop { op=ne, lhs=v91, rhs=v89 }                -> x0
     terminator Bz { cond=v92, target=b28, fall=b27 }   (exit_acc=v92)
   block 27  start_pc=0

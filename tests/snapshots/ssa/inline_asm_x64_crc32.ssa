@@ -535,17 +535,17 @@ fn ent_pc=12 n_params=0 variadic=false locals=3
     v205 Imm(17)                                          -> x1
     v206 Imm(17)                                          -> x1
     v207 BinopI { op=and, lhs=v198, rhs_imm=4294967295 }  -> x0
-    v208 InlineAsm { template="crc32b %1, %0", ops=2, args=[v207, v206] } -> x1
-    v209 BinopI { op=and, lhs=v208, rhs_imm=4294967295 }  -> x0
-    v210 BinopI { op=and, lhs=v208, rhs_imm=4294967295 }  -> x0
-    v211 Imm(0)                                           -> x0
-    v212 BinopI { op=and, lhs=v208, rhs_imm=4294967295 }  -> x0
-    v213 Imm(4294967295)                                  -> x0
-    v214 Imm(0)                                           -> x0
-    v215 Imm(4294967295)                                  -> x0
-    v216 Imm(287454020)                                   -> x0
-    v217 Imm(4294967295)                                  -> x0
-    v218 InlineAsm { template="crc32l %1, %0", ops=2, args=[v217, v216] } -> x0
+    v208 InlineAsm { template="crc32b %1, %0", ops=2, args=[v207, v206] } -> x0
+    v209 BinopI { op=and, lhs=v208, rhs_imm=4294967295 }  -> x1
+    v210 BinopI { op=and, lhs=v208, rhs_imm=4294967295 }  -> x1
+    v211 Imm(0)                                           -> x1
+    v212 BinopI { op=and, lhs=v208, rhs_imm=4294967295 }  -> x1
+    v213 Imm(4294967295)                                  -> x1
+    v214 Imm(0)                                           -> x1
+    v215 Imm(4294967295)                                  -> x1
+    v216 Imm(287454020)                                   -> x1
+    v217 Imm(4294967295)                                  -> x1
+    v218 InlineAsm { template="crc32l %1, %0", ops=2, args=[v217, v216] } -> x1
     v219 BinopI { op=and, lhs=v218, rhs_imm=4294967295 }  -> x2
     v220 BinopI { op=and, lhs=v218, rhs_imm=4294967295 }  -> x2
     v221 Binop { op=ne, lhs=v208, rhs=v218 }              -> x0

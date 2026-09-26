@@ -119,6 +119,7 @@ const TARGET_SPECIFIC_ASM: &[(&str, &str)] = &[
     ("inline_asm_x64_label_directive.c", "linux-aarch64"), // x86-64 label sharing a directive statement
     ("inline_asm_x64_setcc.c", "linux-aarch64"),           // x86-64 setcc
     ("inline_asm_x64_cmov.c", "linux-aarch64"),            // x86-64 cmovcc
+    ("inline_asm_x64_bound_operands.c", "linux-aarch64"),  // x86-64 bound register operands
     ("inline_asm_x64_cdqe.c", "linux-aarch64"),            // x86-64 cdqe
     ("inline_asm_x64_movnti.c", "linux-aarch64"),          // x86-64 movnti/sfence
     ("inline_asm_x64_raid6_syndrome.c", "linux-aarch64"),  // x86-64 AVX2 / AVX-512 RAID-6 syndrome

@@ -529,6 +529,47 @@ fn atomic_apart(
     }
 }
 
+/// Keep a bound x86-64 inline asm statement's read-write output off its
+/// other inputs' registers, which its input's move would copy aside first.
+fn asm_rw_apart(
+    func: &FunctionSsa,
+    target: Target,
+    fixed: FixedRegs,
+    node_of: &[ValueId],
+    apart: &mut Vec<Vec<ValueId>>,
+) {
+    use crate::c5::ir::AsmConstraint;
+    for (v, inst) in func.insts.iter().enumerate() {
+        let Inst::InlineAsm { asm, args } = inst else {
+            continue;
+        };
+        let Some(k) = asm
+            .operands
+            .iter()
+            .position(|o| o.is_output && o.is_rw && o.value)
+        else {
+            continue;
+        };
+        if !super::super::x86_64::emit::asm_binds_directly(func, asm, args, fixed, target) {
+            continue;
+        }
+        if apart.is_empty() {
+            apart.resize(func.insts.len(), Vec::new());
+        }
+        let (a, tied) = (node_of[v], node_of[args[k] as usize]);
+        for (op, &arg) in asm.operands.iter().zip(args) {
+            if op.is_output || op.static_arg || matches!(op.constraint, AsmConstraint::Imm) {
+                continue;
+            }
+            let b = node_of[arg as usize];
+            if a != b && b != tied && !apart[a as usize].contains(&b) {
+                apart[a as usize].push(b);
+                apart[b as usize].push(a);
+            }
+        }
+    }
+}
+
 /// Whether x86-64 lowers a read-modify-write of `op` whose prior contents
 /// are read as a `CMPXCHG` retry: the bitwise operators, which have no
 /// fetching locked form.
@@ -1060,6 +1101,9 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
         (Vec::new(), Vec::new())
     };
     atomic_apart(func, target, &node_of, &mut apart);
+    if target.is_x86_64() {
+        asm_rw_apart(func, target, fixed, &node_of, &mut apart);
+    }
     let value_is_fp: Vec<bool> = func
         .insts
         .iter()
@@ -1685,21 +1729,33 @@ fn asm_live_values(
     }
     let live = liveness.values_live_after(func, &|inst| matches!(inst, Inst::InlineAsm { .. }));
     live.into_iter()
-        .map(|(site, mut values)| {
-            let (gpr, fpr) = match &func.insts[site as usize] {
-                Inst::InlineAsm { asm, args } => {
-                    late_read_args(asm, args, &mut values);
-                    if target.is_aarch64() {
-                        values.extend(super::super::aarch64::emit::asm_site_bound_values(
-                            func, asm, args, site, fixed,
-                        ));
-                        values.sort_unstable();
-                        values.dedup();
-                    }
-                    asm_write_masks(func, asm, args, target, fixed)
-                }
-                _ => (0, 0),
+        .map(|(site, mut live)| {
+            let Inst::InlineAsm { asm, args } = &func.insts[site as usize] else {
+                return AsmSite {
+                    gpr: 0,
+                    fpr: 0,
+                    values: Vec::new(),
+                };
             };
+            late_read_args(asm, args, &mut live);
+            let (gpr, fpr) = asm_write_masks(func, asm, args, target, fixed);
+            let mut values: Vec<(ValueId, u32, u32)> =
+                live.into_iter().map(|v| (v, gpr, fpr)).collect();
+            if target.is_aarch64() {
+                values.extend(
+                    super::super::aarch64::emit::asm_site_bound_values(
+                        func, asm, args, site, fixed,
+                    )
+                    .into_iter()
+                    .map(|v| (v, gpr, fpr)),
+                );
+            } else {
+                values.extend(super::super::x86_64::emit::asm_site_bound_values(
+                    func, asm, args, site, fixed, target,
+                ));
+            }
+            values.sort_unstable();
+            values.dedup();
             AsmSite { gpr, fpr, values }
         })
         .collect()
@@ -1722,13 +1778,13 @@ fn late_read_args(asm: &crate::c5::ir::AsmBlock, args: &[u32], values: &mut Vec<
     values.sort_unstable();
 }
 
-/// One inline-asm site: the registers its lowering writes and the values
-/// that must not sit in one -- those live across it and, where its operands
-/// bind directly, the operands themselves.
+/// One inline-asm site: the registers its lowering writes, and each value
+/// kept out of some of them, with its masks: all of them for those live
+/// across it, the target's choice for bound operands.
 struct AsmSite {
     gpr: u32,
     fpr: u32,
-    values: Vec<ValueId>,
+    values: Vec<(ValueId, u32, u32)>,
 }
 
 /// The registers an inline-asm statement's lowering writes on `target`:
@@ -1744,13 +1800,13 @@ fn asm_write_masks(
     if target.is_aarch64() {
         super::super::aarch64::emit::asm_site_write_masks(func, asm, args, fixed)
     } else {
-        super::super::x86_64::emit::asm_site_write_masks(func, asm, args, fixed)
+        super::super::x86_64::emit::asm_site_write_masks(func, asm, args, fixed, target)
     }
 }
 
-/// Union of the register masks of the inline-asm sites a value is live
-/// across, by phi-congruence-class root: the colorer must not place the
-/// class in one, or a block would destroy the value. Indexed by root
+/// Union of the register masks the inline-asm sites give a value
+/// ([`AsmSite`]), by phi-congruence-class root: the colorer must not place
+/// the class in one, or a block would destroy the value. Indexed by root
 /// rather than by value because a class shares one place, and a member
 /// whose own instruction yields no result still reads that place. Empty
 /// when no site writes a register.
@@ -1760,10 +1816,10 @@ fn asm_forbid_masks(func: &FunctionSsa, sites: &[AsmSite], node_of: &[ValueId]) 
     }
     let mut out = alloc::vec![(0u32, 0u32); func.insts.len()];
     for s in sites {
-        for &v in &s.values {
+        for &(v, gpr, fpr) in &s.values {
             let entry = &mut out[node_of[v as usize] as usize];
-            entry.0 |= s.gpr;
-            entry.1 |= s.fpr;
+            entry.0 |= gpr;
+            entry.1 |= fpr;
         }
     }
     out

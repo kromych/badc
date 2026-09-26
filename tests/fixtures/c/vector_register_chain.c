@@ -28,13 +28,13 @@ static inline void v_store(unsigned char *p, vec v) {
     __asm__("movdqu %1, %0" : "=m"(p[0]) : "x"(v));
 }
 static inline vec v_xor(vec a, vec b) {
-    vec r;
-    __asm__("movdqa %1, %0\n\tpxor %2, %0" : "=x"(r) : "x"(a), "x"(b));
+    vec r = a;
+    __asm__("pxor %1, %0" : "+x"(r) : "x"(b));
     return r;
 }
 static inline vec v_and(vec a, vec b) {
-    vec r;
-    __asm__("movdqa %1, %0\n\tpand %2, %0" : "=x"(r) : "x"(a), "x"(b));
+    vec r = a;
+    __asm__("pand %1, %0" : "+x"(r) : "x"(b));
     return r;
 }
 static inline vec v_shl1(vec a) {
@@ -44,7 +44,7 @@ static inline vec v_shl1(vec a) {
 }
 static inline vec v_mask(vec a) {
     vec r;
-    __asm__("pxor %0, %0\n\tpcmpgtb %1, %0" : "=x"(r) : "x"(a));
+    __asm__("pxor %0, %0\n\tpcmpgtb %1, %0" : "=&x"(r) : "x"(a));
     return r;
 }
 static inline vec v_dup(unsigned char x) {

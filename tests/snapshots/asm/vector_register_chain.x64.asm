@@ -90,31 +90,21 @@ Disassembly of section .text:
                	movq	(%r12,%rsi,8), %rax
                	addq	%rbx, %rax
                	movdqu	(%rax), %xmm0
-               	movapd	%xmm0, %xmm3
-               	movapd	%xmm3, %xmm2
-               	movups	0x40(%rsp), %xmm1
-               	movdqa	%xmm1, %xmm0
-               	pxor	%xmm2, %xmm0
-               	movups	%xmm0, -0x30(%rbp)
+               	movapd	%xmm0, %xmm2
+               	movups	0x40(%rsp), %xmm14
+               	pxor	%xmm2, %xmm14
+               	movups	%xmm14, -0x30(%rbp)
                	movups	0x50(%rsp), %xmm1
                	pxor	%xmm0, %xmm0
                	pcmpgtb	%xmm1, %xmm0
-               	movapd	%xmm0, %xmm1
-               	movups	0x50(%rsp), %xmm0
-               	paddb	%xmm0, %xmm0
-               	movapd	%xmm0, %xmm4
-               	movups	0x30(%rsp), %xmm2
-               	movdqa	%xmm1, %xmm0
-               	pand	%xmm2, %xmm0
-               	movapd	%xmm4, %xmm1
-               	movapd	%xmm0, %xmm2
-               	movdqa	%xmm1, %xmm0
-               	pxor	%xmm2, %xmm0
-               	movapd	%xmm0, %xmm1
-               	movapd	%xmm3, %xmm2
-               	movdqa	%xmm1, %xmm0
-               	pxor	%xmm2, %xmm0
-               	movups	%xmm0, -0x20(%rbp)
+               	movups	0x50(%rsp), %xmm1
+               	paddb	%xmm1, %xmm1
+               	movups	0x30(%rsp), %xmm14
+               	pand	%xmm14, %xmm0
+               	pxor	%xmm0, %xmm1
+               	movapd	%xmm1, %xmm14
+               	pxor	%xmm2, %xmm14
+               	movups	%xmm14, -0x20(%rbp)
                	decq	%rsi
                	testl	%esi, %esi
                	jge	<addr>
@@ -128,8 +118,8 @@ Disassembly of section .text:
                	leaq	(%r15,%rbx), %rax
                	movups	0x50(%rsp), %xmm0
                	movdqu	%xmm0, (%rax)
-               	movups	0x50(%rsp), %xmm0
-               	movq	%xmm0, %rax
+               	movups	0x50(%rsp), %xmm14
+               	movq	%xmm14, %rax
                	andq	$0xff, %rax
                	leaq	(%rcx,%rax), %r13
                	addq	$0x10, %rbx

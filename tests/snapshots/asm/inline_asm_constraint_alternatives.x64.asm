@@ -57,8 +57,8 @@ Disassembly of section .text:
                	leave
                	retq
                	movl	$0xa, %eax
-               	movl	$0x20, %ebx
-               	addq	%rbx, %rax
+               	movl	$0x20, %r10d
+               	addq	%r10, %rax
                	cmpq	$0x2a, %rax
                	je	<addr>
                	movl	$0x4, %eax

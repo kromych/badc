@@ -2204,6 +2204,7 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("dead_reads_across_calls.c", 0),
     ("inline_asm_x64_setcc.c", 42),
     ("inline_asm_x64_cmov.c", 42),
+    ("inline_asm_x64_bound_operands.c", 42),
     ("inline_asm_x64_cdqe.c", 42),
     ("inline_asm_x64_movnti.c", 42),
     ("inline_asm_x64_raid6_syndrome.c", 0),

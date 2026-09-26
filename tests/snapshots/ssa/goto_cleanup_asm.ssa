@@ -321,14 +321,14 @@ fn ent_pc=8 n_params=0 variadic=false locals=0
     v119 ImmData(32)                                      -> x1
     v120 Store { addr=v103, disp=0, value=v117, kind=I8 } -> -
     v121 Imm(1)                                           -> x0
-    v122 Imm(1)                                           -> x1
-    v123 Imm(0)                                           -> x0
-    v124 Imm(1)                                           -> x0
-    v125 Imm(0)                                           -> x0
-    v126 Imm(0)                                           -> x0
-    v127 Imm(1)                                           -> x0
-    v128 Imm(1)                                           -> x0
-    v129 Imm(1)                                           -> x0
+    v122 Imm(1)                                           -> x0
+    v123 Imm(0)                                           -> x1
+    v124 Imm(1)                                           -> x1
+    v125 Imm(0)                                           -> x1
+    v126 Imm(0)                                           -> x1
+    v127 Imm(1)                                           -> x1
+    v128 Imm(1)                                           -> x1
+    v129 Imm(1)                                           -> x1
     v130 InlineAsm { template="cmpl $1, %0; je %l0", ops=1, args=[v122] } -> -
     terminator AsmGoto { table=0 }   [b22, b33]
   block 22  start_pc=0
@@ -342,13 +342,13 @@ fn ent_pc=8 n_params=0 variadic=false locals=0
     v146 Imm(20)                                          -> x0
     v147 Imm(20)                                          -> x0
     v148 Imm(31)                                          -> x0
-    v149 Imm(31)                                          -> x1
+    v149 Imm(31)                                          -> x0
     terminator Jmp(b23)
   block 23  start_pc=0
-    v150 Phi { incoming=[b22:v149, b33:v122], kind=I64 }  -> x1
-    v151 Extend { value=v150, kind=I32 }                  -> x0
-    v152 Extend { value=v150, kind=I32 }                  -> x0
-    v153 Extend { value=v150, kind=I32 }                  -> x0
+    v150 Phi { incoming=[b22:v149, b33:v122], kind=I64 }  -> x0
+    v151 Extend { value=v150, kind=I32 }                  -> x1
+    v152 Extend { value=v150, kind=I32 }                  -> x1
+    v153 Extend { value=v150, kind=I32 }                  -> x1
     v154 BinopI { op=eq, lhs=v150, rhs_imm=1 }            -> x1
     v155 Extend { value=v154, kind=I32 }                  -> x0
     v156 ImmData(56)                                      -> x0
@@ -371,14 +371,14 @@ fn ent_pc=8 n_params=0 variadic=false locals=0
     terminator Jmp(b26)   (exit_acc=v168)
   block 26  start_pc=0
     v6   Imm(0)                                           -> x0
-    v7   Imm(0)                                           -> x1
-    v8   Imm(0)                                           -> x0
-    v9   Imm(0)                                           -> x0
-    v10  Imm(0)                                           -> x0
-    v11  Imm(0)                                           -> x0
-    v12  Imm(0)                                           -> x0
-    v13  Imm(0)                                           -> x0
-    v14  Imm(0)                                           -> x0
+    v7   Imm(0)                                           -> x0
+    v8   Imm(0)                                           -> x1
+    v9   Imm(0)                                           -> x1
+    v10  Imm(0)                                           -> x1
+    v11  Imm(0)                                           -> x1
+    v12  Imm(0)                                           -> x1
+    v13  Imm(0)                                           -> x1
+    v14  Imm(0)                                           -> x1
     v15  InlineAsm { template="cmpl $1, %0; je %l0", ops=1, args=[v7] } -> -
     terminator AsmGoto { table=1 }   [b27, b32]
   block 27  start_pc=0
@@ -392,13 +392,13 @@ fn ent_pc=8 n_params=0 variadic=false locals=0
     v176 Imm(20)                                          -> x0
     v177 Imm(20)                                          -> x0
     v178 Imm(30)                                          -> x0
-    v179 Imm(30)                                          -> x1
+    v179 Imm(30)                                          -> x0
     terminator Jmp(b28)
   block 28  start_pc=0
-    v180 Phi { incoming=[b27:v179, b32:v7], kind=I64 }    -> x1
-    v181 Extend { value=v180, kind=I32 }                  -> x0
-    v182 Extend { value=v180, kind=I32 }                  -> x0
-    v183 Extend { value=v180, kind=I32 }                  -> x0
+    v180 Phi { incoming=[b27:v179, b32:v7], kind=I64 }    -> x0
+    v181 Extend { value=v180, kind=I32 }                  -> x1
+    v182 Extend { value=v180, kind=I32 }                  -> x1
+    v183 Extend { value=v180, kind=I32 }                  -> x1
     v184 BinopI { op=eq, lhs=v180, rhs_imm=30 }           -> x1
     v185 Extend { value=v184, kind=I32 }                  -> x0
     v186 ImmData(56)                                      -> x0

@@ -26,51 +26,45 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x8, %rsp
-               	pushq	%rbx
-               	movl	$0x5, %ebx
-               	movl	$0x5, %ecx
-               	cmpq	%rcx, %rbx
+               	movl	$0x5, %r10d
+               	movl	$0x5, %r11d
+               	cmpq	%r11, %r10
                	sete	%al
                	andq	$0xff, %rax
-               	imulq	$0x14, %rax, %rdx
-               	movl	$0x3, %ebx
-               	movl	$0x7, %ecx
-               	cmpq	%rcx, %rbx
-               	setl	%al
-               	andq	$0xff, %rax
-               	imulq	$0xf, %rax, %rax
-               	addq	%rax, %rdx
-               	movl	$0x9, %ebx
-               	movl	$0x4, %ecx
-               	cmpq	%rcx, %rbx
-               	setg	%al
-               	andq	$0xff, %rax
-               	imulq	$0x7, %rax, %rax
-               	addq	%rax, %rdx
-               	movl	$0x1, %ebx
-               	movl	$0x2, %ecx
-               	cmpq	%rcx, %rbx
-               	sete	%al
-               	andq	$0xff, %rax
-               	imulq	$0x64, %rax, %rax
-               	addq	%rax, %rdx
-               	movl	$0x9, %ebx
-               	movl	$0x3, %ecx
-               	cmpq	%rcx, %rbx
-               	setl	%al
-               	andq	$0xff, %rax
-               	imulq	$0x64, %rax, %rax
-               	addq	%rax, %rdx
-               	movl	$0x4, %ebx
-               	movl	$0x9, %ecx
-               	cmpq	%rcx, %rbx
-               	setg	%al
-               	andq	$0xff, %rax
-               	imulq	$0x64, %rax, %rax
-               	addq	%rdx, %rax
-               	popq	%rbx
-               	leave
+               	imulq	$0x14, %rax, %rax
+               	movl	$0x3, %r10d
+               	movl	$0x7, %r11d
+               	cmpq	%r11, %r10
+               	setl	%cl
+               	andq	$0xff, %rcx
+               	imulq	$0xf, %rcx, %rcx
+               	addq	%rcx, %rax
+               	movl	$0x9, %r10d
+               	movl	$0x4, %r11d
+               	cmpq	%r11, %r10
+               	setg	%cl
+               	andq	$0xff, %rcx
+               	imulq	$0x7, %rcx, %rcx
+               	addq	%rcx, %rax
+               	movl	$0x1, %r10d
+               	movl	$0x2, %r11d
+               	cmpq	%r11, %r10
+               	sete	%cl
+               	andq	$0xff, %rcx
+               	imulq	$0x64, %rcx, %rcx
+               	addq	%rcx, %rax
+               	movl	$0x9, %r10d
+               	movl	$0x3, %r11d
+               	cmpq	%r11, %r10
+               	setl	%cl
+               	andq	$0xff, %rcx
+               	imulq	$0x64, %rcx, %rcx
+               	addq	%rcx, %rax
+               	movl	$0x4, %r10d
+               	movl	$0x9, %r11d
+               	cmpq	%r11, %r10
+               	setg	%cl
+               	andq	$0xff, %rcx
+               	imulq	$0x64, %rcx, %rcx
+               	addq	%rcx, %rax
                	retq

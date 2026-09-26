@@ -191,8 +191,9 @@ pub struct StructDef {
 /// index in `StructDef::fields` of the first named member declared
 /// after it, `unit` the declared type's size in bytes, and `width` the
 /// requested bit count -- 0 for the C99 6.7.2.1p11 form that only ends
-/// the current storage unit. `align` is the unit's MS-layout alignment and
-/// `explicit_align` the one its attributes ask for, 0 when none.
+/// the current storage unit. `align` is the unit's MS-layout alignment,
+/// `explicit_align` the one its attributes ask for and `type_align` the
+/// one a typedef gives its type, each 0 when none.
 #[derive(Debug, Clone, Copy)]
 pub struct AnonBitfield {
     pub before: u32,
@@ -200,6 +201,18 @@ pub struct AnonBitfield {
     pub unit: u8,
     pub align: u8,
     pub explicit_align: u32,
+    pub type_align: u32,
+}
+
+impl AnonBitfield {
+    /// The declared type's alignment in GCC's layout: a typedef's, or the size.
+    pub fn declared_align(&self) -> usize {
+        if self.type_align > 0 {
+            self.type_align as usize
+        } else {
+            self.unit as usize
+        }
+    }
 }
 
 /// One member promoted from an anonymous struct/union (C11 6.7.2.1p13).
@@ -434,6 +447,9 @@ pub struct StructField {
     /// packed struct), so the re-lay path needs the request preserved.
     /// The MS layout adds what the field's type requires.
     pub explicit_align: u32,
+    /// For a bit-field, the alignment a typedef gives its type, 0 when
+    /// none; the MS layout keeps it through packing.
+    pub type_align: u32,
     /// Alignment the layout placed this field at, including a
     /// typedef-carried `aligned(N)` the flat field type cannot express.
     /// `__alignof__` on a member lvalue reports it. A bit-field records

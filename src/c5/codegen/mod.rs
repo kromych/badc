@@ -311,15 +311,11 @@ impl Target {
         matches!(self, Target::LinuxAarch64)
     }
 
-    /// The boundary `#pragma pack(pack)` keeps for a bit-field that asks
-    /// for `align`, 0 for none: GCC caps the request at the pack value and
-    /// clang drops one above it. Linux takes GCC's rule, macOS clang's.
-    pub fn packed_bitfield_align(self, align: usize, pack: usize) -> usize {
-        if matches!(self, Target::LinuxX64 | Target::LinuxAarch64) || align <= pack {
-            align.min(pack)
-        } else {
-            0
-        }
+    /// Whether bit-fields follow GCC where it and clang part: a request above
+    /// `#pragma pack(N)` is capped at N, not dropped, and a type aligned beyond
+    /// its size moves the field to that boundary. Linux follows GCC, macOS clang.
+    pub fn gcc_bitfields(self) -> bool {
+        matches!(self, Target::LinuxX64 | Target::LinuxAarch64)
     }
 
     /// Whether aggregates take the MS record layout, the PE targets' C ABI

@@ -81,7 +81,8 @@ pub(super) enum Packing {
 /// placement, before its own type is consulted.
 struct MemberShape {
     is_union: bool,
-    /// The bit-field width, 0 for a member that is not one.
+    /// The bit-field width: 0 for a member that is not one, and for an
+    /// unnamed one that only closes the storage unit.
     bit_width: u32,
     /// `__attribute__((packed))` on the aggregate or on the member.
     attr_packed: bool,
@@ -267,16 +268,15 @@ impl Compiler {
                     unit_ty = self.apply_mode_to_type(unit_ty, m)?;
                 }
                 let own_packed = core::mem::take(&mut self.pending.attr_packed);
-                let explicit = group_align.max(self.take_member_align()?.max(0) as usize);
-                self.place_anonymous_bitfield(
-                    struct_id,
-                    unit_ty,
-                    width,
+                let shape = MemberShape {
                     is_union,
-                    packed || group_packed || own_packed,
-                    explicit,
-                    layout,
-                );
+                    bit_width: width,
+                    attr_packed: packed || group_packed || own_packed,
+                    group_align,
+                    decl_align: self.take_member_align()?.max(0) as usize,
+                    type_align_override,
+                };
+                self.place_anonymous_bitfield(struct_id, unit_ty, &shape, layout);
                 if self.lex.tk == ',' {
                     self.next()?;
                     continue;
@@ -456,6 +456,11 @@ impl Compiler {
                 anon_union_group: 0,
                 anon_struct_group: 0,
                 explicit_align: placement.required as u32,
+                type_align: if bit_width > 0 {
+                    type_align_override as u32
+                } else {
+                    0
+                },
                 align: placed_align as u32,
                 decl_spelling: field_spelling,
             });
@@ -470,20 +475,24 @@ impl Compiler {
     }
 
     /// An anonymous bitfield (`int :N;`) reserves bits without naming a
-    /// member. A zero width aligns the next member to the start of the next
-    /// storage unit of the declared type (C99 6.7.2.1p11). `explicit` is
-    /// the alignment its attributes ask for, 0 when none.
-    #[allow(clippy::too_many_arguments)]
+    /// member. A zero width aligns the next member to the next boundary of
+    /// the declared type's alignment (C99 6.7.2.1p11).
     fn place_anonymous_bitfield(
         &mut self,
         struct_id: usize,
         field_base: i64,
-        width: u32,
-        is_union: bool,
-        packed: bool,
-        explicit: usize,
+        shape: &MemberShape,
         layout: &mut AggregateLayout,
     ) {
+        let &MemberShape {
+            is_union,
+            bit_width: width,
+            attr_packed: packed,
+            group_align,
+            decl_align,
+            type_align_override,
+        } = shape;
+        let explicit = group_align.max(decl_align);
         let unit = self.size_of_type(field_base).max(1);
         let ms_align = if packed {
             1
@@ -493,14 +502,16 @@ impl Compiler {
         // Recorded so the post-body `packed` re-lay reproduces
         // the same placement: the member has no name, so
         // `fields` cannot carry it.
-        let before = self.structs[struct_id].fields.len() as u32;
-        self.structs[struct_id].anon_bitfields.push(AnonBitfield {
-            before,
+        let record = AnonBitfield {
+            before: self.structs[struct_id].fields.len() as u32,
             width,
             unit: unit.min(u8::MAX as usize) as u8,
             align: ms_align.clamp(1, u8::MAX as usize) as u8,
             explicit_align: explicit as u32,
-        });
+            type_align: type_align_override as u32,
+        };
+        let type_align = record.declared_align();
+        self.structs[struct_id].anon_bitfields.push(record);
         if width == 0 {
             // C99 6.7.2.1p11: a width-zero bitfield aligns
             // the next field to the start of the next
@@ -509,7 +520,7 @@ impl Compiler {
                 if !layout.bf_active {
                     layout.bf_bit_cursor = layout.offset * 8;
                 }
-                layout.bf_bit_cursor = round_up(layout.bf_bit_cursor, unit.max(explicit) * 8);
+                layout.bf_bit_cursor = round_up(layout.bf_bit_cursor, type_align.max(explicit) * 8);
                 layout.offset = layout.offset.max(layout.bf_bit_cursor / 8);
             }
             layout.bf_active = false;
@@ -523,13 +534,8 @@ impl Compiler {
             layout.offset = layout.offset.max(layout.bf_bit_cursor.div_ceil(8));
         } else {
             align_bit_cursor(layout, explicit);
-            place_bitfield(
-                &mut layout.offset,
-                &mut layout.bf_active,
-                &mut layout.bf_bit_cursor,
-                unit,
-                width,
-            );
+            let gcc = self.target.gcc_bitfields();
+            place_bitfield(layout, unit, type_align, width, gcc);
         }
         // Whether an unnamed bit-field's declared type raises
         // the aggregate's alignment is target-defined. Where
@@ -538,13 +544,13 @@ impl Compiler {
         // keeps its boundary regardless.
         if self.target.align_anon_bitfield() {
             let cap = if width == 0 {
-                16
+                super::MAX_STATIC_ALIGN
             } else if packed {
                 1
             } else {
                 self.lex.current_pack()
             };
-            layout.align = layout.align.max(unit.min(16).min(cap)).max(explicit);
+            layout.align = layout.align.max(type_align.min(cap)).max(explicit);
         }
     }
 
@@ -609,33 +615,43 @@ impl Compiler {
         // Placement alignment of a non-bitfield member, recorded on
         // the field so `__alignof__` on a member lvalue reports it.
         if bit_width > 0 {
+            // GCC's layout takes a typedef's alignment either way, MS a raise.
+            let pack = self.lex.current_pack();
+            let size = self.size_of_type(field_ty).max(1);
+            let natural = self.align_of_type(field_ty);
+            let type_align = if type_align_override > 0 {
+                type_align_override
+            } else {
+                natural
+            };
+            required = group_align.max(decl_align);
+            let typedef_raise = if ms { type_align_override } else { 0 };
             placed_align = if attr_packed {
                 1
+            } else if ms {
+                natural.min(pack)
             } else {
-                self.align_of_type(field_ty).min(self.lex.current_pack())
+                type_align.min(pack)
             }
-            .max(group_align)
-            .max(decl_align);
-            required = group_align.max(decl_align);
-            let pack = self.lex.current_pack();
+            .max(required)
+            .max(typedef_raise);
             layout.explicit = layout
                 .explicit
                 .max(if ms { required } else { required.min(pack) });
             layout.align = layout.align.max(required);
             if is_union {
-                // C99 6.7.2.1: a union bitfield occupies one
-                // storage unit of its declared type; size and
-                // align the union to it, as the non-bitfield path does.
-                // A packed one takes only the bytes its bits reach (GCC).
+                // C99 6.7.2.1: a union bitfield takes the bytes its bits
+                // reach and aligns the union to its type (GCC), which pads
+                // it to the whole unit unless that alignment is lowered.
                 field_offset = 0;
                 bit_offset = 0;
-                if attr_packed {
-                    layout.offset = layout.offset.max((bit_width as usize).div_ceil(8));
+                let unit_align = if attr_packed { 1 } else { type_align };
+                layout.offset = layout.offset.max((bit_width as usize).div_ceil(8));
+                layout.align = layout.align.max(unit_align);
+                if unit_align < size {
                     layout.windows_to_fit = true;
                 } else {
-                    bit_unit = self.size_of_type(field_ty).max(1);
-                    layout.offset = layout.offset.max(bit_unit);
-                    layout.align = layout.align.max(bit_unit.min(16));
+                    bit_unit = size;
                 }
             } else if attr_packed {
                 // GCC: the next bit, whatever units it straddles, and no
@@ -654,21 +670,18 @@ impl Compiler {
                 // addressable storage unit is implementation
                 // defined. Place it at the running bit cursor,
                 // its addressable unit sized at the declared
-                // type; bump to the next such unit only when it
-                // would straddle one.
-                let unit = self.size_of_type(field_ty).max(1);
+                // type; under a lowered alignment its access window
+                // is fitted to the final size.
                 align_bit_cursor(layout, required);
-                let (foff, boff) = place_bitfield(
-                    &mut layout.offset,
-                    &mut layout.bf_active,
-                    &mut layout.bf_bit_cursor,
-                    unit,
-                    bit_width,
-                );
-                field_offset = foff;
-                bit_offset = boff;
-                bit_unit = unit;
-                layout.align = layout.align.max(unit.min(16));
+                let gcc = self.target.gcc_bitfields();
+                (field_offset, bit_offset) =
+                    place_bitfield(layout, size, type_align, bit_width, gcc);
+                if type_align < size {
+                    layout.windows_to_fit = true;
+                } else {
+                    bit_unit = size;
+                }
+                layout.align = layout.align.max(type_align);
             }
         } else {
             // Regular (non-bitfield) field. Seal any pending
@@ -1137,6 +1150,7 @@ impl Compiler {
                 anon_union_group: union_group,
                 anon_struct_group: struct_group,
                 explicit_align: inner_field.explicit_align,
+                type_align: inner_field.type_align,
                 align: inner_field.align,
                 decl_spelling: inner_field.decl_spelling,
             });
@@ -1534,11 +1548,19 @@ impl Compiler {
             while anon_pos < anon.len() && anon[anon_pos].before as usize <= i {
                 let a = anon[anon_pos];
                 anon_pos += 1;
-                let align = if attr { 1 } else { a.align as usize }.max(a.explicit_align as usize);
+                let align = if attr { 1 } else { a.align as usize }
+                    .max(a.explicit_align as usize)
+                    .max(a.type_align as usize);
+                let round = ms_unit_round(
+                    packing,
+                    align,
+                    a.explicit_align as usize,
+                    (a.unit as usize).max(a.type_align as usize),
+                );
                 if a.width == 0 {
-                    cur.close(a.unit as usize, align);
+                    cur.close(a.unit as usize, align, round);
                 } else {
-                    cur.bitfield(a.unit as usize, align, a.width as usize);
+                    cur.bitfield(a.unit as usize, align, round, a.width as usize);
                 }
             }
             if mem_pos < members.len() && members[mem_pos].first as usize <= i {
@@ -1556,11 +1578,18 @@ impl Compiler {
             }
             let f = &self.structs[struct_id].fields[i];
             let (ty, width) = (f.ty, f.bit_width as usize);
-            let align = if attr { f.explicit_align } else { f.align }.max(1) as usize;
+            let (request, type_align) = (f.explicit_align as usize, f.type_align as usize);
+            let align = if attr {
+                request.max(type_align)
+            } else {
+                f.align as usize
+            }
+            .max(1);
             if width > 0 {
-                requested = requested.max(f.explicit_align as usize);
+                requested = requested.max(request);
                 let unit = self.size_of_type(ty).max(1);
-                let (offset, bit) = cur.bitfield(unit, align, width);
+                let round = ms_unit_round(packing, align, request, unit.max(type_align));
+                let (offset, bit) = cur.bitfield(unit, align, round, width);
                 let f = &mut self.structs[struct_id].fields[i];
                 f.offset = offset;
                 f.bit_offset = bit;
@@ -1576,7 +1605,7 @@ impl Compiler {
         }
         let align = cur.align.min(super::MAX_STATIC_ALIGN);
         let sd = &mut self.structs[struct_id];
-        sd.size = round_up(cur.size, align);
+        sd.size = round_up(cur.size, cur.round.min(align));
         sd.align = align;
         sd.member_align = align;
         sd.explicit_align = if attr {
@@ -1599,7 +1628,7 @@ impl Compiler {
             .iter()
             .filter(|a| a.width == 0)
             .map(|a| {
-                (a.unit as usize)
+                a.declared_align()
                     .max(a.explicit_align as usize)
                     .min(super::MAX_STATIC_ALIGN)
             })
@@ -1614,8 +1643,8 @@ impl Compiler {
     /// of its request, whichever is wider.
     fn repack_anon_bitfield(&self, bit_cursor: usize, a: &AnonBitfield, packing: Packing) -> usize {
         if a.width == 0 {
-            let unit = (a.unit as usize).max(a.explicit_align as usize).max(1);
-            return round_up(bit_cursor, unit * 8);
+            let align = a.declared_align().max(a.explicit_align as usize).max(1);
+            return round_up(bit_cursor, align * 8);
         }
         match self.packed_request(a.explicit_align as usize, packing) {
             0 => bit_cursor + a.width as usize,
@@ -1629,7 +1658,10 @@ impl Compiler {
     fn packed_request(&self, align: usize, packing: Packing) -> usize {
         match packing {
             Packing::Attribute => align,
-            Packing::Pragma(pack) => self.target.packed_bitfield_align(align, pack),
+            Packing::Pragma(pack) if self.target.gcc_bitfields() || align <= pack => {
+                align.min(pack)
+            }
+            Packing::Pragma(_) => 0,
         }
     }
 
@@ -1666,13 +1698,30 @@ impl Compiler {
 /// of its declared type, shared by the bit-fields directly following it while
 /// they fit and their type has the same size; a width-zero one counts only
 /// while a unit is open, and a union's bit-fields do not raise its alignment.
-/// `unit` is the open unit's size, 0 when none, and `left` its free bits.
+/// `unit` is the open unit's size, 0 when none, and `left` its free bits;
+/// the size rounds up to `round` ([`ms_unit_round`]).
 struct MsCursor {
     is_union: bool,
     size: usize,
     align: usize,
+    round: usize,
     unit: usize,
     left: usize,
+}
+
+/// The boundary a bit-field's unit placed at `align` pads the aggregate to:
+/// under `#pragma pack(N)` cl.exe pads to N for the type (`type_align`, a
+/// typedef's included) and fully for a member's `aligned`; clang, to `align`.
+fn ms_unit_round(
+    packing: Option<Packing>,
+    align: usize,
+    request: usize,
+    type_align: usize,
+) -> usize {
+    match packing {
+        Some(Packing::Pragma(pack)) => request.max(type_align.min(pack)),
+        _ => align,
+    }
 }
 
 impl MsCursor {
@@ -1681,13 +1730,14 @@ impl MsCursor {
             is_union,
             size: 0,
             align: 1,
+            round: 1,
             unit: 0,
             left: 0,
         }
     }
 
     /// Returns the unit's offset and the field's bit offset in it.
-    fn bitfield(&mut self, unit: usize, align: usize, width: usize) -> (usize, u32) {
+    fn bitfield(&mut self, unit: usize, align: usize, round: usize, width: usize) -> (usize, u32) {
         if self.is_union {
             self.size = self.size.max(unit);
             self.unit = unit;
@@ -1701,18 +1751,20 @@ impl MsCursor {
         let offset = round_up(self.size, align);
         self.size = offset + unit;
         self.align = self.align.max(align);
+        self.round = self.round.max(round);
         self.unit = unit;
         self.left = unit * 8 - width;
         (offset, 0)
     }
 
-    fn close(&mut self, unit: usize, align: usize) {
+    fn close(&mut self, unit: usize, align: usize, round: usize) {
         if self.unit != 0 {
             if self.is_union {
                 self.size = self.size.max(unit);
             } else {
                 self.size = round_up(self.size, align);
                 self.align = self.align.max(align);
+                self.round = self.round.max(round);
             }
         }
         self.unit = 0;
@@ -1721,6 +1773,7 @@ impl MsCursor {
     fn member(&mut self, storage: usize, align: usize) -> usize {
         self.unit = 0;
         self.align = self.align.max(align);
+        self.round = self.round.max(align);
         if self.is_union {
             self.size = self.size.max(storage);
             return 0;
@@ -1743,32 +1796,32 @@ fn align_bit_cursor(layout: &mut AggregateLayout, align: usize) {
     }
 }
 
-/// Place a bitfield of declared-type size `unit` bytes and `width` bits
-/// at the running `bit_cursor` (bit position from the aggregate start),
-/// bumping it to the next `unit`-byte storage-unit boundary only when
-/// the field would otherwise straddle one (the SysV AMD64 / AAPCS64
-/// rule). Begins the run at `offset * 8` when not already `active`,
-/// advances `offset` to the highest byte the run reaches, and returns
-/// the field's `(byte offset of its addressable unit, bit offset within
-/// that unit)`.
+/// Place a bitfield of `width` bits whose declared type has `size` bytes
+/// and `align` alignment at the layout's running bit cursor. It moves to
+/// the next `align` boundary when its bits would reach past `size` bytes
+/// from the boundary before (the SysV AMD64 / AAPCS64 rule, where the two
+/// agree unless a typedef aligns the type), and under `gcc` also when
+/// `align` exceeds `size`. Returns the offset of that boundary and the
+/// field's bit offset from it.
 fn place_bitfield(
-    offset: &mut usize,
-    active: &mut bool,
-    bit_cursor: &mut usize,
-    unit: usize,
+    layout: &mut AggregateLayout,
+    size: usize,
+    align: usize,
     width: u32,
+    gcc: bool,
 ) -> (usize, u32) {
-    if !*active {
-        *bit_cursor = *offset * 8;
-        *active = true;
+    if !layout.bf_active {
+        layout.bf_bit_cursor = layout.offset * 8;
+        layout.bf_active = true;
     }
-    let unit_bits = unit * 8;
-    if *bit_cursor % unit_bits + width as usize > unit_bits {
-        *bit_cursor = round_up(*bit_cursor, unit_bits);
+    let align_bits = align * 8;
+    let cursor = layout.bf_bit_cursor;
+    if (gcc && align > size) || cursor % align_bits + width as usize > size * 8 {
+        layout.bf_bit_cursor = round_up(cursor, align_bits);
     }
-    let field_offset = (*bit_cursor / unit_bits) * unit;
-    let bit_offset = (*bit_cursor % unit_bits) as u32;
-    *bit_cursor += width as usize;
-    *offset = (*offset).max(bit_cursor.div_ceil(8));
+    let field_offset = layout.bf_bit_cursor / align_bits * align;
+    let bit_offset = (layout.bf_bit_cursor - field_offset * 8) as u32;
+    layout.bf_bit_cursor += width as usize;
+    layout.offset = layout.offset.max(layout.bf_bit_cursor.div_ceil(8));
     (field_offset, bit_offset)
 }

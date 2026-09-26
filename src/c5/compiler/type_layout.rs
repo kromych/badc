@@ -239,6 +239,7 @@ impl Compiler {
             anon_union_group: 0,
             anon_struct_group: 0,
             explicit_align: 0,
+            type_align: 0,
             align: 0,
             decl_spelling: Default::default(),
         };
@@ -342,6 +343,7 @@ impl Compiler {
             anon_union_group: 0,
             anon_struct_group: 0,
             explicit_align: 0,
+            type_align: 0,
             align: 0,
             decl_spelling: Default::default(),
         };
@@ -450,6 +452,7 @@ impl Compiler {
             anon_union_group: 0,
             anon_struct_group: 0,
             explicit_align: 0,
+            type_align: 0,
             align: 0,
             decl_spelling: Default::default(),
         };
@@ -527,6 +530,7 @@ impl Compiler {
             anon_union_group: 0,
             anon_struct_group: 0,
             explicit_align: 0,
+            type_align: 0,
             align: 0,
             decl_spelling: Default::default(),
         };

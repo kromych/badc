@@ -2038,6 +2038,187 @@ fn bitfield_attributes_follow_the_width_and_place_the_field() {
     layout_rows_hold("", MS, &[Target::WindowsX64, Target::WindowsAarch64]);
 }
 
+/// A bit-field takes its declared type's alignment, a typedef's included,
+/// raised or lowered in GCC's layout and raised in the MS one. The rows are
+/// gcc 16's for Linux, Apple clang 21's for macOS, and on the PE targets
+/// cl.exe's on both boxes where it takes the spelling, else clang 21's.
+#[test]
+fn a_bitfield_takes_its_declared_types_alignment() {
+    use crate::Target;
+    const DECLS: &str = "\
+         typedef int a8 __attribute__((aligned(8)));\n\
+         typedef int a2 __attribute__((aligned(2)));\n\
+         typedef int a1 __attribute__((aligned(1)));\n\
+         typedef long long l4 __attribute__((aligned(4)));\n\
+         typedef short s8 __attribute__((aligned(8)));\n\
+         typedef char c4 __attribute__((aligned(4)));\n\
+         typedef unsigned a16u __attribute__((aligned(16)));\n\
+         struct Q { char c; a8 b : 3; };\n\
+         #pragma pack(push, 1)\n\
+         struct P1 { char c; a8 b : 3; char d; };\n\
+         #pragma pack(pop)\n";
+    const LINUX_X64: &[&str] = &[
+        "|struct { char c; a8 b : 3; }|16/8|c@0 b@64",
+        "|struct { char c; a8 b : 3; char d; }|16/8|c@0 b@64 d@72",
+        "|struct { char c; a1 b : 3; }|2/1|c@0 b@8",
+        "|struct { char c; a1 b : 30; char d; }|6/1|c@0 b@8 d@40",
+        "|struct { char c; a2 b : 20; char d; }|6/2|c@0 b@8 d@32",
+        "|struct { char c; l4 b : 40; char d; }|8/4|c@0 b@8 d@48",
+        "|struct { char c; s8 b : 4; char d; }|16/8|c@0 b@64 d@72",
+        "|struct { char c; c4 b : 4; char d; }|8/4|c@0 b@32 d@40",
+        "|struct { char c; a8 b : 3, e : 30; char d; }|24/8|c@0 b@64 e@128 d@160",
+        "|struct { int a : 20; a8 b : 20; }|16/8|a@0 b@64",
+        "|struct { char c; a8 : 3; char d; }|10/1|c@0 d@72",
+        "|struct { char c; a8 : 0; char d; }|9/1|c@0 d@64",
+        "|union { char c; a8 b : 3; }|8/8|c@0 b@0",
+        "|struct __attribute__((packed)) { char c; a8 b : 3; char d; }|3/1|c@0 b@8 d@16",
+        "1|struct { char c; a8 b : 3; char d; }|3/1|c@0 b@8 d@16",
+        "|struct { char c; a1 b : 3; int e : 4; }|4/4|c@0 b@8 e@11",
+        "|struct { char c; a16u b : 4; char d; }|32/16|c@0 b@128 d@136",
+        "|struct { char c; a8 b : 3; a8 e : 3; }|24/8|c@0 b@64 e@128",
+        "|struct { char c; a1 b : 3; char d; }|3/1|c@0 b@8 d@16",
+        "|struct { char c; __attribute__((packed)) a8 b : 3; char d; }|3/1|c@0 b@8 d@16",
+        "|struct { char c; a8 b : 3 __attribute__((packed)); char d; }|3/1|c@0 b@8 d@16",
+        "2|struct { char c; a8 b : 3; char d; }|4/2|c@0 b@8 d@16",
+        "|struct { char c; a1 : 0; char d; }|2/1|c@0 d@8",
+        "|struct { char c; l4 : 0; char d; }|5/1|c@0 d@32",
+        "|struct { char c; a1 : 3; char d; }|3/1|c@0 d@16",
+        "|struct { char c; l4 : 3; char d; }|3/1|c@0 d@16",
+        "|union { char c; a1 b : 3; }|1/1|c@0 b@0",
+        "|union { char c; l4 b : 40; }|8/4|c@0 b@0",
+        "|struct { char c; a1 b : 3; a1 e : 30; }|6/1|c@0 b@8 e@16",
+        "|struct { short s; a2 b : 20; a2 e : 20; }|8/2|s@0 b@16 e@36",
+        "|struct { char c; c4 : 4; char d; }|6/1|c@0 d@40",
+        "|struct { char c; s8 : 0; char d; }|9/1|c@0 d@64",
+    ];
+    const LINUX_AARCH64: &[&str] = &[
+        "|struct { char c; a8 b : 3; }|16/8|c@0 b@64",
+        "|struct { char c; a8 b : 3; char d; }|16/8|c@0 b@64 d@72",
+        "|struct { char c; a1 b : 3; }|2/1|c@0 b@8",
+        "|struct { char c; a1 b : 30; char d; }|6/1|c@0 b@8 d@40",
+        "|struct { char c; a2 b : 20; char d; }|6/2|c@0 b@8 d@32",
+        "|struct { char c; l4 b : 40; char d; }|8/4|c@0 b@8 d@48",
+        "|struct { char c; s8 b : 4; char d; }|16/8|c@0 b@64 d@72",
+        "|struct { char c; c4 b : 4; char d; }|8/4|c@0 b@32 d@40",
+        "|struct { char c; a8 b : 3, e : 30; char d; }|24/8|c@0 b@64 e@128 d@160",
+        "|struct { int a : 20; a8 b : 20; }|16/8|a@0 b@64",
+        "|struct { char c; a8 : 3; char d; }|16/8|c@0 d@72",
+        "|struct { char c; a8 : 0; char d; }|16/8|c@0 d@64",
+        "|union { char c; a8 b : 3; }|8/8|c@0 b@0",
+        "|struct __attribute__((packed)) { char c; a8 b : 3; char d; }|3/1|c@0 b@8 d@16",
+        "1|struct { char c; a8 b : 3; char d; }|3/1|c@0 b@8 d@16",
+        "|struct { char c; a1 b : 3; int e : 4; }|4/4|c@0 b@8 e@11",
+        "|struct { char c; a16u b : 4; char d; }|32/16|c@0 b@128 d@136",
+        "|struct { char c; a8 b : 3; a8 e : 3; }|24/8|c@0 b@64 e@128",
+        "|struct { char c; a1 b : 3; char d; }|3/1|c@0 b@8 d@16",
+        "|struct { char c; __attribute__((packed)) a8 b : 3; char d; }|3/1|c@0 b@8 d@16",
+        "|struct { char c; a8 b : 3 __attribute__((packed)); char d; }|3/1|c@0 b@8 d@16",
+        "2|struct { char c; a8 b : 3; char d; }|4/2|c@0 b@8 d@16",
+        "|struct { char c; a1 : 0; char d; }|2/1|c@0 d@8",
+        "|struct { char c; l4 : 0; char d; }|8/4|c@0 d@32",
+        "|struct { char c; a1 : 3; char d; }|3/1|c@0 d@16",
+        "|struct { char c; l4 : 3; char d; }|4/4|c@0 d@16",
+        "|union { char c; a1 b : 3; }|1/1|c@0 b@0",
+        "|union { char c; l4 b : 40; }|8/4|c@0 b@0",
+        "|struct { char c; a1 b : 3; a1 e : 30; }|6/1|c@0 b@8 e@16",
+        "|struct { short s; a2 b : 20; a2 e : 20; }|8/2|s@0 b@16 e@36",
+        "|struct { char c; c4 : 4; char d; }|8/4|c@0 d@40",
+        "|struct { char c; s8 : 0; char d; }|16/8|c@0 d@64",
+    ];
+    const MACOS: &[&str] = &[
+        "|struct { char c; a8 b : 3; }|8/8|c@0 b@8",
+        "|struct { char c; a8 b : 3; char d; }|8/8|c@0 b@8 d@16",
+        "|struct { char c; a1 b : 3; }|2/1|c@0 b@8",
+        "|struct { char c; a1 b : 30; char d; }|6/1|c@0 b@8 d@40",
+        "|struct { char c; a2 b : 20; char d; }|6/2|c@0 b@8 d@32",
+        "|struct { char c; l4 b : 40; char d; }|8/4|c@0 b@8 d@48",
+        "|struct { char c; s8 b : 4; char d; }|8/8|c@0 b@8 d@16",
+        "|struct { char c; c4 b : 4; char d; }|8/4|c@0 b@32 d@40",
+        "|struct { char c; a8 b : 3, e : 30; char d; }|16/8|c@0 b@8 e@64 d@96",
+        "|struct { int a : 20; a8 b : 20; }|16/8|a@0 b@64",
+        "|struct { char c; a8 : 3; char d; }|3/1|c@0 d@16",
+        "|struct { char c; a8 : 0; char d; }|9/1|c@0 d@64",
+        "|union { char c; a8 b : 3; }|8/8|c@0 b@0",
+        "|struct __attribute__((packed)) { char c; a8 b : 3; char d; }|3/1|c@0 b@8 d@16",
+        "1|struct { char c; a8 b : 3; char d; }|3/1|c@0 b@8 d@16",
+        "|struct { char c; a1 b : 3; int e : 4; }|4/4|c@0 b@8 e@11",
+        "|struct { char c; a16u b : 4; char d; }|16/16|c@0 b@8 d@16",
+        "|struct { char c; a8 b : 3; a8 e : 3; }|8/8|c@0 b@8 e@11",
+        "|struct { char c; a1 b : 3; char d; }|3/1|c@0 b@8 d@16",
+        "|struct { char c; __attribute__((packed)) a8 b : 3; char d; }|3/1|c@0 b@8 d@16",
+        "|struct { char c; a8 b : 3 __attribute__((packed)); char d; }|3/1|c@0 b@8 d@16",
+        "2|struct { char c; a8 b : 3; char d; }|4/2|c@0 b@8 d@16",
+        "|struct { char c; a1 : 0; char d; }|2/1|c@0 d@8",
+        "|struct { char c; l4 : 0; char d; }|5/1|c@0 d@32",
+        "|struct { char c; a1 : 3; char d; }|3/1|c@0 d@16",
+        "|struct { char c; l4 : 3; char d; }|3/1|c@0 d@16",
+        "|union { char c; a1 b : 3; }|1/1|c@0 b@0",
+        "|union { char c; l4 b : 40; }|8/4|c@0 b@0",
+        "|struct { char c; a1 b : 3; a1 e : 30; }|6/1|c@0 b@8 e@16",
+        "|struct { short s; a2 b : 20; a2 e : 20; }|8/2|s@0 b@16 e@36",
+        "|struct { char c; c4 : 4; char d; }|6/1|c@0 d@40",
+        "|struct { char c; s8 : 0; char d; }|9/1|c@0 d@64",
+    ];
+    const MS: &[&str] = &[
+        "|struct { char c; a8 b : 3; }|16/8|c@0 b@64",
+        "|struct { char c; a8 b : 3; char d; }|16/8|c@0 b@64 d@96",
+        "|struct { char c; a1 b : 3; }|8/4|c@0 b@32",
+        "|struct { char c; a1 b : 30; char d; }|12/4|c@0 b@32 d@64",
+        "|struct { char c; a2 b : 20; char d; }|12/4|c@0 b@32 d@64",
+        "|struct { char c; l4 b : 40; char d; }|24/8|c@0 b@64 d@128",
+        "|struct { char c; s8 b : 4; char d; }|16/8|c@0 b@64 d@80",
+        "|struct { char c; c4 b : 4; char d; }|8/4|c@0 b@32 d@40",
+        "|struct { char c; a8 b : 3, e : 30; char d; }|24/8|c@0 b@64 e@128 d@160",
+        "|struct { int a : 20; a8 b : 20; }|16/8|a@0 b@64",
+        "|struct { char c; a8 : 3; char d; }|16/8|c@0 d@96",
+        "|struct { char c; a8 : 0; char d; }|2/1|c@0 d@8",
+        "|union { char c; a8 b : 3; }|4/1|c@0 b@0",
+        "|struct __attribute__((packed)) { char c; a8 b : 3; char d; }|16/8|c@0 b@64 d@96",
+        "1|struct { char c; a8 b : 3; char d; }|13/8|c@0 b@64 d@96",
+        "|struct { char c; a1 b : 3; int e : 4; }|8/4|c@0 b@32 e@35",
+        "|struct { char c; a16u b : 4; char d; }|32/16|c@0 b@128 d@160",
+        "|struct { char c; a8 b : 3; a8 e : 3; }|16/8|c@0 b@64 e@67",
+        "|struct { char c; a1 b : 3; char d; }|12/4|c@0 b@32 d@64",
+        "|struct { char c; __attribute__((packed)) a8 b : 3; char d; }|16/8|c@0 b@64 d@96",
+        "|struct { char c; a8 b : 3 __attribute__((packed)); char d; }|16/8|c@0 b@64 d@96",
+        "2|struct { char c; a8 b : 3; char d; }|14/8|c@0 b@64 d@96",
+        "|struct { char c; a1 : 0; char d; }|2/1|c@0 d@8",
+        "|struct { char c; l4 : 0; char d; }|2/1|c@0 d@8",
+        "|struct { char c; a1 : 3; char d; }|12/4|c@0 d@64",
+        "|struct { char c; l4 : 3; char d; }|24/8|c@0 d@128",
+        "|union { char c; a1 b : 3; }|4/1|c@0 b@0",
+        "|union { char c; l4 b : 40; }|8/1|c@0 b@0",
+        "|struct { char c; a1 b : 3; a1 e : 30; }|12/4|c@0 b@32 e@64",
+        "|struct { short s; a2 b : 20; a2 e : 20; }|12/4|s@0 b@32 e@64",
+        "|struct { char c; c4 : 4; char d; }|8/4|c@0 d@40",
+        "|struct { char c; s8 : 0; char d; }|2/1|c@0 d@8",
+        "2|struct { char c; struct Q q; }|18/2|c@0 q.c@16",
+        "1|struct { char c; struct Q q; }|17/1|c@0 q.c@8",
+        "2|struct { char c; struct P1 p; }|16/2|c@0 p.c@16",
+        "|struct { struct P1 p[2]; }|32/8|p[1].c@104 p[1].d@200",
+    ];
+    // clang for the windows-msvc triples pads these to the alignment, where
+    // cl.exe pads to the pack value; the rows above are cl.exe's.
+    const CLANG_MSVC_DIFFERS: &[&str] = &[
+        "1|struct { char c; a8 b : 3; char d; }|16/8|c@0 b@64 d@96",
+        "2|struct { char c; a8 b : 3; char d; }|16/8|c@0 b@64 d@96",
+        "2|struct { char c; struct P1 p; }|18/2|c@0 p.c@16",
+        "|struct { struct P1 p[2]; }|32/8|p[1].c@128 p[1].d@224",
+    ];
+    layout_rows_hold(DECLS, LINUX_X64, &[Target::LinuxX64]);
+    layout_rows_hold(DECLS, LINUX_AARCH64, &[Target::LinuxAarch64]);
+    layout_rows_hold(DECLS, MACOS, &[Target::MacOSAarch64]);
+    layout_rows_hold(DECLS, MS, &[Target::WindowsX64, Target::WindowsAarch64]);
+    for row in CLANG_MSVC_DIFFERS {
+        let decl = row.rsplitn(3, '|').nth(2);
+        assert!(
+            MS.iter()
+                .any(|m| m.rsplitn(3, '|').nth(2) == decl && m != row),
+            "{row}"
+        );
+    }
+}
+
 /// The wide storage format round-trips through memory: a value stored
 /// into a `long double` object and read back is unchanged, and the
 /// object's bytes carry the platform's encoding rather than a binary64

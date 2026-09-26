@@ -6056,6 +6056,113 @@ fn bitfield_attributes_cross_the_windows_compiler_boundary() {
     );
 }
 
+// A bit-field of a typedef that raises or lowers its type's alignment, in
+// shapes gcc and clang agree on; Windows spells the raise for cl.exe too.
+const TYPEDEF_BITFIELDS_BODY: &str = "struct ta { char c; a8 b : 30; char d; };\n\
+    struct tl { char c; lo b : 10; char d; };\n\
+    static ll layout(void)\n\
+    { return sizeof(struct ta) + 100 * (sizeof(struct tl) + 100 * ((ll)offsetof(struct ta, d)\n\
+        + 100 * (ll)offsetof(struct tl, d))); }\n\
+    static struct ta make_ta(int b) { struct ta v = { 1, b, 2 }; return v; }\n\
+    static int read_tl(const struct tl *p) { return p->c + p->b * 10 + p->d * 7; }\n\
+    static void set_tl(struct tl *p, int b) { p->b = b; }\n\
+    struct fns { ll (*layout)(void); struct ta (*make_ta)(int);\n\
+      int (*read_tl)(const struct tl *); void (*set_tl)(struct tl *, int); };\n\
+    static int drive(const struct fns *f, int base)\n\
+    { struct ta m = f->make_ta(-0x1234567);\n\
+      struct tl p = { 1, -5, 3 };\n\
+      if (f->layout() != layout()) return base + 1;\n\
+      if (m.c != 1 || m.b != -0x1234567 || m.d != 2) return base + 2;\n\
+      if (f->read_tl(&p) != 1 - 50 + 21) return base + 3;\n\
+      f->set_tl(&p, 0x123);\n\
+      if (p.c != 1 || p.b != 0x123 || p.d != 3) return base + 4;\n\
+      return 0; }\n";
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn typedef_aligned_bitfields_cross_the_system_compiler_boundary() {
+    let Some(cc) = host_cc() else {
+        eprintln!(
+            "skipping typedef_aligned_bitfields_cross_the_system_compiler_boundary: no system C compiler"
+        );
+        return;
+    };
+    let common = format!(
+        "#include <stddef.h>\ntypedef long long ll;\n\
+         typedef int a8 __attribute__((aligned(8)));\n\
+         typedef int lo __attribute__((aligned(1)));\n{TYPEDEF_BITFIELDS_BODY}"
+    );
+    drive_across_the_system_compiler(
+        &cc,
+        "typedef-bitfields-interop",
+        &common,
+        "layout, make_ta, read_tl, set_tl",
+    );
+}
+
+#[cfg(windows)]
+#[test]
+fn typedef_aligned_bitfields_cross_the_windows_compiler_boundary() {
+    let Some(cc) = windows_cc() else {
+        eprintln!("skipping typedef_aligned_bitfields_cross_the_windows_compiler_boundary: no cc");
+        return;
+    };
+    let common = format!(
+        "#include <stddef.h>\ntypedef long long ll;\n\
+         typedef __declspec(align(8)) int a8;\n\
+         typedef __declspec(align(8)) short lo;\n{TYPEDEF_BITFIELDS_BODY}"
+    );
+    drive_across_the_windows_compiler(
+        &cc,
+        "win-typedef-bitfields-interop",
+        &common,
+        "layout, make_ta, read_tl, set_tl",
+    );
+}
+
+// cl.exe pads a `#pragma pack` aggregate only to the pack value for a
+// bit-field whose typedef aligns its type beyond it; clang pads further.
+#[cfg(windows)]
+const PACK_PADDED_COMMON: &str = "#include <stddef.h>\n\
+    typedef long long ll;\n\
+    typedef __declspec(align(8)) int a8;\n\
+    #pragma pack(push, 1)\n\
+    struct pp { char c; a8 b : 3; char d; };\n\
+    #pragma pack(pop)\n\
+    struct pw { char c; struct pp p; };\n\
+    struct pa { struct pp e[2]; };\n\
+    static ll layout(void)\n\
+    { return sizeof(struct pp) + 100 * (sizeof(struct pa) + 100 * (ll)offsetof(struct pw, p)); }\n\
+    static struct pp make_pp(int b) { struct pp v = { 1, b, 2 }; return v; }\n\
+    static int read_pa(const struct pa *p) { return p->e[0].c + p->e[1].b * 10 + p->e[1].d * 7; }\n\
+    static void set_pa(struct pa *p, int b) { p->e[1].b = b; }\n\
+    struct fns { ll (*layout)(void); struct pp (*make_pp)(int);\n\
+      int (*read_pa)(const struct pa *); void (*set_pa)(struct pa *, int); };\n\
+    static int drive(const struct fns *f, int base)\n\
+    { struct pp m = f->make_pp(-3);\n\
+      struct pa a = { { { 1, 2, 3 }, { 4, -1, 5 } } };\n\
+      if (f->layout() != layout()) return base + 1;\n\
+      if (m.c != 1 || m.b != -3 || m.d != 2) return base + 2;\n\
+      if (f->read_pa(&a) != 1 - 10 + 35) return base + 3;\n\
+      f->set_pa(&a, 3);\n\
+      if (a.e[0].b != 2 || a.e[1].b != 3 || a.e[1].d != 5) return base + 4;\n\
+      return 0; }\n";
+
+#[cfg(windows)]
+#[test]
+fn pack_padded_typedef_bitfields_cross_the_msvc_boundary() {
+    let Some(cc) = msvc_cl() else {
+        eprintln!("skipping pack_padded_typedef_bitfields_cross_the_msvc_boundary: no cl.exe");
+        return;
+    };
+    drive_across_the_windows_compiler(
+        &cc,
+        "msvc-pack-padded-interop",
+        PACK_PADDED_COMMON,
+        "layout, make_pp, read_pa, set_pa",
+    );
+}
+
 /// The platform C compiler on Windows: `$CC` when set, else clang on the path
 /// or in LLVM's default install, provided it runs, else the `cl` of the newest
 /// Visual Studio vswhere reports, for the host architecture.

@@ -92,6 +92,13 @@ Multi-TU knobs:
   --print-map              Print the link map to stdout.
   --entry=<sym>            Enter the image at <sym>; overrides
                            `#pragma entrypoint` and `main`.
+  -pie, -no-pie            Link an ELF executable position-independent
+                           (`ET_DYN`, the default) or at its link
+                           address (`ET_EXEC`), where the absolute
+                           fields of a `-fno-pic` object resolve. The
+                           last one wins; `-c` and `--shared` ignore
+                           both. A Mach-O or PE executable is always
+                           position-independent.
   --subsystem=<kind>       Stamp the PE subsystem: console, windows,
                            native, efi_application,
                            efi_boot_service_driver,
@@ -132,9 +139,10 @@ Compile knobs:
                            The image enters at the program's own entry
                            (`__c5_entry` by default, or the
                            `#pragma entrypoint` symbol), which the
-                           program must define. A Linux image is a
-                           static executable unless it binds a
-                           shared-library symbol.
+                           program must define. A Linux image is
+                           placed at its link address, and is a static
+                           executable unless it binds a shared-library
+                           symbol.
 
   --target=<spec>          Pick the binary format (one of
                            macos-aarch64, linux-aarch64, linux-x64,
@@ -292,15 +300,16 @@ Compile knobs:
   -fPIC, -fpic             Emit a position-independent `-c` object: a
   -fPIE, -fpie             switch table takes the label-difference form,
                            so no absolute relocation reaches the object.
-                           Final images are position-independent either
-                           way.
+                           An executable's own form is -pie / -no-pie.
   -fno-pic, -fno-pie       Compile the `-c` object for a link that
                            resolves its relocations statically, keeping
                            a relocation-carrying `const` in .rodata.
                            Without it such storage goes to .data.rel.ro,
                            so the unit's remaining `const` objects keep
-                           the image's read-only prefix. Implied by
-                           -mcmodel=kernel.
+                           the image's read-only prefix. On x86-64 its
+                           tables are addressed absolutely, so it links
+                           into a -no-pie or --freestanding image.
+                           Implied by -mcmodel=kernel.
   -fmin-function-alignment=N
                            Start every function at a multiple of N
                            bytes (a power of two), filling the gap with

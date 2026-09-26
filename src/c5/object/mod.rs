@@ -55,7 +55,7 @@ pub(crate) use crate::c5::codegen::lower_for;
 #[cfg(feature = "native-emit")]
 pub(crate) use crate::c5::codegen::{
     Abi, AddrPart, Build, CopyRelocReq, DataFixup, DwarfTextReloc, DynamicExportSection,
-    EarlyReturn, ElfTpoffFixup, ElfTpoffTarget, FnUnwind, FuncFixup, GotFixup, Machine,
+    EarlyReturn, ElfTpoffFixup, ElfTpoffTarget, ExecForm, FnUnwind, FuncFixup, GotFixup, Machine,
     MachoTlvDescriptor, MachoTlvFixup, NativeOptions, OutputKind, ResolvedImport, ResolvedImports,
     Target, TlsIndexFixup, aarch64, x86_64,
 };
@@ -1159,7 +1159,7 @@ pub(crate) mod test_support {
             data_ro_len: 0,
             data_relro_len: 0,
             pic_link: false,
-            freestanding: false,
+            exec_form: Default::default(),
 
             code_model: Default::default(),
             elf_class: Default::default(),

@@ -3642,12 +3642,14 @@ void start_c(void) {
 
 // `-fno-pic` and the kernel code model compile for a static link, so a
 // switch table, a label table and an indexed object are addressed by their
-// link-time address (`R_X86_64_32S`). A placed image resolves the field
-// and runs; a position-independent image has no load-time form for it,
-// and the hosted link refuses it as GNU ld does, while the default `-c`
-// object of the same unit keeps linking there.
+// link-time address (`R_X86_64_32S`). A placed image, freestanding or a
+// hosted `-no-pie` one, resolves the field and runs; a position-independent
+// image has no load-time form for it, and the hosted link refuses it as
+// GNU ld does, while the default `-c` object of the same unit keeps
+// linking there.
 #[test]
 fn static_link_objects_address_tables_absolutely() {
+    const PT_INTERP: u32 = 3;
     let dir = tempdir("static-link-absolute");
     let main = write_source(&dir, "main.c", ABS_FORMS_MAIN);
     let sq = write_source(
@@ -3697,19 +3699,25 @@ fn static_link_objects_address_tables_absolutely() {
     let hosted = write_source(
         &dir,
         "hosted.c",
-        "int main(int argc, char **argv) {
+        "#include <stdio.h>
+         static const char *const names[] = {\"zero\", \"one\", \"two\", \"three\"};
+         static int hits[4];
+         int main(int argc, char **argv) {
          	(void)argv;
+         	hits[argc & 3]++;
+         	puts(names[argc & 3]);
          	switch (argc) {
-         	case 1: return 0; case 2: return 3; case 3: return 4; case 4: return 5;
+         	case 1: return hits[1] - 1; case 2: return 3; case 3: return 4; case 4: return 5;
          	case 5: return 6; case 6: return 7; case 7: return 8; case 8: return 9;
          	default: return 99;
          	}
          }
 ",
     );
-    let link = |obj: &Path, exe: &Path| {
+    let link = |flags: &[&str], obj: &Path, exe: &Path| {
         Command::new(badc())
             .args(["-q", "--target=linux-x64"])
+            .args(flags)
             .arg(obj)
             .arg("-o")
             .arg(exe)
@@ -3718,7 +3726,7 @@ fn static_link_objects_address_tables_absolutely() {
     };
     let nopic = dir.join("hosted-nopic.o");
     compile(&["-fno-pic"], &hosted, &nopic);
-    let refused = link(&nopic, &dir.join("hosted-nopic"));
+    let refused = link(&[], &nopic, &dir.join("hosted-nopic"));
     let stderr = String::from_utf8_lossy(&refused.stderr);
     assert!(
         !refused.status.success()
@@ -3726,10 +3734,30 @@ fn static_link_objects_address_tables_absolutely() {
             && stderr.contains("position-independent executable"),
         "the hosted link must refuse the absolute field; got: {stderr:?}"
     );
+    let placed = dir.join("hosted-nopic-placed");
+    let linked = link(&["-no-pie"], &nopic, &placed);
+    assert!(
+        linked.status.success(),
+        "a -no-pie link places the image, where the field resolves: {}",
+        String::from_utf8_lossy(&linked.stderr)
+    );
+    let bytes = std::fs::read(&placed).expect("read the image");
+    assert_eq!(u16::from_le_bytes([bytes[16], bytes[17]]), 2, "ET_EXEC");
+    assert!(
+        elf_segments(&bytes).iter().any(|&(t, _)| t == PT_INTERP),
+        "the placed image keeps the loader tables"
+    );
+    if host_linux_target() == "linux-x64" {
+        for (args, status, line) in [(&[][..], 0, "one\n"), (&["a", "b"][..], 4, "three\n")] {
+            let out = Command::new(&placed).args(args).output().expect("run");
+            assert_eq!(out.status.code(), Some(status), "-no-pie dispatch {args:?}");
+            assert_eq!(String::from_utf8_lossy(&out.stdout), line, "{args:?}");
+        }
+    }
     let default = dir.join("hosted.o");
     compile(&[], &hosted, &default);
     let exe = dir.join("hosted");
-    let linked = link(&default, &exe);
+    let linked = link(&[], &default, &exe);
     assert!(
         linked.status.success(),
         "the default object links hosted: {}",
@@ -3738,6 +3766,52 @@ fn static_link_objects_address_tables_absolutely() {
     if host_linux_target() == "linux-x64" {
         let out = Command::new(&exe).output().expect("run the image");
         assert_eq!(out.status.code(), Some(0), "the hosted dispatch");
+    }
+}
+
+// A script link writes `ET_EXEC`, as GNU ld does; `-pie` makes it the
+// position-independent `ET_DYN` form, as it does for `ld`.
+#[test]
+fn a_script_link_takes_the_executable_form_the_flags_pick() {
+    let dir = tempdir("script-link-pie");
+    let src = write_source(
+        &dir,
+        "m.c",
+        "int counter = 3;\nint *p = &counter;\nint _start(void) { return *p; }\n",
+    );
+    let script = write_source(
+        &dir,
+        "t.lds",
+        "ENTRY(_start) SECTIONS { . = 0x400000; .text : { *(.text*) } .data : { *(.data*) } }\n",
+    );
+    let obj = dir.join("m.o");
+    run(
+        Command::new(badc())
+            .args(["-q", "--target=linux-x64", "-c"])
+            .arg(&src)
+            .arg("-o")
+            .arg(&obj),
+        "compile",
+    );
+    for (flag, e_type) in [(None, 2u16), (Some("-pie"), 3), (Some("-no-pie"), 2)] {
+        let out = dir.join("out");
+        run(
+            Command::new(badc())
+                .args(["-q", "--target=linux-x64"])
+                .args(flag)
+                .arg("-T")
+                .arg(&script)
+                .arg(&obj)
+                .arg("-o")
+                .arg(&out),
+            "script link",
+        );
+        let bytes = std::fs::read(&out).expect("read the image");
+        assert_eq!(
+            u16::from_le_bytes([bytes[16], bytes[17]]),
+            e_type,
+            "{flag:?}"
+        );
     }
 }
 
@@ -8357,6 +8431,67 @@ mod aarch64_link {
             "{err}"
         );
         assert!(err.contains("m.o(.text+0x0)"), "the site is named: {err}");
+    }
+
+    /// The group in a hosted image: the default position-independent
+    /// link refuses it, and a `-no-pie` one places the image, where the
+    /// group takes the object's address and the image runs.
+    #[test]
+    fn movw_against_a_placed_symbol_links_into_a_no_pie_image() {
+        let dir = tempdir("a64-movw-no-pie");
+        let asm = write(
+            &dir,
+            "addr.s",
+            "\t.text\n\
+             \t.globl obj_addr\n\
+             obj_addr:\n\
+             \tmovz\tx0, :abs_g2_s:obj\n\
+             \tmovk\tx0, :abs_g1_nc:obj\n\
+             \tmovk\tx0, :abs_g0_nc:obj\n\
+             \tret\n\
+             \t.data\n\
+             \t.balign 8\n\
+             \t.globl obj\n\
+             obj:\n\
+             \t.quad 7\n",
+        );
+        let main = write(
+            &dir,
+            "main.c",
+            "extern long obj;\nextern long *obj_addr(void);\n\
+             int main(void) { return obj_addr() == &obj && obj == 7 ? 0 : 1; }\n",
+        );
+        let link = |flag: Option<&str>, exe: &Path| {
+            Command::new(badc())
+                .args(["-q", "--target=linux-aarch64"])
+                .args(flag)
+                .arg(&asm)
+                .arg(&main)
+                .arg("-o")
+                .arg(exe)
+                .current_dir(&dir)
+                .output()
+                .expect("run badc")
+        };
+        let refused = link(None, &dir.join("pie"));
+        let err = String::from_utf8_lossy(&refused.stderr);
+        assert!(
+            !refused.status.success()
+                && err.contains("R_AARCH64_MOVW_SABS_G2")
+                && err.contains("position-independent executable"),
+            "{err}"
+        );
+        let exe = dir.join("placed");
+        let placed = link(Some("-no-pie"), &exe);
+        assert!(
+            placed.status.success(),
+            "{}",
+            String::from_utf8_lossy(&placed.stderr)
+        );
+        if super::host_linux_target() == "linux-aarch64" {
+            let out = Command::new(&exe).output().expect("run the image");
+            assert_eq!(out.status.code(), Some(0), "the group holds &obj");
+        }
     }
 
     /// Build a host-native image from one asm source plus a `main` that

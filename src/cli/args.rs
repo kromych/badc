@@ -212,6 +212,9 @@ pub(crate) struct Link {
     /// `--whole-archive` spans, as half-open ranges over the positional
     /// input indexes.
     pub(crate) whole_archive: Vec<(usize, usize)>,
+    /// The last of `-pie` / `-no-pie`: whether an executable is
+    /// position-independent. `None` keeps the link's default.
+    pub(crate) pie: Option<bool>,
 }
 
 impl Default for Link {
@@ -237,6 +240,7 @@ impl Default for Link {
             map_path: None,
             print_map: false,
             whole_archive: Vec::new(),
+            pie: None,
         }
     }
 }
@@ -290,6 +294,19 @@ struct DepFlags {
     targets: Vec<String>,
     phony: bool,
     target_from_output: bool,
+}
+
+impl Cli {
+    /// The form of the executable a link writes; see [`badc::ExecForm`].
+    pub(crate) fn exec_form(&self) -> badc::ExecForm {
+        if self.freestanding {
+            badc::ExecForm::Freestanding
+        } else if self.link.pie == Some(false) {
+            badc::ExecForm::Placed
+        } else {
+            badc::ExecForm::Pie
+        }
+    }
 }
 
 /// Argument-vector state while the option loop runs. The fields only
@@ -1059,9 +1076,9 @@ impl Parser {
             "-mno-strict-align" => code.strict_align = false,
             // Position-independent relocatable output: no absolute
             // relocation reaches the object, so a consumer that relocates
-            // it wholesale at load can take it. badc's final images are
-            // always position-independent, so the flag only chooses the
-            // `-c` object's relocation shapes.
+            // it wholesale at load can take it. The flags choose
+            // relocation shapes; an executable's form is `-pie` /
+            // `-no-pie`.
             "-fPIC" | "-fpic" | "-fPIE" | "-fpie" => {
                 code.fpic = true;
                 code.fno_pic = false;
@@ -1368,6 +1385,8 @@ impl Parser {
             // GNU ld's `-M` belongs to the linker persona, which parses
             // separately.
             "--print-map" => link.print_map = true,
+            "-pie" => link.pie = Some(true),
+            "-no-pie" => link.pie = Some(false),
             "-l" => link
                 .lib_names
                 .push(operand(iter, "badc: error: -l requires a library name")?),
@@ -1640,6 +1659,7 @@ impl Parser {
         self.resolve_stack_guard(target)?;
         self.apply_mcpu(target)?;
         self.check_code_model(mode, target)?;
+        self.check_exec_form(mode, target)?;
         // VM-only flags.
         if (self.track_pointers || self.trace) && mode != Mode::Interp {
             return Err(ParseError::plain(format!(
@@ -1938,12 +1958,34 @@ impl Parser {
         Ok(())
     }
 
+    /// `-pie` / `-no-pie` pick the form of an executable the link
+    /// writes, which `--freestanding` fixes and only ELF leaves open.
+    fn check_exec_form(&self, mode: Mode, target: Target) -> Result<(), ParseError> {
+        if mode != Mode::NativeExecutable || self.compile_only {
+            return Ok(());
+        }
+        if self.freestanding && self.link.pie == Some(true) {
+            return Err(ParseError::diag(
+                "badc: error: `-pie` contradicts `--freestanding`, whose image is \
+                 placed at its link address",
+            ));
+        }
+        let format = target.binary_format();
+        if self.link.pie == Some(false) && format != badc::BinaryFormat::Elf {
+            return Err(ParseError::diag(format!(
+                "badc: error: `-no-pie` places an ELF executable at its link address; \
+                 a {} executable is always position-independent",
+                format.name()
+            )));
+        }
+        Ok(())
+    }
+
     /// The kernel model rewrites external addresses into sign-extended
     /// 32-bit absolutes, defined by the x86-64 psABI for images linked
-    /// in the top 2GB. It shapes relocatable output only: badc's own
-    /// images are position-independent and cannot carry an absolute text
-    /// reference, and `-fPIC` contradicts it the same way (gcc rejects
-    /// the combination). `tiny` is an aarch64 model.
+    /// in the top 2GB. It shapes relocatable output only, since badc
+    /// links no image there, and `-fPIC` contradicts it (gcc rejects the
+    /// combination). `tiny` is an aarch64 model.
     fn check_code_model(&self, mode: Mode, target: Target) -> Result<(), ParseError> {
         if self.code_model_tiny && target != Target::LinuxAarch64 {
             return Err(ParseError::diag(
@@ -2884,6 +2926,35 @@ mod tests {
         assert_eq!(parse(&["--shared", "a.c"]).mode, Mode::SharedLibrary);
         assert_eq!(parse(&["-shared", "a.c"]).mode, Mode::SharedLibrary);
         assert_eq!(parse(&["a.c"]).mode, Mode::NativeExecutable);
+    }
+
+    /// The last of `-pie` / `-no-pie` picks an ELF executable's form,
+    /// `--freestanding` places the image whatever else is given, and a
+    /// form the output cannot take is refused rather than ignored.
+    #[test]
+    fn pie_and_no_pie_pick_the_executable_form() {
+        use badc::ExecForm;
+        let form = |args: &[&str]| parse(args).exec_form();
+        assert_eq!(form(&[X64, "a.c"]), ExecForm::Pie);
+        assert_eq!(form(&[X64, "-no-pie", "a.c"]), ExecForm::Placed);
+        assert_eq!(form(&[A64, "-pie", "-no-pie", "a.c"]), ExecForm::Placed);
+        assert_eq!(form(&[X64, "-no-pie", "-pie", "a.c"]), ExecForm::Pie);
+        assert_eq!(
+            form(&[X64, "--freestanding", "-no-pie", "a.c"]),
+            ExecForm::Freestanding
+        );
+        assert_eq!(form(&[X64, "-no-pie", "-c", "a.c"]), ExecForm::Placed);
+        let (msg, _) = reject(&[X64, "--freestanding", "-pie", "a.c"]);
+        assert!(msg.contains("`-pie` contradicts `--freestanding`"), "{msg}");
+        for target in ["--target=macos-aarch64", "--target=windows-x64"] {
+            let (msg, _) = reject(&[target, "-no-pie", "a.c"]);
+            assert!(
+                msg.contains("always position-independent"),
+                "{target}: {msg}"
+            );
+            parse(&[target, "-no-pie", "-c", "a.c"]);
+            parse(&[target, "-no-pie", "--shared", "a.c"]);
+        }
     }
 
     #[test]

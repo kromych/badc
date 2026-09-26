@@ -1,8 +1,8 @@
 //! ELF64 image writer for Linux aarch64 and x86_64: a PIE (`ET_DYN`), a
-//! shared object, or a freestanding executable placed at its link address
-//! (`ET_EXEC`). `PT_INTERP` and the dynamic tables are present when the
-//! loader has work in the image: a position-independent placement, or a
-//! shared-library binding.
+//! shared object, or an executable placed at its link address (`ET_EXEC`,
+//! `-no-pie` and `--freestanding`). `PT_INTERP` and the dynamic tables are
+//! present when the loader has work in the image: a position-independent
+//! placement, or a shared-library binding.
 
 use crate::c5::diag::Code;
 use alloc::format;
@@ -15,7 +15,7 @@ use super::elf_reloc_types::{
     R_AARCH64_COPY, R_AARCH64_GLOB_DAT, R_AARCH64_RELATIVE, R_X86_64_COPY, R_X86_64_GLOB_DAT,
     R_X86_64_RELATIVE,
 };
-use super::{Abi, AddrPart, Build, DataRegion, Machine, data_region_addr};
+use super::{Abi, AddrPart, Build, DataRegion, ExecForm, Machine, data_region_addr};
 use super::{aarch64, dwarf, image, x86_64};
 use crate::c5::layout::{round_up, write_struct};
 
@@ -1468,7 +1468,7 @@ impl<'a> ElfImageWriter<'a> {
         // own `_start` when it is not, as on the library emission path.
         let entry = if is_shared {
             Entry::Exports
-        } else if build.freestanding {
+        } else if build.exec_form == ExecForm::Freestanding {
             Entry::Program
         } else if let Some(off) = symbol_text_offset(build, "__c5_entry") {
             Entry::Adapter(off)
@@ -1488,7 +1488,7 @@ impl<'a> ElfImageWriter<'a> {
             program,
             build,
             machine,
-            emit_dyn: is_shared || !build.freestanding,
+            emit_dyn: is_shared || !build.exec_form.placed(),
             loader_tables: false,
             n_imports: build.imports.imports.len(),
             entry,
@@ -3933,7 +3933,7 @@ mod tests {
         ] {
             let mut b = tiny_build();
             b.abi = target.abi();
-            b.freestanding = true;
+            b.exec_form = ExecForm::Freestanding;
             b.imports.imports.clear();
             b.imports.dylibs.clear();
             b.entry_offset = 4;
@@ -4013,7 +4013,7 @@ mod tests {
             assert!(prologue > 0, "{machine:?}: the adapter precedes the code");
             assert_eq!(entry, text_addr, "{machine:?}: entry at the adapter");
 
-            let b = shaped(|b| b.freestanding = true);
+            let b = shaped(|b| b.exec_form = ExecForm::Freestanding);
             let w = ElfImageWriter::new(&program, &b, machine).unwrap();
             assert!(
                 matches!(w.entry, Entry::Program),
@@ -4032,7 +4032,7 @@ mod tests {
     #[test]
     fn freestanding_image_with_an_import_keeps_the_loader_tables() {
         let mut b = tiny_build();
-        b.freestanding = true;
+        b.exec_form = ExecForm::Freestanding;
         b.data = vec![0; 16];
         b.data_relocs.push(crate::c5::program::DataReloc {
             data_offset: 0,
@@ -4054,6 +4054,80 @@ mod tests {
         let (_, _, data_addr, _, _) = find_section(&bytes, ".data").expect(".data");
         let slot = section_file_off(&bytes, ".data").expect(".data") as usize;
         assert_eq!(read_u64(&bytes, slot), data_addr + 8, "baked pointer");
+    }
+
+    /// A `-no-pie` image is placed as a freestanding one is and keeps
+    /// what a hosted one has: the adapter into the startup runtime and
+    /// the loader tables. A data pointer is baked with no `R_*_RELATIVE`
+    /// entry, and an absolute text field takes the address, which the
+    /// PIE of the same build has no value for.
+    #[test]
+    fn a_placed_hosted_image_keeps_the_runtime_entry_and_the_loader_tables() {
+        use super::super::elf_reloc_types::{R_AARCH64_ABS32, R_X86_64_32S};
+        for (machine, target, rtype) in [
+            (
+                Machine::Aarch64,
+                super::super::Target::LinuxAarch64,
+                R_AARCH64_ABS32,
+            ),
+            (
+                Machine::X86_64,
+                super::super::Target::LinuxX64,
+                R_X86_64_32S,
+            ),
+        ] {
+            let program = tiny_program();
+            let mut b = tiny_build();
+            b.abi = target.abi();
+            b.exec_form = ExecForm::Placed;
+            b.func_names = vec![String::from("__c5_entry")];
+            b.func_ent_pcs = vec![0];
+            b.pc_to_native = vec![0];
+            b.data = vec![0; 16];
+            b.data_relocs.push(crate::c5::program::DataReloc {
+                data_offset: 0,
+                target_offset: 8,
+                target_anchor: 8,
+            });
+            b.text_abs_relocs.push(crate::c5::codegen::TextAbsReloc {
+                site_text_offset: 0,
+                target_offset: 8,
+                target_in_text: false,
+                rtype,
+            });
+            let w = ElfImageWriter::new(&program, &b, machine).unwrap();
+            assert!(matches!(w.entry, Entry::Adapter(0)), "{machine:?}: adapter");
+            let bytes = write(&program, &b, machine).unwrap();
+            let eh: Elf64Ehdr = read_struct(&bytes, 0);
+            assert_eq!(eh.e_type, ET_EXEC, "{machine:?}");
+            assert!(
+                find_phdr(&bytes, PT_INTERP).is_some(),
+                "{machine:?}: PT_INTERP"
+            );
+            assert!(
+                dynamic_entries(&bytes)
+                    .iter()
+                    .any(|&(tag, _)| tag == DT_NEEDED),
+                "{machine:?}: DT_NEEDED"
+            );
+            let (_, _, _, rela_size, _) = find_section(&bytes, ".rela.dyn").expect(".rela.dyn");
+            assert_eq!(rela_size, ELF64_RELA_SIZE, "{machine:?}: one GLOB_DAT");
+            let (_, _, text_addr, text_size, _) = find_section(&bytes, ".text").expect(".text");
+            assert_eq!(eh.e_entry, text_addr, "{machine:?}: entry at the adapter");
+            let (_, _, data_addr, _, _) = find_section(&bytes, ".data").expect(".data");
+            let slot = section_file_off(&bytes, ".data").expect(".data") as usize;
+            assert_eq!(read_u64(&bytes, slot), data_addr + 8, "{machine:?}: baked");
+            let field = section_file_off(&bytes, ".text").expect(".text") as usize
+                + text_size as usize
+                - b.text.len();
+            assert_eq!(
+                u64::from(read_u32(&bytes, field)),
+                data_addr + 8,
+                "{machine:?}: the text field holds the address"
+            );
+            b.exec_form = ExecForm::Pie;
+            assert!(write(&program, &b, machine).is_err(), "{machine:?}: PIE");
+        }
     }
 
     /// Compile a `_Thread_local`-using program for Linux/aarch64, confirm a
@@ -4281,8 +4355,9 @@ mod tests {
             let mut build =
                 super::super::lower_for(&program, target, super::super::NativeOptions::default())
                     .expect("lower");
-            for placed in [false, true] {
-                build.freestanding = placed;
+            for form in [ExecForm::Pie, ExecForm::Placed] {
+                let placed = form.placed();
+                build.exec_form = form;
                 let b = write(&tiny_program(), &build, machine).expect("write ELF");
                 let (phoff, phentsize, phnum) = (
                     le64(&b, 0x20) as usize,

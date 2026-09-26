@@ -2058,11 +2058,10 @@ pub(crate) struct Build {
     /// apart lets `.rodata` stay pure, so the pure `const` objects of
     /// the same unit hold the read-only prefix.
     pub pic_link: bool,
-    /// The image links no startup runtime (`--freestanding`). The ELF
-    /// writer places it at its link address, since no code of its own
-    /// applies load-time relocations, and adds the loader tables only
-    /// when it binds a shared-library symbol.
-    pub freestanding: bool,
+    /// The executable's form. The ELF writer places an image of a
+    /// placed form at its link address and adds the loader tables when
+    /// it binds a shared-library symbol.
+    pub exec_form: ExecForm,
     /// Mirror of [`NativeOptions::code_model`]. The relocatable writer
 
     /// reads it to pick the external-address form; see [`CodeModel`].
@@ -3361,11 +3360,11 @@ pub struct NativeOptions {
     /// so a consumer that relocates it wholesale at load (or forbids
     /// absolute references outright) can take it. The default keeps
     /// the absolute 8-byte form whose relocations name the branch
-    /// targets directly, which unwind-data discovery requires. Final
-    /// images are position-independent either way.
+    /// targets directly, which unwind-data discovery requires. The
+    /// image's own form is the link's; see [`ExecForm`].
     pub pic: bool,
     /// The object is compiled for a link that applies its relocations
-    /// after mapping -- every image this toolchain writes does (ELF
+    /// after mapping, as a position-independent image does (ELF
     /// `ET_DYN`, PE base relocations, Mach-O dyld rebases). `const`
     /// storage carrying a relocation then goes to `.data.rel.ro`
     /// instead of `.rodata`, so the linker places only that storage in
@@ -3609,8 +3608,8 @@ pub(crate) fn access_pieces(
 ///
 /// * **Mach-O**: `MH_EXECUTE` + `LC_MAIN` vs `MH_DYLIB` +
 ///   `LC_ID_DYLIB` + symbol-table N_EXT entries.
-/// * **ELF**: `ET_EXEC` + `_start` stub vs `ET_DYN` +
-///   `STB_GLOBAL` `STT_FUNC` exports in `.dynsym`.
+/// * **ELF**: an executable in the [`ExecForm`] the link picks vs
+///   `ET_DYN` + `STB_GLOBAL` `STT_FUNC` exports in `.dynsym`.
 /// * **PE**: regular console image vs `IMAGE_FILE_DLL`
 ///   characteristic + `IMAGE_DATA_DIRECTORY[0]` Export
 ///   Directory + DllMain stub.
@@ -3633,6 +3632,32 @@ pub enum OutputKind {
     /// compile time -- a relocatable produced for one target can't
     /// be linked into a binary for a different one.
     Relocatable,
+}
+
+/// How an executable is loaded and entered.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum ExecForm {
+    /// Loaded at a base of the loader's choosing -- ELF `ET_DYN` with
+    /// `R_*_RELATIVE` fixups, PE base relocations, Mach-O `MH_PIE` --
+    /// and entered through the startup runtime.
+    #[default]
+    Pie,
+    /// `-no-pie`: an ELF `ET_EXEC` loaded at its link address, so every
+    /// address is final at link time; entered through the startup
+    /// runtime.
+    Placed,
+    /// `--freestanding`: entered at the program's own entry, with no
+    /// startup runtime. An ELF image is placed as [`Self::Placed`] is,
+    /// since no code of its own applies load-time fixups.
+    Freestanding,
+}
+
+impl ExecForm {
+    /// Whether an ELF executable of this form is loaded at its link
+    /// address.
+    pub fn placed(self) -> bool {
+        self != ExecForm::Pie
+    }
 }
 
 impl Default for NativeOptions {

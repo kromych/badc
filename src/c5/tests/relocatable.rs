@@ -1138,7 +1138,7 @@ fn emit_relocs_survive_into_final_elf() {
             false,
             false,
             emit,
-            false,
+            crate::c5::ExecForm::Pie,
         )
         .expect("write")
     };

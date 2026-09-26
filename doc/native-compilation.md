@@ -11,6 +11,13 @@ Five targets, cross-compiled from any host to any of them:
 | `windows-arm64` | PE32+         |
 
 Executables are position-independent (ELF `ET_DYN` / PIE, matching Mach-O).
+On Linux, `-no-pie` places the executable at its link address (`ET_EXEC`), as
+gcc's `-no-pie` does: the startup runtime and the dynamic tables stay, data
+pointers are final at link time with no `R_*_RELATIVE` entries, and the
+absolute fields of a `-fno-pic` object resolve (on x86-64 such an object
+addresses its tables with `R_X86_64_32S`, which a PIE refuses as GNU ld does).
+The last of `-pie` / `-no-pie` wins. A Mach-O or PE executable is always
+position-independent, so `-no-pie` is refused for those targets.
 `--freestanding` drops the embedded startup runtime; the program supplies the
 entry (`__c5_entry`, `#pragma entrypoint` or `--entry`). On Linux such an
 image is placed at its link address (`ET_EXEC`), since nothing in it applies

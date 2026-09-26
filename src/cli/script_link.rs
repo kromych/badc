@@ -158,7 +158,7 @@ pub(crate) fn run_script_link(cli: &Cli, script: &std::path::Path, inputs: Vec<L
     }
     let machine = inputs[0].machine;
     let opts = badc::LdsOptions {
-        emit: if shared {
+        emit: if shared || cli.link.pie == Some(true) {
             badc::LdsEmit::Dyn
         } else {
             badc::LdsEmit::Exec

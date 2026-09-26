@@ -44,11 +44,12 @@ pub(crate) fn link_image(cli: &Cli, inputs: Inputs, stdin: &StdinSource) {
     let mut native_objs: Vec<badc::NativeObject> =
         Vec::with_capacity(sources.len() + objects.len() + archives.len());
 
-    // These objects are linked into an image below, and every image
-    // this toolchain writes takes its data relocations at load time
-    // (ELF ET_DYN, PE base relocations, Mach-O dyld rebases), so a
-    // relocated `const` cannot ride the read-only prefix and must not
-    // cost the unit's pure `const` objects their place in it.
+    // These objects are linked into an image below. A position-
+    // independent one takes its data relocations at load time (ELF
+    // ET_DYN, PE base relocations, Mach-O dyld rebases), so a relocated
+    // `const` cannot ride the read-only prefix and must not cost the
+    // unit's pure `const` objects their place in it. TODO: compile for
+    // a placed image (`-no-pie`, `--freestanding`) when one is linked.
     let reloc_opts = cli
         .codegen
         .relocatable_options(cli.front.optimize, true, &cli.front.diag);
@@ -818,7 +819,7 @@ fn emit_image(cli: &Cli, image: ImageInputs, stats: &mut LinkStats) {
         cli.link.export_all,
         cli.link.export_data,
         cli.link.emit_relocs,
-        cli.freestanding,
+        cli.exec_form(),
     );
 
     let bytes = match write_result {

@@ -35,6 +35,8 @@ struct AggregateLayout {
     bf_active: bool,
     /// Next free bit, measured from the start of the aggregate.
     bf_bit_cursor: usize,
+    /// A packed bit-field awaits its access window (`bit_unit_size` 0).
+    windows_to_fit: bool,
 }
 
 impl Default for AggregateLayout {
@@ -46,6 +48,7 @@ impl Default for AggregateLayout {
             natural: 1,
             bf_active: false,
             bf_bit_cursor: 0,
+            windows_to_fit: false,
         }
     }
 }
@@ -58,6 +61,8 @@ struct MemberBase {
     incomplete_enum_tag: Option<u32>,
     anon_aggregate_inner_id: Option<usize>,
     group_align: usize,
+    /// `packed` among the specifiers, which packs every declarator.
+    group_packed: bool,
     base_spelling: crate::c5::symbol::DeclSpelling,
     type_align_override: usize,
 }
@@ -226,6 +231,7 @@ impl Compiler {
             field_base,
             incomplete_enum_tag,
             group_align,
+            group_packed,
             base_spelling,
             type_align_override,
             ..
@@ -266,7 +272,12 @@ impl Compiler {
 
             if let Some(width) = anon_bitfield_width {
                 self.place_anonymous_bitfield(
-                    struct_id, field_base, width, is_union, packed, layout,
+                    struct_id,
+                    field_base,
+                    width,
+                    is_union,
+                    packed || group_packed,
+                    layout,
                 );
                 if self.lex.tk == ',' {
                     self.next()?;
@@ -280,12 +291,7 @@ impl Compiler {
             self.pending.base_is_function_type = base_field_is_function_type;
             self.pending.fn_ptr_params = base_field_fn_ptr_params.clone();
             self.pending.fn_ptr_ret_fn = base_field_fn_ptr_ret_fn.clone();
-            // Confine `packed` to this declarator: a member-level
-            // `__attribute__((packed))` (trailing the declarator, so
-            // consumed inside `parse_declarator` or just below) sets
-            // `pending.attr_packed`; a base-type or type-level packed
-            // must not carry over to the field's own placement.
-            self.pending.attr_packed = false;
+            self.pending.attr_packed = group_packed;
             let saved_member_ctx = self.pending.in_member_declarator;
             self.pending.in_member_declarator = true;
             self.pending.member_decl_save = None;
@@ -603,10 +609,26 @@ impl Compiler {
                 if bit_unit > layout.offset {
                     layout.offset = bit_unit;
                 }
-                let a = bit_unit.min(16);
+                let a = if attr_packed { 1 } else { bit_unit.min(16) };
                 if a > layout.align {
                     layout.align = a;
                 }
+            } else if attr_packed {
+                // GCC: the next bit, whatever units it straddles, and no
+                // alignment; the access window is fitted to the final size.
+                if !layout.bf_active {
+                    layout.bf_bit_cursor = layout.offset * 8;
+                    layout.bf_active = true;
+                }
+                if layout.bf_bit_cursor % 8 + bit_width as usize > 64 {
+                    layout.bf_bit_cursor = round_up(layout.bf_bit_cursor, 8);
+                }
+                field_offset = layout.bf_bit_cursor / 8;
+                bit_offset = (layout.bf_bit_cursor % 8) as u32;
+                bit_unit = 0;
+                layout.bf_bit_cursor += bit_width as usize;
+                layout.offset = layout.offset.max(layout.bf_bit_cursor.div_ceil(8));
+                layout.windows_to_fit = true;
             } else {
                 // C99 6.7.2.1p11 / p13: the bitfield's
                 // addressable storage unit is implementation
@@ -807,12 +829,13 @@ impl Compiler {
         // alignment of every member of the group; a per-declarator one adds
         // to it at placement.
         let mut group_align: usize = 0;
+        let mut group_packed = false;
         // C99 6.7.2p2 admits the qualifiers in any order, so a leading
         // `volatile int x;` folds like the trailing spelling.
         let mut leading_quals: i64 = 0;
         while is_decl_modifier(self.lex.tk) {
             if self.lex.tk == Token::Attribute {
-                self.skip_attribute_specifiers()?;
+                group_packed |= self.skip_attribute_specifiers()?;
                 let m_align = self.take_member_align()?;
                 if m_align > 0 {
                     group_align = group_align.max(m_align as usize);
@@ -903,9 +926,13 @@ impl Compiler {
 
         // Trailing specifiers: C99 6.7.2p2 admits any order, so
         // `int long` / `char unsigned` fields re-derive the base
-        // tag from the folded modifiers.
+        // tag from the folded modifiers. An attribute among them applies
+        // to every declarator; a nested type's own `packed` does not.
+        self.pending.attr_packed = false;
         let (saw_int_mod, trailing_quals) =
             self.consume_trailing_decl_modifiers(&mut mods, None)?;
+        group_packed |= core::mem::take(&mut self.pending.attr_packed);
+        group_align = group_align.max(self.take_member_align()?.max(0) as usize);
         if saw_int_mod {
             if field_base_tok == Token::Int {
                 field_base = mods.int_base();
@@ -929,6 +956,7 @@ impl Compiler {
             incomplete_enum_tag,
             anon_aggregate_inner_id,
             group_align,
+            group_packed,
             base_spelling,
             type_align_override,
         })
@@ -1141,6 +1169,9 @@ impl Compiler {
         self.structs[struct_id].natural_align = layout.natural.min(super::MAX_STATIC_ALIGN);
         self.structs[struct_id].member_align = struct_align;
         self.structs[struct_id].is_complete = true;
+        if layout.windows_to_fit {
+            self.fit_bitfield_windows(struct_id, false);
+        }
         // The leading spelling lays out exactly like the trailing one.
         // Threading `packed` into the per-member alignment above covers a
         // non-bitfield member; the bit-level packing and the alignment-1
@@ -1342,7 +1373,7 @@ impl Compiler {
             f.bit_offset = (bit_start % 8) as u32;
         }
         self.finish_repack(struct_id, packing, size, max_explicit_align);
-        self.fit_bitfield_windows(struct_id);
+        self.fit_bitfield_windows(struct_id, true);
     }
 
     /// Each bitfield's addressable unit after a packed re-layout: the
@@ -1352,10 +1383,10 @@ impl Compiler {
     /// slide can fit stays at the field's own byte.
     /// TODO: an access through a window wider than the aggregate reaches
     /// past the object; such a field needs a split access.
-    fn fit_bitfield_windows(&mut self, struct_id: usize) {
+    fn fit_bitfield_windows(&mut self, struct_id: usize, refit_all: bool) {
         let size = self.structs[struct_id].size;
         for f in &mut self.structs[struct_id].fields {
-            if f.bit_width == 0 {
+            if f.bit_width == 0 || (!refit_all && f.bit_unit_size != 0) {
                 continue;
             }
             let bit_start = f.offset * 8 + f.bit_offset as usize;
@@ -1447,7 +1478,7 @@ impl Compiler {
             size = size.max((a.width as usize).div_ceil(8));
         }
         self.finish_repack(struct_id, packing, size, max_explicit_align);
-        self.fit_bitfield_windows(struct_id);
+        self.fit_bitfield_windows(struct_id, true);
     }
 
     /// Lay out an aggregate holding bit-fields by the MS rules ([`MsCursor`]).

@@ -5908,6 +5908,61 @@ enum WindowsCc {
     },
 }
 
+// `packed` among a member declaration's specifiers packs every declarator,
+// a bit-field included, as the compiler on the other side lays them out.
+const PACKED_MEMBERS_COMMON: &str = "typedef long long ll;\n\
+    struct pm { char c; __attribute__((packed)) int a, b; char d; };\n\
+    struct pb { char c; int x : 20; __attribute__((packed)) int y : 20; char d; };\n\
+    static ll layout(void)\n\
+    { return sizeof(struct pm) + 100 * (sizeof(struct pb) + 100 * (ll)__builtin_offsetof(struct pm, b)); }\n\
+    static struct pm make_pm(int a, int b) { struct pm v = { 1, a, b, 2 }; return v; }\n\
+    static int read_pb(const struct pb *p) { return p->c + p->x * 10 + p->y * 1000 + p->d * 7; }\n\
+    static void set_pb(struct pb *p, int y) { p->y = y; }\n\
+    struct fns { ll (*layout)(void); struct pm (*make_pm)(int, int);\n\
+      int (*read_pb)(const struct pb *); void (*set_pb)(struct pb *, int); };\n\
+    static int drive(const struct fns *f, int base)\n\
+    { struct pm m = f->make_pm(-3, 0x10203040);\n\
+      struct pb p = { 1, -5, 9, 3 };\n\
+      if (f->layout() != layout()) return base + 1;\n\
+      if (m.c != 1 || m.a != -3 || m.b != 0x10203040 || m.d != 2) return base + 2;\n\
+      if (f->read_pb(&p) != 1 - 50 + 9000 + 21) return base + 3;\n\
+      f->set_pb(&p, -77);\n\
+      if (p.c != 1 || p.x != -5 || p.y != -77 || p.d != 3) return base + 4;\n\
+      return 0; }\n";
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn packed_members_cross_the_system_compiler_boundary() {
+    let Some(cc) = host_cc() else {
+        eprintln!(
+            "skipping packed_members_cross_the_system_compiler_boundary: no system C compiler"
+        );
+        return;
+    };
+    drive_across_the_system_compiler(
+        &cc,
+        "packed-members-interop",
+        PACKED_MEMBERS_COMMON,
+        "layout, make_pm, read_pb, set_pb",
+    );
+}
+
+#[cfg(windows)]
+#[test]
+fn packed_members_cross_the_windows_compiler_boundary() {
+    // MSVC has no GNU attributes, so only a clang build is a peer here.
+    let Some(cc @ WindowsCc::Clang(_)) = windows_cc() else {
+        eprintln!("skipping packed_members_cross_the_windows_compiler_boundary: no clang");
+        return;
+    };
+    drive_across_the_windows_compiler(
+        &cc,
+        "win-packed-members-interop",
+        PACKED_MEMBERS_COMMON,
+        "layout, make_pm, read_pb, set_pb",
+    );
+}
+
 /// The platform C compiler on Windows: `$CC` when set, else clang on the path
 /// or in LLVM's default install, provided it runs, else the `cl` of the newest
 /// Visual Studio vswhere reports, for the host architecture.

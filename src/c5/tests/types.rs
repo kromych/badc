@@ -1815,6 +1815,63 @@ fn enums_take_the_type_the_target_abi_gives() {
     }
 }
 
+/// An attribute among a member declaration's specifiers, before or after the
+/// type, applies to every declarator. The rows are gcc 16's and clang 21's for
+/// x86_64 and aarch64 Linux, which agree, and clang 21's for both
+/// windows-msvc triples.
+#[test]
+fn member_declaration_attributes_apply_to_every_declarator() {
+    use crate::Target;
+    const SYSV: &[&str] = &[
+        "|struct { char c; __attribute__((packed)) int b; }|5/1|c@0 b@8",
+        "|struct { char c; int __attribute__((packed)) b; }|5/1|c@0 b@8",
+        "|struct { char c; __attribute__((packed)) int a, b; char d; }|10/1|c@0 a@8 b@40 d@72",
+        "|struct { char c; int __attribute__((packed)) a, b; char d; }|10/1|c@0 a@8 b@40 d@72",
+        "|struct { char c; __attribute__((packed)) struct { char x; int y; } m; char d; }|10/1|c@0 m.y@40 d@72",
+        "|struct { char c; __attribute__((packed)) long long b; }|9/1|c@0 b@8",
+        "|struct { char c; __attribute__((packed)) int arr[2]; }|9/1|c@0 arr[1]@40",
+        "|struct { char c; __attribute__((packed, aligned(2))) int b; }|6/2|c@0 b@16",
+        "|struct { char c; __attribute__((aligned(2), packed)) int b; char d; }|8/2|c@0 b@16 d@48",
+        "|union { char c; __attribute__((packed)) int b; }|4/1|c@0 b@0",
+        "|struct { char c; int __attribute__((aligned(8))) a, b; }|24/8|c@0 a@64 b@128",
+        "|struct { char c; __attribute__((packed)) int b : 4; char d; }|3/1|c@0 b@8 d@16",
+        "|struct { char c; __attribute__((packed)) int b : 4; int e : 4; char d; }|4/4|c@0 b@8 e@12 d@16",
+        "|struct { char c; __attribute__((packed)) int b : 30; char d; }|6/1|c@0 b@8 d@40",
+        "|struct { char c; int a : 20; __attribute__((packed)) int b : 20; char d; }|8/4|c@0 a@8 b@28 d@48",
+        "|struct { char c; __attribute__((packed)) int b : 4; int e : 30; }|8/4|c@0 b@8 e@32",
+        "|struct { char c; __attribute__((packed)) long long b : 40; char d; }|7/1|c@0 b@8 d@48",
+        "|struct { char c; struct { char x; __attribute__((packed)) int y; } m; char d; }|7/1|c@0 m.y@16 d@48",
+        "|struct { char c; struct __attribute__((packed, aligned(4))) { char x; int y; } m, n; char d; }|24/4|c@0 m.y@40 n.y@104 d@160",
+        "|struct { char c; struct { char x; int y; } __attribute__((packed, aligned(4))) m, n; char d; }|24/4|c@0 m.y@40 n.y@104 d@160",
+        "|struct { char c; __attribute__((packed)) struct __attribute__((aligned(4))) { char x; int y; } m, n; char d; }|18/1|c@0 m.y@40 n.y@104 d@136",
+    ];
+    const MS: &[&str] = &[
+        "|struct { char c; __attribute__((packed)) int b; }|5/1|c@0 b@8",
+        "|struct { char c; int __attribute__((packed)) b; }|5/1|c@0 b@8",
+        "|struct { char c; __attribute__((packed)) int a, b; char d; }|10/1|c@0 a@8 b@40 d@72",
+        "|struct { char c; int __attribute__((packed)) a, b; char d; }|10/1|c@0 a@8 b@40 d@72",
+        "|struct { char c; __attribute__((packed)) struct { char x; int y; } m; char d; }|10/1|c@0 m.y@40 d@72",
+        "|struct { char c; __attribute__((packed)) long long b; }|9/1|c@0 b@8",
+        "|struct { char c; __attribute__((packed)) int arr[2]; }|9/1|c@0 arr[1]@40",
+        "|struct { char c; __attribute__((packed, aligned(2))) int b; }|6/2|c@0 b@16",
+        "|struct { char c; __attribute__((aligned(2), packed)) int b; char d; }|8/2|c@0 b@16 d@48",
+        "|union { char c; __attribute__((packed)) int b; }|4/1|c@0 b@0",
+        "|struct { char c; int __attribute__((aligned(8))) a, b; }|24/8|c@0 a@64 b@128",
+        "|struct { char c; __attribute__((packed)) int b : 4; char d; }|6/1|c@0 b@8 d@40",
+        "|struct { char c; __attribute__((packed)) int b : 4; int e : 4; char d; }|6/1|c@0 b@8 e@12 d@40",
+        "|struct { char c; __attribute__((packed)) int b : 30; char d; }|6/1|c@0 b@8 d@40",
+        "|struct { char c; int a : 20; __attribute__((packed)) int b : 20; char d; }|16/4|c@0 a@32 b@64 d@96",
+        "|struct { char c; __attribute__((packed)) int b : 4; int e : 30; }|12/4|c@0 b@8 e@64",
+        "|struct { char c; __attribute__((packed)) long long b : 40; char d; }|10/1|c@0 b@8 d@72",
+        "|struct { char c; struct { char x; __attribute__((packed)) int y; } m; char d; }|7/1|c@0 m.y@16 d@48",
+        "|struct { char c; struct __attribute__((packed, aligned(4))) { char x; int y; } m, n; char d; }|24/4|c@0 m.y@40 n.y@104 d@160",
+        "|struct { char c; struct { char x; int y; } __attribute__((packed, aligned(4))) m, n; char d; }|24/4|c@0 m.y@40 n.y@104 d@160",
+        "|struct { char c; __attribute__((packed)) struct __attribute__((aligned(4))) { char x; int y; } m, n; char d; }|24/4|c@0 m.y@64 n.y@128 d@160",
+    ];
+    layout_rows_hold("", SYSV, &[Target::LinuxX64, Target::LinuxAarch64]);
+    layout_rows_hold("", MS, &[Target::WindowsX64, Target::WindowsAarch64]);
+}
+
 /// The wide storage format round-trips through memory: a value stored
 /// into a `long double` object and read back is unchanged, and the
 /// object's bytes carry the platform's encoding rather than a binary64

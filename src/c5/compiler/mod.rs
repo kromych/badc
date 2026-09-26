@@ -912,6 +912,12 @@ pub(in crate::c5::compiler) struct Pending {
     /// Pointer levels of the entity's declarator the own signature and
     /// `fn_ret_chain` account for.
     pub fn_chain_levels: i64,
+    /// Pointer levels the declarator applies to its base type before its
+    /// outermost signature: the base's function type lies these levels
+    /// below that signature's result.
+    pub fn_base_levels: i64,
+    /// Pointer levels of the declarator frames enclosing a group's content.
+    pub declarator_path_levels: i64,
     /// The declarator spelled its entity's own signature.
     pub fn_own_sig: bool,
     /// The base type's function type at the entity's declarator start,
@@ -1551,6 +1557,8 @@ impl Default for Pending {
             declarator_in_group: false,
             fn_ret_chain: alloc::vec::Vec::new(),
             fn_chain_levels: 0,
+            fn_base_levels: 0,
+            declarator_path_levels: 0,
             fn_own_sig: false,
             fn_decl_base: None,
             base_is_function_type: false,

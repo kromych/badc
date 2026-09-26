@@ -143,6 +143,7 @@ impl Compiler {
         );
         let outer_chain = core::mem::take(&mut p.fn_ret_chain);
         let outer_levels = core::mem::take(&mut p.fn_chain_levels);
+        let outer_base_levels = core::mem::take(&mut p.fn_base_levels);
         let outer_own = core::mem::take(&mut p.fn_own_sig);
         let outer_base = p.fn_decl_base.take();
         let r = self.parse_function_params_inner();
@@ -157,6 +158,7 @@ impl Compiler {
         ) = outer;
         p.fn_ret_chain = outer_chain;
         p.fn_chain_levels = outer_levels;
+        p.fn_base_levels = outer_base_levels;
         p.fn_own_sig = outer_own;
         p.fn_decl_base = outer_base;
         r

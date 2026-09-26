@@ -307,7 +307,13 @@ impl Compiler {
         // any nested one (a function-pointer parameter's prototype).
         let param_ctx = core::mem::take(&mut self.pending.param_decl_context);
         // An entity's declarator starts its function types from the base.
-        if !core::mem::take(&mut self.pending.declarator_in_group) {
+        let entity_start = !core::mem::take(&mut self.pending.declarator_in_group);
+        let outer_levels = if entity_start {
+            0
+        } else {
+            self.pending.declarator_path_levels
+        };
+        if entity_start {
             self.pending.fn_ret_chain.clear();
             self.pending.fn_chain_levels = 0;
             self.pending.fn_own_sig = false;
@@ -421,6 +427,10 @@ impl Compiler {
             ty -= Ty::Ptr as i64;
         }
         let own_levels = leading_ptr_count - i64::from(absorb_fn_type_ptr);
+        // The pointers of this frame and the enclosing ones apply to the base
+        // before a signature this frame's group or suffixes hold.
+        let path_levels = outer_levels + own_levels;
+        self.pending.fn_base_levels = path_levels;
         if leading_ptr_count > 0
             && let Some(fpi) = self.pending.fn_ptr_indirection
         {
@@ -467,6 +477,7 @@ impl Compiler {
             // pointer levels describe the return type instead.
             core::mem::take(&mut self.pending.fn_ptr_group_resolved);
             self.pending.declarator_in_group = true;
+            self.pending.declarator_path_levels = path_levels;
             let (idx, mut inner_ty, inner_array_size, inner_ptr_levels) =
                 self.parse_declarator_levels(ty)?;
             let inner_resolved = core::mem::take(&mut self.pending.fn_ptr_group_resolved);
@@ -505,6 +516,7 @@ impl Compiler {
                 self.pending.fn_params = Some(params);
                 self.pending.fn_own_sig = true;
                 self.pending.fn_chain_levels = 0;
+                self.pending.fn_base_levels = path_levels + inner_ptr_levels;
                 saw_fn_signature = true;
             }
             if self.lex.tk != ')' {
@@ -589,6 +601,7 @@ impl Compiler {
                         self.pending.fn_chain_levels = inner_ptr_levels;
                         self.pending.fn_ret_chain.push((pp.fn_params(), depth));
                     }
+                    self.pending.fn_base_levels = path_levels;
                     saw_fn_signature = true;
                 } else if self.lex.tk == Token::Brak {
                     self.next()?;

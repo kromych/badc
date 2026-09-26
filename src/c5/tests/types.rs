@@ -2938,3 +2938,31 @@ fn character_types_are_told_apart_by_compatibility_and_diagnostics() {
         }
     }
 }
+
+/// C99 6.7.5.1: the pointer levels a declarator applies to a
+/// function-pointer typedef base lie between the declared function's
+/// result, or the result of the function a declared pointer points to,
+/// and the typedef's function type.
+#[test]
+fn a_result_keeps_the_pointer_levels_over_a_function_pointer_base() {
+    compile_str(
+        "typedef _Bool (*handler)(int);\n\
+         typedef int F(int);\n\
+         static handler table[2];\n\
+         static handler *get(void) { return table; }\n\
+         static handler *(*get2(void)) { static handler *slot; return &slot; }\n\
+         static F *getf(void) { return 0; }\n\
+         handler *(*fp)(char);\n\
+         _Static_assert(__builtin_types_compatible_p(__typeof__(get), _Bool (**(void))(int)), \"get\");\n\
+         _Static_assert(__builtin_types_compatible_p(__typeof__(get2),\n\
+             _Bool (***(void))(int)), \"get2\");\n\
+         _Static_assert(__builtin_types_compatible_p(__typeof__(getf), int (*(void))(int)), \"getf\");\n\
+         _Static_assert(__builtin_types_compatible_p(__typeof__(fp), _Bool (**(*)(char))(int)), \"fp\");\n\
+         int main(void) {\n\
+             handler *lget(void);\n\
+             _Static_assert(__builtin_types_compatible_p(__typeof__(lget),\n\
+                 _Bool (**(void))(int)), \"lget\");\n\
+             return 0;\n\
+         }\n",
+    );
+}

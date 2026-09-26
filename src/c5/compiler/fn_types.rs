@@ -257,10 +257,11 @@ impl Compiler {
         let base = self.pending.fn_decl_base.take();
         let carrier = self.pending.fn_ptr_ret_fn.take();
         self.pending.fn_chain_levels = 0;
+        let levels = core::mem::take(&mut self.pending.fn_base_levels);
         if !core::mem::take(&mut self.pending.fn_own_sig) && !own {
             return carrier;
         }
-        let mut ret = base.map(|(f, d)| (Box::new(f), d));
+        let mut ret = base.map(|(f, d)| (Box::new(f), d + levels));
         for (params, depth) in chain.into_iter().rev() {
             let conv = crate::c5::codegen::CallConv::Target;
             ret = Some((Box::new(FnType { params, conv, ret }), depth));

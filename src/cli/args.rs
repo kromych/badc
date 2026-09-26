@@ -1,4 +1,6 @@
+use std::collections::VecDeque;
 use std::io::IsTerminal;
+use std::iter::Peekable;
 use std::path::PathBuf;
 
 use badc::Target;
@@ -309,6 +311,45 @@ impl Cli {
     }
 }
 
+/// The arguments a run of `-Wl,<arg>[,<arg>...]` / `-Xlinker <arg>`
+/// groups hands the linker, in order. gcc passes the groups' arguments
+/// as one list, so an option's operand may come from the next group.
+struct LinkerArgs<'a, I: Iterator<Item = String>> {
+    pieces: VecDeque<String>,
+    rest: &'a mut Peekable<I>,
+    /// An `-Xlinker` ended the command line.
+    dangling: bool,
+}
+
+/// Whether `arg` opens a group of linker arguments.
+fn linker_group(arg: &str) -> bool {
+    arg.starts_with("-Wl,") || arg == "-Xlinker"
+}
+
+impl<I: Iterator<Item = String>> LinkerArgs<'_, I> {
+    fn queue(&mut self, group: &str) {
+        if let Some(list) = group.strip_prefix("-Wl,") {
+            self.pieces.extend(list.split(',').map(String::from));
+        } else if let Some(arg) = self.rest.next() {
+            self.pieces.push_back(arg);
+        } else {
+            self.dangling = true;
+        }
+    }
+}
+
+impl<I: Iterator<Item = String>> Iterator for LinkerArgs<'_, I> {
+    type Item = String;
+
+    fn next(&mut self) -> Option<String> {
+        while self.pieces.is_empty() && !self.dangling {
+            let group = self.rest.next_if(|a| linker_group(a))?;
+            self.queue(&group);
+        }
+        self.pieces.pop_front()
+    }
+}
+
 /// Argument-vector state while the option loop runs. The fields only
 /// the post-loop checks read stay here rather than in [`Cli`].
 #[derive(Default)]
@@ -353,10 +394,10 @@ struct Parser {
     pressure_caps: Vec<(&'static str, String)>,
 }
 
-type Args = dyn Iterator<Item = String>;
+type Args<'a> = dyn Iterator<Item = String> + 'a;
 
 /// The operand of an option that takes a separate argument.
-fn operand(iter: &mut Args, missing: &str) -> Result<String, ParseError> {
+fn operand(iter: &mut Args<'_>, missing: &str) -> Result<String, ParseError> {
     iter.next().ok_or_else(|| ParseError::diag(missing))
 }
 
@@ -397,9 +438,13 @@ fn selector(sel: &str, arg: &str) -> Result<badc::diag::Selector, ParseError> {
 /// what to write and what to exit with.
 pub(crate) fn parse_args(argv: Vec<String>) -> Result<Parsed, ParseError> {
     let mut p = Parser::default();
-    let mut iter = argv.into_iter();
+    let mut iter = argv.into_iter().peekable();
     p.positional.push(iter.next().unwrap_or_default());
     while let Some(arg) = iter.next() {
+        if linker_group(&arg) {
+            p.linker_args(&arg, &mut iter)?;
+            continue;
+        }
         if p.option(&arg, &mut iter)? {
             if let Some(text) = p.print {
                 return Ok(Parsed::Print(text));
@@ -452,7 +497,7 @@ impl Parser {
     /// families are consulted in the order the spellings were written
     /// in: no family's prefix match covers a spelling a later family
     /// takes exactly.
-    fn option(&mut self, arg: &str, iter: &mut Args) -> Result<bool, ParseError> {
+    fn option(&mut self, arg: &str, iter: &mut Args<'_>) -> Result<bool, ParseError> {
         Ok(self.mode_option(arg, iter)?
             || self.preprocess_option(arg, iter)?
             || self.assembler_option(arg, iter)?
@@ -659,7 +704,7 @@ impl Parser {
 
     /// Output mode, driver behavior, and the flags that shape the whole
     /// run rather than one phase.
-    fn mode_option(&mut self, arg: &str, iter: &mut Args) -> Result<bool, ParseError> {
+    fn mode_option(&mut self, arg: &str, iter: &mut Args<'_>) -> Result<bool, ParseError> {
         match arg {
             "--interp" => self.claim(Mode::Interp)?,
             "--track-pointers" => self.track_pointers = true,
@@ -778,7 +823,7 @@ impl Parser {
     }
 
     /// Preprocessor and language-dialect options.
-    fn preprocess_option(&mut self, arg: &str, iter: &mut Args) -> Result<bool, ParseError> {
+    fn preprocess_option(&mut self, arg: &str, iter: &mut Args<'_>) -> Result<bool, ParseError> {
         let front = &mut self.front;
         match arg {
             "-D" => {
@@ -1005,7 +1050,7 @@ impl Parser {
     /// spellings for handing an option to the assembler. badc's
     /// assembler is built in, so each option is checked against what it
     /// implements rather than passed on.
-    fn assembler_option(&mut self, arg: &str, iter: &mut Args) -> Result<bool, ParseError> {
+    fn assembler_option(&mut self, arg: &str, iter: &mut Args<'_>) -> Result<bool, ParseError> {
         let opts: Vec<String> = match arg {
             s if s.starts_with("-Wa,") => s["-Wa,".len()..].split(',').map(String::from).collect(),
             "-Xassembler" => vec![operand(
@@ -1177,7 +1222,7 @@ impl Parser {
     /// gcc's spellings. An argument that is not implemented is rejected
     /// rather than ignored: a hardening flag that compiles but does
     /// nothing leaves the caller believing the output is mitigated.
-    fn hardening_option(&mut self, arg: &str, iter: &mut Args) -> Result<bool, ParseError> {
+    fn hardening_option(&mut self, arg: &str, iter: &mut Args<'_>) -> Result<bool, ParseError> {
         let code = &mut self.codegen;
         match arg {
             // Speculative-execution mitigations, in gcc's spellings. An
@@ -1366,9 +1411,63 @@ impl Parser {
         Ok(true)
     }
 
+    /// The linker's arguments from `-Wl,` and `-Xlinker`: each option is
+    /// one the link implements, or is refused by name; any other
+    /// argument is an input, in its place among the others.
+    fn linker_args<I: Iterator<Item = String>>(
+        &mut self,
+        first: &str,
+        rest: &mut Peekable<I>,
+    ) -> Result<(), ParseError> {
+        let mut args = LinkerArgs {
+            pieces: VecDeque::new(),
+            rest,
+            dangling: false,
+        };
+        args.queue(first);
+        while let Some(arg) = args.next() {
+            if arg.is_empty() {
+                return Err(ParseError::diag(
+                    "badc: error: `-Wl,` passes the linker an empty argument",
+                ));
+            }
+            if !arg.starts_with('-') {
+                self.positional.push(arg);
+            } else if !self.linker_only_option(&arg) && !self.link_option(&arg, &mut args)? {
+                return Err(ParseError::diag(format!(
+                    "badc: error: unsupported linker option `{arg}`"
+                )));
+            }
+        }
+        if args.dangling {
+            return Err(ParseError::diag(
+                "badc: error: -Xlinker requires an argument",
+            ));
+        }
+        Ok(())
+    }
+
+    /// Linker options that exist only in the linker's argument list,
+    /// where the compiler's spelling of the same letters means another
+    /// thing.
+    fn linker_only_option(&mut self, arg: &str) -> bool {
+        match arg {
+            // `-O<n>` sizes the hash tables of a shared object GNU ld
+            // writes; it changes no symbol binding.
+            s if s.len() > 2
+                && s.starts_with("-O")
+                && s[2..].bytes().all(|b| b.is_ascii_digit()) => {}
+            // The link records a `-l` shared library only when it
+            // satisfies a reference, which is what `--as-needed` asks for.
+            "--as-needed" => {}
+            _ => return false,
+        }
+        true
+    }
+
     /// Options that shape a link, including the GNU ld surface a build
     /// system passes through the compiler driver.
-    fn link_option(&mut self, arg: &str, iter: &mut Args) -> Result<bool, ParseError> {
+    fn link_option(&mut self, arg: &str, iter: &mut Args<'_>) -> Result<bool, ParseError> {
         let link = &mut self.link;
         match arg {
             "-Map" => {
@@ -2926,6 +3025,62 @@ mod tests {
         assert_eq!(parse(&["--shared", "a.c"]).mode, Mode::SharedLibrary);
         assert_eq!(parse(&["-shared", "a.c"]).mode, Mode::SharedLibrary);
         assert_eq!(parse(&["a.c"]).mode, Mode::NativeExecutable);
+    }
+
+    /// `-Wl,` and `-Xlinker` hand their arguments to the link options
+    /// one by one, an operand possibly from the next group; an argument
+    /// that is no option is an input in its place; the linker's `-O1`
+    /// is not the compiler's; an option the link does not implement is
+    /// refused by name.
+    #[test]
+    fn linker_arguments_reach_the_link_options() {
+        let cli = parse(&[X64, "-Wl,-z,max-page-size=65536,-Map=out.map", "a.c"]);
+        assert_eq!(cli.link.max_page_size, Some(65536));
+        assert_eq!(cli.link.map_path, Some(PathBuf::from("out.map")));
+        let cli = parse(&[
+            X64,
+            "-Xlinker",
+            "-z",
+            "-Xlinker",
+            "max-page-size=4096",
+            "a.c",
+        ]);
+        assert_eq!(cli.link.max_page_size, Some(4096));
+        let cli = parse(&[X64, "-Wl,-z", "-Wl,max-page-size=8192", "a.c"]);
+        assert_eq!(cli.link.max_page_size, Some(8192));
+        let cli = parse(&[X64, "-Wl,-O1,--as-needed,-no-pie", "a.c"]);
+        assert!(
+            !cli.front.optimize,
+            "the linker's -O1 is not the compiler's"
+        );
+        assert_eq!(cli.exec_form(), badc::ExecForm::Placed);
+        let cli = parse(&[X64, "-Wl,--whole-archive,libx.a,--no-whole-archive", "a.c"]);
+        assert_eq!(cli.positional[1..], ["libx.a", "a.c"]);
+        assert_eq!(cli.link.whole_archive, vec![(1, 2)]);
+        for (args, want) in [
+            (
+                &[X64, "-Wl,--version-script=v.map", "a.c"][..],
+                "badc: error: unsupported linker option `--version-script=v.map`",
+            ),
+            (
+                &[X64, "-Wl,-rpath,/opt/lib", "a.c"][..],
+                "badc: error: unsupported linker option `-rpath`",
+            ),
+            (
+                &[X64, "a.c", "-Wl,-z"][..],
+                "badc: error: -z requires a keyword",
+            ),
+            (
+                &[X64, "a.c", "-Xlinker"][..],
+                "badc: error: -Xlinker requires an argument",
+            ),
+            (
+                &[X64, "-Wl,", "a.c"][..],
+                "badc: error: `-Wl,` passes the linker an empty argument",
+            ),
+        ] {
+            assert_eq!(reject(args).0, want, "{args:?}");
+        }
     }
 
     /// The last of `-pie` / `-no-pie` picks an ELF executable's form,

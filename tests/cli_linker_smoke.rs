@@ -3769,6 +3769,40 @@ fn static_link_objects_address_tables_absolutely() {
     }
 }
 
+// gcc's spellings for the linker's own arguments reach the link: a map
+// named through `-Wl,` is written, an operand split across `-Xlinker`
+// groups binds, and an option the link does not implement is named.
+#[test]
+fn linker_arguments_pass_through_wl_and_xlinker() {
+    let dir = tempdir("wl-args");
+    let src = write_source(&dir, "m.c", "int main(void) { return 0; }\n");
+    let map = dir.join("m.map");
+    run(
+        Command::new(badc())
+            .args(["-q", "--target=linux-x64"])
+            .arg(format!("-Wl,-Map,{}", map.display()))
+            .args(["-Xlinker", "-z", "-Xlinker", "now", "-Wl,-O1,--as-needed"])
+            .arg(&src)
+            .arg("-o")
+            .arg(dir.join("m")),
+        "link",
+    );
+    let text = std::fs::read_to_string(&map).expect("the map is written");
+    assert!(text.contains(".text"), "{text}");
+    let out = Command::new(badc())
+        .args(["-q", "--target=linux-x64", "-Wl,-rpath,/opt/lib"])
+        .arg(&src)
+        .arg("-o")
+        .arg(dir.join("m"))
+        .output()
+        .expect("run badc");
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        !out.status.success() && err.contains("unsupported linker option `-rpath`"),
+        "{err}"
+    );
+}
+
 // A script link writes `ET_EXEC`, as GNU ld does; `-pie` makes it the
 // position-independent `ET_DYN` form, as it does for `ld`.
 #[test]

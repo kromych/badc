@@ -92,6 +92,13 @@ Multi-TU knobs:
   --print-map              Print the link map to stdout.
   --entry=<sym>            Enter the image at <sym>; overrides
                            `#pragma entrypoint` and `main`.
+  -Wl,<arg>[,<arg>...], -Xlinker <arg>
+                           Pass arguments to the link: each option is
+                           one the link implements (this list, -O<n>,
+                           --as-needed) and is refused by name
+                           otherwise; any other argument is an input.
+                           An option's operand may come from the next
+                           group, as in -Xlinker -z -Xlinker now.
   -pie, -no-pie            Link an ELF executable position-independent
                            (`ET_DYN`, the default) or at its link
                            address (`ET_EXEC`), where the absolute

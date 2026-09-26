@@ -879,9 +879,9 @@ impl Compiler {
             // C99 6.7.2p2 forbids combining a typedef-name with `unsigned` /
             // `short` / `long` / `signed`, so after an int modifier the
             // identifier is the member's declarator name, not a type specifier.
-            let (aliased, is_enum) = self.typedef_name_member_type()?;
-            field_base_is_enum = is_enum;
-            aliased
+            // A member takes what a variable declared through the alias does.
+            field_base_is_enum = self.symbols[self.lex.curr_id_idx].is_enum_typedef;
+            self.typedef_name_base_type()?.0
         } else if mods.saw_int_mod {
             mods.int_base()
         } else {
@@ -964,65 +964,6 @@ impl Compiler {
             self.find_or_forward_declare_struct(&inner_name, nested_is_union)
         };
         Ok((struct_ty_for(inner_id), inner_id))
-    }
-
-    /// A typedef-name member type: the aliased type, plus the carriers a
-    /// member declared through the alias reads -- its array dimension (C99
-    /// 6.7.7p3), its type alignment, and a function-pointer alias's calling
-    /// convention and prototype.
-    fn typedef_name_member_type(&mut self) -> Result<(i64, bool), C5Error> {
-        let is_enum = self.symbols[self.lex.curr_id_idx].is_enum_typedef;
-        let aliased = self.symbols[self.lex.curr_id_idx].type_;
-        self.pending.spell_base_typedef = Some(self.lex.curr_id_idx as u32);
-        // C99 6.7.7p3: the alias carries its array dimension through, so
-        // `jmp_buf b;` lays out as `long b[64];`.
-        let typedef_array = self.symbols[self.lex.curr_id_idx].array_size;
-        if typedef_array != 0 {
-            self.pending.typedef_base_array_size = typedef_array;
-            self.pending.typedef_base_array_dims =
-                self.symbols[self.lex.curr_id_idx].array_dims.clone();
-            self.pending.typedef_base_zero_len =
-                self.symbols[self.lex.curr_id_idx].is_zero_len_array;
-        }
-        // Carry the typedef's explicit type alignment so a field
-        // declared with it lays out on the requested boundary
-        // (below its natural value for a reducing `aligned(N)`).
-        let typedef_align = self.symbols[self.lex.curr_id_idx].type_align;
-        if typedef_align > 0 {
-            self.pending.type_align = typedef_align;
-        }
-        // A function / function-pointer typedef carries the
-        // pointed-to function's calling convention; a declarator
-        // through the alias inherits it unless the declaration names
-        // one of its own.
-        if self.symbols[self.lex.curr_id_idx].conv != crate::c5::codegen::CallConv::Target
-            && self.pending.attr_call_conv == crate::c5::codegen::CallConv::Target
-        {
-            self.pending.attr_call_conv = self.symbols[self.lex.curr_id_idx].conv;
-        }
-        // Carry the typedef's fn-pointer lineage forward
-        // (mirrors `decl_base.rs` for the non-aggregate
-        // path) so a `typedef RET (*fn_t)(args); struct {
-        // fn_t cb; }` field records `fn_ptr_indirection =
-        // 1`. Without it the StructField loses the tag and
-        // `(*s.cb)(...)` looks like a regular pointer
-        // deref rather than the C99 6.3.2.1p4 fn-pointer
-        // decay no-op, so the call jumps to garbage.
-        let typedef_fpi = self.symbols[self.lex.curr_id_idx].fn_ptr_indirection;
-        if typedef_fpi > 0 {
-            self.pending.fn_ptr_indirection = Some(typedef_fpi);
-            self.pending.fn_ptr_ret_indirection =
-                self.symbols[self.lex.curr_id_idx].fn_ptr_ret_indirection;
-            self.pending.base_is_function_type =
-                self.symbols[self.lex.curr_id_idx].is_function_type;
-            // Carry the typedef's pointed-to parameter information so
-            // `s.cb(args)` narrows each argument to its declared type and
-            // splits fixed vs variadic arguments per the host variadic
-            // ABI. Mirrors the non-aggregate path in `decl_base.rs`.
-            self.pending.fn_ptr_params = Some(self.symbols[self.lex.curr_id_idx].fn_params());
-        }
-        self.next()?;
-        Ok((aliased, is_enum))
     }
 
     /// An unnamed member (a struct / union type prefix with no declarator):

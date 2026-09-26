@@ -2047,7 +2047,7 @@ impl Compiler {
     /// debug info, the calling convention, the fn-pointer lineage and
     /// prototype, the array dimensions (C99 6.7.7p3) and the type alignment.
     /// Consumes the identifier.
-    fn typedef_name_base_type(&mut self) -> Result<(i64, Option<u32>), C5Error> {
+    pub(super) fn typedef_name_base_type(&mut self) -> Result<(i64, Option<u32>), C5Error> {
         let idx = self.lex.curr_id_idx;
         let spelled = self.resolve_spelling(super::redeclaration::Spelled {
             ty: self.symbols[idx].type_,

@@ -2715,6 +2715,15 @@ fn type_name_array_derivations() {
 }
 
 #[test]
+fn typedef_member_types() {
+    // C99 6.7.7p3: a member declared through a typedef has the type a
+    // variable declared through it has: a call through the result of a
+    // member's call converts its arguments, and an enum completed after the
+    // typedef lays the member out at the enum's width.
+    assert_eq!(run_fixture("typedef_member_types.c"), 0);
+}
+
+#[test]
 fn indirect_call_prototypes() {
     // A call through a pointer converts or promotes its arguments by the
     // pointed-to type, however the callee is spelled.

@@ -2237,6 +2237,31 @@ fn a_function_type_without_a_prototype_prints_an_empty_list() {
     }
 }
 
+/// C99 6.7.7p3: a member declared through a typedef has the typedef's type,
+/// so a call through the member yields the pointer its function returns,
+/// whose function type the diagnostic names -- as for a variable.
+#[test]
+fn a_member_declared_through_a_typedef_has_its_function_type() {
+    use crate::Compiler;
+    let decls = "static double twice(double x) { return x * 2; }\n\
+                 typedef double (*dfp)(double);\n\
+                 static dfp get(void) { return twice; }\n\
+                 typedef dfp (*gf_t)(void);\n\
+                 typedef dfp gfn_t(void);\n\
+                 struct s { gf_t g; gfn_t *h; gf_t arr[2]; } s = { get, get, { get, get } };\n\
+                 union u { gf_t g; long pad; } u = { get };\n\
+                 gf_t v = get;\n";
+    for callee in ["v()", "s.g()", "s.h()", "s.arr[1]()", "u.g()", "(&s)->g()"] {
+        let src = format!("{decls}int main(void) {{ return {callee}[0](3) == 6.0; }}\n");
+        let err = Compiler::new(src.clone())
+            .compile()
+            .expect_err(&src)
+            .to_string();
+        let text = "subscripted value has type `double (*)(double)`, a pointer to a function";
+        assert!(err.contains(text), "{src}{err}");
+    }
+}
+
 /// C99 6.5.2.1p1, 6.5.6p2: a subscript and the additive operators step by
 /// the pointee's size, so a pointer to a struct or union without its body,
 /// or to an array of unknown bound, is rejected with its type named. A

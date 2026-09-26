@@ -28,40 +28,31 @@ Disassembly of section .text:
 <clobber_heavy>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x28, %rsp
+               	subq	$0x8, %rsp
                	pushq	%r15
                	pushq	%r14
                	pushq	%r13
                	pushq	%r12
                	pushq	%rbx
                	movl	$0xa, %eax
-               	movq	$0x14, -0x20(%rbp)
-               	movq	$0x1e, -0x18(%rbp)
-               	movq	$0x28, -0x10(%rbp)
-               	movq	$0x32, -0x8(%rbp)
+               	movl	$0x14, %ecx
+               	movl	$0x1e, %edx
+               	movl	$0x28, %esi
+               	movl	$0x32, %edi
                	movq	%rax, %rbx
-               	movq	-0x20(%rbp), %r12
-               	movq	-0x18(%rbp), %r13
-               	movq	-0x10(%rbp), %r14
-               	movq	-0x8(%rbp), %r15
+               	movq	%rcx, %r12
+               	movq	%rdx, %r13
+               	movq	%rsi, %r14
+               	movq	%rdi, %r15
                	addq	$0x1, %rbx
                	addq	$0x2, %r12
                	addq	$0x3, %r13
                	addq	$0x4, %r14
                	addq	$0x5, %r15
-               	movq	%r12, -0x20(%rbp)
-               	movq	%r13, -0x18(%rbp)
-               	movq	%r14, -0x10(%rbp)
-               	movq	%r15, -0x8(%rbp)
-               	movq	%rbx, %rax
-               	movq	-0x20(%rbp), %rcx
-               	addq	%rcx, %rax
-               	movq	-0x18(%rbp), %rcx
-               	addq	%rcx, %rax
-               	movq	-0x10(%rbp), %rcx
-               	addq	%rcx, %rax
-               	movq	-0x8(%rbp), %rcx
-               	addq	%rcx, %rax
+               	leaq	(%rbx,%r12), %rax
+               	addq	%r13, %rax
+               	addq	%r14, %rax
+               	addq	%r15, %rax
                	popq	%rbx
                	popq	%r12
                	popq	%r13
@@ -73,40 +64,31 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x28, %rsp
+               	subq	$0x8, %rsp
                	pushq	%r15
                	pushq	%r14
                	pushq	%r13
                	pushq	%r12
                	pushq	%rbx
                	movl	$0xa, %eax
-               	movq	$0x14, -0x20(%rbp)
-               	movq	$0x1e, -0x18(%rbp)
-               	movq	$0x28, -0x10(%rbp)
-               	movq	$0x32, -0x8(%rbp)
+               	movl	$0x14, %ecx
+               	movl	$0x1e, %edx
+               	movl	$0x28, %esi
+               	movl	$0x32, %edi
                	movq	%rax, %rbx
-               	movq	-0x20(%rbp), %r12
-               	movq	-0x18(%rbp), %r13
-               	movq	-0x10(%rbp), %r14
-               	movq	-0x8(%rbp), %r15
+               	movq	%rcx, %r12
+               	movq	%rdx, %r13
+               	movq	%rsi, %r14
+               	movq	%rdi, %r15
                	addq	$0x1, %rbx
                	addq	$0x2, %r12
                	addq	$0x3, %r13
                	addq	$0x4, %r14
                	addq	$0x5, %r15
-               	movq	%r12, -0x20(%rbp)
-               	movq	%r13, -0x18(%rbp)
-               	movq	%r14, -0x10(%rbp)
-               	movq	%r15, -0x8(%rbp)
-               	movq	%rbx, %rax
-               	movq	-0x20(%rbp), %rcx
-               	addq	%rcx, %rax
-               	movq	-0x18(%rbp), %rcx
-               	addq	%rcx, %rax
-               	movq	-0x10(%rbp), %rcx
-               	addq	%rcx, %rax
-               	movq	-0x8(%rbp), %rcx
-               	addq	%rcx, %rax
+               	leaq	(%rbx,%r12), %rax
+               	addq	%r13, %rax
+               	addq	%r14, %rax
+               	addq	%r15, %rax
                	cmpq	$0xa5, %rax
                	je	<addr>
                	movl	$0x1, %eax

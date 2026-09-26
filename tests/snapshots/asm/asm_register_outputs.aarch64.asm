@@ -29,10 +29,10 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	ldr	x1, [x0, #0x8]
-               	ldr	x0, [x0, #0x10]
-               	str	x1, [sp]
-               	str	x0, [sp, #0x8]
+               	ldr	x2, [x0, #0x8]
+               	ldr	x1, [x0, #0x10]
+               	str	x2, [sp]
+               	str	x1, [sp, #0x8]
                	ldr	x0, [sp]
                	ldr	x1, [sp, #0x8]
                	add	x0, x0, x1
@@ -45,16 +45,10 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	x0, [x0, #0x18]
-               	sub	x16, x29, #0x8
-               	str	x16, [sp]
-               	str	x0, [sp, #0x8]
-               	ldr	x2, [sp, #0x8]
-               	mov	w0, w2
-               	lsr	w1, w2, #1
-               	ldr	x16, [sp]
-               	str	w1, [x16]
                	mov	w0, w0
-               	ldur	w1, [x29, #-0x8]
+               	lsr	w1, w0, #1
+               	mov	w0, w0
+               	mov	w1, w1
                	add	x0, x0, x1
                	mov	x17, #0xe81a            // =59418
                	movk	x17, #0x1b4, lsl #16
@@ -99,13 +93,13 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	x1, [x0, #0x30]
-               	stur	xzr, [x29, #-0x10]
+               	stur	xzr, [x29, #-0x8]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	sub	x2, x29, #0x10
+               	sub	x2, x29, #0x8
                	str	x2, [x0]
                	mov	x1, x1
-               	stur	x1, [x29, #-0x10]
+               	stur	x1, [x29, #-0x8]
                	ldr	x0, [x0]
                	ldr	x0, [x0]
                	add	x0, x0, x1
@@ -117,15 +111,15 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	ldr	x0, [x0, #0x38]
-               	sub	x16, x29, #0x10
+               	ldr	x1, [x0, #0x38]
+               	sub	x16, x29, #0x8
                	str	x16, [sp]
-               	str	x0, [sp, #0x8]
+               	str	x1, [sp, #0x8]
                	ldr	x1, [sp, #0x8]
                	mov	x0, x1
                	ldr	x16, [sp]
                	str	x0, [x16]
-               	ldur	x0, [x29, #-0x10]
+               	ldur	x0, [x29, #-0x8]
                	cmp	x0, #0x9
                	b.eq	<addr>
                	mov	x0, #0x7                // =7

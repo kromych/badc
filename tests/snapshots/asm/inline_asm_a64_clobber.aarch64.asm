@@ -38,14 +38,14 @@ Disassembly of section .text:
                	mov	x0, #0x14               // =20
                	mov	x1, #0xe                // =14
                	mov	x2, #0x8                // =8
-               	scvtf	d0, x0
-               	scvtf	d1, x1
-               	scvtf	d2, x2
+               	scvtf	d2, x0
+               	scvtf	d3, x1
+               	scvtf	d4, x2
                	sub	x16, x29, #0x8
                	str	x16, [sp]
-               	str	d0, [sp, #0x8]
-               	str	d1, [sp, #0x10]
-               	str	d2, [sp, #0x18]
+               	str	d2, [sp, #0x8]
+               	str	d3, [sp, #0x10]
+               	str	d4, [sp, #0x18]
                	ldr	d2, [sp, #0x8]
                	ldr	d3, [sp, #0x10]
                	ldr	d4, [sp, #0x18]

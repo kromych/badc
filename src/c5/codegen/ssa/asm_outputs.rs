@@ -4,11 +4,12 @@
 //! the lowering stores the operand register through it; mem2reg promotes
 //! no slot an instruction takes the address of, so a scalar automatic
 //! written this way stays in the frame. A register-class output written
-//! through the only read of a slot's address becomes the statement's own
-//! value instead (`AsmOperand::value`), stored to the slot by a
-//! `StoreLocal` behind the statement, and a `+` output reads the slot
-//! ahead of it. One output per statement takes the form, and none of an
-//! `asm goto`, which leaves through its labels past the store.
+//! through the only read of a slot's address becomes a value instead
+//! (`AsmOperand::value`), stored to the slot by a `StoreLocal` behind the
+//! statement, and a `+` output reads the slot ahead of it. The first such
+//! output is the statement's own value, each later one an `Inst::AsmOut`
+//! following it. No output of an `asm goto` takes the form: it leaves
+//! through its labels past the stores.
 
 use alloc::collections::BTreeSet;
 use alloc::vec;
@@ -20,31 +21,35 @@ use super::super::ir::{
 };
 use super::tape::{At, Insertion, insert};
 
-/// Operand `op` of the statement at `at`, written through `addr`, the address of slot `off`.
-struct Edit {
-    at: ValueId,
+/// Output `op`, written through `addr` = slot `off`; `kind` as an `AsmOut`.
+struct Out {
     op: usize,
     addr: ValueId,
     off: i64,
     rw: bool,
     width: u8,
+    kind: LoadKind,
+}
+
+/// The outputs of the statement at `at` that become values, in operand order.
+struct Edit {
+    at: ValueId,
+    outs: Vec<Out>,
 }
 
 /// Whether `op` is a register-class output of a slot access width into an
 /// object whose write is no access of its own: not a volatile one (C99
 /// 6.7.3p6), not one reached through a segment override.
 fn register_output(op: &AsmOperand) -> bool {
-    op.is_output
-        && !op.value
-        && !op.volatile_object
-        && op.seg == AsmSeg::None
-        && matches!(
-            op.constraint,
-            AsmConstraint::Reg
-                | AsmConstraint::Fixed(_)
-                | AsmConstraint::RegOrImm { reg: Some(_), .. }
-        )
-        && matches!(op.width, 1 | 2 | 4 | 8)
+    let width_ok = match op.constraint {
+        AsmConstraint::Reg
+        | AsmConstraint::Fixed(_)
+        | AsmConstraint::RegOrImm { reg: Some(_), .. }
+        | AsmConstraint::Flags(_) => matches!(op.width, 1 | 2 | 4 | 8),
+        AsmConstraint::Fp => op.width == 16,
+        _ => false,
+    };
+    op.is_output && !op.value && !op.volatile_object && op.seg == AsmSeg::None && width_ok
 }
 
 /// The zero-extending read of a slot at the operand's width.
@@ -53,6 +58,7 @@ fn load_kind(width: u8) -> LoadKind {
         1 => LoadKind::U8,
         2 => LoadKind::U16,
         4 => LoadKind::U32,
+        16 => LoadKind::V128,
         _ => LoadKind::I64,
     }
 }
@@ -62,6 +68,7 @@ fn store_kind(width: u8) -> StoreKind {
         1 => StoreKind::I8,
         2 => StoreKind::I16,
         4 => StoreKind::I32,
+        16 => StoreKind::V128,
         _ => StoreKind::I64,
     }
 }
@@ -99,56 +106,79 @@ pub(crate) fn run(func: &mut FunctionSsa) {
             continue;
         }
         // An address read elsewhere keeps its slot in memory anyway.
-        let edit = asm
+        let outs: Vec<Out> = asm
             .operands
             .iter()
             .zip(args)
             .enumerate()
-            .find_map(|(i, (op, &a))| {
-                let off = match func.insts.get(a as usize) {
-                    Some(Inst::LocalAddr(off)) if register_output(op) && uses[a as usize] == 1 => {
-                        *off
-                    }
-                    _ => return None,
-                };
-                Some(Edit {
-                    at,
-                    op: i,
-                    addr: a,
-                    off,
-                    rw: op.is_rw,
-                    width: op.width,
-                })
-            });
-        edits.extend(edit);
+            .filter_map(|(i, (op, &a))| match func.insts.get(a as usize) {
+                Some(Inst::LocalAddr(off)) if register_output(op) && uses[a as usize] == 1 => {
+                    Some(Out {
+                        op: i,
+                        addr: a,
+                        off: *off,
+                        rw: op.is_rw,
+                        width: op.width,
+                        // A flag output's `set<cc>` zero-extends its byte.
+                        kind: match op.constraint {
+                            AsmConstraint::Flags(_) => LoadKind::U8,
+                            AsmConstraint::Fp => LoadKind::V128,
+                            _ => LoadKind::I64,
+                        },
+                    })
+                }
+                _ => None,
+            })
+            .collect();
+        if !outs.is_empty() {
+            edits.push(Edit { at, outs });
+        }
     }
     if edits.is_empty() {
         return;
     }
+    // Ahead of each statement: its `+` reads, the statement, an `AsmOut`
+    // per later output, the stores; the last takes the old position.
     let mut ins: Vec<Insertion> = Vec::new();
     for e in &edits {
-        if e.rw {
+        let put = |ins: &mut Vec<Insertion>, inst: Inst| {
             ins.push(Insertion {
                 at: At::Before(e.at),
-                inst: Inst::LoadLocal {
-                    off: e.off,
-                    kind: load_kind(e.width),
+                inst,
+                is_f32: false,
+            })
+        };
+        for o in e.outs.iter().filter(|o| o.rw) {
+            put(
+                &mut ins,
+                Inst::LoadLocal {
+                    off: o.off,
+                    kind: load_kind(o.width),
                     volatile: false,
                 },
-                is_f32: false,
-            });
+            );
         }
         let Inst::InlineAsm { asm, args } = &func.insts[e.at as usize] else {
             unreachable!("an edit names an inline asm statement");
         };
         let (mut asm, mut args) = (asm.clone(), args.clone());
-        asm.operands[e.op].value = true;
-        args[e.op] = NO_VALUE;
-        ins.push(Insertion {
-            at: At::Before(e.at),
-            inst: Inst::InlineAsm { asm, args },
-            is_f32: false,
-        });
+        for o in &e.outs {
+            asm.operands[o.op].value = true;
+            args[o.op] = NO_VALUE;
+        }
+        put(&mut ins, Inst::InlineAsm { asm, args });
+        for o in &e.outs[1..] {
+            put(
+                &mut ins,
+                Inst::AsmOut {
+                    op: o.op as u8,
+                    kind: o.kind,
+                },
+            );
+        }
+        for o in &e.outs[..e.outs.len() - 1] {
+            put(&mut ins, store(o, NO_VALUE));
+        }
     }
     let (rw, _) = insert(func, &ins);
     let mut next = 0usize;
@@ -158,28 +188,46 @@ pub(crate) fn run(func: &mut FunctionSsa) {
     };
     let mut gone: BTreeSet<ValueId> = BTreeSet::new();
     for e in &edits {
-        let load = e.rw.then(&mut take);
+        let loads: Vec<ValueId> = e.outs.iter().filter(|o| o.rw).map(|_| take()).collect();
         let site = take();
-        if let (Some(load), Inst::InlineAsm { args, .. }) = (load, &mut func.insts[site as usize]) {
-            args[e.op] = load;
+        let values: Vec<ValueId> = core::iter::once(site)
+            .chain(e.outs[1..].iter().map(|_| take()))
+            .collect();
+        let stores: Vec<ValueId> = e.outs[1..].iter().map(|_| take()).collect();
+        if let Inst::InlineAsm { args, .. } = &mut func.insts[site as usize] {
+            for (o, &load) in e.outs.iter().filter(|o| o.rw).zip(&loads) {
+                args[o.op] = load;
+            }
         }
-        let addr = rw.remap[e.addr as usize];
-        func.insts[addr as usize] = Inst::Imm(0);
-        gone.insert(addr);
+        for (&st, &value) in stores.iter().zip(&values) {
+            if let Inst::StoreLocal { value: v, .. } = &mut func.insts[st as usize] {
+                *v = value;
+            }
+        }
+        for o in &e.outs {
+            let addr = rw.remap[o.addr as usize];
+            func.insts[addr as usize] = Inst::Imm(0);
+            gone.insert(addr);
+        }
         let at = rw.remap[e.at as usize];
-        func.insts[at as usize] = Inst::StoreLocal {
-            off: e.off,
-            value: site,
-            kind: store_kind(e.width),
-            volatile: false,
-            nsw: false,
-        };
+        let last = e.outs.len() - 1;
+        func.insts[at as usize] = store(&e.outs[last], values[last]);
         gone.insert(at);
     }
     for b in &mut func.blocks {
         if gone.contains(&b.exit_acc) {
             b.exit_acc = NO_VALUE;
         }
+    }
+}
+
+fn store(o: &Out, value: ValueId) -> Inst {
+    Inst::StoreLocal {
+        off: o.off,
+        value,
+        kind: store_kind(o.width),
+        volatile: false,
+        nsw: false,
     }
 }
 
@@ -326,8 +374,8 @@ mod tests {
         ));
     }
 
-    /// A memory output, a volatile object, an address read twice, a second
-    /// register output and an `asm goto` keep the address form.
+    /// A memory output, a volatile object, an address read twice and an
+    /// `asm goto` keep the address form.
     #[test]
     fn what_keeps_the_address_form() {
         let mem = |f: &mut FunctionSsa| {
@@ -375,13 +423,18 @@ mod tests {
             assert_eq!(f.insts.len(), 3, "{:?}", f.insts);
             assert!(matches!(f.insts[0], Inst::LocalAddr(-1)));
         }
-        // Two register outputs: the first takes the value form alone.
+    }
+
+    /// `asm("rdtsc" : "=a"(lo), "=d"(hi))`: the statement's value, an
+    /// `AsmOut` right behind it, and the stores in operand order.
+    #[test]
+    fn every_register_output_becomes_a_value() {
         let mut f = func_with(
             vec![
                 Inst::LocalAddr(-1),
                 Inst::LocalAddr(-2),
                 asm_of(
-                    "",
+                    "rdtsc",
                     vec![
                         operand(AsmConstraint::Fixed(0), true, false, 4),
                         operand(AsmConstraint::Fixed(2), true, false, 4),
@@ -392,15 +445,80 @@ mod tests {
             vec![block(0..3, Terminator::Return(NO_VALUE))],
         );
         run(&mut f);
+        assert!(matches!(f.insts[..2], [Inst::Imm(0), Inst::Imm(0)]));
         let (asm, args) = asm_at(&f, 2);
-        assert!(asm.operands[0].value && !asm.operands[1].value);
-        assert_eq!(args, &[NO_VALUE, 1]);
-        assert!(matches!(f.insts[1], Inst::LocalAddr(-2)));
+        assert!(asm.operands.iter().all(|o| o.value));
+        assert_eq!(args, &[NO_VALUE, NO_VALUE]);
+        assert!(matches!(f.insts[3], Inst::AsmOut { op: 1, .. }));
         assert!(matches!(
-            f.insts[3],
+            f.insts[4],
             Inst::StoreLocal {
                 off: -1,
                 value: 2,
+                kind: StoreKind::I32,
+                ..
+            }
+        ));
+        assert!(matches!(
+            f.insts[5],
+            Inst::StoreLocal {
+                off: -2,
+                value: 3,
+                kind: StoreKind::I32,
+                ..
+            }
+        ));
+        assert_eq!(f.asm_output_values(2), [(0, 2), (1, 3)]);
+        assert_eq!(f.blocks[0].inst_range, 0..6);
+    }
+
+    /// A flag output beside a `+a` output: the flag is the statement's own
+    /// value, the read-write output an `AsmOut` whose slot is read ahead.
+    #[test]
+    fn a_flag_output_and_a_read_write_output_are_values() {
+        let mut f = func_with(
+            vec![
+                Inst::LocalAddr(-1),
+                Inst::LocalAddr(-2),
+                asm_of(
+                    "lock cmpxchgq %%rcx, (%%rdx)",
+                    vec![
+                        operand(AsmConstraint::Flags(4), true, false, 1),
+                        operand(AsmConstraint::Fixed(0), true, true, 8),
+                    ],
+                    vec![0, 1],
+                ),
+            ],
+            vec![block(0..3, Terminator::Return(NO_VALUE))],
+        );
+        run(&mut f);
+        assert!(matches!(
+            f.insts[2],
+            Inst::LoadLocal {
+                off: -2,
+                kind: LoadKind::I64,
+                ..
+            }
+        ));
+        let (asm, args) = asm_at(&f, 3);
+        assert!(asm.operands.iter().all(|o| o.value));
+        assert_eq!(args, &[NO_VALUE, 2]);
+        assert!(matches!(f.insts[4], Inst::AsmOut { op: 1, .. }));
+        assert!(matches!(
+            f.insts[5],
+            Inst::StoreLocal {
+                off: -1,
+                value: 3,
+                kind: StoreKind::I8,
+                ..
+            }
+        ));
+        assert!(matches!(
+            f.insts[6],
+            Inst::StoreLocal {
+                off: -2,
+                value: 4,
+                kind: StoreKind::I64,
                 ..
             }
         ));

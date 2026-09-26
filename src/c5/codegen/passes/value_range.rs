@@ -1036,6 +1036,14 @@ fn eval(inst: &Inst, params: &[Range], mut range_of: impl FnMut(ValueId) -> Rang
                 _ => w,
             }
         }
+        // A flag output is its condition, set and zero-extended.
+        Inst::InlineAsm { asm, .. } => match asm.operands.iter().find(|o| o.value && o.is_output) {
+            Some(o) if matches!(o.constraint, crate::c5::ir::AsmConstraint::Flags(_)) => {
+                Range { lo: 0, hi: 1 }
+            }
+            _ => UNIVERSE,
+        },
+        Inst::AsmOut { kind, .. } => extend_range(*kind).unwrap_or(UNIVERSE),
         _ => UNIVERSE,
     }
 }

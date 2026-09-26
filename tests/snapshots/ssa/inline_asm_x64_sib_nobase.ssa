@@ -192,10 +192,10 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
   block 12  start_pc=0
     v163 Imm(0)                                           -> x1
     v164 Imm(2)                                           -> x1
-    v165 BinopI { op=shru, lhs=v96, rhs_imm=1 }           -> x0
-    v166 Imm(0)                                           -> x1
-    v167 Imm(0)                                           -> x1
-    v168 Imm(0)                                           -> x1
+    v165 BinopI { op=shru, lhs=v96, rhs_imm=1 }           -> x9
+    v166 Imm(0)                                           -> x0
+    v167 Imm(0)                                           -> x0
+    v168 Imm(0)                                           -> x0
     v169 InlineAsm { template="movq 40(,%%r9,2), %0", ops=2, args=[-, v165] } -> x0
     v170 Imm(0)                                           -> x1
     v171 Imm(0)                                           -> x1

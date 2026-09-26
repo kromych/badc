@@ -510,7 +510,8 @@ struct AsmOperands<'a> {
     args: &'a [u32],
     func: &'a FunctionSsa,
     op_reg: Vec<Option<u8>>,
-    out_place: Place,
+    /// Value outputs by operand, with their places (`None` when dead).
+    outs: Vec<(usize, Place)>,
 }
 
 impl AsmOperands<'_> {
@@ -1028,17 +1029,41 @@ impl AsmRegion {
                 _ => return fail("inline asm: output operand width not 1 / 2 / 4 / 8"),
             }
         }
-        // The value output goes last: the store-backs read operand registers.
-        if let Some(i) = ops.asm.operands.iter().position(|o| o.value && o.is_output)
-            && let Some(r) = ops.op_reg[i]
-        {
-            if ops.asm.operands[i].width == 16 {
-                propagate_v128(code, self.frame, ops.out_place, r, Reg(16));
-            } else if super::mem::propagate_int(code, self.frame, ops.out_place, Reg(r)).is_err() {
-                return fail("inline asm: value output not an integer place");
+        // Last, as the store-backs read operand registers: spilled integer
+        // outputs first (a bound one may hold x16 / x17), then the copies.
+        let mut int_moves: Vec<PlaceMove> = Vec::new();
+        let mut fp_moves: Vec<(Place, Place, bool)> = Vec::new();
+        let mut pending: Vec<(u8, u32)> = Vec::new();
+        for &(i, place) in &ops.outs {
+            let Some(r) = ops.op_reg[i] else { continue };
+            let op = &ops.asm.operands[i];
+            match (matches!(op.constraint, AsmConstraint::Fp), place) {
+                (_, Place::None) => {}
+                (true, _) => fp_moves.push((Place::FpReg(r), place, op.width == 16)),
+                (false, Place::Spill(slot)) => pending.push((r, slot)),
+                (false, _) => int_moves.push(PlaceMove::copy(Place::IntReg(r), place)),
             }
         }
-        Ok(())
+        while let Some((r, slot)) = pending.pop() {
+            let off = super::mem::spill_off(self.frame, slot);
+            let other = if r == 16 { 17 } else { 16 };
+            if pending.iter().any(|&(p, _)| p == other) {
+                super::mem::emit_spill_str_x_borrow(code, self.frame, Reg(r), off, Reg(other));
+            } else {
+                super::mem::emit_spill_str_x_auto(code, self.frame, Reg(r), off);
+            }
+        }
+        super::ssa::emit_common::schedule_fp_place_moves(
+            &super::ssa::emit_common::Aarch64Backend::default(),
+            code,
+            &mut fp_moves,
+            self.frame,
+            self.frame.fp_scratch[1],
+            self.frame.fp_scratch[0],
+        );
+        super::inst::schedule_place_moves(code, &mut int_moves, self.frame, Reg(16), Reg(17))
+            .map_err(|_| "inline asm: value output not an integer place")
+            .or_else(fail)
     }
 
     fn emit_restore(&self, code: &mut Vec<u8>) {
@@ -1159,7 +1184,7 @@ enum BoundLoad {
 }
 
 /// A directly bound statement's operand registers, its scratch loads, and
-/// whether the exit stores the value output from a scratch.
+/// whether the exit stores a value output from a scratch.
 struct BoundOperands {
     op_reg: Vec<Option<u8>>,
     loads: Vec<BoundLoad>,
@@ -1167,16 +1192,17 @@ struct BoundOperands {
 }
 
 /// Bind each input to the register its value occupies, or to a scratch;
-/// the value output to its own register, or to a scratch it may share with
-/// an input, which a template reads before it writes a non-`&` output. The
-/// SIMD inputs load first: a q / d reload may form its address in x16.
+/// each value output to its own register, or to a scratch no other output
+/// holds, which it may share with an input, as a template reads its inputs
+/// before it writes a non-`&` output. The SIMD inputs load first: a q / d
+/// reload may form its address in x16.
 fn bind_operands(
     asm: &super::super::ir::AsmBlock,
     args: &[u32],
     func: &FunctionSsa,
     alloc: &Allocation,
     frame: Frame,
-    out_place: Place,
+    outs: &[(usize, Place)],
 ) -> Result<BoundOperands, alloc::string::String> {
     use super::super::ir::AsmConstraint as C;
     let short =
@@ -1192,7 +1218,7 @@ fn bind_operands(
         .filter(|&r| r != super::super::ssa::reg_alloc::NO_FP_SCRATCH)
         .filter(|&r| asm.clobber_fp_regs & (1 << r) == 0)
         .collect();
-    let (gp_any, fp_any) = (gp.first().copied(), fp.first().copied());
+    let pools = [gp.clone(), fp.clone()];
     let take = |pool: &mut Vec<u8>| (!pool.is_empty()).then(|| pool.remove(0)).ok_or_else(short);
     let takes_imm = |op: &super::super::ir::AsmOperand, a: u32| match op.constraint {
         C::Imm => true,
@@ -1249,18 +1275,29 @@ fn bind_operands(
             }
         });
     }
+    let simd = |i: usize| matches!(asm.operands[i].constraint, C::Fp);
+    let own = |i: usize, place: Place| match (simd(i), place) {
+        (true, Place::FpReg(r)) | (false, Place::IntReg(r)) => Some(r),
+        _ => None,
+    };
+    let mut held: [Vec<u8>; 2] = [Vec::new(), Vec::new()];
+    for &(i, place) in outs {
+        held[usize::from(simd(i))].extend(own(i, place));
+    }
     let mut out_scratch = false;
-    if let Some(i) = asm.operands.iter().position(|o| o.is_output) {
-        let simd = matches!(asm.operands[i].constraint, C::Fp);
-        op_reg[i] = Some(match (simd, out_place) {
-            (true, Place::FpReg(r)) | (false, Place::IntReg(r)) => r,
-            (true, _) => {
+    for &(i, place) in outs {
+        op_reg[i] = Some(match own(i, place) {
+            Some(r) => r,
+            None => {
+                let b = usize::from(simd(i));
+                let r = pools[b]
+                    .iter()
+                    .copied()
+                    .find(|r| !held[b].contains(r))
+                    .ok_or_else(short)?;
+                held[b].push(r);
                 out_scratch = true;
-                fp.first().copied().or(fp_any).ok_or_else(short)?
-            }
-            (false, _) => {
-                out_scratch = true;
-                gp.first().copied().or(gp_any).ok_or_else(short)?
+                r
             }
         });
     }
@@ -2176,9 +2213,9 @@ fn lower_inline_asm(
 ) -> Result<Option<super::super::map_syms::MapClass>, alloc::string::String> {
     use super::asm::parse_template;
     let text = template_text(asm)?;
-    let out_place = place_of(alloc, site);
+    let outs = alloc.asm_output_places(func, site);
     let bound = super::frame::asm_binds_directly(func, asm, args, frame.fixed_regs)
-        .then(|| bind_operands(asm, args, func, alloc, frame, out_place))
+        .then(|| bind_operands(asm, args, func, alloc, frame, &outs))
         .transpose()?;
     // The GNU-as macro pass substitutes each reference with its register.
     let ops = AsmOperands {
@@ -2189,7 +2226,7 @@ fn lower_inline_asm(
             Some(b) => b.op_reg.clone(),
             None => super::frame::asm_operand_regs(func, asm, args, frame.fixed_regs)?,
         },
-        out_place,
+        outs,
     };
     let gas = crate::c5::asm::expand_asm_gas_macros(&text, 4, &|tok| ops.gas_subst(tok))?;
     let text = gas.as_deref().unwrap_or(&text);

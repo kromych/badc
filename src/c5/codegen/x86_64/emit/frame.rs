@@ -389,24 +389,21 @@ const BOUND_SCRATCH: [u8; 7] = [10, 11, 9, 8, 2, 1, 0];
 pub(super) struct BoundShape {
     gp_in: usize,
     fp_in: usize,
-    /// The value output, `Some(true)` for an `x` one.
-    out_fp: Option<bool>,
-    rw: bool,
+    gp_out: usize,
+    fp_out: usize,
+    /// The read-write value output, `Some(true)` for an `x` one.
+    rw: Option<bool>,
 }
 
 impl BoundShape {
-    /// One scratch per input, one for a read-write output (its own when
-    /// spilled, else a displaced input's), and one for a spilled output.
+    /// One scratch for the read-write output (its own or a displaced
+    /// input's), then one per input or `=` output, which may share.
     pub(super) fn gp_need(&self) -> usize {
-        Self::need(self.gp_in, self.out_fp == Some(false), self.rw)
+        usize::from(self.rw == Some(false)) + self.gp_in.max(self.gp_out)
     }
 
-    fn fp_need(&self) -> usize {
-        Self::need(self.fp_in, self.out_fp == Some(true), self.rw)
-    }
-
-    fn need(inputs: usize, out: bool, rw: bool) -> usize {
-        (inputs + usize::from(out && rw)).max(usize::from(out))
+    pub(super) fn fp_need(&self) -> usize {
+        usize::from(self.rw == Some(true)) + self.fp_in.max(self.fp_out)
     }
 
     fn gp_scratch_mask(&self, asm: &super::super::ir::AsmBlock, fixed: super::FixedRegs) -> u32 {
@@ -418,9 +415,10 @@ impl BoundShape {
 
 /// The shape of a statement whose register operands bind to their values'
 /// registers, as an instruction's do, or `None`: each operand is an
-/// immediate, an `r` or `x` input value, or the one value output, none `&`
-/// or segment-qualified; the clobbers spare rsp and rbp; and the scratch
-/// outside them can hold every operand that has no register.
+/// immediate, an `r` or `x` input value, or a value output, one of them at
+/// most read-write, none `&` or segment-qualified; the clobbers spare rsp
+/// and rbp; and the scratch outside them can hold every operand that has
+/// no register.
 pub(super) fn bound_shape(
     func: &FunctionSsa,
     asm: &super::super::ir::AsmBlock,
@@ -436,23 +434,30 @@ pub(super) fn bound_shape(
     let mut shape = BoundShape {
         gp_in: 0,
         fp_in: 0,
-        out_fp: None,
-        rw: false,
+        gp_out: 0,
+        fp_out: 0,
+        rw: None,
     };
     for (i, op) in asm.operands.iter().enumerate() {
         if op.seg != AsmSeg::None {
             return None;
         }
         if op.is_output {
-            if !op.value || op.early_clobber || shape.out_fp.is_some() {
+            if !op.value || op.early_clobber || (op.is_rw && shape.rw.is_some()) {
                 return None;
             }
-            shape.out_fp = Some(match op.constraint {
+            let fp = match op.constraint {
                 C::Reg if op.width <= 8 => false,
                 C::Fp if op.width == 16 => true,
                 _ => return None,
-            });
-            shape.rw = op.is_rw;
+            };
+            if op.is_rw {
+                shape.rw = Some(fp);
+            } else if fp {
+                shape.fp_out += 1;
+            } else {
+                shape.gp_out += 1;
+            }
             continue;
         }
         match op.constraint {
@@ -513,7 +518,7 @@ pub(crate) fn asm_binds_directly(
 }
 
 /// A bound statement's operand values with the GP and FP registers each
-/// avoids: an input the clobbers and the scratch; the output, written once
+/// avoids: an input the clobbers and the scratch; an output, written once
 /// the inputs are read, the clobbers, and the scratch too when its input
 /// moves in ahead of the loads; that input, read by the move, the scratch.
 pub(crate) fn asm_site_bound_values(
@@ -538,18 +543,40 @@ pub(crate) fn asm_site_bound_values(
         asm.clobber_fp_regs & !fixed.fpr,
     );
     for (op, &a) in asm.operands.iter().zip(args) {
-        if !op.is_output {
-            if !op.static_arg && !matches!(op.constraint, C::Imm) {
-                out.push((a, gpr | scratch, fpr));
-            }
-        } else if op.is_rw {
-            out.push((site, gpr | scratch, fpr));
+        if !op.is_output && !op.static_arg && !matches!(op.constraint, C::Imm) {
+            out.push((a, gpr | scratch, fpr));
+        } else if op.is_output && op.is_rw {
             out.push((a, scratch, 0));
-        } else {
-            out.push((site, gpr, fpr));
         }
     }
+    for (i, v) in func.asm_output_values(site) {
+        if v == super::super::ir::NO_VALUE {
+            continue;
+        }
+        let rw = asm.operands[i].is_rw;
+        out.push((v, gpr | if rw { scratch } else { 0 }, fpr));
+    }
     out
+}
+
+/// `reg_alloc::asm_operand_hints` over a staged statement's registers.
+pub(crate) fn asm_staged_hints(
+    func: &FunctionSsa,
+    asm: &super::super::ir::AsmBlock,
+    args: &[u32],
+    site: u32,
+    fixed: super::FixedRegs,
+    target: Target,
+) -> alloc::vec::Vec<(u32, u8)> {
+    if crate::c5::asm::asm_statement_is_noop(asm, crate::c5::asm::AsmComments::X86)
+        || asm_binds_directly(func, asm, args, fixed, target)
+    {
+        return alloc::vec::Vec::new();
+    }
+    let Ok(op_reg) = asm_operand_regs(func, asm, args, fixed) else {
+        return alloc::vec::Vec::new();
+    };
+    super::super::ssa::reg_alloc::asm_operand_hints(func, asm, args, site, &op_reg)
 }
 
 /// A variadic callee under the Win64 host variadic ABI, the only x86_64

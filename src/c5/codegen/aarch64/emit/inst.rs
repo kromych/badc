@@ -65,9 +65,13 @@ pub(super) fn emit_inst(
     match inst {
         // `Frame::dynamic_sp` carries the alloca fact; no code. A
         // lifetime marker states a fact about storage the frame already
-        // holds, so it emits nothing either, and the return moves the
-        // parts of an `AggParts`.
-        Inst::AllocaInit(_) | Inst::LifetimeEnd(_) | Inst::AggParts { .. } => Ok(()),
+        // holds, so it emits nothing either, the return moves the parts
+        // of an `AggParts`, and an inline asm statement places its
+        // `AsmOut`s.
+        Inst::AllocaInit(_)
+        | Inst::LifetimeEnd(_)
+        | Inst::AggParts { .. }
+        | Inst::AsmOut { .. } => Ok(()),
         Inst::ParamRef { .. } | Inst::ParamPart { .. } | Inst::RetPart { .. } => {
             let src = super::ssa::reg_alloc::incoming_reg(param_plan, inst)
                 .or_else(|| super::ssa::reg_alloc::ret_part_reg(target, inst));

@@ -105,14 +105,14 @@ mod asm_scratch_tests {
         assert_eq!(bytes("", 1 << 5), 0);
     }
 
-    /// A statement of `r` inputs and one value output binds its operands
-    /// to their values' registers and writes only its clobbers and the
-    /// scratch its loads may take: r10 and r11, then the caller-saved
-    /// registers as more inputs need them, none the statement clobbers. Its
+    /// A statement of `r` inputs and value outputs binds its operands to
+    /// their values' registers and writes only its clobbers and the scratch
+    /// its loads may take: r10 and r11, then the caller-saved registers as
+    /// more inputs or outputs need them, none the statement clobbers. Its
     /// inputs avoid both; a `=` output the clobbers alone, a `+` output both
     /// and its input the scratch alone. A fixed, early-clobber or memory
-    /// operand, or a clobbered frame register, keeps the staged lowering,
-    /// whose operand registers the site writes.
+    /// operand, a second read-write output, or a clobbered frame register
+    /// keeps the staged lowering, whose operand registers the site writes.
     #[test]
     fn register_operands_bind_to_their_values() {
         let target = crate::c5::codegen::Target::LinuxX64;
@@ -138,18 +138,32 @@ mod asm_scratch_tests {
                 clobber_memory: false,
                 volatile: true,
             };
+            let parts: alloc::vec::Vec<u8> = (0..n as u8)
+                .filter(|&i| asm.operands[i as usize].is_output)
+                .skip(1)
+                .collect();
             let mut insts: alloc::vec::Vec<Inst> = (0..n as i64).map(Inst::Imm).collect();
             insts.push(Inst::InlineAsm {
                 asm: alloc::boxed::Box::new(asm),
                 args: (0..n as u32).collect(),
             });
+            insts.extend(parts.into_iter().map(|op| Inst::AsmOut {
+                op,
+                kind: crate::c5::ir::LoadKind::I64,
+            }));
             FunctionSsa {
                 insts,
                 ..Default::default()
             }
         };
+        let site = |func: &FunctionSsa| {
+            func.insts
+                .iter()
+                .position(|i| matches!(i, Inst::InlineAsm { .. }))
+                .unwrap()
+        };
         let masks = |func: &FunctionSsa| {
-            let Inst::InlineAsm { asm, args } = &func.insts[func.insts.len() - 1] else {
+            let Inst::InlineAsm { asm, args } = &func.insts[site(func)] else {
                 unreachable!()
             };
             (
@@ -176,7 +190,7 @@ mod asm_scratch_tests {
             (true, (r10_r11 | scratch, 0))
         );
         let avoid = |func: &FunctionSsa| {
-            let site = func.insts.len() - 1;
+            let site = site(func);
             let Inst::InlineAsm { asm, args } = &func.insts[site] else {
                 unreachable!()
             };
@@ -185,14 +199,28 @@ mod asm_scratch_tests {
         let all = r10_r11 | scratch;
         assert_eq!(
             avoid(&statement(three_in.clone(), r10_r11)),
-            [(4, r10_r11, 0), (1, all, 0), (2, all, 0), (3, all, 0)]
+            [(1, all, 0), (2, all, 0), (3, all, 0), (4, r10_r11, 0)]
         );
         let mut rw = alloc::vec![reg(true), reg(false)];
         rw[0].is_rw = true;
         assert_eq!(
-            avoid(&statement(rw, 1)),
-            [(2, 1 | r10_r11, 0), (0, r10_r11, 0), (1, 1 | r10_r11, 0)]
+            avoid(&statement(rw.clone(), 1)),
+            [(0, r10_r11, 0), (1, 1 | r10_r11, 0), (2, 1 | r10_r11, 0)]
         );
+        // Two `=` outputs: a scratch each; the `AsmOut` avoids the clobbers.
+        let two_out = alloc::vec![reg(true), reg(true), reg(false)];
+        assert_eq!(
+            masks(&statement(two_out.clone(), 1)),
+            (true, (1 | r10_r11, 0))
+        );
+        assert_eq!(
+            avoid(&statement(two_out, 1)),
+            [(2, 1 | r10_r11, 0), (3, 1, 0), (4, 1, 0)]
+        );
+        let mut two_rw = alloc::vec![reg(true), reg(true)];
+        two_rw[0].is_rw = true;
+        two_rw[1].is_rw = true;
+        assert!(!masks(&statement(two_rw, 0)).0);
         // Two `x` inputs bind; a third would need the FMA scratch, which a
         // Win64 prologue saves only around a fused multiply-add.
         let x = || AsmOperand {

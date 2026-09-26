@@ -1440,6 +1440,7 @@ fn run_inst<H: Host>(
             // reclaims: the frame cell stays until the call returns.
             return Ok(());
         }
+        Inst::AsmOut { .. } => return Ok(()),
         Inst::AllocaInit(_) => {
             // No-op for v0 == AllocaInit(0); the SSA-VM does not
             // expose alloca yet -- callers requesting a real
@@ -2696,15 +2697,21 @@ fn run_inline_asm(
         }
     }
 
-    // Store the outputs back through their destination addresses; the
-    // value output is the statement's own register.
+    // Store the outputs back through their destination addresses; a value
+    // output is the register of the statement or of its `AsmOut`.
+    let values = frame.func.asm_output_values(site);
     for (i, op) in asm.operands.iter().enumerate() {
         if op.is_output
             && !matches!(op.constraint, crate::c5::ir::AsmConstraint::Bound(_))
             && let Some(r) = op_reg[i]
         {
             if op.value {
-                frame.regs[site as usize] = xregs[r as usize];
+                if let Some(&(_, dst)) = values
+                    .iter()
+                    .find(|&&(k, d)| k == i && d != crate::c5::ir::NO_VALUE)
+                {
+                    frame.regs[dst as usize] = xregs[r as usize];
+                }
                 continue;
             }
             let addr = frame.regs[args[i] as usize] as usize;

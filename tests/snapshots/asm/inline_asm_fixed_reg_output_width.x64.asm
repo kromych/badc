@@ -29,14 +29,13 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	leaq	-0x8(%rbp), %rcx
                	movabsq	$-0x2152411021524111, %rax # imm = 0xDEADBEEFDEADBEEF
                	movq	%rax, -0x10(%rbp)
-               	movq	%rax, (%rcx)
+               	movq	%rax, -0x8(%rbp)
                	rdtsc
-               	movq	%rdx, -0x8(%rbp)
                	movq	%rax, -0x10(%rbp)
-               	movq	-0x8(%rbp), %rcx
+               	movq	%rdx, -0x8(%rbp)
+               	movq	%rdx, %rcx
                	shlq	$0x20, %rcx
                	orq	%rcx, %rax
                	movq	%rax, (%rdi)
@@ -55,16 +54,11 @@ Disassembly of section .text:
                	retq
 
 <tick_int_halves>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
                	rdtsc
-               	movl	%edx, -0x8(%rbp)
-               	movl	-0x8(%rbp), %ecx
+               	movl	%edx, %ecx
                	shlq	$0x20, %rcx
                	movl	%eax, %eax
                	orq	%rcx, %rax
-               	leave
                	retq
 
 <long_output_fills_all_bytes>:

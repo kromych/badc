@@ -189,17 +189,17 @@ Disassembly of section .text:
                	and	v14.16b, v14.16b, v0.16b
                	and	v15.16b, v15.16b, v0.16b
                	ldr	q16, [sp, #0x70]
-               	and	v17.16b, v16.16b, v0.16b
-               	str	q17, [sp, #0x70]
+               	and	v16.16b, v16.16b, v0.16b
+               	str	q16, [sp, #0x70]
                	ldr	q16, [sp, #0x60]
-               	and	v17.16b, v16.16b, v0.16b
-               	str	q17, [sp, #0x60]
+               	and	v16.16b, v16.16b, v0.16b
+               	str	q16, [sp, #0x60]
                	ldr	q16, [sp, #0x50]
-               	and	v17.16b, v16.16b, v0.16b
-               	str	q17, [sp, #0x50]
+               	and	v16.16b, v16.16b, v0.16b
+               	str	q16, [sp, #0x50]
                	ldr	q16, [sp, #0x40]
-               	and	v17.16b, v16.16b, v0.16b
-               	str	q17, [sp, #0x40]
+               	and	v16.16b, v16.16b, v0.16b
+               	str	q16, [sp, #0x40]
                	eor	v19.16b, v19.16b, v12.16b
                	eor	v7.16b, v7.16b, v13.16b
                	eor	v6.16b, v6.16b, v14.16b

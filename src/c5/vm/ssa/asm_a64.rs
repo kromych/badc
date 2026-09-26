@@ -291,6 +291,7 @@ pub(super) fn run(
         step(&model, &mut g, m, &insn.operands)?;
     }
     check_words(&mut words)?;
+    let values = frame.func.asm_output_values(site);
     for (i, op) in asm.operands.iter().enumerate() {
         if op.is_output
             && !matches!(op.constraint, AsmConstraint::Bound(_))
@@ -298,7 +299,12 @@ pub(super) fn run(
         {
             let v = g.x[r as usize] as i64;
             if op.value {
-                frame.regs[site as usize] = v;
+                if let Some(&(_, dst)) = values
+                    .iter()
+                    .find(|&&(k, d)| k == i && d != crate::c5::ir::NO_VALUE)
+                {
+                    frame.regs[dst as usize] = v;
+                }
                 continue;
             }
             let addr = frame.regs[args[i] as usize] as usize;

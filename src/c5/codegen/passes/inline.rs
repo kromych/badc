@@ -1151,7 +1151,9 @@ fn is_inline_candidate(
             | Inst::Udiv128 { .. }
             | Inst::FpCast { .. }
             | Inst::Load { .. }
-            | Inst::LoadIndexed { .. } => {}
+            | Inst::LoadIndexed { .. }
+            // Travels with its statement, admitted below on the reloc path.
+            | Inst::AsmOut { .. } => {}
             Inst::LocalAddr(s) => {
                 // On the reloc path the splice relocates a callee's own local
                 // slot (negative) and a frame-kept parameter cell -- spilled
@@ -2078,6 +2080,7 @@ fn needs_param_agg_copy(c: &FunctionSsa) -> bool {
         Inst::AtomicLoad { .. }
         | Inst::ParamPart { .. }
         | Inst::RetPart { .. }
+        | Inst::AsmOut { .. }
         | Inst::AggParts { .. } => false,
         Inst::Call { .. } | Inst::CallIndirect { .. } | Inst::CallExt { .. } | Inst::TailExt(_) => {
             true

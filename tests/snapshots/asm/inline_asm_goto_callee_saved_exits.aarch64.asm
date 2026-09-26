@@ -46,9 +46,8 @@ Disassembly of section .text:
                	mov	x0, #0x6                // =6
                	bl	<addr>
                	add	x1, x0, x20
-               	mov	x0, x1
                	ldr	x30, [sp, #0x10]
-               	cmp	x0, #0x6c
+               	cmp	x1, #0x6c
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ldp	x29, x30, [sp, #0x20]

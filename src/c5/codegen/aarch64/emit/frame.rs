@@ -352,10 +352,11 @@ pub(crate) fn asm_site_write_masks(
 }
 
 /// Whether a statement's register operands bind to the registers their
-/// values are given, as an instruction's do: each is an input value or the
+/// values are given, as an instruction's do: each is an input value or a
 /// value output, none tied, read-write or early-clobbered, the clobbers
 /// spare the frame's registers, and scratch outside them can reload every
-/// input. Such a statement stages nothing and writes only its clobbers.
+/// input and hold every output without a register. Such a statement stages
+/// nothing and writes only its clobbers.
 pub(crate) fn asm_binds_directly(
     func: &FunctionSsa,
     asm: &super::super::ir::AsmBlock,
@@ -385,18 +386,18 @@ pub(crate) fn asm_binds_directly(
         })
         .count();
     let (mut gp_in, mut fp_in) = (0usize, 0usize);
-    let mut out_fp: Option<bool> = None;
+    let (mut gp_out, mut fp_out) = (0usize, 0usize);
     for (i, op) in asm.operands.iter().enumerate() {
         let arg = args.get(i).copied();
         if op.is_output {
             if !op.value || op.is_rw || op.early_clobber {
                 return false;
             }
-            out_fp = Some(match op.constraint {
-                C::Reg if op.width <= 8 => false,
-                C::Fp if op.width == 16 => true,
+            match op.constraint {
+                C::Reg if op.width <= 8 => gp_out += 1,
+                C::Fp if op.width == 16 => fp_out += 1,
                 _ => return false,
-            });
+            }
             continue;
         }
         match op.constraint {
@@ -422,12 +423,7 @@ pub(crate) fn asm_binds_directly(
             _ => return false,
         }
     }
-    let out_ok = match out_fp {
-        Some(true) => fp_free > 0,
-        Some(false) => gp_free > 0,
-        None => true,
-    };
-    gp_in <= gp_free && fp_in <= fp_free && out_ok
+    gp_in.max(gp_out) <= gp_free && fp_in.max(fp_out) <= fp_free
 }
 
 /// The values a directly bound statement reads or defines in their own
@@ -445,15 +441,39 @@ pub(crate) fn asm_site_bound_values(
     {
         return alloc::vec::Vec::new();
     }
-    let mut out = alloc::vec::Vec::new();
-    for (op, &a) in asm.operands.iter().zip(args) {
-        if op.is_output {
-            out.push(site);
-        } else if !op.static_arg && !matches!(op.constraint, C::Imm) {
-            out.push(a);
-        }
-    }
+    let mut out: alloc::vec::Vec<u32> = asm
+        .operands
+        .iter()
+        .zip(args)
+        .filter(|(op, _)| !op.is_output && !op.static_arg && !matches!(op.constraint, C::Imm))
+        .map(|(_, &a)| a)
+        .collect();
+    out.extend(
+        func.asm_output_values(site)
+            .into_iter()
+            .map(|(_, v)| v)
+            .filter(|&v| v != super::super::ir::NO_VALUE),
+    );
     out
+}
+
+/// `reg_alloc::asm_operand_hints` over a staged statement's registers.
+pub(crate) fn asm_staged_hints(
+    func: &FunctionSsa,
+    asm: &super::super::ir::AsmBlock,
+    args: &[u32],
+    site: u32,
+    fixed: super::FixedRegs,
+) -> alloc::vec::Vec<(u32, u8)> {
+    if crate::c5::asm::asm_statement_is_noop(asm, crate::c5::asm::AsmComments::A64)
+        || asm_binds_directly(func, asm, args, fixed)
+    {
+        return alloc::vec::Vec::new();
+    }
+    let Ok(op_reg) = asm_operand_regs(func, asm, args, fixed) else {
+        return alloc::vec::Vec::new();
+    };
+    super::super::ssa::reg_alloc::asm_operand_hints(func, asm, args, site, &op_reg)
 }
 
 /// The Windows-on-ARM64 integer register save area: x0..x7 at an 8-byte

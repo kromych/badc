@@ -1804,21 +1804,21 @@ struct AsmScratch {
 }
 
 /// A directly bound statement: its operand registers, the moves ahead of
-/// the template, and the scratch a value output without a register is
+/// the template, and the scratch each value output without a register is
 /// stored from.
 struct BoundOperands {
     op_reg: alloc::vec::Vec<Option<u8>>,
     moves: alloc::vec::Vec<Transfer>,
-    /// `(register, place, vector)` of a value output held in a scratch.
-    out_store: Option<(u8, Place, bool)>,
+    /// `(register, place, vector)` of each value output held in a scratch.
+    out_stores: alloc::vec::Vec<(u8, Place, bool)>,
 }
 
 /// Bind each input to the register its value occupies, or to a scratch it
-/// is loaded into; the value output to the register its value is given, or
-/// to a scratch it is stored from, which a non-`&` output may share with an
-/// input, as GCC's operand model allows. A read-write output's input moves
-/// into the output's register; an input bound there is parked in a scratch
-/// first.
+/// is loaded into; each value output to the register its value is given,
+/// or to a scratch no other output holds, which a non-`&` output may share
+/// with an input, as GCC's operand model allows, and which it is stored
+/// from. The read-write output's input moves into the output's register;
+/// an input bound there is parked in a scratch first.
 fn bind_operands(stmt: &AsmStmt) -> Emit<BoundOperands> {
     use super::super::ir::AsmConstraint as C;
     let asm = stmt.asm;
@@ -1827,18 +1827,48 @@ fn bind_operands(stmt: &AsmStmt) -> Emit<BoundOperands> {
     else {
         return fail("inline asm: the operands do not bind directly");
     };
-    let mut gp = super::frame::bound_gp_scratch(asm, fixed, shape.gp_need());
-    let mut fp = super::frame::bound_fp_scratch(asm, fixed, stmt.fcx.target);
-    let (gp_any, fp_any) = (gp.first().copied(), fp.first().copied());
     let short = "inline asm: no scratch register for a bound operand";
+    let vector = |i: usize| matches!(asm.operands[i].constraint, C::Fp);
+    let bank = |i: usize| usize::from(vector(i));
+    // Scratch by bank; `taken` loses what no other operand may share.
+    let pools = [
+        super::frame::bound_gp_scratch(asm, fixed, shape.gp_need()),
+        super::frame::bound_fp_scratch(asm, fixed, stmt.fcx.target),
+    ];
+    let mut taken = pools.clone();
     let take = |pool: &mut alloc::vec::Vec<u8>| -> Emit<u8> {
         if pool.is_empty() {
             return fail(short);
         }
         Ok(pool.remove(0))
     };
+    let outs = stmt.alloc.asm_output_places(stmt.func, stmt.site);
+    let own = |i: usize, place: Place| match (vector(i), place) {
+        (true, Place::FpReg(x)) | (false, Place::IntReg(x)) => Some(x),
+        _ => None,
+    };
+    // The registers the outputs hold, which no other output may take.
+    let mut held: [alloc::vec::Vec<u8>; 2] = [alloc::vec::Vec::new(), alloc::vec::Vec::new()];
+    for &(i, place) in &outs {
+        held[bank(i)].extend(own(i, place));
+    }
     let mut op_reg: alloc::vec::Vec<Option<u8>> = alloc::vec![None; asm.operands.len()];
     let mut moves: alloc::vec::Vec<Transfer> = alloc::vec::Vec::new();
+    let mut out_stores: alloc::vec::Vec<(u8, Place, bool)> = alloc::vec::Vec::new();
+    let rw = outs.iter().copied().find(|&(i, _)| asm.operands[i].is_rw);
+    let mut rw_scratch = None;
+    if let Some((i, place)) = rw {
+        op_reg[i] = Some(match own(i, place) {
+            Some(x) => x,
+            None => {
+                let s = take(&mut taken[bank(i)])?;
+                out_stores.push((s, place, vector(i)));
+                held[bank(i)].push(s);
+                rw_scratch = Some(s);
+                s
+            }
+        });
+    }
     for (i, op) in asm.operands.iter().enumerate() {
         if op.is_output {
             continue;
@@ -1853,13 +1883,12 @@ fn bind_operands(stmt: &AsmStmt) -> Emit<BoundOperands> {
         if imm {
             continue;
         }
-        let vector = matches!(op.constraint, C::Fp);
         let src = arg_source(stmt, i)?;
-        op_reg[i] = Some(match (vector, src) {
+        op_reg[i] = Some(match (vector(i), src) {
             (true, ArgSrc::Xmm(x)) => x,
             (false, ArgSrc::Gpr(r)) => r,
             (true, src) => {
-                let s = take(&mut fp)?;
+                let s = take(&mut taken[1])?;
                 moves.push(Transfer {
                     dst: XMM_UNIFIED + s,
                     src,
@@ -1868,7 +1897,7 @@ fn bind_operands(stmt: &AsmStmt) -> Emit<BoundOperands> {
                 s
             }
             (false, src) => {
-                let s = take(&mut gp)?;
+                let s = take(&mut taken[0])?;
                 moves.push(Transfer {
                     dst: s,
                     src,
@@ -1878,71 +1907,59 @@ fn bind_operands(stmt: &AsmStmt) -> Emit<BoundOperands> {
             }
         });
     }
-    let mut out_store = None;
-    if let Some(i) = asm.operands.iter().position(|o| o.is_output) {
-        let op = &asm.operands[i];
-        let vector = matches!(op.constraint, C::Fp);
-        let place = place_of(stmt.alloc, stmt.site);
-        let r = match (vector, place) {
-            (true, Place::FpReg(x)) => x,
-            (false, Place::IntReg(x)) => x,
-            _ => {
-                let (pool, any) = if vector {
-                    (&mut fp, fp_any)
-                } else {
-                    (&mut gp, gp_any)
+    if let Some((i, _)) = rw
+        && let Some(r) = op_reg[i]
+    {
+        let src = arg_source(stmt, i)?;
+        let (dst, kind) = if vector(i) {
+            (XMM_UNIFIED + r, TransferKind::V128)
+        } else {
+            (r, TransferKind::Value)
+        };
+        if src.reads() != Some(dst) {
+            let displaced: alloc::vec::Vec<usize> = (0..asm.operands.len())
+                .filter(|&j| j != i && op_reg[j] == Some(r) && vector(j) == vector(i))
+                .collect();
+            if !displaced.is_empty() {
+                let p = take(&mut taken[bank(i)])?;
+                moves.push(Transfer {
+                    dst: if vector(i) { XMM_UNIFIED + p } else { p },
+                    src: if vector(i) {
+                        ArgSrc::Xmm(r)
+                    } else {
+                        ArgSrc::Gpr(r)
+                    },
+                    kind,
+                });
+                for j in displaced {
+                    op_reg[j] = Some(p);
+                }
+            }
+            moves.push(Transfer { dst, src, kind });
+        }
+    }
+    for &(i, place) in outs.iter().filter(|&&(i, _)| !asm.operands[i].is_rw) {
+        op_reg[i] = Some(match own(i, place) {
+            Some(x) => x,
+            None => {
+                let b = bank(i);
+                let Some(s) = pools[b]
+                    .iter()
+                    .copied()
+                    .find(|&r| Some(r) != rw_scratch && !held[b].contains(&r))
+                else {
+                    return fail(short);
                 };
-                let s = if op.is_rw {
-                    take(pool)?
-                } else {
-                    match pool.first().copied().or(any) {
-                        Some(s) => s,
-                        None => return fail(short),
-                    }
-                };
-                out_store = Some((s, place, vector));
+                held[b].push(s);
+                out_stores.push((s, place, vector(i)));
                 s
             }
-        };
-        op_reg[i] = Some(r);
-        if op.is_rw {
-            let src = arg_source(stmt, i)?;
-            let (dst, kind) = if vector {
-                (XMM_UNIFIED + r, TransferKind::V128)
-            } else {
-                (r, TransferKind::Value)
-            };
-            if src.reads() != Some(dst) {
-                let displaced: alloc::vec::Vec<usize> = (0..asm.operands.len())
-                    .filter(|&j| {
-                        j != i
-                            && op_reg[j] == Some(r)
-                            && matches!(asm.operands[j].constraint, C::Fp) == vector
-                    })
-                    .collect();
-                if !displaced.is_empty() {
-                    let p = take(if vector { &mut fp } else { &mut gp })?;
-                    moves.push(Transfer {
-                        dst: if vector { XMM_UNIFIED + p } else { p },
-                        src: if vector {
-                            ArgSrc::Xmm(r)
-                        } else {
-                            ArgSrc::Gpr(r)
-                        },
-                        kind,
-                    });
-                    for j in displaced {
-                        op_reg[j] = Some(p);
-                    }
-                }
-                moves.push(Transfer { dst, src, kind });
-            }
-        }
+        });
     }
     Ok(BoundOperands {
         op_reg,
         moves,
-        out_store,
+        out_stores,
     })
 }
 
@@ -2169,7 +2186,7 @@ impl AsmScratch {
     fn goto_direct(&self, asm: &super::super::ir::AsmBlock) -> bool {
         use super::super::ir::AsmConstraint;
         if let Some(b) = &self.bound {
-            return b.out_store.is_none();
+            return b.out_stores.is_empty();
         }
         self.save_list.is_empty()
             && self.fp_save_list.is_empty()
@@ -2370,17 +2387,9 @@ impl AsmScratch {
     fn emit_outputs(&self, out: &mut Out, stmt: &AsmStmt, op_reg: &[Option<u8>]) -> Emit {
         use super::super::ir::AsmConstraint;
         if let Some(b) = &self.bound {
-            if let Some((s, Place::Spill(slot), vector)) = b.out_store {
-                let (base, disp) = if vector {
-                    v128_spill_addr(stmt.frame, slot)
-                } else {
-                    spill_slot_addr(stmt.frame, slot)
-                };
-                let (base, disp) = self.late_base(stmt, base, disp);
-                if vector {
-                    super::encode::emit_movups_mem_xmm(out.cx.code, base, disp, Reg(s));
-                } else {
-                    super::encode::emit_mov_mem_r(out.cx.code, base, disp, Reg(s));
+            for &(s, place, vector) in &b.out_stores {
+                if let Place::Spill(slot) = place {
+                    self.store_spilled(out.cx.code, stmt, s, slot, vector);
                 }
             }
             return Ok(());
@@ -2404,36 +2413,55 @@ impl AsmScratch {
                 emit_asm_store_width(out.cx.code, base, disp, Reg(r), op.width);
             }
         }
-        // The value output goes last: the store-backs read operand registers.
-        if let Some(i) = stmt
-            .asm
-            .operands
-            .iter()
-            .position(|o| o.value && o.is_output)
-            && let Some(r) = op_reg[i]
-        {
+        // Last, as the store-backs read operand registers: the spilled
+        // outputs store, the rest move as a parallel copy (`xchg` cycles).
+        let mut int_moves: alloc::vec::Vec<PlaceMove> = alloc::vec::Vec::new();
+        let mut fp_moves: alloc::vec::Vec<(Place, Place, bool)> = alloc::vec::Vec::new();
+        for (i, place) in stmt.alloc.asm_output_places(stmt.func, stmt.site) {
+            let Some(r) = op_reg[i] else { continue };
             let vector = matches!(stmt.asm.operands[i].constraint, AsmConstraint::Fp);
-            match place_of(stmt.alloc, stmt.site) {
-                Place::FpReg(x) if x != r => {
-                    super::encode::emit_movapd_xmm_xmm(out.cx.code, Reg(x), Reg(r))
-                }
-                Place::IntReg(x) if x != r => {
-                    super::encode::emit_mov_rr(out.cx.code, Reg(x), Reg(r))
-                }
-                Place::Spill(s) if vector => {
-                    let (base, disp) = v128_spill_addr(stmt.frame, s);
-                    let (base, disp) = self.late_base(stmt, base, disp);
-                    super::encode::emit_movups_mem_xmm(out.cx.code, base, disp, Reg(r));
-                }
-                Place::Spill(s) => {
-                    let (base, disp) = spill_slot_addr(stmt.frame, s);
-                    let (base, disp) = self.late_base(stmt, base, disp);
-                    super::encode::emit_mov_mem_r(out.cx.code, base, disp, Reg(r));
+            match place {
+                Place::Spill(slot) => self.store_spilled(out.cx.code, stmt, r, slot, vector),
+                place @ Place::FpReg(_) => fp_moves.push((Place::FpReg(r), place, true)),
+                place @ Place::IntReg(_) => {
+                    int_moves.push(PlaceMove::copy(Place::IntReg(r), place))
                 }
                 _ => {}
             }
         }
-        Ok(())
+        let b = super::ssa::emit_common::X64Backend;
+        let frame = stmt.frame;
+        super::ssa::emit_common::schedule_fp_place_moves(
+            &b,
+            out.cx.code,
+            &mut fp_moves,
+            frame,
+            frame.fp_scratch[1],
+            frame.fp_scratch[0],
+        );
+        super::ssa::emit_common::schedule_place_moves(
+            &b,
+            out.cx.code,
+            &mut int_moves,
+            frame,
+            Reg::R10.0,
+            Reg::R11.0,
+        )
+    }
+
+    /// Store output register `r` to spill slot `slot` after the template.
+    fn store_spilled(&self, code: &mut Vec<u8>, stmt: &AsmStmt, r: u8, slot: u32, vector: bool) {
+        let (base, disp) = if vector {
+            v128_spill_addr(stmt.frame, slot)
+        } else {
+            spill_slot_addr(stmt.frame, slot)
+        };
+        let (base, disp) = self.late_base(stmt, base, disp);
+        if vector {
+            super::encode::emit_movups_mem_xmm(code, base, disp, Reg(r));
+        } else {
+            super::encode::emit_mov_mem_r(code, base, disp, Reg(r));
+        }
     }
 
     fn emit_restore(&self, code: &mut Vec<u8>) {

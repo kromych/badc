@@ -80,8 +80,8 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x6, %eax
                	retq
-               	shrq	%rax
                	movq	%rax, %r9
+               	shrq	%r9
                	movq	0x28(,%r9,2), %rax
                	cmpq	$0x2005, %rax           # imm = 0x2005
                	je	<addr>

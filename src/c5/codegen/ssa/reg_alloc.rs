@@ -202,6 +202,26 @@ pub(crate) struct Allocation {
 }
 
 impl Allocation {
+    /// Each value output of the asm statement at `site` with its place;
+    /// `Place::None` for one nothing reads, whose place may be another's.
+    pub(crate) fn asm_output_places(
+        &self,
+        func: &FunctionSsa,
+        site: ValueId,
+    ) -> Vec<(usize, Place)> {
+        func.asm_output_values(site)
+            .into_iter()
+            .map(|(i, v)| {
+                let place = if v == NO_VALUE || self.is_unread(v) {
+                    Place::None
+                } else {
+                    self.places.get(v as usize).copied().unwrap_or(Place::None)
+                };
+                (i, place)
+            })
+            .collect()
+    }
+
     /// True when value `v` holds a single-precision `f32` pattern.
     /// Out-of-range / unmarked values are double-precision.
     pub(crate) fn is_f32(&self, v: ValueId) -> bool {
@@ -529,6 +549,61 @@ fn atomic_apart(
     }
 }
 
+/// Each value output of an asm statement, and each input carrying a value
+/// into a register, with its register in `op_reg`.
+pub(crate) fn asm_operand_hints(
+    func: &FunctionSsa,
+    asm: &crate::c5::ir::AsmBlock,
+    args: &[ValueId],
+    site: ValueId,
+    op_reg: &[Option<u8>],
+) -> Vec<(ValueId, u8)> {
+    use crate::c5::ir::AsmConstraint as C;
+    let inputs = asm
+        .operands
+        .iter()
+        .zip(args)
+        .enumerate()
+        .filter(|(_, (op, _))| {
+            !op.is_output
+                && !op.static_arg
+                && matches!(
+                    op.constraint,
+                    C::Reg | C::Fixed(_) | C::Match(_) | C::RegOrImm { .. } | C::Fp
+                )
+        })
+        .map(|(i, (_, &a))| (i, a));
+    func.asm_output_values(site)
+        .into_iter()
+        .chain(inputs)
+        .filter(|&(_, v)| v != NO_VALUE)
+        .filter_map(|(i, v)| op_reg.get(i).copied().flatten().map(|r| (v, r)))
+        .collect()
+}
+
+/// Hint staged asm operands to their registers ([`asm_operand_hints`]).
+fn populate_asm_operand_hints(
+    func: &FunctionSsa,
+    target: Target,
+    fixed: FixedRegs,
+    hints: &mut [Option<u8>],
+) {
+    for (site, inst) in func.insts.iter().enumerate() {
+        let Inst::InlineAsm { asm, args } = inst else {
+            continue;
+        };
+        let site = site as ValueId;
+        let outs = if target.is_aarch64() {
+            super::super::aarch64::emit::asm_staged_hints(func, asm, args, site, fixed)
+        } else {
+            super::super::x86_64::emit::asm_staged_hints(func, asm, args, site, fixed, target)
+        };
+        for (v, r) in outs {
+            hints[v as usize].get_or_insert(r);
+        }
+    }
+}
+
 /// Keep a bound x86-64 inline asm statement's read-write output off its
 /// other inputs' registers, which its input's move would copy aside first.
 fn asm_rw_apart(
@@ -539,14 +614,14 @@ fn asm_rw_apart(
     apart: &mut Vec<Vec<ValueId>>,
 ) {
     use crate::c5::ir::AsmConstraint;
-    for (v, inst) in func.insts.iter().enumerate() {
+    for (site, inst) in func.insts.iter().enumerate() {
         let Inst::InlineAsm { asm, args } = inst else {
             continue;
         };
-        let Some(k) = asm
-            .operands
-            .iter()
-            .position(|o| o.is_output && o.is_rw && o.value)
+        let Some((k, v)) = func
+            .asm_output_values(site as ValueId)
+            .into_iter()
+            .find(|&(k, v)| asm.operands[k].is_rw && v != NO_VALUE)
         else {
             continue;
         };
@@ -556,7 +631,7 @@ fn asm_rw_apart(
         if apart.is_empty() {
             apart.resize(func.insts.len(), Vec::new());
         }
-        let (a, tied) = (node_of[v], node_of[args[k] as usize]);
+        let (a, tied) = (node_of[v as usize], node_of[args[k] as usize]);
         for (op, &arg) in asm.operands.iter().zip(args) {
             if op.is_output || op.static_arg || matches!(op.constraint, AsmConstraint::Imm) {
                 continue;
@@ -1014,6 +1089,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     populate_param_ref_hints(func, conv_target, &mut hints);
     populate_ret_part_hints(func, target, &mut hints);
     populate_phi_hints(func, &mut hints);
+    populate_asm_operand_hints(func, target, fixed, &mut hints);
     // The allocation banks stay the target's own, not the convention's:
     // a value live across a call has to sit in a register the *callee*
     // preserves, and this function's callees follow the target's
@@ -1926,6 +2002,7 @@ fn asm_preserve_masks(func: &FunctionSsa, target: Target) -> (u32, u32) {
 ///   apart from the float constant the phi lowering re-materialises.
 /// * Block coverage: no instruction or terminator inside a block reads a
 ///   value covered by no block's `inst_range`.
+/// * Asm outputs: an `AsmOut` follows its statement in its block.
 ///
 /// The placement invariants are checked over the covered values only --
 /// the tape the emit walks. `prune_unreachable` leaves a deleted block's
@@ -2201,6 +2278,22 @@ fn verify_allocation(
             if !after_call {
                 report(alloc::format!(
                     "ret-part: v{v} follows no call in its block"
+                ));
+            }
+        }
+    }
+
+    for block in &func.blocks {
+        for v in block.inst_range.clone() {
+            if !matches!(func.insts[v as usize], Inst::AsmOut { .. }) {
+                continue;
+            }
+            let at = (block.inst_range.start..v)
+                .rev()
+                .find(|&u| !matches!(func.insts[u as usize], Inst::AsmOut { .. }));
+            if !at.is_some_and(|u| matches!(func.insts[u as usize], Inst::InlineAsm { .. })) {
+                report(alloc::format!(
+                    "asm-out: v{v} follows no inline asm statement in its block"
                 ));
             }
         }
@@ -2769,14 +2862,16 @@ pub(crate) fn wide_values(func: &FunctionSsa) -> Vec<bool> {
         .insts
         .iter()
         .map(|inst| match inst {
-            Inst::Load { kind, .. } | Inst::LoadLocal { kind, .. } | Inst::Phi { kind, .. } => {
-                *kind == LoadKind::V128
-            }
+            Inst::Load { kind, .. }
+            | Inst::LoadLocal { kind, .. }
+            | Inst::Phi { kind, .. }
+            | Inst::AsmOut { kind, .. } => *kind == LoadKind::V128,
             Inst::Store { kind, .. } | Inst::StoreLocal { kind, .. } => *kind == StoreKind::V128,
             Inst::InlineAsm { asm, .. } => asm
                 .operands
                 .iter()
-                .any(|o| o.value && o.is_output && o.width == 16),
+                .find(|o| o.value && o.is_output)
+                .is_some_and(|o| o.width == 16),
             _ => false,
         })
         .collect();
@@ -2805,7 +2900,10 @@ fn result_kind(inst: &Inst) -> ResultKind {
         // A parameter seeded with an FP load kind arrives in an FP
         // argument register; classify it accordingly so the seed and
         // its consumers share the FP register file.
-        ParamRef { kind, .. } | ParamPart { kind, .. } | RetPart { kind, .. } => match kind {
+        ParamRef { kind, .. }
+        | ParamPart { kind, .. }
+        | RetPart { kind, .. }
+        | AsmOut { kind, .. } => match kind {
             LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128 => {
                 ResultKind::Fp
             }

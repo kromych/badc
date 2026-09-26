@@ -349,14 +349,11 @@ Disassembly of section .text:
 <vector_level>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x28, %rsp
+               	subq	$0x8, %rsp
                	pushq	%rbx
                	xorl	%eax, %eax
                	xorl	%ecx, %ecx
                	cpuid
-               	movl	%ebx, -0x20(%rbp)
-               	movl	%ecx, -0x18(%rbp)
-               	movl	%edx, -0x10(%rbp)
                	cmpl	$0x7, %eax
                	jae	<addr>
                	xorl	%eax, %eax
@@ -366,11 +363,7 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	xorl	%ecx, %ecx
                	cpuid
-               	movl	%ebx, -0x20(%rbp)
-               	movl	%ecx, -0x18(%rbp)
-               	movl	%edx, -0x10(%rbp)
-               	movl	-0x18(%rbp), %eax
-               	testl	$0x8000000, %eax        # imm = 0x8000000
+               	testl	$0x8000000, %ecx        # imm = 0x8000000
                	jne	<addr>
                	xorl	%eax, %eax
                	popq	%rbx
@@ -378,7 +371,6 @@ Disassembly of section .text:
                	retq
                	xorl	%ecx, %ecx
                	xgetbv
-               	movl	%edx, -0x8(%rbp)
                	movq	%rax, %rsi
                	movq	%rsi, %rax
                	andq	$0x6, %rax
@@ -392,21 +384,15 @@ Disassembly of section .text:
                	movl	$0x7, %eax
                	xorl	%ecx, %ecx
                	cpuid
-               	movl	%ebx, -0x20(%rbp)
-               	movl	%ecx, -0x18(%rbp)
-               	movl	%edx, -0x10(%rbp)
-               	movl	-0x20(%rbp), %eax
-               	testb	$0x20, %al
+               	testb	$0x20, %bl
                	jne	<addr>
                	xorl	%eax, %eax
                	popq	%rbx
                	leave
                	retq
-               	movl	-0x20(%rbp), %eax
-               	testl	$0x10000, %eax          # imm = 0x10000
+               	testl	$0x10000, %ebx          # imm = 0x10000
                	je	<addr>
-               	movl	-0x20(%rbp), %eax
-               	testl	$0x40000000, %eax       # imm = 0x40000000
+               	testl	$0x40000000, %ebx       # imm = 0x40000000
                	je	<addr>
                	movq	%rsi, %rax
                	andq	$0xe0, %rax

@@ -170,8 +170,8 @@ pub(super) fn binop_imm_materializes(target: Target, op: BinOp, imm: i64, high_d
 /// the branch, which no unrelated instruction may come between. `None`
 /// when the position that leaves is a phi or a register read, neither
 /// of which a copy may precede: a phi belongs to the block's leading run,
-/// and a `ParamRef`, a `ParamPart` or a `RetPart` reads an argument or
-/// result register live until it.
+/// a `ParamRef`, a `ParamPart` or a `RetPart` reads an argument or result
+/// register live until it, and an `AsmOut` its statement's output register.
 fn insert_point(func: &FunctionSsa, b: BlockId) -> Option<ValueId> {
     let range = func.blocks[b as usize].inst_range.clone();
     if range.is_empty() {
@@ -192,6 +192,7 @@ fn insert_point(func: &FunctionSsa, b: BlockId) -> Option<ValueId> {
                 | Inst::ParamRef { .. }
                 | Inst::ParamPart { .. }
                 | Inst::RetPart { .. }
+                | Inst::AsmOut { .. }
         )
     });
     if blocked { None } else { Some(at) }

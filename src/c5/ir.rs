@@ -576,6 +576,10 @@ pub(crate) enum Inst {
     /// the block with nothing between them that writes the result
     /// registers; the allocator keeps what does stand there off them.
     RetPart { slot: u8, kind: LoadKind },
+    /// Value output `op` past the first of the inline asm statement it
+    /// follows (after other `AsmOut`s of it) in its block; the lowering
+    /// leaves it in a `kind` register. Emits nothing.
+    AsmOut { op: u8, kind: LoadKind },
     /// The aggregate `agg_descs[desc]` as the values of its register
     /// parts in class order, `fp_mask` naming the floating-point ones,
     /// for a `Terminator::Return` in registers. Produces no value. The
@@ -656,6 +660,7 @@ impl Inst {
                 | Inst::Copy { .. }
                 | Inst::ParamPart { .. }
                 | Inst::RetPart { .. }
+                | Inst::AsmOut { .. }
         )
     }
 
@@ -715,6 +720,7 @@ impl Inst {
             Inst::ParamRef { .. } => "ParamRef",
             Inst::ParamPart { .. } => "ParamPart",
             Inst::RetPart { .. } => "RetPart",
+            Inst::AsmOut { .. } => "AsmOut",
             Inst::AggParts { .. } => "AggParts",
             Inst::Phi { .. } => "Phi",
         }
@@ -742,7 +748,8 @@ impl Inst {
             | Inst::LifetimeEnd(_)
             | Inst::ParamRef { .. }
             | Inst::ParamPart { .. }
-            | Inst::RetPart { .. } => {}
+            | Inst::RetPart { .. }
+            | Inst::AsmOut { .. } => {}
             Inst::AggParts { parts, .. } => parts.iter().for_each(|&v| f(v)),
             Inst::Load { addr, .. } => f(*addr),
             Inst::Store { addr, value, .. } => {
@@ -854,7 +861,8 @@ impl Inst {
             | Inst::LifetimeEnd(_)
             | Inst::ParamRef { .. }
             | Inst::ParamPart { .. }
-            | Inst::RetPart { .. } => {}
+            | Inst::RetPart { .. }
+            | Inst::AsmOut { .. } => {}
             Inst::AggParts { parts, .. } => parts.iter_mut().for_each(f),
             Inst::Load { addr, .. } => f(addr),
             Inst::Store { addr, value, .. } => {
@@ -1483,8 +1491,8 @@ pub(crate) struct AsmBlock {
     /// that still hold something (`Allocation::asm_preserve`).
     pub clobber_regs: u32,
     /// SIMD/FP registers named in the clobber list, as a bitmask over the FP
-    /// register file (independent of `clobber_regs`). Empty for x86 targets,
-    /// whose FP clobbers ride the shared mask.
+    /// register file (independent of `clobber_regs`): any view of a SIMD
+    /// register on AArch64, an `xmm` register on x86-64.
     pub clobber_fp_regs: u32,
     /// A `"memory"` clobber was listed: an ordering barrier for memory
     /// accesses (C practice for `asm volatile("" ::: "memory")`).
@@ -2237,6 +2245,38 @@ impl SspFacts {
 }
 
 impl FunctionSsa {
+    /// Each value output of the asm statement at `site` with its value: the
+    /// statement's own for the first, the following [`Inst::AsmOut`] for a
+    /// later one, `NO_VALUE` for a dead one.
+    pub(crate) fn asm_output_values(&self, site: ValueId) -> Vec<(usize, ValueId)> {
+        let Some(Inst::InlineAsm { asm, .. }) = self.insts.get(site as usize) else {
+            return Vec::new();
+        };
+        let outs = self.insts[site as usize + 1..]
+            .iter()
+            .enumerate()
+            .map_while(|(k, inst)| match *inst {
+                Inst::AsmOut { op, .. } => Some((op as usize, site + 1 + k as ValueId)),
+                _ => None,
+            });
+        let mut values: Vec<(usize, ValueId)> = asm
+            .operands
+            .iter()
+            .enumerate()
+            .filter(|(_, o)| o.value && o.is_output)
+            .map(|(i, _)| (i, NO_VALUE))
+            .collect();
+        if let Some(first) = values.first_mut() {
+            first.1 = site;
+        }
+        for (op, v) in outs {
+            if let Some(e) = values.iter_mut().find(|e| e.0 == op) {
+                e.1 = v;
+            }
+        }
+        values
+    }
+
     /// True when any inline-asm template in the body names the stack
     /// pointer (`AsmBlock::references_sp`).
     pub fn has_sp_asm(&self) -> bool {
@@ -2367,6 +2407,7 @@ impl crate::c5::layout::DataOffsets for Inst {
             | Inst::ParamRef { .. }
             | Inst::ParamPart { .. }
             | Inst::RetPart { .. }
+            | Inst::AsmOut { .. }
             | Inst::AggParts { .. }
             | Inst::Phi { .. } => {}
         }

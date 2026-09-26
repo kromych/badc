@@ -24,22 +24,12 @@ Disassembly of section .text:
                	stp	x16, x17, [x0]
                	ldp	x16, x17, [x1, #0x10]
                	stp	x16, x17, [x0, #0x10]
-               	stur	x0, [x29, #-0x40]
-               	sub	x16, x29, #0x38
-               	str	x16, [sp]
-               	sub	x16, x29, #0x40
-               	str	x16, [sp, #0x8]
-               	ldr	x16, [sp, #0x8]
-               	ldr	x2, [x16]
+               	str	x0, [sp]
+               	ldr	x2, [sp]
                	ld1	{ v0.4s }, [x2], #16
                	mov	w0, v0.s[0]
                	ld1	{ v1.4s }, [x2], #16
                	mov	w1, v1.s[0]
-               	ldr	x16, [sp]
-               	str	w1, [x16]
-               	ldr	x16, [sp, #0x8]
-               	str	x2, [x16]
-               	ldursw	x1, [x29, #-0x38]
                	add	x0, x0, x1
                	cmp	w0, #0x2a
                	b.ne	<addr>

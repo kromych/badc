@@ -1,6 +1,6 @@
 ; --- SSA dump (ok=true) ent_pc=7 ---
 ; name=main
-fn ent_pc=7 n_params=0 variadic=false locals=2
+fn ent_pc=7 n_params=0 variadic=false locals=1
   spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -31,11 +31,11 @@ fn ent_pc=7 n_params=0 variadic=false locals=2
     v17  ImmData(8)                                       -> x0
     v18  Imm(24)                                          -> x1
     v19  BinopI { op=add, lhs=v17, rhs_imm=24 }           -> x1
-    v20  Load { addr=v17, disp=24, kind=I64, volatile }   -> x0
-    v21  LocalAddr(-1)                                    -> x1
-    v22  InlineAsm { template="movl %k2, %0\n\tmovl %k2, %1\n\tshrl $1, %1", ops=3, args=[-, v21, v20] } -> x0
-    v23  BinopI { op=and, lhs=v22, rhs_imm=4294967295 }   -> x0
-    v24  LoadLocal { off=-1, kind=U32 }                   -> x1
+    v20  Load { addr=v17, disp=24, kind=I64, volatile }   -> x3
+    v21  InlineAsm { template="movl %k2, %0\n\tmovl %k2, %1\n\tshrl $1, %1", ops=3, args=[-, -, v20] } -> x0
+    v22  AsmOut(1, kind=I64)                              -> x2
+    v23  BinopI { op=and, lhs=v21, rhs_imm=4294967295 }   -> x0
+    v24  BinopI { op=and, lhs=v22, rhs_imm=4294967295 }   -> x1
     v25  Binop { op=add, lhs=v23, rhs=v24 }               -> x0
     v26  Imm(19088743)                                    -> x1
     v27  Imm(9544371)                                     -> x1
@@ -85,15 +85,15 @@ fn ent_pc=7 n_params=0 variadic=false locals=2
     v59  BinopI { op=add, lhs=v57, rhs_imm=48 }           -> x1
     v60  Load { addr=v57, disp=48, kind=I64, volatile }   -> x1
     v61  Imm(0)                                           -> x0
-    v62  StoreLocal { off=-2, value=v61, kind=I64 }       -> -
+    v62  StoreLocal { off=-1, value=v61, kind=I64 }       -> -
     v63  ImmData(80)                                      -> x0
-    v64  LocalAddr(-2)                                    -> x2
+    v64  LocalAddr(-1)                                    -> x2
     v65  Store { addr=v63, disp=0, value=v64, kind=I64 }  -> -
     v66  InlineAsm { template="movq %1, %0", ops=2, args=[-, v60] } -> x1
-    v67  StoreLocal { off=-2, value=v66, kind=I64 }       -> -
+    v67  StoreLocal { off=-1, value=v66, kind=I64 }       -> -
     v68  Load { addr=v63, disp=0, kind=I64 }              -> x0
     v69  Load { addr=v68, disp=0, kind=I64 }              -> x0
-    v70  LoadLocal { off=-2, kind=I64 }                   -> x2
+    v70  LoadLocal { off=-1, kind=I64 }                   -> x2
     v71  Binop { op=add, lhs=v69, rhs=v66 }               -> x0
     v72  BinopI { op=ne, lhs=v71, rhs_imm=22 }            -> x0
     terminator Bz { cond=v72, target=b12, fall=b11 }   (exit_acc=v72)
@@ -104,10 +104,10 @@ fn ent_pc=7 n_params=0 variadic=false locals=2
     v74  ImmData(8)                                       -> x0
     v75  Imm(56)                                          -> x1
     v76  BinopI { op=add, lhs=v74, rhs_imm=56 }           -> x1
-    v77  Load { addr=v74, disp=56, kind=I64, volatile }   -> x0
-    v78  LocalAddr(-2)                                    -> x1
+    v77  Load { addr=v74, disp=56, kind=I64, volatile }   -> x3
+    v78  LocalAddr(-1)                                    -> x0
     v79  InlineAsm { template="movq %1, %0", ops=2, args=[v78, v77] } -> -
-    v80  LoadLocal { off=-2, kind=I64, volatile }         -> x0
+    v80  LoadLocal { off=-1, kind=I64, volatile }         -> x0
     v81  BinopI { op=ne, lhs=v80, rhs_imm=9 }             -> x0
     terminator Bz { cond=v81, target=b14, fall=b13 }   (exit_acc=v81)
   block 13  start_pc=0

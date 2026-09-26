@@ -151,6 +151,7 @@ fn compute_high_observed_through(
             | Inst::ParamRef { .. }
             | Inst::ParamPart { .. }
             | Inst::RetPart { .. }
+            | Inst::AsmOut { .. }
             | Inst::Extend { .. } => {}
             // A part is returned whole in its register.
             Inst::AggParts { parts, .. } => {

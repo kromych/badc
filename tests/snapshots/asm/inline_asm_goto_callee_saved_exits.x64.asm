@@ -45,15 +45,15 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	pushq	%r12
                	pushq	%rbx
+               	pushq	%r12
                	movl	$0x6, %edi
                	callq	<addr>
                	cmpq	$0x7, %rax
                	je	<addr>
                	movl	$0x1, %eax
-               	popq	%rbx
                	popq	%r12
+               	popq	%rbx
                	popq	%rbp
                	retq
                	movq	$0x65, %rbx
@@ -61,16 +61,15 @@ Disassembly of section .text:
                	callq	<addr>
                	addq	%rbx, %rax
                	movq	%rax, %r12
-               	movq	%r12, %rax
-               	cmpq	$0x6c, %rax
+               	cmpq	$0x6c, %r12
                	je	<addr>
                	movl	$0x2, %eax
-               	popq	%rbx
                	popq	%r12
+               	popq	%rbx
                	popq	%rbp
                	retq
                	movl	$0x2a, %eax
-               	popq	%rbx
                	popq	%r12
+               	popq	%rbx
                	popq	%rbp
                	retq

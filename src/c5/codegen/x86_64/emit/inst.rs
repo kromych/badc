@@ -313,8 +313,9 @@ pub(super) fn emit_inst(
         }
         // A lifetime marker states a fact about storage the frame
         // already holds; `ssa::slot_coalesce` reads it and no code
-        // follows from it. The return moves the parts of an `AggParts`.
-        Inst::LifetimeEnd(_) | Inst::AggParts { .. } => Ok(()),
+        // follows from it. The return moves the parts of an `AggParts`,
+        // and an inline asm statement places its `AsmOut`s.
+        Inst::LifetimeEnd(_) | Inst::AggParts { .. } | Inst::AsmOut { .. } => Ok(()),
         Inst::ParamRef { .. } | Inst::ParamPart { .. } | Inst::RetPart { .. } => {
             emit_incoming(code, inst, dst, v, fcx)
         }

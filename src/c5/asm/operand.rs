@@ -623,7 +623,7 @@ pub(crate) fn asm_operand_form(func: &FunctionSsa, arg: u32) -> alloc::string::S
             Some(Inst::AtomicStore { .. }) => "an atomic store",
             Some(Inst::Mcpy { .. }) => "a block copy",
             Some(Inst::Mzero { .. }) => "a block zero fill",
-            Some(Inst::InlineAsm { .. }) => "an asm statement",
+            Some(Inst::InlineAsm { .. } | Inst::AsmOut { .. }) => "an asm statement",
             Some(Inst::AllocaInit(_)) => "an alloca marker",
             Some(Inst::LifetimeEnd(_)) => "an end-of-lifetime marker",
             Some(Inst::ParamRef { .. } | Inst::ParamPart { .. }) => "a function parameter",

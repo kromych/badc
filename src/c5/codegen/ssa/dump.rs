@@ -340,6 +340,7 @@ fn fmt_inst(inst: &Inst) -> String {
             )
         }
         RetPart { slot, kind } => format!("RetPart({slot}, kind={})", fmt_load_kind(*kind)),
+        AsmOut { op, kind } => format!("AsmOut({op}, kind={})", fmt_load_kind(*kind)),
         AggParts {
             desc,
             parts,

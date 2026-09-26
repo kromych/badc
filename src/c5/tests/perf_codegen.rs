@@ -2471,6 +2471,76 @@ return v;\n}\n";
     m.finish();
 }
 
+/// Every register output of an inline asm statement is a value of its own.
+/// The kernel's `rdtsc()` joins its two halves in registers and `cpuid`'s
+/// four outputs reach their sum, neither through the stack; outputs nothing
+/// reads leave nothing past the template, so the paravirt call shape is the
+/// call alone; on AArch64 two `mrs` outputs sum in their registers, and a
+/// dead one takes x16. Every output past the first went through a frame
+/// slot before.
+#[test]
+fn asm_outputs_past_the_first_are_values() {
+    const X64: &str = "unsigned long rd(void) {\n\
+        unsigned long low, high;\n\
+        __asm__ volatile(\"rdtsc\" : \"=a\"(low), \"=d\"(high));\n\
+        return low | high << 32;\n\
+        }\n\
+        extern void (*op)(void);\n\
+        void f(void) {\n\
+        unsigned long di, si;\n\
+        __asm__ volatile(\"call *%[op]\" : \"=D\"(di), \"=S\"(si) : [op] \"m\"(op) : \"memory\");\n\
+        }\n\
+        unsigned int cpuid_sum(unsigned int leaf) {\n\
+        unsigned int a, b, c, d;\n\
+        __asm__ volatile(\"cpuid\" : \"=a\"(a), \"=b\"(b), \"=c\"(c), \"=d\"(d) : \"0\"(leaf), \"2\"(0));\n\
+        return a + b + c + d;\n\
+        }\n";
+    const A64: &str = "unsigned long tp(void) {\n\
+        unsigned long a, b;\n\
+        __asm__ volatile(\"mrs %0, tpidr_el0\\n\\tmrs %1, tpidrro_el0\" : \"=r\"(a), \"=r\"(b));\n\
+        return a + b;\n\
+        }\n\
+        unsigned long second(void) {\n\
+        unsigned long a, b;\n\
+        __asm__ volatile(\"mrs %0, tpidr_el0\\n\\tmrs %1, tpidrro_el0\" : \"=r\"(a), \"=r\"(b));\n\
+        return b;\n\
+        }\n";
+    let obj = object_at(X64, Target::LinuxX64, true);
+    let mut m = Misses::default();
+    let f = function_bytes(&obj, "f");
+    // call *op(%rip); ret
+    m.expect(f == [0xff, 0x15, 0, 0, 0, 0, 0xc3], || {
+        format!("x86-64 f: {f:02x?}")
+    });
+    for name in ["rd", "cpuid_sum"] {
+        let insns = x64_insns(&function_bytes(&obj, name));
+        let stack = insns
+            .iter()
+            .filter(|i| matches!(i.mem_base(), Some(4 | 5)))
+            .count();
+        m.expect(stack == 0, || {
+            format!("x86-64 {name}: {stack} stack accesses: {insns:x?}")
+        });
+    }
+    // rdtsc; the high half shifted and or'ed in; ret -- no frame.
+    let rd = x64_insns(&function_bytes(&obj, "rd"));
+    m.expect(rd.len() <= 5 && rd[0].op == 0x0F31, || {
+        format!("x86-64 rd: {rd:x?}")
+    });
+    // mrs x0, tpidr_el0; mrs x1, tpidrro_el0; add x0, x0, x1; ret
+    let ws = a64(A64, "tp");
+    m.expect(
+        ws == [0xD53B_D040, 0xD53B_D061, 0x8B01_0000, 0xD65F_03C0],
+        || format!("aarch64 tp: {ws:08x?}"),
+    );
+    // mrs x16, tpidr_el0; mrs x0, tpidrro_el0; ret
+    let ws = a64(A64, "second");
+    m.expect(ws == [0xD53B_D050, 0xD53B_D060, 0xD65F_03C0], || {
+        format!("aarch64 second: {ws:08x?}")
+    });
+    m.finish();
+}
+
 /// Two statements over `r` operands on x86-64: each operand is its value's
 /// register, so `add2` is the read-write input's move into the return
 /// register, the template and `ret`, and `mix` the template and `ret`.

@@ -31,7 +31,7 @@ Disassembly of section .text:
                	subq	$0x58, %rsp
                	pushq	%rbx
                	leaq	<rip>, %rsi
-               	leaq	-0x40(%rbp), %rdi
+               	leaq	-0x48(%rbp), %rdi
                	xorl	%eax, %eax
                	callq	<addr>
                	leaq	<rip>, %rdi
@@ -44,7 +44,7 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	leaq	-0x40(%rbp), %rdi
+               	leaq	-0x48(%rbp), %rdi
                	xorl	%eax, %eax
                	callq	<addr>
                	cmpq	$0x7, %rax

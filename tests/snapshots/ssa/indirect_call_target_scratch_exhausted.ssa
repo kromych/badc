@@ -130,6 +130,22 @@ fn ent_pc=1 n_params=16 variadic=false locals=26
     v124 BinopI { op=add, lhs=v120, rhs_imm=8 }           -> x2
     v125 Load { addr=v120, disp=8, kind=I64 }             -> x0
     v126 Binop { op=add, lhs=v122, rhs=v125 }             -> x0
+    v127 LifetimeEnd(-2)                                  -> -
+    v128 LifetimeEnd(-4)                                  -> -
+    v129 LifetimeEnd(-6)                                  -> -
+    v130 LifetimeEnd(-8)                                  -> -
+    v131 LifetimeEnd(-10)                                 -> -
+    v132 LifetimeEnd(-12)                                 -> -
+    v133 LifetimeEnd(-14)                                 -> -
+    v134 LifetimeEnd(-16)                                 -> -
+    v135 LifetimeEnd(-18)                                 -> -
+    v136 LifetimeEnd(-20)                                 -> -
+    v137 LifetimeEnd(-22)                                 -> -
+    v138 LifetimeEnd(-24)                                 -> -
+    v139 LifetimeEnd(-26)                                 -> -
+    v140 LifetimeEnd(0)                                   -> -
+    v141 LifetimeEnd(0)                                   -> -
+    v142 LifetimeEnd(0)                                   -> -
     terminator Return(v126)   (exit_acc=v126)
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=main

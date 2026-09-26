@@ -186,9 +186,11 @@ fn ent_pc=5 n_params=0 variadic=false locals=0
     v208 BinopI { op=eq, lhs=v207, rhs_imm=9 }            -> x0
     v209 Imm(0)                                           -> x1
     v210 Extend { value=v208, kind=I32 }                  -> x1
-    v211 Extend { value=v208, kind=I32 }                  -> x1
-    v212 BinopI { op=eq, lhs=v208, rhs_imm=0 }            -> x1
-    terminator Bnz { cond=v208, target=b3, fall=b2 }   (low word)   (exit_acc=v212)
+    v211 LifetimeEnd(0)                                   -> -
+    v212 LifetimeEnd(0)                                   -> -
+    v213 Extend { value=v208, kind=I32 }                  -> x1
+    v214 BinopI { op=eq, lhs=v208, rhs_imm=0 }            -> x1
+    terminator Bnz { cond=v208, target=b3, fall=b2 }   (low word)   (exit_acc=v214)
   block 2  start_pc=0
     v105 Imm(10)                                          -> x0
     terminator Return(v105)   (exit_acc=v105)

@@ -83,6 +83,8 @@ fn ent_pc=0 n_params=1 variadic=true locals=6
     v77  Binop { op=add, lhs=v75, rhs=v39 }               -> x0
     v78  Imm(0)                                           -> x1
     v79  Binop { op=add, lhs=v77, rhs=v43 }               -> x0
+    v80  LifetimeEnd(-3)                                  -> -
+    v81  LifetimeEnd(-6)                                  -> -
     terminator Return(v79)   (exit_acc=v79)
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=main

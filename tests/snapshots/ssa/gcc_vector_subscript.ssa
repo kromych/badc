@@ -278,48 +278,52 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v272 Imm(10000)                                       -> x0
     v273 Imm(0)                                           -> x0
     v274 Imm(10000)                                       -> x0
-    v275 Imm(10000)                                       -> x0
-    v276 Imm(0)                                           -> x0
+    v275 LifetimeEnd(0)                                   -> -
+    v276 Imm(10000)                                       -> x0
     v277 Imm(0)                                           -> x0
     v278 Imm(0)                                           -> x0
     v279 Imm(0)                                           -> x0
-    v280 Imm(8)                                           -> x0
-    v281 Imm(0)                                           -> x0
-    v282 Imm(30000)                                       -> x0
-    v283 Imm(0)                                           -> x0
+    v280 Imm(0)                                           -> x0
+    v281 Imm(8)                                           -> x0
+    v282 Imm(0)                                           -> x0
+    v283 Imm(30000)                                       -> x0
     v284 Imm(0)                                           -> x0
     v285 Imm(0)                                           -> x0
-    v286 Imm(30000)                                       -> x0
-    v287 Imm(0)                                           -> x0
+    v286 Imm(0)                                           -> x0
+    v287 Imm(30000)                                       -> x0
     v288 Imm(0)                                           -> x0
     v289 Imm(0)                                           -> x0
     v290 Imm(0)                                           -> x0
     v291 Imm(0)                                           -> x0
     v292 Imm(0)                                           -> x0
-    v293 Imm(1000)                                        -> x0
+    v293 Imm(0)                                           -> x0
     v294 Imm(1000)                                        -> x0
-    v295 Imm(0)                                           -> x0
-    v296 Imm(2000)                                        -> x0
-    v297 Imm(3000)                                        -> x0
+    v295 Imm(1000)                                        -> x0
+    v296 Imm(0)                                           -> x0
+    v297 Imm(2000)                                        -> x0
     v298 Imm(3000)                                        -> x0
-    v299 Imm(0)                                           -> x0
-    v300 Imm(30000)                                       -> x0
-    v301 Imm(33000)                                       -> x0
+    v299 Imm(3000)                                        -> x0
+    v300 Imm(0)                                           -> x0
+    v301 Imm(30000)                                       -> x0
     v302 Imm(33000)                                       -> x0
-    v303 Imm(0)                                           -> x0
-    v304 Imm(4000)                                        -> x0
-    v305 Imm(37000)                                       -> x0
-    v306 Imm(0)                                           -> x0
-    v307 Imm(37000)                                       -> x0
+    v303 Imm(33000)                                       -> x0
+    v304 Imm(0)                                           -> x0
+    v305 Imm(4000)                                        -> x0
+    v306 Imm(37000)                                       -> x0
+    v307 Imm(0)                                           -> x0
     v308 Imm(37000)                                       -> x0
-    v309 Imm(0)                                           -> x0
-    v310 Imm(0)                                           -> x0
+    v309 LifetimeEnd(0)                                   -> -
+    v310 Imm(37000)                                       -> x0
     v311 Imm(0)                                           -> x0
     v312 Imm(0)                                           -> x0
     v313 Imm(0)                                           -> x0
     v314 Imm(0)                                           -> x0
     v315 Imm(0)                                           -> x0
-    terminator Return(v315)   (exit_acc=v315)
+    v316 Imm(0)                                           -> x0
+    v317 Imm(0)                                           -> x0
+    v318 LifetimeEnd(0)                                   -> -
+    v319 LifetimeEnd(-20)                                 -> -
+    terminator Return(v317)   (exit_acc=v317)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

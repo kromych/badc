@@ -1544,6 +1544,21 @@ impl Compiler {
         self.cleanup_scopes.pop();
         self.tag_scopes.pop();
         self.local_label_scopes.close();
+        // The body's own objects end with it, as a nested block's do.
+        let mut slots: alloc::vec::Vec<i64> = self
+            .scope_bound
+            .iter()
+            .filter_map(|&i| self.lifetime_slot(i as usize))
+            .collect();
+        slots.sort_unstable();
+        slots.dedup();
+        if !slots.is_empty() {
+            let pos = self.ast_src_pos();
+            let end = self
+                .ast
+                .push_stmt(super::super::ast::Stmt::ScopeEnd(slots), pos);
+            top_level_ids.push(end);
+        }
         // Wrap the function's top-level stmts into a
         // Compound and pin it as `ast.body` so the
         // walker has a single tree root to descend

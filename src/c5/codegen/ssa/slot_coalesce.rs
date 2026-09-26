@@ -22,9 +22,10 @@
 //!     from its address resolves to a load / store / copy / by-value call
 //!     argument inside the object. Any other flow of the address -- a plain
 //!     pointer call argument, a stored pointer, asm, an atomic, a phi --
-//!     escapes the object and pins it for the whole function: C block scope
-//!     alone does not bound the lifetime once the address has flowed.
-//!     TODO: prove shorter lifetimes for escaped objects from scoping.
+//!     escapes the object. An escaped object whose lifetime ends are marked
+//!     (`Inst::LifetimeEnd`) is live from the first escape on a path to a
+//!     point, or an escape still ahead of it, to its end; one without
+//!     markers is pinned for the whole function.
 //!
 //! Reserved storage keeps a dedicated block: escaped objects, volatile
 //! slots, over-aligned region members, and slots the emit reaches through a
@@ -108,6 +109,25 @@ enum Ref {
     Other,
 }
 
+/// The bases whose address flows where this pass does not follow, and the
+/// instruction each flow happens at.
+#[derive(Default)]
+struct Escapes {
+    bases: BTreeSet<i64>,
+    at: Vec<(u32, i64)>,
+}
+
+impl Escapes {
+    fn insert(&mut self, pc: u32, base: i64) {
+        self.bases.insert(base);
+        self.at.push((pc, base));
+    }
+
+    fn contains(&self, base: &i64) -> bool {
+        self.bases.contains(base)
+    }
+}
+
 /// Resolve `v` to a [`Ref`], memoised, with an in-progress guard against
 /// the cyclic references the unordered SSA tape may carry (a cycle
 /// resolves to `Other`; the phi feeding it escapes its operands through
@@ -123,7 +143,7 @@ fn resolve(
     movable: &impl Fn(i64) -> bool,
     state: &mut [u8],
     memo: &mut [Ref],
-    escaped: &mut BTreeSet<i64>,
+    escaped: &mut Escapes,
 ) -> Ref {
     let vi = v as usize;
     if vi >= insts.len() {
@@ -165,8 +185,8 @@ fn resolve(
             let rr = resolve(insts, *rhs, movable, state, memo, escaped);
             match (rl, rr) {
                 (Ref::Ptr(a, _), Ref::Ptr(b, _)) => {
-                    escaped.insert(a);
-                    escaped.insert(b);
+                    escaped.insert(v, a);
+                    escaped.insert(v, b);
                     Ref::Other
                 }
                 (Ref::Ptr(b, o), _) => Ref::Ptr(b, o.and_then(|o| imm(*rhs).map(|k| o + k))),
@@ -184,14 +204,14 @@ fn resolve(
             match (rl, rr) {
                 (Ref::Ptr(a, _), Ref::Ptr(b, _)) => {
                     if a != b {
-                        escaped.insert(a);
-                        escaped.insert(b);
+                        escaped.insert(v, a);
+                        escaped.insert(v, b);
                     }
                     Ref::Other
                 }
                 (Ref::Ptr(b, o), _) => Ref::Ptr(b, o.and_then(|o| imm(*rhs).map(|k| o - k))),
                 (_, Ref::Ptr(b, _)) => {
-                    escaped.insert(b);
+                    escaped.insert(v, b);
                     Ref::Other
                 }
                 _ => Ref::Other,
@@ -212,6 +232,8 @@ const START: u8 = 4;
 /// End of the object's lifetime (`Inst::LifetimeEnd`). Not a read: it
 /// closes a scoped group's busy range instead of extending it.
 const END: u8 = 8;
+/// The address flows where this pass does not follow, until the end marker.
+const ESCAPE: u8 = 16;
 
 fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64, Option<i64>> {
     // A returns-twice call (setjmp family / vfork) re-enters the frame after
@@ -269,7 +291,7 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
     let ni = f.insts.len();
     let mut state = alloc::vec![0u8; ni];
     let mut memo = alloc::vec![Ref::Other; ni];
-    let mut escaped: BTreeSet<i64> = BTreeSet::new();
+    let mut escaped = Escapes::default();
     // Slots no lifetime bound may unpin: a volatile object must keep its
     // own storage across the control transfers the CFG does not model
     // (C99 5.1.2.3p2).
@@ -319,7 +341,8 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
         // Constant access at `base+off..+width`: extend the extent; a range
         // reaching below the base leaves the object and escapes it.
         let touch = |extent: &mut BTreeMap<i64, i64>,
-                     escaped: &mut BTreeSet<i64>,
+                     escaped: &mut Escapes,
+                     pc: u32,
                      base: i64,
                      off: Option<i64>,
                      width: i64| {
@@ -330,14 +353,14 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
                     true
                 }
                 Some(_) => {
-                    escaped.insert(base);
+                    escaped.insert(pc, base);
                     false
                 }
                 None => {
                     if recorded.contains_key(&base) {
                         true
                     } else {
-                        escaped.insert(base);
+                        escaped.insert(pc, base);
                         false
                     }
                 }
@@ -397,6 +420,7 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
                         } else if touch(
                             &mut extent,
                             &mut escaped,
+                            pc,
                             base,
                             off.map(|o| o + *disp as i64),
                             load_width(*kind),
@@ -419,6 +443,7 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
                         } else if touch(
                             &mut extent,
                             &mut escaped,
+                            pc,
                             base,
                             off.map(|o| o + *disp as i64),
                             store_width(*kind),
@@ -429,15 +454,15 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
                     // A stored address flows to memory this pass does not
                     // follow.
                     if let Some((base, _)) = base_of(*value) {
-                        escaped.insert(base);
+                        escaped.insert(pc, base);
                     }
                 }
                 Inst::Mzero { dst, size, .. } => {
                     if let Some((base, off)) = base_of(*dst) {
-                        if off.is_some() && touch(&mut extent, &mut escaped, base, off, *size) {
+                        if off.is_some() && touch(&mut extent, &mut escaped, pc, base, off, *size) {
                             raw_events.push((pc, base, WRITE));
                         } else if off.is_none() {
-                            escaped.insert(base);
+                            escaped.insert(pc, base);
                         }
                     }
                 }
@@ -445,17 +470,17 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
                     if let Some((base, off)) = base_of(*dst) {
                         // A variable-offset block write has no field bound;
                         // decline it rather than trust the recorded size.
-                        if off.is_some() && touch(&mut extent, &mut escaped, base, off, *size) {
+                        if off.is_some() && touch(&mut extent, &mut escaped, pc, base, off, *size) {
                             raw_events.push((pc, base, WRITE));
                         } else if off.is_none() {
-                            escaped.insert(base);
+                            escaped.insert(pc, base);
                         }
                     }
                     if let Some((base, off)) = base_of(*src) {
-                        if off.is_some() && touch(&mut extent, &mut escaped, base, off, *size) {
+                        if off.is_some() && touch(&mut extent, &mut escaped, pc, base, off, *size) {
                             raw_events.push((pc, base, READ));
                         } else if off.is_none() {
-                            escaped.insert(base);
+                            escaped.insert(pc, base);
                         }
                     }
                 }
@@ -496,19 +521,19 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
                                     .get(ai as usize)
                                     .map(|d| d.size as i64)
                                     .unwrap_or(0);
-                                if touch(&mut extent, &mut escaped, base, off, size) {
+                                if touch(&mut extent, &mut escaped, pc, base, off, size) {
                                     raw_events.push((pc, base, READ | WRITE));
                                 }
                             }
                             _ => {
-                                escaped.insert(base);
+                                escaped.insert(pc, base);
                             }
                         }
                     }
                     if let Inst::CallIndirect { target, .. } = inst
                         && let Some((base, _)) = base_of(*target)
                     {
-                        escaped.insert(base);
+                        escaped.insert(pc, base);
                     }
                     // An aggregate return writes its whole result through
                     // the out-pointer; the pointer is emit-internal (never a
@@ -548,7 +573,7 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
                         sole.insert(*off);
                     }
                     if let Some((base, _)) = base_of(*value) {
-                        escaped.insert(base);
+                        escaped.insert(pc, base);
                     }
                 }
                 other => {
@@ -557,21 +582,26 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
                     // or retains the address.
                     super::reg_alloc::for_each_operand(other, |v| {
                         if let Some((base, _)) = base_of(v) {
-                            escaped.insert(base);
+                            escaped.insert(pc, base);
                         }
                     });
                 }
             }
         }
     }
-    // An address reaching a terminator escapes.
-    for blk in &f.blocks {
+    // An address reaching a terminator escapes, at the end of its block.
+    let mut term_escapes: Vec<(usize, i64)> = Vec::new();
+    for (b, blk) in f.blocks.iter().enumerate() {
         let mut t = blk.terminator;
         t.for_each_operand_mut(|v| {
             if let Some((base, _)) = base_of(*v) {
-                escaped.insert(base);
+                escaped.bases.insert(base);
+                term_escapes.push((b, base));
             }
         });
+    }
+    for &(pc, base) in &escaped.at {
+        raw_events.push((pc, base, ESCAPE));
     }
     // Group formation: one cell interval per address-reached object, from
     // the recorded sizes, the derived extents, and a one-cell interval per
@@ -939,9 +969,18 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
                 }
             }
         }
+        for &(b, base) in &term_escapes {
+            if let Some(g) = group_of(base)
+                && let Some(&sg) = sg_of.get(&g)
+            {
+                let end = f.blocks[b].inst_range.end;
+                block_events[b].push((end, sg, ESCAPE));
+            }
+        }
     }
     let mut g_read = alloc::vec![0u64; nb * gwords];
     let mut g_event = alloc::vec![0u64; nb * gwords];
+    let mut g_escape = alloc::vec![0u64; nb * gwords];
     // Per block: the groups whose last event in it is the end marker.
     let mut g_end_last = alloc::vec![0u64; nb * gwords];
     // The scoped groups, as a mask over the shareable index space.
@@ -957,6 +996,9 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
             g_event[b * gwords + sg / 64] |= bit;
             if kind & READ != 0 {
                 g_read[b * gwords + sg / 64] |= bit;
+            }
+            if kind & ESCAPE != 0 {
+                g_escape[b * gwords + sg / 64] |= bit;
             }
             if kind & END != 0 {
                 g_end_last[b * gwords + sg / 64] |= bit;
@@ -1010,10 +1052,12 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
     // Backward: a component's reads plus those of every component it
     // reaches. Ids ascend towards the sources, so successors are settled.
     let mut c_read = alloc::vec![0u64; ncomp * gwords];
+    let mut c_escape_ahead = alloc::vec![0u64; ncomp * gwords];
     for b in 0..nb {
         let c = comp[b] as usize;
         for w in 0..gwords {
             c_read[c * gwords + w] |= g_read[b * gwords + w];
+            c_escape_ahead[c * gwords + w] |= g_escape[b * gwords + w];
         }
     }
     for c in 0..ncomp {
@@ -1025,18 +1069,21 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
                 }
                 for w in 0..gwords {
                     c_read[c * gwords + w] |= c_read[d * gwords + w];
+                    c_escape_ahead[c * gwords + w] |= c_escape_ahead[d * gwords + w];
                 }
             }
         }
     }
-    // Forward: a component's events plus those of every component that
-    // reaches it. Ids descend towards the sinks, so predecessors are
-    // settled.
+    // Forward: a component's events and escapes plus those of every
+    // component that reaches it. Ids descend towards the sinks, so
+    // predecessors are settled.
     let mut c_event = alloc::vec![0u64; ncomp * gwords];
+    let mut c_escape = alloc::vec![0u64; ncomp * gwords];
     for b in 0..nb {
         let c = comp[b] as usize;
         for w in 0..gwords {
             c_event[c * gwords + w] |= g_event[b * gwords + w];
+            c_escape[c * gwords + w] |= g_escape[b * gwords + w];
         }
     }
     for c in (0..ncomp).rev() {
@@ -1048,6 +1095,7 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
                 }
                 for w in 0..gwords {
                     c_event[c * gwords + w] |= c_event[d * gwords + w];
+                    c_escape[c * gwords + w] |= c_escape[d * gwords + w];
                 }
             }
         }
@@ -1056,18 +1104,22 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
     // interference walk below reads: what a block's successors still
     // read, and what has already happened on entry to it.
     let mut r_out = alloc::vec![0u64; nb * gwords];
+    let mut e_out = alloc::vec![0u64; nb * gwords];
     let mut s_in = alloc::vec![0u64; nb * gwords];
+    let mut x_in = alloc::vec![0u64; nb * gwords];
     for b in 0..nb {
         for &t in graph.of(b as BlockId) {
             let d = comp[t as usize] as usize;
             for w in 0..gwords {
                 r_out[b * gwords + w] |= c_read[d * gwords + w];
+                e_out[b * gwords + w] |= c_escape_ahead[d * gwords + w];
             }
         }
         for &p in graph.preds_of(b as BlockId) {
             let d = comp[p as usize] as usize;
             for w in 0..gwords {
                 s_in[b * gwords + w] |= c_event[d * gwords + w];
+                x_in[b * gwords + w] |= c_escape[d * gwords + w];
             }
         }
     }
@@ -1088,13 +1140,23 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
             continue;
         }
         let mut first_ev: BTreeMap<usize, u32> = BTreeMap::new();
-        for &(pc, sg, _) in evs {
+        let mut first_escape: BTreeMap<usize, u32> = BTreeMap::new();
+        for &(pc, sg, kind) in evs {
             first_ev.entry(sg).or_insert(pc);
+            if kind & ESCAPE != 0 {
+                first_escape.entry(sg).or_insert(pc);
+            }
         }
+        let escaped_before = |sg: usize, pc: u32| {
+            x_in[b * gwords + sg / 64] & (1u64 << (sg % 64)) != 0
+                || first_escape.get(&sg).is_some_and(|&ep| ep < pc)
+        };
         let mut live = r_out[b * gwords..(b + 1) * gwords].to_vec();
-        // A scoped group is busy at the block's exit unless dead there.
+        // A scoped group is busy at the block's exit unless dead there, once
+        // escaped on a path here or with an escape ahead.
         for w in 0..gwords {
-            live[w] |= scoped_mask[w] & !dead_out(&dead_in, b, w);
+            let escaped = x_in[b * gwords + w] | g_escape[b * gwords + w] | e_out[b * gwords + w];
+            live[w] |= scoped_mask[w] & !dead_out(&dead_in, b, w) & escaped;
         }
         let mut i = evs.len();
         while i > 0 {
@@ -1130,13 +1192,17 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
                 }
             }
             for &(_, sg, kind) in at_pc {
-                if kind & READ != 0 {
+                if kind & (READ | ESCAPE) != 0 {
                     live[sg / 64] |= 1u64 << (sg % 64);
                 }
                 // Before its marker the scoped group is busy, unless dead on
-                // entry to the block with no earlier event in it.
+                // entry to the block with no earlier event in it, or not yet
+                // escaped.
                 let dead = dead_in[b * gwords + sg / 64] & (1u64 << (sg % 64)) != 0;
-                if kind & END != 0 && (!dead || first_ev.get(&sg).is_some_and(|&fp| fp < pc)) {
+                if kind & END != 0
+                    && (!dead || first_ev.get(&sg).is_some_and(|&fp| fp < pc))
+                    && escaped_before(sg, pc)
+                {
                     live[sg / 64] |= 1u64 << (sg % 64);
                 }
             }
@@ -2327,6 +2393,66 @@ mod tests {
             ended.locals, 4,
             "ended before the back edge, A shares with B"
         );
+    }
+
+    /// A, written at entry, escapes only on the path B's block is not on,
+    /// so the two share; escaped at entry, A is busy in B's block.
+    #[test]
+    fn an_object_not_yet_escaped_is_free_where_no_escape_is_ahead() {
+        let escape = |addr: ValueId| Inst::Store {
+            addr,
+            disp: 0,
+            value: addr,
+            kind: StoreKind::I64,
+            volatile: false,
+            align: 0,
+        };
+        let write = |addr: ValueId, value: ValueId| Inst::Store {
+            addr,
+            disp: 0,
+            value,
+            kind: StoreKind::I64,
+            volatile: false,
+            align: 0,
+        };
+        let build = |escape_at_entry: bool| {
+            let mut insts = alloc::vec![Inst::Imm(0), Inst::LocalAddr(-8), write(1, 0)];
+            if escape_at_entry {
+                insts.push(escape(1));
+            }
+            let b1 = insts.len() as u32;
+            insts.extend([
+                Inst::LocalAddr(-4),
+                escape(b1),
+                Inst::LifetimeEnd(-4),
+                Inst::LifetimeEnd(-8),
+            ]);
+            let b2 = insts.len() as u32;
+            insts.extend([Inst::LocalAddr(-8), escape(b2), Inst::LifetimeEnd(-8)]);
+            let end = insts.len() as u32;
+            let blocks = alloc::vec![
+                (
+                    0,
+                    b1,
+                    Terminator::Bz {
+                        cond: NO_VALUE,
+                        target: 2,
+                        fall_through: 1,
+                    },
+                ),
+                (b1, b2, Terminator::Return(NO_VALUE)),
+                (b2, end, Terminator::Return(NO_VALUE)),
+            ];
+            let mut f = multi_block(insts, blocks, 8);
+            f.multi_cell_slots = alloc::vec![(-8, 4), (-4, 4)];
+            f
+        };
+        let mut apart = build(false);
+        coalesce(&mut apart, true, false);
+        assert_eq!(apart.locals, 4, "A is free in B's block, so the two share");
+        let mut escaped = build(true);
+        coalesce(&mut escaped, true, false);
+        assert_eq!(escaped.locals, 8, "A escaped at entry is live in B's block");
     }
 
     /// Group lifetimes are reachability relations, settled by one sweep

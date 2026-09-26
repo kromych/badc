@@ -14,38 +14,42 @@ fn ent_pc=2 n_params=0 variadic=false locals=4
     terminator Bz { cond=v7, target=b2, fall=b1 }   (exit_acc=v7)
   block 1  start_pc=0
     v8   Imm(1)                                           -> x0
+    v9   LifetimeEnd(-4)                                  -> -
     terminator Return(v8)   (exit_acc=v8)
   block 2  start_pc=0
-    v9   LocalAddr(-4)                                    -> x0
-    v10  Imm(24)                                          -> x1
-    v11  BinopI { op=add, lhs=v9, rhs_imm=24 }            -> x1
-    v12  Imm(100)                                         -> x1
-    v13  Store { addr=v9, disp=24, value=v12, kind=I64 }  -> -
-    v14  LocalAddr(-4)                                    -> x0
-    v15  Imm(0)                                           -> x0
-    v16  InlineAsm { template="addq 0*8(%1),%0\n\tadcq 1*8(%1),%0\n\tadcq 2*8(%1),%0\n\tadcq (1+2)*8(%1),%0\n\tadcq $0,%0", ops=3, args=[v15, v9, v9] } -> x0
-    v17  BinopI { op=ne, lhs=v16, rhs_imm=106 }           -> x0
-    terminator Bz { cond=v17, target=b4, fall=b3 }   (exit_acc=v17)
+    v10  LocalAddr(-4)                                    -> x0
+    v11  Imm(24)                                          -> x1
+    v12  BinopI { op=add, lhs=v10, rhs_imm=24 }           -> x1
+    v13  Imm(100)                                         -> x1
+    v14  Store { addr=v10, disp=24, value=v13, kind=I64 } -> -
+    v15  LocalAddr(-4)                                    -> x0
+    v16  Imm(0)                                           -> x0
+    v17  InlineAsm { template="addq 0*8(%1),%0\n\tadcq 1*8(%1),%0\n\tadcq 2*8(%1),%0\n\tadcq (1+2)*8(%1),%0\n\tadcq $0,%0", ops=3, args=[v16, v10, v10] } -> x0
+    v18  BinopI { op=ne, lhs=v17, rhs_imm=106 }           -> x0
+    terminator Bz { cond=v18, target=b4, fall=b3 }   (exit_acc=v18)
   block 3  start_pc=0
-    v18  Imm(2)                                           -> x0
-    terminator Return(v18)   (exit_acc=v18)
+    v19  Imm(2)                                           -> x0
+    v20  LifetimeEnd(-4)                                  -> -
+    terminator Return(v19)   (exit_acc=v19)
   block 4  start_pc=0
-    v19  Imm(0)                                           -> x0
-    v20  Imm(0)                                           -> x1
-    v21  Imm(0)                                           -> x1
+    v21  Imm(0)                                           -> x0
     v22  Imm(0)                                           -> x1
-    v23  InlineAsm { template="addq $(3*8+1), %0", ops=1, args=[v19] } -> x0
+    v23  Imm(0)                                           -> x1
     v24  Imm(0)                                           -> x1
-    v25  Imm(0)                                           -> x1
-    v26  BinopI { op=ne, lhs=v23, rhs_imm=25 }            -> x0
-    terminator Bz { cond=v26, target=b6, fall=b5 }   (exit_acc=v26)
+    v25  InlineAsm { template="addq $(3*8+1), %0", ops=1, args=[v21] } -> x0
+    v26  Imm(0)                                           -> x1
+    v27  Imm(0)                                           -> x1
+    v28  BinopI { op=ne, lhs=v25, rhs_imm=25 }            -> x0
+    terminator Bz { cond=v28, target=b6, fall=b5 }   (exit_acc=v28)
   block 5  start_pc=0
-    v27  Imm(3)                                           -> x0
-    terminator Return(v27)   (exit_acc=v27)
-  block 6  start_pc=0
-    v28  InlineAsm { template=".pushsection .badc_const_expr,\"a\"\n\t.long (16*32+22)\n\t.long (1<<3)|2\n\t.long 7*2\n\t.long 0xF0|0x0F\n\t.popsection", ops=0, args=[] } -> -
-    v29  Imm(0)                                           -> x0
+    v29  Imm(3)                                           -> x0
+    v30  LifetimeEnd(-4)                                  -> -
     terminator Return(v29)   (exit_acc=v29)
+  block 6  start_pc=0
+    v31  InlineAsm { template=".pushsection .badc_const_expr,\"a\"\n\t.long (16*32+22)\n\t.long (1<<3)|2\n\t.long 7*2\n\t.long 0xF0|0x0F\n\t.popsection", ops=0, args=[] } -> -
+    v32  Imm(0)                                           -> x0
+    v33  LifetimeEnd(-4)                                  -> -
+    terminator Return(v32)   (exit_acc=v32)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

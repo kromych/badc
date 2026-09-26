@@ -43,17 +43,19 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v11  BinopI { op=ne, lhs=v9, rhs_imm=6 }              -> x0
     terminator Bz { cond=v11, target=b2, fall=b1 }   (exit_acc=v11)
   block 1  start_pc=0
-    v13  Imm(2)                                           -> x0
-    terminator Return(v13)   (exit_acc=v13)
+    v14  Imm(2)                                           -> x0
+    v15  LifetimeEnd(0)                                   -> -
+    terminator Return(v14)   (exit_acc=v14)
   block 2  start_pc=0
-    v14  Imm(0)                                           -> x0
-    v15  Imm(7)                                           -> x0
     v16  Imm(0)                                           -> x0
-    v17  Imm(0)                                           -> x0
-    v18  Imm(7)                                           -> x0
+    v17  Imm(7)                                           -> x0
+    v18  Imm(0)                                           -> x0
     v19  Imm(0)                                           -> x0
-    v20  Imm(0)                                           -> x0
-    terminator Return(v20)   (exit_acc=v20)
+    v20  Imm(7)                                           -> x0
+    v21  Imm(0)                                           -> x0
+    v22  Imm(0)                                           -> x0
+    v23  LifetimeEnd(0)                                   -> -
+    terminator Return(v22)   (exit_acc=v22)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

@@ -60,12 +60,12 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	stur	x0, [x29, #-0x10]
-               	sub	x0, x29, #0x8
-               	sub	x1, x29, #0x10
+               	stur	x0, [x29, #-0x8]
+               	sub	x0, x29, #0x10
+               	sub	x1, x29, #0x8
                	mov	x2, #0x8                // =8
                	bl	<addr>
-               	ldur	x0, [x29, #-0x8]
+               	ldur	x0, [x29, #-0x10]
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
@@ -84,16 +84,16 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	ldr	x16, [x1]
                	str	x16, [x0]
-               	sub	x0, x29, #0x10
+               	sub	x0, x29, #0x8
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	ldr	w16, [x1]
                	str	w16, [x0]
-               	sub	x0, x29, #0x8
+               	sub	x0, x29, #0x10
                	mov	x1, #0x0                // =0
                	mov	x2, #0x8                // =8
                	bl	<addr>
-               	sub	x0, x29, #0x8
+               	sub	x0, x29, #0x10
                	mov	x1, #0x41               // =65
                	strb	w1, [x0]
                	fmov	s0, #2.50000000
@@ -120,7 +120,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x7, x29, #0x10
+               	sub	x7, x29, #0x8
                	ldr	s0, [x7]
                	bl	<addr>
                	mov	x17, #0x3fc00000        // =1069547520
@@ -130,7 +130,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x0, x29, #0x8
+               	sub	x0, x29, #0x10
                	mov	x1, #0x0                // =0
                	ldr	x0, [x0]
                	bl	<addr>
@@ -145,7 +145,7 @@ Disassembly of section .text:
                	ret
                	fmov	s0, #3.00000000
                	fmov	s1, #4.00000000
-               	sub	x7, x29, #0x10
+               	sub	x7, x29, #0x8
                	str	xzr, [x7]
                	str	s0, [x7]
                	str	s1, [x7, #0x4]

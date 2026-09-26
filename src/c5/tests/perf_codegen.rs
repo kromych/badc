@@ -3862,31 +3862,77 @@ fn a64_built_accesses(ws: &[u32], base: u32) -> (usize, usize) {
 }
 
 /// Twelve volatile accesses to locals the layout places past a 4 KiB array,
-/// more than 4 KiB below fp; `moving` also calls alloca, and `switched`
-/// moves sp to another stack the way libmill's `go()` does.
+/// more than 4 KiB below fp -- written as a volatile object, it keeps
+/// storage of its own ahead of them; `moving` also calls alloca, and
+/// `switched` moves sp to another stack the way libmill's `go()` does.
 const FAR_SLOTS: &str = "void use(void *);\n\
     long fixed(long n) {\n\
-        char pad[4096];\n\
+        volatile char pad[4096];\n\
+        pad[0] = 1;\n\
         volatile long v = n; volatile int w = (int)n; volatile double d = (double)n;\n\
-        use(pad);\n\
+        use((void *)pad);\n\
         v += 3; w += 5; d *= 2.0;\n\
         return v + w + (long)d;\n\
     }\n\
     long moving(long n) {\n\
-        char pad[4096];\n\
+        volatile char pad[4096];\n\
+        pad[0] = 1;\n\
         volatile long v = n; volatile int w = (int)n; volatile double d = (double)n;\n\
-        use(pad); use(__builtin_alloca(n));\n\
+        use((void *)pad); use(__builtin_alloca(n));\n\
         v += 3; w += 5; d *= 2.0;\n\
         return v + w + (long)d;\n\
     }\n\
     long switched(long n, void *top) {\n\
-        char pad[4096];\n\
+        volatile char pad[4096];\n\
+        pad[0] = 1;\n\
         volatile long v = n; volatile int w = (int)n; volatile double d = (double)n;\n\
-        use(pad);\n\
+        use((void *)pad);\n\
         __asm__ volatile(\"mov sp, %0\" : : \"r\"(top));\n\
         v += 3; w += 5; d *= 2.0;\n\
         return v + w + (long)d;\n\
     }\n";
+
+/// An inlined helper's object and the caller's zero-initialized one escape
+/// on paths that do not meet, so the frame holds one copy of 33 cells.
+#[test]
+fn objects_escaping_on_disjoint_paths_share_storage() {
+    const SRC: &str = "struct st { unsigned long long v[32]; unsigned sr, cr; };\n\
+        int fetch(void *dst, const void *src, unsigned long n);\n\
+        void load(const struct st *s);\n\
+        static int helper(const void *u) {\n\
+            struct st s;\n\
+            int err = fetch(&s, u, sizeof s);\n\
+            if (!err) load(&s);\n\
+            return err;\n\
+        }\n\
+        int restore(const void *u, int wide) {\n\
+            struct st fp = {0};\n\
+            if (!wide) return helper(u);\n\
+            if (fetch(&fp, u, sizeof fp)) return -14;\n\
+            load(&fp);\n\
+            return 0;\n\
+        }\n";
+    let dump = ssa_dump(SRC, "restore", true);
+    let locals: i64 = dump
+        .lines()
+        .next()
+        .and_then(|l| l.split("locals=").nth(1))
+        .and_then(|s| s.trim().parse().ok())
+        .expect("the function header");
+    assert!(locals < 2 * 33, "{locals} cells: {dump}");
+}
+
+/// A struct an inlined helper returns through the out-pointer, its body
+/// ending in a lifetime marker, is built in the caller's object.
+#[test]
+fn an_out_pointer_return_ending_in_a_marker_is_built_in_place() {
+    const SRC: &str = "typedef struct { double a, b, c; } d3;\n\
+        void take(d3 *p);\n\
+        static d3 mk(double a, double b, double c) { d3 r; r.a = a; r.b = b; r.c = c; return r; }\n\
+        void make(double x) { d3 d = mk(x, x + 1, x + 2); take(&d); }\n";
+    let dump = ssa_dump(SRC, "make", true);
+    assert!(!dump.contains("LoadLocal"), "{dump}");
+}
 
 /// A local far below fp is one load or store off sp where sp stays where
 /// the prologue left it; with alloca or an asm sp move it stays on fp, one

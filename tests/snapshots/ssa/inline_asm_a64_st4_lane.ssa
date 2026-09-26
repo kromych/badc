@@ -191,6 +191,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v185 Imm(8)                                           -> x0
     v186 Imm(0)                                           -> x0
     v187 Imm(1)                                           -> x0
+    v188 LifetimeEnd(0)                                   -> -
+    v189 LifetimeEnd(0)                                   -> -
     terminator Return(v187)   (exit_acc=v187)
 ; --- SSA dump (ok=true) ent_pc=4 ---
 ; name=main
@@ -263,15 +265,15 @@ fn ent_pc=4 n_params=0 variadic=false locals=19
     v62  Imm(0)                                           -> x0
     v63  Imm(0)                                           -> x0
     v64  Imm(1)                                           -> x0
-    v65  Imm(0)                                           -> x0
-    v66  Imm(0)                                           -> x0
-    v67  Imm(1234605616436508552)                         -> x0
+    v65  LifetimeEnd(-5)                                  -> -
+    v66  LifetimeEnd(-4)                                  -> -
+    v67  Imm(0)                                           -> x0
     v68  Imm(0)                                           -> x0
-    v69  Imm(-7373874951294615808)                        -> x0
+    v69  Imm(1234605616436508552)                         -> x0
     v70  Imm(0)                                           -> x0
-    v71  Imm(81985529216486895)                           -> x0
+    v71  Imm(-7373874951294615808)                        -> x0
     v72  Imm(0)                                           -> x0
-    v73  Imm(0)                                           -> x0
+    v73  Imm(81985529216486895)                           -> x0
     v74  Imm(0)                                           -> x0
     v75  Imm(0)                                           -> x0
     v76  Imm(0)                                           -> x0
@@ -307,11 +309,11 @@ fn ent_pc=4 n_params=0 variadic=false locals=19
     v106 Imm(0)                                           -> x0
     v107 Imm(0)                                           -> x0
     v108 Imm(0)                                           -> x0
-    v109 Imm(1)                                           -> x0
+    v109 Imm(0)                                           -> x0
     v110 Imm(0)                                           -> x0
-    v111 Imm(0)                                           -> x0
-    v112 Imm(0)                                           -> x0
-    v113 Imm(0)                                           -> x0
+    v111 Imm(1)                                           -> x0
+    v112 LifetimeEnd(-9)                                  -> -
+    v113 LifetimeEnd(-6)                                  -> -
     v114 Imm(0)                                           -> x0
     v115 Imm(0)                                           -> x0
     v116 Imm(0)                                           -> x0
@@ -319,27 +321,31 @@ fn ent_pc=4 n_params=0 variadic=false locals=19
     v118 Imm(0)                                           -> x0
     v119 Imm(0)                                           -> x0
     v120 Imm(0)                                           -> x0
-    v121 Imm(9)                                           -> x0
-    v122 Imm(9)                                           -> x0
+    v121 Imm(0)                                           -> x0
+    v122 Imm(0)                                           -> x0
     v123 Imm(0)                                           -> x0
     v124 Imm(0)                                           -> x0
-    v125 Imm(0)                                           -> x0
-    v126 Imm(0)                                           -> x0
+    v125 Imm(9)                                           -> x0
+    v126 Imm(9)                                           -> x0
     v127 Imm(0)                                           -> x0
-    v128 Imm(13)                                          -> x0
-    v129 Imm(13)                                          -> x0
+    v128 Imm(0)                                           -> x0
+    v129 Imm(0)                                           -> x0
     v130 Imm(0)                                           -> x0
     v131 Imm(0)                                           -> x0
-    v132 Imm(0)                                           -> x0
-    v133 Imm(0)                                           -> x0
-    v134 Imm(9)                                           -> x0
-    v135 Imm(1)                                           -> x0
+    v132 Imm(13)                                          -> x0
+    v133 Imm(13)                                          -> x0
+    v134 Imm(0)                                           -> x0
+    v135 Imm(0)                                           -> x0
     v136 Imm(0)                                           -> x0
     v137 Imm(0)                                           -> x0
-    v138 Imm(13)                                          -> x0
+    v138 Imm(9)                                           -> x0
     v139 Imm(1)                                           -> x0
-    v140 Imm(42)                                          -> x0
-    terminator Return(v140)   (exit_acc=v140)
+    v140 Imm(0)                                           -> x0
+    v141 Imm(0)                                           -> x0
+    v142 Imm(13)                                          -> x0
+    v143 Imm(1)                                           -> x0
+    v144 Imm(42)                                          -> x0
+    terminator Return(v144)   (exit_acc=v144)
   block 2  start_pc=0
     v6   Imm(0)                                           -> x0
     terminator Return(v6)   (exit_acc=v6)

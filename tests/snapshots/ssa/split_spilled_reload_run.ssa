@@ -539,13 +539,15 @@ fn ent_pc=3 n_params=0 variadic=false locals=8
     terminator Bz { cond=v17, target=b2, fall=b1 }   (exit_acc=v18)
   block 1  start_pc=0
     v19  Imm(1)                                           -> x0
+    v20  LifetimeEnd(-8)                                  -> -
     terminator Return(v19)   (exit_acc=v19)
   block 2  start_pc=0
-    v20  Imm(0)                                           -> x1
-    v21  BinopI { op=and, lhs=v14, rhs_imm=255 }          -> x0
-    v22  Extend { value=v21, kind=I32 }                   -> x1
-    v23  Extend { value=v21, kind=I32 }                   -> x1
-    terminator Return(v21)   (exit_acc=v21)
+    v21  Imm(0)                                           -> x1
+    v22  BinopI { op=and, lhs=v14, rhs_imm=255 }          -> x0
+    v23  Extend { value=v22, kind=I32 }                   -> x1
+    v24  Extend { value=v22, kind=I32 }                   -> x1
+    v25  LifetimeEnd(-8)                                  -> -
+    terminator Return(v22)   (exit_acc=v22)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

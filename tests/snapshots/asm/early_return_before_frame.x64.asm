@@ -413,7 +413,7 @@ Disassembly of section .text:
                	movabsq	$0x5851f42d4c957f2d, %rsi # imm = 0x5851F42D4C957F2D
                	imulq	%rsi, %rcx
                	addq	%rdx, %rcx
-               	leaq	-0x2a8(%rbp), %rdi
+               	leaq	-0x200(%rbp), %rdi
                	movq	%rcx, %r8
                	shrq	$0x21, %r8
                	subq	$0x40000000, %r8        # imm = 0x40000000
@@ -421,7 +421,7 @@ Disassembly of section .text:
                	incq	%rax
                	cmpl	$0x40, %eax
                	jl	<addr>
-               	leaq	-0x2a8(%rbp), %rbx
+               	leaq	-0x200(%rbp), %rbx
                	xorl	%esi, %esi
                	movl	$0x3f, %edx
                	movq	%rbx, %rdi
@@ -429,20 +429,20 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	leaq	-0x1(%rax), %rcx
                	movq	(%rbx,%rcx,8), %rcx
-               	leaq	-0x2a8(%rbp), %rdx
+               	leaq	-0x200(%rbp), %rdx
                	movq	(%rdx,%rax,8), %rdx
                	cmpq	%rdx, %rcx
                	jg	<addr>
                	incq	%rax
                	cmpl	$0x40, %eax
                	jl	<addr>
-               	leaq	-0x2a8(%rbp), %rdi
+               	leaq	-0x200(%rbp), %rdi
                	movl	$0x5, %esi
                	movq	%rsi, %rdx
                	callq	<addr>
                	xorl	%edx, %edx
                	movq	%rdx, %rax
-               	leaq	-0xa8(%rbp), %rcx
+               	leaq	-0x2a8(%rbp), %rcx
                	imulq	$0x18, %rax, %rsi
                	leaq	(%rcx,%rsi), %rdi
                	leaq	0x1(%rax), %r8
@@ -455,7 +455,7 @@ Disassembly of section .text:
                	imulq	$0x18, %r9, %r9
                	addq	%r9, %rcx
                	movq	%rcx, (%rdi)
-               	leaq	-0xa8(%rbp), %rcx
+               	leaq	-0x2a8(%rbp), %rcx
                	addq	%rcx, %rsi
                	leaq	0x2(%r8), %rdi
                	cmpl	$0x7, %edi
@@ -474,7 +474,7 @@ Disassembly of section .text:
                	incq	%rax
                	cmpl	$0x7, %eax
                	jl	<addr>
-               	leaq	-0xa8(%rbp), %rdi
+               	leaq	-0x2a8(%rbp), %rdi
                	callq	<addr>
                	cmpq	$0x1c, %rax
                	je	<addr>

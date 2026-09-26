@@ -1594,8 +1594,10 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
         }
         let window_ok = ((cond + 1)..block.inst_range.end).all(|p| {
             let inst = &func.insts[p as usize];
-            // A dead pure inst emits no code (`is_dead_pure`).
-            (inst.is_pure() && use_counts[p as usize] == 0) || (sets_flags && flags_survive(inst))
+            // A dead pure inst and a lifetime marker emit no code.
+            inst.is_lifetime_marker()
+                || (inst.is_pure() && use_counts[p as usize] == 0)
+                || (sets_flags && flags_survive(inst))
         });
         if !window_ok {
             continue;
@@ -6467,6 +6469,26 @@ int main(void) { return 0; }
         };
         assert!(allocate(&build(), Target::LinuxAarch64).branch_fused[2]);
         assert!(allocate(&build(), Target::LinuxX64).branch_fused[2]);
+    }
+
+    /// A lifetime marker between the compare and its branch emits no code.
+    #[test]
+    fn a_lifetime_marker_in_the_window_keeps_the_fusion() {
+        let f = branch_func(
+            vec![
+                load_i64(),
+                Inst::BinopI {
+                    op: BinOp::Lt,
+                    lhs: 0,
+                    rhs_imm: 5,
+                },
+                Inst::LifetimeEnd(-1),
+            ],
+            1,
+        );
+        for target in [Target::LinuxAarch64, Target::LinuxX64] {
+            assert!(allocate(&f, target).branch_fused[1], "{target:?}");
+        }
     }
 
     /// A dead pure inst in the window emits no code, so it cannot

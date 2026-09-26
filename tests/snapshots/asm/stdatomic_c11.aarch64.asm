@@ -66,7 +66,7 @@ Disassembly of section .text:
                	stur	x0, [x29, #-0x30]
                	sub	x2, x29, #0x30
                	fmov	d0, #2.50000000
-               	sub	x1, x29, #0x40
+               	sub	x1, x29, #0x8
                	str	d0, [x1]
                	ldr	x3, [x1]
                	stlr	x3, [x2]

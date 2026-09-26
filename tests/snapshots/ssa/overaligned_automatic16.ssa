@@ -104,6 +104,9 @@ fn ent_pc=0 n_params=1 variadic=false locals=0
     v88  Extend { value=v86, kind=I32 }                   -> x0
     terminator Jmp(b6)   (exit_acc=v88)
   block 6  start_pc=0
+    v89  LifetimeEnd(-15)                                 -> -
+    v90  LifetimeEnd(-14)                                 -> -
+    v91  LifetimeEnd(-13)                                 -> -
     terminator Return
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=probe_odd
@@ -210,6 +213,9 @@ fn ent_pc=1 n_params=1 variadic=false locals=1
     v87  Extend { value=v85, kind=I32 }                   -> x0
     terminator Jmp(b6)   (exit_acc=v87)
   block 6  start_pc=0
+    v88  LifetimeEnd(-16)                                 -> -
+    v89  LifetimeEnd(-15)                                 -> -
+    v90  LifetimeEnd(-14)                                 -> -
     terminator Return
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=walk
@@ -257,6 +263,7 @@ fn ent_pc=2 n_params=1 variadic=false locals=3
     v34  BinopI { op=shl, lhs=v33, rhs_imm=3 }            -> x0
     v35  Binop { op=add, lhs=v25, rhs=v34 }               -> x0
     v36  Load { addr=v35, disp=0, kind=I64, volatile }    -> x0
+    v37  LifetimeEnd(-3)                                  -> -
     terminator Return
 ; --- SSA dump (ok=true) ent_pc=3 ---
 ; name=main

@@ -1018,9 +1018,11 @@ pub(super) fn detect_tail_call<'a>(
     if v == super::super::ir::NO_VALUE {
         return None;
     }
-    // An empty block whose range starts after another block's trailing call
-    // also satisfies `v + 1 == end`; that call belongs to its own block.
-    if v < block.inst_range.start || v + 1 != block.inst_range.end {
+    // The call ends the block but for lifetime markers, which the frame
+    // teardown makes moot.
+    if !block.inst_range.contains(&v)
+        || !(v + 1..block.inst_range.end).all(|p| func.insts[p as usize].is_lifetime_marker())
+    {
         return None;
     }
     let (target_pc, args, arg_aggs, fp_arg_mask) = match &func.insts[v as usize] {

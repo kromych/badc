@@ -76,7 +76,7 @@ Disassembly of section .text:
                	movq	$0x0, -0x30(%rbp)
                	leaq	-0x30(%rbp), %rcx
                	movabsq	$0x4004000000000000, %rdx # imm = 0x4004000000000000
-               	leaq	-0x40(%rbp), %rax
+               	leaq	-0x8(%rbp), %rax
                	movq	%rdx, %xmm14
                	movsd	%xmm14, (%rax)
                	movq	(%rax), %rsi

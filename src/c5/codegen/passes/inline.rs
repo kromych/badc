@@ -688,7 +688,11 @@ fn out_ptr_return(c: &FunctionSsa) -> Option<OutPtrReturn> {
     ) {
         return None;
     }
-    let copy = block.inst_range.end.checked_sub(1)?;
+    let copy = block
+        .inst_range
+        .clone()
+        .rev()
+        .find(|&i| !c.insts[i as usize].is_lifetime_marker())?;
     let Some(Inst::Mcpy { dst, src, size, .. }) = c.insts.get(copy as usize) else {
         return None;
     };
@@ -1136,8 +1140,8 @@ fn is_inline_candidate(
             | Inst::ImmExtCode(_)
             | Inst::ParamRef { .. }
             | Inst::AllocaInit(_)
-            // The splice drops a lifetime marker rather than relocating
-            // it, so it constrains nothing the body must reproduce.
+            // A lifetime marker moves with its object or goes with a
+            // redirected slot, so it constrains nothing.
             | Inst::LifetimeEnd(_)
             | Inst::Binop { .. }
             | Inst::BinopI { .. }
@@ -2689,12 +2693,14 @@ fn splice_multi_block(
                         callee_remap[ce_pc as usize] = at;
                         at += 1;
                     }
-                    // A spliced body's objects live in a region the caller
-                    // may reuse for another splice, so the callee's own
-                    // lifetime markers are dropped: the region's single-
-                    // activation rule already bounds them, and a marker
-                    // relocated onto shared region cells would speak for
-                    // another callee's object too.
+                    // A callee object's marker moves with the object. The
+                    // region's other occupants are the objects of splices
+                    // that ran before this one or run after it, never
+                    // during it, so the end it states holds for them too.
+                    Inst::LifetimeEnd(off) if *off < 0 => {
+                        callee_remap[ce_pc as usize] = at;
+                        at += 1;
+                    }
                     Inst::LoadLocal { .. }
                     | Inst::StoreLocal { .. }
                     | Inst::AllocaInit(_)
@@ -3098,6 +3104,13 @@ fn splice_multi_block(
                             volatile: *volatile,
                             nsw: false,
                         });
+                        new_inst_src.push((0, 0));
+                        new_f32.push(false);
+                        continue;
+                    }
+                    Inst::LifetimeEnd(off) if *off < 0 => {
+                        callee_remap[ce_pc as usize] = new_insts.len() as u32;
+                        new_insts.push(Inst::LifetimeEnd(off - region_base));
                         new_inst_src.push((0, 0));
                         new_f32.push(false);
                         continue;

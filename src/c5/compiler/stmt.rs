@@ -248,15 +248,18 @@ impl Compiler {
         }
         scope
             .iter()
-            .filter_map(|b| {
-                let sym = &self.symbols[b.idx];
-                let addressed = sym.binding.address_escaped
-                    || sym.array_size != 0
-                    || super::types::is_struct_value_ty(sym.type_);
-                (sym.class == Token::Loc as i64 && sym.val < 0 && !sym.is_vla && addressed)
-                    .then_some(sym.val)
-            })
+            .filter_map(|b| self.lifetime_slot(b.idx))
             .collect()
+    }
+
+    /// The frame slot of symbol `idx` a lifetime marker ends, if any.
+    pub(super) fn lifetime_slot(&self, idx: usize) -> Option<i64> {
+        let sym = &self.symbols[idx];
+        let addressed = sym.binding.address_escaped
+            || sym.array_size != 0
+            || super::types::is_struct_value_ty(sym.type_);
+        (sym.class == Token::Loc as i64 && sym.val < 0 && !sym.is_vla && addressed)
+            .then_some(sym.val)
     }
 
     /// True when statement `s` is an expression statement whose value is

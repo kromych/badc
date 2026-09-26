@@ -240,7 +240,8 @@ fn takes_constant(func: &FunctionSsa, b: BlockId, pred: Option<BlockId>) -> bool
         .any(|&(q, x)| pred.is_none_or(|p| p == q) && imm(x))
 }
 
-/// Whether the chain holds only phis (in `head`) and pure values.
+/// Whether the chain holds only phis (in `head`), pure values and lifetime
+/// markers, which a threaded edge skips: their objects stay reserved on it.
 fn chain_is_pure(func: &FunctionSsa, site: &Site) -> bool {
     site.chain.iter().all(|&c| {
         func.blocks[c as usize]
@@ -248,7 +249,7 @@ fn chain_is_pure(func: &FunctionSsa, site: &Site) -> bool {
             .clone()
             .all(|i| match &func.insts[i as usize] {
                 Inst::Phi { .. } => c == site.head,
-                inst => inst.is_pure(),
+                inst => inst.is_pure() || inst.is_lifetime_marker(),
             })
     })
 }
@@ -644,6 +645,20 @@ mod tests {
         assert_eq!(f.blocks[3].terminator, Terminator::Jmp(6));
         assert!(matches!(&f.insts[2], Inst::Phi { incoming, .. } if incoming.is_empty()));
         assert!(!run_one(&mut f));
+    }
+
+    /// An inlined callee's lifetime marker in the chain does not stop it.
+    #[test]
+    fn a_lifetime_marker_in_the_chain_is_passed() {
+        let mut f = inlined_check(Inst::LifetimeEnd(-1));
+        f.blocks[4].terminator = Terminator::Bnz {
+            cond: 2,
+            target: 6,
+            fall_through: 5,
+        };
+        assert!(run_one(&mut f));
+        assert_eq!(f.blocks[1].terminator, Terminator::Jmp(5));
+        assert_eq!(f.blocks[3].terminator, Terminator::Jmp(6));
     }
 
     #[test]

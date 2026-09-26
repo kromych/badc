@@ -100,11 +100,11 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	leaq	-0x18(%rbp), %rsi
+               	leaq	-0x10(%rbp), %rsi
                	leaq	<rip>, %rcx
                	movq	%rcx, (%rsi)
                	movq	$0x0, 0x8(%rsi)
-               	leaq	-0x8(%rbp), %rdx
+               	leaq	-0x18(%rbp), %rdx
                	movq	$0x0, (%rdx)
                	leaq	<rip>, %rdi
                	xorl	%eax, %eax

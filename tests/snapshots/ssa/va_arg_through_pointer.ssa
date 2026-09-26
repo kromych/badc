@@ -25,6 +25,7 @@ fn ent_pc=1 n_params=1 variadic=true locals=3
     v19  Store { addr=v15, disp=0, value=v18, kind=F64 }  -> -
     v20  LocalAddr(-3)                                    -> x0
     v21  Intrinsic { kind=VaEnd, args=[v20] }             -> x0
+    v22  LifetimeEnd(-3)                                  -> -
     terminator Return
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=main

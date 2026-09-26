@@ -959,6 +959,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v953 Imm(0)                                           -> x0
     v954 Imm(0)                                           -> x0
     v955 Imm(0)                                           -> x0
+    v956 LifetimeEnd(0)                                   -> -
     terminator Return(v955)   (exit_acc=v955)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit

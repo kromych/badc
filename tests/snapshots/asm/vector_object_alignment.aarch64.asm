@@ -188,20 +188,20 @@ Disassembly of section .text:
                	sub	sp, sp, #0xc0
                	mov	x0, #0x1                // =1
                	sturb	w0, [x29, #-0x30]
-               	sub	x2, x29, #0x8
+               	sub	x2, x29, #0x28
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	x16, [x0]
                	str	x16, [x2]
                	mov	x0, #0x2                // =2
-               	sturb	w0, [x29, #-0x28]
+               	sturb	w0, [x29, #-0x20]
                	sub	x3, x29, #0xc0
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldp	x16, x17, [x0]
                	stp	x16, x17, [x3]
                	mov	x0, #0x3                // =3
-               	sturb	w0, [x29, #-0x20]
+               	sturb	w0, [x29, #-0x18]
                	sub	x4, x29, #0xb0
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
@@ -210,7 +210,7 @@ Disassembly of section .text:
                	ldp	x16, x17, [x0, #0x10]
                	stp	x16, x17, [x4, #0x10]
                	mov	x0, #0x4                // =4
-               	sturb	w0, [x29, #-0x18]
+               	sturb	w0, [x29, #-0x10]
                	sub	x0, x29, #0x90
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
@@ -219,7 +219,7 @@ Disassembly of section .text:
                	ldp	x16, x17, [x1, #0x10]
                	stp	x16, x17, [x0, #0x10]
                	mov	x1, #0x5                // =5
-               	sturb	w1, [x29, #-0x10]
+               	sturb	w1, [x29, #-0x8]
                	sub	x1, x29, #0x70
                	adrp	x5, <page>
                	add	x5, x5, <lo12>
@@ -277,13 +277,13 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldurb	w0, [x29, #-0x30]
-               	ldurb	w1, [x29, #-0x28]
-               	add	x0, x0, x1
                	ldurb	w1, [x29, #-0x20]
                	add	x0, x0, x1
                	ldurb	w1, [x29, #-0x18]
                	add	x0, x0, x1
                	ldurb	w1, [x29, #-0x10]
+               	add	x0, x0, x1
+               	ldurb	w1, [x29, #-0x8]
                	add	x0, x0, x1
                	cmp	w0, #0xf
                	b.eq	<addr>

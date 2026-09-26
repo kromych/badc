@@ -43,10 +43,12 @@ fn ent_pc=2 n_params=1 variadic=true locals=3
     v31  LoadLocal { off=2, kind=I32 }                    -> x2
     v32  Imm(0)                                           -> x1
     v33  Imm(0)                                           -> x1
-    v34  Imm(0)                                           -> x1
-    v35  Imm(0)                                           -> x1
-    v36  AggParts { desc=0, parts=[v11, v31], fp_mask=0x0 } -> -
-    terminator Return(v36)   (exit_acc=v33)
+    v34  LifetimeEnd(0)                                   -> -
+    v35  LifetimeEnd(-3)                                  -> -
+    v36  Imm(0)                                           -> x1
+    v37  Imm(0)                                           -> x1
+    v38  AggParts { desc=0, parts=[v11, v31], fp_mask=0x0 } -> -
+    terminator Return(v38)   (exit_acc=v33)
 ; --- SSA dump (ok=true) ent_pc=3 ---
 ; name=main
 fn ent_pc=3 n_params=0 variadic=false locals=0
@@ -115,20 +117,26 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     v60  Imm(0)                                           -> x1
     terminator Bnz { cond=v59, target=b2, fall=b1 }   (exit_acc=v59)
   block 1  start_pc=0
-    v63  Imm(0)                                           -> x0
-    v64  Imm(0)                                           -> x0
-    v65  Imm(0)                                           -> x0
-    v66  BinopI { op=ne, lhs=v47, rhs_imm=4 }             -> x0
-    v67  Imm(0)                                           -> x1
-    v68  Imm(0)                                           -> x1
-    v69  Imm(0)                                           -> x1
-    terminator Bz { cond=v66, target=b3, fall=b2 }   (exit_acc=v66)
-  block 2  start_pc=0
-    v70  Imm(3)                                           -> x0
-    terminator Return(v70)   (exit_acc=v70)
-  block 3  start_pc=0
+    v69  Imm(0)                                           -> x0
+    v70  Imm(0)                                           -> x0
     v71  Imm(0)                                           -> x0
-    terminator Return(v71)   (exit_acc=v71)
+    v72  BinopI { op=ne, lhs=v47, rhs_imm=4 }             -> x0
+    v73  Imm(0)                                           -> x1
+    v74  Imm(0)                                           -> x1
+    v75  Imm(0)                                           -> x1
+    terminator Bz { cond=v72, target=b3, fall=b2 }   (exit_acc=v72)
+  block 2  start_pc=0
+    v76  Imm(3)                                           -> x0
+    v77  LifetimeEnd(0)                                   -> -
+    v78  LifetimeEnd(0)                                   -> -
+    v79  LifetimeEnd(0)                                   -> -
+    terminator Return(v76)   (exit_acc=v76)
+  block 3  start_pc=0
+    v80  Imm(0)                                           -> x0
+    v81  LifetimeEnd(0)                                   -> -
+    v82  LifetimeEnd(0)                                   -> -
+    v83  LifetimeEnd(0)                                   -> -
+    terminator Return(v80)   (exit_acc=v80)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

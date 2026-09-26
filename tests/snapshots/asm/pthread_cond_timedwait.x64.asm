@@ -30,7 +30,7 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0xa8, %rsp
                	pushq	%rbx
-               	leaq	-0xa0(%rbp), %rdi
+               	leaq	-0x38(%rbp), %rdi
                	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
@@ -40,7 +40,7 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	leaq	-0xa0(%rbp), %rdi
+               	leaq	-0x38(%rbp), %rdi
                	xorl	%esi, %esi
                	xorl	%eax, %eax
                	callq	<addr>
@@ -51,7 +51,7 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	leaq	-0xa0(%rbp), %rdi
+               	leaq	-0x38(%rbp), %rdi
                	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
@@ -61,32 +61,32 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	leaq	-0x68(%rbp), %rdi
-               	xorl	%esi, %esi
-               	xorl	%eax, %eax
-               	callq	<addr>
-               	leaq	-0x40(%rbp), %rdi
+               	leaq	-0x90(%rbp), %rdi
                	xorl	%esi, %esi
                	xorl	%eax, %eax
                	callq	<addr>
                	leaq	-0x68(%rbp), %rdi
+               	xorl	%esi, %esi
                	xorl	%eax, %eax
                	callq	<addr>
-               	leaq	-0x10(%rbp), %rdx
+               	leaq	-0x90(%rbp), %rdi
+               	xorl	%eax, %eax
+               	callq	<addr>
+               	leaq	-0xa0(%rbp), %rdx
                	movq	$0x1, (%rdx)
                	movq	$0x0, 0x8(%rdx)
-               	leaq	-0x40(%rbp), %rdi
-               	leaq	-0x68(%rbp), %rsi
+               	leaq	-0x68(%rbp), %rdi
+               	leaq	-0x90(%rbp), %rsi
                	xorl	%eax, %eax
                	callq	<addr>
                	movq	%rax, %rbx
-               	leaq	-0x68(%rbp), %rdi
-               	xorl	%eax, %eax
-               	callq	<addr>
-               	leaq	-0x40(%rbp), %rdi
+               	leaq	-0x90(%rbp), %rdi
                	xorl	%eax, %eax
                	callq	<addr>
                	leaq	-0x68(%rbp), %rdi
+               	xorl	%eax, %eax
+               	callq	<addr>
+               	leaq	-0x90(%rbp), %rdi
                	xorl	%eax, %eax
                	callq	<addr>
                	testl	%ebx, %ebx

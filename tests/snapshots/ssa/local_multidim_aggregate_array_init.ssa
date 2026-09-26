@@ -88,6 +88,9 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v82  Imm(0)                                           -> x0
     v83  Imm(0)                                           -> x0
     v84  Imm(0)                                           -> x0
+    v85  LifetimeEnd(0)                                   -> -
+    v86  LifetimeEnd(0)                                   -> -
+    v87  LifetimeEnd(0)                                   -> -
     terminator Return(v84)   (exit_acc=v84)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit

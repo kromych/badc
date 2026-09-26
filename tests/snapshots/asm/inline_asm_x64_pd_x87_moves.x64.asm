@@ -213,44 +213,44 @@ Disassembly of section .text:
                	pushq	%rbx
                	movl	$0x40200000, %edx       # imm = 0x40200000
                	movq	%rdx, %xmm14
-               	movss	%xmm14, -0x68(%rbp)
-               	movl	$0x0, -0x60(%rbp)
-               	movl	$0x0, -0x58(%rbp)
+               	movss	%xmm14, -0x38(%rbp)
+               	movl	$0x0, -0x30(%rbp)
+               	movl	$0x0, -0x28(%rbp)
                	movabsq	$-0x4018000000000000, %rcx # imm = 0xBFE8000000000000
                	movq	%rcx, %xmm14
-               	movsd	%xmm14, -0x50(%rbp)
-               	movq	$0x0, -0x48(%rbp)
-               	movq	$0x0, -0x40(%rbp)
-               	leaq	-0x60(%rbp), %rax
-               	leaq	-0x40(%rbp), %rbx
-               	leaq	-0x68(%rbp), %rcx
+               	movsd	%xmm14, -0x20(%rbp)
+               	movq	$0x0, -0x18(%rbp)
+               	movq	$0x0, -0x10(%rbp)
+               	leaq	-0x30(%rbp), %rax
+               	leaq	-0x10(%rbp), %rbx
+               	leaq	-0x38(%rbp), %rcx
                	flds	(%rcx)
                	fsts	(%rax)
                	fstpl	(%rbx)
-               	leaq	-0x48(%rbp), %rax
-               	leaq	-0x58(%rbp), %rbx
-               	leaq	-0x50(%rbp), %rcx
+               	leaq	-0x18(%rbp), %rax
+               	leaq	-0x28(%rbp), %rbx
+               	leaq	-0x20(%rbp), %rcx
                	fldl	(%rcx)
                	fstl	(%rax)
                	fstps	(%rbx)
-               	movss	-0x60(%rbp), %xmm0
+               	movss	-0x30(%rbp), %xmm0
                	movq	%rdx, %xmm15
                	ucomiss	%xmm15, %xmm0
                	jp	<addr>
                	jne	<addr>
-               	movsd	-0x40(%rbp), %xmm0
+               	movsd	-0x10(%rbp), %xmm0
                	movabsq	$0x4004000000000000, %rax # imm = 0x4004000000000000
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>
                	jne	<addr>
-               	movsd	-0x48(%rbp), %xmm0
+               	movsd	-0x18(%rbp), %xmm0
                	movabsq	$-0x4018000000000000, %rax # imm = 0xBFE8000000000000
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>
                	jne	<addr>
-               	movss	-0x58(%rbp), %xmm0
+               	movss	-0x28(%rbp), %xmm0
                	movl	$0xbf400000, %eax       # imm = 0xBF400000
                	movq	%rax, %xmm15
                	ucomiss	%xmm15, %xmm0
@@ -260,31 +260,31 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	leaq	-0x38(%rbp), %rax
+               	leaq	-0x68(%rbp), %rax
                	leaq	<rip>, %rcx
                	movq	(%rcx), %r10
                	movq	%r10, (%rax)
                	movzwq	0x8(%rcx), %r10
                	movw	%r10w, 0x8(%rax)
                	movq	$0x0, -0x8(%rbp)
-               	leaq	-0x28(%rbp), %rdi
+               	leaq	-0x58(%rbp), %rdi
                	movl	$0xaa, %esi
                	movl	$0xa, %edx
                	xorl	%eax, %eax
                	callq	<addr>
-               	leaq	-0x28(%rbp), %rax
-               	leaq	-0x38(%rbp), %rbx
+               	leaq	-0x58(%rbp), %rax
+               	leaq	-0x68(%rbp), %rbx
                	fldt	(%rbx)
                	fstpt	(%rax)
                	leaq	-0x8(%rbp), %rax
-               	leaq	-0x38(%rbp), %rbx
+               	leaq	-0x68(%rbp), %rbx
                	fldt	(%rbx)
                	fstpl	(%rax)
-               	leaq	-0x18(%rbp), %rax
+               	leaq	-0x48(%rbp), %rax
                	fld1
                	fstpt	(%rax)
-               	leaq	-0x28(%rbp), %rdi
-               	leaq	-0x38(%rbp), %rsi
+               	leaq	-0x58(%rbp), %rdi
+               	leaq	-0x68(%rbp), %rsi
                	movl	$0xa, %edx
                	xorl	%eax, %eax
                	callq	<addr>
@@ -297,7 +297,7 @@ Disassembly of section .text:
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>
                	jne	<addr>
-               	leaq	-0x18(%rbp), %rdi
+               	leaq	-0x48(%rbp), %rdi
                	leaq	<rip>, %rsi
                	movl	$0xa, %edx
                	xorl	%eax, %eax

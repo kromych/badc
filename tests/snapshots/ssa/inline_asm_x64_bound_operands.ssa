@@ -155,6 +155,9 @@ fn ent_pc=8 n_params=0 variadic=false locals=0
     v19  Imm(0)                                           -> x1
     v20  Imm(0)                                           -> x1
     v21  Store { addr=v18, disp=0, value=v16, kind=V128 } -> -
+    v22  LifetimeEnd(0)                                   -> -
+    v23  LifetimeEnd(0)                                   -> -
+    v24  LifetimeEnd(0)                                   -> -
     terminator Return
 ; --- SSA dump (ok=true) ent_pc=9 ---
 ; name=vec_across_call
@@ -187,6 +190,8 @@ fn ent_pc=9 n_params=0 variadic=false locals=0
     v23  Imm(0)                                           -> x2
     v24  Store { addr=v19, disp=16, value=v17, kind=V128 } -> -
     v25  Imm(0)                                           -> x1
+    v26  LifetimeEnd(0)                                   -> -
+    v27  LifetimeEnd(0)                                   -> -
     terminator Return(v11)   (exit_acc=v11)
 ; --- SSA dump (ok=true) ent_pc=11 ---
 ; name=main

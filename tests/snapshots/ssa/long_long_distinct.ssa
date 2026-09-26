@@ -75,6 +75,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v69  ImmData(12)                                      -> x7
     v70  CallExt { binding_idx=0, args=[v69], fp_arg_mask=0x0 } -> x0
     v71  Imm(0)                                           -> x0
+    v72  LifetimeEnd(0)                                   -> -
+    v73  LifetimeEnd(0)                                   -> -
     terminator Return(v71)   (exit_acc=v71)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit

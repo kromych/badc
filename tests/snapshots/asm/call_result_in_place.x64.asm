@@ -618,10 +618,10 @@ Disassembly of section .text:
                	subq	$0x20, %rsp
                	movl	$0x4, %edi
                	callq	<addr>
-               	leaq	-0x20(%rbp), %rcx
+               	leaq	-0x10(%rbp), %rcx
                	movq	%rax, (%rcx)
                	movq	%rdx, 0x8(%rcx)
-               	leaq	-0x10(%rbp), %rdi
+               	leaq	-0x20(%rbp), %rdi
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rdi)
                	callq	<addr>
@@ -676,20 +676,20 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
-               	leaq	-0x10(%rbp), %rax
+               	leaq	-0x20(%rbp), %rax
                	leaq	<rip>, %rcx
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	leaq	<rip>, %rcx
                	movq	%rax, (%rcx)
                	callq	<addr>
-               	movq	%rax, -0x20(%rbp)
-               	leaq	-0x20(%rbp), %rax
+               	movq	%rax, -0x10(%rbp)
+               	leaq	-0x10(%rbp), %rax
                	movq	%rdx, 0x8(%rax)
-               	leaq	-0x10(%rbp), %rcx
+               	leaq	-0x20(%rbp), %rcx
                	movups	(%rax), %xmm14
                	movups	%xmm14, (%rcx)
-               	leaq	-0x10(%rbp), %rcx
+               	leaq	-0x20(%rbp), %rcx
                	movq	(%rcx), %rax
                	cmpq	$0x2, %rax
                	sete	%dl
@@ -737,7 +737,7 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	leave
                	retq
-               	leaq	-0x30(%rbp), %rdi
+               	leaq	-0x20(%rbp), %rdi
                	callq	<addr>
                	testl	%eax, %eax
                	jne	<addr>
@@ -774,7 +774,7 @@ Disassembly of section .text:
                	movl	$0x8, %eax
                	leave
                	retq
-               	leaq	-0x10(%rbp), %rdi
+               	leaq	-0x30(%rbp), %rdi
                	callq	<addr>
                	testl	%eax, %eax
                	jne	<addr>
@@ -806,8 +806,8 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	<rip>, %rax
-               	movq	-0x30(%rbp), %rcx
-               	movq	-0x10(%rbp), %rdx
+               	movq	-0x20(%rbp), %rcx
+               	movq	-0x30(%rbp), %rdx
                	addq	%rdx, %rcx
                	movq	%rcx, (%rax)
                	xorl	%eax, %eax

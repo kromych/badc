@@ -34,20 +34,20 @@ fn ent_pc=0 n_params=0 variadic=false locals=1
     v32  BinopI { op=eq, lhs=v22, rhs_imm=1 }             -> x2
     terminator Bz { cond=v32, target=b4, fall=b2 }   (exit_acc=v32)
   block 2  start_pc=0
-    v90  Imm(0)                                           -> x2
-    v91  Imm(0)                                           -> x2
+    v93  Imm(0)                                           -> x2
+    v94  Imm(0)                                           -> x2
     terminator Jmp(b3)   (exit_acc=v20)
   block 3  start_pc=0
-    v94  Phi { incoming=[b2:v20, b4:v92], kind=I64 }      -> x2
-    v95  Imm(0)                                           -> x8
-    v96  Binop { op=xor, lhs=v31, rhs=v94 }               -> x2
-    v97  BinopI { op=and, lhs=v96, rhs_imm=4294967295 }   -> x7
-    v98  BinopI { op=ne, lhs=v96, rhs_imm=0 }             -> x7
-    terminator Bz { cond=v96, target=b5, fall=b8 }   (low word)   (exit_acc=v98)
+    v97  Phi { incoming=[b2:v20, b4:v95], kind=I64 }      -> x2
+    v98  Imm(0)                                           -> x8
+    v99  Binop { op=xor, lhs=v31, rhs=v97 }               -> x2
+    v100 BinopI { op=and, lhs=v99, rhs_imm=4294967295 }   -> x7
+    v101 BinopI { op=ne, lhs=v99, rhs_imm=0 }             -> x7
+    terminator Bz { cond=v99, target=b5, fall=b8 }   (low word)   (exit_acc=v101)
   block 4  start_pc=0
-    v92  Imm(1)                                           -> x2
-    v93  Imm(0)                                           -> x8
-    terminator Jmp(b3)   (exit_acc=v92)
+    v95  Imm(1)                                           -> x2
+    v96  Imm(0)                                           -> x8
+    terminator Jmp(b3)   (exit_acc=v95)
   block 5  start_pc=0
     v25  Extend { value=v22, kind=I32 }                   -> x2
     v26  BinopI { op=add, lhs=v22, rhs_imm=1 }            -> x0
@@ -116,14 +116,20 @@ fn ent_pc=0 n_params=0 variadic=false locals=1
     v87  Imm(0)                                           -> x0
     v88  Imm(0)                                           -> x0
     v89  Imm(0)                                           -> x0
+    v90  LifetimeEnd(0)                                   -> -
+    v91  LifetimeEnd(0)                                   -> -
+    v92  LifetimeEnd(-1)                                  -> -
     terminator Return(v89)   (exit_acc=v89)
   block 8  start_pc=0
-    v99  Imm(1)                                           -> x1
-    v100 Extend { value=v22, kind=I32 }                   -> x1
-    v101 BinopI { op=add, lhs=v22, rhs_imm=1 }            -> x0
-    v102 Extend { value=v101, kind=I32, nsw }             -> x1
-    v103 Extend { value=v101, kind=I32 }                  -> x1
-    terminator Return(v101)   (exit_acc=v101)
+    v102 Imm(1)                                           -> x1
+    v103 Extend { value=v22, kind=I32 }                   -> x1
+    v104 BinopI { op=add, lhs=v22, rhs_imm=1 }            -> x0
+    v105 Extend { value=v104, kind=I32, nsw }             -> x1
+    v106 Extend { value=v104, kind=I32 }                  -> x1
+    v107 LifetimeEnd(0)                                   -> -
+    v108 LifetimeEnd(0)                                   -> -
+    v109 LifetimeEnd(-1)                                  -> -
+    terminator Return(v104)   (exit_acc=v104)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

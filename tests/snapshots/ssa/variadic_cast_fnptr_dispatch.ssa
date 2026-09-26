@@ -23,19 +23,22 @@ fn ent_pc=5 n_params=0 variadic=false locals=4
     terminator Bz { cond=v16, target=b2, fall=b1 }   (exit_acc=v16)
   block 1  start_pc=0
     v17  Imm(1)                                           -> x0
+    v18  LifetimeEnd(-4)                                  -> -
     terminator Return(v17)   (exit_acc=v17)
   block 2  start_pc=0
-    v18  LocalAddr(-4)                                    -> x7
-    v19  ImmData(21)                                      -> x6
-    v20  CallExt { binding_idx=78, args=[v18, v19], fp_arg_mask=0x0 } -> x0
-    v21  BinopI { op=ne, lhs=v20, rhs_imm=0 }             -> x1
-    terminator Bz { cond=v20, target=b4, fall=b3 }   (exit_acc=v21)
+    v19  LocalAddr(-4)                                    -> x7
+    v20  ImmData(21)                                      -> x6
+    v21  CallExt { binding_idx=78, args=[v19, v20], fp_arg_mask=0x0 } -> x0
+    v22  BinopI { op=ne, lhs=v21, rhs_imm=0 }             -> x1
+    terminator Bz { cond=v21, target=b4, fall=b3 }   (exit_acc=v22)
   block 3  start_pc=0
-    v22  Imm(2)                                           -> x0
-    terminator Return(v22)   (exit_acc=v22)
-  block 4  start_pc=0
-    v23  Imm(0)                                           -> x0
+    v23  Imm(2)                                           -> x0
+    v24  LifetimeEnd(-4)                                  -> -
     terminator Return(v23)   (exit_acc=v23)
+  block 4  start_pc=0
+    v25  Imm(0)                                           -> x0
+    v26  LifetimeEnd(-4)                                  -> -
+    terminator Return(v25)   (exit_acc=v25)
 ; --- SSA dump (ok=true) ent_pc=6 ---
 ; name=__c5_sys_snprintf
 fn ent_pc=6 n_params=0 variadic=false locals=0

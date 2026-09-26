@@ -147,6 +147,7 @@ fn ent_pc=0 n_params=2 variadic=false locals=8
     v141 Binop { op=add, lhs=v84, rhs=v140 }              -> x6
     v142 LoadIndexed { base=v84, index=v139, scale=8, kind=I64 } -> x0
     v143 Binop { op=add, lhs=v134, rhs=v142 }             -> x0
+    v144 LifetimeEnd(-8)                                  -> -
     terminator Return(v143)   (exit_acc=v143)
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=main
@@ -245,10 +246,12 @@ fn ent_pc=1 n_params=0 variadic=false locals=8
     terminator Bz { cond=v88, target=b2, fall=b1 }   (exit_acc=v88)
   block 1  start_pc=0
     v89  Imm(1)                                           -> x0
+    v90  LifetimeEnd(-8)                                  -> -
     terminator Return(v89)   (exit_acc=v89)
   block 2  start_pc=0
-    v90  Imm(0)                                           -> x0
-    terminator Return(v90)   (exit_acc=v90)
+    v91  Imm(0)                                           -> x0
+    v92  LifetimeEnd(-8)                                  -> -
+    terminator Return(v91)   (exit_acc=v91)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

@@ -80,24 +80,24 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x70
-               	sub	x0, x29, #0x28
+               	sub	x0, x29, #0x68
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	ldr	x16, [x1]
                	str	x16, [x0]
                	mov	x0, #0x0                // =0
-               	sub	x1, x29, #0x20
+               	sub	x1, x29, #0x60
                	strb	w0, [x1, x0]
                	add	x0, x0, #0x1
                	cmp	w0, #0x20
                	b.lt	<addr>
-               	sub	x0, x29, #0x68
+               	sub	x0, x29, #0x40
                	mov	x1, #0x0                // =0
                	mov	x2, #0x40               // =64
-               	sub	x3, x29, #0x28
-               	sub	x4, x29, #0x20
+               	sub	x3, x29, #0x68
+               	sub	x4, x29, #0x60
                	bl	<addr>
-               	ldurb	w0, [x29, #-0x68]
+               	ldurb	w0, [x29, #-0x40]
                	mov	x17, #0x4d              // =77
                	eor	x0, x0, x17
                	cbnz	w0, <addr>

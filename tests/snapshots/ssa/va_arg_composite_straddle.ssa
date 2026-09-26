@@ -56,17 +56,23 @@ fn ent_pc=1 n_params=1 variadic=true locals=3
     terminator Bz { cond=v38, target=b6, fall=b5 }   (exit_acc=v38)
   block 5  start_pc=0
     v42  Imm(1)                                           -> x0
+    v43  LifetimeEnd(0)                                   -> -
+    v44  LifetimeEnd(-3)                                  -> -
     terminator Return(v42)   (exit_acc=v42)
   block 6  start_pc=0
-    v43  Imm(0)                                           -> x0
-    v44  BinopI { op=ne, lhs=v27, rhs_imm=777 }           -> x0
-    terminator Bz { cond=v44, target=b8, fall=b7 }   (exit_acc=v44)
+    v45  Imm(0)                                           -> x0
+    v46  BinopI { op=ne, lhs=v27, rhs_imm=777 }           -> x0
+    terminator Bz { cond=v46, target=b8, fall=b7 }   (exit_acc=v46)
   block 7  start_pc=0
-    v45  Imm(2)                                           -> x0
-    terminator Return(v45)   (exit_acc=v45)
+    v47  Imm(2)                                           -> x0
+    v48  LifetimeEnd(0)                                   -> -
+    v49  LifetimeEnd(-3)                                  -> -
+    terminator Return(v47)   (exit_acc=v47)
   block 8  start_pc=0
-    v46  Imm(0)                                           -> x0
-    terminator Return(v46)   (exit_acc=v46)
+    v50  Imm(0)                                           -> x0
+    v51  LifetimeEnd(0)                                   -> -
+    v52  LifetimeEnd(-3)                                  -> -
+    terminator Return(v50)   (exit_acc=v50)
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=main
 fn ent_pc=2 n_params=0 variadic=false locals=2
@@ -92,6 +98,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=2
     v17  Call { target_pc=1, args=[v8, v9, v10, v11, v12, v13, v14, v15, v16], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v18  Extend { value=v17, kind=I32 }                   -> x1
     v19  Extend { value=v17, kind=I32 }                   -> x1
+    v20  LifetimeEnd(-2)                                  -> -
     terminator Return(v17)   (exit_acc=v17)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit

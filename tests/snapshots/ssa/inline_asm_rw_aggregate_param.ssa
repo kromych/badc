@@ -785,6 +785,9 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v779 Imm(16)                                          -> x0
     v780 Imm(0)                                           -> x0
     v781 Imm(42)                                          -> x0
+    v782 LifetimeEnd(0)                                   -> -
+    v783 LifetimeEnd(0)                                   -> -
+    v784 LifetimeEnd(0)                                   -> -
     terminator Return(v781)   (exit_acc=v781)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit

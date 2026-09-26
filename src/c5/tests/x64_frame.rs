@@ -428,6 +428,19 @@ fn a_tail_jump_pops_what_the_prologue_pushed() {
     }
 }
 
+/// A promoted aggregate's lifetime marker after the call keeps the tail jump.
+#[test]
+fn a_lifetime_marker_after_the_call_keeps_the_tail_jump() {
+    const SRC: &str = "struct p { long a, b; };\n\
+        __attribute__((noinline)) long g(long v) { return v * 3; }\n\
+        long f(long x) { struct p q = { x, x + 1 }; return g(q.a + q.b); }\n";
+    let insns = insns_of(&optimized(SRC, Target::LinuxX64), "f");
+    assert!(
+        exits(&insns).iter().any(|&e| insns[e].is_jmp()),
+        "{insns:x?}"
+    );
+}
+
 /// A frame realigned for an over-aligned object has rsp below the saves, so
 /// a tail jump out of it resets rsp as a return does. The object is
 /// volatile, which keeps it in memory, and its address is not taken, which

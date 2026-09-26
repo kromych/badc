@@ -95,27 +95,28 @@ fn ent_pc=7 n_params=0 variadic=false locals=1
     v69  Load { addr=v68, disp=0, kind=I64 }              -> x0
     v70  LoadLocal { off=-1, kind=I64 }                   -> x2
     v71  Binop { op=add, lhs=v69, rhs=v66 }               -> x0
-    v72  BinopI { op=ne, lhs=v71, rhs_imm=22 }            -> x0
-    terminator Bz { cond=v72, target=b12, fall=b11 }   (exit_acc=v72)
+    v72  LifetimeEnd(-1)                                  -> -
+    v73  BinopI { op=ne, lhs=v71, rhs_imm=22 }            -> x0
+    terminator Bz { cond=v73, target=b12, fall=b11 }   (exit_acc=v73)
   block 11  start_pc=0
-    v73  Imm(6)                                           -> x0
-    terminator Return(v73)   (exit_acc=v73)
+    v74  Imm(6)                                           -> x0
+    terminator Return(v74)   (exit_acc=v74)
   block 12  start_pc=0
-    v74  ImmData(8)                                       -> x0
-    v75  Imm(56)                                          -> x1
-    v76  BinopI { op=add, lhs=v74, rhs_imm=56 }           -> x1
-    v77  Load { addr=v74, disp=56, kind=I64, volatile }   -> x3
-    v78  LocalAddr(-1)                                    -> x0
-    v79  InlineAsm { template="movq %1, %0", ops=2, args=[v78, v77] } -> -
-    v80  LoadLocal { off=-1, kind=I64, volatile }         -> x0
-    v81  BinopI { op=ne, lhs=v80, rhs_imm=9 }             -> x0
-    terminator Bz { cond=v81, target=b14, fall=b13 }   (exit_acc=v81)
+    v75  ImmData(8)                                       -> x0
+    v76  Imm(56)                                          -> x1
+    v77  BinopI { op=add, lhs=v75, rhs_imm=56 }           -> x1
+    v78  Load { addr=v75, disp=56, kind=I64, volatile }   -> x3
+    v79  LocalAddr(-1)                                    -> x0
+    v80  InlineAsm { template="movq %1, %0", ops=2, args=[v79, v78] } -> -
+    v81  LoadLocal { off=-1, kind=I64, volatile }         -> x0
+    v82  BinopI { op=ne, lhs=v81, rhs_imm=9 }             -> x0
+    terminator Bz { cond=v82, target=b14, fall=b13 }   (exit_acc=v82)
   block 13  start_pc=0
-    v82  Imm(7)                                           -> x0
-    terminator Return(v82)   (exit_acc=v82)
-  block 14  start_pc=0
-    v83  Imm(0)                                           -> x0
+    v83  Imm(7)                                           -> x0
     terminator Return(v83)   (exit_acc=v83)
+  block 14  start_pc=0
+    v84  Imm(0)                                           -> x0
+    terminator Return(v84)   (exit_acc=v84)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

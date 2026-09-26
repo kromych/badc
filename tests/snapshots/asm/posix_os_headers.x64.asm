@@ -29,7 +29,7 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x70, %rsp
-               	leaq	-0x68(%rbp), %rdi
+               	leaq	-0x50(%rbp), %rdi
                	xorl	%esi, %esi
                	xorl	%eax, %eax
                	callq	<addr>
@@ -39,13 +39,13 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	leave
                	retq
-               	movq	-0x68(%rbp), %rax
+               	movq	-0x50(%rbp), %rax
                	cmpq	$0x6553f100, %rax       # imm = 0x6553F100
                	jge	<addr>
                	movl	$0x2, %eax
                	leave
                	retq
-               	leaq	-0x58(%rbp), %rdi
+               	leaq	-0x68(%rbp), %rdi
                	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
@@ -54,7 +54,7 @@ Disassembly of section .text:
                	movl	$0x3, %eax
                	leave
                	retq
-               	leaq	-0x58(%rbp), %rax
+               	leaq	-0x68(%rbp), %rax
                	movslq	0x4(%rax), %rdi
                	leaq	<rip>, %rsi
                	movl	$0x1, %edx
@@ -65,8 +65,8 @@ Disassembly of section .text:
                	movl	$0x4, %eax
                	leave
                	retq
-               	leaq	-0x50(%rbp), %rdi
-               	movslq	-0x58(%rbp), %rcx
+               	leaq	-0x60(%rbp), %rdi
+               	movslq	-0x68(%rbp), %rcx
                	movl	%ecx, (%rdi)
                	movl	$0x1, %esi
                	movw	%si, 0x4(%rdi)
@@ -79,27 +79,27 @@ Disassembly of section .text:
                	movl	$0x5, %eax
                	leave
                	retq
-               	leaq	-0x50(%rbp), %rax
+               	leaq	-0x60(%rbp), %rax
                	movswq	0x6(%rax), %rax
                	testb	$0x1, %al
                	jne	<addr>
                	movl	$0x6, %eax
                	leave
                	retq
-               	movslq	-0x58(%rbp), %rdi
+               	movslq	-0x68(%rbp), %rdi
                	xorl	%eax, %eax
                	callq	<addr>
-               	leaq	-0x58(%rbp), %rax
+               	leaq	-0x68(%rbp), %rax
                	movslq	0x4(%rax), %rdi
                	xorl	%eax, %eax
                	callq	<addr>
                	xorl	%edi, %edi
-               	leaq	-0x48(%rbp), %rsi
+               	leaq	-0x40(%rbp), %rsi
                	xorl	%eax, %eax
                	callq	<addr>
                	xorl	%edi, %edi
                	movl	$0x5413, %esi           # imm = 0x5413
-               	leaq	-0x8(%rbp), %rdx
+               	leaq	-0x58(%rbp), %rdx
                	movb	$0x0, %al
                	callq	<addr>
                	xorl	%eax, %eax

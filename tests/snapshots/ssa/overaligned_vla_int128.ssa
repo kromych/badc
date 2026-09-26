@@ -72,6 +72,7 @@ fn ent_pc=0 n_params=1 variadic=false locals=2
     v62  Store { addr=v16, disp=8, value=v60, kind=I64 }  -> -
     v63  LocalAddr(-9)                                    -> x1
     v64  Load { addr=v16, disp=0, kind=I64 }              -> x1
+    v65  LifetimeEnd(-9)                                  -> -
     terminator Return(v57)   (exit_acc=v57)
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=int128_vla

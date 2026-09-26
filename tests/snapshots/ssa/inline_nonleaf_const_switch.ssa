@@ -54,6 +54,9 @@ fn ent_pc=5 n_params=0 variadic=false locals=3
     v48  BinopI { op=and, lhs=v46, rhs_imm=4294967295 }   -> x1
     v49  Extend { value=v46, kind=I32 }                   -> x1
     v50  Extend { value=v46, kind=I32 }                   -> x1
+    v51  LifetimeEnd(-1)                                  -> -
+    v52  LifetimeEnd(-2)                                  -> -
+    v53  LifetimeEnd(-3)                                  -> -
     terminator Return(v46)   (exit_acc=v46)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit

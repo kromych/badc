@@ -111,6 +111,7 @@ fn ent_pc=5 n_params=1 variadic=false locals=0
     v2   Imm(0)                                           -> x0
     v3   Imm(0)                                           -> x0
     v4   LoadLocal { off=-4, kind=F80 }                   -> d0
+    v5   LifetimeEnd(-4)                                  -> -
     terminator Return(v4)   (exit_acc=v4)
 ; --- SSA dump (ok=true) ent_pc=6 ---
 ; name=vsum
@@ -149,6 +150,7 @@ fn ent_pc=6 n_params=1 variadic=true locals=3
     v23  LocalAddr(-3)                                    -> x0
     v24  Intrinsic { kind=VaEnd, args=[v23] }             -> x0
     v25  Imm(0)                                           -> x0
+    v26  LifetimeEnd(-3)                                  -> -
     terminator Return(v8)   (exit_acc=v8)
 ; --- SSA dump (ok=true) ent_pc=7 ---
 ; name=vmixed
@@ -191,6 +193,7 @@ fn ent_pc=7 n_params=1 variadic=true locals=3
     v33  LoadLocal { off=2, kind=I32 }                    -> x0
     v34  FpCast { kind=IntToFp, value=v33 }               -> d1
     v35  Binop { op=fadd, lhs=v32, rhs=v34 }              -> d0
+    v36  LifetimeEnd(-3)                                  -> -
     terminator Return(v35)   (exit_acc=v35)
 ; --- SSA dump (ok=true) ent_pc=8 ---
 ; name=main

@@ -19,15 +19,17 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     terminator Bz { cond=v12, target=b2, fall=b1 }   (exit_acc=v12)
   block 1  start_pc=0
     v13  Imm(18)                                          -> x0
+    v14  LifetimeEnd(-17)                                 -> -
     terminator Return(v13)   (exit_acc=v13)
   block 2  start_pc=0
-    v14  LocalAddr(-17)                                   -> x0
-    v15  BinopI { op=add, lhs=v14, rhs_imm=64 }           -> x0
-    v16  LocalAddr(-17)                                   -> x0
-    v17  Imm(64)                                          -> x0
-    v18  Imm(0)                                           -> x0
+    v15  LocalAddr(-17)                                   -> x0
+    v16  BinopI { op=add, lhs=v15, rhs_imm=64 }           -> x0
+    v17  LocalAddr(-17)                                   -> x0
+    v18  Imm(64)                                          -> x0
     v19  Imm(0)                                           -> x0
-    terminator Return(v19)   (exit_acc=v19)
+    v20  Imm(0)                                           -> x0
+    v21  LifetimeEnd(-17)                                 -> -
+    terminator Return(v20)   (exit_acc=v20)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

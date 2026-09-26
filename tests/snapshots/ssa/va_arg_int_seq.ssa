@@ -39,6 +39,7 @@ fn ent_pc=1 n_params=2 variadic=true locals=3
     v27  Intrinsic { kind=VaEnd, args=[v26] }             -> x0
     v28  ImmData(30)                                      -> x7
     v29  CallExt { binding_idx=0, args=[v28], fp_arg_mask=0x0 } -> x0
+    v30  LifetimeEnd(-3)                                  -> -
     terminator Return
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=main

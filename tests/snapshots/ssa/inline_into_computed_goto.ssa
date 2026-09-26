@@ -87,6 +87,7 @@ fn ent_pc=2 n_params=2 variadic=false locals=3
     terminator Jmp(b1)   (exit_acc=v74)
   block 4  start_pc=0
     v75  Imm(0)                                           -> x1
+    v76  LifetimeEnd(-3)                                  -> -
     terminator Return(v33)   (exit_acc=v33)
 ; --- SSA dump (ok=true) ent_pc=3 ---
 ; name=main
@@ -124,6 +125,8 @@ fn ent_pc=3 n_params=0 variadic=false locals=7
     v26  Phi { incoming=[b1:v22, b3:v24], kind=I64 }      -> x0
     v27  Imm(0)                                           -> x1
     v28  Extend { value=v26, kind=I32 }                   -> x1
+    v29  LifetimeEnd(-4)                                  -> -
+    v30  LifetimeEnd(-7)                                  -> -
     terminator Return(v26)   (exit_acc=v26)
   block 3  start_pc=0
     v24  Imm(1)                                           -> x0

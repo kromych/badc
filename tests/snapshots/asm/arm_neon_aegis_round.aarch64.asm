@@ -19,7 +19,7 @@ Disassembly of section .text:
                	str	x24, [sp, #0x20]
                	stp	x29, x30, [sp, #0xe0]
                	add	x29, sp, #0xe0
-               	sub	x0, x29, #0x10
+               	sub	x0, x29, #0x40
                	mov	x1, #0x5                // =5
                	strb	w1, [x0]
                	mov	x1, #0x1c               // =28
@@ -52,15 +52,15 @@ Disassembly of section .text:
                	strb	w1, [x0, #0xe]
                	mov	x1, #0x5e               // =94
                	strb	w1, [x0, #0xf]
-               	sub	x16, x29, #0x10
+               	sub	x16, x29, #0x40
                	ldr	q0, [x16]
                	rev32	v0.8h, v0.8h
-               	sub	x1, x29, #0x20
-               	sub	x16, x29, #0x20
+               	sub	x1, x29, #0x10
+               	sub	x16, x29, #0x10
                	str	q0, [x16]
                	mov	x0, #0x0                // =0
                	ldrb	w2, [x1, x0]
-               	sub	x3, x29, #0x10
+               	sub	x3, x29, #0x40
                	and	x4, x0, #0xc
                	add	x5, x0, #0x2
                	and	x5, x5, #0x3
@@ -71,8 +71,8 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, #0x10
                	b.lt	<addr>
-               	sub	x0, x29, #0x20
-               	sub	x1, x29, #0x10
+               	sub	x0, x29, #0x10
+               	sub	x1, x29, #0x40
                	ldrb	w2, [x1]
                	strb	w2, [x0]
                	ldrb	w2, [x1, #0x1]
@@ -93,10 +93,10 @@ Disassembly of section .text:
                	strb	w2, [x0, #0x8]
                	ldrb	w1, [x1, #0x9]
                	strb	w1, [x0, #0x9]
-               	sub	x1, x29, #0x10
+               	sub	x1, x29, #0x40
                	ldrb	w2, [x1, #0xa]
                	strb	w2, [x0, #0xa]
-               	sub	x0, x29, #0x20
+               	sub	x0, x29, #0x10
                	ldrb	w2, [x1, #0xb]
                	strb	w2, [x0, #0xb]
                	ldrb	w2, [x1, #0xc]
@@ -110,13 +110,13 @@ Disassembly of section .text:
                	ldrb	w1, [x0, #0x5]
                	eor	x1, x1, #0xff
                	strb	w1, [x0, #0x5]
-               	sub	x3, x29, #0x30
-               	sub	x16, x29, #0x10
+               	sub	x3, x29, #0x20
+               	sub	x16, x29, #0x40
                	ldr	q0, [x16]
-               	sub	x16, x29, #0x20
+               	sub	x16, x29, #0x10
                	ldr	q1, [x16]
                	cmeq	v0.16b, v0.16b, v1.16b
-               	sub	x16, x29, #0x30
+               	sub	x16, x29, #0x20
                	str	q0, [x16]
                	mov	x1, #0x0                // =0
                	mov	x0, x1
@@ -133,7 +133,7 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, #0x10
                	b.lt	<addr>
-               	sub	x0, x29, #0x40
+               	sub	x0, x29, #0x30
                	mov	x1, #0xc8               // =200
                	strb	w1, [x0]
                	mov	x1, #0xc5               // =197
@@ -166,11 +166,11 @@ Disassembly of section .text:
                	strb	w1, [x0, #0xe]
                	mov	x1, #0x9b               // =155
                	strb	w1, [x0, #0xf]
-               	sub	x3, x29, #0x20
-               	sub	x16, x29, #0x10
-               	ldr	q0, [x16]
-               	sub	x4, x29, #0x40
+               	sub	x3, x29, #0x10
                	sub	x16, x29, #0x40
+               	ldr	q0, [x16]
+               	sub	x4, x29, #0x30
+               	sub	x16, x29, #0x30
                	ldr	q1, [x16]
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
@@ -184,7 +184,7 @@ Disassembly of section .text:
                	ldr	q1, [sp, #0x80]
                	ldr	q2, [sp, #0x90]
                	tbx	v0.16b, { v1.16b }, v2.16b
-               	sub	x16, x29, #0x20
+               	sub	x16, x29, #0x10
                	str	q0, [x16]
                	mov	x0, #0x0                // =0
                	ldrb	w5, [x3, x0]
@@ -196,7 +196,7 @@ Disassembly of section .text:
                	cmp	w5, w1
                	b.eq	<addr>
                	b	<addr>
-               	sub	x1, x29, #0x10
+               	sub	x1, x29, #0x40
                	ldrb	w1, [x1, x0]
                	cmp	w5, w1
                	b.ne	<addr>
@@ -268,7 +268,7 @@ Disassembly of section .text:
                	ldp	x22, x23, [sp, #0x10]
                	ldp	x20, x21, [sp], #0xf0
                	ret
-               	sub	x16, x29, #0x10
+               	sub	x16, x29, #0x40
                	ldr	q0, [x16]
                	sub	x0, x29, #0xb0
                	str	q0, [x0]
@@ -432,14 +432,14 @@ Disassembly of section .text:
                	str	x1, [x3]
                	str	x0, [x3, #0x8]
                	ldur	q0, [x29, #-0xa0]
-               	sub	x16, x29, #0x40
+               	sub	x16, x29, #0x30
                	str	q0, [x16]
                	mov	x4, #0x0                // =0
                	mov	x0, x4
                	and	x2, x0, #0xc
                	and	x3, x0, #0x3
-               	sub	x7, x29, #0x20
-               	sub	x1, x29, #0x10
+               	sub	x7, x29, #0x10
+               	sub	x1, x29, #0x40
                	add	x5, x2, x3
                	ldrb	w5, [x1, x5]
                	lsl	x6, x5, #1
@@ -478,9 +478,9 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, #0x10
                	b.lt	<addr>
-               	sub	x0, x29, #0x40
+               	sub	x0, x29, #0x30
                	ldrb	w2, [x0]
-               	sub	x1, x29, #0x20
+               	sub	x1, x29, #0x10
                	ldrb	w3, [x1]
                	cmp	w2, w3
                	b.eq	<addr>
@@ -527,11 +527,11 @@ Disassembly of section .text:
                	cmp	w2, w1
                	b.ne	<addr>
                	ldrb	w1, [x0, #0xa]
-               	sub	x0, x29, #0x20
+               	sub	x0, x29, #0x10
                	ldrb	w2, [x0, #0xa]
                	cmp	w1, w2
                	b.ne	<addr>
-               	sub	x1, x29, #0x40
+               	sub	x1, x29, #0x30
                	ldrb	w2, [x1, #0xb]
                	ldrb	w3, [x0, #0xb]
                	cmp	w2, w3

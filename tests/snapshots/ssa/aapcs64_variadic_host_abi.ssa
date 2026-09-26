@@ -36,6 +36,7 @@ fn ent_pc=0 n_params=1 variadic=true locals=3
     v24  Intrinsic { kind=VaEnd, args=[v23] }             -> x0
     v25  Extend { value=v8, kind=I32 }                    -> x0
     v26  Extend { value=v8, kind=I32 }                    -> x0
+    v27  LifetimeEnd(-3)                                  -> -
     terminator Return(v8)   (exit_acc=v8)
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=dsum
@@ -74,6 +75,7 @@ fn ent_pc=1 n_params=1 variadic=true locals=3
     v23  LocalAddr(-3)                                    -> x0
     v24  Intrinsic { kind=VaEnd, args=[v23] }             -> x0
     v25  Imm(0)                                           -> x0
+    v26  LifetimeEnd(-3)                                  -> -
     terminator Return(v8)   (exit_acc=v8)
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=mixed
@@ -93,35 +95,35 @@ fn ent_pc=2 n_params=1 variadic=true locals=3
     v13  BinopI { op=and, lhs=v7, rhs_imm=1 }             -> x1
     terminator Bz { cond=v13, target=b3, fall=b2 }   (exit_acc=v13)
   block 2  start_pc=0
-    v17  Imm(0)                                           -> x1
-    v18  LocalAddr(-3)                                    -> x1
-    v19  Imm(65544)                                       -> x2
-    v20  Intrinsic { kind=VaArg, args=[v18, v19] }        -> x1
-    v21  Load { addr=v20, disp=0, kind=F64 }              -> d1
-    v22  Binop { op=fadd, lhs=v8, rhs=v21 }               -> d0
-    v23  Imm(0)                                           -> x1
+    v18  Imm(0)                                           -> x1
+    v19  LocalAddr(-3)                                    -> x1
+    v20  Imm(65544)                                       -> x2
+    v21  Intrinsic { kind=VaArg, args=[v19, v20] }        -> x1
+    v22  Load { addr=v21, disp=0, kind=F64 }              -> d1
+    v23  Binop { op=fadd, lhs=v8, rhs=v22 }               -> d0
     v24  Imm(0)                                           -> x1
-    terminator Jmp(b4)   (exit_acc=v22)
+    v25  Imm(0)                                           -> x1
+    terminator Jmp(b4)   (exit_acc=v23)
   block 3  start_pc=0
-    v29  Imm(0)                                           -> x1
-    v30  LocalAddr(-3)                                    -> x1
-    v31  Imm(4)                                           -> x2
-    v32  Intrinsic { kind=VaArg, args=[v30, v31] }        -> x1
-    v33  Load { addr=v32, disp=0, kind=I32 }              -> x1
-    v34  FpCast { kind=IntToFp, value=v33 }               -> d1
-    v35  Binop { op=fadd, lhs=v8, rhs=v34 }               -> d0
-    v36  Imm(0)                                           -> x1
+    v30  Imm(0)                                           -> x1
+    v31  LocalAddr(-3)                                    -> x1
+    v32  Imm(4)                                           -> x2
+    v33  Intrinsic { kind=VaArg, args=[v31, v32] }        -> x1
+    v34  Load { addr=v33, disp=0, kind=I32 }              -> x1
+    v35  FpCast { kind=IntToFp, value=v34 }               -> d1
+    v36  Binop { op=fadd, lhs=v8, rhs=v35 }               -> d0
     v37  Imm(0)                                           -> x1
-    terminator Jmp(b4)   (exit_acc=v35)
+    v38  Imm(0)                                           -> x1
+    terminator Jmp(b4)   (exit_acc=v36)
   block 4  start_pc=0
-    v25  Phi { incoming=[b2:v22, b3:v35], kind=F64 }      -> d0
-    v26  Extend { value=v7, kind=I32 }                    -> x1
-    v27  BinopI { op=add, lhs=v7, rhs_imm=1 }             -> x0
-    v28  Extend { value=v27, kind=I32, nsw }              -> x1
-    terminator Jmp(b5)   (exit_acc=v27)
+    v26  Phi { incoming=[b2:v23, b3:v36], kind=F64 }      -> d0
+    v27  Extend { value=v7, kind=I32 }                    -> x1
+    v28  BinopI { op=add, lhs=v7, rhs_imm=1 }             -> x0
+    v29  Extend { value=v28, kind=I32, nsw }              -> x1
+    terminator Jmp(b5)   (exit_acc=v28)
   block 5  start_pc=0
-    v7   Phi { incoming=[b0:v1, b4:v27], kind=I64 }       -> x0
-    v8   Phi { incoming=[b0:v1, b4:v25], kind=F64 }       -> d0
+    v7   Phi { incoming=[b0:v1, b4:v28], kind=I64 }       -> x0
+    v8   Phi { incoming=[b0:v1, b4:v26], kind=F64 }       -> d0
     v9   Extend { value=v7, kind=I32 }                    -> x1
     v10  LoadLocal { off=2, kind=I32 }                    -> x1
     v11  Binop { op=lt, lhs=v7, rhs=v10 }                 -> x1
@@ -130,6 +132,7 @@ fn ent_pc=2 n_params=1 variadic=true locals=3
     v14  LocalAddr(-3)                                    -> x0
     v15  Intrinsic { kind=VaEnd, args=[v14] }             -> x0
     v16  Imm(0)                                           -> x0
+    v17  LifetimeEnd(-3)                                  -> -
     terminator Return(v8)   (exit_acc=v8)
 ; --- SSA dump (ok=true) ent_pc=3 ---
 ; name=icopy
@@ -198,6 +201,8 @@ fn ent_pc=3 n_params=1 variadic=true locals=6
     v47  Intrinsic { kind=VaEnd, args=[v46] }             -> x1
     v48  Extend { value=v29, kind=I32 }                   -> x1
     v49  Extend { value=v29, kind=I32 }                   -> x1
+    v50  LifetimeEnd(-3)                                  -> -
+    v51  LifetimeEnd(-6)                                  -> -
     terminator Return(v29)   (exit_acc=v29)
 ; --- SSA dump (ok=true) ent_pc=4 ---
 ; name=named_overflow
@@ -261,6 +266,7 @@ fn ent_pc=4 n_params=10 variadic=true locals=3
     v54  Intrinsic { kind=VaEnd, args=[v53] }             -> x1
     v55  Extend { value=v50, kind=I32 }                   -> x1
     v56  Extend { value=v50, kind=I32 }                   -> x1
+    v57  LifetimeEnd(-3)                                  -> -
     terminator Return(v50)   (exit_acc=v50)
 ; --- SSA dump (ok=true) ent_pc=5 ---
 ; name=main

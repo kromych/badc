@@ -35,6 +35,7 @@ fn ent_pc=4 n_params=1 variadic=true locals=3
     v23  LocalAddr(-3)                                    -> x1
     v24  Intrinsic { kind=VaEnd, args=[v23] }             -> x1
     v25  Imm(0)                                           -> x1
+    v26  LifetimeEnd(-3)                                  -> -
     terminator Return(v9)   (exit_acc=v9)
 ; --- SSA dump (ok=true) ent_pc=6 ---
 ; name=main

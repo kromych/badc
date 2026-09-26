@@ -25,97 +25,103 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     terminator Bnz { cond=v11, target=b3, fall=b2 }   (low word)   (exit_acc=v16)
   block 2  start_pc=0
     v17  Imm(1)                                           -> x0
+    v18  LifetimeEnd(0)                                   -> -
+    v19  LifetimeEnd(0)                                   -> -
     terminator Return(v17)   (exit_acc=v17)
   block 3  start_pc=0
-    v18  ImmData(16)                                      -> x0
-    v19  Load { addr=v18, disp=0, kind=I32 }              -> x1
-    v20  BinopI { op=eq, lhs=v19, rhs_imm=1 }             -> x1
-    v21  Imm(0)                                           -> x2
-    v22  Imm(0)                                           -> x2
-    terminator Bz { cond=v20, target=b6, fall=b4 }   (exit_acc=v20)
+    v20  ImmData(16)                                      -> x0
+    v21  Load { addr=v20, disp=0, kind=I32 }              -> x1
+    v22  BinopI { op=eq, lhs=v21, rhs_imm=1 }             -> x1
+    v23  Imm(0)                                           -> x2
+    v24  Imm(0)                                           -> x2
+    terminator Bz { cond=v22, target=b6, fall=b4 }   (exit_acc=v22)
   block 4  start_pc=0
-    v23  ImmData(16)                                      -> x1
-    v24  BinopI { op=add, lhs=v18, rhs_imm=4 }            -> x1
-    v25  Load { addr=v18, disp=4, kind=I32 }              -> x1
-    v26  BinopI { op=eq, lhs=v25, rhs_imm=2 }             -> x1
-    v27  BinopI { op=ne, lhs=v26, rhs_imm=0 }             -> x2
-    v28  Imm(0)                                           -> x2
-    v29  Imm(0)                                           -> x2
+    v25  ImmData(16)                                      -> x1
+    v26  BinopI { op=add, lhs=v20, rhs_imm=4 }            -> x1
+    v27  Load { addr=v20, disp=4, kind=I32 }              -> x1
+    v28  BinopI { op=eq, lhs=v27, rhs_imm=2 }             -> x1
+    v29  BinopI { op=ne, lhs=v28, rhs_imm=0 }             -> x2
     v30  Imm(0)                                           -> x2
     v31  Imm(0)                                           -> x2
     v32  Imm(0)                                           -> x2
-    terminator Bz { cond=v26, target=b6, fall=b5 }   (exit_acc=v26)
+    v33  Imm(0)                                           -> x2
+    v34  Imm(0)                                           -> x2
+    terminator Bz { cond=v28, target=b6, fall=b5 }   (exit_acc=v28)
   block 5  start_pc=0
-    v33  ImmData(16)                                      -> x1
-    v34  BinopI { op=add, lhs=v18, rhs_imm=8 }            -> x1
-    v35  Load { addr=v18, disp=8, kind=I32 }              -> x0
-    v36  BinopI { op=eq, lhs=v35, rhs_imm=3 }             -> x0
-    v37  BinopI { op=ne, lhs=v36, rhs_imm=0 }             -> x1
-    v38  Imm(0)                                           -> x1
-    v39  Imm(0)                                           -> x1
+    v35  ImmData(16)                                      -> x1
+    v36  BinopI { op=add, lhs=v20, rhs_imm=8 }            -> x1
+    v37  Load { addr=v20, disp=8, kind=I32 }              -> x0
+    v38  BinopI { op=eq, lhs=v37, rhs_imm=3 }             -> x0
+    v39  BinopI { op=ne, lhs=v38, rhs_imm=0 }             -> x1
     v40  Imm(0)                                           -> x1
-    v41  BinopI { op=eq, lhs=v36, rhs_imm=0 }             -> x1
-    terminator Bnz { cond=v36, target=b7, fall=b6 }   (low word)   (exit_acc=v41)
+    v41  Imm(0)                                           -> x1
+    v42  Imm(0)                                           -> x1
+    v43  BinopI { op=eq, lhs=v38, rhs_imm=0 }             -> x1
+    terminator Bnz { cond=v38, target=b7, fall=b6 }   (low word)   (exit_acc=v43)
   block 6  start_pc=0
-    v42  Imm(2)                                           -> x0
-    terminator Return(v42)   (exit_acc=v42)
+    v44  Imm(2)                                           -> x0
+    v45  LifetimeEnd(0)                                   -> -
+    v46  LifetimeEnd(0)                                   -> -
+    terminator Return(v44)   (exit_acc=v44)
   block 7  start_pc=0
-    v43  Imm(0)                                           -> x0
-    v44  Imm(0)                                           -> x0
-    v45  Imm(4)                                           -> x0
-    v46  Imm(0)                                           -> x0
-    v47  Imm(5)                                           -> x0
+    v47  Imm(0)                                           -> x0
     v48  Imm(0)                                           -> x0
-    v49  Imm(0)                                           -> x0
-    v50  Imm(4)                                           -> x0
-    v51  Imm(0)                                           -> x0
+    v49  Imm(4)                                           -> x0
+    v50  Imm(0)                                           -> x0
+    v51  Imm(5)                                           -> x0
     v52  Imm(0)                                           -> x0
-    v53  Imm(1)                                           -> x0
-    v54  Imm(0)                                           -> x0
+    v53  Imm(0)                                           -> x0
+    v54  Imm(4)                                           -> x0
     v55  Imm(0)                                           -> x0
     v56  Imm(0)                                           -> x0
-    v57  Imm(0)                                           -> x0
-    v58  Imm(5)                                           -> x0
-    v59  Imm(1)                                           -> x0
-    v60  Imm(1)                                           -> x0
+    v57  Imm(1)                                           -> x0
+    v58  Imm(0)                                           -> x0
+    v59  Imm(0)                                           -> x0
+    v60  Imm(0)                                           -> x0
     v61  Imm(0)                                           -> x0
-    v62  Imm(0)                                           -> x0
-    v63  Imm(0)                                           -> x0
-    v64  Imm(0)                                           -> x0
+    v62  Imm(5)                                           -> x0
+    v63  Imm(1)                                           -> x0
+    v64  Imm(1)                                           -> x0
     v65  Imm(0)                                           -> x0
     v66  Imm(0)                                           -> x0
-    v67  Imm(8)                                           -> x0
+    v67  Imm(0)                                           -> x0
     v68  Imm(0)                                           -> x0
-    v69  Imm(6)                                           -> x0
+    v69  Imm(0)                                           -> x0
     v70  Imm(0)                                           -> x0
-    v71  Imm(2)                                           -> x0
+    v71  Imm(8)                                           -> x0
     v72  Imm(0)                                           -> x0
-    v73  Imm(0)                                           -> x0
-    v74  Imm(8)                                           -> x0
-    v75  Imm(1)                                           -> x0
+    v73  Imm(6)                                           -> x0
+    v74  Imm(0)                                           -> x0
+    v75  Imm(2)                                           -> x0
     v76  Imm(0)                                           -> x0
     v77  Imm(0)                                           -> x0
-    v78  Imm(0)                                           -> x0
-    v79  Imm(0)                                           -> x0
-    v80  Imm(6)                                           -> x0
-    v81  Imm(1)                                           -> x0
-    v82  Imm(1)                                           -> x0
+    v78  Imm(8)                                           -> x0
+    v79  Imm(1)                                           -> x0
+    v80  Imm(0)                                           -> x0
+    v81  Imm(0)                                           -> x0
+    v82  Imm(0)                                           -> x0
     v83  Imm(0)                                           -> x0
-    v84  Imm(0)                                           -> x0
-    v85  Imm(0)                                           -> x0
-    v86  Imm(0)                                           -> x0
+    v84  Imm(6)                                           -> x0
+    v85  Imm(1)                                           -> x0
+    v86  Imm(1)                                           -> x0
     v87  Imm(0)                                           -> x0
     v88  Imm(0)                                           -> x0
     v89  Imm(0)                                           -> x0
-    v90  Imm(2)                                           -> x0
-    v91  Imm(1)                                           -> x0
-    v92  Imm(1)                                           -> x0
+    v90  Imm(0)                                           -> x0
+    v91  Imm(0)                                           -> x0
+    v92  Imm(0)                                           -> x0
     v93  Imm(0)                                           -> x0
-    v94  Imm(0)                                           -> x0
-    v95  Imm(0)                                           -> x0
-    v96  Imm(0)                                           -> x0
+    v94  Imm(2)                                           -> x0
+    v95  Imm(1)                                           -> x0
+    v96  Imm(1)                                           -> x0
     v97  Imm(0)                                           -> x0
-    terminator Return(v97)   (exit_acc=v97)
+    v98  Imm(0)                                           -> x0
+    v99  Imm(0)                                           -> x0
+    v100 Imm(0)                                           -> x0
+    v101 Imm(0)                                           -> x0
+    v102 LifetimeEnd(0)                                   -> -
+    v103 LifetimeEnd(0)                                   -> -
+    terminator Return(v101)   (exit_acc=v101)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

@@ -71,14 +71,14 @@ fn run_one(f: &mut FunctionSsa) {
     }
     // Where each slot is named, and by what. A slot this pass may
     // rewrite is named only by `LocalAddr`s feeding its writers and the
-    // one copy that reads it.
+    // one copy that reads it. A lifetime marker accesses nothing.
     let mut named: BTreeMap<i64, Vec<usize>> = BTreeMap::new();
     for (i, inst) in f.insts.iter().enumerate() {
         match inst {
             Inst::LocalAddr(off) | Inst::LoadLocal { off, .. } | Inst::StoreLocal { off, .. } => {
                 named.entry(*off).or_default().push(i);
             }
-            Inst::AllocaInit(off) | Inst::LifetimeEnd(off) => {
+            Inst::AllocaInit(off) => {
                 named.entry(*off).or_default().push(i);
             }
             Inst::Call { ret_slot_local, .. }

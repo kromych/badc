@@ -19,13 +19,13 @@ fn ent_pc=0 n_params=1 variadic=false locals=2
     v13  Imm(0)                                           -> x1
     terminator Jmp(b4)   (exit_acc=v4)
   block 1  start_pc=0
-    v35  LocalAddr(-2)                                    -> x6
-    v36  Extend { value=v28, kind=I32 }                   -> x6
-    v37  BinopI { op=and, lhs=v28, rhs_imm=1 }            -> x6
-    v38  BinopI { op=shl, lhs=v37, rhs_imm=3 }            -> x8
-    v39  Binop { op=add, lhs=v3, rhs=v38 }                -> x8
-    v40  LoadIndexed { base=v3, index=v37, scale=8, kind=I64 } -> x6
-    terminator GotoIndirect(v40)   (exit_acc=v40)
+    v36  LocalAddr(-2)                                    -> x6
+    v37  Extend { value=v28, kind=I32 }                   -> x6
+    v38  BinopI { op=and, lhs=v28, rhs_imm=1 }            -> x6
+    v39  BinopI { op=shl, lhs=v38, rhs_imm=3 }            -> x8
+    v40  Binop { op=add, lhs=v3, rhs=v39 }                -> x8
+    v41  LoadIndexed { base=v3, index=v38, scale=8, kind=I64 } -> x6
+    terminator GotoIndirect(v41)   (exit_acc=v41)
   block 2  start_pc=0
     v14  Extend { value=v29, kind=I32 }                   -> x6
     v15  BinopI { op=add, lhs=v29, rhs_imm=2 }            -> x1
@@ -54,6 +54,7 @@ fn ent_pc=0 n_params=1 variadic=false locals=2
   block 5  start_pc=0
     v33  Extend { value=v29, kind=I32 }                   -> x0
     v34  Extend { value=v29, kind=I32 }                   -> x0
+    v35  LifetimeEnd(-2)                                  -> -
     terminator Return(v29)   (exit_acc=v29)
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=main

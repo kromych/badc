@@ -239,6 +239,9 @@ fn ent_pc=7 n_params=0 variadic=false locals=2
     v193 Phi { incoming=[b25:v177, b23:v191], kind=I64 }  -> x3
     v194 Extend { value=v193, kind=I32 }                  -> x0
     v195 Extend { value=v193, kind=I32 }                  -> x0
+    v196 LifetimeEnd(-1)                                  -> -
+    v197 LifetimeEnd(-2)                                  -> -
+    v198 LifetimeEnd(0)                                   -> -
     terminator Return(v193)   (exit_acc=v193)
   block 25  start_pc=0
     terminator Jmp(b24)

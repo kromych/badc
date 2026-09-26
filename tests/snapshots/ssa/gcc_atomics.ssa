@@ -849,18 +849,18 @@ fn ent_pc=0 n_params=0 variadic=false locals=2
     v640 Imm(0)                                           -> x1
     terminator Bz { cond=v637, target=b101, fall=b99 }   (low word)   (exit_acc=v639)
   block 99  start_pc=0
-    v658 ImmData(16)                                      -> x0
-    v659 Load { addr=v658, disp=0, kind=I32 }             -> x1
-    v660 BinopI { op=eq, lhs=v659, rhs_imm=0 }            -> x2
-    v661 Imm(0)                                           -> x2
-    v662 Imm(0)                                           -> x2
-    v663 Imm(0)                                           -> x2
-    terminator Bnz { cond=v659, target=b101, fall=b100 }   (low word)   (exit_acc=v660)
+    v661 ImmData(16)                                      -> x0
+    v662 Load { addr=v661, disp=0, kind=I32 }             -> x1
+    v663 BinopI { op=eq, lhs=v662, rhs_imm=0 }            -> x2
+    v664 Imm(0)                                           -> x2
+    v665 Imm(0)                                           -> x2
+    v666 Imm(0)                                           -> x2
+    terminator Bnz { cond=v662, target=b101, fall=b100 }   (low word)   (exit_acc=v663)
   block 100  start_pc=0
-    v664 ImmData(16)                                      -> x1
-    v665 Imm(26)                                          -> x1
-    v666 Store { addr=v658, disp=0, value=v665, kind=I32 } -> -
-    terminator Jmp(b101)   (exit_acc=v666)
+    v667 ImmData(16)                                      -> x1
+    v668 Imm(26)                                          -> x1
+    v669 Store { addr=v661, disp=0, value=v668, kind=I32 } -> -
+    terminator Jmp(b101)   (exit_acc=v669)
   block 101  start_pc=0
     v650 Imm(0)                                           -> x0
     v651 Intrinsic { kind=AtomicThreadFence, args=[] }    -> x0
@@ -870,6 +870,9 @@ fn ent_pc=0 n_params=0 variadic=false locals=2
     v655 ImmData(16)                                      -> x0
     v656 Load { addr=v655, disp=0, kind=I32 }             -> x0
     v657 Extend { value=v656, kind=I32 }                  -> x1
+    v658 LifetimeEnd(-1)                                  -> -
+    v659 LifetimeEnd(0)                                   -> -
+    v660 LifetimeEnd(-2)                                  -> -
     terminator Return(v656)   (exit_acc=v656)
   block 102  start_pc=0
     v254 Imm(0)                                           -> x7

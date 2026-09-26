@@ -30,11 +30,11 @@ Disassembly of section .text:
                	ret
                	mov	x1, #0x13               // =19
                	mov	x2, #0x17               // =23
-               	sub	x0, x29, #0x10
+               	sub	x0, x29, #0x8
                	str	xzr, [x0]
                	str	w1, [x0]
                	str	w2, [x0, #0x4]
-               	sub	x16, x29, #0x10
+               	sub	x16, x29, #0x8
                	str	x16, [sp]
                	ldr	x2, [sp]
                	ld2r	{ v0.4s, v1.4s }, [x2]

@@ -17,7 +17,7 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x70
-               	sub	x2, x29, #0x68
+               	sub	x2, x29, #0x30
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldp	x16, x17, [x0]
@@ -41,19 +41,19 @@ Disassembly of section .text:
                	add	sp, sp, #0x70
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x2, x29, #0x68
+               	sub	x2, x29, #0x30
                	stp	xzr, xzr, [x2]
                	stp	xzr, xzr, [x2, #0x10]
                	stp	xzr, xzr, [x2, #0x20]
-               	sub	x0, x29, #0x38
+               	sub	x0, x29, #0x60
                	str	x0, [x2]
                	mov	x0, #0x10               // =16
                	str	x0, [x2, #0x8]
-               	sub	x0, x29, #0x28
+               	sub	x0, x29, #0x50
                	str	x0, [x2, #0x10]
                	mov	x0, #0x20               // =32
                	str	x0, [x2, #0x18]
-               	sub	x0, x29, #0x8
+               	sub	x0, x29, #0x68
                	str	x0, [x2, #0x20]
                	mov	x0, #0x8                // =8
                	str	x0, [x2, #0x28]
@@ -72,9 +72,9 @@ Disassembly of section .text:
                	add	sp, sp, #0x70
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x0, x29, #0x68
+               	sub	x0, x29, #0x30
                	ldr	x1, [x0]
-               	sub	x2, x29, #0x38
+               	sub	x2, x29, #0x60
                	cmp	x1, x2
                	b.eq	<addr>
                	mov	x0, #0x5                // =5
@@ -82,7 +82,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldr	x1, [x0, #0x10]
-               	sub	x2, x29, #0x28
+               	sub	x2, x29, #0x50
                	cmp	x1, x2
                	b.eq	<addr>
                	mov	x0, #0x6                // =6
@@ -90,7 +90,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldr	x1, [x0, #0x20]
-               	sub	x2, x29, #0x8
+               	sub	x2, x29, #0x68
                	cmp	x1, x2
                	b.eq	<addr>
                	mov	x0, #0x7                // =7

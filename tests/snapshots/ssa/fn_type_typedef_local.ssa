@@ -21,10 +21,11 @@ fn ent_pc=0 n_params=1 variadic=false locals=0
     v15  Imm(0)                                           -> x1
     v16  Imm(0)                                           -> x1
     v17  Imm(0)                                           -> x1
-    v18  Imm(0)                                           -> x1
+    v18  LifetimeEnd(0)                                   -> -
     v19  Imm(0)                                           -> x1
-    v20  AggParts { desc=0, parts=[v1, v13], fp_mask=0x0 } -> -
-    terminator Return(v20)   (exit_acc=v17)
+    v20  Imm(0)                                           -> x1
+    v21  AggParts { desc=0, parts=[v1, v13], fp_mask=0x0 } -> -
+    terminator Return(v21)   (exit_acc=v17)
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=main
 fn ent_pc=1 n_params=0 variadic=false locals=1
@@ -113,11 +114,15 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v80  BinopI { op=ne, lhs=v73, rhs_imm=5 }             -> x0
     terminator Bz { cond=v80, target=b2, fall=b1 }   (exit_acc=v80)
   block 1  start_pc=0
-    v84  Imm(4)                                           -> x0
-    terminator Return(v84)   (exit_acc=v84)
+    v90  Imm(4)                                           -> x0
+    v91  LifetimeEnd(-1)                                  -> -
+    v92  LifetimeEnd(0)                                   -> -
+    terminator Return(v90)   (exit_acc=v90)
   block 2  start_pc=0
-    v85  Imm(0)                                           -> x0
-    terminator Return(v85)   (exit_acc=v85)
+    v93  Imm(0)                                           -> x0
+    v94  LifetimeEnd(-1)                                  -> -
+    v95  LifetimeEnd(0)                                   -> -
+    terminator Return(v93)   (exit_acc=v93)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

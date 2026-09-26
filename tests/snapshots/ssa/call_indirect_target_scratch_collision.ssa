@@ -72,6 +72,8 @@ fn ent_pc=3 n_params=0 variadic=false locals=2
     v35  Phi { incoming=[b2:v31, b4:v33], kind=I64 }      -> x0
     v36  Imm(0)                                           -> x1
     v37  Extend { value=v35, kind=I32 }                   -> x1
+    v38  LifetimeEnd(-1)                                  -> -
+    v39  LifetimeEnd(-2)                                  -> -
     terminator Return(v35)   (exit_acc=v35)
   block 4  start_pc=0
     v33  Imm(1)                                           -> x0

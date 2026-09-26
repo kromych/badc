@@ -22,6 +22,7 @@ fn ent_pc=4 n_params=1 variadic=false locals=0
     v16  Extend { value=v14, kind=I32 }                   -> x1
     v17  Extend { value=v14, kind=I32 }                   -> x1
     v18  Extend { value=v14, kind=I32 }                   -> x1
+    v19  LifetimeEnd(0)                                   -> -
     terminator Return(v14)   (exit_acc=v14)
 ; --- SSA dump (ok=true) ent_pc=5 ---
 ; name=half_from_big
@@ -47,6 +48,7 @@ fn ent_pc=5 n_params=1 variadic=false locals=0
     v16  Extend { value=v14, kind=I32 }                   -> x1
     v17  Extend { value=v14, kind=I32 }                   -> x1
     v18  Extend { value=v14, kind=I32 }                   -> x1
+    v19  LifetimeEnd(0)                                   -> -
     terminator Return(v14)   (exit_acc=v14)
 ; --- SSA dump (ok=true) ent_pc=6 ---
 ; name=word_from_big
@@ -69,6 +71,7 @@ fn ent_pc=6 n_params=1 variadic=false locals=0
     v13  BinopI { op=and, lhs=v7, rhs_imm=4294967295 }    -> x2
     v14  Binop { op=add, lhs=v5, rhs=v7 }                 -> x0
     v15  BinopI { op=and, lhs=v14, rhs_imm=4294967295 }   -> x0
+    v16  LifetimeEnd(0)                                   -> -
     terminator Return(v15)   (exit_acc=v15)
 ; --- SSA dump (ok=true) ent_pc=7 ---
 ; name=wide_from_big
@@ -90,6 +93,7 @@ fn ent_pc=7 n_params=1 variadic=false locals=0
     v12  Imm(0)                                           -> x2
     v13  Imm(0)                                           -> x2
     v14  Binop { op=add, lhs=v5, rhs=v7 }                 -> x0
+    v15  LifetimeEnd(0)                                   -> -
     terminator Return(v14)   (exit_acc=v14)
 ; --- SSA dump (ok=true) ent_pc=8 ---
 ; name=main

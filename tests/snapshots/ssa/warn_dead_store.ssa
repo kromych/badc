@@ -60,6 +60,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=1
     v5   Imm(0)                                           -> x1
     v6   Extend { value=v1, kind=I32 }                    -> x0
     v7   Extend { value=v6, kind=I32 }                    -> x1
+    v8   LifetimeEnd(-1)                                  -> -
     terminator Return(v6)   (exit_acc=v6)
 ; --- SSA dump (ok=true) ent_pc=4 ---
 ; name=block_local_dies
@@ -121,26 +122,27 @@ fn ent_pc=6 n_params=0 variadic=false locals=1
     v19  LocalAddr(-1)                                    -> x1
     v20  Extend { value=v17, kind=I32 }                   -> x0
     v21  Extend { value=v20, kind=I32 }                   -> x1
-    v22  Extend { value=v20, kind=I32 }                   -> x1
-    v23  BinopI { op=add, lhs=v20, rhs_imm=9 }            -> x0
-    v24  Extend { value=v23, kind=I32, nsw }              -> x1
-    v25  Imm(1)                                           -> x1
+    v22  LifetimeEnd(-1)                                  -> -
+    v23  Extend { value=v20, kind=I32 }                   -> x1
+    v24  BinopI { op=add, lhs=v20, rhs_imm=9 }            -> x0
+    v25  Extend { value=v24, kind=I32, nsw }              -> x1
     v26  Imm(1)                                           -> x1
-    v27  BinopI { op=add, lhs=v23, rhs_imm=1 }            -> x0
-    v28  Extend { value=v27, kind=I32, nsw }              -> x1
-    v29  Imm(1)                                           -> x1
+    v27  Imm(1)                                           -> x1
+    v28  BinopI { op=add, lhs=v24, rhs_imm=1 }            -> x0
+    v29  Extend { value=v28, kind=I32, nsw }              -> x1
     v30  Imm(1)                                           -> x1
     v31  Imm(1)                                           -> x1
-    v32  Imm(2)                                           -> x1
+    v32  Imm(1)                                           -> x1
     v33  Imm(2)                                           -> x1
-    v34  Imm(3)                                           -> x1
+    v34  Imm(2)                                           -> x1
     v35  Imm(3)                                           -> x1
     v36  Imm(3)                                           -> x1
     v37  Imm(3)                                           -> x1
-    v38  BinopI { op=add, lhs=v27, rhs_imm=3 }            -> x0
-    v39  Extend { value=v38, kind=I32, nsw }              -> x1
-    v40  Extend { value=v38, kind=I32 }                   -> x1
-    terminator Return(v38)   (exit_acc=v38)
+    v38  Imm(3)                                           -> x1
+    v39  BinopI { op=add, lhs=v28, rhs_imm=3 }            -> x0
+    v40  Extend { value=v39, kind=I32, nsw }              -> x1
+    v41  Extend { value=v39, kind=I32 }                   -> x1
+    terminator Return(v39)   (exit_acc=v39)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

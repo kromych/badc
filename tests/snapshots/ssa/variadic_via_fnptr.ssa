@@ -39,6 +39,7 @@ fn ent_pc=0 n_params=1 variadic=true locals=3
     v33  Binop { op=add, lhs=v30, rhs=v15 }               -> x0
     v34  Extend { value=v33, kind=I32, nsw }              -> x1
     v35  Extend { value=v33, kind=I32 }                   -> x1
+    v36  LifetimeEnd(-3)                                  -> -
     terminator Return(v33)   (exit_acc=v33)
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=main

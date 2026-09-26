@@ -109,15 +109,15 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	leaq	-0x18(%rbp), %rax
+               	leaq	-0x20(%rbp), %rax
                	xorl	%ecx, %ecx
                	movl	%ecx, (%rax)
                	movl	$0xa, 0x4(%rax)
                	movl	$0x14, 0x8(%rax)
                	movl	$0x1e, 0xc(%rax)
                	movl	$0x28, 0x10(%rax)
-               	movq	%rax, -0x20(%rbp)
-               	movq	-0x20(%rbp), %rax
+               	movq	%rax, -0x8(%rbp)
+               	movq	-0x8(%rbp), %rax
                	movslq	0xc(%rax), %rdx
                	cmpl	$0x1e, %edx
                	je	<addr>

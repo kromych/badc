@@ -42,6 +42,8 @@ fn ent_pc=0 n_params=1 variadic=true locals=6
     v30  Intrinsic { kind=VaEnd, args=[v29] }             -> x0
     v31  Extend { value=v11, kind=I32 }                   -> x0
     v32  Extend { value=v11, kind=I32 }                   -> x0
+    v33  LifetimeEnd(-3)                                  -> -
+    v34  LifetimeEnd(-6)                                  -> -
     terminator Return(v11)   (exit_acc=v11)
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=main

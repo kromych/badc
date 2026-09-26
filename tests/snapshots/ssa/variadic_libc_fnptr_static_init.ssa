@@ -26,10 +26,12 @@ fn ent_pc=5 n_params=0 variadic=false locals=8
     terminator Bz { cond=v18, target=b2, fall=b1 }   (exit_acc=v19)
   block 1  start_pc=0
     v20  Imm(1)                                           -> x0
+    v21  LifetimeEnd(-8)                                  -> -
     terminator Return(v20)   (exit_acc=v20)
   block 2  start_pc=0
-    v21  Imm(0)                                           -> x0
-    terminator Return(v21)   (exit_acc=v21)
+    v22  Imm(0)                                           -> x0
+    v23  LifetimeEnd(-8)                                  -> -
+    terminator Return(v22)   (exit_acc=v22)
 ; --- SSA dump (ok=true) ent_pc=6 ---
 ; name=__c5_sys_snprintf
 fn ent_pc=6 n_params=0 variadic=false locals=0

@@ -62,11 +62,15 @@ fn ent_pc=0 n_params=0 variadic=false locals=4
     v56  BinopI { op=ne, lhs=v55, rhs_imm=4 }             -> x0
     terminator Bz { cond=v56, target=b2, fall=b1 }   (exit_acc=v56)
   block 1  start_pc=0
-    v61  Imm(6)                                           -> x0
-    terminator Return(v61)   (exit_acc=v61)
+    v69  Imm(6)                                           -> x0
+    v70  LifetimeEnd(-4)                                  -> -
+    v71  LifetimeEnd(0)                                   -> -
+    terminator Return(v69)   (exit_acc=v69)
   block 2  start_pc=0
-    v62  Imm(0)                                           -> x0
-    terminator Return(v62)   (exit_acc=v62)
+    v72  Imm(0)                                           -> x0
+    v73  LifetimeEnd(-4)                                  -> -
+    v74  LifetimeEnd(0)                                   -> -
+    terminator Return(v72)   (exit_acc=v72)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

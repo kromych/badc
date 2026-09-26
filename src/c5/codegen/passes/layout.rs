@@ -77,9 +77,12 @@ fn uncond_target(term: &Terminator) -> Option<BlockId> {
     }
 }
 
+/// Lifetime markers count as nothing: their one reader, slot coalescing, ran.
 fn block_is_empty(func: &FunctionSsa, b: BlockId) -> bool {
-    let r = &func.blocks[b as usize].inst_range;
-    r.start >= r.end
+    func.blocks[b as usize]
+        .inst_range
+        .clone()
+        .all(|i| func.insts[i as usize].is_lifetime_marker())
 }
 
 fn block_has_phis(func: &FunctionSsa, b: BlockId) -> bool {
@@ -876,6 +879,21 @@ mod tests {
         );
         thread_jumps(&mut f, &mut JumpChains::default());
         assert!(matches!(f.blocks[0].terminator, Terminator::Jmp(3)));
+    }
+
+    #[test]
+    fn a_block_of_lifetime_markers_is_threaded() {
+        // b0 -Jmp-> b1(marker) -Jmp-> b2(ret).
+        let mut f = func_with(
+            vec![Inst::Imm(0), Inst::LifetimeEnd(-1), Inst::Imm(3)],
+            vec![
+                block(0..1, Terminator::Jmp(1)),
+                block(1..2, Terminator::Jmp(2)),
+                block(2..3, Terminator::Return(2)),
+            ],
+        );
+        thread_jumps(&mut f, &mut JumpChains::default());
+        assert!(matches!(f.blocks[0].terminator, Terminator::Jmp(2)));
     }
 
     #[test]

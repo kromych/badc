@@ -84,12 +84,12 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x30]
                	ldr	x20, [sp], #0x40
                	ret
-               	sub	x1, x29, #0x18
+               	sub	x1, x29, #0x10
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	str	x2, [x1]
                	str	xzr, [x1, #0x8]
-               	sub	x2, x29, #0x8
+               	sub	x2, x29, #0x18
                	str	xzr, [x2]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>

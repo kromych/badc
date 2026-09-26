@@ -41,6 +41,7 @@ fn ent_pc=1 n_params=1 variadic=false locals=32
     v25  LocalAddr(-32)                                   -> x0
     v26  Imm(0)                                           -> x0
     v27  LoadLocal { off=-32, kind=I8, volatile }         -> x0
+    v28  LifetimeEnd(-32)                                 -> -
     terminator Return
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=main

@@ -57,37 +57,37 @@ Disassembly of section .text:
                	add	x2, x1, #0x1
                	mov	x0, #0x3344             // =13124
                	movk	x0, #0x1122, lsl #16
-               	str	w0, [sp]
-               	sub	x0, x29, #0x420
+               	stur	w0, [x29, #-0x8]
+               	sub	x0, x29, #0x8
                	ldr	w16, [x0]
                	str	w16, [x2]
                	add	x3, x1, #0x8
                	mov	x4, #0x3345             // =13125
                	movk	x4, #0x1122, lsl #16
-               	str	w4, [sp]
+               	stur	w4, [x29, #-0x8]
                	ldr	w16, [x0]
                	str	w16, [x3]
                	add	x4, x1, #0xf
                	mov	x5, #0x3346             // =13126
                	movk	x5, #0x1122, lsl #16
-               	str	w5, [sp]
+               	stur	w5, [x29, #-0x8]
                	ldr	w16, [x0]
                	str	w16, [x4]
                	add	x4, x1, #0x16
                	mov	x5, #0x3347             // =13127
                	movk	x5, #0x1122, lsl #16
-               	str	w5, [sp]
+               	stur	w5, [x29, #-0x8]
                	ldr	w16, [x0]
                	str	w16, [x4]
                	add	x1, x1, #0x1d
                	mov	x4, #0x3348             // =13128
                	movk	x4, #0x1122, lsl #16
-               	str	w4, [sp]
+               	stur	w4, [x29, #-0x8]
                	ldr	w16, [x0]
                	str	w16, [x1]
                	ldr	w16, [x2]
                	str	w16, [x0]
-               	ldr	w1, [sp]
+               	ldur	w1, [x29, #-0x8]
                	mov	x17, #0x3344            // =13124
                	movk	x17, #0x1122, lsl #16
                	cmp	w1, w17
@@ -98,7 +98,7 @@ Disassembly of section .text:
                	ret
                	ldr	w16, [x3]
                	str	w16, [x0]
-               	ldr	w0, [sp]
+               	ldur	w0, [x29, #-0x8]
                	mov	x17, #0x3345            // =13125
                	movk	x17, #0x1122, lsl #16
                	cmp	w0, w17
@@ -106,10 +106,10 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	add	x2, x0, #0xf
-               	sub	x1, x29, #0x420
+               	sub	x1, x29, #0x8
                	ldr	w16, [x2]
                	str	w16, [x1]
-               	ldr	w2, [sp]
+               	ldur	w2, [x29, #-0x8]
                	mov	x17, #0x3346            // =13126
                	movk	x17, #0x1122, lsl #16
                	cmp	w2, w17
@@ -117,7 +117,7 @@ Disassembly of section .text:
                	add	x2, x0, #0x16
                	ldr	w16, [x2]
                	str	w16, [x1]
-               	ldr	w2, [sp]
+               	ldur	w2, [x29, #-0x8]
                	mov	x17, #0x3347            // =13127
                	movk	x17, #0x1122, lsl #16
                	cmp	w2, w17
@@ -125,7 +125,7 @@ Disassembly of section .text:
                	add	x2, x0, #0x1d
                	ldr	w16, [x2]
                	str	w16, [x1]
-               	ldr	w1, [sp]
+               	ldur	w1, [x29, #-0x8]
                	mov	x17, #0x3348            // =13128
                	movk	x17, #0x1122, lsl #16
                	cmp	w1, w17

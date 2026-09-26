@@ -2735,6 +2735,15 @@ fn pointer_to_array_of_function_pointers() {
 }
 
 #[test]
+fn generic_function_types() {
+    // C11 6.5.1.1p2, C99 6.7.5.3p15: a generic association of a function
+    // pointer type matches by the whole function type -- parameters,
+    // prototype and the pointed-to results -- and an array type never
+    // matches; `__builtin_types_compatible_p` compares the same way.
+    assert_eq!(run_fixture("generic_function_types.c"), 0);
+}
+
+#[test]
 fn indirect_call_prototypes() {
     // A call through a pointer converts or promotes its arguments by the
     // pointed-to type, however the callee is spelled.

@@ -6,12 +6,23 @@ use alloc::boxed::Box;
 
 use super::super::ast::{Expr, ExprId, UnOp};
 use super::super::ir::BinOp;
-use super::super::symbol::FnType;
-use super::super::token::Token;
+use super::super::symbol::{FnParams, FnType};
+use super::super::token::{Token, Ty};
 use super::Compiler;
 use super::types::{
-    format_fn_type, is_pointer_ty, is_struct_ty, pointee_ty, struct_id_of, struct_ptr_depth,
+    format_fn_type, is_pointer_ty, is_struct_ty, pointee_ty, strip_object_const, strip_unsigned,
+    struct_id_of, struct_ptr_depth,
 };
+
+/// True when the default argument promotions (C99 6.5.2.2p6) leave `ty`
+/// unchanged: integer types of rank below `int` promote to `int` and
+/// `float` promotes to `double`, so only those four scalars are altered.
+fn promotes_unchanged(ty: i64) -> bool {
+    let ty = strip_unsigned(ty);
+    ![Ty::Char, Ty::Short, Ty::Bool, Ty::Float]
+        .iter()
+        .any(|&t| ty == t as i64)
+}
 
 impl Compiler {
     /// The function type symbol `idx` names, or a function pointer
@@ -170,6 +181,57 @@ impl Compiler {
     pub(super) fn callee_fn(&self, callee: Option<ExprId>) -> Option<FnType> {
         let (f, d) = self.expr_fn(callee?)?;
         (d <= 1).then_some(f)
+    }
+
+    /// C99 6.7.5.3p15: two function types agree in their parameter
+    /// information and in the function types their results point to, at
+    /// equal depths. The return types themselves ride the tags the callers
+    /// compare; the calling convention is not compared.
+    pub(super) fn fn_types_compatible(&self, a: &FnType, b: &FnType) -> bool {
+        self.fn_params_compatible(&a.params, &b.params)
+            && match (&a.ret, &b.ret) {
+                (None, None) => true,
+                (Some((ra, da)), Some((rb, db))) => da == db && self.fn_types_compatible(ra, rb),
+                _ => false,
+            }
+    }
+
+    /// Two prototypes agree in arity, variadic-ness and the compatibility of
+    /// their parameters' unqualified types. A type without one agrees with
+    /// another without one, and with a non-variadic prototype whose
+    /// parameters the default argument promotions leave unchanged; an
+    /// old-style definition's parameter types take no part, as in gcc and
+    /// clang.
+    fn fn_params_compatible(&self, a: &FnParams, b: &FnParams) -> bool {
+        let unpromoted =
+            |p: &FnParams| !p.variadic && p.types.iter().all(|&t| promotes_unchanged(t));
+        match (a.prototyped, b.prototyped) {
+            (true, true) => {
+                a.variadic == b.variadic
+                    && a.types.len() == b.types.len()
+                    && a.types.iter().zip(&b.types).all(|(&x, &y)| {
+                        self.tags_compatible(strip_object_const(x), strip_object_const(y))
+                    })
+            }
+            (true, false) => unpromoted(a),
+            (false, true) => unpromoted(b),
+            (false, false) => true,
+        }
+    }
+
+    /// Whether two values, each with the function type it leads to at its
+    /// depth, agree in it: neither has one, or both do at equal depths and
+    /// the types agree.
+    pub(super) fn value_fn_types_compatible(
+        &self,
+        a: Option<(&FnType, i64)>,
+        b: Option<(&FnType, i64)>,
+    ) -> bool {
+        match (a, b) {
+            (None, None) => true,
+            (Some((fa, da)), Some((fb, db))) => da == db && self.fn_types_compatible(fa, fb),
+            _ => false,
+        }
     }
 
     /// The function type the base-type carriers describe, and its depth,

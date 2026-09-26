@@ -2913,12 +2913,7 @@ impl Compiler {
         let f = type_name.fn_ty.filter(|f| f.ptr_depth >= 1)?;
         let depth = f.ptr_depth as i64;
         let conv = core::mem::take(&mut self.pending.attr_call_conv);
-        let f = FnType {
-            params: f.params,
-            conv,
-            ret: f.ret,
-        };
-        Some((f, depth + dims))
+        Some((FnType { conv, ..f.f }, depth + dims))
     }
 
     fn parse_deref(&mut self) -> Result<(), C5Error> {
@@ -5322,6 +5317,11 @@ impl Compiler {
         let saved_vstack = self.ast_vstack.len();
         self.expr_or_void(Token::Assign as i64)?;
         let ctrl_ty = strip_object_const(self.ty);
+        // A function designator converts to a pointer to the function.
+        let ctrl_fn = self
+            .ast_acc
+            .and_then(|id| self.expr_fn(id))
+            .map(|(f, d)| (f, d.max(1)));
         self.next_ent_pc = saved_text_len;
         self.clear_recent_emits();
         self.code_reloc_sym_idx.truncate(saved_reloc);
@@ -5342,8 +5342,17 @@ impl Compiler {
                 }
                 self.consume(b':', "`:` expected after `default`")?;
             } else {
-                let assoc_ty = self.parse_type_name()?.ty;
-                let is_match = winner.is_none() && self.tags_compatible(ctrl_ty, assoc_ty);
+                // An array type never matches: the controlling expression's
+                // array decayed. A function type matches by C99 6.7.5.3p15.
+                let assoc = self.parse_type_name()?;
+                let ctrl = ctrl_fn.as_ref().map(|(f, d)| (f, *d));
+                let is_match = winner.is_none()
+                    && assoc.dims.is_empty()
+                    && self.tags_compatible(ctrl_ty, assoc.ty)
+                    && self.value_fn_types_compatible(
+                        ctrl,
+                        assoc.fn_ty.as_ref().map(|f| f.at_depth()),
+                    );
                 if is_match {
                     winner = Some(self.lex.snapshot());
                 }
@@ -5414,10 +5423,13 @@ impl Compiler {
         // dimensions carry the array-vs-pointer distinction a compile-time
         // element-count macro depends on. The flat tag likewise holds only
         // a function type's return type, so the signature settles the rest.
+        let (fa, fb) = (a.fn_ty.as_ref(), b.fn_ty.as_ref());
         Ok(
             (self.tags_compatible(strip_object_const(a.ty), strip_object_const(b.ty))
                 && array_dims_match(&a.dims, &b.dims)
-                && fn_type_match(&a.fn_ty, &b.fn_ty)) as i64,
+                && self
+                    .value_fn_types_compatible(fa.map(|f| f.at_depth()), fb.map(|f| f.at_depth())))
+                as i64,
         )
     }
 
@@ -5620,8 +5632,11 @@ impl Compiler {
             } else {
                 depth.max(0) as usize
             } + dims.len(),
-            params: base_params.unwrap_or_default(),
-            ret: base_ret,
+            f: FnType {
+                params: base_params.unwrap_or_default(),
+                ret: base_ret,
+                ..FnType::default()
+            },
         });
         let mut t = DerivedType {
             ty: base,
@@ -5763,21 +5778,16 @@ impl Compiler {
                 "function returning an array or a function",
             ));
         }
-        let conv = crate::c5::codegen::CallConv::Target;
-        let ret = t.fn_ty.take().map(|f| {
-            let depth = f.ptr_depth as i64;
-            let f = FnType {
-                params: f.params,
-                conv,
-                ret: f.ret,
-            };
-            (alloc::boxed::Box::new(f), depth)
-        });
-        t.fn_ty = Some(FnTypeName {
-            ptr_depth: 0,
+        let ret = t
+            .fn_ty
+            .take()
+            .map(|f| (alloc::boxed::Box::new(f.f), f.ptr_depth as i64));
+        let f = FnType {
             params: params.map(|p| p.fn_params()).unwrap_or_default(),
             ret,
-        });
+            ..FnType::default()
+        };
+        t.fn_ty = Some(FnTypeName { ptr_depth: 0, f });
         t.ty += Ty::Ptr as i64;
         t.is_function = true;
         t.fn_ptr_indirection = Some(1);
@@ -6180,52 +6190,14 @@ pub(super) struct FnTypeName {
     /// Pointer and array levels applied to the function type: 0 names a
     /// function type, 1 a pointer to function.
     ptr_depth: usize,
-    params: crate::c5::symbol::FnParams,
-    /// `FnType::ret` of the function type.
-    ret: Option<(alloc::boxed::Box<FnType>, i64)>,
+    f: FnType,
 }
 
-/// C99 6.7.5.3p15 function-type compatibility, given that the caller has
-/// already matched the return types through the flat tag. Two prototypes
-/// agree on arity, variadic-ness, and pairwise parameter types, each
-/// taken as its unqualified version. A
-/// declarator with no prototype agrees with a non-variadic prototype whose
-/// parameters are unchanged by the default argument promotions. A function
-/// type is never compatible with a non-function type, nor with a different
-/// depth of pointer to itself.
-fn fn_type_match(a: &Option<FnTypeName>, b: &Option<FnTypeName>) -> bool {
-    let (a, b) = match (a, b) {
-        (None, None) => return true,
-        (Some(a), Some(b)) => (a, b),
-        _ => return false,
-    };
-    if a.ptr_depth != b.ptr_depth {
-        return false;
+impl FnTypeName {
+    /// The function type and its depth, as an expression's is recorded.
+    pub(super) fn at_depth(&self) -> (&FnType, i64) {
+        (&self.f, self.ptr_depth as i64)
     }
-    let (pa, pb) = (&a.params, &b.params);
-    match (pa.prototyped, pb.prototyped) {
-        (true, true) => {
-            pa.variadic == pb.variadic
-                && pa.types.len() == pb.types.len()
-                && pa.types.iter().zip(&pb.types).all(|(x, y)| {
-                    generic_type_match(strip_object_const(*x), strip_object_const(*y))
-                })
-        }
-        (true, false) => !pa.variadic && pa.types.iter().copied().all(promotes_unchanged),
-        (false, true) => !pb.variadic && pb.types.iter().copied().all(promotes_unchanged),
-        (false, false) => true,
-    }
-}
-
-/// True when the default argument promotions (C99 6.5.2.2p6) leave `ty`
-/// unchanged: integer types of rank below `int` promote to `int` and
-/// `float` promotes to `double`, so only those four scalars are altered.
-/// A pointer to one of them sits at a different tag and is unaffected.
-fn promotes_unchanged(ty: i64) -> bool {
-    let ty = super::types::strip_unsigned(ty);
-    ![Ty::Char, Ty::Short, Ty::Bool, Ty::Float]
-        .iter()
-        .any(|&t| ty == t as i64)
 }
 
 /// C99 6.7.5.2p6 array compatibility: two array types are compatible when

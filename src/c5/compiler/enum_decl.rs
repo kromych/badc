@@ -244,10 +244,11 @@ impl Compiler {
         };
         Err(self.compile_err(
             Code::UNSUPPORTED,
-            format!(
+            alloc::format!(
                 "`{}` took the storage of `int` before `enum {}` was defined; \
                  a definition of another size is not supported",
-                s.name, self.symbols[tag as usize].name
+                s.name,
+                self.symbols[tag as usize].name
             ),
         ))
     }

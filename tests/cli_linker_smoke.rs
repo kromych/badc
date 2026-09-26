@@ -6511,6 +6511,93 @@ fn enum_bitfields_cross_the_windows_compiler_boundary() {
     drive_across_the_windows_compiler(&cc, "win-enum-interop", common, "layout, make_eb, read_eb");
 }
 
+// A variadic function returning an aggregate through the hidden result pointer
+// takes that pointer in the first integer register and its named and variadic
+// arguments in their own classes after it (System V AMD64 3.2.3 and 3.5.7), as
+// a fixed one does; AAPCS64 returns the aggregate through x8. Both ways across
+// the system compiler boundary.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn variadic_hidden_result_pointer_calls_cross_the_system_compiler_boundary() {
+    let Some(cc) = host_cc() else {
+        eprintln!(
+            "skipping variadic_hidden_result_pointer_calls_cross_the_system_compiler_boundary: \
+             no system C compiler"
+        );
+        return;
+    };
+    let common = "#include <stdarg.h>\n\
+        typedef long long ll;\n\
+        struct big { ll a, b, c; };\n\
+        struct pair { ll lo, hi; };\n\
+        struct dd { double x, y; };\n\
+        static struct big vb(struct pair p, double d, int n, ...)\n\
+        { va_list ap; va_start(ap, n); ll s = 0;\n\
+          for (int i = 0; i < n; i++) s = s * 10 + va_arg(ap, ll);\n\
+          struct dd q = va_arg(ap, struct dd); va_end(ap);\n\
+          struct big r = { p.lo * 100 + p.hi, (ll)(d * 10) + s, (ll)(q.x * 10 + q.y) };\n\
+          return r; }\n\
+        static struct big vbig(struct big g, int n, ...)\n\
+        { va_list ap; va_start(ap, n); struct big h = va_arg(ap, struct big); va_end(ap);\n\
+          struct big r = { g.a * 10 + h.a, g.b * 10 + h.b, g.c * 10 + h.c + n };\n\
+          return r; }\n\
+        struct fns { struct big (*vb)(struct pair, double, int, ...);\n\
+          struct big (*vbig)(struct big, int, ...); };\n\
+        static int drive(const struct fns *f, int base)\n\
+        { struct pair p = { 1, 2 }; struct dd q = { 3, 4 };\n\
+          struct big g = { 1, 2, 3 }, h = { 4, 5, 6 };\n\
+          struct big r = f->vb(p, 2.5, 2, 3LL, 4LL, q);\n\
+          if (r.a != 102 || r.b != 59 || r.c != 34) return base + 1;\n\
+          r = f->vbig(g, 7, h);\n\
+          if (r.a != 14 || r.b != 25 || r.c != 43) return base + 2;\n\
+          return 0; }\n";
+    drive_across_the_system_compiler(&cc, "va-hidden-ret-interop", common, "vb, vbig");
+}
+
+// The Microsoft x64 convention passes a variadic function returning an
+// aggregate through the hidden pointer that pointer in rcx and its named
+// arguments by their own rules after it, a 16-byte one by reference and an
+// 8-byte one as an integer. Both ways across the platform compiler boundary.
+#[cfg(windows)]
+#[test]
+fn variadic_hidden_result_pointer_calls_cross_the_windows_compiler_boundary() {
+    let Some(cc) = windows_cc() else {
+        eprintln!(
+            "skipping variadic_hidden_result_pointer_calls_cross_the_windows_compiler_boundary: \
+             no platform C compiler"
+        );
+        return;
+    };
+    let common = "#include <stdarg.h>\n\
+        typedef long long ll;\n\
+        struct big { ll a, b, c; };\n\
+        struct pair { ll lo, hi; };\n\
+        struct w8 { int x, y; };\n\
+        static struct big vpair(struct pair p, int n, ...)\n\
+        { va_list ap; va_start(ap, n); ll v = va_arg(ap, ll); va_end(ap);\n\
+          struct big r = { p.lo, p.hi, n + v }; return r; }\n\
+        static struct big vw8(struct w8 s, int n, ...)\n\
+        { va_list ap; va_start(ap, n); ll v = va_arg(ap, ll); va_end(ap);\n\
+          struct big r = { s.x, s.y, n + v }; return r; }\n\
+        static struct big vbig(struct big g, int n, ...)\n\
+        { va_list ap; va_start(ap, n); struct big h = va_arg(ap, struct big); va_end(ap);\n\
+          struct big r = { g.a * 10 + h.a, g.b * 10 + h.b, g.c * 10 + h.c + n };\n\
+          return r; }\n\
+        struct fns { struct big (*vpair)(struct pair, int, ...);\n\
+          struct big (*vw8)(struct w8, int, ...); struct big (*vbig)(struct big, int, ...); };\n\
+        static int drive(const struct fns *f, int base)\n\
+        { struct pair p = { 11, 22 }; struct w8 w = { -7, 9 };\n\
+          struct big g = { 1, 2, 3 }, h = { 4, 5, 6 };\n\
+          struct big r = f->vpair(p, 3, 40LL);\n\
+          if (r.a != 11 || r.b != 22 || r.c != 43) return base + 1;\n\
+          r = f->vw8(w, 6, 60LL);\n\
+          if (r.a != -7 || r.b != 9 || r.c != 66) return base + 2;\n\
+          r = f->vbig(g, 7, h);\n\
+          if (r.a != 14 || r.b != 25 || r.c != 43) return base + 3;\n\
+          return 0; }\n";
+    drive_across_the_windows_compiler(&cc, "win-va-hidden-ret-interop", common, "vpair, vw8, vbig");
+}
+
 // A function returning an aggregate through the hidden result pointer takes that
 // pointer in the first integer register and its other arguments in their own
 // classes (System V AMD64 3.2.3), across the system compiler boundary both ways.

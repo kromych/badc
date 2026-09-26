@@ -136,7 +136,8 @@ impl<'a> Walker<'a> {
         ty: i64,
     ) -> Result<ValueId, WalkError> {
         let (result_slot, out_arg) = self.out_ptr_arg(b, ty);
-        let hidden = !self.fun_is_variadic(sym) && self.hidden_result_ptr_is_host(conv);
+        let variadic = self.fun_is_variadic(sym);
+        let hidden = self.hidden_result_ptr_is_host(conv);
         let mut vals: alloc::vec::Vec<ValueId> = alloc::vec::Vec::with_capacity(exprs.len());
         let mut fp_mask = crate::c5::ir::FpMask::EMPTY;
         for (i, a) in exprs.iter().enumerate() {
@@ -162,7 +163,7 @@ impl<'a> Walker<'a> {
             vals.push(v);
         }
         let target_pc = self.live_fun_val(sym, val);
-        let named = if self.fun_is_variadic(sym) {
+        let named = if variadic {
             self.fun_fixed_args(sym).min(exprs.len())
         } else {
             exprs.len()
@@ -170,25 +171,22 @@ impl<'a> Walker<'a> {
         let mut args = CallArgs {
             exprs,
             vals,
-            fp_mask: fp_mask.clone(),
+            fp_mask,
             conv,
             ty,
         };
         let arg_aggs = self.call_arg_aggs(b, &mut args, named, Some(sym), hidden);
+        let call_fp_mask = if hidden {
+            self.hidden_ptr_fp_mask(b, &mut args, variadic, named)
+        } else {
+            crate::c5::ir::FpMask::EMPTY
+        };
         let mut all_args: alloc::vec::Vec<ValueId> =
             alloc::vec::Vec::with_capacity(exprs.len() + 1);
         all_args.push(out_arg);
         all_args.extend_from_slice(&args.vals);
         // Not FP-valued: the result is an address; the out-pointer is fixed argument 0.
-        let call = emit_direct_call(
-            b,
-            target_pc,
-            sym,
-            all_args,
-            1 + named,
-            false,
-            fp_mask.shifted(1),
-        );
+        let call = emit_direct_call(b, target_pc, sym, all_args, 1 + named, false, call_fp_mask);
         let params = Some(self.symbols[sym as usize].params.as_slice());
         self.set_arg_widths(b, call, params, named, exprs, 1);
         b.set_call_out_slot(call, result_slot);
@@ -466,6 +464,28 @@ impl<'a> Walker<'a> {
         call
     }
 
+    /// The FP mask of a call passing the hidden result pointer as argument
+    /// 0, once a variadic callee's protocol has rewritten the arguments from
+    /// `named` on: System V widens a floating-point one to `double` in the FP
+    /// bank (C99 6.5.2.2p6), and the Microsoft convention passes every
+    /// argument in the integer bank.
+    fn hidden_ptr_fp_mask(
+        &self,
+        b: &mut SsaBuilder,
+        args: &mut CallArgs<'_>,
+        variadic: bool,
+        named: usize,
+    ) -> crate::c5::ir::FpMask {
+        if variadic && self.target.abi_for(args.conv).variadic_int_only {
+            self.widen_fp_through_int(b, args, is_floating_scalar);
+            return crate::c5::ir::FpMask::EMPTY;
+        }
+        if variadic {
+            self.widen_variadic_fp(b, args, named);
+        }
+        args.fp_mask.shifted(1)
+    }
+
     /// C99 6.5.2.2p6: widen each variadic floating-point argument to
     /// `double`, kept FP-classed.
     fn widen_variadic_fp(&self, b: &mut SsaBuilder, args: &mut CallArgs<'_>, fixed: usize) {
@@ -618,13 +638,15 @@ impl<'a> Walker<'a> {
         };
         let fp_return = self.crosses_in_fp_reg(conv, ty);
         let out_ptr = self.returns_through_out_ptr(conv, ty);
-        let hidden = out_ptr && !callee_variadic && self.hidden_result_ptr_is_host(conv);
+        let hidden = out_ptr && self.hidden_result_ptr_is_host(conv);
         let arg_aggs = self.call_arg_aggs(b, &mut args, callee_fixed, None, !out_ptr || hidden);
-        // Every argument is fixed; the FP mask moves past a hidden pointer or stays empty.
+        // The FP mask moves past a hidden pointer; the all-integer cdecl
+        // passes every argument as fixed with an empty one.
         if out_ptr {
             let (result_slot, out_arg) = self.out_ptr_arg(b, ty);
+            let variadic = hidden && callee_variadic;
             let call_fp_mask = if hidden {
-                fp_mask.shifted(1)
+                self.hidden_ptr_fp_mask(b, &mut args, variadic, callee_fixed)
             } else {
                 self.widen_fp_through_int(b, &mut args, is_float_ty);
                 crate::c5::ir::FpMask::EMPTY
@@ -633,8 +655,13 @@ impl<'a> Walker<'a> {
                 alloc::vec::Vec::with_capacity(args.vals.len() + 1);
             all_args.push(out_arg);
             all_args.extend_from_slice(&args.vals);
-            let fixed = all_args.len();
-            let call = b.call_indirect(target, all_args, false, fixed, false, call_fp_mask, conv);
+            let fixed = if variadic {
+                1 + callee_fixed
+            } else {
+                all_args.len()
+            };
+            let call =
+                b.call_indirect(target, all_args, variadic, fixed, false, call_fp_mask, conv);
             self.set_arg_widths(b, call, params, callee_fixed, args.exprs, 1);
             b.set_call_out_slot(call, result_slot);
             if !arg_aggs.is_empty() {

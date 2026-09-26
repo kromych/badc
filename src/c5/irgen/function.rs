@@ -198,10 +198,9 @@ impl<'a> ParamEntry<'a> {
         // convention's.
         let abi_target = target.abi_row(fun.conv);
         let param_tys = &fun.param_tys[..];
-        // System V AMD64 3.2.3 and Win64 pass the result address as integer argument 0.
-        let hidden = ret_outptr
-            && !fun.is_variadic
-            && matches!(abi_target, Target::LinuxX64 | Target::WindowsX64);
+        // System V AMD64 3.2.3 and Win64 pass the result address as integer
+        // argument 0, to a variadic definition as well.
+        let hidden = ret_outptr && matches!(abi_target, Target::LinuxX64 | Target::WindowsX64);
         let shift = usize::from(hidden);
         b.set_n_params(shift + fun.n_params);
         let host_abi = !fun.is_variadic && (!ret_outptr || hidden);

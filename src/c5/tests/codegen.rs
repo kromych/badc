@@ -3707,6 +3707,75 @@ fn win64_small_fp_aggregates_pass_as_integers() {
     }
 }
 
+/// A variadic function returning an aggregate through the hidden pointer
+/// takes the pointer in the first integer register and its named arguments
+/// in their own classes after it (System V AMD64 3.2.3): `struct pair` in
+/// rsi:rdx, the double in xmm0 and n in ecx, on both sides of the call.
+#[test]
+fn a_variadic_hidden_pointer_callee_takes_named_arguments_by_class() {
+    use crate::Target;
+    use crate::c5::codegen::ssa::emit_common::param_placements_common;
+    use crate::c5::codegen::{ArgPlacement, ClassReg};
+    use crate::c5::ir::Inst;
+    let src = "#include <stdarg.h>\n\
+        struct big { long a, b, c; };\n\
+        struct pair { long lo, hi; };\n\
+        struct big vb(struct pair p, double d, int n, ...)\n\
+        { va_list ap; va_start(ap, n); long v = va_arg(ap, long); va_end(ap);\n\
+          struct big r = { p.lo, p.hi + (long)d, n + v }; return r; }\n\
+        long use(void) { struct pair p = { 1, 2 }; return vb(p, 2.5, 3, 4L).c; }\n";
+    let target = Target::LinuxX64;
+    let program = crate::Compiler::with_options(
+        src.into(),
+        target,
+        crate::CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .unwrap_or_else(|e| panic!("compile: {e}"));
+    let funcs = crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+        .expect("ssa");
+    let abi = target.abi();
+    let int = |reg| ClassReg { reg, is_fp: false };
+    let vb = funcs.iter().find(|f| f.name == "vb").expect("vb");
+    let plan = param_placements_common(vb, abi);
+    assert_eq!(
+        plan[0],
+        ArgPlacement::IntReg(abi.int_arg_regs[0]),
+        "result pointer"
+    );
+    assert!(
+        matches!(plan[1], ArgPlacement::StructRegs { regs, n: 2, .. }
+            if regs[..2] == [int(abi.int_arg_regs[1]), int(abi.int_arg_regs[2])]),
+        "pair: {:?}",
+        plan[1]
+    );
+    assert_eq!(plan[2], ArgPlacement::FpReg(0), "double");
+    assert_eq!(plan[3], ArgPlacement::IntReg(abi.int_arg_regs[3]), "n");
+    let caller = funcs.iter().find(|f| f.name == "use").expect("use");
+    let (fixed, aggs, mask) = caller
+        .insts
+        .iter()
+        .find_map(|i| match i {
+            Inst::Call {
+                fixed_args,
+                arg_aggs,
+                fp_arg_mask,
+                ..
+            } => Some((*fixed_args, arg_aggs.clone(), fp_arg_mask.clone())),
+            _ => None,
+        })
+        .expect("call");
+    assert_eq!(fixed, 4, "the result pointer and three named arguments");
+    assert!(
+        aggs.get(1).is_some_and(Option::is_some),
+        "the pair takes a layout"
+    );
+    assert!(
+        mask.has(2) && !mask.has(4),
+        "the double, not the long, is FP"
+    );
+}
+
 /// A call's aggregate result aligned above the 8-byte frame slot is a member
 /// of the over-aligned region, as a declared object of its type is, whether
 /// the callee stores it through the result pointer or it returns in
@@ -14339,8 +14408,8 @@ fn named_aggregate_of_a_variadic_callee_is_passed_by_value() {
     assert!(has(&function_bytes(&win, "call_w8"), &[0x48, 0x8b, 0x09]));
 }
 
-/// Through a pointer, a hidden-pointer callee takes a named aggregate in its class and a
-/// variadic out-pointer callee by address; a variadic tail takes its aggregates by value.
+/// Through a pointer, a hidden-pointer callee takes a named aggregate in its class, a
+/// variadic one as well, and a variadic tail takes its aggregates by value.
 #[test]
 fn out_pointer_callee_aggregates_follow_the_callee_convention() {
     use crate::Target;
@@ -14365,13 +14434,10 @@ fn out_pointer_callee_aggregates_follow_the_callee_convention() {
         has("call_ptr", &hi) && has("call_ptr", &lo),
         "call_ptr: the pair not in rdx:rcx"
     );
+    // mov rdx, [rsi + 8] and mov rsi, [rsi]: the pair's eightbytes after the pointer in rdi.
     assert!(
-        has("vcall_ptr", &[0x48, 0x89, 0xfe]),
-        "vcall_ptr: no address in rsi"
-    );
-    assert!(
-        !has("vcall_ptr", &[0x48, 0x8b, 0x56, 0x08]),
-        "vcall_ptr: the pair passed by value"
+        has("vcall_ptr", &[0x48, 0x8b, 0x56, 0x08]) && has("vcall_ptr", &[0x48, 0x8b, 0x36]),
+        "vcall_ptr: the pair not in rsi:rdx"
     );
     assert!(
         has("call_vtail", &hi) && has("call_vtail", &lo),

@@ -35,9 +35,9 @@ struct spwd *getspnam(char *name);
 // and scratch buffer, sets `*result` to it or NULL, returns 0 or errno.
 int getspnam_r(char *name, struct spwd *spbuf, char *buf, unsigned long buflen,
                struct spwd **result);
-struct spwd *getspent();
-void setspent();
-void endspent();
+struct spwd *getspent(void);
+void setspent(void);
+void endspent(void);
 // Advisory lock over the database, held between the two calls.
 int lckpwdf(void);
 int ulckpwdf(void);

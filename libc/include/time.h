@@ -219,7 +219,7 @@ typedef long clock_t;
 // before the subtraction. The time_t pointer parameters likewise carry a
 // 64-bit object, not an int.
 time_t time(time_t *out);
-clock_t clock();
+clock_t clock(void);
 int clock_gettime(int clk_id, struct timespec *ts);
 // Suspend until `request` (relative, or absolute under TIMER_ABSTIME);
 // `remain` receives the unslept interval on EINTR.

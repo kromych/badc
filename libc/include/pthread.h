@@ -249,7 +249,7 @@ int pthread_create(pthread_t *thread, char *attr, int *start, char *arg);
 int pthread_join(pthread_t thread, int **retval);
 void pthread_exit(void *retval);
 int pthread_detach(pthread_t thread);
-pthread_t pthread_self();
+pthread_t pthread_self(void);
 int pthread_equal(pthread_t t1, pthread_t t2);
 // Deliver a signal to a specific thread (POSIX).
 int pthread_kill(pthread_t thread, int sig);

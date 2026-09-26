@@ -5,9 +5,8 @@
 // natural register slot don't see truncation -- e.g.
 // `read(fd, buf, BIG)` was silently passing a 4-byte length
 // before #52 lifted these to `long`. Smaller scalar types
-// (uid_t, mode_t, ...) keep `int` since their on-disk shape is
-// 4 bytes everywhere and their c5-side stack slot is 8 bytes
-// either way.
+// (uid_t, mode_t, ...) are 4 bytes or narrower, as the platform's
+// are.
 //
 // On Windows we're LLP64, so `long` is 32 bits. The byte-count
 // and offset types have to switch to `long long` to keep the
@@ -41,8 +40,15 @@ typedef long off64_t;
 typedef long loff_t;
 #endif
 typedef int pid_t;
+// glibc and Darwin make the user and group ids unsigned; the Windows CRT
+// defines neither.
+#ifdef __BADC_WINDOWS__
 typedef int uid_t;
 typedef int gid_t;
+#else
+typedef unsigned int uid_t;
+typedef unsigned int gid_t;
+#endif
 // The UCRT spells `mode_t` as `_mode_t`, an `unsigned short`, and the
 // Windows `struct stat` carries `st_mode` at that width. Source that
 // declares its own `mode_t` on Windows -- as CPython's `_stat.c` does,

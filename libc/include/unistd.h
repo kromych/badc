@@ -411,12 +411,12 @@ char *getcwd(char *buf, size_t n);
 #endif
 int chdir(const char *path);
 int chroot(char *path);
-int getuid();
-int geteuid();
-int getgid();
-int getegid();
-int getppid();
-int getpid();
+uid_t getuid(void);
+uid_t geteuid(void);
+gid_t getgid(void);
+gid_t getegid(void);
+pid_t getppid(void);
+pid_t getpid(void);
 #ifdef __linux__
 // Linux thread id of the calling thread (glibc >= 2.30).
 pid_t gettid(void);
@@ -447,10 +447,10 @@ int dup2(int oldfd, int newfd);
 #ifdef __linux__
 int dup3(int oldfd, int newfd, int flags);
 int pipe2(int *pipefd, int flags);
-int setresuid(int ruid, int euid, int suid);
-int setresgid(int rgid, int egid, int sgid);
-int getresuid(int *ruid, int *euid, int *suid);
-int getresgid(int *rgid, int *egid, int *sgid);
+int setresuid(uid_t ruid, uid_t euid, uid_t suid);
+int setresgid(gid_t rgid, gid_t egid, gid_t sgid);
+int getresuid(uid_t *ruid, uid_t *euid, uid_t *suid);
+int getresgid(gid_t *rgid, gid_t *egid, gid_t *sgid);
 #endif
 // Linux system call; a null `off_in` / `off_out` copies from and to the
 // descriptors' own offsets and advances them, a non-null one names the
@@ -462,8 +462,8 @@ int getresgid(int *rgid, int *egid, int *sgid);
 long copy_file_range(int fd_in, long *off_in, int fd_out, long *off_out,
                      unsigned long len, unsigned int flags);
 int pipe(int *fds);
-int fork();
-int vfork();
+pid_t fork(void);
+pid_t vfork(void);
 int execvp(const char *file, char *const argv[]);
 int execve(const char *path, char *const argv[], char *const envp[]);
 // List-form exec (variadic argv terminated by a NULL char*; execle takes a
@@ -478,20 +478,20 @@ int execvpe(const char *file, char *const argv[], char *const envp[]);
 // Detach into the background (BSD/glibc); nochdir/noclose suppress the
 // chdir("/") and stdio redirection.
 int daemon(int nochdir, int noclose);
-int setgid(int gid);
-int setuid(int uid);
+int setgid(gid_t gid);
+int setuid(uid_t uid);
 // `_exit` skips the libc atexit / fflush chain. Programs use it
 // after a failed exec in the child branch of fork+exec to avoid
 // running the parent's exit handlers a second time.
 _Noreturn void _exit(int status);
 int fchmod(int fd, int mode);
-int fchown(int fd, int uid, int gid);
+int fchown(int fd, uid_t uid, gid_t gid);
 int utimes(char *path, char *times);
 int futimes(int fd, char *times);
 int lutimes(char *path, char *times);
 int umask(int mode);
 int chmod(char *path, int mode);
-int chown(char *path, int uid, int gid);
+int chown(const char *path, uid_t uid, gid_t gid);
 int truncate(char *path, int len);
 int link(const char *from, const char *to);
 int symlink(const char *from, const char *to);
@@ -503,7 +503,7 @@ int mkdirat(int dirfd, char *path, int mode);
 int mknodat(int dirfd, char *path, int mode, int dev);
 int mkfifoat(int dirfd, char *path, int mode);
 int fchmodat(int dirfd, char *path, int mode, int flag);
-int fchownat(int dirfd, char *path, int uid, int gid, int flag);
+int fchownat(int dirfd, const char *path, uid_t uid, gid_t gid, int flag);
 int unlinkat(int dirfd, char *path, int flag);
 int linkat(int olddirfd, char *oldpath, int newdirfd, char *newpath, int flag);
 int symlinkat(char *target, int newdirfd, char *linkpath);
@@ -519,17 +519,23 @@ char *ctermid(char *s);
 char *ctermid_r(char *s);
 char *getlogin(void);
 int getlogin_r(char *buf, unsigned long len);
-// Supplementary group lists (the gid lists are opaque to c5).
-int getgroups(int size, int *list);
-int setgroups(unsigned long size, int *list);
-int initgroups(char *user, int group);
-int getgrouplist(char *user, int group, int *groups, int *ngroups);
+// Supplementary group lists.
+int getgroups(int size, gid_t *list);
+int setgroups(unsigned long size, const gid_t *list);
+// Darwin takes the base group and returns the list as `int`, glibc as gid_t.
+#ifdef __APPLE__
+int initgroups(const char *user, int group);
+int getgrouplist(const char *user, int group, int *groups, int *ngroups);
+#else
+int initgroups(const char *user, gid_t group);
+int getgrouplist(const char *user, gid_t group, gid_t *groups, int *ngroups);
+#endif
 // Real/effective credential changes (POSIX).
-int seteuid(int uid);
-int setegid(int gid);
-int setreuid(int ruid, int euid);
-int setregid(int rgid, int egid);
-int lchown(char *path, int owner, int group);
+int seteuid(uid_t uid);
+int setegid(gid_t gid);
+int setreuid(uid_t ruid, uid_t euid);
+int setregid(gid_t rgid, gid_t egid);
+int lchown(const char *path, uid_t owner, gid_t group);
 int lchmod(char *path, int mode);
 #ifdef __APPLE__
 // BSD per-file flags (macOS).
@@ -589,7 +595,7 @@ extern char *optarg;
 extern int optind;
 extern int opterr;
 extern int optopt;
-void sync();
+void sync(void);
 int confstr(int name, char *buf, int len);
 
 #define LOCK_SH 1

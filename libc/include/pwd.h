@@ -25,8 +25,8 @@
 struct passwd {
     char *pw_name;     /* offset  0 */
     char *pw_passwd;   /* offset  8 */
-    int   pw_uid;      /* offset 16 */
-    int   pw_gid;      /* offset 20 */
+    uid_t pw_uid;      /* offset 16 */
+    gid_t pw_gid;      /* offset 20 */
     long  pw_change;   /* offset 24, time_t */
     char *pw_class;    /* offset 32 */
     char *pw_gecos;    /* offset 40 */
@@ -40,8 +40,8 @@ struct passwd {
 struct passwd {
     char *pw_name;     /* offset  0 */
     char *pw_passwd;   /* offset  8 */
-    int   pw_uid;      /* offset 16 */
-    int   pw_gid;      /* offset 20 */
+    uid_t pw_uid;      /* offset 16 */
+    gid_t pw_gid;      /* offset 20 */
     char *pw_gecos;    /* offset 24 */
     char *pw_dir;      /* offset 32 */
     char *pw_shell;    /* offset 40 */
@@ -71,15 +71,15 @@ struct passwd {
 #pragma binding(libc::endpwent, "endpwent")
 #endif
 
-struct passwd *getpwuid(int uid);
+struct passwd *getpwuid(uid_t uid);
 struct passwd *getpwnam(char *name);
 // POSIX reentrant lookups: fill the caller's `struct passwd` + scratch
 // buffer, set `*result` to it (or NULL when not found), and return 0 on
 // success or an errno on failure.
-int getpwuid_r(int uid, struct passwd *pwd, char *buf, unsigned long buflen,
+int getpwuid_r(uid_t uid, struct passwd *pwd, char *buf, unsigned long buflen,
                struct passwd **result);
 int getpwnam_r(char *name, struct passwd *pwd, char *buf, unsigned long buflen,
                struct passwd **result);
-struct passwd *getpwent();
-void setpwent();
-void endpwent();
+struct passwd *getpwent(void);
+void setpwent(void);
+void endpwent(void);

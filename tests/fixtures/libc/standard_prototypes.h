@@ -15,7 +15,11 @@
 #include <time.h>
 #include <wchar.h>
 #ifndef _WIN32
+#include <dlfcn.h>
 #include <fcntl.h>
+#include <grp.h>
+#include <pthread.h>
+#include <pwd.h>
 #include <strings.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -304,6 +308,18 @@ char *getcwd(char *buf, size_t size);
 pid_t getpid(void);
 pid_t getppid(void);
 uid_t getuid(void);
+uid_t geteuid(void);
+gid_t getgid(void);
+gid_t getegid(void);
+int setuid(uid_t uid);
+int setgid(gid_t gid);
+int seteuid(uid_t uid);
+int setegid(gid_t gid);
+int chown(const char *path, uid_t owner, gid_t group);
+int fchown(int fildes, uid_t owner, gid_t group);
+int lchown(const char *path, uid_t owner, gid_t group);
+int getgroups(int gidsetsize, gid_t grouplist[]);
+void sync(void);
 int isatty(int fildes);
 int link(const char *path1, const char *path2);
 off_t lseek(int fildes, off_t offset, int whence);
@@ -323,4 +339,13 @@ pid_t setsid(void);
 int getopt(int argc, char *const argv[], const char *optstring);
 extern char *optarg;
 extern int optind, opterr, optopt;
+
+/* POSIX <dlfcn.h>, <grp.h>, <pthread.h>, <pwd.h> */
+char *dlerror(void);
+struct group *getgrgid(gid_t gid);
+pthread_t pthread_self(void);
+struct passwd *getpwuid(uid_t uid);
+struct passwd *getpwent(void);
+void setpwent(void);
+void endpwent(void);
 #endif

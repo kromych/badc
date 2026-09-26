@@ -358,7 +358,7 @@ static inline lldiv_t lldiv(long long n, long long d) {
 // C99 7.20.4: abort / exit / _Exit do not return to the caller.
 // `_Noreturn` lets the reachability analysis treat a call as not
 // reaching its continuation.
-_Noreturn void abort();
+_Noreturn void abort(void);
 _Noreturn void exit(int status);
 int system(const char *cmd);
 char *getenv(const char *name);
@@ -392,7 +392,7 @@ size_t wcstombs(char *dest, const wchar_t *src, size_t n);
 void qsort(void *base, size_t n, size_t size, int (*cmp)(const void *, const void *));
 void *bsearch(const void *key, const void *base, size_t n, size_t size,
               int (*cmp)(const void *, const void *));
-int rand();
+int rand(void);
 void srand(unsigned int seed);
 #ifdef __linux__
 // See the binding-block comment above. `__cxa_atexit` takes a

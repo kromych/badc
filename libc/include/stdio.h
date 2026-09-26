@@ -517,7 +517,7 @@ int putc(int c, FILE *stream);
 // C99 7.19.7.11: push one byte back onto an input stream.
 int ungetc(int c, FILE *stream);
 int putchar(int c);
-int getchar();
+int getchar(void);
 // C99 7.19.4.3 / 7.19.4.4: temporary file streams.
 FILE *tmpfile(void);
 char *tmpnam(char *s);

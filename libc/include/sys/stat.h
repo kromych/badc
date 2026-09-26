@@ -73,8 +73,8 @@ struct stat {
     unsigned short  st_mode;           /* offset  4, 2 bytes */
     unsigned short  st_nlink;          /* offset  6, 2 bytes */
     long            st_ino;            /* offset  8, 8 bytes */
-    int             st_uid;            /* offset 16, 4 bytes */
-    int             st_gid;            /* offset 20, 4 bytes */
+    unsigned int    st_uid;            /* offset 16, 4 bytes, uid_t */
+    unsigned int    st_gid;            /* offset 20, 4 bytes, gid_t */
     int             st_rdev;           /* offset 24, 4 bytes */
     int             __pad28;           /* offset 28, 4 bytes */
     // The nanosecond timestamp fields, named both as a timespec
@@ -116,8 +116,8 @@ struct stat {
     long st_ino;             /* offset   8, 8 bytes */
     long st_nlink;           /* offset  16, 8 bytes */
     int  st_mode;            /* offset  24, 4 bytes */
-    int  st_uid;             /* offset  28, 4 bytes */
-    int  st_gid;             /* offset  32, 4 bytes */
+    unsigned int st_uid;     /* offset  28, 4 bytes, uid_t */
+    unsigned int st_gid;     /* offset  32, 4 bytes, gid_t */
     int  __pad0;             /* offset  36, 4 bytes */
     long st_rdev;            /* offset  40, 8 bytes */
     long st_size;            /* offset  48, 8 bytes */
@@ -148,8 +148,8 @@ struct stat {
     long st_ino;             /* offset   8, 8 bytes */
     int  st_mode;            /* offset  16, 4 bytes */
     int  st_nlink;           /* offset  20, 4 bytes */
-    int  st_uid;             /* offset  24, 4 bytes */
-    int  st_gid;             /* offset  28, 4 bytes */
+    unsigned int st_uid;     /* offset  24, 4 bytes, uid_t */
+    unsigned int st_gid;     /* offset  28, 4 bytes, gid_t */
     long st_rdev;            /* offset  32, 8 bytes */
     long __pad1;             /* offset  40, 8 bytes */
     long st_size;            /* offset  48, 8 bytes */

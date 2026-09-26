@@ -5776,6 +5776,73 @@ fn sysv_eightbyte_classes_place_the_following_argument() {
     }
 }
 
+/// System V AMD64 3.2.3: a packed aggregate with a member off its natural
+/// alignment is MEMORY class, on the stack ahead of the argument after it,
+/// which takes the first integer register; a bit-field is exempt, and so is
+/// a packed aggregate whose members all lie aligned.
+#[test]
+fn sysv_misaligned_members_send_the_aggregate_to_memory() {
+    use crate::Target;
+    use crate::c5::codegen::ArgPlacement;
+    use crate::c5::codegen::ssa::emit_common::param_placements_common;
+    const SHAPES: &[(&str, bool)] = &[
+        ("struct __attribute__((packed)) { char c; int x; }", true),
+        ("struct __attribute__((packed)) { char c; double d; }", true),
+        (
+            "struct { char c; struct __attribute__((packed)) { char a; int b; } s; }",
+            true,
+        ),
+        ("struct __attribute__((packed)) { int a; int b; }", false),
+        (
+            "struct __attribute__((packed)) { char c; char d[3]; }",
+            false,
+        ),
+        (
+            "struct __attribute__((packed)) { char c; int x : 16; }",
+            false,
+        ),
+    ];
+    let mut src = alloc::string::String::from(
+        "#pragma pack(push, 1)\nstruct p { short a; int b; };\n#pragma pack(pop)\n",
+    );
+    for (i, (ty, _)) in SHAPES.iter().enumerate() {
+        src += &alloc::format!(
+            "typedef {ty} T{i};\nlong take{i}(T{i} t, long x) {{ (void)t; return x; }}\n"
+        );
+    }
+    src += "long take_p(struct p t, long x) { (void)t; return x; }\n";
+    let target = Target::LinuxX64;
+    let abi = target.abi();
+    let program = crate::Compiler::with_options(
+        src,
+        target,
+        crate::CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .unwrap_or_else(|e| panic!("compile: {e}"));
+    let funcs = crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+        .expect("ssa");
+    let rows = SHAPES
+        .iter()
+        .enumerate()
+        .map(|(i, &(ty, memory))| (alloc::format!("take{i}"), ty, memory))
+        .chain(core::iter::once((
+            "take_p".into(),
+            "#pragma pack(1) struct",
+            true,
+        )));
+    for (name, ty, memory) in rows {
+        let f = funcs.iter().find(|f| f.name == name).expect("take");
+        let plan = param_placements_common(f, abi);
+        let next = abi.int_arg_regs[usize::from(!memory)];
+        assert_eq!(
+            (matches!(plan[0], ArgPlacement::StructStack { .. }), plan[1]),
+            (memory, ArgPlacement::IntReg(next)),
+            "`{ty}`"
+        );
+    }
+}
+
 /// System V AMD64 3.2.3: overlapping `long double` members merge to one
 /// X87 + X87UP pair, which returns in st(0); beside an integer member, or
 /// beside a `double`, the aggregate is MEMORY class and returns through the

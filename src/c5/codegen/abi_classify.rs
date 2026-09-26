@@ -51,6 +51,8 @@ pub(crate) struct FlatField {
     pub offset: u32,
     pub size: u32,
     pub kind: ScalarKind,
+    /// The bytes a bit-field's bits span, which no alignment binds.
+    pub bit_field: bool,
 }
 
 /// A homogeneous aggregate (AAPCS64 5.9.5): one to four elements of one
@@ -252,14 +254,14 @@ fn classify_win64(size: u32, is_return: bool) -> AggClass {
     }
 }
 
-/// System V AMD64 (3.2.3): aggregates larger than 16 bytes are MEMORY
-/// class. Otherwise each of the one or two eightbytes starts NO_CLASS and
+/// System V AMD64 (3.2.3): aggregates larger than 16 bytes, or with a field
+/// off its natural alignment (a bit-field excepted), are MEMORY class.
+/// Otherwise each of the one or two eightbytes starts NO_CLASS and
 /// merges the classes of the fields overlapping it, the high half of a
 /// 16-byte vector being SSEUP and of an x87 value X87UP. SSE followed by
 /// SSEUP is one vector register, X87 followed by X87UP the x87 register
 /// stack's top, which only a return value takes, and an eightbyte left
 /// NO_CLASS takes no register.
-/// TODO: an aggregate with a misaligned field is MEMORY class (rule 1).
 fn classify_sysv(size: u32, fields: &[FlatField], is_return: bool) -> AggClass {
     let memory = if is_return {
         AggClass::ReturnIndirect
@@ -269,7 +271,11 @@ fn classify_sysv(size: u32, fields: &[FlatField], is_return: bool) -> AggClass {
     if size == 0 {
         return AggClass::Regs(alloc::vec::Vec::new());
     }
-    if size > 16 {
+    if size > 16
+        || fields
+            .iter()
+            .any(|f| !f.bit_field && f.offset % f.size.clamp(1, 16) != 0)
+    {
         return memory;
     }
     let n = size.div_ceil(8) as usize; // 1 or 2 eightbytes
@@ -468,7 +474,12 @@ mod tests {
     use crate::c5::codegen::Target;
 
     fn ff(offset: u32, size: u32, kind: ScalarKind) -> FlatField {
-        FlatField { offset, size, kind }
+        FlatField {
+            offset,
+            size,
+            kind,
+            bit_field: false,
+        }
     }
 
     /// An aggregate of `size` bytes with `fields` that is no HFA.
@@ -605,6 +616,49 @@ mod tests {
                 .map(|p| (p.class, p.offset, p.fields.len()))
                 .collect::<alloc::vec::Vec<_>>(),
             [(RegClass::Sse, 8, 1)]
+        );
+    }
+
+    /// A field off its natural alignment makes the aggregate MEMORY class
+    /// both ways -- `int` at offset 1 of a packed struct -- unless it is a
+    /// bit-field, whose bytes no alignment binds; aligned fields in a packed
+    /// struct keep their classes.
+    #[test]
+    fn sysv_misaligned_field_is_memory_class() {
+        let packed = [ff(0, 1, ScalarKind::Int), ff(1, 4, ScalarKind::Int)];
+        assert_eq!(
+            classify_aggregate(&desc(5, &packed), sysv(), false),
+            AggClass::ByStack
+        );
+        assert_eq!(
+            classify_aggregate(&desc(5, &packed), sysv(), true),
+            AggClass::ReturnIndirect
+        );
+        let double = [ff(0, 1, ScalarKind::Int), ff(1, 8, ScalarKind::F64)];
+        assert_eq!(
+            classify_aggregate(&desc(9, &double), sysv(), false),
+            AggClass::ByStack
+        );
+        let bits = [
+            ff(0, 1, ScalarKind::Int),
+            FlatField {
+                bit_field: true,
+                ..ff(1, 2, ScalarKind::Int)
+            },
+        ];
+        assert_eq!(
+            classify_aggregate(&desc(3, &bits), sysv(), false),
+            AggClass::Regs(alloc::vec![RegClass::Integer])
+        );
+        let aligned = [ff(0, 4, ScalarKind::Int), ff(4, 4, ScalarKind::Int)];
+        assert_eq!(
+            classify_aggregate(&desc(8, &aligned), sysv(), false),
+            AggClass::Regs(alloc::vec![RegClass::Integer])
+        );
+        // AAPCS64 has no such rule.
+        assert_eq!(
+            classify_aggregate(&desc(5, &packed), aapcs(), false),
+            AggClass::Regs(alloc::vec![RegClass::Integer])
         );
     }
 

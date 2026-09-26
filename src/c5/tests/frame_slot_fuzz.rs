@@ -228,6 +228,7 @@ impl AggTy {
                 offset: l.offset,
                 size: l.sc.size(),
                 kind: l.sc.abi_kind(),
+                bit_field: false,
             })
             .collect()
     }

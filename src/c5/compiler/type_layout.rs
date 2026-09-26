@@ -897,6 +897,7 @@ pub(crate) fn flatten_struct_fields(
             offset: base_off,
             size: sd.size as u32,
             kind: ScalarKind::Vector,
+            bit_field: false,
         });
         return;
     }
@@ -929,6 +930,7 @@ pub(crate) fn flatten_struct_fields(
                     offset: off,
                     size: elem_size,
                     kind: scalar_kind(elem_ty, target),
+                    bit_field: f.bit_width > 0,
                 });
             }
         }
@@ -1056,6 +1058,7 @@ pub(crate) fn long_double_agg_desc(
             offset: 0,
             size: 16,
             kind,
+            bit_field: false,
         }],
         homogeneous: HomogeneousAggregate::new(kind, 16, 1),
     })

@@ -6250,9 +6250,10 @@ fn homogeneous_aggregates_cross_the_system_compiler_boundary() {
 
 // Aggregates whose eightbytes merge several fields or none cross the system
 // compiler boundary both ways. System V AMD64 3.2.3 gives an eightbyte no
-// field overlaps no register, and a union's 16-byte vector beside a double
-// or another vector one whole xmm register; each call checks the argument
-// after the aggregate as well.
+// field overlaps no register, a union's 16-byte vector beside a double or
+// another vector one whole xmm register, and a packed aggregate with a
+// misaligned member memory; each call checks the argument after the
+// aggregate as well.
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 #[test]
 fn eightbyte_classes_cross_the_system_compiler_boundary() {
@@ -6269,6 +6270,10 @@ fn eightbyte_classes_cross_the_system_compiler_boundary() {
         union a4 { struct __attribute__((aligned(16))) { double d; } s; double e; };\n\
         union a5 { v4f v; double d; };\n\
         union a6 { v4f v; v4f w; };\n\
+        struct __attribute__((packed)) a7 { char c; int x; };\n\
+        #pragma pack(push, 1)\n\
+        struct a8 { short a; int b; };\n\
+        #pragma pack(pop)\n\
         static long take_a1(struct a1 t, long n, double x)\n\
         { return (long)(t.d * 100) + n * 10 + (long)x; }\n\
         static long take_a2(struct a2 t, long n, double x) { return t.a * 100 + n * 10 + (long)x; }\n\
@@ -6280,6 +6285,10 @@ fn eightbyte_classes_cross_the_system_compiler_boundary() {
         { return (long)(t.v[0] * 1000 + t.v[3] * 100) + n * 10 + (long)x; }\n\
         static long take_a6(long n, union a6 t, double x)\n\
         { return (long)(t.w[1] * 1000 + t.v[2] * 100) + n * 10 + (long)x; }\n\
+        static long take_a7(struct a7 t, long n, double x) { return t.c * 100 + t.x * 10 + n + (long)x; }\n\
+        static long take_a8(long n, struct a8 t, double x) { return t.a * 100 + t.b * 10 + n + (long)x; }\n\
+        static struct a7 make_a7(char c, int x) { struct a7 r; r.c = c; r.x = x; return r; }\n\
+        static struct a8 make_a8(short a, int b) { struct a8 r; r.a = a; r.b = b; return r; }\n\
         static struct a1 make_a1(double v) { struct a1 r = { v }; return r; }\n\
         static struct a2 make_a2(int v) { struct a2 r = { v }; return r; }\n\
         static union a3 make_a3(double v) { union a3 r; r.d = v; return r; }\n\
@@ -6292,7 +6301,9 @@ fn eightbyte_classes_cross_the_system_compiler_boundary() {
           long (*take_a5)(union a5, long, double); long (*take_a6)(long, union a6, double);\n\
           struct a1 (*make_a1)(double); struct a2 (*make_a2)(int); union a3 (*make_a3)(double);\n\
           union a4 (*make_a4)(double); union a5 (*make_a5)(float, float);\n\
-          union a6 (*make_a6)(float, float); };\n\
+          union a6 (*make_a6)(float, float);\n\
+          long (*take_a7)(struct a7, long, double); long (*take_a8)(long, struct a8, double);\n\
+          struct a7 (*make_a7)(char, int); struct a8 (*make_a8)(short, int); };\n\
         static int drive(const struct fns *f, int base)\n\
         { struct a1 t1 = { 3 };\n\
           struct a2 t2 = { 3 };\n\
@@ -6312,13 +6323,22 @@ fn eightbyte_classes_cross_the_system_compiler_boundary() {
           if (t5.v[0] != 1.5f || t5.v[3] != 2.5f) return base + 11;\n\
           t6 = f->make_a6(1.5f, 2.5f);\n\
           if (t6.w[1] != 1.5f || t6.w[2] != 2.5f) return base + 12;\n\
+          struct a7 t7; struct a8 t8;\n\
+          t7.c = 3; t7.x = 4; t8.a = 3; t8.b = 4;\n\
+          if (f->take_a7(t7, 5, 6.5) != 351) return base + 13;\n\
+          if (f->take_a8(5, t8, 6.5) != 351) return base + 14;\n\
+          t7 = f->make_a7(7, 70000);\n\
+          if (t7.c != 7 || t7.x != 70000) return base + 15;\n\
+          t8 = f->make_a8(8, 80000);\n\
+          if (t8.a != 8 || t8.b != 80000) return base + 16;\n\
           return 0; }\n";
     drive_across_the_system_compiler(
         &cc,
         "eightbyte-interop",
         common,
         "take_a1, take_a2, take_a3, take_a4, take_a5, take_a6, \
-         make_a1, make_a2, make_a3, make_a4, make_a5, make_a6",
+         make_a1, make_a2, make_a3, make_a4, make_a5, make_a6, \
+         take_a7, take_a8, make_a7, make_a8",
     );
 }
 

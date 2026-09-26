@@ -319,12 +319,51 @@ impl<'a> Walker<'a> {
                 && self.struct_size(ty_tag) <= 8
                 && !self.agg_arg_is_simd_classed(args.conv, ty_tag)
             {
-                args.vals[i] = b.load(args.vals[i], LoadKind::I64);
+                let vol = is_volatile_ty(ty_tag) || self.expr_is_volatile(args.exprs[i]);
+                args.vals[i] = self.small_aggregate_bits(b, args.vals[i], ty_tag, vol);
                 continue;
             }
             self.record_arg_agg(b, &mut arg_aggs, args, i, ty_tag);
         }
         arg_aggs
+    }
+
+    /// The bytes of the aggregate of `ty`, at most eight, at `addr` as an
+    /// integer, the first byte least significant: accesses that stay inside
+    /// the object, each carrying the alignment its offset has.
+    fn small_aggregate_bits(
+        &self,
+        b: &mut SsaBuilder,
+        addr: ValueId,
+        ty: i64,
+        volatile: bool,
+    ) -> ValueId {
+        let size = self.struct_size(ty) as u32;
+        let align = self.struct_align(ty);
+        let mut bits: Option<ValueId> = None;
+        for (off, width) in crate::c5::codegen::access_pieces(0, size, align, false) {
+            let kind = match width {
+                8 => LoadKind::I64,
+                4 => LoadKind::U32,
+                2 => LoadKind::U16,
+                _ => LoadKind::U8,
+            };
+            let at = if off == 0 {
+                addr
+            } else {
+                b.binop_imm(BinOp::Add, addr, i64::from(off))
+            };
+            let bound = offset_align(align, i64::from(off));
+            let proven = if bound < width { bound as u8 } else { 0 };
+            let piece = b.load_at(at, kind, volatile, proven);
+            let piece = if off == 0 {
+                piece
+            } else {
+                b.binop_imm(BinOp::Shl, piece, i64::from(off * 8))
+            };
+            bits = Some(bits.map_or(piece, |acc| b.binop(BinOp::Or, acc, piece)));
+        }
+        bits.unwrap_or_else(|| b.imm(0))
     }
 
     /// Pass argument `i`, an aggregate of `ty` the call's convention passes

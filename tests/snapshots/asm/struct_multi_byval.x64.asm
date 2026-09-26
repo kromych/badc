@@ -127,9 +127,9 @@ Disassembly of section .text:
                	movq	0x10(%r10), %r11
                	movq	%r11, 0x20(%rsp)
                	movq	(%rdi), %rdi
-               	movq	0x8(%rdx), %rcx
+               	movl	0x8(%rdx), %ecx
                	movq	(%rdx), %rdx
-               	movq	(%r8), %r8
+               	movl	(%r8), %r8d
                	callq	<addr>
                	addq	$0x30, %rsp
                	leaq	<rip>, %rax

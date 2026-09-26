@@ -121,9 +121,9 @@ Disassembly of section .text:
                	str	x3, [sp]
                	str	x6, [sp, #0x8]
                	ldr	x0, [x0]
-               	ldr	x3, [x2, #0x8]
+               	ldr	w3, [x2, #0x8]
                	ldr	x2, [x2]
-               	ldr	x4, [x4]
+               	ldr	w4, [x4]
                	ldr	x6, [x5, #0x8]
                	ldr	x5, [x5]
                	bl	<addr>

@@ -127,7 +127,7 @@ Disassembly of section .text:
                	retq
                	leaq	-0x8(%rbp), %r9
                	movq	%r9, %r10
-               	movsd	(%r10), %xmm0
+               	movss	(%r10), %xmm0
                	callq	<addr>
                	cmpq	$0x3fc00000, %rax       # imm = 0x3FC00000
                	je	<addr>

@@ -583,7 +583,7 @@ impl SiteRegs {
     }
 }
 
-fn enc_load_unit(width: u32, rt: Reg, base: Reg, off: u32) -> u32 {
+pub(super) fn enc_load_unit(width: u32, rt: Reg, base: Reg, off: u32) -> u32 {
     let (ld, _) = int_unit_ops(width);
     enc_mem(ld, rt.0, base, ld.scaled(off))
 }

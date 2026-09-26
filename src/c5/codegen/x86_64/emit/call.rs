@@ -66,6 +66,16 @@ impl Marshal<'_> {
 
     /// Register slot classes of argument `i`, empty when it is not an
     /// aggregate passed in registers.
+    /// The bytes of argument `i`'s aggregate from `off` its eightbyte slot
+    /// carries: eight, or what the aggregate holds past `off` at its end.
+    fn part_width(&self, i: usize, off: i32) -> u32 {
+        let size = match self.aggs.get(i) {
+            Some(Some(a)) => a.size,
+            _ => 8,
+        };
+        size.saturating_sub(off as u32).clamp(1, 8)
+    }
+
     fn arg_classes(&self, i: usize) -> &[super::abi_classify::RegClass] {
         match self.aggs.get(i) {
             Some(Some(a)) => match &a.class {
@@ -208,6 +218,7 @@ impl Marshal<'_> {
                     Reg(cr.reg),
                     SCRATCH_R10,
                     off as i32,
+                    self.part_width(i, off as i32),
                     align,
                     self.abi.strict_align,
                     SCRATCH_R11,
@@ -303,6 +314,7 @@ impl Marshal<'_> {
                         Reg(cr.reg),
                         Reg(base),
                         off,
+                        self.part_width(i, off),
                         align,
                         strict,
                         SCRATCH_R10,
@@ -316,7 +328,7 @@ impl Marshal<'_> {
                         Reg(cr.reg),
                         Reg(base),
                         off,
-                        8,
+                        self.part_width(i, off),
                         align,
                         strict,
                         SCRATCH_R10,
@@ -327,17 +339,20 @@ impl Marshal<'_> {
                 .iter()
                 .find(|(cr, _)| !cr.is_fp && cr.reg == base)
                 .map_or(0, |&(_, off)| off);
+            let width = self.part_width(i, disp);
             // The base's own eightbyte overwrites the base, so a composed
             // one accumulates in scratch first.
-            if super::super::access_unit(disp as u32, 8, align, strict) == 8 {
-                emit_mov_r_mem(code, Reg(base), Reg(base), disp);
+            if width.is_power_of_two()
+                && super::super::access_unit(disp as u32, width, align, strict) == width
+            {
+                emit_load_unit(code, width, Reg(base), Reg(base), disp);
             } else {
                 emit_agg_load_int(
                     code,
                     SCRATCH_R10,
                     Reg(base),
                     disp,
-                    8,
+                    width,
                     align,
                     strict,
                     SCRATCH_R11,

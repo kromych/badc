@@ -3600,18 +3600,29 @@ pub(crate) fn access_unit(off: u32, width: u32, align: u32, strict_align: bool) 
 }
 
 /// Offset and width of each naturally aligned access a `width`-byte
-/// transfer at `off` decomposes into over storage of alignment
-/// `align`. Yields the single `(off, width)` access when no narrowing
-/// applies, so the unbounded lowering is unchanged. Pieces run from
-/// least to most significant byte; `width` must be a power of two.
+/// transfer at `off` decomposes into over storage of alignment `align`:
+/// the widest power of two the bytes left hold and, under `strict_align`,
+/// the alignment proven at its offset allows. A power-of-two transfer the
+/// address satisfies is the single `(off, width)` access, so the unbounded
+/// lowering is unchanged; any other width ends in narrower accesses rather
+/// than reading past its last byte. Pieces run from least to most
+/// significant byte.
 pub(crate) fn access_pieces(
     off: u32,
     width: u32,
     align: u32,
     strict_align: bool,
 ) -> impl Iterator<Item = (u32, u32)> + Clone {
-    let unit = access_unit(off, width, align, strict_align);
-    (0..width / unit).map(move |i| (off + i * unit, unit))
+    let end = off + width;
+    let mut at = off;
+    core::iter::from_fn(move || {
+        (at < end).then(|| {
+            let fits = 1u32 << (31 - (end - at).leading_zeros());
+            let w = access_chunk(offset_align(align, at as i64), strict_align, fits);
+            at += w;
+            (at - w, w)
+        })
+    })
 }
 
 /// Distinguishes "produce an executable" from "produce a
@@ -4471,6 +4482,14 @@ mod access_bound_tests {
         assert_eq!(offset_align(8, 0), 8);
         assert_eq!(offset_align(8, 12), 4);
         assert_eq!(offset_align(1, 8), 1);
+        // A width no power of two ends in narrower accesses.
+        let loose = |off, width| -> alloc::vec::Vec<(u32, u32)> {
+            access_pieces(off, width, 8, false).collect()
+        };
+        assert_eq!(loose(0, 3), alloc::vec![(0, 2), (2, 1)]);
+        assert_eq!(loose(8, 7), alloc::vec![(8, 4), (12, 2), (14, 1)]);
+        assert_eq!(pieces(0, 6, 2), alloc::vec![(0, 2), (2, 2), (4, 2)]);
+        assert_eq!(pieces(0, 6, 4), alloc::vec![(0, 4), (4, 2)]);
     }
 }
 

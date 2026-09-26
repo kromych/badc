@@ -741,7 +741,11 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x0, x29, #0xf8
-               	ldr	x0, [x0]
+               	ldrh	w16, [x0]
+               	ldrb	w17, [x0, #0x2]
+               	lsl	x17, x17, #16
+               	orr	x16, x16, x17
+               	mov	x0, x16
                	bl	<addr>
                	sturh	w0, [x29, #-0x20]
                	lsr	x1, x0, #16
@@ -923,7 +927,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x0, x29, #0xe0
-               	ldr	x0, [x0]
+               	ldrb	w0, [x0]
                	bl	<addr>
                	sturb	w0, [x29, #-0x20]
                	sub	x0, x29, #0x20
@@ -931,7 +935,7 @@ Disassembly of section .text:
                	ldrb	w16, [x0]
                	strb	w16, [x1]
                	sub	x0, x29, #0xd8
-               	ldr	x0, [x0]
+               	ldrh	w0, [x0]
                	bl	<addr>
                	sturh	w0, [x29, #-0x20]
                	sub	x0, x29, #0x20
@@ -939,7 +943,7 @@ Disassembly of section .text:
                	ldrh	w16, [x0]
                	strh	w16, [x1]
                	sub	x0, x29, #0xd0
-               	ldr	x0, [x0]
+               	ldr	w0, [x0]
                	bl	<addr>
                	stur	w0, [x29, #-0x20]
                	sub	x0, x29, #0x20

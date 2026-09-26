@@ -288,13 +288,13 @@ Disassembly of section .text:
                	movzbq	0x2(%rcx), %r10
                	movb	%r10b, 0x2(%rax)
                	leaq	-0x28(%rbp), %rdx
-               	leaq	<rip>, %rcx
-               	movq	(%rcx), %r10
+               	leaq	<rip>, %rax
+               	movq	(%rax), %r10
                	movq	%r10, (%rdx)
-               	movl	0x8(%rcx), %r10d
+               	movl	0x8(%rax), %r10d
                	movl	%r10d, 0x8(%rdx)
                	movl	$0x2, %edi
-               	movq	(%rax), %rsi
+               	movl	$0x30201, %esi          # imm = 0x30201
                	subq	$0x40, %rsp
                	movq	%r9, %r10
                	movq	(%r10), %r11
@@ -322,7 +322,7 @@ Disassembly of section .text:
                	movq	0x10(%r10), %r11
                	movq	%r11, 0x38(%rsp)
                	movq	%rsi, %r8
-               	movq	0x8(%rdx), %rcx
+               	movl	0x8(%rdx), %ecx
                	movq	(%rdx), %rdx
                	movb	$0x0, %al
                	callq	<addr>

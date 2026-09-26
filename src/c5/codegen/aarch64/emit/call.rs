@@ -1172,31 +1172,41 @@ impl CallArgs<'_> {
     /// accumulates in scratch first.
     fn load_struct_eightbytes(&self, code: &mut Vec<u8>) -> Emit {
         let strict = self.abi.strict_align;
-        for &placement in self.plan.placements.iter() {
+        for (i, &placement) in self.plan.placements.iter().enumerate() {
             match placement.register_part() {
                 super::ArgPlacement::StructRegs { regs, n, align } if !regs[0].is_fp => {
                     let base = regs[0].reg;
+                    // The eightbyte at `off`, or what of it the aggregate holds.
+                    let size = self
+                        .arg_aggs
+                        .get(i)
+                        .copied()
+                        .flatten()
+                        .map_or(8 * u32::from(n), |ai| self.agg_descs[ai as usize].size);
+                    let width = |off: u32| size.saturating_sub(off).clamp(1, 8);
                     for k in (1..n as usize).rev() {
+                        let off = (k as u32) * 8;
                         emit_agg_load_int(
                             code,
                             Reg(regs[k].reg),
                             Reg(base),
-                            (k as u32) * 8,
-                            8,
+                            off,
+                            width(off),
                             align,
                             strict,
                             self.scratch.primary,
                         );
                     }
-                    if super::super::access_unit(0, 8, align, strict) == 8 {
-                        emit(code, enc_ldr_imm(Reg(base), Reg(base), 0));
+                    let w = width(0);
+                    if w.is_power_of_two() && super::super::access_unit(0, w, align, strict) == w {
+                        emit(code, enc_load_unit(w, Reg(base), Reg(base), 0));
                     } else {
                         emit_agg_load_int(
                             code,
                             self.scratch.primary,
                             Reg(base),
                             0,
-                            8,
+                            width(0),
                             align,
                             strict,
                             self.scratch.secondary,

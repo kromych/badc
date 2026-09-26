@@ -1258,26 +1258,34 @@ pub(super) fn emit_agg_load_int(
     }
 }
 
-/// [`emit_agg_load_int`] into an SSE register: the eightbyte composes in
-/// `tmp` and moves across with `movq`; the second composition register is
-/// borrowed from the stack, nothing between the push and the pop
-/// addressing rsp. `base` and `tmp` are never `rax`.
+/// [`emit_agg_load_int`] into an SSE register: `width` 8 for a `double` or
+/// two `float`s, 4 for the lone `float` ending an aggregate. Below the
+/// natural access the value composes in `tmp` and moves across with
+/// `movq`; the second composition register is borrowed from the stack,
+/// nothing between the push and the pop addressing rsp. `base` and `tmp`
+/// are never `rax`.
+#[allow(clippy::too_many_arguments)]
 pub(super) fn emit_agg_load_sse(
     code: &mut Vec<u8>,
     dst: Reg,
     base: Reg,
     disp: i32,
+    width: u32,
     align: u32,
     strict_align: bool,
     tmp: Reg,
 ) {
-    if super::super::access_unit(disp.max(0) as u32, 8, align, strict_align) == 8 {
-        emit_movsd_xmm_mem(code, dst, base, disp);
+    if super::super::access_unit(disp.max(0) as u32, width, align, strict_align) == width {
+        if width == 4 {
+            super::encode::emit_movss_xmm_mem(code, dst, base, disp);
+        } else {
+            emit_movsd_xmm_mem(code, dst, base, disp);
+        }
         return;
     }
     debug_assert!(base.0 != Reg::RAX.0 && tmp.0 != Reg::RAX.0);
     emit_push_r(code, Reg::RAX);
-    emit_agg_load_int(code, tmp, base, disp, 8, align, strict_align, Reg::RAX);
+    emit_agg_load_int(code, tmp, base, disp, width, align, strict_align, Reg::RAX);
     super::encode::emit_movq_xmm_r(code, dst, tmp);
     emit_pop_r(code, Reg::RAX);
 }
@@ -1286,7 +1294,7 @@ pub(super) fn emit_agg_load_sse(
 /// disp]`. A `Vector` slot is the whole 128 bits the System V SSE +
 /// SSEUP pair occupies (psABI 3.2.3); `movups` carries no alignment
 /// requirement, so it needs no narrowing. Any other class is the low
-/// eightbyte.
+/// `width` bytes, the eightbyte or what of it the aggregate holds.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_agg_load_slot_sse(
     code: &mut Vec<u8>,
@@ -1294,6 +1302,7 @@ pub(super) fn emit_agg_load_slot_sse(
     dst: Reg,
     base: Reg,
     disp: i32,
+    width: u32,
     align: u32,
     strict_align: bool,
     tmp: Reg,
@@ -1302,7 +1311,7 @@ pub(super) fn emit_agg_load_slot_sse(
         super::encode::emit_movups_xmm_mem(code, dst, base, disp);
         return;
     }
-    emit_agg_load_sse(code, dst, base, disp, align, strict_align, tmp);
+    emit_agg_load_sse(code, dst, base, disp, width, align, strict_align, tmp);
 }
 
 /// The partner of [`emit_agg_load_slot_sse`]: store the slot back to

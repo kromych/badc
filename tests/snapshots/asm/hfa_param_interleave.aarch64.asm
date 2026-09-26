@@ -80,7 +80,7 @@ Disassembly of section .text:
                	ldr	s5, [x2, #0x4]
                	ldr	s6, [x3]
                	ldr	s7, [x3, #0x4]
-               	ldr	x0, [x0]
+               	ldr	w0, [x0]
                	bl	<addr>
                	add	sp, sp, #0x10
                	mov	x16, #0x425e0000        // =1113456640
@@ -105,7 +105,7 @@ Disassembly of section .text:
                	ldr	s5, [x7, #0x4]
                	ldr	s6, [x7]
                	ldr	s7, [x7, #0x4]
-               	ldr	x0, [x0]
+               	ldr	w0, [x0]
                	bl	<addr>
                	add	sp, sp, #0x10
                	mov	x16, #0x41240000        // =1092878336

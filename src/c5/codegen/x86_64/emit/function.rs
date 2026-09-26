@@ -1567,6 +1567,8 @@ fn emit_return(
         let mut int_i = 0usize;
         let mut sse_i = 0u8;
         for (class, off) in super::abi_classify::register_slots(&eb_classes) {
+            // The eightbyte, or what of it the object holds at its end.
+            let width = desc.size.saturating_sub(off).clamp(1, 8);
             let off = off as i32;
             if class == super::abi_classify::RegClass::X87 {
                 super::encode::emit_fld_m80(code, Reg::RCX, off);
@@ -1577,6 +1579,7 @@ fn emit_return(
                     Reg(Reg::XMM0.0 + sse_i),
                     Reg::RCX,
                     off,
+                    width,
                     desc.align,
                     abi.strict_align,
                     SCRATCH_R10,
@@ -1588,7 +1591,7 @@ fn emit_return(
                     int_ret[int_i],
                     Reg::RCX,
                     off,
-                    8,
+                    width,
                     desc.align,
                     abi.strict_align,
                     SCRATCH_R10,

@@ -270,13 +270,13 @@ Disassembly of section .text:
                	add	x0, x0, #0x7
                	cmp	x0, #0x9f
                	b.ne	<addr>
-               	sub	x3, x29, #0xb0
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrh	w16, [x0]
-               	strh	w16, [x3]
-               	ldrb	w16, [x0, #0x2]
-               	strb	w16, [x3, #0x2]
+               	sub	x0, x29, #0xb0
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	ldrh	w16, [x1]
+               	strh	w16, [x0]
+               	ldrb	w16, [x1, #0x2]
+               	strb	w16, [x0, #0x2]
                	sub	x2, x29, #0xa0
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
@@ -285,25 +285,26 @@ Disassembly of section .text:
                	ldr	w16, [x0, #0x8]
                	str	w16, [x2, #0x8]
                	mov	x0, #0x2                // =2
-               	ldr	x1, [x3]
+               	mov	x1, #0x201              // =513
+               	movk	x1, #0x3, lsl #16
                	sub	x4, x29, #0x30
-               	mov	x6, #0x1                // =1
-               	str	x6, [x4]
-               	mov	x7, #0x2                // =2
-               	str	x7, [x4, #0x8]
-               	mov	x8, #0x3                // =3
-               	str	x8, [x4, #0x10]
-               	ldr	x5, [x3]
+               	mov	x5, #0x1                // =1
+               	str	x5, [x4]
+               	mov	x6, #0x2                // =2
+               	str	x6, [x4, #0x8]
+               	mov	x7, #0x3                // =3
+               	str	x7, [x4, #0x10]
                	sub	x3, x29, #0x18
-               	str	x6, [x3]
-               	str	x7, [x3, #0x8]
-               	str	x8, [x3, #0x10]
+               	str	x5, [x3]
+               	str	x6, [x3, #0x8]
+               	str	x7, [x3, #0x10]
                	sub	sp, sp, #0x10
                	str	x3, [sp]
+               	mov	x5, x1
                	mov	x6, x2
-               	ldr	x3, [x2, #0x8]
+               	ldr	w3, [x2, #0x8]
                	ldr	x2, [x2]
-               	ldr	x7, [x6, #0x8]
+               	ldr	w7, [x6, #0x8]
                	ldr	x6, [x6]
                	bl	<addr>
                	add	sp, sp, #0x10

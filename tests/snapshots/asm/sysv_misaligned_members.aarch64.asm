@@ -92,7 +92,11 @@ Disassembly of section .text:
                	strb	w2, [x1]
                	stur	w0, [x1, #0x1]
                	mov	x0, #0x3                // =3
-               	ldr	x1, [x1]
+               	ldr	w16, [x1]
+               	ldrb	w17, [x1, #0x4]
+               	lsl	x17, x17, #32
+               	orr	x16, x16, x17
+               	mov	x1, x16
                	bl	<addr>
                	cmp	x0, #0xdd6
                	b.eq	<addr>
@@ -102,7 +106,11 @@ Disassembly of section .text:
                	ret
                	sub	x0, x29, #0x20
                	mov	x1, #0x3                // =3
-               	ldr	x0, [x0]
+               	ldr	w16, [x0]
+               	ldrh	w17, [x0, #0x4]
+               	lsl	x17, x17, #32
+               	orr	x16, x16, x17
+               	mov	x0, x16
                	bl	<addr>
                	cmp	x0, #0x82d
                	b.eq	<addr>
@@ -112,7 +120,11 @@ Disassembly of section .text:
                	ret
                	sub	x0, x29, #0x18
                	mov	x1, #0x3                // =3
-               	ldr	x0, [x0]
+               	ldr	w16, [x0]
+               	ldrh	w17, [x0, #0x4]
+               	lsl	x17, x17, #32
+               	orr	x16, x16, x17
+               	mov	x0, x16
                	bl	<addr>
                	cmp	x0, #0xfdf
                	b.eq	<addr>

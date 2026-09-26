@@ -3721,3 +3721,23 @@ fn typeof_carries_the_whole_type_of_its_operand() {
          }\n",
     );
 }
+
+/// C99 6.5.17p2: the comma operator's result is its right operand's value
+/// after lvalue conversion, an array operand decayed, in `sizeof` and in
+/// `typeof` alike; parentheses alone keep the array.
+#[test]
+fn a_comma_result_is_the_decayed_right_operand() {
+    compile_str(
+        "int arr[3];\n\
+         struct { int m[4]; } s;\n\
+         int main(void) {\n\
+             _Static_assert(sizeof((0, arr)) == sizeof(int *), \"sizeof\");\n\
+             _Static_assert(sizeof((0, s.m)) == sizeof(int *), \"member\");\n\
+             _Static_assert(sizeof(({ arr; })) == sizeof(int *), \"statement expression\");\n\
+             _Static_assert(__builtin_types_compatible_p(__typeof__((0, arr)), int *), \"paren\");\n\
+             _Static_assert(__builtin_types_compatible_p(__typeof__(0, arr), int *), \"operand\");\n\
+             _Static_assert(sizeof((arr)) == sizeof(arr), \"grouping\");\n\
+             return 0;\n\
+         }\n",
+    );
+}

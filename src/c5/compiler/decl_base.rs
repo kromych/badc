@@ -549,15 +549,7 @@ impl Compiler {
         // assignment operators are consumed.
         self.expr_or_void(Token::Assign as i64)?;
         if comma_operands {
-            while self.lex.tk == ',' {
-                self.next()?;
-                self.pending.last_array_decay_size = 0;
-                self.pending.last_array_decay_bytes = 0;
-                self.pending.last_array_decay_dims.clear();
-                self.pending.last_array_decay_vla = None;
-                self.pending.indirect_callee_ret_fn_ptr = 0;
-                self.expr_or_void(Token::Assign as i64)?;
-            }
+            self.parse_comma_operators()?;
         }
         // `&f` where `f` names a function: the operand is a pointer to
         // `f`'s function type. Route the same pending carriers the

@@ -293,26 +293,7 @@ impl Compiler {
 
     pub(super) fn parse_full_expr_or_void(&mut self) -> Result<(), C5Error> {
         self.expr_or_void(Token::Assign as i64)?;
-        while self.lex.tk == ',' {
-            self.next()?;
-            // C99 6.5.17: comma operator evaluates the lhs for
-            // side effects, discards the value, then evaluates
-            // the rhs. Build `Expr::Comma { lhs, rhs }` so the
-            // walker visits the lhs before producing the rhs's
-            // value as the chain's result.
-            let lhs_ast = self.ast_acc;
-            self.expr_or_void(Token::Assign as i64)?;
-            let rhs_ast = self.ast_acc;
-            if let (Some(lhs), Some(rhs)) = (lhs_ast, rhs_ast) {
-                let pos = self.ast_src_pos();
-                let ty = self.ty;
-                let id = self
-                    .ast
-                    .push_expr(super::super::ast::Expr::Comma { lhs, rhs, ty }, pos);
-                self.ast_acc = Some(id);
-            }
-        }
-        Ok(())
+        self.parse_comma_operators()
     }
 
     /// A controlling expression: scalar for `if` and the loops (C99 6.8.4.1p1,

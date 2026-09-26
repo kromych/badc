@@ -2788,6 +2788,13 @@ fn typeof_function_types() {
 }
 
 #[test]
+fn comma_operator_decay() {
+    // C99 6.5.17p2: an array right operand of the comma operator has
+    // decayed in the result, which `sizeof` and `typeof` see.
+    assert_eq!(run_fixture("comma_operator_decay.c"), 0);
+}
+
+#[test]
 fn indirect_call_prototypes() {
     // A call through a pointer converts or promotes its arguments by the
     // pointed-to type, however the callee is spelled.

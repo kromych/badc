@@ -1263,6 +1263,33 @@ impl Compiler {
     /// so `sizeof` / `typeof` of the result read the result type, not the
     /// operand's array shape (C99 6.3.2.1p3). Mirrors the cast and binary-
     /// operator sites.
+    /// C99 6.5.17: the comma operators continuing an operand parsed at
+    /// assignment precedence. Each left operand is evaluated for its side
+    /// effects; the result is the right operand's value, whose array type
+    /// has decayed (6.5.17p2), so no array shape outlives the operator.
+    pub(super) fn parse_comma_operators(&mut self) -> Result<(), C5Error> {
+        if self.lex.tk != ',' {
+            return Ok(());
+        }
+        while self.lex.tk == ',' {
+            let lhs_ast = self.ast_acc;
+            self.next()?;
+            self.drop_operand_array_decay();
+            self.pending.indirect_callee_ret_fn_ptr = 0;
+            self.expr_or_void(Token::Assign as i64)?;
+            if let (Some(lhs), Some(rhs)) = (lhs_ast, self.ast_acc) {
+                let pos = self.ast_src_pos();
+                let ty = self.ty;
+                let id = self
+                    .ast
+                    .push_expr(super::super::ast::Expr::Comma { lhs, rhs, ty }, pos);
+                self.ast_acc = Some(id);
+            }
+        }
+        self.drop_operand_array_decay();
+        Ok(())
+    }
+
     pub(super) fn drop_operand_array_decay(&mut self) {
         self.pending.last_array_decay_size = 0;
         self.pending.last_array_decay_bytes = 0;
@@ -2773,29 +2800,17 @@ impl Compiler {
         self.next()?;
         if self.lex.tk == '{' {
             self.parse_stmt_expr_body()?;
-            // The body's last expression is a value, not a designator.
+            // The body's last expression is a value, not a designator, and an
+            // array one has decayed.
             self.pending.object_ref = None;
+            self.drop_operand_array_decay();
         } else if self.lex_is_type_start() {
             self.parse_cast_or_compound_literal()?;
         } else {
             self.expr_or_void(Token::Assign as i64)?;
-            // C99 6.5.17: a comma chain, reached only in parentheses because
-            // `expr(Assign)` leaves `,` to its caller. `Expr::Comma` keeps the
-            // left operand's side effects for the walker.
-            while self.lex.tk == ',' {
-                let lhs_ast = self.ast_acc;
-                self.next()?;
-                self.expr_or_void(Token::Assign as i64)?;
-                let rhs_ast = self.ast_acc;
-                if let (Some(lhs), Some(rhs)) = (lhs_ast, rhs_ast) {
-                    let pos = self.ast_src_pos();
-                    let ty = self.ty;
-                    let id = self
-                        .ast
-                        .push_expr(super::super::ast::Expr::Comma { lhs, rhs, ty }, pos);
-                    self.ast_acc = Some(id);
-                }
-            }
+            // A comma chain is reached only in parentheses because
+            // `expr(Assign)` leaves `,` to its caller.
+            self.parse_comma_operators()?;
             if self.lex.tk == ')' {
                 self.next()?;
             } else {
@@ -4027,26 +4042,10 @@ impl Compiler {
         let mut then_ast = cond_ast;
         if !elvis {
             self.expr_or_void(Token::Assign as i64)?;
+            // C99 6.5.15: the middle operand is an expression, so a comma
+            // chain is legal there; `expr(Assign)` stops at `,`.
+            self.parse_comma_operators()?;
             then_ast = self.ast_acc;
-        }
-        // C99 6.5.15: the middle operand is an expression, so a comma chain
-        // is legal there; `expr(Assign)` stops at `,`.
-        while self.lex.tk == ',' {
-            self.next()?;
-            let lhs_ast = then_ast;
-            self.expr_or_void(Token::Assign as i64)?;
-            let rhs_ast = self.ast_acc;
-            if let (Some(lhs), Some(rhs)) = (lhs_ast, rhs_ast) {
-                let pos = self.ast_src_pos();
-                let ty = self.ty;
-                let id = self
-                    .ast
-                    .push_expr(super::super::ast::Expr::Comma { lhs, rhs, ty }, pos);
-                self.ast_acc = Some(id);
-                then_ast = Some(id);
-            } else {
-                then_ast = self.ast_acc;
-            }
         }
         let then_ty = self.ty;
         if self.lex.tk == ':' {

@@ -6833,6 +6833,68 @@ fn a_system_compiled_object_reads_library_data_directly() {
     assert_eq!(out.status.code(), Some(0), "the library's data read wrong");
 }
 
+// A data initializer holding a C library data object's address -- in
+// badc's own unit and in one the system compiler built -- holds the address
+// of the object the program reads, not of a call stub, at -O0 as at -O.
+#[cfg(target_os = "linux")]
+#[test]
+fn a_data_initializer_holds_a_library_objects_address() {
+    let dir = tempdir("data-init-copy");
+    let main = write_source(
+        &dir,
+        "main.c",
+        "#include <unistd.h>\n\
+         int *const optind_addr = &optind;\n\
+         int *optind_slot = &optind;\n\
+         extern int *const sys_optind_addr;\n\
+         int sys_check(void);\n\
+         int main(void) {\n\
+           if (optind_addr != &optind || *optind_addr != 1) return 1;\n\
+           if (optind_slot != &optind) return 2;\n\
+           return sys_check();\n\
+         }\n",
+    );
+    let sys = write_source(
+        &dir,
+        "sys.c",
+        "#include <unistd.h>\n\
+         int *const sys_optind_addr = &optind;\n\
+         int sys_check(void) { return sys_optind_addr == &optind && *sys_optind_addr == 1 ? 0 : 3; }\n",
+    );
+    let exe = dir.join("prog");
+    let obj = dir.join("sys.o");
+    let sys_obj = if let Some(cc) = host_cc() {
+        run(
+            Command::new(&cc)
+                .args(["-O2", "-c"])
+                .arg(&sys)
+                .arg("-o")
+                .arg(&obj),
+            "build the system-compiled object",
+        );
+        obj
+    } else {
+        sys
+    };
+    for opt in ["-O0", "-O"] {
+        run(
+            Command::new(badc())
+                .args(["-q", opt])
+                .arg(&main)
+                .arg(&sys_obj)
+                .arg("-o")
+                .arg(&exe),
+            "link",
+        );
+        let out = Command::new(&exe).output().expect("run");
+        assert_eq!(
+            out.status.code(),
+            Some(0),
+            "{opt}: a data slot missed the object"
+        );
+    }
+}
+
 // An object the system compiler built references its thread-locals by
 // local-exec relocations alone, with no note of badc's: a static, a global
 // a badc unit reads, and a zero-filled one past a shorter `.tdata` at its own

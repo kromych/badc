@@ -816,9 +816,11 @@ pub fn link_native_objects_with_shared_libs<'a>(
 /// Shared-library data objects an object reads directly: through a
 /// relocation that holds the object's address or reaches it PC-relative,
 /// not through a GOT entry. The object's code then addresses a copy in
-/// the image. badc's own objects reach such an object through the GOT
-/// and state so in their note, so their references ask for none. Names
-/// an object defines are not candidates.
+/// the image. badc's own code reaches such an object through the GOT
+/// and states so in its note, so its code references ask for none; a
+/// data initializer holding the object's address asks for one from
+/// any object, since a slot in data has no GOT to go through. Names an
+/// object defines are not candidates.
 pub fn copy_candidates(objs: &[NativeObject], shared_libs: &[SharedLibrary]) -> BTreeSet<String> {
     let direct = |machine: NativeMachine, rtype: u32| match machine {
         NativeMachine::X86_64 => {
@@ -851,15 +853,17 @@ pub fn copy_candidates(objs: &[NativeObject], shared_libs: &[SharedLibrary]) -> 
             obj.extern_data_names.iter().any(|n| n == name)
                 || obj.copy_relocs.iter().any(|(local, _)| local == name)
         };
-        for reloc in &obj.text_relocs {
+        let code = obj.text_relocs.iter().filter(|r| {
+            direct(obj.machine, r.rtype)
+                && obj.symbols.get(r.sym_idx).is_some_and(|s| !routed(&s.name))
+        });
+        for reloc in code.chain(&obj.data_relocs).chain(&obj.relro_relocs) {
             let Some(sym) = obj.symbols.get(reloc.sym_idx) else {
                 continue;
             };
             if sym.section != NativeSymSection::Undef
                 || sym.name.is_empty()
-                || !direct(obj.machine, reloc.rtype)
                 || defined.contains(sym.name.as_str())
-                || routed(&sym.name)
                 || !shared_libs
                     .iter()
                     .any(|l| l.data_exports.contains(&sym.name))
@@ -5743,5 +5747,69 @@ mod tests {
         let err = link_native_objects_with_shared_libs(&[reader(false)], false, &[lib(false)])
             .expect_err("no size, no copy");
         assert!(format!("{err}").contains("states no size"), "{err}");
+    }
+
+    /// A data slot holding a shared-library data object's address has
+    /// no GOT to go through, so it asks for a copy even from an object
+    /// whose note routes its code's references through the GOT, and the
+    /// slot takes the copy's address, not the import's call stub.
+    #[test]
+    fn a_data_initializer_naming_a_library_object_gets_a_copy() {
+        use crate::c5::object::elf_reloc_types::R_X86_64_64;
+        let lib = SharedLibrary {
+            soname: "libcnt.so".to_string(),
+            machine: NativeMachine::X86_64,
+            exports: ["counter".to_string()].into_iter().collect(),
+            data_exports: ["counter".to_string()].into_iter().collect(),
+            object_sizes: [("counter".to_string(), (4, 4))].into_iter().collect(),
+            export_symbols: Default::default(),
+            export_versions: Default::default(),
+            from_image: true,
+        };
+        let mut o = blank_object(NativeMachine::X86_64);
+        // `int *const counter_addr = &counter;`
+        o.relro = alloc::vec![0; 8];
+        o.relro_align = 8;
+        o.symbols = alloc::vec![
+            NativeSymbol {
+                name: String::new(),
+                section: NativeSymSection::Undef,
+                value: 0,
+                size: 0,
+                binding: 0,
+                kind: 0,
+                visibility: 0,
+            },
+            NativeSymbol {
+                name: "counter".to_string(),
+                section: NativeSymSection::Undef,
+                value: 0,
+                size: 0,
+                binding: 1,
+                kind: 0,
+                visibility: 0,
+            },
+        ];
+        o.relro_relocs = alloc::vec![NativeReloc {
+            offset: 0,
+            sym_idx: 1,
+            rtype: R_X86_64_64,
+            addend: 0,
+        }];
+        o.extern_data_names = alloc::vec!["counter".to_string()];
+        let merged = link_native_objects_with_shared_libs(&[o], false, &[lib]).expect("link");
+        let copy = merged.defined.get("counter").expect("the copy is defined");
+        assert_eq!(copy.section, NativeSymSection::Bss);
+        assert!(
+            merged.data_import_refs.is_empty(),
+            "no slot points at a stub"
+        );
+        assert!(
+            merged
+                .data_abs_relocs
+                .iter()
+                .any(|r| matches!(r.target, MergedTarget::Data(at) if at as u64 == merged.data.len() as u64 + copy.value)),
+            "the slot holds the copy's address"
+        );
     }
 }

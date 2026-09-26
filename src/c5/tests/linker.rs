@@ -4103,6 +4103,58 @@ fn thread_local_blocks_merge_on_their_alignment() {
     }
 }
 
+/// badc's own object states every local-exec site twice, as the
+/// relocation another linker applies and as the note fixup this one
+/// applies, so the link skips exactly the relocations a fixup covers:
+/// the x86_64 field, the aarch64 `add` pair.
+#[test]
+fn every_local_exec_relocation_of_a_badc_object_has_its_note_fixup() {
+    use crate::c5::compiler::CompileOptions;
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::object::elf_reloc_types::{aarch64_is_tls, x86_64_is_tls};
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    const UNIT: &str = "static _Thread_local int tl = 5;\n\
+         _Thread_local long long tg = 7;\n\
+         _Thread_local char tz[40];\n\
+         extern _Thread_local int te;\n\
+         int get(int a) { tl += a; tg += a; tz[39] += a; return tl + (int)tg + tz[39] + te; }\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let prog = Compiler::with_options(
+            UNIT.into(),
+            target,
+            CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let obj = parse_native_elf(&emit_native_with_options(&prog, target, opts).expect("emit"))
+            .expect("parse");
+        let aarch64 = target == Target::LinuxAarch64;
+        let sites: Vec<u64> = obj
+            .text_relocs
+            .iter()
+            .filter(|r| {
+                if aarch64 {
+                    aarch64_is_tls(r.rtype)
+                } else {
+                    x86_64_is_tls(r.rtype)
+                }
+            })
+            .map(|r| r.offset)
+            .collect();
+        let noted: Vec<u64> = obj
+            .elf_tpoff_fixups
+            .iter()
+            .flat_map(|&(off, _)| core::iter::once(off).chain(aarch64.then_some(off + 4)))
+            .collect();
+        assert_eq!(sites.len(), if aarch64 { 8 } else { 4 }, "{target:?}");
+        assert_eq!(sites, noted, "{target:?}: each site and its fixup");
+    }
+}
+
 #[test]
 fn macho_tlv_descriptors_round_trip_through_et_rel() {
     // A macOS `_Thread_local` access lowers to a TLV-descriptor call

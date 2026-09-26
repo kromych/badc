@@ -6639,6 +6639,120 @@ fn hidden_result_pointer_calls_cross_the_system_compiler_boundary() {
     drive_across_the_system_compiler(&cc, "hidden-ptr-interop", common, "mix, floats, spill");
 }
 
+// Thread-local storage on both sides of the system compiler boundary: the
+// module's (dynamic, reached through the loader) and the badc host's
+// (static, at the offset the image states), each in the calling thread and
+// from its initializers in a new one, and never the same object.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn thread_locals_cross_the_system_compiler_boundary() {
+    let Some(cc) = host_cc() else {
+        eprintln!(
+            "skipping thread_locals_cross_the_system_compiler_boundary: no system C compiler"
+        );
+        return;
+    };
+    let common = "#include <pthread.h>\n\
+        struct fns { int (*bump)(int); long long (*peek)(void); int *(*where)(void); };\n\
+        static _Thread_local int counter = 5;\n\
+        static _Thread_local long long wide = 3;\n\
+        static _Thread_local char tail[40];\n\
+        static int bump(int by) { counter += by; wide += by; tail[39] += (char)by; return counter; }\n\
+        static long long peek(void) { return wide * 1000 + tail[39]; }\n\
+        static int *where(void) { return &counter; }\n\
+        static void *fresh(void *arg)\n\
+        { const struct fns *f = arg;\n\
+          return (void *)(long)(f->peek() == 3000 && f->bump(1) == 6 && f->peek() == 4001); }\n\
+        static int drive(const struct fns *f, int base)\n\
+        { if (f->bump(0) != 5) return base + 1;\n\
+          if (f->bump(2) != 7 || f->peek() != 5002) return base + 2;\n\
+          pthread_t t; void *ok = 0;\n\
+          if (pthread_create(&t, 0, fresh, (void *)f) || pthread_join(t, &ok) || !ok) return base + 3;\n\
+          if (f->bump(0) != 7) return base + 4;\n\
+          if (f->where() == &counter) return base + 5;\n\
+          return 0; }\n";
+    drive_across_the_system_compiler(&cc, "tls-interop", common, "bump, peek, where");
+}
+
+// An object the system compiler built references its thread-locals by
+// local-exec relocations alone, with no note of badc's: a static, a global
+// a badc unit reads, and a zero-filled one past a shorter `.tdata` at its own
+// alignment. Each resolves in the calling thread and from the initializers
+// in a new one, in a position-independent image and a placed one.
+#[cfg(target_os = "linux")]
+#[test]
+fn a_system_compiled_object_reaches_its_thread_locals() {
+    let Some(cc) = host_cc() else {
+        eprintln!(
+            "skipping a_system_compiled_object_reaches_its_thread_locals: no system C compiler"
+        );
+        return;
+    };
+    let dir = tempdir("sys-tls");
+    let lib = write_source(
+        &dir,
+        "lib.c",
+        "#include <stdint.h>\n\
+         static _Thread_local int tl = 5;\n\
+         _Thread_local long long shared_tl = 40;\n\
+         static _Thread_local struct { char c; long long v; } __attribute__((aligned(32))) wide;\n\
+         int lib_bump(int a) { tl += a; wide.v += a; return tl; }\n\
+         int lib_check(void) { return ((uintptr_t)&wide & 31) != 0; }\n",
+    );
+    let main = write_source(
+        &dir,
+        "main.c",
+        "#include <pthread.h>\n\
+         extern _Thread_local long long shared_tl;\n\
+         int lib_bump(int a);\n\
+         int lib_check(void);\n\
+         static _Thread_local int mine = 100;\n\
+         static void *worker(void *arg) {\n\
+           (void)arg;\n\
+           return (void *)(long)(lib_bump(1) == 6 && shared_tl == 40 && mine == 100 && !lib_check());\n\
+         }\n\
+         int main(int argc, char **argv) {\n\
+           (void)argv;\n\
+           if (lib_bump(argc) != 6) return 1;\n\
+           shared_tl += 2;\n\
+           mine += 1;\n\
+           pthread_t t;\n\
+           void *ok = 0;\n\
+           if (pthread_create(&t, 0, worker, 0) || pthread_join(t, &ok) || !ok) return 2;\n\
+           if (shared_tl != 42 || mine != 101 || lib_check()) return 3;\n\
+           return 0;\n\
+         }\n",
+    );
+    let obj = dir.join("lib.o");
+    run(
+        Command::new(&cc)
+            .args(["-O2", "-c"])
+            .arg(&lib)
+            .arg("-o")
+            .arg(&obj),
+        "build the system-compiled object",
+    );
+    for flags in [&["-O"][..], &["-O", "-no-pie"][..]] {
+        let exe = dir.join("prog");
+        run(
+            Command::new(badc())
+                .arg("-q")
+                .args(flags)
+                .arg(&main)
+                .arg(&obj)
+                .arg("-o")
+                .arg(&exe),
+            "link",
+        );
+        let out = Command::new(&exe).output().expect("run");
+        assert_eq!(
+            out.status.code(),
+            Some(0),
+            "{flags:?}: a thread-local reached the wrong storage"
+        );
+    }
+}
+
 // A `long double` crosses the system compiler boundary both ways as the
 // platform passes it. System V AMD64 3.2.3 gives it and an aggregate of one,
 // or of overlapping ones, the X87 + X87UP classes, in memory as an argument,

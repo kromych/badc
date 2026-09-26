@@ -1461,11 +1461,14 @@ fn concat_families(
                 ),
             ));
         }
-        let base = tls_data.len() as u64;
-        tls_bases.push((sh_i, base));
+        let base = tls_data
+            .len()
+            .next_multiple_of(sh.sh_addralign.max(1) as usize);
+        tls_data.resize(base, 0);
+        tls_bases.push((sh_i, base as u64));
         tls_data.extend_from_slice(section_slice(bytes, sh)?);
     }
-    let mut tls_bss_size: usize = 0;
+    let mut tls_end = tls_data.len();
     for &sh_i in &roles.tbss {
         let sh = &shdrs[sh_i];
         if sh.sh_type != SHT_NOBITS {
@@ -1475,9 +1478,11 @@ fn concat_families(
                 &format!("tbss-family section at index {sh_i} is not SHT_NOBITS",),
             ));
         }
-        tls_bases.push((sh_i, (tls_data.len() + tls_bss_size) as u64));
-        tls_bss_size += sh.sh_size as usize;
+        let base = tls_end.next_multiple_of(sh.sh_addralign.max(1) as usize);
+        tls_bases.push((sh_i, base as u64));
+        tls_end = base + sh.sh_size as usize;
     }
+    let tls_bss_size = tls_end - tls_data.len();
     Ok(FamilyBlobs {
         text: (text_bytes, text_align, text_base_per_shndx),
         rodata,
@@ -3067,11 +3072,12 @@ mod tests {
     /// variables into `.tdata` and zero-init ones into `.tbss`,
     /// with STT_TLS symbols pointing at those sections. The
     /// parser concatenates `.tdata*` bytes into `tls_data`,
-    /// sums `.tbss*` sizes into `tls_bss_size`, and surfaces
-    /// symbols as `Tls` with the value rebased by the section's
-    /// base in the merged TLS image (`.tdata` first, `.tbss`
-    /// past it), and carries the widest section alignment out as
-    /// the unit's TLS alignment.
+    /// counts the `.tbss*` extent past them into `tls_bss_size`,
+    /// and surfaces symbols as `Tls` with the value rebased by the
+    /// section's base in the unit's TLS block (`.tdata` first,
+    /// `.tbss` past it), each section at its own alignment, and
+    /// carries the widest section alignment out as the unit's TLS
+    /// alignment.
     #[test]
     fn tdata_and_tbss_sections_surface_as_tls() {
         let mut strtab: Vec<u8> = vec![0];
@@ -3097,14 +3103,14 @@ mod tests {
         let bytes = build_test_elf(EM_X86_64, &plans);
         let obj = parse_native_elf(&bytes).expect("parse TLS fixture");
         assert_eq!(obj.tls_data.len(), 4);
-        assert_eq!(obj.tls_bss_size, 8);
+        assert_eq!(obj.tls_bss_size, 12 + 8, "padding to 16, then .tbss");
         assert_eq!(obj.tls_align, 16, "widest TLS sh_addralign is carried out");
         assert!(matches!(obj.symbols[1].section, NativeSymSection::Tls));
         assert_eq!(obj.symbols[1].value, 0, ".tdata symbol lands at TLS start");
         assert!(matches!(obj.symbols[2].section, NativeSymSection::Tls));
         assert_eq!(
-            obj.symbols[2].value, 4,
-            ".tbss symbol lands past the .tdata extent"
+            obj.symbols[2].value, 16,
+            ".tbss symbol lands past the .tdata extent at the section's alignment"
         );
     }
 

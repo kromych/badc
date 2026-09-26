@@ -31,6 +31,7 @@ pub(crate) const R_X86_64_8: u32 = 14;
 pub(crate) const R_X86_64_PC16: u32 = 13;
 pub(crate) const R_X86_64_PC8: u32 = 15;
 pub(crate) const R_X86_64_DTPOFF64: u32 = 17;
+pub(crate) const R_X86_64_TPOFF64: u32 = 18;
 pub(crate) const R_X86_64_TPOFF32: u32 = 23;
 pub(crate) const R_X86_64_PC64: u32 = 24;
 /// `GOT + A - P` against `_GLOBAL_OFFSET_TABLE_`: the GOT base computed
@@ -87,7 +88,13 @@ pub(crate) const R_AARCH64_LDST64_ABS_LO12_NC: u32 = 286;
 pub(crate) const R_AARCH64_LDST128_ABS_LO12_NC: u32 = 299;
 pub(crate) const R_AARCH64_ADR_GOT_PAGE: u32 = 311;
 pub(crate) const R_AARCH64_LD64_GOT_LO12_NC: u32 = 312;
+pub(crate) const R_AARCH64_TLSLE_MOVW_TPREL_G2: u32 = 544;
+pub(crate) const R_AARCH64_TLSLE_MOVW_TPREL_G1: u32 = 545;
+pub(crate) const R_AARCH64_TLSLE_MOVW_TPREL_G1_NC: u32 = 546;
+pub(crate) const R_AARCH64_TLSLE_MOVW_TPREL_G0: u32 = 547;
+pub(crate) const R_AARCH64_TLSLE_MOVW_TPREL_G0_NC: u32 = 548;
 pub(crate) const R_AARCH64_TLSLE_ADD_TPREL_HI12: u32 = 549;
+pub(crate) const R_AARCH64_TLSLE_ADD_TPREL_LO12: u32 = 550;
 pub(crate) const R_AARCH64_TLSLE_ADD_TPREL_LO12_NC: u32 = 551;
 pub(crate) const R_AARCH64_COPY: u32 = 1024;
 pub(crate) const R_AARCH64_GLOB_DAT: u32 = 1025;
@@ -146,6 +153,65 @@ pub(crate) fn aarch64_movw_field(rtype: u32) -> Option<(u8, bool, Option<u32>)> 
         R_AARCH64_MOVW_SABS_G2 => Some((2, true, Some(group(2) + 1))),
         _ => None,
     }
+}
+
+/// Whether an x86_64 relocation type is a thread-local one: psABI types
+/// 16-23 and the TLS descriptor types 34-36.
+pub(crate) fn x86_64_is_tls(rtype: u32) -> bool {
+    matches!(rtype, 16..=23 | 34..=36)
+}
+
+/// Whether an aarch64 relocation type is a thread-local one: AAELF64's
+/// static types 512-573 and dynamic types 1028-1031.
+pub(crate) fn aarch64_is_tls(rtype: u32) -> bool {
+    matches!(rtype, 512..=573 | 1028..=1031)
+}
+
+/// Byte width and overflow rule of the field an x86_64 local-exec
+/// relocation writes the offset from the thread pointer into.
+pub(crate) fn x86_64_tpoff_field(rtype: u32) -> Option<(u32, AbsCheck)> {
+    match rtype {
+        R_X86_64_TPOFF32 => Some((4, AbsCheck::Signed)),
+        R_X86_64_TPOFF64 => Some((8, AbsCheck::None)),
+        _ => None,
+    }
+}
+
+/// The field an aarch64 local-exec relocation writes the offset from
+/// the thread pointer into, per AAELF64.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum TprelField {
+    /// An `add` immediate: bits `[23:12]` of the offset when `hi`, else
+    /// bits `[11:0]`; `check` requires the offset below 2^24 or 2^12.
+    Add { hi: bool, check: bool },
+    /// A MOVW group, as [`aarch64_movw_field`] describes one.
+    Movw(u8, bool, Option<u32>),
+}
+
+/// [`TprelField`] of an aarch64 local-exec relocation type. The checked
+/// MOVW groups admit the signed range `-2^(16*(n+1)) <= X < 2^(16*(n+1))`.
+pub(crate) fn aarch64_tprel_field(rtype: u32) -> Option<TprelField> {
+    let signed = |n: u8| TprelField::Movw(n, true, Some(16 * (n as u32 + 1) + 1));
+    Some(match rtype {
+        R_AARCH64_TLSLE_ADD_TPREL_HI12 => TprelField::Add {
+            hi: true,
+            check: true,
+        },
+        R_AARCH64_TLSLE_ADD_TPREL_LO12 => TprelField::Add {
+            hi: false,
+            check: true,
+        },
+        R_AARCH64_TLSLE_ADD_TPREL_LO12_NC => TprelField::Add {
+            hi: false,
+            check: false,
+        },
+        R_AARCH64_TLSLE_MOVW_TPREL_G2 => signed(2),
+        R_AARCH64_TLSLE_MOVW_TPREL_G1 => signed(1),
+        R_AARCH64_TLSLE_MOVW_TPREL_G0 => signed(0),
+        R_AARCH64_TLSLE_MOVW_TPREL_G1_NC => TprelField::Movw(1, false, None),
+        R_AARCH64_TLSLE_MOVW_TPREL_G0_NC => TprelField::Movw(0, false, None),
+        _ => return None,
+    })
 }
 
 /// Overflow rule an absolute relocation's field is checked under.

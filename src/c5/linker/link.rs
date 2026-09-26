@@ -43,10 +43,10 @@ use crate::c5::object::elf_reloc_types::{
     R_AARCH64_ABS32, R_AARCH64_ABS64, R_AARCH64_ADD_ABS_LO12_NC, R_AARCH64_ADR_GOT_PAGE,
     R_AARCH64_ADR_PREL_LO21, R_AARCH64_ADR_PREL_PG_HI21, R_AARCH64_CALL26, R_AARCH64_JUMP26,
     R_AARCH64_LD64_GOT_LO12_NC, R_AARCH64_PREL32, R_AARCH64_PREL64, R_AARCH64_TLS_DTPREL64,
-    R_AARCH64_TLSLE_ADD_TPREL_HI12, R_AARCH64_TLSLE_ADD_TPREL_LO12_NC, R_X86_64_32, R_X86_64_64,
-    R_X86_64_DTPOFF64, R_X86_64_GOTPCREL, R_X86_64_PC32, R_X86_64_PC64, R_X86_64_PLT32,
-    R_X86_64_REX_GOTPCRELX, R_X86_64_TPOFF32, aarch64_ldst_lo12_scale, aarch64_movw_field,
-    aarch64_pcrel_data_field, aarch64_pcrel_imm_field, x86_64_abs_field, x86_64_pcrel_data_field,
+    R_X86_64_32, R_X86_64_64, R_X86_64_DTPOFF64, R_X86_64_GOTPCREL, R_X86_64_PC32, R_X86_64_PC64,
+    R_X86_64_PLT32, R_X86_64_REX_GOTPCRELX, TprelField, aarch64_is_tls, aarch64_ldst_lo12_scale,
+    aarch64_movw_field, aarch64_pcrel_data_field, aarch64_pcrel_imm_field, aarch64_tprel_field,
+    x86_64_abs_field, x86_64_is_tls, x86_64_pcrel_data_field, x86_64_tpoff_field,
 };
 
 /// The tag this module's diagnostics carry.
@@ -1086,13 +1086,101 @@ impl<'a> Link<'a> {
         } else {
             tls_objs.first().map(|o| o.tls_data.len()).unwrap_or(0)
         };
+        // A global definition resolves by name. Every object states its
+        // own in its symbol table, where a strong definition outranks a
+        // weak one; badc's own objects list them in the note as well.
+        for strong in [true, false] {
+            for (i, obj) in objs.iter().enumerate() {
+                let defs = obj.symbols.iter().filter(|s| {
+                    s.section == NativeSymSection::Tls
+                        && !s.name.is_empty()
+                        && s.binding == if strong { 1 } else { 2 }
+                });
+                for sym in defs {
+                    let at = self.tls_bases[i] as u64 + sym.value;
+                    match self.tls_symbol_offsets.entry(sym.name.as_str()) {
+                        hashbrown::hash_map::Entry::Vacant(v) => {
+                            v.insert(at);
+                        }
+                        hashbrown::hash_map::Entry::Occupied(_) if strong => {
+                            return Err(link_err(
+                                Code::DUPLICATE_SYMBOL,
+                                MODULE,
+                                &format!("multiple definition of `{}`", sym.name),
+                            ));
+                        }
+                        hashbrown::hash_map::Entry::Occupied(_) => {}
+                    }
+                }
+            }
+        }
         for (i, obj) in objs.iter().enumerate() {
             for (name, off, _size) in &obj.tls_symbols {
                 self.tls_symbol_offsets
-                    .insert(name.as_str(), self.tls_bases[i] as u64 + off);
+                    .entry(name.as_str())
+                    .or_insert(self.tls_bases[i] as u64 + off);
             }
         }
         Ok(())
+    }
+
+    /// Offset from the thread pointer of `offset` into the merged TLS
+    /// block, under the ELF TLS ABI: variant II on x86_64 places the
+    /// block, rounded up to its alignment, just below the thread
+    /// pointer; variant I on aarch64 places it past the 16-byte TCB,
+    /// rounded up the same way.
+    fn tp_offset(&self, offset: u64) -> i64 {
+        match self.machine {
+            NativeMachine::X86_64 => {
+                offset as i64 - align_usize(self.tls_data.len(), self.tls_align) as i64
+            }
+            NativeMachine::Aarch64 => (offset + align_usize(16, self.tls_align) as u64) as i64,
+        }
+    }
+
+    /// A thread-local relocation no note fixup covers. A local-exec form
+    /// takes `TPREL(S + A)` ([`Self::tp_offset`]); the other models need
+    /// a GOT entry or a call into the loader, which this link does not
+    /// make.
+    fn apply_tls_reloc(
+        &mut self,
+        unit: usize,
+        sym: &NativeSymbol,
+        reloc: &NativeReloc,
+        patch_offset: usize,
+        site: &RelocSite<'_>,
+    ) -> Result<(), C5Error> {
+        let local_exec = match self.machine {
+            NativeMachine::X86_64 => x86_64_tpoff_field(reloc.rtype).is_some(),
+            NativeMachine::Aarch64 => aarch64_tprel_field(reloc.rtype).is_some(),
+        };
+        if !local_exec {
+            return Err(site.unsupported());
+        }
+        // A weak definition yields to a strong one elsewhere, so only a
+        // local or strong definition in this unit resolves here.
+        let offset = if sym.section == NativeSymSection::Tls && sym.binding != 2 {
+            self.tls_bases[unit] as u64 + sym.value
+        } else if let Some(&at) = self.tls_symbol_offsets.get(sym.name.as_str()) {
+            at
+        } else if self.defined.contains_key(sym.name.as_str()) {
+            return Err(link_err(
+                Code::RELOCATION,
+                MODULE,
+                &format!(
+                    "`{}` is accessed as a thread-local but defined as an ordinary object",
+                    sym.name
+                ),
+            ));
+        } else {
+            return Err(link_err(
+                Code::UNDEFINED_SYMBOL,
+                MODULE,
+                &format!("undefined reference to `{}`", sym.name),
+            ));
+        };
+        let value = self.tp_offset(offset) + reloc.addend;
+        apply_tprel_reloc(&mut self.text, patch_offset, value, site)
     }
 
     /// Each unit's `.text` / `.rodata` / `.data` / `.bss` base in the
@@ -1654,6 +1742,16 @@ impl<'a> Link<'a> {
         let objs = self.objs;
         for (i, obj) in objs.iter().enumerate() {
             let origin = RelocOrigin::in_object(obj, SectionFamily::Text);
+            // badc's own objects state each local-exec site twice, as a
+            // relocation for other linkers and as a note fixup, which
+            // `resolve_tls_fixups` applies; on aarch64 a fixup covers the
+            // `add` pair.
+            let pair = self.machine == NativeMachine::Aarch64;
+            let noted: BTreeSet<u64> = obj
+                .elf_tpoff_fixups
+                .iter()
+                .flat_map(|&(off, _)| core::iter::once(off).chain(pair.then_some(off + 4)))
+                .collect();
             for reloc in &obj.text_relocs {
                 let sym = obj.symbols.get(reloc.sym_idx).ok_or_else(|| {
                     internal_err(MODULE, &format!(
@@ -1664,16 +1762,15 @@ impl<'a> Link<'a> {
                     ))
                 })?;
                 let patch_offset = self.text_bases[i] + reloc.offset as usize;
-                // Local-exec TLS relocations duplicate the note-channel
-                // TLS fixups for external linkers; `resolve_tls_fixups`
-                // patches the same sites from the fixup records. Other
-                // TLS models (initial-exec / general-dynamic, from
-                // foreign objects) still land in the
-                // `NativeSymSection::Tls` arm and error.
-                if reloc.rtype == R_X86_64_TPOFF32
-                    || reloc.rtype == R_AARCH64_TLSLE_ADD_TPREL_HI12
-                    || reloc.rtype == R_AARCH64_TLSLE_ADD_TPREL_LO12_NC
-                {
+                let tls = match self.machine {
+                    NativeMachine::X86_64 => x86_64_is_tls(reloc.rtype),
+                    NativeMachine::Aarch64 => aarch64_is_tls(reloc.rtype),
+                };
+                if tls {
+                    if !noted.contains(&reloc.offset) {
+                        let site = origin.at(self.machine, reloc.rtype, &sym.name, reloc.offset);
+                        self.apply_tls_reloc(i, sym, reloc, patch_offset, &site)?;
+                    }
                     continue;
                 }
                 // An STB_WEAK definition is overridable: a strong
@@ -2011,8 +2108,6 @@ impl<'a> Link<'a> {
     /// object carrying any such fixup uses the Windows no-bias offset.
     fn resolve_tls_fixups(&mut self) -> Result<(), C5Error> {
         let objs = self.objs;
-        let merged_tls_total = align_usize(self.tls_data.len(), self.tls_align) as u64;
-        let tcb_reserve = align_usize(16, self.tls_align) as u64;
         for (i, obj) in objs.iter().enumerate() {
             let win_teb = !obj.tls_index_fixups.is_empty();
             for (text_off, target) in &obj.elf_tpoff_fixups {
@@ -2061,7 +2156,7 @@ impl<'a> Link<'a> {
                             }
                             merged_offset as i64
                         } else {
-                            merged_offset as i64 - merged_tls_total as i64
+                            self.tp_offset(merged_offset)
                         };
                         self.text[patch..patch + 4].copy_from_slice(&(value as i32).to_le_bytes());
                     }
@@ -2069,7 +2164,7 @@ impl<'a> Link<'a> {
                         let tpoff = if win_teb {
                             merged_offset
                         } else {
-                            merged_offset + tcb_reserve
+                            self.tp_offset(merged_offset) as u64
                         };
                         if tpoff >= (1 << 24) {
                             return Err(internal_err(
@@ -3635,6 +3730,54 @@ fn apply_absolute_reloc(
         return Ok(());
     }
     Err(site.unsupported())
+}
+
+/// Write a local-exec `TPREL(S + A)` into the field `site`'s relocation
+/// names.
+fn apply_tprel_reloc(
+    text: &mut [u8],
+    patch_offset: usize,
+    value: i64,
+    site: &RelocSite<'_>,
+) -> Result<(), C5Error> {
+    use crate::c5::codegen::aarch64::patch;
+    if let Some((width, check)) = x86_64_tpoff_field(site.rtype)
+        && site.machine == NativeMachine::X86_64
+    {
+        check_patch_bounds(text, patch_offset, width as usize)?;
+        if !check.admits(value, width) {
+            return Err(site.truncated(value));
+        }
+        let n = width as usize;
+        text[patch_offset..patch_offset + n].copy_from_slice(&value.to_le_bytes()[..n]);
+        return Ok(());
+    }
+    let Some(field) =
+        aarch64_tprel_field(site.rtype).filter(|_| site.machine == NativeMachine::Aarch64)
+    else {
+        return Err(site.unsupported());
+    };
+    check_patch_bounds(text, patch_offset, 4)?;
+    let word = u32::from_le_bytes(text[patch_offset..patch_offset + 4].try_into().unwrap());
+    let word = match field {
+        TprelField::Add { hi, check } => {
+            let shift = if hi { 12 } else { 0 };
+            if check && !(0..1i64 << (shift + 12)).contains(&value) {
+                return Err(site.truncated(value));
+            }
+            (word & !(0xfff << 10)) | ((((value >> shift) & 0xfff) as u32) << 10)
+        }
+        TprelField::Movw(group, signed, check) => {
+            if let Some(bits) = check
+                && !patch::movw_fits(value, bits, signed)
+            {
+                return Err(site.truncated(value));
+            }
+            patch::movw_word(word, group, signed, value)
+        }
+    };
+    text[patch_offset..patch_offset + 4].copy_from_slice(&word.to_le_bytes());
+    Ok(())
 }
 
 /// Width and overflow rule of the plain data field a PC-relative
@@ -5267,5 +5410,117 @@ mod tests {
         assert_eq!(merged.debug_info_text_relocs[0].byte_offset, 0);
         assert_eq!(merged.debug_info_text_relocs[0].merged_text_offset, ext_off);
         assert_eq!(&merged.debug_info[8..24], &[0u8; 16]);
+    }
+    /// A thread-local reference from an object with no note fixups, as
+    /// another compiler writes one: the field takes the offset from the
+    /// thread pointer of `S + A` in the merged block, for a local
+    /// symbol, a section symbol with an addend, and a global another
+    /// object defines. A site a note covers keeps the note's value.
+    #[test]
+    fn a_foreign_local_exec_reference_takes_its_thread_pointer_offset() {
+        use crate::c5::object::elf_reloc_types::{
+            R_AARCH64_TLSLE_ADD_TPREL_HI12, R_AARCH64_TLSLE_ADD_TPREL_LO12,
+            R_AARCH64_TLSLE_ADD_TPREL_LO12_NC, R_AARCH64_TLSLE_MOVW_TPREL_G0_NC,
+            R_AARCH64_TLSLE_MOVW_TPREL_G1, R_X86_64_TPOFF32, R_X86_64_TPOFF64,
+        };
+        let sym = |name: &str, section, value, binding| NativeSymbol {
+            name: name.to_string(),
+            section,
+            value,
+            size: 0,
+            binding,
+            kind: 6,
+            visibility: 0,
+        };
+        let reloc = |offset, sym_idx, rtype, addend| NativeReloc {
+            offset,
+            sym_idx,
+            rtype,
+            addend,
+        };
+        // A: `tl` at 4 of a 16-byte `.tdata` and a 0x2000-byte `.tbss`;
+        // B: `ext` at the start of its own block, which lands at 0x2010.
+        let foreign = |machine, text: Vec<u8>, text_relocs: Vec<NativeReloc>| {
+            let mut a = blank_object(machine);
+            a.tls_data = alloc::vec![0; 16];
+            a.tls_bss_size = 0x2000;
+            a.tls_align = 8;
+            a.text = text;
+            a.symbols = alloc::vec![
+                sym("", NativeSymSection::Undef, 0, 0),
+                sym("tl", NativeSymSection::Tls, 4, 0),
+                sym("", NativeSymSection::Tls, 0, 0),
+                sym("ext", NativeSymSection::Undef, 0, 1),
+            ];
+            a.text_relocs = text_relocs;
+            let mut b = blank_object(machine);
+            b.tls_bss_size = 4;
+            b.tls_align = 4;
+            b.symbols = alloc::vec![
+                sym("", NativeSymSection::Undef, 0, 0),
+                sym("ext", NativeSymSection::Tls, 0, 1),
+            ];
+            alloc::vec![a, b]
+        };
+        let word =
+            |text: &[u8], at: usize| u32::from_le_bytes(text[at..at + 4].try_into().unwrap());
+
+        // x86_64: the block, 0x2014 bytes rounded to 0x2018, ends at the
+        // thread pointer.
+        let mut objs = foreign(
+            NativeMachine::X86_64,
+            alloc::vec![0; 24],
+            alloc::vec![
+                reloc(0, 1, R_X86_64_TPOFF32, 0),
+                reloc(4, 2, R_X86_64_TPOFF32, 12),
+                reloc(8, 3, R_X86_64_TPOFF32, 0),
+                reloc(12, 1, R_X86_64_TPOFF32, 0),
+                reloc(16, 3, R_X86_64_TPOFF64, 0),
+            ],
+        );
+        objs[0].elf_tpoff_fixups = alloc::vec![(12, ElfTpoffTarget::Local(0))];
+        let merged = link_native_objects(&objs).expect("link");
+        let tpoff = |at: usize| word(&merged.text, at) as i32;
+        assert_eq!(
+            [tpoff(0), tpoff(4), tpoff(8), tpoff(12)],
+            [4 - 0x2018, 12 - 0x2018, 0x2010 - 0x2018, -0x2018],
+            "a local, a section symbol + 12, another object's global, a noted site"
+        );
+        let wide = i64::from_le_bytes(merged.text[16..24].try_into().unwrap());
+        assert_eq!(wide, 0x2010 - 0x2018, "the 8-byte form");
+
+        // aarch64: the block starts 16 bytes past the thread pointer.
+        let add = 0x9100_0000u32;
+        let objs = foreign(
+            NativeMachine::Aarch64,
+            [add | 1 << 22, add, add, 0xd2a0_0001, 0xf280_0001]
+                .iter()
+                .flat_map(|w: &u32| w.to_le_bytes())
+                .collect(),
+            alloc::vec![
+                reloc(0, 3, R_AARCH64_TLSLE_ADD_TPREL_HI12, 0),
+                reloc(4, 3, R_AARCH64_TLSLE_ADD_TPREL_LO12_NC, 0),
+                reloc(8, 1, R_AARCH64_TLSLE_ADD_TPREL_LO12, 0),
+                reloc(12, 3, R_AARCH64_TLSLE_MOVW_TPREL_G1, 0),
+                reloc(16, 3, R_AARCH64_TLSLE_MOVW_TPREL_G0_NC, 0),
+            ],
+        );
+        let merged = link_native_objects(&objs).expect("link");
+        let imm12 = |at: usize| (word(&merged.text, at) >> 10) & 0xfff;
+        let imm16 = |at: usize| (word(&merged.text, at) >> 5) & 0xffff;
+        assert_eq!(
+            [imm12(0), imm12(4), imm12(8), imm16(12), imm16(16)],
+            [0x2, 0x20, 4 + 16, 0, 0x2020],
+            "`ext` at 0x2010 + 16 through an `add` pair and a MOVW pair; `tl` at 4 + 16"
+        );
+
+        // The checked low form holds no offset of 4096 or more.
+        let objs = foreign(
+            NativeMachine::Aarch64,
+            add.to_le_bytes().to_vec(),
+            alloc::vec![reloc(0, 3, R_AARCH64_TLSLE_ADD_TPREL_LO12, 0)],
+        );
+        let err = link_native_objects(&objs).expect_err("0x2020 overflows the 12 bits");
+        assert!(format!("{err}").contains("relocation truncated"), "{err}");
     }
 }

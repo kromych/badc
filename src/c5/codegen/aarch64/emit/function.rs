@@ -1463,26 +1463,22 @@ fn emit_prologue(
     // argument that landed in one must reach the save area for `va_arg`)
     // into the register save area above the saved fp/lr; see
     // `emit_register_save_area`. Neither is a full leaf, so the frame record
-    // follows.
-    if win_arm64_variadic_callee(func, abi) {
+    // follows, and every step after it applies to one as well.
+    let win = win_arm64_variadic_callee(func, abi);
+    let variadic = win || aarch64_host_variadic_callee(func, abi);
+    if win {
         debug_assert_eq!(
             frame.va_save_bytes, WIN_ARM64_GR_SAVE_BYTES,
             "win-arm64 variadic prologue must reserve the full gr-save area"
         );
-        emit_register_save_area(code, alloc, frame, abi, extern_data_refs, false);
-        emit_struct_param_scatter(code, func, abi, frame);
-        return;
-    }
-    if aarch64_host_variadic_callee(func, abi) {
+        emit_register_save_area(code, frame, abi, false);
+    } else if variadic {
         debug_assert_eq!(
             frame.va_save_bytes, AARCH64_VA_SAVE_BYTES,
             "aapcs64 variadic prologue must reserve the full register save area"
         );
-        emit_register_save_area(code, alloc, frame, abi, extern_data_refs, true);
-        emit_struct_param_scatter(code, func, abi, frame);
-        return;
-    }
-    if is_full_leaf(frame, alloc) {
+        emit_register_save_area(code, frame, abi, true);
+    } else if is_full_leaf(frame, alloc) {
         return;
     }
     emit_frame_and_saves(code, alloc, frame);
@@ -1501,7 +1497,10 @@ fn emit_prologue(
     if frame.realign_align > 0 {
         emit_realign_sp(code, frame);
     }
-    emit_param_homes(code, func, alloc, frame);
+    // A variadic callee reads its named parameters from the save area.
+    if !variadic {
+        emit_param_homes(code, func, alloc, frame);
+    }
     emit_struct_param_scatter(code, func, abi, frame);
 }
 
@@ -1510,14 +1509,7 @@ fn emit_prologue(
 /// q0..q7 at a 16-byte stride after them. Under `no_fp_regs` the
 /// vector half stays reserved but unwritten (the store would fault) and
 /// `va_start` marks it exhausted.
-fn emit_register_save_area(
-    code: &mut Vec<u8>,
-    alloc: &Allocation,
-    frame: Frame,
-    abi: super::Abi,
-    extern_data_refs: &mut Vec<super::UserExternDataRef>,
-    vector: bool,
-) {
+fn emit_register_save_area(code: &mut Vec<u8>, frame: Frame, abi: super::Abi, vector: bool) {
     emit_sub_sp_imm(code, frame.va_save_bytes);
     for (i, &r) in abi.int_arg_regs.iter().enumerate() {
         emit(code, enc_str_imm(Reg(r), Reg(31), (i as u32) * 8));
@@ -1534,8 +1526,6 @@ fn emit_register_save_area(
             );
         }
     }
-    emit_frame_and_saves(code, alloc, frame);
-    emit_canary_store(code, frame, abi, extern_data_refs);
 }
 
 /// Store each register-passed scalar parameter into its home

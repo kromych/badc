@@ -162,27 +162,27 @@ Disassembly of section .text:
                	sub	x7, x29, #0x70
                	ldr	q0, [x7]
                	bl	<addr>
-               	stur	q0, [x29, #-0x20]
+               	stur	q0, [x29, #-0x30]
                	sub	x7, x29, #0x60
                	ldr	q0, [x7]
                	bl	<addr>
-               	stur	q0, [x29, #-0x10]
-               	ldur	q0, [x29, #-0x20]
-               	ldur	q1, [x29, #-0x10]
+               	stur	q0, [x29, #-0x40]
+               	ldur	q0, [x29, #-0x30]
+               	ldur	q1, [x29, #-0x40]
                	pmull2	v0.1q, v0.2d, v1.2d
                	stur	q0, [x29, #-0x50]
                	mov	x16, #0xcdef            // =52719
                	movk	x16, #0x89ab, lsl #16
                	movk	x16, #0x4567, lsl #32
                	movk	x16, #0x123, lsl #48
-               	str	x16, [sp, #0x40]
+               	str	x16, [sp, #0x50]
                	mov	x16, #0xff00            // =65280
                	movk	x16, #0xddee, lsl #16
                	movk	x16, #0xbbcc, lsl #32
                	movk	x16, #0x99aa, lsl #48
-               	str	x16, [sp, #0x48]
-               	ldr	d1, [sp, #0x40]
-               	ldr	d2, [sp, #0x48]
+               	str	x16, [sp, #0x58]
+               	ldr	d1, [sp, #0x50]
+               	ldr	d2, [sp, #0x58]
                	pmull	v0.1q, v1.1d, v2.1d
                	stur	q0, [x29, #-0x40]
                	mov	x3, #0xcdef             // =52719
@@ -193,7 +193,7 @@ Disassembly of section .text:
                	movk	x4, #0xddee, lsl #16
                	movk	x4, #0xbbcc, lsl #32
                	movk	x4, #0x99aa, lsl #48
-               	sub	x1, x29, #0x18
+               	sub	x1, x29, #0x10
                	sub	x2, x29, #0x8
                	mov	x0, #0x0                // =0
                	str	x0, [x1]
@@ -216,7 +216,7 @@ Disassembly of section .text:
                	b.lt	<addr>
                	sub	x0, x29, #0x50
                	ldr	x1, [x0]
-               	ldur	x2, [x29, #-0x18]
+               	ldur	x2, [x29, #-0x10]
                	cmp	x1, x2
                	b.ne	<addr>
                	ldr	x1, [x0, #0x8]
@@ -243,12 +243,12 @@ Disassembly of section .text:
                	sub	x7, x29, #0x70
                	ldr	q0, [x7]
                	bl	<addr>
-               	stur	q0, [x29, #-0x20]
-               	sub	x7, x29, #0x20
+               	stur	q0, [x29, #-0x30]
+               	sub	x7, x29, #0x30
                	ldr	q0, [x7]
                	bl	<addr>
-               	stur	q0, [x29, #-0x10]
-               	ldur	q0, [x29, #-0x10]
+               	stur	q0, [x29, #-0x40]
+               	ldur	q0, [x29, #-0x40]
                	mov	x0, v0.d[0]
                	mov	x17, #0xbeef            // =48879
                	movk	x17, #0xdead, lsl #16
@@ -270,12 +270,12 @@ Disassembly of section .text:
                	sub	x7, x29, #0x60
                	ldr	q0, [x7]
                	bl	<addr>
-               	stur	q0, [x29, #-0x20]
-               	sub	x7, x29, #0x20
+               	stur	q0, [x29, #-0x30]
+               	sub	x7, x29, #0x30
                	ldr	q0, [x7]
                	bl	<addr>
-               	stur	q0, [x29, #-0x10]
-               	ldur	q0, [x29, #-0x10]
+               	stur	q0, [x29, #-0x40]
+               	ldur	q0, [x29, #-0x40]
                	mov	x0, v0.d[0]
                	mov	x17, #0x7788            // =30600
                	movk	x17, #0x5566, lsl #16
@@ -297,12 +297,12 @@ Disassembly of section .text:
                	sub	x7, x29, #0x70
                	ldr	q0, [x7]
                	bl	<addr>
-               	stur	q0, [x29, #-0x20]
-               	sub	x7, x29, #0x20
+               	stur	q0, [x29, #-0x30]
+               	sub	x7, x29, #0x30
                	ldr	q0, [x7]
                	bl	<addr>
-               	stur	q0, [x29, #-0x10]
-               	ldur	q0, [x29, #-0x10]
+               	stur	q0, [x29, #-0x40]
+               	ldur	q0, [x29, #-0x40]
                	mov	x0, v0.d[0]
                	mov	x17, #0xbeef            // =48879
                	movk	x17, #0xdead, lsl #16

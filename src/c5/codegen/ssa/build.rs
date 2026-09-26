@@ -273,18 +273,37 @@ impl SsaBuilder {
         self.defer_divmod = on;
     }
 
-    /// Record the over-aligned frame region for over-aligned automatic
-    /// objects: the members' placements, the region alignment, and its byte
-    /// size. Consumed by the per-arch frame layout and the VM.
-    pub(crate) fn set_realign(
-        &mut self,
-        placed: Vec<crate::c5::ir::RegionMember>,
-        align: i64,
-        region_bytes: i64,
-    ) {
+    /// Make the `size`-byte automatic object at `slot`, aligned above the
+    /// 8-byte frame slot, a member of the over-aligned frame region (C11
+    /// 6.7.5). [`Self::place_region_members`] lays the region out.
+    pub(crate) fn add_region_member(&mut self, slot: i64, align: i64, size: i64) {
+        self.func.over_aligned.push(crate::c5::ir::RegionMember {
+            slot,
+            off: 0,
+            align,
+            size,
+        });
+    }
+
+    /// Lay out the over-aligned region over the members added so far,
+    /// recording the placements, the region alignment and its byte size for
+    /// the per-arch frame layout and the VM. Returns the region alignment,
+    /// 0 when there is no member.
+    pub(crate) fn place_region_members(&mut self) -> i64 {
+        if self.func.over_aligned.is_empty() {
+            return 0;
+        }
+        let blocks = self
+            .func
+            .over_aligned
+            .iter()
+            .map(|&m| alloc::vec![m])
+            .collect();
+        let (placed, align, region_bytes) = crate::c5::ir::place_region(blocks);
         self.func.over_aligned = placed;
         self.func.frame_align = align;
         self.func.realign_region_bytes = region_bytes;
+        align
     }
 
     /// Record the front end's stack-protector classification of the
@@ -1617,8 +1636,9 @@ impl SsaBuilder {
     /// Reserve `ceil(size/8)` contiguous 8-byte slots and return the
     /// base (most-negative) slot, whose address is the lowest of the
     /// group. A whole-struct `Mcpy` from that address covers the
-    /// reserved bytes. Used for an aggregate result temporary.
-    pub(crate) fn alloc_synthetic_struct(&mut self, size: i64) -> i64 {
+    /// reserved bytes. Used for an aggregate temporary; an `align` above
+    /// the slot's 8 bytes places it in the over-aligned region.
+    pub(crate) fn alloc_synthetic_struct(&mut self, size: i64, align: i64) -> i64 {
         let nslots = (size + 7) / 8;
         let mut base = 0;
         for k in 0..nslots {
@@ -1631,6 +1651,9 @@ impl SsaBuilder {
         // interior cells, which carry no instruction reference.
         if nslots >= 1 {
             self.func.multi_cell_slots.push((base, nslots));
+            if align > 8 {
+                self.add_region_member(base, align, nslots * 8);
+            }
         }
         base
     }

@@ -98,7 +98,7 @@ impl<'a> Walker<'a> {
         let seg = self.access_seg(id, ty)?;
         let size = self.struct_size(ty);
         let align = self.struct_align(ty);
-        let slot = b.alloc_synthetic_struct(size);
+        let slot = b.alloc_synthetic_struct(size, i64::from(align));
         let dst = b.local_addr(slot);
         let vol = is_volatile_ty(ty) || self.expr_is_volatile(id);
         seg_copy_bytes(b, dst, AsmSeg::None, v, seg, size, align, vol, false);
@@ -113,7 +113,7 @@ impl<'a> Walker<'a> {
     /// as where the ABI moves it that way (`long_double_agg_desc`): the
     /// value in the storage format. Yields its address.
     pub(super) fn long_double_image(&self, b: &mut SsaBuilder, v: ValueId, ty: i64) -> ValueId {
-        let slot = b.alloc_synthetic_struct(16);
+        let slot = b.alloc_synthetic_struct(16, 16);
         let addr = b.local_addr(slot);
         b.store(addr, v, store_kind_for(ty, self.target));
         addr

@@ -30,7 +30,9 @@ pub(crate) fn walk_function(
     // deferred constant divides.
     b.set_split_modulo(optimize);
     b.set_defer_divmod(optimize);
-    place_over_aligned_slots(&mut b, &fun.over_aligned_slots, fun.alloca_top_slot)?;
+    for &(slot, align, size) in &fun.over_aligned_slots {
+        b.add_region_member(slot, align, size);
+    }
     // C99 6.8: the frame holds the declared locals, alloca and VLA
     // storage being carved from the stack at runtime. With alloca the
     // parser's Ent patch appends one reserved slot.
@@ -91,41 +93,17 @@ pub(crate) fn walk_function(
         b.label_data_block(r.data_offset, block);
     }
     b.close_dead_blocks();
-    Ok(b.finish())
-}
-
-/// C11 6.7.5: an automatic object whose alignment exceeds the 8-byte
-/// frame slot lives in a packed region, widest alignment first, that
-/// every backend addresses as `region_base + region_off`. At
-/// `frame_align` 16 the region sits at a static frame offset; above 16
-/// the prologue realigns sp, which `alloca` precludes.
-fn place_over_aligned_slots(
-    b: &mut SsaBuilder,
-    slots: &[(i64, i64, i64)],
-    alloca_top_slot: i64,
-) -> Result<(), WalkError> {
-    if slots.is_empty() {
-        return Ok(());
-    }
-    let blocks = slots
-        .iter()
-        .map(|&(slot, align, size)| {
-            alloc::vec![crate::c5::ir::RegionMember {
-                slot,
-                off: 0,
-                align,
-                size,
-            }]
-        })
-        .collect();
-    let (placed, frame_align, region_bytes) = crate::c5::ir::place_region(blocks);
-    if frame_align > 16 && alloca_top_slot != 0 {
+    // C11 6.7.5: an automatic object whose alignment exceeds the 8-byte
+    // frame slot, declared or a temporary, lives in a packed region that
+    // every backend addresses as `region_base + region_off`. At
+    // `frame_align` 16 the region sits at a static frame offset; above 16
+    // the prologue realigns sp, which `alloca` precludes.
+    if b.place_region_members() > 16 && fun.alloca_top_slot != 0 {
         return Err(WalkError::Unsupported(
             "an automatic object aligned above 16 cannot share a function with alloca/VLA",
         ));
     }
-    b.set_realign(placed, frame_align, region_bytes);
-    Ok(())
+    Ok(b.finish())
 }
 
 /// How a definition returns its value (C99 6.8.6.4 + the host ABI).

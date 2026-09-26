@@ -3590,6 +3590,57 @@ fn an_over_aligned_object_takes_region_storage_alone() {
     );
 }
 
+/// A call's aggregate result aligned above the 8-byte frame slot is a member
+/// of the over-aligned region, as a declared object of its type is, whether
+/// the callee stores it through the result pointer or it returns in
+/// registers (C11 6.2.4p8, 6.7.5); slot coalescing keeps the membership.
+#[test]
+fn an_aggregate_call_result_takes_its_type_alignment() {
+    use crate::Target;
+    use crate::c5::ir::{FunctionSsa, Inst};
+    let src = "struct m16 { _Alignas(16) char a[32]; };\n\
+        struct r16 { _Alignas(16) char a[16]; };\n\
+        struct m32 { _Alignas(32) char a[64]; };\n\
+        struct m16 f16(void) { struct m16 r = {{1}}; return r; }\n\
+        struct r16 g16(void) { struct r16 r = {{1}}; return r; }\n\
+        struct m32 f32(void) { struct m32 r = {{1}}; return r; }\n\
+        int use_f16(void) { return f16().a[1]; }\n\
+        int use_g16(void) { return g16().a[1]; }\n\
+        int use_f32(void) { return f32().a[1]; }\n\
+        int main(void) { return use_f16() + use_g16() + use_f32(); }\n";
+    let placed = |f: &FunctionSsa| {
+        let slot = f.insts.iter().find_map(|i| match *i {
+            Inst::Call { ret_slot_local, .. } => Some(ret_slot_local),
+            _ => None,
+        });
+        let member = f.over_aligned.iter().find(|m| Some(m.slot) == slot);
+        (member.map(|m| m.align), f.frame_align)
+    };
+    const USES: [(&str, i64); 3] = [("use_f16", 16), ("use_g16", 16), ("use_f32", 32)];
+    for target in [
+        Target::LinuxX64,
+        Target::LinuxAarch64,
+        Target::MacOSAarch64,
+        Target::WindowsX64,
+        Target::WindowsAarch64,
+    ] {
+        let program = crate::Compiler::with_target(src.into(), target)
+            .compile()
+            .unwrap_or_else(|e| panic!("compile: {e}"));
+        let funcs =
+            crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+                .expect("ssa");
+        for (name, align) in USES {
+            let f = funcs.iter().find(|f| f.name == name).expect(name);
+            assert_eq!(placed(f), (Some(align), align), "{target:?} {name}");
+        }
+    }
+    for (name, align) in USES {
+        let f = coalesced(src, name, true);
+        assert_eq!(placed(&f), (Some(align), align), "{name} coalesced");
+    }
+}
+
 /// A body that may be re-entered after its first return does not have its
 /// lifetimes bounded by control flow at all (C99 7.13.2.1p3), so no two
 /// objects share storage however disjoint their scopes.

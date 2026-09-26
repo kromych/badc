@@ -110,7 +110,7 @@ impl<'a> Walker<'a> {
         // The reverse: a scalar cast to a 128-bit type materialises a
         // 16-byte object, whose address is the value.
         if !is_struct_ty(src_ty) && self.is_int128_value_ty(to_ty) {
-            let slot = b.alloc_synthetic_struct(16);
+            let slot = b.alloc_synthetic_struct(16, 8);
             let addr = b.local_addr(slot);
             self.store_scalar_as_int128(b, addr, v, src_ty, to_ty);
             return Ok(addr);

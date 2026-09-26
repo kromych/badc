@@ -141,6 +141,9 @@ fn run_one(f: &mut FunctionSsa) {
                     && !taken.contains(&d)
                     && !retargets.iter().any(|&(_, t)| t == slot)
                     && slot_stays_put(f, d)
+                    // `d`, ordinary storage, need not have the alignment an
+                    // over-aligned temporary gives the result.
+                    && !f.over_aligned.iter().any(|m| m.slot == slot)
                     && !escapes.reaches(f, d, call)
                     && (reads.is_empty() || sole_writer(f, d, i))
                     && reads.iter().all(|&at| !escapes.reaches(f, d, at))
@@ -952,6 +955,24 @@ mod tests {
             ),
             [true, false]
         );
+    }
+
+    /// A result aligned above the frame slot keeps its temporary when the
+    /// destination is ordinary storage, a packed struct's member, which the
+    /// same copy of a slot-aligned result does not.
+    #[test]
+    fn an_over_aligned_result_keeps_its_temporary() {
+        let case = |align: &str| {
+            let src = alloc::format!(
+                "struct A {{ {align} long a, b, c, d; }};\n\
+                 struct A make(long);\n\
+                 struct __attribute__((packed)) P {{ struct A m; char c; }};\n\
+                 long f(void) {{ struct P p; p.c = 2; p.m = make(1); return p.m.a + p.c; }}"
+            );
+            in_place(&src, "f")
+        };
+        assert_eq!(case(""), [true]);
+        assert_eq!(case("_Alignas(16)"), [false]);
     }
 
     /// A function calling a returns-twice function keeps its copies: a

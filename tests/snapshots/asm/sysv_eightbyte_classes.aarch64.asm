@@ -77,12 +77,12 @@ Disassembly of section .text:
                	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x2, x29, #0x10
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldp	x16, x17, [x1]
-               	stp	x16, x17, [x2]
-               	ldr	d2, [x2]
+               	sub	x1, x29, #0x30
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
+               	ldp	x16, x17, [x2]
+               	stp	x16, x17, [x1]
+               	ldr	d2, [x1]
                	fmov	d1, #2.50000000
                	fcmp	d2, d1
                	b.eq	<addr>
@@ -97,9 +97,9 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x1, #0x3fc00000         // =1069547520
-               	mov	x3, #0x4020000000000000 // =4620693217682128896
+               	mov	x2, #0x4020000000000000 // =4620693217682128896
                	str	x1, [x0]
-               	str	x3, [x0, #0x8]
+               	str	x2, [x0, #0x8]
                	ldr	s1, [x0]
                	fmov	s2, #1.50000000
                	fcmp	s1, s2
@@ -141,9 +141,9 @@ Disassembly of section .text:
                	ret
                	sub	x0, x29, #0x40
                	sub	x1, x29, #0x30
-               	adrp	x3, <page>
-               	add	x3, x3, <lo12>
-               	ldp	x16, x17, [x3]
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
+               	ldp	x16, x17, [x2]
                	stp	x16, x17, [x1]
                	ldp	x16, x17, [x1]
                	stp	x16, x17, [x0]
@@ -167,8 +167,9 @@ Disassembly of section .text:
                	sub	x1, x29, #0x20
                	fmov	d0, #4.50000000
                	str	d0, [x1, #0x8]
-               	mov	x0, #0x7                // =7
-               	str	x0, [x2, #0x8]
+               	sub	x0, x29, #0x10
+               	mov	x2, #0x7                // =7
+               	str	x2, [x0, #0x8]
                	mov	x0, #0x3                // =3
                	mov	x3, #0x2                // =2
                	ldr	x2, [x1, #0x8]

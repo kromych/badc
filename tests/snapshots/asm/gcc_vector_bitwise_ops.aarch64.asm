@@ -127,7 +127,7 @@ Disassembly of section .text:
                	b.lt	<addr>
                	sub	x0, x29, #0x80
                	sub	x1, x29, #0x70
-               	sub	x7, x29, #0x40
+               	sub	x7, x29, #0x60
                	ldr	x2, [x0]
                	ldr	x3, [x1]
                	eor	x2, x2, x3
@@ -146,7 +146,7 @@ Disassembly of section .text:
                	ret
                	sub	x0, x29, #0x80
                	sub	x1, x29, #0x70
-               	sub	x7, x29, #0x40
+               	sub	x7, x29, #0x60
                	ldr	x2, [x0]
                	ldr	x3, [x1]
                	and	x2, x2, x3
@@ -165,7 +165,7 @@ Disassembly of section .text:
                	ret
                	sub	x0, x29, #0x80
                	sub	x1, x29, #0x70
-               	sub	x7, x29, #0x40
+               	sub	x7, x29, #0x60
                	ldr	x2, [x0]
                	ldr	x3, [x1]
                	orr	x2, x2, x3
@@ -190,7 +190,7 @@ Disassembly of section .text:
                	ldr	x1, [x1, #0x8]
                	ldr	x4, [x0, #0x8]
                	eor	x1, x1, x4
-               	sub	x7, x29, #0x40
+               	sub	x7, x29, #0x60
                	eor	x2, x3, x2
                	str	x2, [x7]
                	ldr	x0, [x0, #0x8]

@@ -8,7 +8,7 @@ fn ent_pc=0 n_params=1 variadic=false locals=0
     terminator Return(v1)   (exit_acc=v1)
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=main
-fn ent_pc=1 n_params=0 variadic=false locals=2
+fn ent_pc=1 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -19,7 +19,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
     v5   Imm(0)                                           -> x0
     v6   LocalAddr(-46)                                   -> x0
     v7   Call { target_pc=0, args=[v1], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v8   LocalAddr(-2)                                    -> x0
+    v8   LocalAddr(-47)                                   -> x0
     v9   Imm(0)                                           -> x1
     v10  Load { addr=v8, disp=0, kind=U8 }                -> x1
     v11  Imm(0)                                           -> x2

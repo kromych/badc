@@ -50,7 +50,7 @@ impl<'a> Walker<'a> {
     /// Materialise a half pair as a fresh 16-byte object and return its
     /// address (the struct-rvalue address-as-value rule).
     pub(super) fn int128_materialize(&mut self, b: &mut SsaBuilder, pair: Halves) -> ValueId {
-        let slot = b.alloc_synthetic_struct(16);
+        let slot = b.alloc_synthetic_struct(16, 8);
         let addr = b.local_addr(slot);
         self.int128_store(b, addr, pair);
         addr
@@ -516,7 +516,7 @@ impl<'a> Walker<'a> {
         store: StoreKind,
         load: LoadKind,
     ) -> ValueId {
-        let slot = b.alloc_synthetic_struct(8);
+        let slot = b.alloc_synthetic_struct(8, 8);
         let addr = b.local_addr(slot);
         b.store(addr, v, store);
         b.load(addr, load)

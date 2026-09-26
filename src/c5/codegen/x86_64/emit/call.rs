@@ -350,12 +350,12 @@ impl Marshal<'_> {
 
 #[allow(clippy::too_many_arguments)]
 /// Store a register-classed <= 16-byte aggregate return into the caller's
-/// result temp at `[rbp + base]`: INTEGER eightbytes from rax:rdx, SSE from
+/// result temp at `[base + disp]`: INTEGER eightbytes from rax:rdx, SSE from
 /// xmm0:xmm1 (System V AMD64 3.2.3); Win64 returns one INTEGER eightbyte.
 fn store_agg_return(
     code: &mut Vec<u8>,
     desc: &super::super::ir::AggDesc,
-    base: i64,
+    (base, disp): (Reg, i64),
     abi: super::Abi,
 ) {
     let eb_classes = match super::abi_classify::classify_aggregate(desc, abi, true) {
@@ -366,14 +366,14 @@ fn store_agg_return(
     let mut int_i = 0usize;
     let mut sse_i = 0u8;
     for (class, off) in super::abi_classify::register_slots(&eb_classes) {
-        let disp = (base + i64::from(off)) as i32;
+        let disp = (disp + i64::from(off)) as i32;
         if class == super::abi_classify::RegClass::X87 {
-            super::encode::emit_fstp_m80(code, Reg::RBP, disp);
+            super::encode::emit_fstp_m80(code, base, disp);
         } else if class == super::abi_classify::RegClass::Integer {
-            emit_mov_mem_r(code, Reg::RBP, disp, int_ret[int_i]);
+            emit_mov_mem_r(code, base, disp, int_ret[int_i]);
             int_i += 1;
         } else {
-            emit_agg_store_slot_sse(code, class, Reg::RBP, disp, Reg(Reg::XMM0.0 + sse_i));
+            emit_agg_store_slot_sse(code, class, base, disp, Reg(Reg::XMM0.0 + sse_i));
             sse_i += 1;
         }
     }
@@ -399,7 +399,7 @@ fn store_ret_agg(
     if ret_slot_local == 0 {
         return true;
     }
-    let base = local_slot_off(ret_slot_local, func, frame, abi);
+    let base = local_slot_base_disp(ret_slot_local, func, frame, abi);
     store_agg_return(code, &agg_descs[ai as usize], base, abi);
     true
 }

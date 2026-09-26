@@ -2055,10 +2055,10 @@ fn ent_pc=39 n_params=0 variadic=false locals=34
     v766 Call { target_pc=33, args=[v759], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v767 RetPart(0, kind=I64)                             -> x0
     v768 RetPart(1, kind=I64)                             -> x2
-    v769 StoreLocal { off=-7, value=v767, kind=I64 }      -> -
-    v770 LocalAddr(-7)                                    -> x0
+    v769 StoreLocal { off=-190, value=v767, kind=I64 }    -> -
+    v770 LocalAddr(-190)                                  -> x0
     v771 Store { addr=v770, disp=8, value=v768, kind=I64 } -> -
-    v772 LocalAddr(-7)                                    -> x1
+    v772 LocalAddr(-190)                                  -> x1
     v773 LocalAddr(-189)                                  -> x1
     v774 Mcpy { dst=v773, src=v770, size=16, align=16 }   -> -
     v775 LocalAddr(-189)                                  -> x7

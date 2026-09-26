@@ -21,14 +21,14 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	mov	x1, #0x0                // =0
                	bl	<addr>
-               	stur	q0, [x29, #-0x10]
+               	stur	q0, [x29, #-0x20]
                	sub	sp, sp, #0x40
                	stp	x9, x10, [sp]
                	stp	x11, x12, [sp, #0x10]
                	stp	x13, x14, [sp, #0x20]
                	str	x15, [sp, #0x30]
-               	ldur	x9, [x29, #-0x10]
-               	ldur	x10, [x29, #-0x8]
+               	ldur	x9, [x29, #-0x20]
+               	ldur	x10, [x29, #-0x18]
                	lsr	x11, x10, #63
                	lsl	x11, x11, #63
                	lsl	x12, x10, #1
@@ -116,14 +116,14 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	mov	x1, #0x0                // =0
                	bl	<addr>
-               	stur	q0, [x29, #-0x10]
+               	stur	q0, [x29, #-0x20]
                	sub	sp, sp, #0x40
                	stp	x9, x10, [sp]
                	stp	x11, x12, [sp, #0x10]
                	stp	x13, x14, [sp, #0x20]
                	str	x15, [sp, #0x30]
-               	ldur	x9, [x29, #-0x10]
-               	ldur	x10, [x29, #-0x8]
+               	ldur	x9, [x29, #-0x20]
+               	ldur	x10, [x29, #-0x18]
                	lsr	x11, x10, #63
                	lsl	x11, x11, #63
                	lsl	x12, x10, #1
@@ -209,7 +209,7 @@ Disassembly of section .text:
                	ret
                	fmov	d0, #1.00000000
                	mov	x0, #0x35               // =53
-               	sub	x7, x29, #0x20
+               	sub	x7, x29, #0x10
                	sub	sp, sp, #0x30
                	stp	x9, x10, [sp]
                	stp	x11, x12, [sp, #0x10]
@@ -257,14 +257,14 @@ Disassembly of section .text:
                	add	sp, sp, #0x30
                	ldr	q0, [x7]
                	bl	<addr>
-               	stur	q0, [x29, #-0x10]
+               	stur	q0, [x29, #-0x20]
                	sub	sp, sp, #0x40
                	stp	x9, x10, [sp]
                	stp	x11, x12, [sp, #0x10]
                	stp	x13, x14, [sp, #0x20]
                	str	x15, [sp, #0x30]
-               	ldur	x9, [x29, #-0x10]
-               	ldur	x10, [x29, #-0x8]
+               	ldur	x9, [x29, #-0x20]
+               	ldur	x10, [x29, #-0x18]
                	lsr	x11, x10, #63
                	lsl	x11, x11, #63
                	lsl	x12, x10, #1

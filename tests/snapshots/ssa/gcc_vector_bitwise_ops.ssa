@@ -259,7 +259,7 @@ fn ent_pc=1 n_params=2 variadic=false locals=0
     terminator Return(v217)   (exit_acc=v217)
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=main
-fn ent_pc=2 n_params=0 variadic=false locals=8
+fn ent_pc=2 n_params=0 variadic=false locals=7
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -325,7 +325,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=8
   block 3  start_pc=0
     v55  LocalAddr(-62)                                   -> x0
     v56  LocalAddr(-63)                                   -> x1
-    v57  LocalAddr(-8)                                    -> x9
+    v57  LocalAddr(-69)                                   -> x9
     v58  Load { addr=v55, disp=0, kind=I64 }              -> x2
     v59  Load { addr=v56, disp=0, kind=I64 }              -> x6
     v60  Binop { op=xor, lhs=v58, rhs=v59 }               -> x2
@@ -348,7 +348,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=8
   block 5  start_pc=0
     v74  LocalAddr(-62)                                   -> x0
     v75  LocalAddr(-63)                                   -> x1
-    v76  LocalAddr(-8)                                    -> x9
+    v76  LocalAddr(-70)                                   -> x9
     v77  Load { addr=v74, disp=0, kind=I64 }              -> x2
     v78  Load { addr=v75, disp=0, kind=I64 }              -> x6
     v79  Binop { op=and, lhs=v77, rhs=v78 }               -> x2
@@ -371,7 +371,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=8
   block 7  start_pc=0
     v93  LocalAddr(-62)                                   -> x0
     v94  LocalAddr(-63)                                   -> x1
-    v95  LocalAddr(-8)                                    -> x9
+    v95  LocalAddr(-71)                                   -> x9
     v96  Load { addr=v93, disp=0, kind=I64 }              -> x2
     v97  Load { addr=v94, disp=0, kind=I64 }              -> x6
     v98  Binop { op=or, lhs=v96, rhs=v97 }                -> x2
@@ -407,7 +407,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=8
     v124 Binop { op=xor, lhs=v122, rhs=v123 }             -> x1
     v125 Imm(0)                                           -> x7
     v126 LocalAddr(-63)                                   -> x7
-    v127 LocalAddr(-8)                                    -> x9
+    v127 LocalAddr(-72)                                   -> x9
     v128 Imm(0)                                           -> x7
     v129 Load { addr=v113, disp=0, kind=I64 }             -> x7
     v130 Binop { op=xor, lhs=v117, rhs=v116 }             -> x2

@@ -389,7 +389,7 @@ impl<'a> Walker<'a> {
             crate::c5::compiler::struct_return_abi_conv(self.structs, self.target, conv, ty)
         {
             let ridx = b.intern_agg_desc(desc.clone());
-            let slot = b.alloc_synthetic_struct(desc.size as i64);
+            let slot = b.alloc_synthetic_struct(desc.size as i64, i64::from(desc.align));
             return Some((ridx, slot));
         }
         None
@@ -702,7 +702,7 @@ impl<'a> Walker<'a> {
         // The callee writes the whole struct through the pointer, so the
         // object holds `sizeof(struct)` bytes, not a single slot.
         let result_size = self.struct_size(ty);
-        let result_slot = b.alloc_synthetic_struct(result_size);
+        let result_slot = b.alloc_synthetic_struct(result_size, i64::from(self.struct_align(ty)));
         let addr = b.local_addr(result_slot);
         let temp = b.alloc_synthetic_local();
         b.store_local(temp, addr, StoreKind::I64);

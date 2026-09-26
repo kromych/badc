@@ -1862,9 +1862,9 @@ pub(crate) struct AggDesc {
     /// `StructDef::member_align`: `align` without the aggregate's own attribute.
     pub member_align: u32,
     pub fields: Vec<crate::c5::codegen::abi_classify::FlatField>,
-    /// The AAPCS64 homogeneous floating-point aggregate the members form;
-    /// `None` on the other ABIs.
-    pub hfa: Option<crate::c5::codegen::abi_classify::Hfa>,
+    /// The AAPCS64 homogeneous aggregate the members form; `None` on the
+    /// other ABIs.
+    pub homogeneous: Option<crate::c5::codegen::abi_classify::HomogeneousAggregate>,
 }
 
 /// A static-initializer data slot holding the address of a labelled

@@ -2040,13 +2040,15 @@ impl Compiler {
         use crate::c5::op::VaArgDesc;
         let by_ref =
             !is_pointer && super::type_layout::va_arg_by_ref(&self.structs, self.target, arg_ty);
-        // AAPCS64 B.4 saves an HFA's elements one per 16-byte slot of the
-        // `__va_list` vector area; a read composes them in a temporary.
-        let hfa = if !is_pointer
+        // AAPCS64 B.4 saves a homogeneous aggregate's elements one per
+        // 16-byte slot of the `__va_list` vector area; a read composes them in
+        // a temporary. A lone vector is read in place.
+        let homogeneous = if !is_pointer
             && is_struct_value_ty(arg_ty)
+            && !is_vector_ty(&self.structs, arg_ty)
             && self.target.abi().aarch64_host_variadic()
         {
-            super::type_layout::homogeneous_fp_aggregate(
+            super::type_layout::homogeneous_aggregate(
                 &self.structs,
                 self.target,
                 struct_id_of(arg_ty),
@@ -2061,9 +2063,9 @@ impl Compiler {
         };
         let (kind, align) = if is_pointer || by_ref {
             (VaArgDesc::INT, 8)
-        } else if hfa.is_some() {
+        } else if homogeneous.is_some() {
             (
-                VaArgDesc::HFA,
+                VaArgDesc::HOMOGENEOUS,
                 super::type_layout::va_arg_align(&self.structs, self.target, arg_ty),
             )
         } else if let Some((kind, _)) = sysv {
@@ -2091,13 +2093,13 @@ impl Compiler {
             kind,
             align,
             by_ref,
-            elements: hfa.map_or(0, |h| h.count() as u8),
+            elements: homogeneous.map_or(0, |h| h.count() as u8),
             eightbytes: sysv.map_or(0, |(_, e)| e),
         }
         .pack();
         let desc_id = self.ast_emit_int_lit(descriptor, Ty::Int as i64);
         args.push(desc_id);
-        if hfa.is_some() || kind == VaArgDesc::EIGHTBYTES {
+        if homogeneous.is_some() || kind == VaArgDesc::EIGHTBYTES {
             let slots = self.slots_of_type(arg_ty);
             let slot = self.reserve_object_slots(arg_ty, slots)?;
             self.record_multi_cell_temp(slot, slots, arg_ty);

@@ -4752,7 +4752,7 @@ mod abi_plan_tests {
             align: 16,
             member_align: 8,
             fields: alloc::vec![half(0), half(8)],
-            hfa: None,
+            homogeneous: None,
         };
         for (target, pair, slot) in [
             (Target::LinuxAarch64, [1, 2], 8),

@@ -5581,11 +5581,13 @@ fn aggregate_parameter_classes_are_all_spliced() {
     }
 }
 
-/// AAPCS64 5.9.5 as gcc and clang apply it: a union holds as many HFA
-/// elements as its largest member, a struct the sum of its members', an
-/// anonymous member counts as one member, and padding, a bit-field of
-/// nonzero width, a vector or a flexible or zero-length array makes no
-/// HFA. `take` reads the `double` after the aggregate from the first SIMD
+/// AAPCS64 5.9.5 as gcc and clang apply it: a union holds as many
+/// homogeneous-aggregate elements as its largest member, a struct the sum
+/// of its members', an anonymous member counts as one member, 64- or
+/// 128-bit vectors of one width are one base type whatever their lanes,
+/// and padding, a bit-field of nonzero width, a vector of another width, a
+/// vector beside a scalar or a flexible or zero-length array makes none.
+/// `take` reads the `double` after the aggregate from the first SIMD
 /// register past its elements, and `make` returns one per element.
 #[test]
 fn homogeneous_aggregate_elements_follow_the_members() {
@@ -5624,8 +5626,22 @@ fn homogeneous_aggregate_elements_follow_the_members() {
         ("struct { double a; double b[]; }", 0),
         ("struct { double a; double z[0]; }", 0),
         ("struct { float __attribute__((vector_size(4))) v; }", 0),
+        ("union { v4f v; v4f w; }", 1),
+        ("struct { v4f a; v4i b; }", 2),
+        ("struct { v4f a, b, c, d; }", 4),
+        ("struct { v2f a, b, c; }", 3),
+        ("struct { v4f a[2]; }", 2),
+        ("struct { union { v4f a; v4f b; } u; v4f c; }", 2),
+        ("struct { v4f a; }", 1),
+        ("struct { v2f a; double d; }", 0),
+        ("struct { v4f a; v2f b; }", 0),
+        ("union { v4f v; struct { v2f lo, hi; } s; }", 0),
     ];
-    let mut src = alloc::string::String::new();
+    let mut src = alloc::string::String::from(
+        "typedef float v4f __attribute__((vector_size(16)));\n\
+         typedef int v4i __attribute__((vector_size(16)));\n\
+         typedef float v2f __attribute__((vector_size(8)));\n",
+    );
     for (i, (ty, _)) in SHAPES.iter().enumerate() {
         src += &alloc::format!(
             "typedef {ty} T{i};\n\
@@ -13840,10 +13856,10 @@ fn variadic_aggregate_over_16_bytes_is_read_where_the_caller_passed_it() {
     );
 }
 
-/// AAPCS64 B.4: `va_arg` of an HFA takes `__vr_offs` forward by 16 per
-/// element and copies element `k` from its save slot at `16 * k` to
-/// `k * width` of a temporary; `__gr_offs` is not read. A binary128
-/// element is its whole slot.
+/// AAPCS64 B.4: `va_arg` of a homogeneous aggregate takes `__vr_offs`
+/// forward by 16 per element and copies element `k` from its save slot at
+/// `16 * k` to `k * width` of a temporary; `__gr_offs` is not read. A
+/// binary128 element or a 128-bit vector is its whole slot.
 #[test]
 fn variadic_hfa_elements_come_from_the_vector_save_area() {
     use crate::Target;
@@ -13854,15 +13870,24 @@ fn variadic_hfa_elements_come_from_the_vector_save_area() {
         struct d3 { double a, b, c; };\n\
         struct f4 { float a, b, c, d; };\n\
         struct q1 { long double v; };\n\
+        typedef float v4f __attribute__((vector_size(16)));\n\
+        struct v2 { v4f a, b; };\n\
         double va_d3(int n, ...) { va_list ap; va_start(ap, n);\n\
             struct d3 s = va_arg(ap, struct d3); va_end(ap); return s.a + s.c + n; }\n\
         double va_f4(int n, ...) { va_list ap; va_start(ap, n);\n\
             struct f4 s = va_arg(ap, struct f4); va_end(ap); return s.a + s.d + n; }\n\
         long double va_q1(int n, ...) { va_list ap; va_start(ap, n);\n\
-            struct q1 s = va_arg(ap, struct q1); va_end(ap); return s.v + n; }\n";
+            struct q1 s = va_arg(ap, struct q1); va_end(ap); return s.v + n; }\n\
+        float va_v2(int n, ...) { va_list ap; va_start(ap, n);\n\
+            struct v2 s = va_arg(ap, struct v2); va_end(ap); return s.a[0] + s.b[3] + n; }\n";
     let x = Reg;
     let obj = relocatable_object(SRC, Target::LinuxAarch64);
-    for (name, n, width) in [("va_d3", 3u32, 8u32), ("va_f4", 4, 4), ("va_q1", 1, 16)] {
+    for (name, n, width) in [
+        ("va_d3", 3u32, 8u32),
+        ("va_f4", 4, 4),
+        ("va_q1", 1, 16),
+        ("va_v2", 2, 16),
+    ] {
         let ws = function_words(&obj, name);
         expect_words(
             &ws,

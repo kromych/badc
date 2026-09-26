@@ -12,7 +12,7 @@ use alloc::string::ToString;
 use alloc::vec::Vec;
 
 use super::super::codegen::Target;
-use super::super::codegen::abi_classify::{FlatField, Hfa, ScalarKind};
+use super::super::codegen::abi_classify::{FlatField, HomogeneousAggregate, ScalarKind};
 use super::super::error::C5Error;
 use super::super::ir::AggDesc;
 use super::super::token::{Token, Ty};
@@ -955,34 +955,41 @@ fn scalar_kind(ty: i64, target: Target) -> ScalarKind {
     }
 }
 
-/// The AAPCS64 homogeneous floating-point aggregate (5.9.5) `struct_id`
-/// forms on `target`, decided from the members as gcc and clang do: a
-/// struct has the sum of its members' elements, a union the most any
-/// member has, an array its element's times its length, and no padding.
-pub(crate) fn homogeneous_fp_aggregate(
+/// The AAPCS64 homogeneous aggregate (5.9.5) `struct_id` forms on
+/// `target`, decided from the members as gcc and clang do: a struct has
+/// the sum of its members' elements, a union the most any member has, an
+/// array its element's times its length, and no padding.
+pub(crate) fn homogeneous_aggregate(
     structs: &[StructDef],
     target: Target,
     struct_id: usize,
-) -> Option<Hfa> {
+) -> Option<HomogeneousAggregate> {
     if !target.is_aarch64() {
         return None;
     }
-    let (kind, count) = hfa_elements(structs, target, struct_id)?;
-    Hfa::new(kind?, count)
+    let (base, count) = homogeneous_elements(structs, target, struct_id)?;
+    let (kind, width) = base?;
+    HomogeneousAggregate::new(kind, width, count)
 }
 
-/// The base kind, `None` before the first element, and the element count.
-fn hfa_elements(
+/// The base type as its leaf kind and width, `None` before the first
+/// element, and the element count.
+fn homogeneous_elements(
     structs: &[StructDef],
     target: Target,
     id: usize,
-) -> Option<(Option<ScalarKind>, u32)> {
+) -> Option<(Option<(ScalarKind, u32)>, u32)> {
     let sd = &structs[id];
-    if sd.is_vector || sd.anon_bitfields.iter().any(|b| b.width > 0) {
+    if sd.is_vector {
+        let width = sd.size as u32;
+        return HomogeneousAggregate::is_base(ScalarKind::Vector, width)
+            .then_some((Some((ScalarKind::Vector, width)), 1));
+    }
+    if sd.anon_bitfields.iter().any(|b| b.width > 0) {
         return None;
     }
     let (mut base, mut count) = (None, 0u32);
-    let mut add = |kind: Option<ScalarKind>, n: u32| {
+    let mut add = |kind: Option<(ScalarKind, u32)>, n: u32| {
         if kind.is_some() && base.is_some() && kind != base {
             return None;
         }
@@ -996,7 +1003,7 @@ fn hfa_elements(
     };
     // An anonymous member counts as one member, not as its promoted fields.
     for m in &sd.anon_members {
-        let (kind, n) = hfa_elements(structs, target, m.inner)?;
+        let (kind, n) = homogeneous_elements(structs, target, m.inner)?;
         add(kind, n)?;
     }
     for (i, f) in sd.fields.iter().enumerate() {
@@ -1012,16 +1019,18 @@ fn hfa_elements(
             return None;
         }
         let (kind, n) = if is_struct_value_ty(f.ty) {
-            hfa_elements(structs, target, struct_id_of(f.ty))?
+            homogeneous_elements(structs, target, struct_id_of(f.ty))?
         } else {
-            let kind = scalar_kind(f.ty, target);
-            Hfa::base_width(kind)?;
-            (Some(kind), 1)
+            let base = (scalar_kind(f.ty, target), flat_scalar_size(f.ty, target));
+            if !HomogeneousAggregate::is_base(base.0, base.1) {
+                return None;
+            }
+            (Some(base), 1)
         };
         let len = u32::try_from(f.array_size.max(1)).unwrap_or(u32::MAX);
         add(kind, n.saturating_mul(len))?;
     }
-    let width = base.and_then(Hfa::base_width).unwrap_or(0);
+    let width = base.map_or(0, |(_, w)| w);
     (sd.size as u64 == u64::from(count) * u64::from(width)).then_some((base, count))
 }
 
@@ -1048,7 +1057,7 @@ pub(crate) fn long_double_agg_desc(
             size: 16,
             kind,
         }],
-        hfa: Hfa::new(kind, 1),
+        homogeneous: HomogeneousAggregate::new(kind, 16, 1),
     })
 }
 
@@ -1109,8 +1118,8 @@ pub(crate) fn host_abi_agg_desc_conv(
     // FP argument bank, up to four registers -- a four-`double` HFA is 32
     // bytes, past the by-reference threshold. Admit it on AArch64 ahead of
     // the size / FP-class gates.
-    let hfa = homogeneous_fp_aggregate(structs, target, id);
-    if hfa.is_none() {
+    let homogeneous = homogeneous_aggregate(structs, target, id);
+    if homogeneous.is_none() {
         if matches!(row, Target::WindowsX64) {
             // Win64: only a 1-, 2-, 4-, or 8-byte aggregate is passed by
             // value in a register; larger ones go by implicit reference,
@@ -1145,7 +1154,7 @@ pub(crate) fn host_abi_agg_desc_conv(
         align,
         member_align,
         fields,
-        hfa,
+        homogeneous,
     })
 }
 
@@ -1166,9 +1175,9 @@ pub(crate) fn va_arg_by_ref(structs: &[StructDef], target: Target, ty: i64) -> b
         return false;
     }
     let id = struct_id_of(ty);
-    let hfa = || homogeneous_fp_aggregate(structs, target, id).is_some();
+    let homogeneous = || homogeneous_aggregate(structs, target, id).is_some();
     match target {
-        Target::LinuxAarch64 | Target::MacOSAarch64 => structs[id].size > 16 && !hfa(),
+        Target::LinuxAarch64 | Target::MacOSAarch64 => structs[id].size > 16 && !homogeneous(),
         Target::WindowsAarch64 => structs[id].size > 16,
         Target::WindowsX64 => !matches!(structs[id].size, 1 | 2 | 4 | 8),
         _ => false,
@@ -1241,15 +1250,15 @@ pub(crate) fn struct_return_abi_conv(
     // AAPCS64 6.9: a homogeneous floating-point aggregate returns in up to
     // four consecutive FP registers (v0..v3), independent of the 16-byte
     // integer-register threshold -- a four-`double` HFA is 32 bytes.
-    let hfa = homogeneous_fp_aggregate(structs, target, id);
+    let homogeneous = homogeneous_aggregate(structs, target, id);
     let desc = AggDesc {
         size,
         align,
         member_align,
         fields,
-        hfa,
+        homogeneous,
     };
-    if hfa.is_some() {
+    if homogeneous.is_some() {
         return StructReturnAbi::Regs(desc);
     }
     if win64 {

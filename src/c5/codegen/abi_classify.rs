@@ -53,29 +53,38 @@ pub(crate) struct FlatField {
     pub kind: ScalarKind,
 }
 
-/// A homogeneous floating-point aggregate (AAPCS64 5.9.5): one to four
-/// elements of one floating-point type, element `k` at `k * width`.
+/// A homogeneous aggregate (AAPCS64 5.9.5): one to four elements of one
+/// base type, element `k` at `k * width` -- a floating-point type (HFA) or
+/// a 64- or 128-bit short vector, vectors of one width being one type (HVA).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct Hfa {
+pub(crate) struct HomogeneousAggregate {
     kind: ScalarKind,
+    width: u8,
     count: u8,
 }
 
-impl Hfa {
-    /// Element width of an HFA base type, `None` for any other kind.
-    pub(crate) fn base_width(kind: ScalarKind) -> Option<u32> {
-        match kind {
-            ScalarKind::F32 => Some(4),
-            ScalarKind::F64 => Some(8),
-            ScalarKind::F128 => Some(16),
-            _ => None,
-        }
+impl HomogeneousAggregate {
+    /// Whether a leaf of `kind` and `width` bytes is a base type.
+    pub(crate) fn is_base(kind: ScalarKind, width: u32) -> bool {
+        matches!(
+            (kind, width),
+            (ScalarKind::F32, 4)
+                | (ScalarKind::F64, 8)
+                | (ScalarKind::F128, 16)
+                | (ScalarKind::Vector, 8 | 16)
+        )
     }
 
-    pub(crate) fn new(kind: ScalarKind, count: u32) -> Option<Self> {
-        Self::base_width(kind)?;
+    pub(crate) fn new(kind: ScalarKind, width: u32, count: u32) -> Option<Self> {
+        if !Self::is_base(kind, width) {
+            return None;
+        }
         let count = u8::try_from(count).ok().filter(|n| (1..=4).contains(n))?;
-        Some(Self { kind, count })
+        Some(Self {
+            kind,
+            width: width as u8,
+            count,
+        })
     }
 
     pub(crate) fn count(self) -> usize {
@@ -84,14 +93,16 @@ impl Hfa {
 
     /// `(byte_offset, byte_size)` of each element, in register order.
     pub(crate) fn members(self) -> alloc::vec::Vec<(u32, u32)> {
-        let width = Self::base_width(self.kind).expect("`new` admits only a base type");
+        let width = u32::from(self.width);
         (0..u32::from(self.count))
             .map(|k| (k * width, width))
             .collect()
     }
 
+    /// A 16-byte element fills a whole vector register (6.8.2), a narrower
+    /// one the low bytes of its own.
     fn reg_class(self) -> RegClass {
-        if self.kind == ScalarKind::F128 {
+        if self.width == 16 {
             RegClass::Vector
         } else {
             RegClass::Sse
@@ -360,7 +371,7 @@ impl Eightbyte {
 /// one is passed by reference (argument) or via the x8 indirect-result
 /// register (return).
 fn classify_aapcs64(desc: &AggDesc, is_return: bool) -> AggClass {
-    if let Some(hfa) = desc.hfa {
+    if let Some(hfa) = desc.homogeneous {
         return AggClass::Regs(alloc::vec![hfa.reg_class(); hfa.count()]);
     }
     let size = desc.size;
@@ -387,7 +398,7 @@ fn classify_aapcs64(desc: &AggDesc, is_return: bool) -> AggClass {
 /// width from this, so a 16-byte vector moves as one `q` access instead
 /// of the HFA element's `d` or `s`.
 pub(crate) fn fp_member_layout(desc: &AggDesc) -> Option<alloc::vec::Vec<(u32, u32)>> {
-    if let Some(hfa) = desc.hfa {
+    if let Some(hfa) = desc.homogeneous {
         return Some(hfa.members());
     }
     let width = sole_vector_width(desc.size, &desc.fields)?;
@@ -424,7 +435,7 @@ pub(crate) fn register_parts(
         return None;
     }
     let (size, fields) = (desc.size, &desc.fields);
-    let layout: alloc::vec::Vec<(u32, u32, RegClass)> = match desc.hfa {
+    let layout: alloc::vec::Vec<(u32, u32, RegClass)> = match desc.homogeneous {
         Some(hfa) if abi.arch != Arch::X86_64 => hfa
             .members()
             .into_iter()
@@ -467,14 +478,16 @@ mod tests {
             align: 8,
             member_align: 8,
             fields: fields.to_vec(),
-            hfa: None,
+            homogeneous: None,
         }
     }
 
-    /// [`desc`] for an HFA of `count` elements of `kind`.
+    /// [`desc`] for a homogeneous aggregate of `count` elements the kind
+    /// and width of the first field.
     fn hfa(size: u32, fields: &[FlatField], kind: ScalarKind, count: u32) -> AggDesc {
+        let width = fields[0].size;
         AggDesc {
-            hfa: Some(Hfa::new(kind, count).expect("an HFA")),
+            homogeneous: Some(HomogeneousAggregate::new(kind, width, count).expect("homogeneous")),
             ..desc(size, fields)
         }
     }
@@ -793,8 +806,8 @@ mod tests {
     #[test]
     fn aapcs_five_floats_not_hfa() {
         // 5 members exceeds the HFA limit of 4 -> 20B -> by ref / indirect.
-        assert_eq!(Hfa::new(ScalarKind::F32, 5), None);
-        assert_eq!(Hfa::new(ScalarKind::F64, 0), None);
+        assert_eq!(HomogeneousAggregate::new(ScalarKind::F32, 4, 5), None);
+        assert_eq!(HomogeneousAggregate::new(ScalarKind::F64, 8, 0), None);
         let f: alloc::vec::Vec<FlatField> = (0..5).map(|i| ff(i * 4, 4, ScalarKind::F32)).collect();
         assert_eq!(
             classify_aggregate(&desc(20, &f), aapcs(), false),
@@ -910,12 +923,11 @@ mod tests {
             classify_aggregate(&desc(16, &h), sysv(), false),
             AggClass::Regs(alloc::vec![RegClass::Sse, RegClass::Sse])
         );
-        // AAPCS64 has no homogeneous vector aggregate yet: the composite
-        // rules give the same layout two general-purpose registers.
-        // TODO: homogeneous vector aggregates.
+        // AAPCS64 makes the pair a homogeneous short-vector aggregate: one
+        // SIMD register per vector.
         assert_eq!(
-            classify_aggregate(&desc(16, &h), aapcs(), false),
-            AggClass::Regs(alloc::vec![RegClass::Integer, RegClass::Integer])
+            classify_aggregate(&hfa(16, &h, ScalarKind::Vector, 2), aapcs(), false),
+            AggClass::Regs(alloc::vec![RegClass::Sse, RegClass::Sse])
         );
     }
 
@@ -953,11 +965,26 @@ mod tests {
     }
 
     #[test]
-    fn vector_is_not_an_hfa() {
-        // A vector leaf is not a floating-point member, so it cannot form
-        // a homogeneous floating-point aggregate.
-        assert_eq!(Hfa::new(ScalarKind::Vector, 1), None);
-        // The SIMD-slot layout covers it instead, as one whole slot.
+    fn vector_width_decides_the_homogeneous_base() {
+        // A 64- or 128-bit vector is a base type (HVA); a vector of any
+        // other width is not.
+        for (width, base) in [(4, false), (8, true), (16, true), (32, false)] {
+            assert_eq!(
+                HomogeneousAggregate::is_base(ScalarKind::Vector, width),
+                base
+            );
+        }
+        let two = [
+            ff(0, 16, ScalarKind::Vector),
+            ff(16, 16, ScalarKind::Vector),
+        ];
+        let hva = hfa(32, &two, ScalarKind::Vector, 2);
+        assert_eq!(
+            classify_aggregate(&hva, aapcs(), true),
+            AggClass::Regs(alloc::vec![RegClass::Vector; 2])
+        );
+        assert_eq!(fp_member_layout(&hva), Some(alloc::vec![(0, 16), (16, 16)]));
+        // The SIMD-slot layout covers a sole vector as one whole slot.
         assert_eq!(
             fp_member_layout(&desc(16, &vec(16))),
             Some(alloc::vec![(0, 16)])

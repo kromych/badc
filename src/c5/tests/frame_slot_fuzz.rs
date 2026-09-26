@@ -43,7 +43,9 @@
 use std::fmt::Write as _;
 use std::sync::OnceLock;
 
-use crate::c5::codegen::abi_classify::{AggClass, FlatField, Hfa, ScalarKind, classify_aggregate};
+use crate::c5::codegen::abi_classify::{
+    AggClass, FlatField, HomogeneousAggregate, ScalarKind, classify_aggregate,
+};
 use crate::c5::codegen::ssa::reg_alloc::with_pool_size_override;
 use crate::c5::ir::AggDesc;
 use crate::{Compiler, NativeOptions, jit_run_with_options};
@@ -234,18 +236,17 @@ impl AggTy {
     /// leaves of one floating-point type filling it form the AAPCS64 HFA.
     fn desc(&self, abi: crate::c5::codegen::Abi) -> AggDesc {
         let n = self.leaves.len() as u32;
-        let kind = self.leaves.first().map(|l| l.sc.abi_kind());
-        let hfa = kind
-            .filter(|&k| self.leaves.iter().all(|l| l.sc.abi_kind() == k))
-            .filter(|&k| Hfa::base_width(k).is_some_and(|w| self.size == n * w))
-            .and_then(|k| Hfa::new(k, n))
+        let first = self.leaves.first().map(|l| l.sc);
+        let homogeneous = first
+            .filter(|&sc| self.leaves.iter().all(|l| l.sc == sc) && self.size == n * sc.size())
+            .and_then(|sc| HomogeneousAggregate::new(sc.abi_kind(), sc.size(), n))
             .filter(|_| abi.arch == crate::c5::codegen::Arch::Aarch64);
         AggDesc {
             size: self.size,
             align: self.align,
             member_align: self.align,
             fields: self.flat_fields(),
-            hfa,
+            homogeneous,
         }
     }
 }

@@ -303,7 +303,7 @@ pub(crate) struct VaArgDesc {
     pub align: u32,
     /// The argument's slot holds the address of a copy, not its bytes.
     pub by_ref: bool,
-    /// The element count of an [`Self::HFA`], 0 for the other kinds.
+    /// The element count of a [`Self::HOMOGENEOUS`] aggregate, 0 for the other kinds.
     pub elements: u8,
     /// The class of each eightbyte of an [`Self::EIGHTBYTES`] aggregate, two
     /// bits apiece from the first: 0 for none, else [`Self::EB_INTEGER`],
@@ -318,9 +318,9 @@ impl VaArgDesc {
     /// Passed in memory whatever registers are left: the System V MEMORY
     /// class a `long double` takes (X87 + X87UP).
     pub(crate) const MEMORY: u8 = 3;
-    /// An AAPCS64 homogeneous floating-point aggregate: one SIMD register
-    /// per element, each saved in its own 16-byte slot of the vector area.
-    pub(crate) const HFA: u8 = 4;
+    /// An AAPCS64 homogeneous aggregate: one SIMD register per element,
+    /// each saved in its own 16-byte slot of the vector area.
+    pub(crate) const HOMOGENEOUS: u8 = 4;
     /// A System V aggregate in registers whose eightbytes are not all
     /// INTEGER: each comes from the save area of its class (3.5.7).
     pub(crate) const EIGHTBYTES: u8 = 5;

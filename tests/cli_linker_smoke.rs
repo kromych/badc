@@ -6120,11 +6120,13 @@ fn long_double_calls_cross_the_system_compiler_boundary() {
     );
 }
 
-// Unions and structs of floating-point members cross the system compiler
-// boundary both ways as the platform passes them. AAPCS64 gives a union as
-// many HFA elements as its largest member and a struct the sum of its
-// members', so `union { double a, b; }` is one `double`, and padding makes
-// no HFA; System V AMD64 classes the same shapes by eightbyte.
+// Unions and structs of floating-point or short-vector members cross the
+// system compiler boundary both ways as the platform passes them. AAPCS64
+// gives a union as many homogeneous-aggregate elements as its largest member
+// and a struct the sum of its members', so `union { double a, b; }` is one
+// `double` and a union of two vectors one vector register, and padding makes
+// no homogeneous aggregate; System V AMD64 classes the same shapes by
+// eightbyte.
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 #[test]
 fn homogeneous_aggregates_cross_the_system_compiler_boundary() {
@@ -6134,7 +6136,10 @@ fn homogeneous_aggregates_cross_the_system_compiler_boundary() {
         );
         return;
     };
-    let common = "union u1 { double a; double b; };\n\
+    let common = "typedef float v4f __attribute__((vector_size(16)));\n\
+        typedef int v4i __attribute__((vector_size(16)));\n\
+        typedef float v2f __attribute__((vector_size(8)));\n\
+        union u1 { double a; double b; };\n\
         union f2 { float f[2]; struct { float x, y; } p; };\n\
         union f3 { float f[3]; struct { float x, y; } p; };\n\
         union d3 { double d[3]; struct { double a, b; } s; };\n\
@@ -6142,6 +6147,9 @@ fn homogeneous_aggregates_cross_the_system_compiler_boundary() {
         struct nest { double x; union { double y; double z[1]; } u; double w; };\n\
         struct arr { union { float a; float b; } u[3]; };\n\
         struct pad { float a; float b __attribute__((aligned(8))); };\n\
+        union vv { v4f v; v4f w; };\n\
+        struct vs { v4f a; v4i b; };\n\
+        struct v3 { v2f a, b, c; };\n\
         static double take_u1(union u1 u, double x) { return u.b * 10 + x; }\n\
         static double take_f2(union f2 u, float x) { return u.p.x * 100 + u.f[1] * 10 + x; }\n\
         static double take_f3(union f3 u, double x)\n\
@@ -6154,6 +6162,14 @@ fn homogeneous_aggregates_cross_the_system_compiler_boundary() {
         static double take_arr(struct arr s, float x)\n\
         { return s.u[0].b * 100 + s.u[1].a * 10 + s.u[2].b + x; }\n\
         static double take_pad(struct pad s, double x) { return s.a * 10 + s.b + x; }\n\
+        static double take_vv(union vv u, double x) { return u.w[0] * 100 + u.v[3] * 10 + x; }\n\
+        static double take_vs(struct vs s, double x) { return s.a[3] * 100 + s.b[1] * 10 + x; }\n\
+        static double take_v3(struct v3 s, double x) { return s.a[0] * 100 + s.b[1] * 10 + s.c[0] + x; }\n\
+        static union vv make_vv(float a, float b) { union vv u; u.v = (v4f){ a, 0, 0, b }; return u; }\n\
+        static struct vs make_vs(float a, int b) { struct vs s; s.a = (v4f){ a, 0, 0, a }; s.b = (v4i){ b, b, b, b };\n\
+          return s; }\n\
+        static struct v3 make_v3(float a, float b, float c)\n\
+        { struct v3 s; s.a = (v2f){ a, 0 }; s.b = (v2f){ 0, b }; s.c = (v2f){ c, 0 }; return s; }\n\
         static union u1 make_u1(double v) { union u1 u; u.a = v; return u; }\n\
         static union f2 make_f2(float a, float b) { union f2 u; u.p.x = a; u.f[1] = b; return u; }\n\
         static union f3 make_f3(float a, float b, float c)\n\
@@ -6173,7 +6189,10 @@ fn homogeneous_aggregates_cross_the_system_compiler_boundary() {
           union u1 (*make_u1)(double); union f2 (*make_f2)(float, float);\n\
           union f3 (*make_f3)(float, float, float); union d3 (*make_d3)(double, double, double);\n\
           union fd (*make_fd)(double); struct nest (*make_nest)(double, double, double);\n\
-          struct arr (*make_arr)(float, float, float); struct pad (*make_pad)(float, float); };\n\
+          struct arr (*make_arr)(float, float, float); struct pad (*make_pad)(float, float);\n\
+          double (*take_vv)(union vv, double); double (*take_vs)(struct vs, double);\n\
+          double (*take_v3)(struct v3, double); union vv (*make_vv)(float, float);\n\
+          struct vs (*make_vs)(float, int); struct v3 (*make_v3)(float, float, float); };\n\
         static int drive(const struct fns *f, int base)\n\
         { union u1 u1 = { 4.0 };\n\
           union f2 f2 = { { 1, 2 } };\n\
@@ -6206,13 +6225,26 @@ fn homogeneous_aggregates_cross_the_system_compiler_boundary() {
           if (a.u[0].b != 1 || a.u[1].a != 2 || a.u[2].b != 3) return base + 15;\n\
           p = f->make_pad(1, 2);\n\
           if (p.a != 1 || p.b != 2) return base + 16;\n\
+          union vv vv; vv.v = (v4f){ 3, 0, 0, 4 };\n\
+          struct vs vs; vs.a = (v4f){ 0, 0, 0, 3 }; vs.b = (v4i){ 4, 4, 4, 4 };\n\
+          struct v3 v3; v3.a = (v2f){ 1, 0 }; v3.b = (v2f){ 0, 2 }; v3.c = (v2f){ 3, 0 };\n\
+          if (f->take_vv(vv, 0.5) != 340.5) return base + 17;\n\
+          if (f->take_vs(vs, 0.5) != 340.5) return base + 18;\n\
+          if (f->take_v3(v3, 0.5) != 123.5) return base + 19;\n\
+          vv = f->make_vv(1.5f, 2.5f);\n\
+          if (vv.w[0] != 1.5f || vv.v[3] != 2.5f) return base + 20;\n\
+          vs = f->make_vs(1.5f, 7);\n\
+          if (vs.a[3] != 1.5f || vs.b[2] != 7) return base + 21;\n\
+          v3 = f->make_v3(1, 2, 3);\n\
+          if (v3.a[0] != 1 || v3.b[1] != 2 || v3.c[0] != 3) return base + 22;\n\
           return 0; }\n";
     drive_across_the_system_compiler(
         &cc,
         "hfa-union-interop",
         common,
         "take_u1, take_f2, take_f3, take_d3, take_fd, take_nest, take_arr, take_pad, \
-         make_u1, make_f2, make_f3, make_d3, make_fd, make_nest, make_arr, make_pad",
+         make_u1, make_f2, make_f3, make_d3, make_fd, make_nest, make_arr, make_pad, \
+         take_vv, take_vs, take_v3, make_vv, make_vs, make_v3",
     );
 }
 
@@ -6230,14 +6262,7 @@ fn eightbyte_classes_cross_the_system_compiler_boundary() {
         );
         return;
     };
-    // TODO: AAPCS64 passes a homogeneous short-vector aggregate (`a6`) in
-    // SIMD registers; badc passes it as a plain composite.
     let common = "typedef float v4f __attribute__((vector_size(16)));\n\
-        #if defined(__aarch64__)\n\
-        #define HVA 0\n\
-        #else\n\
-        #define HVA 1\n\
-        #endif\n\
         struct __attribute__((aligned(16))) a1 { double d; };\n\
         struct __attribute__((aligned(16))) a2 { int a; };\n\
         union a3 { double d; __attribute__((aligned(16))) char c; };\n\
@@ -6278,15 +6303,15 @@ fn eightbyte_classes_cross_the_system_compiler_boundary() {
           if (f->take_a3(t3, 4, 5.5) != 345) return base + 3;\n\
           if (f->take_a4(t4, 4, 5.5) != 345) return base + 4;\n\
           if (f->take_a5(t5, 5, 6.5) != 3456) return base + 5;\n\
-          if (HVA && f->take_a6(5, t6, 6.5) != 3456) return base + 6;\n\
+          if (f->take_a6(5, t6, 6.5) != 3456) return base + 6;\n\
           if (f->make_a1(2.5).d != 2.5) return base + 7;\n\
           if (f->make_a2(7).a != 7) return base + 8;\n\
           if (f->make_a3(2.5).d != 2.5) return base + 9;\n\
           if (f->make_a4(2.5).e != 2.5) return base + 10;\n\
           t5 = f->make_a5(1.5f, 2.5f);\n\
           if (t5.v[0] != 1.5f || t5.v[3] != 2.5f) return base + 11;\n\
-          if (HVA) { t6 = f->make_a6(1.5f, 2.5f);\n\
-            if (t6.w[1] != 1.5f || t6.w[2] != 2.5f) return base + 12; }\n\
+          t6 = f->make_a6(1.5f, 2.5f);\n\
+          if (t6.w[1] != 1.5f || t6.w[2] != 2.5f) return base + 12;\n\
           return 0; }\n";
     drive_across_the_system_compiler(
         &cc,

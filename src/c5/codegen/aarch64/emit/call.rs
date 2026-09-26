@@ -246,8 +246,9 @@ pub(super) fn emit_va_copy_cursor(
 /// argument from the general save area while `__gr_offs < 0`, a
 /// floating-point one from the vector area while `__vr_offs < 0`, else
 /// the overflow stack. Returns the slot's address; the macro
-/// dereferences it. An HFA's elements sit one per 16-byte vector slot and
-/// are copied to the temporary `args[2]` names, whose address is returned.
+/// dereferences it. A homogeneous aggregate's elements sit one per 16-byte
+/// vector slot and are copied to the temporary `args[2]` names, whose
+/// address is returned.
 /// x17 holds the struct pointer, x16 the offset then the address, and a
 /// borrowed x9 / x10 / x11 (saved around the sequence) the area top.
 pub(super) fn emit_va_arg_aapcs64(
@@ -269,9 +270,9 @@ pub(super) fn emit_va_arg_aapcs64(
         }
     };
     let desc = crate::c5::op::VaArgDesc::unpack(descriptor);
-    let hfa = desc.kind == crate::c5::op::VaArgDesc::HFA;
-    if args.len() != 2 + usize::from(hfa) {
-        return fail("VaArg: expected (ap, descriptor) and an HFA's temporary");
+    let homogeneous = desc.kind == crate::c5::op::VaArgDesc::HOMOGENEOUS;
+    if args.len() != 2 + usize::from(homogeneous) {
+        return fail("VaArg: expected (ap, descriptor) and a homogeneous aggregate's temporary");
     }
     let is_fp = desc.kind != crate::c5::op::VaArgDesc::INT;
     let ap_place = alloc
@@ -293,13 +294,13 @@ pub(super) fn emit_va_arg_aapcs64(
     };
     // The integer bank: __gr_offs (+24), __gr_top (+8), 8-byte stride; the
     // FP bank: __vr_offs (+28), __vr_top (+16), 16-byte stride, one slot
-    // per HFA element (B.4).
+    // per homogeneous-aggregate element (B.4).
     let (off_field, top_field, reg_step): (u32, u32, u32) =
         if is_fp { (28, 16, 16) } else { (24, 8, 8) };
     // An integer-class aggregate spans `ceil(size/8)` eightbytes.
     let size = if desc.by_ref { 8 } else { desc.size };
     let slot_bytes = ((size + 7) & !7u32).max(8);
-    let reg_advance = if hfa {
+    let reg_advance = if homogeneous {
         reg_step * u32::from(desc.elements)
     } else if is_fp {
         reg_step
@@ -310,7 +311,7 @@ pub(super) fn emit_va_arg_aapcs64(
     let stack_align = desc.align.max(8);
     let stack_advance = if desc.kind == crate::c5::op::VaArgDesc::VECTOR {
         size.max(8)
-    } else if is_fp && !hfa {
+    } else if is_fp && !homogeneous {
         8
     } else {
         slot_bytes
@@ -360,11 +361,11 @@ pub(super) fn emit_va_arg_aapcs64(
     emit(code, enc_subs_imm(Reg(31), scratch.primary, 0));
     emit(code, enc_b_cond(Cond::Gt, 0));
     let to_stack_straddle = code.len() - 4;
-    if hfa {
+    if homogeneous {
         // Element k from slot k to `temp + k * width`, through x17 (the
         // struct pointer is not read again on this path).
         let Some(base) = materialize_int_shifted(code, temp, scratch.primary, frame, 16) else {
-            return fail("VaArg: HFA temporary not int reg / spill");
+            return fail("VaArg: homogeneous aggregate temporary not int reg / spill");
         };
         let width = size / u32::from(desc.elements.max(1));
         for k in 0..u32::from(desc.elements) {
@@ -668,8 +669,8 @@ fn setup_indirect_result(
         && agg_descs[ai as usize].size > 16
         && super::abi_classify::fp_member_layout(&agg_descs[ai as usize]).is_none()
     {
-        // An HFA larger than 16 bytes (three or four members) still returns
-        // in v-registers, not through x8.
+        // A homogeneous aggregate over 16 bytes still returns in v-registers,
+        // not through x8.
         let slot = local_slot(ret_slot_off, func, frame).sp_lowered(plan.scratch_bytes);
         let _ = emit_frame_addr(code, Place::IntReg(8), slot, frame);
     }
@@ -702,8 +703,8 @@ fn finish_call_result(
         let size = desc.size;
         let slot = local_slot(ret_slot_off, func, frame);
         if let Some(members) = super::abi_classify::fp_member_layout(desc) {
-            // AAPCS64 6.9: an HFA result arrives with member k in v[k], a
-            // Short Vector result whole in v0.
+            // AAPCS64 6.9: a homogeneous aggregate result arrives with element
+            // k in v[k], a Short Vector result whole in v0.
             let accesses = members
                 .iter()
                 .map(|&(off, msize)| (fp_store_op(msize), off));
@@ -1063,7 +1064,7 @@ impl CallArgs<'_> {
         Ok(())
     }
 
-    /// AAPCS64 6.8.2 HFA arguments: each member loads into its own FP
+    /// AAPCS64 6.8.2 HFA and HVA arguments: each member loads into its own FP
     /// register from the aggregate's address, after the scalar FP moves
     /// consumed their d-register sources and before the integer marshal
     /// overwrites the base register. Integer-class `StructRegs` take the

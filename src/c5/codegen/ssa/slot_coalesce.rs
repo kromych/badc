@@ -1999,7 +1999,7 @@ mod tests {
                 align: 8,
                 member_align: 8,
                 fields: alloc::vec![],
-                hfa: None,
+                homogeneous: None,
             }];
             f
         };

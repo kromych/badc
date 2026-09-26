@@ -1997,8 +1997,27 @@ impl Compiler {
         use crate::c5::op::VaArgDesc;
         let by_ref =
             !is_pointer && super::type_layout::va_arg_by_ref(&self.structs, self.target, arg_ty);
+        // AAPCS64 B.4 saves an HFA's elements one per 16-byte slot of the
+        // `__va_list` vector area; a read composes them in a temporary.
+        let hfa = if !is_pointer
+            && is_struct_value_ty(arg_ty)
+            && self.target.abi().aarch64_host_variadic()
+        {
+            super::type_layout::homogeneous_fp_aggregate(
+                &self.structs,
+                self.target,
+                struct_id_of(arg_ty),
+            )
+        } else {
+            None
+        };
         let (kind, align) = if is_pointer || by_ref {
             (VaArgDesc::INT, 8)
+        } else if hfa.is_some() {
+            (
+                VaArgDesc::HFA,
+                super::type_layout::va_arg_align(&self.structs, self.target, arg_ty),
+            )
         } else if let Some(kind) = self.long_double_va_kind(arg_ty) {
             (kind, 16)
         } else if is_vector_ty(&self.structs, arg_ty) && matches!(size, 8 | 16) {
@@ -2019,10 +2038,27 @@ impl Compiler {
             kind,
             align,
             by_ref,
+            elements: hfa.map_or(0, |h| h.count() as u8),
         }
         .pack();
         let desc_id = self.ast_emit_int_lit(descriptor, Ty::Int as i64);
         args.push(desc_id);
+        if hfa.is_some() {
+            let slots = self.slots_of_type(arg_ty);
+            let slot = self.reserve_object_slots(arg_ty, slots)?;
+            self.record_multi_cell_temp(slot, slots, arg_ty);
+            self.commit_block_slot(slot);
+            let pos = self.ast_src_pos();
+            args.push(self.ast.push_expr(
+                super::super::ast::Expr::CompoundLiteral {
+                    slot_off: slot,
+                    ty: arg_ty,
+                    array_size: 0,
+                    init: super::super::ast::LocalInit::None,
+                },
+                pos,
+            ));
+        }
         Ok(arg_ty)
     }
 

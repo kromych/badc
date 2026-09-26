@@ -5754,6 +5754,62 @@ fn variadic_aggregates_cross_the_system_compiler_boundary() {
     );
 }
 
+// `va_arg` of a homogeneous floating-point aggregate crosses the system
+// compiler boundary both ways: AAPCS64 passes one in the SIMD registers, one
+// per element, and on the stack once too few are left, and a Linux callee
+// reads each element from its own 16-byte slot of the vector save area.
+// TODO: System V `va_arg` of an SSE-class aggregate reads the general area.
+#[cfg(all(any(target_os = "linux", target_os = "macos"), target_arch = "aarch64"))]
+#[test]
+fn variadic_hfas_cross_the_system_compiler_boundary() {
+    let Some(cc) = host_cc() else {
+        eprintln!(
+            "skipping variadic_hfas_cross_the_system_compiler_boundary: no system C compiler"
+        );
+        return;
+    };
+    let common = "#include <stdarg.h>\n\
+        struct d2 { double x, y; };\n\
+        struct f3 { float a, b, c; };\n\
+        struct ld1 { long double v; };\n\
+        union u1 { double a; double b; };\n\
+        static double d2s(int n, ...)\n\
+        { va_list ap; double s = 0; va_start(ap, n);\n\
+          for (int i = 0; i < n; i++) { struct d2 p = va_arg(ap, struct d2);\n\
+            s = s * 100 + p.x * 10 + p.y; }\n\
+          va_end(ap); return s; }\n\
+        static double f3s(int n, ...)\n\
+        { va_list ap; double s = 0; va_start(ap, n);\n\
+          for (int i = 0; i < n; i++) { struct f3 q = va_arg(ap, struct f3);\n\
+            s = s * 1000 + q.a * 100 + q.b * 10 + q.c; }\n\
+          va_end(ap); return s; }\n\
+        static long double lds(int n, ...)\n\
+        { va_list ap; long double s = 0; va_start(ap, n);\n\
+          for (int i = 0; i < n; i++) s = s * 10 + va_arg(ap, struct ld1).v;\n\
+          va_end(ap); return s; }\n\
+        static double mix(int n, ...)\n\
+        { va_list ap; double s = 0; va_start(ap, n);\n\
+          for (int i = 0; i < n; i++) { int k = va_arg(ap, int);\n\
+            union u1 u = va_arg(ap, union u1); double d = va_arg(ap, double);\n\
+            s = s * 1000 + k * 100 + u.b * 10 + d; }\n\
+          va_end(ap); return s; }\n\
+        struct fns { double (*d2s)(int, ...); double (*f3s)(int, ...);\n\
+          long double (*lds)(int, ...); double (*mix)(int, ...); };\n\
+        static int drive(const struct fns *f, int base)\n\
+        { struct d2 a = { 1, 2 }, b = { 3, 4 }, c = { 5, 6 }, d = { 7, 8 }, e = { 9, 1 };\n\
+          struct f3 g = { 1, 2, 3 }, h = { 4, 5, 6 }, k = { 7, 8, 9 };\n\
+          struct ld1 l = { 2 }, m = { 3 };\n\
+          union u1 u = { 4 };\n\
+          if (f->d2s(2, a, b) != 1234) return base + 1;\n\
+          if (f->d2s(5, a, b, c, d, e) != 1234567891) return base + 2;\n\
+          if (f->f3s(3, g, h, k) != 123456789) return base + 3;\n\
+          if (f->lds(2, l, m) != 23) return base + 4;\n\
+          if (f->lds(9, l, l, l, l, l, l, l, l, m) != 222222223) return base + 5;\n\
+          if (f->mix(2, 1, u, 0.5, 2, u, 0.25) != 140740.25) return base + 6;\n\
+          return 0; }\n";
+    drive_across_the_system_compiler(&cc, "va-hfa-interop", common, "d2s, f3s, lds, mix");
+}
+
 /// The platform C compiler on Windows: `$CC` when set, else clang on the path
 /// or in LLVM's default install, provided it runs.
 #[cfg(windows)]

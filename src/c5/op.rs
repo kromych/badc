@@ -293,7 +293,7 @@ pub enum Intrinsic {
 }
 
 /// The type operand of [`Intrinsic::VaArg`], one constant packed as
-/// `by_ref << 25 | (align == 16) << 24 | kind << 16 | size`.
+/// `elements << 26 | by_ref << 25 | (align == 16) << 24 | kind << 16 | size`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct VaArgDesc {
     pub size: u32,
@@ -302,6 +302,8 @@ pub(crate) struct VaArgDesc {
     pub align: u32,
     /// The argument's slot holds the address of a copy, not its bytes.
     pub by_ref: bool,
+    /// The element count of an [`Self::HFA`], 0 for the other kinds.
+    pub elements: u8,
 }
 
 impl VaArgDesc {
@@ -311,9 +313,13 @@ impl VaArgDesc {
     /// Passed in memory whatever registers are left: the System V MEMORY
     /// class a `long double` takes (X87 + X87UP).
     pub(crate) const MEMORY: u8 = 3;
+    /// An AAPCS64 homogeneous floating-point aggregate: one SIMD register
+    /// per element, each saved in its own 16-byte slot of the vector area.
+    pub(crate) const HFA: u8 = 4;
 
     pub(crate) fn pack(self) -> i64 {
-        (i64::from(self.by_ref) << 25)
+        (i64::from(self.elements & 7) << 26)
+            | (i64::from(self.by_ref) << 25)
             | (i64::from(self.align > 8) << 24)
             | (i64::from(self.kind) << 16)
             | i64::from(self.size & 0xffff)
@@ -325,6 +331,7 @@ impl VaArgDesc {
             kind: ((d >> 16) & 0xff) as u8,
             align: if (d >> 24) & 1 != 0 { 16 } else { 8 },
             by_ref: (d >> 25) & 1 != 0,
+            elements: ((d >> 26) & 7) as u8,
         }
     }
 }

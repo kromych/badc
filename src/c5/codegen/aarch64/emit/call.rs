@@ -246,9 +246,10 @@ pub(super) fn emit_va_copy_cursor(
 /// argument from the general save area while `__gr_offs < 0`, a
 /// floating-point one from the vector area while `__vr_offs < 0`, else
 /// the overflow stack. Returns the slot's address; the macro
-/// dereferences it. x17 holds the struct pointer, x16 the offset then
-/// the address, and a borrowed x9 / x10 (saved around the sequence) the
-/// area top.
+/// dereferences it. An HFA's elements sit one per 16-byte vector slot and
+/// are copied to the temporary `args[2]` names, whose address is returned.
+/// x17 holds the struct pointer, x16 the offset then the address, and a
+/// borrowed x9 / x10 / x11 (saved around the sequence) the area top.
 pub(super) fn emit_va_arg_aapcs64(
     code: &mut Vec<u8>,
     args: &[u32],
@@ -258,16 +259,20 @@ pub(super) fn emit_va_arg_aapcs64(
     frame: Frame,
     scratch: &ScratchPool,
 ) -> Emit {
-    if args.len() != 2 {
-        return fail("VaArg: expected 2 args (ap, descriptor)");
-    }
-    let descriptor = match func.insts.get(args[1] as usize) {
+    let descriptor = match func
+        .insts
+        .get(args.get(1).copied().unwrap_or(u32::MAX) as usize)
+    {
         Some(Inst::Imm(d)) => *d,
         _ => {
             return fail("VaArg: descriptor operand is not a constant");
         }
     };
     let desc = crate::c5::op::VaArgDesc::unpack(descriptor);
+    let hfa = desc.kind == crate::c5::op::VaArgDesc::HFA;
+    if args.len() != 2 + usize::from(hfa) {
+        return fail("VaArg: expected (ap, descriptor) and an HFA's temporary");
+    }
     let is_fp = desc.kind != crate::c5::op::VaArgDesc::INT;
     let ap_place = alloc
         .places
@@ -287,31 +292,40 @@ pub(super) fn emit_va_arg_aapcs64(
         ap_r
     };
     // The integer bank: __gr_offs (+24), __gr_top (+8), 8-byte stride; the
-    // FP bank: __vr_offs (+28), __vr_top (+16), 16-byte stride. TODO: an
-    // HFA rides the vector area one 16-byte slot per member (B.5) and
-    // needs composition into a temporary; the descriptor classes every
-    // aggregate but a Short Vector as general-register.
+    // FP bank: __vr_offs (+28), __vr_top (+16), 16-byte stride, one slot
+    // per HFA element (B.4).
     let (off_field, top_field, reg_step): (u32, u32, u32) =
         if is_fp { (28, 16, 16) } else { (24, 8, 8) };
     // An integer-class aggregate spans `ceil(size/8)` eightbytes.
     let size = if desc.by_ref { 8 } else { desc.size };
     let slot_bytes = ((size + 7) & !7u32).max(8);
-    let reg_advance = if is_fp { reg_step } else { slot_bytes };
+    let reg_advance = if hfa {
+        reg_step * u32::from(desc.elements)
+    } else if is_fp {
+        reg_step
+    } else {
+        slot_bytes
+    };
     // C.4 / C.14 round the NSAA up to the argument's alignment; a double takes 8.
     let stack_align = desc.align.max(8);
     let stack_advance = if desc.kind == crate::c5::op::VaArgDesc::VECTOR {
         size.max(8)
-    } else if is_fp {
+    } else if is_fp && !hfa {
         8
     } else {
         slot_bytes
     };
-    let dst_reg = if let Place::IntReg(r) = dst {
-        Some(r)
-    } else {
-        None
+    let reg_of = |place: Place| match place {
+        Place::IntReg(r) => Some(r),
+        _ => None,
     };
-    let borrow = if dst_reg == Some(9) { Reg(10) } else { Reg(9) };
+    let temp = args.get(2).map_or(Place::None, |&t| place_of(alloc, t));
+    let busy = [reg_of(dst), reg_of(temp)];
+    let borrow = [9u8, 10, 11]
+        .into_iter()
+        .find(|r| !busy.contains(&Some(*r)))
+        .map(Reg)
+        .expect("three candidates for two busy registers");
     emit(code, enc_str_pre(borrow, Reg(31), -16));
     // x16 = offs (the signed 32-bit field, sign-extended into x16).
     emit(code, enc_ldrsw_imm(scratch.primary, ap, off_field));
@@ -346,8 +360,30 @@ pub(super) fn emit_va_arg_aapcs64(
     emit(code, enc_subs_imm(Reg(31), scratch.primary, 0));
     emit(code, enc_b_cond(Cond::Gt, 0));
     let to_stack_straddle = code.len() - 4;
-    // Land the address uniformly in x16.
-    emit_mov_reg(code, scratch.primary, borrow);
+    if hfa {
+        // Element k from slot k to `temp + k * width`, through x17 (the
+        // struct pointer is not read again on this path).
+        let Some(base) = materialize_int_shifted(code, temp, scratch.primary, frame, 16) else {
+            return fail("VaArg: HFA temporary not int reg / spill");
+        };
+        let width = size / u32::from(desc.elements.max(1));
+        for k in 0..u32::from(desc.elements) {
+            for part in (0..width).step_by(8) {
+                let (src, dst) = (16 * k + part, width * k + part);
+                if width == 4 {
+                    emit(code, enc_ldr32_imm(scratch.secondary, borrow, src));
+                    emit(code, enc_str32_imm(scratch.secondary, base, dst));
+                } else {
+                    emit(code, enc_ldr_imm(scratch.secondary, borrow, src));
+                    emit(code, enc_str_imm(scratch.secondary, base, dst));
+                }
+            }
+        }
+        emit_mov_reg(code, scratch.primary, base);
+    } else {
+        // Land the address uniformly in x16.
+        emit_mov_reg(code, scratch.primary, borrow);
+    }
     emit(code, enc_b(0));
     let to_done = code.len() - 4;
     // --- overflow-stack path ---

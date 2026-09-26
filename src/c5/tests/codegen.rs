@@ -13591,6 +13591,80 @@ fn variadic_aggregate_over_16_bytes_is_read_where_the_caller_passed_it() {
     );
 }
 
+/// AAPCS64 B.4: `va_arg` of an HFA takes `__vr_offs` forward by 16 per
+/// element and copies element `k` from its save slot at `16 * k` to
+/// `k * width` of a temporary; `__gr_offs` is not read. A binary128
+/// element is its whole slot.
+#[test]
+fn variadic_hfa_elements_come_from_the_vector_save_area() {
+    use crate::Target;
+    use crate::c5::codegen::aarch64::encode::{
+        Reg, enc_add_imm, enc_ldr_imm, enc_ldr32_imm, enc_ldrsw_imm, enc_str_imm, enc_str32_imm,
+    };
+    const SRC: &str = "#include <stdarg.h>\n\
+        struct d3 { double a, b, c; };\n\
+        struct f4 { float a, b, c, d; };\n\
+        struct q1 { long double v; };\n\
+        double va_d3(int n, ...) { va_list ap; va_start(ap, n);\n\
+            struct d3 s = va_arg(ap, struct d3); va_end(ap); return s.a + s.c + n; }\n\
+        double va_f4(int n, ...) { va_list ap; va_start(ap, n);\n\
+            struct f4 s = va_arg(ap, struct f4); va_end(ap); return s.a + s.d + n; }\n\
+        long double va_q1(int n, ...) { va_list ap; va_start(ap, n);\n\
+            struct q1 s = va_arg(ap, struct q1); va_end(ap); return s.v + n; }\n";
+    let x = Reg;
+    let obj = relocatable_object(SRC, Target::LinuxAarch64);
+    for (name, n, width) in [("va_d3", 3u32, 8u32), ("va_f4", 4, 4), ("va_q1", 1, 16)] {
+        let ws = function_words(&obj, name);
+        expect_words(
+            &ws,
+            &[
+                enc_ldrsw_imm(x(16), x(17), 28),
+                enc_add_imm(x(16), x(16), 16 * n),
+            ],
+            name,
+        );
+        assert!(
+            !ws.contains(&enc_ldrsw_imm(x(16), x(17), 24)),
+            "{name}: reads __gr_offs"
+        );
+        // `ldr x17, [src, #16k + p] ; str x17, [dst, #wk + p]` for each part.
+        let parts: alloc::vec::Vec<(u32, u32)> = (0..n)
+            .flat_map(|k| {
+                (0..width)
+                    .step_by(8)
+                    .map(move |p| (16 * k + p, width * k + p))
+            })
+            .collect();
+        let copy = |src: u8, dst: u8, (from, to): (u32, u32)| {
+            if width == 4 {
+                [
+                    enc_ldr32_imm(x(17), x(src), from),
+                    enc_str32_imm(x(17), x(dst), to),
+                ]
+            } else {
+                [
+                    enc_ldr_imm(x(17), x(src), from),
+                    enc_str_imm(x(17), x(dst), to),
+                ]
+            }
+        };
+        let copies = ws.windows(2 * parts.len()).any(|w| {
+            (0..31).any(|src| {
+                (0..31).any(|dst| {
+                    parts
+                        .iter()
+                        .enumerate()
+                        .all(|(i, &p)| w[2 * i..2 * i + 2] == copy(src, dst, p))
+                })
+            })
+        });
+        assert!(
+            copies,
+            "{name}: the elements are not copied from their slots"
+        );
+    }
+}
+
 /// Win64 passes every argument not of 1, 2, 4 or 8 bytes by reference, so `va_arg` loads it.
 #[test]
 fn win64_va_arg_reads_a_type_passed_by_reference_through_its_slot() {

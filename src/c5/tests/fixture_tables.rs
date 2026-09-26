@@ -1242,6 +1242,7 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("callee_function_types.c", 0),
     ("type_name_array_derivations.c", 0),
     ("typedef_member_types.c", 0),
+    ("cast_function_pointer_to_object_pointer.c", 0),
     ("inline_asm_a64_integer_ops.c", 0),
     // Plain `char` is a type distinct from `signed char` and `unsigned
     // char` (C99 6.2.5p15) at the target's signedness.
@@ -2128,6 +2129,7 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("callee_function_types.c", 0),
     ("type_name_array_derivations.c", 0),
     ("typedef_member_types.c", 0),
+    ("cast_function_pointer_to_object_pointer.c", 0),
     ("inline_asm_a64_integer_ops.c", 0),
     // Plain `char` is a type distinct from `signed char` and `unsigned
     // char` (C99 6.2.5p15) at the target's signedness.
@@ -2988,6 +2990,7 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("callee_function_types.c", 0),
     ("type_name_array_derivations.c", 0),
     ("typedef_member_types.c", 0),
+    ("cast_function_pointer_to_object_pointer.c", 0),
     ("inline_asm_a64_integer_ops.c", 0),
     // Plain `char` is a type distinct from `signed char` and `unsigned
     // char` (C99 6.2.5p15) at the target's signedness.
@@ -3630,6 +3633,7 @@ pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("callee_function_types.c", 0),
     ("type_name_array_derivations.c", 0),
     ("typedef_member_types.c", 0),
+    ("cast_function_pointer_to_object_pointer.c", 0),
     ("inline_asm_a64_integer_ops.c", 0),
     // Plain `char` is a type distinct from `signed char` and `unsigned
     // char` (C99 6.2.5p15) at the target's signedness.
@@ -4217,6 +4221,7 @@ pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("callee_function_types.c", 0),
     ("type_name_array_derivations.c", 0),
     ("typedef_member_types.c", 0),
+    ("cast_function_pointer_to_object_pointer.c", 0),
     ("inline_asm_a64_integer_ops.c", 0),
     // Plain `char` is a type distinct from `signed char` and `unsigned
     // char` (C99 6.2.5p15) at the target's signedness.
@@ -5112,6 +5117,7 @@ pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
     ("callee_function_types.c", 0),
     ("type_name_array_derivations.c", 0),
     ("typedef_member_types.c", 0),
+    ("cast_function_pointer_to_object_pointer.c", 0),
     ("inline_asm_a64_integer_ops.c", 0),
     // Plain `char` is a type distinct from `signed char` and `unsigned
     // char` (C99 6.2.5p15) at the target's signedness.

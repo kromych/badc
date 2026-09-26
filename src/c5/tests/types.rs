@@ -2262,6 +2262,28 @@ fn a_member_declared_through_a_typedef_has_its_function_type() {
     }
 }
 
+/// C99 6.5.4: a cast's value has the cast type, so `*` on a function
+/// pointer cast to an object pointer designates the object (6.5.3.2p4):
+/// `sizeof` and `_Generic` read the pointee's type and the value is loaded.
+#[test]
+fn a_function_pointer_cast_to_an_object_pointer_designates_the_object() {
+    use super::Vm;
+    use crate::Compiler;
+    let src = "static int answer(void) { return 42; }\n\
+               int main(void) {\n\
+               \tint x = 5;\n\
+               \tint (*fp)(void) = (int (*)(void))(void *)&x;\n\
+               \treturn (sizeof *(int *)fp == sizeof(int))\n\
+               \t\t+ 2 * (sizeof *(char *)fp == 1)\n\
+               \t\t+ 4 * _Generic(*(int *)fp, int: 1, default: 0)\n\
+               \t\t+ 8 * (*(int *)fp == 5)\n\
+               \t\t+ 16 * (*(int *)(void *)fp == 5)\n\
+               \t\t+ 32 * ((*(int (*)(void))(void *)answer)() == 42);\n\
+               }\n";
+    let program = Compiler::new(src.to_string()).compile().expect(src);
+    assert_eq!(Vm::new(program).run().unwrap(), 63, "{src}");
+}
+
 /// C99 6.5.2.1p1, 6.5.6p2: a subscript and the additive operators step by
 /// the pointee's size, so a pointer to a struct or union without its body,
 /// or to an array of unknown bound, is rejected with its type named. A

@@ -2724,6 +2724,15 @@ fn typedef_member_types() {
 }
 
 #[test]
+fn cast_function_pointer_to_object_pointer() {
+    // C99 6.5.4, J.5.7: a function pointer cast to an object pointer is
+    // that object pointer, so `*` loads through it whatever expression
+    // held the function pointer; a cast to a pointer to a function pointer
+    // keeps the function type a following `*` decays through.
+    assert_eq!(run_fixture("cast_function_pointer_to_object_pointer.c"), 0);
+}
+
+#[test]
 fn indirect_call_prototypes() {
     // A call through a pointer converts or promotes its arguments by the
     // pointed-to type, however the callee is spelled.

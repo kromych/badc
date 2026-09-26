@@ -2812,13 +2812,13 @@ impl Compiler {
         if let Some(child) = cast_child_ast {
             self.ast_emit_cast(child, t);
         }
-        // The cast destination's function-pointer lineage lets a following
-        // unary `*` chain decay, as in `(**(finder_type*)p)(...)`.
-        if let Some(fpi) = type_name.fn_ptr_indirection
-            && fpi > 0
-        {
-            self.pending.fn_ptr_chain_depth = fpi - 1;
-        }
+        // The value's function-pointer lineage is the cast type's, which lets
+        // a following `*` chain decay (`(**(finder_type*)p)(...)`); a cast to
+        // any other type yields no function pointer and no designator.
+        let fpi = type_name.fn_ptr_indirection.filter(|&f| f > 0);
+        self.pending.fn_ptr_chain_depth = fpi.map_or(-1, |f| f - 1);
+        self.pending.fn_ptr_depth_is_array_elem = false;
+        self.pending.value_is_fn_designator = false;
         // C99 6.5.2.2p7: a call through the cast uses the cast's function
         // type, whatever the operand declared.
         if let Some((f, depth)) = self.type_name_fn(type_name) {

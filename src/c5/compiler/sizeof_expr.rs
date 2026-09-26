@@ -151,6 +151,9 @@ impl Compiler {
             }
             let array_count = self.pending.last_array_decay_size;
             let array_bytes = self.pending.last_array_decay_bytes;
+            // C99 6.7.5.2p4: an array whose outer bound is unspecified -- a
+            // flexible member, the pointee of `T (*)[]` -- is incomplete.
+            let incomplete = self.pending.last_array_decay_dims.first() == Some(&-1);
             let expr_ty = self.ty;
             let function = self.operand_is_function();
             self.next_ent_pc = saved_text_len;
@@ -159,6 +162,11 @@ impl Compiler {
             self.drop_operand_array_decay();
             if function {
                 self.function_type_layout(true)
+            } else if incomplete {
+                return Err(self.compile_err(
+                    Code::INVALID_DECLARATION,
+                    "`sizeof` applied to an incomplete type",
+                ));
             } else if array_bytes > 0 {
                 // A row of a pointer to an array or of a multi-dimensional array:
                 // its byte count, which the flat type cannot express.

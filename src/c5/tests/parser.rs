@@ -2711,6 +2711,32 @@ fn sizeof_of_an_incomplete_type_is_diagnosed() {
 }
 
 #[test]
+fn sizeof_of_an_incomplete_array_reached_through_an_expression_is_diagnosed() {
+    // C99 6.5.3.4p1, 6.7.5.2p4: an array whose outer bound is unspecified
+    // is incomplete however it is reached -- the pointee of `T (*)[]`, a
+    // flexible array member, directly or through `*&` -- while a
+    // zero-length array and a row of a pointer to `T[][N]` are complete.
+    for operand in ["*pa", "s->fa", "*&s->fa", "(*pa)"] {
+        expect_compile_error(
+            &alloc::format!(
+                "struct S {{ int n; int fa[]; }};\n\
+                 int main(void) {{ int (*pa)[] = 0; struct S *s = 0;\n\
+                 return (int)sizeof({operand}) + (pa != 0) + (s != 0); }}"
+            ),
+            "`sizeof` applied to an incomplete type",
+        );
+    }
+    Compiler::new(
+        "struct Z { int n; int z[0]; };\n\
+         int main(void) { int (*pr)[][3] = 0; struct Z *p = 0;\n\
+         return (int)(sizeof(p->z) + sizeof((*pr)[0]) + _Alignof(p->z)) - 16; }"
+            .to_string(),
+    )
+    .compile()
+    .expect("a zero-length member and a complete row stay legal");
+}
+
+#[test]
 fn address_of_a_block_scope_compound_literal_is_not_constant() {
     // C99 6.5.2.5p5: a compound literal inside a function body has
     // automatic storage duration, so its address is not an address

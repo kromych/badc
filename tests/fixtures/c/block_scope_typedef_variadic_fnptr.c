@@ -6,7 +6,7 @@
 
 int main(void) {
     char buf[64];
-    typedef int (*psn)(char *, unsigned long, const char *, ...);
+    typedef int (*psn)(char *, size_t, const char *, ...);
     static psn sn = snprintf;
     buf[0] = 0;
     sn(buf, sizeof buf, "%d %s", 7, "tail");

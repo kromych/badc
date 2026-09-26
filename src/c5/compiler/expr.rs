@@ -3598,6 +3598,7 @@ impl Compiler {
     }
 
     fn parse_assignment(&mut self, lhs_ty: i64) -> Result<(), C5Error> {
+        let lhs_fn = self.ast_acc.and_then(|id| self.expr_fn(id));
         self.next()?;
         // A parenthesized bitfield lvalue (`(s.f) = v`, C99 6.5.1p5) arrives
         // as the read node the member parser built, since the parentheses
@@ -3635,7 +3636,16 @@ impl Compiler {
             self.expr(Token::Assign as i64)?;
             let rhs_is_zero = self.last_emit_is_zero();
             let rhs_is_untyped = self.last_emit_was_indirect_call();
-            if let Some(m) = Self::type_warning_with_flags(
+            let rhs_fn = self.value_fn_type(self.ast_acc);
+            if lhs_fn.is_some() && rhs_fn.is_some() {
+                let what = ("assignment", "lhs", "rhs");
+                self.check_fn_pointer_conversion(
+                    (lhs_ty, &lhs_fn),
+                    (self.ty, &rhs_fn),
+                    line,
+                    what,
+                )?;
+            } else if let Some(m) = Self::type_warning_with_flags(
                 &self.structs,
                 lhs_ty,
                 self.ty,

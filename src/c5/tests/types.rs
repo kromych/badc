@@ -1905,6 +1905,144 @@ fn a_return_mismatch_is_an_error_the_user_can_lower() {
     }
 }
 
+/// C99 6.5.16.1p1, 6.7.5.3p15: a pointer to a function converts as if by
+/// assignment -- assigned, initialized at any storage duration or returned
+/// -- only to a pointer to a compatible function type, which gcc 14 and
+/// clang reject as an error the user can lower. A null pointer constant,
+/// `void *`, a cast, a type without a prototype beside one whose parameters
+/// survive promotion, and a libc binding's approximated type pass.
+#[test]
+fn an_incompatible_function_pointer_conversion_is_rejected() {
+    use crate::c5::diag::{Code, Config, Level};
+    use crate::{CompileOptions, Compiler, Target};
+    let decls = "static double d(double x) { return x; }\n\
+                 static int i1(int x) { return x; }\n\
+                 static int ic(char c) { return c; }\n\
+                 static int iv(int x, ...) { return x; }\n\
+                 static int kr(a, b) int a, b; { return a + b; }\n\
+                 static int (*ret_i(void))(int) { return i1; }\n\
+                 typedef int (*fn_t)(int);\n\
+                 struct s { int (*m)(int); };\n";
+    let with_level = |src: &str, level: Option<Level>| {
+        let mut config = Config::new();
+        if let Some(level) = level {
+            config.set_level(Code::INCOMPATIBLE_POINTER_TYPES, level);
+        }
+        Compiler::with_options(
+            src.to_string(),
+            Target::default_target(),
+            CompileOptions::default().with_diag(config),
+        )
+        .compile()
+    };
+    for (outer, body, text) in [
+        (
+            "",
+            "int (*fp)(int); fp = d;",
+            "assignment (lhs=`int (*)(int)`, rhs=`double (*)(double)`)",
+        ),
+        (
+            "",
+            "struct s x; x.m = &d;",
+            "assignment (lhs=`int (*)(int)`, rhs=`double (*)(double)`)",
+        ),
+        (
+            "",
+            "int (*fp)(int), (**pp)(int) = &fp; *pp = ic;",
+            "rhs=`int (*)(char)`",
+        ),
+        (
+            "",
+            "int (*fp)(int) = d;",
+            "initializer (declared=`int (*)(int)`, init=`double (*)(double)`)",
+        ),
+        (
+            "",
+            "fn_t fp = iv;",
+            "initializer (declared=`int (*)(int)`, init=`int (*)(int, ...)`)",
+        ),
+        (
+            "",
+            "int (*fp)() = ic;",
+            "initializer (declared=`int (*)()`, init=`int (*)(char)`)",
+        ),
+        (
+            "",
+            "int (*(*fp)(void))(double) = ret_i;",
+            "init=`int (*(*)(void))(int)`",
+        ),
+        (
+            "",
+            "static int (*fp)(int) = d;",
+            "initializer (declared=`int (*)(int)`",
+        ),
+        (
+            "int (*gp)(int) = d;\n",
+            "",
+            "initializer (declared=`int (*)(int)`",
+        ),
+        ("int (*gp)(int) = &d;\n", "", "init=`double (*)(double)`"),
+        (
+            "int (*gp)(int) = { (d) };\n",
+            "",
+            "init=`double (*)(double)`",
+        ),
+        (
+            "static int (*get(void))(int) { return d; }\n",
+            "",
+            "return (declared=`int (*)(int)`, returned=`double (*)(double)`)",
+        ),
+    ] {
+        let src = format!("{decls}{outer}int main(void) {{ {body} return 0; }}\n");
+        let err = with_level(&src, None).expect_err(&src).to_string();
+        let prefix = "incompatible function pointer types in ";
+        assert!(
+            err.contains(prefix) && err.contains(text) && err.contains("[B3029]"),
+            "{src}{err}"
+        );
+        let lowered = with_level(&src, Some(Level::Warning)).expect("lowered to a warning");
+        let codes: alloc::vec::Vec<Code> = lowered.warnings.iter().map(|d| d.code).collect();
+        assert_eq!(codes, [Code::INCOMPATIBLE_POINTER_TYPES], "{src}");
+        let silenced = with_level(&src, Some(Level::Ignore)).expect("silenced");
+        assert!(silenced.warnings.is_empty(), "{src}{:?}", silenced.warnings);
+    }
+    for (outer, body) in [
+        ("", "int (*fp)(int) = i1; fp = &i1; fp = *i1; fp = ret_i();"),
+        (
+            "",
+            "int (*fp)() = i1; int (*gp)(int, int) = kr; int (*hp)(double) = kr;",
+        ),
+        (
+            "",
+            "int (*fp)(int) = 0; fp = (void *)d; fp = (int (*)(int))d; fp = (fn_t)0;",
+        ),
+        ("", "struct s x = { i1 }; x.m = (1 ? i1 : 0);"),
+        (
+            "",
+            "static int (*fp)(int) = i1; static int (*gp)(int) = (int (*)(int))d;",
+        ),
+        ("int f(const int x) { return x; }\n", "int (*fp)(int) = f;"),
+        (
+            "#include <unistd.h>\n",
+            "\n#ifndef _WIN32\nunsigned (*fp)(void) = geteuid; fp = geteuid;\n#endif\n",
+        ),
+        (
+            "static fn_t tab[3] = { i1 };\n",
+            "fn_t (*pt)[3] = &tab; fn_t *pe = tab;",
+        ),
+    ] {
+        let src = format!("{decls}{outer}int main(void) {{ {body} return 0; }}\n");
+        let program = Compiler::new(src.clone())
+            .compile()
+            .unwrap_or_else(|e| panic!("{src}{e}"));
+        let codes: alloc::vec::Vec<Code> = program.warnings.iter().map(|d| d.code).collect();
+        assert!(
+            !codes.contains(&Code::INCOMPATIBLE_POINTER_TYPES),
+            "{src}{codes:?}"
+        );
+    }
+}
+
 /// C99 6.3.2.2p1: a `void` expression has no value. Every context that
 /// reads one rejects it with the same diagnostic: an argument with or
 /// without a parameter type, an initializer, an assignment, a returned
@@ -2209,22 +2347,21 @@ fn the_address_of_a_function_designator_is_the_function_pointer() {
 
     // The address of an OBJECT of function-pointer type still adds a
     // level, and assigning it where the pointer itself belongs is the
-    // mismatch gcc and clang report.
-    let p = compile_str(
-        "struct T { int a; };\n\
-         typedef struct T *sel_t(int, int);\n\
-         void bad(sel_t *v) { sel_t *p; p = &v; (void)p; }\n\
-         int main(void) { return 0; }",
-    );
+    // mismatch gcc reports as an error and clang as a warning.
+    let src = "struct T { int a; };\n\
+               typedef struct T *sel_t(int, int);\n\
+               void bad(sel_t *v) { sel_t *p; p = &v; (void)p; }\n\
+               int main(void) { return 0; }";
+    let err = crate::Compiler::new(src.to_string())
+        .compile()
+        .expect_err(src)
+        .to_string();
     assert!(
-        p.warnings.iter().any(|w| {
-            let s = w.to_string();
-            s.contains("incompatible struct types in assignment")
-                && s.contains("lhs=struct T**")
-                && s.contains("rhs=struct T***")
-        }),
-        "got: {:?}",
-        p.warnings
+        err.contains(
+            "incompatible function pointer types in assignment \
+             (lhs=`struct T* (*)(int, int)`, rhs=`struct T* (**)(int, int)`) [B3029]"
+        ),
+        "{err}"
     );
 }
 
@@ -2270,22 +2407,19 @@ fn typeof_a_dereferenced_function_pointer_names_the_function_type() {
 
     // `typeof` of the pointer OBJECT keeps its own level, so the cast
     // below really is a pointer to a function pointer and the assignment
-    // is the mismatch gcc and clang report.
-    let p = compile_str(
-        "struct T { int a; };\n\
-         typedef struct T *sel_t(int, int);\n\
-         void bad(sel_t *v, sel_t **slot) { *slot = (typeof(v) *)(v); }\n\
-         int main(void) { return 0; }",
-    );
+    // is the mismatch gcc reports as an error and clang as a warning.
+    let src = "struct T { int a; };\n\
+               typedef struct T *sel_t(int, int);\n\
+               void bad(sel_t *v, sel_t **slot) { *slot = (typeof(v) *)(v); }\n\
+               int main(void) { return 0; }";
+    let err = crate::Compiler::new(src.to_string())
+        .compile()
+        .expect_err(src)
+        .to_string();
     assert!(
-        p.warnings.iter().any(|w| {
-            let s = w.to_string();
-            s.contains("incompatible struct types in assignment")
-                && s.contains("lhs=struct T**")
-                && s.contains("rhs=struct T***")
-        }),
-        "got: {:?}",
-        p.warnings
+        err.contains("incompatible function pointer types in assignment")
+            && err.contains("rhs=`struct T* (**)(int, int)`) [B3029]"),
+        "{err}"
     );
 }
 
@@ -3007,5 +3141,35 @@ fn a_member_typed_before_its_enums_definition_takes_the_enums_type() {
              enum line *), \"last\");\n\
          _Static_assert(__builtin_types_compatible_p(print_fn, __typeof__(&nop)), \"typedef\");\n\
          int main(void) { return 0; }\n",
+    );
+}
+
+/// The function-pointer conversions three Linux units make convert between
+/// compatible types: a trampoline declared through `typeof(*fp)`, a member
+/// typed before the definition of the enum its result names, and a result
+/// pointing to const function pointers returned from an array of them.
+#[test]
+fn function_pointer_conversions_of_linux_shapes_are_compatible() {
+    compile_str(
+        "struct ops { void (*run)(void *ctx, _Bool now); };\n\
+         struct ops ops;\n\
+         extern __typeof__(*ops.run) tramp;\n\
+         static void update(void) { __typeof__(&tramp) f = (ops.run); (void)f; }\n\
+         struct ev;\n\
+         typedef enum line (*print_fn)(struct ev *e, int flags);\n\
+         struct funcs { print_fn trace; };\n\
+         enum line { PARTIAL, HANDLED };\n\
+         static enum line nop(struct ev *e, int flags) { (void)e; (void)flags; return PARTIAL; }\n\
+         static void reg(struct funcs *f) { f->trace = nop; }\n\
+         typedef _Bool (*handler)(int);\n\
+         static const handler table[2];\n\
+         static const handler *handlers(void) { return table; }\n\
+         int main(void) {\n\
+             const handler *h = handlers();\n\
+             struct funcs fs;\n\
+             update();\n\
+             reg(&fs);\n\
+             return h == table && fs.trace == nop ? 0 : 1;\n\
+         }\n",
     );
 }

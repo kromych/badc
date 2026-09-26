@@ -554,6 +554,18 @@ impl Compiler {
                 Some(self.resolve_decl_align(ty, is_static, base_type_align)?)
             };
 
+            // The function type the object points to is part of its type,
+            // which the initializer reads: it may name the object (C99
+            // 6.2.1p7) and converts to it. Written unconditionally, so a
+            // reused slot leaks no stale lineage from an outer binding.
+            if rebinds_slot {
+                self.symbols[loc_idx].fn_ptr_indirection = fn_ptr_indirection;
+                self.symbols[loc_idx].fn_ptr_ret_indirection = fn_ptr_ret_indirection;
+                self.symbols[loc_idx].ret_fn = ret_fn;
+                if let Some(p) = fnptr_params {
+                    self.symbols[loc_idx].set_fn_params(p);
+                }
+            }
             self.bind_local_declarator(&LocalDeclarator {
                 loc_idx,
                 ty,
@@ -568,21 +580,11 @@ impl Compiler {
                 base_spelling,
                 decl_align,
             })?;
-            // Written after any initializer parse, so an init expression's
-            // own symbol lookups cannot clobber them, and unconditionally, so
-            // a reused slot leaks no stale flag from an outer binding. `T x[]`
-            // whose initializer resolved to zero elements keeps its
-            // array-ness through `is_zero_len_array`; a function-pointer
-            // declarator records its pointee's parameter information.
+            // `T x[]` whose initializer resolved to zero elements keeps its
+            // array-ness; written after the initializer fixed the count.
             if rebinds_slot {
                 self.symbols[loc_idx].is_zero_len_array =
                     array_size == -1 && self.symbols[loc_idx].array_size == 0;
-                self.symbols[loc_idx].fn_ptr_indirection = fn_ptr_indirection;
-                self.symbols[loc_idx].fn_ptr_ret_indirection = fn_ptr_ret_indirection;
-                self.symbols[loc_idx].ret_fn = ret_fn;
-                if let Some(p) = fnptr_params {
-                    self.symbols[loc_idx].set_fn_params(p);
-                }
             }
 
             // After the binding is final (the automatic branch reset
@@ -1201,7 +1203,8 @@ impl Compiler {
                 }
             } else {
                 let var_offset = self.symbols[loc_idx].val;
-                self.parse_global_initializer(ty, var_offset, false)?;
+                let target_fn = self.object_fn_type(loc_idx);
+                self.parse_global_initializer(ty, var_offset, false, &target_fn)?;
             }
         }
 
@@ -1841,7 +1844,8 @@ impl Compiler {
                     self.emit_local_array_init(local_val, staged_off, elem_size);
                 }
             } else {
-                self.emit_local_init_store(local_val, ty)?;
+                let target_fn = self.object_fn_type(loc_idx);
+                self.emit_local_init_store(local_val, ty, target_fn)?;
             }
         } else {
             self.emit_auto_var_fill(loc_idx, ty, declared_array_size > 0, fill);

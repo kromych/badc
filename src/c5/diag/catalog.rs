@@ -177,6 +177,9 @@ catalog! {
     3028, "controlling-expression", [], Error, Hard,
         [], Live,
         "a controlling expression of a type its statement does not take: a non-scalar `if`, `while`, `do` or `for` condition, a non-integer `switch` expression";
+    3029, "incompatible-pointer-types", ["incompatible-function-pointer-types"], Error, Controllable,
+        [DEFAULT], Live,
+        "a pointer to a function assigned, initialized or returned as a pointer to an incompatible function type";
     4001, "unsupported", [], Error, Hard,
         [], Live,
         "a well-formed construct badc does not implement";
@@ -390,6 +393,7 @@ impl Code {
     pub const RETURN_MISMATCH: Code = Code::new(3026);
     pub const VOID_VALUE: Code = Code::new(3027);
     pub const CONTROLLING_EXPRESSION: Code = Code::new(3028);
+    pub const INCOMPATIBLE_POINTER_TYPES: Code = Code::new(3029);
     pub const UNSUPPORTED: Code = Code::new(4001);
     pub const LIMIT: Code = Code::new(4002);
     pub const INLINE: Code = Code::new(4003);

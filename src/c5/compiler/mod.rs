@@ -2231,6 +2231,9 @@ pub struct Compiler {
     /// its symbol at the opening brace. Propagated onto
     /// `FinishedFunction::conv`.
     current_func_conv: crate::c5::codegen::CallConv,
+    /// `Symbol::ret_fn` of the function body being parsed: the function
+    /// type a returned pointer to a function points to.
+    current_func_ret_fn: Option<(alloc::boxed::Box<crate::c5::symbol::FnType>, i64)>,
     /// `_Noreturn` (C11 6.7.4) on any declaration of the function whose
     /// body is being parsed, taken off its symbol at the opening brace.
     /// Propagated onto `FinishedFunction::is_noreturn`.
@@ -2959,6 +2962,7 @@ impl Compiler {
             current_func_return_ty: 0,
             current_func_returns_void: false,
             current_func_conv: crate::c5::codegen::CallConv::Target,
+            current_func_ret_fn: None,
             current_func_is_noreturn: false,
             pending: Pending::default(),
             pending_store_symbols: Vec::new(),

@@ -1278,6 +1278,7 @@ impl Compiler {
         self.current_function_name = self.symbols[id_idx].name.clone();
         self.current_func_conv = self.symbols[id_idx].conv;
         self.current_func_is_noreturn = self.symbols[id_idx].is_noreturn;
+        self.current_func_ret_fn = self.symbols[id_idx].ret_fn.clone();
 
         // Callers push right to left, so the i'th declared parameter sits at slot
         // i + 2 and the variadic tail follows it. A struct return through the
@@ -2678,7 +2679,8 @@ impl Compiler {
             }
         } else {
             let cl_parens = core::mem::take(&mut self.pending.compound_lit_close_parens);
-            self.parse_global_initializer(ty, var_offset, thread_local)?;
+            let target_fn = self.object_fn_type(id_idx);
+            self.parse_global_initializer(ty, var_offset, thread_local, &target_fn)?;
             for _ in 0..cl_parens {
                 self.accept(')')?;
             }

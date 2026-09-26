@@ -83,6 +83,35 @@ impl Compiler {
     /// initializer. A function designator names its address only when
     /// nothing follows it: `f(...)` is a call, whose value the constant
     /// evaluator decides. The cursor is left where it was.
+    /// The function a scalar initializer designates when it is only `f` or
+    /// `&f`, parenthesized or not; the cursor is left where it was.
+    fn initializer_designator(&mut self) -> Result<Option<usize>, C5Error> {
+        let snap = self.lex.snapshot();
+        let mut parens = 0;
+        while self.lex.tk == '(' {
+            parens += 1;
+            self.next()?;
+        }
+        if self.lex.tk == Token::AndOp {
+            self.next()?;
+        }
+        let idx = self.lex.curr_id_idx;
+        let class = self.symbols[idx].class;
+        let mut found = None;
+        if self.lex.tk == Token::Id && (class == Token::Fun as i64 || class == Token::Sys as i64) {
+            self.next()?;
+            while parens > 0 && self.lex.tk == ')' {
+                parens -= 1;
+                self.next()?;
+            }
+            if parens == 0 && self.at_initializer_end() {
+                found = Some(idx);
+            }
+        }
+        self.restore_lex(snap);
+        Ok(found)
+    }
+
     fn id_ends_initializer(&mut self) -> Result<bool, C5Error> {
         let snap = self.lex.snapshot();
         self.next()?;
@@ -231,17 +260,20 @@ impl Compiler {
     /// An address constant (C99 6.6p9) comes from the shared
     /// constant-initializer evaluator; the arithmetic paths below fold
     /// the integer and floating cases.
+    /// `target_fn` is the function type a pointer-to-function object points
+    /// to, which a designator initializing it must be compatible with.
     pub(super) fn parse_global_initializer(
         &mut self,
         var_ty: i64,
         var_offset: i64,
         is_thread_local: bool,
+        target_fn: &Option<(crate::c5::symbol::FnType, i64)>,
     ) -> Result<(), C5Error> {
         // A block-scope `const` scalar object folds into a static
         // object's initializer, as GCC accepts. No-op at file scope.
         self.const_object_fold += 1;
         let r = self.with_nesting("initializer", |c| {
-            c.parse_global_initializer_inner(var_ty, var_offset, is_thread_local)
+            c.parse_global_initializer_inner(var_ty, var_offset, is_thread_local, target_fn)
         });
         self.const_object_fold -= 1;
         r
@@ -252,6 +284,7 @@ impl Compiler {
         var_ty: i64,
         var_offset: i64,
         is_thread_local: bool,
+        target_fn: &Option<(crate::c5::symbol::FnType, i64)>,
     ) -> Result<(), C5Error> {
         let line = self.lex.line;
         // C11 6.5.1.1 generic selection as a static initializer element:
@@ -259,14 +292,14 @@ impl Compiler {
         // expression, then resume past the `_Generic(...)`.
         if self.lex.tk == Token::Generic {
             let after = self.generic_select_to_winner()?;
-            self.parse_global_initializer_inner(var_ty, var_offset, is_thread_local)?;
+            self.parse_global_initializer_inner(var_ty, var_offset, is_thread_local, target_fn)?;
             return self.resume_after_generic(after);
         }
         // C99 6.7.8p11: a scalar initializer may be enclosed in one
         // pair of braces. Strip the wrapper and recurse.
         if self.lex.tk == '{' {
             self.next()?;
-            self.parse_global_initializer(var_ty, var_offset, is_thread_local)?;
+            self.parse_global_initializer(var_ty, var_offset, is_thread_local, target_fn)?;
             // A trailing `,` before `}` is allowed in C99.
             self.accept(',')?;
             if self.lex.tk != '}' {
@@ -278,6 +311,15 @@ impl Compiler {
             }
             self.next()?; // consume `}`
             return Ok(());
+        }
+        if target_fn.is_some()
+            && let Some(sym) = self.initializer_designator()?
+            && self.symbols[sym].class == Token::Fun as i64
+        {
+            let init_ty = self.symbols[sym].type_ + Ty::Ptr as i64;
+            let init_fn = Some((self.symbol_fn_type(sym), 1));
+            let what = ("initializer", "declared", "init");
+            self.check_fn_pointer_conversion((var_ty, target_fn), (init_ty, &init_fn), line, what)?;
         }
         // C99 6.6p9 address constant, decided by the shared
         // constant-initializer evaluator, which sees the initializer
@@ -305,7 +347,12 @@ impl Compiler {
         // A leading `(` is a cast prefix, a compound literal or a
         // parenthesized constant expression.
         if self.lex.tk == '('
-            && self.write_global_paren_initializer(var_ty, var_offset, is_thread_local)?
+            && self.write_global_paren_initializer(
+                var_ty,
+                var_offset,
+                is_thread_local,
+                target_fn,
+            )?
         {
             return Ok(());
         }
@@ -475,6 +522,7 @@ impl Compiler {
         var_ty: i64,
         var_offset: i64,
         is_thread_local: bool,
+        target_fn: &Option<(crate::c5::symbol::FnType, i64)>,
     ) -> Result<bool, C5Error> {
         let pre_paren = self.lex.snapshot();
         self.next()?;
@@ -518,7 +566,7 @@ impl Compiler {
                     }
                     self.next()?;
                 }
-                self.parse_global_initializer(var_ty, var_offset, is_thread_local)?;
+                self.parse_global_initializer(var_ty, var_offset, is_thread_local, target_fn)?;
                 return Ok(true);
             }
             self.restore_lex(pre_paren);
@@ -549,7 +597,7 @@ impl Compiler {
                 self.restore_lex(pre_paren);
             } else {
                 self.restore_lex(after_open);
-                self.parse_global_initializer(var_ty, var_offset, is_thread_local)?;
+                self.parse_global_initializer(var_ty, var_offset, is_thread_local, target_fn)?;
                 self.accept(')')?;
                 return Ok(true);
             }

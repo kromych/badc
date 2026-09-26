@@ -5,13 +5,15 @@
 use alloc::boxed::Box;
 
 use super::super::ast::{Expr, ExprId, UnOp};
+use super::super::diag::Code;
+use super::super::error::C5Error;
 use super::super::ir::BinOp;
 use super::super::symbol::{FnParams, FnType};
 use super::super::token::{Token, Ty};
 use super::Compiler;
 use super::types::{
     format_fn_type, is_pointer_ty, is_struct_ty, pointee_ty, strip_object_const, strip_unsigned,
-    struct_id_of, struct_ptr_depth,
+    struct_id_of, struct_ptr_depth, unqualified_object_ty,
 };
 
 /// True when the default argument promotions (C99 6.5.2.2p6) leave `ty`
@@ -34,6 +36,83 @@ impl Compiler {
             conv: s.conv,
             ret: s.ret_fn.clone(),
         }
+    }
+
+    /// The function type object `idx` leads to and its depth, when it is a
+    /// pointer to a function or to one; `None` for an array of them.
+    pub(super) fn object_fn_type(&self, idx: usize) -> Option<(FnType, i64)> {
+        let s = &self.symbols[idx];
+        let depth = self
+            .symbol_fn_depth(idx)
+            .filter(|&d| d >= 1 && s.array_size == 0)?;
+        Some((self.symbol_fn_type(idx), depth))
+    }
+
+    /// The function type expression `id` leads to as a conversion compares
+    /// it: a designator's as the pointer it converts to (C99 6.3.2.1p4),
+    /// and none when a libc binding supplies it, since its declaration
+    /// approximates the platform's.
+    pub(super) fn value_fn_type(&self, id: Option<ExprId>) -> Option<(FnType, i64)> {
+        let id = id?;
+        if self.fn_type_from_binding(id) {
+            return None;
+        }
+        self.expr_fn(id).map(|(f, d)| (f, d.max(1)))
+    }
+
+    /// Whether the function type expression `id` leads to is a libc
+    /// binding's, reached through `&`, `*`, a comma, a conditional arm or a
+    /// call's result.
+    fn fn_type_from_binding(&self, id: ExprId) -> bool {
+        match self.ast.expr(id) {
+            Expr::Ident { class, .. } => *class == Token::Sys as i64,
+            Expr::Unary {
+                op: UnOp::AddrOf | UnOp::Deref,
+                child,
+                ..
+            } => self.fn_type_from_binding(*child),
+            Expr::Comma { rhs, .. } => self.fn_type_from_binding(*rhs),
+            Expr::Ternary { then_e, else_e, .. } => {
+                self.fn_type_from_binding(*then_e) || self.fn_type_from_binding(*else_e)
+            }
+            Expr::Call { callee, .. } => self.fn_type_from_binding(*callee),
+            _ => false,
+        }
+    }
+
+    /// C99 6.5.16.1p1: a pointer to a function converts as if by assignment
+    /// only to a pointer to a compatible function type (6.7.5.3p15). `to`
+    /// and `from` are a tag and the function type it leads to; a value
+    /// with none recorded, one through `void *` or an integer, is not
+    /// compared. `what` names the conversion and its two sides.
+    pub(super) fn check_fn_pointer_conversion(
+        &mut self,
+        to: (i64, &Option<(FnType, i64)>),
+        from: (i64, &Option<(FnType, i64)>),
+        line: usize,
+        what: (&str, &str, &str),
+    ) -> Result<(), C5Error> {
+        let ((to_ty, Some((tf, td))), (from_ty, Some((ff, fd)))) = (to, from) else {
+            return Ok(());
+        };
+        // TODO: a pointer to an array of function pointers is not compared;
+        // `fn_type_text` does not spell its array levels.
+        if self.ptr_array_id(to_ty).is_some() || self.ptr_array_id(from_ty).is_some() {
+            return Ok(());
+        }
+        let tags =
+            self.tags_compatible(unqualified_object_ty(to_ty), unqualified_object_ty(from_ty));
+        if tags && self.value_fn_types_compatible(Some((tf, *td)), Some((ff, *fd))) {
+            return Ok(());
+        }
+        let (context, to_name, from_name) = what;
+        let to_s = self.fn_type_text(to_ty, tf, *td);
+        let from_s = self.fn_type_text(from_ty, ff, *fd);
+        let text = alloc::format!(
+            "incompatible function pointer types in {context} \
+             ({to_name}=`{to_s}`, {from_name}=`{from_s}`)"
+        );
+        self.report_at(Code::INCOMPATIBLE_POINTER_TYPES, line, text)
     }
 
     /// Record that expression `id` has function type `f`, `depth` pointer
@@ -77,27 +156,33 @@ impl Compiler {
         }
     }
 
+    /// The levels between symbol `idx`'s value and the function type it
+    /// leads to: 0 for a function, the pointer levels of a function
+    /// pointer object, and one more per dimension of an array of them.
+    fn symbol_fn_depth(&self, idx: usize) -> Option<i64> {
+        let s = &self.symbols[idx];
+        if s.class == Token::Fun as i64 || s.class == Token::Sys as i64 {
+            return Some(0);
+        }
+        // An array parameter, adjusted to a pointer, keeps its inner
+        // bounds in `array_dims`; a pointer to an array in its tag.
+        let dims = if s.array_size == 0 {
+            s.array_dims.len().saturating_sub(1)
+        } else {
+            s.array_dims.len().max(1)
+        };
+        (s.fn_ptr_indirection >= 1)
+            .then(|| s.fn_ptr_indirection + dims as i64 + self.pointee_array_levels(s.type_))
+    }
+
     /// Record an identifier's function type: a function's, a function
     /// pointer object's, or an array's of them, whose value decays one
     /// level further per dimension.
     pub(super) fn record_ident_fn(&mut self, id: ExprId, idx: usize) {
-        let s = &self.symbols[idx];
-        let depth = if s.class == Token::Fun as i64 || s.class == Token::Sys as i64 {
-            0
-        } else if s.fn_ptr_indirection >= 1 {
-            // An array parameter, adjusted to a pointer, keeps its inner
-            // bounds in `array_dims`; a pointer to an array in its tag.
-            let dims = if s.array_size == 0 {
-                s.array_dims.len().saturating_sub(1)
-            } else {
-                s.array_dims.len().max(1)
-            };
-            s.fn_ptr_indirection + dims as i64 + self.pointee_array_levels(s.type_)
-        } else {
-            return;
-        };
-        let f = self.symbol_fn_type(idx);
-        self.set_expr_fn(id, f, depth);
+        if let Some(depth) = self.symbol_fn_depth(idx) {
+            let f = self.symbol_fn_type(idx);
+            self.set_expr_fn(id, f, depth);
+        }
     }
 
     /// The function type of expression `id` and its depth, through the

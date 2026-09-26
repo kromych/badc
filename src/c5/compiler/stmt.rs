@@ -3381,7 +3381,13 @@ impl Compiler {
                     // rewrites `self.ty`.
                     let rhs_is_zero = self.last_emit_is_zero();
                     let rhs_is_untyped = self.last_emit_was_indirect_call();
-                    if let Some(m) = Self::type_warning_with_flags(
+                    let ret_fn = self.current_func_ret_fn.clone().map(|(f, d)| (*f, d));
+                    let value_fn = self.value_fn_type(self.ast_acc);
+                    if ret_fn.is_some() && value_fn.is_some() {
+                        let what = ("return", "declared", "returned");
+                        let (from, to) = ((self.ty, &value_fn), (ret_ty, &ret_fn));
+                        self.check_fn_pointer_conversion(to, from, line, what)?;
+                    } else if let Some(m) = Self::type_warning_with_flags(
                         &self.structs,
                         ret_ty,
                         self.ty,

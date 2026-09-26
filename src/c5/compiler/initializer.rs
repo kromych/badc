@@ -2488,7 +2488,7 @@ impl Compiler {
         let size = self.size_of_type(cl_ty).max(1);
         let off = self.reserve_literal_bytes(cl_ty, size.div_ceil(8) * 8);
         let sym_idx = self.intern_compound_literal_symbol(off, cl_ty, size as i64);
-        self.parse_global_initializer(cl_ty, off, false)?;
+        self.parse_global_initializer(cl_ty, off, false, &None)?;
         Ok((off, sym_idx))
     }
 
@@ -4546,7 +4546,12 @@ impl Compiler {
     ///   Lea local_val ; Psh ; <init expr> ; Si | Sc | Mcpy
     /// On entry `tk` is positioned just past the `=`; on exit it
     /// is at the comma or semicolon following the initializer.
-    pub(super) fn emit_local_init_store(&mut self, local_val: i64, ty: i64) -> Result<(), C5Error> {
+    pub(super) fn emit_local_init_store(
+        &mut self,
+        local_val: i64,
+        ty: i64,
+        target_fn: Option<(crate::c5::symbol::FnType, i64)>,
+    ) -> Result<(), C5Error> {
         let init_line = self.lex.line;
         self.emit_lea(local_val);
         self.ast_psh();
@@ -4572,9 +4577,19 @@ impl Compiler {
         }
         // C99 6.7.8p11: a scalar object's initializer must have a type
         // assignment-compatible with it. Only the mismatches with no
-        // conversion are diagnosed; the pointer/integer ones this site
-        // has always passed silently stay silent.
-        if let Some(m) = Self::type_warning_with_flags(
+        // conversion are diagnosed, and function pointers by their types;
+        // the pointer/integer ones this site has always passed silently
+        // stay silent.
+        let init_fn = self.value_fn_type(self.ast_acc);
+        if target_fn.is_some() && init_fn.is_some() {
+            let what = ("initializer", "declared", "init");
+            self.check_fn_pointer_conversion(
+                (ty, &target_fn),
+                (self.ty, &init_fn),
+                init_line,
+                what,
+            )?;
+        } else if let Some(m) = Self::type_warning_with_flags(
             &self.structs,
             ty,
             self.ty,

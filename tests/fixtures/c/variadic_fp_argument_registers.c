@@ -3,7 +3,10 @@
 // a variadic or unprototyped one widens to `double`. Microsoft x64 puts each
 // in both the xmm and the integer register of its position; the naked callees
 // report, as bits 1, 2, 4 and 8, which of rcx/xmm0 .. r9/xmm3 carry the same
-// value, 32 bits of a `float` and 64 of a `double`.
+// value, 32 bits of a `float` and 64 of a `double`. Windows arm64 puts each in
+// the integer bank, x0-x7 and then the stack; the naked callees return the
+// low word of a named `float`'s register or slot, or the whole of a variadic
+// one's.
 #include <stdarg.h>
 
 typedef long long ll;
@@ -26,6 +29,20 @@ __attribute__((naked, noinline)) static ll pairs_fixed(double a, double b, doubl
 __attribute__((naked, noinline)) static ll pairs_kr(a, b, c, d) double a, b, c, d; { PAIRS_BODY; }
 // A direct call without a prototype, in tail position.
 __attribute__((noinline)) static ll tail_kr(void) { return pairs_kr(1.5, 2.5, 3.5, 4.5); }
+#endif
+
+#if defined(_WIN32) && defined(__aarch64__) && !defined(_MSC_VER)
+#define BANK_CHECKS 1
+__attribute__((naked, noinline)) static ll low_x0(float a, ...) { __asm__("mov w0, w0\n\tret"); }
+__attribute__((naked, noinline)) static ll whole_x1(float a, ...) { __asm__("mov x0, x1\n\tret"); }
+__attribute__((naked, noinline)) static ll low_slot0(int a, int b, int c, int d, int e, int g,
+                                                      int h, int i, float j, ...) {
+    __asm__("ldr w0, [sp]\n\tret");
+}
+__attribute__((naked, noinline)) static ll whole_slot1(int a, int b, int c, int d, int e, int g,
+                                                        int h, int i, float j, ...) {
+    __asm__("ldr x0, [sp, #8]\n\tret");
+}
 #endif
 
 static double vsum(double d, int n, ...) {
@@ -65,6 +82,15 @@ static double far(int a, int b, int c, int d, float e, int g, ...) {
     return a + b + c + d + e * 10 + g * 100 + f;
 }
 
+// The named `float` past the eight integer registers of Windows arm64.
+static double far8(int a, int b, int c, int d, int e, int g, int h, int i, float j, int k, ...) {
+    va_list ap;
+    va_start(ap, k);
+    double l = va_arg(ap, double);
+    va_end(ap);
+    return a + b + c + d + e + g + h + i + j * 10 + k * 100 + l;
+}
+
 static double two(double a, double b) { return a * 10 + b; }
 
 int main(void) {
@@ -74,6 +100,7 @@ int main(void) {
     if (vfsum(1.5f, 2, f, 3.5) != 178.5) return 3;
     if (mixed(1, 2.0f, 3.0, 4.0, 5, 6.0) != 123456) return 4;
     if (far(1, 2, 3, 4, 5.5f, 7, 0.25) != 765.25) return 5;
+    if (far8(1, 2, 3, 4, 5, 6, 7, 8, f, 9, 0.25) != 961.25) return 13;
     double (*unproto)() = two;
     if (unproto(2.5, 3.5) != 28.5) return 6;
     if (unproto(f, 3.5f) != 28.5) return 7;
@@ -84,6 +111,13 @@ int main(void) {
     ll (*pairs_unproto)() = pairs_fixed;
     if (pairs_unproto(1.5, 2.5, 3.5f, 4.5) != 15) return 11;
     if (tail_kr() != 15) return 12;
+#endif
+#ifdef BANK_CHECKS
+    if (low_x0(1.5f, 2.5f) != 0x3fc00000) return 14;
+    if (low_x0(f, f) != 0x40200000) return 15;
+    if (whole_x1(1.5f, f) != 0x4004000000000000) return 16;
+    if (low_slot0(1, 2, 3, 4, 5, 6, 7, 8, f, 0.25) != 0x40200000) return 17;
+    if (whole_slot1(1, 2, 3, 4, 5, 6, 7, 8, 1.5f, f) != 0x4004000000000000) return 18;
 #endif
     return 0;
 }

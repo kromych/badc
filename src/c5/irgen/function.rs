@@ -166,7 +166,7 @@ struct ParamEntry<'a> {
     /// True when the definition takes its parameters under the host ABI.
     /// A variadic or all-integer out-pointer definition keeps the c5 cdecl shape.
     host_abi: bool,
-    /// A variadic definition under the Microsoft x64 convention, whose caller
+    /// A variadic definition under the Microsoft conventions, whose caller
     /// passes a named `float` in its integer register as the value's own bits.
     float_bits_in_int: bool,
     /// Positions ahead of the first declared parameter: 1 for a hidden result pointer.
@@ -267,7 +267,7 @@ impl<'a> ParamEntry<'a> {
             arrival_tys: &fun.param_arrival_tys,
             param_local_slots: &fun.param_local_slots,
             host_abi,
-            float_bits_in_int: fun.is_variadic && abi_target.abi().position_indexed_args,
+            float_bits_in_int: fun.is_variadic && abi_target.abi().variadic_int_only,
             arg_slot_base: if ret_outptr { 3 } else { 2 },
             shift,
             aggs,

@@ -606,11 +606,11 @@ pub(super) fn emit_call(
     let aggs = build_arg_aggs(arg_aggs, agg_descs, abi);
     // A variadic callee is marshalled through `plan_call_args` like a libc
     // variadic call: macOS puts every variadic argument on the stack at an
-    // 8-byte stride, Windows in x0..x7 then the stack (an FP variadic
-    // argument as its bit pattern, already widened to double), Linux in
-    // both banks then the stack. `fp_arg_mask` comes from the argument
-    // types, since a floating-point constant rides an integer register as
-    // its bit pattern.
+    // 8-byte stride, Windows every argument in x0..x7 then the stack (a
+    // floating-point one as its bit pattern, a named `float` its 32 bits),
+    // Linux in both banks then the stack. `fp_arg_mask` comes from the
+    // argument types, since a floating-point constant rides an integer
+    // register as its bit pattern.
     if callee_is_variadic
         && !(abi.variadic_on_stack || abi.variadic_int_only || abi.aarch64_host_variadic())
     {

@@ -3853,6 +3853,74 @@ fn win64_variadic_and_unprototyped_calls_keep_fp_arguments_in_fp_registers() {
     assert!(f32_cell, "vd reads its named float's cell at 32 bits");
 }
 
+/// Windows arm64 passes every argument to a variadic callee in the integer
+/// bank, a named `float` as its own 32 bits and a variadic one widened to
+/// `double`: the call carries no FP mask, the named value stays single
+/// precision and the variadic one widens, directly and through a pointer. The
+/// variadic definition reads its named `float`'s cell at 32 bits.
+#[test]
+fn windows_arm64_variadic_calls_pass_a_named_float_as_its_own_bits() {
+    use crate::Target;
+    use crate::c5::ir::{FpCastKind, Inst, LoadKind};
+    let src = "double vf(float f, int n, ...) { return f + n; }\n\
+        double (*vp)(float, int, ...);\n\
+        double callv(float x) { return vf(x, 1, x); }\n\
+        double callp(float x) { return vp(x, 1, x); }\n";
+    let target = Target::WindowsAarch64;
+    let program = crate::Compiler::with_options(
+        src.into(),
+        target,
+        crate::CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .unwrap_or_else(|e| panic!("compile: {e}"));
+    let funcs = crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+        .expect("ssa");
+    let func = |name: &str| funcs.iter().find(|f| f.name == name).expect(name);
+    for name in ["callv", "callp"] {
+        let f = func(name);
+        let (args, mask) = f
+            .insts
+            .iter()
+            .find_map(|i| match i {
+                Inst::Call {
+                    args, fp_arg_mask, ..
+                }
+                | Inst::CallIndirect {
+                    args, fp_arg_mask, ..
+                } => Some((args.clone(), fp_arg_mask.clone())),
+                _ => None,
+            })
+            .expect("call");
+        assert!(mask.is_empty(), "{name}: FP mask {mask:x}");
+        assert!(
+            f.f32_values[args[0] as usize],
+            "{name}: the named float is single precision"
+        );
+        assert!(
+            matches!(
+                f.insts[args[2] as usize],
+                Inst::FpCast {
+                    kind: FpCastKind::F32ToF64,
+                    ..
+                }
+            ),
+            "{name}: the variadic float widens to double"
+        );
+    }
+    let f32_cell = func("vf").insts.iter().any(|i| {
+        matches!(
+            i,
+            Inst::LoadLocal {
+                off,
+                kind: LoadKind::F32,
+                ..
+            } if *off > 0
+        )
+    });
+    assert!(f32_cell, "vf reads its named float's cell at 32 bits");
+}
+
 /// A call's aggregate result aligned above the 8-byte frame slot is a member
 /// of the over-aligned region, as a declared object of its type is, whether
 /// the callee stores it through the result pointer or it returns in

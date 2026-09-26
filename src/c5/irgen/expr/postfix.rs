@@ -252,13 +252,15 @@ impl<'a> Walker<'a> {
         // A variadic callee reaching here is on a `variadic_int_only` host
         // (the Microsoft conventions): Microsoft x64 keeps a floating-point
         // argument in its FP register and copies it into the integer one at
-        // the call, Windows arm64 passes every argument in the integer bank.
-        let call_fp_mask = if callee_variadic && abi.position_indexed_args {
+        // the call, Windows arm64 passes every argument in the integer bank,
+        // a named `float` as its 32 bits.
+        let call_fp_mask = if callee_variadic {
             self.widen_variadic_fp(b, &mut args, fixed_args);
-            fp_mask
-        } else if callee_variadic {
-            self.widen_fp_through_int(b, &mut args, is_floating_scalar);
-            crate::c5::ir::FpMask::EMPTY
+            if abi.position_indexed_args {
+                fp_mask
+            } else {
+                crate::c5::ir::FpMask::EMPTY
+            }
         } else {
             fp_mask
         };
@@ -552,17 +554,12 @@ impl<'a> Walker<'a> {
         }
     }
 
-    /// Route each selected floating-point argument through an integer
-    /// slot as a widened `double`, the 8-byte pattern the all-integer
-    /// cdecl reads a floating-point parameter from.
-    fn widen_fp_through_int(
-        &self,
-        b: &mut SsaBuilder,
-        args: &mut CallArgs<'_>,
-        select: fn(i64) -> bool,
-    ) {
+    /// Route each `float` argument through an integer slot as a widened
+    /// `double`, the 8-byte pattern the all-integer cdecl reads a
+    /// floating-point parameter from.
+    fn widen_fp_through_int(&self, b: &mut SsaBuilder, args: &mut CallArgs<'_>) {
         for (i, a) in args.exprs.iter().enumerate() {
-            if arg_value_ty(self.ast.expr(*a)).map(select).unwrap_or(false) {
+            if arg_value_ty(self.ast.expr(*a)).is_some_and(is_float_ty) {
                 let widened = b.fp_widen_to_f64(args.vals[i]);
                 let slot = b.alloc_synthetic_local();
                 b.store_local(slot, widened, StoreKind::I64);
@@ -710,7 +707,7 @@ impl<'a> Walker<'a> {
             let call_fp_mask = if hidden {
                 self.hidden_ptr_fp_mask(b, &mut args, variadic, callee_fixed)
             } else {
-                self.widen_fp_through_int(b, &mut args, is_float_ty);
+                self.widen_fp_through_int(b, &mut args);
                 crate::c5::ir::FpMask::EMPTY
             };
             let mut all_args: alloc::vec::Vec<ValueId> =
@@ -758,13 +755,14 @@ impl<'a> Walker<'a> {
         // A variadic callee on a `variadic_int_only` host: Microsoft x64
         // keeps a floating-point argument in its FP register and copies it
         // into the integer one at the call, Windows arm64 passes every
-        // argument in the integer bank.
-        let call_fp_mask = if callee_variadic && abi.position_indexed_args {
+        // argument in the integer bank, a named `float` as its 32 bits.
+        let call_fp_mask = if callee_variadic {
             self.widen_variadic_fp(b, &mut args, callee_fixed);
-            fp_mask
-        } else if callee_variadic && abi.variadic_int_only && !fp_mask.is_empty() {
-            self.widen_fp_through_int(b, &mut args, is_floating_scalar);
-            crate::c5::ir::FpMask::EMPTY
+            if abi.position_indexed_args {
+                fp_mask
+            } else {
+                crate::c5::ir::FpMask::EMPTY
+            }
         } else {
             fp_mask
         };

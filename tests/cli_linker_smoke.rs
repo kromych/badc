@@ -6827,9 +6827,10 @@ fn variadic_hidden_result_pointer_calls_cross_the_windows_compiler_boundary() {
 
 // The Microsoft conventions pass a floating-point argument to a variadic or
 // unprototyped callee where such a callee reads it, on x64 in both the xmm and
-// the integer register of its position. Named and variadic doubles, past the
-// register positions and through a pointer without a prototype, both ways
-// across the platform compiler boundary.
+// the integer register of its position, on arm64 in the integer bank; a named
+// `float` travels as its 32 bits, a variadic one as a `double`. Named and
+// variadic doubles and floats, past the register positions and through a
+// pointer without a prototype, both ways across the platform compiler boundary.
 #[cfg(windows)]
 #[test]
 fn variadic_fp_arguments_cross_the_windows_compiler_boundary() {
@@ -6853,8 +6854,22 @@ fn variadic_fp_arguments_cross_the_windows_compiler_boundary() {
         { va_list ap; va_start(ap, e); double f = va_arg(ap, double); va_end(ap);\n\
           return a + b + c + d + e * 10 + f; }\n\
         static double two(double a, double b) { return a * 10 + b; }\n\
+        static double vfsum(float f, int n, ...)\n\
+        { va_list ap; va_start(ap, n); double s = f;\n\
+          for (int i = 0; i < n; i++) s = s * 10 + va_arg(ap, double);\n\
+          va_end(ap); return s; }\n\
+        static double fmixed(int a, float b, double c, ...)\n\
+        { va_list ap; va_start(ap, c); double d = va_arg(ap, double); int e = va_arg(ap, int);\n\
+          double g = va_arg(ap, double); va_end(ap);\n\
+          return a * 100000 + b * 10000 + c * 1000 + d * 100 + e * 10 + g; }\n\
+        static double ffar(int a, int b, int c, int d, int e, int g, int h, int i, float j,\n\
+          int k, ...)\n\
+        { va_list ap; va_start(ap, k); double l = va_arg(ap, double); va_end(ap);\n\
+          return a + b + c + d + e + g + h + i + j * 10 + k * 100 + l; }\n\
         struct fns { double (*vsum)(double, int, ...); double (*mixed)(int, double, double, ...);\n\
-          double (*far)(int, int, int, int, double, ...); double (*two)(); };\n\
+          double (*far)(int, int, int, int, double, ...); double (*two)();\n\
+          double (*vfsum)(float, int, ...); double (*fmixed)(int, float, double, ...);\n\
+          double (*ffar)(int, int, int, int, int, int, int, int, float, int, ...); };\n\
         static int drive(const struct fns *f, int base)\n\
         { float x = 2.5f;\n\
           if (f->vsum(1.5, 2, 2.5, 3.5) != 178.5) return base + 1;\n\
@@ -6862,8 +6877,17 @@ fn variadic_fp_arguments_cross_the_windows_compiler_boundary() {
           if (f->mixed(1, 2.0, 3.0, 4.0, 5, 6.0) != 123456) return base + 3;\n\
           if (f->far(1, 2, 3, 4, 5.5, 0.25) != 65.25) return base + 4;\n\
           if (f->two(x, 3.5) != 28.5) return base + 5;\n\
+          if (f->vfsum(1.5f, 1, 2.5) != 17.5) return base + 6;\n\
+          if (f->vfsum(x, 2, x, 3.5f) != 278.5) return base + 7;\n\
+          if (f->fmixed(1, 2.0f, 3.0, 4.0, 5, 6.0) != 123456) return base + 8;\n\
+          if (f->ffar(1, 2, 3, 4, 5, 6, 7, 8, x, 9, 0.25) != 961.25) return base + 9;\n\
           return 0; }\n";
-    drive_across_the_windows_compiler(&cc, "win-va-fp-interop", common, "vsum, mixed, far, two");
+    drive_across_the_windows_compiler(
+        &cc,
+        "win-va-fp-interop",
+        common,
+        "vsum, mixed, far, two, vfsum, fmixed, ffar",
+    );
 }
 
 // A function returning an aggregate through the hidden result pointer takes that

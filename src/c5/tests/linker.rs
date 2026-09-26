@@ -12145,6 +12145,102 @@ fn aarch64_alternative_subsection_defers_replacement_and_relocates() {
 }
 
 #[test]
+fn aarch64_chained_alternatives_defer_each_replacement_in_order() {
+    // Linux 7.3's arm64 __raw_readl chains two ALTERNATIVEs in one template,
+    // each with its own 661..664 and `.subsection 1` replacement. GNU as
+    // binds every numeric reference to the nearest definition in its
+    // direction and lays subsection 1 out after the body in source order,
+    // so each `.altinstructions` entry points at its own original and its own
+    // replacement, the second replacement right after the first. gcc 16.2.1
+    // (-O2 -c) places this function's `.text` as nop, ldr, ret, dmb osh,
+    // ldar and relocates the four PREL32 fields against .text+0, +0xc, +4
+    // and +0x10.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let alt = |old: &str, new: &str, cap: &str| {
+        alloc::format!(
+            "\".if 1 == 1\\n661:\\n\\t{old}\\n662:\\n\"\n\
+             \".pushsection .altinstructions,\\\"a\\\"\\n\"\n\
+             \" .word 661b - .\\n .word 663f - .\\n .hword {cap}\\n\"\n\
+             \" .byte 662b-661b\\n .byte 664f-663f\\n\"\n\
+             \".popsection\\n.subsection 1\\n663:\\n\\t{new}\\n664:\\n\\t\"\n\
+             \".org . - (664b-663b) + (662b-661b)\\n\\t\"\n\
+             \".org . - (662b-661b) + (664b-663b)\\n\\t.previous\\n.endif\\n\"\n"
+        )
+    };
+    let src = alloc::format!(
+        "unsigned long f(const volatile unsigned long *p) {{\n\
+             unsigned long v;\n\
+             __asm__ volatile(\n{}{}: \"=r\" (v) : \"r\" (p));\n\
+             return v;\n\
+         }}\n\
+         int main(void) {{ unsigned long x = 7; return (int)f(&x); }}\n",
+        alt("nop", "dmb osh", "0x0042"),
+        alt("ldr %0, [%1]", "ldar %0, [%1]", "0x0043"),
+    );
+    let program = Compiler::with_target(src, Target::LinuxAarch64)
+        .compile()
+        .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxAarch64, opts).expect("emit");
+    let sections = elf_sections(&bytes);
+    let body = |name: &str| {
+        sections
+            .iter()
+            .find(|(n, _, _, _)| n == name)
+            .unwrap_or_else(|| panic!("{name} missing"))
+            .3
+            .clone()
+    };
+    let alt = body(".altinstructions");
+    assert_eq!(alt.len(), 24, "two entries");
+    assert_eq!(&alt[8..12], &[0x42, 0, 4, 4]);
+    assert_eq!(&alt[20..24], &[0x43, 0, 4, 4]);
+    const R_AARCH64_PREL32: u64 = 261;
+    let rela = body(".rela.altinstructions");
+    assert_eq!(rela.len(), 96, "four relocations");
+    let addend_at = |field: u64| {
+        (0..4)
+            .map(|i| {
+                let b = &rela[i * 24..i * 24 + 24];
+                let off = u64::from_le_bytes(b[0..8].try_into().unwrap());
+                let info = u64::from_le_bytes(b[8..16].try_into().unwrap());
+                let add = i64::from_le_bytes(b[16..24].try_into().unwrap());
+                (off, info & 0xffff_ffff, add)
+            })
+            .find(|e| e.0 == field)
+            .map(|(_, kind, add)| {
+                assert_eq!(kind, R_AARCH64_PREL32, "field {field} is PREL32");
+                add
+            })
+            .expect("reloc")
+    };
+    let text = body(".text");
+    let word = |o: i64| u32::from_le_bytes(text[o as usize..o as usize + 4].try_into().unwrap());
+    let (old1, new1, old2, new2) = (addend_at(0), addend_at(4), addend_at(12), addend_at(16));
+    assert_eq!(word(old1), 0xd503_201f, "first original: nop");
+    assert_eq!(word(new1), 0xd503_33bf, "first replacement: dmb osh");
+    assert_eq!(
+        word(old2) & 0xffff_fc00,
+        0xf940_0000,
+        "second original: ldr"
+    );
+    assert_eq!(
+        word(new2) & 0xffff_fc00,
+        0xc8df_fc00,
+        "second replacement: ldar"
+    );
+    assert_eq!(word(old2) & 0x3ff, word(new2) & 0x3ff, "same registers");
+    assert!(
+        old1 < old2 && old2 < new1,
+        "both replacements after the body"
+    );
+    assert_eq!(new2, new1 + 4, "the replacements in source order");
+}
+
+#[test]
 fn aarch64_alternative_multi_instruction_replacement_defers_and_asserts_length() {
     // A multi-instruction ALTERNATIVE (an LL/SC original replaced by an LSE
     // sequence): the whole replacement defers after the body, the original's

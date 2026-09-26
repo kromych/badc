@@ -2230,7 +2230,12 @@ fn lower_inline_asm(
     };
     let gas = crate::c5::asm::expand_asm_gas_macros(&text, 4, &|tok| ops.gas_subst(tok))?;
     let text = gas.as_deref().unwrap_or(&text);
-    // An ALTERNATIVE `.subsection` replacement becomes a deferred region
+    // The section blocks and the deferred region look a numeric label up by
+    // number, so a label defined twice (two chained ALTERNATIVEs) is numbered
+    // apart by position first.
+    let apart = crate::c5::asm::number_local_labels_apart(text);
+    let text = apart.as_deref().unwrap_or(text);
+    // Every ALTERNATIVE `.subsection` replacement joins the deferred region
     // appended after the function body.
     let (main_text, deferred_text) = crate::c5::asm::split_asm_subsections(text);
     let extracted = crate::c5::asm::extract_asm_sections(&main_text, true)?;

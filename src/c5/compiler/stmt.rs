@@ -59,8 +59,7 @@ pub(super) struct BlockShadow {
     fn_ptr_indirection: i64,
     fn_ptr_ret_indirection: i64,
     ret_fn: Option<(alloc::boxed::Box<crate::c5::symbol::FnType>, i64)>,
-    params: Vec<i64>,
-    is_variadic: bool,
+    params: crate::c5::symbol::FnParams,
     array_size: i64,
     type_align: i64,
     inner_array_size: i64,
@@ -102,8 +101,7 @@ impl Compiler {
             fn_ptr_indirection: s.fn_ptr_indirection,
             fn_ptr_ret_indirection: s.fn_ptr_ret_indirection,
             ret_fn: s.ret_fn.clone(),
-            params: s.params.clone(),
-            is_variadic: s.is_variadic,
+            params: s.fn_params(),
             array_size: s.array_size,
             type_align: s.type_align,
             inner_array_size,
@@ -151,8 +149,7 @@ impl Compiler {
         s.fn_ptr_indirection = b.fn_ptr_indirection;
         s.fn_ptr_ret_indirection = b.fn_ptr_ret_indirection;
         s.ret_fn = b.ret_fn;
-        s.params = b.params;
-        s.is_variadic = b.is_variadic;
+        s.set_fn_params(b.params);
         s.array_size = b.array_size;
         s.type_align = b.type_align;
         s.inner_array_size = b.inner_array_size;
@@ -648,21 +645,14 @@ impl Compiler {
                 self.symbols[id_idx].fn_ptr_ret_indirection = fn_ptr_ret_indirection;
             }
             if let Some(pp) = typedef_params {
-                self.symbols[id_idx].params = pp.types;
-                self.symbols[id_idx].is_variadic = pp.is_variadic;
-            } else if let Some((proto_fixed, proto_variadic)) = self.pending.typedef_fn_proto.take()
-            {
+                self.symbols[id_idx].set_fn_params(pp.fn_params());
+            } else if let Some(p) = self.pending.fn_ptr_params.take() {
                 // `typedef RET (*NAME)(args)` at block scope: the
-                // declarator captured the pointee prototype. Record it
-                // as the file-scope branch does, so an indirect call
+                // declarator captured the pointee's parameter list. Record
+                // it as the file-scope branch does, so an indirect call
                 // through a variable of this typedef narrows arguments
                 // and routes a variadic tail per the host ABI.
-                self.symbols[id_idx].params = self
-                    .pending
-                    .fn_ptr_param_types
-                    .take()
-                    .unwrap_or_else(|| alloc::vec![0i64; proto_fixed]);
-                self.symbols[id_idx].is_variadic = proto_variadic;
+                self.symbols[id_idx].set_fn_params(p);
             }
             self.accept_declarator_separator()?;
         }

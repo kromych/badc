@@ -660,7 +660,7 @@ impl<'a> Walker<'a> {
         self.ast
             .callee_types
             .get(&callee)
-            .map(|f| f.params.as_slice())
+            .map(|f| f.params.types.as_slice())
     }
 
     /// Record `call`'s [`Inst::Call::low_word_args`] and

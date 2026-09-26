@@ -797,6 +797,7 @@ impl Compiler {
         s.h_ret_fn = s.ret_fn.clone();
         s.h_params = s.params.clone();
         s.h_is_variadic = s.is_variadic;
+        s.h_unprototyped = s.unprototyped;
         s.h_conv = s.conv;
         s.h_array_size = s.array_size;
         s.h_type_align = s.type_align;
@@ -870,6 +871,7 @@ impl Compiler {
         sym.ret_fn = sym.h_ret_fn.take();
         sym.params = core::mem::take(&mut sym.h_params);
         sym.is_variadic = sym.h_is_variadic;
+        sym.unprototyped = sym.h_unprototyped;
         sym.conv = sym.h_conv;
         sym.array_size = sym.h_array_size;
         sym.type_align = sym.h_type_align;
@@ -913,6 +915,7 @@ impl Compiler {
             && sym.ret_fn == sym.h_ret_fn
             && sym.params == sym.h_params
             && sym.is_variadic == sym.h_is_variadic
+            && sym.unprototyped == sym.h_unprototyped
             && sym.conv == sym.h_conv
             && sym.array_size == sym.h_array_size
             && sym.type_align == sym.h_type_align

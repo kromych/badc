@@ -19,8 +19,7 @@ impl Compiler {
     pub(super) fn symbol_fn_type(&self, idx: usize) -> FnType {
         let s = &self.symbols[idx];
         FnType {
-            params: s.params.clone(),
-            variadic: s.is_variadic,
+            params: s.fn_params(),
             conv: s.conv,
             ret: s.ret_fn.clone(),
         }
@@ -179,8 +178,7 @@ impl Compiler {
         let p = &self.pending;
         let depth = p.fn_ptr_indirection?;
         let f = FnType {
-            params: p.fn_ptr_param_types.clone().unwrap_or_default(),
-            variadic: matches!(p.typedef_fn_proto, Some((_, true))),
+            params: p.fn_ptr_params.clone().unwrap_or_default(),
             conv: p.attr_call_conv,
             ret: p.fn_ptr_ret_fn.clone(),
         };
@@ -201,17 +199,9 @@ impl Compiler {
             return carrier;
         }
         let mut ret = base.map(|(f, d)| (Box::new(f), d));
-        for (params, variadic, depth) in chain.into_iter().rev() {
+        for (params, depth) in chain.into_iter().rev() {
             let conv = crate::c5::codegen::CallConv::Target;
-            ret = Some((
-                Box::new(FnType {
-                    params,
-                    variadic,
-                    conv,
-                    ret,
-                }),
-                depth,
-            ));
+            ret = Some((Box::new(FnType { params, conv, ret }), depth));
         }
         ret
     }

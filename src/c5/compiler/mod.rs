@@ -397,6 +397,8 @@ pub struct StructField {
     /// variadic ABI. False for a non-function-pointer field or a
     /// non-variadic prototype.
     pub is_variadic: bool,
+    /// Mirrors `Symbol::unprototyped`.
+    pub unprototyped: bool,
     /// Calling convention of the function a function-pointer field
     /// points to (`__attribute__((ms_abi))` / `((sysv_abi))`). Mirrors
     /// `Symbol::conv`; `CallConv::Target` for every other field. The
@@ -904,7 +906,7 @@ pub(in crate::c5::compiler) struct Pending {
     /// The signatures a declarator spells past its entity's own, innermost
     /// first, with the pointer levels from the previous result to each
     /// (`int (*(*f)(void))(int)` spells `(int)` one level past `(void)`).
-    pub fn_ret_chain: alloc::vec::Vec<(alloc::vec::Vec<i64>, bool, i64)>,
+    pub fn_ret_chain: alloc::vec::Vec<(crate::c5::symbol::FnParams, i64)>,
     /// Pointer levels of the entity's declarator the own signature and
     /// `fn_ret_chain` account for.
     pub fn_chain_levels: i64,
@@ -1055,26 +1057,16 @@ pub(in crate::c5::compiler) struct Pending {
     /// compound literal, which denotes an object (C99 6.5.2.5p4) rather
     /// than a value; `__builtin_constant_p` answers 0 for such an operand.
     pub const_expr_compound_literal: bool,
-    /// Binding-site carrier for a function-pointer typedef's
-    /// prototype: `Some((fixed_param_count, is_variadic))` when the
-    /// base type was a typedef whose alias is a function-pointer
-    /// type. A variable declared `fn_ptr_t cb` inherits the
-    /// callee's variadic-ness and named-parameter count so an
-    /// indirect call through `cb` can split its arguments into the
-    /// fixed register prefix and the variadic stack tail (the macOS
-    /// arm64 variadic ABI). `None` for non-fn-pointer base types.
-    /// Cleared by every base-type parse.
-    pub typedef_fn_proto: Option<(usize, bool)>,
-    /// The pointed-to function's parameter type tags, captured by the
-    /// fn-pointer declarator alongside `typedef_fn_proto`. Lets an
-    /// indirect call narrow each argument to its declared parameter type
-    /// instead of applying the default argument promotions. `None` when
-    /// the prototype carries no types (an empty parameter list).
-    pub fn_ptr_param_types: Option<alloc::vec::Vec<i64>>,
-    /// `FnType::ret` of the function type the fn-pointer carriers
-    /// (`fn_ptr_param_types`, `typedef_fn_proto`) describe: a typedef or
-    /// `typeof` base's, or the signatures a declarator spells past the
-    /// declared entity's own. Taken with them.
+    /// The parameter information of the function a function-pointer
+    /// declarator, or a function or function-pointer typedef or `typeof`
+    /// base, names: an indirect call through the bound variable converts
+    /// each argument to its parameter type and splits fixed from variadic
+    /// arguments per the host variadic ABI. `None` for any other base type;
+    /// cleared by every base-type parse.
+    pub fn_ptr_params: Option<crate::c5::symbol::FnParams>,
+    /// `FnType::ret` of the function type `fn_ptr_params` describes: a
+    /// typedef or `typeof` base's, or the signatures a declarator spells
+    /// past the declared entity's own. Taken with it.
     pub fn_ptr_ret_fn: Option<(alloc::boxed::Box<crate::c5::symbol::FnType>, i64)>,
     /// Fn-pointer lineage of the return value of the function pointer an
     /// in-progress postfix call will call (`tbl[i](args)`, `(*fp)(args)`),
@@ -1489,8 +1481,7 @@ impl Pending {
             base_is_function_type: core::mem::take(&mut self.base_is_function_type),
             fn_ptr_indirection: self.fn_ptr_indirection.take(),
             fn_ptr_ret_indirection: core::mem::take(&mut self.fn_ptr_ret_indirection),
-            typedef_fn_proto: self.typedef_fn_proto.take(),
-            fn_ptr_param_types: self.fn_ptr_param_types.take(),
+            fn_ptr_params: self.fn_ptr_params.take(),
             fn_ptr_ret_fn: self.fn_ptr_ret_fn.take(),
             typedef_base_array_size: core::mem::take(&mut self.typedef_base_array_size),
             typedef_base_array_dims: core::mem::take(&mut self.typedef_base_array_dims),
@@ -1510,8 +1501,7 @@ impl Pending {
         self.base_is_function_type = s.base_is_function_type;
         self.fn_ptr_indirection = s.fn_ptr_indirection;
         self.fn_ptr_ret_indirection = s.fn_ptr_ret_indirection;
-        self.typedef_fn_proto = s.typedef_fn_proto;
-        self.fn_ptr_param_types = s.fn_ptr_param_types;
+        self.fn_ptr_params = s.fn_ptr_params;
         self.fn_ptr_ret_fn = s.fn_ptr_ret_fn;
         self.typedef_base_array_size = s.typedef_base_array_size;
         self.typedef_base_array_dims = s.typedef_base_array_dims;
@@ -1534,8 +1524,7 @@ pub(super) struct DeclTypeCarriers {
     base_is_function_type: bool,
     fn_ptr_indirection: Option<i64>,
     fn_ptr_ret_indirection: i64,
-    typedef_fn_proto: Option<(usize, bool)>,
-    fn_ptr_param_types: Option<alloc::vec::Vec<i64>>,
+    fn_ptr_params: Option<crate::c5::symbol::FnParams>,
     fn_ptr_ret_fn: Option<(alloc::boxed::Box<crate::c5::symbol::FnType>, i64)>,
     typedef_base_array_size: i64,
     typedef_base_zero_len: bool,
@@ -1582,8 +1571,7 @@ impl Default for Pending {
             sizeof_vla_size_slot: None,
             const_expr_nonconst: false,
             const_expr_compound_literal: false,
-            typedef_fn_proto: None,
-            fn_ptr_param_types: None,
+            fn_ptr_params: None,
             indirect_callee_ret_fn_ptr: 0,
             fn_ptr_ret_fn: None,
             parsing_fn_ptr_proto: false,

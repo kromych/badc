@@ -33,6 +33,11 @@ Disassembly of section .text:
                	leaq	(%rdi,%rsi), %rax
                	retq
 
+<add3>:
+               	leaq	(%rdi,%rsi), %rax
+               	addq	%rdx, %rax
+               	retq
+
 <main>:
                	xorl	%eax, %eax
                	retq

@@ -112,8 +112,7 @@ impl Compiler {
                 sym.class = Token::Fun as i64;
                 sym.scoped_fn_decl = true;
                 sym.type_ = ret;
-                sym.params = params.types;
-                sym.is_variadic = params.is_variadic;
+                sym.set_fn_params(params.fn_params());
                 // A function-pointer base is the result's function type.
                 sym.ret_fn = base_fn.map(|(f, d)| (alloc::boxed::Box::new(f), d + ret_ptr_levels));
                 sym.is_extern_decl = true;
@@ -534,8 +533,7 @@ impl Compiler {
                         for &pidx in &pp.indices {
                             Self::restore_shadowed_symbol(&mut self.symbols[pidx]);
                         }
-                        self.pending.typedef_fn_proto = Some((pp.types.len(), pp.is_variadic));
-                        self.pending.fn_ptr_param_types = Some(pp.types);
+                        self.pending.fn_ptr_params = Some(pp.fn_params());
                         self.pending.fn_own_sig = true;
                         self.pending.fn_chain_levels = inner_ptr_levels;
                     } else {
@@ -550,8 +548,7 @@ impl Compiler {
                         }
                         let depth = inner_ptr_levels - self.pending.fn_chain_levels;
                         self.pending.fn_chain_levels = inner_ptr_levels;
-                        let level = (pp.types, pp.is_variadic, depth);
-                        self.pending.fn_ret_chain.push(level);
+                        self.pending.fn_ret_chain.push((pp.fn_params(), depth));
                     }
                     saw_fn_signature = true;
                 } else if self.lex.tk == Token::Brak {
@@ -690,8 +687,7 @@ impl Compiler {
             for &pidx in &pp.indices {
                 Self::restore_shadowed_symbol(&mut self.symbols[pidx]);
             }
-            self.pending.typedef_fn_proto = Some((pp.types.len(), pp.is_variadic));
-            self.pending.fn_ptr_param_types = Some(pp.types);
+            self.pending.fn_ptr_params = Some(pp.fn_params());
             self.pending.fn_ptr_indirection = Some(1);
             self.pending.fn_own_sig = true;
             return Ok((idx, ty + Ty::Ptr as i64, 0));

@@ -515,9 +515,9 @@ fn redeclaration_without_parameters_keeps_the_prototype() {
     // C99 6.2.7p4: the composite type keeps the parameter type list a
     // prior declaration or definition established, so a call past it is
     // still checked after a redeclaration through the function's own
-    // type or through the empty-list spelling.
+    // type, the empty-list spelling, or a function-type typedef with one.
     let p = compile_fixture("redecl_composite_arity_warning.c");
-    for name in ["take_wrap", "add2"] {
+    for name in ["take_wrap", "add2", "add3"] {
         assert!(
             p.warnings
                 .iter()
@@ -2180,6 +2180,61 @@ fn a_subscript_rejects_a_pointer_to_a_function() {
         format!("{decls}\treturn pp[0](3) + arr[1](3) + s.a[1](3) + elem(arr) == 24.0;\n}}\n");
     let program = Compiler::new(src.clone()).compile().expect(&src);
     assert_eq!(Vm::new(program).run().unwrap(), 1, "{src}");
+}
+
+/// C99 6.7.5.3p14: an empty list outside a definition, and an old-style
+/// definition, give a function type no prototype, which is not the type
+/// `(void)` gives (6.7.5.3p10). A diagnostic names each as spelled, through
+/// a declaration, a typedef, `typeof`, a cast, a member, a parameter and a
+/// returned pointer; a later prototype makes the composite type one
+/// (6.2.7p3), and so does a prototyped arm of a conditional (6.5.15p6).
+#[test]
+fn a_function_type_without_a_prototype_prints_an_empty_list() {
+    use crate::Compiler;
+    for (decls, expr, want) in [
+        ("int (*fp)();", "fp", "int (*)()"),
+        ("int (*fp)(void);", "fp", "int (*)(void)"),
+        ("int f();", "f", "int (*)()"),
+        ("int f(void);", "f", "int (*)(void)"),
+        ("int g(a) int a; { return a; }", "g", "int (*)()"),
+        ("int h() { return 0; }", "h", "int (*)()"),
+        (
+            "int g(a) int a; { return a; }\nint g(int);",
+            "g",
+            "int (*)(int)",
+        ),
+        ("int m(int);\nint m();", "m", "int (*)(int)"),
+        ("int m(void);\nint m();", "m", "int (*)(void)"),
+        ("typedef int F();\nF *p;", "p", "int (*)()"),
+        ("typedef int F(void);\nF *p;", "p", "int (*)(void)"),
+        ("typedef int (*PF)();\nPF p;", "p", "int (*)()"),
+        ("typedef int F();\nF fd;", "fd", "int (*)()"),
+        ("", "(int (*)())0", "int (*)()"),
+        ("typedef int (*PF)();", "(PF)0", "int (*)()"),
+        ("int (*fp)();\n__typeof__(fp) q;", "q", "int (*)()"),
+        ("int f();\n__typeof__(f) *q;", "q", "int (*)()"),
+        ("struct s { int (*m)(); } s;", "s.m", "int (*)()"),
+        (
+            "int use(int (*pp)()) { return pp[0]() == 0; }",
+            "use",
+            "int (*)()",
+        ),
+        ("int (*arr[2])();", "arr[0]", "int (*)()"),
+        ("int (*(*lp)())(double);", "lp", "int (*(*)())(double)"),
+        ("int (*(*lp)(int))();", "lp", "int (*(*)(int))()"),
+        ("int (*(*lp)(int))();", "lp(1)", "int (*)()"),
+        ("int (*a)(void), (*b)();", "1 ? b : a", "int (*)(void)"),
+        ("int (*a)(), (*b)(int);", "1 ? a : b", "int (*)(int)"),
+        ("", "({ int bf(); bf; })", "int (*)()"),
+    ] {
+        let src = format!("{decls}\nint main(void) {{ return ({expr})[0]() == 0; }}\n");
+        let err = Compiler::new(src.clone())
+            .compile()
+            .expect_err(&src)
+            .to_string();
+        let text = format!("subscripted value has type `{want}`, a pointer to a function");
+        assert!(err.contains(&text), "{src}{err}");
+    }
 }
 
 /// C99 6.5.2.1p1, 6.5.6p2: a subscript and the additive operators step by

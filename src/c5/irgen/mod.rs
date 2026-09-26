@@ -289,7 +289,7 @@ impl<'a> Walker<'a> {
     /// argument is fixed.
     fn indirect_callee_proto(&self, callee: ExprId, arg_count: usize) -> (bool, usize) {
         match self.ast.callee_types.get(&callee) {
-            Some(f) if f.variadic => (true, f.params.len()),
+            Some(f) if f.params.variadic => (true, f.params.types.len()),
             _ => (false, arg_count),
         }
     }

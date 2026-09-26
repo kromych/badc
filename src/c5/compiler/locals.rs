@@ -428,8 +428,7 @@ impl Compiler {
         let base_fn_ptr_indirection = self.pending.fn_ptr_indirection;
         let base_fn_ptr_ret_indirection = self.pending.fn_ptr_ret_indirection;
         let base_is_function_type = self.pending.base_is_function_type;
-        let base_typedef_fn_proto = self.pending.typedef_fn_proto;
-        let base_fn_ptr_param_types = self.pending.fn_ptr_param_types.clone();
+        let base_fn_ptr_params = self.pending.fn_ptr_params.clone();
         let base_fn_ptr_ret_fn = self.pending.fn_ptr_ret_fn.clone();
         // A leading `cleanup(fn)` or `uninitialized` applies to every
         // declarator; one written after a declarator applies to it alone.
@@ -439,8 +438,7 @@ impl Compiler {
             self.pending.fn_ptr_indirection = base_fn_ptr_indirection;
             self.pending.fn_ptr_ret_indirection = base_fn_ptr_ret_indirection;
             self.pending.base_is_function_type = base_is_function_type;
-            self.pending.typedef_fn_proto = base_typedef_fn_proto;
-            self.pending.fn_ptr_param_types = base_fn_ptr_param_types.clone();
+            self.pending.fn_ptr_params = base_fn_ptr_params.clone();
             self.pending.fn_ptr_ret_fn = base_fn_ptr_ret_fn.clone();
             // Any declarator of the list may declare a function (C99 6.7p1).
             let base = super::redeclaration::Spelled {
@@ -482,8 +480,7 @@ impl Compiler {
             let ret_fn = self.take_decl_ret_fn(false);
             let fn_ptr_indirection = self.pending.fn_ptr_indirection.take().unwrap_or(0);
             let fn_ptr_ret_indirection = core::mem::take(&mut self.pending.fn_ptr_ret_indirection);
-            let fnptr_proto = self.pending.typedef_fn_proto.take();
-            let fnptr_param_types = self.pending.fn_ptr_param_types.take();
+            let fnptr_params = self.pending.fn_ptr_params.take();
             // C99 6.7.7p3 + 6.7.6.1: an array typedef contributes its
             // dimension only when the declarator stayed at the element type;
             // a `*` names a pointer-to-element and the dimension belongs to
@@ -575,22 +572,16 @@ impl Compiler {
             // own symbol lookups cannot clobber them, and unconditionally, so
             // a reused slot leaks no stale flag from an outer binding. `T x[]`
             // whose initializer resolved to zero elements keeps its
-            // array-ness through `is_zero_len_array`; the fn-pointer
-            // prototype is inherited only when variadic, since a non-variadic
-            // indirect call places every argument as fixed and placeholder
-            // parameter types would fail the argument check.
+            // array-ness through `is_zero_len_array`; a function-pointer
+            // declarator records its pointee's parameter information.
             if rebinds_slot {
                 self.symbols[loc_idx].is_zero_len_array =
                     array_size == -1 && self.symbols[loc_idx].array_size == 0;
                 self.symbols[loc_idx].fn_ptr_indirection = fn_ptr_indirection;
                 self.symbols[loc_idx].fn_ptr_ret_indirection = fn_ptr_ret_indirection;
                 self.symbols[loc_idx].ret_fn = ret_fn;
-                if let Some(types) = fnptr_param_types {
-                    self.symbols[loc_idx].params = types;
-                    self.symbols[loc_idx].is_variadic = matches!(fnptr_proto, Some((_, true)));
-                } else if let Some((proto_fixed, true)) = fnptr_proto {
-                    self.symbols[loc_idx].params = alloc::vec![0i64; proto_fixed];
-                    self.symbols[loc_idx].is_variadic = true;
+                if let Some(p) = fnptr_params {
+                    self.symbols[loc_idx].set_fn_params(p);
                 }
             }
 
@@ -776,26 +767,17 @@ impl Compiler {
         if !core::mem::take(&mut self.pending.bare_function_type_declarator) {
             return Ok(false);
         }
-        let params = self.pending.fn_ptr_param_types.take().unwrap_or_default();
-        let is_variadic = self
-            .pending
-            .typedef_fn_proto
-            .take()
-            .map(|(_, variadic)| variadic)
-            .unwrap_or(false);
+        let params = self.pending.fn_ptr_params.take().unwrap_or_default();
         self.pending.fn_ptr_indirection = None;
         self.pending.fn_ptr_ret_indirection = 0;
         if loc_idx == usize::MAX {
             self.accept_declarator_separator()?;
             return Ok(true);
         }
-        let types = params
-            .iter()
-            .copied()
-            .map(super::redeclaration::Spelled::plain);
-        let carried = super::redeclaration::Params::Carried(types.collect(), is_variadic);
+        let listed = super::function::ParsedParams::of_type(params.clone());
+        let listed = super::redeclaration::Params::of(&listed, false);
         let ret = super::redeclaration::Spelled::plain(ty - Ty::Ptr as i64);
-        let declared = super::redeclaration::DeclaredType::Function(ret, carried);
+        let declared = super::redeclaration::DeclaredType::Function(ret, listed);
         self.declare_linked(loc_idx, declared, self.lex.line)?;
         let c = self.symbols[loc_idx].class;
         let known = c == Token::Sys as i64
@@ -811,8 +793,7 @@ impl Compiler {
             sym.scoped_fn_decl = true;
             // Undo the typedef's pre-decay to pointer-to-function.
             sym.type_ = ty - Ty::Ptr as i64;
-            sym.params = params;
-            sym.is_variadic = is_variadic;
+            sym.set_fn_params(params);
             sym.is_extern_decl = true;
             sym.linkage = if is_static {
                 crate::c5::symbol::Linkage::Internal

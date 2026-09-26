@@ -599,7 +599,8 @@ pub(super) fn format_signature(
 }
 
 /// Render function type `f` with `depth` pointer levels above it, whose
-/// innermost return type is `ret`: `double (*)(double)`.
+/// innermost return type is `ret`: `double (*)(double)`, `int (*)()` for
+/// one with no prototype.
 pub(super) fn format_fn_type(
     ret: i64,
     f: &crate::c5::symbol::FnType,
@@ -609,7 +610,11 @@ pub(super) fn format_fn_type(
     let mut decl = alloc::string::String::new();
     let mut level = Some((f, depth));
     while let Some((f, depth)) = level {
-        let params = format_params(&f.params, f.variadic, structs);
+        let params = if f.params.unprototyped {
+            alloc::string::String::new()
+        } else {
+            format_params(&f.params.types, f.params.variadic, structs)
+        };
         decl = if depth == 0 && decl.is_empty() {
             alloc::format!("({params})")
         } else {
@@ -621,8 +626,6 @@ pub(super) fn format_fn_type(
 }
 
 /// A parameter list as a prototype spells it; an empty one is `void`.
-/// TODO: `FnType` does not record whether its list is a prototype, so
-/// a pointer declared `T (*)()` prints as `T (*)(void)`.
 fn format_params(
     params: &[i64],
     is_variadic: bool,

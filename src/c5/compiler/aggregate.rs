@@ -244,8 +244,7 @@ impl Compiler {
         // the first. Capture and re-seed each iteration so a typedef'd
         // fn-pointer field inherits the prototype the same way a local
         // does (an inline declarator prototype still overrides it).
-        let base_field_typedef_fn_proto = self.pending.typedef_fn_proto;
-        let base_field_fn_ptr_param_types = self.pending.fn_ptr_param_types.clone();
+        let base_field_fn_ptr_params = self.pending.fn_ptr_params.clone();
         let base_field_fn_ptr_ret_fn = self.pending.fn_ptr_ret_fn.clone();
         loop {
             // Anonymous bitfield (`int :N;`) -- skips a name and
@@ -279,8 +278,7 @@ impl Compiler {
             self.pending.fn_ptr_indirection = base_field_fn_ptr_indirection;
             self.pending.fn_ptr_ret_indirection = base_field_fn_ptr_ret_indirection;
             self.pending.base_is_function_type = base_field_is_function_type;
-            self.pending.typedef_fn_proto = base_field_typedef_fn_proto;
-            self.pending.fn_ptr_param_types = base_field_fn_ptr_param_types.clone();
+            self.pending.fn_ptr_params = base_field_fn_ptr_params.clone();
             self.pending.fn_ptr_ret_fn = base_field_fn_ptr_ret_fn.clone();
             // Confine `packed` to this declarator: a member-level
             // `__attribute__((packed))` (trailing the declarator, so
@@ -361,18 +359,12 @@ impl Compiler {
             let field_fn_ptr_ret_indirection =
                 core::mem::take(&mut self.pending.fn_ptr_ret_indirection);
             let field_ret_fn = self.take_decl_ret_fn(false);
-            // Capture the function-pointer field's parameter prototype
-            // (set by the same declarator branch) so a later
-            // `s.fp(args)` narrows its arguments. Always consume the
+            // Capture the function-pointer field's parameter information
+            // (set by the same declarator branch, or the re-seeded typedef
+            // base) so a later `s.fp(args)` converts its arguments and
+            // splits them at the fixed-parameter count. Always consume the
             // side-channel so it cannot leak to the next field.
-            let field_params = self.pending.fn_ptr_param_types.take().unwrap_or_default();
-            // A variadic function-pointer field carries the variadic
-            // flag from the same prototype (the inline declarator or
-            // the re-seeded typedef base) so `s.fp(args)` splits its
-            // arguments at the fixed-parameter count. Consume the
-            // side-channel so it cannot leak to the next field.
-            let field_is_variadic = !field_params.is_empty()
-                && matches!(self.pending.typedef_fn_proto.take(), Some((_, true)));
+            let field_fn_params = self.pending.fn_ptr_params.take().unwrap_or_default();
             // A function-pointer member's `ms_abi` / `sysv_abi`
             // (`efi_status_t (__efiapi *exit)(...)`, or the typedef
             // form `efi_get_time_t __efiapi *get_time`). Consumed
@@ -436,8 +428,9 @@ impl Compiler {
                 fn_ptr_indirection: field_fn_ptr_indirection,
                 fn_ptr_ret_indirection: field_fn_ptr_ret_indirection,
                 ret_fn: field_ret_fn,
-                params: field_params,
-                is_variadic: field_is_variadic,
+                params: field_fn_params.types,
+                is_variadic: field_fn_params.variadic,
+                unprototyped: field_fn_params.unprototyped,
                 conv: field_conv,
                 anon_union_group: 0,
                 anon_struct_group: 0,
@@ -1022,17 +1015,11 @@ impl Compiler {
                 self.symbols[self.lex.curr_id_idx].fn_ptr_ret_indirection;
             self.pending.base_is_function_type =
                 self.symbols[self.lex.curr_id_idx].is_function_type;
-            // Carry the typedef's pointed-to prototype (parameter
-            // types + variadic flag) so `s.cb(args)` narrows each
-            // argument to its declared type and splits fixed vs
-            // variadic arguments per the host variadic ABI. Mirrors
-            // the non-aggregate path in `decl_base.rs`.
-            self.pending.typedef_fn_proto = Some((
-                self.symbols[self.lex.curr_id_idx].params.len(),
-                self.symbols[self.lex.curr_id_idx].is_variadic,
-            ));
-            self.pending.fn_ptr_param_types =
-                Some(self.symbols[self.lex.curr_id_idx].params.clone());
+            // Carry the typedef's pointed-to parameter information so
+            // `s.cb(args)` narrows each argument to its declared type and
+            // splits fixed vs variadic arguments per the host variadic
+            // ABI. Mirrors the non-aggregate path in `decl_base.rs`.
+            self.pending.fn_ptr_params = Some(self.symbols[self.lex.curr_id_idx].fn_params());
         }
         self.next()?;
         Ok((aliased, is_enum))
@@ -1142,6 +1129,7 @@ impl Compiler {
                 ret_fn: inner_field.ret_fn,
                 params: inner_field.params,
                 is_variadic: inner_field.is_variadic,
+                unprototyped: inner_field.unprototyped,
                 conv: inner_field.conv,
                 anon_union_group: union_group,
                 anon_struct_group: struct_group,

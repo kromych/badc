@@ -86,6 +86,20 @@ fn function_redeclarations_of_another_type_are_rejected() {
             "typedef int F(int);\nF f;\nint f(int a, int b) { return a + b; }\n",
             "now:      int (int, int)",
         ),
+        // A typedef or `typeof` names its type's parameter form.
+        (
+            "typedef int F(void);\nF f;\nint f(int x) { return x; }\n",
+            "previous: int (void)",
+        ),
+        (
+            "typedef int F();\nF f;\nint f(char c) { return c; }\n",
+            "now:      int (char)",
+        ),
+        ("typedef int F(char);\nF f;\nint f();\n", "now:      int ()"),
+        (
+            "int f();\nextern __typeof__(f) f;\nint f(char c) { return c; }\n",
+            "now:      int (char)",
+        ),
         // The tag's definition fixes the type the earlier use names.
         (
             "enum E;\nint f(enum E);\nenum E { A } __attribute__((__mode__(__byte__)));\n\
@@ -142,6 +156,8 @@ fn block_scope_declarations_meet_the_other_declarations() {
         "int main(void) { int g(int); return g(1); }\nint g(int a, int b) { return a + b; }\n",
         "void a(void) { extern int x; }\nvoid b(void) { extern long x; }\nint main(void) { return 0; }\n",
         "typedef int F(int);\nint g(int a, int b) { return a + b; }\n\
+         int main(void) { F g; return g(1); }\n",
+        "typedef int F(void);\nint g(int a) { return a; }\n\
          int main(void) { F g; return g(1); }\n",
     ] {
         expect_conflict(src, &["conflicting types for `"]);
@@ -236,6 +252,19 @@ fn compatible_redeclarations_compose() {
           int main(void) { return t(8); }\n",
             8,
         ),
+        (
+            "int k(a) int a; { return a + 1; }\nextern __typeof__(k) k;\n\
+          int main(void) { return k(4); }\n",
+            5,
+        ),
+        (
+            "typedef int F();\nF f;\nint f(int a) { return a; }\nint main(void) { return f(3); }\n",
+            3,
+        ),
+        (
+            "typedef int F(void);\nF v;\nint v(void) { return 6; }\nint main(void) { return v(); }\n",
+            6,
+        ),
         // C99 6.7.2.3p1: a tag declared before its definition names the type
         // the definition completes, at whatever width it then takes.
         (
@@ -298,6 +327,11 @@ fn compatible_redeclarations_compose() {
         ),
         (
             "typedef int F(int);\nint g(int a) { return a + 2; }\n\
+          int main(void) { F g; return g(1); }\n",
+            3,
+        ),
+        (
+            "typedef int F();\nint g(int a) { return a + 2; }\n\
           int main(void) { F g; return g(1); }\n",
             3,
         ),

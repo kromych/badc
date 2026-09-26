@@ -20,6 +20,11 @@ Disassembly of section .text:
                	add	x0, x0, x1
                	ret
 
+<add3>:
+               	add	x0, x0, x1
+               	add	x0, x0, x2
+               	ret
+
 <main>:
                	mov	x0, #0x0                // =0
                	ret

@@ -40,8 +40,7 @@ struct FileScopeDecl {
     base_fn_ptr_indirection: Option<i64>,
     base_fn_ptr_ret_indirection: i64,
     base_is_function_type: bool,
-    base_typedef_fn_proto: Option<(usize, bool)>,
-    base_fn_ptr_param_types: Option<alloc::vec::Vec<i64>>,
+    base_fn_ptr_params: Option<crate::c5::symbol::FnParams>,
     base_fn_ptr_ret_fn: Option<(alloc::boxed::Box<crate::c5::symbol::FnType>, i64)>,
 }
 
@@ -450,8 +449,7 @@ impl Compiler {
             base_fn_ptr_indirection: self.pending.fn_ptr_indirection,
             base_fn_ptr_ret_indirection: self.pending.fn_ptr_ret_indirection,
             base_is_function_type: self.pending.base_is_function_type,
-            base_typedef_fn_proto: self.pending.typedef_fn_proto,
-            base_fn_ptr_param_types: self.pending.fn_ptr_param_types.clone(),
+            base_fn_ptr_params: self.pending.fn_ptr_params.clone(),
             base_fn_ptr_ret_fn: self.pending.fn_ptr_ret_fn.clone(),
         };
         let mut declarator_count = 0usize;
@@ -485,8 +483,7 @@ impl Compiler {
         self.pending.fn_ptr_indirection = decl.base_fn_ptr_indirection;
         self.pending.fn_ptr_ret_indirection = decl.base_fn_ptr_ret_indirection;
         self.pending.base_is_function_type = decl.base_is_function_type;
-        self.pending.typedef_fn_proto = decl.base_typedef_fn_proto;
-        self.pending.fn_ptr_param_types = decl.base_fn_ptr_param_types.clone();
+        self.pending.fn_ptr_params = decl.base_fn_ptr_params.clone();
         self.pending.fn_ptr_ret_fn = decl.base_fn_ptr_ret_fn.clone();
         // The declarator's own line -- the name and its parameter
         // list -- for diagnostics that would otherwise point at the
@@ -589,29 +586,20 @@ impl Compiler {
             self.symbols[id_idx].fn_ptr_indirection = fn_ptr_indirection;
             self.symbols[id_idx].fn_ptr_ret_indirection = fn_ptr_ret_indirection;
         }
-        // Inherit a variadic function-pointer prototype onto the
-        // bound declarator so an indirect call through it knows
-        // the callee's named-parameter count and routes the
-        // variadic tail per the host variadic ABI. Only variadic
-        // prototypes are recorded: a non-variadic indirect call
-        // places every argument as fixed regardless, and
-        // synthesising placeholder parameter types would feed the
-        // call-site argument type-check a spurious mismatch.
-        let fnptr_proto = self.pending.typedef_fn_proto.take();
-        let mut fnptr_param_types = self.pending.fn_ptr_param_types.take();
+        // The bound declarator takes the pointee's parameter information,
+        // so an indirect call through it converts its arguments and routes
+        // a variadic tail per the host variadic ABI.
+        let mut fnptr_params = self.pending.fn_ptr_params.take();
         // The carrier holds the pointee signature of a fn-pointer typedef, so it
         // describes an object (`cb x;`) -- not a function whose return type is that
         // typedef (`cb f(args)`), and not a bare function-type declarator (`extern
         // typeof(f) f;`); both of those install a list of their own.
         let carrier_names_object = !bare_function_type || is_typedef;
-        if self.lex.tk != '(' && carrier_names_object {
-            if let Some(types) = fnptr_param_types.take() {
-                self.symbols[id_idx].params = types;
-                self.symbols[id_idx].is_variadic = matches!(fnptr_proto, Some((_, true)));
-            } else if let Some((proto_fixed, true)) = fnptr_proto {
-                self.symbols[id_idx].params = alloc::vec![0i64; proto_fixed];
-                self.symbols[id_idx].is_variadic = true;
-            }
+        if self.lex.tk != '('
+            && carrier_names_object
+            && let Some(p) = fnptr_params.take()
+        {
+            self.symbols[id_idx].set_fn_params(p);
         }
         // Carry the bare-`void` side channel onto the
         // declarator. `pending_base_was_void` was set if
@@ -664,16 +652,8 @@ impl Compiler {
         // name merges as a redeclaration rather than colliding.
         if bare_function_type && preconsumed_params.is_none() && self.lex.tk != '(' {
             b.ty -= Ty::Ptr as i64;
-            let types = fnptr_param_types.unwrap_or_default();
-            preconsumed_params = Some(super::function::ParsedParams {
-                indices: alloc::vec::Vec::new(),
-                types,
-                is_variadic: matches!(fnptr_proto, Some((_, true))),
-                // A function-type specifier supplies a parameter type list;
-                // the empty-list spelling does not reach here.
-                form: super::function::ParamForm::Carried,
-                enum_tags: alloc::vec::Vec::new(),
-            });
+            let p = fnptr_params.unwrap_or_default();
+            preconsumed_params = Some(super::function::ParsedParams::of_type(p));
         }
 
         let prior = self.check_file_scope_redeclaration(decl, &b, preconsumed_params.is_some())?;
@@ -806,8 +786,7 @@ impl Compiler {
         // parse a list of their own; an alias of an existing function type
         // took the one its carrier held.
         if let Some(pp) = typedef_params {
-            self.symbols[id_idx].params = pp.types;
-            self.symbols[id_idx].is_variadic = pp.is_variadic;
+            self.symbols[id_idx].set_fn_params(pp.fn_params());
         }
         Ok(())
     }
@@ -950,8 +929,12 @@ impl Compiler {
             params.types = prior_params.clone();
             params.is_variadic = prior_is_variadic;
         }
-        self.symbols[id_idx].params = params.types.clone();
-        self.symbols[id_idx].is_variadic = params.is_variadic;
+        let unprototyped = !self.has_prototype(id_idx, &params);
+        let fn_params = crate::c5::symbol::FnParams {
+            unprototyped,
+            ..params.fn_params()
+        };
+        self.symbols[id_idx].set_fn_params(fn_params);
         // C11 6.7.4: `_Noreturn` on any declaration marks the symbol, and the
         // reachability analysis then treats a call to it as not reaching its
         // continuation. The mark is sticky across later declarations.
@@ -1184,7 +1167,9 @@ impl Compiler {
         } else {
             params.types.clone()
         };
-        self.symbols[id_idx].unprototyped_def = !self.has_prototype(id_idx, &params);
+        let unprototyped = !self.has_prototype(id_idx, &params);
+        self.symbols[id_idx].unprototyped_def = unprototyped;
+        self.symbols[id_idx].unprototyped = unprototyped;
         self.define_linked_function(id_idx, def, Params::of(&params, true))?;
         self.symbols[id_idx].params = arrival.clone();
 

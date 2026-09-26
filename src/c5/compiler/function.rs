@@ -57,6 +57,31 @@ impl ParsedParams {
         self.types.iter().enumerate().map(spell).collect()
     }
 
+    /// The parameter information the list gives its function type.
+    pub(super) fn fn_params(&self) -> crate::c5::symbol::FnParams {
+        crate::c5::symbol::FnParams {
+            types: self.types.clone(),
+            variadic: self.is_variadic,
+            unprototyped: matches!(self.form, ParamForm::Empty | ParamForm::IdentifierList),
+        }
+    }
+
+    /// The list of a declarator whose function type a typedef or `typeof`
+    /// names: that type's.
+    pub(super) fn of_type(p: crate::c5::symbol::FnParams) -> Self {
+        ParsedParams {
+            indices: Vec::new(),
+            form: if p.unprototyped {
+                ParamForm::Empty
+            } else {
+                ParamForm::Prototype
+            },
+            types: p.types,
+            is_variadic: p.variadic,
+            enum_tags: Vec::new(),
+        }
+    }
+
     /// Record the tag position `pos` was declared through, if any.
     pub(super) fn note_enum_tag(&mut self, pos: usize, tag: Option<u32>) {
         self.enum_tags.retain(|(p, _)| *p != pos);
@@ -65,12 +90,11 @@ impl ParsedParams {
 }
 
 /// A parameter's function-pointer carriers: indirection, return lineage,
-/// pointee parameter types, variadic flag, and `FnType::ret`.
+/// pointee parameter information, and `FnType::ret`.
 type ParamFnCarriers = (
     i64,
     i64,
-    Option<Vec<i64>>,
-    bool,
+    Option<crate::c5::symbol::FnParams>,
     Option<(alloc::boxed::Box<crate::c5::symbol::FnType>, i64)>,
 );
 
@@ -83,9 +107,6 @@ pub(super) enum ParamForm {
     Prototype,
     /// An identifier list, typed by the declarations that follow it (6.9.1p6).
     IdentifierList,
-    /// A function type read through a typedef or `typeof`, whose carrier does
-    /// not record which of the other forms declared it.
-    Carried,
 }
 
 impl Compiler {
@@ -99,10 +120,9 @@ impl Compiler {
         let ret_fn = self.take_decl_ret_fn(false);
         let indirection = self.pending.fn_ptr_indirection.take().unwrap_or(0);
         let ret_indirection = core::mem::take(&mut self.pending.fn_ptr_ret_indirection);
-        let params = self.pending.fn_ptr_param_types.take();
-        let variadic = matches!(self.pending.typedef_fn_proto.take(), Some((_, true)));
+        let params = self.pending.fn_ptr_params.take();
         self.pending.base_is_function_type = false;
-        (indirection, ret_indirection, params, variadic, ret_fn)
+        (indirection, ret_indirection, params, ret_fn)
     }
 
     /// A parameter's own `ms_abi` / `sysv_abi` describes that
@@ -117,8 +137,7 @@ impl Compiler {
         let outer = (
             p.fn_ptr_indirection.take(),
             core::mem::take(&mut p.fn_ptr_ret_indirection),
-            p.typedef_fn_proto.take(),
-            p.fn_ptr_param_types.take(),
+            p.fn_ptr_params.take(),
             p.fn_ptr_ret_fn.take(),
             core::mem::take(&mut p.base_is_function_type),
         );
@@ -132,8 +151,7 @@ impl Compiler {
         (
             p.fn_ptr_indirection,
             p.fn_ptr_ret_indirection,
-            p.typedef_fn_proto,
-            p.fn_ptr_param_types,
+            p.fn_ptr_params,
             p.fn_ptr_ret_fn,
             p.base_is_function_type,
         ) = outer;
@@ -361,7 +379,7 @@ impl Compiler {
             // populated. Drained even if the declarator didn't
             // set anything so they don't leak into the next
             // parameter or expression.
-            let (fn_ptr_indirection, fn_ptr_ret_indirection, fnptr_pp, fnptr_variadic, ret_fn) =
+            let (fn_ptr_indirection, fn_ptr_ret_indirection, fnptr_pp, ret_fn) =
                 self.take_param_fn_ptr_carriers();
             // The adjusted pointer is one more level above a function-pointer
             // element, as `fn_t *p` counts it.
@@ -430,10 +448,9 @@ impl Compiler {
             // parameter types so an indirect call through it narrows each
             // argument to its declared type (the common callback shape).
             if fn_ptr_indirection > 0
-                && let Some(pp_types) = fnptr_pp
+                && let Some(pp) = fnptr_pp
             {
-                self.symbols[param_idx].params = pp_types;
-                self.symbols[param_idx].is_variadic = fnptr_variadic;
+                self.symbols[param_idx].set_fn_params(pp);
             }
             self.symbols[param_idx].conv = param_conv;
 

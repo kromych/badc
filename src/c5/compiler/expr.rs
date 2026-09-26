@@ -626,14 +626,13 @@ impl Compiler {
             return idx;
         }
         let link_name = sym.link_name().to_string();
-        let (type_, params, is_variadic) = (sym.type_, sym.params.clone(), sym.is_variadic);
+        let (type_, params) = (sym.type_, sym.fn_params());
         let slot = self.resolve_symbol_named(&alloc::format!("{link_name}.builtin"));
         let sym = &mut self.symbols[slot];
         if sym.class == 0 {
             sym.class = Token::Fun as i64;
             sym.type_ = type_;
-            sym.params = params;
-            sym.is_variadic = is_variadic;
+            sym.set_fn_params(params);
             sym.asm_name = Some(link_name);
             sym.linkage = crate::c5::symbol::Linkage::External;
             sym.defined_here = false;
@@ -1601,6 +1600,7 @@ impl Compiler {
             self.symbols[id_idx].class = Token::Fun as i64;
             self.symbols[id_idx].scoped_fn_decl = true;
             self.symbols[id_idx].type_ = Ty::Int as i64;
+            self.symbols[id_idx].unprototyped = true;
             self.symbols[id_idx].implicit_return_int = true;
             self.symbols[id_idx].linkage = crate::c5::symbol::Linkage::External;
             self.symbols[id_idx].defined_here = false;
@@ -2803,8 +2803,7 @@ impl Compiler {
         let (f, depth) = if let Some(pp) = type_name.proto {
             let depth = type_name.fn_ptr_indirection.unwrap_or(1).max(1);
             let f = FnType {
-                params: pp.types,
-                variadic: pp.is_variadic,
+                params: pp.fn_params(),
                 ret: type_name.fn_ty.and_then(|f| f.ret),
                 ..FnType::default()
             };
@@ -2813,8 +2812,7 @@ impl Compiler {
             let f = type_name.fn_ty.filter(|f| f.ptr_depth >= 1)?;
             let depth = f.ptr_depth as i64;
             let f = FnType {
-                params: f.params.unwrap_or_default(),
-                variadic: f.variadic,
+                params: f.params,
                 ret: f.ret,
                 ..FnType::default()
             };
@@ -3401,7 +3399,7 @@ impl Compiler {
         // converted to the parameter types of the callee expression's
         // function type (C99 6.5.2.2p7), as for a direct call.
         let callee_fn = self.callee_fn(callee_ast);
-        let callee_params = callee_fn.as_ref().map(|f| f.params.clone());
+        let callee_params = callee_fn.as_ref().map(|f| f.params.types.clone());
         let callee_ret_fn_ptr = core::mem::take(&mut self.pending.indirect_callee_ret_fn_ptr);
         let mut arg_idx: usize = 0;
         if self.lex.tk != ')' {
@@ -3893,11 +3891,11 @@ impl Compiler {
         let else_ty = self.ty;
         let result_ty = self.conditional_result_ty(then_ty, else_ty, then_ast, else_ast);
         // C99 6.5.15p6: pointers to compatible function types compose; a
-        // prototype, where either arm has one, is the result's.
+        // prototype, where either arm has one, is the result's (6.2.7p3).
         let arm_fns = [then_ast, else_ast].map(|a| a.and_then(|a| self.expr_fn(a)));
         let [then_fn, else_fn] = arm_fns;
         let result_fn = match (then_fn, else_fn) {
-            (Some(t), Some(e)) if t.0.params.is_empty() => Some(e),
+            (Some(t), Some(e)) if t.0.params.unprototyped => Some(e),
             (Some(t), _) => Some(t),
             (None, e) => e,
         };
@@ -4879,9 +4877,13 @@ impl Compiler {
             let mty = self.ty;
             self.ast_emit_member(obj, field.offset as i64, None, mty, field.array_size);
             if field_is_fn_ptr && let Some(id) = self.ast_acc {
-                let f = FnType {
-                    params: field.params.clone(),
+                let params = crate::c5::symbol::FnParams {
+                    types: field.params.clone(),
                     variadic: field.is_variadic,
+                    unprototyped: field.unprototyped,
+                };
+                let f = FnType {
+                    params,
                     conv: field.conv,
                     ret: field.ret_fn.clone(),
                 };
@@ -5476,15 +5478,13 @@ impl Compiler {
         let base = self.parse_decl_base_type()?;
         let mut ty = base;
         let base_is_fn = core::mem::take(&mut self.pending.base_is_function_type);
-        let base_variadic = matches!(self.pending.typedef_fn_proto.take(), Some((_, true)));
-        let base_params = self.pending.fn_ptr_param_types.take();
+        let base_params = self.pending.fn_ptr_params.take();
         self.pending.fn_ptr_ret_indirection = 0;
         let base_ret = self.pending.fn_ptr_ret_fn.take();
         let mut fn_ptr_indirection = self.pending.fn_ptr_indirection.take();
         let mut fn_ty = fn_ptr_indirection.map(|depth| FnTypeName {
             ptr_depth: if base_is_fn { 0 } else { depth.max(0) as usize },
-            params: Some(base_params.unwrap_or_default()),
-            variadic: base_variadic,
+            params: base_params.unwrap_or_default(),
             ret: base_ret,
         });
         let type_align = core::mem::take(&mut self.pending.type_align);
@@ -5559,34 +5559,24 @@ impl Compiler {
                 dims.clear();
                 // A function-pointer base is the result of the outermost
                 // function level; each level is the result of the one inside.
+                let conv = crate::c5::codegen::CallConv::Target;
                 let mut ret = fn_ty.take().map(|f| {
                     let depth = f.ptr_depth as i64;
                     let base = FnType {
-                        params: f.params.unwrap_or_default(),
-                        variadic: f.variadic,
-                        conv: crate::c5::codegen::CallConv::Target,
+                        params: f.params,
+                        conv,
                         ret: f.ret,
                     };
                     (alloc::boxed::Box::new(base), depth)
                 });
                 for (depth, level) in fns.rev() {
-                    let (params, variadic) = level.map_or((alloc::vec::Vec::new(), false), |p| {
-                        (p.types, p.is_variadic)
-                    });
-                    let conv = crate::c5::codegen::CallConv::Target;
-                    let f = FnType {
-                        params,
-                        variadic,
-                        conv,
-                        ret,
-                    };
+                    let params = level.map(|p| p.fn_params()).unwrap_or_default();
+                    let f = FnType { params, conv, ret };
                     ret = Some((alloc::boxed::Box::new(f), depth));
                 }
                 fn_ty = Some(FnTypeName {
                     ptr_depth: own_depth as usize,
-                    params: (pp.form != super::function::ParamForm::Empty)
-                        .then(|| pp.types.clone()),
-                    variadic: pp.is_variadic,
+                    params: pp.fn_params(),
                     ret,
                 });
                 proto = Some(pp);
@@ -6031,13 +6021,7 @@ pub(super) struct FnTypeName {
     /// Pointer levels applied to the function type: 0 names a function
     /// type, 1 a pointer to function.
     ptr_depth: usize,
-    /// Parameter type tags, or `None` for a declarator with no prototype
-    /// (`T ()`). TODO: a typedef records only its parameter types, not
-    /// whether they came from a prototype, so a `T (*)()` alias reads as
-    /// an empty prototype here; the distinction survives only when the
-    /// declarator is spelled out.
-    params: Option<alloc::vec::Vec<i64>>,
-    variadic: bool,
+    params: crate::c5::symbol::FnParams,
     /// `FnType::ret` of the function type.
     ret: Option<(alloc::boxed::Box<FnType>, i64)>,
 }
@@ -6059,18 +6043,18 @@ fn fn_type_match(a: &Option<FnTypeName>, b: &Option<FnTypeName>) -> bool {
     if a.ptr_depth != b.ptr_depth {
         return false;
     }
-    match (&a.params, &b.params) {
-        (Some(pa), Some(pb)) => {
-            a.variadic == b.variadic
-                && pa.len() == pb.len()
-                && pa.iter().zip(pb).all(|(x, y)| {
+    let (pa, pb) = (&a.params, &b.params);
+    match (pa.unprototyped, pb.unprototyped) {
+        (false, false) => {
+            pa.variadic == pb.variadic
+                && pa.types.len() == pb.types.len()
+                && pa.types.iter().zip(&pb.types).all(|(x, y)| {
                     generic_type_match(strip_object_const(*x), strip_object_const(*y))
                 })
         }
-        (Some(p), None) | (None, Some(p)) => {
-            !a.variadic && !b.variadic && p.iter().copied().all(promotes_unchanged)
-        }
-        (None, None) => true,
+        (false, true) => !pa.variadic && pa.types.iter().copied().all(promotes_unchanged),
+        (true, false) => !pb.variadic && pb.types.iter().copied().all(promotes_unchanged),
+        (true, true) => true,
     }
 }
 

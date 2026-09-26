@@ -38,7 +38,6 @@ pub(super) enum Params {
     Unspecified,
     Prototype(Vec<Spelled>, bool),
     IdentifierList(Vec<Spelled>),
-    Carried(Vec<Spelled>, bool),
 }
 
 impl Params {
@@ -48,7 +47,6 @@ impl Params {
             ParamForm::Empty if !defining => Params::Unspecified,
             ParamForm::Empty | ParamForm::IdentifierList => Params::IdentifierList(types),
             ParamForm::Prototype => Params::Prototype(types, params.is_variadic),
-            ParamForm::Carried => Params::Carried(types, params.is_variadic),
         }
     }
 
@@ -56,10 +54,8 @@ impl Params {
     fn rank(&self) -> u8 {
         match self {
             Params::Unspecified => 0,
-            Params::Carried(t, v) if t.is_empty() && !*v => 1,
-            Params::IdentifierList(_) => 2,
-            Params::Carried(..) => 3,
-            Params::Prototype(..) => 4,
+            Params::IdentifierList(_) => 1,
+            Params::Prototype(..) => 2,
         }
     }
 }
@@ -188,24 +184,22 @@ impl Compiler {
     /// argument promotions (6.5.2.2p6).
     pub(super) fn old_style_arrival_tys(&self, idx: usize, declared: &[i64]) -> Vec<i64> {
         match self.linked_entities.get(&idx).map(|e| &e.ty) {
-            Some(DeclaredType::Function(
-                _,
-                Params::Prototype(t, false) | Params::Carried(t, false),
-            )) if t.len() == declared.len() => t.iter().map(|s| self.spelled_ty(*s)).collect(),
+            Some(DeclaredType::Function(_, Params::Prototype(t, false)))
+                if t.len() == declared.len() =>
+            {
+                t.iter().map(|s| self.spelled_ty(*s)).collect()
+            }
             _ => declared.iter().map(|&t| promoted(t)).collect(),
         }
     }
 
-    /// Whether a definition's function type has a prototype (C99 6.9.1p7):
-    /// a parameter type list, its own or a prior declaration's.
+    /// Whether a declaration's function type has a prototype (C99 6.2.7p3,
+    /// 6.9.1p7): a parameter type list, its own or a prior declaration's.
     pub(super) fn has_prototype(&self, idx: usize, params: &ParsedParams) -> bool {
         !matches!(params.form, ParamForm::Empty | ParamForm::IdentifierList)
             || matches!(
                 self.linked_entities.get(&idx).map(|e| &e.ty),
-                Some(DeclaredType::Function(
-                    _,
-                    Params::Prototype(..) | Params::Carried(..)
-                ))
+                Some(DeclaredType::Function(_, Params::Prototype(..)))
             )
     }
 
@@ -344,9 +338,9 @@ impl Compiler {
         }
     }
 
-    /// C99 6.7.5.3p15; a carried list is lossy and meets a prototype only.
+    /// C99 6.7.5.3p15.
     fn params_verdict(&self, prior: &Params, new: &Params) -> Verdict {
-        use Params::{Carried, IdentifierList, Prototype, Unspecified};
+        use Params::{IdentifierList, Prototype, Unspecified};
         let value = |s: &Spelled| strip_object_const(self.spelled_ty(*s));
         let agree = |a: &Spelled, b: &Spelled| self.tags_agree(value(a), value(b), false);
         let verdict = |ok: bool| {
@@ -356,13 +350,8 @@ impl Compiler {
                 Verdict::Conflict
             }
         };
-        let opaque = |p: &Params| matches!(p, Carried(t, false) if t.is_empty());
-        if opaque(prior) || opaque(new) {
-            return Verdict::Compatible;
-        }
         match (prior, new) {
-            (Prototype(a, va) | Carried(a, va), Prototype(b, vb))
-            | (Prototype(a, va), Carried(b, vb)) => {
+            (Prototype(a, va), Prototype(b, vb)) => {
                 verdict(va == vb && a.len() == b.len() && a.iter().zip(b).all(|(x, y)| agree(x, y)))
             }
             (Prototype(t, v), Unspecified) | (Unspecified, Prototype(t, v)) => {
@@ -433,7 +422,7 @@ impl Compiler {
                     list.join(", ")
                 )
             }
-            DeclaredType::Function(ret, Params::Prototype(t, v) | Params::Carried(t, v)) => {
+            DeclaredType::Function(ret, Params::Prototype(t, v)) => {
                 let types: Vec<i64> = t.iter().map(|s| self.spelled_ty(*s)).collect();
                 format_signature(self.spelled_ty(*ret), &types, *v, &self.structs)
             }

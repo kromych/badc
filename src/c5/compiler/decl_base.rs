@@ -361,11 +361,7 @@ impl Compiler {
                 self.pending.fn_ptr_indirection = Some(1);
                 self.pending.fn_ptr_ret_indirection = 0;
                 self.pending.base_is_function_type = true;
-                self.pending.typedef_fn_proto = Some((
-                    self.symbols[idx].params.len(),
-                    self.symbols[idx].is_variadic,
-                ));
-                self.pending.fn_ptr_param_types = Some(self.symbols[idx].params.clone());
+                self.pending.fn_ptr_params = Some(self.symbols[idx].fn_params());
                 self.pending.fn_ptr_ret_fn = self.symbols[idx].ret_fn.clone();
                 self.next()?; // identifier
                 self.next()?; // )
@@ -620,11 +616,7 @@ impl Compiler {
                 self.pending.fn_ptr_indirection = Some(1);
                 self.pending.fn_ptr_ret_indirection = 0;
                 self.pending.base_is_function_type = false;
-                self.pending.typedef_fn_proto = Some((
-                    self.symbols[idx].params.len(),
-                    self.symbols[idx].is_variadic,
-                ));
-                self.pending.fn_ptr_param_types = Some(self.symbols[idx].params.clone());
+                self.pending.fn_ptr_params = Some(self.symbols[idx].fn_params());
                 self.pending.fn_ptr_ret_fn = self.symbols[idx].ret_fn.clone();
                 self.symbols[idx].type_ + Ty::Ptr as i64
             }
@@ -643,8 +635,7 @@ impl Compiler {
                     self.pending.fn_ptr_indirection = Some(depth);
                     self.pending.fn_ptr_ret_indirection = f.ret.as_ref().map_or(0, |r| r.1);
                     self.pending.base_is_function_type = false;
-                    self.pending.typedef_fn_proto = Some((f.params.len(), f.variadic));
-                    self.pending.fn_ptr_param_types = Some(f.params);
+                    self.pending.fn_ptr_params = Some(f.params);
                     self.pending.fn_ptr_ret_fn = f.ret;
                 }
                 self.ty
@@ -1960,8 +1951,7 @@ impl Compiler {
         self.pending.typedef_base_array_size = 0;
         self.pending.typedef_base_zero_len = false;
         self.pending.type_align = 0;
-        self.pending.typedef_fn_proto = None;
-        self.pending.fn_ptr_param_types = None;
+        self.pending.fn_ptr_params = None;
         self.pending.fn_ptr_ret_fn = None;
     }
 
@@ -2085,11 +2075,7 @@ impl Compiler {
             // declarator so an indirect call through the variable narrows
             // each argument to its declared parameter type and splits fixed
             // from variadic arguments per the host variadic ABI.
-            self.pending.typedef_fn_proto = Some((
-                self.symbols[idx].params.len(),
-                self.symbols[idx].is_variadic,
-            ));
-            self.pending.fn_ptr_param_types = Some(self.symbols[idx].params.clone());
+            self.pending.fn_ptr_params = Some(self.symbols[idx].fn_params());
             self.pending.fn_ptr_ret_fn = self.symbols[idx].ret_fn.clone();
         }
         // `(VOID)` in parameter position is the no-parameter idiom.

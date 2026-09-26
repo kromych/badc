@@ -1349,7 +1349,8 @@ fn builtin_types_compatible_fnptr() {
     // `__builtin_types_compatible_p` arguments, including a typedef against
     // the address of a matching function, differing return types and
     // parameter lists, an unspecified parameter list against a prototype,
-    // and pointer-to-function versus function type. Matches gcc and clang.
+    // spelled or named through a typedef, `typeof` or `&`, and
+    // pointer-to-function versus function type. Matches gcc and clang.
     assert_eq!(run_fixture("builtin_types_compatible_fnptr.c"), 0);
 }
 
@@ -5417,6 +5418,8 @@ fn struct_arg_value_form() {
     // the caller's copy, and -- when the callee's parameter list is not in
     // scope -- the object's bytes in one machine word. The interpreter read
     // the second form's word as an address; the native backends take both.
+    // A redeclaration through a parameterless function type keeps the list
+    // (C99 6.2.7p4), so the calls here are the first form.
     assert_eq!(run_fixture("struct_arg_value_form.c"), 0);
 }
 

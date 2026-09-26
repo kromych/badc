@@ -542,7 +542,7 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
     },
     // subroutine_type -- the pointee of a function pointer (DWARF 4 5.7).
     // TODO: DW_AT_prototyped is set for a pointee without a prototype too;
-    // the symbol tables do not tell its empty list from `(void)`.
+    // the writer reads no `unprototyped` flag, and `VariableInfo` has none.
     AbbrevDecl {
         code: ABBREV_SUBROUTINE_TYPE,
         tag: DW_TAG_SUBROUTINE_TYPE,

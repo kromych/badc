@@ -157,6 +157,9 @@ struct LoopCtx {
     cont_depth: usize,
 }
 
+/// A jump's label, the ids of the scopes it leaves and its cleanup calls.
+type CleanupExit = (LabelId, alloc::vec::Vec<StmtId>, alloc::vec::Vec<StmtId>);
+
 /// A block (`Stmt::Compound`) or VLA scope (`Stmt::VlaScopeEnter`) the walk
 /// is inside: the lifetimes leaving it ends (C99 6.2.4p2), the sp it restores.
 #[derive(Clone, Copy)]
@@ -184,6 +187,8 @@ struct Walker<'a> {
     /// `LabelId`. Filled lazily by a Goto's forward reference or by the
     /// matching Labeled stmt, both of which see the same block.
     label_blocks: alloc::vec::Vec<Option<BlockId>>,
+    /// The exit block of the jumps alike by [`CleanupExit`].
+    cleanup_exits: alloc::collections::BTreeMap<CleanupExit, BlockId>,
     /// Per enclosing `switch`, innermost last: the block reserved for
     /// each `case` value and for `default`, allocated by the
     /// case-collection pass before the dispatcher emits. A marker

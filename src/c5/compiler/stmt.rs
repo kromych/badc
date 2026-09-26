@@ -39,7 +39,7 @@ use super::types::{is_struct_ty, is_struct_value_ty, is_void_ty, struct_ptr_dept
 /// A registered `__attribute__((cleanup(fn)))` variable. The fields the
 /// destructor call bakes into its `Ident` are captured at declaration
 /// time; see `register_cleanup_var`.
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub(super) struct CleanupVar {
     var_sym: usize,
     fn_sym: usize,

@@ -94,8 +94,8 @@ impl<'a> Walker<'a> {
             Stmt::AsmGoto(idx) => {
                 // GCC `asm goto`. Target 0 is the fall-through
                 // successor; the label blocks follow in label-list
-                // order. An edge leaving a scope goes through a block of
-                // its own that leaves it as `goto` does.
+                // order. An edge leaving a scope goes through the exit
+                // block a `goto` to the label from here takes.
                 let asm = self.ast.asm_blocks[*idx as usize].clone();
                 let mut args: alloc::vec::Vec<ValueId> =
                     alloc::vec::Vec::with_capacity(asm.operand_exprs.len());
@@ -107,24 +107,20 @@ impl<'a> Walker<'a> {
                 let mut exits = alloc::vec::Vec::new();
                 targets.push(fall);
                 for (i, &l) in asm.labels.iter().enumerate() {
-                    let label = self.block_for_label(b, l);
                     let depth = self.label_depth(l);
                     if asm.cleanups[i].is_empty() && !self.leaves_anything(depth) {
-                        targets.push(label);
+                        targets.push(self.block_for_label(b, l));
                     } else {
-                        let exit = b.new_block();
+                        let (exit, new) = self.cleanup_exit(b, l, depth, &asm.cleanups[i]);
                         targets.push(exit);
-                        exits.push((exit, i, depth, label));
+                        if new {
+                            exits.push((exit, i, depth, l));
+                        }
                     }
                 }
                 b.asm_goto(alloc::boxed::Box::new(asm.block), args, targets);
-                for (exit, i, depth, label) in exits {
-                    b.switch_to(exit);
-                    for &c in &asm.cleanups[i] {
-                        self.walk_stmt(b, c)?;
-                    }
-                    self.leave_scopes(b, depth, false);
-                    b.jmp(label);
+                for (exit, i, depth, l) in exits {
+                    self.fill_cleanup_exit(b, exit, l, depth, &asm.cleanups[i])?;
                 }
                 b.switch_to(fall);
                 Ok(false)
@@ -141,22 +137,29 @@ impl<'a> Walker<'a> {
                 self.goto_indirect(b, v);
                 Ok(true)
             }
-            Stmt::CleanupJump { cleanups, jump } => {
-                let target = match self.ast.stmt(*jump) {
-                    Stmt::GotoIndirect(t) => Some(self.walk_expr_rvalue(b, *t)?),
-                    _ => None,
-                };
-                for &c in cleanups {
-                    self.walk_stmt(b, c)?;
-                }
-                match target {
-                    Some(v) => {
-                        self.goto_indirect(b, v);
-                        Ok(true)
+            Stmt::CleanupJump { cleanups, jump } => match *self.ast.stmt(*jump) {
+                Stmt::Goto(label) => {
+                    let depth = self.label_depth(label);
+                    let (exit, new) = self.cleanup_exit(b, label, depth, cleanups);
+                    b.jmp(exit);
+                    if new {
+                        self.fill_cleanup_exit(b, exit, label, depth, cleanups)?;
                     }
-                    None => self.walk_stmt(b, *jump),
+                    Ok(true)
                 }
-            }
+                Stmt::GotoIndirect(t) => {
+                    let v = self.walk_expr_rvalue(b, t)?;
+                    for &c in cleanups {
+                        self.walk_stmt(b, c)?;
+                    }
+                    self.goto_indirect(b, v);
+                    Ok(true)
+                }
+                _ => Err(WalkError::InvalidStmt {
+                    id,
+                    kind: "CleanupJump",
+                }),
+            },
             Stmt::Labeled { label, body } => {
                 let label_blk = self.block_for_label(b, *label);
                 // C99 6.8.1: a labeled statement is reachable by
@@ -571,6 +574,46 @@ impl<'a> Walker<'a> {
     fn return_value(&self, b: &mut SsaBuilder, v: ValueId) {
         self.leave_scopes(b, 0, true);
         b.return_(v);
+    }
+
+    /// The exit block the jumps to `label` leaving the scopes above `depth`
+    /// and running `cleanups` share; true when new and still to be filled.
+    fn cleanup_exit(
+        &mut self,
+        b: &mut SsaBuilder,
+        label: LabelId,
+        depth: usize,
+        cleanups: &[StmtId],
+    ) -> (BlockId, bool) {
+        let left = self.scopes[depth.min(self.scopes.len())..]
+            .iter()
+            .map(|s| s.id)
+            .collect();
+        let key = (label, left, cleanups.to_vec());
+        if let Some(&exit) = self.cleanup_exits.get(&key) {
+            return (exit, false);
+        }
+        let exit = b.new_block();
+        self.cleanup_exits.insert(key, exit);
+        (exit, true)
+    }
+
+    fn fill_cleanup_exit(
+        &mut self,
+        b: &mut SsaBuilder,
+        exit: BlockId,
+        label: LabelId,
+        depth: usize,
+        cleanups: &[StmtId],
+    ) -> Result<(), WalkError> {
+        b.switch_to(exit);
+        for &c in cleanups {
+            self.walk_stmt(b, c)?;
+        }
+        self.leave_scopes(b, depth, false);
+        let target = self.block_for_label(b, label);
+        b.jmp(target);
+        Ok(())
     }
 
     /// Whether leaving the scopes above `depth` emits anything.

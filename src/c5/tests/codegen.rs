@@ -11507,6 +11507,65 @@ fn a_goto_chain_reserves_one_block_per_label() {
     );
 }
 
+/// The gotos and `asm goto` edges to one label leaving the same scopes and
+/// running the same cleanup functions share one exit block and its calls.
+#[test]
+fn jumps_leaving_the_same_scopes_share_their_cleanup_calls() {
+    use crate::c5::ir::Inst;
+    const SRC: &str = "static void end(int *p) { *p = 1; }\n\
+        #define CL __attribute__((cleanup(end)))\n\
+        int one_scope(int *p) {\n\
+            { int g CL = 0;\n\
+              if (p[0]) goto fault;\n\
+              if (p[1]) goto fault;\n\
+              if (p[2]) goto fault;\n\
+              asm goto(\"\" : : : : fault);\n\
+              asm goto(\"\" : : : : fault); }\n\
+            return 0;\n\
+        fault:\n\
+            return -14;\n\
+        }\n\
+        int two_depths(int *p) {\n\
+            { int g CL = 0;\n\
+              if (p[0]) goto fault;\n\
+              { int a[2] = {p[1], p[2]};\n\
+                if (a[0]) goto fault;\n\
+                if (a[1]) goto fault; }\n\
+              if (p[3]) goto fault; }\n\
+            return 0;\n\
+        fault:\n\
+            return -14;\n\
+        }\n\
+        int two_lists(int *p) {\n\
+            { int a CL = 0;\n\
+              if (p[0]) goto out;\n\
+              int b CL = 0;\n\
+              if (p[1]) goto out;\n\
+              if (p[2]) goto out; }\n\
+            return 0;\n\
+        out:\n\
+            return 1;\n\
+        }\n";
+    let calls = |name: &str| {
+        ssa_func_named(SRC, name)
+            .insts
+            .iter()
+            .filter(|i| matches!(i, Inst::Call { .. } | Inst::CallExt { .. }))
+            .count()
+    };
+    assert_eq!(
+        calls("one_scope"),
+        2,
+        "one exit for the five jumps, one end"
+    );
+    assert_eq!(calls("two_depths"), 3, "the array's block adds an exit");
+    assert_eq!(
+        calls("two_lists"),
+        5,
+        "`a` for one goto, `b` `a` for two, and the end"
+    );
+}
+
 /// An integer multiply whose only reader is an add or a subtract
 /// contracts into AArch64's three-operand multiply-accumulate: `c -
 /// a*b` is one `MSUB` and `c + a*b` one `MADD`. Both the 32- and the

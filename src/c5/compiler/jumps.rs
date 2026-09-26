@@ -180,6 +180,8 @@ impl Compiler {
     pub(super) fn resolve_jumps(&mut self) -> Result<(), C5Error> {
         self.ast.label_addrs = self.jumps.label_addrs.iter().copied().collect();
         let pending = core::mem::take(&mut self.jumps.pending);
+        // Jumps to one label running one list share its calls.
+        let mut shared: BTreeMap<(LabelId, Vec<CleanupVar>), Vec<StmtId>> = BTreeMap::new();
         for j in &pending {
             let (targets, what): (Vec<LabelId>, _) = match j.target {
                 Target::Label(l) => (alloc::vec![l], "`goto`"),
@@ -204,7 +206,13 @@ impl Compiler {
                 run = Some(list);
             }
             if let Some(list) = run.filter(|l| !l.is_empty()) {
-                let calls = self.cleanup_calls(j.stmt, &list);
+                let calls = match j.target {
+                    Target::Computed => self.cleanup_calls(j.stmt, &list),
+                    Target::Label(l) | Target::Asm { label: l, .. } => shared
+                        .entry((l, list))
+                        .or_insert_with_key(|k| self.cleanup_calls(j.stmt, &k.1))
+                        .clone(),
+                };
                 match j.target {
                     Target::Asm { asm, i, .. } => {
                         self.ast.asm_blocks[asm as usize].cleanups[i] = calls;

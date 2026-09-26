@@ -303,11 +303,14 @@ impl Target {
 
     /// Whether an unnamed bit-field's declared type raises the
     /// alignment of the aggregate containing it. C99 6.7.2.1 leaves
-    /// this to the implementation; AArch64 (AAPCS64) inherits the
-    /// alignment, x86_64 does not. A named bit-field always does on
-    /// both.
+    /// this to the implementation: AAPCS64 counts a bit-field's container
+    /// "without exception for zero-sized or anonymous bit-fields", while
+    /// the x86_64 psABI and Apple's arm64 ABI leave an unnamed one out. A
+    /// named bit-field always counts.
+    // TODO: the Windows targets lay bit-fields out by the MS rules, which
+    // neither placement here follows.
     pub fn align_anon_bitfield(self) -> bool {
-        self.is_aarch64()
+        matches!(self, Target::LinuxAarch64 | Target::WindowsAarch64)
     }
 
     /// Container format the target's toolchain uses for objects,

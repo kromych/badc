@@ -1332,6 +1332,45 @@ fn vector_type_alignment_follows_the_target_abi() {
     }
 }
 
+/// Whether an unnamed bit-field's declared type raises the aggregate's
+/// alignment is the ABI's (C99 6.7.2.1p11): AAPCS64 counts it, the x86_64
+/// psABI and Apple's arm64 ABI do not. The values are gcc 16's on Linux
+/// x86_64 and AArch64 and Apple clang 21's on macOS arm64.
+#[test]
+fn unnamed_bitfield_alignment_follows_the_target_abi() {
+    use super::Vm;
+    use crate::{Compiler, Target};
+    const SHAPES: [&str; 8] = [
+        "struct { char c; unsigned : 1; }",
+        "struct { char c; int : 4; char d; }",
+        "struct { char c; long long : 3; }",
+        "struct { char c; int : 0; char d; }",
+        "struct { short s; long long : 20; char d; }",
+        "struct { unsigned char a; unsigned int : 0; unsigned char b; } __attribute__((packed))",
+        "union { char c; unsigned : 3; }",
+        "struct { char c; unsigned x : 3; unsigned : 3; }",
+    ];
+    // `sizeof * 100 + _Alignof` per shape.
+    const SYSV: [i64; 8] = [201, 301, 201, 501, 602, 501, 101, 404];
+    const AAPCS64: [i64; 8] = [404, 404, 808, 804, 808, 804, 404, 404];
+    for (t, want) in [
+        (Target::LinuxX64, SYSV),
+        (Target::MacOSAarch64, SYSV),
+        (Target::LinuxAarch64, AAPCS64),
+    ] {
+        for (shape, want) in SHAPES.iter().zip(want) {
+            let src = alloc::format!(
+                "typedef {shape} T;\n\
+                 int main(void) {{ return (int)(sizeof(T) * 100 + _Alignof(T)); }}"
+            );
+            let got = Vm::new(Compiler::with_target(src, t).compile().unwrap())
+                .run()
+                .unwrap();
+            assert_eq!(got, want, "{t:?}: {shape}");
+        }
+    }
+}
+
 /// The wide storage format round-trips through memory: a value stored
 /// into a `long double` object and read back is unchanged, and the
 /// object's bytes carry the platform's encoding rather than a binary64

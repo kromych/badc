@@ -4,9 +4,10 @@
 // survive a `packed` attribute that follows the closing brace, which
 // re-lays the members. The shapes below are the kernel's IOAM6 on-wire
 // headers and the nouveau CRC notifier register overlay. Values come
-// from gcc 16 on linux/x86_64 and linux/aarch64, which agree on all of
-// them; unpacked members are typed so the aggregate's alignment comes
-// from a named member, which the two targets also agree on.
+// from gcc 16 on linux/x86_64 and linux/aarch64 and Apple clang 21 on
+// macOS arm64, which agree on all of them but the zero-width break's
+// tail padding; unpacked members are typed so the aggregate's alignment
+// comes from a named member, which the targets also agree on.
 
 #include <stddef.h>
 #include <string.h>
@@ -90,11 +91,11 @@ int main(void) {
     if (sizeof(struct only_anon) != 3) return 7;
 
     // The break puts `b` at byte 4 on every target. The tail padding
-    // after it is target-defined: AArch64 keeps the unnamed bit-field's
-    // 4-byte boundary through `packed` and rounds the struct to 8,
-    // x86_64 does not and leaves it at 5.
+    // after it is target-defined: AAPCS64 keeps the unnamed bit-field's
+    // 4-byte boundary through `packed` and rounds the struct to 8;
+    // x86_64 and Apple's arm64 ABI do not and leave it at 5.
     if (offsetof(struct zero_width, b) != 4) return 8;
-#if defined(__aarch64__)
+#if defined(__aarch64__) && !defined(__APPLE__)
     if (sizeof(struct zero_width) != 8) return 9;
     if (_Alignof(struct zero_width) != 4) return 30;
 #else

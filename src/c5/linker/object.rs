@@ -51,6 +51,7 @@ const SHT_STRTAB: u32 = 3;
 const SHT_RELA: u32 = 4;
 const SHT_NOBITS: u32 = 8;
 const SHT_NOTE: u32 = 7;
+const SHT_X86_64_UNWIND: u32 = 0x7000_0001;
 const SHN_UNDEF: u16 = 0;
 const SHN_ABS: u16 = 0xfff1;
 const SHN_COMMON: u16 = 0xfff2;
@@ -1139,7 +1140,13 @@ fn read_elf_headers(bytes: &[u8]) -> Result<(NativeMachine, Vec<Elf64Shdr>, &[u8
     let mut shdrs: Vec<Elf64Shdr> = Vec::with_capacity(e_shnum);
     for i in 0..e_shnum {
         let off = e_shoff + i * ELF64_SHDR_SIZE;
-        shdrs.push(read_struct(bytes, off)?);
+        let mut sh: Elf64Shdr = read_struct(bytes, off)?;
+        // The x86-64 psABI types unwind tables SHT_X86_64_UNWIND, which
+        // clang gives `.eh_frame`; GNU ld and lld read it as SHT_PROGBITS.
+        if machine == NativeMachine::X86_64 && sh.sh_type == SHT_X86_64_UNWIND {
+            sh.sh_type = SHT_PROGBITS;
+        }
+        shdrs.push(sh);
     }
     let shstrtab = shdrs.get(e_shstrndx).ok_or_else(|| {
         link_err(
@@ -2481,6 +2488,7 @@ mod tests {
         /// the file body is empty but the runtime size isn't.
         sh_size_override: Option<u64>,
         sh_addralign: u64,
+        sh_flags: u64,
     }
 
     impl<'a> SecPlan<'a> {
@@ -2494,6 +2502,7 @@ mod tests {
                 sh_entsize: 0,
                 sh_size_override: None,
                 sh_addralign: 0,
+                sh_flags: 0,
             }
         }
         fn nobits(name: &'a str, size: u64) -> Self {
@@ -2506,6 +2515,7 @@ mod tests {
                 sh_entsize: 0,
                 sh_size_override: Some(size),
                 sh_addralign: 0,
+                sh_flags: 0,
             }
         }
         fn symtab(name: &'a str, body: Vec<u8>, link: u32, info: u32) -> Self {
@@ -2518,6 +2528,7 @@ mod tests {
                 sh_entsize: ELF64_SYM_SIZE as u64,
                 sh_size_override: None,
                 sh_addralign: 0,
+                sh_flags: 0,
             }
         }
         fn strtab(name: &'a str, body: Vec<u8>) -> Self {
@@ -2530,10 +2541,16 @@ mod tests {
                 sh_entsize: 0,
                 sh_size_override: None,
                 sh_addralign: 0,
+                sh_flags: 0,
             }
         }
         fn aligned(mut self, align: u64) -> Self {
             self.sh_addralign = align;
+            self
+        }
+        fn typed(mut self, sh_type: u32, sh_flags: u64) -> Self {
+            self.sh_type = sh_type;
+            self.sh_flags = sh_flags;
             self
         }
         fn rela(name: &'a str, body: Vec<u8>, link: u32, info: u32) -> Self {
@@ -2546,6 +2563,7 @@ mod tests {
                 sh_entsize: ELF64_RELA_SIZE as u64,
                 sh_size_override: None,
                 sh_addralign: 0,
+                sh_flags: 0,
             }
         }
     }
@@ -2665,7 +2683,7 @@ mod tests {
                 Elf64Shdr {
                     sh_name: name_offs[idx],
                     sh_type: p.sh_type,
-                    sh_flags: 0,
+                    sh_flags: p.sh_flags,
                     sh_addr: 0,
                     sh_offset: sec_offs[idx] as u64,
                     sh_size: p.sh_size_override.unwrap_or(p.body.len() as u64),
@@ -2823,6 +2841,36 @@ mod tests {
             vec![(".comment".to_string(), 7), (".mysec".to_string(), 3)],
         );
         assert!(obj.source.is_empty(), "source is the caller's to set");
+    }
+
+    /// clang types `.eh_frame` SHT_X86_64_UNWIND, the x86-64 psABI's
+    /// unwind-table type; it reads as SHT_PROGBITS there and joins the
+    /// read-only stream. The value is processor-specific, and on AArch64
+    /// it names nothing the merge models.
+    #[test]
+    fn an_x86_64_unwind_section_reads_as_progbits() {
+        const SHF_ALLOC: u64 = 0x2;
+        let mut symtab = Vec::new();
+        push_test_sym(&mut symtab, 0, 0, 0, 0, 0);
+        let plans = [
+            SecPlan::strtab(".strtab", vec![0]),
+            SecPlan::symtab(".symtab", symtab, 2, 1),
+            SecPlan::progbits(".text", vec![0xc3]),
+            SecPlan::progbits(".eh_frame", vec![0x14, 0, 0, 0, 0, 0, 0, 0])
+                .typed(SHT_X86_64_UNWIND, SHF_ALLOC),
+        ];
+        let obj = parse_native_elf(&build_test_elf(EM_X86_64, &plans)).expect("x86-64 object");
+        let eh = obj.sections.iter().find(|s| s.name == ".eh_frame");
+        assert!(
+            eh.is_some_and(|s| s.family == SectionFamily::RoData && s.size == 8),
+            "{:?}",
+            obj.sections
+        );
+        let err = parse_native_elf(&build_test_elf(EM_AARCH64, &plans)).unwrap_err();
+        assert!(
+            err.to_string().contains("unhandled sh_type 1879048193"),
+            "{err}"
+        );
     }
 
     /// A `.rodata` an `SHT_RELA` targets cannot ride the stream the
@@ -3215,6 +3263,7 @@ mod tests {
                 sh_entsize: ELF64_SYM_SIZE as u64,
                 sh_size_override: None,
                 sh_addralign: 0,
+                sh_flags: 0,
             },
             SecPlan {
                 name: ".dynamic",
@@ -3225,6 +3274,7 @@ mod tests {
                 sh_entsize: core::mem::size_of::<Elf64Dyn>() as u64,
                 sh_size_override: None,
                 sh_addralign: 0,
+                sh_flags: 0,
             },
         ];
         let bytes = build_test_elf(EM_X86_64, &plans);

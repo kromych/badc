@@ -3652,6 +3652,61 @@ fn a_by_reference_argument_is_the_address_of_a_copy() {
     }
 }
 
+/// The Microsoft x64 convention passes an aggregate of 1, 2, 4 or 8 bytes by
+/// value as an integer whatever its members, so a floating-point member
+/// leaves the argument and the parameter with their layout and an integer
+/// register.
+#[test]
+fn win64_small_fp_aggregates_pass_as_integers() {
+    use crate::Target;
+    use crate::c5::codegen::ArgPlacement;
+    use crate::c5::codegen::ssa::emit_common::param_placements_common;
+    use crate::c5::ir::Inst;
+    const SHAPES: [&str; 4] = [
+        "struct { float x, y; }",
+        "struct { double d; }",
+        "struct { float f; }",
+        "struct { char c; float f; }",
+    ];
+    let mut src = alloc::string::String::new();
+    for (i, ty) in SHAPES.iter().enumerate() {
+        src += &alloc::format!(
+            "typedef {ty} T{i};\nlong take{i}(T{i} t, long x) {{ (void)t; return x; }}\n\
+             long call{i}(T{i} *p) {{ return take{i}(*p, 1); }}\n"
+        );
+    }
+    let target = Target::WindowsX64;
+    let program = crate::Compiler::with_options(
+        src,
+        target,
+        crate::CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .unwrap_or_else(|e| panic!("compile: {e}"));
+    let funcs = crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+        .expect("ssa");
+    for (i, ty) in SHAPES.iter().enumerate() {
+        let take = funcs
+            .iter()
+            .find(|f| f.name == alloc::format!("take{i}"))
+            .expect("take");
+        let plan = param_placements_common(take, target.abi());
+        assert!(
+            matches!(plan[0], ArgPlacement::StructRegs { n: 1, regs, .. } if !regs[0].is_fp),
+            "`{ty}` parameter: {:?}",
+            plan[0]
+        );
+        let call = funcs
+            .iter()
+            .find(|f| f.name == alloc::format!("call{i}"))
+            .expect("call");
+        let tagged = call.insts.iter().any(|inst| {
+            matches!(inst, Inst::Call { arg_aggs, .. } if arg_aggs.first().is_some_and(Option::is_some))
+        });
+        assert!(tagged, "`{ty}` argument takes no layout");
+    }
+}
+
 /// A call's aggregate result aligned above the 8-byte frame slot is a member
 /// of the over-aligned region, as a declared object of its type is, whether
 /// the callee stores it through the result pointer or it returns in

@@ -6202,6 +6202,51 @@ fn by_reference_arguments_cross_the_windows_compiler_boundary() {
     );
 }
 
+// The Microsoft x64 convention passes and returns an aggregate of 1, 2, 4 or 8
+// bytes as an integer whatever its members, and Windows arm64 a homogeneous one
+// in its vector registers, across the platform compiler boundary both ways.
+#[cfg(windows)]
+#[test]
+fn small_fp_aggregates_cross_the_windows_compiler_boundary() {
+    let Some(cc) = windows_cc() else {
+        eprintln!(
+            "skipping small_fp_aggregates_cross_the_windows_compiler_boundary: no platform C compiler"
+        );
+        return;
+    };
+    let common = "typedef long long ll;\n\
+        struct f2 { float x, y; };\n\
+        struct d1 { double d; };\n\
+        struct f1 { float f; };\n\
+        struct cf { char c; float f; };\n\
+        static double take_f2(struct f2 s, double t) { return s.x * 10 + s.y + t; }\n\
+        static double take_d1(ll n, struct d1 s) { return s.d * 10 + n; }\n\
+        static double take_f1(struct f1 s, struct f2 u) { return s.f * 100 + u.x * 10 + u.y; }\n\
+        static double take_cf(struct cf s, ll t) { return s.c * 10 + s.f + t; }\n\
+        static struct f2 make_f2(float x, float y) { struct f2 r = { x, y }; return r; }\n\
+        static struct d1 make_d1(double d) { struct d1 r = { d }; return r; }\n\
+        struct fns { double (*take_f2)(struct f2, double); double (*take_d1)(ll, struct d1);\n\
+          double (*take_f1)(struct f1, struct f2); double (*take_cf)(struct cf, ll);\n\
+          struct f2 (*make_f2)(float, float); struct d1 (*make_d1)(double); };\n\
+        static int drive(const struct fns *f, int base)\n\
+        { struct f2 a = { 1, 2 }; struct d1 b = { 3 }; struct f1 c = { 4 };\n\
+          struct cf d = { 5, 0.5f }; struct f2 e;\n\
+          if (f->take_f2(a, 0.25) != 12.25) return base + 1;\n\
+          if (f->take_d1(7, b) != 37) return base + 2;\n\
+          if (f->take_f1(c, a) != 412) return base + 3;\n\
+          if (f->take_cf(d, 3) != 53.5) return base + 4;\n\
+          e = f->make_f2(6, 7);\n\
+          if (e.x != 6 || e.y != 7) return base + 5;\n\
+          if (f->make_d1(8).d != 8) return base + 6;\n\
+          return 0; }\n";
+    drive_across_the_windows_compiler(
+        &cc,
+        "win-small-fp-agg-interop",
+        common,
+        "take_f2, take_d1, take_f1, take_cf, make_f2, make_d1",
+    );
+}
+
 // A function returning an aggregate through the hidden result pointer takes that
 // pointer in the first integer register and its other arguments in their own
 // classes (System V AMD64 3.2.3), across the system compiler boundary both ways.

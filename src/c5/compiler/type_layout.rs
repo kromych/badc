@@ -1113,10 +1113,6 @@ pub(crate) fn host_abi_agg_desc_conv(
     if size == 0 {
         return None;
     }
-    let aarch64 = matches!(
-        target,
-        Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64
-    );
     let align = (structs[id].align.max(1)) as u32;
     let member_align = (structs[id].member_align.max(1)) as u32;
     let mut fields = Vec::new();
@@ -1140,21 +1136,10 @@ pub(crate) fn host_abi_agg_desc_conv(
             // (MEMORY class), handled by the marshal.
             return None;
         }
-        // System V x86_64 routes FP eightbytes to xmm (<= 16 bytes, in
-        // registers) or the stack (> 16 bytes); AAPCS64 passes a non-HFA
-        // composite of at most 16 bytes in the general-purpose registers
-        // regardless of member types (AAPCS64 5.4.2 C.10 -- only an HFA,
-        // handled above, uses the FP registers), so both admit an
-        // aggregate with a floating-point member. Windows x64 has no
-        // struct-in-register FP class, so an FP-member aggregate there
-        // keeps the by-address convention. TODO: Windows x64 FP-aggregate
-        // arguments.
-        if !matches!(row, Target::LinuxX64)
-            && !aarch64
-            && fields.iter().any(|f| f.kind.is_fp_scalar())
-        {
-            return None;
-        }
+        // A floating-point member changes none of this: System V x86_64
+        // gives its eightbyte the SSE class, AAPCS64 passes a non-HFA
+        // composite in the general-purpose registers (5.4.2 C.10), and Win64
+        // passes an aggregate of 1, 2, 4 or 8 bytes as an integer.
     }
     Some(AggDesc {
         size,

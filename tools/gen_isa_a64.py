@@ -42,6 +42,13 @@ DB_FIXES = {
         ("crc32x Wd, Wn, Xm", None),
     ("crc32cx Xd, Xn, Xm", "10011010|110|Rm|0|10111|Rn|Rd"):
         ("crc32cx Wd, Wn, Xm", None),
+    # The scalar mvn alias (orn Rd, ZR, Rm, {sop #n}) is shipped with its
+    # source spelled `Wn`/`Xn` and an encoding naming `Rn` for both the Rm
+    # field and the zero register, so the row parses as a repeated field.
+    ("mvn Wd, Wn, {sop #n}", "X0101010|sop|1|Rn|n:6|Rn|Rd"):
+        ("mvn Wd, Wm, {sop #n}", "00101010|sop:2|1|Rm|n:6|11111|Rd"),
+    ("mvn Xd, Xn, {sop #n}", "X0101010|sop|1|Rn|n:6|Rn|Rd"):
+        ("mvn Xd, Xm, {sop #n}", "10101010|sop:2|1|Rm|n:6|11111|Rd"),
     # The ldset 64-bit forms are shipped with a 32-bit `Wd` destination; the
     # assembler rejects that width mix (the field is width-independent, so the
     # bytes are already correct -- only the spelling is wrong).

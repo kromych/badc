@@ -463,6 +463,8 @@ pub(crate) static FORMS: &[Form] = &[
     Form { mnemonic: "msubpt", ops: &[X, X, X, X], base: 0x9B608000, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, Reg { op: 2, shift: 16 }, Reg { op: 3, shift: 10 }] },  // msubpt Xd, Xn, Xm, Xa
     Form { mnemonic: "mul", ops: &[W, W, W], base: 0x1B007C00, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, Reg { op: 2, shift: 16 }] },  // mul Wd, Wn, Wm
     Form { mnemonic: "mul", ops: &[X, X, X], base: 0x9B007C00, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, Reg { op: 2, shift: 16 }] },  // mul Xd, Xn, Xm
+    Form { mnemonic: "mvn", ops: &[W, W, OptShift], base: 0x2A2003E0, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 16 }, Shift { op: 2, is64: false, ror: true }] },  // mvn Wd, Wm, {sop #n}
+    Form { mnemonic: "mvn", ops: &[X, X, OptShift], base: 0xAA2003E0, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 16 }, Shift { op: 2, is64: true, ror: true }] },  // mvn Xd, Xm, {sop #n}
     Form { mnemonic: "neg", ops: &[W, W, OptShift], base: 0x4B0003E0, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 16 }, Shift { op: 2, is64: false, ror: false }] },  // neg Wd, Wm, {lsl|lsr|asr #n}
     Form { mnemonic: "neg", ops: &[X, X, OptShift], base: 0xCB0003E0, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 16 }, Shift { op: 2, is64: true, ror: false }] },  // neg Xd, Xm, {lsl|lsr|asr #n}
     Form { mnemonic: "negs", ops: &[W, W, OptShift], base: 0x6B0003E0, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 16 }, Shift { op: 2, is64: false, ror: false }] },  // negs Wd, Wm, {lsl|lsr|asr #n}

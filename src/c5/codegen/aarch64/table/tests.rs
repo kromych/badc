@@ -1729,6 +1729,24 @@ fn mov_alias() {
 }
 
 #[test]
+fn mvn_alias() {
+    // mvn Rd, Rm, {sop #n} is orn Rd, zr, Rm, {sop #n}; the width follows
+    // the destination and every logical shift is admitted (llvm-mc words).
+    assert_eq!(enc("mvn", &[x(0), x(1)]), 0xAA2103E0);
+    assert_eq!(enc("mvn", &[w(0), w(1)]), 0x2A2103E0);
+    assert_eq!(enc("mvn", &[x(8), x(8)]), 0xAA2803E8);
+    assert_eq!(enc("mvn", &[x(0), x(31)]), 0xAA3F03E0); // mvn x0, xzr
+    assert_eq!(enc("mvn", &[x(0), x(1), shift(0, 4)]), 0xAA2113E0);
+    assert_eq!(enc("mvn", &[w(0), w(1), shift(3, 3)]), 0x2AE10FE0);
+    assert_eq!(enc("mvn", &[x(2), x(3), shift(2, 63)]), 0xAAA3FFE2);
+    assert_eq!(enc("mvn", &[w(5), w(6), shift(1, 17)]), 0x2A6647E5);
+    assert_eq!(enc("mvn", &[x(0), x(1)]), enc("orn", &[x(0), x(31), x(1)]));
+    // A mixed width and a stack-pointer operand have no form.
+    assert!(encode("mvn", &[x(0), w(1)]).is_err());
+    assert!(encode("mvn", &[x(0), sp(true)]).is_err());
+}
+
+#[test]
 fn ror_immediate_is_the_extr_alias() {
     // ror Rd, Rn, #n is extr Rd, Rn, Rn, #n; the register form stays rorv.
     assert_eq!(enc("ror", &[x(0), x(0), Opnd::Imm(1)]), 0x93C00400);

@@ -82,6 +82,12 @@ int main(void)
     x = 0; OP1("mov %0, #-2", x, a); r = r ? r : check(52, x, (u64)(i64)-2);
     x = 0; OP1("mov %w0, #-2", x, a); r = r ? r : check(53, x, 0xfffffffeu);
     x = 0; OP1("mov %0, %1\n\tnop\n\tdmb ish", x, a); r = r ? r : check(54, x, a);
+    x = a; OP1("mvn %0, %1", x, a); r = r ? r : check(55, x, ~a);
+    w = wa; OP1("mvn %w0, %w1", w, wa); r = r ? r : check(56, w, ~wa);
+    x = a; OP1("mvn %0, %1, lsl #4", x, a); r = r ? r : check(57, x, ~(a << 4));
+    w = wa; OP1("mvn %w0, %w1, ror #3", w, wa); r = r ? r : check(58, w, ~((wa >> 3) | (wa << 29)));
+    x = a; OP1("mvn %0, %1, asr #63", x, b); r = r ? r : check(59, x, ~(u64)((i64)b >> 63));
+    w = wa; OP1("mvn %w0, %w1, lsr #17", w, wa); r = r ? r : check(60, w, ~(wa >> 17));
     return r;
 #endif
 }

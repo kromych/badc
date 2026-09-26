@@ -168,10 +168,69 @@ Disassembly of section .text:
                	nop
                	dmb	ish
                	cbz	x4, <addr>
+               	mvn	x0, x5
+               	cbz	x4, <addr>
+               	mov	w0, w5
+               	mvn	w0, w0
+               	cbz	x4, <addr>
+               	mvn	x0, x5, lsl #4
+               	cbz	x4, <addr>
+               	mov	w0, w5
+               	mvn	w1, w0, ror #3
+               	cbz	x4, <addr>
+               	mvn	x0, x6, asr #63
+               	cbz	x4, <addr>
+               	mov	w0, w5
+               	mvn	w0, w0, lsr #17
+               	cbz	x4, <addr>
                	mov	x0, x4
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	mov	w1, w5
+               	lsr	x1, x1, #17
+               	mvn	x1, x1
+               	mov	x4, #0x3c               // =60
+               	cmp	w0, w1
+               	b.ne	<addr>
+               	mov	x4, #0x0                // =0
+               	b	<addr>
+               	asr	x1, x6, #63
+               	mvn	x1, x1
+               	mov	x4, #0x3b               // =59
+               	cmp	x0, x1
+               	b.ne	<addr>
+               	mov	x4, #0x0                // =0
+               	b	<addr>
+               	mov	w0, w5
+               	lsr	x2, x0, #3
+               	lsl	x0, x0, #29
+               	orr	x0, x2, x0
+               	mvn	x0, x0
+               	mov	x4, #0x3a               // =58
+               	cmp	w1, w0
+               	b.ne	<addr>
+               	mov	x4, #0x0                // =0
+               	b	<addr>
+               	lsl	x1, x5, #4
+               	mvn	x1, x1
+               	mov	x4, #0x39               // =57
+               	cmp	x0, x1
+               	b.ne	<addr>
+               	mov	x4, #0x0                // =0
+               	b	<addr>
+               	mvn	x1, x5
+               	mov	x4, #0x38               // =56
+               	cmp	w0, w1
+               	b.ne	<addr>
+               	mov	x4, #0x0                // =0
+               	b	<addr>
+               	mvn	x1, x5
+               	mov	x4, #0x37               // =55
+               	cmp	x0, x1
+               	b.ne	<addr>
+               	mov	x4, #0x0                // =0
+               	b	<addr>
                	mov	x4, #0x36               // =54
                	cmp	x0, x5
                	b.ne	<addr>

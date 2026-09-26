@@ -307,10 +307,14 @@ impl Target {
     /// "without exception for zero-sized or anonymous bit-fields", while
     /// the x86_64 psABI and Apple's arm64 ABI leave an unnamed one out. A
     /// named bit-field always counts.
-    // TODO: the Windows targets lay bit-fields out by the MS rules, which
-    // neither placement here follows.
     pub fn align_anon_bitfield(self) -> bool {
-        matches!(self, Target::LinuxAarch64 | Target::WindowsAarch64)
+        matches!(self, Target::LinuxAarch64)
+    }
+
+    /// Whether aggregates holding bit-fields take the MS layout, the PE
+    /// targets' C ABI (MSVC, and clang for a windows-msvc triple).
+    pub fn ms_bitfields(self) -> bool {
+        self.is_windows()
     }
 
     /// Container format the target's toolchain uses for objects,

@@ -461,6 +461,11 @@ impl Compiler {
         layout: &mut AggregateLayout,
     ) {
         let unit = self.size_of_type(field_base).max(1);
+        let ms_align = if packed {
+            1
+        } else {
+            self.align_of_type(field_base).min(self.lex.current_pack())
+        };
         // Recorded so the post-body `packed` re-lay reproduces
         // the same placement: the member has no name, so
         // `fields` cannot carry it.
@@ -469,6 +474,7 @@ impl Compiler {
             before,
             width,
             unit: unit.min(u8::MAX as usize) as u8,
+            align: ms_align.clamp(1, u8::MAX as usize) as u8,
         });
         if width == 0 {
             // C99 6.7.2.1p11: a width-zero bitfield aligns
@@ -534,7 +540,7 @@ impl Compiler {
         let mut bit_width: u32 = 0;
         let mut bit_offset: u32 = 0;
         let mut bit_unit: usize = 0;
-        let mut placed_align: usize = 0;
+        let placed_align: usize;
         let field_offset: usize;
         // `int x:N` packs N bits into a shared storage unit; the layout's bit
         // cursor says whether a run of them is already open.
@@ -577,6 +583,13 @@ impl Compiler {
                 ));
             }
             bit_width = n as u32;
+            placed_align = if attr_packed {
+                1
+            } else {
+                self.align_of_type(field_ty).min(self.lex.current_pack())
+            }
+            .max(group_align)
+            .max(decl_align);
             // C99 6.7.2.1: an enum bitfield reads as unsigned (a
             // non-negative enum's underlying type is unsigned),
             // so the extraction zero-extends. A full-width enum
@@ -1126,6 +1139,8 @@ impl Compiler {
         // result come from the same re-lay the trailing form runs.
         if packed {
             self.repack_struct(struct_id, Packing::Attribute);
+        } else if self.target.ms_bitfields() && self.has_bitfield_members(struct_id) {
+            self.ms_relayout(struct_id, self.lex.pragma_pack().map(Packing::Pragma));
         } else if let Some(pack) = self.lex.pragma_pack()
             && self.has_bitfield_members(struct_id)
         {
@@ -1133,7 +1148,6 @@ impl Compiler {
             // storage units, whenever a pack pragma is in effect,
             // whatever its value; the natural placement above is the
             // one that bumps a field to the next unit of its type.
-            // TODO: the MS layout, which a PE target's C ABI takes.
             self.repack_struct(struct_id, Packing::Pragma(pack));
         }
     }
@@ -1212,6 +1226,10 @@ impl Compiler {
     /// A member carrying an explicit `aligned(N)` keeps that boundary:
     /// `packed` removes natural padding, not a requested alignment.
     pub(super) fn repack_struct(&mut self, struct_id: usize, packing: Packing) {
+        if self.target.ms_bitfields() && self.has_bitfield_members(struct_id) {
+            self.ms_relayout(struct_id, Some(packing));
+            return;
+        }
         if packing == Packing::Attribute {
             self.structs[struct_id].align = 1;
             self.structs[struct_id].explicit_align = 0;
@@ -1424,6 +1442,76 @@ impl Compiler {
         self.fit_bitfield_windows(struct_id);
     }
 
+    /// Lay out an aggregate holding bit-fields by the MS rules ([`MsCursor`]).
+    /// The pragma's value caps a promoted member's alignment; the attribute
+    /// drops every alignment but a requested one to 1.
+    fn ms_relayout(&mut self, struct_id: usize, packing: Option<Packing>) {
+        let attr = packing == Some(Packing::Attribute);
+        let cap = match packing {
+            Some(Packing::Attribute) => 1,
+            Some(Packing::Pragma(pack)) => pack,
+            None => usize::MAX,
+        };
+        let n = self.structs[struct_id].fields.len();
+        let anon = self.structs[struct_id].anon_bitfields.clone();
+        let members = self.structs[struct_id].anon_members.clone();
+        let mut cur = MsCursor::new(self.structs[struct_id].is_union);
+        let (mut anon_pos, mut mem_pos, mut i) = (0usize, 0usize, 0usize);
+        let mut requested = 0usize;
+        loop {
+            while anon_pos < anon.len() && anon[anon_pos].before as usize <= i {
+                let a = anon[anon_pos];
+                anon_pos += 1;
+                let align = if attr { 1 } else { a.align as usize };
+                if a.width == 0 {
+                    cur.close(a.unit as usize, align);
+                } else {
+                    cur.bitfield(a.unit as usize, align, a.width as usize);
+                }
+            }
+            if mem_pos < members.len() && members[mem_pos].first as usize <= i {
+                let m = members[mem_pos];
+                let base = cur.member(m.size, self.structs[m.inner].align.min(cap).max(1));
+                self.move_anon_member(struct_id, mem_pos, base);
+                mem_pos += 1;
+                i = i.max(m.first as usize + m.count as usize);
+                continue;
+            }
+            if i >= n {
+                break;
+            }
+            let f = &self.structs[struct_id].fields[i];
+            let (ty, width) = (f.ty, f.bit_width as usize);
+            let align = if attr { f.explicit_align } else { f.align }.max(1) as usize;
+            if width > 0 {
+                requested = requested.max(f.explicit_align as usize);
+                let unit = self.size_of_type(ty).max(1);
+                let (offset, bit) = cur.bitfield(unit, align, width);
+                let f = &mut self.structs[struct_id].fields[i];
+                f.offset = offset;
+                f.bit_offset = bit;
+                f.bit_unit_size = unit as u8;
+            } else {
+                let storage = self.packed_member_storage(struct_id, i);
+                let offset = cur.member(storage, align);
+                let f = &mut self.structs[struct_id].fields[i];
+                f.offset = offset;
+                f.align = align as u32;
+            }
+            i += 1;
+        }
+        let align = cur.align.min(super::MAX_STATIC_ALIGN);
+        let sd = &mut self.structs[struct_id];
+        sd.size = round_up(cur.size, align);
+        sd.align = align;
+        sd.member_align = align;
+        sd.explicit_align = if attr {
+            if align > 1 { align as u32 } else { 0 }
+        } else {
+            (sd.explicit_align as usize).max(requested).min(align) as u32
+        };
+    }
+
     /// Alignment an aggregate's width-zero unnamed bit-fields impose, or
     /// 1 when there are none. On the targets that align to unnamed
     /// bit-fields, this boundary survives `packed` / `#pragma pack`,
@@ -1479,6 +1567,75 @@ impl Compiler {
         } else {
             self.size_of_type(ty)
         }
+    }
+}
+
+/// The running MS layout of one aggregate. A bit-field opens a storage unit
+/// of its declared type, shared by the bit-fields directly following it while
+/// they fit and their type has the same size; a width-zero one counts only
+/// while a unit is open, and a union's bit-fields do not raise its alignment.
+/// `unit` is the open unit's size, 0 when none, and `left` its free bits.
+struct MsCursor {
+    is_union: bool,
+    size: usize,
+    align: usize,
+    unit: usize,
+    left: usize,
+}
+
+impl MsCursor {
+    fn new(is_union: bool) -> Self {
+        Self {
+            is_union,
+            size: 0,
+            align: 1,
+            unit: 0,
+            left: 0,
+        }
+    }
+
+    /// Returns the unit's offset and the field's bit offset in it.
+    fn bitfield(&mut self, unit: usize, align: usize, width: usize) -> (usize, u32) {
+        if self.is_union {
+            self.size = self.size.max(unit);
+            self.unit = unit;
+            return (0, 0);
+        }
+        if self.unit == unit && width <= self.left {
+            let bit = unit * 8 - self.left;
+            self.left -= width;
+            return (self.size - unit, bit as u32);
+        }
+        let offset = round_up(self.size, align);
+        self.size = offset + unit;
+        self.align = self.align.max(align);
+        self.unit = unit;
+        self.left = unit * 8 - width;
+        (offset, 0)
+    }
+
+    fn close(&mut self, unit: usize, align: usize) {
+        if self.unit != 0 {
+            if self.is_union {
+                self.size = self.size.max(unit);
+            } else {
+                self.size = round_up(self.size, align);
+                self.align = self.align.max(align);
+            }
+        }
+        self.unit = 0;
+    }
+
+    fn member(&mut self, storage: usize, align: usize) -> usize {
+        self.unit = 0;
+        self.align = self.align.max(align);
+        if self.is_union {
+            self.size = self.size.max(storage);
+            return 0;
+        }
+        let offset = round_up(self.size, align);
+        self.size = offset + storage;
+        offset
     }
 }
 

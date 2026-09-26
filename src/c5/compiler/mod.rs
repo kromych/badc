@@ -188,12 +188,13 @@ pub struct StructDef {
 /// index in `StructDef::fields` of the first named member declared
 /// after it, `unit` the declared type's size in bytes, and `width` the
 /// requested bit count -- 0 for the C99 6.7.2.1p11 form that only ends
-/// the current storage unit.
+/// the current storage unit. `align` is the unit's MS-layout alignment.
 #[derive(Debug, Clone, Copy)]
 pub struct AnonBitfield {
     pub before: u32,
     pub width: u32,
     pub unit: u8,
+    pub align: u8,
 }
 
 /// One member promoted from an anonymous struct/union (C11 6.7.2.1p13).
@@ -429,7 +430,8 @@ pub struct StructField {
     pub explicit_align: u32,
     /// Alignment the layout placed this field at, including a
     /// typedef-carried `aligned(N)` the flat field type cannot express.
-    /// `__alignof__` on a member lvalue reports it. 0 for bitfields.
+    /// `__alignof__` on a member lvalue reports it. A bit-field records
+    /// the alignment of its storage unit in the MS layout.
     pub align: u32,
     /// How the member declaration spelled the type; see
     /// [`crate::c5::symbol::DeclSpelling`]. Debug info only.

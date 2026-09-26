@@ -6041,6 +6041,72 @@ fn variadic_aggregates_cross_the_windows_compiler_boundary() {
     );
 }
 
+// The platform compiler lays bit-fields out by the MS rules: a unit of the
+// declared type per bit-field, shared only while the type size stays the same,
+// a width-zero bit-field counting only after another one, and `#pragma pack`
+// lowering where a unit may start. Structs of that shape cross the boundary by
+// value, as results and through pointers, both ways.
+#[cfg(windows)]
+#[test]
+fn bitfield_structs_cross_the_windows_compiler_boundary() {
+    let Some(cc) = windows_cc() else {
+        eprintln!(
+            "skipping bitfield_structs_cross_the_windows_compiler_boundary: no platform C compiler"
+        );
+        return;
+    };
+    let common = "typedef long long ll;\n\
+        struct cb { char c; int b : 4; char d; };\n\
+        struct zw { char a; int : 0; char b; };\n\
+        struct mx { signed char a : 4; signed int b : 4; signed char c : 4; };\n\
+        struct zb { signed char x : 3; int : 0; char y; };\n\
+        #pragma pack(push, 1)\n\
+        struct p1 { char c; int a : 15; short s; };\n\
+        struct p2 { int a : 30; int b : 30; };\n\
+        #pragma pack(pop)\n\
+        static ll layout(void)\n\
+        { return sizeof(struct cb) + 100 * (sizeof(struct zw) + 100 * (sizeof(struct mx)\n\
+            + 100 * (sizeof(struct zb) + 100 * (sizeof(struct p1) + 100 * (ll)sizeof(struct p2))))); }\n\
+        static struct cb make_cb(int b, char c, char d)\n\
+        { struct cb v; v.c = c; v.b = b; v.d = d; return v; }\n\
+        static int read_cb(struct cb v) { return v.c * 10000 + (v.b + 8) * 100 + v.d; }\n\
+        static struct mx make_mx(int a, int b, int c)\n\
+        { struct mx v; v.a = a; v.b = b; v.c = c; return v; }\n\
+        static int read_mx(struct mx v) { return (v.a + 8) * 10000 + (v.b + 8) * 100 + v.c + 8; }\n\
+        static void set_p1(struct p1 *p, int a, short s) { p->a = a; p->s = s; }\n\
+        static ll read_p2(struct p2 v) { return (ll)v.a * 0x40000000 + v.b; }\n\
+        static struct zw make_zw(char a, char b) { struct zw v; v.a = a; v.b = b; return v; }\n\
+        static struct zb make_zb(int x, char y) { struct zb v; v.x = x; v.y = y; return v; }\n\
+        struct fns { ll (*layout)(void); struct cb (*make_cb)(int, char, char);\n\
+          int (*read_cb)(struct cb); struct mx (*make_mx)(int, int, int); int (*read_mx)(struct mx);\n\
+          void (*set_p1)(struct p1 *, int, short); ll (*read_p2)(struct p2);\n\
+          struct zw (*make_zw)(char, char); struct zb (*make_zb)(int, char); };\n\
+        static int drive(const struct fns *f, int base)\n\
+        { struct cb x = f->make_cb(-3, 'x', 'y'), y = { 'p', 5, 'q' };\n\
+          struct mx m = f->make_mx(-4, 3, -2), n = { 1, -6, 7 };\n\
+          struct p1 p = { 9, 0, 0 };\n\
+          struct p2 q = { -2, 0x1abcdef };\n\
+          struct zw z = f->make_zw('a', 'b');\n\
+          struct zb w = f->make_zb(-3, 'k');\n\
+          if (f->layout() != layout()) return base + 1;\n\
+          if (x.c != 'x' || x.b != -3 || x.d != 'y') return base + 2;\n\
+          if (f->read_cb(y) != 'p' * 10000 + 1300 + 'q') return base + 3;\n\
+          if (m.a != -4 || m.b != 3 || m.c != -2) return base + 4;\n\
+          if (f->read_mx(n) != 90215) return base + 5;\n\
+          f->set_p1(&p, -1000, 1234);\n\
+          if (p.c != 9 || p.a != -1000 || p.s != 1234) return base + 6;\n\
+          if (f->read_p2(q) != -2 * 0x40000000LL + 0x1abcdef) return base + 7;\n\
+          if (z.a != 'a' || z.b != 'b') return base + 8;\n\
+          if (w.x != -3 || w.y != 'k') return base + 9;\n\
+          return 0; }\n";
+    drive_across_the_windows_compiler(
+        &cc,
+        "win-bitfield-interop",
+        common,
+        "layout, make_cb, read_cb, make_mx, read_mx, set_p1, read_p2, make_zw, make_zb",
+    );
+}
+
 // A function returning an aggregate through the hidden result pointer takes that
 // pointer in the first integer register and its other arguments in their own
 // classes (System V AMD64 3.2.3), across the system compiler boundary both ways.

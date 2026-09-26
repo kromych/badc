@@ -4,7 +4,10 @@
 // registers; a copy that took the base type's width carried four bytes
 // of an eight-byte object and left the rest of the destination as it
 // was. The fuzzer's shape returned a global of that type and stored the
-// result through a pointer. Returns 0 when every check passes.
+// result through a pointer. The MS layout, which the PE targets take,
+// keeps each bit-field in a unit of its declared type under the pragma,
+// so there `struct w` is 17 bytes (MSVC, and clang for the windows-msvc
+// triples). Returns 0 when every check passes.
 
 #include <stdint.h>
 
@@ -58,7 +61,11 @@ static struct w ret_w(struct w v)
 
 int main(void)
 {
+#if defined(_WIN32)
+    if (sizeof(struct a) != 8 || sizeof(struct s) != 8 || sizeof(struct w) != 17) return 1;
+#else
     if (sizeof(struct a) != 8 || sizeof(struct s) != 8 || sizeof(struct w) != 12) return 1;
+#endif
     h.b = 0x2AAAAAAA;
     {
         struct a j = ret_a();

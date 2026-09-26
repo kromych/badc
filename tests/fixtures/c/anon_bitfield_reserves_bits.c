@@ -7,7 +7,9 @@
 // from gcc 16 on linux/x86_64 and linux/aarch64 and Apple clang 21 on
 // macOS arm64, which agree on all of them but the zero-width break's
 // tail padding; unpacked members are typed so the aggregate's alignment
-// comes from a named member, which the targets also agree on.
+// comes from a named member, which the targets also agree on. The PE
+// targets take the MS layout, as clang 21 gives it for the windows-msvc
+// triples: a bit-field takes a whole storage unit of its declared type.
 
 #include <stddef.h>
 #include <string.h>
@@ -88,25 +90,40 @@ int main(void) {
     if (sizeof(struct unpacked) != 3) return 5;
     if (offsetof(struct unpacked, b) != 2) return 6;
 
+#if defined(_WIN32)
+    if (sizeof(struct only_anon) != 4) return 7;
+#else
     if (sizeof(struct only_anon) != 3) return 7;
+#endif
 
-    // The break puts `b` at byte 4 on every target. The tail padding
-    // after it is target-defined: AAPCS64 keeps the unnamed bit-field's
-    // 4-byte boundary through `packed` and rounds the struct to 8;
-    // x86_64 and Apple's arm64 ABI do not and leave it at 5.
+    // The break puts `b` at byte 4 where the unit is a bit-level notion.
+    // The tail padding after it is target-defined: AAPCS64 keeps the
+    // unnamed bit-field's 4-byte boundary through `packed` and rounds the
+    // struct to 8; x86_64 and Apple's arm64 ABI do not and leave it at 5.
+    // The MS layout ignores a width-zero bit-field no bit-field precedes.
+#if defined(_WIN32)
+    if (offsetof(struct zero_width, b) != 1) return 8;
+    if (sizeof(struct zero_width) != 2) return 9;
+    if (_Alignof(struct zero_width) != 1) return 30;
+#elif defined(__aarch64__) && !defined(__APPLE__)
     if (offsetof(struct zero_width, b) != 4) return 8;
-#if defined(__aarch64__) && !defined(__APPLE__)
     if (sizeof(struct zero_width) != 8) return 9;
     if (_Alignof(struct zero_width) != 4) return 30;
 #else
+    if (offsetof(struct zero_width, b) != 4) return 8;
     if (sizeof(struct zero_width) != 5) return 9;
     if (_Alignof(struct zero_width) != 1) return 30;
 #endif
 
-    // 12 + 5 + 20 = 37 bits, rounded up to 5 bytes.
+    // 12 + 5 + 20 = 37 bits, rounded up to 5 bytes; under the MS layout
+    // `b` does not fit the unit's 15 remaining bits and opens another.
+#if defined(_WIN32)
+    if (sizeof(struct bit_run) != 8) return 10;
+    if (sizeof(union anon_in_union) != 4) return 11;
+#else
     if (sizeof(struct bit_run) != 5) return 10;
-
     if (sizeof(union anon_in_union) != 3) return 11;
+#endif
 
     if (sizeof(struct ioam6_hdr) != 4) return 12;
     if (offsetof(struct ioam6_hdr, type) != 3) return 13;

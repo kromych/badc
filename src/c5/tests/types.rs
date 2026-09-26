@@ -1371,6 +1371,131 @@ fn unnamed_bitfield_alignment_follows_the_target_abi() {
     }
 }
 
+/// The PE targets lay bit-fields out by the MS rules: a storage unit of the
+/// declared type, shared only by adjacent bit-fields whose type has the same
+/// size, with `#pragma pack` and `packed` lowering where a unit may start.
+/// A row is `pack|declaration|size/alignment|member@bit ...`, the bit being
+/// the member's lowest one, as clang 21 lays the shape out for both
+/// `x86_64-pc-windows-msvc` and `aarch64-pc-windows-msvc`; MSVC 14.44 agrees
+/// on every row without a GNU attribute.
+#[test]
+fn bitfields_take_the_ms_layout_on_pe_targets() {
+    use super::Vm;
+    use crate::{Compiler, Target};
+    use alloc::{format, string::String};
+    const SHAPES: &[&str] = &[
+        "|struct { char c; unsigned :1; }|8/4|c@0",
+        "|struct { char c; int :4; char d; }|12/4|c@0 d@64",
+        "|struct { char c; long long :3; }|16/8|c@0",
+        "|struct { char c; int :0; char d; }|2/1|c@0 d@8",
+        "|struct { unsigned :1; char c; }|8/4|c@32",
+        "|struct { short s; long long :20; char d; }|24/8|s@0 d@128",
+        "|struct { char c; unsigned b:1; }|8/4|c@0 b@32",
+        "|struct { char c; int b:4; char d; }|12/4|c@0 b@32 d@64",
+        "|struct { char c; long :1; }|8/4|c@0",
+        "|struct { char c; unsigned x:3; unsigned :3; char d; }|12/4|c@0 x@32 d@64",
+        "|struct { char a:4; int b:4; }|8/4|a@0 b@32",
+        "|struct { int a:4; char b:4; }|8/4|a@0 b@32",
+        "|struct { short a:4; unsigned short b:4; }|2/2|a@0 b@4",
+        "|struct { int a:4; long b:4; }|4/4|a@0 b@4",
+        "|struct { int a:30; int b:30; }|8/4|a@0 b@32",
+        "|struct { int a:32; int b:1; }|8/4|a@0 b@32",
+        "|struct { char c; int x:3; int :0; char d; }|12/4|c@0 x@32 d@64",
+        "|struct { int x:3; long long :0; char d; }|16/8|x@0 d@64",
+        "|struct { int x:3; char :0; char d; }|8/4|x@0 d@32",
+        "|struct { int x:3; int :0; int y:3; }|8/4|x@0 y@32",
+        "|struct { int x:3; int :0; int :0; int y:3; }|8/4|x@0 y@32",
+        "|struct { char c; int :0; int x:3; }|8/4|c@0 x@32",
+        "|struct { _Bool a:1; char b:3; }|1/1|a@0 b@1",
+        "|struct { enum E { E0, E1 } e:2; int x:3; }|4/4|e@0 x@2",
+        "|struct { unsigned char a:3; unsigned char b:6; }|2/1|a@0 b@8",
+        "|struct { long long a:40; long long b:30; }|16/8|a@0 b@64",
+        "|struct { char c; long long a:1; char d; }|24/8|c@0 a@64 d@128",
+        "|struct { char c; struct { int x:3; }; char d; }|12/4|c@0 x@32 d@64",
+        "|struct { int x:3; struct { char y; }; int z:3; }|12/4|x@0 y@32 z@64",
+        "|struct { int x:3; struct { char y; } n; int z:3; }|12/4|x@0 n.y@32 z@64",
+        "|struct { char c; __attribute__((aligned(8))) int b:4; }|16/8|c@0 b@64",
+        "|union { char c; unsigned :3; }|4/1|c@0",
+        "|union { char c; unsigned :0; }|1/1|c@0",
+        "|union { char c; int x:3; }|4/1|c@0 x@0",
+        "|union { int x:3; long long y:40; }|8/1|x@0 y@0",
+        "|union { short s; long long y:40; }|8/2|s@0 y@0",
+        "|union { int x:3; unsigned :0; }|4/1|x@0",
+        "1|struct { char c; unsigned :1; }|5/1|c@0",
+        "1|struct { char c; int :12; char d; }|6/1|c@0 d@40",
+        "1|struct { int a:30; int b:30; }|8/1|a@0 b@32",
+        "1|struct { char c; int a:15; short s; }|7/1|c@0 a@8 s@40",
+        "1|struct { char c; long long a:60; char d; }|10/1|c@0 a@8 d@72",
+        "1|struct { char c; int x:3; int :0; char d; }|6/1|c@0 x@8 d@40",
+        "2|struct { char c; int a:30; int b:30; }|10/2|c@0 a@16 b@48",
+        "2|struct { char c; long long a:1; char d; }|12/2|c@0 a@16 d@80",
+        "4|struct { char c; long long a:1; char d; }|16/4|c@0 a@32 d@96",
+        "|struct __attribute__((packed)) { char c; int b:4; char d; }|6/1|c@0 b@8 d@40",
+        "|struct { unsigned char a; unsigned int :0; unsigned char b; } __attribute__((packed))|2/1|a@0 b@8",
+        "|struct { char c; int a:15; short s; } __attribute__((packed))|7/1|c@0 a@8 s@40",
+        "|struct { char c; int x:3; int :0; char d; } __attribute__((packed))|6/1|c@0 x@8 d@40",
+        "|struct { char c; int b:4; int m __attribute__((aligned(8))); } __attribute__((packed))|16/8|c@0 b@8 m@64",
+        "|union { char c; int x:3; } __attribute__((packed))|4/1|c@0 x@0",
+        "1|struct { int x:3; long long :0; char d; }|5/1|x@0 d@32",
+        "|struct { char c; int :0; }|1/1|c@0",
+        "|struct { int :3; }|4/4|",
+        "1|struct { char c; struct { int x:3; }; char d; }|6/1|c@0 x@8 d@40",
+        "|struct { char a:4; char :0; char b:4; }|2/1|a@0 b@8",
+        "|struct { long long a:3; int b:3; char c:3; }|16/8|a@0 b@64 c@96",
+    ];
+    let mut src = String::from(
+        "static int pos(const unsigned char *b, int n) {\n\
+         for (int i = 0; i < n; i++) if (b[i]) { int k = 0; while (!((b[i] >> k) & 1)) k++;\n\
+         return i * 8 + k; }\n\
+         return -1; }\n",
+    );
+    let mut body = String::new();
+    for (n, row) in SHAPES.iter().enumerate() {
+        let mut parts = row.split('|');
+        let (pack, decl, layout, members) = (
+            parts.next().unwrap(),
+            parts.next().unwrap(),
+            parts.next().unwrap(),
+            parts.next().unwrap(),
+        );
+        let (size, align) = layout.split_once('/').unwrap();
+        let typedef = format!("typedef {decl} T{n};\n");
+        src += &if pack.is_empty() {
+            typedef
+        } else {
+            format!("#pragma pack(push, {pack})\n{typedef}#pragma pack(pop)\n")
+        };
+        // A failing check returns `(row + 1) * 16 + check`.
+        let id = (n + 1) * 16;
+        body += &format!(
+            "{{ union {{ T{n} t; unsigned char b[sizeof(T{n})]; }} u;\n\
+             if (sizeof(T{n}) != {size}) return {};\n\
+             if (_Alignof(T{n}) != {align}) return {};\n",
+            id + 1,
+            id + 2
+        );
+        for (k, member) in members.split_whitespace().enumerate() {
+            let (name, bit) = member.split_once('@').unwrap();
+            body += &format!(
+                "for (int i = 0; i < (int)sizeof u; i++) u.b[i] = 0;\n\
+                 u.t.{name} = 1; if (pos(u.b, sizeof u) != {bit}) return {};\n",
+                id + 3 + k
+            );
+        }
+        body += "}\n";
+    }
+    src += &format!("int main(void) {{\n{body}return 0; }}\n");
+    for t in [Target::WindowsX64, Target::WindowsAarch64] {
+        let got = Vm::new(Compiler::with_target(src.clone(), t).compile().unwrap())
+            .run()
+            .unwrap();
+        let row = (got as usize / 16)
+            .checked_sub(1)
+            .and_then(|r| SHAPES.get(r));
+        assert_eq!(got, 0, "{t:?}: check {} of {row:?}", got % 16);
+    }
+}
+
 /// The wide storage format round-trips through memory: a value stored
 /// into a `long double` object and read back is unchanged, and the
 /// object's bytes carry the platform's encoding rather than a binary64

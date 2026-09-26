@@ -775,6 +775,7 @@ impl Compiler {
                     is_anonymous: false,
                     is_transparent_union: false,
                     cast_named: false,
+                    vla_size_slot: None,
                 });
                 let id = self.structs.len() - 1;
                 if let Some(scope) = self.tag_scopes.last_mut() {

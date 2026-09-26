@@ -1265,6 +1265,7 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("merged_chain_empty_edge_block.c", 0),
     ("address_retested_after_calls.c", 0),
     ("standard_streams_and_errno.c", 0),
+    ("vla_array_type.c", 0),
 ];
 
 /// Same shape as `super::native::NATIVE_FIXTURES`. The two tables
@@ -2168,6 +2169,7 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("merged_chain_empty_edge_block.c", 0),
     ("address_retested_after_calls.c", 0),
     ("standard_streams_and_errno.c", 0),
+    ("vla_array_type.c", 0),
 ];
 
 pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
@@ -3048,6 +3050,7 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("address_retested_after_calls.c", 0),
     ("inline_asm_x64_pd_x87_moves.c", 0),
     ("standard_streams_and_errno.c", 0),
+    ("vla_array_type.c", 0),
 ];
 
 /// Subset of the cross-arch fixture corpus that doesn't lean on
@@ -3708,6 +3711,7 @@ pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("address_retested_after_calls.c", 0),
     ("inline_asm_x64_pd_x87_moves.c", 0),
     ("standard_streams_and_errno.c", 0),
+    ("vla_array_type.c", 0),
 ];
 
 /// Same fixture set as `native_pe_x64`, since the Windows-flavored
@@ -4312,6 +4316,7 @@ pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("merged_chain_empty_edge_block.c", 0),
     ("address_retested_after_calls.c", 0),
     ("standard_streams_and_errno.c", 0),
+    ("vla_array_type.c", 0),
 ];
 
 pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
@@ -5226,6 +5231,7 @@ pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
     ("merged_chain_empty_edge_block.c", 0),
     ("address_retested_after_calls.c", 0),
     ("standard_streams_and_errno.c", 0),
+    ("vla_array_type.c", 0),
 ];
 
 /// Fixtures the JIT declines rather than runs, so the exit-code tables

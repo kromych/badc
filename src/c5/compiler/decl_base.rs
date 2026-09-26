@@ -483,6 +483,14 @@ impl Compiler {
             let n = core::mem::take(&mut self.pending.typeof_operand_array_size);
             let bytes = core::mem::take(&mut self.pending.typeof_operand_array_bytes);
             let dims = core::mem::take(&mut self.pending.typeof_operand_array_dims);
+            // TODO: the type of a variable-length array operand, which a
+            // declaration through the specifier would allocate at run time.
+            if n == super::VLA_ARRAY_SIZE {
+                return Err(self.compile_err(
+                    Code::UNSUPPORTED,
+                    "`typeof` of a variable-length array is not supported",
+                ));
+            }
             if !dims.is_empty() && inner >= Ty::Ptr as i64 {
                 // The decay recorded the row's exact dimensions (a
                 // pointer-to-array deref / row select): the operand is
@@ -587,6 +595,7 @@ impl Compiler {
         let saved_decay = self.pending.last_array_decay_size;
         let saved_decay_bytes = self.pending.last_array_decay_bytes;
         let saved_decay_dims = core::mem::take(&mut self.pending.last_array_decay_dims);
+        let saved_decay_vla = self.pending.last_array_decay_vla.take();
         self.pending.last_array_decay_size = 0;
         self.pending.last_array_decay_bytes = 0;
         // The callee lineage must reflect this operand's own producers:
@@ -602,6 +611,7 @@ impl Compiler {
                 self.pending.last_array_decay_size = 0;
                 self.pending.last_array_decay_bytes = 0;
                 self.pending.last_array_decay_dims.clear();
+                self.pending.last_array_decay_vla = None;
                 self.pending.indirect_callee_ret_fn_ptr = 0;
                 self.expr_or_void(Token::Assign as i64)?;
             }
@@ -656,10 +666,16 @@ impl Compiler {
         // must report it as distinct from a pointer -- including a
         // subscripted row of a multi-dim array (`arr2d[i]`), which
         // sets only the byte marker.
+        let vla = core::mem::replace(&mut self.pending.last_array_decay_vla, saved_decay_vla);
         self.pending.typeof_operand_was_array = self.pending.last_array_decay_size != 0
             || self.pending.last_array_decay_bytes > 0
-            || !self.pending.last_array_decay_dims.is_empty();
-        self.pending.typeof_operand_array_size = self.pending.last_array_decay_size;
+            || !self.pending.last_array_decay_dims.is_empty()
+            || vla.is_some();
+        self.pending.typeof_operand_array_size = if vla.is_some() {
+            super::VLA_ARRAY_SIZE
+        } else {
+            self.pending.last_array_decay_size
+        };
         // Capture the byte-width marker only for a 1D-reducible row: a
         // pending multi-dim stride means the row is itself multi-dim and
         // not expressible as a single element count.

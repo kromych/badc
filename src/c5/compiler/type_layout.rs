@@ -157,6 +157,7 @@ impl Compiler {
             is_anonymous: false,
             is_transparent_union: false,
             cast_named: false,
+            vla_size_slot: None,
         });
         let id = self.structs.len() - 1;
         if let Some(scope) = self.tag_scopes.last_mut() {
@@ -262,6 +263,7 @@ impl Compiler {
             is_anonymous: false,
             is_transparent_union: false,
             cast_named: false,
+            vla_size_slot: None,
         });
         struct_ty_for(self.structs.len() - 1)
     }
@@ -360,6 +362,7 @@ impl Compiler {
             is_anonymous: false,
             is_transparent_union: false,
             cast_named: false,
+            vla_size_slot: None,
         });
         struct_ty_for(self.structs.len() - 1)
     }
@@ -467,6 +470,7 @@ impl Compiler {
             is_anonymous: false,
             is_transparent_union: false,
             cast_named: false,
+            vla_size_slot: None,
         });
         struct_ty_for(self.structs.len() - 1)
     }
@@ -547,8 +551,31 @@ impl Compiler {
             is_anonymous: false,
             is_transparent_union: false,
             cast_named: false,
+            vla_size_slot: None,
         });
         struct_ty_for(self.structs.len() - 1)
+    }
+
+    /// The type of a variable-length array of `elem_ty` whose byte count the
+    /// frame keeps in `size_slot` (C99 6.7.5.2), interned by the pair.
+    pub(super) fn vla_array_type(&mut self, elem_ty: i64, size_slot: i64) -> i64 {
+        let name = alloc::format!("__vla_{elem_ty}_{size_slot}");
+        if let Some(id) = self.structs.iter().position(|s| s.name == name) {
+            return struct_ty_for(id);
+        }
+        let ty = self.array_agg_type(elem_ty, &[-1]);
+        let mut def = self.structs[struct_id_of(ty)].clone();
+        def.name = name;
+        def.fields[0].array_size = super::VLA_ARRAY_SIZE;
+        def.vla_size_slot = Some(size_slot);
+        self.structs.push(def);
+        struct_ty_for(self.structs.len() - 1)
+    }
+
+    /// The byte-count slot of the variable-length array `ty` points to.
+    pub(super) fn vla_pointee_slot(&self, ty: i64) -> Option<i64> {
+        self.ptr_array_id_depth1(ty)
+            .and_then(|id| self.structs[id].vla_size_slot)
     }
 
     /// Struct id of `ty` when it is a pointer (any depth >= 1) whose
@@ -676,6 +703,7 @@ impl Compiler {
         }
         let s = &self.structs[struct_id_of(ptr_ty)];
         match s.fields.first().filter(|_| s.is_array) {
+            _ if s.vla_size_slot.is_some() => false,
             Some(f) if f.array_dims.len() >= 2 => f.array_dims[0] < 0,
             Some(f) => f.array_size < 0,
             None => !s.is_complete,

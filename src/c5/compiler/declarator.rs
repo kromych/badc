@@ -291,6 +291,45 @@ impl Compiler {
     /// still detect "the user wrote brackets" by remembering whether
     /// the decay happened, but for c5 today the equivalence is
     /// sufficient.
+    /// The element type of a variable-length array declared over `ty`: the
+    /// array its constant inner dimensions and an array typedef base form,
+    /// if any (C99 6.7.5.2p3).
+    fn vla_element_type(&mut self, ty: i64) -> Result<i64, C5Error> {
+        let mut inner: alloc::vec::Vec<i64> = alloc::vec::Vec::new();
+        while self.lex.tk == Token::Brak {
+            self.next()?;
+            let Some(m) = self.with_const_object_fold_masked(|c| c.try_parse_constant_dim())?
+            else {
+                return Err(self.compile_err(
+                    Code::UNSUPPORTED,
+                    "a non-constant inner array dimension is not supported",
+                ));
+            };
+            if m <= 0 {
+                return Err(self.compile_err(
+                    Code::INVALID_DECLARATION,
+                    format!("array dimension must be positive (got {m})"),
+                ));
+            }
+            if self.lex.tk != ']' {
+                return Err(
+                    self.compile_err(Code::SYNTAX, "close bracket expected in array declarator")
+                );
+            }
+            self.next()?;
+            inner.push(m);
+        }
+        if self.pending.typedef_base_array_size > 0 && !self.pending.base_array_taken {
+            self.pending.base_array_taken = true;
+            inner.extend(self.typedef_base_dims());
+        }
+        Ok(if inner.is_empty() {
+            ty
+        } else {
+            self.array_agg_type(ty, &inner)
+        })
+    }
+
     pub(super) fn parse_declarator(&mut self, base: i64) -> Result<(usize, i64, i64), C5Error> {
         let (idx, ty, array_size, _) = self.parse_declarator_levels(base)?;
         Ok((idx, ty, array_size))
@@ -839,12 +878,7 @@ impl Compiler {
                         ));
                     }
                     self.next()?;
-                    if self.lex.tk == Token::Brak {
-                        return Err(self.compile_err(
-                            Code::UNSUPPORTED,
-                            "multidimensional variable-length arrays are not supported",
-                        ));
-                    }
+                    let ty = self.vla_element_type(ty)?;
                     array_size = super::VLA_ARRAY_SIZE;
                     if idx != usize::MAX {
                         return Ok((idx, ty, array_size, own_levels));
@@ -887,7 +921,7 @@ impl Compiler {
                     if self.pending.vla_allowed || param_ctx {
                         return Err(self.compile_err(
                             Code::UNSUPPORTED,
-                            "multidimensional variable-length arrays are not supported",
+                            "a non-constant inner array dimension is not supported",
                         ));
                     }
                     return Err(self.compile_err(

@@ -382,6 +382,19 @@ impl Compiler {
         self.ast_binop(binop);
     }
 
+    /// [`Self::emit_binop_with_imm`] with the run-time byte count of a
+    /// variable-length array, kept in `size_slot`, as the right-hand operand.
+    pub(super) fn emit_binop_with_vla_size(
+        &mut self,
+        binop: super::super::ir::BinOp,
+        size_slot: i64,
+    ) {
+        self.ast_psh();
+        self.mark_emit_other();
+        self.ast_emit_vla_sizeof(size_slot);
+        self.ast_binop(binop);
+    }
+
     /// Immediate carrying a string-literal / global address. The
     /// surrounding caller records the originating symbol idx into
     /// `glo_imm_refs` so the linker can rebase the address

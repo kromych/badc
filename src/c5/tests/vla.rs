@@ -23,8 +23,8 @@ fn compile_error(name: &str) -> String {
 #[test]
 fn multidim_vla_rejected() {
     assert!(
-        compile_error("vla_multidim_rejected.c").contains("multidimensional variable-length"),
-        "wrong diagnostic for a multidimensional VLA"
+        compile_error("vla_multidim_rejected.c").contains("non-constant inner array dimension"),
+        "wrong diagnostic for a VLA with a non-constant inner dimension"
     );
 }
 
@@ -42,6 +42,30 @@ fn vla_initializer_rejected() {
         compile_error("vla_initializer_rejected.c").contains("may not have an initializer"),
         "wrong diagnostic for an initialized VLA"
     );
+}
+
+/// A VLA's array type under the interpreter, for both data models: `&v`,
+/// `*&v`, `sizeof` and arithmetic on the pointer read the run-time size.
+#[test]
+fn vla_array_type_runs_under_the_interpreter() {
+    for t in [crate::Target::LinuxX64, crate::Target::WindowsAarch64] {
+        assert_eq!(super::run_fixture_for("vla_array_type.c", t), 0, "{t:?}");
+    }
+}
+
+/// An object declared through `typeof` of a VLA would need its storage
+/// sized at run time; it is rejected rather than declared as the element
+/// pointer the decayed operand has.
+#[test]
+fn typeof_of_a_vla_is_rejected() {
+    let src = "int f(int n) { int v[n]; __typeof__(v) w; return sizeof w; }";
+    match Compiler::new(super::with_prelude(src)).compile() {
+        Ok(_) => panic!("`typeof` of a VLA compiled"),
+        Err(e) => {
+            let msg = alloc::format!("{e}");
+            assert!(msg.contains("`typeof` of a variable-length array"), "{msg}");
+        }
+    }
 }
 
 /// The runnable fixtures execute through the JIT on the hosts where the

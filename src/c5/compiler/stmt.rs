@@ -1662,7 +1662,9 @@ impl Compiler {
             // distinguishes that from an ordinary rvalue.
             let saved_decay_bytes = core::mem::take(&mut self.pending.last_array_decay_bytes);
             let saved_decay_dims = core::mem::take(&mut self.pending.last_array_decay_dims);
+            let saved_decay_vla = self.pending.last_array_decay_vla.take();
             self.expr(Token::Assign as i64)?;
+            let vla = core::mem::replace(&mut self.pending.last_array_decay_vla, saved_decay_vla);
             // The dims channel also marks rows the byte channel cannot
             // (an unspecified bound `*(T (*)[])p` has no byte size).
             let decayed_array =
@@ -1671,7 +1673,8 @@ impl Compiler {
                         &mut self.pending.last_array_decay_dims,
                         saved_decay_dims,
                     )
-                    .is_empty();
+                    .is_empty()
+                    || vla.is_some();
             // A SIMD (`w`/`x`) operand records its full size so the emitter
             // can tell a 16-byte vector from a scalar double; other operands
             // live in 8-byte registers and cap there.

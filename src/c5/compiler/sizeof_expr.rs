@@ -145,6 +145,10 @@ impl Compiler {
             let lev = Token::Inc as i64;
             self.drop_operand_array_decay();
             self.expr_or_void(lev)?;
+            // C99 6.5.3.4p2: a variable-length array's size is read at run time.
+            if let Some(id) = self.pending.last_array_decay_vla {
+                self.pending.sizeof_vla_size_slot = self.structs[id].vla_size_slot;
+            }
             let array_count = self.pending.last_array_decay_size;
             let array_bytes = self.pending.last_array_decay_bytes;
             let expr_ty = self.ty;

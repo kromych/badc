@@ -1267,6 +1267,7 @@ impl Compiler {
         self.pending.last_array_decay_size = 0;
         self.pending.last_array_decay_bytes = 0;
         self.pending.last_array_decay_dims.clear();
+        self.pending.last_array_decay_vla = None;
     }
 
     pub(super) fn expr(&mut self, lev: i64) -> Result<(), C5Error> {
@@ -2628,8 +2629,10 @@ impl Compiler {
             // C99 6.3.2.1p3: a VLA decays to its runtime base pointer, loaded
             // from the hidden slot.
             let ptr_slot = self.symbols[id_idx].vla_ptr_slot;
+            let vla = self.vla_array_type(self.ty, self.symbols[id_idx].vla_size_slot);
             self.ty += Ty::Ptr as i64;
             self.ast_emit_vla_base(ptr_slot, self.ty);
+            self.pending.last_array_decay_vla = Some(struct_id_of(vla));
         } else if is_array_var {
             self.decay_array_variable(id_idx, identifier_is_local);
         } else if is_struct_value {
@@ -2959,8 +2962,7 @@ impl Compiler {
             // stride is consumed and the rest queued for a following `[k]`;
             // the row size reaches an enclosing `sizeof`, and the operand's
             // own shape, which the row does not have, is dropped.
-            self.pending.last_array_decay_size = 0;
-            self.pending.last_array_decay_dims.clear();
+            self.drop_operand_array_decay();
             self.pending.last_array_decay_bytes = leftover_stride;
             self.retag_expr_fn_depth(|d| if d >= 2 { d - 1 } else { d });
             let mut tail = leftover_tail;
@@ -3070,6 +3072,7 @@ impl Compiler {
         // carries the pointer tag -- so the result is the operand's own
         // type and no level is added.
         let addr_of_function = self.pending.value_is_fn_designator;
+        let vla = self.pending.last_array_decay_vla;
         // The shape of a decayed array operand, read before the load that
         // produced its value is considered: `&*p` on a pointer to an array
         // keeps the load of `p`, whose value is the array's address.
@@ -3106,6 +3109,11 @@ impl Compiler {
             // The designator's value is already the function's address.
             self.ty = pre_addr_ty;
             self.retag_expr_fn_depth(|_| 1);
+        } else if let Some(id) = vla {
+            // A variable-length array: its address is the value.
+            self.ty = super::types::struct_ty_for(id) + Ty::Ptr as i64;
+            self.drop_operand_array_decay();
+            self.retag_expr_fn_depth(|d| d + 1);
         } else if let Some(dims) = decayed_array {
             // A decayed array: its address was the value already, so `&` emits
             // nothing. C99 6.5.3.2p3: the type is pointer to the array, rebuilt
@@ -3328,10 +3336,39 @@ impl Compiler {
         });
         self.ast_assign();
         let ty = self.ty;
-        if let Some(lvalue) = lvalue {
+        if let (Some(lvalue), Some(slot)) = (lvalue, self.vla_pointee_slot(ty)) {
+            self.ast_acc = Some(self.vla_step_assign(lvalue, slot, is_inc, ty));
+        } else if let Some(lvalue) = lvalue {
             self.ast_emit_pre_inc(lvalue, if is_inc { step } else { -step }, ty);
         }
         Ok(())
+    }
+
+    /// `lvalue += size` (or `-=`) for a pointer to a variable-length array.
+    fn vla_step_assign(
+        &mut self,
+        lvalue: super::super::ast::ExprId,
+        slot: i64,
+        is_inc: bool,
+        ty: i64,
+    ) -> super::super::ast::ExprId {
+        let pos = self.ast_src_pos();
+        let size = self.ast_emit_vla_sizeof(slot);
+        let op = if is_inc {
+            super::super::ir::BinOp::Add
+        } else {
+            super::super::ir::BinOp::Sub
+        };
+        self.ast.push_expr(
+            super::super::ast::Expr::CompoundAssign {
+                op,
+                lhs: lvalue,
+                rhs: size,
+                ty,
+                nsw: false,
+            },
+            pos,
+        )
     }
 
     /// The lvalue of a `++` / `--` that reads and stores through the
@@ -3932,7 +3969,9 @@ impl Compiler {
             self.require_complete_pointee(lhs_ty, op)?;
             let elem_ty = pointee_ty(lhs_ty);
             let elem_size = self.size_of_type(elem_ty) as i64;
-            if !lhs_fn_ptr && elem_size > 1 {
+            if let Some(slot) = self.vla_pointee_slot(lhs_ty) {
+                self.emit_binop_with_vla_size(crate::c5::ir::BinOp::Mul, slot);
+            } else if !lhs_fn_ptr && elem_size > 1 {
                 self.emit_binop_with_imm(crate::c5::ir::BinOp::Mul, elem_size);
             }
         }
@@ -4432,7 +4471,37 @@ impl Compiler {
             // scales the integer, which sits on the c5 stack: the pointer is
             // spilled, the integer scaled and pushed, and the pointer reloaded.
             let rhs_ty = self.ty;
-            if !fn_ptr_arith && self.is_ptr_scaling_nontrivial(rhs_ty) {
+            if let Some(slot) = self.vla_pointee_slot(rhs_ty) {
+                // The pointee is a variable-length array: `k * size + p`.
+                self.mark_emit_other();
+                let lhs_ast = self.ast_vstack.pop().flatten();
+                let rhs_ast = self.ast_acc.take();
+                self.ty = strip_object_const(rhs_ty);
+                self.ast_acc = None;
+                if let (Some(lhs), Some(rhs)) = (lhs_ast, rhs_ast) {
+                    let pos = self.ast_src_pos();
+                    let size = self.ast_emit_vla_sizeof(slot);
+                    let scaled = self.ast.push_expr(
+                        super::super::ast::Expr::Binary {
+                            op: super::super::ir::BinOp::Mul,
+                            lhs,
+                            rhs: size,
+                            ty: lhs_ty,
+                        },
+                        pos,
+                    );
+                    let added = self.ast.push_expr(
+                        super::super::ast::Expr::Binary {
+                            op: super::super::ir::BinOp::Add,
+                            lhs: scaled,
+                            rhs,
+                            ty: rhs_ty,
+                        },
+                        pos,
+                    );
+                    self.ast_acc = Some(added);
+                }
+            } else if !fn_ptr_arith && self.is_ptr_scaling_nontrivial(rhs_ty) {
                 // The scaling sequence's intermediate stores consume AST vstack
                 // slots: the operands are taken off first, the sequence runs against
                 // a sentinel, and the node is rebuilt.
@@ -4500,7 +4569,9 @@ impl Compiler {
             }
         } else {
             let rhs_ty = self.ty;
-            if !fn_ptr_arith && self.is_ptr_scaling_nontrivial(lhs_ty) {
+            if let Some(slot) = self.vla_pointee_slot(lhs_ty) {
+                self.emit_binop_with_vla_size(crate::c5::ir::BinOp::Mul, slot);
+            } else if !fn_ptr_arith && self.is_ptr_scaling_nontrivial(lhs_ty) {
                 let scale = self.pointer_to_array_arith_stride(
                     lhs_stride,
                     lhs_ty,
@@ -4536,7 +4607,9 @@ impl Compiler {
             // type `ptrdiff_t`. The type is set before the node is built.
             self.ty = self.ptrdiff_t_ty();
             self.ast_binop(crate::c5::ir::BinOp::Sub);
-            if !fn_ptr_arith && self.is_ptr_scaling_nontrivial(lhs_ty) {
+            if let Some(slot) = self.vla_pointee_slot(lhs_ty) {
+                self.emit_binop_with_vla_size(crate::c5::ir::BinOp::Div, slot);
+            } else if !fn_ptr_arith && self.is_ptr_scaling_nontrivial(lhs_ty) {
                 let scale = self.pointer_to_array_arith_stride(
                     lhs_stride,
                     lhs_ty,
@@ -4544,6 +4617,10 @@ impl Compiler {
                 );
                 self.emit_binop_with_imm(crate::c5::ir::BinOp::Div, scale);
             }
+        } else if let Some(slot) = self.vla_pointee_slot(lhs_ty) {
+            self.emit_binop_with_vla_size(crate::c5::ir::BinOp::Mul, slot);
+            self.ty = strip_object_const(lhs_ty);
+            self.ast_binop(crate::c5::ir::BinOp::Sub);
         } else if !fn_ptr_arith && self.is_ptr_scaling_nontrivial(lhs_ty) {
             let scale =
                 self.pointer_to_array_arith_stride(lhs_stride, lhs_ty, self.pointee_size(lhs_ty));
@@ -4701,7 +4778,26 @@ impl Compiler {
             super::super::ir::BinOp::Add
         });
         let ty = self.ty;
-        if let Some(lvalue) = lvalue {
+        if let (Some(lvalue), Some(slot)) = (lvalue, self.vla_pointee_slot(ty)) {
+            let stored = self.vla_step_assign(lvalue, slot, is_inc, ty);
+            let pos = self.ast_src_pos();
+            let size = self.ast_emit_vla_sizeof(slot);
+            let op = if is_inc {
+                super::super::ir::BinOp::Sub
+            } else {
+                super::super::ir::BinOp::Add
+            };
+            let id = self.ast.push_expr(
+                super::super::ast::Expr::Binary {
+                    op,
+                    lhs: stored,
+                    rhs: size,
+                    ty,
+                },
+                pos,
+            );
+            self.ast_acc = Some(id);
+        } else if let Some(lvalue) = lvalue {
             self.ast_emit_post_inc(lvalue, if is_inc { step } else { -step }, ty);
         }
         self.next()
@@ -4715,6 +4811,7 @@ impl Compiler {
         let mut lhs_ty = lhs_ty;
         self.next()?;
         self.pending.last_array_decay_dims.clear();
+        self.pending.last_array_decay_vla = None;
         let index = self.peek_constant_index();
         // GCC vector extension: `v[i]` is lane `i`, an element-typed
         // lvalue; the vector's address is its value, as for an array.
@@ -4770,7 +4867,9 @@ impl Compiler {
             // decays to the element pointer with no load (C99 6.3.2.1p3).
             let row = self.structs[id].size as i64;
             stride = row;
-            if row > 1 {
+            if let Some(slot) = self.structs[id].vla_size_slot {
+                self.emit_binop_with_vla_size(crate::c5::ir::BinOp::Mul, slot);
+            } else if row > 1 {
                 self.emit_binop_with_imm(crate::c5::ir::BinOp::Mul, row);
             }
             self.ast_binop(crate::c5::ir::BinOp::Add);
@@ -5200,6 +5299,13 @@ impl Compiler {
     /// element pointer with no load; the remaining strides and the row
     /// size are left for the following subscripts and `sizeof`.
     fn decay_ptr_array_value(&mut self, id: usize) {
+        if self.structs[id].vla_size_slot.is_some() {
+            self.drop_operand_array_decay();
+            self.pending.last_array_decay_vla = Some(id);
+            self.ty = self.structs[id].fields[0].ty + Ty::Ptr as i64;
+            return;
+        }
+        self.pending.last_array_decay_vla = None;
         let f = &self.structs[id].fields[0];
         let elem_ty = f.ty;
         let dims: alloc::vec::Vec<i64> = if f.array_dims.len() >= 2 {

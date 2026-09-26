@@ -182,6 +182,9 @@ pub struct StructDef {
     /// that a use of the type whatever becomes of the value, so debug info
     /// keeps a DIE for it with no object of the type declared.
     pub cast_named: bool,
+    /// For a variable-length array's type (C99 6.7.5.2): the frame slot of
+    /// its byte count, which `sizeof` and pointer arithmetic read; `size` is 0.
+    pub vla_size_slot: Option<i64>,
 }
 
 /// One unnamed bit-field of an aggregate (`int :N;`). `before` is the
@@ -1120,6 +1123,9 @@ pub(in crate::c5::compiler) struct Pending {
     /// array (C99 6.5.3.2p3), where `last_array_decay_size` holds only
     /// the outermost dimension. Cleared the same way so it doesn't leak.
     pub last_array_decay_dims: alloc::vec::Vec<i64>,
+    /// The array type (struct id) of the variable-length array the value
+    /// just parsed decayed from, for `&`, `sizeof` and `typeof`.
+    pub last_array_decay_vla: Option<usize>,
 
     /// Set by `parse_typeof_specifier` to true when its operand was an
     /// array type (a bare array expression or an array-shaped type name).
@@ -1593,6 +1599,7 @@ impl Default for Pending {
             param_decl_context: false,
             last_array_decay_size: 0,
             last_array_decay_dims: alloc::vec::Vec::new(),
+            last_array_decay_vla: None,
             typeof_operand_was_array: false,
             typeof_operand_array_size: 0,
             typeof_operand_array_bytes: 0,

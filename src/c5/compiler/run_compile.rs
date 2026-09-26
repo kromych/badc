@@ -162,14 +162,14 @@ impl Compiler {
         Ok(max_count)
     }
 
-    /// Record that a defining declaration moved a file-scope object off the
-    /// storage its tentative definition reserved. C99 6.9.2 makes both
-    /// declarations denote one object, so the old placement is kept for the
-    /// finalize-time rebase of references that already baked it in.
+    /// Record that a file-scope object moved off the storage its tentative
+    /// definition reserved. C99 6.9.2 makes every declaration denote one
+    /// object, so the old placement is kept for the finalize-time rebase of
+    /// references that already baked it in.
     fn note_global_relocated(&mut self, id_idx: usize, was_tentative: bool, fresh: i64) {
         let s = &mut self.symbols[id_idx];
         if was_tentative && s.reserved_data_bytes > 0 && s.val != fresh {
-            s.relocated_from = Some((s.val, s.reserved_data_bytes));
+            s.relocated_from.push((s.val, s.reserved_data_bytes));
         }
     }
 
@@ -408,8 +408,9 @@ impl Compiler {
             }
             self.parse_file_scope_declaration()?;
         }
+        self.complete_tentative_definitions()?;
         self.resolve_pending_aliases()?;
-        self.check_incomplete_definitions()?;
+        self.place_object_aliases();
         // Before the asm `.globl` sweep: that directive is an explicit
         // request to export the name and outranks the inline model.
         self.resolve_inline_linkage();
@@ -1154,6 +1155,7 @@ impl Compiler {
             ));
         }
         self.parse_kr_parameter_declarations(&mut params)?;
+        self.check_complete_parameters(&params, def.line)?;
         // C99 6.9.1p7: an identifier list is no prototype; calls pass what arrives.
         let arrival = if params.form == super::function::ParamForm::IdentifierList {
             self.old_style_arrival_tys(id_idx, &params.types)
@@ -1187,6 +1189,29 @@ impl Compiler {
         self.classify_function_frame(vars_start)?;
         self.warn_unused_function_bindings(&bound, &param_set);
         self.unwind_scope_bound(bound);
+        Ok(())
+    }
+
+    /// C99 6.7.5.3p4: the parameters of a function definition have complete
+    /// types, an enum used before its definition being incomplete
+    /// (6.7.2.3p2).
+    fn check_complete_parameters(
+        &self,
+        params: &super::function::ParsedParams,
+        line: usize,
+    ) -> Result<(), C5Error> {
+        for (pos, (&idx, &ty)) in params.indices.iter().zip(&params.types).enumerate() {
+            let incomplete_enum =
+                params.enum_tags.iter().any(|&(p, _)| p == pos) && !is_pointer_ty(ty);
+            if self.incomplete_aggregate_tag(ty).is_some() || incomplete_enum {
+                let name = &self.symbols[idx].name;
+                return Err(self.compile_err_at(
+                    Code::INVALID_DECLARATION,
+                    line,
+                    format!("parameter `{name}` has incomplete type"),
+                ));
+            }
+        }
         Ok(())
     }
 
@@ -1880,9 +1905,6 @@ impl Compiler {
     /// Bind the declarator as an object: linkage and attributes, then the
     /// storage its definition reserves and the initializer that fills it
     /// (C99 6.9.2).
-    /// Bind the declarator as an object: linkage and attributes, then the
-    /// storage its definition reserves and the initializer that fills it
-    /// (C99 6.9.2).
     fn define_file_scope_object(
         &mut self,
         decl: &FileScopeDecl,
@@ -1953,13 +1975,14 @@ impl Compiler {
             }
         } else {
             self.symbols[id_idx].is_extern_decl = false;
-            // C99 6.9.2p3: the type of a definition must not be
-            // incomplete. A tentative definition's tag may be
-            // completed further on in the unit, so the check runs
-            // once the unit is parsed.
-            if let Some(sid) = self.incomplete_aggregate_tag(ty) {
+            // C99 6.9.2: a tentative definition's type may be completed
+            // further on in the unit -- a tag defined later, or an enum
+            // used before its definition -- so its storage is sized, and
+            // an aggregate left incomplete rejected, once the unit is parsed.
+            let tag = self.incomplete_aggregate_tag(ty);
+            if tag.is_some() || (decl.base_enum_tag.is_some() && !is_pointer_ty(ty)) {
                 self.pending_incomplete_objects
-                    .push((id_idx, sid, signature_line));
+                    .push((id_idx, tag, signature_line));
             }
         }
         // Deferred-size array global: the dimension
@@ -2061,6 +2084,7 @@ impl Compiler {
             self.symbols[id_idx].type_ = ty;
             self.symbols[id_idx].val = self.symbols[tgt].val;
             Self::adopt_alias_storage(&mut self.symbols, id_idx, tgt);
+            self.object_aliases.push((id_idx, tgt));
             self.symbols[id_idx].defined_here = true;
             self.symbols[id_idx].is_extern_decl = false;
             self.symbols[id_idx].is_alias = true;
@@ -2156,7 +2180,7 @@ impl Compiler {
         self.symbols[id_idx].type_align = self.symbols[id_idx].type_align.max(obj_align);
         let decl_align: usize = if want_align > 8 {
             if thread_local {
-                self.check_thread_local_align(want_align)?;
+                self.check_thread_local_align(want_align, self.lex.line)?;
             } else {
                 self.data_align = self.data_align.max(want_align);
             }
@@ -2176,13 +2200,15 @@ impl Compiler {
     /// An ELF loader places each thread's block on the `PT_TLS` alignment,
     /// which the image carries from the objects; dyld and the Windows
     /// loader allocate the block from the heap, which places it on a
-    /// 16-byte boundary and nothing wider.
-    fn check_thread_local_align(&self, want_align: usize) -> Result<(), C5Error> {
+    /// 16-byte boundary and nothing wider. Reported at the declarator's
+    /// `line`.
+    fn check_thread_local_align(&self, want_align: usize, line: usize) -> Result<(), C5Error> {
         use super::super::codegen::Target;
         let heap_block = matches!(self.target, Target::MacOSAarch64) || self.target.is_windows();
         if heap_block && want_align > 16 {
-            return Err(self.compile_err(
+            return Err(self.compile_err_at(
                 Code::LIMIT,
+                line,
                 format!(
                     "alignment {want_align} exceeds the 16-byte boundary the target's loader \
                      places a thread's `_Thread_local` block on"
@@ -2482,6 +2508,18 @@ impl Compiler {
         Ok(())
     }
 
+    /// Bytes a file-scope object of `ty` (`array_size` elements when
+    /// positive) reserves: whole 8-byte slots, and one slot for a zero-sized
+    /// object (an empty struct, GNU) so no two objects share a start offset.
+    fn object_storage_bytes(&self, ty: i64, array_size: i64) -> i64 {
+        if array_size > 0 {
+            let total = (self.size_of_type(ty) as i64) * array_size;
+            (((total + 7) / 8) * 8).max(8)
+        } else {
+            (self.slots_of_type(ty) * 8).max(8)
+        }
+    }
+
     /// An object of known size: reserve or reuse its storage, then take the
     /// initializer that fills it.
     #[allow(clippy::too_many_arguments)]
@@ -2495,15 +2533,7 @@ impl Compiler {
         was_tentative_glo: bool,
         was_extern_only_decl: bool,
     ) -> Result<(), C5Error> {
-        // A zero-sized object (empty struct, GNU) still
-        // reserves one slot so no two objects share a
-        // start offset (mirrors the block-scope allocator).
-        let mut bytes = if array_size > 0 {
-            let total = (self.size_of_type(ty) as i64) * array_size;
-            (((total + 7) / 8) * 8).max(8)
-        } else {
-            (self.slots_of_type(ty) * 8).max(8)
-        };
+        let mut bytes = self.object_storage_bytes(ty, array_size);
         // A flexible array member initialized via `.<fam> =
         // {...}` needs its element bytes reserved now, before
         // the field fill appends string literals into that
@@ -2557,6 +2587,7 @@ impl Compiler {
         } else if thread_local {
             let off = self.reserve_data_bytes(DataStore::ThreadLocal, align, bytes as usize);
             self.symbols[id_idx].val = off;
+            self.symbols[id_idx].reserved_data_bytes = bytes;
             off
         } else {
             let off = self.reserve_data_bytes(DataStore::Static, align, bytes as usize);
@@ -2699,12 +2730,16 @@ impl Compiler {
         Ok(())
     }
 
-    /// C99 6.9.2p3: a file-scope definition whose aggregate tag the unit
-    /// never completes has no storage size. The declarator's own line is
-    /// reported, not the end of the unit.
-    fn check_incomplete_definitions(&mut self) -> Result<(), C5Error> {
+    /// C99 6.9.2p2: a tentative definition defines its object with the type
+    /// the unit ends with. Each object declared while its type was
+    /// incomplete is sized with that type; an aggregate tag the unit never
+    /// completes leaves it without a size (6.9.2p3), reported at the
+    /// declarator's own line.
+    fn complete_tentative_definitions(&mut self) -> Result<(), C5Error> {
         for (id_idx, sid, line) in core::mem::take(&mut self.pending_incomplete_objects) {
-            if !self.structs[sid].is_complete {
+            if let Some(sid) = sid
+                && !self.structs[sid].is_complete
+            {
                 let name = self.symbols[id_idx].name.clone();
                 return Err(self.compile_err_at(
                     Code::INVALID_DECLARATION,
@@ -2712,8 +2747,50 @@ impl Compiler {
                     format!("object `{name}` has incomplete type"),
                 ));
             }
+            self.size_tentative_definition(id_idx, line)?;
         }
         Ok(())
+    }
+
+    /// Size a tentative definition by its completed type. Its declarator
+    /// reserved storage for the incomplete type; when the completed type
+    /// needs more bytes or a stricter boundary, the object takes fresh
+    /// storage. The references already made to the old slot are rebased at
+    /// finalize, and a `_Thread_local` access reads the symbol's offset when
+    /// it is lowered.
+    fn size_tentative_definition(&mut self, id_idx: usize, line: usize) -> Result<(), C5Error> {
+        let s = &self.symbols[id_idx];
+        if s.class != Token::Glo as i64 || !s.defined_here || s.has_initializer || s.is_alias {
+            return Ok(());
+        }
+        let (ty, thread_local) = (s.type_, s.is_thread_local);
+        let bytes = self.object_storage_bytes(ty, s.array_size);
+        let want = (s.data_align.max(1) as usize).max(self.align_of_type(ty));
+        let align = self.data_placement_align(ty, want);
+        let s = &mut self.symbols[id_idx];
+        s.data_align = want as i64;
+        if bytes <= s.reserved_data_bytes && s.val % align as i64 == 0 {
+            return Ok(());
+        }
+        let fresh = if thread_local {
+            self.check_thread_local_align(align, line)?;
+            self.reserve_data_bytes(DataStore::ThreadLocal, align, bytes as usize)
+        } else {
+            let off = self.reserve_data_bytes(DataStore::Static, align, bytes as usize);
+            self.note_global_relocated(id_idx, true, off);
+            off
+        };
+        self.symbols[id_idx].val = fresh;
+        self.symbols[id_idx].reserved_data_bytes = bytes;
+        Ok(())
+    }
+
+    /// Place each object alias on its target's storage, which is final once
+    /// the unit is complete.
+    fn place_object_aliases(&mut self) {
+        for &(alias, target) in &self.object_aliases {
+            self.symbols[alias].val = self.symbols[target].val;
+        }
     }
 
     /// Give external linkage to the names a file-scope `asm(".globl name");`
@@ -2764,6 +2841,7 @@ impl Compiler {
             self.symbols[id_idx].is_extern_decl = false;
             if is_object {
                 Self::adopt_alias_storage(&mut self.symbols, id_idx, tgt);
+                self.object_aliases.push((id_idx, tgt));
             } else {
                 let name = self.symbols[id_idx].link_name().into();
                 let bind = alias_bind(&self.symbols[id_idx]);

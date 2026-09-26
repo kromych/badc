@@ -2816,6 +2816,13 @@ fn enum_used_before_definition() {
 }
 
 #[test]
+fn tentative_definition_completed_later() {
+    // C99 6.9.2p2: an object declared while its type was incomplete is sized
+    // and aligned by the type the unit ends with.
+    assert_eq!(run_fixture("tentative_definition_completed_later.c"), 0);
+}
+
+#[test]
 fn indirect_call_prototypes() {
     // A call through a pointer converts or promotes its arguments by the
     // pointed-to type, however the callee is spelled.

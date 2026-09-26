@@ -323,6 +323,70 @@ fn an_internal_linkage_data_alias_names_its_target() {
 }
 
 #[test]
+fn a_tentative_definition_takes_the_storage_of_its_completed_type() {
+    // C99 6.9.2p2: an object declared while its type was incomplete is
+    // defined with the type the unit ends with. Its symbol spans that type
+    // on its boundary without overlapping the objects declared around it,
+    // in `.bss` and in the thread-local image alike, and an alias bound
+    // before the object moved names the moved storage.
+    let a = compile_obj(
+        "struct S v;\n\
+         extern struct S av __attribute__((alias(\"v\")));\n\
+         int w;\n\
+         _Thread_local struct S tv;\n\
+         extern _Thread_local struct S tav __attribute__((alias(\"tv\")));\n\
+         _Thread_local int tw;\n\
+         char c;\n\
+         struct A over;\n\
+         char d;\n\
+         int xs[];\n\
+         extern int xa __attribute__((alias(\"xs\")));\n\
+         struct S { long a, b, c; };\n\
+         struct A { _Alignas(32) long x; };\n\
+         int xs[3] = { 1, 2, 3 };\n\
+         struct S *anchor(void) { return &v; }\n",
+        "a.o",
+    );
+    let sym = |n: &str| {
+        a.symbols
+            .iter()
+            .find(|s| s.name == n)
+            .unwrap_or_else(|| panic!("`{n}` missing from the symbol table"))
+    };
+    let same_section = |x: &EtSym, y: &EtSym| matches!((x.sec, y.sec), (EtSymRef::Section(i), EtSymRef::Section(j)) if i == j);
+    for (obj, size, other) in [
+        ("v", 24, "w"),
+        ("tv", 24, "tw"),
+        ("over", 32, "c"),
+        ("over", 32, "d"),
+    ] {
+        let (o, n) = (sym(obj), sym(other));
+        assert_eq!(o.size, size, "{obj} size");
+        assert!(
+            !same_section(o, n) || o.value + o.size <= n.value || n.value + n.size <= o.value,
+            "{obj} at {:#x}+{} overlaps {other} at {:#x}+{}",
+            o.value,
+            o.size,
+            n.value,
+            n.size
+        );
+    }
+    assert_eq!(
+        sym("over").value % 32,
+        0,
+        "over is placed on its type's boundary"
+    );
+    for (alias, target) in [("av", "v"), ("tav", "tv"), ("xa", "xs")] {
+        let (al, tg) = (sym(alias), sym(target));
+        assert_eq!(al.value, tg.value, "{alias} value");
+        assert!(
+            same_section(al, tg),
+            "{alias} must sit in {target}'s section"
+        );
+    }
+}
+
+#[test]
 fn duplicate_strong_definitions_are_rejected() {
     let a = compile_obj("int dup_val = 1;\n", "a.o");
     let b = compile_obj("int dup_val = 2;\n", "b.o");

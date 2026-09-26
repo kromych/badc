@@ -3695,17 +3695,17 @@ fn uses_before_an_enums_definition_take_the_enums_type() {
     Compiler::with_target(src.to_string(), Target::LinuxX64)
         .compile()
         .expect("uses before the definition name the completed type");
-    let wide = "enum E;\nenum E w;\nenum E { A = 1, B = 0x100000000 };\n\
-                int main(void) { return 0; }\n";
-    let err = Compiler::with_target(wide.to_string(), Target::LinuxX64)
+    // C99 6.9.2p2: a tentative definition declared through the placeholder
+    // is sized by the definition, whatever its width.
+    let sized = "enum E;\nenum E w;\nenum P;\nenum P p;\n\
+                 enum E { A = 1, B = 0x100000000 };\n\
+                 enum P { C = 1 } __attribute__((packed));\n\
+                 _Static_assert(sizeof w == 8 && sizeof p == 1, \"size\");\n\
+                 _Static_assert(__builtin_types_compatible_p(__typeof__(w), enum E), \"w\");\n\
+                 int main(void) { return 0; }\n";
+    Compiler::with_target(sized.to_string(), Target::LinuxX64)
         .compile()
-        .map(|_| ())
-        .unwrap_err()
-        .to_string();
-    assert!(
-        err.contains("`w` took the storage of `int` before `enum E` was defined"),
-        "{err}"
-    );
+        .expect("a tentative definition takes the definition's size");
 }
 
 /// The function-pointer conversions three Linux units make convert between

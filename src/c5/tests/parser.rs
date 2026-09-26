@@ -2644,6 +2644,19 @@ fn object_of_incomplete_type_is_diagnosed() {
          int main(void) { return (int)(long)&arr; }",
         "object `arr` has incomplete type",
     );
+    // C99 6.7.2.3p2: an enum used before its definition is incomplete, for
+    // an automatic and a block-scope `static` object alike.
+    expect_compile_error(
+        "enum later;\n\
+         int main(void) { enum later e; enum later { A, B = 0x100000000 }; return 0; }",
+        "object `e` has incomplete type",
+    );
+    expect_compile_error(
+        "enum later;\n\
+         int main(void) { static enum later e; return 0; }\n\
+         enum later { A };",
+        "object `e` has incomplete type",
+    );
     // A tentative definition the unit completes later stands, as do a
     // block-scope `extern` (it has linkage and defines nothing) and a
     // pointer to an incomplete tag.
@@ -2659,6 +2672,46 @@ fn object_of_incomplete_type_is_diagnosed() {
     )
     .compile()
     .expect("a completed tentative definition, a block extern, and a pointer stay legal");
+}
+
+#[test]
+fn parameter_of_incomplete_type_in_a_definition_is_diagnosed() {
+    // C99 6.7.5.3p4: the parameters of a function definition have complete
+    // types; the definition passes and reads them by value.
+    expect_compile_error(
+        "struct later;\n\
+         long f(struct later s) { return 0; }\n\
+         struct later { long a, b, c; };\n\
+         int main(void) { return 0; }",
+        "parameter `s` has incomplete type",
+    );
+    expect_compile_error(
+        "enum later;\n\
+         long f(enum later e) { enum later { A, B = 0x100000000 }; return e; }\n\
+         int main(void) { return 0; }",
+        "parameter `e` has incomplete type",
+    );
+    // An old-style definition declares its parameters after the list.
+    expect_compile_error(
+        "struct later;\n\
+         long f(s) struct later s; { return 0; }\n\
+         int main(void) { return 0; }",
+        "parameter `s` has incomplete type",
+    );
+    // A declaration that is not a definition, and a pointer parameter of a
+    // definition, stay legal.
+    Compiler::new(
+        "struct later;\n\
+         enum tag;\n\
+         long f(struct later s, enum tag e);\n\
+         long g(struct later *s, enum tag *e) { return s == 0 && e == 0; }\n\
+         struct later { long a; };\n\
+         enum tag { T };\n\
+         int main(void) { return (int)g(0, 0) - 1; }"
+            .to_string(),
+    )
+    .compile()
+    .expect("a prototype and pointer parameters may name incomplete types");
 }
 
 #[test]

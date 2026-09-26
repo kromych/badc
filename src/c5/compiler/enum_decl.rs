@@ -22,7 +22,7 @@ use alloc::vec::Vec;
 use super::super::error::C5Error;
 use super::super::symbol::{FnParams, FnType};
 use super::super::token::{Token, Ty};
-use super::types::{UNSIGNED_BIT, is_pointer_ty, rebase_placeholder_int};
+use super::types::{UNSIGNED_BIT, rebase_placeholder_int};
 use super::{Compiler, EnumDef};
 
 /// The definition of an enum tag, applied to the types an earlier use of
@@ -174,7 +174,7 @@ impl Compiler {
                 });
             }
             if let Some(tag) = tag_idx {
-                self.complete_enum_placeholders(tag, underlying)?;
+                self.complete_enum_placeholders(tag, underlying);
             }
             return Ok((underlying, None));
         }
@@ -198,13 +198,13 @@ impl Compiler {
     /// C99 6.7.2.2p4: the definition of enum tag `tag` completes the type
     /// its earlier uses named with the `int` placeholder. Rewrites the
     /// objects, functions, parameters and members declared through it,
-    /// and the outer bindings an open scope shadows.
-    fn complete_enum_placeholders(&mut self, tag: u32, underlying: i64) -> Result<(), C5Error> {
+    /// and the outer bindings an open scope shadows. A tentative definition
+    /// declared through it is sized when the unit ends.
+    fn complete_enum_placeholders(&mut self, tag: u32, underlying: i64) {
         let Some(at) = self.enum_placeholder_tags.iter().position(|&t| t == tag) else {
-            return Ok(());
+            return;
         };
         self.enum_placeholder_tags.swap_remove(at);
-        self.check_placeholder_storage(tag, underlying)?;
         let c = EnumCompletion { tag, underlying };
         for s in &mut self.symbols {
             c.ty(&mut s.type_, &mut s.incomplete_enum_tag);
@@ -222,35 +222,6 @@ impl Compiler {
             c.list(&mut f.params, &mut f.param_enum_tags);
             c.chain(&mut f.ret_fn);
         }
-        Ok(())
-    }
-
-    /// An object declared through the placeholder was given `int`'s
-    /// storage, which a definition of another size cannot rewrite.
-    // TODO: a tentative definition of an incomplete type reserves its
-    // storage when the unit ends (C99 6.9.2p2).
-    fn check_placeholder_storage(&self, tag: u32, underlying: i64) -> Result<(), C5Error> {
-        if self.size_of_type(underlying) == self.size_of_type(Ty::Int as i64) {
-            return Ok(());
-        }
-        let laid_out = |s: &&crate::c5::symbol::Symbol| {
-            s.incomplete_enum_tag == Some(tag)
-                && !is_pointer_ty(s.type_)
-                && (s.class == Token::Loc as i64
-                    || (s.class == Token::Glo as i64 && !s.is_extern_decl))
-        };
-        let Some(s) = self.symbols.iter().find(laid_out) else {
-            return Ok(());
-        };
-        Err(self.compile_err(
-            Code::UNSUPPORTED,
-            alloc::format!(
-                "`{}` took the storage of `int` before `enum {}` was defined; \
-                 a definition of another size is not supported",
-                s.name,
-                self.symbols[tag as usize].name
-            ),
-        ))
     }
 
     /// The underlying type the definition of enum tag `name` chose. Untagged

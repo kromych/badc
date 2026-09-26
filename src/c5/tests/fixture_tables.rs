@@ -1007,6 +1007,7 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("thread_local_object_alignment.c", 0),
     ("thread_local_image_alignment.c", 0),
     ("thread_local_tentative_array.c", 0),
+    ("thread_local_tentative_completed_later.c", 0),
     // Struct-value locals + `.` field access on macOS arm64.
     ("struct_value_basics.c", 0),
     // Whole-struct copy via Inst::Mcpy on macOS arm64. The aarch64
@@ -1270,6 +1271,7 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("typeof_row_bounds.c", 0),
     ("variably_modified_type_names.c", 0),
     ("enum_used_before_definition.c", 0),
+    ("tentative_definition_completed_later.c", 0),
     ("inline_asm_a64_integer_ops.c", 0),
     // Plain `char` is a type distinct from `signed char` and `unsigned
     // char` (C99 6.2.5p15) at the target's signedness.
@@ -2044,6 +2046,7 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("thread_local_object_alignment.c", 0),
     ("thread_local_image_alignment.c", 0),
     ("thread_local_tentative_array.c", 0),
+    ("thread_local_tentative_completed_later.c", 0),
     // Variadic FP packer: `printf("%f\n", 1.5)` -- on Linux
     // AAPCS64, FP variadic args ride d0..d7 the same as fixed
     // FP args. The all-int packer would land 1.5's bit pattern
@@ -2190,6 +2193,7 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("typeof_row_bounds.c", 0),
     ("variably_modified_type_names.c", 0),
     ("enum_used_before_definition.c", 0),
+    ("tentative_definition_completed_later.c", 0),
     ("inline_asm_a64_integer_ops.c", 0),
     // Plain `char` is a type distinct from `signed char` and `unsigned
     // char` (C99 6.2.5p15) at the target's signedness.
@@ -2933,6 +2937,7 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("thread_local_object_alignment.c", 0),
     ("thread_local_image_alignment.c", 0),
     ("thread_local_tentative_array.c", 0),
+    ("thread_local_tentative_completed_later.c", 0),
     // Variadic FP packer: `printf("%f\n", 1.5)`. SysV pulls FP
     // variadic args through xmm0..xmm7 with AL = XMM count; the
     // pre-packer code routed everything as 8-byte words via the
@@ -3086,6 +3091,7 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("typeof_row_bounds.c", 0),
     ("variably_modified_type_names.c", 0),
     ("enum_used_before_definition.c", 0),
+    ("tentative_definition_completed_later.c", 0),
     ("inline_asm_a64_integer_ops.c", 0),
     // Plain `char` is a type distinct from `signed char` and `unsigned
     // char` (C99 6.2.5p15) at the target's signedness.
@@ -3623,6 +3629,7 @@ pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("thread_local_object_alignment.c", 0),
     ("thread_local_image_alignment.c", 0),
     ("thread_local_tentative_array.c", 0),
+    ("thread_local_tentative_completed_later.c", 0),
     // Windows x86_64 alignment of `_setjmp`: the header's macro
     // wrapper must align the env pointer up to 16 bytes so the
     // `movdqa` saves of xmm6..xmm15 don't AV. The longjmp side
@@ -3763,6 +3770,7 @@ pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("typeof_row_bounds.c", 0),
     ("variably_modified_type_names.c", 0),
     ("enum_used_before_definition.c", 0),
+    ("tentative_definition_completed_later.c", 0),
     ("inline_asm_a64_integer_ops.c", 0),
     // Plain `char` is a type distinct from `signed char` and `unsigned
     // char` (C99 6.2.5p15) at the target's signedness.
@@ -4300,6 +4308,7 @@ pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("thread_local_object_alignment.c", 0),
     ("thread_local_image_alignment.c", 0),
     ("thread_local_tentative_array.c", 0),
+    ("thread_local_tentative_completed_later.c", 0),
     // Windows AArch64 routes setjmp / longjmp through the
     // `Intrinsic::SetjmpAArch64` / `Intrinsic::LongjmpAArch64`
     // inline expansions because msvcrt's `longjmp` requires SEH
@@ -4385,6 +4394,7 @@ pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("typeof_row_bounds.c", 0),
     ("variably_modified_type_names.c", 0),
     ("enum_used_before_definition.c", 0),
+    ("tentative_definition_completed_later.c", 0),
     ("inline_asm_a64_integer_ops.c", 0),
     // Plain `char` is a type distinct from `signed char` and `unsigned
     // char` (C99 6.2.5p15) at the target's signedness.
@@ -5316,6 +5326,7 @@ pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
     ("typeof_row_bounds.c", 0),
     ("variably_modified_type_names.c", 0),
     ("enum_used_before_definition.c", 0),
+    ("tentative_definition_completed_later.c", 0),
     ("inline_asm_a64_integer_ops.c", 0),
     // Plain `char` is a type distinct from `signed char` and `unsigned
     // char` (C99 6.2.5p15) at the target's signedness.
@@ -5348,6 +5359,10 @@ pub(super) const JIT_UNSUPPORTED_FIXTURES: &[(&str, &str)] = &[
     ("thread_local_object_alignment.c", "thread-local storage"),
     ("thread_local_image_alignment.c", "thread-local storage"),
     ("thread_local_tentative_array.c", "thread-local storage"),
+    (
+        "thread_local_tentative_completed_later.c",
+        "thread-local storage",
+    ),
     ("block_scope_object_alignment.c", "thread-local storage"),
     ("thread_local_per_thread.c", "thread-local storage"),
 ];

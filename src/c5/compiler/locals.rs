@@ -544,9 +544,11 @@ impl Compiler {
             }
 
             // C99 6.7p7: an object declared with no linkage must have a
-            // complete type by the end of its declarator. A block-scope
+            // complete type by the end of its declarator; an enum used
+            // before its definition is incomplete (6.7.2.3p2). A block-scope
             // `extern` has linkage and declares no object, so it is exempt.
-            if !is_extern && self.incomplete_aggregate_tag(ty).is_some() {
+            let incomplete_enum = base_enum_tag.is_some() && !is_pointer_ty(ty);
+            if !is_extern && (self.incomplete_aggregate_tag(ty).is_some() || incomplete_enum) {
                 let name = self.symbols[loc_idx].name.clone();
                 return Err(self.compile_err(
                     Code::INVALID_DECLARATION,

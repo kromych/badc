@@ -41,13 +41,14 @@ pub(crate) struct Symbol {
     pub reserved_data_bytes: i64,
     /// Shadow slot for `reserved_data_bytes` (see `h_class`).
     pub h_reserved_data_bytes: i64,
-    /// `(previous offset, previous reserved bytes)` when a defining
-    /// declaration moved the object out of the storage a tentative
-    /// definition had reserved. C99 6.9.2 makes both declarations
-    /// denote one object, so references that baked the old offset --
-    /// identifier snapshots in the AST and pointer initializers already
-    /// written into the data segment -- are rebased onto `val`.
-    pub relocated_from: Option<(i64, i64)>,
+    /// `(previous offset, previous reserved bytes)` for each move of the
+    /// object out of the storage a tentative definition had reserved: to
+    /// a defining declaration that did not fit it, or to the completed
+    /// type at the end of the unit. C99 6.9.2 makes all of them denote one
+    /// object, so references that baked an old offset -- identifier
+    /// snapshots in the AST and pointer initializers already written into
+    /// the data segment -- are rebased onto `val`.
+    pub relocated_from: Vec<(i64, i64)>,
     /// For a defined file-scope object, its byte size, filled at unit
     /// finalize. The object writers emit it as the symbol size
     /// (`st_size`); 0 means unknown and keeps the size unset.
@@ -871,7 +872,7 @@ impl crate::c5::layout::DataOffsets for Symbol {
             val,
             reserved_data_bytes: _,   // a byte count, not an offset
             h_reserved_data_bytes: _, // scope-restore shadow
-            relocated_from: _,        // the pre-relocation span, kept for diagnostics
+            relocated_from: _,        // spans the finalize rebase consumed
             data_byte_size: _,        // a byte count
             fam_init_bytes: _,        // a byte count
             h_fam_init_bytes: _,

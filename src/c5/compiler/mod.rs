@@ -2240,15 +2240,21 @@ pub struct Compiler {
     /// Each entry is the alias symbol, its target name, and whether the
     /// declarator was an object rather than a function.
     pending_aliases: Vec<(usize, String, bool)>,
+    /// Each object alias bound in the unit and the object it names. The
+    /// alias shares the object's storage, which a later declaration or
+    /// the end of the unit may move (C99 6.9.2), so it is placed once the
+    /// unit is complete.
+    object_aliases: Vec<(usize, usize)>,
     /// Names given external linkage by a file-scope `asm(".globl name");`.
     /// The directive may precede the definition, so the names are applied
     /// once the unit is complete.
     pending_asm_globl: Vec<String>,
-    /// File-scope object definitions whose aggregate tag was incomplete at
-    /// the declarator. C99 6.9.2p3 admits a tentative definition the unit
-    /// completes later, so each entry -- the symbol, its tag, and the
-    /// declarator's line -- is rechecked once the unit is complete.
-    pending_incomplete_objects: Vec<(usize, usize, usize)>,
+    /// File-scope object definitions whose type was incomplete at the
+    /// declarator: an aggregate tag, or an enum used before its definition.
+    /// C99 6.9.2p2 completes a tentative definition with the type the unit
+    /// ends with, so each entry -- the symbol, the aggregate's tag, and the
+    /// declarator's line -- is sized once the unit is complete.
+    pending_incomplete_objects: Vec<(usize, Option<usize>, usize)>,
     /// Return type of the function whose body is currently being
     /// parsed (0 outside any function). Used by the `return s`
     /// path to emit a struct-copy through the hidden out-pointer
@@ -2993,6 +2999,7 @@ impl Compiler {
             init_funcs: Vec::new(),
             function_aliases: Vec::new(),
             pending_aliases: Vec::new(),
+            object_aliases: Vec::new(),
             pending_incomplete_objects: Vec::new(),
             pending_asm_globl: Vec::new(),
             current_func_return_ty: 0,
@@ -3275,21 +3282,24 @@ impl Compiler {
         }
     }
 
-    /// C99 6.9.2: a tentative definition and the later defining declaration
-    /// denote one object. A definition that did not fit the tentative's
-    /// reservation took fresh storage, leaving the references emitted before
-    /// it addressing the abandoned slot. Move them onto the definition:
-    /// identifier snapshots in the parsed functions, and the pointer
-    /// initializers already written into the data segment. Only object base
-    /// addresses reach either channel, and the abandoned slot holds no other
-    /// object, so the byte range identifies the relocated object alone.
+    /// C99 6.9.2: a tentative definition and the later declarations of the
+    /// object denote one object. A definition that did not fit the
+    /// tentative's reservation, or a type completed after it, took fresh
+    /// storage, leaving the references emitted before it addressing the
+    /// abandoned slot. Move them onto the object's final storage: identifier
+    /// snapshots in the parsed functions, and the pointer initializers
+    /// already written into the data segment. Only object base addresses
+    /// reach either channel, and the abandoned slot holds no other object,
+    /// so the byte range identifies the relocated object alone.
     fn rebase_relocated_globals(&mut self) {
         let moves: Vec<(i64, i64, i64)> = self
             .symbols
             .iter()
-            .filter_map(|s| {
-                let (old_off, old_bytes) = s.relocated_from?;
-                (s.val != old_off).then_some((old_off, old_bytes, s.val))
+            .flat_map(|s| {
+                s.relocated_from
+                    .iter()
+                    .filter(|&&(old_off, _)| old_off != s.val)
+                    .map(|&(old_off, old_bytes)| (old_off, old_bytes, s.val))
             })
             .collect();
         if moves.is_empty() {
@@ -3321,7 +3331,7 @@ impl Compiler {
             self.tls_data[at..at + 8].copy_from_slice(&(target as u64).to_le_bytes());
         }
         for s in &mut self.symbols {
-            s.relocated_from = None;
+            s.relocated_from.clear();
         }
     }
 
@@ -3647,9 +3657,9 @@ impl Compiler {
     }
 }
 
-/// Objects a defining declaration moved off their tentative reservation,
-/// as `(old offset, reserved bytes, new offset)`. Reuses the compaction
-/// pass's offset surface so both rebases reach the same fields.
+/// Objects moved off their tentative reservation, as `(old offset, reserved
+/// bytes, new offset)`. Reuses the compaction pass's offset surface so both
+/// rebases reach the same fields.
 struct RelocatedGlobals(Vec<(i64, i64, i64)>);
 
 impl RelocatedGlobals {

@@ -721,6 +721,10 @@ impl Compiler {
             _ if value == 0 => 0,
             ConstVal::Int { ty, .. } => ty,
             ConstVal::Float(_) => Ty::Double as i64,
+            // An integer cast to a pointer type is a pointer.
+            ConstVal::Addr(a) if a.root == super::const_expr::ConstRoot::None => {
+                a.pointee.map_or(0, super::types::add_ptr_level)
+            }
             ConstVal::Addr(_) => 0,
         };
         if let Some(m) = Self::type_warning(&self.structs, var_ty, init_ty, value == 0) {

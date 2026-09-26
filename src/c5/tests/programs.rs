@@ -2766,6 +2766,13 @@ fn struct_array_member_brace_elision() {
 }
 
 #[test]
+fn pointer_constant_arithmetic() {
+    // C99 6.6p9: an integer constant cast to a pointer type is an address
+    // constant, whose constant arithmetic strides by the pointee.
+    assert_eq!(run_fixture("pointer_constant_arithmetic.c"), 0);
+}
+
+#[test]
 fn indirect_call_prototypes() {
     // A call through a pointer converts or promotes its arguments by the
     // pointed-to type, however the callee is spelled.

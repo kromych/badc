@@ -455,11 +455,13 @@ impl Compiler {
                 if !same_sym(&a, &b) {
                     return None;
                 }
+                // Addresses order by unsigned magnitude.
+                let (a, b) = (a.value as u64, b.value as u64);
                 let hold = match op {
-                    B::Lt => a.value < b.value,
-                    B::Le => a.value <= b.value,
-                    B::Gt => a.value > b.value,
-                    _ => a.value >= b.value,
+                    B::Lt => a < b,
+                    B::Le => a <= b,
+                    B::Gt => a > b,
+                    _ => a >= b,
                 };
                 Some(ConstVal::int(hold as i64))
             }
@@ -488,6 +490,21 @@ impl Compiler {
                     val: ((a.value - b.value) / a.elem_size.max(1)) as i128,
                     ty: Ty::LongLong as i64,
                 }),
+                // A byte pointer less one with no symbol: the difference
+                // is the relocated address less that integer, as gcc folds
+                // `(char *)"s" - (char *)0`.
+                (Some(a), Some(b))
+                    if a.root.is_symbolic()
+                        && !a.root.is_label()
+                        && b.root == ConstRoot::None
+                        && a.elem_size == 1 =>
+                {
+                    Some(ConstVal::Addr(ConstAddr {
+                        value: a.value.wrapping_sub(b.value),
+                        pointee: None,
+                        ..a
+                    }))
+                }
                 (Some(a), None) if !a.root.is_label() => Some(ConstVal::Addr(ConstAddr {
                     value: a
                         .value
@@ -2352,6 +2369,19 @@ impl Compiler {
     /// for an unsigned type. A 64-bit literal or object read arrives as
     /// sign-extended `i64` bits, which read as negative in a conversion to
     /// a floating type (C99 6.3.1.4p2).
+    /// C99 6.6p9: an integer constant converted to pointer type `ty` is an
+    /// address constant with no symbol, whose arithmetic strides by the
+    /// pointee (6.5.6p8) -- `array_pointee` when it points to an array.
+    fn const_pointer_of(&self, v: i128, ty: i64, array_pointee: Option<i64>) -> ConstVal {
+        let pointee = array_pointee.unwrap_or_else(|| pointee_ty(ty));
+        ConstVal::Addr(ConstAddr {
+            value: v as i64,
+            root: ConstRoot::None,
+            elem_size: (self.size_of_type(pointee) as i64).max(1),
+            pointee: Some(pointee),
+        })
+    }
+
     pub(super) fn const_int_of(&self, v: i128, ty: i64) -> ConstVal {
         let bytes = self.size_of_type(ty);
         let is_bool = strip_unsigned(ty) == Ty::Bool as i64;
@@ -2486,6 +2516,7 @@ impl Compiler {
         Some(match (is_floating_ty(ty), size) {
             (true, 4) => ConstVal::Float(f32::from_bits(bits as u32) as f64),
             (true, _) => ConstVal::Float(f64::from_bits(bits as u64)),
+            _ if is_pointer_ty(ty) => self.const_pointer_of(bits, ty, None),
             (false, _) => self.const_int_of(bits, ty),
         })
     }
@@ -2723,6 +2754,13 @@ impl Compiler {
                         .pointee
                         .map_or(1, |p| (self.size_of_type(p) as i64).max(1));
                     return Ok(ConstVal::Addr(a));
+                }
+                if !is_floating_ty(target_ty) && !matches!(v, ConstVal::Float(_)) {
+                    let ptr_target = is_pointer_ty(target_ty)
+                        || (is_struct_ty(target_ty) && struct_ptr_depth(target_ty) > 0);
+                    if ptr_target {
+                        return Ok(self.const_pointer_of(v.as_i128(), target_ty, array_pointee));
+                    }
                 }
                 return Ok(if is_floating_ty(target_ty) {
                     ConstVal::Float(v.as_float())

@@ -516,7 +516,6 @@ Disassembly of section .text:
                	callq	<addr>
                	leaq	-0x10(%rbp), %rdi
                	callq	<addr>
-               	movl	$0x1, %eax
                	movq	-0x18(%rbp), %rdi
                	testq	%rdi, %rdi
                	je	<addr>
@@ -527,7 +526,6 @@ Disassembly of section .text:
                	callq	<addr>
                	leaq	-0x10(%rbp), %rdi
                	callq	<addr>
-               	movl	$0x1, %eax
                	movq	-0x18(%rbp), %rdi
                	testq	%rdi, %rdi
                	je	<addr>

@@ -252,7 +252,10 @@ pub(crate) fn insert(func: &mut FunctionSsa, ins: &[Insertion]) -> (Rewrite, Und
     debug_assert!(ins.windows(2).all(|w| order(&w[0]) <= order(&w[1])));
     debug_assert!(ins.iter().all(|i| match i.at {
         At::Before(k) | At::After(k) => (k as usize) < n_old,
-        At::Empty(b) => blocks[b as usize].inst_range.is_empty(),
+        At::Empty(b) => {
+            let r = &blocks[b as usize].inst_range;
+            r.is_empty() && at_boundary(blocks, r.start)
+        }
     }));
     let undo = Undo {
         insts: Vec::new(),
@@ -400,9 +403,24 @@ pub(crate) fn concat(func: &mut FunctionSsa, chains: &[Vec<BlockId>]) {
     for (new, &at) in order.iter().enumerate() {
         remap[at as usize] = new as ValueId;
     }
-    // A range moves with its first instruction.
+    // A range moves with its first instruction. An empty one goes ahead of
+    // the first instruction at or past its start that stays in place: one
+    // that moved now sits inside its chain's head.
+    let mut landing = vec![n as u32; n + 1];
+    for at in (0..n).rev() {
+        landing[at] = if moved[at] {
+            landing[at + 1]
+        } else {
+            remap[at]
+        };
+    }
     let moved_to = |r: &core::ops::Range<u32>| {
-        let start = remap.get(r.start as usize).copied().unwrap_or(n as u32);
+        let at = r.start as usize;
+        let start = if r.is_empty() {
+            landing.get(at).copied().unwrap_or(n as u32)
+        } else {
+            remap.get(at).copied().unwrap_or(n as u32)
+        };
         start..start + (r.end - r.start)
     };
     for (block, r) in k.blocks.iter_mut().zip(&old) {
@@ -451,6 +469,14 @@ fn permute<T: Copy + Default>(table: &mut Vec<T>, order: &[ValueId]) {
             .map(|&at| table.get(at as usize).copied().unwrap_or_default())
             .collect();
     }
+}
+
+/// Whether tape index `at` lies strictly inside no non-empty block range,
+/// so an instruction placed there joins no other block.
+fn at_boundary(blocks: &[Block], at: u32) -> bool {
+    !blocks
+        .iter()
+        .any(|b| b.inst_range.start < at && at < b.inst_range.end)
 }
 
 /// Whether no two non-empty block ranges share an instruction.
@@ -774,6 +800,44 @@ mod tests {
         assert!(matches!(f.insts[1], Inst::Imm(2)));
         assert!(matches!(f.insts[2], Inst::Imm(3)));
         assert!(matches!(f.blocks[3].terminator, Terminator::Return(2)));
+    }
+
+    /// An empty block standing ahead of a member that moves stays on a
+    /// block boundary rather than following it into the head's range, so
+    /// an instruction later placed in it joins no other block.
+    #[test]
+    fn concat_leaves_an_empty_block_on_a_boundary() {
+        let mut f = func_with(
+            alloc::vec![
+                Inst::Imm(10), // v0  b0
+                Inst::Imm(11), // v1  b1
+                Inst::Imm(12), // v2  b2, behind the empty b3
+            ],
+            alloc::vec![
+                block(0..1, Terminator::Jmp(2)),
+                block(1..2, Terminator::Return(1)),
+                block(2..3, Terminator::Return(2)),
+                block(2..2, Terminator::Jmp(1)),
+            ],
+        );
+        concat(&mut f, &[alloc::vec![0, 2]]);
+        // New order: v0, v2, v1.
+        assert_eq!(f.blocks[0].inst_range, 0..2);
+        assert_eq!(f.blocks[1].inst_range, 2..3);
+        assert_eq!(f.blocks[3].inst_range, 3..3);
+        let (rw, _undo) = insert(
+            &mut f,
+            &[Insertion {
+                at: At::Empty(3),
+                inst: Inst::Imm(7),
+                is_f32: false,
+            }],
+        );
+        assert_eq!(rw.ids, alloc::vec![3]);
+        let ranges: Vec<_> = f.blocks.iter().map(|b| b.inst_range.clone()).collect();
+        assert!(ranges_are_disjoint(&ranges), "{ranges:?}");
+        assert_eq!(f.blocks[0].inst_range, 0..2);
+        assert_eq!(f.blocks[3].inst_range, 3..4);
     }
 
     /// Two chains in one call, the second anchored inside the span the

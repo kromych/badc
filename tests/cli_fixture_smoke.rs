@@ -508,6 +508,7 @@ const LINKED_IMAGE_RUN_FIXTURES: &[(&str, i32)] = &[
     ("long_double_call_shapes.c", 0),
     ("long_double_math.c", 0),
     ("declared_object_copied_whole.c", 0),
+    ("merged_chain_empty_edge_block.c", 0),
 ];
 
 /// The sweep's target for this host, or `None` when the host cannot

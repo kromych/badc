@@ -517,13 +517,13 @@ Disassembly of section .text:
                	ldr	x0, [x0]
                	cbz	x0, <addr>
                	bl	<addr>
-               	mov	x1, #0x0                // =0
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	mov	x0, #0x0                // =0
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	ldrsw	x1, [x1]
                	mov	x17, #0x64              // =100
-               	mul	x0, x0, x17
-               	add	x0, x1, x0
+               	mul	x1, x1, x17
+               	add	x0, x0, x1
                	ldp	x29, x30, [sp, #0x30]
                	ldr	x20, [sp], #0x40
                	ret
@@ -546,7 +546,7 @@ Disassembly of section .text:
                	ldur	x0, [x29, #-0x18]
                	cbz	x0, <addr>
                	bl	<addr>
-               	mov	x1, #0x1                // =1
+               	mov	x0, #0x1                // =1
                	b	<addr>
                	mov	x0, #0x10               // =16
                	bl	<addr>
@@ -557,17 +557,15 @@ Disassembly of section .text:
                	bl	<addr>
                	sub	x0, x29, #0x10
                	bl	<addr>
-               	mov	x1, #0x1                // =1
                	ldur	x0, [x29, #-0x18]
                	cbz	x0, <addr>
                	bl	<addr>
-               	mov	x1, #0x1                // =1
+               	mov	x0, #0x1                // =1
                	b	<addr>
                	sub	x0, x29, #0x8
                	bl	<addr>
                	sub	x0, x29, #0x10
                	bl	<addr>
-               	mov	x1, #0x1                // =1
                	ldur	x0, [x29, #-0x18]
                	cbz	x0, <addr>
                	bl	<addr>
@@ -582,11 +580,11 @@ Disassembly of section .text:
                	b.ne	<addr>
                	sub	x0, x29, #0x18
                	bl	<addr>
-               	mov	x1, #0x2                // =2
+               	mov	x0, #0x2                // =2
                	b	<addr>
                	sub	x0, x29, #0x18
                	bl	<addr>
-               	mov	x1, #0x3                // =3
+               	mov	x0, #0x3                // =3
                	b	<addr>
 
 <main>:

@@ -32,12 +32,19 @@ pub(crate) const R_X86_64_PC16: u32 = 13;
 pub(crate) const R_X86_64_PC8: u32 = 15;
 pub(crate) const R_X86_64_DTPOFF64: u32 = 17;
 pub(crate) const R_X86_64_TPOFF64: u32 = 18;
+pub(crate) const R_X86_64_TLSGD: u32 = 19;
+pub(crate) const R_X86_64_TLSLD: u32 = 20;
+pub(crate) const R_X86_64_DTPOFF32: u32 = 21;
+pub(crate) const R_X86_64_GOTTPOFF: u32 = 22;
 pub(crate) const R_X86_64_TPOFF32: u32 = 23;
 pub(crate) const R_X86_64_PC64: u32 = 24;
 /// `GOT + A - P` against `_GLOBAL_OFFSET_TABLE_`: the GOT base computed
 /// from the program counter, 4 bytes wide and 8 for the `64` form.
 pub(crate) const R_X86_64_GOTPC32: u32 = 26;
 pub(crate) const R_X86_64_GOTPC64: u32 = 29;
+pub(crate) const R_X86_64_GOTPC32_TLSDESC: u32 = 34;
+pub(crate) const R_X86_64_TLSDESC_CALL: u32 = 35;
+pub(crate) const R_X86_64_GOTPCRELX: u32 = 41;
 pub(crate) const R_X86_64_REX_GOTPCRELX: u32 = 42;
 
 // ---- i386 ----
@@ -88,6 +95,10 @@ pub(crate) const R_AARCH64_LDST64_ABS_LO12_NC: u32 = 286;
 pub(crate) const R_AARCH64_LDST128_ABS_LO12_NC: u32 = 299;
 pub(crate) const R_AARCH64_ADR_GOT_PAGE: u32 = 311;
 pub(crate) const R_AARCH64_LD64_GOT_LO12_NC: u32 = 312;
+pub(crate) const R_AARCH64_TLSGD_ADR_PAGE21: u32 = 513;
+pub(crate) const R_AARCH64_TLSGD_ADD_LO12_NC: u32 = 514;
+pub(crate) const R_AARCH64_TLSIE_ADR_GOTTPREL_PAGE21: u32 = 541;
+pub(crate) const R_AARCH64_TLSIE_LD64_GOTTPREL_LO12_NC: u32 = 542;
 pub(crate) const R_AARCH64_TLSLE_MOVW_TPREL_G2: u32 = 544;
 pub(crate) const R_AARCH64_TLSLE_MOVW_TPREL_G1: u32 = 545;
 pub(crate) const R_AARCH64_TLSLE_MOVW_TPREL_G1_NC: u32 = 546;
@@ -96,6 +107,10 @@ pub(crate) const R_AARCH64_TLSLE_MOVW_TPREL_G0_NC: u32 = 548;
 pub(crate) const R_AARCH64_TLSLE_ADD_TPREL_HI12: u32 = 549;
 pub(crate) const R_AARCH64_TLSLE_ADD_TPREL_LO12: u32 = 550;
 pub(crate) const R_AARCH64_TLSLE_ADD_TPREL_LO12_NC: u32 = 551;
+pub(crate) const R_AARCH64_TLSDESC_ADR_PAGE21: u32 = 562;
+pub(crate) const R_AARCH64_TLSDESC_LD64_LO12: u32 = 563;
+pub(crate) const R_AARCH64_TLSDESC_ADD_LO12: u32 = 564;
+pub(crate) const R_AARCH64_TLSDESC_CALL: u32 = 569;
 pub(crate) const R_AARCH64_COPY: u32 = 1024;
 pub(crate) const R_AARCH64_GLOB_DAT: u32 = 1025;
 pub(crate) const R_AARCH64_JUMP_SLOT: u32 = 1026;

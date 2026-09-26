@@ -7208,6 +7208,129 @@ fn a_system_compiled_object_reaches_its_thread_locals() {
     }
 }
 
+// A system-compiled object in each thread-local model -- initial-exec, and
+// the general- and local-dynamic sequences of both dialects -- reaches a badc
+// unit's thread-local, another object's and its own statics, in the calling
+// thread and a new one, PIE and -no-pie, its debug locations linked too. A
+// dialect the compiler lacks is skipped.
+#[cfg(target_os = "linux")]
+#[test]
+fn a_system_compiled_object_reaches_thread_locals_in_every_model() {
+    let Some(cc) = host_cc() else {
+        eprintln!(
+            "skipping a_system_compiled_object_reaches_thread_locals_in_every_model: no system C compiler"
+        );
+        return;
+    };
+    let dir = tempdir("sys-tls-models");
+    let lib = write_source(
+        &dir,
+        "lib.c",
+        "extern _Thread_local int host_tl;\n\
+         extern _Thread_local long long peer_tl;\n\
+         static _Thread_local int mine = 3;\n\
+         static _Thread_local char big[5000];\n\
+         int *host_addr(void) { return &host_tl; }\n\
+         int host_get(void) { return host_tl; }\n\
+         long long *peer_addr(void) { return &peer_tl; }\n\
+         long long peer_get(void) { return peer_tl; }\n\
+         int bump(int k) { mine += k; big[4999] += (char)k; return mine + big[4999]; }\n",
+    );
+    let peer = write_source(&dir, "peer.c", "_Thread_local long long peer_tl = 40;\n");
+    let main = write_source(
+        &dir,
+        "main.c",
+        "#include <pthread.h>\n\
+         _Thread_local int host_tl = 7;\n\
+         extern _Thread_local long long peer_tl;\n\
+         int *host_addr(void);\n\
+         int host_get(void);\n\
+         long long *peer_addr(void);\n\
+         long long peer_get(void);\n\
+         int bump(int k);\n\
+         static int check(void) {\n\
+           return host_addr() != &host_tl || host_get() != host_tl\n\
+             || peer_addr() != &peer_tl || peer_get() != peer_tl;\n\
+         }\n\
+         static void *worker(void *arg) {\n\
+           (void)arg;\n\
+           return (void *)(long)(check() || host_get() != 7 || peer_get() != 40 || bump(1) != 5);\n\
+         }\n\
+         int main(void) {\n\
+           host_tl = 11;\n\
+           peer_tl = 42;\n\
+           if (check() || bump(2) != 7) return 1;\n\
+           pthread_t t;\n\
+           void *bad = (void *)1;\n\
+           if (pthread_create(&t, 0, worker, 0) || pthread_join(t, &bad) || bad) return 2;\n\
+           return check() || host_get() != 11 || bump(0) != 7 ? 3 : 0;\n\
+         }\n",
+    );
+    let peer_obj = dir.join("peer.o");
+    run(
+        Command::new(&cc)
+            .args(["-O2", "-c"])
+            .arg(&peer)
+            .arg("-o")
+            .arg(&peer_obj),
+        "build the defining object",
+    );
+    let (dynamic, descriptor) = if cfg!(target_arch = "aarch64") {
+        ("-mtls-dialect=trad", "-mtls-dialect=desc")
+    } else {
+        ("-mtls-dialect=gnu", "-mtls-dialect=gnu2")
+    };
+    let models: &[&[&str]] = &[
+        &["-O2", "-g", "-fPIE"],
+        &["-O0", "-fno-pie"],
+        &["-O2", "-fPIC", "-ftls-model=initial-exec"],
+        &["-O2", "-fPIC", dynamic],
+        &["-O0", "-fPIC", dynamic, "-fno-plt"],
+        &["-O2", "-fPIC", descriptor],
+    ];
+    let obj = dir.join("lib.o");
+    for model in models {
+        let built = Command::new(&cc)
+            .args(*model)
+            .arg("-c")
+            .arg(&lib)
+            .arg("-o")
+            .arg(&obj)
+            .output()
+            .expect("run the system compiler");
+        if !built.status.success() {
+            eprintln!(
+                "skipping {model:?}: {}",
+                String::from_utf8_lossy(&built.stderr)
+            );
+            continue;
+        }
+        for form in [&[][..], &["-no-pie"][..]] {
+            let exe = dir.join("prog");
+            let out = run(
+                Command::new(badc())
+                    .env("BADC_LINK_STATS", "1")
+                    .args(["-q", "-O", "-g"])
+                    .args(form)
+                    .arg(&main)
+                    .arg(&obj)
+                    .arg(&peer_obj)
+                    .arg("-o")
+                    .arg(&exe),
+                "link",
+            );
+            let stats = String::from_utf8_lossy(&out.stderr);
+            assert!(!stats.contains(" rtlib="), "{model:?}: {stats}");
+            let ran = Command::new(&exe).output().expect("run");
+            assert_eq!(
+                ran.status.code(),
+                Some(0),
+                "{model:?} {form:?}: a thread-local reached the wrong storage"
+            );
+        }
+    }
+}
+
 // A `long double` crosses the system compiler boundary both ways as the
 // platform passes it. System V AMD64 3.2.3 gives it and an aggregate of one,
 // or of overlapping ones, the X87 + X87UP classes, in memory as an argument,

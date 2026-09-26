@@ -37,15 +37,16 @@ use crate::c5::layout::{pad_to_align as align_up, round_up as align_usize};
 // `R_X86_64_REX_GOTPCRELX` is the relaxable variant of GOTPCREL marking
 // a `REX mov reg, [rip+disp32]` GOT load (psABI B.2); emitted by c5's
 // writer and other toolchains.
+use super::tls_relax::{self, TLS_GET_ADDR, TLS_MODULE_BASE};
 use super::{internal_err, link_err};
 use crate::c5::object::elf_reloc_types::AbsCheck;
 use crate::c5::object::elf_reloc_types::{
     R_AARCH64_ABS32, R_AARCH64_ABS64, R_AARCH64_ADD_ABS_LO12_NC, R_AARCH64_ADR_GOT_PAGE,
     R_AARCH64_ADR_PREL_LO21, R_AARCH64_ADR_PREL_PG_HI21, R_AARCH64_CALL26, R_AARCH64_JUMP26,
     R_AARCH64_LD_PREL_LO19, R_AARCH64_LD64_GOT_LO12_NC, R_AARCH64_PREL32, R_AARCH64_PREL64,
-    R_AARCH64_TLS_DTPREL64, R_X86_64_32, R_X86_64_64, R_X86_64_DTPOFF64, R_X86_64_GOTPCREL,
-    R_X86_64_PC32, R_X86_64_PC64, R_X86_64_PLT32, R_X86_64_REX_GOTPCRELX, TprelField,
-    aarch64_abs_field, aarch64_is_tls, aarch64_ldst_lo12_scale, aarch64_movw_field,
+    R_AARCH64_TLS_DTPREL64, R_X86_64_32, R_X86_64_64, R_X86_64_DTPOFF32, R_X86_64_DTPOFF64,
+    R_X86_64_GOTPCREL, R_X86_64_PC32, R_X86_64_PC64, R_X86_64_PLT32, R_X86_64_REX_GOTPCRELX,
+    TprelField, aarch64_abs_field, aarch64_is_tls, aarch64_ldst_lo12_scale, aarch64_movw_field,
     aarch64_pcrel_data_field, aarch64_pcrel_imm_field, aarch64_tprel_field, x86_64_abs_field,
     x86_64_is_tls, x86_64_pcrel_data_field, x86_64_tpoff_field,
 };
@@ -738,16 +739,18 @@ fn group_named_zerofill(
     }
 }
 
-/// Whether the link itself defines `name` once layout is known: the
-/// init/fini array bounds, the `__start_` / `__stop_` pair of a named
-/// section, and the GOT base. Archive selection runs before layout,
-/// so a reference left undefined by one of these names is not one an
-/// archive member is still needed for.
-pub fn link_synthesized_symbol(name: &str) -> bool {
+/// Whether a reference to `name` needs no archive member: the link defines
+/// the init/fini array bounds, a named section's `__start_` / `__stop_`,
+/// the GOT base and the thread-local module base once layout is known, and
+/// an executable's thread-local transitions remove the `__tls_get_addr`
+/// calls. Archive selection runs before layout.
+pub fn link_resolves_symbol(name: &str) -> bool {
     matches!(
         name,
         "__init_array_start" | "__init_array_end" | "__fini_array_start" | "__fini_array_end"
     ) || name == GOT_BASE_SYMBOL
+        || name == TLS_MODULE_BASE
+        || name == TLS_GET_ADDR
         || name.starts_with("__start_")
         || name.starts_with("__stop_")
 }
@@ -874,6 +877,14 @@ pub fn copy_candidates(objs: &[NativeObject], shared_libs: &[SharedLibrary]) -> 
         }
     }
     wanted
+}
+
+/// The offsets of an object's relocations opening a `__tls_get_addr`
+/// sequence whose call is in place, and of those calls.
+#[derive(Default)]
+struct ResolverCalls {
+    opening: BTreeSet<u64>,
+    calls: BTreeSet<u64>,
 }
 
 /// The state one native link accumulates. Each pass is a method;
@@ -1208,9 +1219,9 @@ impl<'a> Link<'a> {
     }
 
     /// A thread-local relocation no note fixup covers. A local-exec form
-    /// takes `TPREL(S + A)` ([`Self::tp_offset`]); the other models need
-    /// a GOT entry or a call into the loader, which this link does not
-    /// make.
+    /// takes `TPREL(S + A)` ([`Self::tp_offset`]); an executable rewrites the
+    /// other models' sequences to it ([`tls_relax`]). A shared library needs
+    /// the loader's dynamic TLS relocations, which this link does not make.
     fn apply_tls_reloc(
         &mut self,
         unit: usize,
@@ -1218,13 +1229,51 @@ impl<'a> Link<'a> {
         reloc: &NativeReloc,
         patch_offset: usize,
         site: &RelocSite<'_>,
+        resolver: &ResolverCalls,
     ) -> Result<(), C5Error> {
-        let local_exec = match self.machine {
+        let machine = self.machine;
+        let local_exec = match machine {
             NativeMachine::X86_64 => x86_64_tpoff_field(reloc.rtype).is_some(),
             NativeMachine::Aarch64 => aarch64_tprel_field(reloc.rtype).is_some(),
         };
-        if !local_exec {
+        if !local_exec && (self.allow_undefined || !tls_relax::transitions(machine, reloc.rtype)) {
             return Err(site.unsupported());
+        }
+        let value = self.tls_symbol_tpoff(unit, sym)? + reloc.addend;
+        if local_exec
+            || (machine == NativeMachine::X86_64
+                && tls_relax::x86_64_dtpoff_field(reloc.rtype).is_some())
+        {
+            return apply_tprel_reloc(&mut self.text, patch_offset, value, site);
+        }
+        if tls_relax::calls_resolver(machine, reloc.rtype)
+            && !resolver.opening.contains(&reloc.offset)
+        {
+            return Err(site.tls_sequence("followed by a relocated call to `__tls_get_addr`"));
+        }
+        // The rewrite reads and writes the unit's own bytes only.
+        let base = self.text_bases[unit];
+        let text = &mut self.text[base..base + self.objs[unit].text.len()];
+        let at = reloc.offset as usize;
+        match machine {
+            NativeMachine::X86_64 => {
+                let value = value + tls_relax::x86_64_addend_bias(reloc.rtype);
+                let imm = i32::try_from(value).map_err(|_| site.truncated(value))?;
+                tls_relax::x86_64_local_exec(text, at, reloc.rtype, imm)
+            }
+            NativeMachine::Aarch64 => {
+                let imm = u32::try_from(value).map_err(|_| site.truncated(value))?;
+                tls_relax::aarch64_local_exec(text, at, reloc.rtype, imm)
+            }
+        }
+        .map_err(|expected| site.tls_sequence(expected))
+    }
+
+    /// Offset from the thread pointer of the thread-local `sym` names, for a
+    /// reference from `unit`; 0 for the module base.
+    fn tls_symbol_tpoff(&self, unit: usize, sym: &NativeSymbol) -> Result<i64, C5Error> {
+        if sym.section == NativeSymSection::Undef && sym.name == TLS_MODULE_BASE {
+            return Ok(0);
         }
         // A weak definition yields to a strong one elsewhere, so only a
         // local or strong definition in this unit resolves here.
@@ -1241,6 +1290,20 @@ impl<'a> Link<'a> {
                     sym.name
                 ),
             ));
+        } else if let Some(lib) = self
+            .shared_libs
+            .iter()
+            .find(|l| l.exports.contains(&sym.name))
+        {
+            return Err(link_err(
+                Code::RELOCATION,
+                MODULE,
+                &format!(
+                    "thread-local `{}` is defined in shared library `{}`: an executable reaches \
+                     it through a GOT entry the loader fills, which this link does not make",
+                    sym.name, lib.soname,
+                ),
+            ));
         } else {
             return Err(link_err(
                 Code::UNDEFINED_SYMBOL,
@@ -1248,8 +1311,33 @@ impl<'a> Link<'a> {
                 &format!("undefined reference to `{}`", sym.name),
             ));
         };
-        let value = self.tp_offset(offset) + reloc.addend;
-        apply_tprel_reloc(&mut self.text, patch_offset, value, site)
+        Ok(self.tp_offset(offset))
+    }
+
+    /// The `__tls_get_addr` sequences of `obj` an executable link rewrites.
+    fn resolver_calls(&self, obj: &NativeObject) -> ResolverCalls {
+        let mut out = ResolverCalls::default();
+        let resolver: BTreeSet<usize> = (obj.symbols.iter().enumerate())
+            .filter(|(_, s)| s.section == NativeSymSection::Undef && s.name == TLS_GET_ADDR)
+            .map(|(i, _)| i)
+            .collect();
+        if self.allow_undefined || resolver.is_empty() {
+            return out;
+        }
+        let calls: BTreeSet<u64> = (obj.text_relocs.iter())
+            .filter(|r| resolver.contains(&r.sym_idx))
+            .map(|r| r.offset)
+            .collect();
+        for r in &obj.text_relocs {
+            let at = r.offset as usize;
+            if let Some(call) = tls_relax::resolver_call(self.machine, r.rtype, &obj.text, at)
+                && calls.contains(&(call as u64))
+            {
+                out.opening.insert(r.offset);
+                out.calls.insert(call as u64);
+            }
+        }
+        out
     }
 
     /// Each unit's `.text` / `.rodata` / `.data` / `.bss` base in the
@@ -1876,7 +1964,11 @@ impl<'a> Link<'a> {
                 .iter()
                 .flat_map(|&(off, _)| core::iter::once(off).chain(pair.then_some(off + 4)))
                 .collect();
+            let resolver = self.resolver_calls(obj);
             for reloc in &obj.text_relocs {
+                if resolver.calls.contains(&reloc.offset) {
+                    continue;
+                }
                 let sym = obj.symbols.get(reloc.sym_idx).ok_or_else(|| {
                     internal_err(MODULE, &format!(
                         "link_native_objects: object {i} reloc references symbol index {} out of \
@@ -1893,7 +1985,7 @@ impl<'a> Link<'a> {
                 if tls {
                     if !noted.contains(&reloc.offset) {
                         let site = origin.at(self.machine, reloc.rtype, &sym.name, reloc.offset);
-                        self.apply_tls_reloc(i, sym, reloc, patch_offset, &site)?;
+                        self.apply_tls_reloc(i, sym, reloc, patch_offset, &site, &resolver)?;
                     }
                     continue;
                 }
@@ -3076,19 +3168,22 @@ impl<'a> Link<'a> {
         // A thread-local's debug location holds its offset within the
         // module's thread block: the unit's merged TLS base plus the
         // symbol's offset in that unit's block. It is not an address,
-        // so no writer has to defer it.
-        if matches!(
-            (machine, reloc.rtype),
+        // so no writer has to defer it. gcc states the 8-byte operand
+        // as a 4-byte `x@dtpoff` and a zero upper half.
+        let dtp_width = match (machine, reloc.rtype) {
             (NativeMachine::X86_64, R_X86_64_DTPOFF64)
-                | (NativeMachine::Aarch64, R_AARCH64_TLS_DTPREL64)
-        ) {
-            let end = patch_off + 8;
+            | (NativeMachine::Aarch64, R_AARCH64_TLS_DTPREL64) => Some(8),
+            (NativeMachine::X86_64, R_X86_64_DTPOFF32) => Some(4),
+            _ => None,
+        };
+        if let Some(width) = dtp_width {
+            let end = patch_off + width;
             if end > section_bytes.len() {
                 return Err(internal_err(
                     MODULE,
                     &format!(
-                        "link_native_objects: DWARF reloc patch at 0x{patch_off:x}+8 past section end \
-                     ({} bytes)",
+                        "link_native_objects: DWARF reloc patch at 0x{patch_off:x}+{width} past \
+                         section end ({} bytes)",
                         section_bytes.len(),
                     ),
                 ));
@@ -3106,7 +3201,11 @@ impl<'a> Link<'a> {
             let value = (self.tls_bases[unit_idx] as u64)
                 .wrapping_add(sym.value)
                 .wrapping_add(reloc.addend as u64);
-            section_bytes[patch_off..end].copy_from_slice(&value.to_le_bytes());
+            if width == 4 && value > u32::MAX as u64 {
+                let site = origin.at(machine, reloc.rtype, &sym.name, reloc.offset);
+                return Err(site.truncated(value as i64));
+            }
+            section_bytes[patch_off..end].copy_from_slice(&value.to_le_bytes()[..width]);
             return Ok(());
         }
         // Resolve the reloc's symbol to a merged offset, noting which
@@ -3866,7 +3965,7 @@ fn apply_absolute_reloc(
 }
 
 /// Write a local-exec `TPREL(S + A)` into the field `site`'s relocation
-/// names.
+/// names, or a local-dynamic offset taken from the thread pointer.
 fn apply_tprel_reloc(
     text: &mut [u8],
     patch_offset: usize,
@@ -3874,7 +3973,8 @@ fn apply_tprel_reloc(
     site: &RelocSite<'_>,
 ) -> Result<(), C5Error> {
     use crate::c5::codegen::aarch64::patch;
-    if let Some((width, check)) = x86_64_tpoff_field(site.rtype)
+    if let Some((width, check)) =
+        x86_64_tpoff_field(site.rtype).or_else(|| tls_relax::x86_64_dtpoff_field(site.rtype))
         && site.machine == NativeMachine::X86_64
     {
         check_patch_bounds(text, patch_offset, width as usize)?;
@@ -5547,6 +5647,58 @@ mod tests {
         assert_eq!(merged.debug_info_text_relocs[0].merged_text_offset, ext_off);
         assert_eq!(&merged.debug_info[8..24], &[0u8; 16]);
     }
+    /// A thread-local's debug location takes its offset in the module's
+    /// block in either width: gcc's `.long x@dtpoff, 0` and clang's quad.
+    #[test]
+    fn a_debug_location_takes_the_thread_block_offset_in_either_width() {
+        use crate::c5::object::elf_reloc_types::R_X86_64_DTPOFF32;
+        let mut b = blank_object(NativeMachine::X86_64);
+        b.tls_bss_size = 0x10;
+        b.tls_align = 8;
+        let mut a = blank_object(NativeMachine::X86_64);
+        a.tls_data = alloc::vec![0; 16];
+        a.tls_align = 8;
+        a.symbols = alloc::vec![
+            NativeSymbol {
+                name: String::new(),
+                section: NativeSymSection::Undef,
+                value: 0,
+                size: 0,
+                binding: 0,
+                kind: 0,
+                visibility: 0,
+            },
+            NativeSymbol {
+                name: "tl".to_string(),
+                section: NativeSymSection::Tls,
+                value: 4,
+                size: 4,
+                binding: 0,
+                kind: 6,
+                visibility: 0,
+            },
+        ];
+        a.debug_info = alloc::vec![0xaa; 16];
+        a.debug_info[4..8].fill(0);
+        a.debug_info_relocs = alloc::vec![
+            NativeReloc {
+                offset: 0,
+                sym_idx: 1,
+                rtype: R_X86_64_DTPOFF32,
+                addend: 0,
+            },
+            NativeReloc {
+                offset: 8,
+                sym_idx: 1,
+                rtype: R_X86_64_DTPOFF64,
+                addend: 2,
+            },
+        ];
+        let merged = link_native_objects(&[b, a]).expect("link");
+        let at = |i: usize| u64::from_le_bytes(merged.debug_info[i..i + 8].try_into().unwrap());
+        assert_eq!([at(0), at(8)], [0x14, 0x16]);
+    }
+
     /// A thread-local reference from an object with no note fixups, as
     /// another compiler writes one: the field takes the offset from the
     /// thread pointer of `S + A` in the merged block, for a local
@@ -5658,6 +5810,263 @@ mod tests {
         );
         let err = link_native_objects(&objs).expect_err("0x2020 overflows the 12 bits");
         assert!(format!("{err}").contains("relocation truncated"), "{err}");
+    }
+
+    /// A: accessor code, `tl` at 4 of a 16-byte `.tdata` and a 0x2000-byte
+    /// `.tbss`; symbols 1 `tl`, 2 `ext`, 3 `__tls_get_addr`, 4 the module
+    /// base. B: `ext` at the start of its block, which lands at 0x2010.
+    fn tls_accessor(
+        machine: NativeMachine,
+        text: Vec<u8>,
+        relocs: &[(u64, usize, u32, i64)],
+    ) -> Vec<NativeObject> {
+        let sym = |name: &str, section, value, binding, kind| NativeSymbol {
+            name: name.to_string(),
+            section,
+            value,
+            size: 0,
+            binding,
+            kind,
+            visibility: 0,
+        };
+        let mut a = blank_object(machine);
+        a.tls_data = alloc::vec![0; 16];
+        a.tls_bss_size = 0x2000;
+        a.tls_align = 8;
+        a.text = text;
+        a.symbols = alloc::vec![
+            sym("", NativeSymSection::Undef, 0, 0, 0),
+            sym("tl", NativeSymSection::Tls, 4, 0, 6),
+            sym("ext", NativeSymSection::Undef, 0, 1, 6),
+            sym(TLS_GET_ADDR, NativeSymSection::Undef, 0, 1, 0),
+            sym(TLS_MODULE_BASE, NativeSymSection::Undef, 0, 1, 6),
+        ];
+        a.text_relocs = (relocs.iter())
+            .map(|&(offset, sym_idx, rtype, addend)| NativeReloc {
+                offset,
+                sym_idx,
+                rtype,
+                addend,
+            })
+            .collect();
+        let mut b = blank_object(machine);
+        b.tls_bss_size = 4;
+        b.tls_align = 4;
+        b.symbols = alloc::vec![
+            sym("", NativeSymSection::Undef, 0, 0, 0),
+            sym("ext", NativeSymSection::Tls, 0, 1, 6),
+        ];
+        alloc::vec![a, b]
+    }
+
+    /// Each x86-64 model's sequence becomes the local-exec one GNU ld and lld
+    /// make of it, without its `__tls_get_addr` call. The block, 0x2014 bytes
+    /// rounded to 0x2018, ends at the thread pointer: `ext` at -8, `tl` -0x2014.
+    #[test]
+    fn foreign_x86_64_thread_local_sequences_become_local_exec() {
+        use crate::c5::object::elf_reloc_types::{
+            R_X86_64_DTPOFF32, R_X86_64_GOTPC32_TLSDESC, R_X86_64_GOTPCRELX, R_X86_64_GOTTPOFF,
+            R_X86_64_TLSDESC_CALL, R_X86_64_TLSGD, R_X86_64_TLSLD,
+        };
+        let code: &[&[u8]] = &[
+            &[0x48, 0x8b, 0x05, 0, 0, 0, 0], // 0: mov ext@gottpoff(%rip), %rax
+            &[0x4c, 0x03, 0x25, 0, 0, 0, 0], // 7: add ext@gottpoff(%rip), %r12
+            &[0x48, 0x03, 0x0d, 0, 0, 0, 0], // 14: add ext@gottpoff(%rip), %rcx
+            &[0x4c, 0x8b, 0x0d, 0, 0, 0, 0], // 21: mov tl@gottpoff(%rip), %r9
+            &[0x66, 0x48, 0x8d, 0x3d, 0, 0, 0, 0], // 28: data16 lea ext@tlsgd(%rip), %rdi
+            &[0x66, 0x66, 0x48, 0xe8, 0, 0, 0, 0], // 36: call __tls_get_addr@plt
+            &[0x66, 0x48, 0x8d, 0x3d, 0, 0, 0, 0], // 44: the -fno-plt form
+            &[0x66, 0x48, 0xff, 0x15, 0, 0, 0, 0], // 52: call *__tls_get_addr@gotpcrel
+            &[0x48, 0x8d, 0x3d, 0, 0, 0, 0], // 60: lea tl@tlsld(%rip), %rdi
+            &[0xe8, 0, 0, 0, 0],             // 67: call __tls_get_addr@plt
+            &[0x8b, 0x80, 0, 0, 0, 0],       // 72: mov tl@dtpoff(%rax), %eax
+            &[0x48, 0x8d, 0x3d, 0, 0, 0, 0], // 78: lea tl@tlsld(%rip), %rdi
+            &[0xff, 0x15, 0, 0, 0, 0],       // 85: call *__tls_get_addr@gotpcrel
+            &[0x4c, 0x8d, 0x05, 0, 0, 0, 0], // 91: lea ext@tlsdesc(%rip), %r8
+            &[0xff, 0x10],                   // 98: call *ext@tlscall(%rax)
+            &[0x48, 0x8d, 0x05, 0, 0, 0, 0], // 100: lea base@tlsdesc(%rip), %rax
+            &[0xff, 0x10],                   // 107: call *base@tlscall(%rax)
+            &[0x64, 0x8b, 0x90, 0, 0, 0, 0], // 109: mov %fs:tl@dtpoff(%rax), %edx
+        ];
+        let relocs = [
+            (3, 2, R_X86_64_GOTTPOFF, -4),
+            (10, 2, R_X86_64_GOTTPOFF, -4),
+            (17, 2, R_X86_64_GOTTPOFF, -4),
+            (24, 1, R_X86_64_GOTTPOFF, -4),
+            (32, 2, R_X86_64_TLSGD, -4),
+            (40, 3, R_X86_64_PLT32, -4),
+            (48, 2, R_X86_64_TLSGD, -4),
+            (56, 3, R_X86_64_GOTPCRELX, -4),
+            (63, 1, R_X86_64_TLSLD, -4),
+            (68, 3, R_X86_64_PLT32, -4),
+            (74, 1, R_X86_64_DTPOFF32, 0),
+            (81, 1, R_X86_64_TLSLD, -4),
+            (87, 3, R_X86_64_GOTPCRELX, -4),
+            (94, 2, R_X86_64_GOTPC32_TLSDESC, -4),
+            (98, 2, R_X86_64_TLSDESC_CALL, 0),
+            (103, 4, R_X86_64_GOTPC32_TLSDESC, -4),
+            (107, 4, R_X86_64_TLSDESC_CALL, 0),
+            (112, 1, R_X86_64_DTPOFF32, 0),
+        ];
+        let objs = tls_accessor(NativeMachine::X86_64, code.concat(), &relocs);
+        let merged = link_native_objects(&objs).expect("link");
+        assert!(merged.imports.is_empty(), "{:?}", merged.imports);
+        let ext = (-8i32).to_le_bytes();
+        let tl = (-0x2014i32).to_le_bytes();
+        let load_tp = [0x64, 0x48, 0x8b, 0x04, 0x25, 0, 0, 0, 0];
+        let want: &[&[u8]] = &[
+            &[0x48, 0xc7, 0xc0],
+            &ext, // mov $-8, %rax
+            &[0x49, 0x81, 0xc4],
+            &ext, // add $-8, %r12
+            &[0x48, 0x8d, 0x89],
+            &ext, // lea -8(%rcx), %rcx
+            &[0x49, 0xc7, 0xc1],
+            &tl, // mov $-0x2014, %r9
+            &load_tp,
+            &[0x48, 0x8d, 0x80],
+            &ext, // lea -8(%rax), %rax
+            &load_tp,
+            &[0x48, 0x8d, 0x80],
+            &ext,
+            &[0x66; 3],
+            &load_tp,
+            &[0x8b, 0x80],
+            &tl, // mov -0x2014(%rax), %eax
+            &[0x66; 4],
+            &load_tp,
+            &[0x49, 0xc7, 0xc0],
+            &ext, // mov $-8, %r8
+            &[0x66, 0x90],
+            &[0x48, 0xc7, 0xc0, 0, 0, 0, 0], // mov $0, %rax
+            &[0x66, 0x90],
+            &[0x64, 0x8b, 0x90],
+            &tl, // mov %fs:-0x2014(%rax), %edx
+        ];
+        assert_eq!(&merged.text[..116], &want.concat()[..]);
+
+        // Refused: bytes not the sequence, a sequence without its call.
+        let err = |code: &[u8], relocs: &[(u64, usize, u32, i64)]| {
+            let objs = tls_accessor(NativeMachine::X86_64, code.to_vec(), relocs);
+            format!("{}", link_native_objects(&objs).expect_err("refused"))
+        };
+        let msg = err(
+            &[0x48, 0x8d, 0x05, 0, 0, 0, 0],
+            &[(3, 2, R_X86_64_GOTTPOFF, -4)],
+        );
+        assert!(msg.contains("cannot rewrite R_X86_64_GOTTPOFF"), "{msg}");
+        let msg = err(
+            &[
+                0x66, 0x48, 0x8d, 0x3d, 0, 0, 0, 0, 0x66, 0x66, 0x48, 0xe8, 0, 0, 0, 0,
+            ],
+            &[(4, 2, R_X86_64_TLSGD, -4)],
+        );
+        assert!(msg.contains("`__tls_get_addr`"), "{msg}");
+        let objs = tls_accessor(
+            NativeMachine::X86_64,
+            code.concat(),
+            &[(3, 2, R_X86_64_GOTTPOFF, -4)],
+        );
+        let msg = format!(
+            "{}",
+            link_native_objects_with_options(&objs, true).expect_err("a shared library")
+        );
+        assert!(msg.contains("unsupported R_X86_64_GOTTPOFF"), "{msg}");
+    }
+
+    /// The aarch64 counterparts, `movz` / `movk` of `ext`'s offset 0x2020 (the
+    /// block starts past the 16-byte TCB).
+    #[test]
+    fn foreign_aarch64_thread_local_sequences_become_local_exec() {
+        use crate::c5::object::elf_reloc_types::{
+            R_AARCH64_TLSDESC_ADD_LO12, R_AARCH64_TLSDESC_ADR_PAGE21, R_AARCH64_TLSDESC_CALL,
+            R_AARCH64_TLSDESC_LD64_LO12, R_AARCH64_TLSGD_ADD_LO12_NC, R_AARCH64_TLSGD_ADR_PAGE21,
+            R_AARCH64_TLSIE_ADR_GOTTPREL_PAGE21, R_AARCH64_TLSIE_LD64_GOTTPREL_LO12_NC,
+        };
+        let words = |w: &[u32]| -> Vec<u8> { w.iter().flat_map(|w| w.to_le_bytes()).collect() };
+        let nop = 0xd503_201f;
+        let code = words(&[
+            0x9000_0003, // 0: adrp x3, :gottprel:ext
+            0xf940_0063, // 4: ldr x3, [x3, :gottprel_lo12:ext]
+            0x9000_0000, // 8: adrp x0, :tlsgd:ext
+            0x9100_0000, // 12: add x0, x0, :tlsgd_lo12:ext
+            0x9400_0000, // 16: bl __tls_get_addr
+            nop,         // 20
+            0x9000_0000, // 24: adrp x0, :tlsdesc:ext
+            0xf940_0001, // 28: ldr x1, [x0, :tlsdesc_lo12:ext]
+            0x9100_0000, // 32: add x0, x0, :tlsdesc_lo12:ext
+            0xd63f_0020, // 36: blr x1
+        ]);
+        let relocs = [
+            (0, 2, R_AARCH64_TLSIE_ADR_GOTTPREL_PAGE21, 0),
+            (4, 2, R_AARCH64_TLSIE_LD64_GOTTPREL_LO12_NC, 0),
+            (8, 2, R_AARCH64_TLSGD_ADR_PAGE21, 0),
+            (12, 2, R_AARCH64_TLSGD_ADD_LO12_NC, 0),
+            (16, 3, R_AARCH64_CALL26, 0),
+            (24, 2, R_AARCH64_TLSDESC_ADR_PAGE21, 0),
+            (28, 2, R_AARCH64_TLSDESC_LD64_LO12, 0),
+            (32, 2, R_AARCH64_TLSDESC_ADD_LO12, 0),
+            (36, 2, R_AARCH64_TLSDESC_CALL, 0),
+        ];
+        let objs = tls_accessor(NativeMachine::Aarch64, code, &relocs);
+        let merged = link_native_objects(&objs).expect("link");
+        assert!(merged.imports.is_empty(), "{:?}", merged.imports);
+        let movz = |rd: u32| 0xd2a0_0000 | rd;
+        let movk = |rd: u32| 0xf280_0000 | 0x2020 << 5 | rd;
+        let want = words(&[
+            movz(3),
+            movk(3),
+            movz(0),
+            movk(0),
+            0xd53b_d041, // mrs x1, tpidr_el0
+            0x8b00_0020, // add x0, x1, x0
+            movz(0),
+            movk(0),
+            nop,
+            nop,
+        ]);
+        assert_eq!(&merged.text[..40], &want[..]);
+
+        // The `movk` continues the `movz` only in the register the page took.
+        let objs = tls_accessor(
+            NativeMachine::Aarch64,
+            words(&[0x9000_0003, 0xf940_0064]),
+            &relocs[..2],
+        );
+        let msg = format!("{}", link_native_objects(&objs).expect_err("x4 from x3"));
+        assert!(
+            msg.contains("cannot rewrite R_AARCH64_TLSIE_LD64_GOTTPREL_LO12_NC"),
+            "{msg}"
+        );
+    }
+
+    /// A thread-local a shared library defines is refused by name.
+    #[test]
+    fn a_thread_local_of_a_shared_library_is_refused_by_name() {
+        use crate::c5::object::elf_reloc_types::R_X86_64_GOTTPOFF;
+        let objs = tls_accessor(
+            NativeMachine::X86_64,
+            alloc::vec![0x48, 0x8b, 0x05, 0, 0, 0, 0],
+            &[(3, 2, R_X86_64_GOTTPOFF, -4)],
+        );
+        let lib = SharedLibrary {
+            soname: "libtl.so".to_string(),
+            machine: NativeMachine::X86_64,
+            exports: ["ext".to_string()].into_iter().collect(),
+            data_exports: Default::default(),
+            object_sizes: Default::default(),
+            export_symbols: Default::default(),
+            export_versions: Default::default(),
+            from_image: true,
+        };
+        let msg = format!(
+            "{}",
+            link_native_objects_with_shared_libs(&objs[..1], false, &[lib]).expect_err("refused")
+        );
+        assert!(
+            msg.contains("thread-local `ext` is defined in shared library `libtl.so`"),
+            "{msg}"
+        );
     }
 
     /// A shared-library data object an object reads directly, as

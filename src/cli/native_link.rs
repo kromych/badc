@@ -664,7 +664,7 @@ fn select_archive_members(
             // library sits after the archives on the line.
             if embedded.pool_loaded
                 || undefined.keys().all(|n| {
-                    badc::link_synthesized_symbol(n)
+                    badc::link_resolves_symbol(n)
                         || shared_libs.iter().any(|l| l.exports.contains(n))
                         || target_libc.as_mut().is_some_and(|l| l.admit(n))
                 })

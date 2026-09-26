@@ -10,7 +10,6 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use hashbrown::{HashMap, HashSet};
 
-use super::got::R_X86_64_GOTPCRELX;
 use super::inputs::RawReloc;
 use super::sections::{is_debug_section, is_unwind_section};
 use super::{
@@ -305,7 +304,7 @@ impl<'a> LdsLinker<'a> {
                     let v = sa.wrapping_sub(p);
                     w(buf, site, &[v as u8]);
                 }
-                rt::R_X86_64_GOTPCREL | R_X86_64_GOTPCRELX | rt::R_X86_64_REX_GOTPCRELX => {
+                rt::R_X86_64_GOTPCREL | rt::R_X86_64_GOTPCRELX | rt::R_X86_64_REX_GOTPCRELX => {
                     // An import has no link-time address to relax to;
                     // the site keeps its load from the GOT slot.
                     if self.import_of.contains_key(&name()) {

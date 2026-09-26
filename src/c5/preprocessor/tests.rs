@@ -3329,6 +3329,15 @@ fn builtin_table_answers_all_three_roles() {
         ("__builtin_memcmp", "memcmp"),
         ("__builtin_abs", "abs"),
         ("__builtin_malloc", "malloc"),
+        ("__builtin_printf", "printf"),
+        ("__builtin_vsnprintf", "vsnprintf"),
+        ("__builtin_puts", "puts"),
+        ("__builtin_sqrt", "sqrt"),
+        ("__builtin_copysign", "copysign"),
+        ("__builtin_toupper", "toupper"),
+        ("__builtin_wcslen", "wcslen"),
+        ("__builtin__exit", "_exit"),
+        ("__builtin___clear_cache", "__clear_cache"),
     ] {
         assert!(
             builtins::has_builtin(name),
@@ -3350,6 +3359,38 @@ fn builtin_table_answers_all_three_roles() {
     }
     assert_eq!(builtins::library_alias("__builtin_clz"), None);
     assert_eq!(builtins::library_alias("strlen"), None);
+    // gcc's `__builtin_setjmp` / `__builtin_longjmp` take a five-word buffer,
+    // and the <math.h> classifications are macros, not library functions.
+    for name in [
+        "__builtin_setjmp",
+        "__builtin_longjmp",
+        "__builtin_isnan",
+        "__builtin_fpclassify",
+    ] {
+        assert_eq!(builtins::library_alias(name), None, "`{name}`");
+    }
+    // The classifications gcc folds from the operand are no calls, so a
+    // freestanding unit can take them.
+    for name in [
+        "__builtin_isdigit",
+        "__builtin_isascii",
+        "__builtin_toascii",
+    ] {
+        assert_eq!(builtins::library_alias(name), None, "`{name}`");
+        assert!(
+            builtins::has_builtin(name),
+            "__has_builtin({name}) must be 1"
+        );
+    }
+    // The binary search needs the list sorted, and a builtin that the
+    // other table supplies is not also an alias.
+    assert!(
+        builtins::LIBRARY_BUILTINS.windows(2).all(|w| w[0] < w[1]),
+        "the library builtins must be sorted and unique"
+    );
+    for b in builtins::BUILTINS {
+        assert_eq!(builtins::library_alias(b.name), None, "`{}`", b.name);
+    }
     // Library names a header binds: not seeded and not reported by
     // `__has_builtin`, but `#pragma intrinsic` registers them.
     for name in [

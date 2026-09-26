@@ -681,6 +681,15 @@ mod tests {
     }
 
     #[test]
+    fn header_declaring_finds_functions_a_header_defines() {
+        // A library function a header provides as a `static inline`
+        // definition rather than a prototype is found the same way.
+        assert_eq!(header_declaring("copysign"), Some("math.h"));
+        assert_eq!(header_declaring("strnlen"), Some("string.h"));
+        assert_eq!(header_declaring("imaxabs"), Some("inttypes.h"));
+    }
+
+    #[test]
     fn header_declaring_returns_none_for_unknown() {
         assert_eq!(header_declaring("definitely_not_in_any_header"), None);
     }

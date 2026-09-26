@@ -31,6 +31,12 @@
 #define __builtin_huge_vall() ((long double)(1.0e+308 * 10.0))
 #define __builtin_nan(s) (0.0 / 0.0)
 #define __builtin_nanf(s) ((float)(0.0 / 0.0))
+// The locale-independent classifications gcc folds whatever the library
+// provides, so freestanding code may take them: C99 5.2.1p3 makes the
+// decimal digits contiguous, and the ASCII range is the low seven bits.
+#define __builtin_isdigit(c) ((unsigned)(c) - '0' < 10u)
+#define __builtin_isascii(c) (((c) & ~0x7f) == 0)
+#define __builtin_toascii(c) ((c) & 0x7f)
 // Convert between the raw and "real" return address. Both are identity:
 // `__builtin_return_address` already strips the aarch64 authentication
 // code, and no supported target carries other flag bits there. gcc and

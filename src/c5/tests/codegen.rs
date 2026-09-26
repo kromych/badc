@@ -8362,6 +8362,24 @@ fn elf_undefined_names(bytes: &[u8]) -> alloc::vec::Vec<String> {
 }
 
 #[test]
+fn a_freestanding_unit_takes_the_isdigit_builtin_it_probes() {
+    // The shape of Linux's <linux/ctype.h>: `__builtin_isdigit` stands in
+    // for `isdigit` when `__has_builtin` reports it, in a unit with no
+    // library headers, so it folds from its operand as gcc folds it.
+    use crate::{CompileOptions, Compiler, Target};
+    let src = "#if __has_builtin(__builtin_isdigit)\n\
+               #define isdigit(c) __builtin_isdigit(c)\n\
+               #endif\n\
+               int digits(const char *s) { int n = 0; while (isdigit(*s++)) n++; return n; }\n";
+    let opts = CompileOptions::default()
+        .with_no_entry_point(true)
+        .with_nostdinc(true);
+    Compiler::with_options(src.to_string(), Target::LinuxAarch64, opts)
+        .compile()
+        .expect("__builtin_isdigit needs no library function");
+}
+
+#[test]
 fn nostdinc_declines_the_auto_include_retry() {
     // A unit built with `-nostdinc` asked for no library headers, so the
     // C99 7.1.4p2 recovery must not splice one in: the undeclared-function

@@ -414,11 +414,17 @@ Microsoft x64 convention places both by size.
   operation too, and select `bswap` on x86_64 and `rev` on aarch64.
   `__builtin_unreachable` lowers to a trap, so reaching one aborts.
   `__builtin_has_attribute` is accepted and always folds to 0.
-  The remaining string, allocation and absolute-value `__builtin_`
-  spellings are equivalent to the library function of the same name, which
-  the parser binds them to through the symbol table -- a unit that defines
-  a macro of the library name (as the fortified string headers do) still
-  gets the builtin from the `__builtin_` spelling. A few
+  The `__builtin_` spelling of a library function that gcc or clang provides
+  as the function itself (the stdio, stdlib, string, ctype, wide-character
+  and math sets among them, 254 in all) is equivalent to the library
+  function of the same name, which the parser binds it to through the
+  symbol table: the call takes the function's declaration, a header the
+  unit did not include is included as for the plain name, and a unit that
+  defines a macro of the library name (as the fortified string headers do)
+  still gets the builtin from the `__builtin_` spelling. gcc's
+  `__builtin_setjmp` / `__builtin_longjmp`, which take a five-word buffer,
+  are not among them, and `__builtin_isdigit`, `__builtin_isascii` and
+  `__builtin_toascii` fold from their operand as gcc folds them. A few
   (`__builtin_strlen`, `strcmp`, `strncmp`, `memcmp`, `abs` and its wider
   forms) additionally constant-fold on literal operands. The hints with no
   code-generation effect and the infinity / NaN constants stay macros in

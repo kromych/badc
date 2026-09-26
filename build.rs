@@ -272,7 +272,8 @@ fn emit_version_minimums() -> String {
 }
 
 /// Walk `libc/include/*.h`, extract every `#pragma binding(...)`
-/// local symbol and every function-prototype identifier, and emit
+/// local symbol, every function-prototype identifier and every function
+/// a `static inline` definition provides, and emit
 /// `$OUT_DIR/binding_to_header.rs` as a sorted `&[(&str, &[&str])]`
 /// const slice. The compiler's `headers::header_declaring(name)`
 /// then does an O(log N) lookup instead of substring-scanning every
@@ -403,7 +404,9 @@ fn extract_prototype_names(body: &str) -> Vec<String> {
     // ends with `);`. Walk word-bounded identifiers on the line and
     // pick the last one immediately followed by `(` -- the lead-in
     // identifiers are return-type / storage-class / cv-qualifier
-    // tokens (`int`, `void`, `static`, `const`, `extern`, ...).
+    // tokens (`int`, `void`, `static`, `const`, `extern`, ...). A
+    // `static inline` definition's line names its function first, the
+    // parameter list following on it or on the next lines.
     //
     // Track outer-brace depth across lines so call expressions inside
     // a `static inline` function body (e.g., `buf = malloc(32);` in
@@ -415,14 +418,17 @@ fn extract_prototype_names(body: &str) -> Vec<String> {
     for raw in body.lines() {
         let trimmed = raw.trim_start();
         let directive_or_comment = trimmed.starts_with('#') || trimmed.starts_with("//");
-        if !directive_or_comment
-            && brace_depth == 0
-            && paren_depth == 0
-            && raw.trim_end().ends_with(");")
-            && let Some(name) = last_call_id(raw)
-            && !is_c_keyword(&name)
-        {
-            out.push(name);
+        if !directive_or_comment && brace_depth == 0 && paren_depth == 0 {
+            let name = if raw.trim_end().ends_with(");") {
+                call_ids(raw).last().copied()
+            } else if is_inline_definition(trimmed) {
+                call_ids(raw).first().copied()
+            } else {
+                None
+            };
+            if let Some(name) = name.filter(|n| !is_c_keyword(n)) {
+                out.push(name.to_string());
+            }
         }
         // Track brace / paren depth for the next line. Skip the body
         // of `// ...` and `#...` lines; both are line-scoped, so
@@ -434,9 +440,16 @@ fn extract_prototype_names(body: &str) -> Vec<String> {
     out
 }
 
-fn last_call_id(line: &str) -> Option<String> {
+/// Whether `line` opens a `static inline` function definition.
+fn is_inline_definition(line: &str) -> bool {
+    line.strip_prefix("static ")
+        .is_some_and(|rest| rest.starts_with("inline ") || rest.starts_with("__inline"))
+}
+
+/// The identifiers on `line` that a `(` follows, in order.
+fn call_ids(line: &str) -> Vec<&str> {
     let bytes = line.as_bytes();
-    let mut last_id: Option<(usize, usize)> = None;
+    let mut ids = Vec::new();
     let mut i = 0;
     while i < bytes.len() {
         let b = bytes[i];
@@ -450,13 +463,13 @@ fn last_call_id(line: &str) -> Option<String> {
                 j += 1;
             }
             if j < bytes.len() && bytes[j] == b'(' {
-                last_id = Some((start, i));
+                ids.push(&line[start..i]);
             }
         } else {
             i += 1;
         }
     }
-    last_id.map(|(s, e)| line[s..e].to_string())
+    ids
 }
 
 fn update_depth(line: &str, brace: &mut i32, paren: &mut i32) {

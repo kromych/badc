@@ -48,11 +48,15 @@ pub(crate) fn link_image(cli: &Cli, inputs: Inputs, stdin: &StdinSource) {
     // independent one takes its data relocations at load time (ELF
     // ET_DYN, PE base relocations, Mach-O dyld rebases), so a relocated
     // `const` cannot ride the read-only prefix and must not cost the
-    // unit's pure `const` objects their place in it. TODO: compile for
-    // a placed image (`-no-pie`, `--freestanding`) when one is linked.
+    // unit's pure `const` objects their place in it. A placed ELF image
+    // resolves every address at link time, so its sources compile as a
+    // static link's `-fno-pic -c` objects do.
+    let placed = cli.mode == Mode::NativeExecutable
+        && cli.exec_form().placed()
+        && cli.target.binary_format() == badc::BinaryFormat::Elf;
     let reloc_opts = cli
         .codegen
-        .relocatable_options(cli.front.optimize, true, &cli.front.diag);
+        .relocatable_options(cli.front.optimize, !placed, &cli.front.diag);
     // `.c` -> in-memory native ELF64 ET_REL: each source compiles
     // straight to ET_REL bytes that `parse_native_elf` reads back, so no
     // intermediate `.o` is written to disk.

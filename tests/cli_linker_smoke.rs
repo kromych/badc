@@ -3769,6 +3769,80 @@ fn static_link_objects_address_tables_absolutely() {
     }
 }
 
+// A placed image resolves every address at link time, so the sources a
+// placed link compiles take the code of a `-fno-pic -c` object: the one-step
+// freestanding image is the image of that object, byte for byte, and not the
+// image of the default `-c` object. A hosted `-no-pie` image built the same
+// way runs.
+#[test]
+fn a_placed_link_compiles_its_sources_as_a_static_links_objects() {
+    let dir = tempdir("placed-sources");
+    let src = write_source(
+        &dir,
+        "u.c",
+        "static const char *const names[] = {\"zero\", \"one\", \"two\", \"three\"};\n\
+         static int hits[4];\n\
+         __attribute__((noinline)) static int pick(int x) {\n\
+           switch (x) {\n\
+           case 0: return 10; case 1: return 11; case 2: return 12; case 3: return 13;\n\
+           case 4: return 14; case 5: return 15; case 6: return 16; case 7: return 17;\n\
+           default: return -1;\n\
+           }\n\
+         }\n\
+         int start_c(int argc) { hits[argc & 3]++; return pick(argc) + names[argc & 3][0] + hits[1]; }\n",
+    );
+    let badc_run = |args: &[&str], out: &Path| {
+        run(
+            Command::new(badc()).arg("-q").args(args).arg("-o").arg(out),
+            "badc",
+        );
+        std::fs::read(out).expect("read the output")
+    };
+    for target in ["--target=linux-x64", "--target=linux-aarch64"] {
+        let placed = [target, "--freestanding", "--entry=start_c"];
+        let one = badc_run(
+            &[&placed[..], &["-O", src.to_str().unwrap()]].concat(),
+            &dir.join("one"),
+        );
+        let obj = dir.join("u.o");
+        let obj_path = obj.to_str().unwrap();
+        badc_run(
+            &[target, "-O", "-fno-pic", "-c", src.to_str().unwrap()],
+            &obj,
+        );
+        let two = badc_run(&[&placed[..], &[obj_path]].concat(), &dir.join("two"));
+        assert!(
+            one == two,
+            "{target}: the one-step image is the -fno-pic object's"
+        );
+        badc_run(&[target, "-O", "-c", src.to_str().unwrap()], &obj);
+        let pic = badc_run(&[&placed[..], &[obj_path]].concat(), &dir.join("pic"));
+        assert!(
+            one != pic,
+            "{target}: the default -c object is laid out for a PIE"
+        );
+    }
+    if !host_linux_target().is_empty() {
+        let main = write_source(
+            &dir,
+            "m.c",
+            "int start_c(int argc);\nint main(int argc, char **argv) { (void)argv; return start_c(argc) - 'o' - 11 - 1; }\n",
+        );
+        let exe = dir.join("hosted");
+        badc_run(
+            &[
+                "-O",
+                "-no-pie",
+                main.to_str().unwrap(),
+                src.to_str().unwrap(),
+            ],
+            &exe,
+        );
+        let out = Command::new(&exe).output().expect("run the image");
+        assert_eq!(out.status.code(), Some(0), "the -no-pie image computes 0");
+    }
+}
+
 // gcc's spellings for the linker's own arguments reach the link: a map
 // named through `-Wl,` is written, an operand split across `-Xlinker`
 // groups binds, and an option the link does not implement is named.

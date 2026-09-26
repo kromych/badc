@@ -102,10 +102,11 @@ Multi-TU knobs:
   -pie, -no-pie            Link an ELF executable position-independent
                            (`ET_DYN`, the default) or at its link
                            address (`ET_EXEC`), where the absolute
-                           fields of a `-fno-pic` object resolve. The
-                           last one wins; `-c` and `--shared` ignore
-                           both. A Mach-O or PE executable is always
-                           position-independent.
+                           fields of a `-fno-pic` object resolve and
+                           the sources the link compiles take the
+                           `-fno-pic` code. The last one wins; `-c` and
+                           `--shared` ignore both. A Mach-O or PE
+                           executable is always position-independent.
   --subsystem=<kind>       Stamp the PE subsystem: console, windows,
                            native, efi_application,
                            efi_boot_service_driver,

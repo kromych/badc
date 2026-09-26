@@ -2816,6 +2816,16 @@ fn enum_used_before_definition() {
 }
 
 #[test]
+fn type_name_function_of_function_pointer_typedef() {
+    // C99 6.7.6: a function suffix in a type name derives from a
+    // function-pointer typedef base as from any other.
+    assert_eq!(
+        run_fixture("type_name_function_of_function_pointer_typedef.c"),
+        0
+    );
+}
+
+#[test]
 fn tentative_definition_completed_later() {
     // C99 6.9.2p2: an object declared while its type was incomplete is sized
     // and aligned by the type the unit ends with.

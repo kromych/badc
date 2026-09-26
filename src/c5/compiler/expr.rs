@@ -5818,13 +5818,11 @@ impl Compiler {
         if self.lex.tk == '(' {
             let abs = if self.lex.peek_after_whitespace(b'*') {
                 self.parse_abstract_ptr_declarator(true)?
-            } else if t.fn_ty.is_none() {
+            } else {
                 self.next()?;
                 let pp = self.parse_type_name_params()?;
                 let derivations = alloc::vec![Derivation::Function(Some(pp))];
                 super::declarator::AbstractDecl { derivations }
-            } else {
-                super::declarator::AbstractDecl::default()
             };
             for step in abs.derivations.into_iter().rev() {
                 match step {

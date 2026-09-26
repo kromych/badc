@@ -3417,6 +3417,14 @@ fn type_name_array_bound_constraints() {
             needle,
         );
     }
+    // A typedef base takes the function suffix as well, and a function or
+    // an array is no result for it.
+    for base in ["typedef int t(int);", "typedef int t[3];"] {
+        expect_compile_error(
+            &alloc::format!("{base}\nint main(void) {{ return (int)sizeof(t (void)); }}"),
+            "function returning an array or a function",
+        );
+    }
 }
 
 #[test]

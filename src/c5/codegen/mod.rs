@@ -3295,6 +3295,9 @@ pub struct NativeOptions {
     /// before lowering. Same as `--dump-asm` for native code: a
     /// diagnostic emitted alongside the build. Off by default.
     pub dump_ssa: bool,
+    /// Check the SSA rules after each pass and stop at the first pass
+    /// that breaks them. A debug build of badc always checks.
+    pub verify_ssa: bool,
     /// Upper bound (in SSA `Inst` count) on a size-driven leaf function
     /// body that may be inlined at its call sites under `-O`. A body the
     /// source marked `inline` is measured against a multiple of it, and
@@ -3649,6 +3652,7 @@ impl NativeOptions {
             output_kind: OutputKind::Executable,
             debug_info: false,
             dump_ssa: false,
+            verify_ssa: false,
             inline_cap: 64,
             frame_larger_than: None,
             diag: crate::c5::diag::Config::new(),
@@ -3686,6 +3690,12 @@ impl NativeOptions {
     /// observability shape as `--dump-asm`.
     pub const fn with_dump_ssa(mut self) -> Self {
         self.dump_ssa = true;
+        self
+    }
+
+    /// Check the SSA rules after each pass, as a debug build always does.
+    pub const fn with_verify_ssa(mut self) -> Self {
+        self.verify_ssa = true;
         self
     }
 

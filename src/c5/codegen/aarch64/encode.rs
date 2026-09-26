@@ -2183,11 +2183,15 @@ impl super::ssa::emit_common::LowerTarget for Aarch64Lower {
     /// matching reads the `base + index * scale` shape a fused node would
     /// hide, and after the divide pairing, which is what leaves `n - q*d`
     /// behind.
-    fn late_opt_passes(&mut self, funcs: &mut Vec<crate::c5::ir::FunctionSsa>) {
-        super::ssa::emit_common::time_pass_arch("passes::index_ext::run", Self::ARCH, || {
+    fn late_opt_passes(
+        &mut self,
+        funcs: &mut Vec<crate::c5::ir::FunctionSsa>,
+        pipeline: super::ssa::emit_common::Pipeline,
+    ) {
+        pipeline.run("passes::index_ext::run", funcs, |funcs| {
             crate::c5::codegen::passes::index_ext::run(funcs);
         });
-        super::ssa::emit_common::time_pass_arch("passes::mul_add::run", Self::ARCH, || {
+        pipeline.run("passes::mul_add::run", funcs, |funcs| {
             crate::c5::codegen::passes::mul_add::run(funcs);
         });
     }

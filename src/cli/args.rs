@@ -127,6 +127,7 @@ pub(crate) struct Codegen {
     /// reported against; `None` reports nothing.
     pub(crate) frame_larger_than: Option<u64>,
     pub(crate) dump_ssa: bool,
+    pub(crate) verify_ssa: bool,
     pub(crate) no_fp_regs: bool,
     pub(crate) strict_align: bool,
     pub(crate) jump_tables: bool,
@@ -157,6 +158,7 @@ impl Default for Codegen {
             inline_cap: 64,
             frame_larger_than: None,
             dump_ssa: false,
+            verify_ssa: false,
             no_fp_regs: false,
             strict_align: false,
             jump_tables: true,
@@ -696,6 +698,7 @@ impl Parser {
             "-c" | "--compile-only" => self.compile_only = true,
             "--freestanding" => self.freestanding = true,
             "--dump-ssa" => self.codegen.dump_ssa = true,
+            "--verify-ssa" => self.codegen.verify_ssa = true,
             // Silence informational output; errors and warnings stay.
             "-q" | "--quiet" => self.quiet = true,
             "-h" | "--help" => self.print = Some(USAGE),
@@ -2056,6 +2059,9 @@ impl Codegen {
         }
         if self.dump_ssa {
             opts = opts.with_dump_ssa();
+        }
+        if self.verify_ssa {
+            opts = opts.with_verify_ssa();
         }
         opts.output_kind = badc::OutputKind::Relocatable;
         opts

@@ -1888,7 +1888,12 @@ impl super::ssa::emit_common::LowerTarget for X64Lower<'_> {
     const FILE_ASM_ALIGN_POW2: bool = false;
     const FILE_ASM_COMMENTS: crate::c5::asm::AsmComments = crate::c5::asm::AsmComments::X86;
 
-    fn late_opt_passes(&mut self, _funcs: &mut Vec<crate::c5::ir::FunctionSsa>) {}
+    fn late_opt_passes(
+        &mut self,
+        _funcs: &mut Vec<crate::c5::ir::FunctionSsa>,
+        _pipeline: super::ssa::emit_common::Pipeline,
+    ) {
+    }
 
     fn note_callees(&mut self, funcs: &[crate::c5::ir::FunctionSsa]) {
         self.conv_targets = funcs

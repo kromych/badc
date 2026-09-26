@@ -29,7 +29,7 @@
 use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 
-use super::super::ssa::mem2reg::{dominators, postorder, predecessors, successors};
+use super::super::ssa::mem2reg::{DomOrder, dominators, postorder, predecessors, successors};
 use crate::c5::ir::{BlockId, FunctionSsa, Inst, Terminator};
 
 /// Sentinel matching `mem2reg`'s undefined immediate dominator.
@@ -314,77 +314,6 @@ fn dominates(a: BlockId, b: BlockId, idom: &[BlockId]) -> bool {
         x = up;
     }
     a == 0 && idom[b as usize] != NO_BLOCK
-}
-
-/// Entry / exit numbering of the immediate-dominator forest, so an
-/// ancestor test is two comparisons instead of a walk up the chain.
-/// A per-edge query against the walk costs the tree depth, which on a
-/// long chain of sequential regions is the block count.
-struct DomOrder {
-    /// Preorder entry number per block; `u32::MAX` for a block the
-    /// forest walk never reached (no valid immediate dominator).
-    tin: Vec<u32>,
-    /// Exit number: the largest `tin` in the block's subtree.
-    tout: Vec<u32>,
-}
-
-impl DomOrder {
-    fn build(idom: &[BlockId]) -> Self {
-        let n = idom.len();
-        // Children per block, plus the roots: a block whose immediate
-        // dominator is absent or itself heads its own tree.
-        let mut child_head: Vec<u32> = alloc::vec![u32::MAX; n];
-        let mut child_next: Vec<u32> = alloc::vec![u32::MAX; n];
-        let mut roots: Vec<BlockId> = Vec::new();
-        for b in (0..n).rev() {
-            let up = idom[b];
-            if up == NO_BLOCK || up as usize == b || up as usize >= n {
-                roots.push(b as BlockId);
-            } else {
-                child_next[b] = child_head[up as usize];
-                child_head[up as usize] = b as u32;
-            }
-        }
-        let mut tin = alloc::vec![u32::MAX; n];
-        let mut tout = alloc::vec![0u32; n];
-        let mut clock = 0u32;
-        let mut stack: Vec<(BlockId, bool)> = Vec::new();
-        for &r in &roots {
-            stack.push((r, false));
-            while let Some((b, done)) = stack.pop() {
-                if done {
-                    tout[b as usize] = clock - 1;
-                    continue;
-                }
-                if tin[b as usize] != u32::MAX {
-                    continue; // a cycle in `idom` reaches this twice
-                }
-                tin[b as usize] = clock;
-                clock += 1;
-                stack.push((b, true));
-                let mut c = child_head[b as usize];
-                while c != u32::MAX {
-                    stack.push((c as BlockId, false));
-                    c = child_next[c as usize];
-                }
-            }
-        }
-        DomOrder { tin, tout }
-    }
-
-    /// Same relation as [`dominates`], read off the numbering.
-    fn dominates(&self, a: BlockId, b: BlockId, idom: &[BlockId]) -> bool {
-        if a == b {
-            return true;
-        }
-        let (ta, tb) = (self.tin[a as usize], self.tin[b as usize]);
-        if ta != u32::MAX && tb != u32::MAX && ta < tb && tb <= self.tout[a as usize] {
-            return true;
-        }
-        // A chain that breaks before the entry block leaves the walk
-        // short of it; the entry still dominates every reachable block.
-        a == 0 && idom[b as usize] != NO_BLOCK
-    }
 }
 
 /// A retreating edge (target at or before the source in RPO) whose

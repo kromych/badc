@@ -903,7 +903,7 @@ fn is_inline_candidate(
             say(format_args!("aggregate descriptor {i} out of range"));
             return false;
         };
-        let class = classify_aggregate(d.size, d.align, &d.fields, abi, true);
+        let class = classify_aggregate(d, abi, true);
         let reproducible = matches!(class, AggClass::ReturnIndirect)
             || matches!(class, AggClass::Regs(ref regs) if !regs.is_empty());
         if !reproducible {

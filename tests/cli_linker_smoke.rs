@@ -6032,6 +6032,102 @@ fn long_double_calls_cross_the_system_compiler_boundary() {
     );
 }
 
+// Unions and structs of floating-point members cross the system compiler
+// boundary both ways as the platform passes them. AAPCS64 gives a union as
+// many HFA elements as its largest member and a struct the sum of its
+// members', so `union { double a, b; }` is one `double`, and padding makes
+// no HFA; System V AMD64 classes the same shapes by eightbyte.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn homogeneous_aggregates_cross_the_system_compiler_boundary() {
+    let Some(cc) = host_cc() else {
+        eprintln!(
+            "skipping homogeneous_aggregates_cross_the_system_compiler_boundary: no system C compiler"
+        );
+        return;
+    };
+    let common = "union u1 { double a; double b; };\n\
+        union f2 { float f[2]; struct { float x, y; } p; };\n\
+        union f3 { float f[3]; struct { float x, y; } p; };\n\
+        union d3 { double d[3]; struct { double a, b; } s; };\n\
+        union fd { float f; double d; };\n\
+        struct nest { double x; union { double y; double z[1]; } u; double w; };\n\
+        struct arr { union { float a; float b; } u[3]; };\n\
+        struct pad { float a; float b __attribute__((aligned(8))); };\n\
+        static double take_u1(union u1 u, double x) { return u.b * 10 + x; }\n\
+        static double take_f2(union f2 u, float x) { return u.p.x * 100 + u.f[1] * 10 + x; }\n\
+        static double take_f3(union f3 u, double x)\n\
+        { return u.f[0] * 1000 + u.p.y * 100 + u.f[2] * 10 + x; }\n\
+        static double take_d3(double w, union d3 u, double x)\n\
+        { return w * 1000 + u.s.a * 100 + u.s.b * 10 + u.d[2] + x; }\n\
+        static double take_fd(union fd u, double x) { return u.d * 10 + x; }\n\
+        static double take_nest(struct nest s, double x)\n\
+        { return s.x * 1000 + s.u.z[0] * 100 + s.w * 10 + x; }\n\
+        static double take_arr(struct arr s, float x)\n\
+        { return s.u[0].b * 100 + s.u[1].a * 10 + s.u[2].b + x; }\n\
+        static double take_pad(struct pad s, double x) { return s.a * 10 + s.b + x; }\n\
+        static union u1 make_u1(double v) { union u1 u; u.a = v; return u; }\n\
+        static union f2 make_f2(float a, float b) { union f2 u; u.p.x = a; u.f[1] = b; return u; }\n\
+        static union f3 make_f3(float a, float b, float c)\n\
+        { union f3 u; u.f[0] = a; u.p.y = b; u.f[2] = c; return u; }\n\
+        static union d3 make_d3(double a, double b, double c)\n\
+        { union d3 u; u.s.a = a; u.s.b = b; u.d[2] = c; return u; }\n\
+        static union fd make_fd(double v) { union fd u; u.d = v; return u; }\n\
+        static struct nest make_nest(double a, double b, double c)\n\
+        { struct nest s; s.x = a; s.u.y = b; s.w = c; return s; }\n\
+        static struct arr make_arr(float a, float b, float c)\n\
+        { struct arr s; s.u[0].a = a; s.u[1].b = b; s.u[2].a = c; return s; }\n\
+        static struct pad make_pad(float a, float b) { struct pad s; s.a = a; s.b = b; return s; }\n\
+        struct fns { double (*take_u1)(union u1, double); double (*take_f2)(union f2, float);\n\
+          double (*take_f3)(union f3, double); double (*take_d3)(double, union d3, double);\n\
+          double (*take_fd)(union fd, double); double (*take_nest)(struct nest, double);\n\
+          double (*take_arr)(struct arr, float); double (*take_pad)(struct pad, double);\n\
+          union u1 (*make_u1)(double); union f2 (*make_f2)(float, float);\n\
+          union f3 (*make_f3)(float, float, float); union d3 (*make_d3)(double, double, double);\n\
+          union fd (*make_fd)(double); struct nest (*make_nest)(double, double, double);\n\
+          struct arr (*make_arr)(float, float, float); struct pad (*make_pad)(float, float); };\n\
+        static int drive(const struct fns *f, int base)\n\
+        { union u1 u1 = { 4.0 };\n\
+          union f2 f2 = { { 1, 2 } };\n\
+          union f3 f3 = { { 1, 2, 3 } };\n\
+          union d3 d3 = { { 1, 2, 3 } };\n\
+          union fd fd;\n\
+          struct nest n = { 1, { 2 }, 3 };\n\
+          struct arr a = { { { 1 }, { 2 }, { 3 } } };\n\
+          struct pad p = { 1, 2 };\n\
+          fd.d = 0.5;\n\
+          if (f->take_u1(u1, 0.5) != 40.5) return base + 1;\n\
+          if (f->take_f2(f2, 0.5f) != 120.5) return base + 2;\n\
+          if (f->take_f3(f3, 0.5) != 1230.5) return base + 3;\n\
+          if (f->take_d3(4, d3, 0.5) != 4123.5) return base + 4;\n\
+          if (f->take_fd(fd, 0.25) != 5.25) return base + 5;\n\
+          if (f->take_nest(n, 0.5) != 1230.5) return base + 6;\n\
+          if (f->take_arr(a, 0.5f) != 123.5) return base + 7;\n\
+          if (f->take_pad(p, 0.5) != 12.5) return base + 8;\n\
+          if (f->make_u1(2.5).a != 2.5) return base + 9;\n\
+          f2 = f->make_f2(1, 2);\n\
+          if (f2.f[0] != 1 || f2.p.y != 2) return base + 10;\n\
+          f3 = f->make_f3(1, 2, 3);\n\
+          if (f3.p.x != 1 || f3.f[1] != 2 || f3.f[2] != 3) return base + 11;\n\
+          d3 = f->make_d3(1, 2, 3);\n\
+          if (d3.d[0] != 1 || d3.d[1] != 2 || d3.d[2] != 3) return base + 12;\n\
+          if (f->make_fd(0.75).d != 0.75) return base + 13;\n\
+          n = f->make_nest(1, 2, 3);\n\
+          if (n.x != 1 || n.u.z[0] != 2 || n.w != 3) return base + 14;\n\
+          a = f->make_arr(1, 2, 3);\n\
+          if (a.u[0].b != 1 || a.u[1].a != 2 || a.u[2].b != 3) return base + 15;\n\
+          p = f->make_pad(1, 2);\n\
+          if (p.a != 1 || p.b != 2) return base + 16;\n\
+          return 0; }\n";
+    drive_across_the_system_compiler(
+        &cc,
+        "hfa-union-interop",
+        common,
+        "take_u1, take_f2, take_f3, take_d3, take_fd, take_nest, take_arr, take_pad, \
+         make_u1, make_f2, make_f3, make_d3, make_fd, make_nest, make_arr, make_pad",
+    );
+}
+
 // Arguments past the registers cross the system compiler boundary both ways at
 // the offsets the platform puts them: Apple arm64 packs a named stack argument
 // at its own size and alignment, a homogeneous floating-point aggregate too,

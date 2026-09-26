@@ -1951,7 +1951,7 @@ impl Compiler {
         let conv = self.current_func_conv;
         let desc = super::long_double_agg_desc(self.target, conv)?;
         let abi = self.target.abi_for(conv);
-        match classify_aggregate(desc.size, desc.align, &desc.fields, abi, false) {
+        match classify_aggregate(&desc, abi, false) {
             AggClass::ByStack => Some(crate::c5::op::VaArgDesc::MEMORY),
             AggClass::Regs(c) if c == [RegClass::Vector] => Some(crate::c5::op::VaArgDesc::VECTOR),
             _ => None,

@@ -351,7 +351,7 @@ fn run_one(func: &mut FunctionSsa, target: Target, conv_of: &BTreeMap<usize, Cal
     };
     let ret_parts = func.ret_agg.and_then(|ai| {
         let desc = &func.agg_descs[ai as usize];
-        register_parts(desc.size, &desc.fields, abi, true)
+        register_parts(desc, abi, true)
             .filter(|parts| tape_carries(parts, desc.fields.len()))
             .map(|parts| (ai, parts))
     });
@@ -374,7 +374,7 @@ fn run_one(func: &mut FunctionSsa, target: Target, conv_of: &BTreeMap<usize, Cal
             continue;
         }
         let desc = &func.agg_descs[*d as usize];
-        let Some(parts) = register_parts(desc.size, &desc.fields, abi, false) else {
+        let Some(parts) = register_parts(desc, abi, false) else {
             continue;
         };
         if !tape_carries(&parts, desc.fields.len()) {
@@ -515,7 +515,7 @@ fn call_parts(
             };
             let desc = &func.agg_descs[ai as usize];
             let abi = target.abi_row(conv).abi();
-            let Some(parts) = register_parts(desc.size, &desc.fields, abi, true) else {
+            let Some(parts) = register_parts(desc, abi, true) else {
                 continue;
             };
             if slot >= 0 || !tape_carries(&parts, desc.fields.len()) {

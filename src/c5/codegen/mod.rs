@@ -701,13 +701,7 @@ impl ArgAgg {
     /// The classification every call site and callee entry takes for `desc`.
     pub(crate) fn new(desc: &crate::c5::ir::AggDesc, abi: Abi) -> Self {
         Self {
-            class: abi_classify::classify_aggregate(
-                desc.size,
-                desc.align,
-                &desc.fields,
-                abi,
-                false,
-            ),
+            class: abi_classify::classify_aggregate(desc, abi, false),
             size: desc.size,
             align: desc.align,
             arg_align: abi_classify::arg_align(desc.align, desc.member_align, abi),
@@ -4742,6 +4736,7 @@ mod abi_plan_tests {
             align: 16,
             member_align: 8,
             fields: alloc::vec![half(0), half(8)],
+            hfa: None,
         };
         for (target, pair, slot) in [
             (Target::LinuxAarch64, [1, 2], 8),

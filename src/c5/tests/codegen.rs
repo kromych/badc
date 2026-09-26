@@ -5530,6 +5530,92 @@ fn aggregate_parameter_classes_are_all_spliced() {
     }
 }
 
+/// AAPCS64 5.9.5 as gcc and clang apply it: a union holds as many HFA
+/// elements as its largest member, a struct the sum of its members', an
+/// anonymous member counts as one member, and padding, a bit-field of
+/// nonzero width, a vector or a flexible or zero-length array makes no
+/// HFA. `take` reads the `double` after the aggregate from the first SIMD
+/// register past its elements, and `make` returns one per element.
+#[test]
+fn homogeneous_aggregate_elements_follow_the_members() {
+    use crate::Target;
+    use crate::c5::codegen::ArgPlacement;
+    use crate::c5::codegen::abi_classify::fp_member_layout;
+    use crate::c5::codegen::ssa::emit_common::param_placements_common;
+    const SHAPES: &[(&str, u8)] = &[
+        ("union { double a; double b; }", 1),
+        ("union { float f[2]; struct { float x, y; } p; }", 2),
+        ("union { float f[3]; struct { float x, y; } p; }", 3),
+        ("union { double d[3]; struct { double a, b; } s; }", 3),
+        ("union { long double a; long double b; }", 1),
+        (
+            "struct { double x; union { double y; double z[1]; } u; double w; }",
+            3,
+        ),
+        ("struct { union { float a; float b; } u[3]; }", 3),
+        ("struct { float a; union { float b; float c; }; }", 2),
+        ("union { struct { float a, b; }; float c[2]; }", 2),
+        ("union { struct {} e; double d; }", 1),
+        ("struct { float a; int :0; float b; }", 2),
+        ("union { float f; double d; }", 0),
+        ("union { struct { float a, b; } s; double d; }", 0),
+        ("union { float a; int :8; }", 0),
+        ("struct { float a; int :8; float b; }", 0),
+        (
+            "struct { float a; float b __attribute__((aligned(8))); }",
+            0,
+        ),
+        ("struct __attribute__((aligned(16))) { double d; }", 0),
+        (
+            "union { struct __attribute__((aligned(8))) { float a; } s; float c[2]; }",
+            0,
+        ),
+        ("struct { double a; double b[]; }", 0),
+        ("struct { double a; double z[0]; }", 0),
+        ("struct { float __attribute__((vector_size(4))) v; }", 0),
+    ];
+    let mut src = alloc::string::String::new();
+    for (i, (ty, _)) in SHAPES.iter().enumerate() {
+        src += &alloc::format!(
+            "typedef {ty} T{i};\n\
+             double take{i}(T{i} t, double x) {{ (void)t; return x; }}\n\
+             T{i} make{i}(T{i} *p) {{ return *p; }}\n"
+        );
+    }
+    for target in [
+        Target::LinuxAarch64,
+        Target::MacOSAarch64,
+        Target::WindowsAarch64,
+    ] {
+        let program = crate::Compiler::with_options(
+            src.clone(),
+            target,
+            crate::CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .unwrap_or_else(|e| panic!("compile ({target:?}): {e}"));
+        let funcs =
+            crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+                .expect("ssa");
+        let func = |name: &str| funcs.iter().find(|f| f.name == name).expect(name);
+        for (i, &(ty, n)) in SHAPES.iter().enumerate() {
+            let take = func(&alloc::format!("take{i}"));
+            assert_eq!(
+                param_placements_common(take, target.abi()).get(1),
+                Some(&ArgPlacement::FpReg(n)),
+                "{target:?} `{ty}`: the next double's register"
+            );
+            let make = func(&alloc::format!("make{i}"));
+            let desc = &make.agg_descs[make.ret_agg.expect("an aggregate return") as usize];
+            assert_eq!(
+                fp_member_layout(desc).map_or(0, |m| m.len()),
+                usize::from(n),
+                "{target:?} `{ty}`: the result's SIMD registers"
+            );
+        }
+    }
+}
+
 /// C99 6.2.2: a static object nothing reachable references is
 /// unobservable. `.data` is packed before lowering, from the pre-inline
 /// call graph, so an object whose last reference the inliner removes --

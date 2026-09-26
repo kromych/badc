@@ -43,8 +43,9 @@
 use std::fmt::Write as _;
 use std::sync::OnceLock;
 
-use crate::c5::codegen::abi_classify::{AggClass, FlatField, ScalarKind, classify_aggregate};
+use crate::c5::codegen::abi_classify::{AggClass, FlatField, Hfa, ScalarKind, classify_aggregate};
 use crate::c5::codegen::ssa::reg_alloc::with_pool_size_override;
+use crate::c5::ir::AggDesc;
 use crate::{Compiler, NativeOptions, jit_run_with_options};
 
 // ---------------------------------------------------------------- prng
@@ -227,6 +228,25 @@ impl AggTy {
                 kind: l.sc.abi_kind(),
             })
             .collect()
+    }
+
+    /// The walker's descriptor of the type: with no unions or attributes,
+    /// leaves of one floating-point type filling it form the AAPCS64 HFA.
+    fn desc(&self, abi: crate::c5::codegen::Abi) -> AggDesc {
+        let n = self.leaves.len() as u32;
+        let kind = self.leaves.first().map(|l| l.sc.abi_kind());
+        let hfa = kind
+            .filter(|&k| self.leaves.iter().all(|l| l.sc.abi_kind() == k))
+            .filter(|&k| Hfa::base_width(k).is_some_and(|w| self.size == n * w))
+            .and_then(|k| Hfa::new(k, n))
+            .filter(|_| abi.arch == crate::c5::codegen::Arch::Aarch64);
+        AggDesc {
+            size: self.size,
+            align: self.align,
+            member_align: self.align,
+            fields: self.flat_fields(),
+            hfa,
+        }
     }
 }
 
@@ -1928,7 +1948,7 @@ fn shape_space_covers_the_class() {
         for ty in &p.types {
             leaf_hist[ty.leaves.len()] += 1;
             fp_leaf += ty.leaves.iter().filter(|l| l.sc.is_fp()).count();
-            match classify_aggregate(ty.size, ty.align, &ty.flat_fields(), abi, true) {
+            match classify_aggregate(&ty.desc(abi), abi, true) {
                 AggClass::ReturnIndirect => sret += 1,
                 AggClass::Regs(_) => in_regs += 1,
                 _ => {}

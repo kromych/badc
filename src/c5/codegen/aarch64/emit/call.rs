@@ -630,11 +630,7 @@ fn setup_indirect_result(
 ) {
     if let Some(ai) = ret_agg
         && agg_descs[ai as usize].size > 16
-        && super::abi_classify::fp_member_layout(
-            agg_descs[ai as usize].size,
-            &agg_descs[ai as usize].fields,
-        )
-        .is_none()
+        && super::abi_classify::fp_member_layout(&agg_descs[ai as usize]).is_none()
     {
         // An HFA larger than 16 bytes (three or four members) still returns
         // in v-registers, not through x8.
@@ -669,7 +665,7 @@ fn finish_call_result(
         let desc = &agg_descs[ai as usize];
         let size = desc.size;
         let slot = local_slot(ret_slot_off, func, frame);
-        if let Some(members) = super::abi_classify::fp_member_layout(desc.size, &desc.fields) {
+        if let Some(members) = super::abi_classify::fp_member_layout(desc) {
             // AAPCS64 6.9: an HFA result arrives with member k in v[k], a
             // Short Vector result whole in v0.
             let accesses = members
@@ -1046,7 +1042,7 @@ impl CallArgs<'_> {
             }
             let members = self.arg_aggs.get(i).copied().flatten().and_then(|idx| {
                 let d = &self.agg_descs[idx as usize];
-                super::abi_classify::fp_member_layout(d.size, &d.fields)
+                super::abi_classify::fp_member_layout(d)
             });
             let Some(base) = self.arg_int(code, i, self.scratch.primary) else {
                 return fail("Call: SIMD-class arg not int reg / spill");

@@ -12,7 +12,7 @@ use alloc::string::ToString;
 use alloc::vec::Vec;
 
 use super::super::codegen::Target;
-use super::super::codegen::abi_classify::{FlatField, ScalarKind};
+use super::super::codegen::abi_classify::{FlatField, Hfa, ScalarKind};
 use super::super::error::C5Error;
 use super::super::ir::AggDesc;
 use super::super::token::{Token, Ty};
@@ -925,30 +925,104 @@ pub(crate) fn flatten_struct_fields(
             if is_struct_value {
                 flatten_struct_fields(structs, target, struct_id_of(elem_ty), off, out);
             } else {
-                let bare = strip_unsigned(elem_ty);
-                let kind = if is_pointer_ty(elem_ty) {
-                    ScalarKind::Int
-                } else if is_long_double_scalar(elem_ty) {
-                    match target.long_double() {
-                        crate::c5::codegen::LongDoubleKind::F64 => ScalarKind::F64,
-                        crate::c5::codegen::LongDoubleKind::X87 => ScalarKind::F80,
-                        crate::c5::codegen::LongDoubleKind::Binary128 => ScalarKind::F128,
-                    }
-                } else if bare == Ty::Float as i64 {
-                    ScalarKind::F32
-                } else if bare == Ty::Double as i64 {
-                    ScalarKind::F64
-                } else {
-                    ScalarKind::Int
-                };
                 out.push(FlatField {
                     offset: off,
                     size: elem_size,
-                    kind,
+                    kind: scalar_kind(elem_ty, target),
                 });
             }
         }
     }
+}
+
+/// The leaf kind of a non-aggregate member of type `ty`.
+fn scalar_kind(ty: i64, target: Target) -> ScalarKind {
+    let bare = strip_unsigned(ty);
+    if is_pointer_ty(ty) {
+        ScalarKind::Int
+    } else if is_long_double_scalar(ty) {
+        match target.long_double() {
+            crate::c5::codegen::LongDoubleKind::F64 => ScalarKind::F64,
+            crate::c5::codegen::LongDoubleKind::X87 => ScalarKind::F80,
+            crate::c5::codegen::LongDoubleKind::Binary128 => ScalarKind::F128,
+        }
+    } else if bare == Ty::Float as i64 {
+        ScalarKind::F32
+    } else if bare == Ty::Double as i64 {
+        ScalarKind::F64
+    } else {
+        ScalarKind::Int
+    }
+}
+
+/// The AAPCS64 homogeneous floating-point aggregate (5.9.5) `struct_id`
+/// forms on `target`, decided from the members as gcc and clang do: a
+/// struct has the sum of its members' elements, a union the most any
+/// member has, an array its element's times its length, and no padding.
+pub(crate) fn homogeneous_fp_aggregate(
+    structs: &[StructDef],
+    target: Target,
+    struct_id: usize,
+) -> Option<Hfa> {
+    if !target.is_aarch64() {
+        return None;
+    }
+    let (kind, count) = hfa_elements(structs, target, struct_id)?;
+    Hfa::new(kind?, count)
+}
+
+/// The base kind, `None` before the first element, and the element count.
+fn hfa_elements(
+    structs: &[StructDef],
+    target: Target,
+    id: usize,
+) -> Option<(Option<ScalarKind>, u32)> {
+    let sd = &structs[id];
+    if sd.is_vector || sd.anon_bitfields.iter().any(|b| b.width > 0) {
+        return None;
+    }
+    let (mut base, mut count) = (None, 0u32);
+    let mut add = |kind: Option<ScalarKind>, n: u32| {
+        if kind.is_some() && base.is_some() && kind != base {
+            return None;
+        }
+        base = base.or(kind);
+        count = if sd.is_union {
+            count.max(n)
+        } else {
+            count.saturating_add(n)
+        };
+        Some(())
+    };
+    // An anonymous member counts as one member, not as its promoted fields.
+    for m in &sd.anon_members {
+        let (kind, n) = hfa_elements(structs, target, m.inner)?;
+        add(kind, n)?;
+    }
+    for (i, f) in sd.fields.iter().enumerate() {
+        let i = i as u32;
+        if sd
+            .anon_members
+            .iter()
+            .any(|m| (m.first..m.first + m.count).contains(&i))
+        {
+            continue;
+        }
+        if f.bit_width > 0 || f.array_size < 0 {
+            return None;
+        }
+        let (kind, n) = if is_struct_value_ty(f.ty) {
+            hfa_elements(structs, target, struct_id_of(f.ty))?
+        } else {
+            let kind = scalar_kind(f.ty, target);
+            Hfa::base_width(kind)?;
+            (Some(kind), 1)
+        };
+        let len = u32::try_from(f.array_size.max(1)).unwrap_or(u32::MAX);
+        add(kind, n.saturating_mul(len))?;
+    }
+    let width = base.and_then(Hfa::base_width).unwrap_or(0);
+    (sd.size as u64 == u64::from(count) * u64::from(width)).then_some((base, count))
 }
 
 /// The host-ABI descriptor a `long double` crosses a call as where the
@@ -974,6 +1048,7 @@ pub(crate) fn long_double_agg_desc(
             size: 16,
             kind,
         }],
+        hfa: Hfa::new(kind, 1),
     })
 }
 
@@ -1030,12 +1105,12 @@ pub(crate) fn host_abi_agg_desc_conv(
     let member_align = (structs[id].member_align.max(1)) as u32;
     let mut fields = Vec::new();
     flatten_struct_fields(structs, target, id, 0, &mut fields);
-    // AAPCS64 6.8.2: a homogeneous floating-point aggregate (1..4 members
-    // all the same FP type) passes in the FP argument bank, up to four
-    // registers -- a four-`double` HFA is 32 bytes, past the by-reference
-    // threshold. Admit it on AArch64 ahead of the size / FP-class gates.
-    let is_hfa = aarch64 && crate::c5::codegen::abi_classify::hfa_member_layout(&fields).is_some();
-    if !is_hfa {
+    // AAPCS64 6.8.2: a homogeneous floating-point aggregate passes in the
+    // FP argument bank, up to four registers -- a four-`double` HFA is 32
+    // bytes, past the by-reference threshold. Admit it on AArch64 ahead of
+    // the size / FP-class gates.
+    let hfa = homogeneous_fp_aggregate(structs, target, id);
+    if hfa.is_none() {
         if matches!(row, Target::WindowsX64) {
             // Win64: only a 1-, 2-, 4-, or 8-byte aggregate is passed by
             // value in a register; larger ones go by implicit reference,
@@ -1070,6 +1145,7 @@ pub(crate) fn host_abi_agg_desc_conv(
         align,
         member_align,
         fields,
+        hfa,
     })
 }
 
@@ -1090,11 +1166,7 @@ pub(crate) fn va_arg_by_ref(structs: &[StructDef], target: Target, ty: i64) -> b
         return false;
     }
     let id = struct_id_of(ty);
-    let hfa = || {
-        let mut fields = Vec::new();
-        flatten_struct_fields(structs, target, id, 0, &mut fields);
-        crate::c5::codegen::abi_classify::hfa_member_layout(&fields).is_some()
-    };
+    let hfa = || homogeneous_fp_aggregate(structs, target, id).is_some();
     match target {
         Target::LinuxAarch64 | Target::MacOSAarch64 => structs[id].size > 16 && !hfa(),
         Target::WindowsAarch64 => structs[id].size > 16,
@@ -1177,6 +1249,7 @@ pub(crate) fn struct_return_abi_conv(
             align,
             member_align,
             fields,
+            hfa: None,
         });
     }
     // Any other x87 aggregate returns in memory, the out-pointer path.
@@ -1188,27 +1261,23 @@ pub(crate) fn struct_return_abi_conv(
     }
     // AAPCS64 6.9: a homogeneous floating-point aggregate returns in up to
     // four consecutive FP registers (v0..v3), independent of the 16-byte
-    // integer-register threshold -- a four-`double` HFA is 32 bytes. The
-    // emit places each member by its `hfa_member_layout` offset.
-    if aarch64 && crate::c5::codegen::abi_classify::hfa_member_layout(&fields).is_some() {
-        return StructReturnAbi::Regs(AggDesc {
-            size,
-            align,
-            member_align,
-            fields,
-        });
+    // integer-register threshold -- a four-`double` HFA is 32 bytes.
+    let hfa = homogeneous_fp_aggregate(structs, target, id);
+    let desc = AggDesc {
+        size,
+        align,
+        member_align,
+        fields,
+        hfa,
+    };
+    if hfa.is_some() {
+        return StructReturnAbi::Regs(desc);
     }
     // A <=16B aggregate returns in registers: System V AMD64 3.2.3 places
     // each eightbyte in the integer (rax/rdx) or SSE (xmm0/xmm1) bank per its
     // classification, and the emit reads the per-eightbyte class to pick the
     // bank. An eightbyte shared by integer and FP members classifies as
     // Integer and returns in the integer registers bit-for-bit.
-    let desc = AggDesc {
-        size,
-        align,
-        member_align,
-        fields,
-    };
     if win64 {
         // Win64: a 1-, 2-, 4-, or 8-byte aggregate returns by value in
         // rax; any other size returns through a caller-allocated buffer

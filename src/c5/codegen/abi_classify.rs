@@ -1,7 +1,8 @@
 //! Host-ABI classification of aggregate (struct / union / vector)
 //! values for the platform calling conventions (System V AMD64, Win64,
-//! AAPCS64). Given an aggregate's size and the byte ranges + leaf
-//! kinds of its fields, decide whether it is passed / returned
+//! AAPCS64). Given an aggregate's [`AggDesc`] -- its size, the byte
+//! ranges + leaf kinds of its fields and its AAPCS64 homogeneous
+//! aggregate -- decide whether it is passed / returned
 //! in registers (and which class each register slot is), by an
 //! implicit reference, on the stack, or via a hidden return pointer.
 //!
@@ -12,6 +13,7 @@
 //! registers. This module only encodes the size / field-class rules.
 
 use super::{Abi, Arch};
+use crate::c5::ir::AggDesc;
 
 /// Leaf kind, after flattening nested structs / arrays / bitfields.
 /// Width is carried separately in [`FlatField`].
@@ -49,6 +51,52 @@ pub(crate) struct FlatField {
     pub offset: u32,
     pub size: u32,
     pub kind: ScalarKind,
+}
+
+/// A homogeneous floating-point aggregate (AAPCS64 5.9.5): one to four
+/// elements of one floating-point type, element `k` at `k * width`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Hfa {
+    kind: ScalarKind,
+    count: u8,
+}
+
+impl Hfa {
+    /// Element width of an HFA base type, `None` for any other kind.
+    pub(crate) fn base_width(kind: ScalarKind) -> Option<u32> {
+        match kind {
+            ScalarKind::F32 => Some(4),
+            ScalarKind::F64 => Some(8),
+            ScalarKind::F128 => Some(16),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn new(kind: ScalarKind, count: u32) -> Option<Self> {
+        Self::base_width(kind)?;
+        let count = u8::try_from(count).ok().filter(|n| (1..=4).contains(n))?;
+        Some(Self { kind, count })
+    }
+
+    pub(crate) fn count(self) -> usize {
+        usize::from(self.count)
+    }
+
+    /// `(byte_offset, byte_size)` of each element, in register order.
+    pub(crate) fn members(self) -> alloc::vec::Vec<(u32, u32)> {
+        let width = Self::base_width(self.kind).expect("`new` admits only a base type");
+        (0..u32::from(self.count))
+            .map(|k| (k * width, width))
+            .collect()
+    }
+
+    fn reg_class(self) -> RegClass {
+        if self.kind == ScalarKind::F128 {
+            RegClass::Vector
+        } else {
+            RegClass::Sse
+        }
+    }
 }
 
 /// The register class a single eightbyte / member slot occupies.
@@ -145,27 +193,20 @@ pub(crate) fn arg_align(align: u32, member_align: u32, abi: Abi) -> u32 {
     }
 }
 
-/// Classify an aggregate of `size` bytes (with the given flattened
-/// leaf `fields`) for `abi`. `is_return` picks the return-value
-/// rules (indirect via hidden pointer) over the argument rules
-/// (by-reference / by-stack).
-pub(crate) fn classify_aggregate(
-    size: u32,
-    _align: u32,
-    fields: &[FlatField],
-    abi: Abi,
-    is_return: bool,
-) -> AggClass {
+/// Classify the aggregate `desc` lays out for `abi`. `is_return` picks
+/// the return-value rules (indirect via hidden pointer) over the
+/// argument rules (by-reference / by-stack).
+pub(crate) fn classify_aggregate(desc: &AggDesc, abi: Abi, is_return: bool) -> AggClass {
     if abi.arch == Arch::X86_64 {
         if abi.position_indexed_args {
-            classify_win64(size, is_return)
+            classify_win64(desc.size, is_return)
         } else {
-            classify_sysv(size, fields, is_return)
+            classify_sysv(desc.size, &desc.fields, is_return)
         }
     } else {
         // AAPCS64: Linux / macOS aarch64 and Windows aarch64, which
         // follows AAPCS64 aggregate rules.
-        classify_aapcs64(size, fields, is_return)
+        classify_aapcs64(desc, is_return)
     }
 }
 
@@ -244,26 +285,20 @@ fn classify_sysv(size: u32, fields: &[FlatField], is_return: bool) -> AggClass {
     AggClass::Regs(classes)
 }
 
-/// AAPCS64 (6.4.2): a homogeneous floating-point aggregate (1..4
-/// members all the same FP type, after flattening nested
-/// aggregates / arrays) is passed / returned in consecutive FP
-/// registers. Otherwise a composite of 16 bytes or less occupies
-/// one or two GPRs; a larger one is passed by reference (argument)
-/// or via the x8 indirect-result register (return).
-fn classify_aapcs64(size: u32, fields: &[FlatField], is_return: bool) -> AggClass {
-    if let Some(n) = hfa_member_count(fields) {
-        // A binary128 member fills a whole vector register.
-        let class = if fields[0].kind == ScalarKind::F128 {
-            RegClass::Vector
-        } else {
-            RegClass::Sse
-        };
-        return AggClass::Regs(alloc::vec![class; n]);
+/// AAPCS64 (6.8.2): a homogeneous floating-point aggregate is passed /
+/// returned in consecutive SIMD registers, one per element. Otherwise
+/// a composite of 16 bytes or less occupies one or two GPRs; a larger
+/// one is passed by reference (argument) or via the x8 indirect-result
+/// register (return).
+fn classify_aapcs64(desc: &AggDesc, is_return: bool) -> AggClass {
+    if let Some(hfa) = desc.hfa {
+        return AggClass::Regs(alloc::vec![hfa.reg_class(); hfa.count()]);
     }
+    let size = desc.size;
     if size == 0 {
         return AggClass::Regs(alloc::vec::Vec::new());
     }
-    if let Some(c) = sole_vector_width(size, fields).and_then(vector_reg_class) {
+    if let Some(c) = sole_vector_width(size, &desc.fields).and_then(vector_reg_class) {
         return AggClass::Regs(alloc::vec![c]);
     }
     if size <= 16 {
@@ -276,50 +311,17 @@ fn classify_aapcs64(size: u32, fields: &[FlatField], is_return: bool) -> AggClas
     }
 }
 
-/// Return `Some(n)` (1..=4) when the flattened fields form a
-/// homogeneous floating-point aggregate: every leaf is the same FP
-/// type (all `F32`, all `F64` or all `F128`) and there are between one
-/// and four of them. `None` otherwise (any integer field, mixed
-/// precision, empty, or more than four members).
-fn hfa_member_count(fields: &[FlatField]) -> Option<usize> {
-    if fields.is_empty() || fields.len() > 4 {
-        return None;
-    }
-    let first = fields[0].kind;
-    if !matches!(first, ScalarKind::F32 | ScalarKind::F64 | ScalarKind::F128) {
-        return None;
-    }
-    if fields.iter().all(|f| f.kind == first) {
-        Some(fields.len())
-    } else {
-        None
-    }
-}
-
-/// When `fields` form a homogeneous floating-point aggregate, return each
-/// member's `(byte_offset, byte_size)` in declaration order; `None`
-/// otherwise. The aarch64 emit places member `k` in `v[k]` for an HFA
-/// argument or return (AAPCS64 6.4.2 / 6.8.2), so the layout drives the
-/// per-member FP load / store.
-pub(crate) fn hfa_member_layout(fields: &[FlatField]) -> Option<alloc::vec::Vec<(u32, u32)>> {
-    hfa_member_count(fields)?;
-    Some(fields.iter().map(|f| (f.offset, f.size)).collect())
-}
-
 /// `(byte_offset, byte_size)` of each SIMD register slot the aggregate
-/// occupies, in register order: an HFA's members (AAPCS64 6.4.2) or the
-/// single slot a Short Vector fills. `None` when the aggregate takes no
-/// SIMD register. The aarch64 emit drives its per-slot load / store
+/// occupies, in register order: an HFA's elements (AAPCS64 6.8.2) or
+/// the single slot a Short Vector fills. `None` when the aggregate takes
+/// no SIMD register. The aarch64 emit drives its per-slot load / store
 /// width from this, so a 16-byte vector moves as one `q` access instead
-/// of the HFA member's `d` or `s`.
-pub(crate) fn fp_member_layout(
-    size: u32,
-    fields: &[FlatField],
-) -> Option<alloc::vec::Vec<(u32, u32)>> {
-    if let Some(layout) = hfa_member_layout(fields) {
-        return Some(layout);
+/// of the HFA element's `d` or `s`.
+pub(crate) fn fp_member_layout(desc: &AggDesc) -> Option<alloc::vec::Vec<(u32, u32)>> {
+    if let Some(hfa) = desc.hfa {
+        return Some(hfa.members());
     }
-    let width = sole_vector_width(size, fields)?;
+    let width = sole_vector_width(desc.size, &desc.fields)?;
     vector_reg_class(width)?;
     Some(alloc::vec![(0, width)])
 }
@@ -335,28 +337,29 @@ pub(crate) struct RegPart {
     pub fields: alloc::vec::Vec<FlatField>,
 }
 
-/// The register parts of an aggregate of `size` bytes with `fields`,
-/// passed (`is_return` false) or returned in registers under `abi`, in
-/// register order: an HFA's members, else the eightbytes with their
-/// classes. `None` when it takes no register, and for a vector register,
-/// whose lanes no scalar access names.
+/// The register parts of the aggregate `desc` lays out, passed
+/// (`is_return` false) or returned in registers under `abi`, in register
+/// order: an HFA's elements, else the eightbytes with their classes.
+/// `None` when it takes no register, and for a vector register, whose
+/// lanes no scalar access names.
 pub(crate) fn register_parts(
-    size: u32,
-    fields: &[FlatField],
+    desc: &AggDesc,
     abi: Abi,
     is_return: bool,
 ) -> Option<alloc::vec::Vec<RegPart>> {
-    let AggClass::Regs(classes) = classify_aggregate(size, 0, fields, abi, is_return) else {
+    let AggClass::Regs(classes) = classify_aggregate(desc, abi, is_return) else {
         return None;
     };
     if classes.is_empty() || classes.contains(&RegClass::Vector) || classes.contains(&RegClass::X87)
     {
         return None;
     }
-    let layout: alloc::vec::Vec<(u32, u32, RegClass)> = match hfa_member_layout(fields) {
-        Some(members) if abi.arch != Arch::X86_64 => members
-            .iter()
-            .map(|&(off, msize)| (off, msize, RegClass::Sse))
+    let (size, fields) = (desc.size, &desc.fields);
+    let layout: alloc::vec::Vec<(u32, u32, RegClass)> = match desc.hfa {
+        Some(hfa) if abi.arch != Arch::X86_64 => hfa
+            .members()
+            .into_iter()
+            .map(|(off, msize)| (off, msize, RegClass::Sse))
             .collect(),
         _ => classes
             .iter()
@@ -393,6 +396,25 @@ mod tests {
         FlatField { offset, size, kind }
     }
 
+    /// An aggregate of `size` bytes with `fields` that is no HFA.
+    fn desc(size: u32, fields: &[FlatField]) -> AggDesc {
+        AggDesc {
+            size,
+            align: 8,
+            member_align: 8,
+            fields: fields.to_vec(),
+            hfa: None,
+        }
+    }
+
+    /// [`desc`] for an HFA of `count` elements of `kind`.
+    fn hfa(size: u32, fields: &[FlatField], kind: ScalarKind, count: u32) -> AggDesc {
+        AggDesc {
+            hfa: Some(Hfa::new(kind, count).expect("an HFA")),
+            ..desc(size, fields)
+        }
+    }
+
     fn sysv() -> Abi {
         Target::LinuxX64.abi()
     }
@@ -410,7 +432,7 @@ mod tests {
         // struct { int a, b; } -> 8 bytes, one INTEGER eightbyte.
         let f = [ff(0, 4, ScalarKind::Int), ff(4, 4, ScalarKind::Int)];
         assert_eq!(
-            classify_aggregate(8, 4, &f, sysv(), false),
+            classify_aggregate(&desc(8, &f), sysv(), false),
             AggClass::Regs(alloc::vec![RegClass::Integer])
         );
     }
@@ -420,7 +442,7 @@ mod tests {
         // struct { double x, y; } -> 16 bytes, two SSE eightbytes.
         let f = [ff(0, 8, ScalarKind::F64), ff(8, 8, ScalarKind::F64)];
         assert_eq!(
-            classify_aggregate(16, 8, &f, sysv(), false),
+            classify_aggregate(&desc(16, &f), sysv(), false),
             AggClass::Regs(alloc::vec![RegClass::Sse, RegClass::Sse])
         );
     }
@@ -430,7 +452,7 @@ mod tests {
         // struct { double d; int i; } -> 16 bytes: SSE, INTEGER.
         let f = [ff(0, 8, ScalarKind::F64), ff(8, 4, ScalarKind::Int)];
         assert_eq!(
-            classify_aggregate(16, 8, &f, sysv(), false),
+            classify_aggregate(&desc(16, &f), sysv(), false),
             AggClass::Regs(alloc::vec![RegClass::Sse, RegClass::Integer])
         );
     }
@@ -441,7 +463,7 @@ mod tests {
         // holding both an int and a float -> INTEGER.
         let f = [ff(0, 4, ScalarKind::Int), ff(4, 4, ScalarKind::F32)];
         assert_eq!(
-            classify_aggregate(8, 4, &f, sysv(), false),
+            classify_aggregate(&desc(8, &f), sysv(), false),
             AggClass::Regs(alloc::vec![RegClass::Integer])
         );
     }
@@ -451,7 +473,7 @@ mod tests {
         // struct { float a, b; } -> 8 bytes, one SSE eightbyte.
         let f = [ff(0, 4, ScalarKind::F32), ff(4, 4, ScalarKind::F32)];
         assert_eq!(
-            classify_aggregate(8, 4, &f, sysv(), false),
+            classify_aggregate(&desc(8, &f), sysv(), false),
             AggClass::Regs(alloc::vec![RegClass::Sse])
         );
     }
@@ -464,11 +486,11 @@ mod tests {
             ff(16, 8, ScalarKind::Int),
         ];
         assert_eq!(
-            classify_aggregate(24, 8, &f, sysv(), false),
+            classify_aggregate(&desc(24, &f), sysv(), false),
             AggClass::ByStack
         );
         assert_eq!(
-            classify_aggregate(24, 8, &f, sysv(), true),
+            classify_aggregate(&desc(24, &f), sysv(), true),
             AggClass::ReturnIndirect
         );
     }
@@ -478,24 +500,24 @@ mod tests {
         // `long double`, bare or as a struct's only member: X87 + X87UP.
         let f = [ff(0, 16, ScalarKind::F80)];
         assert_eq!(
-            classify_aggregate(16, 16, &f, sysv(), false),
+            classify_aggregate(&desc(16, &f), sysv(), false),
             AggClass::ByStack
         );
         assert_eq!(
-            classify_aggregate(16, 16, &f, sysv(), true),
+            classify_aggregate(&desc(16, &f), sysv(), true),
             AggClass::Regs(alloc::vec![RegClass::X87])
         );
         // A union with a `double`: the eightbyte merges X87 and SSE to
         // MEMORY, returned through the hidden pointer.
         let u = [ff(0, 16, ScalarKind::F80), ff(0, 8, ScalarKind::F64)];
         assert_eq!(
-            classify_aggregate(16, 16, &u, sysv(), true),
+            classify_aggregate(&desc(16, &u), sysv(), true),
             AggClass::ReturnIndirect
         );
         // Two members exceed two eightbytes with no SSE first: MEMORY.
         let two = [ff(0, 16, ScalarKind::F80), ff(16, 16, ScalarKind::F80)];
         assert_eq!(
-            classify_aggregate(32, 16, &two, sysv(), true),
+            classify_aggregate(&desc(32, &two), sysv(), true),
             AggClass::ReturnIndirect
         );
     }
@@ -511,7 +533,7 @@ mod tests {
             ff(12, 4, ScalarKind::F32),
         ];
         assert_eq!(
-            classify_aggregate(16, 4, &f, aapcs(), false),
+            classify_aggregate(&hfa(16, &f, ScalarKind::F32, 4), aapcs(), false),
             AggClass::Regs(alloc::vec![RegClass::Sse; 4])
         );
     }
@@ -520,8 +542,31 @@ mod tests {
     fn aapcs_hfa_two_doubles() {
         let f = [ff(0, 8, ScalarKind::F64), ff(8, 8, ScalarKind::F64)];
         assert_eq!(
-            classify_aggregate(16, 8, &f, aapcs(), true),
+            classify_aggregate(&hfa(16, &f, ScalarKind::F64, 2), aapcs(), true),
             AggClass::Regs(alloc::vec![RegClass::Sse, RegClass::Sse])
+        );
+    }
+
+    /// The registers follow the HFA's elements, not its leaves: the two
+    /// members of `union { double a, b; }` overlap in one element.
+    #[test]
+    fn aapcs_union_hfa_takes_a_register_per_element() {
+        let f = [ff(0, 8, ScalarKind::F64), ff(0, 8, ScalarKind::F64)];
+        let u = hfa(8, &f, ScalarKind::F64, 1);
+        for is_return in [false, true] {
+            assert_eq!(
+                classify_aggregate(&u, aapcs(), is_return),
+                AggClass::Regs(alloc::vec![RegClass::Sse])
+            );
+        }
+        assert_eq!(fp_member_layout(&u), Some(alloc::vec![(0, 8)]));
+        let parts = register_parts(&u, aapcs(), true).expect("one register");
+        assert_eq!(
+            parts
+                .iter()
+                .map(|p| (p.class, p.offset, p.width, p.fields.len()))
+                .collect::<alloc::vec::Vec<_>>(),
+            [(RegClass::Sse, 0, 8, 2)]
         );
     }
 
@@ -530,7 +575,7 @@ mod tests {
         // `long double`, bare or as a struct's only member: one quad.
         let one = [ff(0, 16, ScalarKind::F128)];
         assert_eq!(
-            classify_aggregate(16, 16, &one, aapcs(), false),
+            classify_aggregate(&hfa(16, &one, ScalarKind::F128, 1), aapcs(), false),
             AggClass::Regs(alloc::vec![RegClass::Vector])
         );
         let four = [
@@ -540,14 +585,14 @@ mod tests {
             ff(48, 16, ScalarKind::F128),
         ];
         assert_eq!(
-            classify_aggregate(64, 16, &four, aapcs(), true),
+            classify_aggregate(&hfa(64, &four, ScalarKind::F128, 4), aapcs(), true),
             AggClass::Regs(alloc::vec![RegClass::Vector; 4])
         );
         // Beside a `double` it is no HFA: the 32-byte composite goes by
         // reference.
         let mixed = [ff(0, 16, ScalarKind::F128), ff(16, 8, ScalarKind::F64)];
         assert_eq!(
-            classify_aggregate(32, 16, &mixed, aapcs(), false),
+            classify_aggregate(&desc(32, &mixed), aapcs(), false),
             AggClass::ByRef
         );
     }
@@ -558,7 +603,7 @@ mod tests {
         // composite in two GPRs.
         let f = [ff(0, 4, ScalarKind::F32), ff(8, 8, ScalarKind::F64)];
         assert_eq!(
-            classify_aggregate(16, 8, &f, aapcs(), false),
+            classify_aggregate(&desc(16, &f), aapcs(), false),
             AggClass::Regs(alloc::vec![RegClass::Integer, RegClass::Integer])
         );
     }
@@ -567,7 +612,7 @@ mod tests {
     fn aapcs_small_int_struct_one_gpr() {
         let f = [ff(0, 4, ScalarKind::Int)];
         assert_eq!(
-            classify_aggregate(4, 4, &f, aapcs(), false),
+            classify_aggregate(&desc(4, &f), aapcs(), false),
             AggClass::Regs(alloc::vec![RegClass::Integer])
         );
     }
@@ -580,11 +625,11 @@ mod tests {
             ff(16, 8, ScalarKind::Int),
         ];
         assert_eq!(
-            classify_aggregate(24, 8, &f, aapcs(), false),
+            classify_aggregate(&desc(24, &f), aapcs(), false),
             AggClass::ByRef
         );
         assert_eq!(
-            classify_aggregate(24, 8, &f, aapcs(), true),
+            classify_aggregate(&desc(24, &f), aapcs(), true),
             AggClass::ReturnIndirect
         );
     }
@@ -592,9 +637,11 @@ mod tests {
     #[test]
     fn aapcs_five_floats_not_hfa() {
         // 5 members exceeds the HFA limit of 4 -> 20B -> by ref / indirect.
+        assert_eq!(Hfa::new(ScalarKind::F32, 5), None);
+        assert_eq!(Hfa::new(ScalarKind::F64, 0), None);
         let f: alloc::vec::Vec<FlatField> = (0..5).map(|i| ff(i * 4, 4, ScalarKind::F32)).collect();
         assert_eq!(
-            classify_aggregate(20, 4, &f, aapcs(), false),
+            classify_aggregate(&desc(20, &f), aapcs(), false),
             AggClass::ByRef
         );
     }
@@ -609,11 +656,11 @@ mod tests {
     fn sysv_vector16_is_one_whole_vector_register() {
         // psABI 3.2.3: SSE + SSEUP, one xmm across its full width.
         assert_eq!(
-            classify_aggregate(16, 16, &vec(16), sysv(), false),
+            classify_aggregate(&desc(16, &vec(16)), sysv(), false),
             AggClass::Regs(alloc::vec![RegClass::Vector])
         );
         assert_eq!(
-            classify_aggregate(16, 16, &vec(16), sysv(), true),
+            classify_aggregate(&desc(16, &vec(16)), sysv(), true),
             AggClass::Regs(alloc::vec![RegClass::Vector])
         );
     }
@@ -622,11 +669,11 @@ mod tests {
     fn aapcs_vector16_is_one_whole_vector_register() {
         // AAPCS64 6.4.2 C.1: a 128-bit Short Vector in v[NSRN].
         assert_eq!(
-            classify_aggregate(16, 16, &vec(16), aapcs(), false),
+            classify_aggregate(&desc(16, &vec(16)), aapcs(), false),
             AggClass::Regs(alloc::vec![RegClass::Vector])
         );
         assert_eq!(
-            classify_aggregate(16, 16, &vec(16), aapcs(), true),
+            classify_aggregate(&desc(16, &vec(16)), aapcs(), true),
             AggClass::Regs(alloc::vec![RegClass::Vector])
         );
     }
@@ -637,7 +684,7 @@ mod tests {
         // is the plain SSE slot on both ABIs.
         for abi in [sysv(), aapcs()] {
             assert_eq!(
-                classify_aggregate(8, 8, &vec(8), abi, false),
+                classify_aggregate(&desc(8, &vec(8)), abi, false),
                 AggClass::Regs(alloc::vec![RegClass::Sse])
             );
         }
@@ -657,7 +704,7 @@ mod tests {
         let lanes: alloc::vec::Vec<FlatField> = (0..4).map(|i| ff(i, 1, ScalarKind::Int)).collect();
         for abi in [sysv(), aapcs()] {
             assert_eq!(
-                classify_aggregate(4, 4, &lanes, abi, false),
+                classify_aggregate(&desc(4, &lanes), abi, false),
                 AggClass::Regs(alloc::vec![RegClass::Integer])
             );
         }
@@ -671,16 +718,16 @@ mod tests {
         let lanes: alloc::vec::Vec<FlatField> =
             (0..32).map(|i| ff(i, 1, ScalarKind::Int)).collect();
         assert_eq!(
-            classify_aggregate(32, 32, &lanes, sysv(), false),
+            classify_aggregate(&desc(32, &lanes), sysv(), false),
             AggClass::ByStack
         );
         assert_eq!(
-            classify_aggregate(32, 32, &lanes, aapcs(), false),
+            classify_aggregate(&desc(32, &lanes), aapcs(), false),
             AggClass::ByRef
         );
         for abi in [sysv(), aapcs()] {
             assert_eq!(
-                classify_aggregate(32, 32, &lanes, abi, true),
+                classify_aggregate(&desc(32, &lanes), abi, true),
                 AggClass::ReturnIndirect
             );
         }
@@ -693,25 +740,25 @@ mod tests {
         // gcc delivers `struct { u8x8 v; int i; }` in xmm0 and rdi.
         let f = [ff(0, 8, ScalarKind::Vector), ff(8, 4, ScalarKind::Int)];
         assert_eq!(
-            classify_aggregate(16, 8, &f, sysv(), false),
+            classify_aggregate(&desc(16, &f), sysv(), false),
             AggClass::Regs(alloc::vec![RegClass::Sse, RegClass::Integer])
         );
         let g = [ff(0, 4, ScalarKind::Int), ff(8, 8, ScalarKind::Vector)];
         assert_eq!(
-            classify_aggregate(16, 8, &g, sysv(), false),
+            classify_aggregate(&desc(16, &g), sysv(), false),
             AggClass::Regs(alloc::vec![RegClass::Integer, RegClass::Sse])
         );
         // Two of them are two SSE eightbytes.
         let h = [ff(0, 8, ScalarKind::Vector), ff(8, 8, ScalarKind::Vector)];
         assert_eq!(
-            classify_aggregate(16, 8, &h, sysv(), false),
+            classify_aggregate(&desc(16, &h), sysv(), false),
             AggClass::Regs(alloc::vec![RegClass::Sse, RegClass::Sse])
         );
         // AAPCS64 has no homogeneous vector aggregate yet: the composite
         // rules give the same layout two general-purpose registers.
         // TODO: homogeneous vector aggregates.
         assert_eq!(
-            classify_aggregate(16, 8, &h, aapcs(), false),
+            classify_aggregate(&desc(16, &h), aapcs(), false),
             AggClass::Regs(alloc::vec![RegClass::Integer, RegClass::Integer])
         );
     }
@@ -722,11 +769,11 @@ mod tests {
         // the composite rules apply.
         let f = [ff(0, 16, ScalarKind::Vector), ff(16, 4, ScalarKind::Int)];
         assert_eq!(
-            classify_aggregate(32, 16, &f, sysv(), false),
+            classify_aggregate(&desc(32, &f), sysv(), false),
             AggClass::ByStack
         );
         assert_eq!(
-            classify_aggregate(32, 16, &f, aapcs(), false),
+            classify_aggregate(&desc(32, &f), aapcs(), false),
             AggClass::ByRef
         );
     }
@@ -736,15 +783,15 @@ mod tests {
         // Win64 passes a 16-byte value by an implicit reference whatever
         // its type; only 1, 2, 4 and 8 bytes ride a register.
         assert_eq!(
-            classify_aggregate(16, 16, &vec(16), win64(), false),
+            classify_aggregate(&desc(16, &vec(16)), win64(), false),
             AggClass::ByRef
         );
         assert_eq!(
-            classify_aggregate(16, 16, &vec(16), win64(), true),
+            classify_aggregate(&desc(16, &vec(16)), win64(), true),
             AggClass::ReturnIndirect
         );
         assert_eq!(
-            classify_aggregate(8, 8, &vec(8), win64(), false),
+            classify_aggregate(&desc(8, &vec(8)), win64(), false),
             AggClass::Regs(alloc::vec![RegClass::Integer])
         );
     }
@@ -753,14 +800,23 @@ mod tests {
     fn vector_is_not_an_hfa() {
         // A vector leaf is not a floating-point member, so it cannot form
         // a homogeneous floating-point aggregate.
-        assert_eq!(hfa_member_layout(&vec(16)), None);
+        assert_eq!(Hfa::new(ScalarKind::Vector, 1), None);
         // The SIMD-slot layout covers it instead, as one whole slot.
-        assert_eq!(fp_member_layout(16, &vec(16)), Some(alloc::vec![(0, 16)]));
-        assert_eq!(fp_member_layout(8, &vec(8)), Some(alloc::vec![(0, 8)]));
-        assert_eq!(fp_member_layout(4, &vec(4)), None);
+        assert_eq!(
+            fp_member_layout(&desc(16, &vec(16))),
+            Some(alloc::vec![(0, 16)])
+        );
+        assert_eq!(
+            fp_member_layout(&desc(8, &vec(8))),
+            Some(alloc::vec![(0, 8)])
+        );
+        assert_eq!(fp_member_layout(&desc(4, &vec(4))), None);
         // An HFA still reports its members.
         let f = [ff(0, 8, ScalarKind::F64), ff(8, 8, ScalarKind::F64)];
-        assert_eq!(fp_member_layout(16, &f), Some(alloc::vec![(0, 8), (8, 8)]));
+        assert_eq!(
+            fp_member_layout(&hfa(16, &f, ScalarKind::F64, 2)),
+            Some(alloc::vec![(0, 8), (8, 8)])
+        );
     }
 
     #[test]
@@ -776,7 +832,7 @@ mod tests {
     fn win64_size8_in_one_gpr() {
         let f = [ff(0, 4, ScalarKind::Int), ff(4, 4, ScalarKind::Int)];
         assert_eq!(
-            classify_aggregate(8, 4, &f, win64(), false),
+            classify_aggregate(&desc(8, &f), win64(), false),
             AggClass::Regs(alloc::vec![RegClass::Integer])
         );
     }
@@ -787,11 +843,11 @@ mod tests {
         // (argument) / hidden pointer (return) even if all-FP.
         let f = [ff(0, 8, ScalarKind::F64), ff(8, 8, ScalarKind::F64)];
         assert_eq!(
-            classify_aggregate(16, 8, &f, win64(), false),
+            classify_aggregate(&desc(16, &f), win64(), false),
             AggClass::ByRef
         );
         assert_eq!(
-            classify_aggregate(16, 8, &f, win64(), true),
+            classify_aggregate(&desc(16, &f), win64(), true),
             AggClass::ReturnIndirect
         );
     }
@@ -800,7 +856,7 @@ mod tests {
     fn win64_size3_by_ref() {
         let f = [ff(0, 1, ScalarKind::Int), ff(1, 2, ScalarKind::Int)];
         assert_eq!(
-            classify_aggregate(3, 1, &f, win64(), false),
+            classify_aggregate(&desc(3, &f), win64(), false),
             AggClass::ByRef
         );
     }
@@ -814,7 +870,7 @@ mod tests {
     fn register_parts_follow_the_class_layout() {
         let two_longs = [ff(0, 8, ScalarKind::Int), ff(8, 8, ScalarKind::Int)];
         for abi in [sysv(), aapcs()] {
-            let parts = register_parts(16, &two_longs, abi, false).expect("in registers");
+            let parts = register_parts(&desc(16, &two_longs), abi, false).expect("in registers");
             assert_eq!(
                 parts
                     .iter()
@@ -824,8 +880,11 @@ mod tests {
             );
         }
         let two_doubles = [ff(0, 8, ScalarKind::F64), ff(8, 8, ScalarKind::F64)];
-        for abi in [sysv(), aapcs()] {
-            let parts = register_parts(16, &two_doubles, abi, true).expect("in registers");
+        for (d, abi) in [
+            (desc(16, &two_doubles), sysv()),
+            (hfa(16, &two_doubles, ScalarKind::F64, 2), aapcs()),
+        ] {
+            let parts = register_parts(&d, abi, true).expect("in registers");
             assert!(
                 parts
                     .iter()
@@ -837,14 +896,17 @@ mod tests {
             ff(4, 4, ScalarKind::F32),
             ff(8, 4, ScalarKind::F32),
         ];
-        let hfa = register_parts(12, &three_floats, aapcs(), false).expect("an HFA");
+        let parts = register_parts(&hfa(12, &three_floats, ScalarKind::F32, 3), aapcs(), false)
+            .expect("an HFA");
         assert_eq!(
-            hfa.iter()
+            parts
+                .iter()
                 .map(|p| (p.offset, p.width))
                 .collect::<alloc::vec::Vec<_>>(),
             [(0, 4), (4, 4), (8, 4)]
         );
-        let sse = register_parts(12, &three_floats, sysv(), false).expect("two SSE eightbytes");
+        let sse =
+            register_parts(&desc(12, &three_floats), sysv(), false).expect("two SSE eightbytes");
         assert_eq!(
             sse.iter()
                 .map(|p| (p.class, p.offset, p.width, p.fields.len()))
@@ -852,24 +914,26 @@ mod tests {
             [(RegClass::Sse, 0, 8, 2), (RegClass::Sse, 8, 4, 1)]
         );
         let long_int = [ff(0, 8, ScalarKind::Int), ff(8, 4, ScalarKind::Int)];
-        let parts = register_parts(12, &long_int, sysv(), false).expect("in registers");
+        let parts = register_parts(&desc(12, &long_int), sysv(), false).expect("in registers");
         assert_eq!(
             (parts[1].offset, parts[1].width, parts[1].fields.len()),
             (8, 4, 1)
         );
         let two_ints = [ff(0, 4, ScalarKind::Int), ff(4, 4, ScalarKind::Int)];
         for abi in [sysv(), aapcs(), win64()] {
-            let parts = register_parts(8, &two_ints, abi, false).expect("one register");
+            let parts = register_parts(&desc(8, &two_ints), abi, false).expect("one register");
             assert_eq!((parts.len(), parts[0].fields.len()), (1, 2));
         }
-        assert!(register_parts(16, &[ff(0, 16, ScalarKind::Vector)], sysv(), false).is_none());
+        assert!(
+            register_parts(&desc(16, &[ff(0, 16, ScalarKind::Vector)]), sysv(), false).is_none()
+        );
         let big = [
             ff(0, 8, ScalarKind::Int),
             ff(8, 8, ScalarKind::Int),
             ff(16, 8, ScalarKind::Int),
         ];
-        assert!(register_parts(24, &big, sysv(), false).is_none());
-        assert!(register_parts(24, &big, aapcs(), true).is_none());
-        assert!(register_parts(12, &long_int, win64(), false).is_none());
+        assert!(register_parts(&desc(24, &big), sysv(), false).is_none());
+        assert!(register_parts(&desc(24, &big), aapcs(), true).is_none());
+        assert!(register_parts(&desc(12, &long_int), win64(), false).is_none());
     }
 }

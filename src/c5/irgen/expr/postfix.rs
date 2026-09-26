@@ -334,14 +334,9 @@ impl<'a> Walker<'a> {
         else {
             return false;
         };
+        let abi = self.target.abi_for(conv);
         matches!(
-            crate::c5::codegen::abi_classify::classify_aggregate(
-                desc.size,
-                desc.align,
-                &desc.fields,
-                self.target.abi_for(conv),
-                false,
-            ),
+            crate::c5::codegen::abi_classify::classify_aggregate(&desc, abi, false),
             crate::c5::codegen::abi_classify::AggClass::Regs(ref c)
                 if c.iter()
                     .any(|r| *r != crate::c5::codegen::abi_classify::RegClass::Integer)

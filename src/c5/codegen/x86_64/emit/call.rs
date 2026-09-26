@@ -370,13 +370,7 @@ fn store_agg_return(
     base: i64,
     abi: super::Abi,
 ) {
-    let eb_classes = match super::abi_classify::classify_aggregate(
-        desc.size,
-        desc.align,
-        &desc.fields,
-        abi,
-        true,
-    ) {
+    let eb_classes = match super::abi_classify::classify_aggregate(desc, abi, true) {
         super::abi_classify::AggClass::Regs(c) => c,
         _ => alloc::vec::Vec::new(),
     };

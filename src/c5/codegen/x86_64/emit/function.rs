@@ -1466,13 +1466,7 @@ fn reg_slot_classes(
     abi: super::Abi,
     is_return: bool,
 ) -> alloc::vec::Vec<super::abi_classify::RegClass> {
-    match super::abi_classify::classify_aggregate(
-        desc.size,
-        desc.align,
-        &desc.fields,
-        abi,
-        is_return,
-    ) {
+    match super::abi_classify::classify_aggregate(desc, abi, is_return) {
         super::abi_classify::AggClass::Regs(c) => c,
         _ => alloc::vec::Vec::new(),
     }

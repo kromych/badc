@@ -1845,8 +1845,8 @@ impl core::fmt::LowerHex for FpMask {
 /// [`FunctionSsa::agg_descs`] and referenced by index from the call
 /// instructions' `arg_aggs` / `ret_agg` and the function's own
 /// `param_aggs` / `ret_agg`. Built by the walker via
-/// `Compiler::flatten_fields`; the per-arch emit feeds
-/// `(size, align, fields)` to `abi_classify::classify_aggregate`.
+/// `Compiler::flatten_fields`; the per-arch emit feeds it to
+/// `abi_classify::classify_aggregate`.
 #[derive(Debug, Clone)]
 pub(crate) struct AggDesc {
     pub size: u32,
@@ -1854,6 +1854,9 @@ pub(crate) struct AggDesc {
     /// `StructDef::member_align`: `align` without the aggregate's own attribute.
     pub member_align: u32,
     pub fields: Vec<crate::c5::codegen::abi_classify::FlatField>,
+    /// The AAPCS64 homogeneous floating-point aggregate the members form;
+    /// `None` on the other ABIs.
+    pub hfa: Option<crate::c5::codegen::abi_classify::Hfa>,
 }
 
 /// A static-initializer data slot holding the address of a labelled

@@ -28,71 +28,55 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x50, %rsp
-               	movl	$0x0, -0x40(%rbp)
-               	leaq	-0x40(%rbp), %rcx
-               	movl	$0x5, %eax
-               	movl	%eax, (%rcx)
-               	movl	(%rcx), %edx
-               	cmpl	$0x5, %edx
+               	subq	$0x40, %rsp
+               	movl	$0x0, -0x38(%rbp)
+               	leaq	-0x38(%rbp), %rcx
+               	movl	$0x5, %edx
+               	movl	%edx, (%rcx)
+               	movl	(%rcx), %eax
+               	cmpl	$0x5, %eax
                	je	<addr>
                	movl	$0x1, %eax
                	leave
                	retq
-               	movl	$0xa, %edx
-               	pushq	%rax
-               	movq	%rcx, %r11
-               	movq	%rdx, %r10
-               	movq	%r10, %rax
+               	movl	$0xa, %eax
                	lock
-               	xaddl	%eax, (%r11)
-               	movq	%rax, %r10
-               	popq	%rax
-               	movq	%r10, %rdx
-               	cmpl	$0x5, %edx
+               	xaddl	%eax, (%rcx)
+               	cmpl	$0x5, %eax
                	je	<addr>
                	movl	$0x2, %eax
                	leave
                	retq
-               	movslq	-0x40(%rbp), %rdx
-               	cmpl	$0xf, %edx
+               	movslq	-0x38(%rbp), %rax
+               	cmpl	$0xf, %eax
                	je	<addr>
                	movl	$0x3, %eax
                	leave
                	retq
-               	movl	$0xf, -0x38(%rbp)
-               	leaq	-0x38(%rbp), %rdx
+               	movl	$0xf, %eax
                	movl	$0x63, %esi
-               	pushq	%rax
-               	pushq	%rcx
-               	movq	%rcx, %r11
-               	movq	%rsi, %r10
-               	movq	%rdx, %rcx
-               	movl	(%rcx), %eax
+               	movl	%eax, %eax
                	lock
-               	cmpxchgl	%r10d, (%r11)
-               	je	<addr>
-               	movl	%eax, (%rcx)
-               	sete	%r11b
-               	movzbq	%r11b, %r11
-               	popq	%rcx
-               	popq	%rax
-               	movq	%r11, %rcx
-               	testq	%rcx, %rcx
+               	cmpxchgl	%esi, (%rcx)
+               	cmpl	$0xf, %eax
+               	sete	%al
+               	movzbq	%al, %rax
+               	testl	%eax, %eax
                	jne	<addr>
                	movl	$0x4, %eax
                	leave
                	retq
-               	movslq	-0x40(%rbp), %rcx
-               	cmpl	$0x63, %ecx
+               	movslq	-0x38(%rbp), %rax
+               	cmpl	$0x63, %eax
                	je	<addr>
+               	movq	%rdx, %rax
                	leave
                	retq
                	mfence
                	movq	$0x0, -0x30(%rbp)
                	leaq	-0x30(%rbp), %rcx
                	movabsq	$0x4004000000000000, %rdx # imm = 0x4004000000000000
-               	leaq	-0x48(%rbp), %rax
+               	leaq	-0x8(%rbp), %rax
                	movq	%rdx, %xmm14
                	movsd	%xmm14, (%rax)
                	movq	(%rax), %rsi
@@ -140,10 +124,8 @@ Disassembly of section .text:
                	leaq	-0x20(%rbp), %rcx
                	movb	$0x0, (%rcx)
                	movl	$0x1, %edx
-               	movq	%rcx, %r11
-               	movq	%rdx, %r10
-               	xchgb	%r10b, (%r11)
-               	movq	%r10, %rax
+               	movq	%rdx, %rax
+               	xchgb	%al, (%rcx)
                	movsbq	%al, %rax
                	testl	%eax, %eax
                	je	<addr>
@@ -168,15 +150,9 @@ Disassembly of section .text:
                	movl	$0x64, %esi
                	movq	%rsi, %r10
                	xchgq	%r10, (%rcx)
-               	pushq	%rax
-               	movq	%rcx, %r11
                	movq	%rdx, %r10
-               	movq	%r10, %rax
                	lock
-               	xaddq	%rax, (%r11)
-               	movq	%rax, %r10
-               	popq	%rax
-               	movq	%r10, %rsi
+               	xaddq	%r10, (%rcx)
                	movq	(%rcx), %rsi
                	cmpq	$0x65, %rsi
                	je	<addr>

@@ -64,6 +64,12 @@ typedef unsigned short ADDRESS_FAMILY;
 
 // A Winsock event object is a HANDLE; the null handle is the invalid event.
 typedef HANDLE WSAEVENT;
+typedef WSAEVENT *LPWSAEVENT;
+typedef unsigned int GROUP;
+typedef OVERLAPPED WSAOVERLAPPED, *LPWSAOVERLAPPED;
+typedef void (CALLBACK *LPWSAOVERLAPPED_COMPLETION_ROUTINE)(DWORD dwError, DWORD cbTransferred,
+                                                           LPWSAOVERLAPPED lpOverlapped, DWORD dwFlags);
+typedef struct _QualityOfService QOS, *LPQOS;
 #define WSA_INVALID_EVENT ((WSAEVENT)0)
 
 // Pack two bytes into a WORD, low byte first (the WSAStartup version word).
@@ -97,13 +103,13 @@ typedef struct _WSANETWORKEVENTS {
 #pragma binding(ws2_32::WSAWaitForMultipleEvents, "WSAWaitForMultipleEvents")
 #pragma binding(ws2_32::WSAEnumNetworkEvents, "WSAEnumNetworkEvents")
 WSAEVENT WSACreateEvent(void);
-int WSACloseEvent(WSAEVENT ev);
-int WSASetEvent(WSAEVENT ev);
-int WSAResetEvent(WSAEVENT ev);
-int WSAEventSelect(int s, WSAEVENT ev, long net_events);
-DWORD WSAWaitForMultipleEvents(DWORD count, const WSAEVENT *events, int wait_all,
-                               DWORD timeout, int alertable);
-int WSAEnumNetworkEvents(int s, WSAEVENT ev, WSANETWORKEVENTS *events);
+BOOL WSACloseEvent(WSAEVENT hEvent);
+BOOL WSASetEvent(WSAEVENT hEvent);
+BOOL WSAResetEvent(WSAEVENT hEvent);
+int WSAEventSelect(SOCKET s, WSAEVENT hEventObject, long lNetworkEvents);
+DWORD WSAWaitForMultipleEvents(DWORD cEvents, const WSAEVENT *lphEvents, BOOL fWaitAll,
+                               DWORD dwTimeout, BOOL fAlertable);
+int WSAEnumNetworkEvents(SOCKET s, WSAEVENT hEventObject, LPWSANETWORKEVENTS lpNetworkEvents);
 
 // Uppercase aliases the SDK carries for the address structures.
 typedef struct sockaddr_in  SOCKADDR_IN,  *PSOCKADDR_IN,  *LPSOCKADDR_IN;
@@ -406,32 +412,32 @@ typedef struct _WSABUF {
 #pragma binding(ws2_32::WSASend,             "WSASend")
 #pragma binding(ws2_32::WSARecvFrom,         "WSARecvFrom")
 #pragma binding(ws2_32::WSASendTo,           "WSASendTo")
-int WSARecv(SOCKET s, LPWSABUF buffers, DWORD bufferCount, LPDWORD recvd,
-            LPDWORD flags, LPOVERLAPPED overlapped, void *completionRoutine);
-int WSASend(SOCKET s, LPWSABUF buffers, DWORD bufferCount, LPDWORD sent,
-            DWORD flags, LPOVERLAPPED overlapped, void *completionRoutine);
-int WSARecvFrom(SOCKET s, LPWSABUF buffers, DWORD bufferCount, LPDWORD recvd,
-                LPDWORD flags, struct sockaddr *from, int *fromlen,
-                LPOVERLAPPED overlapped, void *completionRoutine);
-int WSASendTo(SOCKET s, LPWSABUF buffers, DWORD bufferCount, LPDWORD sent,
-              DWORD flags, const struct sockaddr *to, int tolen,
-              LPOVERLAPPED overlapped, void *completionRoutine);
+int WSARecv(SOCKET s, LPWSABUF lpBuffers, DWORD dwBufferCount, LPDWORD lpNumberOfBytesRecvd,
+            LPDWORD lpFlags, LPWSAOVERLAPPED lpOverlapped,
+            LPWSAOVERLAPPED_COMPLETION_ROUTINE lpCompletionRoutine);
+int WSASend(SOCKET s, LPWSABUF lpBuffers, DWORD dwBufferCount, LPDWORD lpNumberOfBytesSent,
+            DWORD dwFlags, LPWSAOVERLAPPED lpOverlapped,
+            LPWSAOVERLAPPED_COMPLETION_ROUTINE lpCompletionRoutine);
+int WSARecvFrom(SOCKET s, LPWSABUF lpBuffers, DWORD dwBufferCount, LPDWORD lpNumberOfBytesRecvd,
+                LPDWORD lpFlags, struct sockaddr *lpFrom, LPINT lpFromlen,
+                LPWSAOVERLAPPED lpOverlapped, LPWSAOVERLAPPED_COMPLETION_ROUTINE lpCompletionRoutine);
+int WSASendTo(SOCKET s, LPWSABUF lpBuffers, DWORD dwBufferCount, LPDWORD lpNumberOfBytesSent,
+              DWORD dwFlags, const struct sockaddr *lpTo, int iTolen,
+              LPWSAOVERLAPPED lpOverlapped, LPWSAOVERLAPPED_COMPLETION_ROUTINE lpCompletionRoutine);
 
 // Parse a numeric address string into a sockaddr (winsock2.h). The
 // length is in/out: callers pass the buffer size and read back the
 // bytes written.
 #pragma binding(ws2_32::WSAStringToAddressW, "WSAStringToAddressW")
-int WSAStringToAddressW(wchar_t *addressString, int addressFamily,
-                        LPWSAPROTOCOL_INFOW protocolInfo,
-                        struct sockaddr *address, int *addressLength);
+INT WSAStringToAddressW(LPWSTR AddressString, INT AddressFamily, LPWSAPROTOCOL_INFOW lpProtocolInfo,
+                        LPSOCKADDR lpAddress, LPINT lpAddressLength);
 
 // Connect a socket, optionally exchanging connect-time data (winsock2.h).
 // The caller/callee WSABUF and QoS arguments are NULL for a plain
 // connectionless bind; the QoS pointers are opaque here.
 #pragma binding(ws2_32::WSAConnect,          "WSAConnect")
-int WSAConnect(SOCKET s, const struct sockaddr *name, int namelen,
-               LPWSABUF callerData, LPWSABUF calleeData, void *sqos,
-               void *gqos);
+int WSAConnect(SOCKET s, const struct sockaddr *name, int namelen, LPWSABUF lpCallerData,
+               LPWSABUF lpCalleeData, LPQOS lpSQOS, LPQOS lpGQOS);
 
 #pragma binding(ws2_32::WSAIoctl,            "WSAIoctl")
 #pragma binding(ws2_32::WSASocketW,          "WSASocketW")
@@ -452,21 +458,22 @@ int WSAConnect(SOCKET s, const struct sockaddr *name, int namelen,
 // WSAStartup / WSACleanup / closesocket / ioctlsocket and the byte-order
 // helpers are declared and bound in <sys/socket.h>, which this header
 // includes; the version word is MAKEWORD(major, minor).
-int WSAIoctl(SOCKET s, DWORD code, void *inbuf, DWORD inlen, void *outbuf,
-             DWORD outlen, DWORD *bytes, void *overlapped, void *routine);
-SOCKET WSASocketW(int af, int type, int protocol, LPWSAPROTOCOL_INFOW info,
-                  unsigned int group, DWORD flags);
-int WSADuplicateSocketW(SOCKET s, DWORD processId, LPWSAPROTOCOL_INFOW info);
+int WSAIoctl(SOCKET s, DWORD dwIoControlCode, LPVOID lpvInBuffer, DWORD cbInBuffer,
+             LPVOID lpvOutBuffer, DWORD cbOutBuffer, LPDWORD lpcbBytesReturned,
+             LPWSAOVERLAPPED lpOverlapped, LPWSAOVERLAPPED_COMPLETION_ROUTINE lpCompletionRoutine);
+SOCKET WSASocketW(int af, int type, int protocol, LPWSAPROTOCOL_INFOW lpProtocolInfo, GROUP g,
+                  DWORD dwFlags);
+int WSADuplicateSocketW(SOCKET s, DWORD dwProcessId, LPWSAPROTOCOL_INFOW lpProtocolInfo);
 int select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds,
            const struct timeval *timeout);
 struct servent *getservbyport(int port, const char *proto);
 struct protoent *getprotobyname(const char *name);
 struct protoent *getprotobynumber(int proto);
 int gethostname(char *name, int namelen);
-unsigned short htons(unsigned short hostshort);
-unsigned short ntohs(unsigned short netshort);
-unsigned int   htonl(unsigned int hostlong);
-unsigned int   ntohl(unsigned int netlong);
+u_short htons(u_short hostshort);
+u_short ntohs(u_short netshort);
+u_long  htonl(u_long hostlong);
+u_long  ntohl(u_long netlong);
 int recvfrom(SOCKET s, char *buf, int len, int flags, struct sockaddr *from,
              int *fromlen);
 int sendto(SOCKET s, const char *buf, int len, int flags,

@@ -20,16 +20,10 @@ Disassembly of section .text:
                	sub	x4, x29, #0x20
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x0]
-               	str	x10, [x4]
-               	ldr	x10, [x0, #0x8]
-               	str	x10, [x4, #0x8]
-               	ldr	x10, [x0, #0x10]
-               	str	x10, [x4, #0x10]
-               	ldr	x10, [x0, #0x18]
-               	str	x10, [x4, #0x18]
-               	ldr	x10, [sp], #0x10
+               	ldp	x16, x17, [x0]
+               	stp	x16, x17, [x4]
+               	ldp	x16, x17, [x0, #0x10]
+               	stp	x16, x17, [x4, #0x10]
                	mov	x1, #0xe667             // =58983
                	movk	x1, #0x6a09, lsl #16
                	mov	x2, #0xae85             // =44677

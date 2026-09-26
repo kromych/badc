@@ -136,7 +136,6 @@ Disassembly of section .text:
                	cbz	w0, <addr>
                	mov	x2, #0x0                // =0
                	stur	w2, [x29, #-0x8]
-               	sxtw	x0, w0
                	sub	x1, x29, #0x8
                	bl	<addr>
                	mov	x1, #0x0                // =0

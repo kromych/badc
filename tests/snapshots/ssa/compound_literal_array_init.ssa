@@ -23,7 +23,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
   block 2  start_pc=0
     v13  Imm(0)                                           -> x1
     v14  Imm(1)                                           -> x1
-    v15  Imm(0)                                           -> x1
+    v15  Imm(1)                                           -> x1
     v16  Imm(1)                                           -> x1
     v17  Imm(1)                                           -> x1
     v18  ImmData(8)                                       -> x1
@@ -38,7 +38,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
   block 3  start_pc=0
     v26  Imm(1)                                           -> x1
     v27  Imm(2)                                           -> x1
-    v28  Imm(0)                                           -> x1
+    v28  Imm(2)                                           -> x1
     v29  Imm(2)                                           -> x1
     v30  Imm(1)                                           -> x1
     v31  ImmData(8)                                       -> x1
@@ -53,7 +53,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
   block 4  start_pc=0
     v39  Imm(2)                                           -> x1
     v40  Imm(3)                                           -> x1
-    v41  Imm(0)                                           -> x1
+    v41  Imm(3)                                           -> x1
     v42  Imm(3)                                           -> x1
     v43  Imm(1)                                           -> x1
     v44  ImmData(8)                                       -> x1
@@ -68,7 +68,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
   block 5  start_pc=0
     v52  Imm(3)                                           -> x1
     v53  Imm(4)                                           -> x1
-    v54  Imm(0)                                           -> x1
+    v54  Imm(4)                                           -> x1
     v55  Imm(4)                                           -> x1
     v56  Imm(1)                                           -> x1
     v57  ImmData(8)                                       -> x1
@@ -83,7 +83,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
   block 6  start_pc=0
     v65  Imm(4)                                           -> x1
     v66  Imm(5)                                           -> x1
-    v67  Imm(0)                                           -> x1
+    v67  Imm(5)                                           -> x1
     v68  Imm(5)                                           -> x1
     v69  Imm(1)                                           -> x1
     v70  ImmData(8)                                       -> x1
@@ -98,7 +98,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
   block 7  start_pc=0
     v78  Imm(5)                                           -> x0
     v79  Imm(6)                                           -> x0
-    v80  Imm(0)                                           -> x0
+    v80  Imm(6)                                           -> x0
     v81  Imm(6)                                           -> x0
     v82  Imm(0)                                           -> x0
     v83  ImmData(16)                                      -> x0
@@ -127,7 +127,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v101 BinopI { op=add, lhs=v98, rhs_imm=5 }            -> x2
     v102 Load { addr=v98, disp=5, kind=U8 }               -> x0
     v103 Binop { op=add, lhs=v100, rhs=v102 }             -> x0
-    v104 Extend { value=v103, kind=I32 }                  -> x1
+    v104 Extend { value=v103, kind=I32, nsw }             -> x1
     v105 Extend { value=v103, kind=I32 }                  -> x1
     v106 Extend { value=v103, kind=I32 }                  -> x1
     v107 Imm(18)                                          -> x1
@@ -154,11 +154,13 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v125 Imm(30)                                          -> x0
     v126 Imm(30)                                          -> x0
     v127 Imm(30)                                          -> x0
-    v128 Imm(30)                                          -> x0
-    v129 Imm(30)                                          -> x0
-    v130 Imm(0)                                           -> x0
-    v131 Imm(0)                                           -> x0
-    terminator Return(v131)   (exit_acc=v131)
+    v128 LifetimeEnd(0)                                   -> -
+    v129 LifetimeEnd(0)                                   -> -
+    v130 Imm(30)                                          -> x0
+    v131 Imm(30)                                          -> x0
+    v132 Imm(0)                                           -> x0
+    v133 Imm(0)                                           -> x0
+    terminator Return(v133)   (exit_acc=v133)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

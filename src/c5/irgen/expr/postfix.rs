@@ -1,10 +1,11 @@
 //! Postfix expressions: calls, member access, subscripting,
 //! postfix increment and compound literals (C99 6.5.2).
 
-use super::super::access::{load_kind_for, load_kind_width, load_place};
+use super::super::access::{load_kind_for, load_kind_width, load_place, seg_copy_bytes};
 use super::super::atomic::RmwOpen;
 use super::super::types::{
-    arg_value_ty, extend_scalar_call_result, is_float_ty, is_floating_scalar,
+    arg_value_ty, arg_width, extend_scalar_call_result, is_float_ty, is_floating_scalar,
+    low_word_param,
 };
 use super::super::*;
 /// A struct or union member access (C99 6.5.2.3), shared by the read and
@@ -80,8 +81,7 @@ impl<'a> Walker<'a> {
         for (i, a) in args.iter().enumerate() {
             arg_vals.push(self.walk_copy_operand(b, *a)?);
             if arg_value_ty(self.ast.expr(*a))
-                .map(is_floating_scalar)
-                .unwrap_or(false)
+                .is_some_and(|t| self.crosses_in_fp_reg(callee_conv, t))
             {
                 fp_arg_mask.set(i);
             }
@@ -136,14 +136,15 @@ impl<'a> Walker<'a> {
         ty: i64,
     ) -> Result<ValueId, WalkError> {
         let (result_slot, out_arg) = self.out_ptr_arg(b, ty);
-        let hidden = !self.fun_is_variadic(sym) && self.hidden_result_ptr_is_host(conv);
+        let variadic = self.fun_is_variadic(sym);
+        let hidden = self.hidden_result_ptr_is_host(conv);
         let mut vals: alloc::vec::Vec<ValueId> = alloc::vec::Vec::with_capacity(exprs.len());
         let mut fp_mask = crate::c5::ir::FpMask::EMPTY;
         for (i, a) in exprs.iter().enumerate() {
             let arg_ty = arg_value_ty(self.ast.expr(*a));
             if hidden {
                 vals.push(self.walk_copy_operand(b, *a)?);
-                if arg_ty.map(is_floating_scalar).unwrap_or(false) {
+                if arg_ty.is_some_and(|t| self.crosses_in_fp_reg(conv, t)) {
                     fp_mask.set(i);
                 }
                 continue;
@@ -162,33 +163,35 @@ impl<'a> Walker<'a> {
             vals.push(v);
         }
         let target_pc = self.live_fun_val(sym, val);
-        let named = if self.fun_is_variadic(sym) {
+        let named = if variadic {
             self.fun_fixed_args(sym).min(exprs.len())
+        } else if self.win64_unprototyped(sym, conv) {
+            0
         } else {
             exprs.len()
         };
         let mut args = CallArgs {
             exprs,
             vals,
-            fp_mask: fp_mask.clone(),
+            fp_mask,
             conv,
             ty,
         };
         let arg_aggs = self.call_arg_aggs(b, &mut args, named, Some(sym), hidden);
+        let call_fp_mask = if hidden {
+            self.hidden_ptr_fp_mask(b, &mut args, variadic, named)
+        } else {
+            crate::c5::ir::FpMask::EMPTY
+        };
         let mut all_args: alloc::vec::Vec<ValueId> =
             alloc::vec::Vec::with_capacity(exprs.len() + 1);
         all_args.push(out_arg);
         all_args.extend_from_slice(&args.vals);
         // Not FP-valued: the result is an address; the out-pointer is fixed argument 0.
-        let call = emit_direct_call(
-            b,
-            target_pc,
-            sym,
-            all_args,
-            1 + named,
-            false,
-            fp_mask.shifted(1),
-        );
+        let call = emit_direct_call(b, target_pc, sym, all_args, 1 + named, false, call_fp_mask);
+        let params = Some(self.symbols[sym as usize].params.as_slice());
+        self.set_arg_widths(b, call, params, named, exprs, 1);
+        b.set_call_out_slot(call, result_slot);
         if !arg_aggs.is_empty() {
             b.set_call_arg_aggs(call, after_out_ptr(&arg_aggs));
         }
@@ -216,11 +219,14 @@ impl<'a> Walker<'a> {
         // arguments past them are the variadic ones.
         let fixed_args = if callee_variadic {
             self.fun_fixed_args(sym).min(args.exprs.len())
+        } else if self.win64_unprototyped(sym, conv) {
+            0
         } else {
             args.exprs.len()
         };
         let named = self.symbols[sym as usize].params.len();
         let arg_aggs = self.call_arg_aggs(b, &mut args, named, Some(sym), true);
+
         // C99 6.5.2.2p6: a variadic floating-point argument widens to
         // `double` under a host variadic ABI but stays FP-classed --
         // riding an FP argument register on the register-save hosts, and
@@ -231,20 +237,26 @@ impl<'a> Walker<'a> {
             && (abi.variadic_on_stack || abi.sysv_host_variadic() || abi.aarch64_host_variadic())
         {
             self.widen_variadic_fp(b, &mut args, fixed_args);
-            let fp_return = is_floating_scalar(ty);
+            let fp_return = self.crosses_in_fp_reg(conv, ty);
             let target_pc = self.live_fun_val(sym, val);
             let call =
                 emit_direct_call(b, target_pc, sym, args.vals, fixed_args, fp_return, fp_mask);
+            let params = Some(self.symbols[sym as usize].params.as_slice());
+            self.set_arg_widths(b, call, params, fixed_args, args.exprs, 0);
             if !arg_aggs.is_empty() {
                 b.set_call_arg_aggs(call, arg_aggs);
             }
             let ret_temp = self.call_ret_temp(b, conv, ty);
             return Ok(self.call_result(b, call, ret_temp, ty, true));
         }
-        // A variadic callee reaching here is on a `variadic_int_only`
-        // host (the Microsoft conventions), where every argument rides
-        // the integer bank.
-        let call_fp_mask = if callee_variadic {
+        // A variadic callee reaching here is on a `variadic_int_only` host
+        // (the Microsoft conventions): Microsoft x64 keeps a floating-point
+        // argument in its FP register and copies it into the integer one at
+        // the call, Windows arm64 passes every argument in the integer bank.
+        let call_fp_mask = if callee_variadic && abi.position_indexed_args {
+            self.widen_variadic_fp(b, &mut args, fixed_args);
+            fp_mask
+        } else if callee_variadic {
             self.widen_fp_through_int(b, &mut args, is_floating_scalar);
             crate::c5::ir::FpMask::EMPTY
         } else {
@@ -252,7 +264,7 @@ impl<'a> Walker<'a> {
         };
         // C99 6.2.5p10: a floating-point return rides the FP return
         // register; tag the call so the codegen reads it there.
-        let fp_return = is_floating_scalar(ty);
+        let fp_return = self.crosses_in_fp_reg(conv, ty);
         let target_pc = self.live_fun_val(sym, val);
         // The aggregate return temp is reserved before the call: its
         // frame slot rides on the call instruction rather than as an SSA
@@ -267,6 +279,8 @@ impl<'a> Walker<'a> {
             fp_return,
             call_fp_mask,
         );
+        let params = Some(self.symbols[sym as usize].params.as_slice());
+        self.set_arg_widths(b, call, params, fixed_args, args.exprs, 0);
         if !arg_aggs.is_empty() {
             b.set_call_arg_aggs(call, arg_aggs);
         }
@@ -290,7 +304,8 @@ impl<'a> Walker<'a> {
     ) -> alloc::vec::Vec<Option<u32>> {
         let mut arg_aggs: alloc::vec::Vec<Option<u32>> = alloc::vec::Vec::new();
         for i in 0..args.vals.len() {
-            let agg_ty = if i < named {
+            let variadic = i >= named;
+            let agg_ty = if !variadic {
                 if !named_by_value {
                     continue;
                 }
@@ -299,23 +314,101 @@ impl<'a> Walker<'a> {
                     None => arg_value_ty(self.ast.expr(args.exprs[i])),
                 }
             } else {
-                match arg_value_ty(self.ast.expr(args.exprs[i])) {
-                    Some(aty)
-                        if is_struct_value_ty(aty)
-                            && self.struct_size(aty) <= 8
-                            && !self.agg_arg_is_simd_classed(args.conv, aty) =>
-                    {
-                        args.vals[i] = b.load(args.vals[i], LoadKind::I64);
-                        None
-                    }
-                    other => other,
-                }
+                arg_value_ty(self.ast.expr(args.exprs[i]))
             };
-            if let Some(ty_tag) = agg_ty {
-                self.record_arg_agg(b, &mut arg_aggs, args, i, ty_tag);
+            let Some(ty_tag) = agg_ty else {
+                continue;
+            };
+            if self.pass_by_reference(b, args, i, ty_tag, variadic) {
+                continue;
             }
+            if variadic
+                && is_struct_value_ty(ty_tag)
+                && self.struct_size(ty_tag) <= 8
+                && !self.agg_arg_is_simd_classed(args.conv, ty_tag)
+            {
+                let vol = is_volatile_ty(ty_tag) || self.expr_is_volatile(args.exprs[i]);
+                args.vals[i] = self.small_aggregate_bits(b, args.vals[i], ty_tag, vol);
+                continue;
+            }
+            self.record_arg_agg(b, &mut arg_aggs, args, i, ty_tag);
         }
         arg_aggs
+    }
+
+    /// The bytes of the aggregate of `ty`, at most eight, at `addr` as an
+    /// integer, the first byte least significant: accesses that stay inside
+    /// the object, each carrying the alignment its offset has.
+    fn small_aggregate_bits(
+        &self,
+        b: &mut SsaBuilder,
+        addr: ValueId,
+        ty: i64,
+        volatile: bool,
+    ) -> ValueId {
+        let size = self.struct_size(ty) as u32;
+        let align = self.struct_align(ty);
+        let mut bits: Option<ValueId> = None;
+        for (off, width) in crate::c5::codegen::access_pieces(0, size, align, false) {
+            let kind = match width {
+                8 => LoadKind::I64,
+                4 => LoadKind::U32,
+                2 => LoadKind::U16,
+                _ => LoadKind::U8,
+            };
+            let at = if off == 0 {
+                addr
+            } else {
+                b.binop_imm(BinOp::Add, addr, i64::from(off))
+            };
+            let bound = offset_align(align, i64::from(off));
+            let proven = if bound < width { bound as u8 } else { 0 };
+            let piece = b.load_at(at, kind, volatile, proven);
+            let piece = if off == 0 {
+                piece
+            } else {
+                b.binop_imm(BinOp::Shl, piece, i64::from(off * 8))
+            };
+            bits = Some(bits.map_or(piece, |acc| b.binop(BinOp::Or, acc, piece)));
+        }
+        bits.unwrap_or_else(|| b.imm(0))
+    }
+
+    /// Pass argument `i`, an aggregate of `ty` the call's convention passes
+    /// by reference, as the address of a copy the callee owns (AAPCS64 B.4;
+    /// the Microsoft x64 convention, which aligns the copy to 16). False,
+    /// leaving the argument alone, for any other argument.
+    fn pass_by_reference(
+        &self,
+        b: &mut SsaBuilder,
+        args: &mut CallArgs<'_>,
+        i: usize,
+        ty: i64,
+        variadic: bool,
+    ) -> bool {
+        if !crate::c5::compiler::passes_by_reference(
+            self.structs,
+            self.target,
+            args.conv,
+            ty,
+            variadic,
+        ) {
+            return false;
+        }
+        let size = self.struct_size(ty);
+        let align = self.struct_align(ty);
+        let win64 = matches!(self.target.abi_row(args.conv), crate::Target::WindowsX64);
+        let copy_align = if win64 { align.max(16) } else { align };
+        let slot = b.alloc_synthetic_struct(size, i64::from(copy_align));
+        let dst = b.local_addr(slot);
+        if is_volatile_ty(ty) || self.expr_is_volatile(args.exprs[i]) {
+            let none = AsmSeg::None;
+            seg_copy_bytes(b, dst, none, args.vals[i], none, size, align, true, false);
+        } else {
+            b.mcpy(dst, args.vals[i], size, align);
+        }
+        args.vals[i] = dst;
+        true
     }
 
     /// Whether a by-value aggregate argument of `ty` takes a SIMD
@@ -326,28 +419,26 @@ impl<'a> Walker<'a> {
         else {
             return false;
         };
+        let abi = self.target.abi_for(conv);
         matches!(
-            crate::c5::codegen::abi_classify::classify_aggregate(
-                desc.size,
-                desc.align,
-                &desc.fields,
-                self.target.abi_for(conv),
-                false,
-            ),
+            crate::c5::codegen::abi_classify::classify_aggregate(&desc, abi, false),
             crate::c5::codegen::abi_classify::AggClass::Regs(ref c)
-                if c.iter()
-                    .any(|r| *r != crate::c5::codegen::abi_classify::RegClass::Integer)
+                if c.iter().any(|r| matches!(
+                    r,
+                    crate::c5::codegen::abi_classify::RegClass::Sse
+                        | crate::c5::codegen::abi_classify::RegClass::Vector
+                ))
         )
     }
 
     /// Record argument `i`'s host-ABI aggregate layout in `aggs`, which
-    /// stays empty until some argument needs one. Inert on the ABIs and
-    /// sizes the classifier declines.
+    /// stays empty until some argument needs one, and pass a `long double`
+    /// as its image. Inert on the ABIs and sizes the classifier declines.
     fn record_arg_agg(
         &self,
         b: &mut SsaBuilder,
         aggs: &mut alloc::vec::Vec<Option<u32>>,
-        args: &CallArgs<'_>,
+        args: &mut CallArgs<'_>,
         i: usize,
         ty_tag: i64,
     ) {
@@ -361,6 +452,9 @@ impl<'a> Walker<'a> {
         };
         if aggs.is_empty() {
             *aggs = alloc::vec![None; args.vals.len()];
+        }
+        if is_long_double_scalar(ty_tag) {
+            args.vals[i] = self.long_double_image(b, args.vals[i], ty_tag);
         }
         aggs[i] = Some(b.intern_agg_desc(desc));
     }
@@ -380,7 +474,7 @@ impl<'a> Walker<'a> {
             crate::c5::compiler::struct_return_abi_conv(self.structs, self.target, conv, ty)
         {
             let ridx = b.intern_agg_desc(desc.clone());
-            let slot = b.alloc_synthetic_struct(desc.size as i64);
+            let slot = b.alloc_synthetic_struct(desc.size as i64, i64::from(desc.align));
             return Some((ridx, slot));
         }
         None
@@ -401,7 +495,12 @@ impl<'a> Walker<'a> {
     ) -> ValueId {
         if let Some((ridx, slot)) = ret_temp {
             b.set_call_ret_agg(call, ridx, slot);
-            return b.local_addr(slot);
+            let addr = b.local_addr(slot);
+            // A `long double` returns its image.
+            if is_long_double_scalar(ty) {
+                return b.load(addr, load_kind_for(ty, self.target));
+            }
+            return addr;
         }
         if is_float_ty(ty) {
             return b.mark_f32(call);
@@ -410,6 +509,31 @@ impl<'a> Walker<'a> {
             return extend_scalar_call_result(b, call, ty, self.target);
         }
         call
+    }
+
+    /// The FP mask of a call passing the hidden result pointer as argument
+    /// 0, once a variadic callee's protocol has widened a floating-point
+    /// argument from `named` on to `double` (C99 6.5.2.2p6), in the FP bank
+    /// on System V and in both banks on Microsoft x64.
+    fn hidden_ptr_fp_mask(
+        &self,
+        b: &mut SsaBuilder,
+        args: &mut CallArgs<'_>,
+        variadic: bool,
+        named: usize,
+    ) -> crate::c5::ir::FpMask {
+        if variadic {
+            self.widen_variadic_fp(b, args, named);
+        }
+        args.fp_mask.shifted(1)
+    }
+
+    /// Whether a direct call on `conv` reaches `sym` without a prototype on
+    /// the Microsoft x64 convention, which places such a call's arguments as
+    /// a variadic call's.
+    fn win64_unprototyped(&self, sym: u32, conv: crate::c5::codegen::CallConv) -> bool {
+        self.target.abi_for(conv).position_indexed_args
+            && self.live_fun_sym(sym).is_some_and(|s| !s.prototyped)
     }
 
     /// C99 6.5.2.2p6: widen each variadic floating-point argument to
@@ -455,7 +579,7 @@ impl<'a> Walker<'a> {
         b: &mut SsaBuilder,
         sym: u32,
         val: i64,
-        args: CallArgs<'a>,
+        mut args: CallArgs<'a>,
     ) -> Result<ValueId, WalkError> {
         // A returns-twice callee (the setjmp family, vfork) disables
         // spill-slot sharing in this function.
@@ -477,17 +601,24 @@ impl<'a> Walker<'a> {
                     None => continue,
                 }
             };
-            if is_struct_value_ty(arg_ty)
+            if self.pass_by_reference(b, &mut args, i, arg_ty, i >= nparams) {
+                continue;
+            }
+            if (is_struct_value_ty(arg_ty) || is_long_double_scalar(arg_ty))
                 && let Some(desc) =
                     crate::c5::compiler::host_abi_agg_desc(self.structs, self.target, arg_ty)
             {
                 if arg_aggs.is_empty() {
                     arg_aggs = alloc::vec![None; args.vals.len()];
                 }
+                if is_long_double_scalar(arg_ty) {
+                    args.vals[i] = self.long_double_image(b, args.vals[i], arg_ty);
+                }
                 arg_aggs[i] = Some(b.intern_agg_desc(desc));
             }
         }
         let (ty, fp_mask) = (args.ty, args.fp_mask.clone());
+        let params = &self.symbols[sym as usize].params;
         // System V AMD64 MEMORY class / Win64 oversize: the caller
         // allocates the result buffer and passes its address as the
         // hidden first integer argument, which shifts the FP-argument
@@ -504,6 +635,8 @@ impl<'a> Walker<'a> {
             shifted.push(out_arg);
             shifted.extend_from_slice(&args.vals);
             let call = b.call_ext(val, shifted, fp_mask.shifted(1), false);
+            self.set_arg_widths(b, call, Some(params), nparams, args.exprs, 1);
+            b.set_call_out_slot(call, result_slot);
             if !arg_aggs.is_empty() {
                 b.set_call_arg_aggs(call, after_out_ptr(&arg_aggs));
             }
@@ -512,8 +645,9 @@ impl<'a> Walker<'a> {
         // A floating-point return is FP-classed (C99 6.2.5p10) so the
         // result rides d0 / xmm0 without a GPR bridge.
         let ret_temp = self.call_ret_temp(b, args.conv, ty);
-        let fp_return = is_floating_scalar(ty);
+        let fp_return = self.crosses_in_fp_reg(args.conv, ty);
         let call = b.call_ext(val, args.vals, fp_mask, fp_return);
+        self.set_arg_widths(b, call, Some(params), nparams, args.exprs, 0);
         if !arg_aggs.is_empty() {
             b.set_call_arg_aggs(call, arg_aggs);
         }
@@ -544,22 +678,37 @@ impl<'a> Walker<'a> {
         // rather than on the stack the callee's va_arg walks. Carrying
         // the prototype on the pointer's type would close this.
         let (callee_variadic, callee_fixed) = self.indirect_callee_proto(callee, args.exprs.len());
+        let params = self.indirect_callee_params(callee);
         // Every ABI question below is asked of the pointed-to function's
         // own convention, not the target's default.
         let abi = self.target.abi_for(conv);
+        // Microsoft x64 places a call without a prototype as a variadic one.
+        let (callee_variadic, callee_fixed) = if abi.position_indexed_args
+            && self
+                .ast
+                .callee_types
+                .get(&callee)
+                .is_some_and(|f| !f.params.prototyped)
+        {
+            (true, 0)
+        } else {
+            (callee_variadic, callee_fixed)
+        };
         let target = match indirect_target {
             Some(t) => t,
             None => self.walk_expr_rvalue(b, callee)?,
         };
-        let fp_return = is_floating_scalar(ty);
+        let fp_return = self.crosses_in_fp_reg(conv, ty);
         let out_ptr = self.returns_through_out_ptr(conv, ty);
-        let hidden = out_ptr && !callee_variadic && self.hidden_result_ptr_is_host(conv);
+        let hidden = out_ptr && self.hidden_result_ptr_is_host(conv);
         let arg_aggs = self.call_arg_aggs(b, &mut args, callee_fixed, None, !out_ptr || hidden);
-        // Every argument is fixed; the FP mask moves past a hidden pointer or stays empty.
+        // The FP mask moves past a hidden pointer; the all-integer cdecl
+        // passes every argument as fixed with an empty one.
         if out_ptr {
             let (result_slot, out_arg) = self.out_ptr_arg(b, ty);
+            let variadic = hidden && callee_variadic;
             let call_fp_mask = if hidden {
-                fp_mask.shifted(1)
+                self.hidden_ptr_fp_mask(b, &mut args, variadic, callee_fixed)
             } else {
                 self.widen_fp_through_int(b, &mut args, is_float_ty);
                 crate::c5::ir::FpMask::EMPTY
@@ -568,8 +717,15 @@ impl<'a> Walker<'a> {
                 alloc::vec::Vec::with_capacity(args.vals.len() + 1);
             all_args.push(out_arg);
             all_args.extend_from_slice(&args.vals);
-            let fixed = all_args.len();
-            let call = b.call_indirect(target, all_args, false, fixed, false, call_fp_mask, conv);
+            let fixed = if variadic {
+                1 + callee_fixed
+            } else {
+                all_args.len()
+            };
+            let call =
+                b.call_indirect(target, all_args, variadic, fixed, false, call_fp_mask, conv);
+            self.set_arg_widths(b, call, params, callee_fixed, args.exprs, 1);
+            b.set_call_out_slot(call, result_slot);
             if !arg_aggs.is_empty() {
                 b.set_call_arg_aggs(call, after_out_ptr(&arg_aggs));
             }
@@ -593,14 +749,20 @@ impl<'a> Walker<'a> {
                 fp_mask,
                 conv,
             );
+            self.set_arg_widths(b, call, params, callee_fixed, args.exprs, 0);
             if !arg_aggs.is_empty() {
                 b.set_call_arg_aggs(call, arg_aggs);
             }
             return Ok(self.call_result(b, call, ret_temp, ty, true));
         }
-        // A variadic callee on a `variadic_int_only` host takes every
+        // A variadic callee on a `variadic_int_only` host: Microsoft x64
+        // keeps a floating-point argument in its FP register and copies it
+        // into the integer one at the call, Windows arm64 passes every
         // argument in the integer bank.
-        let call_fp_mask = if callee_variadic && abi.variadic_int_only && !fp_mask.is_empty() {
+        let call_fp_mask = if callee_variadic && abi.position_indexed_args {
+            self.widen_variadic_fp(b, &mut args, callee_fixed);
+            fp_mask
+        } else if callee_variadic && abi.variadic_int_only && !fp_mask.is_empty() {
             self.widen_fp_through_int(b, &mut args, is_floating_scalar);
             crate::c5::ir::FpMask::EMPTY
         } else {
@@ -619,10 +781,54 @@ impl<'a> Walker<'a> {
             call_fp_mask,
             conv,
         );
+        self.set_arg_widths(b, call, params, callee_fixed, args.exprs, 0);
         if !arg_aggs.is_empty() {
             b.set_call_arg_aggs(call, arg_aggs);
         }
         Ok(self.call_result(b, call, ret_temp, ty, true))
+    }
+
+    /// The parameter types of a pointer callee's function type, empty
+    /// for one without a prototype, `None` where the callee's type
+    /// carried no function type.
+    fn indirect_callee_params(&self, callee: ExprId) -> Option<&'a [i64]> {
+        self.ast
+            .callee_types
+            .get(&callee)
+            .map(|f| f.params.types.as_slice())
+    }
+
+    /// Record `call`'s [`Inst::Call::low_word_args`] and
+    /// [`Inst::Call::arg_widths`]: `exprs` pass `named` of the parameters
+    /// `params`, the rest promoted, `shift` positions up past a hidden
+    /// leading argument. With the prototype unknown the parse converted
+    /// no argument, so each keeps its own type and its whole register.
+    fn set_arg_widths(
+        &self,
+        b: &mut SsaBuilder,
+        call: ValueId,
+        params: Option<&[i64]>,
+        named: usize,
+        exprs: &[ExprId],
+        shift: usize,
+    ) {
+        let known = params.unwrap_or_default();
+        let (mut low, mut widths) = (0u64, crate::c5::ir::ArgWidths::default());
+        for (i, &e) in exprs.iter().enumerate() {
+            let param = known.get(i).filter(|_| i < named).copied();
+            let promoted = param.is_none() && params.is_some();
+            let Some(ty) = param.or_else(|| arg_value_ty(self.ast.expr(e))) else {
+                continue;
+            };
+            widths.set(i + shift, arg_width(ty, self.target, promoted));
+            // `va_arg` of an `int` reads four bytes on every target, so a
+            // promoted argument is read in the low word as a parameter is.
+            if (param.is_some() || promoted) && i + shift < 64 && low_word_param(ty, self.target) {
+                low |= 1 << (i + shift);
+            }
+        }
+        b.set_call_low_word_args(call, low);
+        b.set_call_arg_widths(call, widths);
     }
 
     /// Allocate the result object a c5 out-pointer return writes through,
@@ -633,7 +839,7 @@ impl<'a> Walker<'a> {
         // The callee writes the whole struct through the pointer, so the
         // object holds `sizeof(struct)` bytes, not a single slot.
         let result_size = self.struct_size(ty);
-        let result_slot = b.alloc_synthetic_struct(result_size);
+        let result_slot = b.alloc_synthetic_struct(result_size, i64::from(self.struct_align(ty)));
         let addr = b.local_addr(result_slot);
         let temp = b.alloc_synthetic_local();
         b.store_local(temp, addr, StoreKind::I64);
@@ -716,6 +922,7 @@ impl<'a> Walker<'a> {
     /// C99 6.5.2.4 / 6.5.3.1: step an lvalue by `by`. The expression's
     /// value is the pre-update value for the postfix form and the
     /// post-update value, in the lvalue's own type, for the prefix form.
+    /// `nsw`: the step's overflow is undefined (C99 6.5p5).
     pub(super) fn walk_inc(
         &mut self,
         b: &mut SsaBuilder,
@@ -723,6 +930,7 @@ impl<'a> Walker<'a> {
         by: i64,
         ty: i64,
         post: bool,
+        nsw: bool,
     ) -> Result<ValueId, WalkError> {
         if self.is_int128_value_ty(ty) || self.is_wide_unit_bitfield(lvalue) {
             return self.walk_int128_inc(b, lvalue, by, post);
@@ -735,7 +943,7 @@ impl<'a> Walker<'a> {
             old,
         } = self.rmw_open(b, lvalue, ty)?;
         let stepped = self.increment_value(b, old, by, ty);
-        place.store(b, stepped, store_kind, vol);
+        place.store_marked(b, stepped, store_kind, vol, nsw);
         if post {
             return Ok(old);
         }

@@ -29,23 +29,21 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	movq	$0x0, -0x10(%rbp)
+               	movq	$0x0, -0x8(%rbp)
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	testq	%rax, %rax
                	je	<addr>
-               	leaq	-0x10(%rbp), %rax
+               	leaq	-0x8(%rbp), %rax
                	movq	%mm0, (%rax)
-               	leaq	-0x10(%rbp), %rax
+               	leaq	-0x8(%rbp), %rax
                	movq	(%rax), %mm1
                	movq	%mm2, %mm3
                	movq	%mm4, %rax
-               	movq	%rax, -0x8(%rbp)
-               	movq	-0x8(%rbp), %rax
                	movq	%rax, %mm5
                	fninit
                	wait
                	emms
-               	movq	-0x10(%rbp), %rax
+               	movq	-0x8(%rbp), %rax
                	leave
                	retq

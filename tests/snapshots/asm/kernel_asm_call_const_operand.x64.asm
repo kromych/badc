@@ -27,6 +27,7 @@ Disassembly of section .text:
 		R_X86_64_PLT32	external_target-0x4
                	popq	%rsp
                	movq	%r11, -0x8(%rbp)
+               	leaq	-0x10(%rbp), %rsp
                	leave
                	jmp	<addr>
 		R_X86_64_PLT32	__x86_return_thunk-0x4
@@ -49,6 +50,7 @@ Disassembly of section .text:
                	callq	<addr>
                	popq	%rsp
                	movq	%r11, -0x8(%rbp)
+               	leaq	-0x10(%rbp), %rsp
                	leave
                	jmp	<addr>
 		R_X86_64_PLT32	__x86_return_thunk-0x4

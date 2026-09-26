@@ -661,7 +661,7 @@ pub(super) fn emit_mzero(
         emit(code, super::encode::enc_stp_post(zero, zero, cursor, 32));
         -3
     } else {
-        let post = super::encode::enc_str_w_post(unit as u8, zero, cursor, unit as i32);
+        let post = enc_str_w_post(unit as u8, zero, cursor, unit as i32);
         emit(code, post);
         -2
     };
@@ -676,9 +676,21 @@ pub(super) fn emit_mzero(
     Ok(())
 }
 
+/// The registers a copy takes its temporaries among, in order: the encoder
+/// scratch, which holds no value, then the caller-saved bank. x18 is the
+/// platform register.
+const COPY_TEMPS: [u8; 18] = [16, 17, 9, 10, 11, 12, 13, 14, 15, 0, 1, 2, 3, 4, 5, 6, 7, 8];
+
+/// Copy `size` bytes from `src_val` to `dst_val` through registers free at
+/// the site ([`SiteRegs`]): a pair per two units where the pair forms take
+/// the unit, the tail through halving widths. Up to `MAX_MEM_FILL_ACCESSES`
+/// accesses are written in place; a larger copy loops cursors over the
+/// whole units and copies the tail past them. A base whose register holds
+/// nothing after the copy, or a spill's reload, serves as its own cursor.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_mcpy(
     code: &mut Vec<u8>,
+    v: super::super::ir::ValueId,
     dst_place: Place,
     dst_val: u32,
     src_val: u32,
@@ -689,139 +701,153 @@ pub(super) fn emit_mcpy(
     frame: Frame,
     scratch: &ScratchPool,
 ) -> Emit {
-    if size < 0 {
-        return fail("Mcpy: negative size");
-    }
-    let dst_place_in = place_of(alloc, dst_val);
-    let src_place_in = place_of(alloc, src_val);
-    let dst_r = match materialize_int(code, dst_place_in, scratch.primary, frame) {
-        Some(r) => r,
-        None => return fail("Mcpy: dst not int reg / spill"),
+    let Ok(bytes) = u32::try_from(size) else {
+        return fail("Mcpy: size outside 32 bits");
     };
-    let src_r = match materialize_int(code, src_place_in, scratch.secondary, frame) {
-        Some(r) => r,
-        None => return fail("Mcpy: src not int reg / spill"),
+    let dst_in = place_of(alloc, dst_val);
+    let src_in = place_of(alloc, src_val);
+    let Some(dst_r) = materialize_int(code, dst_in, scratch.primary, frame) else {
+        return fail("Mcpy: dst not int reg / spill");
     };
-    // The data temp is x10, x11 or x12, whichever aliases neither base,
-    // saved and restored around the copy since the allocator may hold a
-    // live value in it.
-    let temp = if dst_r.0 != 10 && src_r.0 != 10 {
-        Reg(10)
-    } else if dst_r.0 != 11 && src_r.0 != 11 {
-        Reg(11)
-    } else {
-        Reg(12)
+    let Some(src_r) = materialize_int(code, src_in, scratch.secondary, frame) else {
+        return fail("Mcpy: src not int reg / spill");
     };
-    let bytes = size as u32;
-    emit(code, enc_str_pre(temp, Reg(31), -16));
     let unit = super::super::access_chunk(align, strict_align, 8);
-    if bytes <= COPY_WINDOW {
-        emit_block_copy(code, unit, temp, src_r, dst_r, bytes);
-    } else {
-        // Working copies keep `dst_r` (the memcpy return value) and `src_r`
-        // unchanged; two more registers, saved and restored.
-        let mut picks = [Reg(9), Reg(9)];
-        let mut n = 0;
-        for cand in [9u8, 13, 14, 15, 12, 11] {
-            if cand != dst_r.0 && cand != src_r.0 && cand != temp.0 && n < 2 {
-                picks[n] = Reg(cand);
-                n += 1;
-            }
+    let pairs = pair_bytes(unit).is_some();
+    let widest = copy_widest(unit, if pairs { 2 } else { 1 });
+    let taken = [dst_r.0, src_r.0];
+    let mut regs = SiteRegs::new(alloc, v, &COPY_TEMPS, &taken, frame.fixed_regs);
+    let inline = super::ssa::emit_common::transfer_accesses(bytes, widest)
+        <= crate::c5::ast::MAX_MEM_FILL_ACCESSES as u32;
+    // The copy's value is the destination; a cursor run over a spilled one
+    // reloads it.
+    let mut reload = false;
+    if inline {
+        let Some(t1) = regs.take(code) else {
+            return fail("Mcpy: no register for the copy");
+        };
+        let mut temps = [t1, t1];
+        let mut n = 1;
+        if pairs && let Some(t2) = regs.free() {
+            temps[1] = t2;
+            n = 2;
         }
-        let (wsrc, wdst) = (picks[0], picks[1]);
-        emit(code, enc_str_pre(wsrc, Reg(31), -16));
-        emit(code, enc_str_pre(wdst, Reg(31), -16));
-        emit_mov_reg(code, wsrc, src_r);
-        emit_mov_reg(code, wdst, dst_r);
-        emit_block_copy(code, unit, temp, wsrc, wdst, bytes);
-        emit(code, enc_ldr_post(wdst, Reg(31), 16));
-        emit(code, enc_ldr_post(wsrc, Reg(31), 16));
+        emit_block_copy(code, unit, &temps[..n], src_r, dst_r, bytes);
+    } else {
+        let step = widest;
+        let looped = bytes - bytes % step;
+        let dead = |place: Place, r: Reg| {
+            matches!(place, Place::Spill(_))
+                || (!alloc.holds_live_across(v, r.0) && !frame.fixed_regs.has_gpr(r.0))
+        };
+        let cursor = |code: &mut Vec<u8>, regs: &mut SiteRegs, base: Reg| {
+            let c = regs.take(code)?;
+            emit_mov_reg(code, c, base);
+            Some(c)
+        };
+        let s = if src_r.0 != dst_r.0 && dead(src_in, src_r) {
+            src_r
+        } else {
+            let Some(s) = cursor(code, &mut regs, src_r) else {
+                return fail("Mcpy: no register for the copy");
+            };
+            s
+        };
+        let d = if dead(dst_in, dst_r)
+            && (dst_place == Place::None || matches!(dst_in, Place::Spill(_)))
+        {
+            dst_r
+        } else {
+            let Some(d) = cursor(code, &mut regs, dst_r) else {
+                return fail("Mcpy: no register for the copy");
+            };
+            d
+        };
+        let (Some(e), Some(t1)) = (regs.take(code), regs.take(code)) else {
+            return fail("Mcpy: no register for the copy");
+        };
+        if looped < 4096 {
+            emit(code, enc_add_imm(e, s, looped));
+        } else {
+            load_imm64(code, e, u64::from(looped));
+            emit(code, enc_add_reg(e, s, e));
+        }
+        if pairs {
+            let Some(t2) = regs.take(code) else {
+                return fail("Mcpy: no register for the copy");
+            };
+            emit(code, enc_ldp_unit_post(unit, t1, t2, s, step as i32));
+            emit(code, enc_stp_unit_post(unit, t1, t2, d, step as i32));
+        } else {
+            emit(code, enc_ldr_w_post(unit as u8, t1, s, step as i32));
+            emit(code, enc_str_w_post(unit as u8, t1, d, step as i32));
+        }
+        emit(code, enc_cmp_reg(s, e));
+        emit(code, enc_b_cond(Cond::Ne, -3));
+        emit_block_copy(code, unit, &[t1], s, d, bytes - looped);
+        reload = d.0 == dst_r.0 && dst_place != Place::None;
     }
-    emit(code, enc_ldr_post(temp, Reg(31), 16));
-    // memcpy returns dst -- propagate into the Inst's `dst_place`.
+    regs.restore(code);
+    let result = if reload {
+        materialize_int(code, dst_in, scratch.primary, frame).unwrap_or(dst_r)
+    } else {
+        dst_r
+    };
     if let Some(rd) = int_reg(dst_place) {
-        if rd.0 != dst_r.0 {
-            emit_mov_reg(code, rd, dst_r);
+        if rd.0 != result.0 {
+            emit_mov_reg(code, rd, result);
         }
     } else {
-        store_spilled_int(code, frame, dst_place, dst_r);
+        store_spilled_int(code, frame, dst_place, result);
     }
     Ok(())
 }
 
-/// The save area of the four borrowed working registers x9..x12.
-const ATOMIC_SAVE_BYTES: u32 = 32;
-
-/// Save x9..x12: the allocator may hold a live value in any of them.
-fn atomic_save_working(code: &mut Vec<u8>) {
-    emit(
-        code,
-        enc_stp_pre(Reg(9), Reg(10), Reg(31), -(ATOMIC_SAVE_BYTES as i32)),
-    );
-    emit(
-        code,
-        super::encode::enc_stp_off(Reg(11), Reg(12), Reg(31), 16),
-    );
-}
-
-/// Restore x9..x12, after the result is in a reserved scratch.
-fn atomic_restore_working(code: &mut Vec<u8>) {
-    emit(
-        code,
-        super::encode::enc_ldp_off(Reg(11), Reg(12), Reg(31), 16),
-    );
-    emit(
-        code,
-        enc_ldp_post(Reg(9), Reg(10), Reg(31), ATOMIC_SAVE_BYTES as i32),
-    );
-}
-
-/// Materialise an operand into `target`, copying it out of its
-/// allocator register; `sp_shift` accounts for the save area.
-fn atomic_operand_into(
-    code: &mut Vec<u8>,
-    value: super::super::ir::ValueId,
-    target: Reg,
-    frame: Frame,
-    sp_shift: u32,
+/// The registers the atomic lowering at `v` may borrow: the scratch and
+/// the caller-saved bank ([`COPY_TEMPS`]) less the operands' and result's
+/// registers in `taken`, a free one first, else one saved below sp.
+fn atomic_regs(
     alloc: &Allocation,
-) -> bool {
-    let place = place_of(alloc, value);
-    // An operand in a borrowed register may already be overwritten; read
-    // its saved copy ([sp+0]=x9 .. [sp+24]=x12).
-    if let Place::IntReg(r) = place
-        && (9..=12).contains(&r)
-    {
-        emit_sp_ldr_x(code, target, (r as u32 - 9) * 8);
-        return true;
-    }
-    match materialize_int_shifted(code, place, target, frame, sp_shift) {
-        Some(r) => {
-            if r.0 != target.0 {
-                emit_mov_reg(code, target, r);
-            }
-            true
-        }
-        None => false,
-    }
+    v: super::super::ir::ValueId,
+    taken: &[Reg],
+    frame: Frame,
+) -> SiteRegs {
+    let taken: Vec<u8> = taken.iter().map(|r| r.0).collect();
+    SiteRegs::new(alloc, v, &COPY_TEMPS, &taken, frame.fixed_regs)
 }
 
-/// Write an atomic op's result to `dst`, after the working registers
-/// are restored so a spilled result lands at the unshifted sp offset.
-fn write_atomic_result(code: &mut Vec<u8>, dst: Place, src: Reg, frame: Frame) {
+/// Write the atomic result `r` to `dst` and restore what `regs` saved. A
+/// result in a saved register leaves through the encoder scratch, which
+/// the consumed operands no longer need.
+fn finish_atomic(
+    code: &mut Vec<u8>,
+    regs: &SiteRegs,
+    dst: Place,
+    r: Reg,
+    frame: Frame,
+    scratch: &ScratchPool,
+) {
+    let r = if regs.borrowed(r) {
+        emit_mov_reg(code, scratch.primary, r);
+        scratch.primary
+    } else {
+        r
+    };
+    regs.restore(code);
     super::ssa::emit_common::write_atomic_result(
         &super::ssa::emit_common::Aarch64Backend::default(),
         code,
         dst,
-        src.0,
+        r.0,
         frame,
     );
 }
 
-/// C11 7.17.7.2 load of `width` bytes, zero-extended: `ldar` for any
-/// order above relaxed (ARM ARM C6.2; against `stlr` it is also the
-/// seq_cst load), a plain load for relaxed. The address rides its own
-/// register or x16; the result lands in `dst`'s register or x16.
+/// C11 7.17.7.2 load of `width` bytes, zero-extended, by order (ARM's
+/// C/C++11 mappings): a plain load for relaxed, the RCpc `LDAPR`
+/// (FEAT_LRCPC) for acquire, and `LDAR` for seq_cst, which stays after
+/// an earlier `STLR`. The address rides its own register or x16; the
+/// result lands in `dst`'s register or x16.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_atomic_load(
     code: &mut Vec<u8>,
@@ -839,15 +865,15 @@ pub(super) fn emit_atomic_load(
         return fail("AtomicLoad: address not int reg / spill");
     };
     let rd = int_reg(dst).unwrap_or(scratch.primary);
-    let word = if order == MemOrder::Relaxed {
-        match width {
+    let word = match order {
+        MemOrder::Relaxed => match width {
             1 => enc_ldrb_imm(rd, a, 0),
             2 => enc_ldrh_imm(rd, a, 0),
             4 => enc_ldr32_imm(rd, a, 0),
             _ => enc_ldr_imm(rd, a, 0),
-        }
-    } else {
-        enc_ldar(rd, a, width)
+        },
+        MemOrder::Acquire => enc_ldapr(rd, a, width),
+        _ => enc_ldar(rd, a, width),
     };
     emit(code, word);
     store_spilled_int(code, frame, dst, rd);
@@ -888,144 +914,121 @@ pub(super) fn emit_atomic_store(
     Ok(())
 }
 
-/// C11 7.17.7.2-7.17.7.5 read-modify-write: an LDAXR / STLXR retry loop
-/// (ARM ARM C6.2), the acquire / release pair carrying seq_cst. The
-/// prior value is the result.
+/// C11 7.17.7.2-7.17.7.5 read-modify-write as one LSE instruction (ARM
+/// ARM C6.2): `SWP`, `LDADD`, `LDSET`, `LDEOR`, and `LDADD` of the
+/// negated operand for subtraction, `LDCLR` of the complemented one for
+/// conjunction. The order sets the acquire and release bits, seq_cst
+/// both (ARM's C/C++11 mappings). An unread result goes to the zero
+/// register unless the order acquires: a load into the zero register
+/// does not.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_atomic_rmw(
     code: &mut Vec<u8>,
+    v: super::super::ir::ValueId,
     dst: Place,
     op: super::super::ir::AtomicRmwOp,
     addr: super::super::ir::ValueId,
     value: super::super::ir::ValueId,
     width: u8,
+    order: super::super::ir::MemOrder,
     alloc: &Allocation,
     frame: Frame,
     scratch: &ScratchPool,
 ) -> Emit {
     use super::super::ir::AtomicRmwOp as Op;
-    // x9 = addr, x10 = operand (borrowed, saved); x16 = old (result,
-    // reserved so it survives the reload); x11 = new, w12 = status.
-    let a = Reg(9);
-    let operand = Reg(10);
-    let old = scratch.primary; // x16
-    let new = Reg(11);
-    let status = Reg(12);
-    atomic_save_working(code);
-    if !atomic_operand_into(code, addr, a, frame, ATOMIC_SAVE_BYTES, alloc)
-        || !atomic_operand_into(code, value, operand, frame, ATOMIC_SAVE_BYTES, alloc)
-    {
+    use super::encode::LseOp;
+    let a = materialize_int(code, place_of(alloc, addr), scratch.primary, frame);
+    let x = materialize_int(code, place_of(alloc, value), scratch.secondary, frame);
+    let (Some(a), Some(x)) = (a, x) else {
         return fail("AtomicRmw: operand not int reg / spill");
-    }
-    let loop_start = code.len();
-    emit(code, enc_ldaxr(old, a, width));
-    let new_reg = match op {
-        Op::Xchg => operand,
-        Op::Add => {
-            emit(code, enc_add_reg(new, old, operand));
-            new
-        }
-        Op::Sub => {
-            emit(code, enc_sub_reg(new, old, operand));
-            new
-        }
-        Op::And => {
-            emit(code, enc_and_reg(new, old, operand));
-            new
-        }
-        Op::Or => {
-            emit(code, enc_orr_reg(new, old, operand));
-            new
-        }
-        Op::Xor => {
-            emit(code, enc_eor_reg(new, old, operand));
-            new
+    };
+    let rd = int_reg(dst);
+    let mut taken = alloc::vec![a, x];
+    taken.extend(rd);
+    let mut regs = atomic_regs(alloc, v, &taken, frame);
+    let (lse, rs) = match op {
+        Op::Xchg => (LseOp::Swp, x),
+        Op::Add => (LseOp::Add, x),
+        Op::Or => (LseOp::Set, x),
+        Op::Xor => (LseOp::Eor, x),
+        Op::Sub | Op::And => {
+            let Some(t) = regs.take(code) else {
+                return fail("AtomicRmw: no register for the operand");
+            };
+            if op == Op::Sub {
+                emit(code, enc_neg(t, x));
+                (LseOp::Add, t)
+            } else {
+                emit(code, enc_mvn(t, x));
+                (LseOp::Clr, t)
+            }
         }
     };
-    emit(code, enc_stlxr(status, new_reg, a, width));
-    // cbnz w12, loop -- retry while the store-exclusive failed.
-    let back = ((loop_start as i64) - (code.len() as i64)) / 4;
-    emit(code, enc_cbnz(status, back as i32));
-    atomic_restore_working(code);
-    write_atomic_result(code, dst, old, frame);
+    let rt = match rd {
+        Some(r) => r,
+        None if dst == Place::None && !order.acquires() => Reg(31),
+        None => {
+            let Some(t) = regs.take(code) else {
+                return fail("AtomicRmw: no register for the result");
+            };
+            t
+        }
+    };
+    emit(
+        code,
+        enc_lse(lse, order.acquires(), order.releases(), rs, rt, a, width),
+    );
+    finish_atomic(code, &regs, dst, rt, frame, scratch);
     Ok(())
 }
 
-/// C11 7.17.7.4 atomic compare-and-exchange via an LDAXR / STLXR retry
-/// loop (ARM ARM C6.2). On a match the loop store-releases `desired`
-/// and the result is 1; on a mismatch the observed value is written
-/// back into `*expected_addr` and the result is 0.
+/// C11 7.17.7.4 compare-and-exchange as the LSE `CAS` (ARM ARM C6.2),
+/// the order setting its acquire and release bits: the comparand goes
+/// into the result's register, which the instruction compares with the
+/// object and overwrites with the prior contents.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_atomic_cas(
     code: &mut Vec<u8>,
+    v: super::super::ir::ValueId,
     dst: Place,
     addr: super::super::ir::ValueId,
-    expected_addr: super::super::ir::ValueId,
+    expected: super::super::ir::ValueId,
     desired: super::super::ir::ValueId,
     width: u8,
+    order: super::super::ir::MemOrder,
     alloc: &Allocation,
     frame: Frame,
     scratch: &ScratchPool,
 ) -> Emit {
-    // x9 = addr, x10 = expected_addr, x11 = desired (borrowed, saved);
-    // x16 = cur (result, reserved); x12 = expected value; w17 = status.
-    let a = Reg(9);
-    let exp_addr = Reg(10);
-    let desired_r = Reg(11);
-    let cur = scratch.primary; // x16
-    let expected = Reg(12);
-    let status = scratch.secondary; // x17
-    atomic_save_working(code);
-    if !atomic_operand_into(code, addr, a, frame, ATOMIC_SAVE_BYTES, alloc)
-        || !atomic_operand_into(
-            code,
-            expected_addr,
-            exp_addr,
-            frame,
-            ATOMIC_SAVE_BYTES,
-            alloc,
-        )
-        || !atomic_operand_into(code, desired, desired_r, frame, ATOMIC_SAVE_BYTES, alloc)
-    {
+    let a = materialize_int(code, place_of(alloc, addr), scratch.primary, frame);
+    let d = materialize_int(code, place_of(alloc, desired), scratch.secondary, frame);
+    let (Some(a), Some(d)) = (a, d) else {
         return fail("AtomicCas: operand not int reg / spill");
-    }
-    // The comparand is loaded once; sub-width loads zero-extend like the
-    // LDAXR result, so the 64-bit compare is exact.
-    match width {
-        1 => emit(code, enc_ldrb_imm(expected, exp_addr, 0)),
-        2 => emit(code, enc_ldrh_imm(expected, exp_addr, 0)),
-        4 => emit(code, enc_ldr32_imm(expected, exp_addr, 0)),
-        _ => emit(code, enc_ldr_imm(expected, exp_addr, 0)),
-    }
-    let loop_start = code.len();
-    emit(code, enc_ldaxr(cur, a, width));
-    emit(code, enc_cmp_reg(cur, expected));
-    // b.ne fail -- patched once the failure path's offset is known.
-    emit(code, enc_b_cond(Cond::Ne, 0));
-    let to_fail = code.len() - 4;
-    emit(code, enc_stlxr(status, desired_r, a, width));
-    let back = ((loop_start as i64) - (code.len() as i64)) / 4;
-    emit(code, enc_cbnz(status, back as i32));
-    // Success: result = 1, branch past the failure path.
-    emit(code, enc_movz(cur, 1, 0));
-    emit(code, enc_b(0));
-    let to_done = code.len() - 4;
-    // Failure: write the observed value back to *expected_addr, result = 0.
-    let fail_lbl = code.len();
-    let delta = ((fail_lbl - to_fail) / 4) as i32;
-    code[to_fail..to_fail + 4].copy_from_slice(&enc_b_cond(Cond::Ne, delta).to_le_bytes());
-    match width {
-        1 => emit(code, enc_strb_imm(cur, exp_addr, 0)),
-        2 => emit(code, enc_strh_imm(cur, exp_addr, 0)),
-        4 => emit(code, enc_str32_imm(cur, exp_addr, 0)),
-        _ => emit(code, enc_str_imm(cur, exp_addr, 0)),
-    }
-    emit(code, enc_movz(cur, 0, 0));
-    let done_lbl = code.len();
-    let delta = ((done_lbl - to_done) / 4) as i32;
-    code[to_done..to_done + 4].copy_from_slice(&enc_b(delta).to_le_bytes());
-    atomic_restore_working(code);
-    write_atomic_result(code, dst, cur, frame);
+    };
+    let e_place = place_of(alloc, expected);
+    let rd = int_reg(dst).filter(|&r| r != a && r != d);
+    let mut taken = alloc::vec![a, d];
+    taken.extend(rd);
+    taken.extend(int_reg(e_place));
+    let mut regs = atomic_regs(alloc, v, &taken, frame);
+    let rs = match rd {
+        Some(r) => r,
+        None => {
+            let Some(t) = regs.take(code) else {
+                return fail("AtomicCas: no register for the comparand");
+            };
+            t
+        }
+    };
+    let Some(e) = materialize_int_shifted(code, e_place, rs, frame, regs.saved_bytes()) else {
+        return fail("AtomicCas: comparand not int reg / spill");
+    };
+    emit_mov_reg(code, rs, e);
+    emit(
+        code,
+        enc_cas(order.acquires(), order.releases(), rs, d, a, width),
+    );
+    finish_atomic(code, &regs, dst, rs, frame, scratch);
     Ok(())
 }
 

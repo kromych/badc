@@ -148,6 +148,27 @@ struct SwitchLabels {
     default: Option<BlockId>,
 }
 
+/// Where `break` and `continue` go, and the `Walker::scopes` depth each keeps.
+#[derive(Clone, Copy)]
+struct LoopCtx {
+    brk: BlockId,
+    cont: BlockId,
+    brk_depth: usize,
+    cont_depth: usize,
+}
+
+/// A jump's label, the ids of the scopes it leaves and its cleanup calls.
+type CleanupExit = (LabelId, alloc::vec::Vec<StmtId>, alloc::vec::Vec<StmtId>);
+
+/// A block (`Stmt::Compound`) or VLA scope (`Stmt::VlaScopeEnter`) the walk
+/// is inside: the lifetimes leaving it ends (C99 6.2.4p2), the sp it restores.
+#[derive(Clone, Copy)]
+struct OpenScope<'a> {
+    id: StmtId,
+    ends: &'a [i64],
+    vla_save: Option<i64>,
+}
+
 /// Per-walk context. Mutable so the walker can stack break /
 /// continue targets across nested loops + switches and intern
 /// `LabelId -> BlockId` for cross-stmt gotos.
@@ -156,14 +177,18 @@ struct Walker<'a> {
     symbols: &'a [Symbol],
     structs: &'a [crate::c5::compiler::StructDef],
     target: Target,
-    /// Stack of `(break_target, continue_target)` block ids, one
-    /// frame per enclosing loop / switch. Break/Continue stmts
-    /// jump to the top-of-stack entries.
-    loop_ctx: alloc::vec::Vec<(BlockId, BlockId)>,
+    /// The enclosing loops / switches and open scopes, innermost last.
+    loop_ctx: alloc::vec::Vec<LoopCtx>,
+    scopes: alloc::vec::Vec<OpenScope<'a>>,
+    /// Per `LabelId`, the ids of the scopes enclosing it; `None` inside a
+    /// statement expression.
+    label_scopes: alloc::vec::Vec<Option<alloc::vec::Vec<StmtId>>>,
     /// SSA block reserved for each AST label's body, indexed by
     /// `LabelId`. Filled lazily by a Goto's forward reference or by the
     /// matching Labeled stmt, both of which see the same block.
     label_blocks: alloc::vec::Vec<Option<BlockId>>,
+    /// The exit block of the jumps alike by [`CleanupExit`].
+    cleanup_exits: alloc::collections::BTreeMap<CleanupExit, BlockId>,
     /// Per enclosing `switch`, innermost last: the block reserved for
     /// each `case` value and for `default`, allocated by the
     /// case-collection pass before the dispatcher emits. A marker
@@ -264,36 +289,12 @@ impl<'a> Walker<'a> {
         self.live_fun_sym(sym).map_or(0, |s| s.params.len())
     }
 
-    /// Resolve an indirect call's callee to the pointed-to function's
-    /// `(is_variadic, fixed_arg_count)`. The prototype is recoverable
-    /// from a direct function name, from a function-pointer variable
-    /// whose declaration inherited it from a typedef, and through a
-    /// comma operator's right operand. Any other callee defaults to
-    /// non-variadic with every argument fixed, which places its
-    /// arguments as a plain call's are placed.
+    /// An indirect call's `(is_variadic, fixed_arg_count)`, from the
+    /// callee's function type the parse recorded; with none, every
+    /// argument is fixed.
     fn indirect_callee_proto(&self, callee: ExprId, arg_count: usize) -> (bool, usize) {
-        // A variadic callee whose prototype was not recoverable from its
-        // symbol -- a struct-field, array-element, or dereferenced
-        // function pointer -- is recorded at parse time with its fixed
-        // (pre-ellipsis) parameter count, keyed by the callee ExprId.
-        if let Some(&(_, fixed)) = self
-            .ast
-            .variadic_indirect_callees
-            .iter()
-            .find(|(c, _)| *c == callee)
-        {
-            return (true, fixed as usize);
-        }
-        match self.ast.expr(callee) {
-            Expr::Ident { sym, .. } => {
-                let idx = *sym as usize;
-                if idx < self.symbols.len() && self.symbols[idx].is_variadic {
-                    (true, self.symbols[idx].params.len())
-                } else {
-                    (false, arg_count)
-                }
-            }
-            Expr::Comma { rhs, .. } => self.indirect_callee_proto(*rhs, arg_count),
+        match self.ast.callee_types.get(&callee) {
+            Some(f) if f.params.variadic => (true, f.params.types.len()),
             _ => (false, arg_count),
         }
     }
@@ -313,23 +314,12 @@ impl<'a> Walker<'a> {
     }
 
     /// Calling convention the pointed-to function of an indirect call
-    /// follows, recorded at parse time on the callee's `ExprId` when its
-    /// declared type carries `__attribute__((ms_abi))` /
-    /// `((sysv_abi))`. The entry is normalised against the target, so
-    /// anything listed differs from it.
+    /// follows, from the callee's function type the parse recorded.
     fn indirect_callee_conv(&self, callee: ExprId) -> crate::c5::codegen::CallConv {
-        if let Some(&(_, conv)) = self
-            .ast
-            .conv_indirect_callees
-            .iter()
-            .find(|(c, _)| *c == callee)
-        {
-            return conv;
-        }
-        match self.ast.expr(callee) {
-            Expr::Comma { rhs, .. } => self.indirect_callee_conv(*rhs),
-            _ => crate::c5::codegen::CallConv::Target,
-        }
+        self.ast
+            .callee_types
+            .get(&callee)
+            .map_or(crate::c5::codegen::CallConv::Target, |f| f.conv)
     }
 
     /// Resolve a `Token::Glo` address producer to an intra-unit data

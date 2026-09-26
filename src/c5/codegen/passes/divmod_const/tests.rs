@@ -43,7 +43,7 @@ fn returns(f: &FunctionSsa, x: i64) -> Option<i64> {
                 ..
             } => x,
             Inst::Imm(k) => k,
-            Inst::Extend { value, kind } => eval_extend(vals[value as usize], kind),
+            Inst::Extend { value, kind, .. } => eval_extend(vals[value as usize], kind),
             Inst::Binop { op, lhs, rhs } => {
                 apply_binop(op, vals[lhs as usize], vals[rhs as usize]).ok()?
             }
@@ -109,7 +109,11 @@ enum Dividend {
 
 impl Dividend {
     fn inst(self) -> Inst {
-        let extend = |kind| Inst::Extend { value: 0, kind };
+        let extend = |kind| Inst::Extend {
+            value: 0,
+            kind,
+            nsw: false,
+        };
         let mask = |rhs_imm| Inst::BinopI {
             op: BinOp::And,
             lhs: 0,
@@ -368,6 +372,7 @@ fn register_form_with_an_immediate_divisor_is_expanded() {
         Inst::Extend {
             value: 0,
             kind: LoadKind::I8,
+            nsw: false,
         },
         Inst::Binop {
             op: BinOp::Div,
@@ -391,6 +396,7 @@ fn later_sites_follow_earlier_insertions() {
         Inst::Extend {
             value: 0,
             kind: LoadKind::I32,
+            nsw: false,
         },
         Inst::BinopI {
             op: BinOp::Mod,
@@ -443,6 +449,7 @@ fn sites_of_one_block_share_their_instructions() {
             Inst::Extend {
                 value: 0,
                 kind: LoadKind::I32,
+                nsw: false,
             },
             Inst::BinopI {
                 op: ops[0],

@@ -82,7 +82,8 @@ struct LdArgs {
     gnu_stack: Option<bool>,
     print_version: bool,
     // Final-link options; ignored under `-r`, which has no layout.
-    /// `-shared` / `-pie`: ET_DYN output.
+    /// `-shared` / `-pie`: ET_DYN output. The last of those two and
+    /// `-no-pie` wins, as under GNU ld.
     shared: bool,
     /// `-shared` alone: a shared object rather than a
     /// position-independent executable.
@@ -356,7 +357,14 @@ impl LdArgs {
                     a.shared = true;
                     a.shared_object = true;
                 }
-                "-pie" | "--pic-executable" => a.shared = true,
+                "-pie" | "--pic-executable" => {
+                    a.shared = true;
+                    a.shared_object = false;
+                }
+                "-no-pie" | "--no-pie" => {
+                    a.shared = false;
+                    a.shared_object = false;
+                }
                 "-e" | "--entry" => a.entry = Some(next_of(&mut it, "-e")?),
                 s if s.starts_with("--entry=") => a.entry = Some(s["--entry=".len()..].to_string()),
                 "-u" | "--undefined" => a.undefined.push(next_of(&mut it, "-u")?),
@@ -480,7 +488,8 @@ impl LdArgs {
                     println!(
                         "usage: badc --ld [options] file...\n\
                          GNU-ld-compatible driver; see ld(1) for option semantics.\n\
-                         Supported: -r, -o, -m EMU, -T SCRIPT, --whole-archive, \
+                         Supported: -r, -o, -m EMU, -T SCRIPT, -shared, -pie, \
+                         -no-pie, --whole-archive, \
                          --start-group, -L/-l, -z KEYWORD, --build-id[=sha1|none], \
                          --emit-relocs, --fatal-warnings, -X, --strip-debug, -EL, \
                          --orphan-handling=KIND, --no-undefined, --gc-sections"
@@ -1269,6 +1278,24 @@ mod tests {
             ld_script_inputs("OUTPUT_FORMAT(elf64-x86-64)").is_empty(),
             "a script naming no inputs contributes none"
         );
+    }
+
+    /// `-shared`, `-pie` and `-no-pie` each name the output kind, and
+    /// the last one given wins, as under GNU ld.
+    #[test]
+    fn the_last_output_kind_flag_wins() {
+        let kind = |args: &[&str]| {
+            let argv: Vec<String> = args.iter().map(|s| String::from(*s)).collect();
+            let a = LdArgs::parse(&argv).unwrap_or_else(|code| panic!("{args:?}: {code}"));
+            (a.shared, a.shared_object)
+        };
+        assert_eq!(kind(&["a.o"]), (false, false));
+        assert_eq!(kind(&["-pie", "a.o"]), (true, false));
+        assert_eq!(kind(&["-shared", "a.o"]), (true, true));
+        assert_eq!(kind(&["-shared", "-pie", "a.o"]), (true, false));
+        assert_eq!(kind(&["-pie", "-shared", "a.o"]), (true, true));
+        assert_eq!(kind(&["-shared", "-no-pie", "a.o"]), (false, false));
+        assert_eq!(kind(&["-pie", "--no-pie", "a.o"]), (false, false));
     }
 
     /// `scripts/ld-version.sh`: `10000*major + 100*minor + patch`, with a

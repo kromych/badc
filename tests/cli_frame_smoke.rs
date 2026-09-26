@@ -17,14 +17,18 @@
 //! dumper `dwarfdump`, then `llvm-dwarfdump`. A missing tool skips the
 //! check that needs it.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::Command;
 
 mod common;
 use common::TempDir;
 
-fn badc() -> PathBuf {
-    PathBuf::from(env!("CARGO_BIN_EXE_badc"))
+/// The compiler under test with the register-pressure caps of a `codegen_test`
+/// run cleared: the frame shapes asserted here hold over the full banks.
+fn badc() -> Command {
+    let mut cmd = Command::new(env!("CARGO_BIN_EXE_badc"));
+    cmd.env_remove("BADC_MAX_GPR").env_remove("BADC_MAX_FPR");
+    cmd
 }
 
 fn tempdir(name: &str) -> TempDir {
@@ -279,7 +283,7 @@ fn x86_64_prologue_and_epilogue_keep_the_return_address_in_place() {
         for opt in [&[][..], &["-O"][..]] {
             let obj = dir.join(format!("shapes-{target}{}.o", opt.join("")));
             run(
-                Command::new(badc())
+                badc()
                     .arg(format!("--target={target}"))
                     .args(opt)
                     .arg("-c")
@@ -344,7 +348,7 @@ fn aarch64_homes_the_parameters_inside_the_frame() {
         for opt in [&[][..], &["-O"][..]] {
             let obj = dir.join(format!("shapes-{target}{}.o", opt.join("")));
             run(
-                Command::new(badc())
+                badc()
                     .arg(format!("--target={target}"))
                     .args(opt)
                     .arg("-c")
@@ -517,7 +521,7 @@ fn each_parameter_home_is_written_once() {
         for opt in [&[][..], &["-O"][..]] {
             let obj = dir.join(format!("homes-{target}{}.o", opt.join("")));
             run(
-                Command::new(badc())
+                badc()
                     .arg(format!("--target={target}"))
                     .args(opt)
                     .arg("-c")
@@ -580,7 +584,7 @@ fn x86_64_debug_frame_follows_each_prologue_instruction() {
     for opt in [&[][..], &["-O"][..]] {
         let exe = dir.join(format!("shapes{}", opt.join("")));
         run(
-            Command::new(badc())
+            badc()
                 .arg("--target=linux-x64")
                 .arg("-g")
                 .args(opt)
@@ -672,17 +676,39 @@ void wrgs(unsigned long gsbase)
     asm volatile("wrgsbase %0" :: "r" (gsbase) : "memory");
     asm volatile("swapgs" ::: "memory");
 }
+__attribute__((__noinline__, __section__(".noinstr.text")))
+unsigned long rdgs_inactive(void)
+{
+    unsigned long gsbase;
+    asm volatile("swapgs" ::: "memory");
+    asm volatile("rdgsbase %0" : "=r" (gsbase));
+    asm volatile("swapgs" ::: "memory");
+    return gsbase;
+}
+unsigned long read_inactive(void) { return rdgs_inactive(); }
+void fill(char *p);
+unsigned long guarded(void)
+{
+    char buf[16];
+    fill(buf);
+    return buf[3];
+}
+__attribute__((no_stack_protector)) unsigned long unguarded(void)
+{
+    char buf[16];
+    fill(buf);
+    return buf[3];
+}
 "#;
 
 /// The frame reports of `KERNEL_ASM` under the kernel's flags, by function.
 fn kernel_asm_frames(dir: &Path) -> std::collections::BTreeMap<String, (u64, String)> {
-    let src = dir.join("kasm.c");
-    std::fs::write(&src, KERNEL_ASM).expect("write source");
-    let out = Command::new(badc())
-        .args([
+    frame_reports(
+        dir,
+        "kasm",
+        KERNEL_ASM,
+        &[
             "--target=linux-x64",
-            "-O",
-            "-c",
             "-mcmodel=kernel",
             "-mno-sse",
             "-fno-pic",
@@ -691,10 +717,27 @@ fn kernel_asm_frames(dir: &Path) -> std::collections::BTreeMap<String, (u64, Str
             "-mstack-protector-guard=tls",
             "-mstack-protector-guard-reg=gs",
             "-mstack-protector-guard-symbol=__ref_stack_chk_guard",
-            "-Wframe-larger-than=0",
-        ])
+            "-ftrivial-auto-var-init=zero",
+            "-fpatchable-function-entry=16,16",
+        ],
+    )
+}
+
+/// The `-Wframe-larger-than=0` reports of `source` compiled at `-O` with
+/// `args`, by function: the frame bytes and the region breakdown.
+fn frame_reports(
+    dir: &Path,
+    stem: &str,
+    source: &str,
+    args: &[&str],
+) -> std::collections::BTreeMap<String, (u64, String)> {
+    let src = dir.join(format!("{stem}.c"));
+    std::fs::write(&src, source).expect("write source");
+    let out = badc()
+        .args(["-O", "-c", "-Wframe-larger-than=0"])
+        .args(args)
         .arg("-o")
-        .arg(dir.join("kasm.o"))
+        .arg(dir.join(format!("{stem}.o")))
         .arg(&src)
         .output()
         .expect("run badc");
@@ -734,7 +777,13 @@ fn x86_64_inline_asm_operands_take_no_frame_scratch() {
             !parts.contains("inline-asm scratch"),
             "{name}: {bytes} bytes: {parts}"
         );
-        assert!(!parts.contains("canary"), "{name}: {bytes} bytes: {parts}");
+        // `-fstack-protector-strong` guards the character array of
+        // `guarded`; `no_stack_protector` takes the guard off `unguarded`.
+        assert_eq!(
+            parts.contains("canary"),
+            name == "guarded",
+            "{name}: {bytes} bytes: {parts}"
+        );
     }
     let one = frames.get("one").expect("`one` has a frame");
     let eight = frames.get("eight").expect("`eight` has a frame");
@@ -752,14 +801,117 @@ fn x86_64_inline_asm_operands_take_no_frame_scratch() {
     // Five output locals, the saved frame pointer, and at most two
     // callee-saved registers.
     assert!(one.0 <= 48 + 8 + 16, "{frames:?}");
-    assert!(
-        frames.get("rdgs").is_some_and(|(b, _)| *b <= 24),
-        "{frames:?}"
-    );
-    for leaf in ["has", "wrgs"] {
+    // A register output into a scalar local is the statement's value, so
+    // the local takes no slot: the gsbase switch, in the shape the kernel
+    // compiles it under its flags, keeps no frame at all.
+    for leaf in ["has", "wrgs", "rdgs", "rdgs_inactive"] {
         assert!(
             !frames.contains_key(leaf),
             "{leaf} keeps no frame: {frames:?}"
+        );
+    }
+}
+
+/// An automatic object aligned above the 8-byte slot is reserved once, in
+/// the over-aligned region: a 528-byte object aligned 16 -- the kernel's
+/// `struct user_fpsimd_state` shape -- takes the frame a same-size 8-aligned
+/// one does, and two in disjoint blocks share one region block.
+#[test]
+fn an_over_aligned_object_is_reserved_once() {
+    const SRC: &str = r#"
+struct st16 { _Alignas(16) unsigned char v[512]; unsigned int fpsr, fpcr; };
+struct st8 { unsigned long long v[66]; };
+void use16(struct st16 *);
+void use8(struct st8 *);
+void one16(void) { struct st16 s; use16(&s); }
+void one8(void) { struct st8 s; use8(&s); }
+void two16(int c) { if (c) { struct st16 a; use16(&a); } else { struct st16 b; use16(&b); } }
+"#;
+    let dir = tempdir("overaligned");
+    for (target, record) in [("linux-aarch64", 16), ("linux-x64", 8)] {
+        let arg = format!("--target={target}");
+        let frames = frame_reports(&dir, "overaligned", SRC, &[arg.as_str()]);
+        for f in ["one16", "one8", "two16"] {
+            let (bytes, parts) = frames
+                .get(f)
+                .unwrap_or_else(|| panic!("{target} {f}: {frames:?}"));
+            assert_eq!(*bytes, 528 + record, "{target} {f}: {parts}");
+            if f != "one8" {
+                assert!(
+                    parts.contains("528 in an over-aligned region") && !parts.contains("locals"),
+                    "{target} {f}: {parts}"
+                );
+            }
+        }
+    }
+}
+
+/// Every edge that leaves a block ends the lifetimes of the objects it
+/// declared (C99 6.2.4p2), so two 512-byte arrays in disjoint blocks share
+/// one 512-byte cell whether the blocks fall through, return, break,
+/// continue or any goto out, and when a path never enters the first block. A
+/// `for` statement is a block (C99 6.8.5p5): the kernel's `scoped_ksimd()`
+/// declares its 528-byte state in one, left by `return` or by `break`, and
+/// the two states take one over-aligned region block.
+#[test]
+fn an_object_left_by_any_edge_shares_its_storage() {
+    const SRC: &str = r#"
+void g(char *);
+int fall(int c) { if (c) { char a[512]; g(a); } else { char b[512]; g(b); } return 0; }
+int ret(int c) { if (c) { char a[512]; g(a); return 1; } else { char b[512]; g(b); return 2; } }
+void skip(int c) { if (c) { char a[512]; g(a); } { char b[512]; g(b); } }
+void sw(int k) { switch (k) { case 0: { char a[512]; g(a); } case 1: { char b[512]; g(b); break; } } }
+void brk(int n) { for (int i = 0; i < n; i++) { char a[512]; g(a); if (a[0]) break; } { char b[512]; g(b); } }
+void cont(int n) {
+    for (int i = 0; i < n; i++) { char a[512]; g(a); if (a[0]) continue; g(a + 1); }
+    { char b[512]; g(b); }
+}
+void jump(int c) { { char a[512]; g(a); if (c) goto out; g(a + 1); } out: { char b[512]; g(b); } }
+void asmjump(int c) {
+    { char a[512]; g(a); if (c) asm goto("" :::: out); g(a + 1); }
+out: { char b[512]; g(b); }
+}
+void cjump(int c) {
+    void *t = &&out;
+    { char a[512]; g(a); if (c) goto *t; again: g(a + 1); if (a[0]) goto again; }
+out: { char b[512]; g(b); }
+}
+struct st { _Alignas(16) unsigned char v[512]; unsigned int fpsr, fpcr; };
+void use_st(struct st *);
+int ksimd(int c) {
+    if (c) { for (struct st s;;) { use_st(&s); return 1; } }
+    else { for (struct st t;;) { use_st(&t); break; } }
+    return 0;
+}
+"#;
+    let dir = tempdir("scope_exits");
+    for target in ["linux-aarch64", "linux-x64"] {
+        let arg = format!("--target={target}");
+        let frames = frame_reports(&dir, "scope_exits", SRC, &[arg.as_str()]);
+        let shapes = [
+            "fall", "ret", "skip", "sw", "brk", "cont", "jump", "cjump", "asmjump",
+        ];
+        for f in shapes {
+            let (bytes, parts) = frames
+                .get(f)
+                .unwrap_or_else(|| panic!("{target} {f}: {frames:?}"));
+            let locals = parts.split(", ").find(|p| p.ends_with(" in locals"));
+            assert_eq!(
+                locals,
+                Some("512 in locals"),
+                "{target} {f}: {bytes} bytes: {parts}"
+            );
+        }
+        let (bytes, parts) = frames
+            .get("ksimd")
+            .unwrap_or_else(|| panic!("{target} ksimd: {frames:?}"));
+        let region = parts
+            .split(", ")
+            .find(|p| p.ends_with(" in an over-aligned region"));
+        assert_eq!(
+            region,
+            Some("528 in an over-aligned region"),
+            "{target} ksimd: {bytes} bytes: {parts}"
         );
     }
 }
@@ -786,7 +938,7 @@ fn simd_wrappers_inline_at_opt() {
     )
     .expect("write source");
     let out = run(
-        Command::new(badc())
+        badc()
             .args(["-q", "-O", "-c", "--target=linux-x64", "--dump-ssa"])
             .arg("-Wframe-larger-than=0")
             .arg("-o")
@@ -825,7 +977,7 @@ fn dump_opt(source: &str, target: &str, name: &str) -> String {
     let src = dir.join("k.c");
     std::fs::write(&src, source).expect("write source");
     let out = run(
-        Command::new(badc())
+        badc()
             .args(["-q", "-O", "-c", "--dump-ssa", "-Wframe-larger-than=0"])
             .arg(format!("--target={target}"))
             .arg("-o")
@@ -968,7 +1120,9 @@ fn x86_64_asm_vector_operands_live_in_registers_at_opt() {
 
 /// A caller whose pre-inline frame is past the inliner's absolute bound
 /// still absorbs the NEON wrappers: once its vectors are values a splice
-/// leaves no frame cell, so none of the calls stays out of line.
+/// leaves no frame cell, so none of the calls stays out of line, and with
+/// the wrappers' asm operands in their values' registers the function
+/// takes no frame at all.
 #[test]
 fn neon_wrappers_inline_into_a_large_frame() {
     let mut source = String::from(
@@ -981,9 +1135,11 @@ fn neon_wrappers_inline_into_a_large_frame() {
     }
     source.push_str("    vst1q_u8(out, w);\n}\n");
     let stderr = dump_opt(&source, "linux-aarch64", "neon-large-frame");
-    let (body, report) = function_dump(&stderr, "fold");
+    let body = stderr
+        .split("; name=")
+        .find(|s| s.starts_with("fold\n"))
+        .unwrap_or_else(|| panic!("fold is not dumped:\n{stderr}"));
     assert!(!body.contains("Call {"), "a wrapper call remains:\n{body}");
-    for region in ["in locals", "over-aligned region"] {
-        assert!(!report.contains(region), "{report}");
-    }
+    let report = stderr.lines().find(|l| l.contains("function `fold`"));
+    assert!(report.is_none(), "{report:?}");
 }

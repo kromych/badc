@@ -87,7 +87,7 @@ impl Compiler {
         undeclared.dedup();
         for sym_idx in undeclared {
             let name = self.symbols[sym_idx].name.clone();
-            let line = self.symbols[sym_idx].decl_line;
+            let line = self.symbols[sym_idx].binding.decl_line;
             let suggestion = self.include_hint(&name);
             self.warn_at(
                 Code::UNDEFINED_FUNCTION,

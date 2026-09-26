@@ -129,12 +129,14 @@ pub(crate) enum Inst {
     /// Store to a local / parameter slot. Same shape as
     /// [`Self::Store`] but with the address represented as a
     /// constant slot offset, so the emit folds it into the
-    /// store's addressing mode.
+    /// store's addressing mode. `nsw`: `value` overflowed undefined
+    /// (C99 6.5p5); promotion leaves a marked [`Self::Extend`] instead.
     StoreLocal {
         off: i64,
         value: ValueId,
         kind: StoreKind,
         volatile: bool,
+        nsw: bool,
     },
     /// Load from `base + index * scale`. Folded form of
     /// `Add(base, Mul/Shl(index, scale))` followed by a `Load`,
@@ -144,13 +146,17 @@ pub(crate) enum Inst {
     /// natural width of `kind` (1 for I8/U8, 2 for I16/U16, 4 for
     /// I32/U32, 8 for I64). Carries no volatile flag: `index_fold`
     /// leaves volatile accesses on the plain `Load` / `Store` forms.
-    /// `index_ext` selects how much of `index` is read.
+    /// `index_ext` selects how much of `index` is read. With `abs_base`
+    /// the base is an `ImmData` whose link-time address the access carries
+    /// as its displacement (x86-64 static-link code models), so no
+    /// register holds it.
     LoadIndexed {
         base: ValueId,
         index: ValueId,
         index_ext: IndexExt,
         scale: u8,
         kind: LoadKind,
+        abs_base: bool,
     },
     /// Store to `base + index * scale`. Companion to
     /// [`Self::LoadIndexed`].
@@ -161,6 +167,7 @@ pub(crate) enum Inst {
         scale: u8,
         value: ValueId,
         kind: StoreKind,
+        abs_base: bool,
     },
     /// Load through an x86 named-address-space pointer (`__seg_gs` /
     /// `__seg_fs`): the memory reference rides a segment-override prefix
@@ -234,6 +241,13 @@ pub(crate) enum Inst {
         c: ValueId,
         neg_product: bool,
     },
+    /// The quotient of the unsigned 128-bit `hi:lo` by `divisor`, for `hi <
+    /// divisor`: x86_64 `div` of rdx:rax (`irgen::int128`).
+    Udiv128 {
+        hi: ValueId,
+        lo: ValueId,
+        divisor: ValueId,
+    },
     /// Sign-extend the low bytes of `value` to 64 bits: discard the
     /// bits above `kind`'s width and replicate the sign bit, the fused
     /// `trunc; sext` that lowers to one `sxtb`/`sxth`/`sxtw` (AArch64)
@@ -244,9 +258,18 @@ pub(crate) enum Inst {
     ///     lifts a narrow local slot whose frame round-trip sign
     ///     extended, or a load feeds a 64-bit use;
     ///   * renormalizing a signed integer result to its declared
-    ///     width after a 64-bit computation (C99 6.5p5) -- equivalent
-    ///     to the `Shl K; Shr K` pair the builder folds here.
-    Extend { value: ValueId, kind: LoadKind },
+    ///     width after a 64-bit computation (C99 6.5p5), from a
+    ///     `Renormalize` node or a `Shl K; Shr K` pair.
+    /// `nsw` marks the renormalization of an operation whose overflow is
+    /// undefined (`+ - *`, unary `-`, and the step a marked
+    /// [`Self::StoreLocal`] stores, without `-fwrapv`): in a defined
+    /// execution `value` fits `kind`. Two copies merge to the conjunction
+    /// of their marks.
+    Extend {
+        value: ValueId,
+        kind: LoadKind,
+        nsw: bool,
+    },
     /// Reverse the low `width` bytes of `value` (`__builtin_bswap16/32/64`,
     /// C99 has no operator; the builtin is the existing practice). `width`
     /// is 2, 4, or 8. Operand bits above `width * 8` do not affect the
@@ -284,7 +307,9 @@ pub(crate) enum Inst {
         /// For a variadic callee this is the prototype's
         /// pre-ellipsis parameter count; `args[fixed_args..]` are
         /// the variadic arguments. For a non-variadic callee it
-        /// equals `args.len()`. The per-arch emit feeds it to
+        /// equals `args.len()`, or 0 for a call without a prototype
+        /// under the Microsoft x64 convention, which places its
+        /// arguments as a variadic call's. The per-arch emit feeds it to
         /// `plan_call_args` so a host variadic ABI (macOS arm64:
         /// AAPCS64 6.4.1 for the named args, all-stack at 8-byte
         /// stride for the variadic tail) places the variadic
@@ -303,6 +328,17 @@ pub(crate) enum Inst {
         /// `Imm` bit pattern, so the placement alone cannot classify
         /// it. The per-arch emit feeds this to `plan_call_args`.
         fp_arg_mask: FpMask,
+        /// Bit `i` set when the callee reads argument `i` in the low 32
+        /// bits alone: a named integer parameter no wider than 32 bits,
+        /// whose upper half every supported ABI leaves unspecified (System
+        /// V AMD64 3.2.3, AAPCS64 6.8.2), or such an argument past the
+        /// prototype, which `va_arg` reads as a promoted `int`; a narrower
+        /// one still arrives extended to 32 bits (Apple arm64). Clear past
+        /// bit 63.
+        low_word_args: u64,
+        /// The width of each argument narrower than 8 bytes: a named
+        /// parameter's type, past the prototype the promoted argument's.
+        arg_widths: ArgWidths,
         /// Host-ABI aggregate metadata. Parallel to `args`:
         /// `arg_aggs[k] = Some(i)` marks `args[k]` as the address of
         /// an aggregate laid out by the function's `agg_descs[i]`,
@@ -313,9 +349,12 @@ pub(crate) enum Inst {
         /// `agg_descs[i]` by value; `None` for scalar / void.
         ret_agg: Option<u32>,
         /// Negative frame slot of the caller-allocated result
-        /// temporary an aggregate return materialises into. A frame
-        /// slot rather than a `ValueId` so it survives value
-        /// renumbering. `0` unless `ret_agg` is set.
+        /// temporary an aggregate return materialises into: through the
+        /// host ABI when `ret_agg` is set, else through the c5
+        /// out-pointer the call passes as `args[0]`. A frame slot rather
+        /// than a `ValueId` so it survives value renumbering. `0` for a
+        /// call returning no aggregate, and for one whose `RetPart`s read
+        /// the result registers.
         ret_slot_local: i64,
     },
     /// Indirect call: the target's address comes from `target`
@@ -326,9 +365,11 @@ pub(crate) enum Inst {
         args: Vec<ValueId>,
         /// True when the pointed-to function's prototype is variadic.
         /// The walker reads it off the callee fn-pointer's declared
-        /// type; an unprototyped or non-statically-typed callee
-        /// defaults to false. Drives the per-arch emit's choice of
-        /// the host variadic ABI vs the c5 cdecl stack-push shape.
+        /// type; an unprototyped callee counts as variadic with no
+        /// named parameter under the Microsoft x64 convention and
+        /// as non-variadic elsewhere, as a non-statically-typed one
+        /// does. Drives the per-arch emit's choice of the host
+        /// variadic ABI vs the c5 cdecl stack-push shape.
         callee_variadic: bool,
         /// Named (fixed) parameter count of the pointed-to function;
         /// see [`Self::Call::fixed_args`]. Equals `args.len()` unless
@@ -338,6 +379,10 @@ pub(crate) enum Inst {
         fp_return: bool,
         /// See [`Self::Call::fp_arg_mask`].
         fp_arg_mask: FpMask,
+        /// See [`Self::Call::low_word_args`].
+        low_word_args: u64,
+        /// See [`Self::Call::arg_widths`].
+        arg_widths: ArgWidths,
         /// Calling convention the pointed-to function follows, read off
         /// the callee pointer's declared type
         /// (`__attribute__((ms_abi))` / `((sysv_abi))`). Selects the
@@ -356,6 +401,10 @@ pub(crate) enum Inst {
         binding_idx: i64,
         args: Vec<ValueId>,
         fp_arg_mask: FpMask,
+        /// See [`Self::Call::low_word_args`].
+        low_word_args: u64,
+        /// See [`Self::Call::arg_widths`].
+        arg_widths: ArgWidths,
         /// True when the callee returns a floating-point scalar, so the
         /// result is delivered in the FP return register (d0 / xmm0) and
         /// the value is FP-classed. Mirrors [`Self::Call::fp_return`];
@@ -400,34 +449,43 @@ pub(crate) enum Inst {
         align: u32,
     },
     /// Atomic read-modify-write on the `width`-byte object at `addr`
-    /// (C11 7.17.7.2-7.17.7.5). `op` selects the operator; the operand
-    /// is `value`. The defined value is the object's prior contents
-    /// (C11 7.17.7p2). The per-arch lowering emits a genuine atomic
-    /// sequence (Intel SDM Vol.2 LOCK XADD / XCHG / CMPXCHG retry on
-    /// x86_64; ARM ARM LDAXR / STLXR retry on aarch64).
+    /// (C11 7.17.7.2-7.17.7.5), carrying `order`. `op` selects the
+    /// operator; the operand is `value`. The defined value is the
+    /// object's prior contents (C11 7.17.7p2), of which only the low
+    /// `width` bytes are defined. One instruction on aarch64, the LSE
+    /// `LDADD` / `LDCLR` / `LDEOR` / `LDSET` / `SWP` with the order's
+    /// acquire and release bits (ARM ARM C6.2); on x86_64 `LOCK XADD`,
+    /// `XCHG`, and for the bitwise operators a `LOCK` op when the prior
+    /// contents are unread, else a `LOCK CMPXCHG` retry (Intel SDM Vol.2).
     AtomicRmw {
         op: AtomicRmwOp,
         addr: ValueId,
         value: ValueId,
         width: u8,
+        order: MemOrder,
     },
     /// Atomic compare-and-exchange on the `width`-byte object at `addr`
-    /// (C11 7.17.7.4). Compares `*addr` against `*expected_addr`; on a
-    /// match stores `desired` and yields 1, otherwise stores the
-    /// current `*addr` into `*expected_addr` and yields 0. Lowered to
-    /// LOCK CMPXCHG on x86_64 and an LDAXR / STLXR retry on aarch64.
+    /// (C11 7.17.7.4): the low `width` bytes of `*addr` are compared with
+    /// those of `expected` and on a match replaced by those of `desired`.
+    /// The defined value is the prior contents, zero-extended; the
+    /// exchange happened when they equal `expected`'s low bytes. `order`
+    /// is the one the instruction carries on either outcome
+    /// ([`MemOrder::with_failure`]). `CAS` on aarch64 (LSE), `LOCK
+    /// CMPXCHG` on x86_64.
     AtomicCas {
         addr: ValueId,
-        expected_addr: ValueId,
+        expected: ValueId,
         desired: ValueId,
         width: u8,
+        order: MemOrder,
     },
     /// Atomic load of the `width`-byte object at `addr` (C11 7.17.7.2),
     /// zero-extended. `order` selects the access: on aarch64 a plain
-    /// load for relaxed and `ldar` otherwise; on x86_64 a plain `mov`
-    /// for every order, which is an acquire and, against the `xchg`
-    /// seq_cst store, sequentially consistent. Never pure: an atomic
-    /// access happens whatever its order (C11 7.17.3p16).
+    /// load for relaxed, the RCpc `ldapr` for acquire and `ldar` for
+    /// seq_cst; on x86_64 a plain `mov` for every order, which is an
+    /// acquire and, against the `xchg` seq_cst store, sequentially
+    /// consistent. Never pure: an atomic access happens whatever its
+    /// order (C11 7.17.3p16).
     AtomicLoad {
         addr: ValueId,
         width: u8,
@@ -508,6 +566,34 @@ pub(crate) enum Inst {
     /// rewrite then collapse to a plain copy when their kind
     /// matches the ParamRef's kind.
     ParamRef { idx: u32, kind: LoadKind },
+    /// Register `part` of aggregate parameter `idx`, which the host ABI
+    /// passes in registers: the k-th eightbyte or floating-point member
+    /// of `agg_descs[param_aggs[idx]]`, as a value of `kind`'s bank
+    /// (`abi_classify::register_parts`). `passes::agg_parts` emits one
+    /// per register for a parameter it takes out of its frame object,
+    /// whose `param_local_slots` entry is then 0.
+    ParamPart { idx: u32, part: u8, kind: LoadKind },
+    /// The value a call left in its `slot`-th result register of `kind`'s
+    /// bank: part of an aggregate the host ABI returns in registers, which
+    /// `passes::agg_parts` stores into the call's result temporary in the
+    /// tape, leaving the call no `ret_slot_local`. It follows its call in
+    /// the block with nothing between them that writes the result
+    /// registers; the allocator keeps what does stand there off them.
+    RetPart { slot: u8, kind: LoadKind },
+    /// Value output `op` past the first of the inline asm statement it
+    /// follows (after other `AsmOut`s of it) in its block; the lowering
+    /// leaves it in a `kind` register. Emits nothing.
+    AsmOut { op: u8, kind: LoadKind },
+    /// The aggregate `agg_descs[desc]` as the values of its register
+    /// parts in class order, `fp_mask` naming the floating-point ones,
+    /// for a `Terminator::Return` in registers. Produces no value. The
+    /// last instruction of its block, so the parts are still in their
+    /// places when the return moves them.
+    AggParts {
+        desc: u32,
+        parts: Vec<ValueId>,
+        fp_mask: FpMask,
+    },
     /// SSA phi: at a join block where a promoted slot has more
     /// than one reaching definition, mem2reg synthesises one of
     /// these per slot to merge the predecessors' incoming
@@ -570,11 +656,15 @@ impl Inst {
                 | Inst::Fneg(_)
                 | Inst::Fma { .. }
                 | Inst::MulAdd { .. }
+                | Inst::Udiv128 { .. }
                 | Inst::FpCast { .. }
                 | Inst::Extend { .. }
                 | Inst::Bswap { .. }
                 | Inst::BitCount { .. }
                 | Inst::Copy { .. }
+                | Inst::ParamPart { .. }
+                | Inst::RetPart { .. }
+                | Inst::AsmOut { .. }
         )
     }
 
@@ -610,6 +700,7 @@ impl Inst {
             Inst::Fneg(_) => "Fneg",
             Inst::Fma { .. } => "Fma",
             Inst::MulAdd { .. } => "MulAdd",
+            Inst::Udiv128 { .. } => "Udiv128",
             Inst::Extend { .. } => "Extend",
             Inst::Bswap { .. } => "Bswap",
             Inst::BitCount { .. } => "BitCount",
@@ -631,6 +722,10 @@ impl Inst {
             Inst::AllocaInit(_) => "AllocaInit",
             Inst::LifetimeEnd(_) => "LifetimeEnd",
             Inst::ParamRef { .. } => "ParamRef",
+            Inst::ParamPart { .. } => "ParamPart",
+            Inst::RetPart { .. } => "RetPart",
+            Inst::AsmOut { .. } => "AsmOut",
+            Inst::AggParts { .. } => "AggParts",
             Inst::Phi { .. } => "Phi",
         }
     }
@@ -655,7 +750,11 @@ impl Inst {
             | Inst::TailExt(_)
             | Inst::AllocaInit(_)
             | Inst::LifetimeEnd(_)
-            | Inst::ParamRef { .. } => {}
+            | Inst::ParamRef { .. }
+            | Inst::ParamPart { .. }
+            | Inst::RetPart { .. }
+            | Inst::AsmOut { .. } => {}
+            Inst::AggParts { parts, .. } => parts.iter().for_each(|&v| f(v)),
             Inst::Load { addr, .. } => f(*addr),
             Inst::Store { addr, value, .. } => {
                 f(*addr);
@@ -688,6 +787,11 @@ impl Inst {
                 f(*a);
                 f(*b);
                 f(*c);
+            }
+            Inst::Udiv128 { hi, lo, divisor } => {
+                f(*hi);
+                f(*lo);
+                f(*divisor);
             }
             Inst::Extend { value, .. } => f(*value),
             Inst::Bswap { value, .. } | Inst::BitCount { value, .. } => f(*value),
@@ -727,12 +831,12 @@ impl Inst {
             Inst::AtomicLoad { addr, .. } => f(*addr),
             Inst::AtomicCas {
                 addr,
-                expected_addr,
+                expected,
                 desired,
                 ..
             } => {
                 f(*addr);
-                f(*expected_addr);
+                f(*expected);
                 f(*desired);
             }
             Inst::Phi { incoming, .. } => {
@@ -759,7 +863,11 @@ impl Inst {
             | Inst::TailExt(_)
             | Inst::AllocaInit(_)
             | Inst::LifetimeEnd(_)
-            | Inst::ParamRef { .. } => {}
+            | Inst::ParamRef { .. }
+            | Inst::ParamPart { .. }
+            | Inst::RetPart { .. }
+            | Inst::AsmOut { .. } => {}
+            Inst::AggParts { parts, .. } => parts.iter_mut().for_each(f),
             Inst::Load { addr, .. } => f(addr),
             Inst::Store { addr, value, .. } => {
                 f(addr);
@@ -792,6 +900,11 @@ impl Inst {
                 f(a);
                 f(b);
                 f(c);
+            }
+            Inst::Udiv128 { hi, lo, divisor } => {
+                f(hi);
+                f(lo);
+                f(divisor);
             }
             Inst::Extend { value, .. } => f(value),
             Inst::Bswap { value, .. } | Inst::BitCount { value, .. } => f(value),
@@ -828,12 +941,12 @@ impl Inst {
             Inst::AtomicLoad { addr, .. } => f(addr),
             Inst::AtomicCas {
                 addr,
-                expected_addr,
+                expected,
                 desired,
                 ..
             } => {
                 f(addr);
-                f(expected_addr);
+                f(expected);
                 f(desired);
             }
             Inst::Phi { incoming, .. } => {
@@ -1147,6 +1260,42 @@ pub(crate) enum MemOrder {
 }
 
 impl MemOrder {
+    /// Whether the access acquires: acquire, acq_rel and seq_cst.
+    pub(crate) fn acquires(self) -> bool {
+        matches!(
+            self,
+            MemOrder::Acquire | MemOrder::AcqRel | MemOrder::SeqCst
+        )
+    }
+
+    /// Whether the access releases: release, acq_rel and seq_cst.
+    pub(crate) fn releases(self) -> bool {
+        matches!(
+            self,
+            MemOrder::Release | MemOrder::AcqRel | MemOrder::SeqCst
+        )
+    }
+
+    /// The order one compare-exchange instruction carries for success
+    /// order `self` and failure order `failure`: it acquires when either
+    /// does and releases when the success order does (C11 7.17.7.4p2).
+    /// A failure order the standard excludes, release or acq_rel, makes
+    /// both seq_cst, as gcc does.
+    pub(crate) fn with_failure(self, failure: MemOrder) -> Self {
+        if matches!(failure, MemOrder::Release | MemOrder::AcqRel)
+            || self == MemOrder::SeqCst
+            || failure == MemOrder::SeqCst
+        {
+            return MemOrder::SeqCst;
+        }
+        match (self.acquires() || failure.acquires(), self.releases()) {
+            (false, false) => MemOrder::Relaxed,
+            (true, false) => MemOrder::Acquire,
+            (false, true) => MemOrder::Release,
+            (true, true) => MemOrder::AcqRel,
+        }
+    }
+
     /// The order a `memory_order` / `__ATOMIC_*` constant names.
     pub(crate) fn from_c11(v: i64) -> Option<Self> {
         Some(match v {
@@ -1323,6 +1472,12 @@ pub(crate) struct AsmOperand {
     /// An output's value, one per statement at most, is the instruction's
     /// own, and its argument `NO_VALUE`.
     pub value: bool,
+    /// The operand's object is volatile-qualified, so the statement's write
+    /// to it is an access the abstract machine performs (C99 6.7.3p6).
+    pub volatile_object: bool,
+    /// `&` output: the template writes it before it has read every input,
+    /// so it may not share a register with one.
+    pub early_clobber: bool,
 }
 
 /// A parsed GCC extended-asm statement (`asm(template : outputs :
@@ -1340,8 +1495,8 @@ pub(crate) struct AsmBlock {
     /// that still hold something (`Allocation::asm_preserve`).
     pub clobber_regs: u32,
     /// SIMD/FP registers named in the clobber list, as a bitmask over the FP
-    /// register file (independent of `clobber_regs`). Empty for x86 targets,
-    /// whose FP clobbers ride the shared mask.
+    /// register file (independent of `clobber_regs`): any view of a SIMD
+    /// register on AArch64, an `xmm` register on x86-64.
     pub clobber_fp_regs: u32,
     /// A `"memory"` clobber was listed: an ordering barrier for memory
     /// accesses (C practice for `asm volatile("" ::: "memory")`).
@@ -1359,36 +1514,54 @@ impl AsmBlock {
     /// not bounded by the CFG or the C block structure, and frame-storage
     /// sharing decisions must exclude the function.
     pub fn references_sp(&self) -> bool {
-        // An operand binding a storage-less register variable: the parser
-        // admits only the stack- and frame-pointer ones. A `%N` naming it
-        // reads or writes the register itself. One the template never
-        // names (`ASM_CALL_CONSTRAINT`, which declares a call inside the
-        // body) gives the template no way to reach it.
-        if self
-            .operands
-            .iter()
-            .enumerate()
-            .any(|(i, o)| matches!(o.constraint, AsmConstraint::Bound(_)) && self.names_operand(i))
-        {
-            return true;
-        }
+        self.names_bound_operand(false) || self.sp_tokens().next().is_some()
+    }
+
+    /// True when the template may leave the stack pointer moved, as a stack
+    /// switch does: it names sp other than as the base of a memory operand
+    /// that keeps it (x86 has no writeback; AArch64 writes the base back in
+    /// `[sp, #n]!` and `[sp], #n`), or names a bound output operand.
+    pub fn may_move_sp(&self) -> bool {
+        self.names_bound_operand(true)
+            || self
+                .sp_tokens()
+                .any(|(start, end)| !keeps_sp_base(&self.template, start, end))
+    }
+
+    /// An operand binding a storage-less register variable, an output one
+    /// when `output`: the parser admits only the stack- and frame-pointer
+    /// ones. A `%N` naming it reads or writes the register itself. One the
+    /// template never names (`ASM_CALL_CONSTRAINT`, which declares a call
+    /// inside the body) gives the template no way to reach it.
+    fn names_bound_operand(&self, output: bool) -> bool {
+        self.operands.iter().enumerate().any(|(i, o)| {
+            matches!(o.constraint, AsmConstraint::Bound(_))
+                && (o.is_output || !output)
+                && self.names_operand(i)
+        })
+    }
+
+    /// Byte ranges of the `sp` / `wsp` / `rsp` / `esp` tokens in the template.
+    fn sp_tokens(&self) -> impl Iterator<Item = (usize, usize)> + '_ {
         let is_word = |b: u8| b.is_ascii_alphanumeric() || b == b'_';
         let t = &self.template;
         let mut i = 0;
-        while i < t.len() {
-            if !is_word(t[i]) {
-                i += 1;
-                continue;
+        core::iter::from_fn(move || {
+            while i < t.len() {
+                if !is_word(t[i]) {
+                    i += 1;
+                    continue;
+                }
+                let start = i;
+                while i < t.len() && is_word(t[i]) {
+                    i += 1;
+                }
+                if matches!(&t[start..i], b"sp" | b"wsp" | b"rsp" | b"esp") {
+                    return Some((start, i));
+                }
             }
-            let start = i;
-            while i < t.len() && is_word(t[i]) {
-                i += 1;
-            }
-            if matches!(&t[start..i], b"sp" | b"wsp" | b"rsp" | b"esp") {
-                return true;
-            }
-        }
-        false
+            None
+        })
     }
 
     /// True when the template carries a `%N` / `%<modifier>N` reference to
@@ -1428,6 +1601,24 @@ impl AsmBlock {
             i = j;
         }
         false
+    }
+}
+
+/// Whether the stack-pointer token at `t[start..end]` is the base of a
+/// memory operand that leaves sp unchanged: `disp(%rsp)`, or `[sp ...]` with
+/// neither `!` nor a post-index after the bracket.
+fn keeps_sp_base(t: &[u8], start: usize, end: usize) -> bool {
+    let blank = |b: &u8| matches!(*b, b' ' | b'\t');
+    match t[..start].iter().rev().find(|&b| !blank(b) && *b != b'%') {
+        Some(b'(') => true,
+        Some(b'[') => match t[end..].iter().position(|&b| b == b']' || b == b'\n') {
+            Some(c) if t[end + c] == b']' => !matches!(
+                t[end + c + 1..].iter().find(|&b| !blank(b)),
+                Some(b'!' | b',')
+            ),
+            _ => false,
+        },
+        _ => false,
     }
 }
 
@@ -1564,6 +1755,41 @@ pub(crate) struct Block {
     pub exit_acc: ValueId,
 }
 
+/// The byte width of each scalar argument, or parameter, narrower than 8
+/// bytes: where a convention places stack arguments at their own size and
+/// alignment (Apple arm64), this is the size. Two bits per position below
+/// 64, 0 for 8 bytes and 1, 2, 3 for 1, 2, 4.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(crate) struct ArgWidths(u128);
+
+impl ArgWidths {
+    pub(crate) fn set(&mut self, i: usize, bytes: u32) {
+        if i < 64 {
+            let code: u128 = match bytes {
+                1 => 1,
+                2 => 2,
+                4 => 3,
+                _ => 0,
+            };
+            self.0 = self.0 & !(3 << (2 * i)) | code << (2 * i);
+        }
+    }
+
+    pub(crate) fn bytes(self, i: usize) -> u32 {
+        match self.0.checked_shr(2 * i as u32).unwrap_or(0) & 3 {
+            1 => 1,
+            2 => 2,
+            3 => 4,
+            _ => 8,
+        }
+    }
+
+    /// Every position moved up by `by`, for a hidden leading argument.
+    pub(crate) fn shifted(self, by: usize) -> ArgWidths {
+        ArgWidths(self.0.checked_shl(2 * by as u32).unwrap_or(0))
+    }
+}
+
 /// The positions of a call's arguments, or of a function's parameters, that
 /// hold a floating-point scalar, for any argument count.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -1631,8 +1857,8 @@ impl core::fmt::LowerHex for FpMask {
 /// [`FunctionSsa::agg_descs`] and referenced by index from the call
 /// instructions' `arg_aggs` / `ret_agg` and the function's own
 /// `param_aggs` / `ret_agg`. Built by the walker via
-/// `Compiler::flatten_fields`; the per-arch emit feeds
-/// `(size, align, fields)` to `abi_classify::classify_aggregate`.
+/// `Compiler::flatten_fields`; the per-arch emit feeds it to
+/// `abi_classify::classify_aggregate`.
 #[derive(Debug, Clone)]
 pub(crate) struct AggDesc {
     pub size: u32,
@@ -1640,6 +1866,9 @@ pub(crate) struct AggDesc {
     /// `StructDef::member_align`: `align` without the aggregate's own attribute.
     pub member_align: u32,
     pub fields: Vec<crate::c5::codegen::abi_classify::FlatField>,
+    /// The AAPCS64 homogeneous aggregate the members form; `None` on the
+    /// other ABIs.
+    pub homogeneous: Option<crate::c5::codegen::abi_classify::HomogeneousAggregate>,
 }
 
 /// A static-initializer data slot holding the address of a labelled
@@ -1707,6 +1936,11 @@ pub(crate) struct FunctionSsa {
     /// prologue/epilogue and no implicit return; the body (inline asm) is the
     /// function's entire machine code. Used for interrupt service routines.
     pub is_naked: bool,
+    /// True if any declaration of the function carried `_Noreturn` /
+    /// `noreturn` (C11 6.7.4): a call to it ends the path it is on. The
+    /// inliner keeps such a call out of line unless the request is
+    /// mandatory.
+    pub is_noreturn: bool,
     /// Calling convention the definition follows when it is not the
     /// target's own: `__attribute__((ms_abi))` /
     /// `__attribute__((sysv_abi))`. The prologue binds the incoming
@@ -1735,6 +1969,8 @@ pub(crate) struct FunctionSsa {
     pub patchable_entry: Option<(u32, u32)>,
     /// `__attribute__((no_instrument_function))`: no profiling call.
     pub no_instrument: bool,
+    /// `__attribute__((no_stack_protector))`: no canary.
+    pub no_stack_protector: bool,
     /// Declared parameters, by index, whose value a whole-program
     /// constant reached (`passes::ipa_const_param`). Their incoming
     /// argument register has no reader left, so the entry spill of
@@ -1809,6 +2045,9 @@ pub(crate) struct FunctionSsa {
     /// banks rather than by absolute parameter index. Empty for SSA built
     /// outside the walker.
     pub param_fp_mask: FpMask,
+    /// The width of each parameter narrower than 8 bytes, as the caller's
+    /// `Inst::Call::arg_widths` gives it.
+    pub param_widths: ArgWidths,
     /// Interned aggregate layouts referenced by the call
     /// instructions' `arg_aggs` / `ret_agg` and this function's
     /// `param_aggs` / `ret_agg`. Empty for SSA built outside the
@@ -1826,8 +2065,9 @@ pub(crate) struct FunctionSsa {
     /// storage, or 0 when the parameter has no dedicated local.
     /// A register-passed aggregate parameter has no SSA entry-copy;
     /// the callee prologue (native) and `run_func` (VM) write the
-    /// argument's bytes directly into this slot. Parallel to the
-    /// declared parameter list; empty for SSA built outside the
+    /// argument's bytes directly into this slot, until `passes::agg_parts`
+    /// puts the transfer in the tape and zeroes the entry. Parallel to
+    /// the declared parameter list; empty for SSA built outside the
     /// walker.
     pub param_local_slots: Vec<i64>,
     /// `Some(i)` when this function returns the aggregate
@@ -1904,11 +2144,12 @@ pub(crate) struct FunctionSsa {
     pub array_slots: Vec<i64>,
     /// Automatic objects whose required alignment exceeds the 8-byte frame
     /// slot (C11 6.7.5 `_Alignas` / GNU `aligned`, or a type whose natural
-    /// alignment is 16), as `(slot_off, region_off)`. The prologue reserves a
-    /// `frame_align`-aligned region below the static frame; every backend
-    /// resolves these slots to `region_base + region_off` rather than the
-    /// fp-relative slot. Empty for the common case.
-    pub over_aligned: Vec<(i64, i64)>,
+    /// alignment is 16). The prologue reserves a `frame_align`-aligned
+    /// region below the static frame; every backend resolves a member's slot
+    /// to `region_base + off` rather than the fp-relative slot, and slot
+    /// coalescing keys the member outside the locals so it holds no storage
+    /// there. Empty for the common case.
+    pub over_aligned: Vec<RegionMember>,
     /// Alignment of the over-aligned region (max over `over_aligned`, a power
     /// of two >= 16), or 0 when no automatic object needs it. Exactly 16 keeps
     /// a static frame: the frame base is 16-aligned and every frame region a
@@ -1944,6 +2185,38 @@ pub(crate) struct FunctionSsa {
     pub did_inline: bool,
 }
 
+/// An automatic object of the over-aligned region (`FunctionSsa::over_aligned`):
+/// the frame slot that names it, its byte offset in the region, and the
+/// alignment and size its placement needs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct RegionMember {
+    pub slot: i64,
+    pub off: i64,
+    pub align: i64,
+    pub size: i64,
+}
+
+/// Lay out the over-aligned region (C11 6.7.5): each block of members that
+/// share storage takes the next offset its widest alignment allows, widest
+/// alignment first and otherwise in the given order. Returns the members
+/// with their offsets in placement order, the region's alignment (at least
+/// 16), and its size rounded to that alignment.
+pub(crate) fn place_region(mut blocks: Vec<Vec<RegionMember>>) -> (Vec<RegionMember>, i64, i64) {
+    let align_of = |b: &[RegionMember]| b.iter().map(|m| m.align).max().unwrap_or(1);
+    blocks.sort_by_key(|b| core::cmp::Reverse(align_of(b)));
+    let (mut placed, mut region_align, mut cursor) = (Vec::new(), 16, 0);
+    for block in blocks {
+        let align = align_of(&block);
+        region_align = region_align.max(align);
+        cursor = (cursor + align - 1) & -align;
+        let size = block.iter().map(|m| m.size).max().unwrap_or(0);
+        placed.extend(block.into_iter().map(|m| RegionMember { off: cursor, ..m }));
+        cursor += size;
+    }
+    let bytes = (cursor + region_align - 1) & -region_align;
+    (placed, region_align, bytes)
+}
+
 /// What a function's declared automatic objects say about its exposure to
 /// a stack buffer overflow. Mirrors gcc's `stack_protect_classify_type` /
 /// `stack_protect_decl_p`: the facts are source-level, so a function keeps
@@ -1976,11 +2249,52 @@ impl SspFacts {
 }
 
 impl FunctionSsa {
+    /// Each value output of the asm statement at `site` with its value: the
+    /// statement's own for the first, the following [`Inst::AsmOut`] for a
+    /// later one, `NO_VALUE` for a dead one.
+    pub(crate) fn asm_output_values(&self, site: ValueId) -> Vec<(usize, ValueId)> {
+        let Some(Inst::InlineAsm { asm, .. }) = self.insts.get(site as usize) else {
+            return Vec::new();
+        };
+        let outs = self.insts[site as usize + 1..]
+            .iter()
+            .enumerate()
+            .map_while(|(k, inst)| match *inst {
+                Inst::AsmOut { op, .. } => Some((op as usize, site + 1 + k as ValueId)),
+                _ => None,
+            });
+        let mut values: Vec<(usize, ValueId)> = asm
+            .operands
+            .iter()
+            .enumerate()
+            .filter(|(_, o)| o.value && o.is_output)
+            .map(|(i, _)| (i, NO_VALUE))
+            .collect();
+        if let Some(first) = values.first_mut() {
+            first.1 = site;
+        }
+        for (op, v) in outs {
+            if let Some(e) = values.iter_mut().find(|e| e.0 == op) {
+                e.1 = v;
+            }
+        }
+        values
+    }
+
     /// True when any inline-asm template in the body names the stack
     /// pointer (`AsmBlock::references_sp`).
     pub fn has_sp_asm(&self) -> bool {
         self.insts.iter().any(|i| match i {
             Inst::InlineAsm { asm, .. } => asm.references_sp(),
+            _ => false,
+        })
+    }
+
+    /// True when an inline-asm statement in the body may leave the stack
+    /// pointer moved (`AsmBlock::may_move_sp`).
+    pub fn has_sp_moving_asm(&self) -> bool {
+        self.insts.iter().any(|i| match i {
+            Inst::InlineAsm { asm, .. } => asm.may_move_sp(),
             _ => false,
         })
     }
@@ -2073,6 +2387,7 @@ impl crate::c5::layout::DataOffsets for Inst {
             | Inst::Fneg { .. }
             | Inst::Fma { .. }
             | Inst::MulAdd { .. }
+            | Inst::Udiv128 { .. }
             | Inst::Extend { .. }
             | Inst::Bswap { .. }
             | Inst::BitCount { .. }
@@ -2094,6 +2409,10 @@ impl crate::c5::layout::DataOffsets for Inst {
             | Inst::AllocaInit { .. }
             | Inst::LifetimeEnd { .. }
             | Inst::ParamRef { .. }
+            | Inst::ParamPart { .. }
+            | Inst::RetPart { .. }
+            | Inst::AsmOut { .. }
+            | Inst::AggParts { .. }
             | Inst::Phi { .. } => {}
         }
     }
@@ -2113,12 +2432,14 @@ impl crate::c5::layout::DataOffsets for FunctionSsa {
             is_always_inline: _,
             is_noinline: _,
             is_naked: _,
+            is_noreturn: _,
             conv: _,
             is_weak: _,
             is_internal: _,
             section: _,
             patchable_entry: _,
             no_instrument: _,
+            no_stack_protector: _,
             const_params: _,
             insts,
             inst_src: _,
@@ -2131,6 +2452,7 @@ impl crate::c5::layout::DataOffsets for FunctionSsa {
             cmp32: _,
             low_word_tests: _,
             param_fp_mask: _,
+            param_widths: _,
             agg_descs: _,
             param_aggs: _,
             param_local_slots: _,
@@ -2213,7 +2535,8 @@ mod tests {
                     off: 0,
                     value: 3,
                     kind: StoreKind::I64,
-                    volatile: false
+                    volatile: false,
+                    nsw: false
                 },
                 alloc::vec![3]
             ),
@@ -2223,7 +2546,8 @@ mod tests {
                     index: 2,
                     index_ext: IndexExt::None,
                     scale: 8,
-                    kind: LoadKind::I64
+                    kind: LoadKind::I64,
+                    abs_base: false,
                 },
                 alloc::vec![1, 2]
             ),
@@ -2234,7 +2558,8 @@ mod tests {
                     index_ext: IndexExt::Sxtw,
                     scale: 8,
                     value: 3,
-                    kind: StoreKind::I64
+                    kind: StoreKind::I64,
+                    abs_base: false,
                 },
                 alloc::vec![1, 2, 3]
             ),
@@ -2268,7 +2593,8 @@ mod tests {
             (
                 Inst::Extend {
                     value: 5,
-                    kind: LoadKind::I32
+                    kind: LoadKind::I32,
+                    nsw: false
                 },
                 alloc::vec![5]
             ),
@@ -2301,16 +2627,18 @@ mod tests {
                     op: AtomicRmwOp::Add,
                     addr: 1,
                     value: 2,
-                    width: 8
+                    width: 8,
+                    order: MemOrder::SeqCst
                 },
                 alloc::vec![1, 2]
             ),
             (
                 Inst::AtomicCas {
                     addr: 1,
-                    expected_addr: 2,
+                    expected: 2,
                     desired: 3,
-                    width: 8
+                    width: 8,
+                    order: MemOrder::SeqCst
                 },
                 alloc::vec![1, 2, 3]
             ),

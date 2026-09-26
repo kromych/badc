@@ -33,6 +33,7 @@ fn sext(value: u32) -> Inst {
     Inst::Extend {
         value,
         kind: LoadKind::I32,
+        nsw: false,
     }
 }
 
@@ -51,6 +52,7 @@ fn load(base: u32, index: u32, scale: u8, kind: LoadKind) -> Inst {
         index_ext: IndexExt::None,
         scale,
         kind,
+        abs_base: false,
     }
 }
 
@@ -62,6 +64,7 @@ fn store(base: u32, index: u32, scale: u8, value: u32, kind: StoreKind) -> Inst 
         scale,
         value,
         kind,
+        abs_base: false,
     }
 }
 
@@ -189,6 +192,7 @@ fn a_full_width_index_keeps_lsl() {
         Inst::Extend {
             value: 1,
             kind: LoadKind::I16,
+            nsw: false,
         },
         load(0, 2, 4, LoadKind::I32),
     ]);

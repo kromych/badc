@@ -14,50 +14,22 @@ Disassembly of section .text:
                	brk	#0x1
 
 <take_wrap>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	stur	x0, [x29, #-0x8]
-               	ldur	w0, [x29, #-0x8]
                	add	x0, x0, #0x1
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <take_wrap2>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	stur	x0, [x29, #-0x8]
-               	ldur	w0, [x29, #-0x8]
                	add	x0, x0, #0x2
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <take_wrap3>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	stur	x0, [x29, #-0x8]
-               	ldur	w0, [x29, #-0x8]
                	add	x0, x0, #0x3
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <take_pairw>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	stur	x0, [x29, #-0x8]
-               	sub	x0, x29, #0x8
-               	ldr	w1, [x0, #0x4]
+               	lsr	x1, x0, #32
                	lsl	x1, x1, #32
-               	ldr	w0, [x0]
+               	mov	w0, w0
                	orr	x0, x1, x0
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <add2>:

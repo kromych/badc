@@ -155,6 +155,8 @@ fn accum_add_long() -> FunctionSsa {
                 fixed_args: 1,
                 fp_return: false,
                 fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
+                low_word_args: 0,
+                arg_widths: crate::c5::ir::ArgWidths::default(),
                 arg_aggs: Vec::new(),
                 ret_agg: None,
                 ret_slot_local: 0,
@@ -247,6 +249,7 @@ fn narrow_return_reextends_the_accumulator() {
     f.insts.push(Inst::Extend {
         value: 4,
         kind: LoadKind::I32,
+        nsw: false,
     });
     f.inst_src.push((0, 0));
     f.f32_values.push(false);
@@ -297,6 +300,8 @@ fn const_void_tail() -> FunctionSsa {
                 fixed_args: 1,
                 fp_return: false,
                 fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
+                low_word_args: 0,
+                arg_widths: crate::c5::ir::ArgWidths::default(),
                 arg_aggs: Vec::new(),
                 ret_agg: None,
                 ret_slot_local: 0,
@@ -490,6 +495,8 @@ fn pure_value_tail_is_left_to_emit_conversion() {
                 fixed_args: 1,
                 fp_return: false,
                 fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
+                low_word_args: 0,
+                arg_widths: crate::c5::ir::ArgWidths::default(),
                 arg_aggs: Vec::new(),
                 ret_agg: None,
                 ret_slot_local: 0,
@@ -522,6 +529,7 @@ fn store_local_body_is_rejected() {
         value: 0,
         kind: StoreKind::I64,
         volatile: false,
+        nsw: false,
     });
     f.inst_src.push((0, 0));
     f.f32_values.push(false);

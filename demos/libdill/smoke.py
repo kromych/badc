@@ -16,10 +16,10 @@ Pipeline:
 
 Both -O0 and -O are exercised (with -UNDEBUG at -O so the predefined
 NDEBUG does not strip the tests' asserts). On x86-64 context switching
-runs upstream's native asm dill_setjmp/dill_longjmp; elsewhere it runs
-sigsetjmp/siglongjmp (upstream's DILL_ARCH_FALLBACK). Both use the
-one-instruction inline-asm stack-pointer move; see setup.py for why
-the alloca stack switches are patched out under badc.
+runs upstream's native asm dill_setjmp/dill_longjmp and stack switch;
+elsewhere it runs sigsetjmp/siglongjmp (upstream's DILL_ARCH_FALLBACK)
+with the one-instruction inline-asm stack-pointer move setup.py adds in
+place of the alloca displacement; see setup.py for why.
 
 The socket/tls suites and the timing-sensitive sleep test stay out:
 the smoke targets the context-switch core and must stay deterministic
@@ -63,16 +63,13 @@ def run(cmd, **kw):
 def base_flags() -> list[str]:
     # x86-64 builds upstream's native asm context switch; other
     # architectures use DILL_ARCH_FALLBACK, upstream's own sigsetjmp
-    # knob. DILL_BADC_SETSP selects the asm sp move added by setup.py.
+    # knob, with the asm sp move setup.py adds (DILL_BADC_SETSP).
     # The bundled <x86intrin.h> satisfies now.c's __rdtsc include on
     # x86 targets. --gnu satisfies the visibility and
     # __builtin_expect surface.
-    flags = [
-        "--gnu",
-        "-DDILL_BADC_SETSP",
-    ]
+    flags = ["--gnu"]
     if platform.machine().lower() not in ("x86_64", "amd64"):
-        flags.append("-DDILL_ARCH_FALLBACK")
+        flags += ["-DDILL_ARCH_FALLBACK", "-DDILL_BADC_SETSP"]
     if sys.platform == "darwin":
         # TODO(badc): no bundled <sys/event.h>, so the default kqueue
         # pollset cannot build; DILL_POLL is the library's poll(2)

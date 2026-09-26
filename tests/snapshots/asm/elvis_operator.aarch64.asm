@@ -61,9 +61,9 @@ Disassembly of section .text:
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	cbz	x1, <addr>
-               	ldrsb	x1, [x1]
-               	cmp	w1, #0x78
-               	b.eq	<addr>
+               	ldrb	w1, [x1]
+               	eor	x1, x1, #0x78
+               	cbz	w1, <addr>
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret

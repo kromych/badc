@@ -32,20 +32,12 @@ Disassembly of section .text:
                	pushq	%rbx
                	leaq	-0x40(%rbp), %rax
                	leaq	<rip>, %rcx
-               	pushq	%rdx
-               	movq	(%rcx), %rdx
-               	movq	%rdx, (%rax)
-               	movq	0x8(%rcx), %rdx
-               	movq	%rdx, 0x8(%rax)
-               	movq	0x10(%rcx), %rdx
-               	movq	%rdx, 0x10(%rax)
-               	movq	0x18(%rcx), %rdx
-               	movq	%rdx, 0x18(%rax)
-               	movq	0x20(%rcx), %rdx
-               	movq	%rdx, 0x20(%rax)
-               	movq	0x28(%rcx), %rdx
-               	movq	%rdx, 0x28(%rax)
-               	popq	%rdx
+               	movups	(%rcx), %xmm14
+               	movups	%xmm14, (%rax)
+               	movups	0x10(%rcx), %xmm14
+               	movups	%xmm14, 0x10(%rax)
+               	movups	0x20(%rcx), %xmm14
+               	movups	%xmm14, 0x20(%rax)
                	xorl	%r9d, %r9d
                	movl	$0x1, -0x10(%rbp)
                	jmp	<addr>

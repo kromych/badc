@@ -64,8 +64,7 @@ Disassembly of section .text:
                	movq	%rbp, %rax
                	movq	%rax, -0x10(%rbp)
                	movq	%rsp, %rax
-               	addq	$0x8, %rax
-               	movq	%rax, %rbx
+               	leaq	0x8(%rax), %rbx
                	movq	%rbx, %rax
                	movq	%rax, -0x8(%rbp)
                	movq	-0x18(%rbp), %rax

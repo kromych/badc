@@ -13,6 +13,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=1
     v7   StoreLocal { off=-1, value=v6, kind=I32 }        -> -
     v8   Extend { value=v6, kind=I32 }                    -> x0
     v9   Extend { value=v8, kind=I32 }                    -> x1
+    v10  LifetimeEnd(-1)                                  -> -
     terminator Return(v8)   (exit_acc=v8)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit

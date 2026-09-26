@@ -26,51 +26,31 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x18, %rsp
-               	pushq	%rbx
-               	movq	$0x14, -0x8(%rbp)
-               	movq	-0x8(%rbp), %rax
-               	movl	$0x2a, %ebx
-               	cmpq	%rbx, %rax
-               	cmovlq	%rbx, %rax
-               	movq	%rax, -0x8(%rbp)
-               	movq	-0x8(%rbp), %rcx
-               	movq	$0x2a, -0x8(%rbp)
-               	movq	-0x8(%rbp), %rax
-               	movl	$0xa, %ebx
-               	cmpq	%rbx, %rax
-               	cmovlq	%rbx, %rax
-               	movq	%rax, -0x8(%rbp)
-               	movq	-0x8(%rbp), %rdx
-               	movq	$0x64, -0x8(%rbp)
-               	movq	-0x8(%rbp), %rax
-               	movl	$0x2a, %ebx
-               	cmpq	%rbx, %rax
-               	cmovgq	%rbx, %rax
-               	movq	%rax, -0x8(%rbp)
-               	movq	-0x8(%rbp), %rsi
-               	movq	$0x2a, -0x8(%rbp)
-               	movq	-0x8(%rbp), %rax
-               	movl	$0x63, %ebx
-               	cmpq	%rbx, %rax
-               	cmovgq	%rbx, %rax
-               	movq	%rax, -0x8(%rbp)
-               	movq	-0x8(%rbp), %rax
+               	movl	$0x14, %eax
+               	movl	$0x2a, %r10d
+               	cmpq	%r10, %rax
+               	cmovlq	%r10, %rax
+               	movl	$0x2a, %ecx
+               	movl	$0xa, %r10d
+               	cmpq	%r10, %rcx
+               	cmovlq	%r10, %rcx
+               	movl	$0x64, %edx
+               	movl	$0x2a, %r10d
+               	cmpq	%r10, %rdx
+               	cmovgq	%r10, %rdx
+               	movl	$0x2a, %esi
+               	movl	$0x63, %r10d
+               	cmpq	%r10, %rsi
+               	cmovgq	%r10, %rsi
+               	cmpq	$0x2a, %rax
+               	jne	<addr>
                	cmpq	$0x2a, %rcx
                	jne	<addr>
                	cmpq	$0x2a, %rdx
                	jne	<addr>
                	cmpq	$0x2a, %rsi
                	jne	<addr>
-               	cmpq	$0x2a, %rax
-               	jne	<addr>
                	movl	$0x2a, %eax
-               	popq	%rbx
-               	leave
                	retq
                	movl	$0x1, %eax
-               	popq	%rbx
-               	leave
                	retq

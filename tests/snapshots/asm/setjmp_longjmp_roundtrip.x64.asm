@@ -28,8 +28,6 @@ Disassembly of section .text:
 <deep>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	movslq	%edi, %rdi
-               	movslq	%esi, %rsi
                	leaq	<rip>, %rax
                	movslq	(%rax), %rcx
                	incq	%rcx

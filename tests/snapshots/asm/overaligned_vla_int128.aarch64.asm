@@ -16,7 +16,7 @@ Disassembly of section .text:
 <fixed_beside_vla>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x30
+               	sub	sp, sp, #0x20
                	mov	x0, #0x3                // =3
                	mov	x1, #0xc                // =12
                	add	x17, x1, #0xf
@@ -30,10 +30,10 @@ Disassembly of section .text:
                	subs	x17, x17, #0x1
                	b.ne	<addr>
                	mov	sp, x2
-               	stur	x0, [x29, #-0x20]
-               	ldur	x3, [x29, #-0x20]
+               	stur	x0, [x29, #-0x10]
+               	ldur	x3, [x29, #-0x10]
                	asr	x4, x3, #63
-               	sub	x1, x29, #0x30
+               	sub	x1, x29, #0x20
                	str	x3, [x1]
                	str	x4, [x1, #0x8]
                	and	x3, x1, #0xf
@@ -54,8 +54,8 @@ Disassembly of section .text:
                	add	x2, x3, x2
                	str	x0, [x1]
                	str	x2, [x1, #0x8]
-               	sub	sp, x29, #0x30
-               	add	sp, sp, #0x30
+               	sub	sp, x29, #0x20
+               	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
 

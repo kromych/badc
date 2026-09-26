@@ -14,13 +14,10 @@ Disassembly of section .text:
                	brk	#0x1
 
 <sum_eleven>:
+               	cmp	w0, #0x1
+               	b.ne	<addr>
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	cmp	w0, #0x1
-               	b.eq	<addr>
-               	mov	x0, #0x1                // =1
-               	ldp	x29, x30, [sp], #0x10
-               	ret
                	cmp	w1, #0x2
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
@@ -76,6 +73,8 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x0                // =0
                	ldp	x29, x30, [sp], #0x10
+               	ret
+               	mov	x0, #0x1                // =1
                	ret
 
 <main>:

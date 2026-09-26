@@ -26,13 +26,10 @@ Disassembly of section .text:
                	int3
 
 <sum_eleven>:
+               	cmpl	$0x1, %edi
+               	jne	<addr>
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	cmpl	$0x1, %edi
-               	je	<addr>
-               	movl	$0x1, %eax
-               	popq	%rbp
-               	retq
                	cmpl	$0x2, %esi
                	je	<addr>
                	movl	$0x2, %eax
@@ -90,6 +87,8 @@ Disassembly of section .text:
                	retq
                	xorl	%eax, %eax
                	popq	%rbp
+               	retq
+               	movl	$0x1, %eax
                	retq
 
 <main>:

@@ -46,9 +46,11 @@ pub(crate) struct Frame {
     /// The ABI the function was lowered against; the home map reads its
     /// argument-register banks.
     pub abi: super::Abi,
-    /// The body moves sp at runtime (`alloca`, C99 6.7.6.2 VLA) or the
-    /// prologue realigns sp: spill slots are addressed through fp and the
-    /// epilogue re-establishes sp from fp.
+    /// sp does not keep its prologue value across the body: it moves at run
+    /// time (`alloca`, C99 6.7.6.2 VLA), the prologue realigns it, or an
+    /// inline asm statement may leave it moved (`AsmBlock::may_move_sp`), as
+    /// a stack switch does. Spill slots and locals are addressed through fp,
+    /// and each return re-establishes sp from fp.
     pub dynamic_sp: bool,
     /// Alignment the prologue forces on sp for automatic objects aligned
     /// above 16 (C11 6.7.5), or 0. The realigned region sits below the static
@@ -76,26 +78,20 @@ pub(crate) fn compute_frame(
     abi: super::Abi,
     target: Target,
 ) -> Frame {
+    let base = super::ssa::emit_common::compute_frame_base(func, alloc);
     let (declared_locals_bytes, alloc_spill_bytes, saved_gpr_bytes) =
-        super::ssa::emit_common::compute_frame_base(func, alloc);
+        (base.locals, base.spills, base.saved_gprs);
     // The canary joins the top of the locals region; every fp-relative
     // offset shifts by it.
-    let canary_bytes =
-        super::ssa::emit_common::canary_bytes(func, declared_locals_bytes, abi.stack_protect);
+    let canary_bytes = super::ssa::emit_common::canary_bytes(func, &base, abi.stack_protect);
     let locals_bytes = declared_locals_bytes + canary_bytes;
     let saved_fpr_bytes = super::ssa::emit_common::slots16(alloc.fp_used.len() as u32);
     let uses_x19 = writes_x19(func, alloc, abi);
     let x19_save_bytes = if uses_x19 { 16u32 } else { 0 };
     // A region aligned exactly 16 joins the static frame between the spill
-    // region and the saved registers; above 16 the prologue realigns sp. A
-    // region with no surviving local access needs no bytes, as the locals
-    // region itself (`compute_frame_base`).
+    // region and the saved registers; above 16 the prologue realigns sp.
     let region_bytes = func.realign_region_bytes.max(0) as u32;
-    let static_region_bytes = if func.frame_align == 16 && declared_locals_bytes > 0 {
-        region_bytes
-    } else {
-        0
-    };
+    let static_region_bytes = base.static_region;
     // Inline-asm scratch below the spill region, sized for the largest
     // statement. A naked function has no frame and stages nothing.
     let asm_bytes = if func.is_naked {
@@ -114,6 +110,7 @@ pub(crate) fn compute_frame(
         + x19_save_bytes
         + asm_bytes
         + static_region_bytes;
+    let dynamic_sp = super::ssa::emit_common::uses_dynamic_alloca(func) || func.frame_align > 16;
     // A host variadic callee reserves its register save area above the
     // saved fp/lr, where its top edge meets the caller's stack arguments:
     // the Windows cursor `va_list` walks the two as one region. Windows on
@@ -126,7 +123,7 @@ pub(crate) fn compute_frame(
     } else {
         0
     };
-    Frame {
+    let mut frame = Frame {
         frame_bytes,
         alloc_spill_base: upper_bytes,
         canary_bytes,
@@ -157,7 +154,7 @@ pub(crate) fn compute_frame(
         param_home_needed: param_home_needed(func, alloc, abi),
         va_save_bytes,
         abi,
-        dynamic_sp: super::ssa::emit_common::uses_dynamic_alloca(func) || func.frame_align > 16,
+        dynamic_sp,
         realign_align: if func.frame_align > 16 {
             func.frame_align as u32
         } else {
@@ -178,7 +175,10 @@ pub(crate) fn compute_frame(
         } else {
             0
         },
-    }
+    };
+    // A full leaf has nothing to address and no fp to restore sp from.
+    frame.dynamic_sp |= func.has_sp_moving_asm() && !is_full_leaf(frame, alloc);
+    frame
 }
 
 /// Frame scratch bytes of one inline-asm statement: 8 per operand
@@ -192,7 +192,9 @@ pub(super) fn asm_stmt_bytes(
     asm: &super::super::ir::AsmBlock,
     args: &[u32],
 ) -> Option<u32> {
-    if crate::c5::asm::asm_statement_is_noop(asm, crate::c5::asm::AsmComments::A64) {
+    if crate::c5::asm::asm_statement_is_noop(asm, crate::c5::asm::AsmComments::A64)
+        || asm_binds_directly(func, asm, args, fixed)
+    {
         return None;
     }
     let op_reg = asm_operand_regs(func, asm, args, fixed).ok()?;
@@ -212,8 +214,8 @@ pub(super) fn asm_stmt_bytes(
 pub(super) fn asm_capture_units(op: &super::super::ir::AsmOperand) -> usize {
     match (op.value, op.is_output && !op.is_rw) {
         (true, true) => 0,
-        (true, false) => 2,
-        (false, _) => 1,
+        (true, false) if op.width == 16 => 2,
+        _ => 1,
     }
 }
 
@@ -326,10 +328,10 @@ pub(super) fn asm_save_masks(
 }
 
 /// The GP / SIMD registers one inline-asm site's lowering writes: the
-/// clobber list and the operand registers. A value live across the site
-/// must not sit in one. `(0, 0)` when the statement emits nothing or its
-/// operands do not assign, where the site writes nothing the allocator
-/// can see.
+/// clobber list and the operand registers, or the clobber list alone when
+/// the operands bind directly. A value live across the site must not sit
+/// in one. `(0, 0)` when the statement emits nothing or its operands do
+/// not assign, where the site writes nothing the allocator can see.
 pub(crate) fn asm_site_write_masks(
     func: &FunctionSsa,
     asm: &super::super::ir::AsmBlock,
@@ -339,10 +341,139 @@ pub(crate) fn asm_site_write_masks(
     if crate::c5::asm::asm_statement_is_noop(asm, crate::c5::asm::AsmComments::A64) {
         return (0, 0);
     }
+    if asm_binds_directly(func, asm, args, fixed) {
+        let gpr = asm.clobber_regs & 0x7FFF_FFFF & !0x0003_0000;
+        return (gpr & !fixed.gpr, asm.clobber_fp_regs & !fixed.fpr);
+    }
     let Ok(op_reg) = asm_operand_regs(func, asm, args, fixed) else {
         return (0, 0);
     };
     asm_save_masks(asm, &op_reg, fixed, (u32::MAX, u32::MAX)).unwrap_or((0, 0))
+}
+
+/// Whether a statement's register operands bind to the registers their
+/// values are given, as an instruction's do: each is an input value or a
+/// value output, none tied, read-write or early-clobbered, the clobbers
+/// spare the frame's registers, and scratch outside them can reload every
+/// input and hold every output without a register. Such a statement stages
+/// nothing and writes only its clobbers.
+pub(crate) fn asm_binds_directly(
+    func: &FunctionSsa,
+    asm: &super::super::ir::AsmBlock,
+    args: &[u32],
+    fixed: super::FixedRegs,
+) -> bool {
+    use super::super::ir::AsmConstraint as C;
+    // x18, x19, x29, x30 and sp: saved around the template when named.
+    const RESERVED: u32 = (1 << 18) | (1 << 19) | (1 << 29) | (1 << 30) | (1 << 31);
+    if func.is_naked || func.has_sp_asm() || asm.references_sp() || asm.clobber_regs & RESERVED != 0
+    {
+        return false;
+    }
+    let gp_free = [16u32, 17]
+        .iter()
+        .filter(|&&r| asm.clobber_regs & (1 << r) == 0)
+        .count();
+    let banks = super::super::ssa::reg_alloc::RegBanks::new(
+        crate::c5::codegen::Target::LinuxAarch64,
+        fixed,
+    );
+    let fp_free = banks
+        .fp_scratch
+        .iter()
+        .filter(|&&r| {
+            r != super::super::ssa::reg_alloc::NO_FP_SCRATCH && asm.clobber_fp_regs & (1 << r) == 0
+        })
+        .count();
+    let (mut gp_in, mut fp_in) = (0usize, 0usize);
+    let (mut gp_out, mut fp_out) = (0usize, 0usize);
+    for (i, op) in asm.operands.iter().enumerate() {
+        let arg = args.get(i).copied();
+        if op.is_output {
+            if !op.value || op.is_rw || op.early_clobber {
+                return false;
+            }
+            match op.constraint {
+                C::Reg if op.width <= 8 => gp_out += 1,
+                C::Fp if op.width == 16 => fp_out += 1,
+                _ => return false,
+            }
+            continue;
+        }
+        match op.constraint {
+            C::Imm => {}
+            C::RegOrImm { reg: None, imm }
+                if arg
+                    .and_then(|a| crate::c5::asm::asm_operand_const(func, a))
+                    .is_some_and(|v| crate::Compiler::aarch64_imm_alternative_accepts(imm, v)) => {}
+            C::Reg | C::RegOrImm { reg: None, .. } => {
+                gp_in += 1;
+                // A link-time address with an offset forms through a second scratch.
+                if op.static_arg
+                    && let Some(crate::c5::asm::StaticOperand::Addr { off, .. }) =
+                        arg.and_then(|a| crate::c5::asm::asm_operand_static(func, a))
+                    && off != 0
+                {
+                    gp_in += 1;
+                }
+            }
+            C::Fp if !op.static_arg && (op.width == 8 || (op.width == 16 && op.value)) => {
+                fp_in += 1
+            }
+            _ => return false,
+        }
+    }
+    gp_in.max(gp_out) <= gp_free && fp_in.max(fp_out) <= fp_free
+}
+
+/// The values a directly bound statement reads or defines in their own
+/// registers, which its clobbers must spare.
+pub(crate) fn asm_site_bound_values(
+    func: &FunctionSsa,
+    asm: &super::super::ir::AsmBlock,
+    args: &[u32],
+    site: u32,
+    fixed: super::FixedRegs,
+) -> alloc::vec::Vec<u32> {
+    use super::super::ir::AsmConstraint as C;
+    if crate::c5::asm::asm_statement_is_noop(asm, crate::c5::asm::AsmComments::A64)
+        || !asm_binds_directly(func, asm, args, fixed)
+    {
+        return alloc::vec::Vec::new();
+    }
+    let mut out: alloc::vec::Vec<u32> = asm
+        .operands
+        .iter()
+        .zip(args)
+        .filter(|(op, _)| !op.is_output && !op.static_arg && !matches!(op.constraint, C::Imm))
+        .map(|(_, &a)| a)
+        .collect();
+    out.extend(
+        func.asm_output_values(site)
+            .into_iter()
+            .map(|(_, v)| v)
+            .filter(|&v| v != super::super::ir::NO_VALUE),
+    );
+    out
+}
+
+/// `reg_alloc::asm_operand_hints` over a staged statement's registers.
+pub(crate) fn asm_staged_hints(
+    func: &FunctionSsa,
+    asm: &super::super::ir::AsmBlock,
+    args: &[u32],
+    site: u32,
+    fixed: super::FixedRegs,
+) -> alloc::vec::Vec<(u32, u8)> {
+    if crate::c5::asm::asm_statement_is_noop(asm, crate::c5::asm::AsmComments::A64)
+        || asm_binds_directly(func, asm, args, fixed)
+    {
+        return alloc::vec::Vec::new();
+    }
+    let Ok(op_reg) = asm_operand_regs(func, asm, args, fixed) else {
+        return alloc::vec::Vec::new();
+    };
+    super::super::ssa::reg_alloc::asm_operand_hints(func, asm, args, site, &op_reg)
 }
 
 /// The Windows-on-ARM64 integer register save area: x0..x7 at an 8-byte
@@ -422,7 +553,7 @@ pub(super) fn param_home_off(i: usize, func: &FunctionSsa, frame: Frame) -> i64 
         unreachable!("ICE: parameter {i} has no placement");
     };
     match p {
-        P::Stack(off) | P::StructByRefStack(off) | P::StructStack { off, .. } => 16 + off as i64,
+        P::Stack(off) | P::StructStack { off, .. } => 16 + off as i64,
         _ => {
             let cell = placements[..i]
                 .iter()
@@ -438,9 +569,7 @@ pub(super) fn param_home_off(i: usize, func: &FunctionSsa, frame: Frame) -> i64 
 fn register_carried(p: &super::ArgPlacement) -> bool {
     !matches!(
         p,
-        super::ArgPlacement::Stack(_)
-            | super::ArgPlacement::StructByRefStack(_)
-            | super::ArgPlacement::StructStack { .. }
+        super::ArgPlacement::Stack(_) | super::ArgPlacement::StructStack { .. }
     )
 }
 
@@ -464,11 +593,11 @@ fn va_named_home_off(i: usize, func: &FunctionSsa, abi: super::Abi) -> Option<i6
         } as i64;
     let vector = |r: u8| 16 + AARCH64_GR_SAVE_BYTES as i64 + r as i64 * 16;
     Some(match va_named_plan(func, abi).placements[i] {
-        P::Stack(off) | P::StructByRefStack(off) | P::StructStack { off, .. } => stack + off as i64,
+        P::Stack(off) | P::StructStack { off, .. } => stack + off as i64,
         P::FpReg(r) => vector(r),
         P::StructRegs { regs, .. } if regs[0].is_fp => vector(regs[0].reg),
         P::StructRegs { regs, .. } => 16 + regs[0].reg as i64 * 8,
-        P::IntReg(r) | P::StructByRefReg(r) | P::StructSplit { reg: r, .. } => 16 + r as i64 * 8,
+        P::IntReg(r) | P::StructSplit { reg: r, .. } => 16 + r as i64 * 8,
     })
 }
 
@@ -555,7 +684,7 @@ fn param_home_needed(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi) ->
     let elidable = param_elidable_mask(func, alloc, abi);
     placements.iter().enumerate().any(|(i, p)| match p {
         super::ArgPlacement::IntReg(_) | super::ArgPlacement::FpReg(_) => !elidable[i],
-        super::ArgPlacement::StructRegs { .. } | super::ArgPlacement::StructByRefReg(_) => false,
+        super::ArgPlacement::StructRegs { .. } => false,
         _ => true,
     })
 }

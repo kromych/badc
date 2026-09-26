@@ -182,7 +182,9 @@ def build_nasm(badc: Path, target: str, optimize: bool, workdir: Path) -> Path:
     (archive the library objects, link the main against them)."""
     workdir.mkdir(parents=True, exist_ok=True)
     inc = [f"-I{SRC / d}" for d in INC_DIRS] + ["-DHAVE_CONFIG_H"]
-    opt = ["-O"] if optimize else []
+    # configure.ac adds -fwrapv, which the frozen config states as
+    # CFLAGS_FWRAPV.
+    opt = ["-fwrapv", *(["-O"] if optimize else [])]
     # The library TUs share one flag set, so archive them in a single
     # invocation: badc compiles them concurrently (see `--jobs`) and
     # bundles the objects into libnasm.a.

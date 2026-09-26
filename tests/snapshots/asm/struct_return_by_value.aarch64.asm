@@ -14,15 +14,10 @@ Disassembly of section .text:
                	brk	#0x1
 
 <echo_small>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	stur	x0, [x29, #-0x8]
-               	sub	x0, x29, #0x8
-               	mov	x16, x0
-               	ldr	x0, [x16]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	lsr	x1, x0, #32
+               	mov	w0, w0
+               	lsl	x1, x1, #32
+               	orr	x0, x0, x1
                	ret
 
 <main>:
@@ -31,7 +26,7 @@ Disassembly of section .text:
                	sub	sp, sp, #0x10
                	mov	x1, #0x7                // =7
                	mov	x2, #0x8                // =8
-               	sub	x0, x29, #0x10
+               	sub	x0, x29, #0x8
                	str	w1, [x0]
                	str	w2, [x0, #0x4]
                	cmp	w1, #0x7

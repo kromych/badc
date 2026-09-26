@@ -72,6 +72,7 @@ const DW_FORM_DATA4: u32 = 0x06;
 const DW_FORM_DATA8: u32 = 0x07;
 const DW_FORM_STRP: u32 = 0x0e;
 const DW_FORM_STRING: u32 = 0x08;
+const DW_FORM_FLAG: u32 = 0x0c;
 const DW_FORM_FLAG_PRESENT: u32 = 0x19;
 const DW_FORM_SEC_OFFSET: u32 = 0x17;
 const DW_FORM_REF4: u32 = 0x13;
@@ -104,7 +105,7 @@ const OPCODE_BASE: u8 = 13;
 use crate::c5::codegen::ssa::cfi::{
     DW_CFA_ADVANCE_LOC_HI, DW_CFA_ADVANCE_LOC1, DW_CFA_ADVANCE_LOC2, DW_CFA_ADVANCE_LOC4,
     DW_CFA_DEF_CFA, DW_CFA_DEF_CFA_OFFSET, DW_CFA_DEF_CFA_REGISTER, DW_CFA_NEGATE_RA_STATE,
-    DW_CFA_OFFSET_HI, DW_CFA_UNDEFINED, write_sleb128, write_uleb128,
+    DW_CFA_OFFSET_HI, DW_CFA_RESTORE_HI, DW_CFA_UNDEFINED, write_sleb128, write_uleb128,
 };
 
 const AARCH64_REG_X29: u8 = 29;
@@ -320,10 +321,15 @@ struct Subprog {
     prologue_size: u32,
     frame_rules: FrameRules,
     ra_signed_at: Option<u32>,
+    /// Offset of the return taken ahead of the frame, where the entry's
+    /// rules hold again.
+    early_return: Option<u32>,
     variables: Vec<SubprogVar>,
     /// False for a definition with internal linkage (C99 6.2.2p3), so the
     /// DIE drops `DW_AT_external`.
     external: bool,
+    /// The definition's type has a prototype (C99 6.9.1p7).
+    prototyped: bool,
 }
 
 /// One PLT-trampoline subprogram.
@@ -369,8 +375,9 @@ fn prologue_size_for(ent_pc: usize, low_pc: usize, build: &Build) -> u32 {
 /// Where the function at `low_pc` signs its return address, read off the
 /// emitted code rather than the option: only the a64 emitter decides which
 /// functions take the pair, and these are the same instruction words it
-/// wrote.
-fn paciasp_offset(build: &Build, low_pc: usize) -> Option<u32> {
+/// wrote. `PACIASP` opens the frame path: past the landing pad and the NOPs,
+/// or at `frame` where the test of an early return precedes it.
+fn paciasp_offset(build: &Build, low_pc: usize, frame: Option<u32>) -> Option<u32> {
     use crate::c5::codegen::aarch64::encode;
     let word = |at: usize| -> Option<u32> {
         build
@@ -380,11 +387,15 @@ fn paciasp_offset(build: &Build, low_pc: usize) -> Option<u32> {
             .map(u32::from_le_bytes)
     };
     let mut at = low_pc;
-    if word(at) == Some(encode::BTI_C) {
-        at += 4;
-    }
-    while word(at) == Some(encode::NOP) {
-        at += 4;
+    if let Some(frame) = frame {
+        at += frame as usize;
+    } else {
+        if word(at) == Some(encode::BTI_C) {
+            at += 4;
+        }
+        while word(at) == Some(encode::NOP) {
+            at += 4;
+        }
     }
     (word(at) == Some(encode::PACIASP)).then(|| (at - low_pc) as u32)
 }
@@ -482,17 +493,17 @@ fn collect_subprograms(
     };
     // A `static` definition's name is not visible outside the compilation
     // unit (C99 6.2.2p3), so its DIE drops DW_AT_external.
-    let internal_pcs: alloc::collections::BTreeSet<usize> = {
+    let fun_pcs = |keep: fn(&crate::c5::symbol::Symbol) -> bool| {
         use crate::c5::token::Token;
         program
             .symbols
             .iter()
-            .filter(|s| {
-                s.class == Token::Fun as i64 && s.linkage == crate::c5::symbol::Linkage::Internal
-            })
+            .filter(|s| s.class == Token::Fun as i64 && keep(s))
             .map(|s| s.val as usize)
-            .collect()
+            .collect::<alloc::collections::BTreeSet<usize>>()
     };
+    let internal_pcs = fun_pcs(|s| s.linkage == crate::c5::symbol::Linkage::Internal);
+    let unprototyped_pcs = fun_pcs(|s| s.unprototyped_def);
     let func_name_by_pc: BTreeMap<usize, alloc::string::String> = build
         .func_ent_pcs
         .iter()
@@ -576,6 +587,14 @@ fn collect_subprograms(
                     .and_then(|m| m.get(&v.fp_slot))
                     .copied()
                     .unwrap_or(v.fp_slot);
+                // An over-aligned automatic lives in the region, not at a slot.
+                // TODO: one past a realignment has no frame-base offset; its
+                // location needs a stack-pointer-relative description.
+                let region = build
+                    .region_frame_offsets
+                    .get(&ent_pc)
+                    .and_then(|m| m.get(&eff))
+                    .copied();
                 SubprogVar {
                     name_off: strs.intern(&v.name),
                     is_parameter: v.is_parameter,
@@ -584,10 +603,9 @@ fn collect_subprograms(
                     // it; the 16-byte cell above the frame record is the
                     // layout of a function with no record. A local uses
                     // the 8-byte slot stride.
-                    // TODO: an over-aligned automatic lives in the frame's
-                    // over-aligned region, not at this slot offset; its
-                    // location needs the per-function region base.
-                    fp_byte_offset: if eff >= 2 {
+                    fp_byte_offset: if let Some(Some(off)) = region {
+                        off
+                    } else if eff >= 2 {
                         param_homes
                             .and_then(|h| h.get((eff - 2) as usize).copied())
                             .unwrap_or((eff - 1) * 16)
@@ -598,10 +616,11 @@ fn collect_subprograms(
                         // frame base and keep their offsets.
                         eff * 8 - canary_shift
                     },
-                    promoted: build
-                        .promoted_local_slots
-                        .get(&ent_pc)
-                        .is_some_and(|slots| slots.contains(&v.fp_slot)),
+                    promoted: region == Some(None)
+                        || build
+                            .promoted_local_slots
+                            .get(&ent_pc)
+                            .is_some_and(|slots| slots.contains(&v.fp_slot)),
                     decl_line: v.decl_line,
                     array_size: v.array_size,
                     decl_file: v.decl_file,
@@ -609,15 +628,18 @@ fn collect_subprograms(
             })
             .collect();
 
+        let early = build.early_returns.iter().find(|e| e.begin as usize == lo);
         out.push(Subprog {
             name_off,
             low_pc: code_vmaddr + lo as u64,
             high_pc: code_vmaddr + hi as u64,
             prologue_size: prologue_size_for(ent_pc, lo, build),
             frame_rules: FrameRules::of(build, lo),
-            ra_signed_at: paciasp_offset(build, lo),
+            ra_signed_at: paciasp_offset(build, lo, early.map(|e| e.frame)),
+            early_return: early.map(|e| e.exit),
             variables,
             external: !internal_pcs.contains(&ent_pc),
+            prototyped: !unprototyped_pcs.contains(&ent_pc),
         });
     }
 
@@ -824,7 +846,6 @@ impl TypeCatalog {
 
 /// Resolve a c5 type tag to its catalog entry.
 fn classify(ty: i64, target: Target) -> CatalogEntry {
-    let unsigned = types::is_unsigned_ty(ty);
     let bare = types::strip_unsigned(ty);
 
     if bare >= types::STRUCT_BASE {
@@ -870,11 +891,7 @@ fn classify(ty: i64, target: Target) -> CatalogEntry {
         return CatalogEntry::VoidStar;
     };
 
-    let leaf_signed = if unsigned {
-        leaf_tag | types::UNSIGNED_BIT
-    } else {
-        leaf_tag
-    };
+    let leaf_signed = leaf_tag | (ty & (types::UNSIGNED_BIT | types::PLAIN_CHAR_BIT));
     let leaf_key = match base_key_for_leaf(leaf_signed, target, 8) {
         Some(k) => k,
         None => return CatalogEntry::VoidStar,
@@ -908,8 +925,16 @@ pub(super) fn base_key_for_leaf(
             encoding: DW_ATE_BOOLEAN,
         }
     } else if bare == Ty::Char as i64 {
+        // C99 6.2.5p15: three types; plain `char` is named as spelled at
+        // the target's signedness.
         BaseTypeKey {
-            name: if unsigned { "unsigned char" } else { "char" },
+            name: if leaf_tag & types::PLAIN_CHAR_BIT != 0 {
+                "char"
+            } else if unsigned {
+                "unsigned char"
+            } else {
+                "signed char"
+            },
             byte_size: 1,
             encoding: if unsigned {
                 DW_ATE_UNSIGNED_CHAR
@@ -1032,7 +1057,7 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
         ],
     },
     // subprogram with variable / parameter children. DW_AT_prototyped is
-    // always set: c5 rejects K&R declarators per C99 6.7.6.3p14.
+    // false for a definition whose type has no prototype (C99 6.9.1p7).
     AbbrevDecl {
         code: ABBREV_SUBPROGRAM,
         tag: DW_TAG_SUBPROGRAM,
@@ -1042,7 +1067,7 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
             (DW_AT_LOW_PC, DW_FORM_ADDR),
             (DW_AT_HIGH_PC, DW_FORM_DATA8),
             (DW_AT_EXTERNAL, DW_FORM_FLAG_PRESENT),
-            (DW_AT_PROTOTYPED, DW_FORM_FLAG_PRESENT),
+            (DW_AT_PROTOTYPED, DW_FORM_FLAG),
             (DW_AT_CALLING_CONVENTION, DW_FORM_DATA1),
             (DW_AT_FRAME_BASE, DW_FORM_EXPRLOC),
         ],
@@ -1055,7 +1080,7 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
             (DW_AT_NAME, DW_FORM_STRP),
             (DW_AT_LOW_PC, DW_FORM_ADDR),
             (DW_AT_HIGH_PC, DW_FORM_DATA8),
-            (DW_AT_PROTOTYPED, DW_FORM_FLAG_PRESENT),
+            (DW_AT_PROTOTYPED, DW_FORM_FLAG),
             (DW_AT_CALLING_CONVENTION, DW_FORM_DATA1),
             (DW_AT_FRAME_BASE, DW_FORM_EXPRLOC),
         ],
@@ -1494,6 +1519,7 @@ impl InfoUnit<'_> {
             body.extend_from_slice(&s.name_off.to_le_bytes());
             body.extend_from_slice(&s.low_pc.to_le_bytes());
             body.extend_from_slice(&(s.high_pc - s.low_pc).to_le_bytes());
+            body.push(u8::from(s.prototyped));
             body.push(DW_CC_NORMAL);
             write_uleb128(body, 2);
             body.push(frame_base_breg);
@@ -1818,6 +1844,25 @@ fn write_post_prologue_instructions(out: &mut Vec<u8>, arch: CfiArch) {
     }
 }
 
+/// The entry's rules again, where a return taken ahead of the frame follows
+/// the body: the CIE's CFA and register rules, the return address unsigned
+/// where it was `signed`. Not `DW_CFA_restore_state`: gdb 17 keeps the
+/// AArch64 return address signed across a state remembered before any
+/// `DW_CFA_AARCH64_negate_ra_state`.
+fn write_entry_rules(out: &mut Vec<u8>, arch: CfiArch, signed: bool) {
+    write_cie_initial_instructions(out, arch);
+    let saved: &[u8] = match arch {
+        CfiArch::Aarch64 => &[AARCH64_REG_X29, AARCH64_REG_X30],
+        CfiArch::X86_64 => &[X86_64_REG_RBP],
+    };
+    for &reg in saved {
+        out.push(DW_CFA_RESTORE_HI | reg);
+    }
+    if signed {
+        out.push(DW_CFA_NEGATE_RA_STATE);
+    }
+}
+
 /// The rules of an x86_64 frame, one per prologue instruction: past
 /// `push rbp` the CFA is `rsp + 16` with rbp saved at `CFA - 16`; past
 /// `mov rbp, rsp` the CFA is `rbp + 16`. The return address stays at
@@ -1977,16 +2022,21 @@ fn build_debug_frame(
 
     for sub in subs {
         let mut fde_body: Vec<u8> = Vec::new();
-        match sub.frame_rules {
-            FrameRules::Leaf => {}
+        // Where the rules below end, and whether they sign the return address.
+        let (ruled, signed) = match sub.frame_rules {
+            FrameRules::Leaf => (0, false),
             FrameRules::X86Frame {
                 push_rbp_end,
                 set_fpreg_end,
-            } => write_x86_64_frame_rules(&mut fde_body, push_rbp_end, set_fpreg_end),
+            } => {
+                write_x86_64_frame_rules(&mut fde_body, push_rbp_end, set_fpreg_end);
+                (set_fpreg_end, false)
+            }
             FrameRules::PostPrologue => {
                 let sign_end = sub.ra_signed_at.map(|at| at + 4);
+                let signed = sign_end.is_some_and(|end| sub.prologue_size >= end);
                 if let Some(end) = sign_end
-                    && sub.prologue_size >= end
+                    && signed
                 {
                     write_advance_loc(&mut fde_body, arch, end);
                     fde_body.push(DW_CFA_NEGATE_RA_STATE);
@@ -1995,7 +2045,12 @@ fn build_debug_frame(
                     write_advance_loc(&mut fde_body, arch, sub.prologue_size);
                 }
                 write_post_prologue_instructions(&mut fde_body, arch);
+                (sub.prologue_size, signed)
             }
+        };
+        if let Some(exit) = sub.early_return {
+            write_advance_loc(&mut fde_body, arch, exit - ruled);
+            write_entry_rules(&mut fde_body, arch, signed);
         }
 
         let mut fde = Vec::with_capacity(24 + fde_body.len());
@@ -2230,6 +2285,11 @@ pub(super) fn write_line_rows(
     func_starts.sort_unstable();
     func_starts.dedup();
     let mut func_start_iter = func_starts.iter().copied().peekable();
+    // `prologue_end` goes on a function's first row at or past its
+    // post-prologue anchor; a test ahead of the frame has rows before it.
+    let mut anchors: Vec<usize> = build.func_prologue_native.values().copied().collect();
+    anchors.sort_unstable();
+    let mut anchor_iter = anchors.into_iter().peekable();
     let mut prologue_end_pending = false;
     for &(native, line, file_idx) in &build.ssa_line_rows {
         if line == 0 {
@@ -2244,6 +2304,10 @@ pub(super) fn write_line_rows(
             }
             state.emit_row(buf, entry_addr, line as i64, file, false);
             func_start_iter.next();
+            while anchor_iter.next_if(|&at| at < fn_start).is_some() {}
+            prologue_end_pending = false;
+        }
+        while anchor_iter.next_if(|&at| at <= native).is_some() {
             prologue_end_pending = true;
         }
         state.emit_row(buf, target_addr, line as i64, file, prologue_end_pending);
@@ -2304,8 +2368,8 @@ mod tests {
             .collect();
         assert_eq!(
             hex,
-            "011101250e130b030e1b0e1101120710170000022e01030e110112073f192719360b\
-             40180000132e01030e110112072719360b40180000032400030e0b0b3e0b00000434\
+            "011101250e130b030e1b0e1101120710170000022e01030e110112073f19270c360b\
+             40180000132e01030e11011207270c360b40180000032400030e0b0b3e0b00000434\
              00030e491302183a0f3b0f0000050500030e491302183a0f3b0f0000060f000b0b49\
              130000071301030e0b060000081701030e0b060000090d00030e4913380600000a0d\
              00030e49136b0f0d0f00000b2e01030e110112073f19491300000c0500030e491300\
@@ -2453,12 +2517,30 @@ mod tests {
     }
 
     #[test]
-    fn classify_char_uses_signed_char_encoding() {
+    fn classify_names_the_three_character_types() {
         let signed = base_of(Ty::Char as i64, Target::LinuxX64);
         let unsigned = base_of(Ty::Char as i64 | types::UNSIGNED_BIT, Target::LinuxX64);
-        assert_eq!(signed.byte_size, 1);
-        assert_eq!(signed.encoding, DW_ATE_SIGNED_CHAR);
-        assert_eq!(unsigned.encoding, DW_ATE_UNSIGNED_CHAR);
+        let plain_x64 = base_of(types::plain_char_ty(true), Target::LinuxX64);
+        let plain_a64 = base_of(types::plain_char_ty(false), Target::LinuxAarch64);
+        for k in [signed, unsigned, plain_x64, plain_a64] {
+            assert_eq!(k.byte_size, 1);
+        }
+        assert_eq!(
+            (signed.name, signed.encoding),
+            ("signed char", DW_ATE_SIGNED_CHAR)
+        );
+        assert_eq!(
+            (unsigned.name, unsigned.encoding),
+            ("unsigned char", DW_ATE_UNSIGNED_CHAR)
+        );
+        assert_eq!(
+            (plain_x64.name, plain_x64.encoding),
+            ("char", DW_ATE_SIGNED_CHAR)
+        );
+        assert_eq!(
+            (plain_a64.name, plain_a64.encoding),
+            ("char", DW_ATE_UNSIGNED_CHAR)
+        );
     }
 
     #[test]
@@ -2546,8 +2628,10 @@ mod tests {
             prologue_size: 12,
             frame_rules,
             ra_signed_at: None,
+            early_return: None,
             variables: Vec::new(),
             external: true,
+            prototyped: true,
         };
         let body = |rules| {
             let out = build_debug_frame(Target::LinuxX64, &[sub(rules)], None, None);
@@ -2602,8 +2686,10 @@ mod tests {
             prologue_size: 12,
             frame_rules: FrameRules::PostPrologue,
             ra_signed_at,
+            early_return: None,
             variables: Vec::new(),
             external: true,
+            prototyped: true,
         };
         let body = |ra_signed| {
             let out = build_debug_frame(Target::LinuxAarch64, &[sub(ra_signed)], None, None);
@@ -2638,6 +2724,85 @@ mod tests {
         assert_eq!(&displaced[2..], &plain[1..], "same rules follow");
     }
 
+    /// The frame path signs x30 at the `PACIASP` past the entry's test, where
+    /// the FDE flips the return-address state; the early return after the
+    /// body states the entry's rules again, the return address unsigned.
+    #[test]
+    fn debug_frame_signs_the_frame_path_past_an_early_return() {
+        use crate::c5::codegen::aarch64::encode;
+        let src = "long fib(int n) { if (n < 2) return n; return fib(n - 1) + fib(n - 2); }\n\
+                   int main(int argc, char **argv) { (void)argv; return (int)fib(argc); }\n";
+        let program = crate::Compiler::new(crate::c5::tests::with_prelude(src))
+            .compile()
+            .expect("compile");
+        let options = crate::NativeOptions {
+            optimize: true,
+            debug_info: true,
+            hardening: crate::Hardening {
+                bti: true,
+                pac_ret: true,
+                ..crate::Hardening::NONE
+            },
+            ..Default::default()
+        };
+        let build =
+            crate::c5::codegen::lower_for(&program, Target::LinuxAarch64, options).expect("lower");
+        let word = |at: usize| u32::from_le_bytes(build.text[at..at + 4].try_into().unwrap());
+        let subs = collect_subprograms(&program, &build, 0, &mut StrTable::new());
+        let fib = subs
+            .iter()
+            .find(|s| s.early_return.is_some())
+            .expect("fib returns ahead of its frame");
+        let lo = fib.low_pc as usize;
+        let early = build.early_returns[0];
+        assert_eq!(early.begin as usize, lo);
+        let (frame, exit) = (early.frame as usize, early.exit as usize);
+        assert_eq!(
+            word(lo),
+            encode::BTI_C,
+            "the landing pad opens the function"
+        );
+        assert_eq!(
+            word(lo + frame),
+            encode::PACIASP,
+            "the frame path signs first"
+        );
+        assert_eq!(fib.ra_signed_at, Some(frame as u32));
+        let ret = encode::enc_ret(encode::Reg(30));
+        assert_eq!(
+            word(fib.high_pc as usize - 4),
+            ret,
+            "the early return closes fib"
+        );
+        assert_eq!(word(lo + exit - 4), ret, "after the frame path's");
+        let out = build_debug_frame(Target::LinuxAarch64, core::slice::from_ref(fib), None, None);
+        let fde = 4 + u32::from_le_bytes(out[..4].try_into().unwrap()) as usize;
+        let len = u32::from_le_bytes(out[fde..fde + 4].try_into().unwrap()) as usize;
+        let mut body = out[fde + 24..fde + 4 + len].to_vec();
+        while body.last() == Some(&0) {
+            body.pop();
+        }
+        let unit = |bytes: usize| DW_CFA_ADVANCE_LOC_HI | (bytes / 4) as u8;
+        assert_eq!(
+            &body[..2],
+            &[unit(frame + 4), DW_CFA_NEGATE_RA_STATE],
+            "unsigned through the test"
+        );
+        assert_eq!(
+            &body[body.len() - 7..],
+            &[
+                unit(exit - fib.prologue_size as usize),
+                DW_CFA_DEF_CFA,
+                AARCH64_REG_SP,
+                0,
+                DW_CFA_RESTORE_HI | AARCH64_REG_X29,
+                DW_CFA_RESTORE_HI | AARCH64_REG_X30,
+                DW_CFA_NEGATE_RA_STATE,
+            ],
+            "the entry's rules at the early return"
+        );
+    }
+
     #[test]
     fn collect_plt_subprograms_uses_offset_delta_not_text_len() {
         // Per-stub size must come from the offset delta between consecutive
@@ -2658,7 +2823,6 @@ mod tests {
                     is_variadic: false,
                     fixed_args: 1,
                     return_type_tag: 0,
-                    returns_long_double: false,
                     param_types: alloc::vec![1], // int
                 },
                 super::super::ResolvedImport {
@@ -2671,7 +2835,6 @@ mod tests {
                     is_variadic: false,
                     fixed_args: 1,
                     return_type_tag: 0,
-                    returns_long_double: false,
                     param_types: alloc::vec![1],
                 },
             ],
@@ -2819,8 +2982,10 @@ mod info_golden {
             prologue_size: 4,
             frame_rules: FrameRules::PostPrologue,
             ra_signed_at: None,
+            early_return: None,
             variables: alloc::vec![],
             external: true,
+            prototyped: true,
         }];
         let plt_subs: alloc::vec::Vec<PltSub> = alloc::vec![];
         let structs: alloc::vec::Vec<StructDef> = alloc::vec![];
@@ -2843,8 +3008,8 @@ mod info_golden {
         let hex: alloc::string::String = info.iter().map(|b| alloc::format!("{b:02x}")).collect();
         assert_eq!(
             hex,
-            "440000000400000000000801010000000c0c0000000b0000000010000000000000\
-             10000000000000000000000002100000000010000000000000100000000000000001\
+            "450000000400000000000801010000000c0c0000000b000000001000000000000010\
+             00000000000000000000000210000000001000000000000010000000000000000101\
              0276000000"
         );
         let info_a64 = build_debug_info(

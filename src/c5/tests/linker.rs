@@ -4103,6 +4103,58 @@ fn thread_local_blocks_merge_on_their_alignment() {
     }
 }
 
+/// badc's own object states every local-exec site twice, as the
+/// relocation another linker applies and as the note fixup this one
+/// applies, so the link skips exactly the relocations a fixup covers:
+/// the x86_64 field, the aarch64 `add` pair.
+#[test]
+fn every_local_exec_relocation_of_a_badc_object_has_its_note_fixup() {
+    use crate::c5::compiler::CompileOptions;
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::object::elf_reloc_types::{aarch64_is_tls, x86_64_is_tls};
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    const UNIT: &str = "static _Thread_local int tl = 5;\n\
+         _Thread_local long long tg = 7;\n\
+         _Thread_local char tz[40];\n\
+         extern _Thread_local int te;\n\
+         int get(int a) { tl += a; tg += a; tz[39] += a; return tl + (int)tg + tz[39] + te; }\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let prog = Compiler::with_options(
+            UNIT.into(),
+            target,
+            CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let obj = parse_native_elf(&emit_native_with_options(&prog, target, opts).expect("emit"))
+            .expect("parse");
+        let aarch64 = target == Target::LinuxAarch64;
+        let sites: Vec<u64> = obj
+            .text_relocs
+            .iter()
+            .filter(|r| {
+                if aarch64 {
+                    aarch64_is_tls(r.rtype)
+                } else {
+                    x86_64_is_tls(r.rtype)
+                }
+            })
+            .map(|r| r.offset)
+            .collect();
+        let noted: Vec<u64> = obj
+            .elf_tpoff_fixups
+            .iter()
+            .flat_map(|&(off, _)| core::iter::once(off).chain(aarch64.then_some(off + 4)))
+            .collect();
+        assert_eq!(sites.len(), if aarch64 { 8 } else { 4 }, "{target:?}");
+        assert_eq!(sites, noted, "{target:?}: each site and its fixup");
+    }
+}
+
 #[test]
 fn macho_tlv_descriptors_round_trip_through_et_rel() {
     // A macOS `_Thread_local` access lowers to a TLV-descriptor call
@@ -4356,7 +4408,7 @@ fn export_data_exposes_data_globals_in_dynsym() {
             false,
             export_data,
             false,
-            false,
+            crate::c5::ExecForm::Pie,
         )
         .expect("write executable")
     };
@@ -4482,7 +4534,7 @@ fn dynamic_exports_carry_section_size_binding_and_visibility() {
         true,
         true,
         false,
-        false,
+        crate::c5::ExecForm::Pie,
     )
     .expect("write executable");
 
@@ -5064,38 +5116,51 @@ fn windows_hypotf_imports_underscored_ucrtbase_export() {
     }
 }
 
-/// `<math.h>` defines `fabsl` and `ldexpl` over `fabs` and `ldexp`, exact for
-/// c5's binary64 `long double`; no long-double library entry point is called.
+/// `<math.h>` binds C99 7.12's `long double` functions to libm's `l` entry
+/// points on Linux, where the type is wider than `double`, and to the
+/// `double` entry points on macOS and Windows, where it is `double`. The
+/// unit defines none of them.
 #[test]
-fn fabsl_and_ldexpl_are_defined_over_the_double_functions() {
-    use crate::c5::Target;
-    use crate::c5::ir::Inst;
+fn long_double_math_binds_the_platform_entry_points() {
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
     let src = "#include <math.h>\n\
-               int main(void) { volatile long double x = -1.5L; return (int) (fabsl(x) + ldexpl(x, 1)); }\n";
-    for target in Target::ALL {
+               #pragma export(use_l)\n\
+               long double use_l(long double x, int e)\n\
+               { return fabsl(x) + ldexpl(x, e) + sinl(x) + powl(x, x) + HUGE_VALL; }\n";
+    let linux = ["fabsl", "ldexpl", "sinl", "powl"];
+    for (target, names) in [
+        (Target::LinuxX64, linux),
+        (Target::LinuxAarch64, linux),
+        (Target::MacOSAarch64, ["_fabs", "_ldexp", "_sin", "_pow"]),
+        (Target::WindowsX64, ["fabs", "ldexp", "sin", "pow"]),
+        (Target::WindowsAarch64, ["fabs", "ldexp", "sin", "pow"]),
+    ] {
         let program = Compiler::with_target(src.to_string(), target)
             .compile()
             .unwrap_or_else(|e| panic!("{target:?}: {e}"));
         let funcs =
             crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
                 .expect("ssa");
-        let insts = |name: &str| {
-            let f = funcs.iter().find(|f| f.name == name);
-            f.unwrap_or_else(|| panic!("{target:?}: `{name}` is not defined in the unit"))
-                .insts
-                .iter()
-        };
-        let internal_calls = insts("main")
-            .filter(|i| matches!(i, Inst::Call { .. }))
-            .count();
-        assert_eq!(
-            internal_calls, 2,
-            "{target:?}: `main` calls both definitions"
-        );
         assert!(
-            insts("ldexpl").any(|i| matches!(i, Inst::CallExt { .. })),
-            "{target:?}: `ldexpl` calls the `ldexp` export"
+            funcs.iter().all(|f| f.name == "use_l"),
+            "{target:?}: the unit defines only `use_l`"
         );
+        let obj = emit_native_with_options(
+            &program,
+            target,
+            NativeOptions {
+                output_kind: OutputKind::Relocatable,
+                ..Default::default()
+            },
+        )
+        .expect("emit object");
+        let contains = |needle: &[u8]| obj.windows(needle.len()).any(|w| w == needle);
+        for name in names {
+            assert!(
+                contains(alloc::format!("\0{name}\0").as_bytes()),
+                "{target:?}: the call binds to `{name}`"
+            );
+        }
     }
 }
 
@@ -5438,7 +5503,7 @@ fn cpuid_xgetbv_asm_emit_for_x86_64() {
     );
     let code = super::codegen::function_bytes(&bytes, "cpuid");
     let n = code.len() as u32;
-    let uw = crate::c5::codegen::decode_x86_64_prologue_unwind(&code, 0, n, n);
+    let uw = crate::c5::codegen::decode_x86_64_prologue_unwind(&code, 0, n, n, 0);
     assert!(!uw.leaf, "{code:02x?}");
     // `push rbx` directly after the frame allocation.
     let saves_at = uw.frame_alloc_end.max(uw.set_fpreg_end) as usize;
@@ -5675,6 +5740,43 @@ fn assembler_local_labels_stay_out_of_the_symbol_table() {
     }
 }
 
+/// The test of an early return moves `push rbp` off the entry; the note
+/// carries where it went and where the return is, so the merged-image
+/// decoder reads the frame the lowering built.
+#[test]
+fn a_frame_past_an_early_return_decodes_from_its_anchor() {
+    use crate::c5::linker::{link_native_objects, parse_native_elf};
+    let src = "long fib(int n) { if (n < 2) return n; return fib(n - 1) + fib(n - 2); }\n";
+    let obj = parse_native_elf(&reloc_tu(src, crate::c5::Target::LinuxX64, true)).expect("parse");
+    assert_eq!(obj.early_returns.len(), 1, "{:x?}", obj.early_returns);
+    let merged = link_native_objects(&[obj]).expect("link");
+    let entry = merged.defined.get("fib").expect("fib is defined").value;
+    let (at, exit) = merged.early_returns[&entry];
+    assert_eq!(
+        merged.text[exit as usize..].first(),
+        Some(&0x48),
+        "`movsxd rax, edi`"
+    );
+    let post = merged.prologue_ends[&entry];
+    let text = &merged.text;
+    assert_eq!(text[at as usize..at as usize + 4], [0x55, 0x48, 0x89, 0xE5]);
+    let n = text.len() as u32;
+    let decode = |frame_start| {
+        crate::c5::codegen::decode_x86_64_prologue_unwind(
+            text,
+            entry as u32,
+            n,
+            post as u32,
+            frame_start,
+        )
+    };
+    let uw = decode(at as u32);
+    assert!(!uw.leaf);
+    assert_eq!(uw.push_rbp_end, (at - entry) as u32 + 1);
+    // Without the anchor the entry reads as a frameless leaf.
+    assert!(decode(0).leaf);
+}
+
 #[test]
 fn typed_local_label_leaves_the_symbol_table_and_its_reference_reduces() {
     // `SYM_FUNC_START_LOCAL(.Lname)` spells a local label `@function` and
@@ -5809,6 +5911,7 @@ fn minimal_native_object(
         elf_tpoff_fixups: alloc::vec::Vec::new(),
         copy_relocs: alloc::vec::Vec::new(),
         prologue_ends: alloc::vec::Vec::new(),
+        early_returns: alloc::vec::Vec::new(),
         extern_data_names: alloc::vec::Vec::new(),
         debug_info: alloc::vec::Vec::new(),
         debug_abbrev: alloc::vec::Vec::new(),
@@ -5989,6 +6092,7 @@ fn weak_undef_binds_against_a_shared_library_export() {
         machine: NativeMachine::X86_64,
         exports: core::iter::once("hook".to_string()).collect(),
         data_exports: Default::default(),
+        object_sizes: Default::default(),
         export_symbols: Default::default(),
         export_versions: Default::default(),
         from_image: true,
@@ -6106,6 +6210,7 @@ fn aarch64_data_ref_object_ex(
         tls_bss_size: 0,
         tls_align: 1,
         prologue_ends: alloc::vec::Vec::new(),
+        early_returns: alloc::vec::Vec::new(),
         extern_data_names: alloc::vec::Vec::new(),
         symbols: alloc::vec![NativeSymbol {
             name: String::new(),
@@ -6361,6 +6466,7 @@ fn blank_aarch64_object() -> crate::c5::linker::NativeObject {
         tls_bss_size: 0,
         tls_align: 1,
         prologue_ends: alloc::vec::Vec::new(),
+        early_returns: alloc::vec::Vec::new(),
         extern_data_names: alloc::vec::Vec::new(),
         symbols: alloc::vec::Vec::new(),
         text_relocs: alloc::vec::Vec::new(),
@@ -12599,6 +12705,7 @@ fn imported_function_called_and_address_taken_links_through_own_linker() {
                 .into_iter()
                 .collect(),
             data_exports: alloc::collections::BTreeSet::new(),
+            object_sizes: Default::default(),
             export_symbols: alloc::collections::BTreeMap::new(),
             export_versions: alloc::collections::BTreeMap::new(),
             from_image: true,

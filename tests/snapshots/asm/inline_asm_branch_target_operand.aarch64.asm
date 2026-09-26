@@ -30,59 +30,40 @@ Disassembly of section .text:
                	ret
 
 <main>:
-               	str	x20, [sp, #-0x50]!
-               	stp	x29, x30, [sp, #0x40]
-               	add	x29, sp, #0x40
-               	str	x18, [sp, #0x18]
-               	str	x30, [sp, #0x20]
-               	sub	x16, x29, #0x10
-               	str	x16, [sp, #0x10]
+               	str	x20, [sp, #-0x30]!
+               	stp	x29, x30, [sp, #0x20]
+               	add	x29, sp, #0x20
+               	str	x18, [sp, #0x10]
+               	str	x30, [sp, #0x18]
                	bl	<addr>
-               	ldr	x16, [sp, #0x10]
-               	str	w0, [x16]
-               	ldr	x18, [sp, #0x18]
-               	ldr	x30, [sp, #0x20]
-               	ldursw	x20, [x29, #-0x10]
-               	str	x18, [sp, #0x18]
-               	str	x30, [sp, #0x20]
-               	sub	x16, x29, #0x10
-               	str	x16, [sp, #0x10]
+               	mov	x20, x0
+               	ldr	x18, [sp, #0x10]
+               	ldr	x30, [sp, #0x18]
+               	str	x18, [sp, #0x10]
+               	str	x30, [sp, #0x18]
                	bl	<addr>
-               	ldr	x16, [sp, #0x10]
-               	str	w0, [x16]
-               	ldr	x18, [sp, #0x18]
-               	ldr	x30, [sp, #0x20]
-               	ldursw	x0, [x29, #-0x10]
+               	ldr	x18, [sp, #0x10]
+               	ldr	x30, [sp, #0x18]
                	add	x20, x20, x0
-               	str	x18, [sp, #0x18]
-               	str	x30, [sp, #0x20]
-               	sub	x16, x29, #0x10
-               	str	x16, [sp, #0x10]
+               	str	x18, [sp, #0x10]
+               	str	x30, [sp, #0x18]
                	bl	<addr>
-               	ldr	x16, [sp, #0x10]
-               	str	w0, [x16]
-               	ldr	x18, [sp, #0x18]
-               	ldr	x30, [sp, #0x20]
-               	ldursw	x0, [x29, #-0x10]
+               	ldr	x18, [sp, #0x10]
+               	ldr	x30, [sp, #0x18]
                	add	x20, x20, x0
-               	str	x18, [sp, #0x18]
-               	str	x30, [sp, #0x20]
-               	sub	x16, x29, #0x10
-               	str	x16, [sp, #0x10]
+               	str	x18, [sp, #0x10]
+               	str	x30, [sp, #0x18]
                	bl	<addr>
-               	ldr	x16, [sp, #0x10]
-               	str	w0, [x16]
-               	ldr	x18, [sp, #0x18]
-               	ldr	x30, [sp, #0x20]
-               	ldursw	x0, [x29, #-0x10]
+               	ldr	x18, [sp, #0x10]
+               	ldr	x30, [sp, #0x18]
                	add	x0, x20, x0
                	cmp	w0, #0xf
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
-               	ldp	x29, x30, [sp, #0x40]
-               	ldr	x20, [sp], #0x50
+               	ldp	x29, x30, [sp, #0x20]
+               	ldr	x20, [sp], #0x30
                	ret
                	mov	x0, #0x2a               // =42
-               	ldp	x29, x30, [sp, #0x40]
-               	ldr	x20, [sp], #0x50
+               	ldp	x29, x30, [sp, #0x20]
+               	ldr	x20, [sp], #0x30
                	ret

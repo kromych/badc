@@ -50,7 +50,15 @@ impl<'a> Walker<'a> {
                 }
                 Ok(false)
             }
-            Stmt::Compound(items) => self.walk_compound(b, items),
+            Stmt::Compound(items) => {
+                let depth = self.scopes.len();
+                if let Some(scope) = self.block_scope(id, items) {
+                    self.scopes.push(scope);
+                }
+                let terminated = self.walk_compound(b, items);
+                self.scopes.truncate(depth);
+                terminated
+            }
             Stmt::If {
                 cond,
                 then_s,
@@ -65,26 +73,29 @@ impl<'a> Walker<'a> {
                 body,
             } => self.walk_for(b, *init, *cond, *post, *body),
             Stmt::Break => {
-                let Some(&(brk, _)) = self.loop_ctx.last() else {
+                let Some(&ctx) = self.loop_ctx.last() else {
                     return Err(WalkError::InvalidStmt { id, kind: "Break" });
                 };
-                b.jmp(brk);
+                self.leave_scopes(b, ctx.brk_depth, false);
+                b.jmp(ctx.brk);
                 Ok(true)
             }
             Stmt::Continue => {
-                let Some(&(_, cont)) = self.loop_ctx.last() else {
+                let Some(&ctx) = self.loop_ctx.last() else {
                     return Err(WalkError::InvalidStmt {
                         id,
                         kind: "Continue",
                     });
                 };
-                b.jmp(cont);
+                self.leave_scopes(b, ctx.cont_depth, false);
+                b.jmp(ctx.cont);
                 Ok(true)
             }
             Stmt::AsmGoto(idx) => {
                 // GCC `asm goto`. Target 0 is the fall-through
                 // successor; the label blocks follow in label-list
-                // order, through the same machinery `goto` uses.
+                // order. An edge leaving a scope goes through the exit
+                // block a `goto` to the label from here takes.
                 let asm = self.ast.asm_blocks[*idx as usize].clone();
                 let mut args: alloc::vec::Vec<ValueId> =
                     alloc::vec::Vec::with_capacity(asm.operand_exprs.len());
@@ -93,24 +104,62 @@ impl<'a> Walker<'a> {
                 }
                 let fall = b.new_block();
                 let mut targets = alloc::vec::Vec::with_capacity(1 + asm.labels.len());
+                let mut exits = alloc::vec::Vec::new();
                 targets.push(fall);
-                for &l in &asm.labels {
-                    targets.push(self.block_for_label(b, l));
+                for (i, &l) in asm.labels.iter().enumerate() {
+                    let depth = self.label_depth(l);
+                    if asm.cleanups[i].is_empty() && !self.leaves_anything(depth) {
+                        targets.push(self.block_for_label(b, l));
+                    } else {
+                        let (exit, new) = self.cleanup_exit(b, l, depth, &asm.cleanups[i]);
+                        targets.push(exit);
+                        if new {
+                            exits.push((exit, i, depth, l));
+                        }
+                    }
                 }
                 b.asm_goto(alloc::boxed::Box::new(asm.block), args, targets);
+                for (exit, i, depth, l) in exits {
+                    self.fill_cleanup_exit(b, exit, l, depth, &asm.cleanups[i])?;
+                }
                 b.switch_to(fall);
                 Ok(false)
             }
             Stmt::Goto(label) => {
                 let target = self.block_for_label(b, *label);
+                let depth = self.label_depth(*label);
+                self.leave_scopes(b, depth, false);
                 b.jmp(target);
                 Ok(true)
             }
             Stmt::GotoIndirect(target) => {
                 let v = self.walk_expr_rvalue(b, *target)?;
-                b.goto_indirect(v);
+                self.goto_indirect(b, v);
                 Ok(true)
             }
+            Stmt::CleanupJump { cleanups, jump } => match *self.ast.stmt(*jump) {
+                Stmt::Goto(label) => {
+                    let depth = self.label_depth(label);
+                    let (exit, new) = self.cleanup_exit(b, label, depth, cleanups);
+                    b.jmp(exit);
+                    if new {
+                        self.fill_cleanup_exit(b, exit, label, depth, cleanups)?;
+                    }
+                    Ok(true)
+                }
+                Stmt::GotoIndirect(t) => {
+                    let v = self.walk_expr_rvalue(b, t)?;
+                    for &c in cleanups {
+                        self.walk_stmt(b, c)?;
+                    }
+                    self.goto_indirect(b, v);
+                    Ok(true)
+                }
+                _ => Err(WalkError::InvalidStmt {
+                    id,
+                    kind: "CleanupJump",
+                }),
+            },
             Stmt::Labeled { label, body } => {
                 let label_blk = self.block_for_label(b, *label);
                 // C99 6.8.1: a labeled statement is reachable by
@@ -164,6 +213,11 @@ impl<'a> Walker<'a> {
                 let slot = *save_slot;
                 let top = b.intrinsic(Intrinsic::AllocaSave as i64, alloc::vec::Vec::new());
                 b.store_local(slot, top, StoreKind::I64);
+                self.scopes.push(OpenScope {
+                    id,
+                    ends: &[],
+                    vla_save: Some(slot),
+                });
                 Ok(false)
             }
             Stmt::VlaScopeExit { save_slot } => {
@@ -381,10 +435,27 @@ impl<'a> Walker<'a> {
         block: StmtId,
         value_item: u32,
     ) -> Result<ValueId, WalkError> {
+        let depth = self.scopes.len();
         let items: alloc::vec::Vec<BlockItem> = match self.ast.stmt(block) {
-            Stmt::Compound(items) => items.clone(),
+            Stmt::Compound(items) => {
+                if let Some(scope) = self.block_scope(block, items) {
+                    self.scopes.push(scope);
+                }
+                items.clone()
+            }
             _ => alloc::vec![BlockItem::Stmt(block)],
         };
+        let value = self.walk_stmt_expr_items(b, items, value_item);
+        self.scopes.truncate(depth);
+        value
+    }
+
+    fn walk_stmt_expr_items(
+        &mut self,
+        b: &mut SsaBuilder,
+        items: alloc::vec::Vec<BlockItem>,
+        value_item: u32,
+    ) -> Result<ValueId, WalkError> {
         let mut result: Option<ValueId> = None;
         for (i, item) in items.into_iter().enumerate() {
             if !b.is_block_open() {
@@ -478,10 +549,174 @@ impl<'a> Walker<'a> {
     /// value-returning function, whose value C99 6.9.1p12 leaves undefined.
     pub(super) fn return_without_value(&self, b: &mut SsaBuilder) {
         if self.returns_no_value {
-            b.return_(NO_VALUE);
+            self.return_value(b, NO_VALUE);
         } else {
             let zero = b.imm(0);
-            b.return_(zero);
+            self.return_value(b, zero);
+        }
+    }
+
+    /// A computed `goto` to `v`. Whichever label whose address is taken it
+    /// names, the jump leaves the scopes none is in.
+    fn goto_indirect(&self, b: &mut SsaBuilder, v: ValueId) {
+        let depth = self
+            .ast
+            .label_addrs
+            .iter()
+            .map(|&l| self.label_depth(l))
+            .max()
+            .unwrap_or(self.scopes.len());
+        self.leave_scopes(b, depth, false);
+        b.goto_indirect(v);
+    }
+
+    /// Return `v`, ending every open scope; the frame's teardown frees VLAs.
+    fn return_value(&self, b: &mut SsaBuilder, v: ValueId) {
+        self.leave_scopes(b, 0, true);
+        b.return_(v);
+    }
+
+    /// The exit block the jumps to `label` leaving the scopes above `depth`
+    /// and running `cleanups` share; true when new and still to be filled.
+    fn cleanup_exit(
+        &mut self,
+        b: &mut SsaBuilder,
+        label: LabelId,
+        depth: usize,
+        cleanups: &[StmtId],
+    ) -> (BlockId, bool) {
+        let left = self.scopes[depth.min(self.scopes.len())..]
+            .iter()
+            .map(|s| s.id)
+            .collect();
+        let key = (label, left, cleanups.to_vec());
+        if let Some(&exit) = self.cleanup_exits.get(&key) {
+            return (exit, false);
+        }
+        let exit = b.new_block();
+        self.cleanup_exits.insert(key, exit);
+        (exit, true)
+    }
+
+    fn fill_cleanup_exit(
+        &mut self,
+        b: &mut SsaBuilder,
+        exit: BlockId,
+        label: LabelId,
+        depth: usize,
+        cleanups: &[StmtId],
+    ) -> Result<(), WalkError> {
+        b.switch_to(exit);
+        for &c in cleanups {
+            self.walk_stmt(b, c)?;
+        }
+        self.leave_scopes(b, depth, false);
+        let target = self.block_for_label(b, label);
+        b.jmp(target);
+        Ok(())
+    }
+
+    /// Whether leaving the scopes above `depth` emits anything.
+    fn leaves_anything(&self, depth: usize) -> bool {
+        self.scopes[depth.min(self.scopes.len())..]
+            .iter()
+            .any(|s| !s.ends.is_empty() || s.vla_save.is_some())
+    }
+
+    /// Leave the scopes above `depth`: end their lifetimes and, unless
+    /// `returning`, restore sp from the outermost VLA scope left.
+    fn leave_scopes(&self, b: &mut SsaBuilder, depth: usize, returning: bool) {
+        let left = &self.scopes[depth.min(self.scopes.len())..];
+        for scope in left.iter().rev() {
+            for &slot in scope.ends {
+                b.lifetime_end(slot);
+            }
+        }
+        if !returning && let Some(save) = left.iter().find_map(|s| s.vla_save) {
+            let saved = b.load_local(save, LoadKind::I64);
+            b.intrinsic(Intrinsic::AllocaRestore as i64, alloc::vec![saved]);
+        }
+    }
+
+    /// The scope block `id` opens, when its last item is a `Stmt::ScopeEnd`.
+    fn block_scope(&self, id: StmtId, items: &'a [BlockItem]) -> Option<OpenScope<'a>> {
+        let Some(BlockItem::Stmt(last)) = items.last() else {
+            return None;
+        };
+        match self.ast.stmt(*last) {
+            Stmt::ScopeEnd(slots) => Some(OpenScope {
+                id,
+                ends: slots,
+                vla_save: None,
+            }),
+            _ => None,
+        }
+    }
+
+    /// The depth of `scopes` also enclosing `label`; all of it for a label
+    /// with no chain.
+    fn label_depth(&self, label: LabelId) -> usize {
+        let Some(Some(chain)) = self.label_scopes.get(label as usize) else {
+            return self.scopes.len();
+        };
+        self.scopes
+            .iter()
+            .zip(chain)
+            .take_while(|(s, c)| s.id == **c)
+            .count()
+    }
+
+    /// Per label, the ids `scopes` holds where the walk reaches it.
+    pub(super) fn label_scope_chains(
+        &self,
+        root: StmtId,
+    ) -> alloc::vec::Vec<Option<alloc::vec::Vec<StmtId>>> {
+        let mut out = alloc::vec![None; self.label_blocks.len()];
+        self.collect_label_scopes(root, &mut alloc::vec::Vec::new(), &mut out);
+        out
+    }
+
+    fn collect_label_scopes(
+        &self,
+        id: StmtId,
+        chain: &mut alloc::vec::Vec<StmtId>,
+        out: &mut alloc::vec::Vec<Option<alloc::vec::Vec<StmtId>>>,
+    ) {
+        match self.ast.stmt(id) {
+            Stmt::Compound(items) => {
+                let depth = chain.len();
+                if self.block_scope(id, items).is_some() {
+                    chain.push(id);
+                }
+                for item in items {
+                    if let BlockItem::Stmt(s) = item {
+                        if matches!(self.ast.stmt(*s), Stmt::VlaScopeEnter { .. }) {
+                            chain.push(*s);
+                        }
+                        self.collect_label_scopes(*s, chain, out);
+                    }
+                }
+                chain.truncate(depth);
+            }
+            Stmt::Labeled { label, body } => {
+                if let Some(slot) = out.get_mut(*label as usize) {
+                    *slot = Some(chain.clone());
+                }
+                self.collect_label_scopes(*body, chain, out);
+            }
+            Stmt::If { then_s, else_s, .. } => {
+                self.collect_label_scopes(*then_s, chain, out);
+                if let Some(e) = else_s {
+                    self.collect_label_scopes(*e, chain, out);
+                }
+            }
+            Stmt::While { body, .. }
+            | Stmt::DoWhile { body, .. }
+            | Stmt::For { body, .. }
+            | Stmt::Switch { body, .. }
+            | Stmt::Case { body, .. }
+            | Stmt::Default { body } => self.collect_label_scopes(*body, chain, out),
+            _ => {}
         }
     }
 
@@ -503,6 +738,10 @@ impl<'a> Walker<'a> {
             if self.is_int128_value_ty(self.scalar_return_ty) && !self.expr_is_int128_value(e) {
                 let pair = self.int128_operand(b, e)?;
                 Some(self.int128_materialize(b, pair))
+            } else if self.ret_in_regs && is_long_double_scalar(self.scalar_return_ty) {
+                // A `long double` returned as its image.
+                let v = self.walk_copy_operand(b, e)?;
+                Some(self.long_double_image(b, v, self.scalar_return_ty))
             } else {
                 None
             };
@@ -515,7 +754,7 @@ impl<'a> Walker<'a> {
                 Some(addr) => addr,
                 None => self.walk_copy_operand(b, e)?,
             };
-            b.return_(v);
+            self.return_value(b, v);
             return Ok(true);
         }
         if self.returns_struct {
@@ -554,7 +793,7 @@ impl<'a> Walker<'a> {
                     b.mcpy(out_ptr, src, self.return_struct_size, align);
                 }
             }
-            b.return_(out_ptr);
+            self.return_value(b, out_ptr);
             return Ok(true);
         }
         let mut v = self.walk_copy_operand(b, e)?;
@@ -597,7 +836,7 @@ impl<'a> Walker<'a> {
                 v = b.extend(v, super::types::sign_extend_kind(rs));
             }
         }
-        b.return_(v);
+        self.return_value(b, v);
         Ok(true)
     }
 
@@ -712,7 +951,13 @@ impl<'a> Walker<'a> {
         after: BlockId,
     ) -> Result<(), WalkError> {
         b.switch_to(body_blk);
-        self.loop_ctx.push((after, next));
+        let depth = self.scopes.len();
+        self.loop_ctx.push(LoopCtx {
+            brk: after,
+            cont: next,
+            brk_depth: depth,
+            cont_depth: depth,
+        });
         let terminated = self.walk_stmt(b, body)?;
         self.loop_ctx.pop();
         if !terminated {
@@ -914,8 +1159,17 @@ impl<'a> Walker<'a> {
 
         // `break` leaves the switch; `continue` is invalid in a
         // bare switch, so propagate the enclosing loop's target.
-        let prev_continue = self.loop_ctx.last().map(|&(_, c)| c).unwrap_or(after_blk);
-        self.loop_ctx.push((after_blk, prev_continue));
+        let depth = self.scopes.len();
+        let (cont, cont_depth) = self
+            .loop_ctx
+            .last()
+            .map_or((after_blk, depth), |c| (c.cont, c.cont_depth));
+        self.loop_ctx.push(LoopCtx {
+            brk: after_blk,
+            cont,
+            brk_depth: depth,
+            cont_depth,
+        });
         self.switch_dispatch.push(SwitchLabels {
             cases,
             ranges,

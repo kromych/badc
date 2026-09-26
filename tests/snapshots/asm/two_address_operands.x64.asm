@@ -302,8 +302,7 @@ Disassembly of section .text:
                	retq
                	movabsq	$0x123456789abcdef, %rdi # imm = 0x123456789ABCDEF
                	leaq	<rip>, %rax
-               	movq	0x48(%rax), %rax
-               	movl	%eax, %esi
+               	movq	0x48(%rax), %rsi
                	callq	<addr>
                	movabsq	$-0x10fedcba98765433, %r11 # imm = 0xEF0123456789ABCD
                	cmpq	%r11, %rax
@@ -313,15 +312,13 @@ Disassembly of section .text:
                	retq
                	movl	$0x1, %edi
                	leaq	<rip>, %rax
-               	movq	0x50(%rax), %rax
-               	movl	%eax, %esi
+               	movq	0x50(%rax), %rsi
                	callq	<addr>
                	cmpq	$0x1, %rax
                	jne	<addr>
                	movl	$0x1, %edi
                	leaq	<rip>, %rax
-               	movq	0x38(%rax), %rax
-               	movl	%eax, %esi
+               	movq	0x38(%rax), %rsi
                	callq	<addr>
                	movabsq	$-0x8000000000000000, %r11 # imm = 0x8000000000000000
                	cmpq	%r11, %rax

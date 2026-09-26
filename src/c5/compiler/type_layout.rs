@@ -12,7 +12,7 @@ use alloc::string::ToString;
 use alloc::vec::Vec;
 
 use super::super::codegen::Target;
-use super::super::codegen::abi_classify::{FlatField, ScalarKind};
+use super::super::codegen::abi_classify::{FlatField, HomogeneousAggregate, ScalarKind};
 use super::super::error::C5Error;
 use super::super::ir::AggDesc;
 use super::super::token::{Token, Ty};
@@ -59,16 +59,17 @@ impl Compiler {
         is_pointer_ty(ptr_ty) && self.pointee_size(ptr_ty) > 1
     }
 
-    /// True when the value the parser just produced is a pointer to a
-    /// function. C99 6.5.6 admits additive operands only for pointers to
-    /// complete object types, so it leaves this case open; GCC and Clang
-    /// define it with a one-byte stride and the Linux kernel depends on
-    /// that. badc encodes a function pointer as "return type plus one
-    /// pointer level", so the flat `ty` tag cannot tell one from a data
-    /// pointer; the fn-pointer lineage the parser already tracks for the
-    /// 6.3.2.1p4 decay no-op answers it. Depth 0 is "the value itself".
+    /// True when the value the parser just produced is a function
+    /// designator or a pointer to a function: its expression's function
+    /// type, or the lineage an identifier load seeds. The additive
+    /// operators step it by one byte, as GNU C does and the Linux kernel
+    /// relies on; C99 6.5.6p2 admits pointers to object types only.
     pub(super) fn value_is_function_pointer(&self) -> bool {
-        self.pending.fn_ptr_chain_depth == 0 && !self.pending.fn_ptr_depth_is_array_elem
+        (self.pending.fn_ptr_chain_depth == 0 && !self.pending.fn_ptr_depth_is_array_elem)
+            || self
+                .ast_acc
+                .and_then(|id| self.expr_fn(id))
+                .is_some_and(|(_, d)| d <= 1)
     }
 
     /// Step size used by `++` / `--` on a value of `ty`: the
@@ -156,6 +157,7 @@ impl Compiler {
             is_anonymous: false,
             is_transparent_union: false,
             cast_named: false,
+            vla_size_slot: None,
         });
         let id = self.structs.len() - 1;
         if let Some(scope) = self.tag_scopes.last_mut() {
@@ -229,12 +231,17 @@ impl Compiler {
             bit_unit_size: 0,
             fn_ptr_indirection: 0,
             fn_ptr_ret_indirection: 0,
+            ret_fn: None,
             params: alloc::vec::Vec::new(),
             is_variadic: false,
+            prototyped: false,
+            param_enum_tags: alloc::vec::Vec::new(),
+            enum_tag: None,
             conv: crate::c5::codegen::CallConv::Target,
             anon_union_group: 0,
             anon_struct_group: 0,
             explicit_align: 0,
+            type_align: 0,
             align: 0,
             decl_spelling: Default::default(),
         };
@@ -259,6 +266,7 @@ impl Compiler {
             is_anonymous: false,
             is_transparent_union: false,
             cast_named: false,
+            vla_size_slot: None,
         });
         struct_ty_for(self.structs.len() - 1)
     }
@@ -329,12 +337,17 @@ impl Compiler {
             bit_unit_size: 0,
             fn_ptr_indirection: 0,
             fn_ptr_ret_indirection: 0,
+            ret_fn: None,
             params: Vec::new(),
             is_variadic: false,
+            prototyped: false,
+            param_enum_tags: alloc::vec::Vec::new(),
+            enum_tag: None,
             conv: crate::c5::codegen::CallConv::Target,
             anon_union_group: 0,
             anon_struct_group: 0,
             explicit_align: 0,
+            type_align: 0,
             align: 0,
             decl_spelling: Default::default(),
         };
@@ -355,6 +368,7 @@ impl Compiler {
             is_anonymous: false,
             is_transparent_union: false,
             cast_named: false,
+            vla_size_slot: None,
         });
         struct_ty_for(self.structs.len() - 1)
     }
@@ -434,12 +448,17 @@ impl Compiler {
             bit_unit_size: 0,
             fn_ptr_indirection: 0,
             fn_ptr_ret_indirection: 0,
+            ret_fn: None,
             params: alloc::vec::Vec::new(),
             is_variadic: false,
+            prototyped: false,
+            param_enum_tags: alloc::vec::Vec::new(),
+            enum_tag: None,
             conv: crate::c5::codegen::CallConv::Target,
             anon_union_group: 0,
             anon_struct_group: 0,
             explicit_align: 0,
+            type_align: 0,
             align: 0,
             decl_spelling: Default::default(),
         };
@@ -460,6 +479,7 @@ impl Compiler {
             is_anonymous: false,
             is_transparent_union: false,
             cast_named: false,
+            vla_size_slot: None,
         });
         struct_ty_for(self.structs.len() - 1)
     }
@@ -508,12 +528,17 @@ impl Compiler {
             bit_unit_size: 0,
             fn_ptr_indirection: 0,
             fn_ptr_ret_indirection: 0,
+            ret_fn: None,
             params: alloc::vec::Vec::new(),
             is_variadic: false,
+            prototyped: false,
+            param_enum_tags: alloc::vec::Vec::new(),
+            enum_tag: None,
             conv: crate::c5::codegen::CallConv::Target,
             anon_union_group: 0,
             anon_struct_group: 0,
             explicit_align: 0,
+            type_align: 0,
             align: 0,
             decl_spelling: Default::default(),
         };
@@ -538,8 +563,31 @@ impl Compiler {
             is_anonymous: false,
             is_transparent_union: false,
             cast_named: false,
+            vla_size_slot: None,
         });
         struct_ty_for(self.structs.len() - 1)
+    }
+
+    /// The type of a variable-length array of `elem_ty` whose byte count the
+    /// frame keeps in `size_slot` (C99 6.7.5.2), interned by the pair.
+    pub(super) fn vla_array_type(&mut self, elem_ty: i64, size_slot: i64) -> i64 {
+        let name = alloc::format!("__vla_{elem_ty}_{size_slot}");
+        if let Some(id) = self.structs.iter().position(|s| s.name == name) {
+            return struct_ty_for(id);
+        }
+        let ty = self.array_agg_type(elem_ty, &[-1]);
+        let mut def = self.structs[struct_id_of(ty)].clone();
+        def.name = name;
+        def.fields[0].array_size = super::VLA_ARRAY_SIZE;
+        def.vla_size_slot = Some(size_slot);
+        self.structs.push(def);
+        struct_ty_for(self.structs.len() - 1)
+    }
+
+    /// The byte-count slot of the variable-length array `ty` points to.
+    pub(super) fn vla_pointee_slot(&self, ty: i64) -> Option<i64> {
+        self.ptr_array_id_depth1(ty)
+            .and_then(|id| self.structs[id].vla_size_slot)
     }
 
     /// Struct id of `ty` when it is a pointer (any depth >= 1) whose
@@ -587,6 +635,15 @@ impl Compiler {
         flat_matches(a, b) || flat_matches(b, a)
     }
 
+    /// The bounds of the array-typedef base, outermost first.
+    pub(super) fn typedef_base_dims(&self) -> Vec<i64> {
+        if self.pending.typedef_base_array_dims.len() >= 2 {
+            self.pending.typedef_base_array_dims.clone()
+        } else {
+            alloc::vec![self.pending.typedef_base_array_size]
+        }
+    }
+
     /// Build the pointer-to-array tag for a declarator with
     /// `ptr_levels` leading `*`s over an array-typedef base: the
     /// aggregate-backed pointee plus one pointer level per `*`. The
@@ -600,11 +657,7 @@ impl Compiler {
         ty: i64,
         ptr_levels: i64,
     ) -> i64 {
-        let dims: Vec<i64> = if self.pending.typedef_base_array_dims.len() >= 2 {
-            self.pending.typedef_base_array_dims.clone()
-        } else {
-            alloc::vec![self.pending.typedef_base_array_size]
-        };
+        let dims = self.typedef_base_dims();
         let agg = self.array_agg_type(elem_ty, &dims);
         (agg + ptr_levels * (Ty::Ptr as i64)) | (ty & (VOLATILE_MASK | CONST_PTR_LVL_MASK))
     }
@@ -650,6 +703,35 @@ impl Compiler {
     pub(super) fn incomplete_aggregate_tag(&self, ty: i64) -> Option<usize> {
         let sid = struct_id_of(ty);
         (is_struct_value_ty(ty) && !self.structs[sid].is_complete).then_some(sid)
+    }
+
+    /// Whether `ptr_ty` points to an incomplete type, which a subscript and
+    /// the additive operators cannot step over (C99 6.5.2.1p1, 6.5.6p2): a
+    /// struct or union without its body, or an array of unknown bound.
+    /// GNU C steps a pointer to `void` or to a function by one byte.
+    pub(super) fn points_to_incomplete(&self, ptr_ty: i64) -> bool {
+        if !is_struct_ty(ptr_ty) || struct_ptr_depth(ptr_ty) != 1 {
+            return false;
+        }
+        let s = &self.structs[struct_id_of(ptr_ty)];
+        match s.fields.first().filter(|_| s.is_array) {
+            _ if s.vla_size_slot.is_some() => false,
+            Some(f) if f.array_dims.len() >= 2 => f.array_dims[0] < 0,
+            Some(f) => f.array_size < 0,
+            None => !s.is_complete,
+        }
+    }
+
+    /// Reject an operand of `op` that [`Self::points_to_incomplete`].
+    pub(super) fn require_complete_pointee(&self, ty: i64, op: &str) -> Result<(), C5Error> {
+        if !self.points_to_incomplete(ty) {
+            return Ok(());
+        }
+        let ty = super::types::format_type(ty, &self.structs);
+        Err(self.compile_err(
+            Code::INVALID_OPERANDS,
+            alloc::format!("`{op}` operand has type `{ty}`, a pointer to an incomplete type"),
+        ))
     }
 
     /// Size in bytes of a value of the given `ty`.
@@ -860,16 +942,24 @@ pub(crate) fn flatten_struct_fields(
             offset: base_off,
             size: sd.size as u32,
             kind: ScalarKind::Vector,
+            bit_field: false,
         });
         return;
     }
     for f in &sd.fields {
         let elem_ty = f.ty;
         let is_struct_value = is_struct_value_ty(elem_ty);
-        let elem_size = if is_struct_value {
-            structs[struct_id_of(elem_ty)].size as u32
+        // A bit-field occupies the bytes its bits span from its unit;
+        // placed contiguously under `#pragma pack`, they can run past
+        // the base type's width.
+        let (elem_off, elem_size) = if f.bit_width > 0 {
+            let first = f.bit_offset / 8;
+            let last = (f.bit_offset + f.bit_width).div_ceil(8);
+            (f.offset as u32 + first, last - first)
+        } else if is_struct_value {
+            (f.offset as u32, structs[struct_id_of(elem_ty)].size as u32)
         } else {
-            flat_scalar_size(elem_ty, target)
+            (f.offset as u32, flat_scalar_size(elem_ty, target))
         };
         let count = if f.array_size > 0 {
             f.array_size as u32
@@ -877,41 +967,152 @@ pub(crate) fn flatten_struct_fields(
             1
         };
         for i in 0..count {
-            let off = base_off + f.offset as u32 + i * elem_size;
+            let off = base_off + elem_off + i * elem_size;
             if is_struct_value {
                 flatten_struct_fields(structs, target, struct_id_of(elem_ty), off, out);
             } else {
-                let bare = strip_unsigned(elem_ty);
-                let kind = if is_pointer_ty(elem_ty) {
-                    ScalarKind::Int
-                } else if is_long_double_scalar(elem_ty) {
-                    match target.long_double() {
-                        crate::c5::codegen::LongDoubleKind::F64 => ScalarKind::F64,
-                        crate::c5::codegen::LongDoubleKind::X87 => ScalarKind::F80,
-                        crate::c5::codegen::LongDoubleKind::Binary128 => ScalarKind::F128,
-                    }
-                } else if bare == Ty::Float as i64 {
-                    ScalarKind::F32
-                } else if bare == Ty::Double as i64 {
-                    ScalarKind::F64
-                } else {
-                    ScalarKind::Int
-                };
                 out.push(FlatField {
                     offset: off,
                     size: elem_size,
-                    kind,
+                    kind: scalar_kind(elem_ty, target),
+                    bit_field: f.bit_width > 0,
                 });
             }
         }
     }
 }
 
-/// Build the host-ABI [`AggDesc`] for a by-value aggregate of `ty`,
-/// or `None` when `ty` is not a by-value struct the current phase
-/// routes through the host ABI. Phase 1 covers AArch64 aggregates of
-/// at most 16 bytes (AAPCS64 register / HFA classes); every other
-/// case keeps the existing c5 by-address convention.
+/// The leaf kind of a non-aggregate member of type `ty`.
+fn scalar_kind(ty: i64, target: Target) -> ScalarKind {
+    let bare = strip_unsigned(ty);
+    if is_pointer_ty(ty) {
+        ScalarKind::Int
+    } else if is_long_double_scalar(ty) {
+        match target.long_double() {
+            crate::c5::codegen::LongDoubleKind::F64 => ScalarKind::F64,
+            crate::c5::codegen::LongDoubleKind::X87 => ScalarKind::F80,
+            crate::c5::codegen::LongDoubleKind::Binary128 => ScalarKind::F128,
+        }
+    } else if bare == Ty::Float as i64 {
+        ScalarKind::F32
+    } else if bare == Ty::Double as i64 {
+        ScalarKind::F64
+    } else {
+        ScalarKind::Int
+    }
+}
+
+/// The AAPCS64 homogeneous aggregate (5.9.5) `struct_id` forms on
+/// `target`, decided from the members as gcc and clang do: a struct has
+/// the sum of its members' elements, a union the most any member has, an
+/// array its element's times its length, and no padding.
+pub(crate) fn homogeneous_aggregate(
+    structs: &[StructDef],
+    target: Target,
+    struct_id: usize,
+) -> Option<HomogeneousAggregate> {
+    if !target.is_aarch64() {
+        return None;
+    }
+    let (base, count) = homogeneous_elements(structs, target, struct_id)?;
+    let (kind, width) = base?;
+    HomogeneousAggregate::new(kind, width, count)
+}
+
+/// The base type as its leaf kind and width, `None` before the first
+/// element, and the element count.
+fn homogeneous_elements(
+    structs: &[StructDef],
+    target: Target,
+    id: usize,
+) -> Option<(Option<(ScalarKind, u32)>, u32)> {
+    let sd = &structs[id];
+    if sd.is_vector {
+        let width = sd.size as u32;
+        return HomogeneousAggregate::is_base(ScalarKind::Vector, width)
+            .then_some((Some((ScalarKind::Vector, width)), 1));
+    }
+    if sd.anon_bitfields.iter().any(|b| b.width > 0) {
+        return None;
+    }
+    let (mut base, mut count) = (None, 0u32);
+    let mut add = |kind: Option<(ScalarKind, u32)>, n: u32| {
+        if kind.is_some() && base.is_some() && kind != base {
+            return None;
+        }
+        base = base.or(kind);
+        count = if sd.is_union {
+            count.max(n)
+        } else {
+            count.saturating_add(n)
+        };
+        Some(())
+    };
+    // An anonymous member counts as one member, not as its promoted fields.
+    for m in &sd.anon_members {
+        let (kind, n) = homogeneous_elements(structs, target, m.inner)?;
+        add(kind, n)?;
+    }
+    for (i, f) in sd.fields.iter().enumerate() {
+        let i = i as u32;
+        if sd
+            .anon_members
+            .iter()
+            .any(|m| (m.first..m.first + m.count).contains(&i))
+        {
+            continue;
+        }
+        if f.bit_width > 0 || f.array_size < 0 {
+            return None;
+        }
+        let (kind, n) = if is_struct_value_ty(f.ty) {
+            homogeneous_elements(structs, target, struct_id_of(f.ty))?
+        } else {
+            let base = (scalar_kind(f.ty, target), flat_scalar_size(f.ty, target));
+            if !HomogeneousAggregate::is_base(base.0, base.1) {
+                return None;
+            }
+            (Some(base), 1)
+        };
+        let len = u32::try_from(f.array_size.max(1)).unwrap_or(u32::MAX);
+        add(kind, n.saturating_mul(len))?;
+    }
+    let width = base.map_or(0, |(_, w)| w);
+    (sd.size as u64 == u64::from(count) * u64::from(width)).then_some((base, count))
+}
+
+/// The host-ABI descriptor a `long double` crosses a call as where the
+/// convention moves it as a 16-byte object in the storage format: System
+/// V AMD64 classifies it X87 + X87UP, memory as an argument and `st(0)` as
+/// a return value (3.2.3); AAPCS64 gives it a whole vector register, as a
+/// one-member HFA of binary128 (6.8.2). `None` where the type is `double`.
+pub(crate) fn long_double_agg_desc(
+    target: Target,
+    conv: crate::c5::codegen::CallConv,
+) -> Option<AggDesc> {
+    let kind = match (target.abi_row(conv), target.long_double()) {
+        (Target::LinuxX64, crate::c5::codegen::LongDoubleKind::X87) => ScalarKind::F80,
+        (Target::LinuxAarch64, crate::c5::codegen::LongDoubleKind::Binary128) => ScalarKind::F128,
+        _ => return None,
+    };
+    Some(AggDesc {
+        size: 16,
+        align: 16,
+        member_align: 16,
+        fields: alloc::vec![FlatField {
+            offset: 0,
+            size: 16,
+            kind,
+            bit_field: false,
+        }],
+        homogeneous: HomogeneousAggregate::new(kind, 16, 1),
+    })
+}
+
+/// Build the host-ABI [`AggDesc`] for a by-value aggregate of `ty`, or
+/// `None` for a type that takes none: a non-aggregate, a target outside the
+/// host ABIs, and an aggregate the convention passes by reference, which
+/// reaches the call as its copy's address.
 pub(crate) fn host_abi_agg_desc(structs: &[StructDef], target: Target, ty: i64) -> Option<AggDesc> {
     host_abi_agg_desc_conv(structs, target, crate::c5::codegen::CallConv::Target, ty)
 }
@@ -938,6 +1139,9 @@ pub(crate) fn host_abi_agg_desc_conv(
     ) {
         return None;
     }
+    if is_long_double_scalar(ty) {
+        return long_double_agg_desc(target, conv);
+    }
     if !is_struct_ty(ty) || struct_ptr_depth(ty) != 0 {
         return None;
     }
@@ -949,65 +1153,40 @@ pub(crate) fn host_abi_agg_desc_conv(
     if size == 0 {
         return None;
     }
-    let aarch64 = matches!(
-        target,
-        Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64
-    );
     let align = (structs[id].align.max(1)) as u32;
     let member_align = (structs[id].member_align.max(1)) as u32;
     let mut fields = Vec::new();
     flatten_struct_fields(structs, target, id, 0, &mut fields);
-    // AAPCS64 6.8.2: a homogeneous floating-point aggregate (1..4 members
-    // all the same FP type) passes in the FP argument bank, up to four
-    // registers -- a four-`double` HFA is 32 bytes, past the by-reference
-    // threshold. Admit it on AArch64 ahead of the size / FP-class gates.
-    // TODO: extended-precision long double -- an AAPCS64 binary128
-    // member rides a full vector register; until a 16-byte FP slot
-    // exists such an aggregate keeps the by-address convention. The
-    // System V x87 member stays: its classes are memory-only.
-    if aarch64
-        && fields
-            .iter()
-            .any(|f| f.kind == crate::c5::codegen::abi_classify::ScalarKind::F128)
-    {
-        return None;
-    }
-    let is_hfa = aarch64 && crate::c5::codegen::abi_classify::hfa_member_layout(&fields).is_some();
-    if !is_hfa {
+    // AAPCS64 6.8.2: a homogeneous floating-point aggregate passes in the
+    // FP argument bank, up to four registers -- a four-`double` HFA is 32
+    // bytes, past the by-reference threshold. Admit it on AArch64 ahead of
+    // the size / FP-class gates.
+    let homogeneous = homogeneous_aggregate(structs, target, id);
+    if homogeneous.is_none() {
         if matches!(row, Target::WindowsX64) {
             // Win64: only a 1-, 2-, 4-, or 8-byte aggregate is passed by
-            // value in a register; larger ones go by implicit reference,
-            // which keeps the by-address convention.
+            // value in a register; any other goes by reference
+            // (`passes_by_reference`), as its copy's address.
             if !matches!(size, 1 | 2 | 4 | 8) {
                 return None;
             }
         } else if size > 16 && !matches!(row, Target::LinuxX64) {
-            // AArch64 passes a larger non-HFA aggregate by reference; the c5
-            // by-address convention already matches. System V x86_64 passes
-            // it inline on the stack (MEMORY class), handled by the marshal.
+            // AArch64 passes a larger non-HFA aggregate by reference, as its
+            // copy's address. System V x86_64 passes it inline on the stack
+            // (MEMORY class), handled by the marshal.
             return None;
         }
-        // System V x86_64 routes FP eightbytes to xmm (<= 16 bytes, in
-        // registers) or the stack (> 16 bytes); AAPCS64 passes a non-HFA
-        // composite of at most 16 bytes in the general-purpose registers
-        // regardless of member types (AAPCS64 5.4.2 C.10 -- only an HFA,
-        // handled above, uses the FP registers), so both admit an
-        // aggregate with a floating-point member. Windows x64 has no
-        // struct-in-register FP class, so an FP-member aggregate there
-        // keeps the by-address convention. TODO: Windows x64 FP-aggregate
-        // arguments.
-        if !matches!(row, Target::LinuxX64)
-            && !aarch64
-            && fields.iter().any(|f| f.kind.is_fp_scalar())
-        {
-            return None;
-        }
+        // A floating-point member changes none of this: System V x86_64
+        // gives its eightbyte the SSE class, AAPCS64 passes a non-HFA
+        // composite in the general-purpose registers (5.4.2 C.10), and Win64
+        // passes an aggregate of 1, 2, 4 or 8 bytes as an integer.
     }
     Some(AggDesc {
         size,
         align,
         member_align,
         fields,
+        homogeneous,
     })
 }
 
@@ -1019,24 +1198,28 @@ pub(crate) fn va_arg_align(structs: &[StructDef], target: Target, ty: i64) -> u3
     })
 }
 
-/// Whether a variadic `ty` is passed as the address of a copy: an AArch64
-/// composite over 16 bytes (AAPCS64 B.4), which keeps an HFA by value except
-/// on Windows, whose variadic calls treat every composite alike.
-/// A Win64 argument of any size but 1, 2, 4 or 8 bytes is passed so too.
-pub(crate) fn va_arg_by_ref(structs: &[StructDef], target: Target, ty: i64) -> bool {
+/// Whether an argument of `ty` on `conv` is passed as the address of a copy
+/// the caller makes and the callee owns: under AAPCS64 a composite over 16
+/// bytes other than a homogeneous aggregate (B.4), and on Windows AArch64 any
+/// variadic one over 16 bytes; under the Microsoft x64 convention an
+/// aggregate of any size but 1, 2, 4 or 8 bytes.
+pub(crate) fn passes_by_reference(
+    structs: &[StructDef],
+    target: Target,
+    conv: crate::c5::codegen::CallConv,
+    ty: i64,
+    variadic: bool,
+) -> bool {
     if !is_struct_value_ty(ty) || struct_id_of(ty) >= structs.len() {
         return false;
     }
     let id = struct_id_of(ty);
-    let hfa = || {
-        let mut fields = Vec::new();
-        flatten_struct_fields(structs, target, id, 0, &mut fields);
-        crate::c5::codegen::abi_classify::hfa_member_layout(&fields).is_some()
-    };
-    match target {
-        Target::LinuxAarch64 | Target::MacOSAarch64 => structs[id].size > 16 && !hfa(),
-        Target::WindowsAarch64 => structs[id].size > 16,
-        Target::WindowsX64 => !matches!(structs[id].size, 1 | 2 | 4 | 8),
+    let size = structs[id].size;
+    let homogeneous = || homogeneous_aggregate(structs, target, id).is_some();
+    match target.abi_row(conv) {
+        Target::LinuxAarch64 | Target::MacOSAarch64 => size > 16 && !homogeneous(),
+        Target::WindowsAarch64 => size > 16 && (variadic || !homogeneous()),
+        Target::WindowsX64 => !matches!(size, 1 | 2 | 4 | 8),
         _ => false,
     }
 }
@@ -1077,6 +1260,10 @@ pub(crate) fn struct_return_abi_conv(
     ty: i64,
 ) -> StructReturnAbi {
     let row = target.abi_row(conv);
+    if is_long_double_scalar(ty) {
+        return long_double_agg_desc(target, conv)
+            .map_or(StructReturnAbi::NotStruct, StructReturnAbi::Regs);
+    }
     if !is_struct_ty(ty) || struct_ptr_depth(ty) != 0 {
         return StructReturnAbi::NotStruct;
     }
@@ -1100,43 +1287,20 @@ pub(crate) fn struct_return_abi_conv(
     let member_align = (structs[id].member_align.max(1)) as u32;
     let mut fields = Vec::new();
     flatten_struct_fields(structs, target, id, 0, &mut fields);
-    // TODO: extended-precision long double -- a sole x87 member returns
-    // in st(0) and a binary128 member in a vector register; until those
-    // return slots exist the aggregate keeps the out-pointer path (the
-    // AAPCS64 > 16-byte x8 case below is already the memory convention).
-    if fields.iter().any(|f| {
-        matches!(
-            f.kind,
-            crate::c5::codegen::abi_classify::ScalarKind::F80
-                | crate::c5::codegen::abi_classify::ScalarKind::F128
-        )
-    }) && (size <= 16 || !aarch64)
-    {
-        return StructReturnAbi::OutPtr;
-    }
     // AAPCS64 6.9: a homogeneous floating-point aggregate returns in up to
     // four consecutive FP registers (v0..v3), independent of the 16-byte
-    // integer-register threshold -- a four-`double` HFA is 32 bytes. The
-    // emit places each member by its `hfa_member_layout` offset.
-    if aarch64 && crate::c5::codegen::abi_classify::hfa_member_layout(&fields).is_some() {
-        return StructReturnAbi::Regs(AggDesc {
-            size,
-            align,
-            member_align,
-            fields,
-        });
-    }
-    // A <=16B aggregate returns in registers: System V AMD64 3.2.3 places
-    // each eightbyte in the integer (rax/rdx) or SSE (xmm0/xmm1) bank per its
-    // classification, and the emit reads the per-eightbyte class to pick the
-    // bank. An eightbyte shared by integer and FP members classifies as
-    // Integer and returns in the integer registers bit-for-bit.
+    // integer-register threshold -- a four-`double` HFA is 32 bytes.
+    let homogeneous = homogeneous_aggregate(structs, target, id);
     let desc = AggDesc {
         size,
         align,
         member_align,
         fields,
+        homogeneous,
     };
+    if homogeneous.is_some() {
+        return StructReturnAbi::Regs(desc);
+    }
     if win64 {
         // Win64: a 1-, 2-, 4-, or 8-byte aggregate returns by value in
         // rax; any other size returns through a caller-allocated buffer
@@ -1148,18 +1312,21 @@ pub(crate) fn struct_return_abi_conv(
         } else {
             StructReturnAbi::OutPtr
         }
+    } else if !aarch64 {
+        // System V AMD64 3.2.3: the eightbyte classes place the value in
+        // rax/rdx, xmm0/xmm1 or st(0). A MEMORY-class one returns through
+        // the hidden pointer the caller passes as the first integer
+        // argument, which the c5 out-pointer convention matches.
+        match crate::c5::codegen::abi_classify::classify_aggregate(&desc, row.abi(), true) {
+            crate::c5::codegen::abi_classify::AggClass::ReturnIndirect => StructReturnAbi::OutPtr,
+            _ => StructReturnAbi::Regs(desc),
+        }
     } else if size <= 16 {
-        // AAPCS64 6.9 x0/x1; System V AMD64 3.2.3 rax/rdx.
+        // AAPCS64 6.9 x0/x1.
         StructReturnAbi::Regs(desc)
-    } else if aarch64 {
+    } else {
         // AAPCS64: > 16 bytes returns through the x8 indirect-result
         // register.
         StructReturnAbi::Indirect(desc)
-    } else {
-        // System V AMD64 MEMORY class: the caller passes a hidden
-        // result pointer as the first integer argument and the callee
-        // returns it -- the c5 out-pointer convention already matches,
-        // so keep it.
-        StructReturnAbi::OutPtr
     }
 }

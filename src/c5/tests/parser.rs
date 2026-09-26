@@ -457,138 +457,6 @@ fn prototype_after_definition_at_pc_zero() {
 }
 
 #[test]
-fn redeclaration_with_different_signature_warns() {
-    // C99 6.7p4 requires redeclarations to be compatible. badc
-    // doesn't refuse them (the codegen only sees one declaration
-    // at a time), but it surfaces the disagreement as a single
-    // warning that prints both shapes, so amalgamated multi-TU
-    // builds don't silently end up with mismatched signatures
-    // across the boundary. The shape is one line per redecl plus
-    // two indented `previous:` / `now:` lines.
-    // Plain `char`'s signedness is host-dependent (C99 6.2.5p15; see
-    // `Target::plain_char_signed`), and `Compiler::new` compiles for
-    // the host target. The return-type-mismatch case prints `char` on
-    // signed-char hosts and `unsigned char` on aarch64-Linux.
-    let char_now = if super::super::codegen::Target::default_target().plain_char_signed() {
-        "now:      char (int)"
-    } else {
-        "now:      unsigned char (int)"
-    };
-    for (src, prev_needle, now_needle) in &[
-        // Different return type.
-        (
-            "int f(int x) { return x; } char f(int x); int main() { return 0; }",
-            "previous: int (int)",
-            char_now,
-        ),
-        // Different parameter list.
-        (
-            "int f(int x); int f(int x, int y) { return x + y; } int main() { return 0; }",
-            "previous: int (int)",
-            "now:      int (int, int)",
-        ),
-        // Differs in variadicity.
-        (
-            "int f(int x); int f(int x, ...) { return x; } int main() { return 0; }",
-            "previous: int (int)",
-            "now:      int (int, ...)",
-        ),
-    ] {
-        let prog = crate::c5::Compiler::new((*src).to_string())
-            .compile()
-            .unwrap();
-        assert!(
-            prog.warnings
-                .iter()
-                .any(|w| w.to_string().contains(prev_needle) && w.to_string().contains(now_needle)),
-            "no warning containing `{prev_needle}` + `{now_needle}` for {src:?}; got {:?}",
-            prog.warnings,
-        );
-    }
-}
-
-#[test]
-fn parameter_qualifiers_do_not_make_a_redeclaration_differ() {
-    // C99 6.7.5.3p15: a parameter's own qualifiers are not part of the
-    // function type, while a pointee's are.
-    let silent = "int f(const int x); int f(int x) { return x; } int main(void) { return f(0); }";
-    let prog = crate::c5::Compiler::new(silent.to_string())
-        .compile()
-        .unwrap();
-    assert!(
-        prog.warnings.is_empty(),
-        "unexpected warnings for {silent:?}: {:?}",
-        prog.warnings
-    );
-    // An `int` pointee: plain `char` prints as `unsigned char` where it is
-    // unsigned, which would make the expected text depend on the host.
-    let differs = "int g(const int *s); int g(int *s) { return *s; } int main(void) { return 0; }";
-    let prog = crate::c5::Compiler::new(differs.to_string())
-        .compile()
-        .unwrap();
-    assert!(
-        prog.warnings.iter().any(|w| {
-            let w = w.to_string();
-            w.contains("previous: int (const int*)") && w.contains("now:      int (int*)")
-        }),
-        "no redeclaration warning for {differs:?}; got {:?}",
-        prog.warnings
-    );
-}
-
-#[test]
-fn fn_type_typedef_ptr_redeclaration_is_silent() {
-    // C99 6.2.7 + 6.7.5.1p1: `F *` for a function-TYPE typedef `F` is
-    // the same type as the spelled-out fn-pointer declarator. Mixed-
-    // spelling prototype pairs -- both orders, unnamed, `F **`, the
-    // `F (*p)` grouping, a pointer typedef of `F`, and the bare `F`
-    // parameter (6.7.5.3p8) -- must merge silently.
-    for src in &[
-        "typedef int F(int); void f(int (*p)(int)); void f(F *p) { (void)p; } \
-         int main() { return 0; }",
-        "typedef int F(int); void f(F *p); void f(int (*p)(int)) { (void)p; } \
-         int main() { return 0; }",
-        "typedef int F(int); void f(int (*)(int)); void f(F *p) { (void)p; } \
-         int main() { return 0; }",
-        "typedef int F(int); void f(F *); void f(int (*p)(int)) { (void)p; } \
-         int main() { return 0; }",
-        "typedef int F(int); void f(int (**pp)(int)); void f(F **pp) { (void)pp; } \
-         int main() { return 0; }",
-        "typedef int F(int); void f(int (*p)(int)); void f(F (*p)) { (void)p; } \
-         int main() { return 0; }",
-        "typedef int F(int); typedef F *P; void f(int (*p)(int)); void f(P p) { (void)p; } \
-         int main() { return 0; }",
-        "typedef int F(int); void f(int (*p)(int)); void f(F p) { (void)p; } \
-         int main() { return 0; }",
-    ] {
-        let prog = crate::c5::Compiler::new((*src).to_string())
-            .compile()
-            .unwrap();
-        assert!(
-            prog.warnings.is_empty(),
-            "expected silence for {src:?}, got {:?}",
-            prog.warnings,
-        );
-    }
-}
-
-#[test]
-fn matching_redeclaration_is_silent() {
-    // The amalgamator (scripts/amalgamate.py) glues TUs that
-    // typically include the same prototype many times via shared
-    // headers. Repeats with identical signatures must not
-    // produce noise.
-    let src = "int f(int x); int f(int x); int f(int x) { return x; } int main() { return f(7); }";
-    let prog = crate::c5::Compiler::new(src.to_string()).compile().unwrap();
-    assert!(
-        prog.warnings.is_empty(),
-        "matching redecl should be silent, got {:?}",
-        prog.warnings,
-    );
-    assert_eq!(crate::c5::Vm::new(prog).run().unwrap(), 7);
-}
-
-#[test]
 fn undeclared_identifier_in_initializer_errors() {
     // C99 6.5.1: an identifier must be declared before use. An undeclared
     // identifier as an initializer element (a missing header or a typo) is
@@ -867,6 +735,111 @@ fn address_of_undefined_label() {
         "int main() { void *p = &&nowhere; return p != 0; }",
         "unresolved label: nowhere",
     );
+}
+
+// A jump may not pass a VLA or cleanup declaration into its scope, nor
+// enter a statement expression.
+
+fn with_cleanup(body: &str) -> String {
+    alloc::format!(
+        "static void f(int *p) {{ (void)p; }}\n#define CL __attribute__((cleanup(f)))\n\
+         {body}\nint main(void) {{ return 0; }}\n"
+    )
+}
+
+#[test]
+fn goto_into_a_cleanup_scope_is_reported_at_the_goto() {
+    let src = with_cleanup("void t(int c) {\n if (c)\n  goto in;\n { int a CL = 0;\n in: ; }\n}");
+    expect_compile_error(
+        &src,
+        ":5: error: `goto` jumps into the scope of `a`, declared with a cleanup function at line 6",
+    );
+}
+
+#[test]
+fn goto_past_a_cleanup_declaration_in_its_scope() {
+    expect_compile_error(
+        &with_cleanup("void t(int c) { { if (c) goto in; int a CL = 0; in: ; } }"),
+        "`goto` jumps into the scope of `a`, declared with a cleanup function",
+    );
+}
+
+#[test]
+fn goto_into_a_vla_scope() {
+    expect_compile_error(
+        "void t(int c, int n) { if (c) goto in; { char v[n]; in: v[0] = 0; } }\n\
+         int main(void) { return 0; }",
+        "`goto` jumps into the scope of `v`, declared with a variably modified type",
+    );
+}
+
+#[test]
+fn switch_into_a_cleanup_scope() {
+    expect_compile_error(
+        &with_cleanup("void t(int k) { switch (k) { int a CL; case 1: break; } }"),
+        "`switch` jumps into the scope of `a`, declared with a cleanup function",
+    );
+}
+
+#[test]
+fn switch_into_a_vla_scope() {
+    expect_compile_error(
+        "void t(int k, int n) { switch (k) { char v[n]; default: v[0] = 0; } }\n\
+         int main(void) { return 0; }",
+        "`switch` jumps into the scope of `v`, declared with a variably modified type",
+    );
+}
+
+#[test]
+fn computed_goto_into_a_cleanup_scope() {
+    expect_compile_error(
+        &with_cleanup("void t(int c) { void *p = &&in; if (c) goto *p; { int a CL = 0; in: ; } }"),
+        "computed `goto` jumps into the scope of `a`, declared with a cleanup function",
+    );
+}
+
+#[test]
+fn asm_goto_into_a_cleanup_scope() {
+    expect_compile_error(
+        &with_cleanup("void t(void) { asm goto(\"\" :::: in); { int a CL = 0; in: ; } }"),
+        "`asm goto` jumps into the scope of `a`, declared with a cleanup function",
+    );
+}
+
+#[test]
+fn goto_into_a_statement_expression() {
+    expect_compile_error(
+        "int t(int c) { if (c) goto in; return ({ in: 1; }); }\nint main(void) { return 0; }",
+        "`goto` jumps into a statement expression",
+    );
+}
+
+#[test]
+fn computed_goto_whose_cleanups_depend_on_its_target() {
+    // `out` leaves the scope of `a`, `mid` does not.
+    expect_compile_error(
+        &with_cleanup(
+            "void t(int c) { void *p = c ? &&out : &&mid; { int a CL = 0; goto *p; mid: ; } out: ; }",
+        ),
+        "computed `goto` leaves scopes whose cleanup functions depend on its target",
+    );
+}
+
+#[test]
+fn jumps_that_enter_no_protected_scope() {
+    // The fifth is the kernel's `scoped_guard()`: from a statement
+    // expression into the loop.
+    let cases = [
+        "void t(int c, int n) { { char v[n]; v[0] = 0; if (c) goto out; } out: ; }",
+        "void t(void) { int k = 0; { again: ; int a CL = 0; (void)a; if (k++ < 2) goto again; } }",
+        "void t(int k, int n) { switch (k) { case 1: { char v[n]; v[0] = 0; } } }",
+        "int t(void) { return ({ int r = 0; goto o; o: r; }); }",
+        "void t(void) { for (int s CL = 0; ; ({ goto l; })) if (0) { l: break; } else { (void)s; } }",
+        "void t(void) { { int a CL = 0; (void)a; asm goto(\"\" :::: out); } out: ; }",
+    ];
+    for body in cases {
+        expect_compiles(&with_cleanup(body), body);
+    }
 }
 
 // The label table is keyed by name, so its size does not change what a
@@ -2738,6 +2711,32 @@ fn sizeof_of_an_incomplete_type_is_diagnosed() {
 }
 
 #[test]
+fn sizeof_of_an_incomplete_array_reached_through_an_expression_is_diagnosed() {
+    // C99 6.5.3.4p1, 6.7.5.2p4: an array whose outer bound is unspecified
+    // is incomplete however it is reached -- the pointee of `T (*)[]`, a
+    // flexible array member, directly or through `*&` -- while a
+    // zero-length array and a row of a pointer to `T[][N]` are complete.
+    for operand in ["*pa", "s->fa", "*&s->fa", "(*pa)"] {
+        expect_compile_error(
+            &alloc::format!(
+                "struct S {{ int n; int fa[]; }};\n\
+                 int main(void) {{ int (*pa)[] = 0; struct S *s = 0;\n\
+                 return (int)sizeof({operand}) + (pa != 0) + (s != 0); }}"
+            ),
+            "`sizeof` applied to an incomplete type",
+        );
+    }
+    Compiler::new(
+        "struct Z { int n; int z[0]; };\n\
+         int main(void) { int (*pr)[][3] = 0; struct Z *p = 0;\n\
+         return (int)(sizeof(p->z) + sizeof((*pr)[0]) + _Alignof(p->z)) - 16; }"
+            .to_string(),
+    )
+    .compile()
+    .expect("a zero-length member and a complete row stay legal");
+}
+
+#[test]
 fn address_of_a_block_scope_compound_literal_is_not_constant() {
     // C99 6.5.2.5p5: a compound literal inside a function body has
     // automatic storage duration, so its address is not an address
@@ -2792,17 +2791,51 @@ fn multi_dim_compound_literal_dimension_constraints() {
         "array type has an incomplete inner dimension",
     );
     // A const-qualified object is not an integer constant expression
-    // (C99 6.6p6), so the dimension makes the literal variably sized;
-    // gcc rejects that, and the static-initializer path masks its
-    // const-object fold to match.
+    // (C99 6.6p6), so the dimension makes the literal variably sized,
+    // which 6.5.2.5p1 forbids; gcc rejects it, and the static-initializer
+    // path masks its const-object fold to match.
     expect_compile_error(
         "int main(void) { const int h = 2; int *p = (int[h]){ 1, 2 }; return p[0]; }",
-        "constant integer expected",
+        "a compound literal may not have a variably modified type",
     );
     expect_compile_error(
         "int main(void) { const int h = 2; static int *p = (int[h]){ 1, 2 }; return p[0]; }",
         "constant integer expected",
     );
+}
+
+#[test]
+fn a_variably_modified_type_name_is_diagnosed_where_c99_forbids_it() {
+    // C99 6.7.5.2p2 admits a variably modified type only at block scope,
+    // 6.5.2.5p1 no variable-length array compound literal, and C11
+    // 6.5.1.1p2 no variably modified generic association.
+    for (src, needle) in [
+        (
+            "int n = 3;\nint a = sizeof(int[n]);\nint main(void) { return a; }",
+            "a variably modified type is only allowed at block scope",
+        ),
+        (
+            "int main(int c, char **v) { (void)v; int *p = (int[c]){1}; return *p; }",
+            "a compound literal may not have a variably modified type",
+        ),
+        (
+            "int main(int c, char **v) { (void)v; return _Generic(0, int[c]: 1, default: 0); }",
+            "a generic association type may not be variably modified",
+        ),
+        (
+            "int main(int c, char **v) { (void)v; return (int)sizeof(int[3][c]); }",
+            "a non-constant inner array dimension is not supported",
+        ),
+    ] {
+        expect_compile_error(src, needle);
+    }
+    Compiler::new(
+        "int main(int c, char **v) { (void)v; int b[4];\n\
+         return (int)(sizeof(int[c]) + sizeof(int (*)[c])) + ((int (*)[c])b)[0][0] * 0; }"
+            .to_string(),
+    )
+    .compile()
+    .expect("variably modified type names at block scope");
 }
 
 #[test]
@@ -2846,6 +2879,35 @@ fn struct_array_compound_literal_counts_elements_not_leaves() {
              return p[0].a; }",
         "array designator index 5 out of bounds [0, 2)",
     );
+}
+
+#[test]
+fn union_initializer_list_rejects_a_second_positional_value() {
+    // C99 6.7.8p17: a union's initializer list initializes its first
+    // named member, so a second positional value has no object (6.7.8p2).
+    // The fill had stored it over the first member's storage.
+    expect_compile_error(
+        "int main(void) { union u { int a; int b; } x = {1, 2}; return x.a; }",
+        "too many initializers for union u",
+    );
+    expect_compile_error(
+        "int main(void) { union u { int a; int b; } x = {.a = 1, 2}; return x.a; }",
+        "too many initializers for union u",
+    );
+    // 6.7.8p19: a later designator overrides; brace elision inside a
+    // struct still hands the union exactly one value.
+    let prog = Compiler::new(
+        "struct s { union u { int a; int b; } m; int n; };\n\
+         int main(void) {\n\
+             union u x = {.a = 1, .b = 2};\n\
+             struct s v = {1, 2};\n\
+             return (x.b == 2 && x.a == 2 && v.m.a == 1 && v.n == 2) ? 0 : 1;\n\
+         }"
+        .to_string(),
+    )
+    .compile()
+    .expect("designated overrides and brace elision stay legal");
+    assert_eq!(crate::c5::Vm::new(prog).run().unwrap(), 0);
 }
 
 #[test]
@@ -3090,6 +3152,113 @@ fn static_initializer_diagnostic_names_what_failed() {
 }
 
 #[test]
+fn an_address_constant_initializes_only_an_object_that_holds_it() {
+    // A static object narrower than a pointer, a floating one and a
+    // bit-field have no relocation for an address; gcc and clang reject
+    // each, where the relocation used to overrun the object.
+    for (decl, what) in [
+        ("int x = (int)(long)&g;", "an object of type `int`"),
+        (
+            "struct { int a, b, c; } x = {1, &g, 3};",
+            "an object of type `int`",
+        ),
+        (
+            "short a[2] = {1, (short)(long)&g};",
+            "an object of type `short`",
+        ),
+        ("double x = (double)(long)&g;", "an object of type `double`"),
+        (
+            "unsigned char c = (unsigned char)(long)\"abc\";",
+            "an object of type `unsigned char`",
+        ),
+        ("int x = (int)(long)main;", "an object of type `int`"),
+        (
+            "_Thread_local int x = (int)(long)&g;",
+            "an object of type `int`",
+        ),
+        (
+            "struct { unsigned long long w : 40; } x = {(unsigned long long)&g};",
+            "a bit-field",
+        ),
+        (
+            "void h(void) { static int x = (int)(long)&g; }",
+            "an object of type `int`",
+        ),
+    ] {
+        expect_compile_error(
+            &format!("int g; int main(void);\n{decl}\nint main(void) {{ return 0; }}"),
+            &format!("an address constant does not fit {what}"),
+        );
+    }
+}
+
+#[test]
+fn addresses_in_distinct_objects_have_no_constant_difference() {
+    // C99 6.5.6p9 and 6.5.8p5 define the difference and order of two
+    // addresses only within one object; the fold used their `.data`
+    // offsets. Within one object both fold; elsewhere the expression
+    // evaluates at run time, and an array bound over it is variable.
+    for init in [
+        "long x = (char *)&a - (char *)&b;",
+        "int x = &a < &b;",
+        "long x = \"ab\" - \"cd\";",
+    ] {
+        expect_compile_error(
+            &format!("int a, b;\n{init}\nint main(void) {{ return 0; }}"),
+            "addresses in distinct objects have no constant difference or order",
+        );
+    }
+    let src = "int a, b, arr[4];\n\
+               long within = &arr[3] - &arr[1];\n\
+               int before = &arr[1] < &arr[2];\n\
+               int main(void) {\n\
+               \tlong d = (char *)&a - (char *)&b;\n\
+               \tchar vla[(char *)&a - (char *)&b != 0 ? 4 : 8];\n\
+               \tif (d != (long)((char *)&a - (char *)&b) || d == 0) return 1;\n\
+               \tif (sizeof vla != 4) return 3;\n\
+               \treturn within == 2 && before == 1 ? 0 : 2;\n\
+               }\n";
+    let program = Compiler::new(src.to_string()).compile().expect(src);
+    assert_eq!(super::Vm::new(program).run().unwrap(), 0, "{src}");
+}
+
+#[test]
+fn a_member_read_through_an_address_is_not_a_constant() {
+    // `(&g)->p` reads `g.p` from storage (C99 6.5.2.3): no constant for a
+    // static initializer, which named the `->` a syntax error, and an
+    // ordinary read in an automatic one.
+    for init in ["void *x = (&g)->p;", "long x = ((struct S *)&g)->b;"] {
+        expect_compile_error(
+            &format!(
+                "struct S {{ int a; long b; void *p; }} g;\n{init}\nint main(void) {{ return 0; }}"
+            ),
+            "a member read through an address is not a constant expression",
+        );
+    }
+    let src = "struct S { int a; long b; void *p; } g = { 1, 2, &g };\n\
+               int main(void) { void *y = (&g)->p; long z = ((struct S *)&g)->b; \
+               return y == &g && z == 2 ? 0 : 1; }\n";
+    let program = Compiler::new(src.to_string()).compile().expect(src);
+    assert_eq!(super::Vm::new(program).run().unwrap(), 0, "{src}");
+}
+
+#[test]
+fn a_braced_scalar_initializer_holds_one_value() {
+    // C99 6.7.8p11: the braces around a scalar initializer hold a single
+    // expression, at file scope, at block scope and in a member.
+    for decl in [
+        "int x = {1, 2};",
+        "void f(void) { static int x = {1, 2}; }",
+        "struct { int a; } x = {{1, 2}};",
+    ] {
+        expect_compile_error(
+            &format!("{decl}\nint main(void) {{ return 0; }}"),
+            "scalar initializer wrapped in `{ ... }` must hold a single value",
+        );
+    }
+}
+
+#[test]
 fn sizeof_of_an_incomplete_array_type_name_is_rejected() {
     // C99 6.5.3.4p1: `sizeof` does not apply to an incomplete type. An
     // array type name with an unspecified bound is one, written out or
@@ -3176,6 +3345,25 @@ fn type_name_array_bound_constraints() {
          int main(void) { return (int)_Alignof(struct t[2]); }",
         "applied to an incomplete type",
     );
+    // A bound inside a group derives the same array, of pointers here
+    // (C99 6.7.6); 6.7.5.2p1 and 6.7.5.3p1 rule out an array of functions
+    // and a function returning an array.
+    for (type_name, needle) in [
+        ("int *[]", "`sizeof` applied to an incomplete type"),
+        ("int (*[])(int)", "`sizeof` applied to an incomplete type"),
+        ("int (*[3][])(int)", "incomplete inner dimension"),
+        ("int (*[-1])(int)", "must not be negative"),
+        ("int (*([3])(int))", "array of functions"),
+        (
+            "int (*)(void)[3]",
+            "function returning an array or a function",
+        ),
+    ] {
+        expect_compile_error(
+            &alloc::format!("int main(void) {{ return (int)sizeof({type_name}); }}"),
+            needle,
+        );
+    }
 }
 
 #[test]
@@ -3756,7 +3944,7 @@ fn initializers_are_separated_by_commas() {
             "int a[4] = { [0] = V [1] = 2 }",
             "`[`",
             separator("`[`"),
-            "pointer type expected [B3020]",
+            "subscripted value has type `int`, not a pointer or an array [B3020]",
         ),
     ] {
         let constant = decl.replace('V', "1");

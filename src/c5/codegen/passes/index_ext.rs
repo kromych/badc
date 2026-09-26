@@ -20,6 +20,7 @@ fn word_extension(insts: &[Inst], v: ValueId) -> Option<(ValueId, IndexExt)> {
         Inst::Extend {
             value,
             kind: LoadKind::I32,
+            ..
         } => Some((*value, IndexExt::Sxtw)),
         Inst::BinopI {
             op: BinOp::And,

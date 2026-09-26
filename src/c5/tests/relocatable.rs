@@ -31,6 +31,28 @@ fn compile_obj(src: &str, name: &str) -> EtRel {
 }
 
 #[test]
+fn a_relocated_thread_local_slot_holds_zero_like_a_data_slot() {
+    // The addend is in the relocation for `.rela.tdata` as for `.rela.data`,
+    // and the slot either patches holds zero, as clang and gcc write it.
+    let src = "int g[4]; _Thread_local int *x = &g[2]; int *y = &g[2];";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let obj = parse_et_rel(&compile_bytes(src, target), "t.o").expect("parse");
+        for name in [".tdata", ".data"] {
+            let sec = obj.sections.iter().find(|s| s.name == name).expect(name);
+            assert!(!sec.relocs.is_empty(), "{name} [{target:?}]: no relocation");
+            for r in &sec.relocs {
+                let at = r.offset as usize;
+                assert_eq!(
+                    &sec.bytes[at..at + 8],
+                    &[0; 8],
+                    "{name} [{target:?}] at {at}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
 fn owned_and_borrowed_emit_agree() {
     // The owning entry hands the program to the data compaction, which
     // rewrites it in place; the borrowing one copies it first. Both must
@@ -1116,7 +1138,7 @@ fn emit_relocs_survive_into_final_elf() {
             false,
             false,
             emit,
-            false,
+            crate::c5::ExecForm::Pie,
         )
         .expect("write")
     };

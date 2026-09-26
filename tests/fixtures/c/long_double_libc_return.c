@@ -1,22 +1,12 @@
-// Locks SysV x86_64 ABI section 3.2.3: `long double` is returned
-// in x87 `st(0)`, distinct from XMM0 (which carries `float` /
-// `double`) and from RAX. c5 stores long double in an 8-byte
-// f64 slot, so the libc-call lowering must spill st(0) and load
-// the truncated bit pattern back into the c5 accumulator. The
-// pre-fix path read XMM0 and got -0.0 for every call.
+// A `long double` a libc function returns reaches the caller: System V
+// x86-64 returns it in x87 `st(0)` and AAPCS64 in `v0` as binary128,
+// neither where a `double` returns. Read as a `double`, every call gave
+// -0.0 on x86-64.
 //
-// `strtold` is the host-libc binding that returns long double on
-// SysV x86_64; `ldexpl` is the header's long-double form over
-// `ldexp`. Each is exercised with a known power of two so the
-// IEEE 754 double bit pattern is exact and fits in 8 bytes
-// without rounding ambiguity. Returns 0 on success; each clause
-// returns a distinct nonzero code.
-//
-// On macOS aarch64 and Linux aarch64, long double has the same
-// register convention as double (v0 / d0), so the libc-return
-// path through XMM-equivalent registers stays correct without
-// the x87 dance. The fixture's expectations only depend on the
-// numeric values, which match on every supported lane.
+// `strtold` is the platform's; `ldexpl` is the header's long-double form
+// over `ldexp`. Each is exercised with a power of two, so the double
+// value is exact. Returns 0 on success; each clause returns a distinct
+// nonzero code.
 
 #include <stdlib.h>
 #include <math.h>

@@ -78,7 +78,7 @@ fn is_bool_value(func: &FunctionSsa, v: ValueId, depth: u32) -> bool {
     match func.insts.get(v as usize) {
         Some(Inst::Imm(k)) => *k == 0 || *k == 1,
         Some(Inst::Binop { op, .. }) | Some(Inst::BinopI { op, .. }) => is_compare_op(*op),
-        Some(Inst::Extend { value, kind }) => {
+        Some(Inst::Extend { value, kind, .. }) => {
             !matches!(kind, LoadKind::F32 | LoadKind::F64) && is_bool_value(func, *value, depth - 1)
         }
         Some(Inst::Phi { incoming, kind }) => {
@@ -244,7 +244,7 @@ fn eval_with(
         return None;
     }
     match *func.insts.get(v as usize)? {
-        Inst::Extend { value, kind } => Some(eval::eval_extend(
+        Inst::Extend { value, kind, .. } => Some(eval::eval_extend(
             eval_with(func, value, pivot, bind, budget)?,
             kind,
         )),
@@ -652,7 +652,7 @@ fn same_operand_compare(op: BinOp) -> Option<i64> {
 /// `imm OP x` recast as `x OP' imm`: the op itself for commutative
 /// ops, the mirrored comparison for ordered compares. `None` for the
 /// non-commutative rest (Sub, shifts, division, FP).
-fn mirror(op: BinOp) -> Option<BinOp> {
+pub(crate) fn mirror(op: BinOp) -> Option<BinOp> {
     Some(match op {
         BinOp::Add | BinOp::Mul | BinOp::And | BinOp::Or | BinOp::Xor | BinOp::Eq | BinOp::Ne => op,
         BinOp::Lt => BinOp::Gt,
@@ -784,8 +784,14 @@ fn fold_round(func: &mut FunctionSsa) -> bool {
             continue;
         }
         let new_inst = match &func.insts[idx] {
-            Inst::Extend { value, kind } => {
+            Inst::Extend { value, kind, .. } => {
                 imm_of(func, *value).map(|k| Inst::Imm(eval::eval_extend(k, *kind)))
+            }
+            Inst::Udiv128 { hi, lo, divisor } => {
+                match (imm_of(func, *hi), imm_of(func, *lo), imm_of(func, *divisor)) {
+                    (Some(h), Some(l), Some(d)) => eval::udiv128(h, l, d).map(Inst::Imm),
+                    _ => None,
+                }
             }
             Inst::Bswap { value, width } => match imm_of(func, *value) {
                 Some(k) => Some(Inst::Imm(eval::eval_bswap(k, *width))),
@@ -896,6 +902,12 @@ fn fold_round(func: &mut FunctionSsa) -> bool {
             } if imm_of(func, *lhs) == Some(0) && imm_of(func, *rhs).is_none() => {
                 Some(Inst::Neg(*rhs))
             }
+            // No value is below zero unsigned.
+            Inst::BinopI {
+                op: op @ (BinOp::Ult | BinOp::Uge),
+                rhs_imm: 0,
+                ..
+            } => Some(Inst::Imm(i64::from(*op == BinOp::Uge))),
             Inst::BinopI { op, lhs, rhs_imm } => imm_of(func, *lhs)
                 .and_then(|l| eval::fold_binop(*op, l, *rhs_imm))
                 .map(Inst::Imm),
@@ -964,10 +976,12 @@ mod tests {
             is_always_inline: false,
             is_noinline: false,
             is_naked: false,
+            is_noreturn: false,
             conv: crate::c5::codegen::CallConv::Target,
             section: None,
             patchable_entry: None,
             no_instrument: false,
+            no_stack_protector: false,
             is_weak: false,
             is_internal: false,
             const_params: 0,
@@ -976,6 +990,7 @@ mod tests {
             cmp32: Vec::new(),
             low_word_tests: Vec::new(),
             param_fp_mask: crate::c5::ir::FpMask::EMPTY,
+            param_widths: crate::c5::ir::ArgWidths::default(),
             agg_descs: Vec::new(),
             param_aggs: Vec::new(),
             param_local_slots: Vec::new(),
@@ -1029,6 +1044,7 @@ mod tests {
             Inst::Extend {
                 value: 0,
                 kind: LoadKind::I8,
+                nsw: false,
             },
             Inst::BinopI {
                 op: BinOp::Mul,
@@ -1064,6 +1080,74 @@ mod tests {
             ]);
             run_one(&mut f);
             assert!(matches!(f.insts[2], Inst::Binop { .. }), "{op:?}");
+        }
+    }
+
+    /// A 128-by-64 division of constants folds where it would not fault.
+    #[test]
+    fn a_fitting_128_by_64_division_of_constants_folds() {
+        for (hi, lo, divisor, want) in [
+            (1, 0, 3, Some(0x5555_5555_5555_5555)),
+            (0, -1, -1, Some(1)),
+            (2, 5, 2, None),
+            (0, 7, 0, None),
+        ] {
+            let mut f = fresh(vec![
+                Inst::Imm(hi),
+                Inst::Imm(lo),
+                Inst::Imm(divisor),
+                Inst::Udiv128 {
+                    hi: 0,
+                    lo: 1,
+                    divisor: 2,
+                },
+            ]);
+            run_one(&mut f);
+            match want {
+                Some(q) => assert!(
+                    matches!(f.insts[3], Inst::Imm(k) if k == q),
+                    "{:?}",
+                    f.insts[3]
+                ),
+                None => assert!(
+                    matches!(f.insts[3], Inst::Udiv128 { .. }),
+                    "{:?}",
+                    f.insts[3]
+                ),
+            }
+        }
+    }
+
+    /// Unsigned, `x < 0` and `x >= 0` are constants, `x <= 0` and `x > 0` not.
+    #[test]
+    fn an_unsigned_comparison_with_zero_that_cannot_vary_folds() {
+        for (op, want) in [
+            (BinOp::Ult, Some(0)),
+            (BinOp::Uge, Some(1)),
+            (BinOp::Ule, None),
+            (BinOp::Ugt, None),
+        ] {
+            let mut f = fresh(vec![
+                Inst::LocalAddr(0),
+                Inst::BinopI {
+                    op,
+                    lhs: 0,
+                    rhs_imm: 0,
+                },
+            ]);
+            run_one(&mut f);
+            match want {
+                Some(k) => assert!(
+                    matches!(f.insts[1], Inst::Imm(v) if v == k),
+                    "{op:?}: {:?}",
+                    f.insts[1]
+                ),
+                None => assert!(
+                    matches!(f.insts[1], Inst::BinopI { .. }),
+                    "{op:?}: {:?}",
+                    f.insts[1]
+                ),
+            }
         }
     }
 
@@ -1279,6 +1363,7 @@ mod tests {
             Inst::Extend {
                 value: 0,
                 kind: LoadKind::I32,
+                nsw: false,
             },
         ]);
         f.f32_values[0] = true;
@@ -1364,6 +1449,7 @@ mod tests {
             Inst::Extend {
                 value: 0,
                 kind: LoadKind::I16,
+                nsw: false,
             },
         ]);
         run_one(&mut f);
@@ -1739,6 +1825,7 @@ mod tests {
                 value: 2,
                 kind: crate::c5::ir::StoreKind::I64,
                 volatile: false,
+                nsw: false,
             },
         ]);
         run_one(&mut f);
@@ -1774,6 +1861,7 @@ mod tests {
                 value: 2,
                 kind: crate::c5::ir::StoreKind::I64,
                 volatile: false,
+                nsw: false,
             },
         ]);
         run_one(&mut f);
@@ -1811,6 +1899,7 @@ mod tests {
                 value: 4,
                 kind: crate::c5::ir::StoreKind::I64,
                 volatile: false,
+                nsw: false,
             },
         ]);
         run_one(&mut f);

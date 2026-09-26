@@ -72,8 +72,8 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x50, %rsp
-               	leaq	-0x48(%rbp), %rax
+               	subq	$0x20, %rsp
+               	leaq	-0x20(%rbp), %rax
                	leaq	0x18(%rax), %rcx
                	subq	%rax, %rcx
                	movq	%rcx, %rdx
@@ -97,21 +97,21 @@ Disassembly of section .text:
                	subq	%rcx, %rsi
                	leaq	-0x5(%rsi), %rcx
                	leaq	(%rdx,%rcx), %rsi
-               	leaq	-0x28(%rbp), %rcx
-               	leaq	0x10(%rcx), %rdx
-               	subq	%rcx, %rdx
-               	movq	%rdx, %rcx
-               	sarq	$0x3f, %rcx
-               	shrq	$0x3d, %rcx
-               	addq	%rdx, %rcx
-               	sarq	$0x3, %rcx
-               	subq	$0x2, %rcx
-               	addq	%rsi, %rcx
-               	leaq	0x10(%rax), %rdx
-               	subq	$0x10, %rdx
-               	cmpq	%rax, %rdx
-               	setne	%al
-               	movzbq	%al, %rax
+               	leaq	0x10(%rax), %rcx
+               	movq	%rcx, %rdx
+               	subq	%rax, %rdx
+               	movq	%rdx, %rax
+               	sarq	$0x3f, %rax
+               	shrq	$0x3d, %rax
+               	addq	%rdx, %rax
+               	sarq	$0x3, %rax
+               	subq	$0x2, %rax
+               	addq	%rsi, %rax
+               	subq	$0x10, %rcx
+               	leaq	-0x20(%rbp), %rdx
+               	cmpq	%rdx, %rcx
+               	setne	%cl
+               	movzbq	%cl, %rcx
                	addq	%rcx, %rax
                	leave
                	retq

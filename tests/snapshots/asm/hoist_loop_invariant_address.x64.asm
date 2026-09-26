@@ -77,9 +77,9 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x8, %rsp
                	pushq	%rbx
-               	xorl	%ebx, %ebx
                	callq	<addr>
                	xorl	%esi, %esi
+               	xorl	%r9d, %r9d
                	xorl	%eax, %eax
                	movq	%rsi, %rcx
                	testl	%ecx, %ecx
@@ -95,14 +95,14 @@ Disassembly of section .text:
                	testl	%ecx, %ecx
                	jg	<addr>
                	movslq	%eax, %rax
-               	addq	%rax, %rbx
+               	addq	%rax, %r9
                	incq	%rsi
                	cmpl	$0x1f4, %esi            # imm = 0x1F4
                	jl	<addr>
-               	cmpq	$0x7b0c, %rbx           # imm = 0x7B0C
+               	cmpq	$0x7b0c, %r9            # imm = 0x7B0C
                	je	<addr>
                	leaq	<rip>, %rdi
-               	movq	%rbx, %rsi
+               	movq	%r9, %rsi
                	movb	$0x0, %al
                	callq	<addr>
                	movl	$0x1, %eax

@@ -5,6 +5,9 @@
 // clang) allocates bitfields at the bit level, placing the next
 // non-bitfield member at the following byte boundary. Sizes,
 // offsets, and read-back values are checked against clang output.
+// The PE targets take the MS layout, where a bit-field keeps a whole
+// unit of its declared type under `packed` as well; those values are
+// clang's for the windows-msvc triples.
 //
 // Returns 0 only when every check passes; each failure path
 // returns a distinct nonzero code.
@@ -24,10 +27,18 @@ union __attribute__((packed)) LU { char c; unsigned x:24; };
 struct A ga = { 85, 7 };
 
 int main(void) {
+#if defined(_WIN32)
+    if (sizeof(struct A) != 5 || offsetof(struct A, c) != 4) return 1;
+#else
     if (sizeof(struct A) != 2 || offsetof(struct A, c) != 1) return 1;
+#endif
     if (sizeof(struct B) != 5 || offsetof(struct B, c) != 4) return 2;
     if (sizeof(struct C) != 3 || offsetof(struct C, c) != 2) return 3;
+#if defined(_WIN32)
+    if (sizeof(struct E) != 5) return 4;
+#else
     if (sizeof(struct E) != 3) return 4;
+#endif
 
     // Writing the plain member must not clobber the bitfield's
     // storage unit (they overlapped when the repack dropped the
@@ -59,8 +70,13 @@ int main(void) {
     // Static initializer merges into the packed unit.
     if (ga.flags != 85 || ga.c != 7) return 9;
 
+#if defined(_WIN32)
+    if (sizeof(struct L) != 5 || __alignof__(struct L) != 1) return 10;
+    if (sizeof(union LU) != 4 || __alignof__(union LU) != 1) return 11;
+#else
     if (sizeof(struct L) != 4 || __alignof__(struct L) != 1) return 10;
     if (sizeof(union LU) != 3 || __alignof__(union LU) != 1) return 11;
+#endif
     struct L l;
     l.c = 6;
     l.x = 0xabcdef;

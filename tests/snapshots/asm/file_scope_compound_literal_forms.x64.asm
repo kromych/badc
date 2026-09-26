@@ -166,18 +166,10 @@ Disassembly of section .text:
                	retq
                	leaq	-0x10(%rbp), %rax
                	leaq	<rip>, %rcx
-               	pushq	%rdx
-               	movq	(%rcx), %rdx
-               	movq	%rdx, (%rax)
-               	movzbq	0x8(%rcx), %rdx
-               	movb	%dl, 0x8(%rax)
-               	movzbq	0x9(%rcx), %rdx
-               	movb	%dl, 0x9(%rax)
-               	movzbq	0xa(%rcx), %rdx
-               	movb	%dl, 0xa(%rax)
-               	movzbq	0xb(%rcx), %rdx
-               	movb	%dl, 0xb(%rax)
-               	popq	%rdx
+               	movq	(%rcx), %r10
+               	movq	%r10, (%rax)
+               	movl	0x8(%rcx), %r10d
+               	movl	%r10d, 0x8(%rax)
                	leaq	<rip>, %rdi
                	movb	$0x0, %al
                	callq	<addr>

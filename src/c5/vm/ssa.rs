@@ -19,6 +19,8 @@ use super::super::ir::{
 };
 use super::eval::{self, round_if_f32};
 
+mod asm_a64;
+
 /// `Inst::ImmCode` results are tagged with this bit set so
 /// `Inst::CallIndirect` can distinguish a function pointer from
 /// a real memory address. The low bits hold the callee's
@@ -102,6 +104,8 @@ struct Memory {
     /// `run_program_with_args_tracked` (or the
     /// `Vm::with_pointer_tracking` constructor).
     track_pointers: bool,
+    /// Base of the stdio block ([`STDIO_ERRNO`]), 0 until first use.
+    stdio: usize,
 }
 
 /// Metadata for one heap allocation. The SSA-VM never reuses
@@ -157,7 +161,22 @@ impl Memory {
             allocations: Vec::new(),
             next_alloc_id: 1,
             track_pointers: false,
+            stdio: 0,
         }
+    }
+
+    /// The stdio block, allocated on first use.
+    fn stdio(&mut self) -> usize {
+        if self.stdio == 0 {
+            let base = self.heap_alloc(STDIO_ERRNO + 8);
+            for i in 0..3 {
+                let file = (base + i * STDIO_FILE_BYTES) as u64;
+                let slot = base + STDIO_SLOTS + i * 8;
+                self.bytes[slot..slot + 8].copy_from_slice(&file.to_le_bytes());
+            }
+            self.stdio = base;
+        }
+        self.stdio
     }
 
     fn with_track_pointers(mut self, on: bool) -> Self {
@@ -389,10 +408,12 @@ struct Program<'a> {
     /// the TLS block is appended onto the data segment per C11
     /// 7.5p1 (single-thread `_Thread_local` storage duration).
     tls_base: usize,
+    /// The inline asm templates are AArch64's, not x86-64's.
+    aarch64: bool,
 }
 
 impl<'a> Program<'a> {
-    fn new(funcs: &'a [FunctionSsa]) -> Self {
+    fn new(funcs: &'a [FunctionSsa], target: crate::c5::codegen::Target) -> Self {
         let ent_pc_to_idx = funcs
             .iter()
             .enumerate()
@@ -403,6 +424,7 @@ impl<'a> Program<'a> {
             ent_pc_to_idx,
             binding_names: &[],
             tls_base: 0,
+            aarch64: target.is_aarch64(),
         }
     }
 
@@ -497,12 +519,10 @@ impl Frame<'_> {
         if off < 0 {
             // An over-aligned automatic object's storage is in the frame's
             // realigned region, not the fp-relative slot (C11 6.7.5).
-            if self.realign_base != 0 {
-                for &(slot, region_off) in &self.func.over_aligned {
-                    if slot == off {
-                        return Some(self.realign_base + region_off as usize);
-                    }
-                }
+            if self.realign_base != 0
+                && let Some(m) = self.func.over_aligned.iter().find(|m| m.slot == off)
+            {
+                return Some(self.realign_base + m.off as usize);
             }
             let slot_n = (-off) as usize;
             (slot_n >= 1 && slot_n <= self.locals)
@@ -524,7 +544,8 @@ impl Frame<'_> {
 pub(super) fn run_ssa(func: &FunctionSsa) -> Result<i64, C5Error> {
     let funcs = core::slice::from_ref(func);
     let mut host = NullHost;
-    run_program(funcs, &[], &[], func.ent_pc, &mut host)
+    let target = crate::c5::codegen::Target::host();
+    run_program(funcs, &[], &[], func.ent_pc, &mut host, target)
 }
 
 /// Multi-function entry: pick the function at `entry_pc` and run
@@ -540,8 +561,9 @@ pub(super) fn run_program<H: Host>(
     binding_names: &[alloc::string::String],
     entry_pc: usize,
     host: &mut H,
+    target: crate::c5::codegen::Target,
 ) -> Result<i64, C5Error> {
-    run_program_with_args(funcs, data, binding_names, 0, entry_pc, host, &[])
+    run_program_with_args(funcs, data, binding_names, 0, entry_pc, host, &[], target)
 }
 
 /// Multi-function entry that stages `args` as `argv` for the
@@ -551,6 +573,7 @@ pub(super) fn run_program<H: Host>(
 /// (frame slot 2) and `argv` at param slot 1 (frame slot 3).
 /// When `args` is empty both pass through as 0; C99 5.1.2.2.1
 /// allows that shape for a hosted program.
+#[allow(clippy::too_many_arguments)]
 pub(super) fn run_program_with_args<H: Host>(
     funcs: &[FunctionSsa],
     data: &[u8],
@@ -559,6 +582,7 @@ pub(super) fn run_program_with_args<H: Host>(
     entry_pc: usize,
     host: &mut H,
     args: &[alloc::string::String],
+    target: crate::c5::codegen::Target,
 ) -> Result<i64, C5Error> {
     run_program_with_args_tracked(
         funcs,
@@ -571,6 +595,7 @@ pub(super) fn run_program_with_args<H: Host>(
         false,
         &[],
         &[],
+        target,
     )
 }
 
@@ -590,8 +615,9 @@ pub(super) fn run_program_with_args_tracked<H: Host>(
     track_pointers: bool,
     init_pcs: &[usize],
     fini_pcs: &[usize],
+    target: crate::c5::codegen::Target,
 ) -> Result<i64, C5Error> {
-    let prog = Program::new(funcs)
+    let prog = Program::new(funcs, target)
         .with_bindings(binding_names)
         .with_tls_base(tls_base);
     let (data_with_argv, argc, argv_addr) = stage_argv(data, args);
@@ -1159,10 +1185,11 @@ fn run_inst<H: Host>(
             addr,
             value,
             width,
+            ..
         } => {
             // C11 7.17.7. The interpreter is single-threaded, so a
-            // load-op-store reproduces the architectural effect; the
-            // prior contents are the result (7.17.7p2).
+            // load-op-store reproduces the architectural effect, whatever
+            // the order; the prior contents are the result (7.17.7p2).
             let a = frame.regs[*addr as usize];
             let operand = frame.regs[*value as usize];
             atomic_addr_check(a, "AtomicRmw")?;
@@ -1184,33 +1211,30 @@ fn run_inst<H: Host>(
         }
         Inst::AtomicCas {
             addr,
-            expected_addr,
+            expected,
             desired,
             width,
+            ..
         } => {
-            // C11 7.17.7.4. Single-threaded: load-compare-store. On a
-            // mismatch the current contents are written back into
-            // `*expected_addr` and the result is 0; on a match
-            // `desired` is stored and the result is 1.
+            // C11 7.17.7.4. Single-threaded: load, compare the low `width`
+            // bytes with the comparand's, store `desired` on a match. The
+            // prior contents, zero-extended, are the result.
             let a = frame.regs[*addr as usize];
-            let exp = frame.regs[*expected_addr as usize];
-            let des = frame.regs[*desired as usize];
             atomic_addr_check(a, "AtomicCas")?;
-            atomic_addr_check(exp, "AtomicCas")?;
-            let (lk, sk) = atomic_kinds(*width);
+            let (_, sk) = atomic_kinds(*width);
             mem.check_data_access(a as usize, *width as usize, AccessKind::Read)?;
             mem.check_data_access(a as usize, *width as usize, AccessKind::Write)?;
-            mem.check_data_access(exp as usize, *width as usize, AccessKind::Read)?;
-            mem.check_data_access(exp as usize, *width as usize, AccessKind::Write)?;
-            let cur = load_from_memory(mem, a as usize, lk)?;
-            let ecur = load_from_memory(mem, exp as usize, lk)?;
-            if cur == ecur {
-                store_to_memory(mem, a as usize, narrow_store(des, sk), sk)?;
-                frame.regs[v as usize] = 1;
+            let cur = load_from_memory(mem, a as usize, atomic_load_kind(*width))?;
+            let mask = if *width < 8 {
+                (1i64 << (8 * *width)) - 1
             } else {
-                store_to_memory(mem, exp as usize, narrow_store(cur, sk), sk)?;
-                frame.regs[v as usize] = 0;
+                -1
+            };
+            if cur == frame.regs[*expected as usize] & mask {
+                let des = frame.regs[*desired as usize];
+                store_to_memory(mem, a as usize, narrow_store(des, sk), sk)?;
             }
+            frame.regs[v as usize] = cur;
             return Ok(());
         }
         // C11 7.17.7.1 / 7.17.7.2. The order has no effect in the
@@ -1286,6 +1310,20 @@ fn run_inst<H: Host>(
             frame.regs[v as usize] = round_if_f32(res, frame.func.f32_values.get(v as usize));
             return Ok(());
         }
+        Inst::Udiv128 { hi, lo, divisor } => {
+            let (h, l, d) = (
+                frame.regs[*hi as usize],
+                frame.regs[*lo as usize],
+                frame.regs[*divisor as usize],
+            );
+            let Some(q) = eval::udiv128(h, l, d) else {
+                return Err(C5Error::Runtime(
+                    "vm_ssa: 128-by-64 division overflow".into(),
+                ));
+            };
+            frame.regs[v as usize] = q;
+            return Ok(());
+        }
         Inst::MulAdd {
             a,
             b,
@@ -1301,7 +1339,7 @@ fn run_inst<H: Host>(
             };
             return Ok(());
         }
-        Inst::Extend { value, kind } => {
+        Inst::Extend { value, kind, .. } => {
             let raw = frame.regs[*value as usize];
             frame.regs[v as usize] = eval::eval_extend(raw, *kind);
             return Ok(());
@@ -1407,7 +1445,11 @@ fn run_inst<H: Host>(
             return Ok(());
         }
         Inst::InlineAsm { asm, args } => {
-            run_inline_asm(mem, frame, asm, args)?;
+            if prog.aarch64 {
+                asm_a64::run(mem, frame, asm, args, v)?;
+            } else {
+                run_inline_asm(mem, frame, asm, args, v)?;
+            }
             return Ok(());
         }
         Inst::LifetimeEnd(_) => {
@@ -1415,6 +1457,7 @@ fn run_inst<H: Host>(
             // reclaims: the frame cell stays until the call returns.
             return Ok(());
         }
+        Inst::AsmOut { .. } => return Ok(()),
         Inst::AllocaInit(_) => {
             // No-op for v0 == AllocaInit(0); the SSA-VM does not
             // expose alloca yet -- callers requesting a real
@@ -1457,9 +1500,50 @@ fn run_inst<H: Host>(
         // rather than reading the generic address space.
         Inst::SegLoad { .. } => "SegLoad",
         Inst::SegStore { .. } => "SegStore",
+        // Emitted by the `-O` pipeline, which the interpreter's SSA skips.
+        Inst::ParamPart { .. } => "ParamPart",
+        Inst::RetPart { .. } => "RetPart",
+        Inst::AggParts { .. } => "AggParts",
         Inst::Phi { .. } => "Phi",
     };
     Err(C5Error::Runtime(format!("vm_ssa: {name} not implemented",)))
+}
+
+/// The stdio block: a record per standard stream, as far apart as the bundled
+/// `<stdio.h>` steps from `__iob_func()` on Windows, then the `FILE *` object
+/// each stream's data symbol names, then the `errno` cell.
+const STDIO_FILE_BYTES: usize = 48;
+const STDIO_SLOTS: usize = 3 * STDIO_FILE_BYTES;
+const STDIO_ERRNO: usize = STDIO_SLOTS + 3 * 8;
+
+fn std_stream_index(sym: &str) -> Option<usize> {
+    match sym {
+        "stdin" | "__stdinp" => Some(0),
+        "stdout" | "__stdoutp" => Some(1),
+        "stderr" | "__stderrp" => Some(2),
+        _ => None,
+    }
+}
+
+/// The descriptor of the standard stream argument `idx` of `name` names.
+fn stdio_fd(name: &str, args: &[i64], idx: usize, mem: &Memory) -> Result<i64, C5Error> {
+    let stream = args.get(idx).copied().unwrap_or(0);
+    let off = (stream as usize).wrapping_sub(mem.stdio);
+    if mem.stdio != 0 && off < STDIO_SLOTS && off.is_multiple_of(STDIO_FILE_BYTES) {
+        return Ok((off / STDIO_FILE_BYTES) as i64);
+    }
+    Err(C5Error::Runtime(format!(
+        "vm_ssa: {name}: 0x{stream:x} is not a standard stream"
+    )))
+}
+
+fn cstring_arg(name: &str, args: &[i64], idx: usize, mem: &Memory) -> Result<Vec<u8>, C5Error> {
+    match args.get(idx).copied() {
+        Some(addr) if addr >= 0 => read_cstring_bytes(mem, addr as usize),
+        _ => Err(C5Error::Runtime(format!(
+            "vm_ssa: {name}: bad string argument"
+        ))),
+    }
 }
 
 /// Dispatch a libc binding by name. Implementations land here
@@ -1629,19 +1713,48 @@ fn dispatch_callext<H: Host>(
         // writes the bytes to stdout via the host. Returns the
         // number of bytes transmitted (7.19.6.3p3).
         "printf" => {
-            let fmt_addr = *args
-                .first()
-                .ok_or_else(|| C5Error::Runtime("vm_ssa: printf: missing fmt".to_string()))?;
-            if fmt_addr < 0 {
-                return Err(C5Error::Runtime(format!(
-                    "vm_ssa: printf: bad fmt addr 0x{fmt_addr:x}",
-                )));
-            }
-            let fmt = read_cstring_bytes(mem, fmt_addr as usize)?;
+            let fmt = cstring_arg(name, args, 0, mem)?;
             let out = format_printf(&fmt, &args[1..], mem)?;
             let _ = host.write(1, &out);
             Ok(out.len() as i64)
         }
+        // The bundled headers reach a stream through its data symbol (`dlsym`
+        // below) or `__iob_func()`, and `errno` through `errno_location()`.
+        "__iob_func" => Ok(mem.stdio() as i64),
+        "errno_location" => Ok((mem.stdio() + STDIO_ERRNO) as i64),
+        "fprintf" => {
+            let fd = stdio_fd(name, args, 0, mem)?;
+            let fmt = cstring_arg(name, args, 1, mem)?;
+            let out = format_printf(&fmt, args.get(2..).unwrap_or_default(), mem)?;
+            let _ = host.write(fd, &out);
+            Ok(out.len() as i64)
+        }
+        "fputs" => {
+            let fd = stdio_fd(name, args, 1, mem)?;
+            let _ = host.write(fd, &cstring_arg(name, args, 0, mem)?);
+            Ok(0)
+        }
+        "puts" => {
+            let mut line = cstring_arg(name, args, 0, mem)?;
+            line.push(b'\n');
+            let _ = host.write(1, &line);
+            Ok(0)
+        }
+        "fputc" | "putc" => {
+            let fd = stdio_fd(name, args, 1, mem)?;
+            let byte = args.first().copied().unwrap_or(-1) as u8;
+            let _ = host.write(fd, &[byte]);
+            Ok(i64::from(byte))
+        }
+        "fwrite" => {
+            let fd = stdio_fd(name, args, 3, mem)?;
+            let (buf, size, n) = libc_three_arg(name, args)?;
+            let bytes = mem.read_bytes(buf, size.saturating_mul(n))?.to_vec();
+            let _ = host.write(fd, &bytes);
+            Ok(if size == 0 { 0 } else { n as i64 })
+        }
+        "fflush" => Ok(0),
+        "fileno" => stdio_fd(name, args, 0, mem),
         // `int putchar(int c)` -- write one byte to stdout, returns
         // the byte (or EOF on error; we return the byte unconditionally).
         "putchar" => {
@@ -1772,6 +1885,9 @@ fn dispatch_callext<H: Host>(
                 )));
             }
             let sym = read_cstring(mem, name_addr as usize)?;
+            if let Some(i) = std_stream_index(&sym) {
+                return Ok((mem.stdio() + STDIO_SLOTS + i * 8) as i64);
+            }
             Ok(host.dlsym(handle, &sym))
         }
         // `int dlclose(void *handle)` -- pure host bridge.
@@ -2250,9 +2366,10 @@ fn libc_size(name: &str, raw: Option<i64>) -> Result<usize, C5Error> {
 /// Evaluate a GCC extended-asm statement (`Inst::InlineAsm`) in the
 /// interpreter. The template is parsed into instructions and executed
 /// against a 16-entry model register file seeded from the operand
-/// values; the results are stored through the output addresses. This
-/// reproduces the semantics the native encoding runs on hardware, so a
-/// fixture round-trips identically on any host. Non-deterministic reads
+/// values; the results are stored through the output addresses, a value
+/// output into the statement's own register `site`. This reproduces the
+/// semantics the native encoding runs on hardware, so a fixture
+/// round-trips identically on any host. Non-deterministic reads
 /// (timestamp counter) yield zero, matching the native fallback in
 /// value tests.
 fn run_inline_asm(
@@ -2260,6 +2377,7 @@ fn run_inline_asm(
     frame: &mut Frame<'_>,
     asm: &crate::c5::ir::AsmBlock,
     args: &[ValueId],
+    site: ValueId,
 ) -> Result<(), C5Error> {
     use crate::c5::codegen::x86_64::asm::{AsmOpnd, Mnemonic, parse_template};
     use crate::c5::ir::AsmRegSize;
@@ -2363,7 +2481,7 @@ fn run_inline_asm(
             xregs[r as usize] = frame.regs[args[i] as usize];
             continue;
         }
-        if !op.is_output {
+        if !op.is_output || (op.is_rw && op.value) {
             xregs[r as usize] = frame.regs[args[i] as usize];
         } else if op.is_rw {
             let addr = frame.regs[args[i] as usize] as usize;
@@ -2665,12 +2783,23 @@ fn run_inline_asm(
         }
     }
 
-    // Store the outputs back through their destination addresses.
+    // Store the outputs back through their destination addresses; a value
+    // output is the register of the statement or of its `AsmOut`.
+    let values = frame.func.asm_output_values(site);
     for (i, op) in asm.operands.iter().enumerate() {
         if op.is_output
             && !matches!(op.constraint, crate::c5::ir::AsmConstraint::Bound(_))
             && let Some(r) = op_reg[i]
         {
+            if op.value {
+                if let Some(&(_, dst)) = values
+                    .iter()
+                    .find(|&&(k, d)| k == i && d != crate::c5::ir::NO_VALUE)
+                {
+                    frame.regs[dst as usize] = xregs[r as usize];
+                }
+                continue;
+            }
             let addr = frame.regs[args[i] as usize] as usize;
             store_to_memory(mem, addr, xregs[r as usize], width_store_kind(op.width))?;
         }
@@ -3547,6 +3676,7 @@ mod tests {
             &binding_names,
             program.entry_pc,
             &mut host,
+            super::super::super::Target::MacOSAarch64,
         )
         .expect("ssa run")
     }
@@ -3605,8 +3735,15 @@ mod tests {
         )
         .expect("ssa lift");
         let mut host = super::super::super::host::StdHost::default();
-        let err = run_program(&funcs, &program.data, &[], program.entry_pc, &mut host)
-            .expect_err("recursion past the stack region must fail");
+        let err = run_program(
+            &funcs,
+            &program.data,
+            &[],
+            program.entry_pc,
+            &mut host,
+            super::super::super::Target::MacOSAarch64,
+        )
+        .expect_err("recursion past the stack region must fail");
         match err {
             crate::C5Error::Runtime(m) => assert!(m.contains("stack overflow"), "{m}"),
             other => panic!("expected Runtime, got {other:?}"),
@@ -3622,6 +3759,15 @@ mod tests {
             crate::C5Error::Runtime(m) => assert!(m.contains(needle), "`{m}` lacks `{needle}`"),
             other => panic!("expected Runtime, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn stream_call_on_other_memory_is_diagnosed() {
+        expect_runtime_err(
+            "#include <stdio.h>\n\
+             int main(void) { char b[48]; return fputs(\"x\", (FILE *)b); }",
+            "is not a standard stream",
+        );
     }
 
     #[test]
@@ -3827,6 +3973,7 @@ mod tests {
             &binding_names,
             program.entry_pc,
             &mut host,
+            super::super::super::Target::MacOSAarch64,
         )
         .expect("ssa run");
         assert_eq!(rc, 'Z' as i64);
@@ -3908,6 +4055,7 @@ mod tests {
             &binding_names,
             program.entry_pc,
             &mut host,
+            super::super::super::Target::MacOSAarch64,
         )
         .expect_err("strlen should land in the unimplemented arm");
         match err {

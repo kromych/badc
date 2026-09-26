@@ -51,6 +51,15 @@ impl<'a> Walker<'a> {
                 let v = self.walk_expr_rvalue(b, child)?;
                 Ok(b.binop_imm(BinOp::Eq, v, 0))
             }
+            UnOp::Renormalize { nsw } => {
+                let v = self.walk_expr_rvalue(b, child)?;
+                Ok(match load_kind_for(ty, self.target) {
+                    kind @ (LoadKind::I8 | LoadKind::I16 | LoadKind::I32) => {
+                        b.extend_marked(v, kind, nsw)
+                    }
+                    _ => v,
+                })
+            }
             UnOp::AddrOf => self.walk_expr_lvalue(b, child),
             UnOp::Deref => {
                 let addr = self.walk_expr_rvalue(b, child)?;
@@ -101,7 +110,7 @@ impl<'a> Walker<'a> {
         // The reverse: a scalar cast to a 128-bit type materialises a
         // 16-byte object, whose address is the value.
         if !is_struct_ty(src_ty) && self.is_int128_value_ty(to_ty) {
-            let slot = b.alloc_synthetic_struct(16);
+            let slot = b.alloc_synthetic_struct(16, 8);
             let addr = b.local_addr(slot);
             self.store_scalar_as_int128(b, addr, v, src_ty, to_ty);
             return Ok(addr);

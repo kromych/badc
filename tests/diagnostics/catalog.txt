@@ -17,7 +17,7 @@ B2003  unused-but-set-variable        ignore   controllable  all                
 B2004  unused-function                ignore   controllable  all                live     a function with internal linkage that is defined and never referenced
 B2005  implicit-function-declaration  warning  controllable  default            live     a function used before a prototype declares it, so its return type is `int`
 B2006  undefined-function             warning  controllable  default            live     an initializer names a `static` function this unit declares and never defines
-B2007  redeclaration-mismatch         warning  controllable  default            live     a redeclaration whose signature differs from the previous one
+B2007  redeclaration-mismatch         warning  controllable  default            live     a function redeclaration incompatible under C99 that GNU C accepts: a qualified return type, an implicit `int` body for a `void` declaration, an old-style definition matching its prototype only before promotion
 B2008  attributes                     warning  controllable  default            live     an attribute the declaration cannot carry, so it is ignored
 B2009  ignored-asm-label              warning  controllable  default            live     an assembler name on a declaration that has no symbol to rename
 B2010  shadowed-binding               warning  controllable  default            live     a `#pragma binding` for a name an earlier binding already claimed
@@ -28,19 +28,20 @@ B2023  static-assert                  error    hard          -                  
 B3001  int-conversion                 warning  controllable  default            live     an integer and a pointer exchanged with no cast
 B3002  incompatible-struct-types      warning  controllable  default            live     an aggregate used where a different aggregate type is expected
 B3003  return-type                    ignore   controllable  all                live     control reaches the end of a value-returning function
-B3004  too-few-arguments              warning  controllable  default            live     a call passing fewer arguments than the prototype declares
-B3005  too-many-arguments             warning  controllable  default            live     a call passing more arguments than the prototype declares
-B3006  long-double-abi                warning  controllable  default            live     a `long double` argument passed in a format this target's ABI does not use
+B3004  too-few-arguments              warning  controllable  default            live     a call passing fewer arguments than an old-style definition or a libc binding's prototype declares
+B3005  too-many-arguments             warning  controllable  default            live     a call passing more arguments than an old-style definition or a libc binding's prototype declares
+B3006  long-double-abi                warning  controllable  default            retired  a `long double` argument passed in a format this target's ABI does not use
 B3007  dead-store                     ignore   controllable  -                  live     a value assigned to a local and replaced before any read
 B3020  invalid-operands               error    hard          -                  live     an operator applied to operands its constraints reject, or a non-lvalue where an lvalue is required
 B3021  constant-expression            error    hard          -                  live     an expression that must be constant and is not, or one the compiler cannot evaluate at translation time
 B3022  invalid-initializer            error    hard          -                  live     an initializer C99 6.7.8 rejects: a mismatched brace form, a designator naming nothing, an index out of range
-B3023  invalid-arguments              error    hard          -                  live     a builtin or intrinsic called with arguments it does not take
-B3024  invalid-statement              error    hard          -                  live     a statement outside the construct it needs: `break` outside a loop, `case` outside a switch, a `goto` to no label
+B3023  invalid-arguments              error    hard          -                  live     a call with arguments its callee does not take: a count other than a prototype's, or a builtin's or intrinsic's operand it rejects
+B3024  invalid-statement              error    hard          -                  live     a statement outside the construct it needs: `break` outside a loop, `case` outside a switch, a `goto` to no label, a jump into a statement expression or into the scope of a variably modified or cleanup object
 B3025  incompatible-types             error    hard          -                  live     a value of a type no implicit conversion takes to the type required: an aggregate assigned, passed or returned as another
 B3026  return-mismatch                error    controllable  default            live     a `return` with a value in a function returning `void`, or with none in a function returning a value
 B3027  void-value                     error    hard          -                  live     the value of a `void` expression used: as an operand, an argument, an initializer, an assigned or returned value, or a controlling expression
 B3028  controlling-expression         error    hard          -                  live     a controlling expression of a type its statement does not take: a non-scalar `if`, `while`, `do` or `for` condition, a non-integer `switch` expression
+B3029  incompatible-pointer-types     error    controllable  default            live     a pointer to a function assigned, initialized or returned as a pointer to an incompatible function type
 B4001  unsupported                    error    hard          -                  live     a well-formed construct badc does not implement
 B4002  limit                          error    hard          -                  live     a translation limit badc imposes: nesting depth, include depth, alignment
 B4003  inline                         ignore   controllable  -                  live     a function the source declared `inline` that the optimizer left out of line

@@ -16,9 +16,10 @@ use super::super::token::{Token, Ty};
 use super::Compiler;
 use super::decl_base;
 use super::initializer::DataStore;
+use super::redeclaration::{DeclaredType, Definition, Params, Spelled};
 use super::types::{
-    format_signature, is_pointer_ty, is_struct_ty, is_struct_value_ty, is_void_ty,
-    strip_object_const, strip_unsigned, struct_id_of, struct_ptr_depth,
+    is_pointer_ty, is_struct_ty, is_struct_value_ty, is_void_ty, strip_unsigned, struct_id_of,
+    struct_ptr_depth,
 };
 
 /// The declaration specifiers a file-scope declarator list shares: the base
@@ -30,14 +31,16 @@ struct FileScopeDecl {
     static_seen: bool,
     extern_seen: bool,
     thread_local: bool,
-    base_is_enum: bool,
+    implicit_int: bool,
     base_spelling: crate::c5::symbol::DeclSpelling,
+    /// The base type named an enum tag that had no definition yet.
+    base_enum_tag: Option<u32>,
     base_type_align: i64,
     base_fn_ptr_indirection: Option<i64>,
     base_fn_ptr_ret_indirection: i64,
     base_is_function_type: bool,
-    base_typedef_fn_proto: Option<(usize, bool)>,
-    base_fn_ptr_param_types: Option<alloc::vec::Vec<i64>>,
+    base_fn_ptr_params: Option<crate::c5::symbol::FnParams>,
+    base_fn_ptr_ret_fn: Option<(alloc::boxed::Box<crate::c5::symbol::FnType>, i64)>,
 }
 
 /// What one file-scope declarator supplied: the bound symbol, the type its
@@ -60,11 +63,8 @@ struct DeclaratorBinding {
 /// file-scope declaration with no initializer a tentative definition.
 struct PriorDecl {
     was_sys: bool,
-    was_fwd_fun: bool,
     was_tentative_glo: bool,
-    prior_return_ty: i64,
-    prior_params: alloc::vec::Vec<i64>,
-    prior_is_variadic: bool,
+    prior_params: crate::c5::symbol::FnParams,
 }
 
 impl Compiler {
@@ -89,8 +89,7 @@ impl Compiler {
         let saved_data = self.data.len();
         let saved_pc = self.next_ent_pc;
         let result = self.designated_array_count_inner(fallback, inner_span);
-        self.restore_lex(snap);
-        self.truncate_data(saved_data);
+        self.rewind_speculation(snap, saved_data);
         self.next_ent_pc = saved_pc;
         // A non-constant designator (invalid, or a shape this peek can't
         // fold) falls back to the positional count; the real fill re-parses
@@ -105,8 +104,7 @@ impl Compiler {
         let saved_data = self.data.len();
         let saved_pc = self.next_ent_pc;
         let is_desig = self.next().is_ok() && self.lex.tk == Token::Brak;
-        self.restore_lex(snap);
-        self.truncate_data(saved_data);
+        self.rewind_speculation(snap, saved_data);
         self.next_ent_pc = saved_pc;
         is_desig
     }
@@ -378,6 +376,7 @@ impl Compiler {
         self.pending.attr_section = None;
         self.pending.attr_patchable_entry = None;
         self.pending.attr_no_instrument = false;
+        self.pending.attr_no_stack_protector = false;
         self.pending.attr_alias = None;
         self.pending.saw_register_storage = false;
         self.pending.auto_type_single_declarator = false;
@@ -431,8 +430,9 @@ impl Compiler {
             static_seen: storage.is_static,
             extern_seen: storage.is_extern,
             thread_local: storage.is_thread_local,
-            base_is_enum: storage.base_is_enum,
+            implicit_int: storage.implicit_int,
             base_spelling: self.take_base_spelling(),
+            base_enum_tag: self.pending.base_enum_tag.take(),
             // A typedef-carried type alignment applies to every declarator;
             // an initializer's own type parses (casts, `sizeof`) reset the
             // pending carrier, so capture it once for the whole list.
@@ -446,8 +446,8 @@ impl Compiler {
             base_fn_ptr_indirection: self.pending.fn_ptr_indirection,
             base_fn_ptr_ret_indirection: self.pending.fn_ptr_ret_indirection,
             base_is_function_type: self.pending.base_is_function_type,
-            base_typedef_fn_proto: self.pending.typedef_fn_proto,
-            base_fn_ptr_param_types: self.pending.fn_ptr_param_types.clone(),
+            base_fn_ptr_params: self.pending.fn_ptr_params.clone(),
+            base_fn_ptr_ret_fn: self.pending.fn_ptr_ret_fn.clone(),
         };
         let mut declarator_count = 0usize;
         while self.lex.tk != ';' && self.lex.tk != '}' {
@@ -480,8 +480,8 @@ impl Compiler {
         self.pending.fn_ptr_indirection = decl.base_fn_ptr_indirection;
         self.pending.fn_ptr_ret_indirection = decl.base_fn_ptr_ret_indirection;
         self.pending.base_is_function_type = decl.base_is_function_type;
-        self.pending.typedef_fn_proto = decl.base_typedef_fn_proto;
-        self.pending.fn_ptr_param_types = decl.base_fn_ptr_param_types.clone();
+        self.pending.fn_ptr_params = decl.base_fn_ptr_params.clone();
+        self.pending.fn_ptr_ret_fn = decl.base_fn_ptr_ret_fn.clone();
         // The declarator's own line -- the name and its parameter
         // list -- for diagnostics that would otherwise point at the
         // function body's opening brace parsed further below.
@@ -532,12 +532,16 @@ impl Compiler {
         // the declarator (or its typedef base type)
         // recorded, and store it on the symbol so a later
         // identifier load can seed the chain-depth tracker.
+        let own_signature = self.lex.tk == '(' || self.pending.fn_params.is_some();
+        if let Some(ret) = self.take_decl_ret_fn(own_signature) {
+            self.symbols[id_idx].ret_fn = Some(ret);
+        }
         let fn_ptr_indirection = self.pending.fn_ptr_indirection.take().unwrap_or(0);
         let fn_ptr_ret_indirection = core::mem::take(&mut self.pending.fn_ptr_ret_indirection);
         // C99 6.7.7p3: an array typedef contributes its dimension to a declarator
         // that supplied none. It belongs to the base type, so every declarator of
-        // the list reads it; one that added a pointer level names a pointer to the
-        // element type and does not (6.7.6.1). TODO: compose the multi-dimensional
+        // the list reads it; one whose derivations applied to it (`A *p` points to
+        // the array) does not (6.7.5p4). TODO: compose the multi-dimensional
         // case (`arr_t four[4]` -> `long four[4][64]`) through `array_dims`.
         let typedef_dim = self.pending.typedef_base_array_size;
         // Declarator-added dimensions over an over-aligned element
@@ -547,7 +551,7 @@ impl Compiler {
         // typedef (`typedef T X[]`, carried as `-1`) makes the object
         // a deferred array whose size the initializer fixes.
         let mut zero_len_array = self.pending.declarator_zero_len_array;
-        if typedef_dim != 0 && array_size == 0 && self.pending.declarator_leading_ptr_count == 0 {
+        if typedef_dim != 0 && array_size == 0 && !self.pending.base_array_taken {
             array_size = typedef_dim;
             zero_len_array = self.pending.typedef_base_zero_len;
             self.apply_typedef_array_dims(id_idx);
@@ -579,29 +583,20 @@ impl Compiler {
             self.symbols[id_idx].fn_ptr_indirection = fn_ptr_indirection;
             self.symbols[id_idx].fn_ptr_ret_indirection = fn_ptr_ret_indirection;
         }
-        // Inherit a variadic function-pointer prototype onto the
-        // bound declarator so an indirect call through it knows
-        // the callee's named-parameter count and routes the
-        // variadic tail per the host variadic ABI. Only variadic
-        // prototypes are recorded: a non-variadic indirect call
-        // places every argument as fixed regardless, and
-        // synthesising placeholder parameter types would feed the
-        // call-site argument type-check a spurious mismatch.
-        let fnptr_proto = self.pending.typedef_fn_proto.take();
-        let mut fnptr_param_types = self.pending.fn_ptr_param_types.take();
+        // The bound declarator takes the pointee's parameter information,
+        // so an indirect call through it converts its arguments and routes
+        // a variadic tail per the host variadic ABI.
+        let mut fnptr_params = self.pending.fn_ptr_params.take();
         // The carrier holds the pointee signature of a fn-pointer typedef, so it
         // describes an object (`cb x;`) -- not a function whose return type is that
         // typedef (`cb f(args)`), and not a bare function-type declarator (`extern
         // typeof(f) f;`); both of those install a list of their own.
         let carrier_names_object = !bare_function_type || is_typedef;
-        if self.lex.tk != '(' && carrier_names_object {
-            if let Some(types) = fnptr_param_types.take() {
-                self.symbols[id_idx].params = types;
-                self.symbols[id_idx].is_variadic = matches!(fnptr_proto, Some((_, true)));
-            } else if let Some((proto_fixed, true)) = fnptr_proto {
-                self.symbols[id_idx].params = alloc::vec![0i64; proto_fixed];
-                self.symbols[id_idx].is_variadic = true;
-            }
+        if self.lex.tk != '('
+            && carrier_names_object
+            && let Some(p) = fnptr_params.take()
+        {
+            self.symbols[id_idx].set_fn_params(p);
         }
         // Carry the bare-`void` side channel onto the
         // declarator. `pending_base_was_void` was set if
@@ -654,15 +649,8 @@ impl Compiler {
         // name merges as a redeclaration rather than colliding.
         if bare_function_type && preconsumed_params.is_none() && self.lex.tk != '(' {
             b.ty -= Ty::Ptr as i64;
-            let types = fnptr_param_types.unwrap_or_default();
-            preconsumed_params = Some(super::function::ParsedParams {
-                indices: alloc::vec::Vec::new(),
-                types,
-                is_variadic: matches!(fnptr_proto, Some((_, true))),
-                // A function-type specifier supplies a parameter type list;
-                // the empty-list spelling does not reach here.
-                form: super::function::ParamForm::Carried,
-            });
+            let p = fnptr_params.unwrap_or_default();
+            preconsumed_params = Some(super::function::ParsedParams::of_type(p));
         }
 
         let prior = self.check_file_scope_redeclaration(decl, &b, preconsumed_params.is_some())?;
@@ -683,9 +671,7 @@ impl Compiler {
         preconsumed_params: Option<super::function::ParsedParams>,
     ) -> Result<(), C5Error> {
         let &FileScopeDecl {
-            base_is_enum,
-            base_type_align,
-            ..
+            base_type_align, ..
         } = decl;
         let &DeclaratorBinding {
             id_idx,
@@ -761,7 +747,7 @@ impl Compiler {
             self.mark_transparent_union(super::types::struct_id_of(typedef_ty));
         }
         self.symbols[id_idx].is_void_typedef = declarator_is_bare_void;
-        self.symbols[id_idx].is_enum_typedef = base_is_enum;
+        self.symbols[id_idx].incomplete_enum_tag = decl.base_enum_tag;
         self.symbols[id_idx].is_function_type = typedef_is_fn_type;
         // A function-type typedef records the calling
         // convention its declaration named, so a declarator
@@ -794,8 +780,7 @@ impl Compiler {
         // parse a list of their own; an alias of an existing function type
         // took the one its carrier held.
         if let Some(pp) = typedef_params {
-            self.symbols[id_idx].params = pp.types;
-            self.symbols[id_idx].is_variadic = pp.is_variadic;
+            self.symbols[id_idx].set_fn_params(pp.fn_params());
         }
         Ok(())
     }
@@ -858,26 +843,21 @@ impl Compiler {
         {
             return Err(self.compile_err(Code::INVALID_DECLARATION, "duplicate global definition"));
         }
-        // Snapshot the prior signature before overwriting `type_`, so the
-        // signature check has something to compare against.
-        let prior_return_ty = self.symbols[id_idx].type_;
-        let prior_params = self.symbols[id_idx].params.clone();
-        let prior_is_variadic = self.symbols[id_idx].is_variadic;
+        // The prior parameter list, which a redeclaration supplying none keeps.
+        let prior_params = self.symbols[id_idx].fn_params();
         self.symbols[id_idx].type_ = ty;
+        self.symbols[id_idx].incomplete_enum_tag = decl.base_enum_tag;
         // For an object the spelling is the object's; for a function it is
         // the return type's.
-        self.symbols[id_idx].decl_spelling = self.decl_spelling(base_spelling);
+        self.symbols[id_idx].binding.decl_spelling = self.decl_spelling(base_spelling);
         // An explicit return type replaces the implicit-`int`
         // default (Sys binding without a prior prototype).
         self.symbols[id_idx].implicit_return_int = false;
 
         Ok(PriorDecl {
             was_sys,
-            was_fwd_fun,
             was_tentative_glo,
-            prior_return_ty,
             prior_params,
-            prior_is_variadic,
         })
     }
 
@@ -893,6 +873,7 @@ impl Compiler {
         let &FileScopeDecl {
             static_seen,
             extern_seen,
+            implicit_int,
             ..
         } = decl;
         let &DeclaratorBinding {
@@ -903,10 +884,7 @@ impl Compiler {
         } = b;
         let PriorDecl {
             was_sys,
-            was_fwd_fun,
-            prior_return_ty,
             prior_params,
-            prior_is_variadic,
             ..
         } = prior;
 
@@ -914,13 +892,6 @@ impl Compiler {
             self.record_function_declaration(id_idx, static_seen, extern_seen);
         }
         let declarator_line = self.lex.line;
-        // A `Sys` binding starts with a stub signature the unit's own header is
-        // expected to refine, so only user-vs-user redeclarations are compared.
-        // Capture the long-double return-type marker
-        // before parameter parsing, which calls
-        // `parse_decl_base_type` per param and clears
-        // the side channel as part of its reset.
-        let ret_was_long_double = self.pending.base_was_long_double;
         let mut params = if let Some(pp) = preconsumed_params {
             pp
         } else {
@@ -945,13 +916,18 @@ impl Compiler {
         let is_defining_declarator = self.lex.tk != ';' && self.lex.tk != ',';
         let keeps_prior_list = params.form == super::function::ParamForm::Empty
             && !is_defining_declarator
-            && !prior_params.is_empty();
+            && !prior_params.types.is_empty();
         if keeps_prior_list {
-            params.types = prior_params.clone();
-            params.is_variadic = prior_is_variadic;
+            params.types = prior_params.types;
+            params.is_variadic = prior_params.variadic;
+            params.enum_tags = prior_params.enum_tags;
         }
-        self.symbols[id_idx].params = params.types.clone();
-        self.symbols[id_idx].is_variadic = params.is_variadic;
+        let prototyped = self.has_prototype(id_idx, &params);
+        let fn_params = crate::c5::symbol::FnParams {
+            prototyped,
+            ..params.fn_params()
+        };
+        self.symbols[id_idx].set_fn_params(fn_params);
         // C11 6.7.4: `_Noreturn` on any declaration marks the symbol, and the
         // reachability analysis then treats a call to it as not reaching its
         // continuation. The mark is sticky across later declarations.
@@ -968,20 +944,20 @@ impl Compiler {
         self.pending_is_noinline = self.symbols[id_idx].is_noinline;
         // The `return` statement and the fall-off diagnostic read this. A prototype
         // records it too; a body that then disagrees is a C99 6.7p4 violation the
-        // signature check above reports.
+        // redeclaration check reports.
         if declarator_is_bare_void {
             self.symbols[id_idx].returns_void = true;
         }
-
-        self.warn_on_signature_mismatch(
-            id_idx,
-            ty,
-            prior_return_ty,
-            &prior_params,
-            prior_is_variadic,
-            &params,
-            was_fwd_fun,
-        );
+        // A `Sys` binding's stub signature is no declaration of the unit, so the
+        // first one the unit spells starts the composite type.
+        if !is_defining_declarator {
+            let ret = Spelled {
+                ty,
+                enum_tag: decl.base_enum_tag,
+            };
+            let declared = DeclaredType::Function(ret, Params::of(&params, false));
+            self.declare_linked(id_idx, declared, declarator_line)?;
+        }
         // For Sys symbols (header-bound libc functions),
         // also fold the variadic flag onto the matching
         // `#pragma binding`. The native lowering reads
@@ -990,7 +966,7 @@ impl Compiler {
         // instead of consulting the symbol table at
         // codegen time -- it is out of scope by then.
         if was_sys {
-            self.update_libc_binding(id_idx, &params, ty, ret_was_long_double);
+            self.update_libc_binding(id_idx, &params, ty);
         }
 
         if self.lex.tk == ';' || self.lex.tk == ',' {
@@ -1005,7 +981,18 @@ impl Compiler {
             // unit still links against the import.
             self.record_function_declaration(id_idx, static_seen, extern_seen);
         }
-        self.parse_function_definition(id_idx, params, declarator_line)
+        let gnu89 = self.symbols[id_idx].is_gnu_inline
+            || self.inline_model == crate::c5::symbol::InlineModel::Gnu89;
+        let def = Definition {
+            ret: Spelled {
+                ty,
+                enum_tag: decl.base_enum_tag,
+            },
+            line: declarator_line,
+            implicit_int,
+            extern_inline: gnu89 && extern_seen && self.pending_saw_inline_specifier,
+        };
+        self.parse_function_definition(id_idx, params, def)
     }
 
     /// Record one file-scope declaration of a function name: its class and
@@ -1013,9 +1000,9 @@ impl Compiler {
     /// 6.7.4p6-p7 and GNU89), and the linkage that census implies so far.
     fn record_function_declaration(&mut self, id_idx: usize, static_seen: bool, extern_seen: bool) {
         self.symbols[id_idx].class = Token::Fun as i64;
-        if self.symbols[id_idx].decl_line == 0 {
-            self.symbols[id_idx].decl_line = self.lex.line;
-            self.symbols[id_idx].decl_in_main_source = self.in_main_source();
+        if self.symbols[id_idx].binding.decl_line == 0 {
+            self.symbols[id_idx].binding.decl_line = self.lex.line;
+            self.symbols[id_idx].binding.decl_in_main_source = self.in_main_source();
         }
         // Census one file-scope declaration of this name for
         // the inline linkage models (C99 6.7.4p6-p7 and
@@ -1046,54 +1033,6 @@ impl Compiler {
         // it.
     }
 
-    /// C99 6.7p4 requires the declarations of one function to be
-    /// compatible. An amalgamated unit can disagree by accident, which is
-    /// worth surfacing but not refusing: only this declaration is in scope.
-    #[allow(clippy::too_many_arguments)]
-    fn warn_on_signature_mismatch(
-        &mut self,
-        id_idx: usize,
-        ty: i64,
-        prior_return_ty: i64,
-        prior_params: &[i64],
-        prior_is_variadic: bool,
-        params: &super::function::ParsedParams,
-        prior_was_known: bool,
-    ) {
-        // C99 6.7.5.3p14: an empty list in a non-defining declarator supplies no
-        // parameter information, so it is not a claim about a signature and
-        // cannot disagree with one.
-        let either_unspecified = prior_params.is_empty() || params.types.is_empty();
-        let return_differs = prior_return_ty != ty;
-        let variadic_differs = prior_is_variadic != params.is_variadic;
-        // C99 6.7.5.3p15: each parameter is taken as its unqualified type.
-        let params_differ = !either_unspecified
-            && (prior_params.len() != params.types.len()
-                || prior_params
-                    .iter()
-                    .zip(&params.types)
-                    .any(|(&a, &b)| strip_object_const(a) != strip_object_const(b)));
-        if prior_was_known && (return_differs || variadic_differs || params_differ) {
-            let name = self.symbols[id_idx].name.clone();
-            let line = self.lex.line;
-            let prior_sig = format_signature(
-                prior_return_ty,
-                prior_params,
-                prior_is_variadic,
-                &self.structs,
-            );
-            let new_sig = format_signature(ty, &params.types, params.is_variadic, &self.structs);
-            self.warn_at(
-                Code::REDECLARATION_MISMATCH,
-                line,
-                format!(
-                    "redeclaration of `{name}` differs from the previous \
-                 declaration\n  previous: {prior_sig}\n  now:      {new_sig}",
-                ),
-            );
-        }
-    }
-
     /// Fold a libc binding's signature onto the matching `#pragma binding`:
     /// the native lowering reads the variadic ABI choice and the return
     /// convention off it, and the DWARF subprogram DIE over each PLT
@@ -1103,7 +1042,6 @@ impl Compiler {
         id_idx: usize,
         params: &super::function::ParsedParams,
         ret_ty: i64,
-        ret_is_long_double: bool,
     ) {
         let name = self.symbols[id_idx].name.clone();
         let fixed = params.types.len();
@@ -1118,7 +1056,6 @@ impl Compiler {
                     binding.is_variadic = variadic;
                     binding.fixed_args = fixed;
                     binding.return_type_tag = ret_ty;
-                    binding.returns_long_double = ret_is_long_double;
                     // Per-param types for the
                     // DWARF subprogram DIE the codegen
                     // emits over each PLT trampoline.
@@ -1161,7 +1098,7 @@ impl Compiler {
                 self.unwind_scope_bound(bound);
                 return Ok(());
             };
-            self.symbols[tgt].was_referenced = true;
+            self.symbols[tgt].binding.was_referenced = true;
             self.symbols[id_idx].val = self.symbols[tgt].val;
             // Defined-through-the-target: keeps the TU-end
             // extern-import pass from re-assigning a
@@ -1201,23 +1138,34 @@ impl Compiler {
         &mut self,
         id_idx: usize,
         mut params: super::function::ParsedParams,
-        declarator_line: usize,
+        def: Definition,
     ) -> Result<(), C5Error> {
         // The definition's position replaces the first declaration's, so a
         // report about the function points at its body.
-        self.symbols[id_idx].decl_line = declarator_line;
-        self.symbols[id_idx].decl_file = self.intern_source_file() as u32;
-        self.symbols[id_idx].decl_in_main_source = self.in_main_source();
+        self.symbols[id_idx].binding.decl_line = def.line;
+        self.symbols[id_idx].binding.decl_file = self.intern_source_file() as u32;
+        self.symbols[id_idx].binding.decl_in_main_source = self.in_main_source();
         // C99 6.9.1p5: a definition names every parameter it declares.
         if params.indices.len() != params.types.len() {
             return Err(self.compile_err_at(
                 Code::INVALID_DECLARATION,
-                declarator_line,
+                def.line,
                 "parameter name omitted in a function definition",
             ));
         }
         self.parse_kr_parameter_declarations(&mut params)?;
-        self.symbols[id_idx].params = params.types.clone();
+        // C99 6.9.1p7: an identifier list is no prototype; calls pass what arrives.
+        let arrival = if params.form == super::function::ParamForm::IdentifierList {
+            self.old_style_arrival_tys(id_idx, &params.types)
+        } else {
+            params.types.clone()
+        };
+        let prototyped = self.has_prototype(id_idx, &params);
+        self.symbols[id_idx].unprototyped_def = !prototyped;
+        self.symbols[id_idx].prototyped = prototyped;
+        self.define_linked_function(id_idx, def, Params::of(&params, true))?;
+        self.symbols[id_idx].params = arrival.clone();
+        self.symbols[id_idx].param_enum_tags = params.enum_tags.clone();
 
         if self.lex.tk != '{' {
             return Err(self.compile_err(Code::SYNTAX, "bad function definition"));
@@ -1227,7 +1175,7 @@ impl Compiler {
         let ent_pc = self.open_function_body(id_idx, &params);
         self.copy_by_value_parameters(&params)?;
         self.parse_function_body_items()?;
-        self.finish_function_body(ent_pc, &params)?;
+        self.finish_function_body(ent_pc, &params, arrival)?;
         // The capture runs before the scope unwind restores the outer bindings.
         // DWARF 5 3.3.4 groups the DIEs by the subprogram's entry pc and locates
         // each at `fp_slot * 8`; slots 0 and 1 are the saved frame and return
@@ -1278,6 +1226,7 @@ impl Compiler {
             } else {
                 break;
             } | qual_bits;
+            let base_enum_tag = self.pending.base_enum_tag.take();
             while self.lex.tk != ';' && self.lex.tk != 0 {
                 let (decl_idx, mut decl_ty, decl_arr) = self.parse_declarator(base)?;
                 if decl_idx != usize::MAX {
@@ -1288,7 +1237,9 @@ impl Compiler {
                     }
                     if let Some(pos) = params.indices.iter().position(|&pi| pi == decl_idx) {
                         self.symbols[decl_idx].type_ = decl_ty;
+                        self.symbols[decl_idx].incomplete_enum_tag = base_enum_tag;
                         params.types[pos] = decl_ty;
+                        params.note_enum_tag(pos, base_enum_tag);
                     } else {
                         return Err(self.compile_err(
                             Code::INVALID_DECLARATION,
@@ -1321,6 +1272,8 @@ impl Compiler {
         self.current_func_returns_void = self.symbols[id_idx].returns_void;
         self.current_function_name = self.symbols[id_idx].name.clone();
         self.current_func_conv = self.symbols[id_idx].conv;
+        self.current_func_is_noreturn = self.symbols[id_idx].is_noreturn;
+        self.current_func_ret_fn = self.symbols[id_idx].ret_fn.clone();
 
         // Callers push right to left, so the i'th declared parameter sits at slot
         // i + 2 and the variadic tail follows it. A struct return through the
@@ -1351,6 +1304,7 @@ impl Compiler {
         self.array_temps.clear();
         self.func_over_aligned.clear();
         self.labels.clear();
+        self.jumps = super::jumps::Jumps::default();
         self.unresolved_gotos.clear();
         self.local_label_scopes.clear();
         self.func_local_addr_taken = false;
@@ -1453,6 +1407,23 @@ impl Compiler {
             // Symbol now points at the f32-storage local.
             self.symbols[idx].val = local_val;
         }
+
+        // A `long double` wider than `double` takes a local of the platform
+        // format the body reads. The callee fills it from the image the
+        // convention passes; under `ms_abi`, which has no image descriptor,
+        // it converts the binary64 the caller passes in one 8-byte cell.
+        if self.target.long_double() != crate::c5::codegen::LongDoubleKind::F64 {
+            for &idx in params.indices.iter() {
+                let pty = self.symbols[idx].type_;
+                if !super::types::is_long_double_scalar(pty) {
+                    continue;
+                }
+                let slots = self.slots_of_type(pty);
+                let local_val = self.reserve_object_slots(pty, slots)?;
+                self.record_multi_cell_temp(local_val, slots, pty);
+                self.symbols[idx].val = local_val;
+            }
+        }
         Ok(())
     }
 
@@ -1475,7 +1446,7 @@ impl Compiler {
         // The function body's top-level block scope for
         // `__attribute__((cleanup))` variables; cleaned on
         // fall-through (below) and on every `return`.
-        self.cleanup_scopes.push(alloc::vec::Vec::new());
+        self.open_cleanup_scope(false);
         // GCC local labels declared by the body's top-level
         // block; see `Compiler::resolve_label_name`.
         self.local_label_scopes.open();
@@ -1557,26 +1528,32 @@ impl Compiler {
         // Fall-through / implicit return: run the body's
         // top-level `__attribute__((cleanup))` functions in
         // reverse declaration order before the synthetic return.
-        if self.cleanup_scopes.last().is_some_and(|s| !s.is_empty()) {
-            let pending: alloc::vec::Vec<_> = self
-                .cleanup_scopes
-                .last()
-                .unwrap()
-                .iter()
-                .rev()
-                .cloned()
-                .collect();
-            for cv in pending {
-                let before = self.ast.stmts.len();
-                self.push_cleanup_call(&cv);
-                for id in before..self.ast.stmts.len() {
-                    top_level_ids.push(id as super::super::ast::StmtId);
-                }
+        for cv in self.innermost_cleanups() {
+            let before = self.ast.stmts.len();
+            self.push_cleanup_call(&cv);
+            for id in before..self.ast.stmts.len() {
+                top_level_ids.push(id as super::super::ast::StmtId);
             }
         }
+        self.resolve_jumps()?;
         self.cleanup_scopes.pop();
         self.tag_scopes.pop();
         self.local_label_scopes.close();
+        // The body's own objects end with it, as a nested block's do.
+        let mut slots: alloc::vec::Vec<i64> = self
+            .scope_bound
+            .iter()
+            .filter_map(|&i| self.lifetime_slot(i as usize))
+            .collect();
+        slots.sort_unstable();
+        slots.dedup();
+        if !slots.is_empty() {
+            let pos = self.ast_src_pos();
+            let end = self
+                .ast
+                .push_stmt(super::super::ast::Stmt::ScopeEnd(slots), pos);
+            top_level_ids.push(end);
+        }
         // Wrap the function's top-level stmts into a
         // Compound and pin it as `ast.body` so the
         // walker has a single tree root to descend
@@ -1592,6 +1569,7 @@ impl Compiler {
         &mut self,
         ent_pc: usize,
         params: &super::function::ParsedParams,
+        arrival_tys: Vec<i64>,
     ) -> Result<(), C5Error> {
         self.emit_dead_stores_and_flush();
         let n_params = params.indices.len();
@@ -1644,6 +1622,7 @@ impl Compiler {
             n_params,
             is_variadic,
             param_tys,
+            arrival_tys,
             param_local_slots,
             returns_struct_finish,
             return_struct_size_finish,
@@ -1718,9 +1697,9 @@ impl Compiler {
                     type_tag: sym.type_,
                     fp_slot: sym.val,
                     is_parameter,
-                    decl_line: sym.decl_line as u32,
+                    decl_line: sym.binding.decl_line as u32,
                     array_size,
-                    decl_file: sym.decl_file,
+                    decl_file: sym.binding.decl_file,
                     fn_ptr_indirection: sym.fn_ptr_indirection,
                     params: sym.params.clone(),
                     is_variadic: sym.is_variadic,
@@ -1729,7 +1708,7 @@ impl Compiler {
                     } else {
                         sym.array_dims.clone()
                     },
-                    decl_spelling: sym.decl_spelling,
+                    decl_spelling: sym.binding.decl_spelling,
                 });
             }
         }
@@ -1839,10 +1818,10 @@ impl Compiler {
             let i = bi as usize;
             let sym = &self.symbols[i];
             if sym.class != Token::Loc as i64
-                || !sym.decl_in_main_source
-                || sym.address_escaped
-                || sym.was_read
-                || sym.maybe_unused
+                || !sym.binding.decl_in_main_source
+                || sym.binding.address_escaped
+                || sym.binding.was_read
+                || sym.binding.maybe_unused
                 || sym.name.is_empty()
                 || sym.name.starts_with('_')
             {
@@ -1860,14 +1839,14 @@ impl Compiler {
             // `was_referenced` separates "never mentioned" from "mentioned, but every
             // mention was a write" -- the dead-store case. A parameter is written at
             // call entry, so it takes the unused-parameter diagnostic instead.
-            let kind = if sym.was_referenced && sym.was_written && !is_param {
+            let kind = if sym.binding.was_referenced && sym.binding.was_written && !is_param {
                 UnusedKind::ValueSet
             } else if is_param {
                 UnusedKind::Parameter
             } else {
                 UnusedKind::Variable
             };
-            unused.push((sym.decl_line, sym.name.clone(), kind));
+            unused.push((sym.binding.decl_line, sym.name.clone(), kind));
         }
         for (line, name, kind) in unused {
             let (code, msg) = match kind {
@@ -1926,6 +1905,17 @@ impl Compiler {
             ..
         } = b;
 
+        let zero_len = array_size < 0 && self.symbols[id_idx].is_zero_len_array;
+        let bounds = self.declared_bounds(id_idx, array_size, zero_len);
+        let spelled = Spelled {
+            ty,
+            enum_tag: decl.base_enum_tag,
+        };
+        self.declare_linked(
+            id_idx,
+            DeclaredType::Object(spelled, bounds),
+            signature_line,
+        )?;
         self.record_object_declaration(id_idx, static_seen, thread_local, was_tentative_glo);
         if self.bind_object_alias(id_idx, ty)? {
             return Ok(());
@@ -1978,6 +1968,7 @@ impl Compiler {
         // globals -- the per-target rebase ordering
         // needs design work.
         if array_size == -1 {
+            let initialized = self.lex.tk == Token::Assign;
             self.define_deferred_size_array(
                 id_idx,
                 ty,
@@ -1986,7 +1977,11 @@ impl Compiler {
                 extern_seen,
                 was_tentative_glo,
                 prior_array_size,
-            )
+            )?;
+            if initialized {
+                self.complete_linked_bound(id_idx);
+            }
+            Ok(())
         } else {
             self.define_sized_object(
                 id_idx,
@@ -2012,10 +2007,10 @@ impl Compiler {
         self.symbols[id_idx].class = Token::Glo as i64;
         // First declaration wins the source position, as it does
         // for functions; it feeds DW_AT_decl_file / decl_line.
-        if self.symbols[id_idx].decl_line == 0 {
-            self.symbols[id_idx].decl_line = self.lex.line;
-            self.symbols[id_idx].decl_file = self.intern_source_file() as u32;
-            self.symbols[id_idx].decl_in_main_source = self.in_main_source();
+        if self.symbols[id_idx].binding.decl_line == 0 {
+            self.symbols[id_idx].binding.decl_line = self.lex.line;
+            self.symbols[id_idx].binding.decl_file = self.intern_source_file() as u32;
+            self.symbols[id_idx].binding.decl_in_main_source = self.in_main_source();
         }
         if !was_tentative_glo {
             self.symbols[id_idx].is_thread_local = thread_local;
@@ -2694,7 +2689,8 @@ impl Compiler {
             }
         } else {
             let cl_parens = core::mem::take(&mut self.pending.compound_lit_close_parens);
-            self.parse_global_initializer(ty, var_offset, thread_local)?;
+            let target_fn = self.object_fn_type(id_idx);
+            self.parse_global_initializer(ty, var_offset, thread_local, &target_fn)?;
             for _ in 0..cl_parens {
                 self.accept(')')?;
             }
@@ -2751,7 +2747,7 @@ impl Compiler {
                     format!("alias target `{target}` is not {kind} defined in this unit"),
                 ));
             };
-            self.symbols[tgt].was_referenced = true;
+            self.symbols[tgt].binding.was_referenced = true;
             if !is_object && self.symbols[id_idx].is_weak {
                 let name = self.symbols[id_idx].link_name().into();
                 self.function_aliases
@@ -2904,8 +2900,8 @@ impl Compiler {
                 // An inline definition is internal but externally
                 // declared; another unit may still call the name.
                 || sym.is_inline_definition
-                || sym.was_referenced
-                || !sym.decl_in_main_source
+                || sym.binding.was_referenced
+                || !sym.binding.decl_in_main_source
                 || sym.name.is_empty()
                 || sym.name.starts_with('_')
                 || sym.name == "main"
@@ -2914,7 +2910,7 @@ impl Compiler {
             {
                 continue;
             }
-            unused.push((sym.decl_line, sym.name.clone()));
+            unused.push((sym.binding.decl_line, sym.name.clone()));
         }
         for (line, name) in unused {
             self.warn_at(
@@ -2978,6 +2974,9 @@ impl Compiler {
         }
         if self.pending.attr_no_instrument {
             self.symbols[id_idx].no_instrument_function = true;
+        }
+        if self.pending.attr_no_stack_protector {
+            self.symbols[id_idx].no_stack_protector = true;
         }
         if self.pending_is_noinline {
             self.symbols[id_idx].is_noinline = true;

@@ -71,8 +71,13 @@ pub(crate) struct Symbol {
     /// True if the function accepts trailing varargs (e.g. `printf`).
     /// Type-checking only verifies the fixed parameters.
     pub is_variadic: bool,
+    /// `FnParams::prototyped` of the function type `params` belongs to.
+    pub prototyped: bool,
+    /// `FnParams::enum_tags` of the function type `params` belongs to.
+    pub param_enum_tags: Vec<(usize, u32)>,
 
-    /// Shadow slots for `params` / `is_variadic`. See `h_array_size`:
+    /// Shadow slots for `params` / `is_variadic` / `prototyped` /
+    /// `param_enum_tags`. See `h_array_size`:
     /// a function-pointer parameter, block-scope local, or block-scope
     /// typedef that reuses an outer function name writes its own
     /// prototype onto the shared symbol slot; without the save the
@@ -81,6 +86,8 @@ pub(crate) struct Symbol {
     /// ABI.
     pub h_params: Vec<i64>,
     pub h_is_variadic: bool,
+    pub h_prototyped: bool,
+    pub h_param_enum_tags: Vec<(usize, u32)>,
     /// Calling convention of the function this symbol names, or of the
     /// function a function-pointer object points to
     /// (`__attribute__((ms_abi))` / `((sysv_abi))`). Already normalised
@@ -181,6 +188,10 @@ pub(crate) struct Symbol {
     /// `__attribute__((no_instrument_function))` seen on any declaration
     /// of the name: `-pg` emits no profiling call in the body.
     pub no_instrument_function: bool,
+
+    /// `__attribute__((no_stack_protector))` seen on any declaration of
+    /// the name: `-fstack-protector*` gives the body no canary.
+    pub no_stack_protector: bool,
 
     /// `__attribute__((noinline))` seen on any declaration of the name.
     /// Sticky like `is_constructor`: gcc binds the attribute to the
@@ -295,10 +306,6 @@ pub(crate) struct Symbol {
     /// Shadow slot for `is_zero_len_array`. See `h_array_size`.
     pub h_is_zero_len_array: bool,
 
-    /// How the declaration spelled the type; see [`DeclSpelling`].
-    /// Debug info only.
-    pub decl_spelling: DeclSpelling,
-
     /// True for a `const`-qualified plain integer object with static
     /// storage (`static const int N = ...`, a file-scope `const`). C99 6.6
     /// does not make it a constant expression, but GCC and common practice
@@ -387,6 +394,11 @@ pub(crate) struct Symbol {
     pub fn_ptr_ret_indirection: i64,
     /// Scope-restore shadow for `fn_ptr_ret_indirection`.
     pub h_fn_ptr_ret_indirection: i64,
+    /// `FnType::ret` of the function this symbol names or points to: the
+    /// function type a call's result points to.
+    pub ret_fn: Option<(alloc::boxed::Box<FnType>, i64)>,
+    /// Scope-restore shadow for `ret_fn`.
+    pub h_ret_fn: Option<(alloc::boxed::Box<FnType>, i64)>,
     /// True for a typedef of a function TYPE (`typedef RET F(args)`),
     /// as opposed to a function POINTER (`typedef RET (*F)(args)`). The
     /// type encoding pre-decays both to a function pointer (`RET` plus
@@ -402,6 +414,10 @@ pub(crate) struct Symbol {
     /// and by the fall-off diagnostic, which such a function never takes.
     pub returns_void: bool,
 
+    /// Set on a function defined with an empty or identifier list and no
+    /// prototype before it, whose type then has none (C99 6.9.1p7).
+    pub unprototyped_def: bool,
+
     /// Set on a `Token::Typedef` symbol whose alias chain ends
     /// at the bare `void` keyword. Because `void` and
     /// `unsigned char` share the same type encoding, the
@@ -410,11 +426,12 @@ pub(crate) struct Symbol {
     /// `int f(BYTE)` (one byte-typed parameter).
     pub is_void_typedef: bool,
 
-    /// True for a typedef whose base type is an `enum`. The base
-    /// collapses to `int`, but an enum bitfield reads as unsigned, so
-    /// a field declared with this typedef plus a bitfield width needs
-    /// the unsigned (zero-extending) extraction.
-    pub is_enum_typedef: bool,
+    /// The enum tag `type_` was spelled through while the tag had no
+    /// definition: `type_` holds the `int` placeholder, which the
+    /// definition rewrites (C99 6.7.2.2p4).
+    pub incomplete_enum_tag: Option<u32>,
+    /// Scope-restore shadow for `incomplete_enum_tag`.
+    pub h_incomplete_enum_tag: Option<u32>,
 
     /// Explicit alignment (bytes) a typedef's type carries from a GNU
     /// `__attribute__((aligned(N)))` type attribute, or 0 for the
@@ -449,6 +466,15 @@ pub(crate) struct Symbol {
     /// another translation unit -- those become undefined-symbol
     /// references in the link-unit symbol table.
     pub defined_here: bool,
+
+    /// True for a `Token::Glo` this unit defined whose storage data
+    /// compaction dropped because no live code reached it. The record
+    /// stays so the AST's symbol indices hold; `defined_here` is
+    /// cleared so no writer places it. The parse-time facts about the
+    /// object stand: its address is still an address constant that is
+    /// not null (C99 6.6), which is what folded away every reference
+    /// to it in the first place.
+    pub storage_dropped: bool,
 
     /// True for a file-scope declaration that explicitly carried
     /// the `extern` storage-class keyword. Combined with
@@ -553,6 +579,24 @@ pub(crate) struct Symbol {
     /// expression, matching gcc / clang).
     pub is_compound_literal: bool,
 
+    /// Set beside `is_compound_literal` for the array of a string literal,
+    /// which has static storage duration wherever it appears (C99 6.4.5p5).
+    pub is_string_literal: bool,
+
+    /// The current binding's declaration site and uses.
+    pub binding: BindingInfo,
+    /// Shadow slot for `binding` (see `h_class`).
+    pub h_binding: BindingInfo,
+}
+
+/// One binding of a name: its declaration site and its uses. Each binding
+/// starts with a fresh one and gives it up at its scope's exit.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct BindingInfo {
+    /// How the declaration spelled the type; see [`DeclSpelling`].
+    /// Debug info only.
+    pub decl_spelling: DeclSpelling,
+
     /// True once the parser has emitted any reference to this
     /// symbol after its declaration -- a read, a write, an
     /// address-of, or a decay. Set by the expression parser's
@@ -630,6 +674,42 @@ pub(crate) struct Symbol {
     /// and dead-store diagnostics for this symbol, matching the
     /// documented effect of the attribute.
     pub maybe_unused: bool,
+}
+
+impl BindingInfo {
+    pub(crate) fn absorb_uses(&mut self, inner: &BindingInfo) {
+        self.was_referenced |= inner.was_referenced;
+        self.was_read |= inner.was_read;
+        self.was_written |= inner.was_written;
+        self.address_escaped |= inner.address_escaped;
+    }
+}
+
+/// A function type's parameter information (C99 6.7.5.3p14).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub(crate) struct FnParams {
+    /// Parameter types, empty when the type declares none.
+    pub types: Vec<i64>,
+    pub variadic: bool,
+    /// The type includes a prototype (C99 6.7.5.3p14). An old-style
+    /// definition has none (6.9.1p7), yet `types` lists the promoted types
+    /// a call passes; a type no declaration gave a list has none either.
+    pub prototyped: bool,
+    /// Positions an enum tag with no definition yet spelled: their types
+    /// hold the `int` placeholder, which the definition rewrites.
+    pub enum_tags: Vec<(usize, u32)>,
+}
+
+/// The part of a function type its `i64` tag, the return type's, leaves
+/// out: what a call converts its arguments to (C99 6.5.2.2p7) and passes
+/// them by, and the function type a returned pointer points to.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub(crate) struct FnType {
+    pub params: FnParams,
+    pub conv: crate::c5::codegen::CallConv,
+    /// The function type the returned value points to, and the pointer
+    /// levels from the value down to it (1 for a pointer to function).
+    pub ret: Option<(alloc::boxed::Box<FnType>, i64)>,
 }
 
 /// Recorded initializer value of a block-scope `const` scalar arithmetic
@@ -726,6 +806,24 @@ pub fn inline_definition(sym: &Symbol, model: InlineModel) -> bool {
 }
 
 impl Symbol {
+    /// The parameter information of the function type this symbol names or
+    /// points to.
+    pub(crate) fn fn_params(&self) -> FnParams {
+        FnParams {
+            types: self.params.clone(),
+            variadic: self.is_variadic,
+            prototyped: self.prototyped,
+            enum_tags: self.param_enum_tags.clone(),
+        }
+    }
+
+    pub(crate) fn set_fn_params(&mut self, p: FnParams) {
+        self.params = p.types;
+        self.is_variadic = p.variadic;
+        self.prototyped = p.prototyped;
+        self.param_enum_tags = p.enum_tags;
+    }
+
     /// Assembler symbol name: the GNU asm label when the declaration
     /// set one, otherwise the C identifier. Every emitted symbol,
     /// relocation and export uses this; `name` is the identifier.
@@ -782,8 +880,12 @@ impl crate::c5::layout::DataOffsets for Symbol {
             h_val: _, // scope-restore shadow; every scope is unwound before a `Program` exists
             params: _,
             is_variadic: _,
+            prototyped: _,
+            param_enum_tags: _,
             h_params: _,
             h_is_variadic: _,
+            h_prototyped: _,
+            h_param_enum_tags: _,
             conv: _,
             h_conv: _,
             implicit_return_int: _,
@@ -802,6 +904,7 @@ impl crate::c5::layout::DataOffsets for Symbol {
             section_name,
             patchable_function_entry: _,
             no_instrument_function: _,
+            no_stack_protector: _,
             is_noinline: _,
             is_constructor: _,
             is_destructor: _,
@@ -823,7 +926,6 @@ impl crate::c5::layout::DataOffsets for Symbol {
             h_vla_size_slot: _,
             is_zero_len_array: _,
             h_is_zero_len_array: _,
-            decl_spelling: _, // debug-info spelling, not an offset
             is_const_qualified: _,
             h_is_const_qualified: _,
             const_object_value: _,
@@ -837,14 +939,19 @@ impl crate::c5::layout::DataOffsets for Symbol {
             h_fn_ptr_indirection: _,
             fn_ptr_ret_indirection: _,
             h_fn_ptr_ret_indirection: _,
+            ret_fn: _,
+            h_ret_fn: _,
             is_function_type: _,
             returns_void: _,
+            unprototyped_def: _,
             is_void_typedef: _,
-            is_enum_typedef: _,
+            incomplete_enum_tag: _,
+            h_incomplete_enum_tag: _,
             type_align: _,
             h_type_align: _,
             linkage: _,
             defined_here,
+            storage_dropped,
             is_extern_decl: _,
             h_is_extern_decl: _,
             saw_noninline_decl: _,
@@ -863,15 +970,9 @@ impl crate::c5::layout::DataOffsets for Symbol {
             static_local_record: _,
             h_static_local_record: _, // scope-restore shadow
             is_compound_literal: _,
-            was_referenced: _,
-            was_read: _,
-            was_written: _,
-            address_escaped: _,
-            pending_stores: _,
-            decl_line: _,
-            decl_file: _,
-            decl_in_main_source: _,
-            maybe_unused: _,
+            is_string_literal: _,
+            binding: _, // declaration site and uses, not an offset
+            h_binding: _,
         } = self;
         if *class != crate::c5::token::Token::Glo as i64
             || !*defined_here
@@ -887,6 +988,7 @@ impl crate::c5::layout::DataOffsets for Symbol {
             // places or carves it.
             None => {
                 *defined_here = false;
+                *storage_dropped = true;
                 *is_used = false;
                 *section_name = None;
                 *val = 0;

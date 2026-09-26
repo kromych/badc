@@ -21,13 +21,12 @@ Disassembly of section .text:
                	ret
 
 <main>:
-               	stp	x20, x21, [sp, #-0x20]!
+               	str	x20, [sp, #-0x20]!
                	stp	x29, x30, [sp, #0x10]
                	add	x29, sp, #0x10
-               	mov	x21, #0x6789            // =26505
-               	movk	x21, #0x2345, lsl #16
-               	movk	x21, #0x1, lsl #32
-               	mov	x0, x21
+               	mov	x0, #0x6789             // =26505
+               	movk	x0, #0x2345, lsl #16
+               	movk	x0, #0x1, lsl #32
                	bl	<addr>
                	mov	x20, x0
                	mov	x0, #0x7890             // =30864
@@ -35,7 +34,10 @@ Disassembly of section .text:
                	movk	x0, #0x12, lsl #32
                	bl	<addr>
                	mov	x2, x0
-               	cmp	x20, x21
+               	mov	x0, #0x6789             // =26505
+               	movk	x0, #0x2345, lsl #16
+               	movk	x0, #0x1, lsl #32
+               	cmp	x20, x0
                	b.eq	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
@@ -43,7 +45,7 @@ Disassembly of section .text:
                	bl	<addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0x20
+               	ldr	x20, [sp], #0x20
                	ret
                	mov	x17, #0x7891            // =30865
                	movk	x17, #0x3456, lsl #16
@@ -56,7 +58,7 @@ Disassembly of section .text:
                	bl	<addr>
                	mov	x0, #0x2                // =2
                	ldp	x29, x30, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0x20
+               	ldr	x20, [sp], #0x20
                	ret
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
@@ -64,5 +66,5 @@ Disassembly of section .text:
                	bl	<addr>
                	mov	x0, #0x0                // =0
                	ldp	x29, x30, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0x20
+               	ldr	x20, [sp], #0x20
                	ret

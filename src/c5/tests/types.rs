@@ -492,7 +492,7 @@ fn cast_silences_int_to_pointer_warning() {
 
 #[test]
 fn warn_call_arity_mismatch() {
-    // `int add(int, int);` called with 1 arg and with 4 args.
+    // An old-style definition of `add(a, b)` called with 1 argument and with 4.
     let p = compile_fixture("type_warning_arity.c");
     assert!(
         p.warnings
@@ -510,21 +510,140 @@ fn warn_call_arity_mismatch() {
     );
 }
 
+/// C99 6.5.2.2p2: a call to a function whose type includes a prototype
+/// passes as many arguments as it has parameters, at least as many when it
+/// is variadic, whether the callee is named or reached through a pointer.
+/// An old-style definition's count binds no constraint (6.9.1p7), so a call
+/// past it warns; a declaration without a prototype is not checked.
+#[test]
+fn a_call_with_a_count_other_than_the_prototypes_is_rejected() {
+    use crate::Compiler;
+    let decls = "int i1(int x) { return x; }\n\
+                 int iv(void) { return 0; }\n\
+                 int ivar(int x, ...) { return x; }\n\
+                 int kr(a) int a; { return a; }\n\
+                 int ke() { return 0; }\n\
+                 int iu();\n\
+                 int (*get(void))(int) { return i1; }\n\
+                 struct s { int (*m)(int); int (*v)(void); int (*u)(); } s = { i1, iv, i1 };\n\
+                 int (*arr[2])(int) = { i1, i1 };\n\
+                 int (*fp)(int) = i1, (*vp)(int, ...) = ivar;\n";
+    let compile = |call: &str| {
+        let src = format!("{decls}int main(void) {{ return {call}; }}\nint iu() {{ return 0; }}\n");
+        (Compiler::new(src.clone()).compile(), src)
+    };
+    for (call, text) in [
+        (
+            "i1(1, 2)",
+            "too many arguments to `i1` (expected 1, got at least 2)",
+        ),
+        ("i1()", "too few arguments to `i1` (expected 1, got 0)"),
+        (
+            "iv(1)",
+            "too many arguments to `iv` (expected 0, got at least 1)",
+        ),
+        (
+            "ivar()",
+            "too few arguments to `ivar` (expected at least 1, got 0)",
+        ),
+        (
+            "fp(1, 2)",
+            "too many arguments to `fp` (expected 1, got at least 2)",
+        ),
+        (
+            "(*fp)(1, 2)",
+            "too many arguments to function call (expected 1, got 2)",
+        ),
+        (
+            "(*vp)()",
+            "too few arguments to function call (expected at least 1, got 0)",
+        ),
+        (
+            "s.m()",
+            "too few arguments to function call (expected 1, got 0)",
+        ),
+        (
+            "s.v(1)",
+            "too many arguments to function call (expected 0, got 1)",
+        ),
+        (
+            "arr[1](1, 2)",
+            "too many arguments to function call (expected 1, got 2)",
+        ),
+        (
+            "get()(1, 2)",
+            "too many arguments to function call (expected 1, got 2)",
+        ),
+    ] {
+        let (r, src) = compile(call);
+        let err = r.expect_err(&src).to_string();
+        assert!(err.contains(&format!("{text} [B3023]")), "{src}{err}");
+    }
+    for (call, text) in [
+        (
+            "kr(1, 2)",
+            Some("too many arguments to `kr` (expected 1, got at least 2) [B3005]"),
+        ),
+        (
+            "kr()",
+            Some("too few arguments to `kr` (expected 1, got 0) [B3004]"),
+        ),
+        (
+            "ke(1)",
+            Some("too many arguments to `ke` (expected 0, got at least 1) [B3005]"),
+        ),
+        ("iu(1, 2)", None),
+        ("s.u(1, 2)", None),
+        ("(*vp)(1, 2.0, 3)", None),
+    ] {
+        let (r, src) = compile(call);
+        let program = r.unwrap_or_else(|e| panic!("{src}{e}"));
+        let warnings: alloc::vec::Vec<_> = program.warnings.iter().map(|w| w.to_string()).collect();
+        match text {
+            Some(t) => assert!(warnings.iter().any(|w| w.contains(t)), "{src}{warnings:?}"),
+            None => assert!(
+                !warnings.iter().any(|w| w.contains("arguments")),
+                "{src}{warnings:?}"
+            ),
+        }
+    }
+}
+
 #[test]
 fn redeclaration_without_parameters_keeps_the_prototype() {
     // C99 6.2.7p4: the composite type keeps the parameter type list a
     // prior declaration or definition established, so a call past it is
-    // still checked after a redeclaration through the function's own
-    // type or through the empty-list spelling.
-    let p = compile_fixture("redecl_composite_arity_warning.c");
-    for name in ["take_wrap", "add2"] {
+    // still checked (6.5.2.2p2) after a redeclaration through the
+    // function's own type, the empty-list spelling, or a function-type
+    // typedef with one.
+    use crate::Compiler;
+    for (decls, call) in [
+        (
+            "typedef struct { unsigned val; } wrap;\n\
+             unsigned take_wrap(wrap w);\n\
+             unsigned take_wrap(wrap w) { return w.val; }\n\
+             extern typeof(take_wrap) take_wrap;\n",
+            "wrap w = {1u}; return (int)take_wrap(w, 1u, 2u);",
+        ),
+        (
+            "unsigned add2(unsigned a, unsigned b) { return a + b; }\nunsigned add2();\n",
+            "return (int)add2(1u, 2u, 3u);",
+        ),
+        (
+            "typedef unsigned noproto_fn();\n\
+             unsigned add3(unsigned a, unsigned b, unsigned c) { return a + b + c; }\n\
+             extern noproto_fn add3;\n",
+            "return (int)add3(1u, 2u, 3u, 4u);",
+        ),
+    ] {
+        let src = format!("{decls}int main(void) {{ {call} }}\n");
+        let err = Compiler::new(src.clone())
+            .compile()
+            .expect_err(&src)
+            .to_string();
         assert!(
-            p.warnings
-                .iter()
-                .any(|w| w.to_string().contains("too many arguments")
-                    && w.to_string().contains(name)),
-            "expected a too-many warning for `{name}`, got: {:?}",
-            p.warnings
+            err.contains("too many arguments") && err.contains("[B3023]"),
+            "{src}{err}"
         );
     }
 }
@@ -571,14 +690,13 @@ fn typeof_redeclaration_merges_with_the_recorded_prototype() {
         let src = alloc::format!(
             "typedef struct {{ int val; }} kuid_t;\n{body}int main(void) {{ return 0; }}\n"
         );
-        let p = compile_str(&src);
+        let err = crate::Compiler::new(src.clone())
+            .compile()
+            .expect_err(&src)
+            .to_string();
         assert!(
-            p.warnings
-                .iter()
-                .any(|w| w.to_string().contains("too many arguments")
-                    && w.to_string().contains("inner")),
-            "expected an arity warning past the redeclaration, got: {:?}",
-            p.warnings
+            err.contains("too many arguments to `inner`"),
+            "expected the prototype's count past the redeclaration: {src}{err}"
         );
     }
 }
@@ -677,6 +795,81 @@ fn warn_unused_variable_parameter_function() {
     );
 }
 
+/// A binding starts with no uses and the outer one keeps its own: `n` is
+/// unused in `second` and ends no lifetime there, the outer `k` stays unread.
+#[test]
+fn a_binding_starts_with_no_uses() {
+    use crate::c5::ir::Inst;
+    let src = "void g(int *p);\n\
+               int first(void) { int n = 1; g(&n); return n; }\n\
+               void second(void) { { int n = 2; } }\n\
+               int third(void) {\n\
+                   int k = 1;\n\
+                   { int k = 2; return k; }\n\
+               }\n\
+               int main(void) { return 0; }\n";
+    let p = super::compile_str_bare_with_diags(src, &["all"]);
+    let unused: alloc::vec::Vec<(u32, &str)> = p
+        .warnings
+        .iter()
+        .filter(|w| w.text.starts_with("unused variable"))
+        .map(|w| (w.loc.as_ref().map_or(0, |l| l.line), w.text.as_str()))
+        .collect();
+    assert_eq!(
+        unused,
+        [(3, "unused variable `n`"), (5, "unused variable `k`")],
+        "{:?}",
+        p.warnings
+    );
+    let mut k_lines: alloc::vec::Vec<u32> = p
+        .variables
+        .iter()
+        .filter(|v| v.name == "k")
+        .map(|v| v.decl_line)
+        .collect();
+    k_lines.sort_unstable();
+    assert_eq!(k_lines, [5, 6]);
+    let funcs =
+        crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&p, crate::Target::host(), false, true)
+            .expect("ssa");
+    let second = funcs.iter().find(|f| f.name == "second").expect("second");
+    assert!(
+        !second
+            .insts
+            .iter()
+            .any(|i| matches!(i, Inst::LifetimeEnd(_))),
+        "no address of `n` is taken in `second`: {:?}",
+        second.insts
+    );
+}
+
+/// A local named like a static function keeps its uses apart from the
+/// function's; a call through a block-scope declaration uses the function.
+#[test]
+fn a_local_named_like_a_static_function_keeps_its_uses_apart() {
+    let src = "static int helper(void) { return 1; }\n\
+               int a(void) { return helper(); }\n\
+               int b(void) { int helper = 0; return 0; }\n\
+               static int lonely(void) { return 2; }\n\
+               int c(void) { int lonely = 3; return lonely; }\n\
+               static int hidden(void) { return 4; }\n\
+               int d(void) { { int hidden(void); return hidden(); } }\n\
+               int main(void) { return 0; }\n";
+    let p = super::compile_str_bare_with_diags(src, &["all"]);
+    let unused: alloc::vec::Vec<&str> = p
+        .warnings
+        .iter()
+        .filter(|w| w.text.starts_with("unused"))
+        .map(|w| w.text.as_str())
+        .collect();
+    assert_eq!(
+        unused,
+        ["unused variable `helper`", "unused function `lonely`"],
+        "{:?}",
+        p.warnings
+    );
+}
+
 /// Per-store dead-store analysis: when `-Wdead-store` is on, each
 /// store whose value never reaches a read fires a `dead store:
 /// value assigned to X is never read` diagnostic at the store's
@@ -706,11 +899,16 @@ fn warn_dead_store_per_store_when_enabled() {
         "expected two dead-store warnings on `a` (initializer + a = 2;), got: {:?}",
         dead
     );
-    // No false positives: branch-straddling, self-referencing
-    // RHS, and address-escape cases must not fire.
+    let e_warns = dead.iter().filter(|w| w.contains("`e`")).count();
+    assert_eq!(
+        e_warns, 2,
+        "expected two dead-store warnings on `e`, got: {dead:?}"
+    );
+    // No false positives: branch-straddling, self-referencing RHS,
+    // address-escape and shadowed-binding cases must not fire.
     for w in &dead {
         assert!(
-            !w.contains("`b`") && !w.contains("`c`") && !w.contains("`d`"),
+            !["`b`", "`c`", "`d`", "`f`"].iter().any(|n| w.contains(n)),
             "unexpected dead-store warning: {w}"
         );
     }
@@ -1332,6 +1530,695 @@ fn vector_type_alignment_follows_the_target_abi() {
     }
 }
 
+/// Whether an unnamed bit-field's declared type raises the aggregate's
+/// alignment is the ABI's (C99 6.7.2.1p11): AAPCS64 counts it, the x86_64
+/// psABI and Apple's arm64 ABI do not. The values are gcc 16's on Linux
+/// x86_64 and AArch64 and Apple clang 21's on macOS arm64.
+#[test]
+fn unnamed_bitfield_alignment_follows_the_target_abi() {
+    use super::Vm;
+    use crate::{Compiler, Target};
+    const SHAPES: [&str; 8] = [
+        "struct { char c; unsigned : 1; }",
+        "struct { char c; int : 4; char d; }",
+        "struct { char c; long long : 3; }",
+        "struct { char c; int : 0; char d; }",
+        "struct { short s; long long : 20; char d; }",
+        "struct { unsigned char a; unsigned int : 0; unsigned char b; } __attribute__((packed))",
+        "union { char c; unsigned : 3; }",
+        "struct { char c; unsigned x : 3; unsigned : 3; }",
+    ];
+    // `sizeof * 100 + _Alignof` per shape.
+    const SYSV: [i64; 8] = [201, 301, 201, 501, 602, 501, 101, 404];
+    const AAPCS64: [i64; 8] = [404, 404, 808, 804, 808, 804, 404, 404];
+    for (t, want) in [
+        (Target::LinuxX64, SYSV),
+        (Target::MacOSAarch64, SYSV),
+        (Target::LinuxAarch64, AAPCS64),
+    ] {
+        for (shape, want) in SHAPES.iter().zip(want) {
+            let src = alloc::format!(
+                "typedef {shape} T;\n\
+                 int main(void) {{ return (int)(sizeof(T) * 100 + _Alignof(T)); }}"
+            );
+            let got = Vm::new(Compiler::with_target(src, t).compile().unwrap())
+                .run()
+                .unwrap();
+            assert_eq!(got, want, "{t:?}: {shape}");
+        }
+    }
+}
+
+/// The PE targets lay bit-fields out by the MS rules: a storage unit of the
+/// declared type, shared only by adjacent bit-fields whose type has the same
+/// size, with `#pragma pack` and `packed` lowering where a unit may start.
+/// A row is `pack|declaration|size/alignment|member@bit ...`, the bit being
+/// the member's lowest one, as clang 21 lays the shape out for both
+/// `x86_64-pc-windows-msvc` and `aarch64-pc-windows-msvc`; MSVC 14.44 agrees
+/// on every row without a GNU attribute.
+#[test]
+fn bitfields_take_the_ms_layout_on_pe_targets() {
+    use crate::Target;
+    const SHAPES: &[&str] = &[
+        "|struct { char c; unsigned :1; }|8/4|c@0",
+        "|struct { char c; int :4; char d; }|12/4|c@0 d@64",
+        "|struct { char c; long long :3; }|16/8|c@0",
+        "|struct { char c; int :0; char d; }|2/1|c@0 d@8",
+        "|struct { unsigned :1; char c; }|8/4|c@32",
+        "|struct { short s; long long :20; char d; }|24/8|s@0 d@128",
+        "|struct { char c; unsigned b:1; }|8/4|c@0 b@32",
+        "|struct { char c; int b:4; char d; }|12/4|c@0 b@32 d@64",
+        "|struct { char c; long :1; }|8/4|c@0",
+        "|struct { char c; unsigned x:3; unsigned :3; char d; }|12/4|c@0 x@32 d@64",
+        "|struct { char a:4; int b:4; }|8/4|a@0 b@32",
+        "|struct { int a:4; char b:4; }|8/4|a@0 b@32",
+        "|struct { short a:4; unsigned short b:4; }|2/2|a@0 b@4",
+        "|struct { int a:4; long b:4; }|4/4|a@0 b@4",
+        "|struct { int a:30; int b:30; }|8/4|a@0 b@32",
+        "|struct { int a:32; int b:1; }|8/4|a@0 b@32",
+        "|struct { char c; int x:3; int :0; char d; }|12/4|c@0 x@32 d@64",
+        "|struct { int x:3; long long :0; char d; }|16/8|x@0 d@64",
+        "|struct { int x:3; char :0; char d; }|8/4|x@0 d@32",
+        "|struct { int x:3; int :0; int y:3; }|8/4|x@0 y@32",
+        "|struct { int x:3; int :0; int :0; int y:3; }|8/4|x@0 y@32",
+        "|struct { char c; int :0; int x:3; }|8/4|c@0 x@32",
+        "|struct { _Bool a:1; char b:3; }|1/1|a@0 b@1",
+        "|struct { enum E { E0, E1 } e:2; int x:3; }|4/4|e@0 x@2",
+        "|struct { unsigned char a:3; unsigned char b:6; }|2/1|a@0 b@8",
+        "|struct { long long a:40; long long b:30; }|16/8|a@0 b@64",
+        "|struct { char c; long long a:1; char d; }|24/8|c@0 a@64 d@128",
+        "|struct { char c; struct { int x:3; }; char d; }|12/4|c@0 x@32 d@64",
+        "|struct { int x:3; struct { char y; }; int z:3; }|12/4|x@0 y@32 z@64",
+        "|struct { int x:3; struct { char y; } n; int z:3; }|12/4|x@0 n.y@32 z@64",
+        "|struct { char c; __attribute__((aligned(8))) int b:4; }|16/8|c@0 b@64",
+        "|union { char c; unsigned :3; }|4/1|c@0",
+        "|union { char c; unsigned :0; }|1/1|c@0",
+        "|union { char c; int x:3; }|4/1|c@0 x@0",
+        "|union { int x:3; long long y:40; }|8/1|x@0 y@0",
+        "|union { short s; long long y:40; }|8/2|s@0 y@0",
+        "|union { int x:3; unsigned :0; }|4/1|x@0",
+        "1|struct { char c; unsigned :1; }|5/1|c@0",
+        "1|struct { char c; int :12; char d; }|6/1|c@0 d@40",
+        "1|struct { int a:30; int b:30; }|8/1|a@0 b@32",
+        "1|struct { char c; int a:15; short s; }|7/1|c@0 a@8 s@40",
+        "1|struct { char c; long long a:60; char d; }|10/1|c@0 a@8 d@72",
+        "1|struct { char c; int x:3; int :0; char d; }|6/1|c@0 x@8 d@40",
+        "2|struct { char c; int a:30; int b:30; }|10/2|c@0 a@16 b@48",
+        "2|struct { char c; long long a:1; char d; }|12/2|c@0 a@16 d@80",
+        "4|struct { char c; long long a:1; char d; }|16/4|c@0 a@32 d@96",
+        "|struct __attribute__((packed)) { char c; int b:4; char d; }|6/1|c@0 b@8 d@40",
+        "|struct { unsigned char a; unsigned int :0; unsigned char b; } __attribute__((packed))|2/1|a@0 b@8",
+        "|struct { char c; int a:15; short s; } __attribute__((packed))|7/1|c@0 a@8 s@40",
+        "|struct { char c; int x:3; int :0; char d; } __attribute__((packed))|6/1|c@0 x@8 d@40",
+        "|struct { char c; int b:4; int m __attribute__((aligned(8))); } __attribute__((packed))|16/8|c@0 b@8 m@64",
+        "|union { char c; int x:3; } __attribute__((packed))|4/1|c@0 x@0",
+        "1|struct { int x:3; long long :0; char d; }|5/1|x@0 d@32",
+        "|struct { char c; int :0; }|1/1|c@0",
+        "|struct { int :3; }|4/4|",
+        "1|struct { char c; struct { int x:3; }; char d; }|6/1|c@0 x@8 d@40",
+        "|struct { char a:4; char :0; char b:4; }|2/1|a@0 b@8",
+        "|struct { long long a:3; int b:3; char c:3; }|16/8|a@0 b@64 c@96",
+    ];
+    layout_rows_hold("", SHAPES, &[Target::WindowsX64, Target::WindowsAarch64]);
+}
+
+/// The MS layout lowers only a member's natural alignment for `#pragma
+/// pack` and `packed`: an alignment the member or its type asks for, by
+/// `__declspec(align)` or `aligned`, stands, and it raises the aggregate. A
+/// typedef's own alignment neither lowers the member below its type's nor
+/// yields to the pack value. GCC's rule, which the other targets keep, packs
+/// the requested alignment too. The rows are clang 21's record layouts for
+/// both windows-msvc triples and for x86_64-linux-gnu, the latter only where
+/// the two rules part.
+#[test]
+fn explicit_alignment_survives_packing_in_the_ms_layout() {
+    use crate::Target;
+    const PRELUDE: &str = "typedef __declspec(align(8)) int i8;\n\
+        typedef int __attribute__((aligned(1))) i1;\n\
+        typedef struct __declspec(align(8)) al8 { char a; } ali8;\n";
+    const MS: &[&str] = &[
+        "1|struct { char c; int m __attribute__((aligned(8))); }|16/8|c@0 m@64",
+        "1|struct { char c; __declspec(align(8)) int m; }|16/8|c@0 m@64",
+        "2|struct { char c; int m __attribute__((aligned(4))); }|8/4|c@0 m@32",
+        "1|struct { char c; int m __attribute__((aligned(2))); }|6/2|c@0 m@16",
+        "1|struct { char c; long long d; }|9/1|c@0 d@8",
+        "4|struct { char c; long long x; }|12/4|c@0 x@32",
+        "4|struct { char c; __declspec(align(16)) long long m; }|32/16|c@0 m@128",
+        "|struct { char c; int m __attribute__((aligned(8))); } __attribute__((packed))|16/8|c@0 m@64",
+        "|struct { char c; int m __attribute__((aligned(2))); } __attribute__((packed))|6/2|c@0 m@16",
+        "|struct __attribute__((packed)) { char c; int m __attribute__((aligned(8))); char d; }|16/8|c@0 m@64 d@96",
+        "1|struct { char c; struct { int x; } __attribute__((aligned(8))) m; }|16/8|c@0 m.x@64",
+        "1|struct { char c; struct { char a; __declspec(align(16)) int b; } m; char t; }|64/16|c@0 m.a@128 m.b@256 t@384",
+        "|struct { char h; struct { char a; int b; } __attribute__((aligned(8))) m; char t; } __attribute__((packed))|24/8|h@0 m.a@64 m.b@96 t@128",
+        "|struct { char h; struct { char a; int b __attribute__((aligned(16))); } m; char t; } __attribute__((packed))|64/16|h@0 m.a@128 m.b@256 t@384",
+        "2|struct { char c; __declspec(align(8)) int a; short s; }|16/8|c@0 a@64 s@96",
+        "1|union { char c; __declspec(align(8)) int m; }|8/8|c@0 m@0",
+        "|union { char c; int m __attribute__((aligned(8))); } __attribute__((packed))|8/8|c@0 m@0",
+        "8|struct { __declspec(align(2)) char c; char d; }|2/2|c@0 d@8",
+        "1|struct { char c; i8 x; }|16/8|c@0 x@64",
+        "|struct { char c; i8 x; } __attribute__((packed))|16/8|c@0 x@64",
+        "|struct { char c; i1 x; }|8/4|c@0 x@32",
+        "1|struct { char c; i1 x; }|5/1|c@0 x@8",
+        "1|struct { char c; ali8 x; }|16/8|c@0 x.a@64",
+        "|struct { char c; ali8 x; } __attribute__((packed))|16/8|c@0 x.a@64",
+        "1|struct { char c; ali8 x[2]; char d; }|32/8|c@0 x[1].a@128 d@192",
+        "1|struct __declspec(align(4)) { char c; __declspec(align(8)) int m; }|16/8|c@0 m@64",
+        "2|union { char c; __declspec(align(4)) short m; char d[5]; }|8/4|c@0 m@0 d[4]@32",
+    ];
+    const SYSV: &[&str] = &[
+        "1|struct { char c; int m __attribute__((aligned(8))); }|5/1|c@0 m@8",
+        "1|struct { char c; __declspec(align(8)) int m; }|5/1|c@0 m@8",
+        "2|struct { char c; int m __attribute__((aligned(4))); }|6/2|c@0 m@16",
+        "1|struct { char c; int m __attribute__((aligned(2))); }|5/1|c@0 m@8",
+        "4|struct { char c; __declspec(align(16)) long long m; }|12/4|c@0 m@32",
+        "1|struct { char c; struct { int x; } __attribute__((aligned(8))) m; }|9/1|c@0 m.x@8",
+        "1|struct { char c; struct { char a; __declspec(align(16)) int b; } m; char t; }|7/1|c@0 m.a@8 m.b@16 t@48",
+        "|struct { char h; struct { char a; int b; } __attribute__((aligned(8))) m; char t; } __attribute__((packed))|10/1|h@0 m.a@8 m.b@40 t@72",
+        "|struct { char h; struct { char a; int b __attribute__((aligned(16))); } m; char t; } __attribute__((packed))|34/1|h@0 m.a@8 m.b@136 t@264",
+        "2|struct { char c; __declspec(align(8)) int a; short s; }|8/2|c@0 a@16 s@48",
+        "1|union { char c; __declspec(align(8)) int m; }|4/1|c@0 m@0",
+        "1|struct { char c; i8 x; }|5/1|c@0 x@8",
+        "|struct { char c; i8 x; } __attribute__((packed))|5/1|c@0 x@8",
+        "|struct { char c; i1 x; }|5/1|c@0 x@8",
+        "1|struct { char c; ali8 x; }|9/1|c@0 x.a@8",
+        "|struct { char c; ali8 x; } __attribute__((packed))|9/1|c@0 x.a@8",
+        "1|struct { char c; ali8 x[2]; char d; }|18/1|c@0 x[1].a@72 d@136",
+        "1|struct __declspec(align(4)) { char c; __declspec(align(8)) int m; }|8/4|c@0 m@8",
+        "2|union { char c; __declspec(align(4)) short m; char d[5]; }|6/2|c@0 m@0 d[4]@32",
+    ];
+    layout_rows_hold(PRELUDE, MS, &[Target::WindowsX64, Target::WindowsAarch64]);
+    layout_rows_hold(PRELUDE, SYSV, &[Target::LinuxX64, Target::LinuxAarch64]);
+}
+
+/// Check layout rows `pack|declaration|size/alignment|member@bit ...` for
+/// each target through the interpreter, the bit being the lowest one a
+/// member set to 1 occupies. `prelude` declares the types the rows name.
+fn layout_rows_hold(prelude: &str, rows: &[&str], targets: &[crate::Target]) {
+    use super::Vm;
+    use crate::Compiler;
+    use alloc::{format, string::String};
+    let mut src = String::from(prelude);
+    src += "static int pos(const unsigned char *b, int n) {\n\
+         for (int i = 0; i < n; i++) if (b[i]) { int k = 0; while (!((b[i] >> k) & 1)) k++;\n\
+         return i * 8 + k; }\n\
+         return -1; }\n";
+    let mut body = String::new();
+    for (n, row) in rows.iter().enumerate() {
+        let mut parts = row.split('|');
+        let (pack, decl, layout, members) = (
+            parts.next().unwrap(),
+            parts.next().unwrap(),
+            parts.next().unwrap(),
+            parts.next().unwrap(),
+        );
+        let (size, align) = layout.split_once('/').unwrap();
+        let typedef = format!("typedef {decl} T{n};\n");
+        src += &if pack.is_empty() {
+            typedef
+        } else {
+            format!("#pragma pack(push, {pack})\n{typedef}#pragma pack(pop)\n")
+        };
+        // A failing check returns `(row + 1) * 16 + check`.
+        let id = (n + 1) * 16;
+        body += &format!(
+            "{{ union {{ T{n} t; unsigned char b[sizeof(T{n})]; }} u;\n\
+             if (sizeof(T{n}) != {size}) return {};\n\
+             if (_Alignof(T{n}) != {align}) return {};\n",
+            id + 1,
+            id + 2
+        );
+        for (k, member) in members.split_whitespace().enumerate() {
+            let (name, bit) = member.split_once('@').unwrap();
+            body += &format!(
+                "for (int i = 0; i < (int)sizeof u; i++) u.b[i] = 0;\n\
+                 u.t.{name} = 1; if (pos(u.b, sizeof u) != {bit}) return {};\n",
+                id + 3 + k
+            );
+        }
+        body += "}\n";
+    }
+    src += &format!("int main(void) {{\n{body}return 0; }}\n");
+    for &t in targets {
+        let got = Vm::new(Compiler::with_target(src.clone(), t).compile().unwrap())
+            .run()
+            .unwrap();
+        let row = (got as usize / 16).checked_sub(1).and_then(|r| rows.get(r));
+        assert_eq!(got, 0, "{t:?}: check {} of {row:?}", got % 16);
+    }
+}
+
+/// The enumeration types the target's C ABI gives. MSVC, which the PE targets
+/// follow, makes every enum and enumerator `int`: a value outside `int`
+/// converts to it, `packed` leaves the enum alone and its bit-field reads
+/// signed. GCC's rule, which the other targets keep, types a non-negative
+/// enum `unsigned int` and a wider one by its range. Either way a bit-field
+/// of an enum reads with the enum's own type, so one with a negative
+/// enumerator reads signed. The values are clang 21's for both windows-msvc
+/// triples and for x86_64-linux-gnu. A set bit names the failing check.
+#[test]
+fn enums_take_the_type_the_target_abi_gives() {
+    use super::Vm;
+    use crate::{Compiler, Target};
+    const SRC: &str = "enum id { ID0, ID1, ID2, ID3 };\n\
+        enum sig { NEG = -1, POS };\n\
+        enum wide { TOP = 0x80000000u };\n\
+        enum big { BIG = 0x100000000LL };\n\
+        enum pk { PK0, PK1 } __attribute__((packed));\n\
+        struct bf { enum id e : 2; enum sig s : 2; };\n\
+        #define IS_INT(x) _Generic((x), int: 1, default: 0)\n\
+        int main(void) {\n\
+          struct bf b; int r = 0;\n\
+          b.e = ID3; b.s = NEG;\n\
+          if (b.s != NEG || !(b.s < 0)) r |= 1;\n\
+        #ifdef _WIN32\n\
+          if (!IS_INT((enum id)0) || !IS_INT(TOP) || !IS_INT((enum big)0)) r |= 2;\n\
+          if (TOP != -2147483647 - 1 || BIG != 0 || sizeof(enum big) != 4) r |= 4;\n\
+          if (sizeof(enum pk) != 4 || !((enum id)-1 < (enum id)1)) r |= 8;\n\
+          if (b.e != -1) r |= 16;\n\
+        #else\n\
+          if (IS_INT((enum id)0) || IS_INT(TOP) || sizeof(enum big) != 8) r |= 2;\n\
+          if (TOP != 0x80000000u || BIG != 0x100000000LL) r |= 4;\n\
+          if (sizeof(enum pk) != 1 || (enum id)-1 < (enum id)1) r |= 8;\n\
+          if (b.e != ID3) r |= 16;\n\
+        #endif\n\
+          return r; }\n";
+    for t in [
+        Target::WindowsX64,
+        Target::WindowsAarch64,
+        Target::LinuxX64,
+        Target::LinuxAarch64,
+    ] {
+        let program = Compiler::with_target(super::with_prelude(SRC), t)
+            .compile()
+            .unwrap();
+        assert_eq!(Vm::new(program).run().unwrap(), 0, "{t:?}");
+    }
+}
+
+/// An attribute among a member declaration's specifiers, before or after the
+/// type, applies to every declarator. The rows are gcc 16's and clang 21's for
+/// x86_64 and aarch64 Linux, which agree, and clang 21's for both
+/// windows-msvc triples.
+#[test]
+fn member_declaration_attributes_apply_to_every_declarator() {
+    use crate::Target;
+    const SYSV: &[&str] = &[
+        "|struct { char c; __attribute__((packed)) int b; }|5/1|c@0 b@8",
+        "|struct { char c; int __attribute__((packed)) b; }|5/1|c@0 b@8",
+        "|struct { char c; __attribute__((packed)) int a, b; char d; }|10/1|c@0 a@8 b@40 d@72",
+        "|struct { char c; int __attribute__((packed)) a, b; char d; }|10/1|c@0 a@8 b@40 d@72",
+        "|struct { char c; __attribute__((packed)) struct { char x; int y; } m; char d; }|10/1|c@0 m.y@40 d@72",
+        "|struct { char c; __attribute__((packed)) long long b; }|9/1|c@0 b@8",
+        "|struct { char c; __attribute__((packed)) int arr[2]; }|9/1|c@0 arr[1]@40",
+        "|struct { char c; __attribute__((packed, aligned(2))) int b; }|6/2|c@0 b@16",
+        "|struct { char c; __attribute__((aligned(2), packed)) int b; char d; }|8/2|c@0 b@16 d@48",
+        "|union { char c; __attribute__((packed)) int b; }|4/1|c@0 b@0",
+        "|struct { char c; int __attribute__((aligned(8))) a, b; }|24/8|c@0 a@64 b@128",
+        "|struct { char c; __attribute__((packed)) int b : 4; char d; }|3/1|c@0 b@8 d@16",
+        "|struct { char c; __attribute__((packed)) int b : 4; int e : 4; char d; }|4/4|c@0 b@8 e@12 d@16",
+        "|struct { char c; __attribute__((packed)) int b : 30; char d; }|6/1|c@0 b@8 d@40",
+        "|struct { char c; int a : 20; __attribute__((packed)) int b : 20; char d; }|8/4|c@0 a@8 b@28 d@48",
+        "|struct { char c; __attribute__((packed)) int b : 4; int e : 30; }|8/4|c@0 b@8 e@32",
+        "|struct { char c; __attribute__((packed)) long long b : 40; char d; }|7/1|c@0 b@8 d@48",
+        "|struct { char c; struct { char x; __attribute__((packed)) int y; } m; char d; }|7/1|c@0 m.y@16 d@48",
+        "|struct { char c; struct __attribute__((packed, aligned(4))) { char x; int y; } m, n; char d; }|24/4|c@0 m.y@40 n.y@104 d@160",
+        "|struct { char c; struct { char x; int y; } __attribute__((packed, aligned(4))) m, n; char d; }|24/4|c@0 m.y@40 n.y@104 d@160",
+        "|struct { char c; __attribute__((packed)) struct __attribute__((aligned(4))) { char x; int y; } m, n; char d; }|18/1|c@0 m.y@40 n.y@104 d@136",
+    ];
+    const MS: &[&str] = &[
+        "|struct { char c; __attribute__((packed)) int b; }|5/1|c@0 b@8",
+        "|struct { char c; int __attribute__((packed)) b; }|5/1|c@0 b@8",
+        "|struct { char c; __attribute__((packed)) int a, b; char d; }|10/1|c@0 a@8 b@40 d@72",
+        "|struct { char c; int __attribute__((packed)) a, b; char d; }|10/1|c@0 a@8 b@40 d@72",
+        "|struct { char c; __attribute__((packed)) struct { char x; int y; } m; char d; }|10/1|c@0 m.y@40 d@72",
+        "|struct { char c; __attribute__((packed)) long long b; }|9/1|c@0 b@8",
+        "|struct { char c; __attribute__((packed)) int arr[2]; }|9/1|c@0 arr[1]@40",
+        "|struct { char c; __attribute__((packed, aligned(2))) int b; }|6/2|c@0 b@16",
+        "|struct { char c; __attribute__((aligned(2), packed)) int b; char d; }|8/2|c@0 b@16 d@48",
+        "|union { char c; __attribute__((packed)) int b; }|4/1|c@0 b@0",
+        "|struct { char c; int __attribute__((aligned(8))) a, b; }|24/8|c@0 a@64 b@128",
+        "|struct { char c; __attribute__((packed)) int b : 4; char d; }|6/1|c@0 b@8 d@40",
+        "|struct { char c; __attribute__((packed)) int b : 4; int e : 4; char d; }|6/1|c@0 b@8 e@12 d@40",
+        "|struct { char c; __attribute__((packed)) int b : 30; char d; }|6/1|c@0 b@8 d@40",
+        "|struct { char c; int a : 20; __attribute__((packed)) int b : 20; char d; }|16/4|c@0 a@32 b@64 d@96",
+        "|struct { char c; __attribute__((packed)) int b : 4; int e : 30; }|12/4|c@0 b@8 e@64",
+        "|struct { char c; __attribute__((packed)) long long b : 40; char d; }|10/1|c@0 b@8 d@72",
+        "|struct { char c; struct { char x; __attribute__((packed)) int y; } m; char d; }|7/1|c@0 m.y@16 d@48",
+        "|struct { char c; struct __attribute__((packed, aligned(4))) { char x; int y; } m, n; char d; }|24/4|c@0 m.y@40 n.y@104 d@160",
+        "|struct { char c; struct { char x; int y; } __attribute__((packed, aligned(4))) m, n; char d; }|24/4|c@0 m.y@40 n.y@104 d@160",
+        "|struct { char c; __attribute__((packed)) struct __attribute__((aligned(4))) { char x; int y; } m, n; char d; }|24/4|c@0 m.y@64 n.y@128 d@160",
+    ];
+    layout_rows_hold("", SYSV, &[Target::LinuxX64, Target::LinuxAarch64]);
+    layout_rows_hold("", MS, &[Target::WindowsX64, Target::WindowsAarch64]);
+}
+
+/// An attribute list may follow a bit-field's width, and the alignment a
+/// bit-field's attributes ask for places it, named or unnamed, packed or
+/// under `#pragma pack`. The rows are gcc 16's for the Linux targets, Apple
+/// clang 21's for macOS and clang 21's for both windows-msvc triples. Under
+/// the pragma gcc caps a request above the pack value and clang drops it.
+#[test]
+fn bitfield_attributes_follow_the_width_and_place_the_field() {
+    use crate::Target;
+    const LINUX_X64: &[&str] = &[
+        "|struct { int b : 4 __attribute__((aligned(8))); }|8/8|b@0",
+        "|struct { char c; int b : 4 __attribute__((aligned(8))); char d; }|16/8|c@0 b@64 d@72",
+        "|struct { char c; int b : 4 __attribute__((deprecated)); char d; }|4/4|c@0 b@8 d@16",
+        "|struct { char c; int b : 4 __attribute__((aligned(8))), e : 4; char d; }|16/8|c@0 b@64 e@68 d@72",
+        "|struct { char c; int b : 4 __attribute__((aligned(16))), e : 4 __attribute__((aligned(2))); char d; }|32/16|c@0 b@128 e@144 d@152",
+        "|struct { char c; int b : 30 __attribute__((packed)); char d; }|6/1|c@0 b@8 d@40",
+        "|struct { char c; long long b : 40 __attribute__((packed)), e : 30; char d; }|16/8|c@0 b@8 e@64 d@96",
+        "|struct { char c; int b : 4 __attribute__((aligned(2), packed)); char d; }|4/2|c@0 b@16 d@24",
+        "|struct { char c; int b : 4 __attribute__((aligned(8))) __attribute__((packed)); char d; }|16/8|c@0 b@64 d@72",
+        "|struct { char c; int b : 4 __attribute__((mode(DI))); char d; }|8/8|c@0 b@8 d@16",
+        "|struct { char c; int b : 30 __attribute__((aligned(2))); char d; }|12/4|c@0 b@32 d@64",
+        "|struct { char c; int a : 4; int b : 4 __attribute__((aligned(1))); }|4/4|c@0 a@8 b@16",
+        "|struct { char c; long long b : 40 __attribute__((aligned(16))); char d; }|32/16|c@0 b@128 d@168",
+        "|union { char c; int b : 4 __attribute__((aligned(8))); }|8/8|c@0 b@0",
+        "|union { char c; int b : 12 __attribute__((packed)); }|2/1|c@0 b@0",
+        "|struct { char c; __attribute__((aligned(8))) int b : 4, e : 4; char d; }|24/8|c@0 b@64 e@128 d@136",
+        "|struct { char c; int __attribute__((aligned(8))) b : 4; char d; }|16/8|c@0 b@64 d@72",
+        "|struct { char c; int a : 4; __attribute__((aligned(4))) int b : 4; char d; }|8/4|c@0 a@8 b@32 d@40",
+        "|struct { char c; int : 4 __attribute__((aligned(8))); char d; }|10/1|c@0 d@72",
+        "|struct { char c; __attribute__((aligned(8))) int : 4, : 4; char d; }|18/1|c@0 d@136",
+        "|struct { char c; int : 0 __attribute__((aligned(8))); char d; }|9/1|c@0 d@64",
+        "|struct { char c; int a : 4; int : 0 __attribute__((aligned(8))); char d; }|12/4|c@0 a@8 d@64",
+        "|struct { char c; int a : 4; int : 30 __attribute__((aligned(8))); char d; }|16/4|c@0 a@8 d@96",
+        "|struct { char c; int : 30 __attribute__((packed)); char d; }|6/1|c@0 d@40",
+        "|struct { char c; short a : 4; int : 4 __attribute__((aligned(4))); char d; }|6/2|c@0 a@8 d@40",
+        "|union { char c; int : 4 __attribute__((aligned(8))); }|1/1|c@0",
+        "|struct __attribute__((packed)) { char c; int b : 30 __attribute__((aligned(2))); char d; }|8/2|c@0 b@16 d@48",
+        "|struct __attribute__((packed)) { char c; int : 4 __attribute__((aligned(4))); char d; }|6/1|c@0 d@40",
+        "1|struct { char c; int b : 4 __attribute__((aligned(8))); char d; }|3/1|c@0 b@8 d@16",
+        "2|struct { char c; int a : 4; int b : 4 __attribute__((aligned(8))); char d; }|4/2|c@0 a@8 b@16 d@24",
+        "4|struct { char c; char b : 4 __attribute__((aligned(8))); char d; }|8/4|c@0 b@32 d@40",
+        "4|struct { char c; char b : 4 __attribute__((aligned(2))); char d; }|4/2|c@0 b@16 d@24",
+        "4|struct { char c; char : 4 __attribute__((aligned(8))); char d; }|6/1|c@0 d@40",
+        "2|struct { char c; int : 0 __attribute__((aligned(8))); char d; }|9/1|c@0 d@64",
+        "|union __attribute__((packed)) { char c; int : 4 __attribute__((aligned(8))); }|1/1|c@0",
+        "|union __attribute__((packed)) { char c; int b : 4 __attribute__((aligned(8))); }|8/8|c@0 b@0",
+    ];
+    const LINUX_AARCH64: &[&str] = &[
+        "|struct { int b : 4 __attribute__((aligned(8))); }|8/8|b@0",
+        "|struct { char c; int b : 4 __attribute__((aligned(8))); char d; }|16/8|c@0 b@64 d@72",
+        "|struct { char c; int b : 4 __attribute__((deprecated)); char d; }|4/4|c@0 b@8 d@16",
+        "|struct { char c; int b : 4 __attribute__((aligned(8))), e : 4; char d; }|16/8|c@0 b@64 e@68 d@72",
+        "|struct { char c; int b : 4 __attribute__((aligned(16))), e : 4 __attribute__((aligned(2))); char d; }|32/16|c@0 b@128 e@144 d@152",
+        "|struct { char c; int b : 30 __attribute__((packed)); char d; }|6/1|c@0 b@8 d@40",
+        "|struct { char c; long long b : 40 __attribute__((packed)), e : 30; char d; }|16/8|c@0 b@8 e@64 d@96",
+        "|struct { char c; int b : 4 __attribute__((aligned(2), packed)); char d; }|4/2|c@0 b@16 d@24",
+        "|struct { char c; int b : 4 __attribute__((aligned(8))) __attribute__((packed)); char d; }|16/8|c@0 b@64 d@72",
+        "|struct { char c; int b : 4 __attribute__((mode(DI))); char d; }|8/8|c@0 b@8 d@16",
+        "|struct { char c; int b : 30 __attribute__((aligned(2))); char d; }|12/4|c@0 b@32 d@64",
+        "|struct { char c; int a : 4; int b : 4 __attribute__((aligned(1))); }|4/4|c@0 a@8 b@16",
+        "|struct { char c; long long b : 40 __attribute__((aligned(16))); char d; }|32/16|c@0 b@128 d@168",
+        "|union { char c; int b : 4 __attribute__((aligned(8))); }|8/8|c@0 b@0",
+        "|union { char c; int b : 12 __attribute__((packed)); }|2/1|c@0 b@0",
+        "|struct { char c; __attribute__((aligned(8))) int b : 4, e : 4; char d; }|24/8|c@0 b@64 e@128 d@136",
+        "|struct { char c; int __attribute__((aligned(8))) b : 4; char d; }|16/8|c@0 b@64 d@72",
+        "|struct { char c; int a : 4; __attribute__((aligned(4))) int b : 4; char d; }|8/4|c@0 a@8 b@32 d@40",
+        "|struct { char c; int : 4 __attribute__((aligned(8))); char d; }|16/8|c@0 d@72",
+        "|struct { char c; __attribute__((aligned(8))) int : 4, : 4; char d; }|24/8|c@0 d@136",
+        "|struct { char c; int : 0 __attribute__((aligned(8))); char d; }|16/8|c@0 d@64",
+        "|struct { char c; int a : 4; int : 0 __attribute__((aligned(8))); char d; }|16/8|c@0 a@8 d@64",
+        "|struct { char c; int a : 4; int : 30 __attribute__((aligned(8))); char d; }|16/8|c@0 a@8 d@96",
+        "|struct { char c; int : 30 __attribute__((packed)); char d; }|6/1|c@0 d@40",
+        "|struct { char c; short a : 4; int : 4 __attribute__((aligned(4))); char d; }|8/4|c@0 a@8 d@40",
+        "|union { char c; int : 4 __attribute__((aligned(8))); }|8/8|c@0",
+        "|struct __attribute__((packed)) { char c; int b : 30 __attribute__((aligned(2))); char d; }|8/2|c@0 b@16 d@48",
+        "|struct __attribute__((packed)) { char c; int : 4 __attribute__((aligned(4))); char d; }|8/4|c@0 d@40",
+        "1|struct { char c; int b : 4 __attribute__((aligned(8))); char d; }|3/1|c@0 b@8 d@16",
+        "2|struct { char c; int a : 4; int b : 4 __attribute__((aligned(8))); char d; }|4/2|c@0 a@8 b@16 d@24",
+        "4|struct { char c; char b : 4 __attribute__((aligned(8))); char d; }|8/4|c@0 b@32 d@40",
+        "4|struct { char c; char b : 4 __attribute__((aligned(2))); char d; }|4/2|c@0 b@16 d@24",
+        "4|struct { char c; char : 4 __attribute__((aligned(8))); char d; }|8/4|c@0 d@40",
+        "2|struct { char c; int : 0 __attribute__((aligned(8))); char d; }|16/8|c@0 d@64",
+        "|union __attribute__((packed)) { char c; int : 4 __attribute__((aligned(8))); }|8/8|c@0",
+        "|union __attribute__((packed)) { char c; int b : 4 __attribute__((aligned(8))); }|8/8|c@0 b@0",
+    ];
+    const MACOS: &[&str] = &[
+        "|struct { int b : 4 __attribute__((aligned(8))); }|8/8|b@0",
+        "|struct { char c; int b : 4 __attribute__((aligned(8))); char d; }|16/8|c@0 b@64 d@72",
+        "|struct { char c; int b : 4 __attribute__((deprecated)); char d; }|4/4|c@0 b@8 d@16",
+        "|struct { char c; int b : 4 __attribute__((aligned(8))), e : 4; char d; }|16/8|c@0 b@64 e@68 d@72",
+        "|struct { char c; int b : 4 __attribute__((aligned(16))), e : 4 __attribute__((aligned(2))); char d; }|32/16|c@0 b@128 e@144 d@152",
+        "|struct { char c; int b : 30 __attribute__((packed)); char d; }|6/1|c@0 b@8 d@40",
+        "|struct { char c; long long b : 40 __attribute__((packed)), e : 30; char d; }|16/8|c@0 b@8 e@64 d@96",
+        "|struct { char c; int b : 4 __attribute__((aligned(2), packed)); char d; }|4/2|c@0 b@16 d@24",
+        "|struct { char c; int b : 4 __attribute__((aligned(8))) __attribute__((packed)); char d; }|16/8|c@0 b@64 d@72",
+        "|struct { char c; int b : 4 __attribute__((mode(DI))); char d; }|8/8|c@0 b@8 d@16",
+        "|struct { char c; int b : 30 __attribute__((aligned(2))); char d; }|12/4|c@0 b@32 d@64",
+        "|struct { char c; int a : 4; int b : 4 __attribute__((aligned(1))); }|4/4|c@0 a@8 b@16",
+        "|struct { char c; long long b : 40 __attribute__((aligned(16))); char d; }|32/16|c@0 b@128 d@168",
+        "|union { char c; int b : 4 __attribute__((aligned(8))); }|8/8|c@0 b@0",
+        "|union { char c; int b : 12 __attribute__((packed)); }|2/1|c@0 b@0",
+        "|struct { char c; __attribute__((aligned(8))) int b : 4, e : 4; char d; }|24/8|c@0 b@64 e@128 d@136",
+        "|struct { char c; int __attribute__((aligned(8))) b : 4; char d; }|16/8|c@0 b@64 d@72",
+        "|struct { char c; int a : 4; __attribute__((aligned(4))) int b : 4; char d; }|8/4|c@0 a@8 b@32 d@40",
+        "|struct { char c; int : 4 __attribute__((aligned(8))); char d; }|10/1|c@0 d@72",
+        "|struct { char c; __attribute__((aligned(8))) int : 4, : 4; char d; }|18/1|c@0 d@136",
+        "|struct { char c; int : 0 __attribute__((aligned(8))); char d; }|9/1|c@0 d@64",
+        "|struct { char c; int a : 4; int : 0 __attribute__((aligned(8))); char d; }|12/4|c@0 a@8 d@64",
+        "|struct { char c; int a : 4; int : 30 __attribute__((aligned(8))); char d; }|16/4|c@0 a@8 d@96",
+        "|struct { char c; int : 30 __attribute__((packed)); char d; }|6/1|c@0 d@40",
+        "|struct { char c; short a : 4; int : 4 __attribute__((aligned(4))); char d; }|6/2|c@0 a@8 d@40",
+        "|union { char c; int : 4 __attribute__((aligned(8))); }|1/1|c@0",
+        "|struct __attribute__((packed)) { char c; int b : 30 __attribute__((aligned(2))); char d; }|8/2|c@0 b@16 d@48",
+        "|struct __attribute__((packed)) { char c; int : 4 __attribute__((aligned(4))); char d; }|6/1|c@0 d@40",
+        "1|struct { char c; int b : 4 __attribute__((aligned(8))); char d; }|3/1|c@0 b@8 d@16",
+        "2|struct { char c; int a : 4; int b : 4 __attribute__((aligned(8))); char d; }|4/2|c@0 a@8 b@12 d@16",
+        "4|struct { char c; char b : 4 __attribute__((aligned(8))); char d; }|4/4|c@0 b@8 d@16",
+        "4|struct { char c; char b : 4 __attribute__((aligned(2))); char d; }|4/2|c@0 b@16 d@24",
+        "4|struct { char c; char : 4 __attribute__((aligned(8))); char d; }|3/1|c@0 d@16",
+        "2|struct { char c; int : 0 __attribute__((aligned(8))); char d; }|9/1|c@0 d@64",
+        "|union __attribute__((packed)) { char c; int : 4 __attribute__((aligned(8))); }|1/1|c@0",
+        "|union __attribute__((packed)) { char c; int b : 4 __attribute__((aligned(8))); }|8/8|c@0 b@0",
+    ];
+    const MS: &[&str] = &[
+        "|struct { int b : 4 __attribute__((aligned(8))); }|8/8|b@0",
+        "|struct { char c; int b : 4 __attribute__((aligned(8))); char d; }|16/8|c@0 b@64 d@96",
+        "|struct { char c; int b : 4 __attribute__((deprecated)); char d; }|12/4|c@0 b@32 d@64",
+        "|struct { char c; int b : 4 __attribute__((aligned(8))), e : 4; char d; }|16/8|c@0 b@64 e@68 d@96",
+        "|struct { char c; int b : 4 __attribute__((aligned(16))), e : 4 __attribute__((aligned(2))); char d; }|32/16|c@0 b@128 e@132 d@160",
+        "|struct { char c; int b : 30 __attribute__((packed)); char d; }|6/1|c@0 b@8 d@40",
+        "|struct { char c; long long b : 40 __attribute__((packed)), e : 30; char d; }|32/8|c@0 b@8 e@128 d@192",
+        "|struct { char c; int b : 4 __attribute__((aligned(2), packed)); char d; }|8/2|c@0 b@16 d@48",
+        "|struct { char c; int b : 4 __attribute__((aligned(8))) __attribute__((packed)); char d; }|16/8|c@0 b@64 d@96",
+        "|struct { char c; int b : 4 __attribute__((mode(DI))); char d; }|24/8|c@0 b@64 d@128",
+        "|struct { char c; int b : 30 __attribute__((aligned(2))); char d; }|12/4|c@0 b@32 d@64",
+        "|struct { char c; int a : 4; int b : 4 __attribute__((aligned(1))); }|8/4|c@0 a@32 b@36",
+        "|struct { char c; long long b : 40 __attribute__((aligned(16))); char d; }|32/16|c@0 b@128 d@192",
+        "|union { char c; int b : 4 __attribute__((aligned(8))); }|4/1|c@0 b@0",
+        "|union { char c; int b : 12 __attribute__((packed)); }|4/1|c@0 b@0",
+        "|struct { char c; __attribute__((aligned(8))) int b : 4, e : 4; char d; }|16/8|c@0 b@64 e@68 d@96",
+        "|struct { char c; int __attribute__((aligned(8))) b : 4; char d; }|16/8|c@0 b@64 d@96",
+        "|struct { char c; int a : 4; __attribute__((aligned(4))) int b : 4; char d; }|12/4|c@0 a@32 b@36 d@64",
+        "|struct { char c; int : 4 __attribute__((aligned(8))); char d; }|16/8|c@0 d@96",
+        "|struct { char c; __attribute__((aligned(8))) int : 4, : 4; char d; }|16/8|c@0 d@96",
+        "|struct { char c; int : 0 __attribute__((aligned(8))); char d; }|2/1|c@0 d@8",
+        "|struct { char c; int a : 4; int : 0 __attribute__((aligned(8))); char d; }|16/8|c@0 a@32 d@64",
+        "|struct { char c; int a : 4; int : 30 __attribute__((aligned(8))); char d; }|16/8|c@0 a@32 d@96",
+        "|struct { char c; int : 30 __attribute__((packed)); char d; }|6/1|c@0 d@40",
+        "|struct { char c; short a : 4; int : 4 __attribute__((aligned(4))); char d; }|12/4|c@0 a@16 d@64",
+        "|union { char c; int : 4 __attribute__((aligned(8))); }|4/1|c@0",
+        "|struct __attribute__((packed)) { char c; int b : 30 __attribute__((aligned(2))); char d; }|8/2|c@0 b@16 d@48",
+        "|struct __attribute__((packed)) { char c; int : 4 __attribute__((aligned(4))); char d; }|12/4|c@0 d@64",
+        "1|struct { char c; int b : 4 __attribute__((aligned(8))); char d; }|16/8|c@0 b@64 d@96",
+        "2|struct { char c; int a : 4; int b : 4 __attribute__((aligned(8))); char d; }|8/2|c@0 a@16 b@20 d@48",
+        "4|struct { char c; char b : 4 __attribute__((aligned(8))); char d; }|16/8|c@0 b@64 d@72",
+        "4|struct { char c; char b : 4 __attribute__((aligned(2))); char d; }|4/2|c@0 b@16 d@24",
+        "4|struct { char c; char : 4 __attribute__((aligned(8))); char d; }|16/8|c@0 d@72",
+        "2|struct { char c; int : 0 __attribute__((aligned(8))); char d; }|2/1|c@0 d@8",
+        "|union __attribute__((packed)) { char c; int : 4 __attribute__((aligned(8))); }|4/1|c@0",
+        "|union __attribute__((packed)) { char c; int b : 4 __attribute__((aligned(8))); }|4/1|c@0 b@0",
+    ];
+    layout_rows_hold("", LINUX_X64, &[Target::LinuxX64]);
+    layout_rows_hold("", LINUX_AARCH64, &[Target::LinuxAarch64]);
+    layout_rows_hold("", MACOS, &[Target::MacOSAarch64]);
+    layout_rows_hold("", MS, &[Target::WindowsX64, Target::WindowsAarch64]);
+}
+
+/// A bit-field takes its declared type's alignment, a typedef's included,
+/// raised or lowered in GCC's layout and raised in the MS one. The rows are
+/// gcc 16's for Linux, Apple clang 21's for macOS, and on the PE targets
+/// cl.exe's on both boxes where it takes the spelling, else clang 21's.
+#[test]
+fn a_bitfield_takes_its_declared_types_alignment() {
+    use crate::Target;
+    const DECLS: &str = "\
+         typedef int a8 __attribute__((aligned(8)));\n\
+         typedef int a2 __attribute__((aligned(2)));\n\
+         typedef int a1 __attribute__((aligned(1)));\n\
+         typedef long long l4 __attribute__((aligned(4)));\n\
+         typedef short s8 __attribute__((aligned(8)));\n\
+         typedef char c4 __attribute__((aligned(4)));\n\
+         typedef unsigned a16u __attribute__((aligned(16)));\n\
+         struct Q { char c; a8 b : 3; };\n\
+         #pragma pack(push, 1)\n\
+         struct P1 { char c; a8 b : 3; char d; };\n\
+         #pragma pack(pop)\n";
+    const LINUX_X64: &[&str] = &[
+        "|struct { char c; a8 b : 3; }|16/8|c@0 b@64",
+        "|struct { char c; a8 b : 3; char d; }|16/8|c@0 b@64 d@72",
+        "|struct { char c; a1 b : 3; }|2/1|c@0 b@8",
+        "|struct { char c; a1 b : 30; char d; }|6/1|c@0 b@8 d@40",
+        "|struct { char c; a2 b : 20; char d; }|6/2|c@0 b@8 d@32",
+        "|struct { char c; l4 b : 40; char d; }|8/4|c@0 b@8 d@48",
+        "|struct { char c; s8 b : 4; char d; }|16/8|c@0 b@64 d@72",
+        "|struct { char c; c4 b : 4; char d; }|8/4|c@0 b@32 d@40",
+        "|struct { char c; a8 b : 3, e : 30; char d; }|24/8|c@0 b@64 e@128 d@160",
+        "|struct { int a : 20; a8 b : 20; }|16/8|a@0 b@64",
+        "|struct { char c; a8 : 3; char d; }|10/1|c@0 d@72",
+        "|struct { char c; a8 : 0; char d; }|9/1|c@0 d@64",
+        "|union { char c; a8 b : 3; }|8/8|c@0 b@0",
+        "|struct __attribute__((packed)) { char c; a8 b : 3; char d; }|3/1|c@0 b@8 d@16",
+        "1|struct { char c; a8 b : 3; char d; }|3/1|c@0 b@8 d@16",
+        "|struct { char c; a1 b : 3; int e : 4; }|4/4|c@0 b@8 e@11",
+        "|struct { char c; a16u b : 4; char d; }|32/16|c@0 b@128 d@136",
+        "|struct { char c; a8 b : 3; a8 e : 3; }|24/8|c@0 b@64 e@128",
+        "|struct { char c; a1 b : 3; char d; }|3/1|c@0 b@8 d@16",
+        "|struct { char c; __attribute__((packed)) a8 b : 3; char d; }|3/1|c@0 b@8 d@16",
+        "|struct { char c; a8 b : 3 __attribute__((packed)); char d; }|3/1|c@0 b@8 d@16",
+        "2|struct { char c; a8 b : 3; char d; }|4/2|c@0 b@8 d@16",
+        "|struct { char c; a1 : 0; char d; }|2/1|c@0 d@8",
+        "|struct { char c; l4 : 0; char d; }|5/1|c@0 d@32",
+        "|struct { char c; a1 : 3; char d; }|3/1|c@0 d@16",
+        "|struct { char c; l4 : 3; char d; }|3/1|c@0 d@16",
+        "|union { char c; a1 b : 3; }|1/1|c@0 b@0",
+        "|union { char c; l4 b : 40; }|8/4|c@0 b@0",
+        "|struct { char c; a1 b : 3; a1 e : 30; }|6/1|c@0 b@8 e@16",
+        "|struct { short s; a2 b : 20; a2 e : 20; }|8/2|s@0 b@16 e@36",
+        "|struct { char c; c4 : 4; char d; }|6/1|c@0 d@40",
+        "|struct { char c; s8 : 0; char d; }|9/1|c@0 d@64",
+    ];
+    const LINUX_AARCH64: &[&str] = &[
+        "|struct { char c; a8 b : 3; }|16/8|c@0 b@64",
+        "|struct { char c; a8 b : 3; char d; }|16/8|c@0 b@64 d@72",
+        "|struct { char c; a1 b : 3; }|2/1|c@0 b@8",
+        "|struct { char c; a1 b : 30; char d; }|6/1|c@0 b@8 d@40",
+        "|struct { char c; a2 b : 20; char d; }|6/2|c@0 b@8 d@32",
+        "|struct { char c; l4 b : 40; char d; }|8/4|c@0 b@8 d@48",
+        "|struct { char c; s8 b : 4; char d; }|16/8|c@0 b@64 d@72",
+        "|struct { char c; c4 b : 4; char d; }|8/4|c@0 b@32 d@40",
+        "|struct { char c; a8 b : 3, e : 30; char d; }|24/8|c@0 b@64 e@128 d@160",
+        "|struct { int a : 20; a8 b : 20; }|16/8|a@0 b@64",
+        "|struct { char c; a8 : 3; char d; }|16/8|c@0 d@72",
+        "|struct { char c; a8 : 0; char d; }|16/8|c@0 d@64",
+        "|union { char c; a8 b : 3; }|8/8|c@0 b@0",
+        "|struct __attribute__((packed)) { char c; a8 b : 3; char d; }|3/1|c@0 b@8 d@16",
+        "1|struct { char c; a8 b : 3; char d; }|3/1|c@0 b@8 d@16",
+        "|struct { char c; a1 b : 3; int e : 4; }|4/4|c@0 b@8 e@11",
+        "|struct { char c; a16u b : 4; char d; }|32/16|c@0 b@128 d@136",
+        "|struct { char c; a8 b : 3; a8 e : 3; }|24/8|c@0 b@64 e@128",
+        "|struct { char c; a1 b : 3; char d; }|3/1|c@0 b@8 d@16",
+        "|struct { char c; __attribute__((packed)) a8 b : 3; char d; }|3/1|c@0 b@8 d@16",
+        "|struct { char c; a8 b : 3 __attribute__((packed)); char d; }|3/1|c@0 b@8 d@16",
+        "2|struct { char c; a8 b : 3; char d; }|4/2|c@0 b@8 d@16",
+        "|struct { char c; a1 : 0; char d; }|2/1|c@0 d@8",
+        "|struct { char c; l4 : 0; char d; }|8/4|c@0 d@32",
+        "|struct { char c; a1 : 3; char d; }|3/1|c@0 d@16",
+        "|struct { char c; l4 : 3; char d; }|4/4|c@0 d@16",
+        "|union { char c; a1 b : 3; }|1/1|c@0 b@0",
+        "|union { char c; l4 b : 40; }|8/4|c@0 b@0",
+        "|struct { char c; a1 b : 3; a1 e : 30; }|6/1|c@0 b@8 e@16",
+        "|struct { short s; a2 b : 20; a2 e : 20; }|8/2|s@0 b@16 e@36",
+        "|struct { char c; c4 : 4; char d; }|8/4|c@0 d@40",
+        "|struct { char c; s8 : 0; char d; }|16/8|c@0 d@64",
+    ];
+    const MACOS: &[&str] = &[
+        "|struct { char c; a8 b : 3; }|8/8|c@0 b@8",
+        "|struct { char c; a8 b : 3; char d; }|8/8|c@0 b@8 d@16",
+        "|struct { char c; a1 b : 3; }|2/1|c@0 b@8",
+        "|struct { char c; a1 b : 30; char d; }|6/1|c@0 b@8 d@40",
+        "|struct { char c; a2 b : 20; char d; }|6/2|c@0 b@8 d@32",
+        "|struct { char c; l4 b : 40; char d; }|8/4|c@0 b@8 d@48",
+        "|struct { char c; s8 b : 4; char d; }|8/8|c@0 b@8 d@16",
+        "|struct { char c; c4 b : 4; char d; }|8/4|c@0 b@32 d@40",
+        "|struct { char c; a8 b : 3, e : 30; char d; }|16/8|c@0 b@8 e@64 d@96",
+        "|struct { int a : 20; a8 b : 20; }|16/8|a@0 b@64",
+        "|struct { char c; a8 : 3; char d; }|3/1|c@0 d@16",
+        "|struct { char c; a8 : 0; char d; }|9/1|c@0 d@64",
+        "|union { char c; a8 b : 3; }|8/8|c@0 b@0",
+        "|struct __attribute__((packed)) { char c; a8 b : 3; char d; }|3/1|c@0 b@8 d@16",
+        "1|struct { char c; a8 b : 3; char d; }|3/1|c@0 b@8 d@16",
+        "|struct { char c; a1 b : 3; int e : 4; }|4/4|c@0 b@8 e@11",
+        "|struct { char c; a16u b : 4; char d; }|16/16|c@0 b@8 d@16",
+        "|struct { char c; a8 b : 3; a8 e : 3; }|8/8|c@0 b@8 e@11",
+        "|struct { char c; a1 b : 3; char d; }|3/1|c@0 b@8 d@16",
+        "|struct { char c; __attribute__((packed)) a8 b : 3; char d; }|3/1|c@0 b@8 d@16",
+        "|struct { char c; a8 b : 3 __attribute__((packed)); char d; }|3/1|c@0 b@8 d@16",
+        "2|struct { char c; a8 b : 3; char d; }|4/2|c@0 b@8 d@16",
+        "|struct { char c; a1 : 0; char d; }|2/1|c@0 d@8",
+        "|struct { char c; l4 : 0; char d; }|5/1|c@0 d@32",
+        "|struct { char c; a1 : 3; char d; }|3/1|c@0 d@16",
+        "|struct { char c; l4 : 3; char d; }|3/1|c@0 d@16",
+        "|union { char c; a1 b : 3; }|1/1|c@0 b@0",
+        "|union { char c; l4 b : 40; }|8/4|c@0 b@0",
+        "|struct { char c; a1 b : 3; a1 e : 30; }|6/1|c@0 b@8 e@16",
+        "|struct { short s; a2 b : 20; a2 e : 20; }|8/2|s@0 b@16 e@36",
+        "|struct { char c; c4 : 4; char d; }|6/1|c@0 d@40",
+        "|struct { char c; s8 : 0; char d; }|9/1|c@0 d@64",
+    ];
+    const MS: &[&str] = &[
+        "|struct { char c; a8 b : 3; }|16/8|c@0 b@64",
+        "|struct { char c; a8 b : 3; char d; }|16/8|c@0 b@64 d@96",
+        "|struct { char c; a1 b : 3; }|8/4|c@0 b@32",
+        "|struct { char c; a1 b : 30; char d; }|12/4|c@0 b@32 d@64",
+        "|struct { char c; a2 b : 20; char d; }|12/4|c@0 b@32 d@64",
+        "|struct { char c; l4 b : 40; char d; }|24/8|c@0 b@64 d@128",
+        "|struct { char c; s8 b : 4; char d; }|16/8|c@0 b@64 d@80",
+        "|struct { char c; c4 b : 4; char d; }|8/4|c@0 b@32 d@40",
+        "|struct { char c; a8 b : 3, e : 30; char d; }|24/8|c@0 b@64 e@128 d@160",
+        "|struct { int a : 20; a8 b : 20; }|16/8|a@0 b@64",
+        "|struct { char c; a8 : 3; char d; }|16/8|c@0 d@96",
+        "|struct { char c; a8 : 0; char d; }|2/1|c@0 d@8",
+        "|union { char c; a8 b : 3; }|4/1|c@0 b@0",
+        "|struct __attribute__((packed)) { char c; a8 b : 3; char d; }|16/8|c@0 b@64 d@96",
+        "1|struct { char c; a8 b : 3; char d; }|13/8|c@0 b@64 d@96",
+        "|struct { char c; a1 b : 3; int e : 4; }|8/4|c@0 b@32 e@35",
+        "|struct { char c; a16u b : 4; char d; }|32/16|c@0 b@128 d@160",
+        "|struct { char c; a8 b : 3; a8 e : 3; }|16/8|c@0 b@64 e@67",
+        "|struct { char c; a1 b : 3; char d; }|12/4|c@0 b@32 d@64",
+        "|struct { char c; __attribute__((packed)) a8 b : 3; char d; }|16/8|c@0 b@64 d@96",
+        "|struct { char c; a8 b : 3 __attribute__((packed)); char d; }|16/8|c@0 b@64 d@96",
+        "2|struct { char c; a8 b : 3; char d; }|14/8|c@0 b@64 d@96",
+        "|struct { char c; a1 : 0; char d; }|2/1|c@0 d@8",
+        "|struct { char c; l4 : 0; char d; }|2/1|c@0 d@8",
+        "|struct { char c; a1 : 3; char d; }|12/4|c@0 d@64",
+        "|struct { char c; l4 : 3; char d; }|24/8|c@0 d@128",
+        "|union { char c; a1 b : 3; }|4/1|c@0 b@0",
+        "|union { char c; l4 b : 40; }|8/1|c@0 b@0",
+        "|struct { char c; a1 b : 3; a1 e : 30; }|12/4|c@0 b@32 e@64",
+        "|struct { short s; a2 b : 20; a2 e : 20; }|12/4|s@0 b@32 e@64",
+        "|struct { char c; c4 : 4; char d; }|8/4|c@0 d@40",
+        "|struct { char c; s8 : 0; char d; }|2/1|c@0 d@8",
+        "2|struct { char c; struct Q q; }|18/2|c@0 q.c@16",
+        "1|struct { char c; struct Q q; }|17/1|c@0 q.c@8",
+        "2|struct { char c; struct P1 p; }|16/2|c@0 p.c@16",
+        "|struct { struct P1 p[2]; }|32/8|p[1].c@104 p[1].d@200",
+    ];
+    // clang for the windows-msvc triples pads these to the alignment, where
+    // cl.exe pads to the pack value; the rows above are cl.exe's.
+    const CLANG_MSVC_DIFFERS: &[&str] = &[
+        "1|struct { char c; a8 b : 3; char d; }|16/8|c@0 b@64 d@96",
+        "2|struct { char c; a8 b : 3; char d; }|16/8|c@0 b@64 d@96",
+        "2|struct { char c; struct P1 p; }|18/2|c@0 p.c@16",
+        "|struct { struct P1 p[2]; }|32/8|p[1].c@128 p[1].d@224",
+    ];
+    layout_rows_hold(DECLS, LINUX_X64, &[Target::LinuxX64]);
+    layout_rows_hold(DECLS, LINUX_AARCH64, &[Target::LinuxAarch64]);
+    layout_rows_hold(DECLS, MACOS, &[Target::MacOSAarch64]);
+    layout_rows_hold(DECLS, MS, &[Target::WindowsX64, Target::WindowsAarch64]);
+    for row in CLANG_MSVC_DIFFERS {
+        let decl = row.rsplitn(3, '|').nth(2);
+        assert!(
+            MS.iter()
+                .any(|m| m.rsplitn(3, '|').nth(2) == decl && m != row),
+            "{row}"
+        );
+    }
+}
+
 /// The wide storage format round-trips through memory: a value stored
 /// into a `long double` object and read back is unchanged, and the
 /// object's bytes carry the platform's encoding rather than a binary64
@@ -1401,6 +2288,53 @@ fn long_double_storage_round_trips_through_its_abi_format() {
     );
 }
 
+/// A `long double` parameter reads back what its caller passed on every
+/// target, through a register, the stack or `va_arg`.
+#[test]
+fn long_double_parameters_read_back_what_the_caller_passed() {
+    use super::Vm;
+    use crate::{Compiler, Target};
+    let src = super::load_fixture("long_double_parameter_shapes.c");
+    for t in [Target::LinuxX64, Target::LinuxAarch64, Target::MacOSAarch64] {
+        let program = Compiler::with_target(src.clone(), t).compile().unwrap();
+        assert_eq!(Vm::new(program).run().unwrap(), 0, "{t:?}");
+    }
+}
+
+/// An `L` constant, an arithmetic operation and a conditional with a
+/// `long double` operand have type `long double` (C99 6.4.4.2p4,
+/// 6.3.1.8p1, 6.5.15p5) on every target, as `_Generic` and `sizeof` see.
+#[test]
+fn long_double_operands_give_long_double_results() {
+    use super::Vm;
+    use crate::{Compiler, Target};
+    let src = super::load_fixture("long_double_usual_conversions.c");
+    for t in [
+        Target::LinuxX64,
+        Target::LinuxAarch64,
+        Target::MacOSAarch64,
+        Target::WindowsX64,
+        Target::WindowsAarch64,
+    ] {
+        let program = Compiler::with_target(src.clone(), t).compile().unwrap();
+        assert_eq!(Vm::new(program).run().unwrap(), 0, "{t:?}");
+    }
+}
+
+/// A `long double` argument, result, variadic argument and aggregate member
+/// crosses a call unchanged on every target, System V's x87 image in memory
+/// and `st(0)` included.
+#[test]
+fn long_double_call_shapes_keep_their_values() {
+    use super::Vm;
+    use crate::{Compiler, Target};
+    let src = super::load_fixture("long_double_call_shapes.c");
+    for t in [Target::LinuxX64, Target::LinuxAarch64, Target::MacOSAarch64] {
+        let program = Compiler::with_target(src.clone(), t).compile().unwrap();
+        assert_eq!(Vm::new(program).run().unwrap(), 0, "{t:?}");
+    }
+}
+
 /// `long double` keeps `double`'s 53-bit significand through the compute
 /// path, so a value needing more than 53 bits does not round-trip even
 /// where the stored object could hold it (x87 80-bit has 64 significand
@@ -1419,76 +2353,6 @@ fn long_double_carries_only_the_binary64_significand() {
         7,
         "2^53 is representable and must round-trip"
     );
-}
-
-/// A `long double` handed to a platform-libc import is read by the
-/// callee in the target ABI's format. badc passes the binary64 it
-/// stores, so on the two Linux targets the callee decodes a different
-/// object; the mismatch is announced at compile time instead of
-/// surfacing as a wrong value at run time. macOS/arm64 and Windows x64
-/// define `long double` as binary64, so nothing is lost there.
-#[test]
-fn long_double_libc_argument_warns_where_the_platform_abi_is_wider() {
-    use crate::Compiler;
-    use crate::Target;
-    let warns = |src: &str, t: Target| -> alloc::vec::Vec<alloc::string::String> {
-        Compiler::with_target(super::with_prelude(src), t)
-            .compile()
-            .unwrap()
-            .warnings
-            .iter()
-            .map(|w| w.to_string())
-            .collect()
-    };
-    let src = "int main(void){ long double x = 1.0L; double d = 2.0;\n\
-               printf(\"%Lf\\n\", x); printf(\"%f\\n\", d); return 0; }";
-    let hit = |ws: &[alloc::string::String], needle: &str| {
-        ws.iter().any(|w| {
-            w.to_string().contains("`long double` argument") && w.to_string().contains(needle)
-        })
-    };
-    let x64 = warns(src, Target::LinuxX64);
-    assert!(
-        hit(&x64, "x87 80-bit"),
-        "LinuxX64 must name the x87 format, got: {x64:?}"
-    );
-    let a64 = warns(src, Target::LinuxAarch64);
-    assert!(
-        hit(&a64, "IEEE binary128"),
-        "LinuxAarch64 must name the binary128 format, got: {a64:?}"
-    );
-    for t in [
-        Target::MacOSAarch64,
-        Target::WindowsX64,
-        Target::WindowsAarch64,
-    ] {
-        let ws = warns(src, t);
-        assert!(
-            !ws.iter()
-                .any(|w| w.to_string().contains("`long double` argument")),
-            "{t:?} defines long double as binary64 and must not warn, got: {ws:?}"
-        );
-    }
-    // Exactly one argument is at issue: the `double` call must stay quiet.
-    assert_eq!(
-        x64.iter()
-            .filter(|w| w.to_string().contains("`long double` argument"))
-            .count(),
-        1,
-        "only the `%Lf` argument may warn, got: {x64:?}"
-    );
-    // <math.h> defines the `l` entry points over their `double` counterparts,
-    // so no `long double` reaches a platform callee and nothing may warn.
-    let prototyped = "#include <math.h>\n\
-                      int main(void){ return (int)ldexpl((long double)1.0, 53); }";
-    for t in [Target::LinuxX64, Target::LinuxAarch64] {
-        let ws = warns(prototyped, t);
-        assert!(
-            !ws.iter()
-                .any(|w| w.to_string().contains("`long double` argument")),
-            "{t:?}: a `double` parameter takes the value exactly and must not warn, got: {ws:?}"
-        );
-    }
 }
 
 /// A failed unit's error carries the diagnostics reported before the
@@ -1563,6 +2427,144 @@ fn a_return_mismatch_is_an_error_the_user_can_lower() {
         assert_eq!(Vm::new(lowered).run().unwrap(), 0, "the lowered unit runs");
         let silenced = with_level(src, Level::Ignore).expect("silenced");
         assert!(silenced.warnings.is_empty(), "{:?}", silenced.warnings);
+    }
+}
+
+/// C99 6.5.16.1p1, 6.7.5.3p15: a pointer to a function converts as if by
+/// assignment -- assigned, initialized at any storage duration or returned
+/// -- only to a pointer to a compatible function type, which gcc 14 and
+/// clang reject as an error the user can lower. A null pointer constant,
+/// `void *`, a cast, a type without a prototype beside one whose parameters
+/// survive promotion, and a libc binding's approximated type pass.
+#[test]
+fn an_incompatible_function_pointer_conversion_is_rejected() {
+    use crate::c5::diag::{Code, Config, Level};
+    use crate::{CompileOptions, Compiler, Target};
+    let decls = "static double d(double x) { return x; }\n\
+                 static int i1(int x) { return x; }\n\
+                 static int ic(char c) { return c; }\n\
+                 static int iv(int x, ...) { return x; }\n\
+                 static int kr(a, b) int a, b; { return a + b; }\n\
+                 static int (*ret_i(void))(int) { return i1; }\n\
+                 typedef int (*fn_t)(int);\n\
+                 struct s { int (*m)(int); };\n";
+    let with_level = |src: &str, level: Option<Level>| {
+        let mut config = Config::new();
+        if let Some(level) = level {
+            config.set_level(Code::INCOMPATIBLE_POINTER_TYPES, level);
+        }
+        Compiler::with_options(
+            src.to_string(),
+            Target::default_target(),
+            CompileOptions::default().with_diag(config),
+        )
+        .compile()
+    };
+    for (outer, body, text) in [
+        (
+            "",
+            "int (*fp)(int); fp = d;",
+            "assignment (lhs=`int (*)(int)`, rhs=`double (*)(double)`)",
+        ),
+        (
+            "",
+            "struct s x; x.m = &d;",
+            "assignment (lhs=`int (*)(int)`, rhs=`double (*)(double)`)",
+        ),
+        (
+            "",
+            "int (*fp)(int), (**pp)(int) = &fp; *pp = ic;",
+            "rhs=`int (*)(char)`",
+        ),
+        (
+            "",
+            "int (*fp)(int) = d;",
+            "initializer (declared=`int (*)(int)`, init=`double (*)(double)`)",
+        ),
+        (
+            "",
+            "fn_t fp = iv;",
+            "initializer (declared=`int (*)(int)`, init=`int (*)(int, ...)`)",
+        ),
+        (
+            "",
+            "int (*fp)() = ic;",
+            "initializer (declared=`int (*)()`, init=`int (*)(char)`)",
+        ),
+        (
+            "",
+            "int (*(*fp)(void))(double) = ret_i;",
+            "init=`int (*(*)(void))(int)`",
+        ),
+        (
+            "",
+            "static int (*fp)(int) = d;",
+            "initializer (declared=`int (*)(int)`",
+        ),
+        (
+            "int (*gp)(int) = d;\n",
+            "",
+            "initializer (declared=`int (*)(int)`",
+        ),
+        ("int (*gp)(int) = &d;\n", "", "init=`double (*)(double)`"),
+        (
+            "int (*gp)(int) = { (d) };\n",
+            "",
+            "init=`double (*)(double)`",
+        ),
+        (
+            "static int (*get(void))(int) { return d; }\n",
+            "",
+            "return (declared=`int (*)(int)`, returned=`double (*)(double)`)",
+        ),
+    ] {
+        let src = format!("{decls}{outer}int main(void) {{ {body} return 0; }}\n");
+        let err = with_level(&src, None).expect_err(&src).to_string();
+        let prefix = "incompatible function pointer types in ";
+        assert!(
+            err.contains(prefix) && err.contains(text) && err.contains("[B3029]"),
+            "{src}{err}"
+        );
+        let lowered = with_level(&src, Some(Level::Warning)).expect("lowered to a warning");
+        let codes: alloc::vec::Vec<Code> = lowered.warnings.iter().map(|d| d.code).collect();
+        assert_eq!(codes, [Code::INCOMPATIBLE_POINTER_TYPES], "{src}");
+        let silenced = with_level(&src, Some(Level::Ignore)).expect("silenced");
+        assert!(silenced.warnings.is_empty(), "{src}{:?}", silenced.warnings);
+    }
+    for (outer, body) in [
+        ("", "int (*fp)(int) = i1; fp = &i1; fp = *i1; fp = ret_i();"),
+        (
+            "",
+            "int (*fp)() = i1; int (*gp)(int, int) = kr; int (*hp)(double) = kr;",
+        ),
+        (
+            "",
+            "int (*fp)(int) = 0; fp = (void *)d; fp = (int (*)(int))d; fp = (fn_t)0;",
+        ),
+        ("", "struct s x = { i1 }; x.m = (1 ? i1 : 0);"),
+        (
+            "",
+            "static int (*fp)(int) = i1; static int (*gp)(int) = (int (*)(int))d;",
+        ),
+        ("int f(const int x) { return x; }\n", "int (*fp)(int) = f;"),
+        (
+            "#include <unistd.h>\n",
+            "\n#ifndef _WIN32\nunsigned (*fp)(void) = geteuid; fp = geteuid;\n#endif\n",
+        ),
+        (
+            "static fn_t tab[3] = { i1 };\n",
+            "fn_t (*pt)[3] = &tab; fn_t *pe = tab;",
+        ),
+    ] {
+        let src = format!("{decls}{outer}int main(void) {{ {body} return 0; }}\n");
+        let program = Compiler::new(src.clone())
+            .compile()
+            .unwrap_or_else(|e| panic!("{src}{e}"));
+        let codes: alloc::vec::Vec<Code> = program.warnings.iter().map(|d| d.code).collect();
+        assert!(
+            !codes.contains(&Code::INCOMPATIBLE_POINTER_TYPES),
+            "{src}{codes:?}"
+        );
     }
 }
 
@@ -1870,22 +2872,21 @@ fn the_address_of_a_function_designator_is_the_function_pointer() {
 
     // The address of an OBJECT of function-pointer type still adds a
     // level, and assigning it where the pointer itself belongs is the
-    // mismatch gcc and clang report.
-    let p = compile_str(
-        "struct T { int a; };\n\
-         typedef struct T *sel_t(int, int);\n\
-         void bad(sel_t *v) { sel_t *p; p = &v; (void)p; }\n\
-         int main(void) { return 0; }",
-    );
+    // mismatch gcc reports as an error and clang as a warning.
+    let src = "struct T { int a; };\n\
+               typedef struct T *sel_t(int, int);\n\
+               void bad(sel_t *v) { sel_t *p; p = &v; (void)p; }\n\
+               int main(void) { return 0; }";
+    let err = crate::Compiler::new(src.to_string())
+        .compile()
+        .expect_err(src)
+        .to_string();
     assert!(
-        p.warnings.iter().any(|w| {
-            let s = w.to_string();
-            s.contains("incompatible struct types in assignment")
-                && s.contains("lhs=struct T**")
-                && s.contains("rhs=struct T***")
-        }),
-        "got: {:?}",
-        p.warnings
+        err.contains(
+            "incompatible function pointer types in assignment \
+             (lhs=`struct T* (*)(int, int)`, rhs=`struct T* (**)(int, int)`) [B3029]"
+        ),
+        "{err}"
     );
 }
 
@@ -1931,22 +2932,19 @@ fn typeof_a_dereferenced_function_pointer_names_the_function_type() {
 
     // `typeof` of the pointer OBJECT keeps its own level, so the cast
     // below really is a pointer to a function pointer and the assignment
-    // is the mismatch gcc and clang report.
-    let p = compile_str(
-        "struct T { int a; };\n\
-         typedef struct T *sel_t(int, int);\n\
-         void bad(sel_t *v, sel_t **slot) { *slot = (typeof(v) *)(v); }\n\
-         int main(void) { return 0; }",
-    );
+    // is the mismatch gcc reports as an error and clang as a warning.
+    let src = "struct T { int a; };\n\
+               typedef struct T *sel_t(int, int);\n\
+               void bad(sel_t *v, sel_t **slot) { *slot = (typeof(v) *)(v); }\n\
+               int main(void) { return 0; }";
+    let err = crate::Compiler::new(src.to_string())
+        .compile()
+        .expect_err(src)
+        .to_string();
     assert!(
-        p.warnings.iter().any(|w| {
-            let s = w.to_string();
-            s.contains("incompatible struct types in assignment")
-                && s.contains("lhs=struct T**")
-                && s.contains("rhs=struct T***")
-        }),
-        "got: {:?}",
-        p.warnings
+        err.contains("incompatible function pointer types in assignment")
+            && err.contains("rhs=`struct T* (**)(int, int)`) [B3029]"),
+        "{err}"
     );
 }
 
@@ -1979,11 +2977,10 @@ fn a_pointer_initializer_folded_from_a_cast_is_not_read_as_an_integer() {
     let msgs: alloc::vec::Vec<alloc::string::String> =
         p.warnings.iter().map(|w| w.to_string()).collect();
     let struct_row = msgs.iter().any(|s| {
-        s.contains("integer assigned to pointer in global initializer")
-            && s.contains("var=struct S*")
+        s.contains("integer assigned to pointer in initializer") && s.contains("declared=struct S*")
     });
     let scalar_row = msgs.iter().any(|s| {
-        s.contains("integer assigned to pointer in global initializer") && s.contains("var=int*")
+        s.contains("integer assigned to pointer in initializer") && s.contains("declared=int*")
     });
     assert!(struct_row && scalar_row, "got: {msgs:?}");
 }
@@ -2021,7 +3018,7 @@ fn a_pointer_against_a_scalar_reports_the_same_row_whatever_the_pointee() {
     let count = |needle: &str| rows.iter().filter(|(_, s)| s.contains(needle)).count();
     assert_eq!(
         (
-            count("integer assigned to pointer in global initializer"),
+            count("integer assigned to pointer in initializer"),
             count("integer assigned to pointer in assignment"),
             count("pointer assigned to integer in assignment"),
             rows.len(),
@@ -2100,7 +3097,7 @@ fn a_subscript_takes_the_integer_on_either_side() {
         ),
         (
             "int t(int i, int j) { return i[j]; }",
-            "pointer type expected",
+            "subscripted value has type `int`, not a pointer or an array",
         ),
     ] {
         let src = format!("{body}\nint main(void) {{ return 0; }}\n");
@@ -2111,6 +3108,349 @@ fn a_subscript_takes_the_integer_on_either_side() {
             "{src}{msg}"
         );
     }
+}
+
+/// C99 6.5.2.1p1: the pointer operand of `[]` points to an object type. A
+/// pointer to a function does not, however it is spelled, and a function
+/// designator decays to one; the diagnostic names its type. An element of
+/// an array of function pointers, of a pointer to one, or of an array
+/// parameter, which C99 6.7.5.3p7 makes such a pointer, is an object.
+#[test]
+fn a_subscript_rejects_a_pointer_to_a_function() {
+    use super::Vm;
+    use crate::Compiler;
+    let decls = "static double twice(double x) { return x * 2; }\n\
+                 static double (*getfp(void))(double) { return twice; }\n\
+                 struct s { double (*m)(double); double (*a[2])(double); };\n\
+                 double (*(*lp)(void))(double) = getfp;\n\
+                 static double elem(double (*const t[])(double)) { return t[1](3); }\n\
+                 int main(void) {\n\
+                 \tdouble (*fp)(double) = twice, (**pp)(double) = &fp;\n\
+                 \tdouble (*arr[2])(double) = { twice, twice };\n\
+                 \tstruct s s = { twice, { twice, twice } };\n";
+    let fp = "`double (*)(double)`, a pointer to a function";
+    for (expr, text) in [
+        ("(&twice)[0](3)", fp),
+        ("fp[0](3)", fp),
+        ("0[fp](3)", fp),
+        ("twice[0](3)", fp),
+        ("(*fp)[0](3)", fp),
+        ("(*pp)[0](3)", fp),
+        ("s.m[0](3)", fp),
+        ("getfp()[0](3)", fp),
+        ("(fp + 1)[0](3)", fp),
+        ("(0, fp)[0](3)", fp),
+        ("(1 ? fp : twice)[0](3)", fp),
+        ("((double (*)(double))0)[0](3)", fp),
+        (
+            "lp[0]()(3)",
+            "`double (*(*)(void))(double)`, a pointer to a function",
+        ),
+    ] {
+        let src = format!("{decls}\treturn {expr} == 6.0;\n}}\n");
+        let err = Compiler::new(src.clone())
+            .compile()
+            .expect_err(&src)
+            .to_string();
+        assert!(
+            err.contains(&format!("subscripted value has type {text} [B3020]")),
+            "{src}{err}"
+        );
+    }
+    let src =
+        format!("{decls}\treturn pp[0](3) + arr[1](3) + s.a[1](3) + elem(arr) == 24.0;\n}}\n");
+    let program = Compiler::new(src.clone()).compile().expect(&src);
+    assert_eq!(Vm::new(program).run().unwrap(), 1, "{src}");
+}
+
+/// C99 6.7.5.3p14: an empty list outside a definition, and an old-style
+/// definition, give a function type no prototype, which is not the type
+/// `(void)` gives (6.7.5.3p10). A diagnostic names each as spelled, through
+/// a declaration, a typedef, `typeof`, a cast, a member, a parameter and a
+/// returned pointer; a later prototype makes the composite type one
+/// (6.2.7p3), and so does a prototyped arm of a conditional (6.5.15p6).
+#[test]
+fn a_function_type_without_a_prototype_prints_an_empty_list() {
+    use crate::Compiler;
+    for (decls, expr, want) in [
+        ("int (*fp)();", "fp", "int (*)()"),
+        ("int (*fp)(void);", "fp", "int (*)(void)"),
+        ("int f();", "f", "int (*)()"),
+        ("int f(void);", "f", "int (*)(void)"),
+        ("int g(a) int a; { return a; }", "g", "int (*)()"),
+        ("int h() { return 0; }", "h", "int (*)()"),
+        (
+            "int g(a) int a; { return a; }\nint g(int);",
+            "g",
+            "int (*)(int)",
+        ),
+        ("int m(int);\nint m();", "m", "int (*)(int)"),
+        ("int m(void);\nint m();", "m", "int (*)(void)"),
+        ("typedef int F();\nF *p;", "p", "int (*)()"),
+        ("typedef int F(void);\nF *p;", "p", "int (*)(void)"),
+        ("typedef int (*PF)();\nPF p;", "p", "int (*)()"),
+        ("typedef int F();\nF fd;", "fd", "int (*)()"),
+        ("", "(int (*)())0", "int (*)()"),
+        ("typedef int (*PF)();", "(PF)0", "int (*)()"),
+        ("int (*fp)();\n__typeof__(fp) q;", "q", "int (*)()"),
+        ("int f();\n__typeof__(f) *q;", "q", "int (*)()"),
+        ("struct s { int (*m)(); } s;", "s.m", "int (*)()"),
+        (
+            "int use(int (*pp)()) { return pp[0]() == 0; }",
+            "use",
+            "int (*)()",
+        ),
+        ("int (*arr[2])();", "arr[0]", "int (*)()"),
+        ("int (*(*lp)())(double);", "lp", "int (*(*)())(double)"),
+        ("int (*(*lp)(int))();", "lp", "int (*(*)(int))()"),
+        ("int (*(*lp)(int))();", "lp(1)", "int (*)()"),
+        ("int (*a)(void), (*b)();", "1 ? b : a", "int (*)(void)"),
+        ("int (*a)(), (*b)(int);", "1 ? a : b", "int (*)(int)"),
+        ("", "({ int bf(); bf; })", "int (*)()"),
+    ] {
+        let src = format!("{decls}\nint main(void) {{ return ({expr})[0]() == 0; }}\n");
+        let err = Compiler::new(src.clone())
+            .compile()
+            .expect_err(&src)
+            .to_string();
+        let text = format!("subscripted value has type `{want}`, a pointer to a function");
+        assert!(err.contains(&text), "{src}{err}");
+    }
+}
+
+/// C99 6.7.7p3: a member declared through a typedef has the typedef's type,
+/// so a call through the member yields the pointer its function returns,
+/// whose function type the diagnostic names -- as for a variable.
+#[test]
+fn a_member_declared_through_a_typedef_has_its_function_type() {
+    use crate::Compiler;
+    let decls = "static double twice(double x) { return x * 2; }\n\
+                 typedef double (*dfp)(double);\n\
+                 static dfp get(void) { return twice; }\n\
+                 typedef dfp (*gf_t)(void);\n\
+                 typedef dfp gfn_t(void);\n\
+                 struct s { gf_t g; gfn_t *h; gf_t arr[2]; } s = { get, get, { get, get } };\n\
+                 union u { gf_t g; long pad; } u = { get };\n\
+                 gf_t v = get;\n";
+    for callee in ["v()", "s.g()", "s.h()", "s.arr[1]()", "u.g()", "(&s)->g()"] {
+        let src = format!("{decls}int main(void) {{ return {callee}[0](3) == 6.0; }}\n");
+        let err = Compiler::new(src.clone())
+            .compile()
+            .expect_err(&src)
+            .to_string();
+        let text = "subscripted value has type `double (*)(double)`, a pointer to a function";
+        assert!(err.contains(text), "{src}{err}");
+    }
+}
+
+/// C99 6.7.5.1, 6.7.5.2: an element of the array a declared pointer to an
+/// array of function pointers points to is a function pointer, whatever
+/// the declaration context; the diagnostic names its function type.
+#[test]
+fn an_element_through_a_pointer_to_an_array_of_function_pointers_has_its_type() {
+    use crate::Compiler;
+    let decls = "static double twice(double x) { return x * 2; }\n\
+                 static double (*table[3])(double) = {twice, twice, twice};\n\
+                 static double (*grid[2][3])(double) = {{twice}, {twice}};\n\
+                 typedef double (*(*G)[3])(double);\n\
+                 double (*(*g)[3])(double) = &table;\n\
+                 double (*(*gg)[2][3])(double) = &grid;\n\
+                 struct h { double (*(*m)[3])(double); } h = { &table };\n\
+                 G tg = &table;\n";
+    for elem in [
+        "g[0][1]",
+        "(*g)[1]",
+        "gg[0][1][2]",
+        "(*gg)[1][2]",
+        "h.m[0][1]",
+        "tg[0][2]",
+    ] {
+        let src = format!("{decls}int main(void) {{ return {elem}[0](3) == 6.0; }}\n");
+        let err = Compiler::new(src.clone())
+            .compile()
+            .expect_err(&src)
+            .to_string();
+        let text = "subscripted value has type `double (*)(double)`, a pointer to a function";
+        assert!(err.contains(text), "{src}{err}");
+    }
+}
+
+/// C99 6.5.4: a cast's value has the cast type, so `*` on a function
+/// pointer cast to an object pointer designates the object (6.5.3.2p4):
+/// `sizeof` and `_Generic` read the pointee's type and the value is loaded.
+#[test]
+fn a_function_pointer_cast_to_an_object_pointer_designates_the_object() {
+    use super::Vm;
+    use crate::Compiler;
+    let src = "static int answer(void) { return 42; }\n\
+               int main(void) {\n\
+               \tint x = 5;\n\
+               \tint (*fp)(void) = (int (*)(void))(void *)&x;\n\
+               \treturn (sizeof *(int *)fp == sizeof(int))\n\
+               \t\t+ 2 * (sizeof *(char *)fp == 1)\n\
+               \t\t+ 4 * _Generic(*(int *)fp, int: 1, default: 0)\n\
+               \t\t+ 8 * (*(int *)fp == 5)\n\
+               \t\t+ 16 * (*(int *)(void *)fp == 5)\n\
+               \t\t+ 32 * ((*(int (*)(void))(void *)answer)() == 42);\n\
+               }\n";
+    let program = Compiler::new(src.to_string()).compile().expect(src);
+    assert_eq!(Vm::new(program).run().unwrap(), 63, "{src}");
+}
+
+/// C99 6.5.2.1p1, 6.5.6p2: a subscript and the additive operators step by
+/// the pointee's size, so a pointer to a struct or union without its body,
+/// or to an array of unknown bound, is rejected with its type named. A
+/// pointer to `void` steps by one byte as GNU C defines it, the element of
+/// a pointer to an incomplete array is an object, and the comparisons take
+/// any object pointer.
+#[test]
+fn pointer_arithmetic_rejects_an_incomplete_pointee() {
+    use super::Vm;
+    use crate::Compiler;
+    let decls = "struct S; union U;\n\
+                 long f(struct S *p, struct S *q, union U *u, int (*pa)[], void *vp) {\n";
+    let s = "`struct S*`, a pointer to an incomplete type";
+    for (body, text) in [
+        (
+            "return (long)&p[1];",
+            format!("subscripted value has type {s}"),
+        ),
+        ("return (long)(p + 1);", format!("`+` operand has type {s}")),
+        ("return (long)(1 + p);", format!("`+` operand has type {s}")),
+        ("return p - q;", format!("`-` operand has type {s}")),
+        ("p++; return 0;", format!("`++` operand has type {s}")),
+        ("--p; return 0;", format!("`--` operand has type {s}")),
+        ("p += 2; return 0;", format!("`+=` operand has type {s}")),
+        ("p -= 2; return 0;", format!("`-=` operand has type {s}")),
+        (
+            "return (long)(u - 1);",
+            "`-` operand has type `union U*`, a pointer to an incomplete type".into(),
+        ),
+        (
+            "return (long)&pa[1];",
+            "subscripted value has type `int (*)[]`, a pointer to an incomplete type".into(),
+        ),
+    ] {
+        let src = format!("{decls}\t{body}\n}}\nint main(void) {{ return 0; }}\n");
+        let err = Compiler::new(src.clone())
+            .compile()
+            .expect_err(&src)
+            .to_string();
+        assert!(err.contains(&format!("{text} [B3020]")), "{src}{err}");
+    }
+    let src = "struct S;\n\
+               int f(struct S *p, struct S *q, int (*pa)[], void *vp) {\n\
+               \treturn (p == q) + (*pa)[1] + (int)((char *)(vp + 3) - (char *)vp);\n\
+               }\n\
+               int main(void) { int a[2] = { 0, 4 }; return f(0, 0, &a, a); }\n";
+    let program = Compiler::new(src.to_string()).compile().expect(src);
+    assert_eq!(Vm::new(program).run().unwrap(), 8, "{src}");
+}
+
+/// C99 6.5.3.2p3: the address of an array-typed lvalue is a pointer to
+/// that array type. A row of a multi-dimensional array, an array member
+/// and a row of one, a row of a pointer to an array and the array `*p`
+/// reaches, a string literal and a compound literal each address as their
+/// array type, so a further subscript steps by the row, `sizeof` and
+/// `typeof` of the pointee see the array, and the address compares equal
+/// to the arithmetic that reaches it. A row selected by `*` leaves no
+/// shape of the whole array behind, so `typeof(*m)` is the row, and an
+/// operator other than a subscript or a member access leaves none at all:
+/// `typeof(a - b)` is the difference's type, `sizeof(p = arr)` a pointer's.
+/// An array parameter is a pointer (6.7.5.3p7), so its address is a pointer
+/// to a pointer.
+#[test]
+fn the_address_of_an_array_lvalue_is_a_pointer_to_the_array() {
+    use super::Vm;
+    use crate::Compiler;
+    let src = "static int m[5][2] = {{1, 2}, {3, 4}};\n\
+               static int t[2][3][4];\n\
+               struct S { int a[3]; int mm[2][3]; int (*pa)[3]; };\n\
+               int (*pa)[2] = m;\n\
+               int (*p3)[3][4] = t;\n\
+               static int f(int p[3], int r[2][3][4]) {\n\
+               \treturn (sizeof(*&p) == sizeof(int *) && (&p)[0] == p)\n\
+               \t\t+ 2 * ((&r[1])[0][2][3] == 42 && sizeof(*&r[1][2]) == sizeof(int[4]));\n\
+               }\n\
+               int main(void) {\n\
+               \tstruct S s = {{1, 2, 3}, {{1, 2, 3}, {4, 5, 6}}, 0};\n\
+               \tint bits = 0;\n\
+               \ts.pa = s.mm;\n\
+               \tt[1][2][3] = 42;\n\
+               \tbits |= ((&m[1])[0][1] == 4 && (*&m[1])[1] == 4) << 0;\n\
+               \tbits |= (sizeof(*&m[1]) == sizeof(int[2]) && sizeof(*&t[1]) == sizeof(int[3][4])\n\
+               \t\t&& sizeof(*&t[1][2]) == sizeof(int[4])) << 1;\n\
+               \tbits |= ((&t[1])[0][2][3] == 42 && (&t[1][2])[0][3] == 42) << 2;\n\
+               \tbits |= (sizeof(*&*m) == sizeof(int[2]) && sizeof(__typeof__(*m)) == sizeof(int[2])) << 3;\n\
+               \tbits |= ((&s.mm[1])[0][2] == 6 && sizeof(*&s.mm[1]) == sizeof(int[3])\n\
+               \t\t&& (&s.pa[1])[0][1] == 5 && (&s.a)[0][2] == 3) << 4;\n\
+               \tbits |= ((&*pa)[1][0] == 3 && (&pa[1])[0][1] == 4 && sizeof(*&p3[1][1]) == sizeof(int[4])) << 5;\n\
+               \tbits |= (&m[1] == &m[0] + 1 && &m[1] - &m[0] == 1\n\
+               \t\t&& (char *)(&m[0] + 1) - (char *)m == sizeof(int[2])) << 6;\n\
+               \tbits |= (sizeof(*&\"abc\") == 4 && (&\"abc\")[0][2] == 'c'\n\
+               \t\t&& sizeof(*&(int[]){1, 2, 3}) == sizeof(int[3])) << 7;\n\
+               \tbits |= (__builtin_types_compatible_p(__typeof__(&m[1]), int (*)[2])\n\
+               \t\t&& sizeof(!m) == sizeof(int)) << 8;\n\
+               \tbits |= f(m[0], t) << 9;\n\
+               \tbits |= (sizeof(__typeof__(m[0] - m[1])) == sizeof(m[0] - m[1]) && sizeof(pa = m) == sizeof(int (*)[2])\n\
+               \t\t&& sizeof(__typeof__(m[0] + 1)) == sizeof(int *) && sizeof(!m) == sizeof(int)) << 11;\n\
+               \treturn bits;\n\
+               }\n";
+    let program = Compiler::new(src.to_string()).compile().expect(src);
+    assert_eq!(Vm::new(program).run().unwrap(), 0xfff, "{src}");
+}
+
+/// C99 6.5.3.2p3 with 6.7.5.2p4: the address of an array of unknown bound
+/// -- an `extern` array or a flexible array member -- is a pointer to an
+/// incomplete array type, so a subscript or arithmetic on it is rejected
+/// as on any pointer to an incomplete type (6.5.2.1p1, 6.5.6p2). The array
+/// reached through `*` still subscripts.
+#[test]
+fn the_address_of_an_array_of_unknown_bound_is_a_pointer_to_an_incomplete_array() {
+    use super::Vm;
+    use crate::Compiler;
+    let decls = "extern int ua[];\nstruct F { int n; int fa[]; };\n";
+    let ty = "`int (*)[]`, a pointer to an incomplete type";
+    for (body, text) in [
+        (
+            "return (&ua)[1][0];",
+            format!("subscripted value has type {ty}"),
+        ),
+        (
+            "return (long)(&ua + 1);",
+            format!("`+` operand has type {ty}"),
+        ),
+        (
+            "return (long)(&ua - 1);",
+            format!("`-` operand has type {ty}"),
+        ),
+        (
+            "return (&f->fa)[1][0];",
+            format!("subscripted value has type {ty}"),
+        ),
+        (
+            "return (long)(&f->fa + 1);",
+            format!("`+` operand has type {ty}"),
+        ),
+    ] {
+        let src = format!(
+            "{decls}long g(struct F *f) {{\n\t{body}\n}}\nint ua[3];\nint main(void) {{ return 0; }}\n"
+        );
+        let err = Compiler::new(src.clone())
+            .compile()
+            .expect_err(&src)
+            .to_string();
+        assert!(err.contains(&format!("{text} [B3020]")), "{src}{err}");
+    }
+    let src = "extern int ua[];\n\
+               struct F { int n; int fa[]; };\n\
+               int g(struct F *f) {\n\
+               \treturn (*&ua)[1] * 10 + (*&f->fa)[1] + (int)(sizeof(&ua) == sizeof(int *));\n\
+               }\n\
+               int ua[3] = {5, 6, 7};\n\
+               int main(void) { return g((struct F *)ua); }\n";
+    let program = Compiler::new(src.to_string()).compile().expect(src);
+    assert_eq!(Vm::new(program).run().unwrap(), 68, "{src}");
 }
 
 /// C99 6.6p6: a context that requires an integer constant expression -- a
@@ -2154,4 +3494,488 @@ fn an_integer_constant_expression_rejects_a_floating_result() {
                }\n";
     let program = Compiler::new(src.to_string()).compile().expect(src);
     assert_eq!(Vm::new(program).run().unwrap(), 18, "{src}");
+}
+
+/// C99 6.2.5p15: plain `char` is a type distinct from `signed char` and
+/// `unsigned char`, with the representation of one of them. Generic
+/// selection (C11 6.5.1.1) and `__builtin_types_compatible_p` see three
+/// types on every target and under `-fsigned-char` / `-funsigned-char`,
+/// a string literal's element is plain `char`, and its value follows the
+/// target's signedness: what gcc 16.2.1 and clang 22.1.8 give on x86_64
+/// and aarch64.
+#[test]
+fn plain_char_is_a_third_character_type() {
+    use super::Vm;
+    use crate::{CompileOptions, Compiler, Target};
+    const SRC: &str = "#define WHICH(x) _Generic((x), signed char: 1, char: 2, unsigned char: 3, default: 0)\n\
+         char pc; signed char sc; unsigned char uc;\n\
+         int main(void) {\n\
+         \tint literal = \"\\xff\"[0];\n\
+         \treturn WHICH(sc) + WHICH(pc) * 10 + WHICH(uc) * 100 + WHICH(\"a\"[0]) * 1000\n\
+         \t    + WHICH((__typeof__(pc))0) * 10000 + WHICH(pc + 0) * 100000\n\
+         \t    + (__builtin_types_compatible_p(char, signed char)\n\
+         \t       + __builtin_types_compatible_p(char, unsigned char)\n\
+         \t       + __builtin_types_compatible_p(char *, unsigned char *)) * 1000000\n\
+         \t    + (literal == 255) * 10000000 + (literal == -1) * 20000000;\n\
+         }\n";
+    let run = |t: Target, sel: Option<bool>| -> i64 {
+        let opts = CompileOptions::default().with_char_signed(sel);
+        Vm::new(
+            Compiler::with_options(SRC.to_string(), t, opts)
+                .compile()
+                .unwrap(),
+        )
+        .run()
+        .unwrap()
+    };
+    // 1, 2, 3, the literal's element 2, `typeof` 2, the promoted value
+    // `int`, no compatible pair, then the element's value.
+    const SIGNED: i64 = 20_022_321;
+    const UNSIGNED: i64 = 10_022_321;
+    for (t, dflt) in [
+        (Target::LinuxX64, SIGNED),
+        (Target::LinuxAarch64, UNSIGNED),
+        (Target::MacOSAarch64, SIGNED),
+        (Target::WindowsX64, SIGNED),
+        (Target::WindowsAarch64, SIGNED),
+    ] {
+        assert_eq!(run(t, None), dflt, "{t:?} ABI default");
+        assert_eq!(run(t, Some(true)), SIGNED, "{t:?} under -fsigned-char");
+        assert_eq!(run(t, Some(false)), UNSIGNED, "{t:?} under -funsigned-char");
+    }
+}
+
+/// The three character types are incompatible (C99 6.2.7p1), so a
+/// redeclaration that swaps one for another conflicts, on the target whose
+/// plain `char` shares the other's representation too, and a diagnostic
+/// spells each as declared; gcc 16.2.1 and clang 22.1.8 report the same on
+/// x86_64 and aarch64.
+#[test]
+fn character_types_are_told_apart_by_compatibility_and_diagnostics() {
+    use crate::{Compiler, Target};
+    let err = |t: Target, src: &str| -> String {
+        Compiler::with_target(src.to_string(), t)
+            .compile()
+            .expect_err(src)
+            .to_string()
+    };
+    for t in [Target::LinuxX64, Target::LinuxAarch64] {
+        for other in ["signed char", "unsigned char"] {
+            let src =
+                format!("void f(char *p);\nvoid f({other} *p);\nint main(void) {{ return 0; }}\n");
+            let e = err(t, &src);
+            assert!(
+                e.contains("conflicting types for `f`")
+                    && e.contains("previous: void (char*)")
+                    && e.contains(&format!("now:      void ({other}*)")),
+                "{t:?}: {e}"
+            );
+        }
+        for spelled in ["char", "signed char", "unsigned char"] {
+            let src = format!(
+                "struct S {{ int a; }} s; {spelled} c;\nint f(void) {{ return s + c; }}\n\
+                 int main(void) {{ return 0; }}\n"
+            );
+            let e = err(t, &src);
+            assert!(
+                e.contains(&format!(
+                    "invalid operands to binary `+` (`struct S` and `{spelled}`)"
+                )),
+                "{t:?}: {e}"
+            );
+            let src = format!(
+                "{spelled} c = ({spelled})(long)\"abc\";\nint main(void) {{ return 0; }}\n"
+            );
+            let e = err(t, &src);
+            assert!(
+                e.contains(&format!(
+                    "an address constant does not fit an object of type `{spelled}`"
+                )),
+                "{t:?}: {e}"
+            );
+        }
+    }
+}
+
+/// C99 6.7.5.1: the pointer levels a declarator applies to a
+/// function-pointer typedef base lie between the declared function's
+/// result, or the result of the function a declared pointer points to,
+/// and the typedef's function type.
+#[test]
+fn a_result_keeps_the_pointer_levels_over_a_function_pointer_base() {
+    compile_str(
+        "typedef _Bool (*handler)(int);\n\
+         typedef int F(int);\n\
+         static handler table[2];\n\
+         static handler *get(void) { return table; }\n\
+         static handler *(*get2(void)) { static handler *slot; return &slot; }\n\
+         static F *getf(void) { return 0; }\n\
+         handler *(*fp)(char);\n\
+         _Static_assert(__builtin_types_compatible_p(__typeof__(get), _Bool (**(void))(int)), \"get\");\n\
+         _Static_assert(__builtin_types_compatible_p(__typeof__(get2),\n\
+             _Bool (***(void))(int)), \"get2\");\n\
+         _Static_assert(__builtin_types_compatible_p(__typeof__(getf), int (*(void))(int)), \"getf\");\n\
+         _Static_assert(__builtin_types_compatible_p(__typeof__(fp), _Bool (**(*)(char))(int)), \"fp\");\n\
+         int main(void) {\n\
+             handler *lget(void);\n\
+             _Static_assert(__builtin_types_compatible_p(__typeof__(lget),\n\
+                 _Bool (**(void))(int)), \"lget\");\n\
+             return 0;\n\
+         }\n",
+    );
+}
+
+/// C23 6.7.2.5: `typeof` of a function designator (`*fp`) names the
+/// function's type, its parameters included, so an entity declared through
+/// the specifier has the prototype (the kernel's `static_call` trampolines).
+#[test]
+fn typeof_a_function_designator_keeps_its_parameters() {
+    compile_str(
+        "struct ops { void (*run)(void *ctx, _Bool now); int (*get)(char); };\n\
+         struct ops ops;\n\
+         extern __typeof__(*ops.run) tramp;\n\
+         _Static_assert(__builtin_types_compatible_p(__typeof__(*ops.run), void (void *, _Bool)), \"run\");\n\
+         _Static_assert(__builtin_types_compatible_p(__typeof__(&tramp), void (*)(void *, _Bool)), \"tramp\");\n\
+         _Static_assert(!__builtin_types_compatible_p(__typeof__(&tramp), void (*)()), \"tramp\");\n\
+         _Static_assert(__builtin_types_compatible_p(__typeof__(*ops.get), int (char)), \"get\");\n\
+         int main(void) {\n\
+             __typeof__(*ops.get) *g = ops.get;\n\
+             _Static_assert(__builtin_types_compatible_p(__typeof__(g), int (*)(char)), \"g\");\n\
+             return g == ops.get ? 0 : 1;\n\
+         }\n",
+    );
+}
+
+/// C99 6.7.2.2p4: a member typed through an enum tag used before its
+/// definition -- directly or through a typedef -- has the enum's type once
+/// the definition fixes it, as a declaration after the definition does.
+#[test]
+fn a_member_typed_before_its_enums_definition_takes_the_enums_type() {
+    compile_str(
+        "struct ev;\n\
+         typedef enum line (*print_fn)(struct ev *e, int flags);\n\
+         struct funcs { print_fn trace; enum line (*raw)(int); enum line *last; };\n\
+         enum line { PARTIAL, HANDLED };\n\
+         enum line nop(struct ev *e, int flags);\n\
+         _Static_assert(__builtin_types_compatible_p(__typeof__(((struct funcs *)0)->trace),\n\
+             __typeof__(&nop)), \"trace\");\n\
+         _Static_assert(__builtin_types_compatible_p(__typeof__(((struct funcs *)0)->raw),\n\
+             enum line (*)(int)), \"raw\");\n\
+         _Static_assert(__builtin_types_compatible_p(__typeof__(((struct funcs *)0)->last),\n\
+             enum line *), \"last\");\n\
+         _Static_assert(__builtin_types_compatible_p(print_fn, __typeof__(&nop)), \"typedef\");\n\
+         int main(void) { return 0; }\n",
+    );
+}
+
+/// C99 6.7.2.2p4: the definition of an enum used before it completes the
+/// type of every earlier use -- objects, results, parameters, function
+/// pointers and the function types typedefs name, members promoted from
+/// an anonymous struct. An object given storage through the use keeps it
+/// only at the size the definition chooses.
+#[test]
+fn uses_before_an_enums_definition_take_the_enums_type() {
+    use crate::{Compiler, Target};
+    let src = "enum E;\nenum E g(void);\nextern enum E v;\nenum E *pv;\n\
+               void (*setter)(enum E);\ntypedef void sink_t(enum E);\n\
+               enum E (*(*maker)(void))(enum E);\nenum E tentative;\n\
+               struct ops { void (*set)(enum E); struct { enum E *inner; }; };\n\
+               enum E { A, B = 0x80000000u };\n\
+               #define SAME(a, b) _Static_assert(__builtin_types_compatible_p(a, b), #a)\n\
+               SAME(__typeof__(g()), unsigned int);\n\
+               SAME(__typeof__(v), unsigned int);\n\
+               SAME(__typeof__(pv), unsigned int *);\n\
+               SAME(__typeof__(setter), void (*)(unsigned int));\n\
+               SAME(sink_t *, void (*)(unsigned int));\n\
+               SAME(__typeof__(maker), unsigned int (*(*)(void))(unsigned int));\n\
+               SAME(__typeof__(tentative), unsigned int);\n\
+               SAME(__typeof__(((struct ops *)0)->set), void (*)(unsigned int));\n\
+               SAME(__typeof__(((struct ops *)0)->inner), unsigned int *);\n\
+               int main(void) { return 0; }\n";
+    Compiler::with_target(src.to_string(), Target::LinuxX64)
+        .compile()
+        .expect("uses before the definition name the completed type");
+    let wide = "enum E;\nenum E w;\nenum E { A = 1, B = 0x100000000 };\n\
+                int main(void) { return 0; }\n";
+    let err = Compiler::with_target(wide.to_string(), Target::LinuxX64)
+        .compile()
+        .map(|_| ())
+        .unwrap_err()
+        .to_string();
+    assert!(
+        err.contains("`w` took the storage of `int` before `enum E` was defined"),
+        "{err}"
+    );
+}
+
+/// The function-pointer conversions three Linux units make convert between
+/// compatible types: a trampoline declared through `typeof(*fp)`, a member
+/// typed before the definition of the enum its result names, and a result
+/// pointing to const function pointers returned from an array of them.
+#[test]
+fn function_pointer_conversions_of_linux_shapes_are_compatible() {
+    compile_str(
+        "struct ops { void (*run)(void *ctx, _Bool now); };\n\
+         struct ops ops;\n\
+         extern __typeof__(*ops.run) tramp;\n\
+         static void update(void) { __typeof__(&tramp) f = (ops.run); (void)f; }\n\
+         struct ev;\n\
+         typedef enum line (*print_fn)(struct ev *e, int flags);\n\
+         struct funcs { print_fn trace; };\n\
+         enum line { PARTIAL, HANDLED };\n\
+         static enum line nop(struct ev *e, int flags) { (void)e; (void)flags; return PARTIAL; }\n\
+         static void reg(struct funcs *f) { f->trace = nop; }\n\
+         typedef _Bool (*handler)(int);\n\
+         static const handler table[2];\n\
+         static const handler *handlers(void) { return table; }\n\
+         int main(void) {\n\
+             const handler *h = handlers();\n\
+             struct funcs fs;\n\
+             update();\n\
+             reg(&fs);\n\
+             return h == table && fs.trace == nop ? 0 : 1;\n\
+         }\n",
+    );
+}
+
+/// C99 6.7.5.3p1: a group holding a declarator's own parameter list makes
+/// its entity a function, at file and block scope, and the suffixes after
+/// the group derive the type the function's result points to; a result is
+/// never an array and an array element never a function.
+#[test]
+fn a_group_holding_the_parameter_list_derives_the_function_result() {
+    use crate::Compiler;
+    compile_str(
+        "static int arr[3];\n\
+         static double (*fns[3])(double);\n\
+         int (*mki(void))[3] { return &arr; }\n\
+         double (*(*mkf(void))[3])(double) { return &fns; }\n\
+         static int *(*h(void));\n\
+         _Static_assert(__builtin_types_compatible_p(__typeof__(mki), int (*(void))[3]), \"mki\");\n\
+         _Static_assert(!__builtin_types_compatible_p(__typeof__(mki), int *(void)), \"mki\");\n\
+         _Static_assert(sizeof(*mki()) == 3 * sizeof(int), \"mki\");\n\
+         _Static_assert(__builtin_types_compatible_p(__typeof__(mkf),\n\
+             double (*(*(void))[3])(double)), \"mkf\");\n\
+         _Static_assert(!__builtin_types_compatible_p(__typeof__(mkf),\n\
+             double (*(*(void))[3])(int)), \"mkf\");\n\
+         _Static_assert(sizeof(*mkf()) == 3 * sizeof(void *), \"mkf\");\n\
+         _Static_assert(__builtin_types_compatible_p(__typeof__(h), int **(void)), \"h\");\n\
+         int main(void) {\n\
+             int (*mkl(void))[3];\n\
+             int (*sig(int))(int);\n\
+             _Static_assert(__builtin_types_compatible_p(__typeof__(mkl), int (*(void))[3]), \"mkl\");\n\
+             _Static_assert(__builtin_types_compatible_p(__typeof__(sig), int (*(int))(int)), \"sig\");\n\
+             return 0;\n\
+         }\n",
+    );
+    for (decl, text) in [
+        ("int (f(void))[3];", "function returning an array"),
+        ("int (*p)(void)[3];", "function returning an array"),
+        ("int (*a[2])[3](void);", "array of functions"),
+    ] {
+        let src = format!("{decl}\nint main(void) {{ return 0; }}\n");
+        let err = Compiler::new(src.clone())
+            .compile()
+            .expect_err(&src)
+            .to_string();
+        assert!(err.contains(text), "{src}{err}");
+    }
+}
+
+/// C99 6.7.7p3: an array typedef names the whole array type, so the first
+/// derivation of a declarator applies to it -- a pointer to the array, an
+/// array of such pointers, a function returning one -- in every context.
+#[test]
+fn a_derivation_applies_to_the_whole_array_an_array_typedef_names() {
+    compile_str(
+        "typedef int A[3];\n\
+         A *v[2];\n\
+         A (*pa)[2];\n\
+         A *(*pf)(void);\n\
+         typedef A *PA2[2];\n\
+         struct M { A *m[2]; A *(*f)(void); };\n\
+         _Static_assert(__builtin_types_compatible_p(__typeof__(v), int (*[2])[3]), \"v\");\n\
+         _Static_assert(sizeof(v) == 2 * sizeof(void *), \"v\");\n\
+         _Static_assert(__builtin_types_compatible_p(__typeof__(pa), int (*)[2][3]), \"pa\");\n\
+         _Static_assert(sizeof(*pa) == 6 * sizeof(int), \"pa\");\n\
+         _Static_assert(__builtin_types_compatible_p(__typeof__(pf), int (*(*)(void))[3]), \"pf\");\n\
+         _Static_assert(__builtin_types_compatible_p(PA2, int (*[2])[3]), \"PA2\");\n\
+         _Static_assert(sizeof(((struct M *)0)->m) == 2 * sizeof(void *), \"m\");\n\
+         static int use(A *p[2]) {\n\
+             _Static_assert(sizeof(p) == sizeof(void *), \"p\");\n\
+             return (*p[1])[0];\n\
+         }\n\
+         int main(void) {\n\
+             typedef A *PA;\n\
+             A *(pp);\n\
+             _Static_assert(__builtin_types_compatible_p(PA, int (*)[3]), \"PA\");\n\
+             _Static_assert(__builtin_types_compatible_p(__typeof__(pp), int (*)[3]), \"pp\");\n\
+             return use(v) * 0;\n\
+         }\n",
+    );
+}
+
+/// C99 6.7.8p11: an initializer converts as if by simple assignment, so it
+/// reports what the assignment reports -- a pointer to an integer, a
+/// non-zero integer to a pointer, a pointer to an incompatible struct --
+/// in a static or automatic scalar, member and element and in a compound
+/// literal. The folded value of a static one carries the expression's
+/// type, so a cast and a null pointer constant stay silent.
+#[test]
+fn an_initializer_reports_the_conversions_an_assignment_reports() {
+    use crate::diag::Code;
+    let pre = "int g, arr[2];\nint f(void) { return 0; }\n\
+               struct A { int x; }; struct B { int y; } b;\n";
+    let int_conv = Some(Code::INT_CONVERSION);
+    let struct_conv = Some(Code::INCOMPATIBLE_STRUCT_TYPES);
+    for (body, want) in [
+        ("long long s = &g;", int_conv),
+        ("long long s = f;", int_conv),
+        ("long long s = \"x\";", int_conv),
+        ("long long s = arr;", int_conv),
+        ("long long s = &g + 1;", int_conv),
+        ("int *p = 5;", int_conv),
+        ("struct { long long v; } t = { &g };", int_conv),
+        ("struct { int *p; } t = { 5 };", int_conv),
+        ("long long a[2] = { 0, &g };", int_conv),
+        ("long long s = (long long){ &g };", int_conv),
+        ("struct A *p = &b;", struct_conv),
+        (
+            "int main(void) { static long long z = &g; return (int)z; }",
+            int_conv,
+        ),
+        (
+            "int main(void) { long long z = &g; return (int)z; }",
+            int_conv,
+        ),
+        ("int main(void) { int *w = 5; return w != 0; }", int_conv),
+        (
+            "int main(void) { struct { long long v; } t = { &g }; return (int)t.v; }",
+            int_conv,
+        ),
+        (
+            "int main(void) { long long a[2] = { 0, &g }; return (int)a[1]; }",
+            int_conv,
+        ),
+        (
+            "int main(void) { long long z = (long long){ &g }; return (int)z; }",
+            int_conv,
+        ),
+        (
+            "int main(void) { struct A *p = &b; return p != 0; }",
+            struct_conv,
+        ),
+        ("long long s = (long long)&g;", None),
+        ("unsigned long long s = (unsigned long long)f;", None),
+        ("struct { long long v; } t = { (long long)&g };", None),
+        (
+            "long long a[2] = { (long long)arr, (long long)\"x\" };",
+            None,
+        ),
+        (
+            "int *p = 0; void *q = &g; char *c = \"x\"; long n = sizeof(int);",
+            None,
+        ),
+        (
+            "int main(void) { long long z = (long long)&g; int *p = 0; return (int)z + (p != 0); }",
+            None,
+        ),
+        (
+            "void *v = (void *)0x300 + 0x10UL; struct { void *n; } t = { (void *)0x300 + 1 };",
+            None,
+        ),
+    ] {
+        let main = if body.contains("main(") {
+            ""
+        } else {
+            "int main(void) { return 0; }\n"
+        };
+        let src = alloc::format!("{pre}{body}\n{main}");
+        let p = compile_str(&src);
+        let got: alloc::vec::Vec<Code> = p.warnings.iter().map(|w| w.code).collect();
+        assert_eq!(
+            got,
+            want.into_iter().collect::<alloc::vec::Vec<_>>(),
+            "{src}"
+        );
+    }
+    let p = compile_str("int g;\nlong long s = &g;\nint main(void) { return 0; }\n");
+    let text = p.warnings[0].to_string();
+    let row = "pointer assigned to integer in initializer (declared=long long, init=int*)";
+    assert!(text.contains(row), "{text}");
+}
+
+/// C23 6.7.2.5: `typeof` of a type name takes every derivation of its
+/// abstract declarator (C99 6.7.6), and `typeof` of an expression carries
+/// the function type the value leads to whatever its form -- an array, a
+/// call, `&`, a member, an element, a conditional -- so each compares by
+/// its parameters.
+#[test]
+fn typeof_carries_the_whole_type_of_its_operand() {
+    compile_str(
+        "static int twice(int x) { return 2 * x; }\n\
+         static double half(double x) { return x / 2; }\n\
+         static double (*getfp(void))(double) { return half; }\n\
+         static int (*arr[3])(int) = {twice, twice, twice};\n\
+         static int (*fp)(int) = twice;\n\
+         struct S { int (*m)(int); double (*t[2])(double); } s;\n\
+         typedef int (*IF)(int);\n\
+         #define SAME(a, b) _Static_assert(__builtin_types_compatible_p(a, b), #a)\n\
+         #define DIFF(a, b) _Static_assert(!__builtin_types_compatible_p(a, b), #a)\n\
+         int main(void) {\n\
+             SAME(__typeof__(int (*)(int)), int (*)(int));\n\
+             DIFF(__typeof__(int (*)(int)), int (*)(double));\n\
+             SAME(__typeof__(int (*[3])(int)), int (*[3])(int));\n\
+             SAME(__typeof__(int (int)), int (int));\n\
+             SAME(__typeof__(IF[2]), int (*[2])(int));\n\
+             SAME(__typeof__(int (*(*)(void))(int)), int (*(*)(void))(int));\n\
+             SAME(__typeof__(arr), int (*[3])(int));\n\
+             DIFF(__typeof__(arr), int (*[3])(double));\n\
+             SAME(__typeof__(getfp()), double (*)(double));\n\
+             DIFF(__typeof__(getfp()), double (*)(int));\n\
+             SAME(__typeof__(&fp), int (**)(int));\n\
+             DIFF(__typeof__(&fp), int (**)(double));\n\
+             SAME(__typeof__(s.t), double (*[2])(double));\n\
+             SAME(__typeof__(&arr[1]), int (**)(int));\n\
+             SAME(__typeof__(1 ? fp : 0), int (*)(int));\n\
+             return 0;\n\
+         }\n",
+    );
+}
+
+/// C99 6.5.17p2: the comma operator's result is its right operand's value
+/// after lvalue conversion, an array operand decayed, in `sizeof` and in
+/// `typeof` alike; parentheses alone keep the array.
+#[test]
+fn a_comma_result_is_the_decayed_right_operand() {
+    compile_str(
+        "int arr[3];\n\
+         struct { int m[4]; } s;\n\
+         int main(void) {\n\
+             _Static_assert(sizeof((0, arr)) == sizeof(int *), \"sizeof\");\n\
+             _Static_assert(sizeof((0, s.m)) == sizeof(int *), \"member\");\n\
+             _Static_assert(sizeof(({ arr; })) == sizeof(int *), \"statement expression\");\n\
+             _Static_assert(__builtin_types_compatible_p(__typeof__((0, arr)), int *), \"paren\");\n\
+             _Static_assert(__builtin_types_compatible_p(__typeof__(0, arr), int *), \"operand\");\n\
+             _Static_assert(sizeof((arr)) == sizeof(arr), \"grouping\");\n\
+             return 0;\n\
+         }\n",
+    );
+}
+
+/// C23 6.7.2.5: `typeof` of a row of a multi-dimensional array, of a
+/// member array's row and of a row reached through a pointer to an array
+/// names the row's array type with its inner bounds.
+#[test]
+fn typeof_a_row_keeps_its_inner_bounds() {
+    compile_str(
+        "int t[2][3][4];\n\
+         struct { int m[2][2][5]; } s;\n\
+         int (*p)[3][4] = t;\n\
+         _Static_assert(__builtin_types_compatible_p(__typeof__(t[1]), int[3][4]), \"row\");\n\
+         _Static_assert(__builtin_types_compatible_p(__typeof__(t[1][2]), int[4]), \"inner\");\n\
+         _Static_assert(__builtin_types_compatible_p(__typeof__(s.m[1]), int[2][5]), \"member\");\n\
+         _Static_assert(__builtin_types_compatible_p(__typeof__(p[1]), int[3][4]), \"pointer\");\n\
+         int main(void) { return 0; }\n",
+    );
 }

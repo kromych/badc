@@ -80,31 +80,42 @@ fn read_write_flag_tracks_the_plus_modifier() {
     assert_eq!(out("+m"), Some((AsmConstraint::Mem, true)));
 }
 
+/// A statement over a register operand and an operand bound to a register
+/// variable, then a bound output operand.
+fn sp_block(template: &str) -> crate::c5::ir::AsmBlock {
+    use crate::c5::ir::{AsmBlock, AsmOperand, AsmSeg};
+    AsmBlock {
+        template: template.as_bytes().to_vec(),
+        operands: [
+            (AsmConstraint::Reg, false),
+            (AsmConstraint::Bound(4), false),
+            (AsmConstraint::Bound(4), true),
+        ]
+        .iter()
+        .map(|&(constraint, is_output)| AsmOperand {
+            constraint,
+            is_output,
+            is_rw: false,
+            width: 8,
+            seg: AsmSeg::None,
+            static_arg: false,
+            value: false,
+            volatile_object: false,
+            early_clobber: false,
+        })
+        .collect(),
+        clobber_regs: 0,
+        clobber_fp_regs: 0,
+        clobber_memory: true,
+        volatile: true,
+    }
+}
+
 /// A statement references the stack pointer through its text or through
 /// a `%N` naming a bound operand; a bound operand the template never names
 /// (the kernel's `ASM_CALL_CONSTRAINT`) is out of the template's reach.
 #[test]
 fn a_bound_operand_names_the_stack_pointer_only_when_the_template_names_it() {
-    use crate::c5::ir::{AsmBlock, AsmOperand, AsmSeg};
-    let block = |template: &str| AsmBlock {
-        template: template.as_bytes().to_vec(),
-        operands: [AsmConstraint::Reg, AsmConstraint::Bound(4)]
-            .iter()
-            .map(|&constraint| AsmOperand {
-                constraint,
-                is_output: false,
-                is_rw: false,
-                width: 8,
-                seg: AsmSeg::None,
-                static_arg: false,
-                value: false,
-            })
-            .collect(),
-        clobber_regs: 0,
-        clobber_fp_regs: 0,
-        clobber_memory: true,
-        volatile: true,
-    };
     for (template, names, sp) in [
         ("call *%0", false, false),
         ("mov %1, %0", true, true),
@@ -114,9 +125,33 @@ fn a_bound_operand_names_the_stack_pointer_only_when_the_template_names_it() {
         ("add $1, %%rax # %%1", false, false),
         ("mov %0, %0", false, false),
     ] {
-        let b = block(template);
+        let b = sp_block(template);
         assert_eq!(b.names_operand(1), names, "{template}");
         assert_eq!(b.references_sp(), sp, "{template}");
+    }
+}
+
+/// A memory operand based on sp leaves it in place unless AArch64 writes the
+/// base back; sp as a register operand, or a named bound output operand, may
+/// be the destination.
+#[test]
+fn a_template_may_move_the_stack_pointer_unless_sp_is_a_kept_memory_base() {
+    for (template, moves) in [
+        ("lock addl $0,-4(%%rsp)", false),
+        ("mov 8( %%rsp ), %0", false),
+        ("mov rax, [rsp + 8]", false),
+        ("ldr %0, [sp, #8]\n\tldr %0, [ sp ]", false),
+        ("str %0, [sp, #-16]!", true),
+        ("ldr %0, [sp], #16", true),
+        ("mov sp, %0", true),
+        ("mov %0, %%rsp", true),
+        ("lea 8(%%rsp), %%rsp", true),
+        ("mov %%rsp, %0", true),
+        ("mov %1, %0", false),
+        ("mov %0, %2", true),
+        ("call *%0", false),
+    ] {
+        assert_eq!(sp_block(template).may_move_sp(), moves, "{template}");
     }
 }
 
@@ -553,10 +588,10 @@ fn x86_c_operand_memory_reference_encodings_match_the_assembler() {
             "__asm__ volatile(\"movq %c1, %0\" : \"=r\"(v) : \"i\"(16));",
             &[0x48, 0x8B, 0x04, 0x25, 0x10, 0x00, 0x00, 0x00],
         ),
-        // movq %rax, %gs:0x18
+        // movq %r10, %gs:0x18 -- the constant loads into the operand scratch
         (
             "__asm__ volatile(\"movq %0, %%gs:%c1\" : : \"r\"(v), \"i\"(24) : \"memory\");",
-            &[0x65, 0x48, 0x89, 0x04, 0x25, 0x18, 0x00, 0x00, 0x00],
+            &[0x65, 0x4C, 0x89, 0x14, 0x25, 0x18, 0x00, 0x00, 0x00],
         ),
         // movl %gs:0x10, %eax -- the access width follows the suffix
         (
@@ -957,7 +992,8 @@ fn x86_register_or_immediate_operand_takes_a_constant_as_the_immediate() {
             &[0x49, 0x89, 0xC8],
             None,
         ),
-        // movq %r, %r8: `ri` with a non-constant, `rm` with a constant
+        // movq %r, %r8: `ri` with a non-constant; movq %r10, %r8: `rm` with a
+        // constant, loaded into the operand scratch
         (
             "__asm__ volatile(\"movq %0, %%r8\" : : \"ri\"(v) : \"r8\");",
             &[0x49, 0x89, 0xC0],
@@ -965,8 +1001,8 @@ fn x86_register_or_immediate_operand_takes_a_constant_as_the_immediate() {
         ),
         (
             "__asm__ volatile(\"movq %0, %%r8\" : : \"rm\"(9L) : \"r8\");",
-            &[0x49, 0x89, 0xC0],
-            Some((2, 0xC7)),
+            &[0x4D, 0x89, 0xD0],
+            None,
         ),
         // addq $3, %r: 3 is within `I`
         (
@@ -3017,15 +3053,16 @@ fn x64_frame_bytes(text: &[u8]) -> i32 {
 #[cfg(feature = "native-emit")]
 #[test]
 fn x64_frame_pointer_clobber_stores_an_output_through_the_stack_pointer() {
-    // A register output is stored back after the template, which wrote rbp,
-    // and before the restore, so a frame local's slot is addressed through
+    // A register output into an object that stays in memory, here a
+    // volatile one, is stored back after the template, which wrote rbp,
+    // and before the restore, so the object's slot is addressed through
     // rsp like the saves: `mov %rax, d(%rsp)` names the byte the function
     // later reads as `d - frame_bytes(%rbp)`.
     let src = "int h(int);\n\
                long f(int v)\n\
                {\n\
                    int r = h(v);\n\
-                   long x;\n\
+                   volatile long x;\n\
                    __asm__ volatile(\"xorq %%rbp, %%rbp\\n\\tmovq $7, %0\" : \"=r\"(x) : : \"rbp\");\n\
                    return r + h(v) + x;\n\
                }\n";
@@ -3052,6 +3089,50 @@ fn x64_frame_pointer_clobber_stores_an_output_through_the_stack_pointer() {
             .windows(4)
             .any(|w| w[..2] == [0x48, 0x8b] && w[2] & 0xc7 == 0x45 && w[3] == disp),
         "no rbp-relative read of the output's slot: {:02x?}",
+        &text[at..]
+    );
+}
+
+// Emits a relocatable object, so it needs `native-emit`.
+#[cfg(feature = "native-emit")]
+#[test]
+fn x64_frame_pointer_clobber_spills_a_value_output_through_the_stack_pointer() {
+    // An output into an ordinary local is the statement's value. Over two
+    // callee-saved registers it spills, the three values live across the
+    // second call being one too many, and its spill store follows the
+    // template, which wrote rbp, ahead of the restore, through rsp.
+    let src = "int h(int);\n\
+               long f(int v)\n\
+               {\n\
+                   int r = h(v);\n\
+                   long x;\n\
+                   __asm__ volatile(\"xorq %%rbp, %%rbp\\n\\tmovq $7, %0\" : \"=r\"(x) : : \"rbp\");\n\
+                   return r + h(v) + x;\n\
+               }\n";
+    let text = crate::c5::codegen::ssa::reg_alloc::with_pool_size_override(2, 2, || {
+        asm_text(src, crate::Target::LinuxX64, true)
+    });
+    let at = text
+        .windows(3)
+        .position(|w| w == [0x48, 0x31, 0xed])
+        .expect("the template");
+    let (save, store) = (text[at - 1], text[at + 14]);
+    assert_eq!(
+        text[at + 3..at + 20],
+        [
+            0x48, 0xc7, 0xc0, 7, 0, 0, 0, // mov $7, %rax
+            0x48, 0x89, 0x44, 0x24, store, // mov %rax, disp8(%rsp)
+            0x48, 0x8b, 0x6c, 0x24, save, // mov disp8(%rsp), %rbp
+        ],
+        "{:02x?}",
+        &text[at..at + 20]
+    );
+    // A REX.W instruction with a `disp8(%rsp)` operand at the store's slot.
+    assert!(
+        text[at + 20..]
+            .windows(5)
+            .any(|w| w[0] & 0xf8 == 0x48 && w[2] & 0xc7 == 0x44 && w[3..] == [0x24, store]),
+        "no rsp-relative read of the spill slot: {:02x?}",
         &text[at..]
     );
 }

@@ -2,7 +2,7 @@
 //! the incoming parameters (C99 6.9.1).
 
 use super::access::{load_kind_for, seg_copy_bytes, store_kind_for};
-use super::types::is_floating_scalar;
+use super::types::{arg_width, is_floating_scalar};
 use super::*;
 use crate::c5::codegen::{ArgAgg, CallConv, CallPlan};
 use crate::c5::compiler::{StructDef, StructReturnAbi};
@@ -30,7 +30,9 @@ pub(crate) fn walk_function(
     // deferred constant divides.
     b.set_split_modulo(optimize);
     b.set_defer_divmod(optimize);
-    place_over_aligned_slots(&mut b, &fun.over_aligned_slots, fun.alloca_top_slot)?;
+    for &(slot, align, size) in &fun.over_aligned_slots {
+        b.add_region_member(slot, align, size);
+    }
     // C99 6.8: the frame holds the declared locals, alloca and VLA
     // storage being carved from the stack at runtime. With alloca the
     // parser's Ent patch appends one reserved slot.
@@ -56,7 +58,10 @@ pub(crate) fn walk_function(
         structs,
         target,
         loop_ctx: alloc::vec::Vec::new(),
+        scopes: alloc::vec::Vec::new(),
+        label_scopes: alloc::vec::Vec::new(),
         label_blocks: alloc::vec![None; ast.goto_targets.len()],
+        cleanup_exits: alloc::collections::BTreeMap::new(),
         switch_dispatch: alloc::vec::Vec::new(),
         returns_struct: fun.returns_struct,
         return_struct_size: fun.return_struct_size,
@@ -69,7 +74,10 @@ pub(crate) fn walk_function(
         jump_tables,
     };
     let terminated = match ast.body {
-        Some(root) => ctx.walk_stmt(&mut b, root)?,
+        Some(root) => {
+            ctx.label_scopes = ctx.label_scope_chains(root);
+            ctx.walk_stmt(&mut b, root)?
+        }
         None => false,
     };
     // A body that fell off the end leaves the current block open.
@@ -85,41 +93,17 @@ pub(crate) fn walk_function(
         b.label_data_block(r.data_offset, block);
     }
     b.close_dead_blocks();
-    Ok(b.finish())
-}
-
-/// C11 6.7.5: an automatic object whose alignment exceeds the 8-byte
-/// frame slot lives in a packed region, widest alignment first, that
-/// every backend addresses as `region_base + region_off`. At
-/// `frame_align` 16 the region sits at a static frame offset; above 16
-/// the prologue realigns sp, which `alloca` precludes.
-fn place_over_aligned_slots(
-    b: &mut SsaBuilder,
-    slots: &[(i64, i64, i64)],
-    alloca_top_slot: i64,
-) -> Result<(), WalkError> {
-    if slots.is_empty() {
-        return Ok(());
-    }
-    let mut items: alloc::vec::Vec<(i64, i64, i64)> = slots.to_vec();
-    items.sort_by_key(|&(_, align, _)| core::cmp::Reverse(align));
-    let mut frame_align: i64 = 16;
-    let mut cursor: i64 = 0;
-    let mut placed: alloc::vec::Vec<(i64, i64)> = alloc::vec::Vec::new();
-    for (slot, align, size) in items {
-        frame_align = frame_align.max(align);
-        cursor = (cursor + align - 1) & -align;
-        placed.push((slot, cursor));
-        cursor += size;
-    }
-    if frame_align > 16 && alloca_top_slot != 0 {
+    // C11 6.7.5: an automatic object whose alignment exceeds the 8-byte
+    // frame slot, declared or a temporary, lives in a packed region that
+    // every backend addresses as `region_base + region_off`. At
+    // `frame_align` 16 the region sits at a static frame offset; above 16
+    // the prologue realigns sp, which `alloca` precludes.
+    if b.place_region_members() > 16 && fun.alloca_top_slot != 0 {
         return Err(WalkError::Unsupported(
             "an automatic object aligned above 16 cannot share a function with alloca/VLA",
         ));
     }
-    let region_bytes = (cursor + frame_align - 1) & -frame_align;
-    b.set_realign(placed, frame_align, region_bytes);
-    Ok(())
+    Ok(b.finish())
 }
 
 /// How a definition returns its value (C99 6.8.6.4 + the host ABI).
@@ -147,11 +131,12 @@ impl ReturnAbi {
         return_ty: i64,
     ) -> Self {
         let abi = crate::c5::compiler::struct_return_abi_conv(structs, target, conv, return_ty);
+        let agg = matches!(abi, StructReturnAbi::Regs(_) | StructReturnAbi::Indirect(_));
         if let StructReturnAbi::Regs(desc) | StructReturnAbi::Indirect(desc) = &abi {
             let idx = b.intern_agg_desc(desc.clone());
             b.set_ret_agg(idx);
         }
-        b.set_ret_is_fp(is_floating_scalar(return_ty));
+        b.set_ret_is_fp(is_floating_scalar(return_ty) && !agg);
         b.set_ret_type_tag(return_ty);
         let indirect = matches!(abi, StructReturnAbi::Indirect(_));
         let indirect_result_slot = if indirect {
@@ -175,10 +160,15 @@ impl ReturnAbi {
 struct ParamEntry<'a> {
     structs: &'a [StructDef],
     param_tys: &'a [i64],
+    /// [`FinishedFunction::param_arrival_tys`].
+    arrival_tys: &'a [i64],
     param_local_slots: &'a [i64],
     /// True when the definition takes its parameters under the host ABI.
     /// A variadic or all-integer out-pointer definition keeps the c5 cdecl shape.
     host_abi: bool,
+    /// A variadic definition under the Microsoft x64 convention, whose caller
+    /// passes a named `float` in its integer register as the value's own bits.
+    float_bits_in_int: bool,
     /// Positions ahead of the first declared parameter: 1 for a hidden result pointer.
     shift: usize,
     /// Argument cell of the first declared parameter: 2, or 3 when the
@@ -211,10 +201,9 @@ impl<'a> ParamEntry<'a> {
         // convention's.
         let abi_target = target.abi_row(fun.conv);
         let param_tys = &fun.param_tys[..];
-        // System V AMD64 3.2.3 and Win64 pass the result address as integer argument 0.
-        let hidden = ret_outptr
-            && !fun.is_variadic
-            && matches!(abi_target, Target::LinuxX64 | Target::WindowsX64);
+        // System V AMD64 3.2.3 and Win64 pass the result address as integer
+        // argument 0, to a variadic definition as well.
+        let hidden = ret_outptr && matches!(abi_target, Target::LinuxX64 | Target::WindowsX64);
         let shift = usize::from(hidden);
         b.set_n_params(shift + fun.n_params);
         let host_abi = !fun.is_variadic && (!ret_outptr || hidden);
@@ -253,22 +242,32 @@ impl<'a> ParamEntry<'a> {
         if !int_only {
             for (i, &pty) in param_tys.iter().enumerate() {
                 let stripped = strip_unsigned(pty);
-                if stripped == Ty::Float as i64 || stripped == Ty::Double as i64 {
+                let agg = arg_aggs.get(shift + i).is_some_and(Option::is_some);
+                if (stripped == Ty::Float as i64 || stripped == Ty::Double as i64) && !agg {
                     b.mark_param_fp(shift + i);
                 }
             }
         }
+        let mut widths = crate::c5::ir::ArgWidths::default();
+        for (i, &pty) in param_tys.iter().enumerate() {
+            let arrives = fun.param_arrival_tys.get(i).copied().unwrap_or(pty);
+            widths.set(shift + i, arg_width(arrives, target, false));
+        }
+        b.set_param_widths(widths);
         let plan = plan_param_regs_aggs(
             shift + param_tys.len(),
             b.param_fp_mask(),
             abi_target.abi(),
             &arg_aggs,
+            widths,
         );
         Self {
             structs,
             param_tys,
+            arrival_tys: &fun.param_arrival_tys,
             param_local_slots: &fun.param_local_slots,
             host_abi,
+            float_bits_in_int: fun.is_variadic && abi_target.abi().position_indexed_args,
             arg_slot_base: if ret_outptr { 3 } else { 2 },
             shift,
             aggs,
@@ -348,9 +347,10 @@ impl<'a> ParamEntry<'a> {
 
     /// Copy each by-address aggregate parameter into the body local the
     /// parser reserved for it -- the c5 convention passes the source's
-    /// address in the parameter's argument cell -- and narrow each
-    /// `float` parameter into its narrow-storage local. A negative
-    /// `param_local_slots` entry marks both kinds.
+    /// address in the parameter's argument cell -- narrow each `float`
+    /// parameter into its narrow-storage local, and widen each `long
+    /// double` passed as binary64 into its local of the platform format. A
+    /// negative `param_local_slots` entry marks all three kinds.
     fn emit_entry_copies(&self, b: &mut SsaBuilder) {
         for i in 0..self.param_tys.len() {
             let pty = self.param_tys[i];
@@ -383,22 +383,52 @@ impl<'a> ParamEntry<'a> {
                 }
                 continue;
             }
+            if is_long_double_scalar(pty) {
+                // One passed as its image arrives the way an aggregate does.
+                if self.aggs.get(self.shift + i).copied().flatten().is_some() {
+                    continue;
+                }
+                let val = if self.host_abi && self.in_fp_reg(i) {
+                    b.param_ref((self.shift + i) as u32, LoadKind::F64)
+                } else {
+                    b.load_local(arg_slot, LoadKind::F64)
+                };
+                b.store_local(local_slot, val, store_kind_for(pty, self.target));
+                continue;
+            }
             if stripped != Ty::Float as i64 {
                 continue;
             }
+            let arrives = self
+                .arrival_tys
+                .get(i)
+                .map_or(stripped, |&t| strip_unsigned(t));
+            let kind = if arrives == Ty::Double as i64 {
+                LoadKind::F64
+            } else {
+                LoadKind::F32
+            };
             if self.host_abi && self.in_fp_reg(i) {
-                // The argument arrives at single precision in an FP
-                // argument register (C99 6.2.5p10) and never
-                // round-trips through the positive c5 cdecl cell, whose
-                // spill the prologue then elides.
-                let pr = b.param_ref((self.shift + i) as u32, LoadKind::F32);
-                b.mark_f32(pr);
-                b.store_local(local_slot, pr, StoreKind::F32);
-            } else if !b.param_fp_mask().is_empty() {
-                // Host-stack-overflow `float` under the FP-register ABI:
-                // the caller pushed it at single precision into the c5
-                // cdecl cell. Read the cell as `F32` and narrow back.
-                let val = b.load_local(arg_slot, LoadKind::F32);
+                // The argument arrives in an FP argument register (C99
+                // 6.2.5p10) and never round-trips through the positive c5
+                // cdecl cell, whose spill the prologue then elides.
+                let pr = b.param_ref((self.shift + i) as u32, kind);
+                let val = if kind == LoadKind::F32 {
+                    b.mark_f32(pr)
+                } else {
+                    b.fp_narrow_to_f32(pr)
+                };
+                b.store_local(local_slot, val, StoreKind::F32);
+            } else if !b.param_fp_mask().is_empty() || self.float_bits_in_int {
+                // The caller left the `float` in the c5 cdecl cell at the
+                // width it arrives at: past the FP argument registers, or in
+                // the integer register of a Microsoft variadic callee.
+                let val = b.load_local(arg_slot, kind);
+                let val = if kind == LoadKind::F32 {
+                    val
+                } else {
+                    b.fp_narrow_to_f32(val)
+                };
                 b.store_local(local_slot, val, StoreKind::F32);
             } else {
                 // The c5 cdecl shape: the caller widened the `float` to an

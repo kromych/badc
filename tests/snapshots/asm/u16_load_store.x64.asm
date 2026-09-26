@@ -31,14 +31,10 @@ Disassembly of section .text:
                	subq	$0x20, %rsp
                	leaq	-0x20(%rbp), %rax
                	leaq	<rip>, %rcx
-               	pushq	%rdx
-               	movq	(%rcx), %rdx
-               	movq	%rdx, (%rax)
-               	movzbq	0x8(%rcx), %rdx
-               	movb	%dl, 0x8(%rax)
-               	movzbq	0x9(%rcx), %rdx
-               	movb	%dl, 0x9(%rax)
-               	popq	%rdx
+               	movq	(%rcx), %r10
+               	movq	%r10, (%rax)
+               	movzwq	0x8(%rcx), %r10
+               	movw	%r10w, 0x8(%rax)
                	leaq	-0x10(%rbp), %rdi
                	xorl	%esi, %esi
                	movl	$0xa, %edx

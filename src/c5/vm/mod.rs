@@ -78,6 +78,9 @@ pub struct Vm<H: Host> {
     /// reverse after the entry returns (a direct `exit()` bypasses them,
     /// as the VM has no atexit chain).
     fini_pcs: Vec<usize>,
+    /// The target the program was compiled for, whose assembler syntax
+    /// the inline asm templates are written in.
+    target: super::codegen::Target,
 }
 
 /// `Vm::new` is only available with the `std` feature; it picks the
@@ -220,6 +223,7 @@ impl<H: Host> Vm<H> {
             code_reloc_pcs,
             init_pcs,
             fini_pcs,
+            target: program.target,
         }
     }
 
@@ -337,6 +341,7 @@ impl<H: Host> Vm<H> {
             self.track_pointers,
             &self.init_pcs,
             &self.fini_pcs,
+            self.target,
         )
     }
 }

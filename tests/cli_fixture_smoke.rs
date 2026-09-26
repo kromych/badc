@@ -119,6 +119,7 @@ const TARGET_SPECIFIC_ASM: &[(&str, &str)] = &[
     ("inline_asm_x64_label_directive.c", "linux-aarch64"), // x86-64 label sharing a directive statement
     ("inline_asm_x64_setcc.c", "linux-aarch64"),           // x86-64 setcc
     ("inline_asm_x64_cmov.c", "linux-aarch64"),            // x86-64 cmovcc
+    ("inline_asm_x64_bound_operands.c", "linux-aarch64"),  // x86-64 bound register operands
     ("inline_asm_x64_cdqe.c", "linux-aarch64"),            // x86-64 cdqe
     ("inline_asm_x64_movnti.c", "linux-aarch64"),          // x86-64 movnti/sfence
     ("inline_asm_x64_raid6_syndrome.c", "linux-aarch64"),  // x86-64 AVX2 / AVX-512 RAID-6 syndrome
@@ -422,7 +423,21 @@ fn every_fixture_compiles_standalone_for_linux() {
 /// Values are these programs' own exit codes, checked here rather than
 /// copied from another table, so a wrong one fails instead of drifting.
 const LINKED_IMAGE_RUN_FIXTURES: &[(&str, i32)] = &[
+    ("neon_raid6_checksum.c", 0),
+    ("goto_cleanup_scopes.c", 0),
+    ("scope_exit_storage.c", 0),
+    ("early_return_before_frame.c", 0),
+    ("inline_asm_stack_switch_spill.c", 0),
+    ("far_frame_slots.c", 0),
+    ("overaligned_region_storage.c", 0),
+    ("aggregate_copy_site_temps.c", 0),
+    ("aggregate_register_parts.c", 0),
+    ("call_result_in_place.c", 0),
+    ("atomic_orders.c", 0),
+    ("atomic_contention.c", 0),
     ("data_reloc_one_past_end.c", 10),
+    ("constant_set_again_after_call.c", 0),
+    ("asm_register_outputs.c", 0),
     ("static_init_cast_funcptr.c", 0),
     ("static_init_paren_relocation.c", 0),
     ("sys_addr_in_static_init.c", 42),
@@ -468,6 +483,33 @@ const LINKED_IMAGE_RUN_FIXTURES: &[(&str, i32)] = &[
     ("packed_bitfield_repack.c", 0),
     ("wide_string_literal_alignment.c", 0),
     ("computed_include_pp_number.c", 0),
+    ("pragma_pack_bitfield_layout.c", 0),
+    ("pragma_pack_push_pop_forms.c", 0),
+    ("bitnot_promoted_compare.c", 0),
+    ("packed_bitfield_struct_by_value.c", 0),
+    ("addr_compare_disjoint_blocks.c", 0),
+    ("unsigned_bitwise_mixed_sign.c", 0),
+    ("dead_arm_static_callee.c", 0),
+    ("param_incoming_reg_constant_clobber.c", 0),
+    ("forward_enum_tag_redeclaration.c", 0),
+    ("seh_context_record.c", 0),
+    ("unsigned_constant_to_floating.c", 0),
+    ("string_literal_address_constant.c", 0),
+    ("address_constant_through_cast.c", 0),
+    ("local_byte_array_init_converts.c", 0),
+    ("address_to_bool_initializer.c", 0),
+    ("address_constant_array_strides.c", 0),
+    ("const_object_address_read.c", 0),
+    ("const_bit_field_read.c", 0),
+    ("induction_variable_steps.c", 0),
+    ("wrap_signed.c", 0),
+    ("long_double_parameter_shapes.c", 0),
+    ("long_double_usual_conversions.c", 0),
+    ("long_double_call_shapes.c", 0),
+    ("long_double_math.c", 0),
+    ("declared_object_copied_whole.c", 0),
+    ("merged_chain_empty_edge_block.c", 0),
+    ("address_retested_after_calls.c", 0),
 ];
 
 /// The sweep's target for this host, or `None` when the host cannot
@@ -499,12 +541,14 @@ fn linked_image_fixtures_run_on_the_native_target() {
 
     let mut failures: Vec<String> = Vec::new();
     for (name, expected) in LINKED_IMAGE_RUN_FIXTURES {
+        let pinned = snapshot_flags(&dir.join(name));
         for (tag, flags) in [("-O0", &[][..]), ("-O", &["-O"][..])] {
             let stem = name.trim_end_matches(".c");
             let out = tmp_root.join(format!("{stem}{tag}"));
             let built = Command::new(badc)
                 .arg(format!("--target={target}"))
                 .args(flags)
+                .args(&pinned)
                 .arg("-o")
                 .arg(&out)
                 .arg(dir.join(name))
@@ -952,6 +996,28 @@ fn strict_flex_arrays_level_selects_the_bounded_members() {
     assert!(
         String::from_utf8_lossy(&out.stderr).contains("-fstrict-flex-arrays="),
         "the rejection names the option"
+    );
+}
+
+// The interpreter holds the standard streams and `errno` itself, where the
+// host would resolve the C library's data symbol or `__iob_func()` outside its
+// memory. Each write lands on its stream's descriptor, in order.
+#[test]
+fn interp_writes_to_the_standard_streams() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let src = fixtures_dir().join("standard_streams_and_errno.c");
+    let out = Command::new(badc)
+        .arg("--interp")
+        .arg(&src)
+        .output()
+        .expect("run badc --interp");
+    assert_eq!(
+        String::from_utf8_lossy(&out.stderr),
+        "err: fputs\nerr: fprintf 2\n!\nerr: fwrite\n"
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&out.stdout),
+        "out: fputs\nout: puts\nout: x\nexit(0)\n"
     );
 }
 

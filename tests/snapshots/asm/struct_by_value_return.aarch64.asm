@@ -24,17 +24,10 @@ Disassembly of section .text:
                	ret
 
 <make_pair>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	mov	x2, x0
-               	sub	x0, x29, #0x8
-               	str	w2, [x0]
-               	str	w1, [x0, #0x4]
-               	mov	x16, x0
-               	ldr	x0, [x16]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	mov	w0, w0
+               	mov	w1, w1
+               	lsl	x1, x1, #32
+               	orr	x0, x0, x1
                	ret
 
 <clobber>:
@@ -44,26 +37,14 @@ Disassembly of section .text:
                	ret
 
 <sum_pair_pair>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	stur	x0, [x29, #-0x8]
-               	stur	x1, [x29, #-0x10]
-               	sub	x0, x29, #0x18
-               	sub	x1, x29, #0x8
-               	ldrsw	x3, [x1]
-               	sub	x2, x29, #0x10
-               	ldrsw	x4, [x2]
-               	add	x3, x3, x4
-               	str	w3, [x0]
-               	ldrsw	x1, [x1, #0x4]
-               	ldrsw	x2, [x2, #0x4]
-               	add	x1, x1, x2
-               	str	w1, [x0, #0x4]
-               	mov	x16, x0
-               	ldr	x0, [x16]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
+               	lsr	x2, x0, #32
+               	lsr	x3, x1, #32
+               	add	x0, x0, x1
+               	add	x1, x2, x3
+               	mov	w0, w0
+               	mov	w1, w1
+               	lsl	x1, x1, #32
+               	orr	x0, x0, x1
                	ret
 
 <main>:

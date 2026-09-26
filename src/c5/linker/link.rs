@@ -42,11 +42,12 @@ use crate::c5::object::elf_reloc_types::AbsCheck;
 use crate::c5::object::elf_reloc_types::{
     R_AARCH64_ABS32, R_AARCH64_ABS64, R_AARCH64_ADD_ABS_LO12_NC, R_AARCH64_ADR_GOT_PAGE,
     R_AARCH64_ADR_PREL_LO21, R_AARCH64_ADR_PREL_PG_HI21, R_AARCH64_CALL26, R_AARCH64_JUMP26,
-    R_AARCH64_LD64_GOT_LO12_NC, R_AARCH64_PREL32, R_AARCH64_PREL64, R_AARCH64_TLS_DTPREL64,
-    R_AARCH64_TLSLE_ADD_TPREL_HI12, R_AARCH64_TLSLE_ADD_TPREL_LO12_NC, R_X86_64_32, R_X86_64_64,
-    R_X86_64_DTPOFF64, R_X86_64_GOTPCREL, R_X86_64_PC32, R_X86_64_PC64, R_X86_64_PLT32,
-    R_X86_64_REX_GOTPCRELX, R_X86_64_TPOFF32, aarch64_ldst_lo12_scale, aarch64_movw_field,
-    aarch64_pcrel_data_field, aarch64_pcrel_imm_field, x86_64_abs_field, x86_64_pcrel_data_field,
+    R_AARCH64_LD_PREL_LO19, R_AARCH64_LD64_GOT_LO12_NC, R_AARCH64_PREL32, R_AARCH64_PREL64,
+    R_AARCH64_TLS_DTPREL64, R_X86_64_32, R_X86_64_64, R_X86_64_DTPOFF64, R_X86_64_GOTPCREL,
+    R_X86_64_PC32, R_X86_64_PC64, R_X86_64_PLT32, R_X86_64_REX_GOTPCRELX, TprelField,
+    aarch64_abs_field, aarch64_is_tls, aarch64_ldst_lo12_scale, aarch64_movw_field,
+    aarch64_pcrel_data_field, aarch64_pcrel_imm_field, aarch64_tprel_field, x86_64_abs_field,
+    x86_64_is_tls, x86_64_pcrel_data_field, x86_64_tpoff_field,
 };
 
 /// The tag this module's diagnostics carry.
@@ -267,6 +268,9 @@ pub struct MergedNative {
     /// post-prologue CFA rule. Consulted by lookup only, so it is
     /// keyed by hash rather than ordered.
     pub prologue_ends: HashMap<u64, u64>,
+    /// The frame path and the early return of a function that returns ahead
+    /// of its frame, keyed as [`Self::prologue_ends`] (`NT_BADC_EARLY_RETURN`).
+    pub early_returns: HashMap<u64, (u64, u64)>,
     /// Defined `STT_FUNC STB_LOCAL` (static) functions as
     /// `(name, merged_text_offset)`, rebased by the per-unit text base.
     /// Kept as a flat list separate from `defined` -- which is
@@ -800,12 +804,76 @@ pub fn link_native_objects_with_shared_libs<'a>(
     link.collect_prologue_anchors();
     link.collect_local_functions();
     link.coalesce_commons();
+    link.allocate_copies()?;
     link.define_link_symbols();
     link.collect_import_facts();
     link.resolve_text_relocs()?;
     link.resolve_tls_fixups()?;
     link.resolve_data_relocs()?;
     link.finish()
+}
+
+/// Shared-library data objects an object reads directly: through a
+/// relocation that holds the object's address or reaches it PC-relative,
+/// not through a GOT entry. The object's code then addresses a copy in
+/// the image. badc's own code reaches such an object through the GOT
+/// and states so in its note, so its code references ask for none; a
+/// data initializer holding the object's address asks for one from
+/// any object, since a slot in data has no GOT to go through. Names an
+/// object defines are not candidates.
+pub fn copy_candidates(objs: &[NativeObject], shared_libs: &[SharedLibrary]) -> BTreeSet<String> {
+    let direct = |machine: NativeMachine, rtype: u32| match machine {
+        NativeMachine::X86_64 => {
+            rtype == R_X86_64_PC32
+                || x86_64_abs_field(rtype).is_some()
+                || x86_64_pcrel_data_field(rtype).is_some()
+        }
+        NativeMachine::Aarch64 => {
+            matches!(
+                rtype,
+                R_AARCH64_ADR_PREL_PG_HI21
+                    | R_AARCH64_ADD_ABS_LO12_NC
+                    | R_AARCH64_ADR_PREL_LO21
+                    | R_AARCH64_LD_PREL_LO19
+            ) || aarch64_ldst_lo12_scale(rtype).is_some()
+                || aarch64_abs_field(rtype).is_some()
+                || aarch64_movw_field(rtype).is_some()
+                || aarch64_pcrel_data_field(rtype).is_some()
+        }
+    };
+    let defined: BTreeSet<&str> = objs
+        .iter()
+        .flat_map(|o| &o.symbols)
+        .filter(|s| s.binding != 0 && s.section != NativeSymSection::Undef)
+        .map(|s| s.name.as_str())
+        .collect();
+    let mut wanted = BTreeSet::new();
+    for obj in objs {
+        let routed = |name: &str| {
+            obj.extern_data_names.iter().any(|n| n == name)
+                || obj.copy_relocs.iter().any(|(local, _)| local == name)
+        };
+        let code = obj.text_relocs.iter().filter(|r| {
+            direct(obj.machine, r.rtype)
+                && obj.symbols.get(r.sym_idx).is_some_and(|s| !routed(&s.name))
+        });
+        for reloc in code.chain(&obj.data_relocs).chain(&obj.relro_relocs) {
+            let Some(sym) = obj.symbols.get(reloc.sym_idx) else {
+                continue;
+            };
+            if sym.section != NativeSymSection::Undef
+                || sym.name.is_empty()
+                || defined.contains(sym.name.as_str())
+                || !shared_libs
+                    .iter()
+                    .any(|l| l.data_exports.contains(&sym.name))
+            {
+                continue;
+            }
+            wanted.insert(sym.name.clone());
+        }
+    }
+    wanted
 }
 
 /// The state one native link accumulates. Each pass is a method;
@@ -880,6 +948,8 @@ struct Link<'a> {
     absolute_defined: HashMap<&'a str, i64>,
     /// Function entry -> post-prologue offset, in merged text.
     prologue_ends: HashMap<u64, u64>,
+    /// Function entry -> (frame path, early return), in merged text.
+    early_returns: HashMap<u64, (u64, u64)>,
     /// `STT_FUNC` `STB_LOCAL` text symbols; a flat list, so two units'
     /// same-named statics both survive.
     local_funcs: Vec<(String, u64)>,
@@ -898,6 +968,9 @@ struct Link<'a> {
     extern_data_names: hashbrown::HashSet<&'a str>,
     /// Names with dylib routing from any unit's binding map.
     routed_import_names: hashbrown::HashSet<&'a str>,
+    /// `(name, host symbol)` of each shared-library data object the
+    /// link gave a copy in `.bss`.
+    copies: Vec<(String, String)>,
     /// Import indices the note channel names as data references, and
     /// those some site branches to; a branch makes the import code.
     object_imports: BTreeSet<usize>,
@@ -978,6 +1051,7 @@ impl<'a> Link<'a> {
             defined: HashMap::new(),
             absolute_defined: HashMap::new(),
             prologue_ends: HashMap::new(),
+            early_returns: HashMap::new(),
             local_funcs: Vec::new(),
             imports: Vec::new(),
             import_idx_for_name: HashMap::new(),
@@ -985,6 +1059,7 @@ impl<'a> Link<'a> {
             data_binding_locals: hashbrown::HashSet::new(),
             extern_data_names: hashbrown::HashSet::new(),
             routed_import_names: hashbrown::HashSet::new(),
+            copies: Vec::new(),
             object_imports: BTreeSet::new(),
             branch_imports: BTreeSet::new(),
             pending_imports: Vec::new(),
@@ -1080,13 +1155,101 @@ impl<'a> Link<'a> {
         } else {
             tls_objs.first().map(|o| o.tls_data.len()).unwrap_or(0)
         };
+        // A global definition resolves by name. Every object states its
+        // own in its symbol table, where a strong definition outranks a
+        // weak one; badc's own objects list them in the note as well.
+        for strong in [true, false] {
+            for (i, obj) in objs.iter().enumerate() {
+                let defs = obj.symbols.iter().filter(|s| {
+                    s.section == NativeSymSection::Tls
+                        && !s.name.is_empty()
+                        && s.binding == if strong { 1 } else { 2 }
+                });
+                for sym in defs {
+                    let at = self.tls_bases[i] as u64 + sym.value;
+                    match self.tls_symbol_offsets.entry(sym.name.as_str()) {
+                        hashbrown::hash_map::Entry::Vacant(v) => {
+                            v.insert(at);
+                        }
+                        hashbrown::hash_map::Entry::Occupied(_) if strong => {
+                            return Err(link_err(
+                                Code::DUPLICATE_SYMBOL,
+                                MODULE,
+                                &format!("multiple definition of `{}`", sym.name),
+                            ));
+                        }
+                        hashbrown::hash_map::Entry::Occupied(_) => {}
+                    }
+                }
+            }
+        }
         for (i, obj) in objs.iter().enumerate() {
             for (name, off, _size) in &obj.tls_symbols {
                 self.tls_symbol_offsets
-                    .insert(name.as_str(), self.tls_bases[i] as u64 + off);
+                    .entry(name.as_str())
+                    .or_insert(self.tls_bases[i] as u64 + off);
             }
         }
         Ok(())
+    }
+
+    /// Offset from the thread pointer of `offset` into the merged TLS
+    /// block, under the ELF TLS ABI: variant II on x86_64 places the
+    /// block, rounded up to its alignment, just below the thread
+    /// pointer; variant I on aarch64 places it past the 16-byte TCB,
+    /// rounded up the same way.
+    fn tp_offset(&self, offset: u64) -> i64 {
+        match self.machine {
+            NativeMachine::X86_64 => {
+                offset as i64 - align_usize(self.tls_data.len(), self.tls_align) as i64
+            }
+            NativeMachine::Aarch64 => (offset + align_usize(16, self.tls_align) as u64) as i64,
+        }
+    }
+
+    /// A thread-local relocation no note fixup covers. A local-exec form
+    /// takes `TPREL(S + A)` ([`Self::tp_offset`]); the other models need
+    /// a GOT entry or a call into the loader, which this link does not
+    /// make.
+    fn apply_tls_reloc(
+        &mut self,
+        unit: usize,
+        sym: &NativeSymbol,
+        reloc: &NativeReloc,
+        patch_offset: usize,
+        site: &RelocSite<'_>,
+    ) -> Result<(), C5Error> {
+        let local_exec = match self.machine {
+            NativeMachine::X86_64 => x86_64_tpoff_field(reloc.rtype).is_some(),
+            NativeMachine::Aarch64 => aarch64_tprel_field(reloc.rtype).is_some(),
+        };
+        if !local_exec {
+            return Err(site.unsupported());
+        }
+        // A weak definition yields to a strong one elsewhere, so only a
+        // local or strong definition in this unit resolves here.
+        let offset = if sym.section == NativeSymSection::Tls && sym.binding != 2 {
+            self.tls_bases[unit] as u64 + sym.value
+        } else if let Some(&at) = self.tls_symbol_offsets.get(sym.name.as_str()) {
+            at
+        } else if self.defined.contains_key(sym.name.as_str()) {
+            return Err(link_err(
+                Code::RELOCATION,
+                MODULE,
+                &format!(
+                    "`{}` is accessed as a thread-local but defined as an ordinary object",
+                    sym.name
+                ),
+            ));
+        } else {
+            return Err(link_err(
+                Code::UNDEFINED_SYMBOL,
+                MODULE,
+                &format!("undefined reference to `{}`", sym.name),
+            ));
+        };
+        let value = self.tp_offset(offset) + reloc.addend;
+        apply_tprel_reloc(&mut self.text, patch_offset, value, site)
     }
 
     /// Each unit's `.text` / `.rodata` / `.data` / `.bss` base in the
@@ -1458,6 +1621,10 @@ impl<'a> Link<'a> {
             for &(entry, post) in &obj.prologue_ends {
                 self.prologue_ends.insert(base + entry, base + post);
             }
+            for &(entry, frame, exit) in &obj.early_returns {
+                self.early_returns
+                    .insert(base + entry, (base + frame, base + exit));
+            }
         }
     }
 
@@ -1525,6 +1692,61 @@ impl<'a> Link<'a> {
                 size: *size,
             });
         }
+    }
+
+    /// A shared-library data object an object reads directly gets a
+    /// copy in `.bss`, which the image exports and binds to the
+    /// library's object by `R_*_COPY`: the loader fills the copy and
+    /// resolves every other reference to the object, the library's own
+    /// included, to it. The copy takes the size and alignment the
+    /// library states.
+    fn allocate_copies(&mut self) -> Result<(), C5Error> {
+        for name in copy_candidates(self.objs, self.shared_libs) {
+            if self.defined.contains_key(name.as_str())
+                || self.absolute_defined.contains_key(name.as_str())
+            {
+                continue;
+            }
+            let lib = self
+                .shared_libs
+                .iter()
+                .find(|l| l.data_exports.contains(&name))
+                .expect("a candidate is a shared-library data object");
+            let Some(&(size, align)) = lib.object_sizes.get(&name) else {
+                return Err(link_err(
+                    Code::RELOCATION,
+                    MODULE,
+                    &format!(
+                        "`{name}` of {} is read directly, which needs a copy of it in the \
+                         image, and the library states no size for it",
+                        lib.soname
+                    ),
+                ));
+            };
+            self.bss_size = align_usize(self.bss_size, align.max(1) as usize);
+            let offset = self.bss_size as u64;
+            self.bss_size += size as usize;
+            let host = lib.export_symbols.get(&name).unwrap_or(&name).clone();
+            self.defined.insert(
+                Cow::Owned(name.clone()),
+                MergedSymbol {
+                    section: NativeSymSection::Bss,
+                    value: offset,
+                    size,
+                    kind: super::object::STT_OBJECT,
+                    visibility: super::object::STV_DEFAULT,
+                    weak: false,
+                },
+            );
+            self.section_map.bss.push(SectionContribution {
+                input: None,
+                name: ".dynbss".to_string(),
+                offset,
+                size,
+            });
+            self.copies.push((name, host));
+        }
+        Ok(())
     }
 
     /// The symbols the link itself defines: the init/fini array bounds
@@ -1644,6 +1866,16 @@ impl<'a> Link<'a> {
         let objs = self.objs;
         for (i, obj) in objs.iter().enumerate() {
             let origin = RelocOrigin::in_object(obj, SectionFamily::Text);
+            // badc's own objects state each local-exec site twice, as a
+            // relocation for other linkers and as a note fixup, which
+            // `resolve_tls_fixups` applies; on aarch64 a fixup covers the
+            // `add` pair.
+            let pair = self.machine == NativeMachine::Aarch64;
+            let noted: BTreeSet<u64> = obj
+                .elf_tpoff_fixups
+                .iter()
+                .flat_map(|&(off, _)| core::iter::once(off).chain(pair.then_some(off + 4)))
+                .collect();
             for reloc in &obj.text_relocs {
                 let sym = obj.symbols.get(reloc.sym_idx).ok_or_else(|| {
                     internal_err(MODULE, &format!(
@@ -1654,16 +1886,15 @@ impl<'a> Link<'a> {
                     ))
                 })?;
                 let patch_offset = self.text_bases[i] + reloc.offset as usize;
-                // Local-exec TLS relocations duplicate the note-channel
-                // TLS fixups for external linkers; `resolve_tls_fixups`
-                // patches the same sites from the fixup records. Other
-                // TLS models (initial-exec / general-dynamic, from
-                // foreign objects) still land in the
-                // `NativeSymSection::Tls` arm and error.
-                if reloc.rtype == R_X86_64_TPOFF32
-                    || reloc.rtype == R_AARCH64_TLSLE_ADD_TPREL_HI12
-                    || reloc.rtype == R_AARCH64_TLSLE_ADD_TPREL_LO12_NC
-                {
+                let tls = match self.machine {
+                    NativeMachine::X86_64 => x86_64_is_tls(reloc.rtype),
+                    NativeMachine::Aarch64 => aarch64_is_tls(reloc.rtype),
+                };
+                if tls {
+                    if !noted.contains(&reloc.offset) {
+                        let site = origin.at(self.machine, reloc.rtype, &sym.name, reloc.offset);
+                        self.apply_tls_reloc(i, sym, reloc, patch_offset, &site)?;
+                    }
                     continue;
                 }
                 // An STB_WEAK definition is overridable: a strong
@@ -2001,8 +2232,6 @@ impl<'a> Link<'a> {
     /// object carrying any such fixup uses the Windows no-bias offset.
     fn resolve_tls_fixups(&mut self) -> Result<(), C5Error> {
         let objs = self.objs;
-        let merged_tls_total = align_usize(self.tls_data.len(), self.tls_align) as u64;
-        let tcb_reserve = align_usize(16, self.tls_align) as u64;
         for (i, obj) in objs.iter().enumerate() {
             let win_teb = !obj.tls_index_fixups.is_empty();
             for (text_off, target) in &obj.elf_tpoff_fixups {
@@ -2051,7 +2280,7 @@ impl<'a> Link<'a> {
                             }
                             merged_offset as i64
                         } else {
-                            merged_offset as i64 - merged_tls_total as i64
+                            self.tp_offset(merged_offset)
                         };
                         self.text[patch..patch + 4].copy_from_slice(&(value as i32).to_le_bytes());
                     }
@@ -2059,7 +2288,7 @@ impl<'a> Link<'a> {
                         let tpoff = if win_teb {
                             merged_offset
                         } else {
-                            merged_offset + tcb_reserve
+                            self.tp_offset(merged_offset) as u64
                         };
                         if tpoff >= (1 << 24) {
                             return Err(internal_err(
@@ -2596,6 +2825,16 @@ impl<'a> Link<'a> {
                 }
             }
         }
+        // A copy is bound to the library whose object it copies.
+        for (name, _) in &self.copies {
+            let lib = self.shared_libs.iter().zip(&shlib_declared);
+            if let Some(at) = lib
+                .filter(|(l, _)| l.data_exports.contains(name))
+                .find_map(|(_, at)| *at)
+            {
+                bound[at] = true;
+            }
+        }
         let mut merged_idx = alloc::vec![0u32; declared.len()];
         let mut dylibs: Vec<String> = Vec::new();
         for (i, path) in declared.iter().enumerate() {
@@ -2654,11 +2893,10 @@ impl<'a> Link<'a> {
     fn merge_copy_relocs(&self) -> Vec<(String, String)> {
         let mut copy_relocs: Vec<(String, String)> = Vec::new();
         let mut seen: hashbrown::HashSet<(&str, &str)> = hashbrown::HashSet::new();
-        for obj in self.objs {
-            for pair in &obj.copy_relocs {
-                if seen.insert((pair.0.as_str(), pair.1.as_str())) {
-                    copy_relocs.push(pair.clone());
-                }
+        let pairs = self.objs.iter().flat_map(|o| &o.copy_relocs);
+        for pair in pairs.chain(&self.copies) {
+            if seen.insert((pair.0.as_str(), pair.1.as_str())) {
+                copy_relocs.push(pair.clone());
             }
         }
         copy_relocs
@@ -3052,6 +3290,7 @@ impl<'a> Link<'a> {
             debug_line_text_relocs: dbg.line.text_relocs,
             debug_info_data_relocs: dbg.info.data_relocs,
             prologue_ends: self.prologue_ends,
+            early_returns: self.early_returns,
             local_funcs: self.local_funcs,
             tls_data: self.tls_data,
             tls_init_size: self.tls_init_size,
@@ -3626,6 +3865,54 @@ fn apply_absolute_reloc(
     Err(site.unsupported())
 }
 
+/// Write a local-exec `TPREL(S + A)` into the field `site`'s relocation
+/// names.
+fn apply_tprel_reloc(
+    text: &mut [u8],
+    patch_offset: usize,
+    value: i64,
+    site: &RelocSite<'_>,
+) -> Result<(), C5Error> {
+    use crate::c5::codegen::aarch64::patch;
+    if let Some((width, check)) = x86_64_tpoff_field(site.rtype)
+        && site.machine == NativeMachine::X86_64
+    {
+        check_patch_bounds(text, patch_offset, width as usize)?;
+        if !check.admits(value, width) {
+            return Err(site.truncated(value));
+        }
+        let n = width as usize;
+        text[patch_offset..patch_offset + n].copy_from_slice(&value.to_le_bytes()[..n]);
+        return Ok(());
+    }
+    let Some(field) =
+        aarch64_tprel_field(site.rtype).filter(|_| site.machine == NativeMachine::Aarch64)
+    else {
+        return Err(site.unsupported());
+    };
+    check_patch_bounds(text, patch_offset, 4)?;
+    let word = u32::from_le_bytes(text[patch_offset..patch_offset + 4].try_into().unwrap());
+    let word = match field {
+        TprelField::Add { hi, check } => {
+            let shift = if hi { 12 } else { 0 };
+            if check && !(0..1i64 << (shift + 12)).contains(&value) {
+                return Err(site.truncated(value));
+            }
+            (word & !(0xfff << 10)) | ((((value >> shift) & 0xfff) as u32) << 10)
+        }
+        TprelField::Movw(group, signed, check) => {
+            if let Some(bits) = check
+                && !patch::movw_fits(value, bits, signed)
+            {
+                return Err(site.truncated(value));
+            }
+            patch::movw_word(word, group, signed, value)
+        }
+    };
+    text[patch_offset..patch_offset + 4].copy_from_slice(&word.to_le_bytes());
+    Ok(())
+}
+
 /// Width and overflow rule of the plain data field a PC-relative
 /// relocation writes `S + A - P` into, for either machine.
 pub(crate) fn pcrel_data_field(machine: NativeMachine, rtype: u32) -> Option<(u32, AbsCheck)> {
@@ -3913,6 +4200,7 @@ mod tests {
             elf_tpoff_fixups: Vec::new(),
             copy_relocs: Vec::new(),
             prologue_ends: Vec::new(),
+            early_returns: Vec::new(),
             extern_data_names: Vec::new(),
             debug_info: Vec::new(),
             debug_abbrev: Vec::new(),
@@ -4264,6 +4552,7 @@ mod tests {
             machine: NativeMachine::Aarch64,
             exports: names("tbl"),
             data_exports: names("tbl"),
+            object_sizes: Default::default(),
             export_symbols: alloc::collections::BTreeMap::new(),
             export_versions: alloc::collections::BTreeMap::new(),
             from_image: true,
@@ -4377,6 +4666,7 @@ mod tests {
             machine: NativeMachine::Aarch64,
             exports: core::iter::once(alloc::string::String::from("ext_fn")).collect(),
             data_exports: alloc::collections::BTreeSet::new(),
+            object_sizes: Default::default(),
             export_symbols: alloc::collections::BTreeMap::new(),
             export_versions: alloc::collections::BTreeMap::new(),
             from_image: true,
@@ -4414,6 +4704,7 @@ mod tests {
             machine: NativeMachine::Aarch64,
             exports: core::iter::once(alloc::string::String::from("ext_fn")).collect(),
             data_exports: alloc::collections::BTreeSet::new(),
+            object_sizes: Default::default(),
             export_symbols: alloc::collections::BTreeMap::new(),
             export_versions: alloc::collections::BTreeMap::new(),
             from_image: true,
@@ -4967,6 +5258,7 @@ mod tests {
                 elf_tpoff_fixups: alloc::vec::Vec::new(),
                 copy_relocs: alloc::vec::Vec::new(),
                 prologue_ends: alloc::vec::Vec::new(),
+                early_returns: alloc::vec::Vec::new(),
                 extern_data_names: alloc::vec::Vec::new(),
                 debug_info: alloc::vec::Vec::new(),
                 debug_abbrev: alloc::vec::Vec::new(),
@@ -5254,5 +5546,270 @@ mod tests {
         assert_eq!(merged.debug_info_text_relocs[0].byte_offset, 0);
         assert_eq!(merged.debug_info_text_relocs[0].merged_text_offset, ext_off);
         assert_eq!(&merged.debug_info[8..24], &[0u8; 16]);
+    }
+    /// A thread-local reference from an object with no note fixups, as
+    /// another compiler writes one: the field takes the offset from the
+    /// thread pointer of `S + A` in the merged block, for a local
+    /// symbol, a section symbol with an addend, and a global another
+    /// object defines. A site a note covers keeps the note's value.
+    #[test]
+    fn a_foreign_local_exec_reference_takes_its_thread_pointer_offset() {
+        use crate::c5::object::elf_reloc_types::{
+            R_AARCH64_TLSLE_ADD_TPREL_HI12, R_AARCH64_TLSLE_ADD_TPREL_LO12,
+            R_AARCH64_TLSLE_ADD_TPREL_LO12_NC, R_AARCH64_TLSLE_MOVW_TPREL_G0_NC,
+            R_AARCH64_TLSLE_MOVW_TPREL_G1, R_X86_64_TPOFF32, R_X86_64_TPOFF64,
+        };
+        let sym = |name: &str, section, value, binding| NativeSymbol {
+            name: name.to_string(),
+            section,
+            value,
+            size: 0,
+            binding,
+            kind: 6,
+            visibility: 0,
+        };
+        let reloc = |offset, sym_idx, rtype, addend| NativeReloc {
+            offset,
+            sym_idx,
+            rtype,
+            addend,
+        };
+        // A: `tl` at 4 of a 16-byte `.tdata` and a 0x2000-byte `.tbss`;
+        // B: `ext` at the start of its own block, which lands at 0x2010.
+        let foreign = |machine, text: Vec<u8>, text_relocs: Vec<NativeReloc>| {
+            let mut a = blank_object(machine);
+            a.tls_data = alloc::vec![0; 16];
+            a.tls_bss_size = 0x2000;
+            a.tls_align = 8;
+            a.text = text;
+            a.symbols = alloc::vec![
+                sym("", NativeSymSection::Undef, 0, 0),
+                sym("tl", NativeSymSection::Tls, 4, 0),
+                sym("", NativeSymSection::Tls, 0, 0),
+                sym("ext", NativeSymSection::Undef, 0, 1),
+            ];
+            a.text_relocs = text_relocs;
+            let mut b = blank_object(machine);
+            b.tls_bss_size = 4;
+            b.tls_align = 4;
+            b.symbols = alloc::vec![
+                sym("", NativeSymSection::Undef, 0, 0),
+                sym("ext", NativeSymSection::Tls, 0, 1),
+            ];
+            alloc::vec![a, b]
+        };
+        let word =
+            |text: &[u8], at: usize| u32::from_le_bytes(text[at..at + 4].try_into().unwrap());
+
+        // x86_64: the block, 0x2014 bytes rounded to 0x2018, ends at the
+        // thread pointer.
+        let mut objs = foreign(
+            NativeMachine::X86_64,
+            alloc::vec![0; 24],
+            alloc::vec![
+                reloc(0, 1, R_X86_64_TPOFF32, 0),
+                reloc(4, 2, R_X86_64_TPOFF32, 12),
+                reloc(8, 3, R_X86_64_TPOFF32, 0),
+                reloc(12, 1, R_X86_64_TPOFF32, 0),
+                reloc(16, 3, R_X86_64_TPOFF64, 0),
+            ],
+        );
+        objs[0].elf_tpoff_fixups = alloc::vec![(12, ElfTpoffTarget::Local(0))];
+        let merged = link_native_objects(&objs).expect("link");
+        let tpoff = |at: usize| word(&merged.text, at) as i32;
+        assert_eq!(
+            [tpoff(0), tpoff(4), tpoff(8), tpoff(12)],
+            [4 - 0x2018, 12 - 0x2018, 0x2010 - 0x2018, -0x2018],
+            "a local, a section symbol + 12, another object's global, a noted site"
+        );
+        let wide = i64::from_le_bytes(merged.text[16..24].try_into().unwrap());
+        assert_eq!(wide, 0x2010 - 0x2018, "the 8-byte form");
+
+        // aarch64: the block starts 16 bytes past the thread pointer.
+        let add = 0x9100_0000u32;
+        let objs = foreign(
+            NativeMachine::Aarch64,
+            [add | 1 << 22, add, add, 0xd2a0_0001, 0xf280_0001]
+                .iter()
+                .flat_map(|w: &u32| w.to_le_bytes())
+                .collect(),
+            alloc::vec![
+                reloc(0, 3, R_AARCH64_TLSLE_ADD_TPREL_HI12, 0),
+                reloc(4, 3, R_AARCH64_TLSLE_ADD_TPREL_LO12_NC, 0),
+                reloc(8, 1, R_AARCH64_TLSLE_ADD_TPREL_LO12, 0),
+                reloc(12, 3, R_AARCH64_TLSLE_MOVW_TPREL_G1, 0),
+                reloc(16, 3, R_AARCH64_TLSLE_MOVW_TPREL_G0_NC, 0),
+            ],
+        );
+        let merged = link_native_objects(&objs).expect("link");
+        let imm12 = |at: usize| (word(&merged.text, at) >> 10) & 0xfff;
+        let imm16 = |at: usize| (word(&merged.text, at) >> 5) & 0xffff;
+        assert_eq!(
+            [imm12(0), imm12(4), imm12(8), imm16(12), imm16(16)],
+            [0x2, 0x20, 4 + 16, 0, 0x2020],
+            "`ext` at 0x2010 + 16 through an `add` pair and a MOVW pair; `tl` at 4 + 16"
+        );
+
+        // The checked low form holds no offset of 4096 or more.
+        let objs = foreign(
+            NativeMachine::Aarch64,
+            add.to_le_bytes().to_vec(),
+            alloc::vec![reloc(0, 3, R_AARCH64_TLSLE_ADD_TPREL_LO12, 0)],
+        );
+        let err = link_native_objects(&objs).expect_err("0x2020 overflows the 12 bits");
+        assert!(format!("{err}").contains("relocation truncated"), "{err}");
+    }
+
+    /// A shared-library data object an object reads directly, as
+    /// another compiler's code does, gets a copy in `.bss` at the size
+    /// and alignment the library states, bound to the library's object
+    /// by a copy relocation and to the library as a load-time need. A
+    /// reference badc's note routes through the GOT asks for none, and a
+    /// library that states no size cannot give one.
+    #[test]
+    fn a_library_object_read_directly_gets_a_copy() {
+        let lib = |sizes: bool| SharedLibrary {
+            soname: "libcnt.so".to_string(),
+            machine: NativeMachine::X86_64,
+            exports: ["counter".to_string()].into_iter().collect(),
+            data_exports: ["counter".to_string()].into_iter().collect(),
+            object_sizes: if sizes {
+                [("counter".to_string(), (24, 8))].into_iter().collect()
+            } else {
+                Default::default()
+            },
+            export_symbols: Default::default(),
+            export_versions: Default::default(),
+            from_image: true,
+        };
+        let reader = |routed: bool| {
+            let mut o = blank_object(NativeMachine::X86_64);
+            // `movl counter(%rip), %eax`
+            o.text = alloc::vec![0x8b, 0x05, 0, 0, 0, 0];
+            o.bss_size = 4;
+            o.symbols = alloc::vec![
+                NativeSymbol {
+                    name: String::new(),
+                    section: NativeSymSection::Undef,
+                    value: 0,
+                    size: 0,
+                    binding: 0,
+                    kind: 0,
+                    visibility: 0,
+                },
+                NativeSymbol {
+                    name: "counter".to_string(),
+                    section: NativeSymSection::Undef,
+                    value: 0,
+                    size: 0,
+                    binding: 1,
+                    kind: 0,
+                    visibility: 0,
+                },
+            ];
+            o.text_relocs = alloc::vec![NativeReloc {
+                offset: 2,
+                sym_idx: 1,
+                rtype: R_X86_64_PC32,
+                addend: -4,
+            }];
+            if routed {
+                o.extern_data_names = alloc::vec!["counter".to_string()];
+            }
+            o
+        };
+        let merged = link_native_objects_with_shared_libs(&[reader(false)], false, &[lib(true)])
+            .expect("link");
+        let copy = merged.defined.get("counter").expect("the copy is defined");
+        assert_eq!(
+            (copy.section, copy.value, copy.size),
+            (NativeSymSection::Bss, 8, 24),
+            "past the unit's 4 bytes, on the object's alignment"
+        );
+        assert_eq!(
+            merged.copy_relocs,
+            alloc::vec![("counter".to_string(), "counter".to_string())]
+        );
+        assert!(
+            merged.dylibs.iter().any(|d| d == "libcnt.so"),
+            "{:?}",
+            merged.dylibs
+        );
+
+        let merged = link_native_objects_with_shared_libs(&[reader(true)], false, &[lib(true)])
+            .expect("link");
+        assert!(
+            !merged.defined.contains_key("counter"),
+            "the GOT serves a routed read"
+        );
+        assert!(merged.copy_relocs.is_empty());
+
+        let err = link_native_objects_with_shared_libs(&[reader(false)], false, &[lib(false)])
+            .expect_err("no size, no copy");
+        assert!(format!("{err}").contains("states no size"), "{err}");
+    }
+
+    /// A data slot holding a shared-library data object's address has
+    /// no GOT to go through, so it asks for a copy even from an object
+    /// whose note routes its code's references through the GOT, and the
+    /// slot takes the copy's address, not the import's call stub.
+    #[test]
+    fn a_data_initializer_naming_a_library_object_gets_a_copy() {
+        use crate::c5::object::elf_reloc_types::R_X86_64_64;
+        let lib = SharedLibrary {
+            soname: "libcnt.so".to_string(),
+            machine: NativeMachine::X86_64,
+            exports: ["counter".to_string()].into_iter().collect(),
+            data_exports: ["counter".to_string()].into_iter().collect(),
+            object_sizes: [("counter".to_string(), (4, 4))].into_iter().collect(),
+            export_symbols: Default::default(),
+            export_versions: Default::default(),
+            from_image: true,
+        };
+        let mut o = blank_object(NativeMachine::X86_64);
+        // `int *const counter_addr = &counter;`
+        o.relro = alloc::vec![0; 8];
+        o.relro_align = 8;
+        o.symbols = alloc::vec![
+            NativeSymbol {
+                name: String::new(),
+                section: NativeSymSection::Undef,
+                value: 0,
+                size: 0,
+                binding: 0,
+                kind: 0,
+                visibility: 0,
+            },
+            NativeSymbol {
+                name: "counter".to_string(),
+                section: NativeSymSection::Undef,
+                value: 0,
+                size: 0,
+                binding: 1,
+                kind: 0,
+                visibility: 0,
+            },
+        ];
+        o.relro_relocs = alloc::vec![NativeReloc {
+            offset: 0,
+            sym_idx: 1,
+            rtype: R_X86_64_64,
+            addend: 0,
+        }];
+        o.extern_data_names = alloc::vec!["counter".to_string()];
+        let merged = link_native_objects_with_shared_libs(&[o], false, &[lib]).expect("link");
+        let copy = merged.defined.get("counter").expect("the copy is defined");
+        assert_eq!(copy.section, NativeSymSection::Bss);
+        assert!(
+            merged.data_import_refs.is_empty(),
+            "no slot points at a stub"
+        );
+        assert!(
+            merged
+                .data_abs_relocs
+                .iter()
+                .any(|r| matches!(r.target, MergedTarget::Data(at) if at as u64 == merged.data.len() as u64 + copy.value)),
+            "the slot holds the copy's address"
+        );
     }
 }

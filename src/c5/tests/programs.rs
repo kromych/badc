@@ -3,6 +3,7 @@
 
 use super::compile_str;
 use super::run_fixture;
+use super::run_fixture_for;
 use super::run_str;
 
 #[test]
@@ -254,7 +255,10 @@ fn inline_asm_memory_operand() {
     // interlocked `lock cmpxchg` / `lock xadd` (edk2 BaseSynchronizationLib)
     // read and write the memory object, not a register (a `lock` on a
     // register destination is an invalid encoding that faults at runtime).
-    assert_eq!(run_fixture("inline_asm_memory_operand.c"), 0);
+    assert_eq!(
+        run_fixture_for("inline_asm_memory_operand.c", crate::Target::LinuxX64),
+        0
+    );
 }
 
 #[test]
@@ -265,7 +269,13 @@ fn inline_asm_x64_callee_saved_operands() {
     // usable GP file, including rbx / r12..r15, not just the caller-saved
     // half, or it reports a spurious "out of registers"; the emitter already
     // saves and restores each operand register around the block.
-    assert_eq!(run_fixture("inline_asm_x64_callee_saved_operands.c"), 0);
+    assert_eq!(
+        run_fixture_for(
+            "inline_asm_x64_callee_saved_operands.c",
+            crate::Target::LinuxX64
+        ),
+        0
+    );
 }
 
 #[test]
@@ -412,7 +422,10 @@ fn rdtsc_host_ticks() {
     // The x86-64 `rdtsc` inline-asm shape (a common host-tick counter):
     // two register-tied outputs, no inputs. The VM zeroes the counter (no
     // host clock); native x86-64 emits `rdtsc`.
-    assert_eq!(run_fixture("rdtsc_host_ticks.c"), 0);
+    assert_eq!(
+        run_fixture_for("rdtsc_host_ticks.c", crate::Target::LinuxX64),
+        0
+    );
 }
 
 #[test]
@@ -420,7 +433,13 @@ fn inline_asm_fixed_reg_output_width() {
     // A fixed-register output stores back at the width of its C object:
     // a `long` operand of a 32-bit instruction takes all eight bytes, a
     // 16-bit operand takes two and leaves its neighbours alone.
-    assert_eq!(run_fixture("inline_asm_fixed_reg_output_width.c"), 0);
+    assert_eq!(
+        run_fixture_for(
+            "inline_asm_fixed_reg_output_width.c",
+            crate::Target::LinuxX64
+        ),
+        0
+    );
 }
 
 #[test]
@@ -428,7 +447,10 @@ fn cpuid_partial_outputs() {
     // A `cpuid` asm with one output and the remaining implicit outputs
     // listed as clobbers takes the same generic extended-asm path as the
     // full four-output form; the VM zeroes every register cpuid defines.
-    assert_eq!(run_fixture("cpuid_partial_outputs.c"), 0);
+    assert_eq!(
+        run_fixture_for("cpuid_partial_outputs.c", crate::Target::LinuxX64),
+        0
+    );
 }
 
 #[test]
@@ -436,7 +458,10 @@ fn cpuid_xgetbv_output_width() {
     // `cpuid` / `xgetbv` outputs store back at the width of the C
     // operand: a `long` output takes all eight bytes (the instruction
     // clears the register's upper half), an `unsigned` output four.
-    assert_eq!(run_fixture("cpuid_xgetbv_output_width.c"), 0);
+    assert_eq!(
+        run_fixture_for("cpuid_xgetbv_output_width.c", crate::Target::LinuxX64),
+        0
+    );
 }
 
 #[test]
@@ -445,6 +470,70 @@ fn get_cpuid_leaf_checks() {
     // __get_cpuid_max, select the extended maximum for leaves with bit 31 set,
     // and leave the outputs untouched when they reject one.
     assert_eq!(run_fixture("get_cpuid_leaf_checks.c"), 0);
+}
+
+/// The interpreter runs an inline asm template in the assembler syntax of
+/// the target the program was compiled for: AArch64 integer instructions on
+/// the general registers, x86-64's on its register model. Each fixture
+/// computes under both targets the value its native build returns.
+#[test]
+fn the_interpreter_runs_inline_asm_in_the_targets_syntax() {
+    for (name, want) in [
+        ("inline_asm_a64_integer_ops.c", 0),
+        ("asm_register_outputs.c", 0),
+        ("file_scope_asm_decls.c", 0),
+        ("inline_asm_a64_bitfield.c", 42),
+        ("inline_asm_a64_hvc_inout.c", 0),
+        ("inline_asm_clobber_probe.c", 42),
+        ("inline_asm_constraint_alternatives.c", 42),
+        ("inline_asm_hint.c", 0),
+        ("inline_asm_named_operands.c", 42),
+        ("inline_asm_reg_var.c", 42),
+        ("inline_asm_reg_var_inout.c", 42),
+        ("inline_asm_sp_reg_var.c", 42),
+        ("register_var_typeof_stmt_expr.c", 0),
+    ] {
+        for target in [crate::Target::LinuxAarch64, crate::Target::LinuxX64] {
+            assert_eq!(run_fixture_for(name, target), want, "{name} for {target:?}");
+        }
+    }
+}
+
+/// An AArch64 template the interpreter does not model is refused with a
+/// diagnostic naming what it met, never evaluated as another architecture's.
+#[test]
+fn the_interpreter_refuses_an_unmodelled_aarch64_template() {
+    use crate::{Compiler, Target};
+    for (template, what) in [
+        (
+            "cmp %1, #0\n\tcset %w0, eq",
+            "`cmp`, which uses the condition flags,",
+        ),
+        ("ldr %0, [%1]", "`ldr`"),
+        ("mrs %0, midr_el1", "`mrs`"),
+        ("mov %0, sp", "the stack pointer"),
+        ("dup v0.16b, %w1\n\tmov %0, %1", "`dup`"),
+        (
+            ".inst 0x8b010000\n\tmov %0, %1",
+            "an instruction word other than a hint or a barrier",
+        ),
+        ("b 1f\n1:\tmov %0, %1", "`b`"),
+    ] {
+        let src = format!(
+            "int main(void) {{ unsigned long x = 1, y; \
+             __asm__(\"{template}\" : \"=r\"(y) : \"r\"(&x)); return (int)y; }}"
+        );
+        let program = Compiler::with_options(src.clone(), Target::LinuxAarch64, Default::default())
+            .compile()
+            .expect(&src);
+        let err = super::Vm::new(program).run().expect_err(&src).to_string();
+        assert!(
+            err.contains(&format!(
+                "inline asm: {what} is not supported under --interp"
+            )),
+            "{src}: {err}"
+        );
+    }
 }
 
 #[test]
@@ -1184,6 +1273,14 @@ fn generic_selection() {
 }
 
 #[test]
+fn plain_char_distinct_type() {
+    // C99 6.2.5p15: `char`, `signed char` and `unsigned char` are three
+    // types; `_Generic`, `__builtin_types_compatible_p`, `typeof` and the
+    // element type of a string literal tell them apart on every target.
+    assert_eq!(run_fixture("plain_char_distinct_type.c"), 0);
+}
+
+#[test]
 fn generic_selection_qualified() {
     // C11 6.5.1.1p2 / 6.7.3p9 through `_Generic` and
     // `__builtin_types_compatible_p`: a `const` on the object itself is
@@ -1252,7 +1349,8 @@ fn builtin_types_compatible_fnptr() {
     // `__builtin_types_compatible_p` arguments, including a typedef against
     // the address of a matching function, differing return types and
     // parameter lists, an unspecified parameter list against a prototype,
-    // and pointer-to-function versus function type. Matches gcc and clang.
+    // spelled or named through a typedef, `typeof` or `&`, and
+    // pointer-to-function versus function type. Matches gcc and clang.
     assert_eq!(run_fixture("builtin_types_compatible_fnptr.c"), 0);
 }
 
@@ -1903,12 +2001,6 @@ fn redecl_composite_keeps_prototype() {
 }
 
 #[test]
-fn redecl_composite_arity_warning() {
-    // The same composite keeps call-site argument checking alive.
-    assert_eq!(run_fixture("redecl_composite_arity_warning.c"), 0);
-}
-
-#[test]
 fn float_increment_decrement() {
     // `++` / `--` on a real floating type add / subtract 1 (C99 6.5.3.1 /
     // 6.5.2.4), prefix yielding the new value and postfix the prior.
@@ -2303,6 +2395,12 @@ fn attribute_cleanup() {
 }
 
 #[test]
+fn goto_cleanup_scopes() {
+    // A goto or computed goto runs the cleanups of the scopes it leaves.
+    assert_eq!(run_fixture("goto_cleanup_scopes.c"), 0);
+}
+
+#[test]
 fn sizeof_array_type_and_binding() {
     // `sizeof(T [N])` sizes the array type; `sizeof(arr)[i]` binds to
     // the full unary-expression.
@@ -2591,6 +2689,137 @@ fn kr_old_style_def() {
     // Old-style parameter declarations between `)` and the body refine
     // the parameter types.
     assert_eq!(run_fixture("kr_old_style_def.c"), 0);
+}
+
+#[test]
+fn callee_function_types() {
+    // A call converts its arguments by its callee expression's function
+    // type, whatever form the callee takes: a dereferenced designator, a
+    // conditional, a comma, a member, an element, a cast, a call's result.
+    assert_eq!(run_fixture("callee_function_types.c"), 0);
+}
+
+#[test]
+fn type_name_array_derivations() {
+    // C99 6.7.6: a bound inside a group of a type name's abstract
+    // declarator makes an array, of pointers to functions or to data;
+    // `sizeof`, a compound literal, a cast and a call through an element
+    // read it. A group without a function names a data pointer.
+    assert_eq!(run_fixture("type_name_array_derivations.c"), 0);
+}
+
+#[test]
+fn typedef_member_types() {
+    // C99 6.7.7p3: a member declared through a typedef has the type a
+    // variable declared through it has: a call through the result of a
+    // member's call converts its arguments, and an enum completed after the
+    // typedef lays the member out at the enum's width.
+    assert_eq!(run_fixture("typedef_member_types.c"), 0);
+}
+
+#[test]
+fn cast_function_pointer_to_object_pointer() {
+    // C99 6.5.4, J.5.7: a function pointer cast to an object pointer is
+    // that object pointer, so `*` loads through it whatever expression
+    // held the function pointer; a cast to a pointer to a function pointer
+    // keeps the function type a following `*` decays through.
+    assert_eq!(run_fixture("cast_function_pointer_to_object_pointer.c"), 0);
+}
+
+#[test]
+fn pointer_to_array_of_function_pointers() {
+    // C99 6.7.5.1, 6.7.5.2: an element reached through a declared pointer
+    // to an array of function pointers is a function pointer at file and
+    // block scope, as a member, a parameter and through a typedef.
+    assert_eq!(run_fixture("pointer_to_array_of_function_pointers.c"), 0);
+}
+
+#[test]
+fn generic_function_types() {
+    // C11 6.5.1.1p2, C99 6.7.5.3p15: a generic association of a function
+    // pointer type matches by the whole function type -- parameters,
+    // prototype and the pointed-to results -- and an array type never
+    // matches; `__builtin_types_compatible_p` compares the same way.
+    assert_eq!(run_fixture("generic_function_types.c"), 0);
+}
+
+#[test]
+fn function_returning_pointer_to_array() {
+    // C99 6.7.5.3p1: a group holding a function's parameter list derives,
+    // through its suffixes, the array the function's result points to; the
+    // group declares a function at block scope too.
+    assert_eq!(run_fixture("function_returning_pointer_to_array.c"), 0);
+}
+
+#[test]
+fn array_typedef_derivations() {
+    // C99 6.7.7p3: a declarator's first derivation applies to the whole
+    // array an array typedef names, whatever derivations follow it.
+    assert_eq!(run_fixture("array_typedef_derivations.c"), 0);
+}
+
+#[test]
+fn struct_array_member_brace_elision() {
+    // C99 6.7.8p20: an aggregate element of an array member takes its
+    // members from the enclosing list when its braces are elided.
+    assert_eq!(run_fixture("struct_array_member_brace_elision.c"), 0);
+}
+
+#[test]
+fn pointer_constant_arithmetic() {
+    // C99 6.6p9: an integer constant cast to a pointer type is an address
+    // constant, whose constant arithmetic strides by the pointee.
+    assert_eq!(run_fixture("pointer_constant_arithmetic.c"), 0);
+}
+
+#[test]
+fn static_initializer_address_casts() {
+    // C99 6.6p9: an address constant cast to an integer or pointer type
+    // initializes a static scalar, member or element as its relocation.
+    assert_eq!(run_fixture("static_initializer_address_casts.c"), 0);
+}
+
+#[test]
+fn typeof_function_types() {
+    // C23 6.7.2.5: an object declared through `typeof` of a type name or of
+    // an expression of any form has the function type the operand leads
+    // to, so a call through it converts to the parameter types.
+    assert_eq!(run_fixture("typeof_function_types.c"), 0);
+}
+
+#[test]
+fn comma_operator_decay() {
+    // C99 6.5.17p2: an array right operand of the comma operator has
+    // decayed in the result, which `sizeof` and `typeof` see.
+    assert_eq!(run_fixture("comma_operator_decay.c"), 0);
+}
+
+#[test]
+fn typeof_row_bounds() {
+    // C23 6.7.2.5: `typeof` of a row of a multi-dimensional array keeps the
+    // row's inner bounds.
+    assert_eq!(run_fixture("typeof_row_bounds.c"), 0);
+}
+
+#[test]
+fn variably_modified_type_names() {
+    // C99 6.7.5.2p4, 6.5.3.4p2: a variable-length array type name's size
+    // is computed at run time, and a cast to a pointer to one strides by it.
+    assert_eq!(run_fixture("variably_modified_type_names.c"), 0);
+}
+
+#[test]
+fn enum_used_before_definition() {
+    // C99 6.7.2.2p4: values read through declarations made before an enum's
+    // definition take the enum's type, as those made after it do.
+    assert_eq!(run_fixture("enum_used_before_definition.c"), 0);
+}
+
+#[test]
+fn indirect_call_prototypes() {
+    // A call through a pointer converts or promotes its arguments by the
+    // pointed-to type, however the callee is spelled.
+    assert_eq!(run_fixture("indirect_call_prototypes.c"), 0);
 }
 
 #[test]
@@ -2958,14 +3187,19 @@ fn inline_asm_raw_bytes() {
     // Raw machine bytes emitted from a template (`.byte` directive and the
     // bare hex-byte run) encode a no-op per target; the interpreter models
     // them as opaque and the surrounding computation is unaffected.
-    assert_eq!(run_fixture("inline_asm_raw_bytes.c"), 0);
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        assert_eq!(run_fixture_for("inline_asm_raw_bytes.c", target), 0);
+    }
 }
 
 #[test]
 fn inline_asm_x64_align_padding_opaque() {
     // `.align` / `.p2align` / `.balign` padding in the code stream has no
     // modelled effect; the surrounding computation is unaffected.
-    assert_eq!(run_fixture("inline_asm_x64_align.c"), 42);
+    assert_eq!(
+        run_fixture_for("inline_asm_x64_align.c", crate::Target::LinuxX64),
+        42
+    );
 }
 
 #[test]
@@ -4809,14 +5043,11 @@ fn win64_xmm_scratch_callee_save() {
 }
 
 #[test]
-#[ignore = "TODO: c5 VM has no shim for strtold / ldexpl; the fixture verifies the SysV x86_64 long-double libc-return convention through the native lane via NATIVE_FIXTURES"]
+#[ignore = "TODO: c5 VM has no shim for strtold / ldexpl; the Linux native fixture tables run the fixture"]
 fn long_double_libc_return_round_trips() {
-    // SysV x86_64 ABI: `long double` libc returns ride in
-    // x87 `st(0)`, not XMM0. The libc-call lowering spills
-    // st(0) and reloads as double; the fixture asserts that
-    // strtold and ldexpl yield the right bit pattern after
-    // the round trip. Pre-fix the path read XMM0 and got
-    // -0.0 for every call.
+    // A `long double` libc return arrives in x87 `st(0)` on System V
+    // x86-64 and in `v0` as binary128 on AAPCS64, not where a `double`
+    // returns.
     assert_eq!(run_fixture("long_double_libc_return.c"), 0);
 }
 
@@ -5297,6 +5528,8 @@ fn struct_arg_value_form() {
     // the caller's copy, and -- when the callee's parameter list is not in
     // scope -- the object's bytes in one machine word. The interpreter read
     // the second form's word as an address; the native backends take both.
+    // A redeclaration through a parameterless function type keeps the list
+    // (C99 6.2.7p4), so the calls here are the first form.
     assert_eq!(run_fixture("struct_arg_value_form.c"), 0);
 }
 
@@ -5679,10 +5912,11 @@ fn diagnostic_echoes_the_source_line() {
     );
 
     // A warning does the same via `Program.warnings`.
-    let wsrc = "int add(int a, int b);\nint main(void) {\n    return add(1);\n}\n";
+    let wsrc =
+        "int add(a, b) int a, b; { return a + b; }\nint main(void) {\n    return add(1);\n}\n";
     let prog = Compiler::new(wsrc.to_string())
         .compile()
-        .expect("too-few-arguments is a warning, not an error");
+        .expect("too few arguments to an old-style definition is a warning");
     let warns = prog
         .warnings
         .iter()
@@ -6212,7 +6446,7 @@ fn inline_asm_byte_width_keeps_upper_bits() {
             return 42;
         }
     ";
-    assert_eq!(run_str(src), 42);
+    assert_eq!(super::run_str_for(src, crate::Target::LinuxX64), 42);
 }
 
 #[test]
@@ -6233,7 +6467,7 @@ fn inline_asm_shld_double_shift() {
             return got == want ? 42 : 1;
         }
     ";
-    assert_eq!(run_str(src), 42);
+    assert_eq!(super::run_str_for(src, crate::Target::LinuxX64), 42);
 }
 
 #[test]
@@ -6251,7 +6485,7 @@ fn inline_asm_shrd_double_shift() {
             return got == want ? 42 : 1;
         }
     ";
-    assert_eq!(run_str(src), 42);
+    assert_eq!(super::run_str_for(src, crate::Target::LinuxX64), 42);
 }
 
 #[test]
@@ -6268,7 +6502,7 @@ fn inline_asm_bswap_matching_constraint() {
             return bswap32(x) == 0x44332211u ? 42 : 1;
         }
     ";
-    assert_eq!(run_str(src), 42);
+    assert_eq!(super::run_str_for(src, crate::Target::LinuxX64), 42);
 }
 
 #[test]
@@ -6313,7 +6547,7 @@ fn inline_asm_bswap_size_modifier() {
             return bswap64(x) == 0x0807060504030201ULL ? 42 : 1;
         }
     ";
-    assert_eq!(run_str(src), 42);
+    assert_eq!(super::run_str_for(src, crate::Target::LinuxX64), 42);
 }
 
 #[test]
@@ -6334,7 +6568,7 @@ fn inline_asm_rdtscp_sequence_fixed_regs() {
             return rdtscp_read() == 0 ? 42 : 1;
         }
     ";
-    assert_eq!(run_str(src), 42);
+    assert_eq!(super::run_str_for(src, crate::Target::LinuxX64), 42);
 }
 
 #[test]

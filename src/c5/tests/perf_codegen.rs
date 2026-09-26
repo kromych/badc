@@ -14,22 +14,29 @@ use crate::Target;
 /// The relocatable object of `src` at `-O` or `-O0`, over the full register
 /// pool so the pressure caps do not move registers.
 pub(super) fn object_at(src: &str, target: Target, optimize: bool) -> Vec<u8> {
-    object_with(src, target, optimize, (usize::MAX, usize::MAX))
+    object_with(src, target, optimize, (usize::MAX, usize::MAX), false)
 }
 
 /// The `-O` object of `src` over integer / FP banks capped to `caps`.
 fn object_with_pool(src: &str, target: Target, caps: (usize, usize)) -> Vec<u8> {
-    object_with(src, target, true, caps)
+    object_with(src, target, true, caps, false)
 }
 
-fn object_with(src: &str, target: Target, optimize: bool, caps: (usize, usize)) -> Vec<u8> {
+fn object_with(
+    src: &str,
+    target: Target,
+    optimize: bool,
+    caps: (usize, usize),
+    wrapv: bool,
+) -> Vec<u8> {
     use crate::{CompileOptions, Compiler, NativeOptions, OutputKind, emit_native_with_options};
     let program = Compiler::with_options(
         src.to_string(),
         target,
         CompileOptions::default()
             .with_no_entry_point(true)
-            .with_optimize(optimize),
+            .with_optimize(optimize)
+            .with_wrapv(wrapv),
     )
     .compile()
     .unwrap_or_else(|e| panic!("compile ({target:?}): {e}"));
@@ -65,6 +72,23 @@ fn a64(src: &str, name: &str) -> Vec<u32> {
 
 fn x64(src: &str, name: &str) -> Vec<X64Insn> {
     x64_at(src, name, true)
+}
+
+/// [`a64`] and [`x64`] under `-fwrapv`.
+fn a64_wrapv(src: &str, name: &str) -> Vec<u32> {
+    let caps = (usize::MAX, usize::MAX);
+    function_words(
+        &object_with(src, Target::LinuxAarch64, true, caps, true),
+        name,
+    )
+}
+
+fn x64_wrapv(src: &str, name: &str) -> Vec<X64Insn> {
+    let caps = (usize::MAX, usize::MAX);
+    x64_insns(&function_bytes(
+        &object_with(src, Target::LinuxX64, true, caps, true),
+        name,
+    ))
 }
 
 /// One decoded x86-64 instruction. `op` is the opcode with `0x0F00` set for
@@ -123,7 +147,7 @@ impl X64Insn {
         )
     }
     /// `movslq r32, r64` between registers.
-    fn is_movsxd_rr(&self) -> bool {
+    pub(super) fn is_movsxd_rr(&self) -> bool {
         self.op == 0x63 && self.rex_w() && self.reg_form()
     }
 }
@@ -224,6 +248,7 @@ pub(super) fn x64_insns(code: &[u8]) -> Vec<X64Insn> {
             | 0x0F90..=0x0F9F
             | 0x0FA3
             | 0x0FAB
+            | 0x0FAE
             | 0x0FAF
             | 0x0FB0
             | 0x0FB1
@@ -486,15 +511,24 @@ fn counted_loop_is_entered_through_its_guard() {
 }
 
 /// Under `n >= 2` the decrement `n - 2` stays inside `int`, so only the
-/// parameter's entry extension remains.
+/// parameter's entry extension remains. The early return after the body
+/// extends its own result.
 #[test]
 fn guarded_decrement_is_not_renormalized() {
     let mut m = Misses::default();
     let ws = a64(FIB, "fib");
-    let n = ws.iter().filter(|&&w| a64_is_sxtw(w)).count();
+    let body = ws
+        .iter()
+        .position(|&w| w == 0xD65F_03C0)
+        .map_or(ws.len(), |r| r + 1);
+    let n = ws[..body].iter().filter(|&&w| a64_is_sxtw(w)).count();
     m.expect(n <= 1, || format!("aarch64: {n} sxtw: {ws:08x?}"));
     let insns = x64(FIB, "fib");
-    let n = insns.iter().filter(|i| i.is_movsxd_rr()).count();
+    let body = insns
+        .iter()
+        .position(|i| i.op == 0xC3)
+        .map_or(insns.len(), |r| r + 1);
+    let n = insns[..body].iter().filter(|i| i.is_movsxd_rr()).count();
     m.expect(n <= 1, || format!("x86-64: {n} movslq: {insns:x?}"));
     m.finish();
 }
@@ -522,7 +556,7 @@ fn a64_in_loop(ws: &[u32], pred: impl Fn(u32) -> bool) -> bool {
     })
 }
 
-fn x64_in_loop(insns: &[X64Insn], pred: impl Fn(&X64Insn) -> bool) -> bool {
+pub(super) fn x64_in_loop(insns: &[X64Insn], pred: impl Fn(&X64Insn) -> bool) -> bool {
     insns
         .iter()
         .filter(|b| (b.is_jmp() || b.is_jcc()) && b.target() <= b.at)
@@ -531,6 +565,44 @@ fn x64_in_loop(insns: &[X64Insn], pred: impl Fn(&X64Insn) -> bool) -> bool {
                 .iter()
                 .any(|i| i.at >= b.target() && i.at <= b.at && pred(i))
         })
+}
+
+/// Whether the control flow of `insns` has a cycle, which a backward branch
+/// from a block placed past the return does not make.
+pub(super) fn x64_has_cycle(insns: &[X64Insn]) -> bool {
+    let index = |at: usize| insns.iter().position(|i| i.at == at);
+    let successors = |k: usize| {
+        let i = &insns[k];
+        let next = (i.op != 0xC3 && !i.is_jmp())
+            .then_some(k + 1)
+            .filter(|&n| n < insns.len());
+        let taken = (i.is_jmp() || i.is_jcc())
+            .then(|| index(i.target()))
+            .flatten();
+        next.into_iter().chain(taken)
+    };
+    let (mut on_path, mut seen) = (vec![false; insns.len()], vec![false; insns.len()]);
+    let mut stack = vec![(0usize, false)];
+    while let Some((k, leaving)) = stack.pop() {
+        if leaving {
+            on_path[k] = false;
+            continue;
+        }
+        if seen[k] {
+            continue;
+        }
+        (seen[k], on_path[k]) = (true, true);
+        stack.push((k, true));
+        for n in successors(k) {
+            if on_path[n] {
+                return true;
+            }
+            if !seen[n] {
+                stack.push((n, false));
+            }
+        }
+    }
+    false
 }
 
 /// `mov wd, wm`, the zero extension of a low word.
@@ -543,31 +615,48 @@ fn x64_is_mask(i: &X64Insn) -> bool {
     matches!(i.op, 0x89 | 0x8B) && !i.rex_w() && i.reg_form()
 }
 
-/// Arithmetic wraps, so a counter keeps its extension wherever its bound
-/// does not keep the step inside `int`: a disequality, `i <= n` (n can be
-/// INT_MAX), a step that is not a constant, a bound on the side the step
-/// moves away from, and a second back edge whose step is not a constant.
+/// Counters no bound keeps inside `int`: a disequality, `i <= n`, a
+/// variable step, a bound behind the step, and a variable second step.
+const UNBOUNDED_COUNTERS: [&str; 6] = [
+    "long f(const int *a, int n) { long s = 0; for (int i = 0; i != n; i++) s += a[i]; return s; }",
+    "long f(const int *a, int n) { long s = 0; for (int i = 0; i <= n; i++) s += a[i]; return s; }",
+    "long f(const int *a, int n, int k) { long s = 0; for (int i = 0; i < n; i += k) s += a[i]; return s; }",
+    "long f(const int *a, int n) { long s = 0; for (int i = n; i > 0; i++) s += a[i]; return s; }",
+    "long f(const int *a, int n) { long s = 0; for (int i = n; i < 0; i--) s += a[i]; return s; }",
+    "long f(const int *a, int n, int k) { long s = 0; int i = 0;\n\
+     while (i < n) { if (a[i] & 1) { i += 1; continue; } s += a[i]; i += k; } return s; }",
+];
+
+/// Under `-fwrapv` the step wraps, so such a counter keeps its extension.
 /// On aarch64 the subscript's access may perform it.
 #[test]
-fn counter_that_can_leave_int_keeps_its_extension() {
-    const SRCS: [&str; 6] = [
-        "long f(const int *a, int n) { long s = 0; for (int i = 0; i != n; i++) s += a[i]; return s; }",
-        "long f(const int *a, int n) { long s = 0; for (int i = 0; i <= n; i++) s += a[i]; return s; }",
-        "long f(const int *a, int n, int k) { long s = 0; for (int i = 0; i < n; i += k) s += a[i]; return s; }",
-        "long f(const int *a, int n) { long s = 0; for (int i = n; i > 0; i++) s += a[i]; return s; }",
-        "long f(const int *a, int n) { long s = 0; for (int i = n; i < 0; i--) s += a[i]; return s; }",
-        "long f(const int *a, int n, int k) { long s = 0; int i = 0;\n\
-         while (i < n) { if (a[i] & 1) { i += 1; continue; } s += a[i]; i += k; } return s; }",
-    ];
+fn counter_that_can_leave_int_keeps_its_extension_under_wrapv() {
     let mut m = Misses::default();
-    for src in SRCS {
-        let ws = a64(src, "f");
+    for src in UNBOUNDED_COUNTERS {
+        let ws = a64_wrapv(src, "f");
         m.expect(a64_in_loop(&ws, a64_extends_word), || {
             format!("aarch64: no sxtw in the loop of `{src}`: {ws:08x?}")
         });
-        let insns = x64(src, "f");
+        let insns = x64_wrapv(src, "f");
         m.expect(x64_in_loop(&insns, X64Insn::is_movsxd_rr), || {
             format!("x86-64: no movslq in the loop of `{src}`: {insns:x?}")
+        });
+    }
+    m.finish();
+}
+
+/// Without `-fwrapv` the overflow is undefined, so the loop holds none.
+#[test]
+fn counter_whose_overflow_is_undefined_holds_no_extension() {
+    let mut m = Misses::default();
+    for src in UNBOUNDED_COUNTERS {
+        let ws = a64(src, "f");
+        m.expect(!a64_in_loop(&ws, a64_extends_word), || {
+            format!("aarch64: an extension in the loop of `{src}`: {ws:08x?}")
+        });
+        let insns = x64(src, "f");
+        m.expect(!x64_in_loop(&insns, X64Insn::is_movsxd_rr), || {
+            format!("x86-64: a movslq in the loop of `{src}`: {insns:x?}")
         });
     }
     m.finish();
@@ -801,6 +890,50 @@ fn compound_division_by_a_constant_takes_no_divide() {
         let divides = |i: &X64Insn| i.op == 0xF7 && i.modrm.is_some_and(|b| (b >> 3) & 7 >= 6);
         m.expect(!insns.iter().any(divides), || {
             format!("x86-64 {name}: a hardware divide: {insns:x?}")
+        });
+    }
+    m.finish();
+}
+
+/// Every 128-bit division form steps by one `div` on x86-64 and by two
+/// 32-bit quotient digits over `udiv` on aarch64; none loops over bits.
+#[test]
+fn int128_division_takes_no_bit_loop() {
+    const SRC: &str = "typedef unsigned long long u64;\n\
+        typedef unsigned __int128 u128;\n\
+        u64 div128(u64 hi, u64 lo, u64 d) {\n\
+            u128 hl = ((u128)hi << 64) + lo;\n\
+            return (u64)(hl / d);\n\
+        }\n\
+        u128 udiv(u128 a, u128 b) { return a / b; }\n\
+        u128 umod(u128 a, u128 b) { return a % b; }\n\
+        __int128 sdiv(__int128 a, __int128 b) { return a / b; }\n\
+        __int128 smod(__int128 a, __int128 b) { return a % b; }\n";
+    // `lsl #1` and `lsr #63` (UBFM), `extr #63`: a 128-bit shift by one.
+    let one_bit = |w: u32| {
+        matches!(w & 0xFFFF_FC00, 0xD37F_F800 | 0xD37F_FC00) || w & 0xFFE0_FC00 == 0x93C0_FC00
+    };
+    let udiv = |w: &&u32| **w & 0xFFE0_FC00 == 0x9AC0_0800;
+    // `div r/m64`, the /6 row of the 0xF7 group.
+    let div =
+        |i: &&X64Insn| i.op == 0xF7 && i.rex_w() && i.modrm.is_some_and(|b| (b >> 3) & 7 == 6);
+    let mut m = Misses::default();
+    for name in ["div128", "udiv", "umod", "sdiv", "smod"] {
+        let ws = a64(SRC, name);
+        m.expect(!a64_in_loop(&ws, one_bit), || {
+            format!("aarch64 {name}: a loop shifts by one bit: {ws:08x?}")
+        });
+        m.expect(ws.iter().filter(udiv).count() >= 4, || {
+            format!(
+                "aarch64 {name}: no `udiv` for a 64-bit pair, a high word and two digits: {ws:08x?}"
+            )
+        });
+        let insns = x64(SRC, name);
+        m.expect(!x64_has_cycle(&insns), || {
+            format!("x86-64 {name}: a loop: {insns:x?}")
+        });
+        m.expect(insns.iter().filter(div).count() >= 3, || {
+            format!("x86-64 {name}: no `div` for a 64-bit pair, a high word and a step: {insns:x?}")
         });
     }
     m.finish();
@@ -1508,9 +1641,10 @@ fn signed_halving_reads_the_sign_bit_once() {
     m.finish();
 }
 
-/// The base case of `fib` reaches its `ret` without building the frame.
+/// The base case of `fib` reaches its `ret` without building the frame: the
+/// test comes ahead of the frame and the return it branches to touches no
+/// memory.
 #[test]
-#[ignore = "TODO: an early return pays the whole prologue and epilogue"]
 fn early_return_precedes_the_frame() {
     let mut m = Misses::default();
     let ws = a64(FIB, "fib");
@@ -1518,6 +1652,16 @@ fn early_return_precedes_the_frame() {
         .iter()
         .enumerate()
         .position(|(i, &w)| matches!(a64_branch(w, i), Some((_, false))));
+    let bare = guard.and_then(|g| {
+        let (t, _) = a64_branch(ws[g], g)?;
+        let t = usize::try_from(t).ok()?;
+        let r = t + ws.get(t..)?.iter().position(|&w| w == 0xD65F_03C0)?;
+        // Loads and stores have op0 bits 27 and 25 as 1 and 0.
+        Some(!ws[t..r].iter().any(|&w| (w >> 25) & 0b101 == 0b100))
+    });
+    m.expect(bare == Some(true), || {
+        format!("aarch64: the test's target is no bare return: {ws:08x?}")
+    });
     // A pre-indexed store or pair through sp, or `sub sp, sp, #imm`.
     let moves_sp = |w: u32| {
         let rn_sp = (w >> 5) & 31 == 31;
@@ -1531,6 +1675,17 @@ fn early_return_precedes_the_frame() {
     });
     let insns = x64(FIB, "fib");
     let guard = insns.iter().position(X64Insn::is_jcc);
+    let bare =
+        guard.and_then(|g| {
+            let t = insns.iter().position(|i| i.at == insns[g].target())?;
+            let r = t + insns[t..].iter().position(|i| i.op == 0xC3)?;
+            Some(!insns[t..r].iter().any(|i| {
+                matches!(i.op, 0x50..=0x5F | 0xC9) || i.modrm.is_some_and(|m| m >> 6 != 3)
+            }))
+        });
+    m.expect(bare == Some(true), || {
+        format!("x86-64: the test's target is no bare return: {insns:x?}")
+    });
     let frame = insns.iter().position(|i| matches!(i.op, 0x50..=0x57));
     m.expect(guard.is_some_and(|g| frame.is_none_or(|f| g < f)), || {
         format!("x86-64: the frame precedes the guard: {insns:x?}")
@@ -1691,6 +1846,61 @@ fn narrow_parameter_converts_in_its_entry_move() {
             && insns[0].regs() == (0, 7)
             && insns[1].op == 0xC3;
         m.expect(one, || format!("x86-64 {name}: {insns:x?}"));
+    }
+    m.finish();
+}
+
+/// No `int` extension or `unsigned` mask precedes a direct, indirect,
+/// library or variadic call taking the argument in the low word (`wrap` of
+/// `tail_call_outside_return_block.c`); a narrower argument keeps its
+/// extension to 32 bits.
+#[test]
+fn a_32_bit_argument_is_passed_without_extension() {
+    const SRC: &str = "#include <stdio.h>\n\
+        #include <string.h>\n\
+        struct node;\n\
+        struct node *make(unsigned flags, unsigned order, void *policy,\n\
+                          unsigned long index, int slot);\n\
+        struct node *wrap(unsigned flags, unsigned order, void *policy,\n\
+                          unsigned long index, int slot) {\n\
+            return make(flags | 0x40000, order, policy, index, slot);\n\
+        }\n\
+        struct ops { long (*op)(unsigned, int); };\n\
+        long through(const struct ops *o, unsigned a, int b) { return o->op(a | 1, b); }\n\
+        void fill(char *p, unsigned c, unsigned long n) { memset(p, c | 1, n); }\n\
+        long take8(signed char c);\n\
+        long narrow(long v) { return take8((signed char)v); }\n\
+        int show(int x) { return printf(\"%d\\n\", x + 1); }\n";
+    // SBFM of either width, the `sxt*` forms; `movsx` of each width.
+    let sbfm = |ws: &[u32]| {
+        ws.iter()
+            .filter(|&&w| w & 0x7F80_0000 == 0x1300_0000)
+            .count()
+    };
+    let movsx = |insns: &[X64Insn]| {
+        insns
+            .iter()
+            .filter(|i| matches!(i.op, 0x63 | 0x0FBE | 0x0FBF))
+            .count()
+    };
+    let mut m = Misses::default();
+    for (name, extends) in [
+        ("wrap", 0),
+        ("through", 0),
+        ("fill", 0),
+        ("narrow", 1),
+        ("show", 0),
+    ] {
+        let ws = a64(SRC, name);
+        let masks = ws.iter().filter(|&&w| a64_is_mask(w)).count();
+        m.expect(sbfm(&ws) == extends && masks == 0, || {
+            format!("aarch64 {name}: {extends} sxt* and no mask expected: {ws:08x?}")
+        });
+        let insns = x64(SRC, name);
+        let masks = insns.iter().filter(|i| x64_is_mask(i)).count();
+        m.expect(movsx(&insns) == extends && masks == 0, || {
+            format!("x86-64 {name}: {extends} movsx and no mask expected: {insns:x?}")
+        });
     }
     m.finish();
 }
@@ -2157,6 +2367,354 @@ return a + f(x, 6, 5, 4, 3, 2, 1);\n}\n";
     m.expect(pushes == 4, || {
         format!("x86-64: {pushes} pushes, not rbp and three: {insns:x?}")
     });
+    m.finish();
+}
+
+/// The allocation header of `name` in `src` at `-O` on `target`: spill
+/// slots and the callee-saved GPRs the prologue saves.
+fn allocation_of(src: &str, name: &str, target: Target) -> (u32, Vec<u8>) {
+    let (body, _) = optimized_function_full_pool(src, name, target);
+    let field = |key: &str, end: char| -> &str {
+        let at = body
+            .find(key)
+            .unwrap_or_else(|| panic!("no `{key}`: {body}"));
+        let rest = &body[at + key.len()..];
+        &rest[..rest.find(end).unwrap_or(rest.len())]
+    };
+    let spills = field("spill_count=", ' ').parse().expect("spill_count");
+    let gprs = field("gpr_used=[", ']')
+        .split(',')
+        .filter_map(|r| r.trim().parse().ok())
+        .collect();
+    (spills, gprs)
+}
+
+/// The fixtures whose frames once grew on AArch64 while shrinking on
+/// x86-64 spill no more on AArch64 than on x86-64, and a value spills there
+/// only once every callee-saved register x20..x28 is in the prologue's
+/// save list: `main` of the int128 and FMA fixtures holds every value in
+/// a caller-saved register on both targets, and `main` of the vfork one,
+/// whose values each take a slot of their own, fills the callee-saved
+/// bank before it spills.
+#[test]
+fn aarch64_frames_spill_only_past_the_callee_saved_bank() {
+    let fixture = |name: &str| {
+        std::fs::read_to_string(
+            std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("tests/fixtures/c")
+                .join(name),
+        )
+        .unwrap_or_else(|e| panic!("{name}: {e}"))
+    };
+    let mut m = Misses::default();
+    for name in ["int128_overflow_builtin.c", "fma_numeric_kernels.c"] {
+        let src = fixture(name);
+        for target in [Target::LinuxAarch64, Target::LinuxX64] {
+            let (spills, gprs) = allocation_of(&src, "main", target);
+            m.expect(spills == 0 && gprs.is_empty(), || {
+                format!("{name} main on {target:?}: {spills} spill slots, saves {gprs:?}")
+            });
+        }
+    }
+    let src = fixture("vfork_shared_stack_slot_reuse.c");
+    let (a64_spills, a64_gprs) = allocation_of(&src, "main", Target::LinuxAarch64);
+    let (x64_spills, _) = allocation_of(&src, "main", Target::LinuxX64);
+    m.expect(a64_spills <= x64_spills, || {
+        format!("vfork main: {a64_spills} spill slots on aarch64, {x64_spills} on x86-64")
+    });
+    m.expect(
+        a64_spills == 0 || (20..=28).all(|r| a64_gprs.contains(&r)),
+        || format!("vfork main on aarch64: {a64_spills} spill slots while saving {a64_gprs:?}"),
+    );
+    m.finish();
+}
+
+/// A register output of an inline asm statement into a scalar local is
+/// the statement's own value, so the local takes no frame slot: the
+/// gsbase switch of the kernel's entry path is `swapgs; rdgsbase %rax;
+/// swapgs; ret` and nothing else, and a system-register read on AArch64
+/// is `mrs; ret`. An output into a volatile local is still written to it.
+#[test]
+fn asm_register_output_keeps_the_local_out_of_the_frame() {
+    const X64: &str = "__attribute__((noinline)) unsigned long rdgs(void) {\n\
+unsigned long gsbase;\n\
+asm volatile(\"swapgs\" ::: \"memory\");\n\
+asm volatile(\"rdgsbase %0\" : \"=r\"(gsbase));\n\
+asm volatile(\"swapgs\" ::: \"memory\");\n\
+return gsbase;\n}\n\
+__attribute__((noinline)) void keep(void) {\n\
+volatile unsigned long v;\n\
+asm volatile(\"rdgsbase %0\" : \"=r\"(v));\n}\n";
+    const A64: &str = "__attribute__((noinline)) unsigned long tpid(void) {\n\
+unsigned long v;\n\
+asm volatile(\"mrs %0, tpidr_el0\" : \"=r\"(v));\n\
+return v;\n}\n";
+    let mut m = Misses::default();
+    let bytes = function_bytes(&object_at(X64, Target::LinuxX64, true), "rdgs");
+    let leaf: [u8; 12] = [
+        0x0f, 0x01, 0xf8, 0xf3, 0x48, 0x0f, 0xae, 0xc8, 0x0f, 0x01, 0xf8, 0xc3,
+    ];
+    m.expect(bytes == leaf, || {
+        format!("x86-64 rdgs: not the four-instruction leaf: {bytes:02x?}")
+    });
+    // `mov %rax, disp8(%rbp)`: the volatile write stays. Raw bytes, since
+    // the decoder takes no `rdgsbase`.
+    let bytes = function_bytes(&object_at(X64, Target::LinuxX64, true), "keep");
+    m.expect(bytes.windows(3).any(|w| w == [0x48, 0x89, 0x45]), || {
+        format!("x86-64 keep: no store to the volatile local: {bytes:02x?}")
+    });
+    let ws = a64(A64, "tpid");
+    // `mrs x0, tpidr_el0; ret`.
+    m.expect(ws == [0xD53B_D040, 0xD65F_03C0], || {
+        format!("aarch64 tpid: not the two-instruction leaf: {ws:08x?}")
+    });
+    m.finish();
+}
+
+/// Every register output of an inline asm statement is a value of its own.
+/// The kernel's `rdtsc()` joins its two halves in registers and `cpuid`'s
+/// four outputs reach their sum, neither through the stack; outputs nothing
+/// reads leave nothing past the template, so the paravirt call shape is the
+/// call alone; on AArch64 two `mrs` outputs sum in their registers, and a
+/// dead one takes x16. Every output past the first went through a frame
+/// slot before.
+#[test]
+fn asm_outputs_past_the_first_are_values() {
+    const X64: &str = "unsigned long rd(void) {\n\
+        unsigned long low, high;\n\
+        __asm__ volatile(\"rdtsc\" : \"=a\"(low), \"=d\"(high));\n\
+        return low | high << 32;\n\
+        }\n\
+        extern void (*op)(void);\n\
+        void f(void) {\n\
+        unsigned long di, si;\n\
+        __asm__ volatile(\"call *%[op]\" : \"=D\"(di), \"=S\"(si) : [op] \"m\"(op) : \"memory\");\n\
+        }\n\
+        unsigned int cpuid_sum(unsigned int leaf) {\n\
+        unsigned int a, b, c, d;\n\
+        __asm__ volatile(\"cpuid\" : \"=a\"(a), \"=b\"(b), \"=c\"(c), \"=d\"(d) : \"0\"(leaf), \"2\"(0));\n\
+        return a + b + c + d;\n\
+        }\n";
+    const A64: &str = "unsigned long tp(void) {\n\
+        unsigned long a, b;\n\
+        __asm__ volatile(\"mrs %0, tpidr_el0\\n\\tmrs %1, tpidrro_el0\" : \"=r\"(a), \"=r\"(b));\n\
+        return a + b;\n\
+        }\n\
+        unsigned long second(void) {\n\
+        unsigned long a, b;\n\
+        __asm__ volatile(\"mrs %0, tpidr_el0\\n\\tmrs %1, tpidrro_el0\" : \"=r\"(a), \"=r\"(b));\n\
+        return b;\n\
+        }\n";
+    let obj = object_at(X64, Target::LinuxX64, true);
+    let mut m = Misses::default();
+    let f = function_bytes(&obj, "f");
+    // call *op(%rip); ret
+    m.expect(f == [0xff, 0x15, 0, 0, 0, 0, 0xc3], || {
+        format!("x86-64 f: {f:02x?}")
+    });
+    for name in ["rd", "cpuid_sum"] {
+        let insns = x64_insns(&function_bytes(&obj, name));
+        let stack = insns
+            .iter()
+            .filter(|i| matches!(i.mem_base(), Some(4 | 5)))
+            .count();
+        m.expect(stack == 0, || {
+            format!("x86-64 {name}: {stack} stack accesses: {insns:x?}")
+        });
+    }
+    // rdtsc; the high half shifted and or'ed in; ret -- no frame.
+    let rd = x64_insns(&function_bytes(&obj, "rd"));
+    m.expect(rd.len() <= 5 && rd[0].op == 0x0F31, || {
+        format!("x86-64 rd: {rd:x?}")
+    });
+    // mrs x0, tpidr_el0; mrs x1, tpidrro_el0; add x0, x0, x1; ret
+    let ws = a64(A64, "tp");
+    m.expect(
+        ws == [0xD53B_D040, 0xD53B_D061, 0x8B01_0000, 0xD65F_03C0],
+        || format!("aarch64 tp: {ws:08x?}"),
+    );
+    // mrs x16, tpidr_el0; mrs x0, tpidrro_el0; ret
+    let ws = a64(A64, "second");
+    m.expect(ws == [0xD53B_D050, 0xD53B_D060, 0xD65F_03C0], || {
+        format!("aarch64 second: {ws:08x?}")
+    });
+    m.finish();
+}
+
+/// Two statements over `r` operands on x86-64: each operand is its value's
+/// register, so `add2` is the read-write input's move into the return
+/// register, the template and `ret`, and `mix` the template and `ret`.
+/// Staged, each took a frame, a `%rbx` save and a move per operand.
+#[test]
+fn x86_asm_register_operands_bind_to_their_values() {
+    const SRC: &str = "unsigned long add2(unsigned long x, unsigned long y) {\n\
+        __asm__(\"add %1, %0\" : \"+r\"(x) : \"r\"(y));\n\
+        return x;\n\
+        }\n\
+        unsigned long mix(unsigned long a, unsigned long b, unsigned long c) {\n\
+        unsigned long r;\n\
+        __asm__(\"lea (%1,%2), %0\\n\\txor %3, %0\" : \"=r\"(r) : \"r\"(a), \"r\"(b), \"r\"(c));\n\
+        return r;\n\
+        }\n";
+    let obj = object_at(SRC, Target::LinuxX64, true);
+    let mut m = Misses::default();
+    let add2 = function_bytes(&obj, "add2");
+    // mov %rdi,%rax; add %rsi,%rax; ret
+    m.expect(add2 == [0x48, 0x89, 0xf8, 0x48, 0x01, 0xf0, 0xc3], || {
+        format!("x86-64 add2: {add2:02x?}")
+    });
+    let mix = function_bytes(&obj, "mix");
+    // lea (%rdi,%rsi),%rax; xor %rdx,%rax; ret
+    m.expect(
+        mix == [0x48, 0x8d, 0x04, 0x37, 0x48, 0x31, 0xd0, 0xc3],
+        || format!("x86-64 mix: {mix:02x?}"),
+    );
+    m.finish();
+}
+
+/// The four-lane syndrome of the kernel's lib/raid6/neon.uc in its
+/// statement order: the wrappers' asm operands are their values' registers,
+/// so no memory access goes through sp and the inner loop moves no vector.
+/// Staged through a frame scratch, the kernel's function took 48 bytes.
+#[test]
+fn neon_intrinsic_chain_takes_no_frame() {
+    const SRC: &str = "#include <arm_neon.h>\n\
+void gen4(int disks, unsigned long bytes, unsigned char **dptr) {\n\
+    int z0 = disks - 3;\n\
+    unsigned char *p = dptr[z0 + 1], *q = dptr[z0 + 2];\n\
+    uint8x16_t wd0, wq0, wp0, w10, w20, wd1, wq1, wp1, w11, w21;\n\
+    uint8x16_t wd2, wq2, wp2, w12, w22, wd3, wq3, wp3, w13, w23;\n\
+    const uint8x16_t x1d = vdupq_n_u8(0x1d);\n\
+    for (unsigned long d = 0; d < bytes; d += 64) {\n\
+        wq0 = wp0 = vld1q_u8(&dptr[z0][d + 0 * 16]); wq1 = wp1 = vld1q_u8(&dptr[z0][d + 1 * 16]); wq2 = wp2 = vld1q_u8(&dptr[z0][d + 2 * 16]); wq3 = wp3 = vld1q_u8(&dptr[z0][d + 3 * 16]);\n\
+        for (int z = z0 - 1; z >= 0; z--) {\n\
+            wd0 = vld1q_u8(&dptr[z][d + 0 * 16]); wd1 = vld1q_u8(&dptr[z][d + 1 * 16]); wd2 = vld1q_u8(&dptr[z][d + 2 * 16]); wd3 = vld1q_u8(&dptr[z][d + 3 * 16]);\n\
+            wp0 = veorq_u8(wp0, wd0); wp1 = veorq_u8(wp1, wd1); wp2 = veorq_u8(wp2, wd2); wp3 = veorq_u8(wp3, wd3);\n\
+            w20 = (uint8x16_t)vshrq_n_s8((int8x16_t)wq0, 7); w21 = (uint8x16_t)vshrq_n_s8((int8x16_t)wq1, 7); w22 = (uint8x16_t)vshrq_n_s8((int8x16_t)wq2, 7); w23 = (uint8x16_t)vshrq_n_s8((int8x16_t)wq3, 7);\n\
+            w10 = vshlq_n_u8(wq0, 1); w11 = vshlq_n_u8(wq1, 1); w12 = vshlq_n_u8(wq2, 1); w13 = vshlq_n_u8(wq3, 1);\n\
+            w20 = vandq_u8(w20, x1d); w21 = vandq_u8(w21, x1d); w22 = vandq_u8(w22, x1d); w23 = vandq_u8(w23, x1d);\n\
+            w10 = veorq_u8(w10, w20); w11 = veorq_u8(w11, w21); w12 = veorq_u8(w12, w22); w13 = veorq_u8(w13, w23);\n\
+            wq0 = veorq_u8(w10, wd0); wq1 = veorq_u8(w11, wd1); wq2 = veorq_u8(w12, wd2); wq3 = veorq_u8(w13, wd3);\n\
+        }\n\
+        vst1q_u8(&p[d + 0 * 16], wp0); vst1q_u8(&p[d + 1 * 16], wp1); vst1q_u8(&p[d + 2 * 16], wp2); vst1q_u8(&p[d + 3 * 16], wp3);\n\
+        vst1q_u8(&q[d + 0 * 16], wq0); vst1q_u8(&q[d + 1 * 16], wq1); vst1q_u8(&q[d + 2 * 16], wq2); vst1q_u8(&q[d + 3 * 16], wq3);\n\
+    }\n\
+}\n";
+    let mut m = Misses::default();
+    let ws = a64(SRC, "gen4");
+    // A load or store whose base register is sp.
+    let sp_access = |w: u32| w & 0x0A00_0000 == 0x0800_0000 && (w >> 5) & 31 == 31;
+    m.expect(!ws.iter().any(|&w| sp_access(w)), || {
+        format!("aarch64 gen4: the frame is used: {ws:08x?}")
+    });
+    // `orr vD.16b, vN.16b, vN.16b`: a vector move.
+    let vmov = |w: u32| w & 0xFFE0_FC00 == 0x4EA0_1C00 && (w >> 16) & 31 == (w >> 5) & 31;
+    let inner = ws
+        .iter()
+        .enumerate()
+        .filter_map(|(i, &w)| match a64_branch(w, i) {
+            Some((t, _)) if t >= 0 && t as usize <= i => Some(t as usize..=i),
+            _ => None,
+        })
+        .min_by_key(|r| r.end() - r.start());
+    m.expect(
+        inner.is_some_and(|r| !ws[r].iter().any(|&w| vmov(w))),
+        || format!("aarch64 gen4: the inner loop moves vectors: {ws:08x?}"),
+    );
+    m.finish();
+}
+
+/// The same syndrome step with each intrinsic's result passed straight to
+/// the next: the statement-expression wrappers' vectors are values too, and
+/// the function takes no frame.
+#[test]
+fn nested_neon_intrinsics_take_no_frame() {
+    const SRC: &str = "#include <arm_neon.h>\n\
+void step4(unsigned char *p, const unsigned char *d) {\n\
+    const uint8x16_t x1d = vdupq_n_u8(0x1d);\n\
+    uint8x16_t q0 = vld1q_u8(p), q1 = vld1q_u8(p + 16), q2 = vld1q_u8(p + 32), q3 = vld1q_u8(p + 48);\n\
+    uint8x16_t m0 = vandq_u8((uint8x16_t)vshrq_n_s8((int8x16_t)q0, 7), x1d);\n\
+    uint8x16_t m1 = vandq_u8((uint8x16_t)vshrq_n_s8((int8x16_t)q1, 7), x1d);\n\
+    uint8x16_t m2 = vandq_u8((uint8x16_t)vshrq_n_s8((int8x16_t)q2, 7), x1d);\n\
+    uint8x16_t m3 = vandq_u8((uint8x16_t)vshrq_n_s8((int8x16_t)q3, 7), x1d);\n\
+    vst1q_u8(p, veorq_u8(veorq_u8(vshlq_n_u8(q0, 1), m0), vld1q_u8(d)));\n\
+    vst1q_u8(p + 16, veorq_u8(veorq_u8(vshlq_n_u8(q1, 1), m1), vld1q_u8(d + 16)));\n\
+    vst1q_u8(p + 32, veorq_u8(veorq_u8(vshlq_n_u8(q2, 1), m2), vld1q_u8(d + 32)));\n\
+    vst1q_u8(p + 48, veorq_u8(veorq_u8(vshlq_n_u8(q3, 1), m3), vld1q_u8(d + 48)));\n\
+}\n";
+    let ws = a64(SRC, "step4");
+    let sp_access = |w: u32| w & 0x0A00_0000 == 0x0800_0000 && (w >> 5) & 31 == 31;
+    assert!(
+        !ws.iter().any(|&w| sp_access(w)),
+        "aarch64 step4: the frame is used: {ws:08x?}"
+    );
+}
+
+/// A constant read past a call by a contracted multiply-add, by a return
+/// and by a phi income through a split edge is set again after the call:
+/// no callee-saved register holds one, `ret` and `flag` save none, and
+/// `fm` builds its constant after the call.
+#[test]
+fn constant_read_past_a_call_is_set_again_after_it() {
+    const SRC: &str = "long f(long);\n\
+double fm(double a, double b) { double k0 = a * 2.0; double s = f((long)b); return s + k0; }\n\
+long ret(long x) { long r = 7; f(x); return r; }\n\
+int flag(long x) { int ok = 1; if (f(x)) ok = 0; return ok; }\n";
+    let mut m = Misses::default();
+    // `fmov Dd, #imm8`, and into d8..d15; `movz` / `movn` into x19..x28.
+    let fp_imm = |w: u32| w & 0xFFE0_1FE0 == 0x1E60_1000;
+    let fp_imm_to_saved = |w: u32| fp_imm(w) && (8..=15).contains(&(w & 31));
+    let imm_to_saved = |w: u32| {
+        w & 0x1F80_0000 == 0x1280_0000 && (w >> 29) & 3 != 3 && (19..=28).contains(&(w & 31))
+    };
+    for name in ["fm", "ret", "flag"] {
+        let ws = a64(SRC, name);
+        m.expect(
+            !ws.iter().any(|&w| fp_imm_to_saved(w) || imm_to_saved(w)),
+            || format!("aarch64 {name}: a constant in a callee-saved register: {ws:08x?}"),
+        );
+    }
+    let ws = a64(SRC, "fm");
+    let call = ws.iter().position(|&w| w & 0xFC00_0000 == 0x9400_0000);
+    let fmov = ws.iter().position(|&w| fp_imm(w));
+    m.expect(matches!((call, fmov), (Some(c), Some(k)) if k > c), || {
+        format!("aarch64 fm: the constant is not set after the call: {ws:08x?}")
+    });
+    for (name, len) in [("ret", 6), ("flag", 9)] {
+        let ws = a64(SRC, name);
+        m.expect(ws.len() == len, || {
+            format!(
+                "aarch64 {name}: {} instructions, not {len}: {ws:08x?}",
+                ws.len()
+            )
+        });
+    }
+    let callee_saved = |r: u8| matches!(r, 3 | 12..=15);
+    let imm_dst = |i: &X64Insn| match i.op {
+        0xB8..=0xBF => Some((i.op as u8 & 7) | ((i.rex & 1) << 3)),
+        0xC7 if i.reg_form() => Some(i.regs().1),
+        _ => None,
+    };
+    for name in ["fm", "ret", "flag"] {
+        let insns = x64(SRC, name);
+        m.expect(
+            !insns.iter().any(|i| imm_dst(i).is_some_and(callee_saved)),
+            || format!("x86-64 {name}: a constant in a callee-saved register: {insns:x?}"),
+        );
+        let pushes = insns.iter().filter(|i| matches!(i.op, 0x50..=0x57)).count();
+        m.expect(pushes == 1, || {
+            format!("x86-64 {name}: {pushes} pushes, not rbp alone: {insns:x?}")
+        });
+    }
+    let insns = x64(SRC, "fm");
+    let call = insns.iter().position(|i| i.op == 0xE8);
+    let movabs = insns
+        .iter()
+        .position(|i| matches!(i.op, 0xB8..=0xBF) && i.rex_w());
+    m.expect(
+        matches!((call, movabs), (Some(c), Some(k)) if k > c),
+        || format!("x86-64 fm: the constant is not set after the call: {insns:x?}"),
+    );
     m.finish();
 }
 
@@ -3273,6 +3831,212 @@ fn a_local_access_folds_only_where_the_slot_form_says_the_same_thing() {
     m.finish();
 }
 
+/// `(rd, rn)` of a 64-bit `add` / `sub` (immediate), either shift.
+fn a64_add_sub_imm(w: u32) -> Option<(u32, u32)> {
+    matches!(w & 0xFF80_0000, 0x9100_0000 | 0xD100_0000).then_some((w & 31, (w >> 5) & 31))
+}
+
+/// Loads and stores at an immediate offset from a register built off `base`
+/// by the instruction ahead of them, and those whose register took two. An
+/// access off sp follows the frame allocation, not an address build.
+fn a64_built_accesses(ws: &[u32], base: u32) -> (usize, usize) {
+    let mut built = (0, 0);
+    for i in 1..ws.len() {
+        let Some((rn, _, _)) = a64_mem_imm(ws[i]).filter(|&(rn, _, _)| rn != 31) else {
+            continue;
+        };
+        match a64_add_sub_imm(ws[i - 1]) {
+            Some((rd, src)) if rd == rn && src == base => built.0 += 1,
+            Some((rd, src))
+                if rd == rn
+                    && src == rn
+                    && i >= 2
+                    && a64_add_sub_imm(ws[i - 2]) == Some((rn, base)) =>
+            {
+                built.1 += 1
+            }
+            _ => {}
+        }
+    }
+    built
+}
+
+/// Twelve volatile accesses to locals the layout places past a 4 KiB array,
+/// more than 4 KiB below fp -- written as a volatile object, it keeps
+/// storage of its own ahead of them; `moving` also calls alloca, and
+/// `switched` moves sp to another stack the way libmill's `go()` does.
+const FAR_SLOTS: &str = "void use(void *);\n\
+    long fixed(long n) {\n\
+        volatile char pad[4096];\n\
+        pad[0] = 1;\n\
+        volatile long v = n; volatile int w = (int)n; volatile double d = (double)n;\n\
+        use((void *)pad);\n\
+        v += 3; w += 5; d *= 2.0;\n\
+        return v + w + (long)d;\n\
+    }\n\
+    long moving(long n) {\n\
+        volatile char pad[4096];\n\
+        pad[0] = 1;\n\
+        volatile long v = n; volatile int w = (int)n; volatile double d = (double)n;\n\
+        use((void *)pad); use(__builtin_alloca(n));\n\
+        v += 3; w += 5; d *= 2.0;\n\
+        return v + w + (long)d;\n\
+    }\n\
+    long switched(long n, void *top) {\n\
+        volatile char pad[4096];\n\
+        pad[0] = 1;\n\
+        volatile long v = n; volatile int w = (int)n; volatile double d = (double)n;\n\
+        use((void *)pad);\n\
+        __asm__ volatile(\"mov sp, %0\" : : \"r\"(top));\n\
+        v += 3; w += 5; d *= 2.0;\n\
+        return v + w + (long)d;\n\
+    }\n";
+
+/// An inlined helper's object and the caller's zero-initialized one escape
+/// on paths that do not meet, so the frame holds one copy of 33 cells.
+#[test]
+fn objects_escaping_on_disjoint_paths_share_storage() {
+    const SRC: &str = "struct st { unsigned long long v[32]; unsigned sr, cr; };\n\
+        int fetch(void *dst, const void *src, unsigned long n);\n\
+        void load(const struct st *s);\n\
+        static int helper(const void *u) {\n\
+            struct st s;\n\
+            int err = fetch(&s, u, sizeof s);\n\
+            if (!err) load(&s);\n\
+            return err;\n\
+        }\n\
+        int restore(const void *u, int wide) {\n\
+            struct st fp = {0};\n\
+            if (!wide) return helper(u);\n\
+            if (fetch(&fp, u, sizeof fp)) return -14;\n\
+            load(&fp);\n\
+            return 0;\n\
+        }\n";
+    let dump = ssa_dump(SRC, "restore", true);
+    let locals: i64 = dump
+        .lines()
+        .next()
+        .and_then(|l| l.split("locals=").nth(1))
+        .and_then(|s| s.trim().parse().ok())
+        .expect("the function header");
+    assert!(locals < 2 * 33, "{locals} cells: {dump}");
+}
+
+/// A struct an inlined helper returns through the out-pointer, its body
+/// ending in a lifetime marker, is built in the caller's object.
+#[test]
+fn an_out_pointer_return_ending_in_a_marker_is_built_in_place() {
+    const SRC: &str = "typedef struct { double a, b, c; } d3;\n\
+        void take(d3 *p);\n\
+        static d3 mk(double a, double b, double c) { d3 r; r.a = a; r.b = b; r.c = c; return r; }\n\
+        void make(double x) { d3 d = mk(x, x + 1, x + 2); take(&d); }\n";
+    let dump = ssa_dump(SRC, "make", true);
+    assert!(!dump.contains("LoadLocal"), "{dump}");
+}
+
+/// A local far below fp is one load or store off sp where sp stays where
+/// the prologue left it; with alloca or an asm sp move it stays on fp, one
+/// instruction building the 4 KiB multiple and the access holding the rest.
+#[test]
+fn a64_far_local_is_addressed_off_the_fixed_sp() {
+    let mut m = Misses::default();
+    let ws = a64(FAR_SLOTS, "fixed");
+    let off_sp = ws
+        .iter()
+        .filter(|&&w| a64_mem_imm(w).is_some_and(|(rn, _, _)| rn == 31))
+        .count();
+    let built = [29, 31].map(|base| a64_built_accesses(&ws, base));
+    m.expect(off_sp >= 12 && built == [(0, 0); 2], || {
+        format!("aarch64 fixed: {off_sp} accesses off sp, built {built:?}: {ws:08x?}")
+    });
+    for name in ["moving", "switched"] {
+        let ws = a64(FAR_SLOTS, name);
+        let built = a64_built_accesses(&ws, 29);
+        m.expect(built.0 >= 12 && built.1 == 0, || {
+            format!("aarch64 {name}: built off fp {built:?}: {ws:08x?}")
+        });
+    }
+    m.finish();
+}
+
+/// Four values live across a call made after an asm statement moves sp; with
+/// the integer bank capped to two registers they spill. `set_sp`, whose asm
+/// takes no operand to stage, is a full leaf: it has no frame and keeps sp
+/// where the asm leaves it.
+const SP_SWITCH: &str = "long mix(long);\n\
+    #if defined(__x86_64__)\n\
+    #define SET_SP(p) __asm__ volatile(\"mov %0, %%rsp\" : : \"r\"(p) : \"memory\")\n\
+    #define SET_SP_ARG0 __asm__ volatile(\"mov %%rdi, %%rsp\")\n\
+    #else\n\
+    #define SET_SP(p) __asm__ volatile(\"mov sp, %0\" : : \"r\"(p) : \"memory\")\n\
+    #define SET_SP_ARG0 __asm__ volatile(\"mov sp, x0\")\n\
+    #endif\n\
+    long switched(long s, void *top) {\n\
+        long a = s + 1, b = s * 3, c = s ^ 5, d = s * s;\n\
+        SET_SP(top);\n\
+        long m = mix(s);\n\
+        return a + 2 * b + 3 * c + 4 * d + m;\n\
+    }\n\
+    void set_sp(void *p) { (void)p; SET_SP_ARG0; }\n";
+
+/// After an asm statement moves sp, the spill slots are reached through the
+/// frame pointer and the epilogue re-establishes sp from it.
+#[test]
+fn spills_after_an_asm_sp_move_are_addressed_off_the_frame_pointer() {
+    let mut m = Misses::default();
+    let obj = object_with_pool(SP_SWITCH, Target::LinuxAarch64, (2, 2));
+    let ws = function_words(&obj, "switched");
+    let moved = ws
+        .iter()
+        .position(|&w| matches!(a64_add_sub_imm(w), Some((31, rn)) if rn != 31 && rn != 29));
+    let restored = ws
+        .iter()
+        .rposition(|&w| a64_add_sub_imm(w) == Some((31, 29)));
+    let off = |body: &[u32], base: u32| {
+        body.iter()
+            .filter(|&&w| a64_mem_imm(w).is_some_and(|(rn, _, _)| rn == base))
+            .count()
+    };
+    // `(off sp, off x29)` between the move and the restore; none without both.
+    let counts = match (moved, restored) {
+        (Some(a), Some(b)) if a < b => Some((off(&ws[a + 1..b], 31), off(&ws[a + 1..b], 29))),
+        _ => None,
+    };
+    m.expect(matches!(counts, Some((0, fp)) if fp > 0), || {
+        format!("aarch64: accesses after the move {counts:?}: {ws:08x?}")
+    });
+    let ws = function_words(&object_at(SP_SWITCH, Target::LinuxAarch64, true), "set_sp");
+    m.expect(!a64_has_frame_record(&ws), || {
+        format!("aarch64 set_sp: {ws:08x?}")
+    });
+
+    let obj = object_with_pool(SP_SWITCH, Target::LinuxX64, (2, 2));
+    let insns = x64_insns(&function_bytes(&obj, "switched"));
+    const RSP: u8 = 4;
+    let moved = insns.iter().position(|i| {
+        i.reg_form() && ((i.op == 0x89 && i.regs().1 == RSP) || (i.op == 0x8B && i.regs().0 == RSP))
+    });
+    let restored = insns
+        .iter()
+        .rposition(|i| i.op == 0x8D && i.regs().0 == RSP && i.mem_base() == Some(RBP));
+    let off =
+        |body: &[X64Insn], base: u8| body.iter().filter(|i| i.mem_base() == Some(base)).count();
+    let counts = match (moved, restored) {
+        (Some(a), Some(b)) if a < b => {
+            Some((off(&insns[a + 1..b], RSP), off(&insns[a + 1..b], RBP)))
+        }
+        _ => None,
+    };
+    m.expect(matches!(counts, Some((0, fp)) if fp > 0), || {
+        format!("x86-64: accesses after the move {counts:?}: {insns:x?}")
+    });
+    let insns = x64_at(SP_SWITCH, "set_sp", true);
+    m.expect(!x64_has_frame_record(&insns), || {
+        format!("x86-64 set_sp: {insns:x?}")
+    });
+    m.finish();
+}
+
 /// `fmov <Dd>, <Xn>` / `fmov <Sd>, <Wn>`: the general-to-vector transfers.
 fn a64_fmov_x_to_d(w: u32) -> bool {
     matches!(w & 0xFFFE_0000, 0x9E67_0000 | 0x1E27_0000)
@@ -3361,5 +4125,339 @@ fn a_floating_store_of_a_general_register_value_stays_in_the_bank() {
             || format!("aarch64 {name}: no floating store: {ws:08x?}"),
         );
     }
+    m.finish();
+}
+
+/// `ldp` / `stp` of two general registers off a register other than sp, in
+/// the signed-offset or the post-indexed form: a copy's pair, not a frame's.
+fn a64_copy_pair(w: u32) -> Option<bool> {
+    let load = match w & 0xFFC0_0000 {
+        0xA940_0000 | 0xA8C0_0000 => true,
+        0xA900_0000 | 0xA880_0000 => false,
+        _ => return None,
+    };
+    ((w >> 5) & 31 != 31).then_some(load)
+}
+
+/// `str <Xt>, [sp, #imm]!`: a register saved around a lowering.
+fn a64_single_save(w: u32) -> bool {
+    w & 0xFFE0_0C00 == 0xF800_0C00 && (w >> 5) & 31 == 31
+}
+
+const COPIES: &str = "typedef struct { long v; long tag; } Value;\n\
+    void push_value(Value **psp, const Value *src) { Value *sp = *psp; *sp = *src; *psp = sp + 1; }\n\
+    long arr(int k) { long a[4] = {1,2,3,4}; return a[k & 3]; }\n\
+    struct big { char x[1000]; };\n\
+    void copy_big(struct big *d, const struct big *s) { *d = *s; }\n";
+
+/// An aggregate copy takes its temporaries among the registers free at its
+/// site and moves 16 bytes per access: no save around it, one pair
+/// (aarch64) or one `movups` (x86-64) per 16 bytes written in place, and
+/// past the inline bound a loop of one such access.
+#[test]
+fn aggregate_copy_saves_nothing_and_moves_sixteen_bytes() {
+    let mut m = Misses::default();
+    for (name, accesses, looped, frame) in [
+        ("push_value", 1, false, false),
+        ("arr", 2, false, true),
+        ("copy_big", 1, true, false),
+    ] {
+        let ws = a64(COPIES, name);
+        m.expect(!ws.iter().any(|&w| a64_single_save(w)), || {
+            format!("aarch64 {name}: a save around the copy: {ws:08x?}")
+        });
+        let (loads, stores) =
+            ws.iter()
+                .filter_map(|&w| a64_copy_pair(w))
+                .fold(
+                    (0, 0),
+                    |(l, s), load| if load { (l + 1, s) } else { (l, s + 1) },
+                );
+        m.expect(loads == accesses && stores == accesses, || {
+            format!("aarch64 {name}: {loads} ldp and {stores} stp, not {accesses}: {ws:08x?}")
+        });
+        m.expect(
+            a64_in_loop(&ws, |w| a64_copy_pair(w).is_some()) == looped,
+            || format!("aarch64 {name}: the pairs and the loop: {ws:08x?}"),
+        );
+        let insns = x64(COPIES, name);
+        let pushes = insns.iter().filter(|i| matches!(i.op, 0x50..=0x57)).count();
+        let pops = insns.iter().filter(|i| matches!(i.op, 0x58..=0x5F)).count();
+        m.expect(pushes == usize::from(frame) && pops == 0, || {
+            format!("x86-64 {name}: {pushes} pushes and {pops} pops: {insns:x?}")
+        });
+        let loads = insns.iter().filter(|i| i.op == 0x0F10).count();
+        let stores = insns.iter().filter(|i| i.op == 0x0F11).count();
+        m.expect(loads == accesses && stores == accesses, || {
+            format!("x86-64 {name}: {loads} movups loads and {stores} stores, not {accesses}: {insns:x?}")
+        });
+        m.expect(x64_in_loop(&insns, |i| i.op == 0x0F10) == looped, || {
+            format!("x86-64 {name}: the moves and the loop: {insns:x?}")
+        });
+    }
+    m.finish();
+}
+
+const REGISTER_AGGREGATES: &str = "struct P { long a, b; };\n\
+    struct P by_value(struct P v) { v.a += 1; return v; }\n\
+    struct P make_pair(long a, long b) { struct P p; p.a = a; p.b = b; return p; }\n\
+    struct P swap(struct P v) { struct P r; r.a = v.b; r.b = v.a; return r; }\n\
+    struct Q { int a, b; };\n\
+    struct Q swapq(struct Q v) { struct Q r; r.a = v.b; r.b = v.a; return r; }\n";
+
+/// A register-passed aggregate whose address never escapes stays in
+/// registers through the body: no frame, no memory access, the pair
+/// moving straight through. `by_value` is an add and a return, `make_pair`
+/// hands its arguments on, `swap` exchanges the pair through the scratch
+/// register, and two `int`s in one register are shifted, not stored.
+#[test]
+fn register_aggregate_keeps_no_frame_object() {
+    let mut m = Misses::default();
+    let ret = 0xD65F_03C0;
+    let expect_a64 = |m: &mut Misses, name: &str, want: &[u32]| {
+        let ws = a64(REGISTER_AGGREGATES, name);
+        m.expect(ws == want, || format!("aarch64 {name}: {ws:08x?}"));
+    };
+    // add x0, x0, #1; ret
+    expect_a64(&mut m, "by_value", &[0x9100_0400, ret]);
+    expect_a64(&mut m, "make_pair", &[ret]);
+    // Three register moves break the cycle, then ret.
+    let ws = a64(REGISTER_AGGREGATES, "swap");
+    let is_mov = |w: u32| w & 0xFFE0_FFE0 == 0xAA00_03E0;
+    m.expect(
+        ws.len() == 4 && ws[..3].iter().all(|&w| is_mov(w)) && ws[3] == ret,
+        || format!("aarch64 swap: {ws:08x?}"),
+    );
+    for name in ["by_value", "make_pair", "swap", "swapq"] {
+        let ws = a64(REGISTER_AGGREGATES, name);
+        m.expect(
+            !a64_has_frame_record(&ws) && !ws.iter().any(|&w| a64_mem_imm(w).is_some()),
+            || format!("aarch64 {name}: a frame or a memory access: {ws:08x?}"),
+        );
+        let insns = x64(REGISTER_AGGREGATES, name);
+        // `lea` computes an address without a memory access.
+        let touches_memory = |i: &X64Insn| i.op != 0x8D && i.modrm.is_some() && !i.reg_form();
+        m.expect(
+            !insns
+                .iter()
+                .any(|i| matches!(i.op, 0x50..=0x57) || touches_memory(i)),
+            || format!("x86-64 {name}: a push or a memory operand: {insns:x?}"),
+        );
+    }
+    // lea rax, [rdi + 1]; mov rdx, rsi; ret, in either order.
+    let insns = x64(REGISTER_AGGREGATES, "by_value");
+    m.expect(
+        insns.len() == 3
+            && insns
+                .iter()
+                .any(|i| i.op == 0x8D && i.regs() == (0, 7) && i.disp == 1)
+            && insns.iter().any(|i| i.op == 0x89 && i.regs() == (6, 2)),
+        || format!("x86-64 by_value: {insns:x?}"),
+    );
+    // mov rax, rdi; mov rdx, rsi; ret
+    let insns = x64(REGISTER_AGGREGATES, "make_pair");
+    m.expect(
+        insns.len() == 3
+            && insns.iter().any(|i| i.op == 0x89 && i.regs() == (7, 0))
+            && insns.iter().any(|i| i.op == 0x89 && i.regs() == (6, 2)),
+        || format!("x86-64 make_pair: {insns:x?}"),
+    );
+    m.finish();
+}
+
+const PARTS_ACROSS_CALL: &str = "struct P { long a, b; };\n\
+    long g(long);\n\
+    struct P across(long x) { struct P r = {7, 8}; g(x); return r; }\n";
+
+/// The constant parts of a return in registers are set again after a call
+/// (`ssa::remat`) straight into the return registers their hints name, so
+/// no callee-saved register holds them across it.
+#[test]
+fn constant_parts_are_set_again_after_a_call() {
+    let mut m = Misses::default();
+    let ws = a64(PARTS_ACROSS_CALL, "across");
+    let after_bl = ws
+        .iter()
+        .position(|&w| w & 0xFC00_0000 == 0x9400_0000)
+        .map_or(&[][..], |i| &ws[i + 1..]);
+    // mov x0, #7; mov x1, #8
+    m.expect(
+        after_bl.contains(&0xD280_00E0) && after_bl.contains(&0xD280_0101),
+        || format!("aarch64 across: the parts are not set after the call: {ws:08x?}"),
+    );
+    let pair_saves = ws
+        .iter()
+        .filter(|&&w| matches!(w & 0xFFC0_0000, 0xA980_0000 | 0xA900_0000) && (w >> 5) & 31 == 31)
+        .count();
+    m.expect(pair_saves == 1, || {
+        format!("aarch64 across: {pair_saves} pair saves, not the frame record: {ws:08x?}")
+    });
+    let insns = x64(PARTS_ACROSS_CALL, "across");
+    let after_call = insns
+        .iter()
+        .position(|i| i.op == 0xE8)
+        .map_or(&[][..], |i| &insns[i + 1..]);
+    // mov eax, 7; mov edx, 8
+    m.expect(
+        after_call.iter().any(|i| i.op == 0xB8 && i.imm == 7)
+            && after_call.iter().any(|i| i.op == 0xBA && i.imm == 8),
+        || format!("x86-64 across: the parts are not set after the call: {insns:x?}"),
+    );
+    let pushes = insns.iter().filter(|i| matches!(i.op, 0x50..=0x57)).count();
+    m.expect(pushes == 1, || {
+        format!("x86-64 across: {pushes} pushes, not rbp alone: {insns:x?}")
+    });
+    m.finish();
+}
+
+const CALL_RESULTS: &str = "struct S { long a, b, c, d; };\n\
+    struct P { long a, b; };\n\
+    struct S make(int);\n\
+    struct P makep(int);\n\
+    long use(struct S *);\n\
+    struct S *gp;\n\
+    void from_call(struct S *a) { *a = make(1); }\n\
+    void from_callp(struct P *a) { *a = makep(1); }\n\
+    long init_fresh(void) { struct S s = make(1); return use(&s); }\n\
+    long assign_local(void) { struct S s; s = make(1); return use(&s); }\n\
+    long escaped(void) { struct S s = make(0); gp = &s; s = make(1); return use(&s); }\n";
+
+/// An aggregate a call returns lands in its destination. Through a hidden
+/// result pointer the callee builds a fresh object, or a local whose
+/// address has not escaped, in place -- the pointer it takes (x8, rdi)
+/// is the address later passed on, and nothing is copied -- while a
+/// destination behind a pointer, or one whose address escaped before the
+/// call, keeps the temporary and its copy. A result in registers is
+/// stored through the destination pointer with no temporary.
+#[test]
+fn call_results_land_in_their_destination() {
+    let mut m = Misses::default();
+    // `ldp x16, x17` / `movups`: the copy out of a temporary.
+    let a64_copies = |ws: &[u32]| ws.iter().any(|&w| w & 0xFFC0_7FE0 == 0xA940_4400);
+    let x64_copies = |insns: &[X64Insn]| insns.iter().any(|i| i.op == 0x0F10);
+    for (name, copies) in [
+        ("from_call", true),
+        ("init_fresh", false),
+        ("assign_local", false),
+        ("from_callp", false),
+    ] {
+        let ws = a64(CALL_RESULTS, name);
+        m.expect(a64_copies(&ws) == copies, || {
+            format!("aarch64 {name}: copy {copies} expected: {ws:08x?}")
+        });
+        let insns = x64(CALL_RESULTS, name);
+        m.expect(x64_copies(&insns) == copies, || {
+            format!("x86-64 {name}: copy {copies} expected: {insns:x?}")
+        });
+    }
+    // `escaped` copies the second result only.
+    let ws = a64(CALL_RESULTS, "escaped");
+    let pairs = ws
+        .iter()
+        .filter(|&&w| w & 0xFFC0_7FE0 == 0xA940_4400)
+        .count();
+    m.expect(pairs == 2, || {
+        format!("aarch64 escaped: {pairs} ldp: {ws:08x?}")
+    });
+    // In place: the frame address set into x8 is the one passed to `use`.
+    for name in ["init_fresh", "assign_local"] {
+        let ws = a64(CALL_RESULTS, name);
+        let sub_fp = |rd: u32| {
+            ws.iter()
+                .find(|&&w| w & 0xFF80_03FF == 0xD100_03A0 | rd)
+                .map(|&w| (w >> 10) & 0xFFF)
+        };
+        m.expect(sub_fp(8).is_some() && sub_fp(8) == sub_fp(0), || {
+            format!("aarch64 {name}: x8 is not the object passed on: {ws:08x?}")
+        });
+        let insns = x64(CALL_RESULTS, name);
+        let rdi_lea: Vec<i64> = insns
+            .iter()
+            .filter(|i| i.op == 0x8D && i.regs().0 == 7)
+            .map(|i| i.disp)
+            .collect();
+        m.expect(rdi_lea.len() == 2 && rdi_lea[0] == rdi_lea[1], || {
+            format!("x86-64 {name}: rdi is not the object passed on: {insns:x?}")
+        });
+    }
+    // In registers: the result registers stored through the pointer.
+    let ws = a64(CALL_RESULTS, "from_callp");
+    let stores_reg = |rt: u32| {
+        ws.iter().any(|&w| {
+            (w & 0xFFC0_001F == 0xF900_0000 | rt) || (w & 0xFFC0_001F == 0xA900_0000 | rt)
+        })
+    };
+    m.expect(
+        stores_reg(0) && (stores_reg(1) || ws.iter().any(|&w| w & 0xFFC0_7C1F == 0xA900_0400)),
+        || format!("aarch64 from_callp: x0 / x1 not stored: {ws:08x?}"),
+    );
+    let insns = x64(CALL_RESULTS, "from_callp");
+    let stores = |r: u8| {
+        insns
+            .iter()
+            .any(|i| i.op == 0x89 && !i.reg_form() && i.regs().0 == r)
+    };
+    m.expect(stores(0) && stores(2), || {
+        format!("x86-64 from_callp: rax / rdx not stored: {insns:x?}")
+    });
+    m.finish();
+}
+
+const LEAF_ATOMICS: &str = "long add(long *p) { return __atomic_fetch_add(p, 1, __ATOMIC_SEQ_CST); }\n\
+    long acq(long *p) { return __atomic_load_n(p, __ATOMIC_ACQUIRE); }\n\
+    int cas(long *p, long e, long d) {\n\
+        return __atomic_compare_exchange_n(p, &e, d, 0, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST);\n\
+    }\n";
+
+/// A leaf atomic is its one instruction, with no register saved and no
+/// stack access: on aarch64 `mov x1, #1; ldaddal x1, x0, [x0]; ret`,
+/// `ldapr x0, [x0]; ret`, and a `casal` on a copy of the comparand; on
+/// x86-64 `movl $1, %eax; lock xaddq %rax, (%rdi); retq`, one `movq`, and
+/// one `lock cmpxchgq` on a copy of the comparand in rax.
+#[test]
+fn leaf_atomics_are_one_instruction() {
+    let mut m = Misses::default();
+    let add = a64(LEAF_ATOMICS, "add");
+    m.expect(
+        add.len() == 3 && add[1] & 0xFFE0_FC00 == 0xF8E0_0000,
+        || format!("aarch64 add: not mov / ldaddal / ret: {add:08x?}"),
+    );
+    let acq = a64(LEAF_ATOMICS, "acq");
+    m.expect(
+        acq.len() == 2 && acq[0] & 0xFFFF_FC00 == 0xF8BF_C000,
+        || format!("aarch64 acq: not ldapr / ret: {acq:08x?}"),
+    );
+    // mov, casal, cmp, cset, ret: no save and no stack access.
+    let cas = a64(LEAF_ATOMICS, "cas");
+    m.expect(
+        cas.len() == 5 && cas[1] & 0xFFE0_FC00 == 0xC8E0_FC00,
+        || format!("aarch64 cas: not mov / casal / cmp / cset / ret: {cas:08x?}"),
+    );
+    let bytes = |name: &str| function_bytes(&object_at(LEAF_ATOMICS, Target::LinuxX64, true), name);
+    let locked = |code: &[u8], i: &X64Insn| code[i.at] == 0xF0;
+    let add = bytes("add");
+    let insns = x64_insns(&add);
+    m.expect(
+        insns.len() == 3
+            && insns[0].op == 0xB8
+            && insns[0].imm == 1
+            && insns[1].op == 0x0FC1
+            && locked(&add, &insns[1])
+            && insns[2].op == 0xC3,
+        || format!("x86-64 add: not movl $1 / lock xaddq / retq: {insns:x?}"),
+    );
+    let acq = x64(LEAF_ATOMICS, "acq");
+    m.expect(acq.len() == 2 && acq[0].op == 0x8B, || {
+        format!("x86-64 acq: not movq / retq: {acq:x?}")
+    });
+    let cas = bytes("cas");
+    let insns = x64_insns(&cas);
+    let stack = insns
+        .iter()
+        .any(|i| matches!(i.op, 0x50..=0x5F) || i.mem_base() == Some(4));
+    m.expect(
+        insns.iter().any(|i| i.op == 0x0FB1 && locked(&cas, i)) && !stack && insns.len() <= 6,
+        || format!("x86-64 cas: not one lock cmpxchgq off the stack: {insns:x?}"),
+    );
     m.finish();
 }

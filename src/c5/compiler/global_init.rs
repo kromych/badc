@@ -9,13 +9,12 @@
 //! constant joins, and the type-mismatch warning.
 
 use super::super::diag::Code;
-use alloc::format;
 
 use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
 use super::Compiler;
 use super::const_expr::ConstVal;
-use super::initializer::InitElemReloc;
+use super::initializer::{InitElemReloc, InitLeaf};
 use super::types::{is_pointer_ty, strip_unsigned};
 
 impl Compiler {
@@ -75,8 +74,7 @@ impl Compiler {
                     || (c == Token::Glo as i64
                         && self.symbols[self.lex.curr_id_idx].array_size != 0)
             });
-        self.restore_lex(snap);
-        self.truncate_data(data_snap);
+        self.rewind_speculation(snap, data_snap);
         Ok(reloc)
     }
 
@@ -84,6 +82,35 @@ impl Compiler {
     /// initializer. A function designator names its address only when
     /// nothing follows it: `f(...)` is a call, whose value the constant
     /// evaluator decides. The cursor is left where it was.
+    /// The function a scalar initializer designates when it is only `f` or
+    /// `&f`, parenthesized or not; the cursor is left where it was.
+    fn initializer_designator(&mut self) -> Result<Option<usize>, C5Error> {
+        let snap = self.lex.snapshot();
+        let mut parens = 0;
+        while self.lex.tk == '(' {
+            parens += 1;
+            self.next()?;
+        }
+        if self.lex.tk == Token::AndOp {
+            self.next()?;
+        }
+        let idx = self.lex.curr_id_idx;
+        let class = self.symbols[idx].class;
+        let mut found = None;
+        if self.lex.tk == Token::Id && (class == Token::Fun as i64 || class == Token::Sys as i64) {
+            self.next()?;
+            while parens > 0 && self.lex.tk == ')' {
+                parens -= 1;
+                self.next()?;
+            }
+            if parens == 0 && self.at_initializer_end() {
+                found = Some(idx);
+            }
+        }
+        self.restore_lex(snap);
+        Ok(found)
+    }
+
     fn id_ends_initializer(&mut self) -> Result<bool, C5Error> {
         let snap = self.lex.snapshot();
         self.next()?;
@@ -122,7 +149,7 @@ impl Compiler {
         let target_idx = self.symbols[target_idx]
             .static_local_record
             .map_or(target_idx, |r| r as usize);
-        self.symbols[target_idx].was_referenced = true;
+        self.symbols[target_idx].binding.was_referenced = true;
         if !is_thread_local {
             self.note_init_reloc(var_offset as usize);
         }
@@ -185,11 +212,12 @@ impl Compiler {
         reloc: InitElemReloc,
         var_ty: i64,
     ) -> Result<(), C5Error> {
+        let kept = self.init_reloc_for(reloc, var_ty)?;
         let bits = self.to_storage_bits(value, reloc, var_ty);
         let at = off as usize;
         self.tls_data[at..at + 8].copy_from_slice(&(bits as u64).to_le_bytes());
         self.note_tls_init(off);
-        match reloc {
+        match kept {
             InitElemReloc::None | InitElemReloc::Float64Bits => {}
             InitElemReloc::Data(src_sym) => match src_sym {
                 Some(sym_idx) => self.emit_addr_reloc(off, sym_idx, value as i64, true)?,
@@ -205,7 +233,7 @@ impl Compiler {
                 }
             },
             InitElemReloc::Code(sym_idx) => {
-                self.symbols[sym_idx].was_referenced = true;
+                self.symbols[sym_idx].binding.was_referenced = true;
                 self.tls_code_relocs.push(crate::c5::program::CodeReloc {
                     data_offset: off as u64,
                     target_ent_pc: value as u64,
@@ -231,17 +259,20 @@ impl Compiler {
     /// An address constant (C99 6.6p9) comes from the shared
     /// constant-initializer evaluator; the arithmetic paths below fold
     /// the integer and floating cases.
+    /// `target_fn` is the function type a pointer-to-function object points
+    /// to, which a designator initializing it must be compatible with.
     pub(super) fn parse_global_initializer(
         &mut self,
         var_ty: i64,
         var_offset: i64,
         is_thread_local: bool,
+        target_fn: &Option<(crate::c5::symbol::FnType, i64)>,
     ) -> Result<(), C5Error> {
         // A block-scope `const` scalar object folds into a static
         // object's initializer, as GCC accepts. No-op at file scope.
         self.const_object_fold += 1;
         let r = self.with_nesting("initializer", |c| {
-            c.parse_global_initializer_inner(var_ty, var_offset, is_thread_local)
+            c.parse_global_initializer_inner(var_ty, var_offset, is_thread_local, target_fn)
         });
         self.const_object_fold -= 1;
         r
@@ -252,6 +283,7 @@ impl Compiler {
         var_ty: i64,
         var_offset: i64,
         is_thread_local: bool,
+        target_fn: &Option<(crate::c5::symbol::FnType, i64)>,
     ) -> Result<(), C5Error> {
         let line = self.lex.line;
         // C11 6.5.1.1 generic selection as a static initializer element:
@@ -259,25 +291,34 @@ impl Compiler {
         // expression, then resume past the `_Generic(...)`.
         if self.lex.tk == Token::Generic {
             let after = self.generic_select_to_winner()?;
-            self.parse_global_initializer_inner(var_ty, var_offset, is_thread_local)?;
+            self.parse_global_initializer_inner(var_ty, var_offset, is_thread_local, target_fn)?;
             return self.resume_after_generic(after);
         }
         // C99 6.7.8p11: a scalar initializer may be enclosed in one
         // pair of braces. Strip the wrapper and recurse.
         if self.lex.tk == '{' {
             self.next()?;
-            self.parse_global_initializer(var_ty, var_offset, is_thread_local)?;
+            self.parse_global_initializer(var_ty, var_offset, is_thread_local, target_fn)?;
             // A trailing `,` before `}` is allowed in C99.
             self.accept(',')?;
             if self.lex.tk != '}' {
                 return Err(self.compile_err_at(
                     Code::INVALID_INITIALIZER,
                     line,
-                    "scalar initializer wrapped in `{{ ... }}` must hold a single value",
+                    "scalar initializer wrapped in `{ ... }` must hold a single value",
                 ));
             }
             self.next()?; // consume `}`
             return Ok(());
+        }
+        if target_fn.is_some()
+            && let Some(sym) = self.initializer_designator()?
+            && self.symbols[sym].class == Token::Fun as i64
+        {
+            let init_ty = self.symbols[sym].type_ + Ty::Ptr as i64;
+            let init_fn = Some((self.symbol_fn_type(sym), 1));
+            let what = ("initializer", "declared", "init");
+            self.check_fn_pointer_conversion((var_ty, target_fn), (init_ty, &init_fn), line, what)?;
         }
         // C99 6.6p9 address constant, decided by the shared
         // constant-initializer evaluator, which sees the initializer
@@ -288,10 +329,11 @@ impl Compiler {
         {
             let cp = self.init_checkpoint();
             match self.parse_constant_init_value() {
-                Ok((value, reloc))
+                Ok(InitLeaf { value, reloc, ty })
                     if !matches!(reloc, InitElemReloc::None | InitElemReloc::Float64Bits)
                         && self.at_initializer_end() =>
                 {
+                    self.check_initializer_conversion(var_ty, ty, (false, false), line)?;
                     if is_thread_local {
                         self.write_tls_init_value(line, var_offset, value, reloc, var_ty)?;
                     } else {
@@ -305,7 +347,12 @@ impl Compiler {
         // A leading `(` is a cast prefix, a compound literal or a
         // parenthesized constant expression.
         if self.lex.tk == '('
-            && self.write_global_paren_initializer(var_ty, var_offset, is_thread_local)?
+            && self.write_global_paren_initializer(
+                var_ty,
+                var_offset,
+                is_thread_local,
+                target_fn,
+            )?
         {
             return Ok(());
         }
@@ -321,9 +368,24 @@ impl Compiler {
             if self.symbols[sym_idx].class == Token::Sys as i64 {
                 sym_idx = self.ensure_sys_trampoline_sym(sym_idx);
             }
-            self.symbols[sym_idx].was_referenced = true;
+            self.symbols[sym_idx].binding.was_referenced = true;
             let ent_pc = self.symbols[sym_idx].val;
             self.next()?;
+            let reloc = InitElemReloc::Code(sym_idx);
+            if matches!(self.init_reloc_for(reloc, var_ty)?, InitElemReloc::None) {
+                let value = self.to_storage_bits(ent_pc as i128, reloc, var_ty);
+                return if is_thread_local {
+                    self.write_tls_init_value(line, var_offset, value, InitElemReloc::None, var_ty)
+                } else {
+                    self.write_init_value(
+                        var_offset as usize,
+                        8,
+                        value,
+                        InitElemReloc::None,
+                        var_ty,
+                    )
+                };
+            }
             let bytes = (ent_pc as u64).to_le_bytes();
             let reloc = crate::c5::program::CodeReloc {
                 data_offset: var_offset as u64,
@@ -376,18 +438,18 @@ impl Compiler {
         {
             let snap = self.lex.snapshot();
             let data_snap = self.data.len();
-            if let Some((off, sym_idx, is_array)) = self.parse_const_address()?
-                && is_array
+            if let Some(a) = self.parse_const_address()?
+                && a.is_array
                 && (self.lex.tk == ';' || self.lex.tk == ',')
             {
+                self.check_initializer_conversion(var_ty, a.ty, (false, false), line)?;
                 if is_thread_local {
                     self.note_tls_init(var_offset);
                 }
-                self.emit_addr_reloc(var_offset, sym_idx, off, is_thread_local)?;
+                self.emit_addr_reloc(var_offset, a.sym_idx, a.off, is_thread_local)?;
                 return Ok(());
             }
-            self.restore_lex(snap);
-            self.truncate_data(data_snap);
+            self.rewind_speculation(snap, data_snap);
         }
         // A string literal is the slot's value only when it is the whole
         // initializer; a trailing `[i]` or operator makes it an operand
@@ -438,7 +500,10 @@ impl Compiler {
             // an incomplete parse rewinds to the arithmetic evaluator below.
             let cp = self.init_checkpoint();
             match self.parse_constant_init_value() {
-                Ok((value, reloc)) if self.at_initializer_end() => {
+                Ok(leaf) if self.at_initializer_end() => {
+                    let InitLeaf { value, reloc, ty } = leaf;
+                    let flags = (leaf.is_zero_int(), false);
+                    self.check_initializer_conversion(var_ty, ty, flags, line)?;
                     if is_thread_local {
                         self.write_tls_init_value(line, var_offset, value, reloc, var_ty)?;
                     } else {
@@ -461,52 +526,14 @@ impl Compiler {
         var_ty: i64,
         var_offset: i64,
         is_thread_local: bool,
+        target_fn: &Option<(crate::c5::symbol::FnType, i64)>,
     ) -> Result<bool, C5Error> {
         let pre_paren = self.lex.snapshot();
         self.next()?;
         if self.lex_is_type_start() {
-            // Fold the whole expression with the cast applied first: a
-            // cast participating in arithmetic (`(char *)&s.b -
-            // (char *)&s.a` strides by the cast's pointee, C99 6.5.6)
-            // must not be discarded by the reloc-leaf shortcut below.
-            // An arithmetic result that consumes the whole initializer
-            // routes to the shared evaluator tail, which refolds it.
-            let cp = self.init_checkpoint();
-            let data_before = self.data.len();
-            self.restore_lex(pre_paren);
-            let whole = self.parse_const_expr_cond_val();
-            // A parse that staged data (a string or compound literal)
-            // folded an address needing its relocation; only a
-            // stage-free arithmetic result takes the evaluator tail.
-            let arithmetic = matches!(whole, Ok(ConstVal::Int { .. }) | Ok(ConstVal::Float(_)))
-                && self.at_initializer_end()
-                && self.data.len() == data_before;
-            self.restore_init_checkpoint(cp);
-            if arithmetic {
-                self.restore_lex(pre_paren);
-            } else
-            // A cast over a relocation leaf (`&x`, a string, a
-            // function or global-array name) contributes nothing to the
-            // value, so the cast tokens are skipped. A cast over an
-            // arithmetic operand narrows (C99 6.3.1.3) and goes to the
-            // const-expr evaluator, which applies it.
-            if self.post_cast_is_reloc_leaf()? {
-                let mut depth: i64 = 1;
-                while depth > 0 && self.lex.tk != 0 {
-                    if self.lex.tk == '(' {
-                        depth += 1;
-                    } else if self.lex.tk == ')' {
-                        depth -= 1;
-                        if depth == 0 {
-                            self.next()?;
-                            break;
-                        }
-                    }
-                    self.next()?;
-                }
-                self.parse_global_initializer(var_ty, var_offset, is_thread_local)?;
-                return Ok(true);
-            }
+            // A cast over a relocation leaf consumed whole took the leaf
+            // parser in the caller; any other cast goes to the const-expr
+            // evaluator, which applies it (C99 6.3.1.3).
             self.restore_lex(pre_paren);
         } else {
             // A parenthesized expression. An operator past the matching
@@ -535,7 +562,7 @@ impl Compiler {
                 self.restore_lex(pre_paren);
             } else {
                 self.restore_lex(after_open);
-                self.parse_global_initializer(var_ty, var_offset, is_thread_local)?;
+                self.parse_global_initializer(var_ty, var_offset, is_thread_local, target_fn)?;
                 self.accept(')')?;
                 return Ok(true);
             }
@@ -559,8 +586,11 @@ impl Compiler {
             let stripped = strip_unsigned(var_ty);
             stripped == Ty::Float as i64 || stripped == Ty::Double as i64
         };
-        // C99 6.6 constant expression.
+        // C99 6.6 constant expression, which converts to the object's type
+        // as if by assignment (6.7.8p11).
         let cv = self.parse_const_expr_cond_val()?;
+        let zero = matches!(cv, ConstVal::Int { val: 0, .. });
+        self.check_initializer_conversion(var_ty, cv.expr_ty(), (zero, false), line)?;
         // C99 6.6 / 6.3.2.3: an address constant in a pointer-width
         // integer slot is a link-time relocation, and takes the one a
         // pointer-typed slot would; gcc and clang accept it. Restricted
@@ -574,7 +604,7 @@ impl Compiler {
             && self.size_of_type(var_ty) == 8
         {
             if matches!(a.root, super::const_expr::ConstRoot::Code(_)) {
-                self.symbols[sym_idx].was_referenced = true;
+                self.symbols[sym_idx].binding.was_referenced = true;
                 let ent_pc = self.symbols[sym_idx].val;
                 let bytes = (ent_pc as u64).to_le_bytes();
                 let reloc = crate::c5::program::CodeReloc {
@@ -646,32 +676,6 @@ impl Compiler {
             if end > self.tls_init_size {
                 self.tls_init_size = end;
             }
-        }
-
-        // Pointer-vs-integer mismatches warn, as the assignment path
-        // does. The folded constant carries the initializer's own type,
-        // including a cast's target (C99 6.3.2.3p5 permits the
-        // integer-to-pointer conversion an implementation defines), so a
-        // pointer initializer is not read as an integer one. It is still
-        // too coarse for a 6.7.8p11 constraint error; the aggregate path
-        // checks element types against real ones.
-        let init_ty = match cv {
-            _ if value == 0 => 0,
-            ConstVal::Int { ty, .. } => ty,
-            ConstVal::Float(_) => Ty::Double as i64,
-            ConstVal::Addr(_) => 0,
-        };
-        if let Some(m) = Self::type_warning(&self.structs, var_ty, init_ty, value == 0) {
-            let var_s = super::types::format_type(var_ty, &self.structs);
-            let init_s = super::types::format_type(init_ty, &self.structs);
-            self.warn_at(
-                m.code,
-                line,
-                format!(
-                    "{} in global initializer (var={var_s}, value={init_s})",
-                    m.reason
-                ),
-            );
         }
         Ok(())
     }

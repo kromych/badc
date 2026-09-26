@@ -252,6 +252,12 @@ typedef struct __c5_fpos_t fpos_t;
 #pragma binding(libc::getdelim,  "getdelim")
 #pragma binding(libc::dprintf,   "dprintf")
 #pragma binding(libc::vdprintf,  "vdprintf")
+// The standard streams are C library data objects (C99 7.19.1). This
+// header reads them through `__c5_lazy_stream` below; the bindings state
+// them for an object from another compiler, which reads them directly.
+#pragma binding(data libc::stdin,  "stdin")
+#pragma binding(data libc::stdout, "stdout")
+#pragma binding(data libc::stderr, "stderr")
 #endif
 
 #ifdef _WIN32

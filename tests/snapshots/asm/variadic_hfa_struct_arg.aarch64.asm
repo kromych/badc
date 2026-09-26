@@ -33,7 +33,7 @@ Disassembly of section .text:
                	str	q7, [sp, #0xb0]
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x30
+               	sub	sp, sp, #0x40
                	sub	x0, x29, #0x20
                	add	x1, x29, #0x10
                	mov	x16, x0
@@ -48,18 +48,23 @@ Disassembly of section .text:
                	mov	x17, #-0x80             // =-128
                	str	w17, [x16, #0x1c]
                	sub	x0, x29, #0x20
+               	sub	x1, x29, #0x40
                	mov	x17, x0
                	str	x9, [sp, #-0x10]!
-               	ldrsw	x16, [x17, #0x18]
+               	ldrsw	x16, [x17, #0x1c]
                	cmp	x16, #0x0
                	b.ge	<addr>
-               	ldr	x9, [x17, #0x8]
+               	ldr	x9, [x17, #0x10]
                	add	x9, x9, x16
-               	add	x16, x16, #0x10
-               	str	w16, [x17, #0x18]
+               	add	x16, x16, #0x20
+               	str	w16, [x17, #0x1c]
                	cmp	x16, #0x0
                	b.gt	<addr>
-               	mov	x16, x9
+               	ldr	x17, [x9]
+               	str	x17, [x1]
+               	ldr	x17, [x9, #0x10]
+               	str	x17, [x1, #0x8]
+               	mov	x16, x1
                	b	<addr>
                	ldr	x16, [x17]
                	add	x9, x16, #0x10
@@ -67,18 +72,14 @@ Disassembly of section .text:
                	ldr	x9, [sp], #0x10
                	mov	x0, x16
                	sub	x1, x29, #0x30
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x0]
-               	str	x10, [x1]
-               	ldr	x10, [x0, #0x8]
-               	str	x10, [x1, #0x8]
-               	ldr	x10, [sp], #0x10
+               	ldp	x16, x17, [x0]
+               	stp	x16, x17, [x1]
                	sub	x0, x29, #0x20
                	sub	x0, x29, #0x30
                	ldr	d0, [x0]
                	ldr	d1, [x0, #0x8]
                	fadd	d0, d0, d1
-               	add	sp, sp, #0x30
+               	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
                	add	sp, sp, #0xc0
                	ret

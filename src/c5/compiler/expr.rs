@@ -12,9 +12,11 @@ use alloc::vec::Vec;
 use super::super::diag::Code;
 use super::super::error::C5Error;
 use super::super::ir::{LoadKind, MemOrder};
+use super::super::symbol::FnType;
 use super::super::token::{Token, Ty};
 use super::CODE_BASE;
 use super::Compiler;
+use super::declarator::Derivation;
 use super::diag::{Category, Operand};
 
 /// Largest byte count `__builtin_memcpy` is expanded inline for; gcc's
@@ -64,10 +66,9 @@ pub(super) fn mem_transfer_lib_name(op: super::super::ast::MemTransferOp) -> &'s
 use super::types::{
     CONST_BIT, UNSIGNED_BIT, VOLATILE_BIT, add_ptr_level, apply_qual_bits, format_type,
     fp_result_ty, integer_promote, is_bool_ty, is_const_object_ty, is_float_ty, is_floating_scalar,
-    is_long_double_ty, is_pointer_ty, is_struct_ty, is_struct_value_ty, is_unsigned_ty,
-    is_vector_ty, is_void_ptr_ty, is_void_ty, narrow_const_int, object_segment_bits,
-    pointee_const_bits, pointee_ty, segment_of_ty, strip_object_const, struct_id_of,
-    struct_ptr_depth, void_ty,
+    is_pointer_ty, is_struct_ty, is_struct_value_ty, is_unsigned_ty, is_vector_ty, is_void_ptr_ty,
+    is_void_ty, narrow_const_int, object_segment_bits, pointee_const_bits, pointee_ty,
+    segment_of_ty, strip_object_const, struct_id_of, struct_ptr_depth, void_ty,
 };
 
 impl Compiler {
@@ -145,31 +146,48 @@ impl Compiler {
     /// value never selects it; only an integer constant takes the
     /// value-driven rank selection of 6.4.4.1p5.
     pub(super) fn num_token_type(&self, val: i64) -> i64 {
-        use crate::c5::lexer::StrPrefix;
         if !self.lex.num_is_char {
             return self.literal_auto_promoted_type(val);
         }
-        match self.lex.char_prefix {
+        // Unprefixed is `int` (6.4.4.4p10).
+        self.prefixed_char_ty(self.lex.char_prefix)
+            .unwrap_or(Ty::Int as i64)
+    }
+
+    /// The element type of the string literal at the cursor: plain `char`
+    /// without a prefix or with `u8`, else the prefix's character type.
+    pub(super) fn string_literal_elem_ty(&self) -> i64 {
+        match self.prefixed_char_ty(self.lex.str_prefix) {
+            Some(ty) if self.lex.str_is_wide => ty,
+            _ => super::types::plain_char_ty(self.lex.char_signed),
+        }
+    }
+
+    /// The type an encoding prefix gives a character constant or a string
+    /// literal's elements (C11 6.4.4.4p2-p4, 6.4.5p6); `None` for no prefix
+    /// and `u8`.
+    pub(super) fn prefixed_char_ty(&self, prefix: crate::c5::lexer::StrPrefix) -> Option<i64> {
+        use crate::c5::lexer::StrPrefix;
+        match prefix {
             // `char16_t` is `uint_least16_t` and `char32_t` is
             // `uint_least32_t`: unsigned, and the same width on every
             // target. `wchar_t` takes both its width and its signedness
             // from the target ABI, so neither is derived from the other.
-            StrPrefix::Char16 => Ty::Short as i64 | UNSIGNED_BIT,
-            StrPrefix::Char32 => Ty::Int as i64 | UNSIGNED_BIT,
+            StrPrefix::Char16 => Some(Ty::Short as i64 | UNSIGNED_BIT),
+            StrPrefix::Char32 => Some(Ty::Int as i64 | UNSIGNED_BIT),
             StrPrefix::Wide => {
                 let base = if self.lex.wchar_bytes == 2 {
                     Ty::Short as i64
                 } else {
                     Ty::Int as i64
                 };
-                if self.lex.wchar_signed {
+                Some(if self.lex.wchar_signed {
                     base
                 } else {
                     base | UNSIGNED_BIT
-                }
+                })
             }
-            // Unprefixed is `int` (6.4.4.4p10).
-            _ => Ty::Int as i64,
+            _ => None,
         }
     }
 
@@ -461,6 +479,11 @@ impl Compiler {
         }
         self.mark_emit_other();
         let ty = match row.ret.lane_ty() {
+            // The headers' `__v16qi` is a vector of plain `char`.
+            Some(Ty::Char) => {
+                let lane = super::types::plain_char_ty(self.lex.char_signed);
+                self.make_vector_type(lane, 16)
+            }
             Some(lane) => self.make_vector_type(lane as i64, 16),
             None if row.ret == Ret::Void => super::types::void_ty(),
             None => Ty::Int as i64,
@@ -604,14 +627,14 @@ impl Compiler {
             return idx;
         }
         let link_name = sym.link_name().to_string();
-        let (type_, params, is_variadic) = (sym.type_, sym.params.clone(), sym.is_variadic);
+        let (type_, enum_tag, params) = (sym.type_, sym.incomplete_enum_tag, sym.fn_params());
         let slot = self.resolve_symbol_named(&alloc::format!("{link_name}.builtin"));
         let sym = &mut self.symbols[slot];
         if sym.class == 0 {
             sym.class = Token::Fun as i64;
             sym.type_ = type_;
-            sym.params = params;
-            sym.is_variadic = is_variadic;
+            sym.incomplete_enum_tag = enum_tag;
+            sym.set_fn_params(params);
             sym.asm_name = Some(link_name);
             sym.linkage = crate::c5::symbol::Linkage::External;
             sym.defined_here = false;
@@ -652,6 +675,7 @@ impl Compiler {
                 }
                 self.symbols[i].class = Token::Fun as i64;
                 self.symbols[i].type_ = ty;
+                self.symbols[i].incomplete_enum_tag = None;
                 self.symbols[i].linkage = crate::c5::symbol::Linkage::External;
                 self.symbols[i].defined_here = false;
                 i
@@ -665,7 +689,7 @@ impl Compiler {
             }
         };
         let idx = self.builtin_library_symbol(idx);
-        self.symbols[idx].was_referenced = true;
+        self.symbols[idx].binding.was_referenced = true;
         self.flush_pending_stores();
         self.pending.last_emit_was_indirect_call = false;
         self.mark_emit_other();
@@ -790,6 +814,13 @@ impl Compiler {
         let pos = self.ast_src_pos();
 
         let seq = MemOrder::SeqCst;
+        let rmw_order = |this: &Self| {
+            if name.starts_with("__sync_") {
+                seq
+            } else {
+                order_at(this, 2)
+            }
+        };
         let (kind, op_args, result_ty, order): (AtomicKind, Vec<ExprId>, i64, MemOrder) = match name
         {
             "__atomic_load_n" => (
@@ -827,31 +858,63 @@ impl Compiler {
                     order_at(self, 2).for_store(),
                 )
             }
-            // The read-modify-write and compare-exchange forms lower to
-            // the seq_cst sequence whatever order they name.
+            // A read-modify-write carries the order its `__atomic_*` form
+            // names (any of the six, C11 7.17.7.2-7.17.7.5); a `__sync_*`
+            // form is a full barrier, `__sync_lock_test_and_set` an
+            // acquire barrier (gcc's documentation of the family).
             "__atomic_exchange_n" | "__sync_lock_test_and_set" => {
                 let v = self.require_gcc_arg(val1, name)?;
-                (AtomicKind::Exchange, alloc::vec![ptr, v], elem_ty, seq)
+                let order = if name == "__atomic_exchange_n" {
+                    order_at(self, 2)
+                } else {
+                    MemOrder::Acquire
+                };
+                (AtomicKind::Exchange, alloc::vec![ptr, v], elem_ty, order)
             }
             "__atomic_fetch_add" | "__sync_fetch_and_add" => {
                 let v = self.require_gcc_arg(val1, name)?;
-                (AtomicKind::FetchAdd, alloc::vec![ptr, v], elem_ty, seq)
+                (
+                    AtomicKind::FetchAdd,
+                    alloc::vec![ptr, v],
+                    elem_ty,
+                    rmw_order(self),
+                )
             }
             "__atomic_fetch_sub" | "__sync_fetch_and_sub" => {
                 let v = self.require_gcc_arg(val1, name)?;
-                (AtomicKind::FetchSub, alloc::vec![ptr, v], elem_ty, seq)
+                (
+                    AtomicKind::FetchSub,
+                    alloc::vec![ptr, v],
+                    elem_ty,
+                    rmw_order(self),
+                )
             }
             "__atomic_fetch_and" | "__sync_fetch_and_and" => {
                 let v = self.require_gcc_arg(val1, name)?;
-                (AtomicKind::FetchAnd, alloc::vec![ptr, v], elem_ty, seq)
+                (
+                    AtomicKind::FetchAnd,
+                    alloc::vec![ptr, v],
+                    elem_ty,
+                    rmw_order(self),
+                )
             }
             "__atomic_fetch_or" | "__sync_fetch_and_or" => {
                 let v = self.require_gcc_arg(val1, name)?;
-                (AtomicKind::FetchOr, alloc::vec![ptr, v], elem_ty, seq)
+                (
+                    AtomicKind::FetchOr,
+                    alloc::vec![ptr, v],
+                    elem_ty,
+                    rmw_order(self),
+                )
             }
             "__atomic_fetch_xor" | "__sync_fetch_and_xor" => {
                 let v = self.require_gcc_arg(val1, name)?;
-                (AtomicKind::FetchXor, alloc::vec![ptr, v], elem_ty, seq)
+                (
+                    AtomicKind::FetchXor,
+                    alloc::vec![ptr, v],
+                    elem_ty,
+                    rmw_order(self),
+                )
             }
             // The C11 `__atomic_*_fetch` forms return the new (post-op)
             // value and take a memory-order argument; the `__sync_*_and_fetch`
@@ -859,24 +922,52 @@ impl Compiler {
             // read-modify-write returning the updated value.
             "__atomic_add_fetch" | "__sync_add_and_fetch" => {
                 let v = self.require_gcc_arg(val1, name)?;
-                (AtomicKind::AddFetch, alloc::vec![ptr, v], elem_ty, seq)
+                (
+                    AtomicKind::AddFetch,
+                    alloc::vec![ptr, v],
+                    elem_ty,
+                    rmw_order(self),
+                )
             }
             "__atomic_sub_fetch" | "__sync_sub_and_fetch" => {
                 let v = self.require_gcc_arg(val1, name)?;
-                (AtomicKind::SubFetch, alloc::vec![ptr, v], elem_ty, seq)
+                (
+                    AtomicKind::SubFetch,
+                    alloc::vec![ptr, v],
+                    elem_ty,
+                    rmw_order(self),
+                )
             }
             "__atomic_and_fetch" | "__sync_and_and_fetch" => {
                 let v = self.require_gcc_arg(val1, name)?;
-                (AtomicKind::AndFetch, alloc::vec![ptr, v], elem_ty, seq)
+                (
+                    AtomicKind::AndFetch,
+                    alloc::vec![ptr, v],
+                    elem_ty,
+                    rmw_order(self),
+                )
             }
             "__atomic_or_fetch" | "__sync_or_and_fetch" => {
                 let v = self.require_gcc_arg(val1, name)?;
-                (AtomicKind::OrFetch, alloc::vec![ptr, v], elem_ty, seq)
+                (
+                    AtomicKind::OrFetch,
+                    alloc::vec![ptr, v],
+                    elem_ty,
+                    rmw_order(self),
+                )
             }
             "__atomic_xor_fetch" | "__sync_xor_and_fetch" => {
                 let v = self.require_gcc_arg(val1, name)?;
-                (AtomicKind::XorFetch, alloc::vec![ptr, v], elem_ty, seq)
+                (
+                    AtomicKind::XorFetch,
+                    alloc::vec![ptr, v],
+                    elem_ty,
+                    rmw_order(self),
+                )
             }
+            // `(p, expected, desired, weak, success, failure)`; a weak
+            // exchange is lowered as a strong one, which C11 7.17.7.4p4
+            // permits.
             "__atomic_compare_exchange_n" => {
                 let exp = self.require_gcc_arg(val1, name)?;
                 let des = self.require_gcc_arg(val2, name)?;
@@ -884,7 +975,7 @@ impl Compiler {
                     AtomicKind::CompareExchangeStrong,
                     alloc::vec![ptr, exp, des],
                     int_ty,
-                    seq,
+                    order_at(self, 4).with_failure(order_at(self, 5)),
                 )
             }
             "__sync_val_compare_and_swap" => {
@@ -911,7 +1002,12 @@ impl Compiler {
             // yield the prior contents (callers test for non-zero).
             "__atomic_test_and_set" => {
                 let one = self.ast.push_expr(Expr::IntLit { val: 1, ty: int_ty }, pos);
-                (AtomicKind::Exchange, alloc::vec![ptr, one], elem_ty, seq)
+                (
+                    AtomicKind::Exchange,
+                    alloc::vec![ptr, one],
+                    elem_ty,
+                    order_at(self, 1),
+                )
             }
             // `__atomic_clear(ptr, mo)` / `__sync_lock_release(ptr)` --
             // store 0 to the object; the `__sync` form is a release.
@@ -1169,10 +1265,38 @@ impl Compiler {
     /// so `sizeof` / `typeof` of the result read the result type, not the
     /// operand's array shape (C99 6.3.2.1p3). Mirrors the cast and binary-
     /// operator sites.
-    fn drop_operand_array_decay(&mut self) {
+    /// C99 6.5.17: the comma operators continuing an operand parsed at
+    /// assignment precedence. Each left operand is evaluated for its side
+    /// effects; the result is the right operand's value, whose array type
+    /// has decayed (6.5.17p2), so no array shape outlives the operator.
+    pub(super) fn parse_comma_operators(&mut self) -> Result<(), C5Error> {
+        if self.lex.tk != ',' {
+            return Ok(());
+        }
+        while self.lex.tk == ',' {
+            let lhs_ast = self.ast_acc;
+            self.next()?;
+            self.drop_operand_array_decay();
+            self.pending.indirect_callee_ret_fn_ptr = 0;
+            self.expr_or_void(Token::Assign as i64)?;
+            if let (Some(lhs), Some(rhs)) = (lhs_ast, self.ast_acc) {
+                let pos = self.ast_src_pos();
+                let ty = self.ty;
+                let id = self
+                    .ast
+                    .push_expr(super::super::ast::Expr::Comma { lhs, rhs, ty }, pos);
+                self.ast_acc = Some(id);
+            }
+        }
+        self.drop_operand_array_decay();
+        Ok(())
+    }
+
+    pub(super) fn drop_operand_array_decay(&mut self) {
         self.pending.last_array_decay_size = 0;
         self.pending.last_array_decay_bytes = 0;
         self.pending.last_array_decay_dims.clear();
+        self.pending.last_array_decay_vla = None;
     }
 
     pub(super) fn expr(&mut self, lev: i64) -> Result<(), C5Error> {
@@ -1199,10 +1323,11 @@ impl Compiler {
     /// loop, except a call on a bare identifier, which the identifier arm
     /// takes so it can read the callee's declaration.
     fn parse_unary(&mut self) -> Result<(), C5Error> {
-        // A fresh operand designates no object until one of the arms
-        // below says so; the arms that pass an operand's designator
-        // through are the ones listed here.
+        // A fresh operand designates no object and has no array shape until
+        // one of the arms below says so; the arms that pass an operand's
+        // designator through are the ones listed here.
         self.pending.object_ref = None;
+        self.drop_operand_array_decay();
         let designates = self.lex.tk == '('
             || self.lex.tk == '"'
             || self.lex.tk == Token::Id
@@ -1302,11 +1427,14 @@ impl Compiler {
 
     fn parse_float_literal(&mut self) -> Result<(), C5Error> {
         // C99 6.4.4.2p4: unsuffixed is `double`, `f` is `float`, `l` is
-        // `long double` (binary64 here); the lexer stored the bits in `ival`.
+        // `long double`; the lexer stored the bits in `ival`, at binary64
+        // for a `long double`.
         let bits = self.lex.ival as u64;
         self.emit_imm(self.lex.ival);
         self.ty = if self.lex.float_suffix_f32 {
             Ty::Float as i64
+        } else if self.lex.float_suffix_long {
+            Ty::Double as i64 | super::types::LONG_DOUBLE_BIT
         } else {
             Ty::Double as i64
         };
@@ -1316,14 +1444,15 @@ impl Compiler {
     }
 
     fn parse_string_literal(&mut self) -> Result<(), C5Error> {
-        // C99 6.4.5p6: the literal is a `char[N+1]` that decays to `char *`
-        // here; `sizeof("...")` reads the array size through
-        // `last_array_decay_bytes`.
+        // C99 6.4.5p5: the literal is an array of its elements that decays
+        // to a pointer to the first here; `sizeof("...")` reads the array
+        // size through `last_array_decay_bytes`.
         let start_offset = self.lex.ival;
         // Adjacent literals concatenate (6.4.5p4). The lexer terminates a
         // wide literal itself and leaves a narrow one open, so the NUL is
         // added once the parts are in.
         let is_wide = self.lex.str_is_wide;
+        let elem_ty = self.string_literal_elem_ty();
         self.emit_data_imm(start_offset);
         self.next()?;
         while self.lex.tk == '"' {
@@ -1340,7 +1469,7 @@ impl Compiler {
                 ..super::ObjectRef::declared(bytes, Some(bytes))
             });
         }
-        self.ty = Ty::Ptr as i64;
+        self.ty = elem_ty + Ty::Ptr as i64;
         self.ast_emit_str_lit(start_offset, self.ty);
         Ok(())
     }
@@ -1353,7 +1482,10 @@ impl Compiler {
         // C99 6.5.3.4p2: `sizeof` of a VLA is a runtime value, loaded from
         // the VLA's byte-count slot.
         if let Some(size_slot) = self.pending.sizeof_vla_size_slot.take() {
-            self.ast_emit_vla_sizeof(size_slot);
+            let size = self.ast_emit_vla_sizeof(size_slot);
+            if let Some(store) = self.pending.sizeof_vla_store.take() {
+                self.ast_emit_comma(store, size, self.ty);
+            }
         } else {
             self.ast_emit_int_lit(total_bytes, self.ty);
         }
@@ -1401,7 +1533,7 @@ impl Compiler {
         let offset = self.intern_func_name();
         self.emit_data_imm(offset);
         self.next()?;
-        self.ty = Ty::Char as i64 + Ty::Ptr as i64;
+        self.ty = super::types::plain_char_ty(self.lex.char_signed) + Ty::Ptr as i64;
         // The array size reaches an enclosing `sizeof` as for any decayed
         // array.
         self.pending.last_array_decay_size = self.current_function_name.len() as i64 + 1;
@@ -1502,6 +1634,7 @@ impl Compiler {
             self.symbols[id_idx].class = Token::Fun as i64;
             self.symbols[id_idx].scoped_fn_decl = true;
             self.symbols[id_idx].type_ = Ty::Int as i64;
+            self.symbols[id_idx].prototyped = false;
             self.symbols[id_idx].implicit_return_int = true;
             self.symbols[id_idx].linkage = crate::c5::symbol::Linkage::External;
             self.symbols[id_idx].defined_here = false;
@@ -1598,16 +1731,24 @@ impl Compiler {
         );
         self.ast_acc = Some(id);
         // `__builtin_va_arg` yields the argument as a value of `T`: the slot
-        // address the intrinsic returns is read through `T *`.
+        // address the intrinsic returns is read through a pointer to the type
+        // the caller passed, then converted to `T`.
         if let Some(res_ty) = va_arg_result_ty {
+            let slot_ty = self.va_arg_slot_ty(res_ty);
             if let Some(child) = self.ast_acc {
-                self.ast_emit_cast(child, res_ty + Ty::Ptr as i64);
+                self.ast_emit_cast(child, slot_ty + Ty::Ptr as i64);
             }
             if !(is_struct_value_ty(res_ty)) {
                 self.mark_emit_scalar_load();
             }
-            self.ty = res_ty;
+            self.ty = slot_ty;
             self.ast_apply_unary(super::super::ast::UnOp::Deref);
+            if slot_ty != res_ty
+                && let Some(read) = self.ast_acc
+            {
+                self.ast_emit_cast(read, res_ty);
+                self.ty = res_ty;
+            }
         }
         // A frame record holds the caller's frame pointer at offset 0, so
         // each level above 0 is one load through the level below; the
@@ -1819,6 +1960,80 @@ impl Compiler {
         Ok(())
     }
 
+    /// The type a variadic argument of type `ty` travels as: a `long double`
+    /// wider than `double` that the convention does not pass as its image is
+    /// passed as the binary64 badc computes with.
+    fn va_arg_slot_ty(&self, ty: i64) -> i64 {
+        if super::types::is_long_double_scalar(ty)
+            && self.target.long_double() != crate::c5::codegen::LongDoubleKind::F64
+            && super::long_double_agg_desc(self.target, self.current_func_conv).is_none()
+        {
+            Ty::Double as i64
+        } else {
+            ty
+        }
+    }
+
+    /// The `va_arg` class of a `long double` passed as its image, by its
+    /// classification: memory on System V, a vector register on AAPCS64.
+    fn long_double_va_kind(&self, ty: i64) -> Option<u8> {
+        use crate::c5::codegen::abi_classify::{AggClass, RegClass, classify_aggregate};
+        if !super::types::is_long_double_scalar(ty) {
+            return None;
+        }
+        let conv = self.current_func_conv;
+        let desc = super::long_double_agg_desc(self.target, conv)?;
+        let abi = self.target.abi_for(conv);
+        match classify_aggregate(&desc, abi, false) {
+            AggClass::ByStack => Some(crate::c5::op::VaArgDesc::MEMORY),
+            AggClass::Regs(c) if c == [RegClass::Vector] => Some(crate::c5::op::VaArgDesc::VECTOR),
+            _ => None,
+        }
+    }
+
+    /// The `va_arg` class of an aggregate `ty` on a System V `va_list`
+    /// (3.5.7): MEMORY for one passed in memory, FLOAT or VECTOR for one in a
+    /// single SSE or whole vector register, which its save slot holds as it
+    /// lies, EIGHTBYTES with the class of each eightbyte for any other in
+    /// registers whose eightbytes are not all INTEGER, `None` otherwise --
+    /// whole INTEGER eightbytes lie in order in the general-register area.
+    fn sysv_va_arg_eightbytes(&self, ty: i64) -> Option<(u8, u8)> {
+        use crate::c5::codegen::abi_classify::{
+            AggClass, RegClass, classify_aggregate, register_slots,
+        };
+        use crate::c5::op::VaArgDesc;
+        let conv = self.current_func_conv;
+        let abi = self.target.abi_for(conv);
+        if !abi.sysv_host_variadic() || !is_struct_value_ty(ty) || is_vector_ty(&self.structs, ty) {
+            return None;
+        }
+        let desc = super::host_abi_agg_desc_conv(&self.structs, self.target, conv, ty)?;
+        let AggClass::Regs(classes) = classify_aggregate(&desc, abi, false) else {
+            return Some((VaArgDesc::MEMORY, 0));
+        };
+        match classes.as_slice() {
+            [RegClass::Sse] => return Some((VaArgDesc::FLOAT, 0)),
+            [RegClass::Vector] => return Some((VaArgDesc::VECTOR, 0)),
+            c if c.iter().all(|c| *c == RegClass::Integer)
+                && c.len() == desc.size.div_ceil(8) as usize =>
+            {
+                return None;
+            }
+            _ => {}
+        }
+        let codes = register_slots(&classes).fold(0u8, |codes, (class, off)| {
+            let k = 2 * (off / 8);
+            codes
+                | match class {
+                    RegClass::Integer => VaArgDesc::EB_INTEGER << k,
+                    RegClass::Sse => VaArgDesc::EB_SSE << k,
+                    RegClass::Vector => VaArgDesc::EB_SSE << k | VaArgDesc::EB_SSEUP << (k + 2),
+                    _ => 0,
+                }
+        });
+        Some((VaArgDesc::EIGHTBYTES, codes))
+    }
+
     /// The operands of `__builtin_va_arg(ap, T)`: the `va_list` address
     /// and the packed descriptor of `T`. Returns `T`.
     fn parse_va_arg_operands(
@@ -1849,17 +2064,56 @@ impl Compiler {
         let type_name = self.parse_type_name()?;
         let arg_ty = type_name.ty;
         let is_pointer = type_name.ptr_levels > 0;
-        let size = self.size_of_type(arg_ty) as i64;
+        let size = self.size_of_type(self.va_arg_slot_ty(arg_ty)) as i64;
         // C99 6.5.2.2p6: a floating argument past the promotions is `double`
         // and rides the fp save area; a pointer or integer the gp save area.
         // A 64- or 128-bit vector rides the fp save area too, one whole
         // register per argument (System V AMD64 psABI 3.2.3, AAPCS64 6.4.2
         // C.1), which the third class selects.
         use crate::c5::op::VaArgDesc;
-        let by_ref =
-            !is_pointer && super::type_layout::va_arg_by_ref(&self.structs, self.target, arg_ty);
+        let by_ref = !is_pointer
+            && super::type_layout::passes_by_reference(
+                &self.structs,
+                self.target,
+                crate::c5::codegen::CallConv::Target,
+                arg_ty,
+                true,
+            );
+        // AAPCS64 B.4 saves a homogeneous aggregate's elements one per
+        // 16-byte slot of the `__va_list` vector area; a read composes them in
+        // a temporary. A lone vector is read in place.
+        let homogeneous = if !is_pointer
+            && is_struct_value_ty(arg_ty)
+            && !is_vector_ty(&self.structs, arg_ty)
+            && self.target.abi().aarch64_host_variadic()
+        {
+            super::type_layout::homogeneous_aggregate(
+                &self.structs,
+                self.target,
+                struct_id_of(arg_ty),
+            )
+        } else {
+            None
+        };
+        let sysv = if is_pointer || by_ref {
+            None
+        } else {
+            self.sysv_va_arg_eightbytes(arg_ty)
+        };
         let (kind, align) = if is_pointer || by_ref {
             (VaArgDesc::INT, 8)
+        } else if homogeneous.is_some() {
+            (
+                VaArgDesc::HOMOGENEOUS,
+                super::type_layout::va_arg_align(&self.structs, self.target, arg_ty),
+            )
+        } else if let Some((kind, _)) = sysv {
+            (
+                kind,
+                super::type_layout::va_arg_align(&self.structs, self.target, arg_ty),
+            )
+        } else if let Some(kind) = self.long_double_va_kind(arg_ty) {
+            (kind, 16)
         } else if is_vector_ty(&self.structs, arg_ty) && matches!(size, 8 | 16) {
             (
                 VaArgDesc::VECTOR,
@@ -1878,10 +2132,28 @@ impl Compiler {
             kind,
             align,
             by_ref,
+            elements: homogeneous.map_or(0, |h| h.count() as u8),
+            eightbytes: sysv.map_or(0, |(_, e)| e),
         }
         .pack();
         let desc_id = self.ast_emit_int_lit(descriptor, Ty::Int as i64);
         args.push(desc_id);
+        if homogeneous.is_some() || kind == VaArgDesc::EIGHTBYTES {
+            let slots = self.slots_of_type(arg_ty);
+            let slot = self.reserve_object_slots(arg_ty, slots)?;
+            self.record_multi_cell_temp(slot, slots, arg_ty);
+            self.commit_block_slot(slot);
+            let pos = self.ast_src_pos();
+            args.push(self.ast.push_expr(
+                super::super::ast::Expr::CompoundLiteral {
+                    slot_off: slot,
+                    ty: arg_ty,
+                    array_size: 0,
+                    init: super::super::ast::LocalInit::None,
+                },
+                pos,
+            ));
+        }
         Ok(arg_ty)
     }
 
@@ -1958,14 +2230,18 @@ impl Compiler {
     }
 
     fn parse_direct_call(&mut self, id_idx: usize) -> Result<(), C5Error> {
+        let s = &self.symbols[id_idx];
+        let is_sys_call = s.class == Token::Sys as i64;
+        let old_style_def = s.class == Token::Fun as i64 && s.unprototyped_def;
         let callee = DirectCallee {
-            params: self.symbols[id_idx].params.clone(),
-            is_variadic: self.symbols[id_idx].is_variadic,
-            name: self.symbols[id_idx].name.clone(),
-            is_sys_call: self.symbols[id_idx].class == Token::Sys as i64,
-            ret_ty: self.symbols[id_idx].type_,
-            returns_struct: self.symbols[id_idx].class == Token::Fun as i64
-                && is_struct_value_ty(self.symbols[id_idx].type_),
+            params: s.params.clone(),
+            is_variadic: s.is_variadic,
+            name: s.name.clone(),
+            is_sys_call,
+            ret_ty: s.type_,
+            returns_struct: s.class == Token::Fun as i64 && is_struct_value_ty(s.type_),
+            count_known: s.prototyped || old_style_def,
+            count_is_constraint: s.prototyped && !is_sys_call,
         };
         // A callee left at the implicit `int` (a `#pragma binding` with no
         // prototype, or a C89 implicit declaration) truncates a wider return
@@ -2039,21 +2315,20 @@ impl Compiler {
         // A compound literal reserved while evaluating the arguments has
         // block lifetime (C99 6.5.2.5p5) and is never reclaimed here.
         self.loc_offs = target_loc_offs.max(self.committed_loc_offs);
-        if !callee.is_variadic
-            && !callee.params.is_empty()
-            && (nargs as usize) < callee.params.len()
-        {
+        if callee.count_known && (nargs as usize) < callee.params.len() {
+            let at_least = if callee.is_variadic { "at least " } else { "" };
+            let text = format!(
+                "too few arguments to `{}` (expected {at_least}{}, got {nargs})",
+                callee.name,
+                callee.params.len(),
+            );
             let line = self.lex.line;
-            self.warn_at(
+            self.report_arity(
+                callee.count_is_constraint,
                 Code::TOO_FEW_ARGUMENTS,
                 line,
-                format!(
-                    "too few arguments to `{}` (expected {}, got {})",
-                    callee.name,
-                    callee.params.len(),
-                    nargs,
-                ),
-            );
+                text,
+            )?;
         }
         self.next()?;
         if self.symbols[id_idx].class == Token::Sys as i64
@@ -2061,7 +2336,7 @@ impl Compiler {
         {
             // A binding the unit defines later becomes one of its
             // functions, so a call made while it was bound counts too.
-            self.symbols[id_idx].was_referenced = true;
+            self.symbols[id_idx].binding.was_referenced = true;
             self.flush_pending_stores();
             self.pending.last_emit_was_indirect_call = false;
             self.ast_acc = None;
@@ -2071,8 +2346,8 @@ impl Compiler {
             // A call through a function-pointer variable: the read counts for
             // the dead-store diagnostic.
             if self.symbols[id_idx].class == Token::Loc as i64 {
-                self.symbols[id_idx].was_referenced = true;
-                self.symbols[id_idx].was_read = true;
+                self.symbols[id_idx].binding.was_referenced = true;
+                self.symbols[id_idx].binding.was_read = true;
             } else {
                 self.glo_imm_refs.push(id_idx);
             }
@@ -2106,44 +2381,18 @@ impl Compiler {
         self.ast_psh();
         self.expr(Token::Assign as i64)?;
 
-        // A `long double` that reaches a platform-libc callee as such is
-        // decoded there in the ABI's wider format, not the binary64 c5
-        // supplies; an argument converted to a `double` parameter is exact.
-        // Past the fixed parameters 6.5.2.2p6 leaves the type alone.
-        let reaches_callee_as_long_double = match callee.params.get(nargs as usize) {
-            Some(want) => is_long_double_ty(*want),
-            None => is_long_double_ty(self.ty),
-        };
-        if callee.is_sys_call
-            && reaches_callee_as_long_double
-            && let Some(platform_fmt) = self.target.platform_long_double_abi()
-        {
-            self.warn_at(
-                Code::LONG_DOUBLE_ABI,
-                arg_line,
-                format!(
-                    "`long double` argument {} of `{}` is passed as 8-byte \
-                         binary64; this target's ABI passes {platform_fmt}",
-                    nargs + 1,
-                    callee.name,
-                ),
-            );
-        }
-
         if (nargs as usize) < callee.params.len() {
             self.convert_declared_argument(callee, nargs, arg_line)?;
         } else {
-            if !callee.params.is_empty() && !callee.is_variadic {
-                self.warn_at(
-                    Code::TOO_MANY_ARGUMENTS,
-                    arg_line,
-                    format!(
-                        "too many arguments to `{}` (expected {}, got at least {})",
-                        callee.name,
-                        callee.params.len(),
-                        nargs + 1,
-                    ),
+            if callee.count_known && !callee.is_variadic {
+                let text = format!(
+                    "too many arguments to `{}` (expected {}, got at least {})",
+                    callee.name,
+                    callee.params.len(),
+                    nargs + 1,
                 );
+                let constraint = callee.count_is_constraint;
+                self.report_arity(constraint, Code::TOO_MANY_ARGUMENTS, arg_line, text)?;
             }
             // C99 6.5.2.2p6: an argument past the declared parameters, or to a
             // callee with no prototype, undergoes the default argument
@@ -2156,6 +2405,22 @@ impl Compiler {
         let arg_ast = self.ast_acc;
         self.ast_assign();
         Ok((temp_off, arg_ast))
+    }
+
+    /// An argument count that does not match the callee's parameters: an
+    /// error when it violates a constraint, else the warning `code`.
+    fn report_arity(
+        &mut self,
+        constraint: bool,
+        code: Code,
+        line: usize,
+        text: String,
+    ) -> Result<(), C5Error> {
+        if constraint {
+            return Err(self.compile_err_at(Code::INVALID_ARGUMENTS, line, text));
+        }
+        self.warn_at(code, line, text);
+        Ok(())
     }
 
     /// C99 6.5.2.2p7: an argument to a declared parameter undergoes the
@@ -2260,18 +2525,10 @@ impl Compiler {
         // object and yields its address as the call's value.
         let callee_ty = self.symbols[id_idx].type_;
         let callee_id = self.ast_synthesize_callee(id_idx as u32, callee_ty);
-        // A variadic function-pointer variable records its fixed count now,
-        // while its block-scope binding is live (C99 6.2.1p4); the walker
-        // runs after the scope is gone.
-        if is_var_call && self.symbols[id_idx].is_variadic {
-            self.ast
-                .variadic_indirect_callees
-                .push((callee_id, self.symbols[id_idx].params.len() as u32));
-        }
-        if is_var_call && self.symbols[id_idx].conv != crate::c5::codegen::CallConv::Target {
-            self.ast
-                .conv_indirect_callees
-                .push((callee_id, self.symbols[id_idx].conv));
+        // Recorded while a block-scope binding is live (C99 6.2.1p4); the
+        // walker runs after the scope is gone.
+        if is_var_call && let Some(f) = self.callee_fn(Some(callee_id)) {
+            self.ast.callee_types.insert(callee_id, f);
         }
         self.ast_emit_call(callee_id, ast_arg_ids.clone(), result_ty);
         // A struct result is its temp's address (the address-as-value rule).
@@ -2280,12 +2537,13 @@ impl Compiler {
         }
         self.ty = result_ty;
         self.drop_operand_array_decay();
-        // A callee returning a function pointer leaves a function-pointer
-        // value, so a following unary `*` is the C99 6.3.2.1p4 no-op.
+        // A callee whose result leads to a function pointer seeds the decay
+        // depth as a loaded variable of the result's type does: at depth 0 a
+        // unary `*` is the C99 6.3.2.1p4 no-op.
         if self.symbols[id_idx].class == Token::Fun as i64
             && self.symbols[id_idx].fn_ptr_indirection > 0
         {
-            self.pending.fn_ptr_chain_depth = 0;
+            self.pending.fn_ptr_chain_depth = self.symbols[id_idx].fn_ptr_indirection - 1;
         } else if is_var_call && self.symbols[id_idx].fn_ptr_ret_indirection > 0 {
             self.pending.fn_ptr_chain_depth = self.symbols[id_idx].fn_ptr_ret_indirection - 1;
         }
@@ -2305,7 +2563,7 @@ impl Compiler {
     /// import has no compile-time address; the walker materializes its stub.
     fn parse_function_designator(&mut self, id_idx: usize) -> Result<(), C5Error> {
         if self.symbols[id_idx].class == Token::Fun as i64 {
-            self.symbols[id_idx].was_referenced = true;
+            self.symbols[id_idx].binding.was_referenced = true;
             // The `CODE_BASE` bias tells the VM a function pointer from a data
             // pointer; the walker resolves the address on the SSA side.
             self.emit_imm(CODE_BASE as i64 + self.symbols[id_idx].val);
@@ -2343,8 +2601,8 @@ impl Compiler {
                 ),
             ));
         }
-        self.symbols[id_idx].was_referenced = true;
-        self.symbols[id_idx].was_read = true;
+        self.symbols[id_idx].binding.was_referenced = true;
+        self.symbols[id_idx].binding.was_read = true;
         self.mark_emit_other();
         self.ty = self.symbols[id_idx].type_;
         let kind = match self.symbols[id_idx].asm_register {
@@ -2371,7 +2629,7 @@ impl Compiler {
     fn parse_variable(&mut self, id_idx: usize) -> Result<(), C5Error> {
         let identifier_is_local = self.symbols[id_idx].class == Token::Loc as i64;
         if identifier_is_local {
-            self.symbols[id_idx].was_referenced = true;
+            self.symbols[id_idx].binding.was_referenced = true;
             self.emit_lea(self.symbols[id_idx].val);
         } else if self.symbols[id_idx].class == Token::Glo as i64
             && self.symbols[id_idx].is_thread_local
@@ -2394,29 +2652,26 @@ impl Compiler {
             self.symbols[id_idx].array_size != 0 || self.symbols[id_idx].is_zero_len_array;
         let is_vla_var = self.symbols[id_idx].is_vla;
         self.pending.object_ref = self.declared_object_ref(id_idx);
-        // A function-pointer variable carries its prototype so `(*fp)(args)`,
-        // which reaches the postfix call, converts each argument (C99
-        // 6.5.2.2p7).
-        if !is_array_var && !is_struct_value && !self.symbols[id_idx].params.is_empty() {
-            self.pending.indirect_callee_params = Some(self.symbols[id_idx].params.clone());
-            self.pending.indirect_callee_is_variadic = self.symbols[id_idx].is_variadic;
-            self.pending.indirect_callee_conv = self.symbols[id_idx].conv;
-            self.pending.indirect_callee_fn_ptr_depth = self.symbols[id_idx].fn_ptr_indirection;
+        // A function-pointer variable's return lineage reaches `(*fp)(args)`.
+        let fn_ptr = self.symbols[id_idx].fn_ptr_indirection >= 1;
+        if !is_array_var && !is_struct_value && fn_ptr {
             self.pending.indirect_callee_ret_fn_ptr = self.symbols[id_idx].fn_ptr_ret_indirection;
         }
         if is_vla_var {
             // C99 6.3.2.1p3: a VLA decays to its runtime base pointer, loaded
             // from the hidden slot.
             let ptr_slot = self.symbols[id_idx].vla_ptr_slot;
+            let vla = self.vla_array_type(self.ty, self.symbols[id_idx].vla_size_slot);
             self.ty += Ty::Ptr as i64;
             self.ast_emit_vla_base(ptr_slot, self.ty);
+            self.pending.last_array_decay_vla = Some(struct_id_of(vla));
         } else if is_array_var {
             self.decay_array_variable(id_idx, identifier_is_local);
         } else if is_struct_value {
             if identifier_is_local {
                 // A struct object's value is its address, with no load to track a
                 // read by; the object counts as address-escaped.
-                self.symbols[id_idx].address_escaped = true;
+                self.symbols[id_idx].binding.address_escaped = true;
             }
             self.ast_emit_ident(id_idx as u32, self.ty);
         } else {
@@ -2460,7 +2715,7 @@ impl Compiler {
         if identifier_is_local {
             // The decayed address may be indexed, passed or stored, none of
             // which is tracked; the array counts as address-escaped.
-            self.symbols[id_idx].address_escaped = true;
+            self.symbols[id_idx].binding.address_escaped = true;
         }
         self.ty += Ty::Ptr as i64;
         self.ast_emit_ident(id_idx as u32, self.ty);
@@ -2477,16 +2732,23 @@ impl Compiler {
         let elem_ty = self.symbols[id_idx].type_;
         let elem_size = self.size_of_type(elem_ty) as i64;
         let dims = self.symbols[id_idx].array_dims.clone();
-        // The dimension list lets `&arr` and `typeof` rebuild the array
-        // type; a zero-length array records its bound so `typeof` reads
-        // `T[0]`.
-        self.pending.last_array_decay_dims =
-            if dims.is_empty() && self.symbols[id_idx].is_zero_len_array {
-                alloc::vec![0]
-            } else {
-                dims.clone()
-            };
         self.seed_multi_dim_strides(&dims, elem_size);
+        // The dimension list lets `&arr` and `typeof` rebuild the array
+        // type: a zero-length array records its bound so `typeof` reads
+        // `T[0]`, and an unspecified outer bound (C99 6.7.5.2p4, `extern
+        // T x[]`) is -1, where the symbol holds the 0 placeholder.
+        let mut shape = dims;
+        if self.symbols[id_idx].is_zero_len_array {
+            if shape.is_empty() {
+                shape.push(0);
+            }
+        } else if self.symbols[id_idx].array_size < 0 {
+            match shape.first_mut() {
+                Some(outer) => *outer = -1,
+                None => shape.push(-1),
+            }
+        }
+        self.pending.last_array_decay_dims = shape;
         // A function-pointer element keeps its prototype for `arr[i](args)`
         // and its decay depth for `(*arr[i])(...)`: the subscript consumes
         // an array level, not an indirection level.
@@ -2495,11 +2757,7 @@ impl Compiler {
             self.pending.fn_ptr_chain_depth = fpi - 1;
             self.pending.fn_ptr_depth_is_array_elem = true;
         }
-        if fpi > 0 || !self.symbols[id_idx].params.is_empty() {
-            self.pending.indirect_callee_params = Some(self.symbols[id_idx].params.clone());
-            self.pending.indirect_callee_is_variadic = self.symbols[id_idx].is_variadic;
-            self.pending.indirect_callee_conv = self.symbols[id_idx].conv;
-            self.pending.indirect_callee_fn_ptr_depth = fpi;
+        if fpi > 0 {
             self.pending.indirect_callee_ret_fn_ptr = self.symbols[id_idx].fn_ptr_ret_indirection;
         }
     }
@@ -2514,10 +2772,10 @@ impl Compiler {
             // restores `was_read` and the pending stores through
             // `last_loaded_local`.
             self.pending.last_loaded_local = Some(id_idx);
-            self.pending.last_loaded_local_prior_was_read = self.symbols[id_idx].was_read;
+            self.pending.last_loaded_local_prior_was_read = self.symbols[id_idx].binding.was_read;
             self.pending.last_loaded_local_prior_pending =
-                core::mem::take(&mut self.symbols[id_idx].pending_stores);
-            self.symbols[id_idx].was_read = true;
+                core::mem::take(&mut self.symbols[id_idx].binding.pending_stores);
+            self.symbols[id_idx].binding.was_read = true;
         }
         // `mark_emit_scalar_load` cleared the decay depth; the load consumed
         // one indirection level of the symbol's `fn_ptr_indirection`.
@@ -2547,29 +2805,17 @@ impl Compiler {
         self.next()?;
         if self.lex.tk == '{' {
             self.parse_stmt_expr_body()?;
-            // The body's last expression is a value, not a designator.
+            // The body's last expression is a value, not a designator, and an
+            // array one has decayed.
             self.pending.object_ref = None;
+            self.drop_operand_array_decay();
         } else if self.lex_is_type_start() {
             self.parse_cast_or_compound_literal()?;
         } else {
             self.expr_or_void(Token::Assign as i64)?;
-            // C99 6.5.17: a comma chain, reached only in parentheses because
-            // `expr(Assign)` leaves `,` to its caller. `Expr::Comma` keeps the
-            // left operand's side effects for the walker.
-            while self.lex.tk == ',' {
-                let lhs_ast = self.ast_acc;
-                self.next()?;
-                self.expr_or_void(Token::Assign as i64)?;
-                let rhs_ast = self.ast_acc;
-                if let (Some(lhs), Some(rhs)) = (lhs_ast, rhs_ast) {
-                    let pos = self.ast_src_pos();
-                    let ty = self.ty;
-                    let id = self
-                        .ast
-                        .push_expr(super::super::ast::Expr::Comma { lhs, rhs, ty }, pos);
-                    self.ast_acc = Some(id);
-                }
-            }
+            // A comma chain is reached only in parentheses because
+            // `expr(Assign)` leaves `,` to its caller.
+            self.parse_comma_operators()?;
             if self.lex.tk == ')' {
                 self.next()?;
             } else {
@@ -2592,16 +2838,29 @@ impl Compiler {
         } else {
             return Err(self.compile_err(Code::INVALID_OPERANDS, "bad cast"));
         }
+        if self.lex.tk == '{' && type_name.vla.is_some() {
+            // C99 6.5.2.5p1: no variable-length array type; a type derived
+            // from one would need its size stored before the literal.
+            return Err(self.compile_err(
+                Code::INVALID_INITIALIZER,
+                "a compound literal may not have a variably modified type",
+            ));
+        }
         if self.lex.tk == '{' {
             // C99 6.5.2.5 compound literal: `(type){ init }`. An array
             // typedef's dimensions complete the type from the inside:
             // `(row[2]){...}` with `typedef int row[3]` is `int[2][3]`
             // (C99 6.7.7); a `*` absorbed the typedef array into the
             // pointee instead.
-            let literal = self.parse_block_compound_literal(type_name.ty, &type_name.dims);
+            self.parse_block_compound_literal(type_name.ty, &type_name.dims)?;
             // gcc answers unknown for a compound literal's object.
             self.pending.object_ref = None;
-            return literal;
+            if let Some(id) = self.ast_acc
+                && let Some((f, depth)) = self.type_name_fn(type_name)
+            {
+                self.set_expr_fn(id, f, depth);
+            }
+            return Ok(());
         }
         self.parse_cast_operand(type_name)
     }
@@ -2658,42 +2917,46 @@ impl Compiler {
         self.ty = t;
         // C99 6.5.4: the value has the cast type, so an operand's array
         // shape does not reach an enclosing `sizeof` / `typeof`.
-        self.pending.last_array_decay_size = 0;
-        self.pending.last_array_decay_bytes = 0;
+        self.drop_operand_array_decay();
         // The cast node replaces the conversion's intermediate nodes, which
         // have no consumer.
         if let Some(child) = cast_child_ast {
             self.ast_emit_cast(child, t);
         }
-        // The cast destination's function-pointer lineage lets a following
-        // unary `*` chain decay, as in `(**(finder_type*)p)(...)`.
-        if let Some(fpi) = type_name.fn_ptr_indirection
-            && fpi > 0
-        {
-            self.pending.fn_ptr_chain_depth = fpi - 1;
+        // C99 6.7.5.2p5: the variable-length array the cast type derives
+        // from takes its size when the cast is evaluated.
+        if let (Some(vm), Some(value)) = (type_name.vla, self.ast_acc) {
+            self.ast_emit_comma(vm.store, value, t);
         }
-        // C99 6.5.2.2p7: a call through the cast uses the cast's prototype,
-        // whatever the operand declared; `typeof(<cast>)` recovers it
-        // through `last_fn_ptr_cast`.
-        if let Some(pp) = type_name.proto {
-            self.pending.last_fn_ptr_cast = Some((
-                t,
-                pp.types.clone(),
-                pp.is_variadic,
-                type_name.fn_ptr_indirection.unwrap_or(1).max(1),
-            ));
-            self.pending.indirect_callee_is_variadic = pp.is_variadic;
-            self.pending.indirect_callee_conv = core::mem::take(&mut self.pending.attr_call_conv);
-            self.pending.indirect_callee_fn_ptr_depth =
-                type_name.fn_ptr_indirection.unwrap_or(1).max(1);
+        // The value's function-pointer lineage is the cast type's, which lets
+        // a following `*` chain decay (`(**(finder_type*)p)(...)`); a cast to
+        // any other type yields no function pointer and no designator.
+        let fpi = type_name.fn_ptr_indirection.filter(|&f| f > 0);
+        self.pending.fn_ptr_chain_depth = fpi.map_or(-1, |f| f - 1);
+        self.pending.fn_ptr_depth_is_array_elem = false;
+        self.pending.value_is_fn_designator = false;
+        // C99 6.5.2.2p7: a call through the cast uses the cast's function
+        // type, whatever the operand declared.
+        if let Some((f, depth)) = self.type_name_fn(type_name) {
             self.pending.indirect_callee_ret_fn_ptr = 0;
-            self.pending.indirect_callee_params = if pp.types.is_empty() {
-                None
-            } else {
-                Some(pp.types)
-            };
+            if cast_child_ast.is_some()
+                && let Some(id) = self.ast_acc
+            {
+                self.set_expr_fn(id, f, depth);
+            }
         }
         Ok(())
+    }
+
+    /// The function type a value of type `type_name` has and its depth,
+    /// when it is a pointer to a function; an array value decays one
+    /// level further per dimension.
+    fn type_name_fn(&mut self, type_name: TypeName) -> Option<(FnType, i64)> {
+        let dims = type_name.dims.len() as i64;
+        let f = type_name.fn_ty.filter(|f| f.ptr_depth >= 1)?;
+        let depth = f.ptr_depth as i64;
+        let conv = core::mem::take(&mut self.pending.attr_call_conv);
+        Some((FnType { conv, ..f.f }, depth + dims))
     }
 
     fn parse_deref(&mut self) -> Result<(), C5Error> {
@@ -2715,20 +2978,26 @@ impl Compiler {
             // the array, which decays to the element pointer (C99 6.3.2.1p3)
             // with no load.
             self.decay_ptr_array_value(id);
-        } else if self.pending.fn_ptr_chain_depth == 0 && !self.pending.fn_ptr_depth_is_array_elem {
+            self.retag_expr_fn_depth(|d| if d >= 2 { d - 1 } else { d });
+        } else if self.value_is_function_pointer() {
             // C99 6.5.3.2p4: `*` on a pointer to a function yields the
             // function designator, which 6.3.2.1p4 decays right back to the
             // same pointer; the depth stays 0 so further `*`s decay too. A
             // decayed array of function pointers is not one: `*arr` is its
-            // first element, loaded below.
+            // first element, loaded below. The operand's node stands for
+            // the designator.
             self.pending.value_is_fn_designator = true;
+            self.retag_expr_fn_depth(|_| 0);
         } else if let Some(id) = self.ptr_array_id_depth1(self.ty) {
             self.decay_ptr_array_value(id);
         } else if leftover_stride > 0 {
             // `*p` on a pointer-to-array row is `p[0]`: no load, the head
             // stride is consumed and the rest queued for a following `[k]`;
-            // the row size reaches an enclosing `sizeof`.
+            // the row size reaches an enclosing `sizeof`, and the operand's
+            // own shape, which the row does not have, is dropped.
+            self.drop_operand_array_decay();
             self.pending.last_array_decay_bytes = leftover_stride;
+            self.retag_expr_fn_depth(|d| if d >= 2 { d - 1 } else { d });
             let mut tail = leftover_tail;
             self.pending.index_stride = if tail.is_empty() { 0 } else { tail.remove(0) };
             self.pending.index_strides_tail = tail;
@@ -2770,8 +3039,7 @@ impl Compiler {
             }
             // `*arr` is the first element, not the array: an enclosing
             // `sizeof` reads `sizeof(T)`.
-            self.pending.last_array_decay_size = 0;
-            self.pending.last_array_decay_bytes = 0;
+            self.drop_operand_array_decay();
         }
         // `*e` is element 0 of what `e` points at: of the object the
         // operand designates when its value is that address, and of an
@@ -2814,7 +3082,17 @@ impl Compiler {
     fn parse_address_of(&mut self) -> Result<(), C5Error> {
         self.next()?;
         // The operand is designated, not read: `&*p` takes a `void *` `p`.
+        // The strides its parse left unconsumed are read from the
+        // end-of-expression snapshot, as under unary `*`; the enclosing
+        // snapshot is kept.
+        let saved_eos_stride = core::mem::take(&mut self.pending.end_of_expr_stride);
+        let saved_eos_tail = core::mem::take(&mut self.pending.end_of_expr_strides_tail);
         self.expr_or_void(Token::Inc as i64)?;
+        let mut strides = alloc::vec![core::mem::take(&mut self.pending.end_of_expr_stride)];
+        strides.append(&mut self.pending.end_of_expr_strides_tail);
+        strides.retain(|&s| s > 0);
+        self.pending.end_of_expr_stride = saved_eos_stride;
+        self.pending.end_of_expr_strides_tail = saved_eos_tail;
         // The result type is set before the trailing load is dropped, so
         // the `AddrOf` node built there carries the pointer type. A struct
         // value's address is already the value, and a load emitted earlier
@@ -2827,6 +3105,15 @@ impl Compiler {
         // carries the pointer tag -- so the result is the operand's own
         // type and no level is added.
         let addr_of_function = self.pending.value_is_fn_designator;
+        let vla = self.pending.last_array_decay_vla;
+        // The shape of a decayed array operand, read before the load that
+        // produced its value is considered: `&*p` on a pointer to an array
+        // keeps the load of `p`, whose value is the array's address.
+        let decayed_array = if is_pointer_ty(pre_addr_ty) {
+            self.decayed_array_dims(pre_addr_ty - Ty::Ptr as i64, &strides)
+        } else {
+            None
+        };
         self.ty += Ty::Ptr as i64;
         if is_struct_value_ty(pre_addr_ty) {
             // The address stands; an `AddrOf` node over the lvalue forms the
@@ -2854,30 +3141,29 @@ impl Compiler {
         } else if addr_of_function {
             // The designator's value is already the function's address.
             self.ty = pre_addr_ty;
+            self.retag_expr_fn_depth(|_| 1);
+        } else if let Some(id) = vla {
+            // A variable-length array: its address is the value.
+            self.ty = super::types::struct_ty_for(id) + Ty::Ptr as i64;
+            self.drop_operand_array_decay();
+            self.retag_expr_fn_depth(|d| d + 1);
+        } else if let Some(dims) = decayed_array {
+            // A decayed array: its address was the value already, so `&` emits
+            // nothing. C99 6.5.3.2p3: the type is pointer to the array, rebuilt
+            // from the shape the decay left -- a whole array, a row of one or
+            // of a pointer to one, a string literal -- so `(*p)[i]`, `p[i][j]`,
+            // `p + 1`, `sizeof(&arr)` and `typeof(&arr)` see it. The strides
+            // belonged to the decayed operand; the pointer seeds its own.
+            let elem_ty = pre_addr_ty - Ty::Ptr as i64;
+            let agg = self.array_agg_type(elem_ty, &dims);
+            self.ty = agg + Ty::Ptr as i64;
+            self.drop_operand_array_decay();
+            self.retag_expr_fn_depth(|d| d + 1);
         } else if self.pop_trailing_scalar_load() {
             // A scalar or pointer lvalue: dropping the load leaves its address.
         } else if is_pointer_ty(pre_addr_ty) {
-            // A decayed array: its address was the value already, so `&` emits
-            // nothing. C99 6.5.3.2p3: the type is pointer to the array, rebuilt
-            // for a known-size 1D array (`index_stride == 0`) so `(*p)[i]`,
-            // `sizeof(&arr)` and `typeof(&arr)` see it.
-            let n = self.pending.last_array_decay_size;
-            let decay_dims = core::mem::take(&mut self.pending.last_array_decay_dims);
-            if decay_dims.len() >= 2 {
-                // For a multi-dimensional array the pointee is the whole aggregate;
-                // the seeded strides belong to the decayed operand and are cleared.
-                let elem_ty = pre_addr_ty - Ty::Ptr as i64;
-                let agg = self.array_agg_type(elem_ty, &decay_dims);
-                self.ty = agg + Ty::Ptr as i64;
-                self.pending.index_stride = 0;
-                self.pending.index_strides_tail.clear();
-            } else if n > 0 && self.pending.index_stride == 0 {
-                let elem_ty = pre_addr_ty - Ty::Ptr as i64;
-                let agg = self.array_agg_type(elem_ty, &[n]);
-                self.ty = agg + Ty::Ptr as i64;
-            }
-            self.pending.last_array_decay_size = 0;
-            self.pending.last_array_decay_bytes = 0;
+            // A pointer value with no shape on record and no load to drop.
+            self.retag_expr_fn_depth(|d| d + 1);
         } else if matches!(
             self.ast_acc,
             Some(id) if matches!(
@@ -2923,7 +3209,9 @@ impl Compiler {
     /// adds a cast to the operand's own type, a union from a member's type,
     /// and a cast involving a vector.
     fn check_cast(&self, to: i64, from: i64) -> Result<(), C5Error> {
-        let bare = |ty: i64| super::types::unqualified_object_ty(ty) & !UNSIGNED_BIT;
+        let bare = |ty: i64| {
+            super::types::unqualified_object_ty(ty) & !(UNSIGNED_BIT | super::types::PLAIN_CHAR_BIT)
+        };
         let fits = match (self.operand(to), self.operand(from)) {
             (Operand::Pointer, Operand::Floating) | (Operand::Floating, Operand::Pointer) => false,
             (Operand::Other, _) | (_, Operand::Other) => {
@@ -2960,6 +3248,9 @@ impl Compiler {
         )?;
         self.emit_binop_with_imm(crate::c5::ir::BinOp::Eq, 0);
         self.ty = Ty::Int as i64;
+        // The result is an `int` value, not the array a pointer operand
+        // decayed from.
+        self.drop_operand_array_decay();
         Ok(())
     }
 
@@ -2979,15 +3270,17 @@ impl Compiler {
             }
             self.ast_apply_unary(super::super::ast::UnOp::BitNot);
         } else {
-            self.emit_binop_with_imm(crate::c5::ir::BinOp::Xor, -1);
             // C99 6.5.3.3p4: the result has the promoted operand type, so a
-            // `long` keeps its width and signedness for a following `>>`. A
+            // `long` keeps its width and signedness for a following `>>`.
+            // The node is built under that type: a `~` over a promoted
+            // `uint8_t` is an `int` whose consumers convert it as one. A
             // 4-byte unsigned result is masked back: the xor set all 64 bits.
             let promoted = integer_promote(self.ty);
+            self.ty = promoted;
+            self.emit_binop_with_imm(crate::c5::ir::BinOp::Xor, -1);
             if is_unsigned_ty(promoted) && self.size_of_type(promoted) == 4 {
                 self.emit_binop_with_imm(crate::c5::ir::BinOp::And, 0xffff_ffff);
             }
-            self.ty = promoted;
         }
         Ok(())
     }
@@ -3040,7 +3333,7 @@ impl Compiler {
                 // Negating the type minimum overflows the width, so a 32-bit
                 // result is renormalized for a later 64-bit read.
                 if self.size_of_type(self.ty) == 4 {
-                    self.renormalize_to_width(self.ty);
+                    self.renormalize_overflow(self.ty);
                 }
             }
         }
@@ -3057,6 +3350,7 @@ impl Compiler {
         if let Some((lvalue, ty)) = self.direct_inc_lvalue() {
             return self.emit_direct_inc_dec(lvalue, ty, is_inc, false);
         }
+        self.require_complete_pointee(self.ty, if is_inc { "++" } else { "--" })?;
         let (lvalue, fn_ptr_step) = self.inc_dec_lvalue("pre-increment")?;
         let step = if fn_ptr_step {
             1
@@ -3075,10 +3369,39 @@ impl Compiler {
         });
         self.ast_assign();
         let ty = self.ty;
-        if let Some(lvalue) = lvalue {
+        if let (Some(lvalue), Some(slot)) = (lvalue, self.vla_pointee_slot(ty)) {
+            self.ast_acc = Some(self.vla_step_assign(lvalue, slot, is_inc, ty));
+        } else if let Some(lvalue) = lvalue {
             self.ast_emit_pre_inc(lvalue, if is_inc { step } else { -step }, ty);
         }
         Ok(())
+    }
+
+    /// `lvalue += size` (or `-=`) for a pointer to a variable-length array.
+    fn vla_step_assign(
+        &mut self,
+        lvalue: super::super::ast::ExprId,
+        slot: i64,
+        is_inc: bool,
+        ty: i64,
+    ) -> super::super::ast::ExprId {
+        let pos = self.ast_src_pos();
+        let size = self.ast_emit_vla_sizeof(slot);
+        let op = if is_inc {
+            super::super::ir::BinOp::Add
+        } else {
+            super::super::ir::BinOp::Sub
+        };
+        self.ast.push_expr(
+            super::super::ast::Expr::CompoundAssign {
+                op,
+                lhs: lvalue,
+                rhs: size,
+                ty,
+                nsw: false,
+            },
+            pos,
+        )
     }
 
     /// The lvalue of a `++` / `--` that reads and stores through the
@@ -3097,8 +3420,8 @@ impl Compiler {
         })?;
         let line = self.lex.line;
         if let Some(idx) = self.take_last_loaded_local() {
-            self.symbols[idx].was_read = true;
-            self.symbols[idx].was_written = true;
+            self.symbols[idx].binding.was_read = true;
+            self.symbols[idx].binding.was_written = true;
             self.record_local_read(idx);
             self.record_local_store(idx, line);
         }
@@ -3121,9 +3444,19 @@ impl Compiler {
         let src = self.ast_src_pos();
         let expr = if postfix {
             self.next()?;
-            super::super::ast::Expr::PostInc { lvalue, by, ty }
+            super::super::ast::Expr::PostInc {
+                lvalue,
+                by,
+                ty,
+                nsw: false,
+            }
         } else {
-            super::super::ast::Expr::PreInc { lvalue, by, ty }
+            super::super::ast::Expr::PreInc {
+                lvalue,
+                by,
+                ty,
+                nsw: false,
+            }
         };
         let id = self.ast.push_expr(expr, src);
         self.ast_acc = Some(id);
@@ -3138,9 +3471,7 @@ impl Compiler {
         let lhs_ty = self.ty;
         // An operator consumes the operand, so its array shape does not
         // reach an enclosing `sizeof`.
-        self.pending.last_array_decay_size = 0;
-        self.pending.last_array_decay_bytes = 0;
-        self.pending.last_array_decay_dims.clear();
+        self.drop_operand_array_decay();
         let object_ref = self.pending.object_ref.take();
         // The postfix steps that keep designating an object re-set the
         // channel; every other operator consumes the operand, so what
@@ -3150,6 +3481,11 @@ impl Compiler {
             || self.lex.tk == Token::Dot
             || self.lex.tk == Token::AddOp
             || self.lex.tk == Token::SubOp;
+        // A subscript or a member access may select an array, whose shape
+        // it records; every other operator yields a value that is not one
+        // (C99 6.3.2.1p3), whatever its right operand decayed from.
+        let selects =
+            self.lex.tk == Token::Brak || self.lex.tk == Token::Arrow || self.lex.tk == Token::Dot;
         let applied = if self.lex.tk == '(' {
             self.parse_indirect_call()
         } else if self.lex.tk == Token::Assign {
@@ -3177,6 +3513,9 @@ impl Compiler {
         };
         if !designates {
             self.pending.object_ref = None;
+        }
+        if !selects {
+            self.drop_operand_array_decay();
         }
         applied
     }
@@ -3228,24 +3567,26 @@ impl Compiler {
         let fp_temp = self.reserve_slots(1);
         self.mark_emit_other();
         // Arguments are evaluated left to right into staging slots and
-        // converted to the declared parameter types the operand carried
-        // (C99 6.5.2.2p7), as for a direct call.
-        let callee_params = self.pending.indirect_callee_params.take();
-        let callee_is_variadic = core::mem::take(&mut self.pending.indirect_callee_is_variadic);
-        let callee_conv = core::mem::take(&mut self.pending.indirect_callee_conv);
+        // converted to the parameter types of the callee expression's
+        // function type (C99 6.5.2.2p7), as for a direct call.
+        let callee_fn = self.callee_fn(callee_ast);
+        let callee_params = callee_fn.as_ref().map(|f| f.params.types.clone());
         let callee_ret_fn_ptr = core::mem::take(&mut self.pending.indirect_callee_ret_fn_ptr);
-        let callee_fixed = callee_params.as_ref().map_or(0, |p| p.len()) as u32;
         let mut arg_idx: usize = 0;
+        let call_line = self.lex.line;
         if self.lex.tk != ')' {
             loop {
                 let temp_off = self.reserve_slots(1);
                 self.emit_lea(temp_off);
                 self.ast_psh();
                 self.expr(Token::Assign as i64)?;
-                if let Some(params) = &callee_params
-                    && arg_idx < params.len()
-                {
-                    self.convert_assign_rhs(params[arg_idx]);
+                match &callee_params {
+                    Some(params) if arg_idx < params.len() => {
+                        self.convert_assign_rhs(params[arg_idx]);
+                    }
+                    // C99 6.5.2.2p6: past the prototype, or with none, `float` becomes `double`.
+                    Some(_) if is_float_ty(self.ty) => self.convert_assign_rhs(Ty::Double as i64),
+                    _ => {}
                 }
                 indirect_arg_ids.push(self.ast_acc);
                 self.ast_assign();
@@ -3253,6 +3594,24 @@ impl Compiler {
                 if !self.list_separator(')', "argument")? {
                     break;
                 }
+            }
+        }
+        if let Some(p) = callee_fn
+            .as_ref()
+            .map(|f| &f.params)
+            .filter(|p| p.prototyped)
+        {
+            let (want, variadic) = (p.types.len(), p.variadic);
+            if arg_idx < want || (arg_idx > want && !variadic) {
+                let (dir, at_least) = if arg_idx < want {
+                    ("few", if variadic { "at least " } else { "" })
+                } else {
+                    ("many", "")
+                };
+                let text = format!(
+                    "too {dir} arguments to function call (expected {at_least}{want}, got {arg_idx})"
+                );
+                return Err(self.compile_err_at(Code::INVALID_ARGUMENTS, call_line, text));
             }
         }
         self.next()?; // consume `)`
@@ -3268,13 +3627,7 @@ impl Compiler {
         }
         self.drop_operand_array_decay();
         self.ast_vstack.truncate(ast_vstack_snapshot);
-        self.emit_indirect_call_ast(
-            callee_ast,
-            indirect_arg_ids,
-            callee_is_variadic,
-            callee_fixed,
-            callee_conv,
-        );
+        self.emit_indirect_call_ast(callee_ast, indirect_arg_ids, callee_fn);
         Ok(())
     }
 
@@ -3282,9 +3635,7 @@ impl Compiler {
         &mut self,
         callee_ast: Option<super::super::ast::ExprId>,
         indirect_arg_ids: alloc::vec::Vec<Option<super::super::ast::ExprId>>,
-        callee_is_variadic: bool,
-        callee_fixed: u32,
-        callee_conv: crate::c5::codegen::CallConv,
+        callee_fn: Option<FnType>,
     ) {
         let return_ty = self.ty;
         if let Some(callee_id) = callee_ast {
@@ -3302,19 +3653,9 @@ impl Compiler {
                 }
             }
             if all_some {
-                // A variadic callee records its fixed count for the walker, whose
-                // symbol (a member, element or dereferenced pointer) carries none.
-                if callee_is_variadic {
-                    self.ast
-                        .variadic_indirect_callees
-                        .push((callee_id, callee_fixed));
-                }
-                // A calling convention other than the target's is recorded on the
-                // callee node; the declaration's scope is gone by the walk.
-                if callee_conv != crate::c5::codegen::CallConv::Target {
-                    self.ast
-                        .conv_indirect_callees
-                        .push((callee_id, callee_conv));
+                // The walker places the arguments by it after the scope is gone.
+                if let Some(f) = callee_fn {
+                    self.ast.callee_types.insert(callee_id, f);
                 }
                 let id = self.ast.push_expr(
                     super::super::ast::Expr::Call {
@@ -3334,6 +3675,7 @@ impl Compiler {
     }
 
     fn parse_assignment(&mut self, lhs_ty: i64) -> Result<(), C5Error> {
+        let lhs_fn = self.ast_acc.and_then(|id| self.expr_fn(id));
         self.next()?;
         // A parenthesized bitfield lvalue (`(s.f) = v`, C99 6.5.1p5) arrives
         // as the read node the member parser built, since the parentheses
@@ -3366,12 +3708,21 @@ impl Compiler {
             let line = self.lex.line;
             let assigned_local = self.take_last_loaded_local();
             if let Some(idx) = assigned_local {
-                self.symbols[idx].was_written = true;
+                self.symbols[idx].binding.was_written = true;
             }
             self.expr(Token::Assign as i64)?;
             let rhs_is_zero = self.last_emit_is_zero();
             let rhs_is_untyped = self.last_emit_was_indirect_call();
-            if let Some(m) = Self::type_warning_with_flags(
+            let rhs_fn = self.value_fn_type(self.ast_acc);
+            if lhs_fn.is_some() && rhs_fn.is_some() {
+                let what = ("assignment", "lhs", "rhs");
+                self.check_fn_pointer_conversion(
+                    (lhs_ty, &lhs_fn),
+                    (self.ty, &rhs_fn),
+                    line,
+                    what,
+                )?;
+            } else if let Some(m) = Self::type_warning_with_flags(
                 &self.structs,
                 lhs_ty,
                 self.ty,
@@ -3568,6 +3919,7 @@ impl Compiler {
                 lhs: lhs_node,
                 rhs: rhs_node,
                 ty: lhs_ty,
+                nsw: false,
             },
             pos,
         );
@@ -3624,8 +3976,8 @@ impl Compiler {
         let line = self.lex.line;
         let assigned_local = self.take_last_loaded_local();
         if let Some(idx) = assigned_local {
-            self.symbols[idx].was_read = true;
-            self.symbols[idx].was_written = true;
+            self.symbols[idx].binding.was_read = true;
+            self.symbols[idx].binding.was_written = true;
             self.record_local_read(idx);
         }
         self.mark_emit_other();
@@ -3642,9 +3994,17 @@ impl Compiler {
             && is_pointer_ty(lhs_ty)
             && !is_floating_scalar(lhs_ty)
         {
+            let op = if binop == Token::AddOp as i64 {
+                "+="
+            } else {
+                "-="
+            };
+            self.require_complete_pointee(lhs_ty, op)?;
             let elem_ty = pointee_ty(lhs_ty);
             let elem_size = self.size_of_type(elem_ty) as i64;
-            if !lhs_fn_ptr && elem_size > 1 {
+            if let Some(slot) = self.vla_pointee_slot(lhs_ty) {
+                self.emit_binop_with_vla_size(crate::c5::ir::BinOp::Mul, slot);
+            } else if !lhs_fn_ptr && elem_size > 1 {
                 self.emit_binop_with_imm(crate::c5::ir::BinOp::Mul, elem_size);
             }
         }
@@ -3670,7 +4030,16 @@ impl Compiler {
         }
         if let (Some(lhs), Some(rhs)) = (compound_lhs_ast, compound_rhs_ast) {
             let ca_ty = self.ty;
-            self.ast_emit_compound_assign(bop, lhs, rhs, ca_ty);
+            // The operation is performed in the lvalue's own type, or the
+            // store back is a conversion rather than an overflow.
+            let common =
+                (!op_is_fp && !is_pointer_ty(lhs_ty)).then(|| self.arith_common_ty(lhs_ty, rhs_ty));
+            let nsw = common.is_some_and(|c| {
+                self.overflow_undefined(bop, c)
+                    && self.overflow_undefined(bop, lhs_ty)
+                    && self.size_of_type(c) == self.size_of_type(lhs_ty)
+            });
+            self.ast_emit_compound_assign(bop, lhs, rhs, ca_ty, nsw);
         }
         Ok(())
     }
@@ -3691,26 +4060,10 @@ impl Compiler {
         let mut then_ast = cond_ast;
         if !elvis {
             self.expr_or_void(Token::Assign as i64)?;
+            // C99 6.5.15: the middle operand is an expression, so a comma
+            // chain is legal there; `expr(Assign)` stops at `,`.
+            self.parse_comma_operators()?;
             then_ast = self.ast_acc;
-        }
-        // C99 6.5.15: the middle operand is an expression, so a comma chain
-        // is legal there; `expr(Assign)` stops at `,`.
-        while self.lex.tk == ',' {
-            self.next()?;
-            let lhs_ast = then_ast;
-            self.expr_or_void(Token::Assign as i64)?;
-            let rhs_ast = self.ast_acc;
-            if let (Some(lhs), Some(rhs)) = (lhs_ast, rhs_ast) {
-                let pos = self.ast_src_pos();
-                let ty = self.ty;
-                let id = self
-                    .ast
-                    .push_expr(super::super::ast::Expr::Comma { lhs, rhs, ty }, pos);
-                self.ast_acc = Some(id);
-                then_ast = Some(id);
-            } else {
-                then_ast = self.ast_acc;
-            }
         }
         let then_ty = self.ty;
         if self.lex.tk == ':' {
@@ -3723,6 +4076,15 @@ impl Compiler {
         let mut else_ast = self.ast_acc;
         let else_ty = self.ty;
         let result_ty = self.conditional_result_ty(then_ty, else_ty, then_ast, else_ast);
+        // C99 6.5.15p6: pointers to compatible function types compose; a
+        // prototype, where either arm has one, is the result's (6.2.7p3).
+        let arm_fns = [then_ast, else_ast].map(|a| a.and_then(|a| self.expr_fn(a)));
+        let [then_fn, else_fn] = arm_fns;
+        let result_fn = match (then_fn, else_fn) {
+            (Some(t), Some(e)) if !t.0.params.prototyped => Some(e),
+            (Some(t), _) => Some(t),
+            (None, e) => e,
+        };
         // Both arms convert to the result type, so the join stores one
         // width and signedness.
         if then_ty != result_ty && then_ast.is_some() {
@@ -3758,6 +4120,10 @@ impl Compiler {
                 pos,
             );
             self.ast_acc = Some(id);
+            // A designator arm decays (C99 6.3.2.1p4).
+            if let Some((f, depth)) = result_fn {
+                self.set_expr_fn(id, f, depth.max(1));
+            }
         }
         self.drop_operand_array_decay();
         self.ty = result_ty;
@@ -3889,13 +4255,42 @@ impl Compiler {
         self.next()?;
         self.ast_psh();
         self.expr(op.rhs_lev as i64)?;
-        self.check_binary_operands(lhs_ty, self.ty, op.name)?;
-        self.ty = match self.vector_binop_ty(lhs_ty, self.ty, op.name) {
-            Some(vty) => vty,
-            None => self.arith_common_ty(lhs_ty, self.ty),
-        };
+        let rhs_ty = self.ty;
+        self.check_binary_operands(lhs_ty, rhs_ty, op.name)?;
+        if let Some(vty) = self.vector_binop_ty(lhs_ty, rhs_ty, op.name) {
+            self.ty = vty;
+            self.ast_binop(bop);
+            return Ok(());
+        }
+        let common = self.arith_common_ty(lhs_ty, rhs_ty);
+        // An operand converted to an unsigned common type (C99 6.3.1.8)
+        // still sits sign-extended in the accumulator, and `|` and `^`
+        // carry its high bits into the result where `&` clears them. A
+        // non-negative literal has none to carry.
+        let lhs_carries = !is_unsigned_ty(lhs_ty)
+            && !self
+                .ast_vstack
+                .last()
+                .copied()
+                .flatten()
+                .is_some_and(|id| self.is_nonnegative_literal(id));
+        let rhs_carries = !is_unsigned_ty(rhs_ty)
+            && !self
+                .ast_acc
+                .is_some_and(|id| self.is_nonnegative_literal(id));
+        self.ty = common;
         self.ast_binop(bop);
+        if !matches!(bop, super::super::ir::BinOp::And)
+            && is_unsigned_ty(common)
+            && (lhs_carries || rhs_carries)
+        {
+            self.maybe_mask_to_unsigned_width(lhs_ty, rhs_ty);
+        }
         Ok(())
+    }
+
+    fn is_nonnegative_literal(&self, id: super::super::ast::ExprId) -> bool {
+        matches!(self.ast.expr(id), super::super::ast::Expr::IntLit { val, .. } if *val >= 0)
     }
 
     /// C99 6.5.9: `==` and `!=`.
@@ -4023,6 +4418,8 @@ impl Compiler {
         let displaced = self.additive_object_ref(lhs_ty, lhs_stride, op.tok, object_ref);
         let fn_ptr_arith = lhs_fn_ptr || self.value_is_function_pointer();
         self.check_binary_operands(lhs_ty, self.ty, op.name)?;
+        self.require_complete_pointee(lhs_ty, op.name)?;
+        self.require_complete_pointee(self.ty, op.name)?;
         if let Some(vty) = self.vector_binop_ty(lhs_ty, self.ty, op.name) {
             self.ty = vty;
             self.ast_binop(int);
@@ -4091,7 +4488,37 @@ impl Compiler {
             // scales the integer, which sits on the c5 stack: the pointer is
             // spilled, the integer scaled and pushed, and the pointer reloaded.
             let rhs_ty = self.ty;
-            if !fn_ptr_arith && self.is_ptr_scaling_nontrivial(rhs_ty) {
+            if let Some(slot) = self.vla_pointee_slot(rhs_ty) {
+                // The pointee is a variable-length array: `k * size + p`.
+                self.mark_emit_other();
+                let lhs_ast = self.ast_vstack.pop().flatten();
+                let rhs_ast = self.ast_acc.take();
+                self.ty = strip_object_const(rhs_ty);
+                self.ast_acc = None;
+                if let (Some(lhs), Some(rhs)) = (lhs_ast, rhs_ast) {
+                    let pos = self.ast_src_pos();
+                    let size = self.ast_emit_vla_sizeof(slot);
+                    let scaled = self.ast.push_expr(
+                        super::super::ast::Expr::Binary {
+                            op: super::super::ir::BinOp::Mul,
+                            lhs,
+                            rhs: size,
+                            ty: lhs_ty,
+                        },
+                        pos,
+                    );
+                    let added = self.ast.push_expr(
+                        super::super::ast::Expr::Binary {
+                            op: super::super::ir::BinOp::Add,
+                            lhs: scaled,
+                            rhs,
+                            ty: rhs_ty,
+                        },
+                        pos,
+                    );
+                    self.ast_acc = Some(added);
+                }
+            } else if !fn_ptr_arith && self.is_ptr_scaling_nontrivial(rhs_ty) {
                 // The scaling sequence's intermediate stores consume AST vstack
                 // slots: the operands are taken off first, the sequence runs against
                 // a sentinel, and the node is rebuilt.
@@ -4159,7 +4586,9 @@ impl Compiler {
             }
         } else {
             let rhs_ty = self.ty;
-            if !fn_ptr_arith && self.is_ptr_scaling_nontrivial(lhs_ty) {
+            if let Some(slot) = self.vla_pointee_slot(lhs_ty) {
+                self.emit_binop_with_vla_size(crate::c5::ir::BinOp::Mul, slot);
+            } else if !fn_ptr_arith && self.is_ptr_scaling_nontrivial(lhs_ty) {
                 let scale = self.pointer_to_array_arith_stride(
                     lhs_stride,
                     lhs_ty,
@@ -4195,7 +4624,9 @@ impl Compiler {
             // type `ptrdiff_t`. The type is set before the node is built.
             self.ty = self.ptrdiff_t_ty();
             self.ast_binop(crate::c5::ir::BinOp::Sub);
-            if !fn_ptr_arith && self.is_ptr_scaling_nontrivial(lhs_ty) {
+            if let Some(slot) = self.vla_pointee_slot(lhs_ty) {
+                self.emit_binop_with_vla_size(crate::c5::ir::BinOp::Div, slot);
+            } else if !fn_ptr_arith && self.is_ptr_scaling_nontrivial(lhs_ty) {
                 let scale = self.pointer_to_array_arith_stride(
                     lhs_stride,
                     lhs_ty,
@@ -4203,6 +4634,10 @@ impl Compiler {
                 );
                 self.emit_binop_with_imm(crate::c5::ir::BinOp::Div, scale);
             }
+        } else if let Some(slot) = self.vla_pointee_slot(lhs_ty) {
+            self.emit_binop_with_vla_size(crate::c5::ir::BinOp::Mul, slot);
+            self.ty = strip_object_const(lhs_ty);
+            self.ast_binop(crate::c5::ir::BinOp::Sub);
         } else if !fn_ptr_arith && self.is_ptr_scaling_nontrivial(lhs_ty) {
             let scale =
                 self.pointer_to_array_arith_stride(lhs_stride, lhs_ty, self.pointee_size(lhs_ty));
@@ -4330,6 +4765,7 @@ impl Compiler {
         if let Some((lvalue, ty)) = self.direct_inc_lvalue() {
             return self.emit_direct_inc_dec(lvalue, ty, is_inc, true);
         }
+        self.require_complete_pointee(self.ty, if is_inc { "++" } else { "--" })?;
         let (lvalue, fn_ptr_step) = self.inc_dec_lvalue("post-increment")?;
         self.emit_imm(if fn_ptr_step {
             1
@@ -4359,7 +4795,26 @@ impl Compiler {
             super::super::ir::BinOp::Add
         });
         let ty = self.ty;
-        if let Some(lvalue) = lvalue {
+        if let (Some(lvalue), Some(slot)) = (lvalue, self.vla_pointee_slot(ty)) {
+            let stored = self.vla_step_assign(lvalue, slot, is_inc, ty);
+            let pos = self.ast_src_pos();
+            let size = self.ast_emit_vla_sizeof(slot);
+            let op = if is_inc {
+                super::super::ir::BinOp::Sub
+            } else {
+                super::super::ir::BinOp::Add
+            };
+            let id = self.ast.push_expr(
+                super::super::ast::Expr::Binary {
+                    op,
+                    lhs: stored,
+                    rhs: size,
+                    ty,
+                },
+                pos,
+            );
+            self.ast_acc = Some(id);
+        } else if let Some(lvalue) = lvalue {
             self.ast_emit_post_inc(lvalue, if is_inc { step } else { -step }, ty);
         }
         self.next()
@@ -4373,6 +4828,7 @@ impl Compiler {
         let mut lhs_ty = lhs_ty;
         self.next()?;
         self.pending.last_array_decay_dims.clear();
+        self.pending.last_array_decay_vla = None;
         let index = self.peek_constant_index();
         // GCC vector extension: `v[i]` is lane `i`, an element-typed
         // lvalue; the vector's address is its value, as for an array.
@@ -4396,8 +4852,22 @@ impl Compiler {
         } else {
             return Err(self.compile_err(Code::SYNTAX, "close bracket expected"));
         }
+        // C99 6.5.2.1p1: one operand is a pointer to an object type. A
+        // function designator decays to a pointer to a function.
         if !is_pointer_ty(lhs_ty) {
-            return Err(self.compile_err(Code::INVALID_OPERANDS, "pointer type expected"));
+            let ty = format_type(lhs_ty, &self.structs);
+            return Err(self.subscripted_value_err(ty, "not a pointer or an array"));
+        }
+        if let Some((f, _)) = array_ast
+            .and_then(|a| self.expr_fn(a))
+            .filter(|&(_, d)| d <= 1)
+        {
+            let ty = self.fn_type_text(lhs_ty, &f, 1);
+            return Err(self.subscripted_value_err(ty, "a pointer to a function"));
+        }
+        if self.points_to_incomplete(lhs_ty) {
+            let ty = format_type(lhs_ty, &self.structs);
+            return Err(self.subscripted_value_err(ty, "a pointer to an incomplete type"));
         }
         self.require_category(
             idx_ty,
@@ -4414,10 +4884,13 @@ impl Compiler {
             // decays to the element pointer with no load (C99 6.3.2.1p3).
             let row = self.structs[id].size as i64;
             stride = row;
-            if row > 1 {
+            if let Some(slot) = self.structs[id].vla_size_slot {
+                self.emit_binop_with_vla_size(crate::c5::ir::BinOp::Mul, slot);
+            } else if row > 1 {
                 self.emit_binop_with_imm(crate::c5::ir::BinOp::Mul, row);
             }
             self.ast_binop(crate::c5::ir::BinOp::Add);
+            self.record_row_fn(array_ast);
             self.decay_ptr_array_value(id);
             // The row's address is the value: no indirection level is
             // consumed, so the operand's decay depth stands.
@@ -4426,6 +4899,7 @@ impl Compiler {
         } else if multi_dim_stride > 0 {
             self.emit_binop_with_imm(crate::c5::ir::BinOp::Mul, multi_dim_stride);
             self.ast_binop(crate::c5::ir::BinOp::Add);
+            self.record_row_fn(array_ast);
             // A row of a multi-dimensional array keeps the pointer level; the
             // innermost subscript decays to the element.
             self.ty = lhs_ty;
@@ -4483,6 +4957,13 @@ impl Compiler {
         Ok(())
     }
 
+    fn subscripted_value_err(&self, ty: alloc::string::String, what: &str) -> C5Error {
+        self.compile_err(
+            Code::INVALID_OPERANDS,
+            format!("subscripted value has type `{ty}`, {what}"),
+        )
+    }
+
     fn parse_subscript_index(&mut self, lhs_ty: i64) -> Result<SubscriptIndex, C5Error> {
         // The stride queue the operand seeded is parked across the index
         // parse, which clears the pending state at its exit, and shifted
@@ -4490,13 +4971,9 @@ impl Compiler {
         let multi_dim_stride = self.pending.index_stride;
         let saved_tail = core::mem::take(&mut self.pending.index_strides_tail);
         self.pending.index_stride = 0;
-        // The element keeps the callee prototype and decay depth the array
+        // The element keeps the return lineage and decay depth the array
         // decay left; the index expression must neither consume nor clear
         // them.
-        let saved_callee_params = self.pending.indirect_callee_params.take();
-        let saved_callee_variadic = core::mem::take(&mut self.pending.indirect_callee_is_variadic);
-        let saved_callee_conv = core::mem::take(&mut self.pending.indirect_callee_conv);
-        let saved_callee_depth = core::mem::take(&mut self.pending.indirect_callee_fn_ptr_depth);
         let saved_callee_ret = core::mem::take(&mut self.pending.indirect_callee_ret_fn_ptr);
         let saved_fn_ptr_chain = self.pending.fn_ptr_chain_depth;
         let saved_fn_ptr_elem = self.pending.fn_ptr_depth_is_array_elem;
@@ -4524,10 +5001,6 @@ impl Compiler {
                 fn_ptr_depth_is_array_elem: self.pending.fn_ptr_depth_is_array_elem,
             });
         }
-        self.pending.indirect_callee_params = saved_callee_params;
-        self.pending.indirect_callee_is_variadic = saved_callee_variadic;
-        self.pending.indirect_callee_conv = saved_callee_conv;
-        self.pending.indirect_callee_fn_ptr_depth = saved_callee_depth;
         self.pending.indirect_callee_ret_fn_ptr = saved_callee_ret;
         self.pending.fn_ptr_chain_depth = saved_fn_ptr_chain;
         self.pending.fn_ptr_depth_is_array_elem = saved_fn_ptr_elem;
@@ -4606,25 +5079,9 @@ impl Compiler {
         };
         let step = base.map(|b| self.object_ref_member(b, sid, field_idx));
 
-        // A function-pointer member carries its prototype for a following
-        // call (C99 6.5.2.2p7); any other member clears the channel.
+        // A function-pointer member's return lineage reaches a following
+        // call; any other member clears it.
         let field_is_fn_ptr = field.fn_ptr_indirection > 0 || !field.params.is_empty();
-        self.pending.indirect_callee_params = if field_is_fn_ptr {
-            Some(field.params.clone())
-        } else {
-            None
-        };
-        self.pending.indirect_callee_is_variadic = field_is_fn_ptr && field.is_variadic;
-        self.pending.indirect_callee_conv = if field_is_fn_ptr {
-            field.conv
-        } else {
-            crate::c5::codegen::CallConv::Target
-        };
-        self.pending.indirect_callee_fn_ptr_depth = if field_is_fn_ptr {
-            field.fn_ptr_indirection
-        } else {
-            0
-        };
         self.pending.indirect_callee_ret_fn_ptr = if field_is_fn_ptr {
             field.fn_ptr_ret_indirection
         } else {
@@ -4665,6 +5122,27 @@ impl Compiler {
         {
             let mty = self.ty;
             self.ast_emit_member(obj, field.offset as i64, None, mty, field.array_size);
+            if field_is_fn_ptr && let Some(id) = self.ast_acc {
+                let params = crate::c5::symbol::FnParams {
+                    types: field.params.clone(),
+                    variadic: field.is_variadic,
+                    prototyped: field.prototyped,
+                    enum_tags: field.param_enum_tags.clone(),
+                };
+                let f = FnType {
+                    params,
+                    conv: field.conv,
+                    ret: field.ret_fn.clone(),
+                };
+                let dims = if field.array_size == 0 {
+                    0
+                } else {
+                    field.array_dims.len().max(1) as i64
+                };
+                let levels = field.fn_ptr_indirection.max(1);
+                let arrays = self.pointee_array_levels(field.ty, levels);
+                self.set_expr_fn(id, f, levels + dims + arrays);
+            }
         }
         Ok(())
     }
@@ -4759,6 +5237,7 @@ impl Compiler {
                         lvalue,
                         by,
                         ty: bf_field_ty,
+                        nsw: false,
                     },
                     src,
                 );
@@ -4797,10 +5276,19 @@ impl Compiler {
                 // `-1` sentinel as for a zero-length array object.
                 self.pending.last_array_decay_size = -1;
                 // A multi-dimensional flexible member records a 0 placeholder for
-                // its outer dimension; the strides read only the inner ones.
+                // its outer dimension; the strides read only the inner ones. The
+                // dimension list spells that bound as unspecified, or as 0 for a
+                // member declared `[0]`, so `&s->fa` is `T (*)[]` or `T (*)[0]`.
                 let dims = field.array_dims.clone();
                 let elem_size = self.size_of_type(field.ty) as i64;
                 self.seed_multi_dim_strides(&dims, elem_size);
+                let mut shape = dims;
+                let outer = if field.zero_len { 0 } else { -1 };
+                match shape.first_mut() {
+                    Some(d) => *d = outer,
+                    None => shape.push(outer),
+                }
+                self.pending.last_array_decay_dims = shape;
             }
         } else if !field_is_struct_value {
             self.mark_emit_scalar_load();
@@ -4829,6 +5317,13 @@ impl Compiler {
     /// element pointer with no load; the remaining strides and the row
     /// size are left for the following subscripts and `sizeof`.
     fn decay_ptr_array_value(&mut self, id: usize) {
+        if self.structs[id].vla_size_slot.is_some() {
+            self.drop_operand_array_decay();
+            self.pending.last_array_decay_vla = Some(id);
+            self.ty = self.structs[id].fields[0].ty + Ty::Ptr as i64;
+            return;
+        }
+        self.pending.last_array_decay_vla = None;
         let f = &self.structs[id].fields[0];
         let elem_ty = f.ty;
         let dims: alloc::vec::Vec<i64> = if f.array_dims.len() >= 2 {
@@ -4848,6 +5343,41 @@ impl Compiler {
         // for `typeof` / `&` recovery of the undecayed array type.
         self.pending.last_array_decay_dims = dims;
         self.ty = elem_ty + Ty::Ptr as i64;
+    }
+
+    /// The dimensions, outermost first, of the array the value just parsed
+    /// decayed from (C99 6.3.2.1p3), or `None` when it did not decay from
+    /// one. A bound is -1 when unspecified and 0 for a zero-length array.
+    /// The decay recorded either the exact dimensions, the byte count of a
+    /// row over the strides it left unconsumed (`strides`, head first), or
+    /// the element count of a 1D array, with -1 for a count of zero.
+    pub(super) fn decayed_array_dims(
+        &self,
+        elem_ty: i64,
+        strides: &[i64],
+    ) -> Option<alloc::vec::Vec<i64>> {
+        let p = &self.pending;
+        if !p.last_array_decay_dims.is_empty() {
+            return Some(p.last_array_decay_dims.clone());
+        }
+        if p.last_array_decay_bytes > 0 {
+            let elem_size = self.size_of_type(elem_ty) as i64;
+            let mut dims = alloc::vec::Vec::with_capacity(strides.len() + 1);
+            let mut bytes = p.last_array_decay_bytes;
+            for &below in strides.iter().chain(core::iter::once(&elem_size)) {
+                if below <= 0 || bytes % below != 0 {
+                    return None;
+                }
+                dims.push(bytes / below);
+                bytes = below;
+            }
+            return Some(dims);
+        }
+        match p.last_array_decay_size {
+            n if n > 0 => Some(alloc::vec![n]),
+            n if n < 0 => Some(alloc::vec![0]),
+            _ => None,
+        }
     }
 
     /// The subscript strides of an N-dimensional array of `elem_size`
@@ -4933,6 +5463,11 @@ impl Compiler {
         let saved_vstack = self.ast_vstack.len();
         self.expr_or_void(Token::Assign as i64)?;
         let ctrl_ty = strip_object_const(self.ty);
+        // A function designator converts to a pointer to the function.
+        let ctrl_fn = self
+            .ast_acc
+            .and_then(|id| self.expr_fn(id))
+            .map(|(f, d)| (f, d.max(1)));
         self.next_ent_pc = saved_text_len;
         self.clear_recent_emits();
         self.code_reloc_sym_idx.truncate(saved_reloc);
@@ -4953,8 +5488,24 @@ impl Compiler {
                 }
                 self.consume(b':', "`:` expected after `default`")?;
             } else {
-                let assoc_ty = self.parse_type_name()?.ty;
-                let is_match = winner.is_none() && self.tags_compatible(ctrl_ty, assoc_ty);
+                // An array type never matches: the controlling expression's
+                // array decayed. A function type matches by C99 6.7.5.3p15.
+                let assoc = self.parse_type_name()?;
+                // C11 6.5.1.1p2: no variably modified association type.
+                if assoc.vla.is_some() {
+                    return Err(self.compile_err(
+                        Code::INVALID_DECLARATION,
+                        "a generic association type may not be variably modified",
+                    ));
+                }
+                let ctrl = ctrl_fn.as_ref().map(|(f, d)| (f, *d));
+                let is_match = winner.is_none()
+                    && assoc.dims.is_empty()
+                    && self.tags_compatible(ctrl_ty, assoc.ty)
+                    && self.value_fn_types_compatible(
+                        ctrl,
+                        assoc.fn_ty.as_ref().map(|f| f.at_depth()),
+                    );
                 if is_match {
                     winner = Some(self.lex.snapshot());
                 }
@@ -4979,8 +5530,7 @@ impl Compiler {
         // Drop the data the scan appended, then position at the selected
         // association's `:`; the following `next` re-lexes its first
         // token, appending any string data at `data_start`.
-        self.truncate_data(data_start);
-        self.restore_lex(chosen);
+        self.rewind_speculation(chosen, data_start);
         self.next()?; // the `:` -> the expression's first token
         Ok(after)
     }
@@ -5005,8 +5555,7 @@ impl Compiler {
         self.code_reloc_sym_idx.truncate(saved_reloc);
         self.ast_acc = saved_ast_acc;
         self.ast_vstack.truncate(saved_vstack);
-        self.truncate_data(data_start);
-        self.restore_lex(snap);
+        self.rewind_speculation(snap, data_start);
         result.map(|_| ty)
     }
 
@@ -5027,10 +5576,13 @@ impl Compiler {
         // dimensions carry the array-vs-pointer distinction a compile-time
         // element-count macro depends on. The flat tag likewise holds only
         // a function type's return type, so the signature settles the rest.
+        let (fa, fb) = (a.fn_ty.as_ref(), b.fn_ty.as_ref());
         Ok(
             (self.tags_compatible(strip_object_const(a.ty), strip_object_const(b.ty))
                 && array_dims_match(&a.dims, &b.dims)
-                && fn_type_match(&a.fn_ty, &b.fn_ty)) as i64,
+                && self
+                    .value_fn_types_compatible(fa.map(|f| f.at_depth()), fb.map(|f| f.at_depth())))
+                as i64,
         )
     }
 
@@ -5207,22 +5759,16 @@ impl Compiler {
         self.pending.typedef_base_array_dims.clear();
         self.pending.typedef_base_zero_len = false;
         let base = self.parse_decl_base_type()?;
-        let mut ty = base;
-        let base_is_fn = core::mem::take(&mut self.pending.base_is_function_type);
-        let base_variadic = matches!(self.pending.typedef_fn_proto.take(), Some((_, true)));
-        let base_params = self.pending.fn_ptr_param_types.take();
+        let is_function = core::mem::take(&mut self.pending.base_is_function_type);
+        let base_params = self.pending.fn_ptr_params.take();
         self.pending.fn_ptr_ret_indirection = 0;
-        let mut fn_ptr_indirection = self.pending.fn_ptr_indirection.take();
-        let mut fn_ty = fn_ptr_indirection.map(|depth| FnTypeName {
-            ptr_depth: if base_is_fn { 0 } else { depth.max(0) as usize },
-            params: Some(base_params.unwrap_or_default()),
-            variadic: base_variadic,
-        });
+        let base_ret = self.pending.fn_ptr_ret_fn.take();
+        let fn_ptr_indirection = self.pending.fn_ptr_indirection.take();
         let type_align = core::mem::take(&mut self.pending.type_align);
         let base_extent = core::mem::take(&mut self.pending.typedef_base_array_size);
         let base_dims = core::mem::take(&mut self.pending.typedef_base_array_dims);
         let base_zero_len = core::mem::take(&mut self.pending.typedef_base_zero_len);
-        let mut dims = if base_extent == 0 && !base_zero_len {
+        let dims = if base_extent == 0 && !base_zero_len {
             alloc::vec::Vec::new()
         } else if !base_dims.is_empty() {
             base_dims
@@ -5231,104 +5777,70 @@ impl Compiler {
         } else {
             alloc::vec![if base_extent > 0 { base_extent } else { -1 }]
         };
-        // A function-type typedef already encodes one pointer level, so
-        // the first `*` forms the pointer to function rather than adding
-        // a level to the tag, as the declarator path reads it; the named
-        // function type is then one indirection down.
-        let mut absorb_fn_type_ptr = base_is_fn;
-        let mut ptr_levels: i64 = 0;
+        // An array typedef's bounds are levels above its element's function
+        // type, as a declared bound is.
+        let fn_ty = fn_ptr_indirection.map(|depth| FnTypeName {
+            ptr_depth: if is_function {
+                0
+            } else {
+                depth.max(0) as usize
+            } + dims.len(),
+            f: FnType {
+                params: base_params.unwrap_or_default(),
+                ret: base_ret,
+                ..FnType::default()
+            },
+        });
+        let mut t = DerivedType {
+            ty: base,
+            own_bounds: dims.len(),
+            dims,
+            fn_ty,
+            is_function,
+            fn_ptr_indirection,
+            ptr_levels: 0,
+            vla: None,
+            vla_value: false,
+        };
+        // The leading pointers are the declarator's last derivations, so
+        // they apply to the base type first (C99 6.7.5.1).
         while self.lex.tk == Token::MulOp {
             self.next()?;
-            if absorb_fn_type_ptr {
-                absorb_fn_type_ptr = false;
-                if let Some(f) = fn_ty.as_mut() {
-                    f.ptr_depth += 1;
-                }
-            } else {
-                // `A *` over an array base names a pointer to the array
-                // (C99 6.7.7p3): the extent folds into the pointee.
-                if !dims.is_empty() {
-                    ty = self.array_agg_type(ty, &dims);
-                    dims.clear();
-                }
-                ty = add_ptr_level(ty);
-                ptr_levels += 1;
-                if let Some(f) = fn_ty.as_mut() {
-                    f.ptr_depth += 1;
-                }
-                if let Some(fpi) = fn_ptr_indirection.as_mut() {
-                    *fpi += 1;
-                }
-            }
+            self.derive_pointer(&mut t);
             while self.lex.tk == Token::TypeQual {
-                ty = apply_qual_bits(ty, self.lex_qualifier_bits());
+                t.ty = apply_qual_bits(t.ty, self.lex_qualifier_bits());
                 self.next()?;
             }
         }
-        // Abstract function declarator (C99 6.7.6): `T (*)(params)` names
-        // a pointer to function, `T (params)` the function type itself,
-        // spelled as the return type at one pointer level; `T (*)[N]` a
-        // pointer to an array, whose pointee keeps its dimensions.
-        let mut proto = None;
+        // `T (*)(params)` names a pointer to function, `T (params)` the
+        // function type itself, `T (*)[N]` a pointer to an array and
+        // `T (*[N])(params)` an array of pointers to functions (C99 6.7.6).
         if self.lex.tk == '(' {
-            let (levels, pp, ptr_dims) = if self.lex.peek_after_whitespace(b'*') {
+            let abs = if self.lex.peek_after_whitespace(b'*') {
                 self.parse_abstract_ptr_declarator(true)?
-            } else if fn_ty.is_none() {
+            } else if t.fn_ty.is_none() {
                 self.next()?;
-                (
-                    0,
-                    Some(self.parse_type_name_params()?),
-                    alloc::vec::Vec::new(),
-                )
+                let pp = self.parse_type_name_params()?;
+                let derivations = alloc::vec![Derivation::Function(Some(pp))];
+                super::declarator::AbstractDecl { derivations }
             } else {
-                (0, None, alloc::vec::Vec::new())
+                super::declarator::AbstractDecl::default()
             };
-            if let Some(pp) = pp {
-                ty += levels.max(1) * Ty::Ptr as i64;
-                dims.clear();
-                fn_ty = Some(FnTypeName {
-                    ptr_depth: levels as usize,
-                    params: (pp.form != super::function::ParamForm::Empty)
-                        .then(|| pp.types.clone()),
-                    variadic: pp.is_variadic,
-                });
-                proto = Some(pp);
-            } else if !ptr_dims.is_empty() && levels > 0 {
-                let mut pointee = ptr_dims;
-                pointee.append(&mut dims);
-                ty = self.array_agg_type(ty, &pointee) + levels * Ty::Ptr as i64;
-            } else {
-                ty += levels * Ty::Ptr as i64;
+            for step in abs.derivations.into_iter().rev() {
+                match step {
+                    Derivation::Pointer => self.derive_pointer(&mut t),
+                    Derivation::Array(n) => self.derive_array(&mut t, n)?,
+                    Derivation::RuntimeArray(dim) => self.derive_runtime_array(&mut t, dim)?,
+                    Derivation::Function(pp) => self.derive_function(&mut t, pp)?,
+                }
             }
-            if levels > 0 {
-                fn_ptr_indirection = Some(levels);
-            }
-            ptr_levels += levels;
         }
-        // Abstract array declarator `T []` / `T [N]`. Only the outermost
-        // bound may be omitted (C99 6.7.5.2p1: the element type shall be
-        // complete); an array typedef base supplies the inner bounds.
+        // Abstract array declarator `T []` / `T [N]`, outermost bound first;
+        // an array typedef base supplies the inner bounds.
         let mut outer = alloc::vec::Vec::new();
         while self.lex.tk == Token::Brak {
             self.next()?;
-            let n = if self.lex.tk == ']' {
-                if !outer.is_empty() {
-                    return Err(self.compile_err(
-                        Code::INVALID_DECLARATION,
-                        "array type has an incomplete inner dimension",
-                    ));
-                }
-                -1
-            } else {
-                let n = self.with_const_object_fold_masked(|c| c.parse_constant_int())?;
-                if n < 0 {
-                    return Err(self.compile_err(
-                        Code::INVALID_DECLARATION,
-                        "array dimension in a type name must not be negative",
-                    ));
-                }
-                n
-            };
+            let n = self.parse_type_name_bound()?;
             if self.lex.tk != ']' {
                 return Err(
                     self.compile_err(Code::SYNTAX, "close bracket expected in an array type name")
@@ -5337,20 +5849,208 @@ impl Compiler {
             self.next()?;
             outer.push(n);
         }
-        if !outer.is_empty() {
-            outer.append(&mut dims);
-            dims = outer;
+        for n in outer.into_iter().rev() {
+            match n {
+                TypeNameBound::Fixed(n) => self.derive_array(&mut t, n)?,
+                TypeNameBound::Runtime(dim) => self.derive_runtime_array(&mut t, dim)?,
+            }
+        }
+        if let Some(f) = t.fn_ty.as_mut() {
+            f.ptr_depth -= t.own_bounds;
         }
         Ok(TypeName {
             base,
-            ty,
-            dims,
-            ptr_levels,
-            fn_ty,
-            proto,
-            fn_ptr_indirection,
+            ty: t.ty,
+            dims: t.dims,
+            ptr_levels: t.ptr_levels,
+            fn_ty: t.fn_ty,
+            fn_ptr_indirection: t.fn_ptr_indirection,
             type_align,
+            vla: t.vla,
+            is_vla: t.vla_value,
         })
+    }
+
+    /// The bound of an array type name at the cursor, `]` not consumed: a
+    /// constant, `-1` when omitted, or the expression of a variable-length
+    /// array's bound, which C99 6.7.5.2p2 admits only at block scope.
+    pub(super) fn parse_type_name_bound(&mut self) -> Result<TypeNameBound, C5Error> {
+        if self.lex.tk == ']' {
+            return Ok(TypeNameBound::Fixed(-1));
+        }
+        if let Some(n) = self.with_const_object_fold_masked(|c| c.try_parse_constant_dim())? {
+            if n < 0 {
+                return Err(self.compile_err(
+                    Code::INVALID_DECLARATION,
+                    "array dimension in a type name must not be negative",
+                ));
+            }
+            return Ok(TypeNameBound::Fixed(n));
+        }
+        if !self.in_function_body() {
+            return Err(self.compile_err(
+                Code::INVALID_DECLARATION,
+                "a variably modified type is only allowed at block scope",
+            ));
+        }
+        let saved_ty = self.ty;
+        self.expr(Token::Assign as i64)?;
+        self.ty = saved_ty;
+        match self.ast_acc.take() {
+            Some(dim) => Ok(TypeNameBound::Runtime(dim)),
+            None => Err(self.compile_err(Code::SYNTAX, "array bound expected in a type name")),
+        }
+    }
+
+    /// A pointer to the type `t` holds. The first one above a function type
+    /// is the level its pre-decayed tag already has; one above an array
+    /// folds the bounds into the aggregate-backed pointee (C99 6.7.7p3).
+    fn derive_pointer(&mut self, t: &mut DerivedType) {
+        t.vla_value = false;
+        if t.is_function {
+            t.is_function = false;
+        } else {
+            if !t.dims.is_empty() {
+                t.ty = self.array_agg_type(t.ty, &t.dims);
+                t.dims.clear();
+                t.own_bounds = 0;
+            }
+            t.ty = add_ptr_level(t.ty);
+            if let Some(fpi) = t.fn_ptr_indirection.as_mut() {
+                *fpi += 1;
+            }
+        }
+        if let Some(f) = t.fn_ty.as_mut() {
+            f.ptr_depth += 1;
+        }
+        t.ptr_levels += 1;
+    }
+
+    /// An array of `n` of the type `t` holds; only its outermost bound may
+    /// be unspecified (C99 6.7.5.2p1), and its element is no function.
+    fn derive_array(&mut self, t: &mut DerivedType, n: i64) -> Result<(), C5Error> {
+        if t.is_function {
+            return Err(self.compile_err(Code::INVALID_DECLARATION, "array of functions"));
+        }
+        if t.vla_value {
+            return Err(self.compile_err(
+                Code::UNSUPPORTED,
+                "a non-constant inner array dimension is not supported",
+            ));
+        }
+        if t.dims.first().is_some_and(|&d| d < 0) {
+            return Err(self.compile_err(
+                Code::INVALID_DECLARATION,
+                "array type has an incomplete inner dimension",
+            ));
+        }
+        t.dims.insert(0, n);
+        t.own_bounds += 1;
+        if let Some(f) = t.fn_ty.as_mut() {
+            f.ptr_depth += 1;
+        }
+        Ok(())
+    }
+
+    /// A variable-length array of the type `t` holds, `dim` elements long
+    /// (C99 6.7.5.2p4): its size is stored in a frame slot when the type
+    /// name is evaluated, and the constant inner bounds fold into the
+    /// element. Only the outermost bound may be variable.
+    fn derive_runtime_array(
+        &mut self,
+        t: &mut DerivedType,
+        dim: super::super::ast::ExprId,
+    ) -> Result<(), C5Error> {
+        if t.is_function {
+            return Err(self.compile_err(Code::INVALID_DECLARATION, "array of functions"));
+        }
+        if t.vla_value || t.dims.first().is_some_and(|&d| d < 0) {
+            return Err(self.compile_err(
+                Code::UNSUPPORTED,
+                "a non-constant inner array dimension is not supported",
+            ));
+        }
+        let elem = if t.dims.is_empty() {
+            t.ty
+        } else {
+            self.array_agg_type(t.ty, &t.dims)
+        };
+        let elem_size = self.size_of_type(elem) as i64;
+        let slot = self.reserve_slots(1);
+        let size_t = self.size_t_ty();
+        let pos = self.ast_src_pos();
+        use super::super::ast::Expr;
+        let count = self.ast.push_expr(
+            Expr::Cast {
+                child: dim,
+                to_ty: size_t,
+            },
+            pos,
+        );
+        let scale = self.ast.push_expr(
+            Expr::IntLit {
+                val: elem_size,
+                ty: size_t,
+            },
+            pos,
+        );
+        let size = self.ast.push_expr(
+            Expr::Binary {
+                op: crate::c5::ir::BinOp::Mul,
+                lhs: count,
+                rhs: scale,
+                ty: size_t,
+            },
+            pos,
+        );
+        let store = self.ast.push_expr(
+            Expr::CompoundLiteral {
+                slot_off: slot,
+                ty: size_t,
+                array_size: 0,
+                init: super::super::ast::LocalInit::Scalar(size),
+            },
+            pos,
+        );
+        t.ty = self.vla_array_type(elem, slot);
+        t.dims.clear();
+        t.own_bounds = 0;
+        t.vla_value = true;
+        t.vla = Some(VmBound { slot, store });
+        if let Some(f) = t.fn_ty.as_mut() {
+            f.ptr_depth += 1;
+        }
+        Ok(())
+    }
+
+    /// A function returning the type `t` holds, which is spelled as that
+    /// type one pointer level up; the function type `t` leads to becomes
+    /// the returned pointer's (C99 6.7.5.3p1: no array or function result).
+    fn derive_function(
+        &mut self,
+        t: &mut DerivedType,
+        params: Option<super::function::ParsedParams>,
+    ) -> Result<(), C5Error> {
+        if t.is_function || !t.dims.is_empty() || t.vla_value {
+            return Err(self.compile_err(
+                Code::INVALID_DECLARATION,
+                "function returning an array or a function",
+            ));
+        }
+        let ret = t
+            .fn_ty
+            .take()
+            .map(|f| (alloc::boxed::Box::new(f.f), f.ptr_depth as i64));
+        let f = FnType {
+            params: params.map(|p| p.fn_params()).unwrap_or_default(),
+            ret,
+            ..FnType::default()
+        };
+        t.fn_ty = Some(FnTypeName { ptr_depth: 0, f });
+        t.ty += Ty::Ptr as i64;
+        t.is_function = true;
+        t.fn_ptr_indirection = Some(1);
+        Ok(())
     }
 
     /// The parameter list of an abstract function declarator, entered
@@ -5676,6 +6376,13 @@ struct DirectCallee {
     /// `ret_agg` instead and the emitter gathers the platform-ABI return
     /// registers into that object.
     returns_struct: bool,
+    /// The parameter count is part of the callee's type: a prototype, or an
+    /// old-style definition's identifier list (C99 6.9.1p7).
+    count_known: bool,
+    /// A count mismatch violates C99 6.5.2.2p2: the callee has a prototype
+    /// the unit declared. An old-style definition binds no constraint, and a
+    /// libc binding's prototype approximates the platform's; those warn.
+    count_is_constraint: bool,
 }
 
 /// What a subscript's index parse hands back: the index expression, the
@@ -5706,73 +6413,75 @@ pub(super) struct TypeName {
     pub ptr_levels: i64,
     /// The function type the name denotes or points to.
     pub fn_ty: Option<FnTypeName>,
-    /// The parameter list of a `(*)(params)` declarator, for a call
-    /// through a cast value.
-    pub proto: Option<super::function::ParsedParams>,
     /// Function-pointer lineage of the named type, as
-    /// `Symbol::fn_ptr_indirection` counts it.
+    /// `Symbol::fn_ptr_indirection` counts it; `None` without a function type.
     pub fn_ptr_indirection: Option<i64>,
     /// Explicit alignment a typedef base carries (GNU `aligned(N)`).
     pub type_align: i64,
+    /// The variable-length array the type is or is derived from.
+    pub vla: Option<VmBound>,
+    /// The type is that array itself, whose size is known only when the
+    /// type name is evaluated (C99 6.5.3.4p2).
+    pub is_vla: bool,
+}
+
+/// The bound of an array type name: a constant (`-1` when omitted) or the
+/// expression computing a variable-length array's.
+pub(super) enum TypeNameBound {
+    Fixed(i64),
+    Runtime(super::super::ast::ExprId),
+}
+
+/// A variably modified type's variable-length array (C99 6.7.5.2): the
+/// frame slot holding its byte count and the expression that stores the
+/// count there, which the type name's evaluation runs.
+#[derive(Clone, Copy)]
+pub(super) struct VmBound {
+    pub slot: i64,
+    pub store: super::super::ast::ExprId,
+}
+
+/// The type a type name derives, from its base type outward.
+struct DerivedType {
+    /// The tag; the element's when `dims` is not empty.
+    ty: i64,
+    /// Bounds of the array the type is, outermost first.
+    dims: alloc::vec::Vec<i64>,
+    /// Of `dims`, how many `fn_ty`'s depth counts.
+    own_bounds: usize,
+    fn_ty: Option<FnTypeName>,
+    /// The type is `fn_ty` itself, whose tag is pre-decayed.
+    is_function: bool,
+    fn_ptr_indirection: Option<i64>,
+    ptr_levels: i64,
+    /// The variable-length array the type is or is derived from.
+    vla: Option<VmBound>,
+    /// The type is that array itself, not derived from it.
+    vla_value: bool,
+}
+
+impl TypeName {
+    /// Whether the name denotes a function type, not a pointer to one.
+    pub(super) fn names_function(&self) -> bool {
+        self.dims.is_empty() && self.fn_ty.as_ref().is_some_and(|f| f.ptr_depth == 0)
+    }
 }
 
 /// A function type named by a type name. The flat type tag carries only
 /// the return type, so C99 6.7.5.3 compatibility needs the parameter list
 /// and the indirection above the function alongside it.
 pub(super) struct FnTypeName {
-    /// Pointer levels applied to the function type: 0 names a function
-    /// type, 1 a pointer to function.
+    /// Pointer and array levels applied to the function type: 0 names a
+    /// function type, 1 a pointer to function.
     ptr_depth: usize,
-    /// Parameter type tags, or `None` for a declarator with no prototype
-    /// (`T ()`). TODO: a typedef records only its parameter types, not
-    /// whether they came from a prototype, so a `T (*)()` alias reads as
-    /// an empty prototype here; the distinction survives only when the
-    /// declarator is spelled out.
-    params: Option<alloc::vec::Vec<i64>>,
-    variadic: bool,
+    f: FnType,
 }
 
-/// C99 6.7.5.3p15 function-type compatibility, given that the caller has
-/// already matched the return types through the flat tag. Two prototypes
-/// agree on arity, variadic-ness, and pairwise parameter types, each
-/// taken as its unqualified version. A
-/// declarator with no prototype agrees with a non-variadic prototype whose
-/// parameters are unchanged by the default argument promotions. A function
-/// type is never compatible with a non-function type, nor with a different
-/// depth of pointer to itself.
-fn fn_type_match(a: &Option<FnTypeName>, b: &Option<FnTypeName>) -> bool {
-    let (a, b) = match (a, b) {
-        (None, None) => return true,
-        (Some(a), Some(b)) => (a, b),
-        _ => return false,
-    };
-    if a.ptr_depth != b.ptr_depth {
-        return false;
+impl FnTypeName {
+    /// The function type and its depth, as an expression's is recorded.
+    pub(super) fn at_depth(&self) -> (&FnType, i64) {
+        (&self.f, self.ptr_depth as i64)
     }
-    match (&a.params, &b.params) {
-        (Some(pa), Some(pb)) => {
-            a.variadic == b.variadic
-                && pa.len() == pb.len()
-                && pa.iter().zip(pb).all(|(x, y)| {
-                    generic_type_match(strip_object_const(*x), strip_object_const(*y))
-                })
-        }
-        (Some(p), None) | (None, Some(p)) => {
-            !a.variadic && !b.variadic && p.iter().copied().all(promotes_unchanged)
-        }
-        (None, None) => true,
-    }
-}
-
-/// True when the default argument promotions (C99 6.5.2.2p6) leave `ty`
-/// unchanged: integer types of rank below `int` promote to `int` and
-/// `float` promotes to `double`, so only those four scalars are altered.
-/// A pointer to one of them sits at a different tag and is unaffected.
-fn promotes_unchanged(ty: i64) -> bool {
-    let ty = super::types::strip_unsigned(ty);
-    ![Ty::Char, Ty::Short, Ty::Bool, Ty::Float]
-        .iter()
-        .any(|&t| ty == t as i64)
 }
 
 /// C99 6.7.5.2p6 array compatibility: two array types are compatible when

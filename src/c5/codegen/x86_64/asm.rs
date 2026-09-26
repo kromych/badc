@@ -1145,6 +1145,15 @@ pub(crate) fn mnemonic_by_name(name: &str) -> Option<Mnemonic> {
         // x87 wait-for-pending-exceptions (WAIT/FWAIT) and clear-exceptions.
         "fwait" | "wait" => Mnemonic::Fixed(&[0x9B]),
         "fnclex" => Mnemonic::Fixed(&[0xDB, 0xE2]),
+        // x87 constant loads (D9 E8+i): 1, log2(10), log2(e), pi, log10(2),
+        // ln(2) and 0.
+        "fld1" => Mnemonic::Fixed(&[0xD9, 0xE8]),
+        "fldl2t" => Mnemonic::Fixed(&[0xD9, 0xE9]),
+        "fldl2e" => Mnemonic::Fixed(&[0xD9, 0xEA]),
+        "fldpi" => Mnemonic::Fixed(&[0xD9, 0xEB]),
+        "fldlg2" => Mnemonic::Fixed(&[0xD9, 0xEC]),
+        "fldln2" => Mnemonic::Fixed(&[0xD9, 0xED]),
+        "fldz" => Mnemonic::Fixed(&[0xD9, 0xEE]),
         // MMX state clear.
         "emms" => Mnemonic::Fixed(&[0x0F, 0x77]),
         // x87 subtract-and-pop register form; AT&T operand order (GNU as
@@ -1200,6 +1209,45 @@ pub(crate) fn mnemonic_by_name(name: &str) -> Option<Mnemonic> {
         "fstpl" => Mnemonic::MemExt {
             opcode: 0xDD,
             ext: 3,
+            osz: false,
+            rex_w: false,
+        },
+        // The same at the other widths the suffix names: a 32-bit float
+        // (`s`: D9 /0, /2, /3), the 64-bit store that keeps the value
+        // (DD /2) and the 80-bit extended value (`t`: DB /5, /7).
+        "flds" => Mnemonic::MemExt {
+            opcode: 0xD9,
+            ext: 0,
+            osz: false,
+            rex_w: false,
+        },
+        "fsts" => Mnemonic::MemExt {
+            opcode: 0xD9,
+            ext: 2,
+            osz: false,
+            rex_w: false,
+        },
+        "fstps" => Mnemonic::MemExt {
+            opcode: 0xD9,
+            ext: 3,
+            osz: false,
+            rex_w: false,
+        },
+        "fstl" => Mnemonic::MemExt {
+            opcode: 0xDD,
+            ext: 2,
+            osz: false,
+            rex_w: false,
+        },
+        "fldt" => Mnemonic::MemExt {
+            opcode: 0xDB,
+            ext: 5,
+            osz: false,
+            rex_w: false,
+        },
+        "fstpt" => Mnemonic::MemExt {
+            opcode: 0xDB,
+            ext: 7,
             osz: false,
             rex_w: false,
         },
@@ -1413,6 +1461,8 @@ fn sse_mov(name: &str) -> Option<Mnemonic> {
         row("movdqu",   0xF3, Some(0x6F), Some(0x7F), 1),
         row("movaps",   0x00, Some(0x28), Some(0x29), 1),
         row("movups",   0x00, Some(0x10), Some(0x11), 1),
+        row("movapd",   0x66, Some(0x28), Some(0x29), 1),
+        row("movupd",   0x66, Some(0x10), Some(0x11), 1),
         row("movsd",    0xF2, Some(0x10), Some(0x11), 1),
         row("movss",    0xF3, Some(0x10), Some(0x11), 1),
         row("movntdqa", 0x66, Some(0x2A), None,       2),
@@ -6944,6 +6994,8 @@ mod tests {
             seg: crate::c5::ir::AsmSeg::None,
             static_arg: false,
             value: false,
+            volatile_object: false,
+            early_clobber: false,
         };
         // `x` operands take xmm0, xmm1, ... from a file independent of the GPRs,
         // so a mixed GP + xmm operand list assigns each from its own pool.
@@ -6968,6 +7020,8 @@ mod tests {
             seg: crate::c5::ir::AsmSeg::None,
             static_arg: false,
             value: false,
+            volatile_object: false,
+            early_clobber: false,
         };
         // Pool order is rax(0) rbx(3) rcx(1) rdx(2) rsi(6) rdi(7) r8(8) r9(9)
         // r12(12) r13(13) r14(14) r15(15). With rax/rbx/rcx/rdx clobbered,
@@ -7006,6 +7060,8 @@ mod tests {
             seg: AsmSeg::None,
             static_arg: false,
             value: false,
+            volatile_object: false,
+            early_clobber: false,
         };
         let any = C::RegOrImm {
             reg: None,
@@ -7042,6 +7098,8 @@ mod tests {
             seg: AsmSeg::None,
             static_arg: false,
             value: false,
+            volatile_object: false,
+            early_clobber: false,
         };
         let ops = [op(C::Mem), op(C::Mem), op(C::Reg)];
         let a = assign_operand_regs(&ops, 0, 0, &|_| None, &|i| i == 0).unwrap();
@@ -8426,6 +8484,56 @@ mod string_and_prefix_tests {
         assert_eq!(asm_bytes(b"rep movsq"), [0xF3, 0x48, 0xA5]);
         // `lock` is the same mechanism and keeps its standalone form.
         assert_eq!(asm_bytes(b"lock; stosb"), [0xF0, 0xAA]);
+    }
+
+    /// The packed-double moves in their register, load and store forms, the
+    /// x87 constant loads, and the x87 loads and stores of each memory width,
+    /// against llvm-mc 22.1.8.
+    #[test]
+    fn packed_double_moves_and_x87_constants_and_widths() {
+        #[rustfmt::skip]
+        let cases: &[(&[u8], &[u8])] = &[
+            (b"movapd %xmm1, %xmm2", &[0x66, 0x0F, 0x28, 0xD1]),
+            (b"movapd %xmm9, %xmm3", &[0x66, 0x41, 0x0F, 0x28, 0xD9]),
+            (b"movapd %xmm1, %xmm12", &[0x66, 0x44, 0x0F, 0x28, 0xE1]),
+            (b"movapd (%rax), %xmm3", &[0x66, 0x0F, 0x28, 0x18]),
+            (b"movapd 16(%rbx,%rcx,8), %xmm9", &[0x66, 0x44, 0x0F, 0x28, 0x4C, 0xCB, 0x10]),
+            (b"movapd %xmm3, (%rax)", &[0x66, 0x0F, 0x29, 0x18]),
+            (b"movapd %xmm12, -8(%rsp)", &[0x66, 0x44, 0x0F, 0x29, 0x64, 0x24, 0xF8]),
+            (b"movupd %xmm1, %xmm2", &[0x66, 0x0F, 0x10, 0xD1]),
+            (b"movupd %xmm9, %xmm3", &[0x66, 0x41, 0x0F, 0x10, 0xD9]),
+            (b"movupd %xmm1, %xmm12", &[0x66, 0x44, 0x0F, 0x10, 0xE1]),
+            (b"movupd (%rax), %xmm3", &[0x66, 0x0F, 0x10, 0x18]),
+            (b"movupd 16(%rbx,%rcx,8), %xmm9", &[0x66, 0x44, 0x0F, 0x10, 0x4C, 0xCB, 0x10]),
+            (b"movupd %xmm3, (%rax)", &[0x66, 0x0F, 0x11, 0x18]),
+            (b"movupd %xmm12, -8(%rsp)", &[0x66, 0x44, 0x0F, 0x11, 0x64, 0x24, 0xF8]),
+            (b"fld1", &[0xD9, 0xE8]),
+            (b"fldl2t", &[0xD9, 0xE9]),
+            (b"fldl2e", &[0xD9, 0xEA]),
+            (b"fldpi", &[0xD9, 0xEB]),
+            (b"fldlg2", &[0xD9, 0xEC]),
+            (b"fldln2", &[0xD9, 0xED]),
+            (b"fldz", &[0xD9, 0xEE]),
+            (b"flds (%rax)", &[0xD9, 0x00]),
+            (b"flds 4(%r9)", &[0x41, 0xD9, 0x41, 0x04]),
+            (b"fsts (%rax)", &[0xD9, 0x10]),
+            (b"fsts -4(%rsp)", &[0xD9, 0x54, 0x24, 0xFC]),
+            (b"fstps (%rax)", &[0xD9, 0x18]),
+            (b"fstps (%r13)", &[0x41, 0xD9, 0x5D, 0x00]),
+            (b"fstl (%rax)", &[0xDD, 0x10]),
+            (b"fstl 8(%rdi,%rdx,4)", &[0xDD, 0x54, 0x97, 0x08]),
+            (b"fldt (%rax)", &[0xDB, 0x28]),
+            (b"fldt 8(%rbx)", &[0xDB, 0x6B, 0x08]),
+            (b"fldt (%r14)", &[0x41, 0xDB, 0x2E]),
+            (b"fldt -16(%rsp)", &[0xDB, 0x6C, 0x24, 0xF0]),
+            (b"fstpt (%rax)", &[0xDB, 0x38]),
+            (b"fstpt 16(%rsp)", &[0xDB, 0x7C, 0x24, 0x10]),
+            (b"fstpt (%r12)", &[0x41, 0xDB, 0x3C, 0x24]),
+            (b"fstpt 0x1234(%rbx,%rsi,2)", &[0xDB, 0xBC, 0x73, 0x34, 0x12, 0x00, 0x00]),
+        ];
+        for &(src, want) in cases {
+            assert_eq!(asm_bytes(src), want, "{}", String::from_utf8_lossy(src));
+        }
     }
 
     /// `fninit` and the x87 / far-call memory forms. Byte-verified against

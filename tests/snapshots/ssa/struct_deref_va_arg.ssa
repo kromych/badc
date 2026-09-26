@@ -15,6 +15,7 @@ fn ent_pc=1 n_params=1 variadic=true locals=3
     v9   Mcpy { dst=v4, src=v8, size=16, align=4 }        -> -
     v10  LocalAddr(-3)                                    -> x0
     v11  Intrinsic { kind=VaEnd, args=[v10] }             -> x0
+    v12  LifetimeEnd(-3)                                  -> -
     terminator Return
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=main

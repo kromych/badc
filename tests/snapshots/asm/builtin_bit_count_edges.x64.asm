@@ -755,29 +755,27 @@ Disassembly of section .text:
                	pushq	%r13
                	pushq	%r12
                	pushq	%rbx
-               	xorl	%ebx, %ebx
-               	movq	%rbx, %rdi
+               	xorl	%edi, %edi
                	callq	<addr>
                	testl	%eax, %eax
                	jne	<addr>
-               	movq	%rbx, %rdi
+               	xorl	%edi, %edi
                	callq	<addr>
                	testl	%eax, %eax
                	jne	<addr>
-               	movq	%rbx, %rdi
+               	xorl	%edi, %edi
                	callq	<addr>
                	testl	%eax, %eax
                	jne	<addr>
-               	movq	$-0x1, %rbx
-               	movq	%rbx, %rdi
+               	movq	$-0x1, %rdi
                	callq	<addr>
                	testl	%eax, %eax
                	jne	<addr>
-               	movq	%rbx, %rdi
+               	movq	$-0x1, %rdi
                	callq	<addr>
                	testl	%eax, %eax
                	jne	<addr>
-               	movq	%rbx, %rdi
+               	movq	$-0x1, %rdi
                	callq	<addr>
                	xorl	%r12d, %r12d
                	testl	%eax, %eax

@@ -31,16 +31,18 @@ use super::encode::{
     BranchKind, Cond, Fixup, JB_D8_OFF, JB_PC_OFF, JB_SP_OFF, JB_X19_OFF, JB_X29_OFF, PltCallFixup,
     Reg, emit, emit_add_sp_imm, emit_mov_reg, emit_setjmp_aarch64, emit_sub_sp_imm, enc_add_imm,
     enc_add_reg, enc_adr, enc_adrp, enc_and_reg, enc_asrv, enc_b, enc_b_cond, enc_bl, enc_blr,
-    enc_br, enc_cbnz, enc_cbz, enc_cinc, enc_cmp_reg, enc_cset, enc_eor_reg, enc_fadd_d,
+    enc_br, enc_cas, enc_cbnz, enc_cbz, enc_cinc, enc_cmp_reg, enc_cset, enc_eor_reg, enc_fadd_d,
     enc_fcmp_d, enc_fcmp_s, enc_fcvt_d_s, enc_fcvt_s_d, enc_fcvtzs_x_d, enc_fcvtzs_x_s,
     enc_fcvtzu_x_d, enc_fcvtzu_x_s, enc_fdiv_d, enc_fmov_d_to_x, enc_fmov_w_to_s, enc_fmov_x_to_d,
-    enc_fmul_d, enc_fneg_d, enc_fsub_d, enc_ldaxr, enc_ldp_d_off, enc_ldp_d_post, enc_ldp_off,
-    enc_ldp_post, enc_ldr_d_imm, enc_ldr_d_post, enc_ldr_imm, enc_ldr_post, enc_ldr_reg_lsl3,
-    enc_ldr32_imm, enc_ldrb_imm, enc_ldrh_imm, enc_ldrsw_imm, enc_ldrsw_reg_lsl2, enc_lslv,
-    enc_lsrv, enc_movz, enc_msub, enc_mul, enc_orr_reg, enc_ret, enc_scvtf_d_x, enc_scvtf_s_x,
-    enc_sdiv, enc_stlxr, enc_stp_d_off, enc_stp_d_pre, enc_stp_off, enc_stp_pre, enc_str_d_imm,
-    enc_str_d_pre, enc_str_imm, enc_str_pre, enc_str32_imm, enc_strb_imm, enc_strh_imm,
-    enc_sub_imm, enc_sub_reg, enc_subs_imm, enc_ucvtf_d_x, enc_ucvtf_s_x, enc_udiv, load_imm64,
+    enc_fmul_d, enc_fneg_d, enc_fsub_d, enc_ldapr, enc_ldp_d_off, enc_ldp_d_post, enc_ldp_off,
+    enc_ldp_post, enc_ldp_unit_off, enc_ldp_unit_post, enc_ldr_d_imm, enc_ldr_d_post, enc_ldr_imm,
+    enc_ldr_post, enc_ldr_reg_lsl3, enc_ldr_w_post, enc_ldr32_imm, enc_ldrb_imm, enc_ldrh_imm,
+    enc_ldrsw_imm, enc_ldrsw_reg_lsl2, enc_lse, enc_lslv, enc_lsrv, enc_movz, enc_msub, enc_mul,
+    enc_mvn, enc_neg, enc_orr_reg, enc_ret, enc_scvtf_d_x, enc_scvtf_s_x, enc_sdiv, enc_stp_d_off,
+    enc_stp_d_pre, enc_stp_off, enc_stp_pre, enc_stp_unit_off, enc_stp_unit_post, enc_str_d_imm,
+    enc_str_d_pre, enc_str_imm, enc_str_pre, enc_str_w_post, enc_str32_imm, enc_strb_imm,
+    enc_strh_imm, enc_sub_imm, enc_sub_reg, enc_subs_imm, enc_ucvtf_d_x, enc_ucvtf_s_x, enc_udiv,
+    load_imm64,
 };
 use super::ssa::emit_common::{
     Emit, MAX_UNPROBED_STACK_STEP, PlaceMove, STACK_PROBE_PAGE, STACK_PROBE_UNROLL_MAX,
@@ -54,6 +56,7 @@ use super::*;
 
 mod arith;
 mod call;
+mod early_exit;
 mod frame;
 mod function;
 mod inline_asm;
@@ -65,6 +68,7 @@ mod tests;
 
 use arith::*;
 use call::*;
+use early_exit::*;
 use frame::*;
 use function::*;
 use inline_asm::*;
@@ -73,7 +77,9 @@ use intrinsic::*;
 use mem::*;
 
 pub(crate) use arith::binop_imm_materializes;
-pub(crate) use frame::{Frame, asm_site_write_masks, compute_frame};
+pub(crate) use frame::{
+    Frame, asm_site_bound_values, asm_site_write_masks, asm_staged_hints, compute_frame,
+};
 pub(crate) use function::emit_function;
 pub(super) use inline_asm::a64_align_asm_stream;
 pub(crate) use inline_asm::encode_a64_file_asm_section_code;

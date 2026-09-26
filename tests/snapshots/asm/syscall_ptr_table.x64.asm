@@ -44,7 +44,7 @@ Disassembly of section .text:
                	movl	$0x42, %esi
                	movl	$0x1a4, %edx            # imm = 0x1A4
                	callq	*%rcx
-               	movslq	%eax, %rbx
+               	movq	%rax, %rbx
                	testl	%ebx, %ebx
                	jge	<addr>
                	movl	$0x1, %eax

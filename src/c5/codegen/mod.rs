@@ -303,11 +303,32 @@ impl Target {
 
     /// Whether an unnamed bit-field's declared type raises the
     /// alignment of the aggregate containing it. C99 6.7.2.1 leaves
-    /// this to the implementation; AArch64 (AAPCS64) inherits the
-    /// alignment, x86_64 does not. A named bit-field always does on
-    /// both.
+    /// this to the implementation: AAPCS64 counts a bit-field's container
+    /// "without exception for zero-sized or anonymous bit-fields", while
+    /// the x86_64 psABI and Apple's arm64 ABI leave an unnamed one out. A
+    /// named bit-field always counts.
     pub fn align_anon_bitfield(self) -> bool {
-        self.is_aarch64()
+        matches!(self, Target::LinuxAarch64)
+    }
+
+    /// Whether bit-fields follow GCC where it and clang part: a request above
+    /// `#pragma pack(N)` is capped at N, not dropped, and a type aligned beyond
+    /// its size moves the field to that boundary. Linux follows GCC, macOS clang.
+    pub fn gcc_bitfields(self) -> bool {
+        matches!(self, Target::LinuxX64 | Target::LinuxAarch64)
+    }
+
+    /// Whether aggregates take the MS record layout, the PE targets' C ABI
+    /// (MSVC, and clang for a windows-msvc triple).
+    pub fn ms_layout(self) -> bool {
+        self.is_windows()
+    }
+
+    /// Whether every enumeration and enumerator has type `int`, as MSVC
+    /// gives them on the PE targets: a value converts to `int` and
+    /// `packed` leaves the type alone.
+    pub fn ms_enums(self) -> bool {
+        self.is_windows()
     }
 
     /// Container format the target's toolchain uses for objects,
@@ -357,37 +378,9 @@ impl Target {
         }
     }
 
-    /// The `long double` storage format badc gives the type. System V
-    /// x86-64 gives it the x87 80-bit format in a 16-byte object;
-    /// macOS/arm64 and both Windows targets define it as binary64.
-    ///
-    /// AArch64 Linux defines it as IEEE binary128, which badc does not
-    /// yet store: the format has no hardware support there, so a load
-    /// and a store are open-coded conversions the aarch64 emitter does
-    /// not implement. Reporting 16 bytes while storing a binary64 would
-    /// make every foreign reader misdecode the object, so the type
-    /// stays binary64 there -- a uniform divergence
-    /// doc/std-conformance.md records, with the call-site diagnostic
-    /// naming the platform format.
-    /// The `long double` format the target's platform ABI moves across
-    /// a call, when badc does not move it the same way; `None` when the
-    /// two agree. System V x86-64 passes the type in a 16-byte stack
-    /// slot and returns it in `st(0)`, and AAPCS64 passes binary128 in
-    /// a vector register, while badc passes the binary64 it computes
-    /// with in the FP argument bank. Read by the libc-argument
-    /// diagnostic; independent of [`Self::long_double`], which answers
-    /// what a declared object stores.
-    /// TODO: extended-precision long double -- the SysV x87 and AAPCS64
-    /// binary128 argument / return conventions.
-    pub fn platform_long_double_abi(self) -> Option<&'static str> {
-        match self {
-            Target::LinuxX64 => Some("x87 80-bit"),
-            Target::LinuxAarch64 => Some("IEEE binary128"),
-            Target::MacOSAarch64 | Target::WindowsX64 | Target::WindowsAarch64 => None,
-        }
-    }
-
-    /// In-memory format a declared `long double` object takes.
+    /// In-memory format a declared `long double` object takes: x87 80-bit
+    /// in 16 bytes on System V x86-64, IEEE binary128 on AArch64 Linux,
+    /// binary64 on macOS/arm64 and both Windows targets.
     pub fn long_double(self) -> LongDoubleKind {
         match self {
             Target::LinuxX64 => LongDoubleKind::X87,
@@ -565,8 +558,9 @@ pub(crate) enum ArgPlacement {
     /// An aggregate passed by value in up to four register slots
     /// (`regs[0..n]`), one per eightbyte / HFA member. Each
     /// [`ClassReg`] names the concrete register and whether it is an
-    /// integer or FP register; the emitter loads the k-th slot from
-    /// `[arg_addr + 8*k]`. C99 aggregates pass at most two GPRs
+    /// integer or FP register; the emitter loads the k-th slot from the
+    /// offset `abi_classify::register_slots` gives it (System V) or from
+    /// the HFA member's own. C99 aggregates pass at most two GPRs
     /// (System V eightbytes) or four FP registers (AAPCS64 HFA), so
     /// four slots suffice and the placement stays `Copy`. `align` is
     /// the aggregate's own alignment, the bound on the width of an
@@ -576,13 +570,6 @@ pub(crate) enum ArgPlacement {
         n: u8,
         align: u32,
     },
-    /// An aggregate passed by an implicit reference: the caller
-    /// copies it to a temporary and passes the pointer in this
-    /// integer register (one of `Abi::int_arg_regs`).
-    StructByRefReg(u8),
-    /// As `StructByRefReg`, but the implicit-reference pointer
-    /// overflows to the outgoing-args stack at `[sp + offset]`.
-    StructByRefStack(u32),
     /// An aggregate passed wholly on the outgoing-args stack: the
     /// caller copies `size` bytes to `[sp + off]` (System V MEMORY
     /// class, or a register-bank-exhausted small aggregate). `align`
@@ -646,22 +633,65 @@ pub(crate) struct CallPlan {
     pub next_gpr: usize,
     pub next_fpr: usize,
     pub stack_bytes: u32,
+    /// The bytes each `Stack` placement takes: 8, or under
+    /// `Abi::packed_stack_args` a named argument's own width.
+    pub stack_widths: crate::c5::ir::ArgWidths,
+    /// `(fp, int)`: an `FpReg(fp)` argument the call also copies into
+    /// integer register `int` (see [`plan_mirrored_call`]).
+    pub fp_mirrors: alloc::vec::Vec<(u8, u8)>,
 }
 
 impl CallPlan {
     /// The integer registers the placements fill.
     pub(crate) fn int_regs(&self) -> impl Iterator<Item = u8> + '_ {
-        self.placements.iter().flat_map(|p| {
-            let (one, parts): (Option<u8>, &[ClassReg]) = match p {
-                ArgPlacement::IntReg(r) | ArgPlacement::StructByRefReg(r) => (Some(*r), &[]),
-                ArgPlacement::StructSplit { reg, .. } => (Some(*reg), &[]),
-                ArgPlacement::StructRegs { regs, n, .. } => (None, &regs[..*n as usize]),
-                _ => (None, &[]),
-            };
-            one.into_iter()
-                .chain(parts.iter().filter(|c| !c.is_fp).map(|c| c.reg))
-        })
+        self.placements
+            .iter()
+            .flat_map(|p| {
+                let (one, parts): (Option<u8>, &[ClassReg]) = match p {
+                    ArgPlacement::IntReg(r) => (Some(*r), &[]),
+                    ArgPlacement::StructSplit { reg, .. } => (Some(*reg), &[]),
+                    ArgPlacement::StructRegs { regs, n, .. } => (None, &regs[..*n as usize]),
+                    _ => (None, &[]),
+                };
+                one.into_iter()
+                    .chain(parts.iter().filter(|c| !c.is_fp).map(|c| c.reg))
+            })
+            .chain(self.fp_mirrors.iter().map(|&(_, r)| r))
     }
+}
+
+/// The Microsoft x64 placement of a call to a variadic or unprototyped
+/// callee: each argument by its position, a floating-point one in the xmm
+/// register of its position and copied into the integer register of the
+/// same position, where a callee reading its arguments as integers finds
+/// it. Past the four register positions every argument takes its stack
+/// slot.
+pub(crate) fn plan_mirrored_call(
+    arg_count: usize,
+    fp_arg_mask: &crate::c5::ir::FpMask,
+    abi: Abi,
+    aggs: &[Option<ArgAgg>],
+) -> CallPlan {
+    debug_assert!(abi.position_indexed_args);
+    let mut plan = plan_call_args_aggs(
+        arg_count,
+        arg_count,
+        fp_arg_mask,
+        abi,
+        aggs,
+        false,
+        crate::c5::ir::ArgWidths::default(),
+    );
+    plan.fp_mirrors = plan
+        .placements
+        .iter()
+        .enumerate()
+        .filter_map(|(i, p)| match *p {
+            ArgPlacement::FpReg(x) => abi.int_arg_regs.get(i).map(|&r| (x, r)),
+            _ => None,
+        })
+        .collect();
+    plan
 }
 
 /// The leading arguments a call places as named: none of a Windows arm64 variadic callee's.
@@ -689,17 +719,21 @@ pub(crate) fn named_args(abi: Abi, callee_variadic: bool, fixed_args: usize, arg
 /// * **macOS arm64** (`variadic_on_stack`): fixed args follow
 ///   AAPCS64; variadic args spill to the host stack at 8-byte
 ///   stride, no FP regs used.
-/// * **Win64 / Windows aarch64** (`variadic_int_only`): fixed
-///   args follow the standard placement; variadic args use the
-///   integer reg bank only (FP variadic args ride int regs as
-///   their raw bit pattern), then overflow to the stack.
+/// * **Win64** (`position_indexed_args`): each argument by its
+///   position in either bank, then the stack; a call to a variadic
+///   or unprototyped callee is [`plan_mirrored_call`]'s.
+/// * **Windows aarch64** (`variadic_int_only`): fixed args follow
+///   the standard placement; variadic args use the integer reg bank
+///   only (FP variadic args ride int regs as their raw bit pattern),
+///   then overflow to the stack.
 pub(super) fn plan_call_args(
     arg_count: usize,
     fixed_args: usize,
     fp_arg_mask: &crate::c5::ir::FpMask,
     abi: Abi,
 ) -> CallPlan {
-    plan_call_args_aggs(arg_count, fixed_args, fp_arg_mask, abi, &[], false)
+    let widths = crate::c5::ir::ArgWidths::default();
+    plan_call_args_aggs(arg_count, fixed_args, fp_arg_mask, abi, &[], false, widths)
 }
 
 /// One call argument's aggregate classification, for the
@@ -722,13 +756,7 @@ impl ArgAgg {
     /// The classification every call site and callee entry takes for `desc`.
     pub(crate) fn new(desc: &crate::c5::ir::AggDesc, abi: Abi) -> Self {
         Self {
-            class: abi_classify::classify_aggregate(
-                desc.size,
-                desc.align,
-                &desc.fields,
-                abi,
-                false,
-            ),
+            class: abi_classify::classify_aggregate(desc, abi, false),
             size: desc.size,
             align: desc.align,
             arg_align: abi_classify::arg_align(desc.align, desc.member_align, abi),
@@ -768,6 +796,7 @@ pub(super) fn plan_call_args_aggs(
     abi: Abi,
     aggs: &[Option<ArgAgg>],
     ret_via_first_int: bool,
+    widths: crate::c5::ir::ArgWidths,
 ) -> CallPlan {
     use abi_classify::{AggClass, RegClass};
     let mut placements = alloc::vec::Vec::with_capacity(arg_count);
@@ -775,6 +804,20 @@ pub(super) fn plan_call_args_aggs(
     let mut int_idx = if ret_via_first_int { 1 } else { 0 };
     let mut fp_idx = 0usize;
     let mut stack_used: u32 = 0;
+    let mut stack_widths = crate::c5::ir::ArgWidths::default();
+    // A scalar's stack slot: 8 bytes, or a named argument's own width at
+    // its own alignment where the convention packs them.
+    let mut scalar_slot = |stack_used: &mut u32, i: usize| {
+        let bytes = if abi.packed_stack_args && i < fixed_args {
+            widths.bytes(i)
+        } else {
+            8
+        };
+        stack_widths.set(i, bytes);
+        let off = stack_used.next_multiple_of(bytes);
+        *stack_used = off + bytes;
+        off
+    };
     for i in 0..arg_count {
         // Aggregate argument: classify into registers / by-reference
         // / by-stack per the host ABI. A variadic aggregate on the
@@ -832,19 +875,20 @@ pub(super) fn plan_call_args_aggs(
             // Windows aarch64 variadic convention: an anonymous composite
             // is passed as if all SIMD/FP registers were unavailable -- a
             // <= 16-byte composite (HFA or not) rides the integer bank
-            // x0-x7 then the stack, a larger one goes by reference. The
-            // callee's va_arg walks one 8-byte-stride region, so an FP
-            // bank placement would read garbage on both sides.
+            // x0-x7 then the stack, a larger one goes by reference, its
+            // copy's address an integer argument. The callee's va_arg walks
+            // one 8-byte-stride region, so an FP bank placement would read
+            // garbage on both sides.
             if i >= fixed_args && abi.variadic_int_only && matches!(abi.arch, Arch::Aarch64) {
                 let placement = if agg.size > 16 {
                     if int_idx < int_max {
                         let r = abi.int_arg_regs[int_idx];
                         int_idx += 1;
-                        ArgPlacement::StructByRefReg(r)
+                        ArgPlacement::IntReg(r)
                     } else {
-                        let off = stack_used;
-                        stack_used += 8;
-                        ArgPlacement::StructByRefStack(off)
+                        let off = stack_used.next_multiple_of(8);
+                        stack_used = off + 8;
+                        ArgPlacement::Stack(off)
                     }
                 } else {
                     let need = (aligned as usize / 8).max(1);
@@ -894,7 +938,10 @@ pub(super) fn plan_call_args_aggs(
             let placement = match &agg.class {
                 AggClass::Regs(classes) => {
                     let need_int = classes.iter().filter(|c| **c == RegClass::Integer).count();
-                    let need_fp = classes.iter().filter(|c| **c != RegClass::Integer).count();
+                    let need_fp = classes
+                        .iter()
+                        .filter(|c| matches!(c, RegClass::Sse | RegClass::Vector))
+                        .count();
                     if need_int > 0 && need_fp == 0 {
                         int_idx = pair_align16(int_idx, int_max, agg, abi);
                     }
@@ -904,7 +951,7 @@ pub(super) fn plan_call_args_aggs(
                             is_fp: false,
                         }; 4];
                         let mut n = 0u8;
-                        for c in classes {
+                        for (c, _) in abi_classify::register_slots(classes) {
                             regs[n as usize] = match c {
                                 RegClass::Integer => {
                                     let r = abi.int_arg_regs[int_idx];
@@ -913,6 +960,9 @@ pub(super) fn plan_call_args_aggs(
                                         reg: r,
                                         is_fp: false,
                                     }
+                                }
+                                RegClass::X87 | RegClass::NoClass => {
+                                    unreachable!("an argument register is never {c:?}")
                                 }
                                 RegClass::Sse | RegClass::Vector => {
                                     let r = fp_idx as u8;
@@ -945,8 +995,15 @@ pub(super) fn plan_call_args_aggs(
                                 int_idx = int_max;
                             }
                         }
-                        let off = agg_stack_off(stack_used, agg.arg_align);
-                        stack_used = off + aligned;
+                        let off = if abi.packed_stack_args && need_int == 0 && i < fixed_args {
+                            let off = stack_used.next_multiple_of(agg.arg_align.max(1));
+                            stack_used = off + agg.size;
+                            off
+                        } else {
+                            let off = agg_stack_off(stack_used, agg.arg_align);
+                            stack_used = off + aligned;
+                            off
+                        };
                         ArgPlacement::StructStack {
                             off,
                             size: agg.size,
@@ -954,15 +1011,16 @@ pub(super) fn plan_call_args_aggs(
                         }
                     }
                 }
+                // The argument is the address of the caller's copy.
                 AggClass::ByRef => {
                     if int_idx < int_max {
                         let r = abi.int_arg_regs[int_idx];
                         int_idx += 1;
-                        ArgPlacement::StructByRefReg(r)
+                        ArgPlacement::IntReg(r)
                     } else {
-                        let off = stack_used;
-                        stack_used += 8;
-                        ArgPlacement::StructByRefStack(off)
+                        let off = stack_used.next_multiple_of(8);
+                        stack_used = off + 8;
+                        ArgPlacement::Stack(off)
                     }
                 }
                 AggClass::ByStack => {
@@ -995,23 +1053,20 @@ pub(super) fn plan_call_args_aggs(
         let allow_fp_reg = !is_variadic || !abi.variadic_int_only;
 
         let placement = if force_stack {
-            let off = stack_used;
-            stack_used += 8;
-            ArgPlacement::Stack(off)
+            ArgPlacement::Stack(scalar_slot(&mut stack_used, i))
         } else if abi.position_indexed_args {
             // Win64: arg position i picks reg i for both int and
-            // FP. No separate counters; arg 0 burns slot 0 even
-            // if a prior FP arg already used xmm0.
+            // FP, a variadic argument's as a named one's. No separate
+            // counters; arg 0 burns slot 0 even if a prior FP arg
+            // already used xmm0.
             if i < int_max {
-                if is_fp && allow_fp_reg {
+                if is_fp {
                     ArgPlacement::FpReg(i as u8)
                 } else {
                     ArgPlacement::IntReg(abi.int_arg_regs[i])
                 }
             } else {
-                let off = stack_used;
-                stack_used += 8;
-                ArgPlacement::Stack(off)
+                ArgPlacement::Stack(scalar_slot(&mut stack_used, i))
             }
         } else if is_fp && allow_fp_reg && fp_idx < 8 {
             let r = fp_idx as u8;
@@ -1022,11 +1077,9 @@ pub(super) fn plan_call_args_aggs(
             // FP argument registers overflows to the host stack, not the
             // integer bank (System V AMD64 3.2.3 / AAPCS64 6.4.1). The
             // integer-bank fall-through below is reserved for variadic
-            // FP arguments under `variadic_int_only` (Win64), where
-            // `allow_fp_reg` is already false.
-            let off = stack_used;
-            stack_used += 8;
-            ArgPlacement::Stack(off)
+            // FP arguments under `variadic_int_only` (Windows arm64),
+            // where `allow_fp_reg` is already false.
+            ArgPlacement::Stack(scalar_slot(&mut stack_used, i))
         } else if int_idx < int_max {
             // Routes both real int args and variadic FP args
             // (under `variadic_int_only`) through the integer
@@ -1038,9 +1091,7 @@ pub(super) fn plan_call_args_aggs(
             int_idx += 1;
             ArgPlacement::IntReg(r)
         } else {
-            let off = stack_used;
-            stack_used += 8;
-            ArgPlacement::Stack(off)
+            ArgPlacement::Stack(scalar_slot(&mut stack_used, i))
         };
         placements.push(placement);
     }
@@ -1059,7 +1110,6 @@ pub(super) fn plan_call_args_aggs(
         for p in placements.iter_mut() {
             match p {
                 ArgPlacement::Stack(off)
-                | ArgPlacement::StructByRefStack(off)
                 | ArgPlacement::StructStack { off, .. }
                 | ArgPlacement::StructSplit { off, .. } => *off += abi.shadow_space,
                 _ => {}
@@ -1067,11 +1117,13 @@ pub(super) fn plan_call_args_aggs(
         }
     }
     CallPlan {
+        fp_mirrors: alloc::vec::Vec::new(),
         placements,
         scratch_bytes,
         next_gpr: int_idx,
         next_fpr: fp_idx,
         stack_bytes: stack_used,
+        stack_widths,
     }
 }
 
@@ -1085,8 +1137,9 @@ pub(crate) fn plan_param_regs_aggs(
     fp_mask: &crate::c5::ir::FpMask,
     abi: Abi,
     aggs: &[Option<ArgAgg>],
+    widths: crate::c5::ir::ArgWidths,
 ) -> CallPlan {
-    plan_call_args_aggs(n_params, n_params, fp_mask, abi, aggs, false)
+    plan_call_args_aggs(n_params, n_params, fp_mask, abi, aggs, false, widths)
 }
 
 /// Decide how to extend a libc return value into the c5
@@ -1246,14 +1299,6 @@ pub(crate) struct ResolvedImport {
     /// prototype seen") falls through with no extension, as does
     /// `void`, which the tag's void bit names.
     pub return_type_tag: i64,
-    /// Prototype's return type was spelled `long double`. The
-    /// SysV x86_64 ABI returns long double in x87 `st(0)`; c5's
-    /// generic FP-return path reads XMM0 (where plain `double`
-    /// returns land), so without this flag the binding's first
-    /// caller reads -0.0 or whatever XMM0 had on entry. Plumbed
-    /// from `Binding::returns_long_double` through
-    /// `apply_fold_to_binding`.
-    pub returns_long_double: bool,
     /// Per-fixed-parameter type tags from the prototype. Carried
     /// from `Binding::param_types`; the DWARF emitter
     /// uses these to give every PLT trampoline a
@@ -1447,7 +1492,6 @@ impl ResolvedImports {
             is_variadic: b.is_variadic,
             fixed_args: b.fixed_args,
             return_type_tag: b.return_type_tag,
-            returns_long_double: b.returns_long_double,
             param_types: b.param_types.clone(),
         });
         Ok(())
@@ -1585,7 +1629,6 @@ impl ResolvedImports {
                 is_variadic: b.is_variadic,
                 fixed_args: b.fixed_args,
                 return_type_tag: b.return_type_tag,
-                returns_long_double: b.returns_long_double,
                 param_types: b.param_types.clone(),
             });
         }
@@ -1905,6 +1948,8 @@ pub(crate) struct Build {
     /// Byte offsets of the profiling call sites `-mrecord-mcount`
     /// records, in emission order.
     pub mcount_sites: Vec<usize>,
+    /// The functions that return ahead of their frame, in emission order.
+    pub early_returns: Vec<EarlyReturn>,
     /// Source-level function names parallel to `func_ent_pcs`,
     /// populated from `FunctionSsa::name` during the per-arch
     /// emit loop. Empty entries surface for archive-reloaded
@@ -2065,11 +2110,10 @@ pub(crate) struct Build {
     /// apart lets `.rodata` stay pure, so the pure `const` objects of
     /// the same unit hold the read-only prefix.
     pub pic_link: bool,
-    /// The image links no startup runtime (`--freestanding`). The ELF
-    /// writer places it at its link address, since no code of its own
-    /// applies load-time relocations, and adds the loader tables only
-    /// when it binds a shared-library symbol.
-    pub freestanding: bool,
+    /// The executable's form. The ELF writer places an image of a
+    /// placed form at its link address and adds the loader tables when
+    /// it binds a shared-library symbol.
+    pub exec_form: ExecForm,
     /// Mirror of [`NativeOptions::code_model`]. The relocatable writer
 
     /// reads it to pick the external-address form; see [`CodeModel`].
@@ -2183,6 +2227,11 @@ pub(crate) struct Build {
     /// places `DW_TAG_formal_parameter` locations with it. Absent for a
     /// function with no parameters and on the multi-TU link path.
     pub param_frame_offsets: alloc::collections::BTreeMap<usize, alloc::vec::Vec<i64>>,
+    /// Where each over-aligned region member's storage is, by `ent_pc` and
+    /// member slot: its frame-base-relative byte offset in a static region,
+    /// or `None` past a realignment, which leaves it no frame-base offset.
+    pub region_frame_offsets:
+        alloc::collections::BTreeMap<usize, alloc::collections::BTreeMap<i64, Option<i64>>>,
     pub coalesced_slot_remap:
         alloc::collections::BTreeMap<usize, alloc::collections::BTreeMap<i64, i64>>,
     /// Per-function x86_64 unwind descriptors, in emission order. The
@@ -2204,6 +2253,8 @@ pub(crate) struct Build {
     /// absolute immediate (`pushq $1f`). The relocatable ELF writer emits one
     /// `R_X86_64_32S` per entry against the `.text` symbol.
     pub asm_text_abs_refs: Vec<AsmTextAbsRef>,
+    /// Absolute address fields of the x86-64 code; see [`AbsAddrRef`].
+    pub abs_addr_refs: Vec<AbsAddrRef>,
     /// Named labels an inline-asm template defines in the main code stream.
     /// Each is a definition the unit owns, so the writers emit a local
     /// `.text` symbol and bind a C reference to the same name against it.
@@ -2290,6 +2341,18 @@ pub(crate) struct FnUnwind {
     /// Offset (from `begin`) past `sub rsp,N`. Set only when
     /// `frame_bytes > 0`.
     pub frame_alloc_end: u32,
+}
+
+/// A function whose entry test branches to a return placed after the body,
+/// ahead of the frame (`ssa::early_exit`). Offsets are from `begin`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(crate) struct EarlyReturn {
+    /// Byte offset of the function's first instruction in `text`.
+    pub begin: u32,
+    /// Where the frame path starts.
+    pub frame: u32,
+    /// Where the early return starts; it runs to the function's end.
+    pub exit: u32,
 }
 
 /// One macOS arm64 Thread-Local Variable. A 24-byte `__thread_vars`
@@ -2431,6 +2494,29 @@ pub(crate) struct AsmTextAbsRef {
     pub field_offset: usize,
     /// Byte offset within `Build::text` of the referenced label.
     pub target_offset: usize,
+}
+
+/// An x86-64 instruction field holding a link-time address as a
+/// sign-extended 32-bit displacement: the table of a switch dispatch or the
+/// base of an indexed access, `sym(,%index,scale)`. Only a relocatable
+/// object for a static link carries one ([`NativeOptions::abs32_addrs`]);
+/// the ELF writer emits an `R_X86_64_32S` per field.
+#[derive(Debug, Clone)]
+pub(crate) struct AbsAddrRef {
+    /// Byte offset within `Build::text` of the 4-byte field.
+    pub field_offset: usize,
+    pub target: AbsAddrTarget,
+}
+
+/// What an [`AbsAddrRef`] addresses.
+#[derive(Debug, Clone)]
+pub(crate) enum AbsAddrTarget {
+    /// Offset into `Build::data`.
+    Data(u64),
+    /// A data symbol another unit defines.
+    Extern(alloc::string::String),
+    /// Offset into `RodataBuild::bytes`, a switch table.
+    Rodata(u64),
 }
 
 /// Address-materialisation site in `Build::text` reaching a byte of
@@ -3271,6 +3357,9 @@ pub struct NativeOptions {
     /// before lowering. Same as `--dump-asm` for native code: a
     /// diagnostic emitted alongside the build. Off by default.
     pub dump_ssa: bool,
+    /// Check the SSA rules after each pass and stop at the first pass
+    /// that breaks them. A debug build of badc always checks.
+    pub verify_ssa: bool,
     /// Upper bound (in SSA `Inst` count) on a size-driven leaf function
     /// body that may be inlined at its call sites under `-O`. A body the
     /// source marked `inline` is measured against a multiple of it, and
@@ -3323,11 +3412,11 @@ pub struct NativeOptions {
     /// so a consumer that relocates it wholesale at load (or forbids
     /// absolute references outright) can take it. The default keeps
     /// the absolute 8-byte form whose relocations name the branch
-    /// targets directly, which unwind-data discovery requires. Final
-    /// images are position-independent either way.
+    /// targets directly, which unwind-data discovery requires. The
+    /// image's own form is the link's; see [`ExecForm`].
     pub pic: bool,
     /// The object is compiled for a link that applies its relocations
-    /// after mapping -- every image this toolchain writes does (ELF
+    /// after mapping, as a position-independent image does (ELF
     /// `ET_DYN`, PE base relocations, Mach-O dyld rebases). `const`
     /// storage carrying a relocation then goes to `.data.rel.ro`
     /// instead of `.rodata`, so the linker places only that storage in
@@ -3552,18 +3641,29 @@ pub(crate) fn access_unit(off: u32, width: u32, align: u32, strict_align: bool) 
 }
 
 /// Offset and width of each naturally aligned access a `width`-byte
-/// transfer at `off` decomposes into over storage of alignment
-/// `align`. Yields the single `(off, width)` access when no narrowing
-/// applies, so the unbounded lowering is unchanged. Pieces run from
-/// least to most significant byte; `width` must be a power of two.
+/// transfer at `off` decomposes into over storage of alignment `align`:
+/// the widest power of two the bytes left hold and, under `strict_align`,
+/// the alignment proven at its offset allows. A power-of-two transfer the
+/// address satisfies is the single `(off, width)` access, so the unbounded
+/// lowering is unchanged; any other width ends in narrower accesses rather
+/// than reading past its last byte. Pieces run from least to most
+/// significant byte.
 pub(crate) fn access_pieces(
     off: u32,
     width: u32,
     align: u32,
     strict_align: bool,
 ) -> impl Iterator<Item = (u32, u32)> + Clone {
-    let unit = access_unit(off, width, align, strict_align);
-    (0..width / unit).map(move |i| (off + i * unit, unit))
+    let end = off + width;
+    let mut at = off;
+    core::iter::from_fn(move || {
+        (at < end).then(|| {
+            let fits = 1u32 << (31 - (end - at).leading_zeros());
+            let w = access_chunk(offset_align(align, at as i64), strict_align, fits);
+            at += w;
+            (at - w, w)
+        })
+    })
 }
 
 /// Distinguishes "produce an executable" from "produce a
@@ -3571,8 +3671,8 @@ pub(crate) fn access_pieces(
 ///
 /// * **Mach-O**: `MH_EXECUTE` + `LC_MAIN` vs `MH_DYLIB` +
 ///   `LC_ID_DYLIB` + symbol-table N_EXT entries.
-/// * **ELF**: `ET_EXEC` + `_start` stub vs `ET_DYN` +
-///   `STB_GLOBAL` `STT_FUNC` exports in `.dynsym`.
+/// * **ELF**: an executable in the [`ExecForm`] the link picks vs
+///   `ET_DYN` + `STB_GLOBAL` `STT_FUNC` exports in `.dynsym`.
 /// * **PE**: regular console image vs `IMAGE_FILE_DLL`
 ///   characteristic + `IMAGE_DATA_DIRECTORY[0]` Export
 ///   Directory + DllMain stub.
@@ -3597,6 +3697,32 @@ pub enum OutputKind {
     Relocatable,
 }
 
+/// How an executable is loaded and entered.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum ExecForm {
+    /// Loaded at a base of the loader's choosing -- ELF `ET_DYN` with
+    /// `R_*_RELATIVE` fixups, PE base relocations, Mach-O `MH_PIE` --
+    /// and entered through the startup runtime.
+    #[default]
+    Pie,
+    /// `-no-pie`: an ELF `ET_EXEC` loaded at its link address, so every
+    /// address is final at link time; entered through the startup
+    /// runtime.
+    Placed,
+    /// `--freestanding`: entered at the program's own entry, with no
+    /// startup runtime. An ELF image is placed as [`Self::Placed`] is,
+    /// since no code of its own applies load-time fixups.
+    Freestanding,
+}
+
+impl ExecForm {
+    /// Whether an ELF executable of this form is loaded at its link
+    /// address.
+    pub fn placed(self) -> bool {
+        self != ExecForm::Pie
+    }
+}
+
 impl Default for NativeOptions {
     /// Defaults: executable output, DWARF off, optimizations off.
     fn default() -> Self {
@@ -3605,6 +3731,19 @@ impl Default for NativeOptions {
 }
 
 impl NativeOptions {
+    /// Whether an x86-64 instruction may carry a link-time address as a
+    /// sign-extended 32-bit displacement: a relocatable LP64 object linked
+    /// statically, where the kernel code model places every symbol in the
+    /// top 2 GiB and the small one in the bottom 2 GiB. A position-
+    /// independent link resolves no such field.
+    pub(crate) fn abs32_addrs(&self, target: Target) -> bool {
+        target == Target::LinuxX64
+            && self.output_kind == OutputKind::Relocatable
+            && !self.pic
+            && !self.pic_link
+            && self.elf_class == ElfClass::Elf64
+    }
+
     /// Convenience builder. `NativeOptions::new().with_optimize()`.
     pub const fn new() -> Self {
         Self {
@@ -3612,6 +3751,7 @@ impl NativeOptions {
             output_kind: OutputKind::Executable,
             debug_info: false,
             dump_ssa: false,
+            verify_ssa: false,
             inline_cap: 64,
             frame_larger_than: None,
             diag: crate::c5::diag::Config::new(),
@@ -3649,6 +3789,12 @@ impl NativeOptions {
     /// observability shape as `--dump-asm`.
     pub const fn with_dump_ssa(mut self) -> Self {
         self.dump_ssa = true;
+        self
+    }
+
+    /// Check the SSA rules after each pass, as a debug build always does.
+    pub const fn with_verify_ssa(mut self) -> Self {
+        self.verify_ssa = true;
         self
     }
 
@@ -3833,20 +3979,6 @@ pub(crate) fn lower_for_with_prebuilt(
     // relocatable objects record the list for the linker.
     if matches!(target, Target::MacOSAarch64) && !program.tls_data.is_empty() {
         imports.ensure_dylib("libSystem", program, target);
-    }
-    // Linux aarch64 long-double libc returns. AAPCS64 returns
-    // binary128 in v0 (full Q register); the c5 compute path carries
-    // the value as binary64, so any libc call whose prototype is
-    // `long double f(...)` needs a `__trunctfdf2` follow-up that
-    // truncates v0 to d0 before the c5 accumulator reads it. Force
-    // the binding in if any in-scope binding carries
-    // `returns_long_double`; otherwise the codegen has no import
-    // slot to record a fixup against. No-op when nothing in the
-    // program calls a `long double`-returning libc function.
-    if matches!(target, Target::LinuxAarch64)
-        && imports.imports.iter().any(|i| i.returns_long_double)
-    {
-        imports.force_include_by_name("__trunctfdf2", program)?;
     }
     let mut build = match target {
         Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => {
@@ -4097,6 +4229,11 @@ pub(crate) struct Abi {
     /// AAPCS64 C.10: an argument with 16-byte alignment starts at an even
     /// general register. The Apple arm64 convention lets it start at an odd one.
     pub pair_align16_gprs: bool,
+    /// Apple arm64: a named stack argument, and a homogeneous floating-point
+    /// aggregate, takes its own size at its own alignment rather than a
+    /// multiple of 8 bytes; the variadic part starts at the next multiple
+    /// of 8 and takes 8-byte slots.
+    pub packed_stack_args: bool,
     /// A composite argument is placed by its natural alignment (AAPCS64 B.6, C.14),
     /// which leaves out an `aligned(N)` on the aggregate itself.
     pub natural_composite_align: bool,
@@ -4260,6 +4397,7 @@ impl Target {
                 variadic_int_only: false,
                 position_indexed_args: false,
                 pair_align16_gprs: false,
+                packed_stack_args: true,
                 natural_composite_align: false,
                 variadic_zero_xmm_count: false,
                 no_fp_regs: false,
@@ -4277,6 +4415,7 @@ impl Target {
                 variadic_int_only: false,
                 position_indexed_args: false,
                 pair_align16_gprs: true,
+                packed_stack_args: false,
                 natural_composite_align: true,
                 variadic_zero_xmm_count: false,
                 no_fp_regs: false,
@@ -4294,6 +4433,7 @@ impl Target {
                 variadic_int_only: false,
                 position_indexed_args: false,
                 pair_align16_gprs: false,
+                packed_stack_args: false,
                 natural_composite_align: false,
                 variadic_zero_xmm_count: true,
                 no_fp_regs: false,
@@ -4311,6 +4451,7 @@ impl Target {
                 variadic_int_only: true,
                 position_indexed_args: true,
                 pair_align16_gprs: false,
+                packed_stack_args: false,
                 natural_composite_align: false,
                 variadic_zero_xmm_count: false,
                 no_fp_regs: false,
@@ -4328,6 +4469,7 @@ impl Target {
                 variadic_int_only: true,
                 position_indexed_args: false,
                 pair_align16_gprs: true,
+                packed_stack_args: false,
                 natural_composite_align: false,
                 variadic_zero_xmm_count: false,
                 no_fp_regs: false,
@@ -4381,14 +4523,24 @@ mod access_bound_tests {
         assert_eq!(offset_align(8, 0), 8);
         assert_eq!(offset_align(8, 12), 4);
         assert_eq!(offset_align(1, 8), 1);
+        // A width no power of two ends in narrower accesses.
+        let loose = |off, width| -> alloc::vec::Vec<(u32, u32)> {
+            access_pieces(off, width, 8, false).collect()
+        };
+        assert_eq!(loose(0, 3), alloc::vec![(0, 2), (2, 1)]);
+        assert_eq!(loose(8, 7), alloc::vec![(8, 4), (12, 2), (14, 1)]);
+        assert_eq!(pieces(0, 6, 2), alloc::vec![(0, 2), (2, 2), (4, 2)]);
+        assert_eq!(pieces(0, 6, 4), alloc::vec![(0, 4), (4, 2)]);
     }
 }
 
 #[cfg(test)]
 mod abi_plan_tests {
     use super::abi_classify::{AggClass, RegClass};
-    use super::{ArgAgg, ArgPlacement, CallPlan, ClassReg, Target, plan_call_args_aggs};
-    use crate::c5::ir::FpMask;
+    use super::{
+        ArgAgg, ArgPlacement, CallPlan, ClassReg, Target, plan_call_args_aggs, plan_mirrored_call,
+    };
+    use crate::c5::ir::{ArgWidths, FpMask};
 
     // A register-passed aggregate that spills must exhaust the correct
     // register file: nothing on System V (only the aggregate goes to
@@ -4407,7 +4559,15 @@ mod abi_plan_tests {
         // five int scalars, a 2-eightbyte GP aggregate that can't fit the
         // one remaining int reg, then one int scalar.
         let aggs = [None, None, None, None, None, Some(gp), None];
-        let plan = plan_call_args_aggs(7, 7, &FpMask::EMPTY, abi, &aggs, false);
+        let plan = plan_call_args_aggs(
+            7,
+            7,
+            &FpMask::EMPTY,
+            abi,
+            &aggs,
+            false,
+            ArgWidths::default(),
+        );
         assert!(matches!(
             plan.placements[5],
             ArgPlacement::StructStack { .. }
@@ -4430,7 +4590,15 @@ mod abi_plan_tests {
         // five FP scalars, a 4-float HFA that can't fit the remaining FP
         // regs, then one int scalar that the integer file must still hold.
         let aggs = [None, None, None, None, None, Some(hfa), None];
-        let plan = plan_call_args_aggs(7, 7, &FpMask::from_bits(0b1_1111), abi, &aggs, false);
+        let plan = plan_call_args_aggs(
+            7,
+            7,
+            &FpMask::from_bits(0b1_1111),
+            abi,
+            &aggs,
+            false,
+            ArgWidths::default(),
+        );
         assert!(matches!(
             plan.placements[5],
             ArgPlacement::StructStack { .. }
@@ -4467,7 +4635,15 @@ mod abi_plan_tests {
             (Target::WindowsAarch64, [2, 3], 4),
             (Target::MacOSAarch64, [1, 2], 3),
         ] {
-            let plan = plan_call_args_aggs(3, 3, &FpMask::EMPTY, target.abi(), &aggs, false);
+            let plan = plan_call_args_aggs(
+                3,
+                3,
+                &FpMask::EMPTY,
+                target.abi(),
+                &aggs,
+                false,
+                ArgWidths::default(),
+            );
             assert_eq!(gprs(&plan, 1), pair, "{target:?}");
             assert_eq!(plan.placements[2], ArgPlacement::IntReg(next), "{target:?}");
         }
@@ -4478,12 +4654,28 @@ mod abi_plan_tests {
         let abi = Target::LinuxAarch64.abi();
         let mut aggs = alloc::vec![None; 7];
         aggs[5] = Some(int128());
-        let plan = plan_call_args_aggs(7, 7, &FpMask::EMPTY, abi, &aggs, false);
+        let plan = plan_call_args_aggs(
+            7,
+            7,
+            &FpMask::EMPTY,
+            abi,
+            &aggs,
+            false,
+            ArgWidths::default(),
+        );
         assert_eq!(gprs(&plan, 5), [6, 7]);
         assert_eq!(plan.placements[6], ArgPlacement::Stack(0));
         let mut aggs = alloc::vec![None; 9];
         aggs[7] = Some(int128());
-        let plan = plan_call_args_aggs(9, 9, &FpMask::EMPTY, abi, &aggs, false);
+        let plan = plan_call_args_aggs(
+            9,
+            9,
+            &FpMask::EMPTY,
+            abi,
+            &aggs,
+            false,
+            ArgWidths::default(),
+        );
         assert!(matches!(
             plan.placements[7],
             ArgPlacement::StructStack { off: 0, .. }
@@ -4491,7 +4683,15 @@ mod abi_plan_tests {
         assert_eq!(plan.placements[8], ArgPlacement::Stack(16));
         let mut aggs = alloc::vec![None; 11];
         aggs[9] = Some(int128());
-        let plan = plan_call_args_aggs(11, 11, &FpMask::EMPTY, abi, &aggs, false);
+        let plan = plan_call_args_aggs(
+            11,
+            11,
+            &FpMask::EMPTY,
+            abi,
+            &aggs,
+            false,
+            ArgWidths::default(),
+        );
         assert_eq!(plan.placements[8], ArgPlacement::Stack(0));
         assert!(matches!(
             plan.placements[9],
@@ -4504,7 +4704,15 @@ mod abi_plan_tests {
     fn align16_variadic_argument_follows_each_convention() {
         let aggs = [None, Some(int128()), None];
         for target in [Target::LinuxAarch64, Target::WindowsAarch64] {
-            let plan = plan_call_args_aggs(3, 1, &FpMask::EMPTY, target.abi(), &aggs, false);
+            let plan = plan_call_args_aggs(
+                3,
+                1,
+                &FpMask::EMPTY,
+                target.abi(),
+                &aggs,
+                false,
+                ArgWidths::default(),
+            );
             assert_eq!(gprs(&plan, 1), [2, 3], "{target:?}");
             assert_eq!(plan.placements[2], ArgPlacement::IntReg(4), "{target:?}");
         }
@@ -4516,6 +4724,7 @@ mod abi_plan_tests {
             Target::MacOSAarch64.abi(),
             &aggs,
             false,
+            ArgWidths::default(),
         );
         assert_eq!(plan.placements[1], ArgPlacement::Stack(0));
         assert!(matches!(
@@ -4523,6 +4732,70 @@ mod abi_plan_tests {
             ArgPlacement::StructStack { off: 16, .. }
         ));
         assert_eq!(plan.placements[3], ArgPlacement::Stack(32));
+    }
+
+    /// Apple arm64 places a named stack argument at its own size and
+    /// alignment, `(a0..a7 as long, char, short, int, char, long)` at 0, 2,
+    /// 4, 8 and 16, a variadic tail in 8-byte slots from the next multiple
+    /// of 8, and a spilled float HFA at its own alignment; AAPCS64 gives
+    /// each scalar 8 bytes.
+    #[test]
+    fn apple_arm64_packs_named_stack_arguments() {
+        let mut widths = ArgWidths::default();
+        for (i, w) in [(8, 1), (9, 2), (10, 4), (11, 1)] {
+            widths.set(i, w);
+        }
+        let stack = |target: Target, fixed| {
+            let plan =
+                plan_call_args_aggs(13, fixed, &FpMask::EMPTY, target.abi(), &[], false, widths);
+            let offs: alloc::vec::Vec<u32> = plan.placements[8..]
+                .iter()
+                .map(|p| match p {
+                    ArgPlacement::Stack(off) => *off,
+                    _ => u32::MAX,
+                })
+                .collect();
+            (offs, plan.stack_widths.bytes(9))
+        };
+        assert_eq!(
+            stack(Target::MacOSAarch64, 13),
+            (alloc::vec![0, 2, 4, 8, 16], 2)
+        );
+        assert_eq!(
+            stack(Target::LinuxAarch64, 13),
+            (alloc::vec![0, 8, 16, 24, 32], 8)
+        );
+        assert_eq!(
+            stack(Target::MacOSAarch64, 10),
+            (alloc::vec![0, 2, 8, 16, 24], 2)
+        );
+        let hfa = ArgAgg {
+            class: AggClass::Regs(alloc::vec![RegClass::Sse; 2]),
+            size: 8,
+            align: 4,
+            arg_align: 4,
+        };
+        let mut fp = FpMask::EMPTY;
+        for i in 0..11 {
+            fp.set(i);
+        }
+        let mut aggs = alloc::vec![None; 11];
+        aggs[9] = Some(hfa);
+        let mut widths = ArgWidths::default();
+        widths.set(8, 4);
+        widths.set(10, 4);
+        let abi = Target::MacOSAarch64.abi();
+        let plan = plan_call_args_aggs(11, 11, &fp, abi, &aggs, false, widths);
+        assert_eq!(plan.placements[8], ArgPlacement::Stack(0));
+        assert!(matches!(
+            plan.placements[9],
+            ArgPlacement::StructStack {
+                off: 4,
+                size: 8,
+                ..
+            }
+        ));
+        assert_eq!(plan.placements[10], ArgPlacement::Stack(12));
     }
 
     #[test]
@@ -4535,7 +4808,15 @@ mod abi_plan_tests {
             align: 8,
             arg_align: 8,
         });
-        let plan = plan_call_args_aggs(9, 1, &FpMask::EMPTY, abi, &aggs, false);
+        let plan = plan_call_args_aggs(
+            9,
+            1,
+            &FpMask::EMPTY,
+            abi,
+            &aggs,
+            false,
+            ArgWidths::default(),
+        );
         let split = ArgPlacement::StructSplit {
             reg: 7,
             off: 0,
@@ -4545,7 +4826,15 @@ mod abi_plan_tests {
         assert_eq!(plan.placements[7], split);
         assert_eq!(plan.placements[8], ArgPlacement::Stack(8));
         aggs[7] = Some(int128());
-        let plan = plan_call_args_aggs(9, 1, &FpMask::EMPTY, abi, &aggs, false);
+        let plan = plan_call_args_aggs(
+            9,
+            1,
+            &FpMask::EMPTY,
+            abi,
+            &aggs,
+            false,
+            ArgWidths::default(),
+        );
         assert!(matches!(
             plan.placements[7],
             ArgPlacement::StructStack { off: 0, .. }
@@ -4560,12 +4849,14 @@ mod abi_plan_tests {
             offset,
             size: 8,
             kind: ScalarKind::Int,
+            bit_field: false,
         };
         let desc = crate::c5::ir::AggDesc {
             size: 16,
             align: 16,
             member_align: 8,
             fields: alloc::vec![half(0), half(8)],
+            homogeneous: None,
         };
         for (target, pair, slot) in [
             (Target::LinuxAarch64, [1, 2], 8),
@@ -4580,11 +4871,20 @@ mod abi_plan_tests {
                 abi,
                 &[None, Some(ArgAgg::new(&desc, abi))],
                 false,
+                ArgWidths::default(),
             );
             assert_eq!(gprs(&plan, 1), pair, "{target:?}");
             let mut aggs = alloc::vec![None; 11];
             aggs[9] = Some(ArgAgg::new(&desc, abi));
-            let plan = plan_call_args_aggs(11, 11, &FpMask::EMPTY, abi, &aggs, false);
+            let plan = plan_call_args_aggs(
+                11,
+                11,
+                &FpMask::EMPTY,
+                abi,
+                &aggs,
+                false,
+                ArgWidths::default(),
+            );
             assert_eq!(plan.placements[8], ArgPlacement::Stack(0), "{target:?}");
             assert!(
                 matches!(plan.placements[9], ArgPlacement::StructStack { off, .. } if off == slot),
@@ -4601,7 +4901,8 @@ mod abi_plan_tests {
         for (count, fp_at) in [(40, 35), (70, 69)] {
             let mut mask = FpMask::EMPTY;
             mask.set(fp_at);
-            let plan = plan_call_args_aggs(count, count, &mask, abi, &[], false);
+            let plan =
+                plan_call_args_aggs(count, count, &mask, abi, &[], false, ArgWidths::default());
             assert_eq!(
                 plan.placements[fp_at],
                 ArgPlacement::FpReg(0),
@@ -4612,15 +4913,44 @@ mod abi_plan_tests {
         }
     }
 
-    /// The integer registers a plan fills: scalar, by-reference and the
-    /// integer slots of a register-passed aggregate, not its FP slots.
+    /// A Win64 call to a variadic or unprototyped callee places each
+    /// argument by its position and copies each FP register argument into
+    /// the integer register of that position; past the four register
+    /// positions an argument takes its stack slot alone.
+    #[test]
+    fn mirrored_call_copies_fp_register_arguments_into_integer_registers() {
+        let abi = Target::WindowsX64.abi();
+        let plan = plan_mirrored_call(5, &FpMask::from_bits(0b11101), abi, &[]);
+        let regs = abi.int_arg_regs;
+        assert_eq!(
+            plan.placements,
+            [
+                ArgPlacement::FpReg(0),
+                ArgPlacement::IntReg(regs[1]),
+                ArgPlacement::FpReg(2),
+                ArgPlacement::FpReg(3),
+                ArgPlacement::Stack(32),
+            ]
+        );
+        assert_eq!(plan.fp_mirrors, [(0, regs[0]), (2, regs[2]), (3, regs[3])]);
+    }
+
+    /// The integer registers a plan fills: scalar, split, the integer
+    /// slots of a register-passed aggregate, not its FP slots, and the
+    /// integer copy of a mirrored FP argument.
     #[test]
     fn call_plan_names_the_integer_registers_it_fills() {
         let plan = CallPlan {
+            fp_mirrors: alloc::vec![(3, 8)],
             placements: alloc::vec![
                 ArgPlacement::IntReg(7),
                 ArgPlacement::FpReg(0),
-                ArgPlacement::StructByRefReg(6),
+                ArgPlacement::StructSplit {
+                    reg: 6,
+                    off: 0,
+                    size: 16,
+                    align: 8,
+                },
                 ArgPlacement::StructRegs {
                     regs: [
                         ClassReg {
@@ -4649,8 +4979,12 @@ mod abi_plan_tests {
             next_gpr: 0,
             next_fpr: 0,
             stack_bytes: 0,
+            stack_widths: ArgWidths::default(),
         };
-        assert_eq!(plan.int_regs().collect::<alloc::vec::Vec<_>>(), [7, 6, 2]);
+        assert_eq!(
+            plan.int_regs().collect::<alloc::vec::Vec<_>>(),
+            [7, 6, 2, 8]
+        );
     }
 
     #[test]

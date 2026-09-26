@@ -2,7 +2,8 @@
 //! whole -- 16-byte copies and zero fills, `V128` loads and stores, 16-byte
 //! SIMD asm operands -- becomes `V128` slot accesses for mem2reg to promote,
 //! provided something reads it and it meets a SIMD operand or a vector ABI
-//! piece directly or through whole copies.
+//! piece directly or through whole copies. An asm output keeps its address
+//! for `asm_outputs`, which makes it a value stored to the slot.
 
 use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::vec::Vec;
@@ -11,7 +12,7 @@ use super::super::abi_classify::ScalarKind;
 use super::super::ir::{
     AsmConstraint, FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind, Terminator, ValueId,
 };
-use super::tape::{Insertion, insert};
+use super::tape::{At, Insertion, insert};
 
 /// One rewritten access, by its tape index before the rewrite.
 enum Edit {
@@ -38,7 +39,6 @@ enum Edit {
     Asm {
         at: ValueId,
         inputs: Vec<(usize, i64)>,
-        output: Option<(usize, i64)>,
     },
 }
 
@@ -83,6 +83,7 @@ fn slot_store(off: i64, value: ValueId) -> Inst {
         value,
         kind: StoreKind::V128,
         volatile: false,
+        nsw: false,
     }
 }
 
@@ -238,15 +239,14 @@ fn eligible(func: &FunctionSsa, spliced: bool) -> BTreeSet<i64> {
                 }
             }
             Inst::InlineAsm { asm, args } => {
-                let outputs = asm.operands.iter().filter(|o| o.is_output).count();
-                let single_exit = outputs == 1 && !goto_asm.contains(&(v as ValueId));
+                let goto = goto_asm.contains(&(v as ValueId));
                 for (i, &a) in args.iter().enumerate() {
                     let op = asm.operands.get(i);
                     let ok = op.is_some_and(|o| {
                         matches!(o.constraint, AsmConstraint::Fp)
                             && o.width == 16
                             && !o.value
-                            && (!o.is_output || single_exit)
+                            && (!o.is_output || !goto)
                     });
                     check(a, ok, &mut reject);
                     if let (Some(&b), Some(o)) = (addr.get(&a), op) {
@@ -309,11 +309,28 @@ fn rewrite(func: &mut FunctionSsa, slots: &BTreeSet<i64>) {
         .collect();
     let slot_of = |a: ValueId| addr.get(&a).copied();
     let side = |slot: Option<i64>, a: ValueId| slot.map_or(Side::Addr(a), Side::Slot);
+    let out_addrs: BTreeSet<ValueId> = func
+        .insts
+        .iter()
+        .filter_map(|inst| match inst {
+            Inst::InlineAsm { asm, args } => Some((asm, args)),
+            _ => None,
+        })
+        .flat_map(|(asm, args)| {
+            asm.operands
+                .iter()
+                .zip(args)
+                .filter(|(op, _)| op.is_output)
+                .map(|(_, &a)| a)
+        })
+        .collect();
     let mut edits: Vec<Edit> = Vec::new();
     for (v, inst) in func.insts.iter().enumerate() {
         let at = v as ValueId;
         match inst {
-            Inst::LocalAddr(_) if addr.contains_key(&at) => edits.push(Edit::Addr { at }),
+            Inst::LocalAddr(_) if addr.contains_key(&at) && !out_addrs.contains(&at) => {
+                edits.push(Edit::Addr { at })
+            }
             Inst::Load { addr: a, .. } => {
                 if let Some(off) = slot_of(*a) {
                     edits.push(Edit::Load { at, off });
@@ -340,20 +357,14 @@ fn rewrite(func: &mut FunctionSsa, slots: &BTreeSet<i64>) {
                 }
             }
             Inst::InlineAsm { asm, args } => {
-                let mut inputs = Vec::new();
-                let mut output = None;
-                for (i, &a) in args.iter().enumerate() {
-                    let Some(off) = slot_of(a) else { continue };
-                    let op = &asm.operands[i];
-                    if !op.is_output || op.is_rw {
-                        inputs.push((i, off));
-                    }
-                    if op.is_output {
-                        output = Some((i, off));
-                    }
-                }
-                if !inputs.is_empty() || output.is_some() {
-                    edits.push(Edit::Asm { at, inputs, output });
+                let inputs: Vec<(usize, i64)> = args
+                    .iter()
+                    .enumerate()
+                    .filter(|&(i, _)| !asm.operands[i].is_output)
+                    .filter_map(|(i, &a)| slot_of(a).map(|off| (i, off)))
+                    .collect();
+                if !inputs.is_empty() {
+                    edits.push(Edit::Asm { at, inputs });
                 }
             }
             _ => {}
@@ -363,7 +374,7 @@ fn rewrite(func: &mut FunctionSsa, slots: &BTreeSet<i64>) {
     for e in &edits {
         let mut put = |at: ValueId, inst: Inst| {
             ins.push(Insertion {
-                at,
+                at: At::Before(at),
                 inst,
                 is_f32: false,
             })
@@ -383,12 +394,9 @@ fn rewrite(func: &mut FunctionSsa, slots: &BTreeSet<i64>) {
                 },
             ),
             Edit::Zero { at, .. } => put(*at, Inst::Imm(0)),
-            Edit::Asm { at, inputs, output } => {
+            Edit::Asm { at, inputs } => {
                 for &(_, off) in inputs {
                     put(*at, slot_load(off));
-                }
-                if output.is_some() {
-                    put(*at, func.insts[*at as usize].clone());
                 }
             }
             _ => {}
@@ -438,25 +446,14 @@ fn rewrite(func: &mut FunctionSsa, slots: &BTreeSet<i64>) {
                 func.insts[n as usize] = slot_store(*off, zero);
                 gone.insert(n);
             }
-            Edit::Asm { at, inputs, output } => {
+            Edit::Asm { at, inputs } => {
                 let loads: Vec<ValueId> = inputs.iter().map(|_| take()).collect();
-                let n = rw.remap[*at as usize];
-                let site = if output.is_some() { take() } else { n };
+                let site = rw.remap[*at as usize];
                 if let Inst::InlineAsm { asm, args } = &mut func.insts[site as usize] {
                     for (&(i, _), &load) in inputs.iter().zip(&loads) {
                         asm.operands[i].value = true;
                         args[i] = load;
                     }
-                    if let Some((i, _)) = *output {
-                        asm.operands[i].value = true;
-                        if !asm.operands[i].is_rw {
-                            args[i] = NO_VALUE;
-                        }
-                    }
-                }
-                if let Some((_, off)) = *output {
-                    func.insts[n as usize] = slot_store(off, site);
-                    gone.insert(n);
                 }
             }
         }

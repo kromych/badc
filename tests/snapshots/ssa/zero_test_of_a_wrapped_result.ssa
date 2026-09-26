@@ -11,7 +11,7 @@ fn ent_pc=0 n_params=2 variadic=false locals=0
     v5   Imm(0)                                           -> x0
     v6   Imm(0)                                           -> x0
     v7   Binop { op=add, lhs=v1, rhs=v3 }                 -> x0
-    v8   Extend { value=v7, kind=I32 }                    -> x1
+    v8   Extend { value=v7, kind=I32, nsw }               -> x1
     v9   BinopI { op=ne, lhs=v7, rhs_imm=0 }              -> x1
     terminator Bz { cond=v7, target=b2, fall=b1 }   (low word)   (exit_acc=v9)
   block 1  start_pc=0
@@ -33,7 +33,7 @@ fn ent_pc=1 n_params=2 variadic=false locals=0
     v5   Imm(0)                                           -> x0
     v6   Imm(0)                                           -> x0
     v7   Binop { op=sub, lhs=v1, rhs=v3 }                 -> x0
-    v8   Extend { value=v7, kind=I32 }                    -> x1
+    v8   Extend { value=v7, kind=I32, nsw }               -> x1
     v9   BinopI { op=eq, lhs=v7, rhs_imm=0 }              -> x1
     terminator Bnz { cond=v7, target=b2, fall=b1 }   (low word)   (exit_acc=v9)
   block 1  start_pc=0
@@ -55,7 +55,7 @@ fn ent_pc=2 n_params=2 variadic=false locals=0
     v5   Imm(0)                                           -> x0
     v6   Imm(0)                                           -> x0
     v7   Binop { op=mul, lhs=v1, rhs=v3 }                 -> x0
-    v8   Extend { value=v7, kind=I32 }                    -> x1
+    v8   Extend { value=v7, kind=I32, nsw }               -> x1
     terminator Bz { cond=v7, target=b2, fall=b1 }   (low word)   (exit_acc=v8)
   block 1  start_pc=0
     v9   Imm(1)                                           -> x0
@@ -117,7 +117,7 @@ fn ent_pc=5 n_params=1 variadic=false locals=0
     v2   Imm(0)                                           -> x0
     v3   Imm(0)                                           -> x0
     v4   Neg(v1)                                          -> x0
-    v5   Extend { value=v4, kind=I32 }                    -> x1
+    v5   Extend { value=v4, kind=I32, nsw }               -> x1
     v6   BinopI { op=ne, lhs=v4, rhs_imm=0 }              -> x1
     terminator Bz { cond=v4, target=b2, fall=b1 }   (low word)   (exit_acc=v6)
   block 1  start_pc=0

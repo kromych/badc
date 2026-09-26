@@ -21,17 +21,7 @@ Disassembly of section .text:
                	stur	w2, [x29, #-0x8]
                	sub	x1, x29, #0x8
                	mov	x3, #0x5                // =5
-               	stp	x9, x10, [sp, #-0x20]!
-               	stp	x11, x12, [sp, #0x10]
-               	mov	x9, x1
-               	mov	x10, x3
-               	ldaxr	w16, [x9]
-               	add	x11, x16, x10
-               	stlxr	w12, w11, [x9]
-               	cbnz	x12, <addr>
-               	ldp	x11, x12, [sp, #0x10]
-               	ldp	x9, x10, [sp], #0x20
-               	mov	x0, x16
+               	ldaddal	w3, w0, [x1]
                	add	x0, x0, #0x5
                	cmp	w0, #0xf
                	b.eq	<addr>
@@ -40,17 +30,8 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x3                // =3
-               	stp	x9, x10, [sp, #-0x20]!
-               	stp	x11, x12, [sp, #0x10]
-               	mov	x9, x1
-               	mov	x10, x0
-               	ldaxr	w16, [x9]
-               	sub	x11, x16, x10
-               	stlxr	w12, w11, [x9]
-               	cbnz	x12, <addr>
-               	ldp	x11, x12, [sp, #0x10]
-               	ldp	x9, x10, [sp], #0x20
-               	mov	x4, x16
+               	neg	x16, x0
+               	ldaddal	w16, w4, [x1]
                	sub	x4, x4, #0x3
                	cmp	w4, #0xc
                	b.eq	<addr>
@@ -59,17 +40,8 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x4, #0xf                // =15
-               	stp	x9, x10, [sp, #-0x20]!
-               	stp	x11, x12, [sp, #0x10]
-               	mov	x9, x1
-               	mov	x10, x4
-               	ldaxr	w16, [x9]
-               	and	x11, x16, x10
-               	stlxr	w12, w11, [x9]
-               	cbnz	x12, <addr>
-               	ldp	x11, x12, [sp, #0x10]
-               	ldp	x9, x10, [sp], #0x20
-               	mov	x5, x16
+               	mvn	x16, x4
+               	ldclral	w16, w5, [x1]
                	and	x4, x5, x4
                	cmp	w4, #0xc
                	b.eq	<addr>
@@ -77,17 +49,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x4, #0x1                // =1
-               	stp	x9, x10, [sp, #-0x20]!
-               	stp	x11, x12, [sp, #0x10]
-               	mov	x9, x1
-               	mov	x10, x4
-               	ldaxr	w16, [x9]
-               	orr	x11, x16, x10
-               	stlxr	w12, w11, [x9]
-               	cbnz	x12, <addr>
-               	ldp	x11, x12, [sp, #0x10]
-               	ldp	x9, x10, [sp], #0x20
-               	mov	x5, x16
+               	ldsetal	w4, w5, [x1]
                	orr	x4, x5, x4
                	cmp	w4, #0xd
                	b.eq	<addr>
@@ -95,17 +57,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	stp	x9, x10, [sp, #-0x20]!
-               	stp	x11, x12, [sp, #0x10]
-               	mov	x9, x1
-               	mov	x10, x0
-               	ldaxr	w16, [x9]
-               	eor	x11, x16, x10
-               	stlxr	w12, w11, [x9]
-               	cbnz	x12, <addr>
-               	ldp	x11, x12, [sp, #0x10]
-               	ldp	x9, x10, [sp], #0x20
-               	mov	x1, x16
+               	ldeoral	w0, w1, [x1]
                	eor	x0, x1, x0
                	cmp	w0, #0xe
                	b.eq	<addr>
@@ -124,34 +76,15 @@ Disassembly of section .text:
                	stur	x0, [x29, #-0x10]
                	sub	x1, x29, #0x10
                	mov	x0, #0x7                // =7
-               	stp	x9, x10, [sp, #-0x20]!
-               	stp	x11, x12, [sp, #0x10]
-               	mov	x9, x1
-               	mov	x10, x0
-               	ldaxr	x16, [x9]
-               	add	x11, x16, x10
-               	stlxr	w12, x11, [x9]
-               	cbnz	x12, <addr>
-               	ldp	x11, x12, [sp, #0x10]
-               	ldp	x9, x10, [sp], #0x20
-               	mov	x3, x16
+               	ldaddal	x0, x3, [x1]
                	add	x3, x3, #0x7
                	cmp	x3, #0x6b
                	b.eq	<addr>
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	stp	x9, x10, [sp, #-0x20]!
-               	stp	x11, x12, [sp, #0x10]
-               	mov	x9, x1
-               	mov	x10, x2
-               	ldaxr	x16, [x9]
-               	sub	x11, x16, x10
-               	stlxr	w12, x11, [x9]
-               	cbnz	x12, <addr>
-               	ldp	x11, x12, [sp, #0x10]
-               	ldp	x9, x10, [sp], #0x20
-               	mov	x0, x16
+               	neg	x16, x2
+               	ldaddal	x16, x0, [x1]
                	sub	x0, x0, #0xa
                	cmp	x0, #0x61
                	b.eq	<addr>

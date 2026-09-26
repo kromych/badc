@@ -20,34 +20,18 @@ Disassembly of section .text:
                	sub	x2, x29, #0x10
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x0]
-               	str	x10, [x2]
-               	ldr	x10, [x0, #0x8]
-               	str	x10, [x2, #0x8]
-               	ldr	x10, [sp], #0x10
+               	ldp	x16, x17, [x0]
+               	stp	x16, x17, [x2]
                	sub	x0, x29, #0x30
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x2]
-               	str	x10, [x0]
-               	ldr	x10, [x2, #0x8]
-               	str	x10, [x0, #0x8]
-               	ldr	x10, [sp], #0x10
+               	ldp	x16, x17, [x2]
+               	stp	x16, x17, [x0]
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x1]
-               	str	x10, [x2]
-               	ldr	x10, [x1, #0x8]
-               	str	x10, [x2, #0x8]
-               	ldr	x10, [sp], #0x10
+               	ldp	x16, x17, [x1]
+               	stp	x16, x17, [x2]
                	sub	x1, x29, #0x20
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x2]
-               	str	x10, [x1]
-               	ldr	x10, [x2, #0x8]
-               	str	x10, [x1, #0x8]
-               	ldr	x10, [sp], #0x10
+               	ldp	x16, x17, [x2]
+               	stp	x16, x17, [x1]
                	ldrb	w2, [x0]
                	eor	x2, x2, #0xff
                	cbz	w2, <addr>

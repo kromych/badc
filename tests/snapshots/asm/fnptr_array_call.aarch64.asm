@@ -22,31 +22,13 @@ Disassembly of section .text:
                	ret
 
 <mk1>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	sub	x0, x29, #0x8
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	str	x1, [x0]
-               	mov	x16, x0
-               	ldr	x0, [x16]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
                	ret
 
 <mk2>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	sub	x0, x29, #0x8
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	str	x1, [x0]
-               	mov	x16, x0
-               	ldr	x0, [x16]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
                	ret
 
 <pick>:
@@ -82,7 +64,6 @@ Disassembly of section .text:
                	ldr	x0, [x0, #0x8]
                	blr	x0
                	stur	x0, [x29, #-0x8]
-               	ldur	x0, [x29, #-0x8]
                	ldr	w0, [x0]
                	mov	x17, #0x9               // =9
                	eor	x0, x0, x17
@@ -96,7 +77,6 @@ Disassembly of section .text:
                	ldr	x0, [x0]
                	blr	x0
                	stur	x0, [x29, #-0x8]
-               	ldur	x0, [x29, #-0x8]
                	ldr	w0, [x0]
                	eor	x0, x0, #0x7
                	cbz	w0, <addr>

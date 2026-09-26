@@ -33,7 +33,7 @@ Disassembly of section .text:
                	add	x29, sp, #0x30
                	mov	x20, x0
                	mov	x21, x1
-               	sub	x0, x29, #0x18
+               	sub	x0, x29, #0x10
                	stp	xzr, xzr, [x0]
                	strb	w20, [x0]
                	strb	w21, [x0, #0x1]
@@ -55,7 +55,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x30]
                	ldp	x20, x21, [sp], #0x40
                	ret
-               	sub	x0, x29, #0x8
+               	sub	x0, x29, #0x18
                	str	xzr, [x0]
                	mov	x1, #0x9                // =9
                	strb	w1, [x0]

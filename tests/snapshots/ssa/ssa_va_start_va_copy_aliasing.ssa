@@ -22,6 +22,7 @@ fn ent_pc=1 n_params=1 variadic=true locals=3
     v16  Imm(0)                                           -> x2
     v17  BinopI { op=mul, lhs=v11, rhs_imm=1000 }         -> x1
     v18  Binop { op=add, lhs=v7, rhs=v17 }                -> x0
+    v19  LifetimeEnd(-3)                                  -> -
     terminator Return(v18)   (exit_acc=v18)
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=copy_then_walk_twice
@@ -52,6 +53,8 @@ fn ent_pc=2 n_params=1 variadic=true locals=6
     v21  BinopI { op=mul, lhs=v10, rhs_imm=17 }           -> x0
     v22  Imm(0)                                           -> x2
     v23  Binop { op=add, lhs=v21, rhs=v14 }               -> x0
+    v24  LifetimeEnd(-3)                                  -> -
+    v25  LifetimeEnd(-6)                                  -> -
     terminator Return(v23)   (exit_acc=v23)
 ; --- SSA dump (ok=true) ent_pc=3 ---
 ; name=main

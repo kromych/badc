@@ -14,21 +14,19 @@ Disassembly of section .text:
                	brk	#0x1
 
 <sink>:
+               	cmp	w0, #0x0
+               	b.le	<addr>
                	str	x20, [sp, #-0x20]!
                	stp	x29, x30, [sp, #0x10]
                	add	x29, sp, #0x10
-               	sxtw	x20, w0
-               	cmp	w20, #0x0
-               	b.gt	<addr>
-               	mov	x0, #0x1                // =1
-               	ldp	x29, x30, [sp, #0x10]
-               	ldr	x20, [sp], #0x20
-               	ret
+               	mov	x20, x0
                	sub	x0, x20, #0x1
                	bl	<addr>
                	add	x0, x20, x0
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x20, [sp], #0x20
+               	ret
+               	mov	x0, #0x1                // =1
                	ret
 
 <quad>:
@@ -37,7 +35,7 @@ Disassembly of section .text:
                	str	x24, [sp, #0x20]
                	stp	x29, x30, [sp, #0x30]
                	add	x29, sp, #0x30
-               	sxtw	x20, w0
+               	mov	x20, x0
                	mov	x24, x4
                	mov	x23, x3
                	mov	x22, x2

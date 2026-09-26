@@ -66,7 +66,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
   block 4  start_pc=0
     v6   Extend { value=v3, kind=I32 }                    -> x0
     v7   BinopI { op=add, lhs=v3, rhs_imm=1 }             -> x3
-    v8   Imm(0)                                           -> x0
+    v8   Extend { value=v7, kind=I32, nsw }               -> x0
     terminator Jmp(b5)   (exit_acc=v7)
   block 5  start_pc=0
     v3   Phi { incoming=[b0:v1, b4:v7], kind=I64 }        -> x3
@@ -156,7 +156,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v52  Imm(20)                                          -> x0
     v53  Extend { value=v3, kind=I32 }                    -> x0
     v54  BinopI { op=add, lhs=v3, rhs_imm=20 }            -> x0
-    v55  Extend { value=v54, kind=I32 }                   -> x1
+    v55  Extend { value=v54, kind=I32, nsw }              -> x1
     v56  Extend { value=v54, kind=I32 }                   -> x1
     terminator Return(v54)   (exit_acc=v54)
 ; --- SSA dump (ok=true) ent_pc=4 ---

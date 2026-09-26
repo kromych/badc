@@ -277,7 +277,6 @@ fn binding_names_seed_token_sys_when_dylibs_provided() {
             is_variadic: false,
             fixed_args: 1,
             return_type_tag: 0,
-            returns_long_double: false,
             param_types: Vec::new(),
             local_name: "malloc".into(),
             real_symbol: "malloc".into(),
@@ -325,10 +324,10 @@ fn line_text_by_number_honours_line_markers() {
 }
 
 #[test]
-fn line_index_is_sized_by_markers_not_lines() {
-    // A preprocessed kernel unit runs to hundreds of thousands of lines
-    // and asks single-digit questions of them, so the index is sized by
-    // the markers it has to honour rather than by the buffer's lines.
+fn line_index_is_sized_by_markers_and_the_runs_it_answers_from() {
+    // A preprocessed kernel unit runs to hundreds of thousands of lines:
+    // the index holds an entry per marker and tabulates a run's lines
+    // once, when the run first answers, however many lines are asked.
     use crate::c5::lexer::Lexer;
     let mut src = String::from("# 1 \"big.h\"\n");
     for i in 1..=20000 {
@@ -336,11 +335,18 @@ fn line_index_is_sized_by_markers_not_lines() {
     }
     src.push_str("# 1 \"main.c\"\nint last;\n");
     let mut lex = Lexer::new(src);
-    lex.file = "big.h".into();
-    assert_eq!(lex.line_text_by_number(19999), Some("int v19999;"));
     lex.file = "main.c".into();
     assert_eq!(lex.line_text_by_number(1), Some("int last;"));
-    assert_eq!(lex.line_index_entries(), 2);
+    assert_eq!((lex.line_index_entries(), lex.line_tables()), (2, 1));
+    lex.file = "big.h".into();
+    for i in (1..=20000).rev().step_by(97) {
+        assert_eq!(
+            lex.line_text_by_number(i),
+            Some(format!("int v{i};").as_str())
+        );
+    }
+    assert_eq!(lex.line_text_by_number(20001), None);
+    assert_eq!((lex.line_index_entries(), lex.line_tables()), (2, 2));
 }
 
 #[test]

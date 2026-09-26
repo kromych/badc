@@ -136,9 +136,9 @@ fn ent_pc=7 n_params=0 variadic=false locals=0
     v746 Binop { op=mul, lhs=v27, rhs=v18 }               -> x3
     v747 Binop { op=sub, lhs=v16, rhs=v741 }              -> x3
     v748 Binop { op=add, lhs=v27, rhs=v742 }              -> x2
-    v749 Extend { value=v748, kind=I32 }                  -> x3
+    v749 Extend { value=v748, kind=I32, nsw }             -> x3
     v750 Binop { op=add, lhs=v20, rhs=v22 }               -> x9
-    v751 Extend { value=v750, kind=I32 }                  -> x0
+    v751 Extend { value=v750, kind=I32, nsw }             -> x0
     v752 Binop { op=ne, lhs=v748, rhs=v750 }              -> x0
     terminator Bz { cond=v752, target=b8, fall=b7 }   (exit_acc=v752)
   block 7  start_pc=0
@@ -149,9 +149,9 @@ fn ent_pc=7 n_params=0 variadic=false locals=0
     v755 Binop { op=mul, lhs=v27, rhs=v18 }               -> x8
     v756 Binop { op=sub, lhs=v16, rhs=v755 }              -> x0
     v757 Binop { op=add, lhs=v756, rhs=v27 }              -> x0
-    v758 Extend { value=v757, kind=I32 }                  -> x2
+    v758 Extend { value=v757, kind=I32, nsw }             -> x2
     v759 Binop { op=add, lhs=v20, rhs=v22 }               -> x2
-    v760 Extend { value=v750, kind=I32 }                  -> x2
+    v760 Extend { value=v750, kind=I32, nsw }             -> x2
     v761 Binop { op=ne, lhs=v757, rhs=v750 }              -> x0
     terminator Bz { cond=v761, target=b10, fall=b9 }   (exit_acc=v761)
   block 9  start_pc=0
@@ -160,10 +160,10 @@ fn ent_pc=7 n_params=0 variadic=false locals=0
   block 10  start_pc=0
     v763 Binop { op=div, lhs=v16, rhs=v18 }               -> x0
     v764 Binop { op=mul, lhs=v27, rhs=v18 }               -> x0
-    v765 Extend { value=v755, kind=I32 }                  -> x0
+    v765 Extend { value=v755, kind=I32, nsw }             -> x0
     v766 Binop { op=sub, lhs=v16, rhs=v755 }              -> x0
     v767 Binop { op=add, lhs=v755, rhs=v766 }             -> x0
-    v768 Extend { value=v767, kind=I32 }                  -> x2
+    v768 Extend { value=v767, kind=I32, nsw }             -> x2
     v769 Binop { op=ne, lhs=v767, rhs=v16 }               -> x0
     terminator Bz { cond=v769, target=b12, fall=b11 }   (exit_acc=v769)
   block 11  start_pc=0
@@ -604,7 +604,7 @@ fn ent_pc=7 n_params=0 variadic=false locals=0
     v702 Imm(30)                                          -> x1
     v703 Imm(0)                                           -> x1
     v704 BinopI { op=add, lhs=v701, rhs_imm=30 }          -> x0
-    v705 Extend { value=v704, kind=I32 }                  -> x1
+    v705 Extend { value=v704, kind=I32, nsw }             -> x1
     v706 Extend { value=v704, kind=I32 }                  -> x1
     terminator Return(v704)   (exit_acc=v704)
   block 18  start_pc=0
@@ -896,9 +896,10 @@ fn ent_pc=7 n_params=0 variadic=false locals=0
     v851 Extend { value=v834, kind=I32 }                  -> x7
     v852 Extend { value=v842, kind=I32 }                  -> x7
     v853 Binop { op=add, lhs=v834, rhs=v842 }             -> x1
-    v854 Extend { value=v835, kind=I32 }                  -> x0
-    v855 BinopI { op=mul, lhs=v835, rhs_imm=429496730 }   -> x0
-    v856 BinopI { op=shru, lhs=v839, rhs_imm=32 }         -> x0
+    v854 Extend { value=v853, kind=I32, nsw }             -> x0
+    v855 Extend { value=v835, kind=I32 }                  -> x0
+    v856 BinopI { op=mul, lhs=v835, rhs_imm=429496730 }   -> x0
+    v857 BinopI { op=shru, lhs=v839, rhs_imm=32 }         -> x0
     terminator Jmp(b29)   (exit_acc=v840)
   block 29  start_pc=0
     v834 Phi { incoming=[b26:v719, b28:v853], kind=I64 }  -> x1
@@ -940,7 +941,7 @@ fn ent_pc=7 n_params=0 variadic=false locals=0
     v438 Imm(10)                                          -> x1
     v439 Imm(0)                                           -> x1
     v440 BinopI { op=add, lhs=v771, rhs_imm=10 }          -> x0
-    v441 Extend { value=v440, kind=I32 }                  -> x1
+    v441 Extend { value=v440, kind=I32, nsw }             -> x1
     v442 Extend { value=v440, kind=I32 }                  -> x1
     terminator Return(v440)   (exit_acc=v440)
 ; --- SSA dump (ok=true) ent_pc=0 ---

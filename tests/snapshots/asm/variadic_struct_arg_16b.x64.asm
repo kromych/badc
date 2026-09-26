@@ -89,28 +89,16 @@ Disassembly of section .text:
                	subq	$0x30, %rsp
                	leaq	-0x30(%rbp), %rsi
                	leaq	<rip>, %rax
-               	pushq	%rcx
-               	movq	(%rax), %rcx
-               	movq	%rcx, (%rsi)
-               	movq	0x8(%rax), %rcx
-               	movq	%rcx, 0x8(%rsi)
-               	popq	%rcx
+               	movups	(%rax), %xmm14
+               	movups	%xmm14, (%rsi)
                	leaq	-0x20(%rbp), %rcx
                	leaq	<rip>, %rax
-               	pushq	%rdx
-               	movq	(%rax), %rdx
-               	movq	%rdx, (%rcx)
-               	movq	0x8(%rax), %rdx
-               	movq	%rdx, 0x8(%rcx)
-               	popq	%rdx
+               	movups	(%rax), %xmm14
+               	movups	%xmm14, (%rcx)
                	leaq	-0x10(%rbp), %r9
                	leaq	<rip>, %rax
-               	pushq	%rcx
-               	movq	(%rax), %rcx
-               	movq	%rcx, (%r9)
-               	movq	0x8(%rax), %rcx
-               	movq	%rcx, 0x8(%r9)
-               	popq	%rcx
+               	movups	(%rax), %xmm14
+               	movups	%xmm14, (%r9)
                	movl	$0x3, %edi
                	subq	$0x10, %rsp
                	movq	%r9, %r10

@@ -20,11 +20,11 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v14  BinopI { op=add, lhs=v11, rhs_imm=0 }            -> x1
     v15  Load { addr=v11, disp=0, kind=I32 }              -> x1
     v16  BinopI { op=add, lhs=v15, rhs_imm=0 }            -> x2
-    v17  Imm(0)                                           -> x2
+    v17  Extend { value=v15, kind=I32, nsw }              -> x2
     v18  Extend { value=v15, kind=I32 }                   -> x2
     v19  Imm(0)                                           -> x2
     v20  Imm(1)                                           -> x2
-    v21  Imm(0)                                           -> x2
+    v21  Imm(1)                                           -> x2
     v22  Imm(1)                                           -> x2
     v23  Imm(12)                                          -> x2
     v24  Imm(4)                                           -> x2
@@ -38,11 +38,11 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v32  BinopI { op=add, lhs=v11, rhs_imm=4 }            -> x2
     v33  Load { addr=v11, disp=4, kind=I32 }              -> x2
     v34  Binop { op=add, lhs=v15, rhs=v33 }               -> x1
-    v35  Imm(0)                                           -> x2
+    v35  Extend { value=v34, kind=I32, nsw }              -> x2
     v36  Extend { value=v34, kind=I32 }                   -> x2
     v37  Imm(1)                                           -> x2
     v38  Imm(2)                                           -> x2
-    v39  Imm(0)                                           -> x2
+    v39  Imm(2)                                           -> x2
     v40  Imm(2)                                           -> x2
     v41  Imm(12)                                          -> x2
     v42  Imm(4)                                           -> x2
@@ -56,11 +56,11 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v50  BinopI { op=add, lhs=v11, rhs_imm=8 }            -> x2
     v51  Load { addr=v11, disp=8, kind=I32 }              -> x0
     v52  Binop { op=add, lhs=v34, rhs=v51 }               -> x0
-    v53  Imm(0)                                           -> x1
+    v53  Extend { value=v52, kind=I32, nsw }              -> x1
     v54  Extend { value=v52, kind=I32 }                   -> x1
     v55  Imm(2)                                           -> x1
     v56  Imm(3)                                           -> x1
-    v57  Imm(0)                                           -> x1
+    v57  Imm(3)                                           -> x1
     v58  Imm(3)                                           -> x1
     v59  Imm(12)                                          -> x1
     v60  Imm(4)                                           -> x1
@@ -72,10 +72,12 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     terminator Bz { cond=v65, target=b2, fall=b1 }   (exit_acc=v65)
   block 1  start_pc=0
     v66  Imm(6)                                           -> x0
+    v67  LifetimeEnd(0)                                   -> -
     terminator Return(v66)   (exit_acc=v66)
   block 2  start_pc=0
-    v67  Imm(0)                                           -> x0
-    terminator Return(v67)   (exit_acc=v67)
+    v68  Imm(0)                                           -> x0
+    v69  LifetimeEnd(0)                                   -> -
+    terminator Return(v68)   (exit_acc=v68)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

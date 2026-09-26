@@ -75,6 +75,7 @@ enum Key {
     FpCast(FpCastKind, ValueId, bool),
     Fma(ValueId, ValueId, ValueId, bool, bool, bool),
     MulAdd(ValueId, ValueId, ValueId, bool),
+    Udiv128(ValueId, ValueId, ValueId),
 }
 
 pub(crate) fn run(funcs: &mut [FunctionSsa], caps: BankCapacity) {
@@ -142,6 +143,7 @@ fn remat_cost(inst: &Inst) -> u32 {
             _ => 1,
         },
         Inst::Fma { .. } | Inst::MulAdd { .. } | Inst::FpCast { .. } | Inst::BitCount { .. } => 3,
+        Inst::Udiv128 { .. } => 12,
         _ => 1,
     }
 }
@@ -574,7 +576,7 @@ fn key_of(inst: &Inst, vn: &[ValueId], is_f32: bool, sym: u32) -> Option<Key> {
             Some(Key::Binop(*op, a, b, is_f32))
         }
         Inst::BinopI { op, lhs, rhs_imm } => Some(Key::BinopI(*op, r(*lhs), *rhs_imm, is_f32)),
-        Inst::Extend { value, kind } => Some(Key::Extend(r(*value), *kind, is_f32)),
+        Inst::Extend { value, kind, .. } => Some(Key::Extend(r(*value), *kind, is_f32)),
         Inst::Bswap { value, width } => Some(Key::Bswap(r(*value), *width, is_f32)),
         Inst::BitCount { op, value, width } => Some(Key::BitCount(*op, r(*value), *width, is_f32)),
         Inst::Neg(v) => Some(Key::Neg(r(*v))),
@@ -600,6 +602,7 @@ fn key_of(inst: &Inst, vn: &[ValueId], is_f32: bool, sym: u32) -> Option<Key> {
             c,
             neg_product,
         } => Some(Key::MulAdd(r(*a), r(*b), r(*c), *neg_product)),
+        Inst::Udiv128 { hi, lo, divisor } => Some(Key::Udiv128(r(*hi), r(*lo), r(*divisor))),
         _ => None,
     }
 }
@@ -718,6 +721,11 @@ fn run_one(func: &mut FunctionSsa, caps: BankCapacity) {
                         && leader < idx
                         && gate.pays(func, inst_block[leader as usize], b, leader, idx)
                     {
+                        if let Inst::Extend { nsw: false, .. } = func.insts[i]
+                            && let Inst::Extend { nsw, .. } = &mut func.insts[leader as usize]
+                        {
+                            *nsw = false;
+                        }
                         redirect[i] = Some(leader);
                         vn[i] = leader;
                         any = true;
@@ -782,10 +790,12 @@ mod tests {
             is_always_inline: false,
             is_noinline: false,
             is_naked: false,
+            is_noreturn: false,
             conv: crate::c5::codegen::CallConv::Target,
             section: None,
             patchable_entry: None,
             no_instrument: false,
+            no_stack_protector: false,
             is_weak: false,
             is_internal: false,
             const_params: 0,
@@ -794,6 +804,7 @@ mod tests {
             cmp32: alloc::vec![false; insts.len()],
             low_word_tests: Vec::new(),
             param_fp_mask: crate::c5::ir::FpMask::EMPTY,
+            param_widths: crate::c5::ir::ArgWidths::default(),
             agg_descs: Vec::new(),
             param_aggs: Vec::new(),
             param_local_slots: Vec::new(),
@@ -1003,6 +1014,8 @@ mod tests {
             binding_idx: 0,
             args: Vec::new(),
             fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
+            low_word_args: 0,
+            arg_widths: crate::c5::ir::ArgWidths::default(),
             fp_return: false,
             arg_aggs: Vec::new(),
             ret_agg: None,
@@ -1040,6 +1053,8 @@ mod tests {
             binding_idx: 0,
             args: Vec::new(),
             fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
+            low_word_args: 0,
+            arg_widths: crate::c5::ir::ArgWidths::default(),
             fp_return: false,
             arg_aggs: Vec::new(),
             ret_agg: None,

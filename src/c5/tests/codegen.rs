@@ -2854,13 +2854,12 @@ fn int128_scalar_conversions_run_correctly() {
     );
 }
 
-/// ARM ARM C6.2: the aarch64 atomic read-modify-write lowering uses an
-/// LDAXR / STLXR exclusive-monitor retry loop. Confirm both opcodes are
-/// present by their fixed bit patterns, independent of register fields:
-/// LDAXR is `_x011000_010_11111_1_11111 Rn Rt` and STLXR is
-/// `_x011000_000 Rs 1_11111 Rn Rt`.
+/// ARM ARM C6.2: the aarch64 atomic read-modify-write lowering is one LSE
+/// instruction, for a seq_cst fetch-add the acquire-release `LDADDAL`.
+/// Match it by the bits that do not depend on the registers:
+/// `11_111000_1_1_1 Rs 0_000_00 Rn Rt`.
 #[test]
-fn atomic_rmw_emits_ldaxr_stlxr_aarch64() {
+fn atomic_rmw_emits_ldaddal_aarch64() {
     use crate::{NativeOptions, Target, emit_native_with_options};
     let program = super::compile_str_bare(
         "#include <stdatomic.h>\n\
@@ -2869,23 +2868,13 @@ fn atomic_rmw_emits_ldaxr_stlxr_aarch64() {
     );
     let bytes = emit_native_with_options(&program, Target::MacOSAarch64, NativeOptions::default())
         .expect("emit MacOSAarch64");
-    // Match the 32-bit little-endian instruction words by the fixed bits
-    // that do not depend on the chosen registers (size / L / o0 / Rt2 and
-    // the LDAXR all-ones Rs).
-    let words = || {
-        bytes
-            .windows(4)
-            .map(|w| u32::from_le_bytes([w[0], w[1], w[2], w[3]]))
-    };
-    let any_ldaxr = words().any(|w| (w & 0x3FFF_FC00) == (0x085F_FC00 & 0x3FFF_FC00));
-    let any_stlxr = words().any(|w| (w & 0x3FE0_FC00) == (0x0800_FC00 & 0x3FE0_FC00));
+    let any_ldaddal = bytes
+        .windows(4)
+        .map(|w| u32::from_le_bytes([w[0], w[1], w[2], w[3]]))
+        .any(|w| w & 0xFFE0_FC00 == 0xF8E0_0000);
     assert!(
-        any_ldaxr,
-        "expected an LDAXR opcode word in the aarch64 image",
-    );
-    assert!(
-        any_stlxr,
-        "expected an STLXR opcode word in the aarch64 image",
+        any_ldaddal,
+        "expected an LDADDAL opcode word in the aarch64 image",
     );
 }
 
@@ -3398,6 +3387,11 @@ fn block_scoped_arrays_share_frame_slots() {
 /// object's own cell, so the two modes are reported separately.
 #[cfg(test)]
 fn coalesced_locals(src: &str, name: &str, compact: bool) -> i64 {
+    coalesced(src, name, compact).locals
+}
+
+/// Function `name` of `src` after slot coalescing.
+fn coalesced(src: &str, name: &str, compact: bool) -> crate::c5::ir::FunctionSsa {
     use crate::Target;
     let program = super::compile_str(src);
     let mut funcs =
@@ -3409,10 +3403,9 @@ fn coalesced_locals(src: &str, name: &str, compact: bool) -> i64 {
         crate::c5::codegen::StackProtect::OFF,
     );
     funcs
-        .iter()
+        .into_iter()
         .find(|f| f.name == name)
         .unwrap_or_else(|| panic!("no function {name}"))
-        .locals
 }
 
 /// C99 6.2.4p2: an automatic object is dead once its block's execution
@@ -3440,11 +3433,11 @@ fn escaped_objects_in_disjoint_blocks_share_one_cell() {
     );
 }
 
-/// A block left by `break` runs no end-of-lifetime marker on that path,
-/// so the object it declared is not bounded and keeps its own cell: what
-/// an escaped address may still reach is then unbounded.
+/// A block left by `break` ends the lifetime of the object it declared on
+/// that edge too (C99 6.2.4p2), so the object shares its cell with one
+/// declared after the loop.
 #[test]
-fn a_block_whose_marker_no_path_reaches_keeps_its_own_cell() {
+fn a_block_left_by_break_ends_its_objects_lifetime() {
     let src = r#"
         void sink(unsigned *p);
         void looped(int n)
@@ -3458,8 +3451,8 @@ fn a_block_whose_marker_no_path_reaches_keeps_its_own_cell() {
     "#;
     assert_eq!(
         coalesced_locals(src, "looped", true),
-        3,
-        "each object keeps a cell, beside the loop counter's"
+        2,
+        "the two objects share a cell, beside the loop counter's"
     );
 }
 
@@ -3550,11 +3543,12 @@ fn a_volatile_object_does_not_share_storage() {
     assert_eq!(coalesced_locals(src, "vols", true), 2);
 }
 
-/// An over-aligned object is a member of the realigned region, which is
-/// addressed by its own offset; sharing a member's slot would misplace the
-/// partner, so the bound does not reach it.
+/// An over-aligned object's storage is its region block alone: it keeps no
+/// locals cell. Objects in disjoint blocks share one block as ordinary
+/// objects share a cell; objects alive together, and every object at -O0,
+/// keep blocks of their own.
 #[test]
-fn an_over_aligned_object_does_not_share_storage() {
+fn an_over_aligned_object_takes_region_storage_alone() {
     let src = r#"
         void sink(unsigned *p);
         void aligned16(void)
@@ -3562,9 +3556,352 @@ fn an_over_aligned_object_does_not_share_storage() {
             { _Alignas(16) unsigned a = 1; sink(&a); }
             { _Alignas(16) unsigned b = 2; sink(&b); }
         }
+        void together(void)
+        {
+            _Alignas(16) unsigned a = 1;
+            _Alignas(16) unsigned b = 2;
+            sink(&a);
+            sink(&b);
+        }
         int main(void) { return 0; }
     "#;
-    assert_eq!(coalesced_locals(src, "aligned16", true), 2);
+    let f = coalesced(src, "aligned16", true);
+    assert_eq!(
+        (f.locals, f.realign_region_bytes),
+        (0, 16),
+        "{:?}",
+        f.over_aligned
+    );
+    assert_eq!(f.over_aligned.len(), 2);
+    assert_eq!(f.over_aligned[0].off, f.over_aligned[1].off);
+    let g = coalesced(src, "together", true);
+    assert_eq!(
+        (g.locals, g.realign_region_bytes),
+        (0, 32),
+        "{:?}",
+        g.over_aligned
+    );
+    let h = coalesced(src, "aligned16", false);
+    assert_eq!(
+        (h.locals, h.realign_region_bytes),
+        (0, 32),
+        "{:?}",
+        h.over_aligned
+    );
+}
+
+/// AAPCS64 B.4 and the Microsoft x64 convention pass an aggregate by
+/// reference: the call takes, untagged, the address of a copy the walker
+/// makes -- a region member aligned to 16 under Win64 -- and never the
+/// object's own. Windows AArch64 passes a variadic homogeneous aggregate over
+/// 16 bytes so too; System V AMD64 and the other AArch64 calls take the
+/// aggregate's layout and marshal its bytes.
+#[test]
+fn a_by_reference_argument_is_the_address_of_a_copy() {
+    use crate::Target;
+    use crate::c5::ir::{FunctionSsa, Inst};
+    let src = "struct big { long long a, b, c; };\n\
+        struct hfa4 { double a, b, c, d; };\n\
+        long long h(struct big s) { return s.a; }\n\
+        double v(int n, ...) { return n; }\n\
+        long long f(void) { struct big s = { 1, 2, 3 }; return h(s) + s.b; }\n\
+        double g(void) { struct hfa4 x = { 1, 2, 3, 4 }; return v(1, x); }\n\
+        int main(void) { return (int)f() + (int)g(); }\n";
+    // The copy slot argument `j` of `f`'s first call names, with its region
+    // alignment, or `None` when the argument carries an aggregate layout.
+    let copy = |f: &FunctionSsa, j: usize| -> Option<(i64, i64)> {
+        let (args, aggs) = f.insts.iter().find_map(|i| match i {
+            Inst::Call { args, arg_aggs, .. } => Some((args, arg_aggs)),
+            _ => None,
+        })?;
+        if aggs.get(j).is_some_and(Option::is_some) {
+            return None;
+        }
+        let Inst::LocalAddr(slot) = f.insts[args[j] as usize] else {
+            panic!("argument {j} is no frame address");
+        };
+        assert!(
+            f.insts.iter().any(|i| matches!(i, Inst::Mcpy { dst, .. }
+                if matches!(f.insts[*dst as usize], Inst::LocalAddr(s) if s == slot))),
+            "argument {j} names slot {slot}, which no copy fills"
+        );
+        let align = f
+            .over_aligned
+            .iter()
+            .find(|m| m.slot == slot)
+            .map_or(8, |m| m.align);
+        Some((slot, align))
+    };
+    for (target, big, hfa) in [
+        (Target::LinuxAarch64, Some(8), None),
+        (Target::MacOSAarch64, Some(8), None),
+        (Target::WindowsAarch64, Some(8), Some(8)),
+        (Target::WindowsX64, Some(16), Some(16)),
+        (Target::LinuxX64, None, None),
+    ] {
+        let program = crate::Compiler::with_target(src.into(), target)
+            .compile()
+            .unwrap_or_else(|e| panic!("compile: {e}"));
+        let funcs =
+            crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+                .expect("ssa");
+        let f = funcs.iter().find(|f| f.name == "f").expect("f");
+        assert_eq!(copy(f, 0).map(|c| c.1), big, "{target:?} h(s)");
+        let g = funcs.iter().find(|f| f.name == "g").expect("g");
+        assert_eq!(copy(g, 1).map(|c| c.1), hfa, "{target:?} v(1, x)");
+    }
+}
+
+/// The Microsoft x64 convention passes an aggregate of 1, 2, 4 or 8 bytes by
+/// value as an integer whatever its members, so a floating-point member
+/// leaves the argument and the parameter with their layout and an integer
+/// register.
+#[test]
+fn win64_small_fp_aggregates_pass_as_integers() {
+    use crate::Target;
+    use crate::c5::codegen::ArgPlacement;
+    use crate::c5::codegen::ssa::emit_common::param_placements_common;
+    use crate::c5::ir::Inst;
+    const SHAPES: [&str; 4] = [
+        "struct { float x, y; }",
+        "struct { double d; }",
+        "struct { float f; }",
+        "struct { char c; float f; }",
+    ];
+    let mut src = alloc::string::String::new();
+    for (i, ty) in SHAPES.iter().enumerate() {
+        src += &alloc::format!(
+            "typedef {ty} T{i};\nlong take{i}(T{i} t, long x) {{ (void)t; return x; }}\n\
+             long call{i}(T{i} *p) {{ return take{i}(*p, 1); }}\n"
+        );
+    }
+    let target = Target::WindowsX64;
+    let program = crate::Compiler::with_options(
+        src,
+        target,
+        crate::CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .unwrap_or_else(|e| panic!("compile: {e}"));
+    let funcs = crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+        .expect("ssa");
+    for (i, ty) in SHAPES.iter().enumerate() {
+        let take = funcs
+            .iter()
+            .find(|f| f.name == alloc::format!("take{i}"))
+            .expect("take");
+        let plan = param_placements_common(take, target.abi());
+        assert!(
+            matches!(plan[0], ArgPlacement::StructRegs { n: 1, regs, .. } if !regs[0].is_fp),
+            "`{ty}` parameter: {:?}",
+            plan[0]
+        );
+        let call = funcs
+            .iter()
+            .find(|f| f.name == alloc::format!("call{i}"))
+            .expect("call");
+        let tagged = call.insts.iter().any(|inst| {
+            matches!(inst, Inst::Call { arg_aggs, .. } if arg_aggs.first().is_some_and(Option::is_some))
+        });
+        assert!(tagged, "`{ty}` argument takes no layout");
+    }
+}
+
+/// A variadic function returning an aggregate through the hidden pointer
+/// takes the pointer in the first integer register and its named arguments
+/// in their own classes after it (System V AMD64 3.2.3): `struct pair` in
+/// rsi:rdx, the double in xmm0 and n in ecx, on both sides of the call.
+#[test]
+fn a_variadic_hidden_pointer_callee_takes_named_arguments_by_class() {
+    use crate::Target;
+    use crate::c5::codegen::ssa::emit_common::param_placements_common;
+    use crate::c5::codegen::{ArgPlacement, ClassReg};
+    use crate::c5::ir::Inst;
+    let src = "#include <stdarg.h>\n\
+        struct big { long a, b, c; };\n\
+        struct pair { long lo, hi; };\n\
+        struct big vb(struct pair p, double d, int n, ...)\n\
+        { va_list ap; va_start(ap, n); long v = va_arg(ap, long); va_end(ap);\n\
+          struct big r = { p.lo, p.hi + (long)d, n + v }; return r; }\n\
+        long use(void) { struct pair p = { 1, 2 }; return vb(p, 2.5, 3, 4L).c; }\n";
+    let target = Target::LinuxX64;
+    let program = crate::Compiler::with_options(
+        src.into(),
+        target,
+        crate::CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .unwrap_or_else(|e| panic!("compile: {e}"));
+    let funcs = crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+        .expect("ssa");
+    let abi = target.abi();
+    let int = |reg| ClassReg { reg, is_fp: false };
+    let vb = funcs.iter().find(|f| f.name == "vb").expect("vb");
+    let plan = param_placements_common(vb, abi);
+    assert_eq!(
+        plan[0],
+        ArgPlacement::IntReg(abi.int_arg_regs[0]),
+        "result pointer"
+    );
+    assert!(
+        matches!(plan[1], ArgPlacement::StructRegs { regs, n: 2, .. }
+            if regs[..2] == [int(abi.int_arg_regs[1]), int(abi.int_arg_regs[2])]),
+        "pair: {:?}",
+        plan[1]
+    );
+    assert_eq!(plan[2], ArgPlacement::FpReg(0), "double");
+    assert_eq!(plan[3], ArgPlacement::IntReg(abi.int_arg_regs[3]), "n");
+    let caller = funcs.iter().find(|f| f.name == "use").expect("use");
+    let (fixed, aggs, mask) = caller
+        .insts
+        .iter()
+        .find_map(|i| match i {
+            Inst::Call {
+                fixed_args,
+                arg_aggs,
+                fp_arg_mask,
+                ..
+            } => Some((*fixed_args, arg_aggs.clone(), fp_arg_mask.clone())),
+            _ => None,
+        })
+        .expect("call");
+    assert_eq!(fixed, 4, "the result pointer and three named arguments");
+    assert!(
+        aggs.get(1).is_some_and(Option::is_some),
+        "the pair takes a layout"
+    );
+    assert!(
+        mask.has(2) && !mask.has(4),
+        "the double, not the long, is FP"
+    );
+}
+
+/// Microsoft x64 passes a floating-point argument to a variadic or
+/// unprototyped callee in its FP register, which the call copies into the
+/// integer one: a named `float` keeps its type, a variadic one widens to
+/// `double`, and a call without a prototype names no argument. The variadic
+/// definition reads its named `float` from the integer register's home at
+/// the width it arrives at.
+#[test]
+fn win64_variadic_and_unprototyped_calls_keep_fp_arguments_in_fp_registers() {
+    use crate::Target;
+    use crate::c5::ir::{FpMask, Inst, LoadKind};
+    let src = "double vd(double d, float f, int n, ...) { return d + f + n; }\n\
+        double un();\n\
+        double (*up)();\n\
+        double callv(void) { return vd(2.5, 1.5f, 1, 3.5f); }\n\
+        double callu(void) { return un(2.5, 3); }\n\
+        double callp(void) { return up(2.5, 1.5f); }\n\
+        double un(a, b) double a; int b; { return a + b; }\n";
+    let target = Target::WindowsX64;
+    let program = crate::Compiler::with_options(
+        src.into(),
+        target,
+        crate::CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .unwrap_or_else(|e| panic!("compile: {e}"));
+    let funcs = crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+        .expect("ssa");
+    let func = |name: &str| funcs.iter().find(|f| f.name == name).expect(name);
+    let call = |name: &str| -> (bool, usize, FpMask) {
+        func(name)
+            .insts
+            .iter()
+            .find_map(|i| match i {
+                Inst::Call {
+                    fixed_args,
+                    fp_arg_mask,
+                    ..
+                } => Some((false, *fixed_args, fp_arg_mask.clone())),
+                Inst::CallIndirect {
+                    callee_variadic,
+                    fixed_args,
+                    fp_arg_mask,
+                    ..
+                } => Some((*callee_variadic, *fixed_args, fp_arg_mask.clone())),
+                _ => None,
+            })
+            .expect("call")
+    };
+    let (_, fixed, mask) = call("callv");
+    assert_eq!(fixed, 3, "three named arguments");
+    assert!(
+        mask.has(0) && mask.has(1) && !mask.has(2) && mask.has(3),
+        "callv: {mask:x}"
+    );
+    let (_, fixed, mask) = call("callu");
+    assert_eq!(fixed, 0, "no named argument");
+    assert!(mask.has(0) && !mask.has(1), "callu: {mask:x}");
+    let (variadic, fixed, mask) = call("callp");
+    assert!(
+        variadic && fixed == 0,
+        "callp: variadic {variadic}, {fixed} named"
+    );
+    assert!(mask.has(0) && mask.has(1), "callp: {mask:x}");
+    // A positive offset is an argument cell.
+    let f32_cell = func("vd").insts.iter().any(|i| {
+        matches!(
+            i,
+            Inst::LoadLocal {
+                off,
+                kind: LoadKind::F32,
+                ..
+            } if *off > 0
+        )
+    });
+    assert!(f32_cell, "vd reads its named float's cell at 32 bits");
+}
+
+/// A call's aggregate result aligned above the 8-byte frame slot is a member
+/// of the over-aligned region, as a declared object of its type is, whether
+/// the callee stores it through the result pointer or it returns in
+/// registers (C11 6.2.4p8, 6.7.5); slot coalescing keeps the membership.
+#[test]
+fn an_aggregate_call_result_takes_its_type_alignment() {
+    use crate::Target;
+    use crate::c5::ir::{FunctionSsa, Inst};
+    let src = "struct m16 { _Alignas(16) char a[32]; };\n\
+        struct r16 { _Alignas(16) char a[16]; };\n\
+        struct m32 { _Alignas(32) char a[64]; };\n\
+        struct m16 f16(void) { struct m16 r = {{1}}; return r; }\n\
+        struct r16 g16(void) { struct r16 r = {{1}}; return r; }\n\
+        struct m32 f32(void) { struct m32 r = {{1}}; return r; }\n\
+        int use_f16(void) { return f16().a[1]; }\n\
+        int use_g16(void) { return g16().a[1]; }\n\
+        int use_f32(void) { return f32().a[1]; }\n\
+        int main(void) { return use_f16() + use_g16() + use_f32(); }\n";
+    let placed = |f: &FunctionSsa| {
+        let slot = f.insts.iter().find_map(|i| match *i {
+            Inst::Call { ret_slot_local, .. } => Some(ret_slot_local),
+            _ => None,
+        });
+        let member = f.over_aligned.iter().find(|m| Some(m.slot) == slot);
+        (member.map(|m| m.align), f.frame_align)
+    };
+    const USES: [(&str, i64); 3] = [("use_f16", 16), ("use_g16", 16), ("use_f32", 32)];
+    for target in [
+        Target::LinuxX64,
+        Target::LinuxAarch64,
+        Target::MacOSAarch64,
+        Target::WindowsX64,
+        Target::WindowsAarch64,
+    ] {
+        let program = crate::Compiler::with_target(src.into(), target)
+            .compile()
+            .unwrap_or_else(|e| panic!("compile: {e}"));
+        let funcs =
+            crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+                .expect("ssa");
+        for (name, align) in USES {
+            let f = funcs.iter().find(|f| f.name == name).expect(name);
+            assert_eq!(placed(f), (Some(align), align), "{target:?} {name}");
+        }
+    }
+    for (name, align) in USES {
+        let f = coalesced(src, name, true);
+        assert_eq!(placed(&f), (Some(align), align), "{name} coalesced");
+    }
 }
 
 /// A body that may be re-entered after its first return does not have its
@@ -5507,6 +5844,314 @@ fn aggregate_parameter_classes_are_all_spliced() {
     }
 }
 
+/// AAPCS64 5.9.5 as gcc and clang apply it: a union holds as many
+/// homogeneous-aggregate elements as its largest member, a struct the sum
+/// of its members', an anonymous member counts as one member, 64- or
+/// 128-bit vectors of one width are one base type whatever their lanes,
+/// and padding, a bit-field of nonzero width, a vector of another width, a
+/// vector beside a scalar or a flexible or zero-length array makes none.
+/// `take` reads the `double` after the aggregate from the first SIMD
+/// register past its elements, and `make` returns one per element.
+#[test]
+fn homogeneous_aggregate_elements_follow_the_members() {
+    use crate::Target;
+    use crate::c5::codegen::ArgPlacement;
+    use crate::c5::codegen::abi_classify::fp_member_layout;
+    use crate::c5::codegen::ssa::emit_common::param_placements_common;
+    const SHAPES: &[(&str, u8)] = &[
+        ("union { double a; double b; }", 1),
+        ("union { float f[2]; struct { float x, y; } p; }", 2),
+        ("union { float f[3]; struct { float x, y; } p; }", 3),
+        ("union { double d[3]; struct { double a, b; } s; }", 3),
+        ("union { long double a; long double b; }", 1),
+        (
+            "struct { double x; union { double y; double z[1]; } u; double w; }",
+            3,
+        ),
+        ("struct { union { float a; float b; } u[3]; }", 3),
+        ("struct { float a; union { float b; float c; }; }", 2),
+        ("union { struct { float a, b; }; float c[2]; }", 2),
+        ("union { struct {} e; double d; }", 1),
+        ("struct { float a; int :0; float b; }", 2),
+        ("union { float f; double d; }", 0),
+        ("union { struct { float a, b; } s; double d; }", 0),
+        ("union { float a; int :8; }", 0),
+        ("struct { float a; int :8; float b; }", 0),
+        (
+            "struct { float a; float b __attribute__((aligned(8))); }",
+            0,
+        ),
+        ("struct __attribute__((aligned(16))) { double d; }", 0),
+        (
+            "union { struct __attribute__((aligned(8))) { float a; } s; float c[2]; }",
+            0,
+        ),
+        ("struct { double a; double b[]; }", 0),
+        ("struct { double a; double z[0]; }", 0),
+        ("struct { float __attribute__((vector_size(4))) v; }", 0),
+        ("union { v4f v; v4f w; }", 1),
+        ("struct { v4f a; v4i b; }", 2),
+        ("struct { v4f a, b, c, d; }", 4),
+        ("struct { v2f a, b, c; }", 3),
+        ("struct { v4f a[2]; }", 2),
+        ("struct { union { v4f a; v4f b; } u; v4f c; }", 2),
+        ("struct { v4f a; }", 1),
+        ("struct { v2f a; double d; }", 0),
+        ("struct { v4f a; v2f b; }", 0),
+        ("union { v4f v; struct { v2f lo, hi; } s; }", 0),
+    ];
+    let mut src = alloc::string::String::from(
+        "typedef float v4f __attribute__((vector_size(16)));\n\
+         typedef int v4i __attribute__((vector_size(16)));\n\
+         typedef float v2f __attribute__((vector_size(8)));\n",
+    );
+    for (i, (ty, _)) in SHAPES.iter().enumerate() {
+        src += &alloc::format!(
+            "typedef {ty} T{i};\n\
+             double take{i}(T{i} t, double x) {{ (void)t; return x; }}\n\
+             T{i} make{i}(T{i} *p) {{ return *p; }}\n"
+        );
+    }
+    for target in [
+        Target::LinuxAarch64,
+        Target::MacOSAarch64,
+        Target::WindowsAarch64,
+    ] {
+        let program = crate::Compiler::with_options(
+            src.clone(),
+            target,
+            crate::CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .unwrap_or_else(|e| panic!("compile ({target:?}): {e}"));
+        let funcs =
+            crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+                .expect("ssa");
+        let func = |name: &str| funcs.iter().find(|f| f.name == name).expect(name);
+        for (i, &(ty, n)) in SHAPES.iter().enumerate() {
+            let take = func(&alloc::format!("take{i}"));
+            assert_eq!(
+                param_placements_common(take, target.abi()).get(1),
+                Some(&ArgPlacement::FpReg(n)),
+                "{target:?} `{ty}`: the next double's register"
+            );
+            let make = func(&alloc::format!("make{i}"));
+            let desc = &make.agg_descs[make.ret_agg.expect("an aggregate return") as usize];
+            assert_eq!(
+                fp_member_layout(desc).map_or(0, |m| m.len()),
+                usize::from(n),
+                "{target:?} `{ty}`: the result's SIMD registers"
+            );
+        }
+    }
+}
+
+/// System V AMD64 3.2.3: an eightbyte no field overlaps takes no register,
+/// and a union's 16-byte vector beside a double or another vector takes one
+/// whole xmm register. The argument after each aggregate lands in the
+/// register past the ones the aggregate takes, and the result takes as many.
+#[test]
+fn sysv_eightbyte_classes_place_the_following_argument() {
+    use crate::Target;
+    use crate::c5::codegen::ArgPlacement;
+    use crate::c5::codegen::abi_classify::{AggClass, classify_aggregate, register_slots};
+    use crate::c5::codegen::ssa::emit_common::param_placements_common;
+    // (type, the next parameter's type, whether it is FP, its register index,
+    // the result's register count)
+    const SHAPES: &[(&str, &str, bool, usize, usize)] = &[
+        (
+            "struct __attribute__((aligned(16))) { double d; }",
+            "long",
+            false,
+            0,
+            1,
+        ),
+        (
+            "struct __attribute__((aligned(16))) { int a; }",
+            "long",
+            false,
+            1,
+            1,
+        ),
+        (
+            "union { double d; __attribute__((aligned(16))) char c; }",
+            "long",
+            false,
+            1,
+            1,
+        ),
+        (
+            "union { struct __attribute__((aligned(16))) { double d; } s; double e; }",
+            "long",
+            false,
+            0,
+            1,
+        ),
+        ("union { v4f v; double d; }", "double", true, 1, 1),
+        ("union { v4f v; v4f w; }", "double", true, 1, 1),
+        ("union { float f[4]; v4f v; }", "double", true, 2, 2),
+        ("union { double a; double b; }", "double", true, 1, 1),
+        ("struct { double d; long l; }", "long", false, 1, 2),
+    ];
+    let mut src =
+        alloc::string::String::from("typedef float v4f __attribute__((vector_size(16)));\n");
+    for (i, (ty, next, _, _, _)) in SHAPES.iter().enumerate() {
+        src += &alloc::format!(
+            "typedef {ty} T{i};\n\
+             {next} take{i}(T{i} t, {next} x) {{ (void)t; return x; }}\n\
+             T{i} make{i}(T{i} *p) {{ return *p; }}\n"
+        );
+    }
+    let target = Target::LinuxX64;
+    let abi = target.abi();
+    let program = crate::Compiler::with_options(
+        src,
+        target,
+        crate::CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .unwrap_or_else(|e| panic!("compile: {e}"));
+    let funcs = crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+        .expect("ssa");
+    let func = |name: &str| funcs.iter().find(|f| f.name == name).expect(name);
+    for (i, &(ty, _, fp, reg, ret_regs)) in SHAPES.iter().enumerate() {
+        let want = if fp {
+            ArgPlacement::FpReg(reg as u8)
+        } else {
+            ArgPlacement::IntReg(abi.int_arg_regs[reg])
+        };
+        let take = func(&alloc::format!("take{i}"));
+        assert_eq!(
+            param_placements_common(take, abi).get(1),
+            Some(&want),
+            "`{ty}`: the next argument's register"
+        );
+        let make = func(&alloc::format!("make{i}"));
+        let desc = &make.agg_descs[make.ret_agg.expect("an aggregate return") as usize];
+        let AggClass::Regs(classes) = classify_aggregate(desc, abi, true) else {
+            panic!("`{ty}`: returned in registers")
+        };
+        assert_eq!(
+            register_slots(&classes).count(),
+            ret_regs,
+            "`{ty}`: the result's registers"
+        );
+    }
+}
+
+/// System V AMD64 3.2.3: a packed aggregate with a member off its natural
+/// alignment is MEMORY class, on the stack ahead of the argument after it,
+/// which takes the first integer register; a bit-field is exempt, and so is
+/// a packed aggregate whose members all lie aligned.
+#[test]
+fn sysv_misaligned_members_send_the_aggregate_to_memory() {
+    use crate::Target;
+    use crate::c5::codegen::ArgPlacement;
+    use crate::c5::codegen::ssa::emit_common::param_placements_common;
+    const SHAPES: &[(&str, bool)] = &[
+        ("struct __attribute__((packed)) { char c; int x; }", true),
+        ("struct __attribute__((packed)) { char c; double d; }", true),
+        (
+            "struct { char c; struct __attribute__((packed)) { char a; int b; } s; }",
+            true,
+        ),
+        ("struct __attribute__((packed)) { int a; int b; }", false),
+        (
+            "struct __attribute__((packed)) { char c; char d[3]; }",
+            false,
+        ),
+        (
+            "struct __attribute__((packed)) { char c; int x : 16; }",
+            false,
+        ),
+    ];
+    let mut src = alloc::string::String::from(
+        "#pragma pack(push, 1)\nstruct p { short a; int b; };\n#pragma pack(pop)\n",
+    );
+    for (i, (ty, _)) in SHAPES.iter().enumerate() {
+        src += &alloc::format!(
+            "typedef {ty} T{i};\nlong take{i}(T{i} t, long x) {{ (void)t; return x; }}\n"
+        );
+    }
+    src += "long take_p(struct p t, long x) { (void)t; return x; }\n";
+    let target = Target::LinuxX64;
+    let abi = target.abi();
+    let program = crate::Compiler::with_options(
+        src,
+        target,
+        crate::CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .unwrap_or_else(|e| panic!("compile: {e}"));
+    let funcs = crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+        .expect("ssa");
+    let rows = SHAPES
+        .iter()
+        .enumerate()
+        .map(|(i, &(ty, memory))| (alloc::format!("take{i}"), ty, memory))
+        .chain(core::iter::once((
+            "take_p".into(),
+            "#pragma pack(1) struct",
+            true,
+        )));
+    for (name, ty, memory) in rows {
+        let f = funcs.iter().find(|f| f.name == name).expect("take");
+        let plan = param_placements_common(f, abi);
+        let next = abi.int_arg_regs[usize::from(!memory)];
+        assert_eq!(
+            (matches!(plan[0], ArgPlacement::StructStack { .. }), plan[1]),
+            (memory, ArgPlacement::IntReg(next)),
+            "`{ty}`"
+        );
+    }
+}
+
+/// System V AMD64 3.2.3: overlapping `long double` members merge to one
+/// X87 + X87UP pair, which returns in st(0); beside an integer member, or
+/// beside a `double`, the aggregate is MEMORY class and returns through the
+/// hidden pointer.
+#[test]
+fn sysv_x87_aggregates_return_as_their_eightbytes_merge() {
+    use crate::Target;
+    use crate::c5::codegen::abi_classify::{AggClass, RegClass, classify_aggregate};
+    const SHAPES: &[(&str, bool)] = &[
+        ("union { long double a; long double b; }", true),
+        ("union { long double x; long double y[1]; }", true),
+        (
+            "struct { union { long double a; long double b; } u; }",
+            true,
+        ),
+        ("struct { long double x; }", true),
+        ("union { long double x; long long l; }", false),
+        ("union { long double x; double d; }", false),
+    ];
+    let mut src = alloc::string::String::new();
+    for (i, (ty, _)) in SHAPES.iter().enumerate() {
+        src += &alloc::format!("typedef {ty} T{i};\nT{i} make{i}(T{i} *p) {{ return *p; }}\n");
+    }
+    let target = Target::LinuxX64;
+    let program = crate::Compiler::with_options(
+        src,
+        target,
+        crate::CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .unwrap_or_else(|e| panic!("compile: {e}"));
+    let funcs = crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+        .expect("ssa");
+    for (i, &(ty, in_st0)) in SHAPES.iter().enumerate() {
+        let make = funcs
+            .iter()
+            .find(|f| f.name == alloc::format!("make{i}"))
+            .expect("make");
+        let class = make
+            .ret_agg
+            .map(|ai| classify_aggregate(&make.agg_descs[ai as usize], target.abi(), true));
+        let want = in_st0.then(|| AggClass::Regs(alloc::vec![RegClass::X87]));
+        assert_eq!(class, want, "`{ty}`");
+    }
+}
+
 /// C99 6.2.2: a static object nothing reachable references is
 /// unobservable. `.data` is packed before lowering, from the pre-inline
 /// call graph, so an object whose last reference the inliner removes --
@@ -6942,12 +7587,13 @@ fn rolled_back_compound_literal_leaves_no_symbol_behind() {
     use crate::{CompileOptions, Compiler, Target};
 
     // The scalar's initializer folds to an integer, so the address path
-    // stages both literals and then restores its checkpoint; the table
-    // that follows is allocated over the reclaimed bytes.
+    // stages the literal in the arm it does not take and then restores its
+    // checkpoint; the table that follows is allocated over the reclaimed
+    // bytes.
     const SRC: &str = "struct s { int a; int b; };\n\
          struct e { const char *n; const struct s *p; };\n\
          static const long delta =\n\
-         (long)&((struct s){ 1, 2 }).b - (long)&((struct s){ 1, 2 }).a;\n\
+         1 ? 4 : (long)&((struct s){ 1, 2 }).a;\n\
          static const struct e tab[] = {\n\
          { \"a\", &(struct s){ .a = 1 } },\n\
          { \"b\", &(struct s){ .a = 2 } },\n\
@@ -7679,7 +8325,10 @@ fn freestanding_builtin_mem_transfer_binds_its_own_fallback() {
 /// per 8-byte entry against the `.text` section symbol with the
 /// target's offset as the addend -- the shape jump-table discovery in
 /// unwind tooling keys on -- and relocates the dispatch's base
-/// materialization against that section's STT_SECTION symbol.
+/// materialization against that section's STT_SECTION symbol. The object
+/// is the driver's default `-c` one, for a link that relocates it after
+/// mapping; a static link's form is
+/// `static_link_switch_dispatch_indexes_the_table_by_its_address`.
 #[test]
 fn switch_table_lands_in_rodata_section_of_object() {
     use crate::{
@@ -7710,6 +8359,7 @@ fn switch_table_lands_in_rodata_section_of_object() {
     .unwrap_or_else(|e| panic!("compile dense switch: {e}"));
     let opts = NativeOptions {
         output_kind: OutputKind::Relocatable,
+        pic_link: true,
         ..NativeOptions::default()
     };
     let bytes = emit_native_with_options(&prog, Target::LinuxX64, opts)
@@ -8053,6 +8703,158 @@ fn dense_switch_object(target: crate::Target, pic: bool, jump_tables: bool) -> a
         ..NativeOptions::default()
     };
     emit_native_with_options(&prog, target, opts).unwrap_or_else(|e| panic!("emit object: {e}"))
+}
+
+/// A relocatable x86-64 object for `opts`, compiled at `-O`.
+fn x64_object_at_o(src: &str, opts: crate::NativeOptions) -> alloc::vec::Vec<u8> {
+    use crate::{CompileOptions, Compiler, Target, emit_native_with_options};
+    let prog = Compiler::with_options(
+        src.to_string(),
+        Target::LinuxX64,
+        CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .unwrap_or_else(|e| panic!("compile: {e}"));
+    let opts = crate::NativeOptions {
+        output_kind: crate::OutputKind::Relocatable,
+        ..opts.with_optimize()
+    };
+    emit_native_with_options(&prog, Target::LinuxX64, opts)
+        .unwrap_or_else(|e| panic!("emit object: {e}"))
+}
+
+/// `.rela.text` as `(offset, type, target, addend)`, a section symbol
+/// named by its section.
+fn text_rela_by_target(bytes: &[u8]) -> alloc::vec::Vec<(usize, u32, String, u64)> {
+    let elf = ElfView::new(bytes);
+    let Some(rela) = elf.find(".rela.text") else {
+        return alloc::vec::Vec::new();
+    };
+    elf.rela_rows(rela)
+        .into_iter()
+        .map(|r| {
+            let target = if elf.sym_type(r.sym) == 3 {
+                elf.name_of(elf.sym_shndx(r.sym))
+            } else {
+                elf.sym_name(r.sym)
+            };
+            (r.offset as usize, r.rtype, target.to_string(), r.addend)
+        })
+        .collect()
+}
+
+/// Whether the four bytes at `at` are the displacement of a base-less
+/// SIB operand: ModRM mod=00 rm=100, SIB base=101.
+fn indexes_by_address(text: &[u8], at: usize) -> bool {
+    text[at - 2] & 0xc7 == 0x04 && text[at - 1] & 0x07 == 0x05
+}
+
+/// A link that resolves the relocations statically (`pic_link` clear:
+/// `-fno-pic`, the kernel code model) takes an absolute field, so the
+/// dispatch loads its entry through the table's address, `mov
+/// table(,%idx,8), %r10`: one `R_X86_64_32S` at that load's displacement
+/// against the table section's STT_SECTION symbol and no `lea`. objtool
+/// reads a PC32 table reference as a compiler quirk and stops reporting
+/// unreachable instructions for the whole object.
+#[test]
+fn static_link_switch_dispatch_indexes_the_table_by_its_address() {
+    use crate::c5::object::elf_reloc_types::R_X86_64_32S;
+    use crate::{CodeModel, NativeOptions};
+    for code_model in [CodeModel::Small, CodeModel::Kernel] {
+        let opts = NativeOptions {
+            code_model,
+            ..NativeOptions::default()
+        };
+        let bytes = x64_object_at_o(DENSE_SWITCH_SRC, opts);
+        let text = elf_text(&bytes);
+        let rows: alloc::vec::Vec<_> = text_rela_by_target(&bytes)
+            .into_iter()
+            .filter(|r| r.2 == ".rodata.jump_tables")
+            .collect();
+        assert_eq!(rows.len(), 1, "{code_model:?}: one reference to the table");
+        let (at, rtype, _, addend) = rows[0];
+        assert_eq!(rtype, R_X86_64_32S, "{code_model:?}: reference type");
+        assert_eq!(addend, 0, "{code_model:?}: the table opens its section");
+        assert!(
+            indexes_by_address(&text, at),
+            "{code_model:?}: operand form"
+        );
+        // REX.W 8b /r at scale 8.
+        assert_eq!(text[at - 4] & 0xf8, 0x48, "{code_model:?}: REX.W");
+        assert_eq!(text[at - 3], 0x8b, "{code_model:?}: mov opcode");
+        assert_eq!(text[at - 1] >> 6, 3, "{code_model:?}: scale 8");
+    }
+}
+
+/// Under a static link an indexed access to an object reads it through
+/// the object's address, `sym(,%idx,scale)` with `R_X86_64_32S` at the
+/// displacement: a load, a store, an immediate store, a zero test and a
+/// computed-goto table, and under the kernel code model an object of
+/// another unit, which the small model reaches through the GOT. A link
+/// that relocates after mapping keeps every access RIP-relative.
+#[test]
+fn static_link_indexes_data_by_its_address() {
+    use crate::c5::object::elf_reloc_types::{R_X86_64_32S, R_X86_64_PC32, R_X86_64_REX_GOTPCRELX};
+    use crate::{CodeModel, NativeOptions};
+    const SRC: &str = "static long tab[16];\n\
+        static short half[16];\n\
+        extern unsigned long ext_arr[];\n\
+        long ld(unsigned i) { return tab[i]; }\n\
+        void st(unsigned i, long v) { tab[i] = v; }\n\
+        void sti(unsigned i) { half[i] = 7; }\n\
+        int zt(unsigned i) { if (half[i]) return 3; return 5; }\n\
+        unsigned long ex(unsigned i) { return ext_arr[i]; }\n\
+        int cg(unsigned i) {\n\
+            static const void *const t[] = { &&a, &&b };\n\
+            goto *t[i & 1];\n\
+        a: return 1;\n\
+        b: return 2;\n\
+        }\n";
+    for code_model in [CodeModel::Kernel, CodeModel::Small] {
+        let kernel = code_model == CodeModel::Kernel;
+        let opts = NativeOptions {
+            code_model,
+            ..NativeOptions::default()
+        };
+        let bytes = x64_object_at_o(SRC, opts);
+        let text = elf_text(&bytes);
+        let rows = text_rela_by_target(&bytes);
+        let mut abs: alloc::vec::Vec<&str> = alloc::vec::Vec::new();
+        for (at, rtype, target, _) in &rows {
+            if *rtype == R_X86_64_32S {
+                assert!(
+                    indexes_by_address(&text, *at),
+                    "{code_model:?}: `{target}` at {at:#x} is not a base-less index"
+                );
+                abs.push(target);
+            }
+            assert!(
+                !(*rtype == R_X86_64_PC32 && (target == ".bss" || target == ".rodata")),
+                "{code_model:?}: `{target}` still addressed RIP-relative at {at:#x}"
+            );
+        }
+        abs.sort_unstable();
+        let mut want = alloc::vec![".bss", ".bss", ".bss", ".bss", ".rodata"];
+        if kernel {
+            want.push("ext_arr");
+        }
+        assert_eq!(abs, want, "{code_model:?}: absolute fields by target");
+        let got = rows
+            .iter()
+            .any(|r| r.1 == R_X86_64_REX_GOTPCRELX && r.2 == "ext_arr");
+        assert_eq!(got, !kernel, "{code_model:?}: `ext_arr` through the GOT");
+    }
+    let opts = NativeOptions {
+        pic_link: true,
+        ..NativeOptions::default()
+    };
+    let bytes = x64_object_at_o(SRC, opts);
+    assert!(
+        !text_rela_by_target(&bytes)
+            .iter()
+            .any(|r| r.1 == R_X86_64_32S),
+        "a link relocating after mapping takes no absolute field"
+    );
 }
 
 /// aarch64 twin of `switch_table_lands_in_rodata_section_of_object`:
@@ -8537,13 +9339,21 @@ fn optimized_function(
     name: &str,
     target: crate::Target,
 ) -> (String, alloc::vec::Vec<(u32, String)>) {
-    use crate::{CompileOptions, Compiler, NativeOptions, OutputKind};
+    optimized_function_with(src, name, target, crate::CompileOptions::default())
+}
+
+/// [`optimized_function`] with the front end configured by `opts`.
+pub(super) fn optimized_function_with(
+    src: &str,
+    name: &str,
+    target: crate::Target,
+    opts: crate::CompileOptions,
+) -> (String, alloc::vec::Vec<(u32, String)>) {
+    use crate::{Compiler, NativeOptions, OutputKind};
     let program = Compiler::with_options(
         String::from(src),
         target,
-        CompileOptions::default()
-            .with_no_entry_point(true)
-            .with_optimize(true),
+        opts.with_no_entry_point(true).with_optimize(true),
     )
     .compile()
     .unwrap_or_else(|e| panic!("compile ({target:?}): {e}"));
@@ -8576,7 +9386,8 @@ fn optimized_function(
 /// A long double member is read and written 16 bytes wide and a split
 /// field takes a one-cell slot, so the object stays in memory. Given such
 /// a slot, the member's store wrote the cell above it -- the saved frame
-/// pointer, in this function on x86-64.
+/// pointer, in this function on x86-64. The parameter's own home, which
+/// its entry store fills from the argument register, is two cells.
 #[test]
 fn wide_member_keeps_its_object_in_memory() {
     const SRC: &str = "struct ld { int a; int b; long double x; };\n\
@@ -8597,11 +9408,173 @@ fn wide_member_keeps_its_object_in_memory() {
                 .any(|(_, i)| i.starts_with("Store {") && wide(i)),
             "{target:?}: the member is stored through its object: {body}"
         );
+        let from_param = |i: &str| {
+            let id = i.split("value=v").nth(1).and_then(|r| r.split(',').next());
+            insts.iter().any(|(v, t)| {
+                Some(alloc::format!("{v}").as_str()) == id && t.starts_with("ParamRef")
+            })
+        };
         assert!(
             !insts
                 .iter()
-                .any(|(_, i)| i.starts_with("StoreLocal { off=-") && wide(i)),
+                .any(|(_, i)| { i.starts_with("StoreLocal { off=-") && wide(i) && !from_param(i) }),
             "{target:?}: no one-cell slot holds the member: {body}"
+        );
+    }
+}
+
+/// System V AMD64 passes a `long double` in memory and returns it in
+/// `st(0)` (3.2.3); AAPCS64 moves it whole in a vector register (6.8.2).
+/// Either way the caller stores the argument's image in a temporary it
+/// passes as an aggregate, not as a double in an FP argument register, the
+/// callee returns the address of its result's image, and the caller reads
+/// the result from the temporary the call fills.
+#[test]
+fn long_double_crosses_a_call_as_its_image() {
+    const SRC: &str = "__attribute__((noinline)) long double f(long double x) { return x * 2; }\n\
+        long double g(long double y) { return f(y) + 1; }\n";
+    fn stored_at(i: &str) -> Option<&str> {
+        i.split("addr=v").nth(1).and_then(|r| r.split(',').next())
+    }
+    for (target, kind) in [
+        (crate::Target::LinuxX64, "kind=F80"),
+        (crate::Target::LinuxAarch64, "kind=F128"),
+    ] {
+        let (body, insts) = optimized_function(SRC, "g", target);
+        let call = insts
+            .iter()
+            .find(|(_, i)| i.starts_with("Call {"))
+            .unwrap_or_else(|| panic!("{target:?}: no call: {body}"));
+        assert!(
+            call.1.contains("fp_arg_mask=0x0") && call.1.contains("fp_return=false"),
+            "{target:?}: no double rides an FP register: {body}"
+        );
+        let arg = call
+            .1
+            .split("args=[v")
+            .nth(1)
+            .and_then(|r| r.split(']').next());
+        assert!(
+            insts
+                .iter()
+                .any(|(_, i)| i.starts_with("Store {") && i.contains(kind) && stored_at(i) == arg),
+            "{target:?}: the argument is the address of its image: {body}"
+        );
+        assert!(
+            insts
+                .iter()
+                .any(|(v, i)| *v > call.0 && i.contains("Load") && i.contains(kind)),
+            "{target:?}: the result is read from its image: {body}"
+        );
+        let (body, insts) = optimized_function(SRC, "f", target);
+        let ret = body
+            .split("Return(v")
+            .nth(1)
+            .and_then(|r| r.split(')').next())
+            .and_then(|r| r.parse::<u32>().ok());
+        assert!(
+            insts
+                .iter()
+                .any(|(v, i)| Some(*v) == ret && i.starts_with("LocalAddr")),
+            "{target:?}: the callee returns its result's image: {body}"
+        );
+    }
+}
+
+/// An inlined callee reads a `long double` parameter from its cell with a
+/// `LoadLocal`, which binding the cell to the caller's argument address
+/// does not reach: the splice copies the argument's image into the cell.
+/// Bound, the cell was never written and `pick` read garbage at -O. So
+/// every cell a `LoadLocal` reads is written, through its address or
+/// directly.
+#[test]
+fn inlined_long_double_parameter_reads_the_argument_copy() {
+    const SRC: &str = "static long double pick(int c, long double a, long double b)\n\
+        { if (c) return a; return b; }\n\
+        long double f(int c, double x) { return pick(c, x, 5); }\n";
+    let (body, insts) = optimized_function(SRC, "f", crate::Target::LinuxX64);
+    assert!(
+        !insts.iter().any(|(_, i)| i.starts_with("Call {")),
+        "pick is inlined: {body}"
+    );
+    let reads: alloc::vec::Vec<&str> = insts
+        .iter()
+        .filter(|(_, i)| i.starts_with("LoadLocal") && i.contains("kind=F80"))
+        .filter_map(|(_, i)| i.split("off=").nth(1)?.split(',').next())
+        .collect();
+    assert!(!reads.is_empty(), "the parameters are read: {body}");
+    for off in reads {
+        let addr = alloc::format!("LocalAddr({off})");
+        let through_addr = |i: &str| {
+            insts.iter().any(|(v, a)| {
+                *a == addr
+                    && (i.starts_with("Mcpy {") && i.contains(alloc::format!("dst=v{v},").as_str())
+                        || i.starts_with("Store {")
+                            && i.contains(alloc::format!("addr=v{v},").as_str()))
+            })
+        };
+        let written = insts.iter().any(|(_, i)| {
+            through_addr(i) || i.starts_with(alloc::format!("StoreLocal {{ off={off},").as_str())
+        });
+        assert!(written, "cell {off} is written before it is read: {body}");
+    }
+}
+
+/// A call to a function that never returns stays out of line at -O: the
+/// callee declared `_Noreturn`, and the one whose body no path returns
+/// from, whether it ends in a call to a `_Noreturn` function or in a loop
+/// without an exit. A mandatory request is spliced as before.
+#[test]
+fn a_call_to_a_function_that_never_returns_survives_at_opt() {
+    const SRC: &str = "extern int g;\n\
+        static _Noreturn void die(int x) { g = x; for (;;) {} }\n\
+        static __attribute__((always_inline)) _Noreturn void die_now(int x)\n\
+        { g = x + 1; for (;;) {} }\n\
+        static void seal(int x) { g = x + 2; die(x); }\n\
+        static void spin(int x) { g = x + 3; for (;;) {} }\n\
+        int f(int t) { if (t == 3) die(t); return t + 1; }\n\
+        int f_now(int t) { if (t == 4) die_now(t); return t + 1; }\n\
+        int f_seal(int t) { if (t == 5) seal(t); return t + 1; }\n\
+        int f_spin(int t) { if (t == 6) spin(t); return t + 1; }\n";
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        let calls = |name: &str| {
+            let (body, insts) = optimized_function(SRC, name, target);
+            let n = insts
+                .iter()
+                .filter(|(_, i)| i.starts_with("Call {"))
+                .count();
+            (body, n)
+        };
+        for name in ["f", "f_seal", "f_spin"] {
+            let (body, n) = calls(name);
+            assert_eq!(n, 1, "{target:?}: {name} keeps its call: {body}");
+        }
+        let (body, n) = calls("f_now");
+        assert_eq!(
+            n, 0,
+            "{target:?}: f_now splices its always_inline callee: {body}"
+        );
+    }
+}
+
+/// A `long double` conditional merges its arms' binary64 values as a
+/// double. Given the object's F80 / F128 kinds, the merge slot fell back to
+/// I64: it stayed in memory and the result reached the return through a
+/// general register.
+#[test]
+fn long_double_conditional_merges_in_the_fp_class() {
+    const SRC: &str = "long double pick(int c, long double a, double b) { return c ? a : b; }\n";
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        let (body, insts) = optimized_function(SRC, "pick", target);
+        assert!(
+            insts
+                .iter()
+                .any(|(_, i)| i.starts_with("Phi {") && i.contains("kind=F64")),
+            "{target:?}: the arms merge in a double phi: {body}"
+        );
+        assert!(
+            !insts.iter().any(|(_, i)| i.contains("kind=I64")),
+            "{target:?}: no integer slot carries the value: {body}"
         );
     }
 }
@@ -10931,6 +11904,65 @@ fn a_goto_chain_reserves_one_block_per_label() {
     );
 }
 
+/// The gotos and `asm goto` edges to one label leaving the same scopes and
+/// running the same cleanup functions share one exit block and its calls.
+#[test]
+fn jumps_leaving_the_same_scopes_share_their_cleanup_calls() {
+    use crate::c5::ir::Inst;
+    const SRC: &str = "static void end(int *p) { *p = 1; }\n\
+        #define CL __attribute__((cleanup(end)))\n\
+        int one_scope(int *p) {\n\
+            { int g CL = 0;\n\
+              if (p[0]) goto fault;\n\
+              if (p[1]) goto fault;\n\
+              if (p[2]) goto fault;\n\
+              asm goto(\"\" : : : : fault);\n\
+              asm goto(\"\" : : : : fault); }\n\
+            return 0;\n\
+        fault:\n\
+            return -14;\n\
+        }\n\
+        int two_depths(int *p) {\n\
+            { int g CL = 0;\n\
+              if (p[0]) goto fault;\n\
+              { int a[2] = {p[1], p[2]};\n\
+                if (a[0]) goto fault;\n\
+                if (a[1]) goto fault; }\n\
+              if (p[3]) goto fault; }\n\
+            return 0;\n\
+        fault:\n\
+            return -14;\n\
+        }\n\
+        int two_lists(int *p) {\n\
+            { int a CL = 0;\n\
+              if (p[0]) goto out;\n\
+              int b CL = 0;\n\
+              if (p[1]) goto out;\n\
+              if (p[2]) goto out; }\n\
+            return 0;\n\
+        out:\n\
+            return 1;\n\
+        }\n";
+    let calls = |name: &str| {
+        ssa_func_named(SRC, name)
+            .insts
+            .iter()
+            .filter(|i| matches!(i, Inst::Call { .. } | Inst::CallExt { .. }))
+            .count()
+    };
+    assert_eq!(
+        calls("one_scope"),
+        2,
+        "one exit for the five jumps, one end"
+    );
+    assert_eq!(calls("two_depths"), 3, "the array's block adds an exit");
+    assert_eq!(
+        calls("two_lists"),
+        5,
+        "`a` for one goto, `b` `a` for two, and the end"
+    );
+}
+
 /// An integer multiply whose only reader is an add or a subtract
 /// contracts into AArch64's three-operand multiply-accumulate: `c -
 /// a*b` is one `MSUB` and `c + a*b` one `MADD`. Both the 32- and the
@@ -11100,6 +12132,64 @@ fn stack_protector_modes_select_the_shapes_gcc_selects() {
         StackProtector::All,
         &["addr", "arrmem", "c7", "c8", "i2", "leaf", "noarr", "scal"],
     );
+}
+
+/// A return taken ahead of the frame runs before the canary is stored and
+/// leaves without checking it: under `-fstack-protector-all` at `-O` the
+/// return after `fib`'s body touches no memory, and the frame path still
+/// checks the canary.
+#[test]
+#[cfg(feature = "full")]
+fn an_early_return_leaves_without_the_canary() {
+    use crate::{CompileOptions, NativeOptions, OutputKind, StackProtect, StackProtector, Target};
+    const SRC: &str = "long fib(int n) { if (n < 2) return n; return fib(n - 1) + fib(n - 2); }\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let program = crate::Compiler::with_options(
+            alloc::string::String::from(SRC),
+            target,
+            CompileOptions::default()
+                .with_no_entry_point(true)
+                .with_optimize(true),
+        )
+        .compile()
+        .unwrap_or_else(|e| panic!("compile: {e}"));
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            stack_protect: StackProtect {
+                mode: StackProtector::All,
+                ..StackProtect::OFF
+            },
+            ..NativeOptions::new().with_optimize()
+        };
+        let build = crate::c5::codegen::lower_for(&program, target, opts.clone())
+            .unwrap_or_else(|e| panic!("lower: {e}"));
+        let [early] = build.early_returns[..] else {
+            panic!(
+                "{target:?}: fib returns ahead of its frame: {:?}",
+                build.early_returns
+            );
+        };
+        let end = build.func_ends.first().copied().unwrap_or(build.text.len());
+        let stub = &build.text[(early.begin + early.exit) as usize..end];
+        let touches_memory = match target {
+            Target::LinuxX64 => super::perf_codegen::x64_insns(stub)
+                .iter()
+                .any(|i| i.modrm.is_some_and(|m| m >> 6 != 3)),
+            _ => stub
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .any(|w| (u32::from_le_bytes(*w) >> 25) & 0b101 == 0b100),
+        };
+        assert!(!touches_memory, "{target:?}: {stub:02x?}");
+        let obj = crate::emit_native_with_options(&program, target, opts)
+            .unwrap_or_else(|e| panic!("emit: {e}"));
+        assert_eq!(
+            functions_calling(&obj, "__stack_chk_fail"),
+            ["fib"],
+            "{target:?}"
+        );
+    }
 }
 
 #[test]
@@ -12617,9 +13707,84 @@ fn stores_pair(ws: &[u32], rt: u8) -> bool {
     ws.iter().any(stp) || slots(lo).any(|(base, off)| slots(hi).any(|s| s == (base, off + 8)))
 }
 
+/// Whether `ws` adds registers `a` and `b` into x0, in either order.
+fn adds_regs(ws: &[u32], a: u8, b: u8) -> bool {
+    use crate::c5::codegen::aarch64::encode::{Reg, enc_add_reg};
+    ws.contains(&enc_add_reg(Reg(0), Reg(a), Reg(b)))
+        || ws.contains(&enc_add_reg(Reg(0), Reg(b), Reg(a)))
+}
+
 fn expect_words(ws: &[u32], want: &[u32], what: &str) {
     for w in want {
         assert!(ws.contains(w), "{what}: {w:#010x} missing");
+    }
+}
+
+/// Apple arm64 stores a named stack argument at its own size and alignment,
+/// `char`, `short`, `int`, `char`, `long` past eight `long`s at 0, 2, 4, 8
+/// and 16, and a variadic one in an 8-byte slot from the next multiple of 8;
+/// the callee loads each from there. AAPCS64 gives every one 8 bytes.
+#[test]
+fn apple_arm64_packs_narrow_stack_arguments() {
+    use crate::Target;
+    const SRC: &str = "typedef long L;\n\
+        L take(L a0, L a1, L a2, L a3, L a4, L a5, L a6, L a7, char c, short s, int i,\n\
+            char c2, L l) { return c + s * 3 + i * 5 + c2 * 7 + l * 11; }\n\
+        L ext(L a0, L a1, L a2, L a3, L a4, L a5, L a6, L a7, char c, short s, int i,\n\
+            char c2, L l);\n\
+        L ext_va(L a0, L a1, L a2, L a3, L a4, L a5, L a6, L a7, int n, ...);\n\
+        L give(char c, short s, int i) { return ext(0, 1, 2, 3, 4, 5, 6, 7, c, s, i, c, 9); }\n\
+        L give_va(char c) { return ext_va(0, 1, 2, 3, 4, 5, 6, 7, 1, c); }\n";
+    // (bytes, offset) of each general-register store, or load of either
+    // extension, at `[base, #offset]` (unsigned offset: size 111 0 01 opc
+    // imm12 Rn Rt, opc 00 a store), in offset order.
+    let accesses = |ws: &[u32], base: u32, load: bool| {
+        let mut got: alloc::vec::Vec<(u32, u32)> = ws
+            .iter()
+            .filter(|&&w| {
+                w & 0x3f00_0000 == 0x3900_0000
+                    && ((w >> 22) & 3 != 0) == load
+                    && (w >> 5) & 0x1f == base
+            })
+            .map(|&w| (1 << (w >> 30), ((w >> 10) & 0xfff) << (w >> 30)))
+            .collect();
+        got.sort_by_key(|&(_, off)| off);
+        got
+    };
+    let packed = [(1, 0), (2, 2), (4, 4), (1, 8), (8, 16)];
+    for (target, named, variadic) in [
+        (Target::MacOSAarch64, &packed, [(4, 0), (8, 8)]),
+        (
+            Target::LinuxAarch64,
+            &[(8, 0), (8, 8), (8, 16), (8, 24), (8, 32)],
+            [(8, 0), (8, 8)],
+        ),
+    ] {
+        let obj = relocatable_object(SRC, target);
+        let give = function_words(&obj, "give");
+        assert_eq!(
+            accesses(&give, 31, false),
+            named,
+            "{target:?} give: {give:08x?}"
+        );
+        let give_va = function_words(&obj, "give_va");
+        assert_eq!(
+            accesses(&give_va, 31, false),
+            variadic,
+            "{target:?} give_va: {give_va:08x?}"
+        );
+        // Each at its type's width, above the frame record.
+        let take = function_words(&obj, "take");
+        let from_fp: alloc::vec::Vec<(u32, u32)> = named
+            .iter()
+            .zip([1, 2, 4, 1, 8])
+            .map(|(&(_, off), bytes)| (bytes, off + 16))
+            .collect();
+        assert_eq!(
+            accesses(&take, 29, true),
+            from_fp,
+            "{target:?} take: {take:08x?}"
+        );
     }
 }
 
@@ -12630,12 +13795,12 @@ fn expect_words(ws: &[u32], want: &[u32], what: &str) {
 fn align16_arguments_pair_registers_and_align_stack_slots() {
     use crate::Target;
     use crate::c5::codegen::aarch64::encode::{
-        Reg, enc_add_imm, enc_and_align_down, enc_ldr_imm, enc_mov_reg, enc_movz, enc_str_imm,
+        Reg, enc_add_imm, enc_and_align_down, enc_ldr_imm, enc_movz, enc_str_imm,
     };
     const SRC: &str = "#include <stdarg.h>\n\
         typedef long long ll;\n\
-        ll take_c(void *ctx, __int128 a, ll c) { return c; }\n\
-        ll after_five(ll r0, ll r1, ll r2, ll r3, ll r4, __int128 a, ll c) { return c; }\n\
+        ll take_c(void *ctx, __int128 a, ll c) { return c + (ll)a; }\n\
+        ll after_five(ll r0, ll r1, ll r2, ll r3, ll r4, __int128 a, ll c) { return c + (ll)a; }\n\
         ll after_seven(ll r0, ll r1, ll r2, ll r3, ll r4, ll r5, ll r6, __int128 a, ll c)\n\
             { return c + (ll)a; }\n\
         ll va_pair(int n, ...) { va_list ap; va_start(ap, n);\n\
@@ -12674,15 +13839,12 @@ fn align16_arguments_pair_registers_and_align_stack_slots() {
         (Target::MacOSAarch64, 1, 3),
     ] {
         let obj = relocatable_object(SRC, target);
+        // The sum reads the pair's low register and `c` straight from
+        // their argument registers.
         let take_c = function_words(&obj, "take_c");
         assert!(
-            stores_pair(&take_c, pair),
-            "{target:?} take_c: the pair is not x{pair}"
-        );
-        expect_words(
-            &take_c,
-            &[enc_mov_reg(x(0), x(next))],
-            &alloc::format!("{target:?} take_c"),
+            adds_regs(&take_c, pair, next),
+            "{target:?} take_c: the pair is not x{pair}: {take_c:08x?}"
         );
         let caller = [
             enc_ldr_imm(x(pair + 1), x(pair), 8),
@@ -12729,11 +13891,13 @@ fn align16_arguments_pair_registers_and_align_stack_slots() {
     // after seven the pair itself spills, 16-aligned, ahead of `c`.
     let obj = relocatable_object(SRC, Target::LinuxAarch64);
     let after_five = function_words(&obj, "after_five");
+    let reads_c = after_five
+        .iter()
+        .any(|&w| w & !0x1f == enc_ldr_imm(x(0), x(29), 16) & !0x1f);
     assert!(
-        stores_pair(&after_five, 6),
-        "after_five: the pair is not x6"
+        reads_c && (0..31).any(|r| adds_regs(&after_five, 6, r)),
+        "after_five: the pair is not x6: {after_five:08x?}"
     );
-    expect_words(&after_five, &[enc_ldr_imm(x(0), x(29), 16)], "after_five");
     let seven = [
         enc_ldr_imm(x(17), x(29), 16),
         enc_ldr_imm(x(17), x(29), 24),
@@ -12768,12 +13932,10 @@ fn align16_arguments_pair_registers_and_align_stack_slots() {
 #[test]
 fn attribute_aligned_aggregate_is_placed_per_arm64_platform() {
     use crate::Target;
-    use crate::c5::codegen::aarch64::encode::{
-        Reg, enc_ldr_imm, enc_mov_reg, enc_movz, enc_str_imm,
-    };
+    use crate::c5::codegen::aarch64::encode::{Reg, enc_ldr_imm, enc_movz, enc_str_imm};
     const SRC: &str = "typedef long long ll;\n\
         struct whole16 { ll lo; ll hi; } __attribute__((aligned(16)));\n\
-        ll take_reg(ll x, struct whole16 s, ll c) { return c; }\n\
+        ll take_reg(ll x, struct whole16 s, ll c) { return c + s.hi; }\n\
         ll ext_reg(ll x, struct whole16 s, ll c);\n\
         ll ext_stack(ll r0, ll r1, ll r2, ll r3, ll r4, ll r5, ll r6, ll r7, ll x,\n\
             struct whole16 s, ll c);\n\
@@ -12788,16 +13950,13 @@ fn attribute_aligned_aggregate_is_placed_per_arm64_platform() {
     ] {
         let obj = relocatable_object(SRC, target);
         let what = |f: &str| alloc::format!("{target:?} {f}");
+        // The sum reads the pair's high register and `c` straight from
+        // their argument registers.
         let take_reg = function_words(&obj, "take_reg");
         assert!(
-            stores_pair(&take_reg, pair),
-            "{}: the pair is not x{pair}",
+            adds_regs(&take_reg, pair + 1, pair + 2),
+            "{}: the pair is not x{pair}: {take_reg:08x?}",
             what("take_reg")
-        );
-        expect_words(
-            &take_reg,
-            &[enc_mov_reg(x(0), x(pair + 2))],
-            &what("take_reg"),
         );
         let caller = [
             enc_ldr_imm(x(pair + 1), x(pair), 8),
@@ -13027,6 +14186,152 @@ fn variadic_aggregate_over_16_bytes_is_read_where_the_caller_passed_it() {
     );
 }
 
+/// AAPCS64 B.4: `va_arg` of a homogeneous aggregate takes `__vr_offs`
+/// forward by 16 per element and copies element `k` from its save slot at
+/// `16 * k` to `k * width` of a temporary; `__gr_offs` is not read. A
+/// binary128 element or a 128-bit vector is its whole slot.
+#[test]
+fn variadic_hfa_elements_come_from_the_vector_save_area() {
+    use crate::Target;
+    use crate::c5::codegen::aarch64::encode::{
+        Reg, enc_add_imm, enc_ldr_imm, enc_ldr32_imm, enc_ldrsw_imm, enc_str_imm, enc_str32_imm,
+    };
+    const SRC: &str = "#include <stdarg.h>\n\
+        struct d3 { double a, b, c; };\n\
+        struct f4 { float a, b, c, d; };\n\
+        struct q1 { long double v; };\n\
+        typedef float v4f __attribute__((vector_size(16)));\n\
+        struct v2 { v4f a, b; };\n\
+        double va_d3(int n, ...) { va_list ap; va_start(ap, n);\n\
+            struct d3 s = va_arg(ap, struct d3); va_end(ap); return s.a + s.c + n; }\n\
+        double va_f4(int n, ...) { va_list ap; va_start(ap, n);\n\
+            struct f4 s = va_arg(ap, struct f4); va_end(ap); return s.a + s.d + n; }\n\
+        long double va_q1(int n, ...) { va_list ap; va_start(ap, n);\n\
+            struct q1 s = va_arg(ap, struct q1); va_end(ap); return s.v + n; }\n\
+        float va_v2(int n, ...) { va_list ap; va_start(ap, n);\n\
+            struct v2 s = va_arg(ap, struct v2); va_end(ap); return s.a[0] + s.b[3] + n; }\n";
+    let x = Reg;
+    let obj = relocatable_object(SRC, Target::LinuxAarch64);
+    for (name, n, width) in [
+        ("va_d3", 3u32, 8u32),
+        ("va_f4", 4, 4),
+        ("va_q1", 1, 16),
+        ("va_v2", 2, 16),
+    ] {
+        let ws = function_words(&obj, name);
+        expect_words(
+            &ws,
+            &[
+                enc_ldrsw_imm(x(16), x(17), 28),
+                enc_add_imm(x(16), x(16), 16 * n),
+            ],
+            name,
+        );
+        assert!(
+            !ws.contains(&enc_ldrsw_imm(x(16), x(17), 24)),
+            "{name}: reads __gr_offs"
+        );
+        // `ldr x17, [src, #16k + p] ; str x17, [dst, #wk + p]` for each part.
+        let parts: alloc::vec::Vec<(u32, u32)> = (0..n)
+            .flat_map(|k| {
+                (0..width)
+                    .step_by(8)
+                    .map(move |p| (16 * k + p, width * k + p))
+            })
+            .collect();
+        let copy = |src: u8, dst: u8, (from, to): (u32, u32)| {
+            if width == 4 {
+                [
+                    enc_ldr32_imm(x(17), x(src), from),
+                    enc_str32_imm(x(17), x(dst), to),
+                ]
+            } else {
+                [
+                    enc_ldr_imm(x(17), x(src), from),
+                    enc_str_imm(x(17), x(dst), to),
+                ]
+            }
+        };
+        let copies = ws.windows(2 * parts.len()).any(|w| {
+            (0..31).any(|src| {
+                (0..31).any(|dst| {
+                    parts
+                        .iter()
+                        .enumerate()
+                        .all(|(i, &p)| w[2 * i..2 * i + 2] == copy(src, dst, p))
+                })
+            })
+        });
+        assert!(
+            copies,
+            "{name}: the elements are not copied from their slots"
+        );
+    }
+}
+
+/// System V AMD64 3.5.7: `va_arg` takes each eightbyte of an aggregate from
+/// the save area of its class, checking room for all of them first -- two
+/// SSE eightbytes from the vector area, 16 bytes apart; an INTEGER and an
+/// SSE one from one area each -- and an x87 aggregate only from the
+/// overflow area.
+#[test]
+fn sysv_va_arg_takes_each_eightbyte_from_its_area() {
+    use crate::Target;
+    use crate::c5::codegen::x86_64::encode::{Reg, emit_mi, emit_mov_r32_mem, emit_ri};
+    use crate::c5::codegen::x86_64::table::Mnem;
+    const SRC: &str = "#include <stdarg.h>\n\
+        struct d2 { double x, y; };\n\
+        struct ld { long l; double d; };\n\
+        struct x87 { long double v; };\n\
+        double va_d2(int n, ...) { va_list ap; va_start(ap, n);\n\
+            struct d2 s = va_arg(ap, struct d2); va_end(ap); return s.x + s.y + n; }\n\
+        double va_ld(int n, ...) { va_list ap; va_start(ap, n);\n\
+            struct ld s = va_arg(ap, struct ld); va_end(ap); return s.l + s.d + n; }\n\
+        long double va_x87(int n, ...) { va_list ap; va_start(ap, n);\n\
+            struct x87 s = va_arg(ap, struct x87); va_end(ap); return s.v + n; }\n";
+    let (r10, r11) = (Reg(10), Reg(11));
+    let bytes = |f: &dyn Fn(&mut alloc::vec::Vec<u8>)| {
+        let mut v = alloc::vec::Vec::new();
+        f(&mut v);
+        v
+    };
+    // Load an offset field, check it, advance it.
+    let load_gp = bytes(&|v| emit_mov_r32_mem(v, r10, r11, 0));
+    let load_fp = bytes(&|v| emit_mov_r32_mem(v, r10, r11, 4));
+    let room = |limit| bytes(&|v| emit_ri(v, Mnem::Cmp, 8, r10, limit));
+    let step_gp = bytes(&|v| emit_mi(v, Mnem::Add, 4, r11, 0, 8));
+    let step_fp = bytes(&|v| emit_mi(v, Mnem::Add, 4, r11, 4, 16));
+    let obj = relocatable_object(SRC, Target::LinuxX64);
+    let has = |b: &[u8], seq: &[u8]| b.windows(seq.len()).any(|w| w == seq);
+    let count = |b: &[u8], seq: &[u8]| b.windows(seq.len()).filter(|w| *w == seq).count();
+    let d2 = function_bytes(&obj, "va_d2");
+    assert!(
+        has(&d2, &[load_fp.clone(), room(176 - 32)].concat()),
+        "va_d2: room for two"
+    );
+    assert_eq!(count(&d2, &step_fp), 2, "va_d2: two vector slots");
+    assert!(!has(&d2, &load_gp), "va_d2: reads gp_offset");
+    let ld = function_bytes(&obj, "va_ld");
+    assert!(
+        has(&ld, &[load_gp.clone(), room(48 - 8)].concat()),
+        "va_ld: room in the gp area"
+    );
+    assert!(
+        has(&ld, &[load_fp.clone(), room(176 - 16)].concat()),
+        "va_ld: room in the fp area"
+    );
+    assert_eq!(
+        (count(&ld, &step_gp), count(&ld, &step_fp)),
+        (1, 1),
+        "va_ld"
+    );
+    let x87 = function_bytes(&obj, "va_x87");
+    assert!(
+        !has(&x87, &load_gp) && !has(&x87, &load_fp),
+        "va_x87: reads a register save area"
+    );
+}
+
 /// Win64 passes every argument not of 1, 2, 4 or 8 bytes by reference, so `va_arg` loads it.
 #[test]
 fn win64_va_arg_reads_a_type_passed_by_reference_through_its_slot() {
@@ -13180,8 +14485,8 @@ fn named_aggregate_of_a_variadic_callee_is_passed_by_value() {
     assert!(has(&function_bytes(&win, "call_w8"), &[0x48, 0x8b, 0x09]));
 }
 
-/// Through a pointer, a hidden-pointer callee takes a named aggregate in its class and a
-/// variadic out-pointer callee by address; a variadic tail takes its aggregates by value.
+/// Through a pointer, a hidden-pointer callee takes a named aggregate in its class, a
+/// variadic one as well, and a variadic tail takes its aggregates by value.
 #[test]
 fn out_pointer_callee_aggregates_follow_the_callee_convention() {
     use crate::Target;
@@ -13206,13 +14511,10 @@ fn out_pointer_callee_aggregates_follow_the_callee_convention() {
         has("call_ptr", &hi) && has("call_ptr", &lo),
         "call_ptr: the pair not in rdx:rcx"
     );
+    // mov rdx, [rsi + 8] and mov rsi, [rsi]: the pair's eightbytes after the pointer in rdi.
     assert!(
-        has("vcall_ptr", &[0x48, 0x89, 0xfe]),
-        "vcall_ptr: no address in rsi"
-    );
-    assert!(
-        !has("vcall_ptr", &[0x48, 0x8b, 0x56, 0x08]),
-        "vcall_ptr: the pair passed by value"
+        has("vcall_ptr", &[0x48, 0x8b, 0x56, 0x08]) && has("vcall_ptr", &[0x48, 0x8b, 0x36]),
+        "vcall_ptr: the pair not in rsi:rdx"
     );
     assert!(
         has("call_vtail", &hi) && has("call_vtail", &lo),

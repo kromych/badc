@@ -26,57 +26,37 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x28, %rsp
-               	pushq	%rbx
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	testq	%rax, %rax
                	je	<addr>
-               	leaq	<rip>, %rbx
+               	leaq	<rip>, %r10
                	movq	%gs:<rip>, %rax
-               	movq	%rax, -0x20(%rbp)
-               	movq	-0x20(%rbp), %rcx
-               	movq	%gs:<rip>, %rax
-               	movq	%rax, -0x20(%rbp)
-               	movq	-0x20(%rbp), %rax
-               	addq	%rax, %rcx
-               	movb	%gs:0x10, %al
-               	movb	%al, -0x20(%rbp)
-               	movw	%gs:0x12, %ax
-               	movw	%ax, -0x18(%rbp)
-               	movl	%gs:0x14, %eax
-               	movl	%eax, -0x10(%rbp)
-               	movq	%gs:0x18, %rax
-               	movq	%rax, -0x8(%rbp)
-               	movzbq	-0x20(%rbp), %rax
-               	movzwq	-0x18(%rbp), %rdx
-               	addq	%rdx, %rax
-               	movl	-0x10(%rbp), %edx
-               	addq	%rdx, %rax
-               	movq	-0x8(%rbp), %rdx
-               	addq	%rdx, %rax
-               	incq	%rax
-               	addq	%rax, %rcx
-               	movq	%fs:0x28, %rax
-               	movq	%rax, -0x20(%rbp)
-               	movq	-0x20(%rbp), %rax
-               	addq	%rax, %rcx
-               	movq	%rcx, %rax
+               	movq	%gs:<rip>, %rcx
+               	addq	%rcx, %rax
+               	movb	%gs:0x10, %cl
+               	movw	%gs:0x12, %dx
+               	movl	%gs:0x14, %esi
+               	movq	%gs:0x18, %rdi
+               	andq	$0xff, %rcx
+               	andq	$0xffff, %rdx           # imm = 0xFFFF
+               	addq	%rdx, %rcx
+               	movl	%esi, %edx
+               	addq	%rdx, %rcx
+               	addq	%rdi, %rcx
+               	incq	%rcx
+               	addq	%rcx, %rax
+               	movq	%fs:0x28, %rcx
+               	addq	%rcx, %rax
                	movq	%rax, %gs:0x20
-               	movl	%ecx, %eax
-               	movl	%eax, %gs:0x28
-               	movq	%rcx, %rax
+               	movl	%eax, %ecx
+               	movl	%ecx, %gs:0x28
                	addq	%rax, %gs:0x20
                	incq	%gs:0x30
-               	movq	%rcx, %rax
                	cmpq	%rax, %gs:0x38
-               	leaq	<rip>, %rbx
+               	leaq	<rip>, %r10
                	nop
                	movl	$0x2a, %eax
-               	popq	%rbx
-               	leave
                	retq
                	addb	%al, (%rax)
                	movq	%gs:0x40, %rax

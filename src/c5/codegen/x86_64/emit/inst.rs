@@ -313,9 +313,12 @@ pub(super) fn emit_inst(
         }
         // A lifetime marker states a fact about storage the frame
         // already holds; `ssa::slot_coalesce` reads it and no code
-        // follows from it.
-        Inst::LifetimeEnd(_) => Ok(()),
-        Inst::ParamRef { idx, kind } => emit_param_ref(code, *idx, *kind, dst, v, fcx),
+        // follows from it. The return moves the parts of an `AggParts`,
+        // and an inline asm statement places its `AsmOut`s.
+        Inst::LifetimeEnd(_) | Inst::AggParts { .. } | Inst::AsmOut { .. } => Ok(()),
+        Inst::ParamRef { .. } | Inst::ParamPart { .. } | Inst::RetPart { .. } => {
+            emit_incoming(code, inst, dst, v, fcx)
+        }
         Inst::Imm(value) => {
             let Some(rd) = int_or_spill_dst(dst) else {
                 return fail("Imm: dst not int reg / spill");
@@ -338,6 +341,9 @@ pub(super) fn emit_inst(
             emit_lea_r_mem(code, rd, base, disp);
             spill_dst_to_slot(code, dst, rd, frame);
             Ok(())
+        }
+        Inst::LoadIndexed { abs_base: true, .. } | Inst::StoreIndexed { abs_base: true, .. } => {
+            emit_abs_indexed(code, &mut *out.abs_addr_refs, inst, v, dst, fcx)
         }
         Inst::Load { .. }
         | Inst::Store { .. }
@@ -371,14 +377,17 @@ pub(super) fn emit_inst(
             align,
         } => emit_mcpy(
             code,
+            v,
             dst,
             *d,
             *s,
             *size,
             *align,
+            fcx.bulk_xmm,
             abi.strict_align,
             alloc,
             frame,
+            abi,
         ),
         Inst::Mzero {
             dst: d,
@@ -389,7 +398,7 @@ pub(super) fn emit_inst(
             *d,
             *size,
             *align,
-            fcx.zero_fill_fp,
+            fcx.bulk_xmm,
             abi.strict_align,
             alloc,
             frame,
@@ -399,21 +408,16 @@ pub(super) fn emit_inst(
             addr,
             value,
             width,
-        } => emit_atomic_rmw(code, dst, *op, *addr, *value, *width, alloc, frame),
+            ..
+        } => emit_atomic_rmw(code, v, dst, *op, *addr, *value, *width, alloc, frame, abi),
         Inst::AtomicCas {
             addr,
-            expected_addr,
+            expected,
             desired,
             width,
+            ..
         } => emit_atomic_cas(
-            code,
-            dst,
-            *addr,
-            *expected_addr,
-            *desired,
-            *width,
-            alloc,
-            frame,
+            code, v, dst, *addr, *expected, *desired, *width, alloc, frame,
         ),
         Inst::AtomicLoad { addr, width, .. } => {
             emit_atomic_load(code, dst, *addr, *width, alloc, frame)
@@ -455,7 +459,10 @@ pub(super) fn emit_inst(
             c,
             neg_product,
         } => emit_mul_add(code, dst, v, *a, *b, *c, *neg_product, alloc, frame),
-        Inst::Extend { value, kind } => emit_extend(code, dst, v, *value, *kind, alloc, frame),
+        Inst::Udiv128 { hi, lo, divisor } => {
+            emit_udiv128(code, v, dst, *hi, *lo, *divisor, alloc, frame)
+        }
+        Inst::Extend { value, kind, .. } => emit_extend(code, dst, v, *value, *kind, alloc, frame),
         Inst::Bswap { value, width } => emit_bswap(code, dst, *value, *width, alloc, frame),
         Inst::BitCount { op, value, width } => emit_bit_count(
             code,
@@ -601,6 +608,7 @@ fn emit_mem_inst(
             index_ext,
             scale,
             kind,
+            ..
         } => emit_load_indexed(
             code,
             dst,
@@ -618,6 +626,7 @@ fn emit_mem_inst(
             scale,
             value,
             kind,
+            ..
         } => emit_store_indexed(
             code,
             dst,
@@ -724,7 +733,6 @@ fn emit_call_inst(
             target: callee,
             args,
             callee_variadic,
-            fixed_args,
             fp_return,
             fp_arg_mask,
             callee_conv,
@@ -738,7 +746,6 @@ fn emit_call_inst(
             *callee,
             args,
             *callee_variadic,
-            *fixed_args,
             alloc,
             frame,
             callee_abi(abi, target, *callee_conv),
@@ -755,17 +762,16 @@ fn emit_call_inst(
     }
 }
 
-/// Materialise the i-th host-ABI parameter into its `Place`, converting
-/// the low `kind` bytes per C99 6.3.1.3. An earlier `ParamRef` may have
-/// overwritten the incoming argument register (the allocator packs
+/// `Inst::ParamRef` / `Inst::ParamPart`: the incoming register the plan
+/// names into the value's place, an integer one converted from the low
+/// `kind` bytes per C99 6.3.1.3. An earlier `ParamRef` may have
+/// overwritten a parameter's argument register (the allocator packs
 /// sequentially-live parameters into one register), so `param_from_home`
 /// marks the parameters that read the home the prologue stored
-/// (`param_home_off`). The plan names the incoming register; a
-/// stack-passed parameter always reads its home.
-fn emit_param_ref(
+/// (`param_home_off`); a stack-passed parameter always reads its home.
+fn emit_incoming(
     code: &mut Vec<u8>,
-    idx: u32,
-    kind: LoadKind,
+    inst: &Inst,
     dst: Place,
     v: super::super::ir::ValueId,
     fcx: &FnCtx,
@@ -775,13 +781,21 @@ fn emit_param_ref(
         alloc,
         frame,
         abi,
+        target,
         param_from_home,
         param_plan,
         ..
     } = *fcx;
-    let i = idx as usize;
-    let from_home = param_from_home.get(i).copied().unwrap_or(false);
-    let home_off = param_home_off(i, func, frame, abi) as i32;
+    let (kind, home) = match inst {
+        Inst::ParamRef { idx, kind } => (*kind, Some(*idx as usize)),
+        Inst::ParamPart { kind, .. } | Inst::RetPart { kind, .. } => (*kind, None),
+        _ => return fail("incoming: not a register read"),
+    };
+    let name = inst.variant_name();
+    let from_home = home.is_some_and(|i| param_from_home.get(i).copied().unwrap_or(false));
+    let home_off = home.map_or(0, |i| param_home_off(i, func, frame, abi) as i32);
+    let incoming = super::ssa::reg_alloc::incoming_reg(param_plan, inst)
+        .or_else(|| super::ssa::reg_alloc::ret_part_reg(target, inst));
     if matches!(kind, LoadKind::F32 | LoadKind::F64) {
         // A `float` occupies the low 32 bits of the xmm; the body re-narrows
         // it through the f32 store the walker seeded, so a scalar copy
@@ -800,12 +814,14 @@ fn emit_param_ref(
                     load_home(code, Reg(frame.fp_scratch[0]));
                     fp_spill_dst_to_slot(code, dst, Reg(frame.fp_scratch[0]), frame);
                 }
-                _ => return fail("ParamRef: FP param dst not fp reg / spill"),
+                _ => return fail(alloc::format!("{name}: FP dst not fp reg / spill")),
             }
             return Ok(());
         }
-        let Some(super::ArgPlacement::FpReg(x)) = param_plan.get(i).copied() else {
-            return fail("ParamRef: FP param not in an FP argument register");
+        let Some((true, x)) = incoming else {
+            return fail(alloc::format!(
+                "{name}: FP value not in an FP argument register"
+            ));
         };
         let xmm = Reg(x);
         match dst {
@@ -815,14 +831,18 @@ fn emit_param_ref(
                 }
             }
             Place::Spill(_) => fp_spill_dst_to_slot(code, dst, xmm, frame),
-            _ => return fail("ParamRef: FP param dst not fp reg / spill"),
+            _ => return fail(alloc::format!("{name}: FP dst not fp reg / spill")),
         }
         return Ok(());
     }
-    let arg_reg = match param_plan.get(i).copied() {
-        Some(super::ArgPlacement::IntReg(r)) => Reg(r),
+    let arg_reg = match incoming {
+        Some((false, r)) => Reg(r),
         _ if from_home => Reg(0),
-        _ => return fail("ParamRef: int param has no incoming integer register"),
+        _ => {
+            return fail(alloc::format!(
+                "{name}: integer value has no incoming register"
+            ));
+        }
     };
     let ext = param_entry_ext(kind, v, alloc);
     let materialize = |code: &mut Vec<u8>, rd: Reg| {
@@ -849,7 +869,7 @@ fn emit_param_ref(
             materialize(code, SCRATCH_R10);
             spill_dst_to_slot(code, dst, SCRATCH_R10, frame);
         }
-        _ => return fail("ParamRef: dst not int reg / spill"),
+        _ => return fail(alloc::format!("{name}: dst not int reg / spill")),
     }
     Ok(())
 }

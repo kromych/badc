@@ -1,8 +1,7 @@
 // C99 6.4.4.2p4: an unsuffixed floating constant has type double,
-// `f`/`F` float, `l`/`L` long double (which c5 represents as
-// double). p5: the value is converted to the constant's type at
-// the literal, so an `f`-suffixed constant carries single-precision
-// rounding into any wider context.
+// `f`/`F` float, `l`/`L` long double. p5: the value is converted to
+// the constant's type at the literal, so an `f`-suffixed constant
+// carries single-precision rounding into any wider context.
 
 #include <stdarg.h>
 
@@ -23,8 +22,8 @@ int main(void) {
     if (sizeof(1.0f) != 4) return 1;
     if (sizeof(1.0F) != 4) return 2;
     if (sizeof(1.0) != 8) return 3;
-    if (sizeof(1.0l) != 8) return 4;
-    if (sizeof(1.0L) != 8) return 5;
+    if (sizeof(1.0l) != sizeof(long double)) return 4;
+    if (sizeof(1.0L) != sizeof(long double)) return 5;
     if (sizeof(.5f) != 4) return 6;
     if (sizeof(1e2f) != 4) return 7;
     if (sizeof(0x1p0f) != 4) return 8;

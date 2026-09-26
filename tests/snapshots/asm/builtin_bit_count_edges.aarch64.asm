@@ -581,24 +581,22 @@ Disassembly of section .text:
                	str	x22, [sp, #0x10]
                	stp	x29, x30, [sp, #0x20]
                	add	x29, sp, #0x20
-               	mov	x20, #0x0               // =0
-               	mov	x0, x20
+               	mov	x0, #0x0                // =0
                	bl	<addr>
                	cbnz	w0, <addr>
-               	mov	x0, x20
+               	mov	x0, #0x0                // =0
                	bl	<addr>
                	cbnz	w0, <addr>
-               	mov	x0, x20
+               	mov	x0, #0x0                // =0
                	bl	<addr>
                	cbnz	w0, <addr>
-               	mov	x20, #-0x1              // =-1
-               	mov	x0, x20
+               	mov	x0, #-0x1               // =-1
                	bl	<addr>
                	cbnz	w0, <addr>
-               	mov	x0, x20
+               	mov	x0, #-0x1               // =-1
                	bl	<addr>
                	cbnz	w0, <addr>
-               	mov	x0, x20
+               	mov	x0, #-0x1               // =-1
                	bl	<addr>
                	mov	x21, #0x0               // =0
                	cbnz	w0, <addr>

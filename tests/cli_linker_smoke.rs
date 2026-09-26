@@ -2349,15 +2349,17 @@ fn multi_tu_link_emits_array_type_for_local_arrays() {
     );
 }
 
-/// Every c5-emitted subprogram has DW_AT_prototyped set per
-/// DWARF 4 section 3.3.3.7 -- c5 rejects K&R-style identifier-
-/// list declarators (C99 6.7.6.3p14) so every function is
-/// prototyped at the source level. Debuggers rely on this flag
-/// to know the formal-parameter list is authoritative.
+/// DW_AT_prototyped (DWARF 4 3.3.3.7) is true on a subprogram whose type
+/// has a prototype and false on an old-style definition's (C99 6.9.1p7);
+/// a debugger calling the function promotes its arguments by it.
 #[test]
 fn multi_tu_link_emits_prototyped_flag_on_subprograms() {
     let dir = tempdir("multi-tu-prototyped");
-    write_source(&dir, "helper.c", "int helper(int x) { return x + 1; }\n");
+    write_source(
+        &dir,
+        "helper.c",
+        "int helper(int x) { return x + 1; }\nint old_style(x) int x; { return x - 1; }\n",
+    );
     write_source(
         &dir,
         "main.c",
@@ -2405,9 +2407,18 @@ fn multi_tu_link_emits_prototyped_flag_on_subprograms() {
             }
         }
     };
-    assert!(
-        out_text.contains("DW_AT_prototyped"),
-        "expected DW_AT_prototyped on at least one subprogram:\n{out_text}",
+    // The flag follows the subprogram's name in its DIE.
+    let flag_after = |name: &str| {
+        let at = out_text.find(&format!("DW_AT_name\t(\"{name}\")"))?;
+        let rest = &out_text[at..];
+        let p = rest.find("DW_AT_prototyped\t(")? + "DW_AT_prototyped\t(".len();
+        Some(rest[p..].split(')').next()?.to_string())
+    };
+    assert_eq!(flag_after("helper").as_deref(), Some("0x01"), "{out_text}");
+    assert_eq!(
+        flag_after("old_style").as_deref(),
+        Some("0x00"),
+        "{out_text}"
     );
 }
 
@@ -3573,6 +3584,345 @@ fn a_placed_image_lays_out_two_loads_without_page_padding() {
     }
 }
 
+/// A freestanding x86-64 program over a switch dispatch, a computed-goto
+/// table and indexed arrays, one of them defined by a second unit; the
+/// exit status counts the wrong results.
+const ABS_FORMS_MAIN: &str = r#"
+long sys_call3(long nr, long a, long b, long c);
+__asm__(".text
+.globl _start
+_start:
+  xor %ebp, %ebp
+  and $-16, %rsp
+"
+        "  call start_c
+  hlt
+"
+        ".globl sys_call3
+sys_call3:
+  mov %rdi, %rax
+  mov %rsi, %rdi
+"
+        "  mov %rdx, %rsi
+  mov %rcx, %rdx
+  syscall
+  ret
+");
+extern const int squares[];
+static long acc[8];
+static unsigned char seen[8];
+__attribute__((noinline)) static int pick(int x) {
+    switch (x) {
+    case 0: return 10; case 1: return 11; case 2: return 12; case 3: return 13;
+    case 4: return 14; case 5: return 15; case 6: return 16; case 7: return 17;
+    default: return -1;
+    }
+}
+__attribute__((noinline)) static int hop(unsigned i) {
+    static const void *const t[] = { &&a, &&b, &&c, &&d };
+    goto *t[i & 3];
+a: return 1;
+b: return 2;
+c: return 3;
+d: return 4;
+}
+void start_c(void) {
+    long bad = 0;
+    for (int i = 0; i < 8; i++) {
+        acc[i] = pick(i) + hop(i) + squares[i];
+        seen[i] = 1;
+    }
+    for (int i = 0; i < 8; i++)
+        if (!seen[i] || acc[i] != 10 + i + (i & 3) + 1 + i * i)
+            bad++;
+    sys_call3(231, bad, 0, 0);
+    for (;;) {}
+}
+"#;
+
+// `-fno-pic` and the kernel code model compile for a static link, so a
+// switch table, a label table and an indexed object are addressed by their
+// link-time address (`R_X86_64_32S`). A placed image, freestanding or a
+// hosted `-no-pie` one, resolves the field and runs; a position-independent
+// image has no load-time form for it, and the hosted link refuses it as
+// GNU ld does, while the default `-c` object of the same unit keeps
+// linking there.
+#[test]
+fn static_link_objects_address_tables_absolutely() {
+    const PT_INTERP: u32 = 3;
+    let dir = tempdir("static-link-absolute");
+    let main = write_source(&dir, "main.c", ABS_FORMS_MAIN);
+    let sq = write_source(
+        &dir,
+        "sq.c",
+        "const int squares[8] = {0, 1, 4, 9, 16, 25, 36, 49};
+",
+    );
+    let compile = |flags: &[&str], src: &Path, obj: &Path| {
+        run(
+            Command::new(badc())
+                .args(["-q", "--target=linux-x64", "-O", "-c"])
+                .args(flags)
+                .arg(src)
+                .arg("-o")
+                .arg(obj),
+            "compile",
+        );
+    };
+    for (tag, flag) in [("nopic", "-fno-pic"), ("kernel", "-mcmodel=kernel")] {
+        let objs = [
+            dir.join(format!("main-{tag}.o")),
+            dir.join(format!("sq-{tag}.o")),
+        ];
+        compile(&[flag], &main, &objs[0]);
+        compile(&[flag], &sq, &objs[1]);
+        let exe = dir.join(format!("placed-{tag}"));
+        run(
+            Command::new(badc())
+                .args([
+                    "-q",
+                    "--freestanding",
+                    "--entry=_start",
+                    "--target=linux-x64",
+                ])
+                .args(&objs)
+                .arg("-o")
+                .arg(&exe),
+            "placed link",
+        );
+        if host_linux_target() == "linux-x64" {
+            let out = Command::new(&exe).output().expect("run the image");
+            assert_eq!(out.status.code(), Some(0), "{tag}: wrong results");
+        }
+    }
+
+    let hosted = write_source(
+        &dir,
+        "hosted.c",
+        "#include <stdio.h>
+         static const char *const names[] = {\"zero\", \"one\", \"two\", \"three\"};
+         static int hits[4];
+         int main(int argc, char **argv) {
+         	(void)argv;
+         	hits[argc & 3]++;
+         	puts(names[argc & 3]);
+         	switch (argc) {
+         	case 1: return hits[1] - 1; case 2: return 3; case 3: return 4; case 4: return 5;
+         	case 5: return 6; case 6: return 7; case 7: return 8; case 8: return 9;
+         	default: return 99;
+         	}
+         }
+",
+    );
+    let link = |flags: &[&str], obj: &Path, exe: &Path| {
+        Command::new(badc())
+            .args(["-q", "--target=linux-x64"])
+            .args(flags)
+            .arg(obj)
+            .arg("-o")
+            .arg(exe)
+            .output()
+            .expect("run badc")
+    };
+    let nopic = dir.join("hosted-nopic.o");
+    compile(&["-fno-pic"], &hosted, &nopic);
+    let refused = link(&[], &nopic, &dir.join("hosted-nopic"));
+    let stderr = String::from_utf8_lossy(&refused.stderr);
+    assert!(
+        !refused.status.success()
+            && stderr.contains("R_X86_64_32S")
+            && stderr.contains("position-independent executable"),
+        "the hosted link must refuse the absolute field; got: {stderr:?}"
+    );
+    let placed = dir.join("hosted-nopic-placed");
+    let linked = link(&["-no-pie"], &nopic, &placed);
+    assert!(
+        linked.status.success(),
+        "a -no-pie link places the image, where the field resolves: {}",
+        String::from_utf8_lossy(&linked.stderr)
+    );
+    let bytes = std::fs::read(&placed).expect("read the image");
+    assert_eq!(u16::from_le_bytes([bytes[16], bytes[17]]), 2, "ET_EXEC");
+    assert!(
+        elf_segments(&bytes).iter().any(|&(t, _)| t == PT_INTERP),
+        "the placed image keeps the loader tables"
+    );
+    if host_linux_target() == "linux-x64" {
+        for (args, status, line) in [(&[][..], 0, "one\n"), (&["a", "b"][..], 4, "three\n")] {
+            let out = Command::new(&placed).args(args).output().expect("run");
+            assert_eq!(out.status.code(), Some(status), "-no-pie dispatch {args:?}");
+            assert_eq!(String::from_utf8_lossy(&out.stdout), line, "{args:?}");
+        }
+    }
+    let default = dir.join("hosted.o");
+    compile(&[], &hosted, &default);
+    let exe = dir.join("hosted");
+    let linked = link(&[], &default, &exe);
+    assert!(
+        linked.status.success(),
+        "the default object links hosted: {}",
+        String::from_utf8_lossy(&linked.stderr)
+    );
+    if host_linux_target() == "linux-x64" {
+        let out = Command::new(&exe).output().expect("run the image");
+        assert_eq!(out.status.code(), Some(0), "the hosted dispatch");
+    }
+}
+
+// A placed image resolves every address at link time, so the sources a
+// placed link compiles take the code of a `-fno-pic -c` object: the one-step
+// freestanding image is the image of that object, byte for byte, and not the
+// image of the default `-c` object. A hosted `-no-pie` image built the same
+// way runs.
+#[test]
+fn a_placed_link_compiles_its_sources_as_a_static_links_objects() {
+    let dir = tempdir("placed-sources");
+    let src = write_source(
+        &dir,
+        "u.c",
+        "static const char *const names[] = {\"zero\", \"one\", \"two\", \"three\"};\n\
+         static int hits[4];\n\
+         __attribute__((noinline)) static int pick(int x) {\n\
+           switch (x) {\n\
+           case 0: return 10; case 1: return 11; case 2: return 12; case 3: return 13;\n\
+           case 4: return 14; case 5: return 15; case 6: return 16; case 7: return 17;\n\
+           default: return -1;\n\
+           }\n\
+         }\n\
+         int start_c(int argc) { hits[argc & 3]++; return pick(argc) + names[argc & 3][0] + hits[1]; }\n",
+    );
+    let badc_run = |args: &[&str], out: &Path| {
+        run(
+            Command::new(badc()).arg("-q").args(args).arg("-o").arg(out),
+            "badc",
+        );
+        std::fs::read(out).expect("read the output")
+    };
+    for target in ["--target=linux-x64", "--target=linux-aarch64"] {
+        let placed = [target, "--freestanding", "--entry=start_c"];
+        let one = badc_run(
+            &[&placed[..], &["-O", src.to_str().unwrap()]].concat(),
+            &dir.join("one"),
+        );
+        let obj = dir.join("u.o");
+        let obj_path = obj.to_str().unwrap();
+        badc_run(
+            &[target, "-O", "-fno-pic", "-c", src.to_str().unwrap()],
+            &obj,
+        );
+        let two = badc_run(&[&placed[..], &[obj_path]].concat(), &dir.join("two"));
+        assert!(
+            one == two,
+            "{target}: the one-step image is the -fno-pic object's"
+        );
+        badc_run(&[target, "-O", "-c", src.to_str().unwrap()], &obj);
+        let pic = badc_run(&[&placed[..], &[obj_path]].concat(), &dir.join("pic"));
+        assert!(
+            one != pic,
+            "{target}: the default -c object is laid out for a PIE"
+        );
+    }
+    if !host_linux_target().is_empty() {
+        let main = write_source(
+            &dir,
+            "m.c",
+            "int start_c(int argc);\nint main(int argc, char **argv) { (void)argv; return start_c(argc) - 'o' - 11 - 1; }\n",
+        );
+        let exe = dir.join("hosted");
+        badc_run(
+            &[
+                "-O",
+                "-no-pie",
+                main.to_str().unwrap(),
+                src.to_str().unwrap(),
+            ],
+            &exe,
+        );
+        let out = Command::new(&exe).output().expect("run the image");
+        assert_eq!(out.status.code(), Some(0), "the -no-pie image computes 0");
+    }
+}
+
+// gcc's spellings for the linker's own arguments reach the link: a map
+// named through `-Wl,` is written, an operand split across `-Xlinker`
+// groups binds, and an option the link does not implement is named.
+#[test]
+fn linker_arguments_pass_through_wl_and_xlinker() {
+    let dir = tempdir("wl-args");
+    let src = write_source(&dir, "m.c", "int main(void) { return 0; }\n");
+    let map = dir.join("m.map");
+    run(
+        Command::new(badc())
+            .args(["-q", "--target=linux-x64"])
+            .arg(format!("-Wl,-Map,{}", map.display()))
+            .args(["-Xlinker", "-z", "-Xlinker", "now", "-Wl,-O1,--as-needed"])
+            .arg(&src)
+            .arg("-o")
+            .arg(dir.join("m")),
+        "link",
+    );
+    let text = std::fs::read_to_string(&map).expect("the map is written");
+    assert!(text.contains(".text"), "{text}");
+    let out = Command::new(badc())
+        .args(["-q", "--target=linux-x64", "-Wl,-rpath,/opt/lib"])
+        .arg(&src)
+        .arg("-o")
+        .arg(dir.join("m"))
+        .output()
+        .expect("run badc");
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        !out.status.success() && err.contains("unsupported linker option `-rpath`"),
+        "{err}"
+    );
+}
+
+// A script link writes `ET_EXEC`, as GNU ld does; `-pie` makes it the
+// position-independent `ET_DYN` form, as it does for `ld`.
+#[test]
+fn a_script_link_takes_the_executable_form_the_flags_pick() {
+    let dir = tempdir("script-link-pie");
+    let src = write_source(
+        &dir,
+        "m.c",
+        "int counter = 3;\nint *p = &counter;\nint _start(void) { return *p; }\n",
+    );
+    let script = write_source(
+        &dir,
+        "t.lds",
+        "ENTRY(_start) SECTIONS { . = 0x400000; .text : { *(.text*) } .data : { *(.data*) } }\n",
+    );
+    let obj = dir.join("m.o");
+    run(
+        Command::new(badc())
+            .args(["-q", "--target=linux-x64", "-c"])
+            .arg(&src)
+            .arg("-o")
+            .arg(&obj),
+        "compile",
+    );
+    for (flag, e_type) in [(None, 2u16), (Some("-pie"), 3), (Some("-no-pie"), 2)] {
+        let out = dir.join("out");
+        run(
+            Command::new(badc())
+                .args(["-q", "--target=linux-x64"])
+                .args(flag)
+                .arg("-T")
+                .arg(&script)
+                .arg(&obj)
+                .arg("-o")
+                .arg(&out),
+            "script link",
+        );
+        let bytes = std::fs::read(&out).expect("read the image");
+        assert_eq!(
+            u16::from_le_bytes([bytes[16], bytes[17]]),
+            e_type,
+            "{flag:?}"
+        );
+    }
+}
+
 /// The `--target` name of this host when it is a Linux one.
 fn host_linux_target() -> &'static str {
     match (cfg!(target_os = "linux"), cfg!(target_arch = "x86_64")) {
@@ -3819,6 +4169,59 @@ fn outline_atomics_run_correct() {
         out.status.code(),
         Some(0),
         "outline-atomics semantics: stderr={:?}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+}
+
+// A program calling the libgcc / compiler-rt __int128 division helpers
+// through their prototypes, as a gcc or clang object does. The expected
+// values are computed apart from badc's own division.
+#[cfg(not(windows))]
+const TI_DIVISION_SRC: &str = "\
+typedef unsigned __int128 u128; typedef __int128 s128; typedef unsigned long long u64;\n\
+extern u128 __udivti3(u128, u128);\n\
+extern u128 __umodti3(u128, u128);\n\
+extern s128 __divti3(s128, s128);\n\
+extern s128 __modti3(s128, s128);\n\
+extern u128 __udivmodti4(u128, u128, u128 *);\n\
+extern s128 __divmodti4(s128, s128, s128 *);\n\
+#define W(h, l) (((u128)(h) << 64) | (u64)(l))\n\
+int main(void) {\n\
+    u128 n = W(0x0123456789abcdefULL, 0xfedcba987654321fULL), d = W(3, 12345), r;\n\
+    s128 sr;\n\
+    if (__udivti3(n, d) != W(0, 0x006117228339449fULL)) return 1;\n\
+    if (__umodti3(n, d) != W(0, 0xb4e81b4e81b61ab8ULL)) return 2;\n\
+    if (__udivmodti4(n, 10, &r) != W(0x001d208a5a912e31ULL, 0x997c790f3f086b69ULL) || r != 5) return 3;\n\
+    if ((u128)__divti3(-(s128)n, 7) != W(0xffd663cca3309970ULL, 0x00299c335ccf668eULL)) return 4;\n\
+    if (__modti3(-(s128)n, 7) != -1) return 5;\n\
+    if (__divmodti4(-(s128)n, -(s128)d, &sr) != 0x006117228339449fLL) return 6;\n\
+    if ((u128)sr != W(0xffffffffffffffffULL, 0x4b17e4b17e49e548ULL)) return 7;\n\
+    return 0;\n\
+}\n";
+
+// The embedded compiler-rt object supplies the __int128 division helpers a
+// program references, with libgcc's results.
+#[cfg(not(windows))]
+#[test]
+fn int128_division_helpers_resolve_on_demand() {
+    let dir = tempdir("ti-division");
+    let src = write_source(&dir, "m.c", TI_DIVISION_SRC);
+    let exe = dir.join("m");
+    run(
+        Command::new(badc())
+            .arg("-o")
+            .arg(&exe)
+            .arg(&src)
+            .current_dir(&dir),
+        "link the __int128 division helpers",
+    );
+    let out = Command::new(&exe)
+        .output()
+        .expect("run the __int128 division helpers");
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "__int128 division helpers: stderr={:?}",
         String::from_utf8_lossy(&out.stderr)
     );
 }
@@ -5533,6 +5936,936 @@ fn variadic_aggregates_cross_the_system_compiler_boundary() {
     );
 }
 
+// `va_arg` of an aggregate with floating-point members crosses the system
+// compiler boundary both ways. AAPCS64 passes an HFA in the SIMD registers,
+// one per element, and a Linux callee reads each element from its own
+// 16-byte slot of the vector save area; System V AMD64 passes each eightbyte
+// in a register of its class and reads it from that class's save area. Both
+// use the stack once too few registers are left.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn variadic_fp_aggregates_cross_the_system_compiler_boundary() {
+    let Some(cc) = host_cc() else {
+        eprintln!(
+            "skipping variadic_fp_aggregates_cross_the_system_compiler_boundary: no system C compiler"
+        );
+        return;
+    };
+    let common = "#include <stdarg.h>\n\
+        struct d2 { double x, y; };\n\
+        struct f3 { float a, b, c; };\n\
+        struct ld1 { long double v; };\n\
+        union u1 { double a; double b; };\n\
+        struct lx { long long l; double d; };\n\
+        struct xl { double d; long long l; };\n\
+        static double d2s(int n, ...)\n\
+        { va_list ap; double s = 0; va_start(ap, n);\n\
+          for (int i = 0; i < n; i++) { struct d2 p = va_arg(ap, struct d2);\n\
+            s = s * 100 + p.x * 10 + p.y; }\n\
+          va_end(ap); return s; }\n\
+        static double f3s(int n, ...)\n\
+        { va_list ap; double s = 0; va_start(ap, n);\n\
+          for (int i = 0; i < n; i++) { struct f3 q = va_arg(ap, struct f3);\n\
+            s = s * 1000 + q.a * 100 + q.b * 10 + q.c; }\n\
+          va_end(ap); return s; }\n\
+        static long double lds(int n, ...)\n\
+        { va_list ap; long double s = 0; va_start(ap, n);\n\
+          for (int i = 0; i < n; i++) s = s * 10 + va_arg(ap, struct ld1).v;\n\
+          va_end(ap); return s; }\n\
+        static double mix(int n, ...)\n\
+        { va_list ap; double s = 0; va_start(ap, n);\n\
+          for (int i = 0; i < n; i++) { int k = va_arg(ap, int);\n\
+            union u1 u = va_arg(ap, union u1); double d = va_arg(ap, double);\n\
+            s = s * 1000 + k * 100 + u.b * 10 + d; }\n\
+          va_end(ap); return s; }\n\
+        static double lxs(int n, ...)\n\
+        { va_list ap; double s = 0; va_start(ap, n);\n\
+          for (int i = 0; i < n; i++) { struct lx p = va_arg(ap, struct lx);\n\
+            struct xl q = va_arg(ap, struct xl); s = s * 10000 + p.l * 1000 + p.d * 100\n\
+            + q.d * 10 + q.l; }\n\
+          va_end(ap); return s; }\n\
+        struct fns { double (*d2s)(int, ...); double (*f3s)(int, ...);\n\
+          long double (*lds)(int, ...); double (*mix)(int, ...); double (*lxs)(int, ...); };\n\
+        static int drive(const struct fns *f, int base)\n\
+        { struct d2 a = { 1, 2 }, b = { 3, 4 }, c = { 5, 6 }, d = { 7, 8 }, e = { 9, 1 };\n\
+          struct f3 g = { 1, 2, 3 }, h = { 4, 5, 6 }, k = { 7, 8, 9 };\n\
+          struct ld1 l = { 2 }, m = { 3 };\n\
+          union u1 u = { 4 };\n\
+          struct lx p = { 1, 2 }, q = { 5, 6 };\n\
+          struct xl r = { 3, 4 }, t = { 7, 8 };\n\
+          if (f->d2s(2, a, b) != 1234) return base + 1;\n\
+          if (f->d2s(5, a, b, c, d, e) != 1234567891) return base + 2;\n\
+          if (f->f3s(3, g, h, k) != 123456789) return base + 3;\n\
+          if (f->lds(2, l, m) != 23) return base + 4;\n\
+          if (f->lds(9, l, l, l, l, l, l, l, l, m) != 222222223) return base + 5;\n\
+          if (f->mix(2, 1, u, 0.5, 2, u, 0.25) != 140740.25) return base + 6;\n\
+          if (f->lxs(2, p, r, q, t) != 12345678) return base + 7;\n\
+          if (f->lxs(4, p, r, q, t, p, r, q, t) != 1234567812345678.0) return base + 8;\n\
+          return 0; }\n";
+    drive_across_the_system_compiler(&cc, "va-fp-agg-interop", common, "d2s, f3s, lds, mix, lxs");
+}
+
+/// A platform C compiler on Windows: a clang driver, or MSVC's `cl` with the
+/// environment its `vcvarsall.bat` sets up.
+#[cfg(windows)]
+enum WindowsCc {
+    Clang(std::ffi::OsString),
+    Msvc {
+        cl: PathBuf,
+        env: Vec<(String, String)>,
+    },
+}
+
+// `packed` among a member declaration's specifiers packs every declarator,
+// a bit-field included, as the compiler on the other side lays them out.
+const PACKED_MEMBERS_COMMON: &str = "typedef long long ll;\n\
+    struct pm { char c; __attribute__((packed)) int a, b; char d; };\n\
+    struct pb { char c; int x : 20; __attribute__((packed)) int y : 20; char d; };\n\
+    static ll layout(void)\n\
+    { return sizeof(struct pm) + 100 * (sizeof(struct pb) + 100 * (ll)__builtin_offsetof(struct pm, b)); }\n\
+    static struct pm make_pm(int a, int b) { struct pm v = { 1, a, b, 2 }; return v; }\n\
+    static int read_pb(const struct pb *p) { return p->c + p->x * 10 + p->y * 1000 + p->d * 7; }\n\
+    static void set_pb(struct pb *p, int y) { p->y = y; }\n\
+    struct fns { ll (*layout)(void); struct pm (*make_pm)(int, int);\n\
+      int (*read_pb)(const struct pb *); void (*set_pb)(struct pb *, int); };\n\
+    static int drive(const struct fns *f, int base)\n\
+    { struct pm m = f->make_pm(-3, 0x10203040);\n\
+      struct pb p = { 1, -5, 9, 3 };\n\
+      if (f->layout() != layout()) return base + 1;\n\
+      if (m.c != 1 || m.a != -3 || m.b != 0x10203040 || m.d != 2) return base + 2;\n\
+      if (f->read_pb(&p) != 1 - 50 + 9000 + 21) return base + 3;\n\
+      f->set_pb(&p, -77);\n\
+      if (p.c != 1 || p.x != -5 || p.y != -77 || p.d != 3) return base + 4;\n\
+      return 0; }\n";
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn packed_members_cross_the_system_compiler_boundary() {
+    let Some(cc) = host_cc() else {
+        eprintln!(
+            "skipping packed_members_cross_the_system_compiler_boundary: no system C compiler"
+        );
+        return;
+    };
+    drive_across_the_system_compiler(
+        &cc,
+        "packed-members-interop",
+        PACKED_MEMBERS_COMMON,
+        "layout, make_pm, read_pb, set_pb",
+    );
+}
+
+#[cfg(windows)]
+#[test]
+fn packed_members_cross_the_windows_compiler_boundary() {
+    // MSVC has no GNU attributes, so only a clang build is a peer here.
+    let Some(cc @ WindowsCc::Clang(_)) = windows_cc() else {
+        eprintln!("skipping packed_members_cross_the_windows_compiler_boundary: no clang");
+        return;
+    };
+    drive_across_the_windows_compiler(
+        &cc,
+        "win-packed-members-interop",
+        PACKED_MEMBERS_COMMON,
+        "layout, make_pm, read_pb, set_pb",
+    );
+}
+
+// An attribute list after a bit-field's width applies to that bit-field, and
+// an alignment request places a named or unnamed one, as the compiler on the
+// other side lays them out. gcc computes in a wide bit-field's own width, so
+// `w` is widened before the arithmetic.
+const BITFIELD_ATTRS_COMMON: &str = "typedef long long ll;\n\
+    struct ba { char c; int b : 4 __attribute__((aligned(8))), e : 4; char d; };\n\
+    struct bu { char c; int : 4 __attribute__((aligned(8))); short s;\n\
+      long long w : 40 __attribute__((aligned(16))); };\n\
+    static ll layout(void)\n\
+    { return sizeof(struct ba) + 100 * (sizeof(struct bu) + 100 * ((ll)__builtin_offsetof(struct ba, d)\n\
+        + 100 * (ll)__builtin_offsetof(struct bu, s))); }\n\
+    static struct ba make_ba(int b, int e) { struct ba v = { 1, b, e, 2 }; return v; }\n\
+    static ll read_bu(const struct bu *p) { return p->c + p->s * 10 + (ll)p->w * 1000; }\n\
+    static void set_bu(struct bu *p, ll w) { p->w = w; }\n\
+    struct fns { ll (*layout)(void); struct ba (*make_ba)(int, int);\n\
+      ll (*read_bu)(const struct bu *); void (*set_bu)(struct bu *, ll); };\n\
+    static int drive(const struct fns *f, int base)\n\
+    { struct ba m = f->make_ba(-3, 5);\n\
+      struct bu p = { 1, -7, 0x123456789LL };\n\
+      if (f->layout() != layout()) return base + 1;\n\
+      if (m.c != 1 || m.b != -3 || m.e != 5 || m.d != 2) return base + 2;\n\
+      if (f->read_bu(&p) != 1 - 70 + 0x123456789LL * 1000) return base + 3;\n\
+      f->set_bu(&p, -0x7654321LL);\n\
+      if (p.c != 1 || p.s != -7 || p.w != -0x7654321LL) return base + 4;\n\
+      return 0; }\n";
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn bitfield_attributes_cross_the_system_compiler_boundary() {
+    let Some(cc) = host_cc() else {
+        eprintln!(
+            "skipping bitfield_attributes_cross_the_system_compiler_boundary: no system C compiler"
+        );
+        return;
+    };
+    drive_across_the_system_compiler(
+        &cc,
+        "bitfield-attrs-interop",
+        BITFIELD_ATTRS_COMMON,
+        "layout, make_ba, read_bu, set_bu",
+    );
+}
+
+#[cfg(windows)]
+#[test]
+fn bitfield_attributes_cross_the_windows_compiler_boundary() {
+    // MSVC has no GNU attributes, so only a clang build is a peer here.
+    let Some(cc @ WindowsCc::Clang(_)) = windows_cc() else {
+        eprintln!("skipping bitfield_attributes_cross_the_windows_compiler_boundary: no clang");
+        return;
+    };
+    drive_across_the_windows_compiler(
+        &cc,
+        "win-bitfield-attrs-interop",
+        BITFIELD_ATTRS_COMMON,
+        "layout, make_ba, read_bu, set_bu",
+    );
+}
+
+// A bit-field of a typedef that raises or lowers its type's alignment, in
+// shapes gcc and clang agree on; Windows spells the raise for cl.exe too.
+const TYPEDEF_BITFIELDS_BODY: &str = "struct ta { char c; a8 b : 30; char d; };\n\
+    struct tl { char c; lo b : 10; char d; };\n\
+    static ll layout(void)\n\
+    { return sizeof(struct ta) + 100 * (sizeof(struct tl) + 100 * ((ll)offsetof(struct ta, d)\n\
+        + 100 * (ll)offsetof(struct tl, d))); }\n\
+    static struct ta make_ta(int b) { struct ta v = { 1, b, 2 }; return v; }\n\
+    static int read_tl(const struct tl *p) { return p->c + p->b * 10 + p->d * 7; }\n\
+    static void set_tl(struct tl *p, int b) { p->b = b; }\n\
+    struct fns { ll (*layout)(void); struct ta (*make_ta)(int);\n\
+      int (*read_tl)(const struct tl *); void (*set_tl)(struct tl *, int); };\n\
+    static int drive(const struct fns *f, int base)\n\
+    { struct ta m = f->make_ta(-0x1234567);\n\
+      struct tl p = { 1, -5, 3 };\n\
+      if (f->layout() != layout()) return base + 1;\n\
+      if (m.c != 1 || m.b != -0x1234567 || m.d != 2) return base + 2;\n\
+      if (f->read_tl(&p) != 1 - 50 + 21) return base + 3;\n\
+      f->set_tl(&p, 0x123);\n\
+      if (p.c != 1 || p.b != 0x123 || p.d != 3) return base + 4;\n\
+      return 0; }\n";
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn typedef_aligned_bitfields_cross_the_system_compiler_boundary() {
+    let Some(cc) = host_cc() else {
+        eprintln!(
+            "skipping typedef_aligned_bitfields_cross_the_system_compiler_boundary: no system C compiler"
+        );
+        return;
+    };
+    let common = format!(
+        "#include <stddef.h>\ntypedef long long ll;\n\
+         typedef int a8 __attribute__((aligned(8)));\n\
+         typedef int lo __attribute__((aligned(1)));\n{TYPEDEF_BITFIELDS_BODY}"
+    );
+    drive_across_the_system_compiler(
+        &cc,
+        "typedef-bitfields-interop",
+        &common,
+        "layout, make_ta, read_tl, set_tl",
+    );
+}
+
+#[cfg(windows)]
+#[test]
+fn typedef_aligned_bitfields_cross_the_windows_compiler_boundary() {
+    let Some(cc) = windows_cc() else {
+        eprintln!("skipping typedef_aligned_bitfields_cross_the_windows_compiler_boundary: no cc");
+        return;
+    };
+    let common = format!(
+        "#include <stddef.h>\ntypedef long long ll;\n\
+         typedef __declspec(align(8)) int a8;\n\
+         typedef __declspec(align(8)) short lo;\n{TYPEDEF_BITFIELDS_BODY}"
+    );
+    drive_across_the_windows_compiler(
+        &cc,
+        "win-typedef-bitfields-interop",
+        &common,
+        "layout, make_ta, read_tl, set_tl",
+    );
+}
+
+// cl.exe pads a `#pragma pack` aggregate only to the pack value for a
+// bit-field whose typedef aligns its type beyond it; clang pads further.
+#[cfg(windows)]
+const PACK_PADDED_COMMON: &str = "#include <stddef.h>\n\
+    typedef long long ll;\n\
+    typedef __declspec(align(8)) int a8;\n\
+    #pragma pack(push, 1)\n\
+    struct pp { char c; a8 b : 3; char d; };\n\
+    #pragma pack(pop)\n\
+    struct pw { char c; struct pp p; };\n\
+    struct pa { struct pp e[2]; };\n\
+    static ll layout(void)\n\
+    { return sizeof(struct pp) + 100 * (sizeof(struct pa) + 100 * (ll)offsetof(struct pw, p)); }\n\
+    static struct pp make_pp(int b) { struct pp v = { 1, b, 2 }; return v; }\n\
+    static int read_pa(const struct pa *p) { return p->e[0].c + p->e[1].b * 10 + p->e[1].d * 7; }\n\
+    static void set_pa(struct pa *p, int b) { p->e[1].b = b; }\n\
+    struct fns { ll (*layout)(void); struct pp (*make_pp)(int);\n\
+      int (*read_pa)(const struct pa *); void (*set_pa)(struct pa *, int); };\n\
+    static int drive(const struct fns *f, int base)\n\
+    { struct pp m = f->make_pp(-3);\n\
+      struct pa a = { { { 1, 2, 3 }, { 4, -1, 5 } } };\n\
+      if (f->layout() != layout()) return base + 1;\n\
+      if (m.c != 1 || m.b != -3 || m.d != 2) return base + 2;\n\
+      if (f->read_pa(&a) != 1 - 10 + 35) return base + 3;\n\
+      f->set_pa(&a, 3);\n\
+      if (a.e[0].b != 2 || a.e[1].b != 3 || a.e[1].d != 5) return base + 4;\n\
+      return 0; }\n";
+
+#[cfg(windows)]
+#[test]
+fn pack_padded_typedef_bitfields_cross_the_msvc_boundary() {
+    let Some(cc) = msvc_cl() else {
+        eprintln!("skipping pack_padded_typedef_bitfields_cross_the_msvc_boundary: no cl.exe");
+        return;
+    };
+    drive_across_the_windows_compiler(
+        &cc,
+        "msvc-pack-padded-interop",
+        PACK_PADDED_COMMON,
+        "layout, make_pp, read_pa, set_pa",
+    );
+}
+
+/// The platform C compiler on Windows: `$CC` when set, else clang on the path
+/// or in LLVM's default install, provided it runs, else the `cl` of the newest
+/// Visual Studio vswhere reports, for the host architecture.
+#[cfg(windows)]
+fn windows_cc() -> Option<WindowsCc> {
+    let clang = [
+        std::env::var_os("CC"),
+        Some("clang".into()),
+        Some(r"C:\Program Files\LLVM\bin\clang.exe".into()),
+    ]
+    .into_iter()
+    .flatten()
+    .find(|cc| {
+        Command::new(cc)
+            .arg("--version")
+            .output()
+            .is_ok_and(|o| o.status.success())
+    });
+    clang.map(WindowsCc::Clang).or_else(msvc_cl)
+}
+
+/// MSVC's `cl` for the host architecture and the environment `vcvarsall.bat`
+/// gives it, read back through `set` in UTF-16 (`cmd /u`).
+#[cfg(windows)]
+fn msvc_cl() -> Option<WindowsCc> {
+    use std::os::windows::process::CommandExt;
+    let vswhere = Path::new(&std::env::var_os("ProgramFiles(x86)")?)
+        .join(r"Microsoft Visual Studio\Installer\vswhere.exe");
+    let out = Command::new(vswhere)
+        .args(["-latest", "-products", "*", "-find"])
+        .arg(r"VC\Auxiliary\Build\vcvarsall.bat")
+        .output()
+        .ok()?;
+    let vcvarsall = String::from_utf8(out.stdout)
+        .ok()?
+        .lines()
+        .next()?
+        .trim()
+        .to_string();
+    let arch = if cfg!(target_arch = "aarch64") {
+        "arm64"
+    } else {
+        "x64"
+    };
+    let out = Command::new("cmd")
+        .raw_arg(format!(
+            "/d /u /s /c \"\"{vcvarsall}\" {arch} >nul && set\""
+        ))
+        .output()
+        .ok()?;
+    let wide: Vec<u16> = out
+        .stdout
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|b| u16::from_le_bytes(*b))
+        .collect();
+    let env: Vec<(String, String)> = String::from_utf16_lossy(&wide)
+        .lines()
+        .filter_map(|l| l.split_once('='))
+        .map(|(k, v)| (k.to_string(), v.to_string()))
+        .collect();
+    let path = &env.iter().find(|(k, _)| k.eq_ignore_ascii_case("PATH"))?.1;
+    let cl = std::env::split_paths(path)
+        .map(|d| d.join("cl.exe"))
+        .find(|p| p.is_file())?;
+    Some(WindowsCc::Msvc { cl, env })
+}
+
+/// [`drive_across_the_system_compiler`] on Windows: the platform compiler links
+/// the module as a DLL without a C runtime, which the badc host loads.
+#[cfg(windows)]
+fn drive_across_the_windows_compiler(cc: &WindowsCc, test: &str, common: &str, fns: &str) {
+    let dir = tempdir(test);
+    // The module links without the C runtime, which defines the `_fltused`
+    // that floating-point code references.
+    let module = write_source(
+        &dir,
+        "module.c",
+        &format!(
+            "int _fltused;\n{common}\
+             __declspec(dllexport) struct fns sys_fns = {{ {fns} }};\n\
+             __declspec(dllexport) int sys_drive(const struct fns *f) {{ return drive(f, 10); }}\n"
+        ),
+    );
+    let host = write_source(
+        &dir,
+        "host.c",
+        &format!(
+            "#include <windows.h>\n{common}\
+             int main(int argc, char **argv) {{\n\
+               HMODULE h = LoadLibraryA(argv[1]);\n\
+               if (!h) return 1;\n\
+               const struct fns *sys = (const struct fns *)GetProcAddress(h, \"sys_fns\");\n\
+               int (*sys_drive)(const struct fns *) =\n\
+                 (int (*)(const struct fns *))GetProcAddress(h, \"sys_drive\");\n\
+               if (!sys || !sys_drive) return 2;\n\
+               int r = drive(sys, 20);\n\
+               if (r) return r;\n\
+               struct fns mine = {{ {fns} }};\n\
+               (void)argc;\n\
+               return sys_drive(&mine); }}\n"
+        ),
+    );
+    let dll = dir.join("module.dll");
+    let target = if cfg!(target_arch = "aarch64") {
+        "--target=aarch64-pc-windows-msvc"
+    } else {
+        "--target=x86_64-pc-windows-msvc"
+    };
+    let mut build = match cc {
+        WindowsCc::Clang(cc) => {
+            let mut c = Command::new(cc);
+            c.args([target, "-O2", "-shared", "-nostdlib", "-fuse-ld=lld"])
+                .args(["-Wl,-noentry", "-o"])
+                .arg(&dll)
+                .arg(&module);
+            c
+        }
+        WindowsCc::Msvc { cl, env } => {
+            let mut c = Command::new(cl);
+            c.envs(env.iter().map(|(k, v)| (k, v)))
+                .args(["/nologo", "/O2", "/GS-", "/LD"])
+                .arg(&module)
+                .arg(format!("/Fe{}", dll.display()))
+                .args(["/link", "/NOENTRY", "/NODEFAULTLIB"]);
+            c
+        }
+    };
+    run(
+        build.current_dir(&dir),
+        "build the platform-compiled module",
+    );
+    for opt in ["-O0", "-O"] {
+        let exe = dir.join(format!("host{opt}.exe"));
+        run(
+            Command::new(badc())
+                .arg(opt)
+                .arg("-o")
+                .arg(&exe)
+                .arg(&host)
+                .current_dir(&dir),
+            "link the badc host",
+        );
+        let out = Command::new(&exe)
+            .arg(&dll)
+            .output()
+            .expect("run the badc host");
+        assert_eq!(
+            out.status.code(),
+            Some(0),
+            "{test} host{opt}: a call crossed the boundary misplaced (stderr {:?})",
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+}
+
+// Win64 passes a variadic argument of other than 1, 2, 4 or 8 bytes by
+// reference, and Windows arm64 a composite over 16 bytes; there a 16-byte one
+// reached with x7 the last register left takes x7 and the first stack slot.
+// Both ways across the platform compiler boundary, but for clang's arm64 caller
+// of that split, which stores both halves on the stack and leaves x7 unset
+// while its own callee reads x7.
+#[cfg(windows)]
+#[test]
+fn variadic_aggregates_cross_the_windows_compiler_boundary() {
+    let Some(cc) = windows_cc() else {
+        eprintln!(
+            "skipping variadic_aggregates_cross_the_windows_compiler_boundary: no platform C compiler"
+        );
+        return;
+    };
+    let common = "#include <stdarg.h>\n\
+        typedef long long ll;\n\
+        struct s16 { ll a, b; };\n\
+        struct s24 { ll a, b, c; };\n\
+        struct pair { int x, y; };\n\
+        static ll take16(int n, ...)\n\
+        { va_list ap; va_start(ap, n); struct s16 s = va_arg(ap, struct s16);\n\
+          ll t = va_arg(ap, ll); va_end(ap); return s.a * 100 + s.b * 10 + t + n; }\n\
+        static ll take24(int n, ...)\n\
+        { va_list ap; va_start(ap, n); struct s24 s = va_arg(ap, struct s24);\n\
+          ll t = va_arg(ap, ll); va_end(ap); return s.a * 1000 + s.b * 100 + s.c * 10 + t + n; }\n\
+        static ll take8(int n, ...)\n\
+        { va_list ap; va_start(ap, n); struct pair p = va_arg(ap, struct pair);\n\
+          ll t = va_arg(ap, ll); va_end(ap); return p.x * 100 + p.y * 10 + t + n; }\n\
+        static ll at7(ll a0, ll a1, ll a2, ll a3, ll a4, ll a5, ll a6, ...)\n\
+        { va_list ap; va_start(ap, a6); struct s16 s = va_arg(ap, struct s16);\n\
+          ll t = va_arg(ap, ll); va_end(ap); return s.a * 100 + s.b * 10 + t + a0 + a6; }\n\
+        struct fns { ll (*take16)(int, ...); ll (*take24)(int, ...); ll (*take8)(int, ...);\n\
+          ll (*at7)(ll, ll, ll, ll, ll, ll, ll, ...); };\n\
+        static int drive(const struct fns *f, int base)\n\
+        { struct s16 s = { 3, 4 };\n\
+          struct s24 w = { 1, 2, 3 };\n\
+          struct pair p = { 7, 8 };\n\
+          if (f->take16(5, s, 6LL) != 351) return base + 1;\n\
+          if (f->take24(5, w, 6LL) != 1241) return base + 2;\n\
+          if (f->take8(5, p, 6LL) != 791) return base + 3;\n\
+        #if !(defined(__aarch64__) && defined(__clang__))\n\
+          if (f->at7(1, 0, 0, 0, 0, 0, 2, s, 6LL) != 349) return base + 4;\n\
+        #endif\n\
+          return 0; }\n";
+    drive_across_the_windows_compiler(
+        &cc,
+        "win-va-agg-interop",
+        common,
+        "take16, take24, take8, at7",
+    );
+}
+
+// The platform compiler lays bit-fields out by the MS rules: a unit of the
+// declared type per bit-field, shared only while the type size stays the same,
+// a width-zero bit-field counting only after another one, and `#pragma pack`
+// lowering where a unit may start. Structs of that shape cross the boundary by
+// value, as results and through pointers, both ways.
+#[cfg(windows)]
+#[test]
+fn bitfield_structs_cross_the_windows_compiler_boundary() {
+    let Some(cc) = windows_cc() else {
+        eprintln!(
+            "skipping bitfield_structs_cross_the_windows_compiler_boundary: no platform C compiler"
+        );
+        return;
+    };
+    let common = "typedef long long ll;\n\
+        struct cb { char c; int b : 4; char d; };\n\
+        struct zw { char a; int : 0; char b; };\n\
+        struct mx { signed char a : 4; signed int b : 4; signed char c : 4; };\n\
+        struct zb { signed char x : 3; int : 0; char y; };\n\
+        #pragma pack(push, 1)\n\
+        struct p1 { char c; int a : 15; short s; };\n\
+        struct p2 { int a : 30; int b : 30; };\n\
+        #pragma pack(pop)\n\
+        static ll layout(void)\n\
+        { return sizeof(struct cb) + 100 * (sizeof(struct zw) + 100 * (sizeof(struct mx)\n\
+            + 100 * (sizeof(struct zb) + 100 * (sizeof(struct p1) + 100 * (ll)sizeof(struct p2))))); }\n\
+        static struct cb make_cb(int b, char c, char d)\n\
+        { struct cb v; v.c = c; v.b = b; v.d = d; return v; }\n\
+        static int read_cb(struct cb v) { return v.c * 10000 + (v.b + 8) * 100 + v.d; }\n\
+        static struct mx make_mx(int a, int b, int c)\n\
+        { struct mx v; v.a = a; v.b = b; v.c = c; return v; }\n\
+        static int read_mx(struct mx v) { return (v.a + 8) * 10000 + (v.b + 8) * 100 + v.c + 8; }\n\
+        static void set_p1(struct p1 *p, int a, short s) { p->a = a; p->s = s; }\n\
+        static ll read_p2(struct p2 v) { return (ll)v.a * 0x40000000 + v.b; }\n\
+        static struct zw make_zw(char a, char b) { struct zw v; v.a = a; v.b = b; return v; }\n\
+        static struct zb make_zb(int x, char y) { struct zb v; v.x = x; v.y = y; return v; }\n\
+        struct fns { ll (*layout)(void); struct cb (*make_cb)(int, char, char);\n\
+          int (*read_cb)(struct cb); struct mx (*make_mx)(int, int, int); int (*read_mx)(struct mx);\n\
+          void (*set_p1)(struct p1 *, int, short); ll (*read_p2)(struct p2);\n\
+          struct zw (*make_zw)(char, char); struct zb (*make_zb)(int, char); };\n\
+        static int drive(const struct fns *f, int base)\n\
+        { struct cb x = f->make_cb(-3, 'x', 'y'), y = { 'p', 5, 'q' };\n\
+          struct mx m = f->make_mx(-4, 3, -2), n = { 1, -6, 7 };\n\
+          struct p1 p = { 9, 0, 0 };\n\
+          struct p2 q = { -2, 0x1abcdef };\n\
+          struct zw z = f->make_zw('a', 'b');\n\
+          struct zb w = f->make_zb(-3, 'k');\n\
+          if (f->layout() != layout()) return base + 1;\n\
+          if (x.c != 'x' || x.b != -3 || x.d != 'y') return base + 2;\n\
+          if (f->read_cb(y) != 'p' * 10000 + 1300 + 'q') return base + 3;\n\
+          if (m.a != -4 || m.b != 3 || m.c != -2) return base + 4;\n\
+          if (f->read_mx(n) != 90215) return base + 5;\n\
+          f->set_p1(&p, -1000, 1234);\n\
+          if (p.c != 9 || p.a != -1000 || p.s != 1234) return base + 6;\n\
+          if (f->read_p2(q) != -2 * 0x40000000LL + 0x1abcdef) return base + 7;\n\
+          if (z.a != 'a' || z.b != 'b') return base + 8;\n\
+          if (w.x != -3 || w.y != 'k') return base + 9;\n\
+          return 0; }\n";
+    drive_across_the_windows_compiler(
+        &cc,
+        "win-bitfield-interop",
+        common,
+        "layout, make_cb, read_cb, make_mx, read_mx, set_p1, read_p2, make_zw, make_zb",
+    );
+}
+
+// An aggregate the convention passes by reference crosses the compiler
+// boundary as the address of a copy the callee owns: a callee writing its
+// parameter leaves the caller's object alone, and a callee of the other
+// compiler finds the copy at its alignment, 16 under the Microsoft x64
+// convention. AAPCS64 passes a composite over 16 bytes so, and Windows arm64
+// a variadic one too; System V AMD64 copies the bytes onto the stack.
+const BY_REFERENCE_COMMON: &str = "#include <stdarg.h>\n\
+    #include <stdint.h>\n\
+    typedef long long ll;\n\
+    struct big { ll a, b, c; };\n\
+    struct odd { char c[3]; };\n\
+    struct s16 { ll a, b; };\n\
+    struct hfa4 { double a, b, c, d; };\n\
+    #if defined(_WIN64) && (defined(__x86_64__) || defined(_M_X64))\n\
+    #define COPY_ALIGN 16\n\
+    #else\n\
+    #define COPY_ALIGN 8\n\
+    #endif\n\
+    static void keep(void *p) { (void)p; }\n\
+    static void (*volatile sink)(void *) = keep;\n\
+    static ll wbig(struct big s, ll t, int *off)\n\
+    { ll r = s.a * 100 + s.b * 10 + s.c + t;\n\
+      *off = (int)((uintptr_t)&s % COPY_ALIGN); s.a = s.b = s.c = -1; sink(&s); return r; }\n\
+    static ll wodd(struct odd o, ll t)\n\
+    { ll r = o.c[0] * 100 + o.c[1] * 10 + o.c[2] + t; o.c[0] = o.c[2] = -1; sink(&o); return r; }\n\
+    static ll ws16(struct s16 s, ll t)\n\
+    { ll r = s.a * 10 + s.b + t; s.a = s.b = -1; sink(&s); return r; }\n\
+    static double whfa(struct hfa4 h, double t)\n\
+    { double r = h.a * 1000 + h.b * 100 + h.c * 10 + h.d + t; h.a = h.d = -1; sink(&h); return r; }\n\
+    static double vhfa(int n, ...)\n\
+    { va_list ap; double s = 0; va_start(ap, n);\n\
+      for (int i = 0; i < n; i++) { struct hfa4 h = va_arg(ap, struct hfa4);\n\
+        s = s * 10000 + h.a * 1000 + h.b * 100 + h.c * 10 + h.d; }\n\
+      va_end(ap); return s; }\n\
+    static ll vodd(int n, ...)\n\
+    { va_list ap; ll s = 0; va_start(ap, n);\n\
+      for (int i = 0; i < n; i++) { struct odd o = va_arg(ap, struct odd);\n\
+        s = s * 1000 + o.c[0] * 100 + o.c[1] * 10 + o.c[2]; }\n\
+      va_end(ap); return s; }\n\
+    struct fns { ll (*wbig)(struct big, ll, int *); ll (*wodd)(struct odd, ll);\n\
+      ll (*ws16)(struct s16, ll); double (*whfa)(struct hfa4, double);\n\
+      double (*vhfa)(int, ...); ll (*vodd)(int, ...); };\n\
+    static int drive(const struct fns *f, int base)\n\
+    { struct big b = { 1, 2, 3 };\n\
+      struct odd o = { { 1, 2, 3 } };\n\
+      struct s16 s = { 4, 5 };\n\
+      struct hfa4 h = { 1, 2, 3, 4 };\n\
+      int off = -1;\n\
+      if (f->wbig(b, 4, &off) != 127) return base + 1;\n\
+      if (b.a != 1 || b.b != 2 || b.c != 3) return base + 2;\n\
+      if (base == 20 && off != 0) return base + 3;\n\
+      if (f->wodd(o, 4) != 127 || o.c[0] != 1 || o.c[2] != 3) return base + 4;\n\
+      if (f->ws16(s, 6) != 51 || s.a != 4 || s.b != 5) return base + 5;\n\
+      if (f->whfa(h, 0.5) != 1234.5 || h.a != 1 || h.d != 4) return base + 6;\n\
+      if (f->vhfa(2, h, h) != 12341234) return base + 7;\n\
+      if (f->vodd(2, o, o) != 123123) return base + 8;\n\
+      return 0; }\n";
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn by_reference_arguments_cross_the_system_compiler_boundary() {
+    let Some(cc) = host_cc() else {
+        eprintln!(
+            "skipping by_reference_arguments_cross_the_system_compiler_boundary: no system C compiler"
+        );
+        return;
+    };
+    drive_across_the_system_compiler(
+        &cc,
+        "by-ref-interop",
+        BY_REFERENCE_COMMON,
+        "wbig, wodd, ws16, whfa, vhfa, vodd",
+    );
+}
+
+#[cfg(windows)]
+#[test]
+fn by_reference_arguments_cross_the_windows_compiler_boundary() {
+    let Some(cc) = windows_cc() else {
+        eprintln!(
+            "skipping by_reference_arguments_cross_the_windows_compiler_boundary: no platform C compiler"
+        );
+        return;
+    };
+    drive_across_the_windows_compiler(
+        &cc,
+        "win-by-ref-interop",
+        BY_REFERENCE_COMMON,
+        "wbig, wodd, ws16, whfa, vhfa, vodd",
+    );
+}
+
+// The Microsoft x64 convention passes and returns an aggregate of 1, 2, 4 or 8
+// bytes as an integer whatever its members, and Windows arm64 a homogeneous one
+// in its vector registers, across the platform compiler boundary both ways.
+#[cfg(windows)]
+#[test]
+fn small_fp_aggregates_cross_the_windows_compiler_boundary() {
+    let Some(cc) = windows_cc() else {
+        eprintln!(
+            "skipping small_fp_aggregates_cross_the_windows_compiler_boundary: no platform C compiler"
+        );
+        return;
+    };
+    let common = "typedef long long ll;\n\
+        struct f2 { float x, y; };\n\
+        struct d1 { double d; };\n\
+        struct f1 { float f; };\n\
+        struct cf { char c; float f; };\n\
+        static double take_f2(struct f2 s, double t) { return s.x * 10 + s.y + t; }\n\
+        static double take_d1(ll n, struct d1 s) { return s.d * 10 + n; }\n\
+        static double take_f1(struct f1 s, struct f2 u) { return s.f * 100 + u.x * 10 + u.y; }\n\
+        static double take_cf(struct cf s, ll t) { return s.c * 10 + s.f + t; }\n\
+        static struct f2 make_f2(float x, float y) { struct f2 r = { x, y }; return r; }\n\
+        static struct d1 make_d1(double d) { struct d1 r = { d }; return r; }\n\
+        struct fns { double (*take_f2)(struct f2, double); double (*take_d1)(ll, struct d1);\n\
+          double (*take_f1)(struct f1, struct f2); double (*take_cf)(struct cf, ll);\n\
+          struct f2 (*make_f2)(float, float); struct d1 (*make_d1)(double); };\n\
+        static int drive(const struct fns *f, int base)\n\
+        { struct f2 a = { 1, 2 }; struct d1 b = { 3 }; struct f1 c = { 4 };\n\
+          struct cf d = { 5, 0.5f }; struct f2 e;\n\
+          if (f->take_f2(a, 0.25) != 12.25) return base + 1;\n\
+          if (f->take_d1(7, b) != 37) return base + 2;\n\
+          if (f->take_f1(c, a) != 412) return base + 3;\n\
+          if (f->take_cf(d, 3) != 53.5) return base + 4;\n\
+          e = f->make_f2(6, 7);\n\
+          if (e.x != 6 || e.y != 7) return base + 5;\n\
+          if (f->make_d1(8).d != 8) return base + 6;\n\
+          return 0; }\n";
+    drive_across_the_windows_compiler(
+        &cc,
+        "win-small-fp-agg-interop",
+        common,
+        "take_f2, take_d1, take_f1, take_cf, make_f2, make_d1",
+    );
+}
+
+// The platform compiler keeps an alignment a member or its type asks for under
+// `#pragma pack`, which lowers only the natural alignment. Structs of that
+// shape cross the boundary by value, as results and through a pointer.
+#[cfg(windows)]
+#[test]
+fn aligned_members_cross_the_windows_compiler_boundary() {
+    let Some(cc) = windows_cc() else {
+        eprintln!(
+            "skipping aligned_members_cross_the_windows_compiler_boundary: no platform C compiler"
+        );
+        return;
+    };
+    let common = "typedef long long ll;\n\
+        typedef __declspec(align(8)) int i8;\n\
+        #pragma pack(push, 1)\n\
+        struct am { char c; __declspec(align(8)) int m; char d; };\n\
+        struct at { char c; i8 m; short s; };\n\
+        struct an { char c; struct { char a; __declspec(align(16)) int b; } n; char t; };\n\
+        #pragma pack(pop)\n\
+        static ll layout(void)\n\
+        { return sizeof(struct am) + 100 * (sizeof(struct at) + 100 * (ll)sizeof(struct an)); }\n\
+        static struct am make_am(int m, char c, char d)\n\
+        { struct am v; v.c = c; v.m = m; v.d = d; return v; }\n\
+        static int read_at(struct at v) { return v.c * 1000000 + v.m * 1000 + v.s; }\n\
+        static void set_an(struct an *p, int b, char t) { p->n.b = b; p->t = t; }\n\
+        struct fns { ll (*layout)(void); struct am (*make_am)(int, char, char);\n\
+          int (*read_at)(struct at); void (*set_an)(struct an *, int, char); };\n\
+        static int drive(const struct fns *f, int base)\n\
+        { struct am a = f->make_am(123456, 'x', 'y');\n\
+          struct at t = { 7, 654, 321 };\n\
+          struct an n = { 1, { 2, 3 }, 4 };\n\
+          if (f->layout() != layout()) return base + 1;\n\
+          if (a.c != 'x' || a.m != 123456 || a.d != 'y') return base + 2;\n\
+          if (f->read_at(t) != 7654321) return base + 3;\n\
+          f->set_an(&n, 99, 5);\n\
+          if (n.c != 1 || n.n.a != 2 || n.n.b != 99 || n.t != 5) return base + 4;\n\
+          return 0; }\n";
+    drive_across_the_windows_compiler(
+        &cc,
+        "win-aligned-interop",
+        common,
+        "layout, make_am, read_at, set_an",
+    );
+}
+
+// The platform compiler makes every enum `int`, so a bit-field of one reads
+// signed. Structs of enum bit-fields cross the boundary by value and as
+// results, both ways.
+#[cfg(windows)]
+#[test]
+fn enum_bitfields_cross_the_windows_compiler_boundary() {
+    let Some(cc) = windows_cc() else {
+        eprintln!(
+            "skipping enum_bitfields_cross_the_windows_compiler_boundary: no platform C compiler"
+        );
+        return;
+    };
+    let common = "typedef long long ll;\n\
+        enum id { ID0, ID1, ID2, ID3 };\n\
+        struct eb { enum id e : 2; enum id f : 3; int n; };\n\
+        static ll layout(void)\n\
+        { return sizeof(enum id) + 100 * (sizeof(struct eb) + 100 * (ll)((enum id)-1 < ID1)); }\n\
+        static struct eb make_eb(int e, int f, int n)\n\
+        { struct eb v; v.e = e; v.f = f; v.n = n; return v; }\n\
+        static int read_eb(struct eb v) { return v.e * 100 + v.f * 10 + v.n; }\n\
+        struct fns { ll (*layout)(void); struct eb (*make_eb)(int, int, int);\n\
+          int (*read_eb)(struct eb); };\n\
+        static int drive(const struct fns *f, int base)\n\
+        { struct eb x = f->make_eb(ID3, ID3, 7), y = { ID2, ID3, 5 };\n\
+          if (f->layout() != layout() || layout() != 10804) return base + 1;\n\
+          if (x.e != -1 || x.f != 3 || x.n != 7) return base + 2;\n\
+          if (f->read_eb(y) != -165) return base + 3;\n\
+          return 0; }\n";
+    drive_across_the_windows_compiler(&cc, "win-enum-interop", common, "layout, make_eb, read_eb");
+}
+
+// A variadic function returning an aggregate through the hidden result pointer
+// takes that pointer in the first integer register and its named and variadic
+// arguments in their own classes after it (System V AMD64 3.2.3 and 3.5.7), as
+// a fixed one does; AAPCS64 returns the aggregate through x8. Both ways across
+// the system compiler boundary.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn variadic_hidden_result_pointer_calls_cross_the_system_compiler_boundary() {
+    let Some(cc) = host_cc() else {
+        eprintln!(
+            "skipping variadic_hidden_result_pointer_calls_cross_the_system_compiler_boundary: \
+             no system C compiler"
+        );
+        return;
+    };
+    let common = "#include <stdarg.h>\n\
+        typedef long long ll;\n\
+        struct big { ll a, b, c; };\n\
+        struct pair { ll lo, hi; };\n\
+        struct dd { double x, y; };\n\
+        static struct big vb(struct pair p, double d, int n, ...)\n\
+        { va_list ap; va_start(ap, n); ll s = 0;\n\
+          for (int i = 0; i < n; i++) s = s * 10 + va_arg(ap, ll);\n\
+          struct dd q = va_arg(ap, struct dd); va_end(ap);\n\
+          struct big r = { p.lo * 100 + p.hi, (ll)(d * 10) + s, (ll)(q.x * 10 + q.y) };\n\
+          return r; }\n\
+        static struct big vbig(struct big g, int n, ...)\n\
+        { va_list ap; va_start(ap, n); struct big h = va_arg(ap, struct big); va_end(ap);\n\
+          struct big r = { g.a * 10 + h.a, g.b * 10 + h.b, g.c * 10 + h.c + n };\n\
+          return r; }\n\
+        struct fns { struct big (*vb)(struct pair, double, int, ...);\n\
+          struct big (*vbig)(struct big, int, ...); };\n\
+        static int drive(const struct fns *f, int base)\n\
+        { struct pair p = { 1, 2 }; struct dd q = { 3, 4 };\n\
+          struct big g = { 1, 2, 3 }, h = { 4, 5, 6 };\n\
+          struct big r = f->vb(p, 2.5, 2, 3LL, 4LL, q);\n\
+          if (r.a != 102 || r.b != 59 || r.c != 34) return base + 1;\n\
+          r = f->vbig(g, 7, h);\n\
+          if (r.a != 14 || r.b != 25 || r.c != 43) return base + 2;\n\
+          return 0; }\n";
+    drive_across_the_system_compiler(&cc, "va-hidden-ret-interop", common, "vb, vbig");
+}
+
+// The Microsoft x64 convention passes a variadic function returning an
+// aggregate through the hidden pointer that pointer in rcx and its named
+// arguments by their own rules after it, a 16-byte one by reference, an 8-byte
+// one as an integer and a double in both registers of its position. Both ways
+// across the platform compiler boundary.
+#[cfg(windows)]
+#[test]
+fn variadic_hidden_result_pointer_calls_cross_the_windows_compiler_boundary() {
+    let Some(cc) = windows_cc() else {
+        eprintln!(
+            "skipping variadic_hidden_result_pointer_calls_cross_the_windows_compiler_boundary: \
+             no platform C compiler"
+        );
+        return;
+    };
+    let common = "#include <stdarg.h>\n\
+        typedef long long ll;\n\
+        struct big { ll a, b, c; };\n\
+        struct pair { ll lo, hi; };\n\
+        struct w8 { int x, y; };\n\
+        static struct big vpair(struct pair p, int n, ...)\n\
+        { va_list ap; va_start(ap, n); ll v = va_arg(ap, ll); va_end(ap);\n\
+          struct big r = { p.lo, p.hi, n + v }; return r; }\n\
+        static struct big vw8(struct w8 s, int n, ...)\n\
+        { va_list ap; va_start(ap, n); ll v = va_arg(ap, ll); va_end(ap);\n\
+          struct big r = { s.x, s.y, n + v }; return r; }\n\
+        static struct big vbig(struct big g, int n, ...)\n\
+        { va_list ap; va_start(ap, n); struct big h = va_arg(ap, struct big); va_end(ap);\n\
+          struct big r = { g.a * 10 + h.a, g.b * 10 + h.b, g.c * 10 + h.c + n };\n\
+          return r; }\n\
+        static struct big vdbl(double d, int n, ...)\n\
+        { va_list ap; va_start(ap, n); double v = va_arg(ap, double); va_end(ap);\n\
+          struct big r = { (ll)(d * 10), n, (ll)(v * 10) }; return r; }\n\
+        struct fns { struct big (*vpair)(struct pair, int, ...);\n\
+          struct big (*vw8)(struct w8, int, ...); struct big (*vbig)(struct big, int, ...);\n\
+          struct big (*vdbl)(double, int, ...); };\n\
+        static int drive(const struct fns *f, int base)\n\
+        { struct pair p = { 11, 22 }; struct w8 w = { -7, 9 };\n\
+          struct big g = { 1, 2, 3 }, h = { 4, 5, 6 };\n\
+          struct big r = f->vpair(p, 3, 40LL);\n\
+          if (r.a != 11 || r.b != 22 || r.c != 43) return base + 1;\n\
+          r = f->vw8(w, 6, 60LL);\n\
+          if (r.a != -7 || r.b != 9 || r.c != 66) return base + 2;\n\
+          r = f->vbig(g, 7, h);\n\
+          if (r.a != 14 || r.b != 25 || r.c != 43) return base + 3;\n\
+          r = f->vdbl(2.5, 4, 3.5);\n\
+          if (r.a != 25 || r.b != 4 || r.c != 35) return base + 4;\n\
+          return 0; }\n";
+    drive_across_the_windows_compiler(
+        &cc,
+        "win-va-hidden-ret-interop",
+        common,
+        "vpair, vw8, vbig, vdbl",
+    );
+}
+
+// The Microsoft conventions pass a floating-point argument to a variadic or
+// unprototyped callee where such a callee reads it, on x64 in both the xmm and
+// the integer register of its position. Named and variadic doubles, past the
+// register positions and through a pointer without a prototype, both ways
+// across the platform compiler boundary.
+#[cfg(windows)]
+#[test]
+fn variadic_fp_arguments_cross_the_windows_compiler_boundary() {
+    let Some(cc) = windows_cc() else {
+        eprintln!(
+            "skipping variadic_fp_arguments_cross_the_windows_compiler_boundary: \
+             no platform C compiler"
+        );
+        return;
+    };
+    let common = "#include <stdarg.h>\n\
+        static double vsum(double d, int n, ...)\n\
+        { va_list ap; va_start(ap, n); double s = d;\n\
+          for (int i = 0; i < n; i++) s = s * 10 + va_arg(ap, double);\n\
+          va_end(ap); return s; }\n\
+        static double mixed(int a, double b, double c, ...)\n\
+        { va_list ap; va_start(ap, c); double d = va_arg(ap, double); int e = va_arg(ap, int);\n\
+          double g = va_arg(ap, double); va_end(ap);\n\
+          return a * 100000 + b * 10000 + c * 1000 + d * 100 + e * 10 + g; }\n\
+        static double far(int a, int b, int c, int d, double e, ...)\n\
+        { va_list ap; va_start(ap, e); double f = va_arg(ap, double); va_end(ap);\n\
+          return a + b + c + d + e * 10 + f; }\n\
+        static double two(double a, double b) { return a * 10 + b; }\n\
+        struct fns { double (*vsum)(double, int, ...); double (*mixed)(int, double, double, ...);\n\
+          double (*far)(int, int, int, int, double, ...); double (*two)(); };\n\
+        static int drive(const struct fns *f, int base)\n\
+        { float x = 2.5f;\n\
+          if (f->vsum(1.5, 2, 2.5, 3.5) != 178.5) return base + 1;\n\
+          if (f->vsum(1.5, 2, x, 3.5f) != 178.5) return base + 2;\n\
+          if (f->mixed(1, 2.0, 3.0, 4.0, 5, 6.0) != 123456) return base + 3;\n\
+          if (f->far(1, 2, 3, 4, 5.5, 0.25) != 65.25) return base + 4;\n\
+          if (f->two(x, 3.5) != 28.5) return base + 5;\n\
+          return 0; }\n";
+    drive_across_the_windows_compiler(&cc, "win-va-fp-interop", common, "vsum, mixed, far, two");
+}
+
 // A function returning an aggregate through the hidden result pointer takes that
 // pointer in the first integer register and its other arguments in their own
 // classes (System V AMD64 3.2.3), across the system compiler boundary both ways.
@@ -5572,6 +6905,924 @@ fn hidden_result_pointer_calls_cross_the_system_compiler_boundary() {
           if (r.a != 10 || r.b != 11 || r.c != 25 || r.d != 35) return base + 3;\n\
           return 0; }\n";
     drive_across_the_system_compiler(&cc, "hidden-ptr-interop", common, "mix, floats, spill");
+}
+
+// Thread-local storage on both sides of the system compiler boundary: the
+// module's (dynamic, reached through the loader) and the badc host's
+// (static, at the offset the image states), each in the calling thread and
+// from its initializers in a new one, and never the same object.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn thread_locals_cross_the_system_compiler_boundary() {
+    let Some(cc) = host_cc() else {
+        eprintln!(
+            "skipping thread_locals_cross_the_system_compiler_boundary: no system C compiler"
+        );
+        return;
+    };
+    let common = "#include <pthread.h>\n\
+        struct fns { int (*bump)(int); long long (*peek)(void); int *(*where)(void); };\n\
+        static _Thread_local int counter = 5;\n\
+        static _Thread_local long long wide = 3;\n\
+        static _Thread_local char tail[40];\n\
+        static int bump(int by) { counter += by; wide += by; tail[39] += (char)by; return counter; }\n\
+        static long long peek(void) { return wide * 1000 + tail[39]; }\n\
+        static int *where(void) { return &counter; }\n\
+        static void *fresh(void *arg)\n\
+        { const struct fns *f = arg;\n\
+          return (void *)(long)(f->peek() == 3000 && f->bump(1) == 6 && f->peek() == 4001); }\n\
+        static int drive(const struct fns *f, int base)\n\
+        { if (f->bump(0) != 5) return base + 1;\n\
+          if (f->bump(2) != 7 || f->peek() != 5002) return base + 2;\n\
+          pthread_t t; void *ok = 0;\n\
+          if (pthread_create(&t, 0, fresh, (void *)f) || pthread_join(t, &ok) || !ok) return base + 3;\n\
+          if (f->bump(0) != 7) return base + 4;\n\
+          if (f->where() == &counter) return base + 5;\n\
+          return 0; }\n";
+    drive_across_the_system_compiler(&cc, "tls-interop", common, "bump, peek, where");
+}
+
+// An object the system compiler built reads C library data directly -- the
+// PC-relative loads of x86-64 `-fPIE` code, the absolute and page-relative
+// forms of `-fno-pie` code -- where badc's own code reaches it through the
+// GOT. The image holds a copy of each object, which the loader fills and
+// binds the library's own references to; the same for a `-l` library's data.
+#[cfg(target_os = "linux")]
+#[test]
+fn a_system_compiled_object_reads_library_data_directly() {
+    let Some(cc) = host_cc() else {
+        eprintln!(
+            "skipping a_system_compiled_object_reads_library_data_directly: no system C compiler"
+        );
+        return;
+    };
+    let dir = tempdir("sys-copy");
+    let reader = write_source(
+        &dir,
+        "reader.c",
+        "#include <stdio.h>\n\
+         #include <unistd.h>\n\
+         int get_optind(void) { return optind; }\n\
+         int *addr_optind(void) { return &optind; }\n\
+         char *get_optarg(void) { return optarg; }\n\
+         FILE *get_stdout(void) { return stdout; }\n\
+         int say(const char *s) { return fputs(s, stderr) + fputs(s, stdout); }\n",
+    );
+    let main = write_source(
+        &dir,
+        "main.c",
+        "#include <stdio.h>\n\
+         #include <unistd.h>\n\
+         int get_optind(void);\n\
+         int *addr_optind(void);\n\
+         char *get_optarg(void);\n\
+         FILE *get_stdout(void);\n\
+         int say(const char *s);\n\
+         int main(int argc, char **argv) {\n\
+           if (getopt(argc, argv, \"x:\") != 'x' || get_optind() != 3) return 1;\n\
+           if (addr_optind() != &optind || get_optarg() != optarg) return 2;\n\
+           if (get_stdout() != stdout || say(\"said\\n\") <= 0) return 3;\n\
+           return 0;\n\
+         }\n",
+    );
+    let obj = dir.join("reader.o");
+    let exe = dir.join("prog");
+    for (cflag, link) in [("-fPIE", &[][..]), ("-fno-pie", &["-no-pie"][..])] {
+        run(
+            Command::new(&cc)
+                .args(["-O2", cflag, "-c"])
+                .arg(&reader)
+                .arg("-o")
+                .arg(&obj),
+            "build the system-compiled object",
+        );
+        run(
+            Command::new(badc())
+                .args(["-q", "-O"])
+                .args(link)
+                .arg(&main)
+                .arg(&obj)
+                .arg("-o")
+                .arg(&exe),
+            "link",
+        );
+        let out = Command::new(&exe).args(["-x", "v"]).output().expect("run");
+        assert_eq!(
+            out.status.code(),
+            Some(0),
+            "{cflag}: a library object read wrong"
+        );
+        assert_eq!(String::from_utf8_lossy(&out.stdout), "said\n", "{cflag}");
+        assert_eq!(String::from_utf8_lossy(&out.stderr), "said\n", "{cflag}");
+    }
+
+    let lib = write_source(
+        &dir,
+        "cnt.c",
+        "int lib_counter = 41;\nlong lib_table[3] = {1, 2, 3};\n",
+    );
+    run(
+        Command::new(&cc)
+            .args(["-O2", "-shared", "-fPIC", "-o"])
+            .arg(dir.join("libcnt.so"))
+            .arg(&lib),
+        "build the shared library",
+    );
+    let user = write_source(
+        &dir,
+        "user.c",
+        "extern int lib_counter;\nextern long lib_table[3];\n\
+         int bump(void) { return ++lib_counter; }\nlong third(void) { return lib_table[2]; }\n",
+    );
+    let user_obj = dir.join("user.o");
+    run(
+        Command::new(&cc)
+            .args(["-O2", "-c"])
+            .arg(&user)
+            .arg("-o")
+            .arg(&user_obj),
+        "build the reading object",
+    );
+    let lmain = write_source(
+        &dir,
+        "lmain.c",
+        "extern int lib_counter;\nint bump(void);\nlong third(void);\n\
+         int main(void) { return bump() == 42 && lib_counter == 42 && third() == 3 ? 0 : 1; }\n",
+    );
+    run(
+        Command::new(badc())
+            .arg("-q")
+            .arg(&lmain)
+            .arg(&user_obj)
+            .arg(format!("-L{}", dir.display()))
+            .arg("-lcnt")
+            .arg("-o")
+            .arg(&exe),
+        "link against the library",
+    );
+    let out = Command::new(&exe)
+        .env("LD_LIBRARY_PATH", &dir)
+        .output()
+        .expect("run");
+    assert_eq!(out.status.code(), Some(0), "the library's data read wrong");
+}
+
+// A data initializer holding a C library data object's address -- in
+// badc's own unit and in one the system compiler built -- holds the address
+// of the object the program reads, not of a call stub, at -O0 as at -O.
+#[cfg(target_os = "linux")]
+#[test]
+fn a_data_initializer_holds_a_library_objects_address() {
+    let dir = tempdir("data-init-copy");
+    let main = write_source(
+        &dir,
+        "main.c",
+        "#include <unistd.h>\n\
+         int *const optind_addr = &optind;\n\
+         int *optind_slot = &optind;\n\
+         extern int *const sys_optind_addr;\n\
+         int sys_check(void);\n\
+         int main(void) {\n\
+           if (optind_addr != &optind || *optind_addr != 1) return 1;\n\
+           if (optind_slot != &optind) return 2;\n\
+           return sys_check();\n\
+         }\n",
+    );
+    let sys = write_source(
+        &dir,
+        "sys.c",
+        "#include <unistd.h>\n\
+         int *const sys_optind_addr = &optind;\n\
+         int sys_check(void) { return sys_optind_addr == &optind && *sys_optind_addr == 1 ? 0 : 3; }\n",
+    );
+    let exe = dir.join("prog");
+    let obj = dir.join("sys.o");
+    let sys_obj = if let Some(cc) = host_cc() {
+        run(
+            Command::new(&cc)
+                .args(["-O2", "-c"])
+                .arg(&sys)
+                .arg("-o")
+                .arg(&obj),
+            "build the system-compiled object",
+        );
+        obj
+    } else {
+        sys
+    };
+    for opt in ["-O0", "-O"] {
+        run(
+            Command::new(badc())
+                .args(["-q", opt])
+                .arg(&main)
+                .arg(&sys_obj)
+                .arg("-o")
+                .arg(&exe),
+            "link",
+        );
+        let out = Command::new(&exe).output().expect("run");
+        assert_eq!(
+            out.status.code(),
+            Some(0),
+            "{opt}: a data slot missed the object"
+        );
+    }
+}
+
+// An object the system compiler built references its thread-locals by
+// local-exec relocations alone, with no note of badc's: a static, a global
+// a badc unit reads, and a zero-filled one past a shorter `.tdata` at its own
+// alignment. Each resolves in the calling thread and from the initializers
+// in a new one, in a position-independent image and a placed one.
+#[cfg(target_os = "linux")]
+#[test]
+fn a_system_compiled_object_reaches_its_thread_locals() {
+    let Some(cc) = host_cc() else {
+        eprintln!(
+            "skipping a_system_compiled_object_reaches_its_thread_locals: no system C compiler"
+        );
+        return;
+    };
+    let dir = tempdir("sys-tls");
+    let lib = write_source(
+        &dir,
+        "lib.c",
+        "#include <stdint.h>\n\
+         static _Thread_local int tl = 5;\n\
+         _Thread_local long long shared_tl = 40;\n\
+         static _Thread_local struct { char c; long long v; } __attribute__((aligned(32))) wide;\n\
+         int lib_bump(int a) { tl += a; wide.v += a; return tl; }\n\
+         int lib_check(void) { return ((uintptr_t)&wide & 31) != 0; }\n",
+    );
+    let main = write_source(
+        &dir,
+        "main.c",
+        "#include <pthread.h>\n\
+         extern _Thread_local long long shared_tl;\n\
+         int lib_bump(int a);\n\
+         int lib_check(void);\n\
+         static _Thread_local int mine = 100;\n\
+         static void *worker(void *arg) {\n\
+           (void)arg;\n\
+           return (void *)(long)(lib_bump(1) == 6 && shared_tl == 40 && mine == 100 && !lib_check());\n\
+         }\n\
+         int main(int argc, char **argv) {\n\
+           (void)argv;\n\
+           if (lib_bump(argc) != 6) return 1;\n\
+           shared_tl += 2;\n\
+           mine += 1;\n\
+           pthread_t t;\n\
+           void *ok = 0;\n\
+           if (pthread_create(&t, 0, worker, 0) || pthread_join(t, &ok) || !ok) return 2;\n\
+           if (shared_tl != 42 || mine != 101 || lib_check()) return 3;\n\
+           return 0;\n\
+         }\n",
+    );
+    let obj = dir.join("lib.o");
+    run(
+        Command::new(&cc)
+            .args(["-O2", "-c"])
+            .arg(&lib)
+            .arg("-o")
+            .arg(&obj),
+        "build the system-compiled object",
+    );
+    for flags in [&["-O"][..], &["-O", "-no-pie"][..]] {
+        let exe = dir.join("prog");
+        run(
+            Command::new(badc())
+                .arg("-q")
+                .args(flags)
+                .arg(&main)
+                .arg(&obj)
+                .arg("-o")
+                .arg(&exe),
+            "link",
+        );
+        let out = Command::new(&exe).output().expect("run");
+        assert_eq!(
+            out.status.code(),
+            Some(0),
+            "{flags:?}: a thread-local reached the wrong storage"
+        );
+    }
+}
+
+// A `long double` crosses the system compiler boundary both ways as the
+// platform passes it. System V AMD64 3.2.3 gives it and an aggregate of one,
+// or of overlapping ones, the X87 + X87UP classes, in memory as an argument,
+// fixed or variadic, and in st(0) as a return value; a larger aggregate, or
+// one whose x87 eightbyte is shared, is MEMORY both ways. AAPCS64 passes and returns binary128 in a
+// whole vector register, fixed or variadic, and an aggregate of up to four
+// as an HFA. `pass1` returns its operand's bytes, so a value binary64
+// cannot hold comes back exactly. Linux only: elsewhere `long double` is
+// `double`.
+#[cfg(target_os = "linux")]
+#[test]
+fn long_double_calls_cross_the_system_compiler_boundary() {
+    let Some(cc) = host_cc() else {
+        eprintln!(
+            "skipping long_double_calls_cross_the_system_compiler_boundary: no system C compiler"
+        );
+        return;
+    };
+    let common = "#include <stdarg.h>\n\
+        #include <stdio.h>\n\
+        #include <stdlib.h>\n\
+        #include <string.h>\n\
+        typedef long double ld;\n\
+        struct ld1 { ld x; };\n\
+        struct ld2 { ld x, y; };\n\
+        struct ld4 { ld a, b, c, d; };\n\
+        struct ldi { ld x; int i; };\n\
+        union ldu { ld x; double d; };\n\
+        union ldu2 { ld a; ld b; };\n\
+        struct lds { union { ld a; ld b; } u; };\n\
+        union ldm { ld x; long long l; };\n\
+        static ld ident(ld v) { return v; }\n\
+        static ld mix(int a, ld b, double c, ld d, int e) { return a + b * 2 + c * 4 + d * 8 + e * 16; }\n\
+        static ld past(double d0, double d1, double d2, double d3, double d4, double d5,\n\
+          double d6, double d7, double d8, ld x, int i0, int i1, int i2, int i3, int i4,\n\
+          int i5, int i6, ld y)\n\
+        { return d0 + d8 + x * 10 + i0 + i6 * 100 + y * 1000 + d7 + i5; }\n\
+        static struct ld1 mk1(ld v) { struct ld1 s = { v }; return s; }\n\
+        static ld take1(struct ld1 s, int k) { return s.x * k; }\n\
+        static struct ld1 pass1(struct ld1 s) { return s; }\n\
+        static struct ld2 mk2(ld a, ld b) { struct ld2 s = { a, b }; return s; }\n\
+        static struct ld4 flip4(struct ld4 s, ld k)\n\
+        { struct ld4 r = { s.d * k, s.c, s.b, s.a }; return r; }\n\
+        static struct ldi mki(struct ldi s, union ldu u) { s.x += u.x; s.i *= 2; return s; }\n\
+        static union ldu mku(ld v) { union ldu u; u.x = v; return u; }\n\
+        static union ldu2 mku2(ld v) { union ldu2 u; u.a = v; return u; }\n\
+        static ld takeu2(union ldu2 u, int k) { return u.b * k; }\n\
+        static union ldu2 passu2(union ldu2 u) { return u; }\n\
+        static struct lds mks(ld v, int k) { struct lds s; s.u.a = v * k; return s; }\n\
+        static union ldm addm(union ldm m, int k) { m.x += k; return m; }\n\
+        static ld vsum(int n, ...)\n\
+        { va_list ap; ld s = 0; va_start(ap, n);\n\
+          for (int i = 0; i < n; i++) s += va_arg(ap, ld);\n\
+          va_end(ap); return s; }\n\
+        static ld vmix(int n, ld first, ...)\n\
+        { va_list ap; ld s = first; va_start(ap, first);\n\
+          for (int i = 0; i < n; i++) { s += va_arg(ap, int); s += va_arg(ap, ld);\n\
+            s += va_arg(ap, double); }\n\
+          va_end(ap); return s; }\n\
+        struct fns { ld (*ident)(ld); ld (*mix)(int, ld, double, ld, int);\n\
+          ld (*past)(double, double, double, double, double, double, double, double, double,\n\
+            ld, int, int, int, int, int, int, int, ld);\n\
+          struct ld1 (*mk1)(ld); ld (*take1)(struct ld1, int); struct ld1 (*pass1)(struct ld1);\n\
+          struct ld2 (*mk2)(ld, ld); struct ld4 (*flip4)(struct ld4, ld);\n\
+          struct ldi (*mki)(struct ldi, union ldu);\n\
+          union ldu (*mku)(ld); ld (*vsum)(int, ...); ld (*vmix)(int, ld, ...);\n\
+          union ldu2 (*mku2)(ld); ld (*takeu2)(union ldu2, int); union ldu2 (*passu2)(union ldu2);\n\
+          struct lds (*mks)(ld, int); union ldm (*addm)(union ldm, int); };\n\
+        static int drive(const struct fns *f, int base)\n\
+        { struct ld1 s = { 1.25L };\n\
+          struct ld1 fine = { 1.0L + 0x1p-60L };\n\
+          char buf[32];\n\
+          if (f->ident(2.5L) != 2.5L || f->ident(0.5) != 0.5L) return base + 1;\n\
+          if (f->mix(1, 2.0L, 3.0, 4.0L, 5) != 129.0L) return base + 2;\n\
+          if (f->past(1, 2, 3, 4, 5, 6, 7, 8, 9, 0.5L, 1, 0, 0, 0, 0, 2, 3, 0.25L) != 576.0L)\n\
+            return base + 3;\n\
+          if (f->mk1(6.5L).x != 6.5L) return base + 4;\n\
+          if (f->take1(s, 4) != 5.0L) return base + 5;\n\
+          if (f->pass1(fine).x != fine.x) return base + 6;\n\
+          struct ld2 p = f->mk2(1.5L, -2.0L);\n\
+          if (p.x != 1.5L || p.y != -2.0L) return base + 7;\n\
+          struct ldi q = { 1.5L, 3 };\n\
+          union ldu u = f->mku(0.25L);\n\
+          q = f->mki(q, u);\n\
+          if (q.x != 1.75L || q.i != 6) return base + 12;\n\
+          struct ld4 in4 = { 1.0L, 2.0L, 3.0L, 4.0L };\n\
+          struct ld4 r4 = f->flip4(in4, 0.5L);\n\
+          if (r4.a != 2.0L || r4.b != 3.0L || r4.c != 2.0L || r4.d != 1.0L) return base + 14;\n\
+          if (f->vsum(3, 1.0L, 2.0L, 0.5L) != 3.5L) return base + 8;\n\
+          if (f->vsum(9, 1.0L, 1.0L, 1.0L, 1.0L, 1.0L, 1.0L, 1.0L, 1.0L, 1.0L) != 9.0L)\n\
+            return base + 9;\n\
+          if (f->vmix(2, 0.5L, 1, 2.0L, 3.0, 4, 5.0L, 6.0) != 21.5L) return base + 10;\n\
+          snprintf(buf, sizeof buf, \"%.2Lf %d %.1Lf\", f->ident(2.5L), 7, 0.25L);\n\
+          if (strcmp(buf, \"2.50 7 0.2\") != 0) return base + 11;\n\
+          if (strtold(\"2.75\", 0) != 2.75L) return base + 13;\n\
+          union ldu2 u2 = f->mku2(0.75L);\n\
+          if (u2.b != 0.75L) return base + 15;\n\
+          if (f->takeu2(u2, 4) != 3.0L) return base + 16;\n\
+          union ldu2 w; w.a = fine.x;\n\
+          if (f->passu2(w).b != fine.x) return base + 17;\n\
+          if (f->mks(1.25L, 3).u.b != 3.75L) return base + 18;\n\
+          union ldm m; m.x = 0.5L;\n\
+          if (f->addm(m, 2).x != 2.5L) return base + 19;\n\
+          return 0; }\n";
+    drive_across_the_system_compiler(
+        &cc,
+        "long-double-interop",
+        common,
+        "ident, mix, past, mk1, take1, pass1, mk2, flip4, mki, mku, vsum, vmix, mku2, takeu2, \
+         passu2, mks, addm",
+    );
+}
+
+// Unions and structs of floating-point or short-vector members cross the
+// system compiler boundary both ways as the platform passes them. AAPCS64
+// gives a union as many homogeneous-aggregate elements as its largest member
+// and a struct the sum of its members', so `union { double a, b; }` is one
+// `double` and a union of two vectors one vector register, and padding makes
+// no homogeneous aggregate; System V AMD64 classes the same shapes by
+// eightbyte.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn homogeneous_aggregates_cross_the_system_compiler_boundary() {
+    let Some(cc) = host_cc() else {
+        eprintln!(
+            "skipping homogeneous_aggregates_cross_the_system_compiler_boundary: no system C compiler"
+        );
+        return;
+    };
+    let common = "typedef float v4f __attribute__((vector_size(16)));\n\
+        typedef int v4i __attribute__((vector_size(16)));\n\
+        typedef float v2f __attribute__((vector_size(8)));\n\
+        union u1 { double a; double b; };\n\
+        union f2 { float f[2]; struct { float x, y; } p; };\n\
+        union f3 { float f[3]; struct { float x, y; } p; };\n\
+        union d3 { double d[3]; struct { double a, b; } s; };\n\
+        union fd { float f; double d; };\n\
+        struct nest { double x; union { double y; double z[1]; } u; double w; };\n\
+        struct arr { union { float a; float b; } u[3]; };\n\
+        struct pad { float a; float b __attribute__((aligned(8))); };\n\
+        union vv { v4f v; v4f w; };\n\
+        struct vs { v4f a; v4i b; };\n\
+        struct v3 { v2f a, b, c; };\n\
+        static double take_u1(union u1 u, double x) { return u.b * 10 + x; }\n\
+        static double take_f2(union f2 u, float x) { return u.p.x * 100 + u.f[1] * 10 + x; }\n\
+        static double take_f3(union f3 u, double x)\n\
+        { return u.f[0] * 1000 + u.p.y * 100 + u.f[2] * 10 + x; }\n\
+        static double take_d3(double w, union d3 u, double x)\n\
+        { return w * 1000 + u.s.a * 100 + u.s.b * 10 + u.d[2] + x; }\n\
+        static double take_fd(union fd u, double x) { return u.d * 10 + x; }\n\
+        static double take_nest(struct nest s, double x)\n\
+        { return s.x * 1000 + s.u.z[0] * 100 + s.w * 10 + x; }\n\
+        static double take_arr(struct arr s, float x)\n\
+        { return s.u[0].b * 100 + s.u[1].a * 10 + s.u[2].b + x; }\n\
+        static double take_pad(struct pad s, double x) { return s.a * 10 + s.b + x; }\n\
+        static double take_vv(union vv u, double x) { return u.w[0] * 100 + u.v[3] * 10 + x; }\n\
+        static double take_vs(struct vs s, double x) { return s.a[3] * 100 + s.b[1] * 10 + x; }\n\
+        static double take_v3(struct v3 s, double x) { return s.a[0] * 100 + s.b[1] * 10 + s.c[0] + x; }\n\
+        static union vv make_vv(float a, float b) { union vv u; u.v = (v4f){ a, 0, 0, b }; return u; }\n\
+        static struct vs make_vs(float a, int b) { struct vs s; s.a = (v4f){ a, 0, 0, a }; s.b = (v4i){ b, b, b, b };\n\
+          return s; }\n\
+        static struct v3 make_v3(float a, float b, float c)\n\
+        { struct v3 s; s.a = (v2f){ a, 0 }; s.b = (v2f){ 0, b }; s.c = (v2f){ c, 0 }; return s; }\n\
+        static union u1 make_u1(double v) { union u1 u; u.a = v; return u; }\n\
+        static union f2 make_f2(float a, float b) { union f2 u; u.p.x = a; u.f[1] = b; return u; }\n\
+        static union f3 make_f3(float a, float b, float c)\n\
+        { union f3 u; u.f[0] = a; u.p.y = b; u.f[2] = c; return u; }\n\
+        static union d3 make_d3(double a, double b, double c)\n\
+        { union d3 u; u.s.a = a; u.s.b = b; u.d[2] = c; return u; }\n\
+        static union fd make_fd(double v) { union fd u; u.d = v; return u; }\n\
+        static struct nest make_nest(double a, double b, double c)\n\
+        { struct nest s; s.x = a; s.u.y = b; s.w = c; return s; }\n\
+        static struct arr make_arr(float a, float b, float c)\n\
+        { struct arr s; s.u[0].a = a; s.u[1].b = b; s.u[2].a = c; return s; }\n\
+        static struct pad make_pad(float a, float b) { struct pad s; s.a = a; s.b = b; return s; }\n\
+        struct fns { double (*take_u1)(union u1, double); double (*take_f2)(union f2, float);\n\
+          double (*take_f3)(union f3, double); double (*take_d3)(double, union d3, double);\n\
+          double (*take_fd)(union fd, double); double (*take_nest)(struct nest, double);\n\
+          double (*take_arr)(struct arr, float); double (*take_pad)(struct pad, double);\n\
+          union u1 (*make_u1)(double); union f2 (*make_f2)(float, float);\n\
+          union f3 (*make_f3)(float, float, float); union d3 (*make_d3)(double, double, double);\n\
+          union fd (*make_fd)(double); struct nest (*make_nest)(double, double, double);\n\
+          struct arr (*make_arr)(float, float, float); struct pad (*make_pad)(float, float);\n\
+          double (*take_vv)(union vv, double); double (*take_vs)(struct vs, double);\n\
+          double (*take_v3)(struct v3, double); union vv (*make_vv)(float, float);\n\
+          struct vs (*make_vs)(float, int); struct v3 (*make_v3)(float, float, float); };\n\
+        static int drive(const struct fns *f, int base)\n\
+        { union u1 u1 = { 4.0 };\n\
+          union f2 f2 = { { 1, 2 } };\n\
+          union f3 f3 = { { 1, 2, 3 } };\n\
+          union d3 d3 = { { 1, 2, 3 } };\n\
+          union fd fd;\n\
+          struct nest n = { 1, { 2 }, 3 };\n\
+          struct arr a = { { { 1 }, { 2 }, { 3 } } };\n\
+          struct pad p = { 1, 2 };\n\
+          fd.d = 0.5;\n\
+          if (f->take_u1(u1, 0.5) != 40.5) return base + 1;\n\
+          if (f->take_f2(f2, 0.5f) != 120.5) return base + 2;\n\
+          if (f->take_f3(f3, 0.5) != 1230.5) return base + 3;\n\
+          if (f->take_d3(4, d3, 0.5) != 4123.5) return base + 4;\n\
+          if (f->take_fd(fd, 0.25) != 5.25) return base + 5;\n\
+          if (f->take_nest(n, 0.5) != 1230.5) return base + 6;\n\
+          if (f->take_arr(a, 0.5f) != 123.5) return base + 7;\n\
+          if (f->take_pad(p, 0.5) != 12.5) return base + 8;\n\
+          if (f->make_u1(2.5).a != 2.5) return base + 9;\n\
+          f2 = f->make_f2(1, 2);\n\
+          if (f2.f[0] != 1 || f2.p.y != 2) return base + 10;\n\
+          f3 = f->make_f3(1, 2, 3);\n\
+          if (f3.p.x != 1 || f3.f[1] != 2 || f3.f[2] != 3) return base + 11;\n\
+          d3 = f->make_d3(1, 2, 3);\n\
+          if (d3.d[0] != 1 || d3.d[1] != 2 || d3.d[2] != 3) return base + 12;\n\
+          if (f->make_fd(0.75).d != 0.75) return base + 13;\n\
+          n = f->make_nest(1, 2, 3);\n\
+          if (n.x != 1 || n.u.z[0] != 2 || n.w != 3) return base + 14;\n\
+          a = f->make_arr(1, 2, 3);\n\
+          if (a.u[0].b != 1 || a.u[1].a != 2 || a.u[2].b != 3) return base + 15;\n\
+          p = f->make_pad(1, 2);\n\
+          if (p.a != 1 || p.b != 2) return base + 16;\n\
+          union vv vv; vv.v = (v4f){ 3, 0, 0, 4 };\n\
+          struct vs vs; vs.a = (v4f){ 0, 0, 0, 3 }; vs.b = (v4i){ 4, 4, 4, 4 };\n\
+          struct v3 v3; v3.a = (v2f){ 1, 0 }; v3.b = (v2f){ 0, 2 }; v3.c = (v2f){ 3, 0 };\n\
+          if (f->take_vv(vv, 0.5) != 340.5) return base + 17;\n\
+          if (f->take_vs(vs, 0.5) != 340.5) return base + 18;\n\
+          if (f->take_v3(v3, 0.5) != 123.5) return base + 19;\n\
+          vv = f->make_vv(1.5f, 2.5f);\n\
+          if (vv.w[0] != 1.5f || vv.v[3] != 2.5f) return base + 20;\n\
+          vs = f->make_vs(1.5f, 7);\n\
+          if (vs.a[3] != 1.5f || vs.b[2] != 7) return base + 21;\n\
+          v3 = f->make_v3(1, 2, 3);\n\
+          if (v3.a[0] != 1 || v3.b[1] != 2 || v3.c[0] != 3) return base + 22;\n\
+          return 0; }\n";
+    drive_across_the_system_compiler(
+        &cc,
+        "hfa-union-interop",
+        common,
+        "take_u1, take_f2, take_f3, take_d3, take_fd, take_nest, take_arr, take_pad, \
+         make_u1, make_f2, make_f3, make_d3, make_fd, make_nest, make_arr, make_pad, \
+         take_vv, take_vs, take_v3, make_vv, make_vs, make_v3",
+    );
+}
+
+// An eightbyte that only unnamed bit-fields cover has no class and takes no
+// register, as clang classes it (System V AMD64 3.2.3): `struct { int :32;
+// int :32; double d; }` passes `d` in xmm0 and the next integer in rdi, and
+// `struct { float a; int :8; float b; }` two SSE eightbytes. gcc gives such an
+// eightbyte the INTEGER class, a recorded divergence: against gcc on x86_64
+// the integers after the aggregate arrive one register over, which the
+// expected sums state, a gcc callee reading them one register late and a badc
+// callee one early. Every other pairing agrees.
+const UNNAMED_BIT_FIELD_COMMON: &str = "typedef long long ll;\n\
+    struct s1 { int :32; int :32; double d; };\n\
+    struct s2 { float a; int :8; float b; };\n\
+    #if defined(__x86_64__) && defined(__GNUC__) && !defined(__clang__)\n\
+    #define GCC_X64 1\n\
+    #else\n\
+    #define GCC_X64 0\n\
+    #endif\n\
+    static int gcc_x64(void) { return GCC_X64; }\n\
+    static ll take1(struct s1 s, ll n1, ll n2, ll n3, ll n4, ll n5, ll n6)\n\
+    { (void)n1; (void)n6; return (s.d == 1.5) * 100000 + n2 * 1000 + n3 * 100 + n4 * 10 + n5; }\n\
+    static ll take2(struct s2 s, ll n1, ll n2, ll n3, ll n4, ll n5, ll n6)\n\
+    { (void)n1; (void)n6;\n\
+      return (s.a == 1.5f && s.b == 2.5f) * 100000 + n2 * 1000 + n3 * 100 + n4 * 10 + n5; }\n\
+    struct fns { int (*gcc_x64)(void); ll (*take1)(struct s1, ll, ll, ll, ll, ll, ll);\n\
+      ll (*take2)(struct s2, ll, ll, ll, ll, ll, ll); };\n\
+    static int drive(const struct fns *f, int base)\n\
+    { struct s1 x = { .d = 1.5 }; struct s2 y = { .a = 1.5f, .b = 2.5f };\n\
+      ll want = f->gcc_x64() ? 3456 : GCC_X64 ? 1234 : 2345;\n\
+      ll floats = f->gcc_x64() || GCC_X64 ? 0 : 100000;\n\
+      if (f->take1(x, 1, 2, 3, 4, 5, 6) != 100000 + want) return base + 1;\n\
+      if (f->take2(y, 1, 2, 3, 4, 5, 6) != floats + want) return base + 2;\n\
+      return 0; }\n";
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn unnamed_bit_field_eightbytes_cross_the_system_compiler_boundary() {
+    let Some(cc) = host_cc() else {
+        eprintln!(
+            "skipping unnamed_bit_field_eightbytes_cross_the_system_compiler_boundary: \
+             no system C compiler"
+        );
+        return;
+    };
+    drive_across_the_system_compiler(
+        &cc,
+        "unnamed-bitfield-interop",
+        UNNAMED_BIT_FIELD_COMMON,
+        "gcc_x64, take1, take2",
+    );
+}
+
+#[cfg(windows)]
+#[test]
+fn unnamed_bit_field_eightbytes_cross_the_windows_compiler_boundary() {
+    let Some(cc) = windows_cc() else {
+        eprintln!(
+            "skipping unnamed_bit_field_eightbytes_cross_the_windows_compiler_boundary: \
+             no platform C compiler"
+        );
+        return;
+    };
+    drive_across_the_windows_compiler(
+        &cc,
+        "win-unnamed-bitfield-interop",
+        UNNAMED_BIT_FIELD_COMMON,
+        "gcc_x64, take1, take2",
+    );
+}
+
+// Aggregates whose eightbytes merge several fields or none cross the system
+// compiler boundary both ways. System V AMD64 3.2.3 gives an eightbyte no
+// field overlaps no register, a union's 16-byte vector beside a double or
+// another vector one whole xmm register, and a packed aggregate with a
+// misaligned member memory; each call checks the argument after the
+// aggregate as well.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn eightbyte_classes_cross_the_system_compiler_boundary() {
+    let Some(cc) = host_cc() else {
+        eprintln!(
+            "skipping eightbyte_classes_cross_the_system_compiler_boundary: no system C compiler"
+        );
+        return;
+    };
+    let common = "typedef float v4f __attribute__((vector_size(16)));\n\
+        struct __attribute__((aligned(16))) a1 { double d; };\n\
+        struct __attribute__((aligned(16))) a2 { int a; };\n\
+        union a3 { double d; __attribute__((aligned(16))) char c; };\n\
+        union a4 { struct __attribute__((aligned(16))) { double d; } s; double e; };\n\
+        union a5 { v4f v; double d; };\n\
+        union a6 { v4f v; v4f w; };\n\
+        struct __attribute__((packed)) a7 { char c; int x; };\n\
+        #pragma pack(push, 1)\n\
+        struct a8 { short a; int b; };\n\
+        #pragma pack(pop)\n\
+        static long take_a1(struct a1 t, long n, double x)\n\
+        { return (long)(t.d * 100) + n * 10 + (long)x; }\n\
+        static long take_a2(struct a2 t, long n, double x) { return t.a * 100 + n * 10 + (long)x; }\n\
+        static long take_a3(union a3 t, long n, double x)\n\
+        { return (long)(t.d * 100) + n * 10 + (long)x; }\n\
+        static long take_a4(union a4 t, long n, double x)\n\
+        { return (long)(t.e * 100) + n * 10 + (long)x; }\n\
+        static long take_a5(union a5 t, long n, double x)\n\
+        { return (long)(t.v[0] * 1000 + t.v[3] * 100) + n * 10 + (long)x; }\n\
+        static long take_a6(long n, union a6 t, double x)\n\
+        { return (long)(t.w[1] * 1000 + t.v[2] * 100) + n * 10 + (long)x; }\n\
+        static long take_a7(struct a7 t, long n, double x) { return t.c * 100 + t.x * 10 + n + (long)x; }\n\
+        static long take_a8(long n, struct a8 t, double x) { return t.a * 100 + t.b * 10 + n + (long)x; }\n\
+        static struct a7 make_a7(char c, int x) { struct a7 r; r.c = c; r.x = x; return r; }\n\
+        static struct a8 make_a8(short a, int b) { struct a8 r; r.a = a; r.b = b; return r; }\n\
+        static struct a1 make_a1(double v) { struct a1 r = { v }; return r; }\n\
+        static struct a2 make_a2(int v) { struct a2 r = { v }; return r; }\n\
+        static union a3 make_a3(double v) { union a3 r; r.d = v; return r; }\n\
+        static union a4 make_a4(double v) { union a4 r; r.s.d = v; return r; }\n\
+        static union a5 make_a5(float a, float b) { union a5 r; r.v = (v4f){ a, 0, 0, b }; return r; }\n\
+        static union a6 make_a6(float a, float b) { union a6 r; r.v = (v4f){ 0, a, b, 0 }; return r; }\n\
+        struct fns {\n\
+          long (*take_a1)(struct a1, long, double); long (*take_a2)(struct a2, long, double);\n\
+          long (*take_a3)(union a3, long, double); long (*take_a4)(union a4, long, double);\n\
+          long (*take_a5)(union a5, long, double); long (*take_a6)(long, union a6, double);\n\
+          struct a1 (*make_a1)(double); struct a2 (*make_a2)(int); union a3 (*make_a3)(double);\n\
+          union a4 (*make_a4)(double); union a5 (*make_a5)(float, float);\n\
+          union a6 (*make_a6)(float, float);\n\
+          long (*take_a7)(struct a7, long, double); long (*take_a8)(long, struct a8, double);\n\
+          struct a7 (*make_a7)(char, int); struct a8 (*make_a8)(short, int); };\n\
+        static int drive(const struct fns *f, int base)\n\
+        { struct a1 t1 = { 3 };\n\
+          struct a2 t2 = { 3 };\n\
+          union a3 t3; union a4 t4; union a5 t5; union a6 t6;\n\
+          t3.d = 3; t4.e = 3; t5.v = (v4f){ 3, 0, 0, 4 }; t6.v = (v4f){ 0, 3, 4, 0 };\n\
+          if (f->take_a1(t1, 4, 5.5) != 345) return base + 1;\n\
+          if (f->take_a2(t2, 4, 5.5) != 345) return base + 2;\n\
+          if (f->take_a3(t3, 4, 5.5) != 345) return base + 3;\n\
+          if (f->take_a4(t4, 4, 5.5) != 345) return base + 4;\n\
+          if (f->take_a5(t5, 5, 6.5) != 3456) return base + 5;\n\
+          if (f->take_a6(5, t6, 6.5) != 3456) return base + 6;\n\
+          if (f->make_a1(2.5).d != 2.5) return base + 7;\n\
+          if (f->make_a2(7).a != 7) return base + 8;\n\
+          if (f->make_a3(2.5).d != 2.5) return base + 9;\n\
+          if (f->make_a4(2.5).e != 2.5) return base + 10;\n\
+          t5 = f->make_a5(1.5f, 2.5f);\n\
+          if (t5.v[0] != 1.5f || t5.v[3] != 2.5f) return base + 11;\n\
+          t6 = f->make_a6(1.5f, 2.5f);\n\
+          if (t6.w[1] != 1.5f || t6.w[2] != 2.5f) return base + 12;\n\
+          struct a7 t7; struct a8 t8;\n\
+          t7.c = 3; t7.x = 4; t8.a = 3; t8.b = 4;\n\
+          if (f->take_a7(t7, 5, 6.5) != 351) return base + 13;\n\
+          if (f->take_a8(5, t8, 6.5) != 351) return base + 14;\n\
+          t7 = f->make_a7(7, 70000);\n\
+          if (t7.c != 7 || t7.x != 70000) return base + 15;\n\
+          t8 = f->make_a8(8, 80000);\n\
+          if (t8.a != 8 || t8.b != 80000) return base + 16;\n\
+          return 0; }\n";
+    drive_across_the_system_compiler(
+        &cc,
+        "eightbyte-interop",
+        common,
+        "take_a1, take_a2, take_a3, take_a4, take_a5, take_a6, \
+         make_a1, make_a2, make_a3, make_a4, make_a5, make_a6, \
+         take_a7, take_a8, make_a7, make_a8",
+    );
+}
+
+// Arguments past the registers cross the system compiler boundary both ways at
+// the offsets the platform puts them: Apple arm64 packs a named stack argument
+// at its own size and alignment, a homogeneous floating-point aggregate too,
+// while other composites take multiples of 8 and a variadic tail 8-byte slots
+// from the next multiple of 8; AAPCS64 and System V AMD64 give every one 8. An
+// old-style definition takes its arguments promoted, and a callee that inlines
+// a multi-block function reads its own where they arrive. Each side checks the
+// other's result against its own copy of the callee.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn stack_arguments_cross_the_system_compiler_boundary() {
+    let Some(cc) = host_cc() else {
+        eprintln!(
+            "skipping stack_arguments_cross_the_system_compiler_boundary: no system C compiler"
+        );
+        return;
+    };
+    let common = "#include <stdarg.h>\n\
+        typedef long L;\n\
+        typedef double D;\n\
+        struct c3 { char c[3]; };\n\
+        struct c12 { char c[12]; };\n\
+        struct f2 { float a, b; };\n\
+        struct f3 { float a, b, c; };\n\
+        struct d1 { double a; };\n\
+        struct s2 { short a; };\n\
+        static L scalars(L a0, L a1, L a2, L a3, L a4, L a5, L a6, L a7, char c, short s,\n\
+          int i, char c2, L l, unsigned char uc, _Bool b, unsigned short us, float f)\n\
+        { return a7 + c + s * 3 + i * 5 + c2 * 7 + l * 11 + uc * 13 + b * 17 + us * 19\n\
+            + (L)(f * 2); }\n\
+        static L agg3(L a0, L a1, L a2, L a3, L a4, L a5, L a6, L a7, struct c3 x, char y)\n\
+        { return a0 + x.c[0] + x.c[1] * 3 + x.c[2] * 5 + y * 7; }\n\
+        static L agg12(L a0, L a1, L a2, L a3, L a4, L a5, L a6, L a7, char y, struct c12 x,\n\
+          char z)\n\
+        { return a1 + y + x.c[0] * 3 + x.c[11] * 5 + z * 7; }\n\
+        static L agg_s2(L a0, L a1, L a2, L a3, L a4, L a5, L a6, L a7, char y, struct s2 x,\n\
+          char z)\n\
+        { return a2 + y + x.a * 3 + z * 5; }\n\
+        static D hfa(D d0, D d1, D d2, D d3, D d4, D d5, D d6, D d7, float f, struct f2 h,\n\
+          float g, struct f3 t, struct d1 dd, float k)\n\
+        { return d7 + f + h.a * 3 + h.b * 5 + g * 7 + t.a * 11 + t.c * 13 + dd.a * 17\n\
+            + k * 19; }\n\
+        static D fps(D d0, D d1, D d2, D d3, D d4, D d5, D d6, D d7, float f, D d, float g,\n\
+          float h)\n\
+        { return d0 + f + d * 3 + g * 5 + h * 7; }\n\
+        static L mixed(L a0, L a1, L a2, L a3, L a4, L a5, L a6, L a7, D d0, D d1, D d2, D d3,\n\
+          D d4, D d5, D d6, D d7, float f, char c, D d, short s, int i)\n\
+        { return a3 + (L)(f * 2) + c * 3 + (L)(d * 5) + s * 7 + i * 11; }\n\
+        static L vnamed(L a0, L a1, L a2, L a3, L a4, L a5, L a6, L a7, char c, short s,\n\
+          int n, ...)\n\
+        { va_list ap; L r = a4 + c + s * 3; va_start(ap, n);\n\
+          for (int i = 0; i < n; i++) r += va_arg(ap, L) * (5 + i);\n\
+          r += (L)(va_arg(ap, D) * 2); va_end(ap); return r; }\n\
+        static L vint(L a0, L a1, L a2, L a3, L a4, L a5, L a6, L a7, int n, ...)\n\
+        { va_list ap; L r = a1; va_start(ap, n);\n\
+          for (int i = 0; i < n; i++) r += va_arg(ap, L) * (5 + i);\n\
+          r += (L)(va_arg(ap, D) * 2); va_end(ap); return r; }\n\
+        static L kr(a0, a1, a2, a3, a4, a5, a6, a7, d0, d1, d2, d3, d4, d5, d6, d7, c, s, f,\n\
+          uc)\n\
+          L a0, a1, a2, a3, a4, a5, a6, a7; D d0, d1, d2, d3, d4, d5, d6, d7; char c; short s;\n\
+          float f; unsigned char uc;\n\
+        { return a5 + (L)d6 + c + s * 3 + (L)(f * 4) + uc * 5; }\n\
+        static int pick(int c, int x, int y) { if (c) return x * 3; return y - 1; }\n\
+        static L inl(L a0, L a1, L a2, L a3, L a4, L a5, L a6, L a7, char c, short s, int i)\n\
+        { return a6 + pick(c > 0, s, i) * 5 + c; }\n\
+        struct fns {\n\
+          L (*scalars)(L, L, L, L, L, L, L, L, char, short, int, char, L, unsigned char,\n\
+            _Bool, unsigned short, float);\n\
+          L (*agg3)(L, L, L, L, L, L, L, L, struct c3, char);\n\
+          L (*agg12)(L, L, L, L, L, L, L, L, char, struct c12, char);\n\
+          L (*agg_s2)(L, L, L, L, L, L, L, L, char, struct s2, char);\n\
+          D (*hfa)(D, D, D, D, D, D, D, D, float, struct f2, float, struct f3, struct d1,\n\
+            float);\n\
+          D (*fps)(D, D, D, D, D, D, D, D, float, D, float, float);\n\
+          L (*mixed)(L, L, L, L, L, L, L, L, D, D, D, D, D, D, D, D, float, char, D, short,\n\
+            int);\n\
+          L (*vnamed)(L, L, L, L, L, L, L, L, char, short, int, ...);\n\
+          L (*kr)(L, L, L, L, L, L, L, L, D, D, D, D, D, D, D, D, int, int, D, int);\n\
+          L (*inl)(L, L, L, L, L, L, L, L, char, short, int);\n\
+          L (*vint)(L, L, L, L, L, L, L, L, int, ...); };\n\
+        static int drive(const struct fns *f, int base)\n\
+        { struct c3 x3 = { { 1, -2, 3 } };\n\
+          struct c12 x12 = { { 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -6 } };\n\
+          struct s2 xs = { -300 };\n\
+          struct f2 h = { 2.5f, -3.5f };\n\
+          struct f3 t = { 4.5f, 0.5f, -5.5f };\n\
+          struct d1 dd = { 6.25 };\n\
+          if (f->scalars(0, 1, 2, 3, 4, 5, 6, 7, 'a', -300, 70000, -5, 1234567890123L, 200, 1,\n\
+                60000, 1.5f)\n\
+              != scalars(0, 1, 2, 3, 4, 5, 6, 7, 'a', -300, 70000, -5, 1234567890123L, 200, 1,\n\
+                60000, 1.5f)) return base + 1;\n\
+          if (f->agg3(8, 1, 2, 3, 4, 5, 6, 7, x3, 'y') != agg3(8, 1, 2, 3, 4, 5, 6, 7, x3, 'y'))\n\
+            return base + 2;\n\
+          if (f->agg12(0, 9, 2, 3, 4, 5, 6, 7, -7, x12, 'z')\n\
+              != agg12(0, 9, 2, 3, 4, 5, 6, 7, -7, x12, 'z')) return base + 3;\n\
+          if (f->agg_s2(0, 1, 10, 3, 4, 5, 6, 7, 'q', xs, -9)\n\
+              != agg_s2(0, 1, 10, 3, 4, 5, 6, 7, 'q', xs, -9)) return base + 4;\n\
+          if (f->hfa(0, 1, 2, 3, 4, 5, 6, 7.5, 0.75f, h, -1.25f, t, dd, 2.0f)\n\
+              != hfa(0, 1, 2, 3, 4, 5, 6, 7.5, 0.75f, h, -1.25f, t, dd, 2.0f)) return base + 5;\n\
+          if (f->fps(0.5, 1, 2, 3, 4, 5, 6, 7, 1.25f, -2.5, 3.75f, -4.5f)\n\
+              != fps(0.5, 1, 2, 3, 4, 5, 6, 7, 1.25f, -2.5, 3.75f, -4.5f)) return base + 6;\n\
+          if (f->mixed(0, 1, 2, 11, 4, 5, 6, 7, 0, 1, 2, 3, 4, 5, 6, 7, 2.5f, -3, 4.5, -700,\n\
+                123456)\n\
+              != mixed(0, 1, 2, 11, 4, 5, 6, 7, 0, 1, 2, 3, 4, 5, 6, 7, 2.5f, -3, 4.5, -700,\n\
+                123456)) return base + 7;\n\
+          if (f->vnamed(0, 1, 2, 3, 12, 5, 6, 7, 'c', -2, 2, 30L, 40L, 2.5)\n\
+              != vnamed(0, 1, 2, 3, 12, 5, 6, 7, 'c', -2, 2, 30L, 40L, 2.5)) return base + 8;\n\
+          if (f->kr(0L, 1L, 2L, 3L, 4L, 13L, 6L, 7L, 0., 1., 2., 3., 4., 5., 6.5, 7., 'k', -300,\n\
+                2.25f, 250)\n\
+              != kr(0L, 1L, 2L, 3L, 4L, 13L, 6L, 7L, 0., 1., 2., 3., 4., 5., 6.5, 7., 'k', -300,\n\
+                2.25f, 250)) return base + 9;\n\
+          if (f->inl(0, 1, 2, 3, 4, 5, 16, 7, 'x', -300, 70000)\n\
+              != inl(0, 1, 2, 3, 4, 5, 16, 7, 'x', -300, 70000)) return base + 10;\n\
+          if (f->vint(0, 9, 2, 3, 4, 5, 6, 7, 2, 30L, 40L, 2.5)\n\
+              != vint(0, 9, 2, 3, 4, 5, 6, 7, 2, 30L, 40L, 2.5)) return base + 11;\n\
+          return 0; }\n";
+    drive_across_the_system_compiler(
+        &cc,
+        "stack-args-interop",
+        common,
+        "scalars, agg3, agg12, agg_s2, hfa, fps, mixed, vnamed, kr, inl, vint",
+    );
+}
+
+// A parameter of 32 bits or less is read in the low word, across the system
+// compiler boundary both ways: each side calls the other's callees through
+// 64-bit parameter types, an upper half set, then through their own types
+// with arguments its 64-bit arithmetic narrowed, a variadic `int` among them.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn low_word_arguments_cross_the_system_compiler_boundary() {
+    let Some(cc) = host_cc() else {
+        eprintln!(
+            "skipping low_word_arguments_cross_the_system_compiler_boundary: no system C compiler"
+        );
+        return;
+    };
+    let common = "#include <stdarg.h>\n\
+        typedef unsigned long long u64;\n\
+        typedef long long s64;\n\
+        static s64 widen_i(int x) { return x; }\n\
+        static u64 widen_u(unsigned x) { return x; }\n\
+        static u64 halve(unsigned x) { return (u64)x >> 1; }\n\
+        static s64 sum(int a, int b) { return (s64)a + (s64)b; }\n\
+        static s64 pick(const s64 *t, int i) { return t[i]; }\n\
+        static s64 byte(signed char c) { return c; }\n\
+        static u64 half(unsigned short h) { return h; }\n\
+        static s64 vsum(int n, ...)\n\
+        { va_list ap; s64 s = 0; va_start(ap, n);\n\
+          for (int i = 0; i < n; i++) s += (s64)va_arg(ap, int) * (i + 1);\n\
+          va_end(ap); return s; }\n\
+        struct fns { s64 (*widen_i)(int); u64 (*widen_u)(unsigned); u64 (*halve)(unsigned);\n\
+          s64 (*sum)(int, int); s64 (*pick)(const s64 *, int); s64 (*byte)(signed char);\n\
+          u64 (*half)(unsigned short); s64 (*vsum)(int, ...); };\n\
+        typedef u64 (*wide1)(u64);\n\
+        typedef s64 (*wide2)(u64, u64);\n\
+        typedef s64 (*wide_pick)(const s64 *, u64);\n\
+        static const s64 table[8] = { 10, 11, 12, 13, 14, 15, 16, 17 };\n\
+        static int drive(const struct fns *f, int base)\n\
+        { volatile u64 vh = 0xdeadbeef00000004ULL, vn = 0x12345678fffffffcULL;\n\
+          u64 h = vh, n = vn;\n\
+          if ((s64)((wide1)f->widen_i)(n) != -4) return base + 1;\n\
+          if (((wide1)f->widen_u)(h) != 4) return base + 2;\n\
+          if (((wide1)f->halve)(h + 2) != 3) return base + 3;\n\
+          if (((wide2)f->sum)(h, n) != 0) return base + 4;\n\
+          if (((wide_pick)f->pick)(table + 4, n) != 10) return base + 5;\n\
+          if ((s64)((wide1)f->byte)(0x12345678ffffff85ULL) != -123) return base + 6;\n\
+          if (((wide1)f->half)(0xdeadbeef0000fffeULL) != 0xfffe) return base + 7;\n\
+          if (f->widen_i((int)n + 1) != -3) return base + 8;\n\
+          if (f->widen_u((unsigned)h | 1) != 5) return base + 9;\n\
+          if (f->sum((int)h, (int)n - 1) != -1) return base + 10;\n\
+          if (f->pick(table + 4, (int)h - 5) != 13) return base + 11;\n\
+          if (f->byte((signed char)(h + 0x81)) != -123) return base + 12;\n\
+          if (f->half((unsigned short)(n + 3)) != 0xffff) return base + 13;\n\
+          if (f->vsum(3, (int)h, (int)n - 1, (signed char)(h + 0x81)) != -375) return base + 14;\n\
+          if (f->vsum(9, (int)h, (int)n - 1, (int)h, (int)n - 1, (int)h, (int)n - 1, (int)h,\n\
+                (int)n - 1, (signed char)(h + 0x81)) != -1143) return base + 15;\n\
+          return 0; }\n";
+    drive_across_the_system_compiler(
+        &cc,
+        "low-word-args-interop",
+        common,
+        "widen_i, widen_u, halve, sum, pick, byte, half, vsum",
+    );
+}
+
+// An old-style definition receives its arguments promoted (C99 6.9.1p7, p10),
+// across the system compiler boundary both ways: `float` as `double` and `char`
+// as `int`, through the prototype of the promoted types (6.7.5.3p15), which a
+// prior declaration may also name.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn old_style_definitions_cross_the_system_compiler_boundary() {
+    let Some(cc) = host_cc() else {
+        eprintln!(
+            "skipping old_style_definitions_cross_the_system_compiler_boundary: no system C compiler"
+        );
+        return;
+    };
+    let common = "typedef double D;\n\
+        static D scale(a, x, c) int a; float x; char c;\n\
+        { return a + x * 2 + c; }\n\
+        static D halve(D, int);\n\
+        static D halve(x, c) float x; char c; { return x / 2 + c; }\n\
+        struct fns { D (*scale)(int, D, int); D (*halve)(D, int); };\n\
+        static int drive(const struct fns *f, int base)\n\
+        { if (f->scale(1, 1.5f, 300) != 48.0) return base + 1;\n\
+          if (scale(1, 1.5f, 300) != 48.0) return base + 2;\n\
+          if (f->halve(5.0, 1) != 3.5) return base + 3;\n\
+          if (halve(5.0, 1) != 3.5) return base + 4;\n\
+          return 0; }\n";
+    drive_across_the_system_compiler(&cc, "old-style-interop", common, "scale, halve");
 }
 
 // `-Map=FILE` / `-Map FILE` / `-M` produce a GNU-ld-style link map.
@@ -7018,6 +9269,67 @@ mod aarch64_link {
             "{err}"
         );
         assert!(err.contains("m.o(.text+0x0)"), "the site is named: {err}");
+    }
+
+    /// The group in a hosted image: the default position-independent
+    /// link refuses it, and a `-no-pie` one places the image, where the
+    /// group takes the object's address and the image runs.
+    #[test]
+    fn movw_against_a_placed_symbol_links_into_a_no_pie_image() {
+        let dir = tempdir("a64-movw-no-pie");
+        let asm = write(
+            &dir,
+            "addr.s",
+            "\t.text\n\
+             \t.globl obj_addr\n\
+             obj_addr:\n\
+             \tmovz\tx0, :abs_g2_s:obj\n\
+             \tmovk\tx0, :abs_g1_nc:obj\n\
+             \tmovk\tx0, :abs_g0_nc:obj\n\
+             \tret\n\
+             \t.data\n\
+             \t.balign 8\n\
+             \t.globl obj\n\
+             obj:\n\
+             \t.quad 7\n",
+        );
+        let main = write(
+            &dir,
+            "main.c",
+            "extern long obj;\nextern long *obj_addr(void);\n\
+             int main(void) { return obj_addr() == &obj && obj == 7 ? 0 : 1; }\n",
+        );
+        let link = |flag: Option<&str>, exe: &Path| {
+            Command::new(badc())
+                .args(["-q", "--target=linux-aarch64"])
+                .args(flag)
+                .arg(&asm)
+                .arg(&main)
+                .arg("-o")
+                .arg(exe)
+                .current_dir(&dir)
+                .output()
+                .expect("run badc")
+        };
+        let refused = link(None, &dir.join("pie"));
+        let err = String::from_utf8_lossy(&refused.stderr);
+        assert!(
+            !refused.status.success()
+                && err.contains("R_AARCH64_MOVW_SABS_G2")
+                && err.contains("position-independent executable"),
+            "{err}"
+        );
+        let exe = dir.join("placed");
+        let placed = link(Some("-no-pie"), &exe);
+        assert!(
+            placed.status.success(),
+            "{}",
+            String::from_utf8_lossy(&placed.stderr)
+        );
+        if super::host_linux_target() == "linux-aarch64" {
+            let out = Command::new(&exe).output().expect("run the image");
+            assert_eq!(out.status.code(), Some(0), "the group holds &obj");
+        }
     }
 
     /// Build a host-native image from one asm source plus a `main` that

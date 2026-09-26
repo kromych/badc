@@ -855,6 +855,45 @@ fn modulo_with_spilled_divisor_under_pressure() {
 }
 
 #[test]
+fn aggregate_parts_under_pressure() {
+    // `take_many` reads its register aggregates as `ParamPart`s and stores
+    // them to their objects. The entry parallel copy wrote every part at
+    // entry while the allocator reckoned each from its own position, so a
+    // store address the allocator gave the register of a later part
+    // overwrote that part (`c` in r8 on System V, homed in rax).
+    let src = r#"
+        struct p1 { int a; };
+        struct p2 { int a, b; };
+        struct p3 { int a, b, c; };
+        struct p4 { int a, b, c, d; };
+        struct p6 { int a, b, c, d, e, f; };
+        static long long g_sum;
+        static void take_many(struct p2 a, int s0, struct p3 b, struct p1 c,
+                              struct p4 d, int s1, struct p6 e, int s2) {
+            g_sum = a.a + a.b + s0 + b.a + b.b + b.c + c.a
+                  + d.a + d.b + d.c + d.d + s1
+                  + e.a + e.b + e.c + e.d + e.e + e.f + s2;
+        }
+        int main(void) {
+            struct p2 a = {10, 20};
+            struct p3 b = {3, 4, 5};
+            struct p1 c = {7};
+            struct p4 d = {1, 2, 3, 4};
+            struct p6 e = {100, 101, 102, 103, 104, 105};
+            take_many(a, 1000, b, c, d, 2000, e, 3000);
+            return g_sum == 6674 ? 0 : 1;
+        }
+    "#;
+    let result = crate::c5::codegen::ssa::reg_alloc::with_pool_size_override(2, 2, || {
+        jit_exit_native_optimized(src, &["aggregate-parts-pressure"])
+    });
+    assert_eq!(
+        result, 0,
+        "an aggregate part was overwritten before it was read"
+    );
+}
+
+#[test]
 fn fp_param_incoming_reg_clobber_under_pressure() {
     // Each Inst::ParamRef reads its incoming FP argument register, which
     // stays live from function entry until that ParamRef materializes.

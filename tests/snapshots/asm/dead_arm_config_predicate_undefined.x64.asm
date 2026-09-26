@@ -208,10 +208,8 @@ Disassembly of section .text:
                	leaq	-0x8(%rbp), %rax
                	movq	$0x0, (%rax)
                	leaq	<rip>, %rcx
-               	pushq	%rdx
-               	movq	(%rcx), %rdx
-               	movq	%rdx, (%rax)
-               	popq	%rdx
+               	movq	(%rcx), %r10
+               	movq	%r10, (%rax)
                	xorl	%eax, %eax
                	leave
                	retq

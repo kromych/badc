@@ -300,10 +300,10 @@ Disassembly of section .text:
                	popq	%r12
                	leave
                	retq
-               	movslq	%ebx, %rdi
                	leaq	<rip>, %rsi
                	leaq	<rip>, %rdx
                	movl	$0x2a, %ecx
+               	movq	%rbx, %rdi
                	movb	$0x0, %al
                	callq	<addr>
                	movslq	%eax, %rax
@@ -314,8 +314,8 @@ Disassembly of section .text:
                	popq	%r12
                	leave
                	retq
-               	movslq	%ebx, %rdi
                	xorl	%esi, %esi
+               	movq	%rbx, %rdi
                	movq	%rsi, %rdx
                	xorl	%eax, %eax
                	callq	<addr>
@@ -326,9 +326,9 @@ Disassembly of section .text:
                	popq	%r12
                	leave
                	retq
-               	movslq	%ebx, %rdi
                	leaq	-0x40(%rbp), %rsi
                	movl	$0x40, %edx
+               	movq	%rbx, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
                	cmpq	$0x9, %rax

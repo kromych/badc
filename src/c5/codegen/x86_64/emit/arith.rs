@@ -1240,6 +1240,83 @@ fn emit_binop_rdx_rax(
     Ok(())
 }
 
+/// `Inst::Udiv128`: `div` of rdx:rax = `hi:lo`, whose quotient `hi < divisor`
+/// keeps within rax; values live in rax / rdx across it are saved.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn emit_udiv128(
+    code: &mut Vec<u8>,
+    v: super::super::ir::ValueId,
+    dst: Place,
+    hi: super::super::ir::ValueId,
+    lo: super::super::ir::ValueId,
+    divisor: super::super::ir::ValueId,
+    alloc: &Allocation,
+    frame: Frame,
+) -> Emit {
+    let Some(rd) = int_or_spill_dst(dst) else {
+        return fail("Udiv128: dst not int reg / spill");
+    };
+    let (hi, lo) = (place_of(alloc, hi), place_of(alloc, lo));
+    let preserve_rax = rd != Reg::RAX && implicit_holds_live(alloc, v, Reg::RAX, frame);
+    let preserve_rdx = rd != Reg::RDX && implicit_holds_live(alloc, v, Reg::RDX, frame);
+    let pushed = (u32::from(preserve_rax) + u32::from(preserve_rdx)) * 8;
+    let rm = match place_of(alloc, divisor) {
+        Place::IntReg(r) if r != Reg::RAX.0 && r != Reg::RDX.0 => Ok(Reg(r)),
+        Place::IntReg(r) => {
+            emit_mov_rr(code, SCRATCH_R11, Reg(r));
+            Ok(SCRATCH_R11)
+        }
+        Place::Spill(slot) => Err(spill_slot_addr_shifted(frame, slot, pushed)),
+        _ => return fail("Udiv128: divisor not int reg / spill"),
+    };
+    if preserve_rax {
+        emit_push_r(code, Reg::RAX);
+    }
+    if preserve_rdx {
+        emit_push_r(code, Reg::RDX);
+    }
+    let load = |code: &mut Vec<u8>, to: Reg, from: Place| match from {
+        Place::IntReg(r) => {
+            emit_mov_rr(code, to, Reg(r));
+            true
+        }
+        Place::Spill(slot) => {
+            let (base, off) = spill_slot_addr_shifted(frame, slot, pushed);
+            emit_mov_r_mem(code, to, base, off);
+            true
+        }
+        _ => false,
+    };
+    let (lo_in_rdx, hi_in_rax) = (
+        lo == Place::IntReg(Reg::RDX.0),
+        hi == Place::IntReg(Reg::RAX.0),
+    );
+    let loaded = match (lo_in_rdx, hi_in_rax) {
+        (true, true) => {
+            super::encode::emit_xchg_rr(code, Reg::RAX, Reg::RDX);
+            true
+        }
+        (true, false) => load(code, Reg::RAX, lo) && load(code, Reg::RDX, hi),
+        _ => load(code, Reg::RDX, hi) && load(code, Reg::RAX, lo),
+    };
+    if !loaded {
+        return fail("Udiv128: dividend not int reg / spill");
+    }
+    match rm {
+        Ok(r) => super::encode::emit_unary_r(code, Mnem::Div, 8, r),
+        Err((base, off)) => super::encode::emit_unary_m(code, Mnem::Div, 8, base, off),
+    }
+    emit_mov_rr(code, rd, Reg::RAX);
+    if preserve_rdx {
+        emit_pop_r(code, Reg::RDX);
+    }
+    if preserve_rax {
+        emit_pop_r(code, Reg::RAX);
+    }
+    spill_dst_to_slot(code, dst, rd, frame);
+    Ok(())
+}
+
 /// Source of a variable shift count for `emit_shift_by_count_reg`.
 enum ShiftCount {
     /// Count already resident in a register; moved into cl.

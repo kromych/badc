@@ -61,6 +61,7 @@ fn strip_sign_narrow_32(func: &FunctionSsa, idx: ValueId) -> Option<ValueId> {
         Inst::Extend {
             value,
             kind: LoadKind::I32,
+            ..
         } => Some(*value),
         Inst::BinopI {
             op: BinOp::Shr,

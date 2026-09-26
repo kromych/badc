@@ -183,6 +183,7 @@ pub(crate) fn strip_zero_test_conds(func: &mut FunctionSsa) -> bool {
         Inst::Extend {
             value,
             kind: LoadKind::I32 | LoadKind::U32,
+            ..
         }
         | Inst::BinopI {
             op: BinOp::And,
@@ -379,10 +380,12 @@ mod tests {
             is_always_inline: false,
             is_noinline: false,
             is_naked: false,
+            is_noreturn: false,
             conv: crate::c5::codegen::CallConv::Target,
             section: None,
             patchable_entry: None,
             no_instrument: false,
+            no_stack_protector: false,
             is_weak: false,
             is_internal: false,
             const_params: 0,
@@ -391,6 +394,7 @@ mod tests {
             cmp32: Vec::new(),
             low_word_tests: Vec::new(),
             param_fp_mask: crate::c5::ir::FpMask::EMPTY,
+            param_widths: crate::c5::ir::ArgWidths::default(),
             agg_descs: alloc::vec::Vec::new(),
             param_aggs: alloc::vec::Vec::new(),
             param_local_slots: alloc::vec::Vec::new(),
@@ -791,7 +795,11 @@ mod tests {
     #[test]
     fn branch_on_a_32_bit_extension_tests_the_low_word() {
         use crate::c5::ir::LoadKind;
-        let ext = |kind| Inst::Extend { value: 0, kind };
+        let ext = |kind| Inst::Extend {
+            value: 0,
+            kind,
+            nsw: false,
+        };
         let mask = Inst::BinopI {
             op: BinOp::And,
             lhs: 0,
@@ -842,6 +850,7 @@ mod tests {
                     Inst::Extend {
                         value: 0,
                         kind: LoadKind::I32,
+                        nsw: false,
                     },
                     Inst::BinopI {
                         op: BinOp::Ne,

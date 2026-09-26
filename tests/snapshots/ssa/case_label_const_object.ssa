@@ -23,7 +23,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=1
     v17  Store { addr=v6, disp=0, value=v14, kind=I32 }   -> -
     v18  Imm(0)                                           -> x0
     v19  Imm(1)                                           -> x0
-    v20  Imm(0)                                           -> x0
+    v20  Imm(1)                                           -> x0
     v21  Imm(1)                                           -> x0
     v22  Imm(0)                                           -> x0
     v23  Imm(1)                                           -> x0
@@ -34,7 +34,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=1
     v28  Store { addr=v6, disp=4, value=v25, kind=I32 }   -> -
     v29  Imm(1)                                           -> x2
     v30  Imm(2)                                           -> x2
-    v31  Imm(0)                                           -> x2
+    v31  Imm(2)                                           -> x2
     v32  Imm(2)                                           -> x2
     v33  Imm(0)                                           -> x2
     v34  Imm(1)                                           -> x2
@@ -45,7 +45,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=1
     v39  Store { addr=v6, disp=8, value=v36, kind=I32 }   -> -
     v40  Imm(2)                                           -> x2
     v41  Imm(3)                                           -> x2
-    v42  Imm(0)                                           -> x2
+    v42  Imm(3)                                           -> x2
     v43  Imm(3)                                           -> x2
     v44  Imm(0)                                           -> x2
     v45  Imm(1)                                           -> x2
@@ -56,7 +56,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=1
     v50  Store { addr=v6, disp=12, value=v47, kind=I32 }  -> -
     v51  Imm(3)                                           -> x1
     v52  Imm(4)                                           -> x1
-    v53  Imm(0)                                           -> x1
+    v53  Imm(4)                                           -> x1
     v54  Imm(4)                                           -> x1
     v55  Imm(0)                                           -> x1
     v56  Imm(0)                                           -> x1
@@ -186,9 +186,11 @@ fn ent_pc=5 n_params=0 variadic=false locals=0
     v208 BinopI { op=eq, lhs=v207, rhs_imm=9 }            -> x0
     v209 Imm(0)                                           -> x1
     v210 Extend { value=v208, kind=I32 }                  -> x1
-    v211 Extend { value=v208, kind=I32 }                  -> x1
-    v212 BinopI { op=eq, lhs=v208, rhs_imm=0 }            -> x1
-    terminator Bnz { cond=v208, target=b3, fall=b2 }   (low word)   (exit_acc=v212)
+    v211 LifetimeEnd(0)                                   -> -
+    v212 LifetimeEnd(0)                                   -> -
+    v213 Extend { value=v208, kind=I32 }                  -> x1
+    v214 BinopI { op=eq, lhs=v208, rhs_imm=0 }            -> x1
+    terminator Bnz { cond=v208, target=b3, fall=b2 }   (low word)   (exit_acc=v214)
   block 2  start_pc=0
     v105 Imm(10)                                          -> x0
     terminator Return(v105)   (exit_acc=v105)

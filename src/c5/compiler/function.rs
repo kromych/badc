@@ -37,7 +37,67 @@ pub(super) struct ParsedParams {
     pub(super) types: Vec<i64>,
     pub(super) is_variadic: bool,
     pub(super) form: ParamForm,
+    /// Positions declared through an enum tag that had no definition yet.
+    pub(super) enum_tags: Vec<(usize, u32)>,
 }
+
+impl ParsedParams {
+    /// The types as declared, each with the incomplete enum tag it named.
+    pub(super) fn spelled(&self) -> Vec<super::redeclaration::Spelled> {
+        let tag = |pos: usize| {
+            self.enum_tags
+                .iter()
+                .find(|(p, _)| *p == pos)
+                .map(|&(_, t)| t)
+        };
+        let spell = |(pos, &ty): (usize, &i64)| super::redeclaration::Spelled {
+            ty,
+            enum_tag: tag(pos),
+        };
+        self.types.iter().enumerate().map(spell).collect()
+    }
+
+    /// The parameter information the list gives its function type.
+    pub(super) fn fn_params(&self) -> crate::c5::symbol::FnParams {
+        crate::c5::symbol::FnParams {
+            types: self.types.clone(),
+            variadic: self.is_variadic,
+            prototyped: self.form == ParamForm::Prototype,
+            enum_tags: self.enum_tags.clone(),
+        }
+    }
+
+    /// The list of a declarator whose function type a typedef or `typeof`
+    /// names: that type's.
+    pub(super) fn of_type(p: crate::c5::symbol::FnParams) -> Self {
+        ParsedParams {
+            indices: Vec::new(),
+            form: if p.prototyped {
+                ParamForm::Prototype
+            } else {
+                ParamForm::Empty
+            },
+            types: p.types,
+            is_variadic: p.variadic,
+            enum_tags: p.enum_tags,
+        }
+    }
+
+    /// Record the tag position `pos` was declared through, if any.
+    pub(super) fn note_enum_tag(&mut self, pos: usize, tag: Option<u32>) {
+        self.enum_tags.retain(|(p, _)| *p != pos);
+        self.enum_tags.extend(tag.map(|t| (pos, t)));
+    }
+}
+
+/// A parameter's function-pointer carriers: indirection, return lineage,
+/// pointee parameter information, and `FnType::ret`.
+type ParamFnCarriers = (
+    i64,
+    i64,
+    Option<crate::c5::symbol::FnParams>,
+    Option<(alloc::boxed::Box<crate::c5::symbol::FnType>, i64)>,
+);
 
 /// How a function declarator specified its parameters (C99 6.7.5.3p14).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -48,9 +108,6 @@ pub(super) enum ParamForm {
     Prototype,
     /// An identifier list, typed by the declarations that follow it (6.9.1p6).
     IdentifierList,
-    /// A function type read through a typedef or `typeof`, whose carrier does
-    /// not record which of the other forms declared it.
-    Carried,
 }
 
 impl Compiler {
@@ -60,13 +117,13 @@ impl Compiler {
     /// declarator to bind it) leaks into the next declaration -- e.g. the
     /// first field of a following struct definition would record a phantom
     /// function-pointer prototype.
-    fn take_param_fn_ptr_carriers(&mut self) -> (i64, i64, Option<Vec<i64>>, bool) {
+    fn take_param_fn_ptr_carriers(&mut self) -> ParamFnCarriers {
+        let ret_fn = self.take_decl_ret_fn(false);
         let indirection = self.pending.fn_ptr_indirection.take().unwrap_or(0);
         let ret_indirection = core::mem::take(&mut self.pending.fn_ptr_ret_indirection);
-        let params = self.pending.fn_ptr_param_types.take();
-        let variadic = matches!(self.pending.typedef_fn_proto.take(), Some((_, true)));
+        let params = self.pending.fn_ptr_params.take();
         self.pending.base_is_function_type = false;
-        (indirection, ret_indirection, params, variadic)
+        (indirection, ret_indirection, params, ret_fn)
     }
 
     /// A parameter's own `ms_abi` / `sysv_abi` describes that
@@ -75,14 +132,47 @@ impl Compiler {
     /// list the way the other declarator carriers are.
     pub(super) fn parse_function_params(&mut self) -> Result<ParsedParams, C5Error> {
         let outer_conv = core::mem::take(&mut self.pending.attr_call_conv);
+        // The enclosing declarator's function-pointer carriers and function
+        // types, which each parameter's own declarator starts afresh.
+        let p = &mut self.pending;
+        let outer = (
+            p.fn_ptr_indirection.take(),
+            core::mem::take(&mut p.fn_ptr_ret_indirection),
+            p.fn_ptr_params.take(),
+            p.fn_ptr_ret_fn.take(),
+            core::mem::take(&mut p.base_is_function_type),
+        );
+        let outer_chain = core::mem::take(&mut p.fn_ret_chain);
+        let outer_levels = core::mem::take(&mut p.fn_chain_levels);
+        let outer_arrays = core::mem::take(&mut p.fn_chain_array_levels);
+        let outer_base_levels = core::mem::take(&mut p.fn_base_levels);
+        let outer_taken = p.base_array_taken;
+        let outer_own = core::mem::take(&mut p.fn_own_sig);
+        let outer_base = p.fn_decl_base.take();
         let r = self.parse_function_params_inner();
-        self.pending.attr_call_conv = outer_conv;
+        let p = &mut self.pending;
+        p.attr_call_conv = outer_conv;
+        (
+            p.fn_ptr_indirection,
+            p.fn_ptr_ret_indirection,
+            p.fn_ptr_params,
+            p.fn_ptr_ret_fn,
+            p.base_is_function_type,
+        ) = outer;
+        p.fn_ret_chain = outer_chain;
+        p.fn_chain_levels = outer_levels;
+        p.fn_chain_array_levels = outer_arrays;
+        p.fn_base_levels = outer_base_levels;
+        p.base_array_taken = outer_taken;
+        p.fn_own_sig = outer_own;
+        p.fn_decl_base = outer_base;
         r
     }
 
     fn parse_function_params_inner(&mut self) -> Result<ParsedParams, C5Error> {
         let mut args = Vec::new();
         let mut types = Vec::new();
+        let mut enum_tags = Vec::new();
         let mut is_variadic = false;
         // An empty list declares no prototype; `(void)` declares one with
         // no parameters. A list is an identifier list until a parameter
@@ -142,6 +232,7 @@ impl Compiler {
                 Ty::Int as i64
             };
             let base_spelling = self.take_base_spelling();
+            let base_enum_tag = self.pending.base_enum_tag.take();
             // `(void)` via a typedef alias. The early check above
             // matches only the bare `void` keyword; aliases reach
             // here with `base_was_void` set by `parse_decl_base_type`.
@@ -176,9 +267,12 @@ impl Compiler {
             // (C99 6.7.7p3 + 6.7.6.1); rebuild the flat tag into the
             // aggregate-backed form, mirroring `parse_declarator`'s
             // leading-`*` epilogue (this loop consumed the `*`s, so the
-            // declarator below never sees them).
+            // declarator below never sees them). The array is then the
+            // pointee, so the declarator's own derivations do not apply to it.
             if leading_ptr_count > 0 && self.pending.typedef_base_array_size > 0 {
                 ty = self.ptr_to_array_typedef_ty(base, ty, leading_ptr_count);
+                self.pending.typedef_base_array_size = 0;
+                self.pending.typedef_base_array_dims.clear();
             }
             // A function-TYPE typedef base pre-decays to a function
             // pointer; the first `*` forms that pointer-to-function (C99
@@ -236,6 +330,7 @@ impl Compiler {
                 // fn-pointer carriers its base (a fn-pointer typedef) seeded.
                 let _ = self.take_param_fn_ptr_carriers();
                 self.ty = ty;
+                enum_tags.extend(base_enum_tag.map(|t| (types.len(), t)));
                 types.push(ty);
                 if !self.parameter_separator()? {
                     break;
@@ -257,12 +352,12 @@ impl Compiler {
             // A parameter may carry a trailing attribute
             // (`PyObject *op __attribute__((unused))`).
             self.skip_attribute_specifiers()?;
-            if self.pending.attr_maybe_unused && param_idx != usize::MAX {
-                self.symbols[param_idx].maybe_unused = true;
-            }
+            let param_maybe_unused = self.pending.attr_maybe_unused;
             if array_size != 0 {
                 full_ty += Ty::Ptr as i64;
             }
+            let adjusted = array_size != 0
+                || (self.pending.typedef_base_array_size != 0 && leading_ptr_count == 0);
             // Per C99 6.7.5.3p7, a named array parameter is
             // adjusted to a pointer to the element type. The
             // same rule applies when the base type is a typedef
@@ -292,8 +387,12 @@ impl Compiler {
             // populated. Drained even if the declarator didn't
             // set anything so they don't leak into the next
             // parameter or expression.
-            let (fn_ptr_indirection, fn_ptr_ret_indirection, fnptr_pp, fnptr_variadic) =
+            let (fn_ptr_indirection, fn_ptr_ret_indirection, fnptr_pp, ret_fn) =
                 self.take_param_fn_ptr_carriers();
+            // The adjusted pointer is one more level above a function-pointer
+            // element, as `fn_t *p` counts it.
+            let fn_ptr_indirection =
+                fn_ptr_indirection + i64::from(adjusted && fn_ptr_indirection > 0);
             // Drained per parameter so one parameter's convention cannot
             // leak into the next.
             let param_conv = core::mem::take(&mut self.pending.attr_call_conv);
@@ -304,6 +403,7 @@ impl Compiler {
             // name that shadows an enclosing prototype's parameter must not
             // trip the duplicate-parameter check.
             if param_idx == usize::MAX || self.pending.parsing_fn_ptr_proto {
+                enum_tags.extend(base_enum_tag.map(|t| (types.len(), t)));
                 types.push(full_ty);
                 if !self.parameter_separator()? {
                     break;
@@ -336,13 +436,11 @@ impl Compiler {
             self.shadow_symbol(param_idx);
             self.symbols[param_idx].class = Token::Loc as i64;
             self.symbols[param_idx].type_ = full_ty;
-            self.symbols[param_idx].decl_spelling = self.decl_spelling(base_spelling);
+            self.symbols[param_idx].incomplete_enum_tag = base_enum_tag;
+            self.symbols[param_idx].binding.decl_spelling = self.decl_spelling(base_spelling);
+            self.symbols[param_idx].binding.maybe_unused = param_maybe_unused;
             self.symbols[param_idx].array_size = 0;
-            self.symbols[param_idx].was_referenced = false;
-            self.symbols[param_idx].decl_line = self.lex.line;
-            let decl_file = self.intern_source_file() as u32;
-            self.symbols[param_idx].decl_file = decl_file;
-            self.symbols[param_idx].decl_in_main_source = self.in_main_source();
+            self.set_decl_site(param_idx);
             // Unconditional write: a regular scalar/pointer
             // parameter must not inherit a stale fn-ptr lineage
             // from a prior binding of the same name (the
@@ -351,18 +449,19 @@ impl Compiler {
             // decay no-op to the unary `*` handler.
             self.symbols[param_idx].fn_ptr_indirection = fn_ptr_indirection;
             self.symbols[param_idx].fn_ptr_ret_indirection = fn_ptr_ret_indirection;
+            self.symbols[param_idx].ret_fn = ret_fn;
             // A function-pointer parameter records its pointee signature's
             // parameter types so an indirect call through it narrows each
             // argument to its declared type (the common callback shape).
             if fn_ptr_indirection > 0
-                && let Some(pp_types) = fnptr_pp
+                && let Some(pp) = fnptr_pp
             {
-                self.symbols[param_idx].params = pp_types;
-                self.symbols[param_idx].is_variadic = fnptr_variadic;
+                self.symbols[param_idx].set_fn_params(pp);
             }
             self.symbols[param_idx].conv = param_conv;
 
             args.push(param_idx);
+            enum_tags.extend(base_enum_tag.map(|t| (types.len(), t)));
             types.push(full_ty);
             if !self.parameter_separator()? {
                 break;
@@ -381,6 +480,7 @@ impl Compiler {
             types,
             is_variadic,
             form,
+            enum_tags,
         })
     }
 

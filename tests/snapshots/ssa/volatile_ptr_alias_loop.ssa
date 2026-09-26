@@ -14,11 +14,11 @@ fn ent_pc=0 n_params=0 variadic=false locals=1
     v9   Imm(0)                                           -> x1
     v10  LoadLocal { off=-1, kind=I32, volatile }         -> x1
     v11  BinopI { op=add, lhs=v10, rhs_imm=1 }            -> x1
-    v12  Extend { value=v11, kind=I32 }                   -> x2
+    v12  Extend { value=v11, kind=I32, nsw }              -> x2
     v13  StoreLocal { off=-1, value=v11, kind=I32, volatile } -> -
     v14  Extend { value=v6, kind=I32 }                    -> x1
     v15  BinopI { op=add, lhs=v6, rhs_imm=1 }             -> x0
-    v16  Imm(0)                                           -> x1
+    v16  Extend { value=v15, kind=I32, nsw }              -> x1
     v17  Extend { value=v15, kind=I32 }                   -> x1
     v18  BinopI { op=gt, lhs=v15, rhs_imm=10 }            -> x1
     terminator Bz { cond=v18, target=b2, fall=b8 }   (exit_acc=v18)
@@ -34,20 +34,22 @@ fn ent_pc=0 n_params=0 variadic=false locals=1
     v20  BinopI { op=eq, lhs=v6, rhs_imm=3 }              -> x0
     terminator Bz { cond=v20, target=b7, fall=b5 }   (exit_acc=v20)
   block 5  start_pc=0
-    v22  Imm(0)                                           -> x0
-    v23  Imm(0)                                           -> x1
-    terminator Jmp(b6)   (exit_acc=v22)
+    v23  Imm(0)                                           -> x0
+    v24  Imm(0)                                           -> x1
+    terminator Jmp(b6)   (exit_acc=v23)
   block 6  start_pc=0
-    v26  Phi { incoming=[b5:v22, b7:v24], kind=I64 }      -> x0
-    v27  Imm(0)                                           -> x1
-    v28  Extend { value=v26, kind=I32 }                   -> x1
-    terminator Return(v26)   (exit_acc=v26)
+    v27  Phi { incoming=[b5:v23, b7:v25], kind=I64 }      -> x0
+    v28  Imm(0)                                           -> x1
+    v29  Extend { value=v27, kind=I32 }                   -> x1
+    v30  LifetimeEnd(-1)                                  -> -
+    terminator Return(v27)   (exit_acc=v27)
   block 7  start_pc=0
-    v24  Imm(2)                                           -> x0
-    v25  Imm(0)                                           -> x1
-    terminator Jmp(b6)   (exit_acc=v24)
+    v25  Imm(2)                                           -> x0
+    v26  Imm(0)                                           -> x1
+    terminator Jmp(b6)   (exit_acc=v25)
   block 8  start_pc=0
     v21  Imm(1)                                           -> x0
+    v22  LifetimeEnd(-1)                                  -> -
     terminator Return(v21)   (exit_acc=v21)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit

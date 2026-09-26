@@ -90,27 +90,33 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v84  BinopI { op=ne, lhs=v83, rhs_imm=1 }             -> x0
     terminator Bz { cond=v84, target=b2, fall=b1 }   (exit_acc=v84)
   block 1  start_pc=0
-    v91  Imm(12)                                          -> x0
-    terminator Return(v91)   (exit_acc=v91)
+    v109 Imm(12)                                          -> x0
+    v110 LifetimeEnd(0)                                   -> -
+    v111 LifetimeEnd(0)                                   -> -
+    v112 LifetimeEnd(-1)                                  -> -
+    terminator Return(v109)   (exit_acc=v109)
   block 2  start_pc=0
-    v92  Imm(0)                                           -> x0
-    v93  Imm(0)                                           -> x0
-    v94  Imm(0)                                           -> x0
-    v95  Imm(0)                                           -> x0
-    v96  Imm(0)                                           -> x0
-    v97  Imm(0)                                           -> x0
-    v98  Imm(0)                                           -> x0
-    v99  Imm(0)                                           -> x0
-    v100 Imm(0)                                           -> x0
-    v101 Imm(0)                                           -> x0
-    v102 Imm(0)                                           -> x0
-    v103 Imm(0)                                           -> x0
-    v104 Imm(0)                                           -> x0
-    v105 Imm(0)                                           -> x0
-    v106 Imm(0)                                           -> x0
-    v107 Imm(0)                                           -> x0
-    v108 Imm(0)                                           -> x0
-    terminator Return(v108)   (exit_acc=v108)
+    v113 Imm(0)                                           -> x0
+    v114 Imm(0)                                           -> x0
+    v115 Imm(0)                                           -> x0
+    v116 Imm(0)                                           -> x0
+    v117 Imm(0)                                           -> x0
+    v118 Imm(0)                                           -> x0
+    v119 Imm(0)                                           -> x0
+    v120 Imm(0)                                           -> x0
+    v121 Imm(0)                                           -> x0
+    v122 Imm(0)                                           -> x0
+    v123 Imm(0)                                           -> x0
+    v124 Imm(0)                                           -> x0
+    v125 Imm(0)                                           -> x0
+    v126 Imm(0)                                           -> x0
+    v127 Imm(0)                                           -> x0
+    v128 Imm(0)                                           -> x0
+    v129 Imm(0)                                           -> x0
+    v130 LifetimeEnd(0)                                   -> -
+    v131 LifetimeEnd(0)                                   -> -
+    v132 LifetimeEnd(-1)                                  -> -
+    terminator Return(v129)   (exit_acc=v129)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

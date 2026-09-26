@@ -107,11 +107,6 @@ pub struct Binding {
     /// `int` return, which a 64-bit comparison would then read. `0`
     /// (= `Ty::Char`) means no prototype yet, and no extension.
     pub return_type_tag: i64,
-    /// The return type was spelled `long double`. `return_type_tag`
-    /// stays `Ty::Double` (c5 stores both as f64); the libc-call codegen
-    /// needs this to read the result from x87 `st(0)` on SysV x86-64
-    /// rather than XMM0.
-    pub returns_long_double: bool,
     /// Per-fixed-parameter type tags, encoded as `return_type_tag` is.
     /// Carried into `ResolvedImport` so the DWARF emitter can type each
     /// PLT trampoline's `DW_TAG_formal_parameter` children.

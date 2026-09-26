@@ -61,6 +61,8 @@ mod native_elf_x64;
 mod native_pe_arm64;
 #[cfg(feature = "full")]
 mod native_pe_x64;
+#[cfg(feature = "full")]
+mod overflow;
 mod parser;
 #[cfg(feature = "full")]
 mod patchable_entry;
@@ -68,12 +70,15 @@ mod patchable_entry;
 mod perf_codegen;
 mod pointer_tracking;
 mod programs;
+mod redeclaration;
 #[cfg(feature = "full")]
 mod reloc_golden;
 #[cfg(feature = "full")]
 mod relocatable;
 #[cfg(feature = "full")]
 mod stack_guard;
+#[cfg(feature = "full")]
+mod static_init;
 mod types;
 mod vla;
 #[cfg(feature = "full")]
@@ -1019,6 +1024,15 @@ pub fn run_str(src: &str) -> i64 {
         .with_pointer_tracking()
         .run()
         .unwrap()
+}
+
+/// [`run_str`] for an explicit target, whose assembler syntax an inline
+/// asm template is written in.
+pub fn run_str_for(src: &str, target: crate::Target) -> i64 {
+    let program = Compiler::with_options(with_prelude(src), target, Default::default())
+        .compile()
+        .unwrap();
+    Vm::new(program).with_pointer_tracking().run().unwrap()
 }
 
 /// Compile + run a fixture.

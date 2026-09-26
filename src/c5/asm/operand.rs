@@ -174,7 +174,7 @@ impl<'a> Folder<'a> {
                 Fold::Value(Folded::Addr { base: v, off: 0 })
             }
             Some(Inst::Copy { value, .. }) => self.fold(*value),
-            Some(Inst::Extend { value, kind }) => {
+            Some(Inst::Extend { value, kind, .. }) => {
                 let Some((w, signed)) = load_int_kind(*kind) else {
                     return Fold::NotConstant;
                 };
@@ -406,6 +406,7 @@ fn reaching_local_stores(
                     value,
                     kind,
                     volatile,
+                    ..
                 } if *o == off => {
                     if *volatile || store_int_width(*kind) != Some(lw) {
                         return None;
@@ -463,11 +464,7 @@ fn may_write_slot(func: &FunctionSsa, inst: &Inst, off: i64, exposed: bool) -> b
         Inst::AtomicRmw { addr, .. } | Inst::AtomicStore { addr, .. } => {
             exposed || names_slot(*addr)
         }
-        Inst::AtomicCas {
-            addr,
-            expected_addr,
-            ..
-        } => exposed || names_slot(*addr) || names_slot(*expected_addr),
+        Inst::AtomicCas { addr, .. } => exposed || names_slot(*addr),
         Inst::InlineAsm { asm, args } => {
             // An asm that neither clobbers memory nor writes an output
             // operand writes nothing.
@@ -507,10 +504,10 @@ fn slot_exposed(func: &FunctionSsa, off: i64) -> bool {
             Inst::AtomicLoad { addr, .. } => *addr == v,
             Inst::AtomicCas {
                 addr,
-                expected_addr,
+                expected,
                 desired,
                 ..
-            } => (*addr == v || *expected_addr == v) && *desired != v,
+            } => *addr == v && *expected != v && *desired != v,
             Inst::InlineAsm { asm, args } => {
                 args.len() == asm.operands.len()
                     && args.iter().zip(&asm.operands).all(|(&a, o)| {
@@ -608,6 +605,7 @@ pub(crate) fn asm_operand_form(func: &FunctionSsa, arg: u32) -> alloc::string::S
                 | Inst::Bswap { .. }
                 | Inst::BitCount { .. },
             ) => "an arithmetic result",
+            Some(Inst::Udiv128 { .. }) => "an arithmetic result",
             Some(Inst::Fneg(_) | Inst::Fma { .. } | Inst::MulAdd { .. } | Inst::FpCast { .. }) => {
                 "a floating-point result"
             }
@@ -625,10 +623,12 @@ pub(crate) fn asm_operand_form(func: &FunctionSsa, arg: u32) -> alloc::string::S
             Some(Inst::AtomicStore { .. }) => "an atomic store",
             Some(Inst::Mcpy { .. }) => "a block copy",
             Some(Inst::Mzero { .. }) => "a block zero fill",
-            Some(Inst::InlineAsm { .. }) => "an asm statement",
+            Some(Inst::InlineAsm { .. } | Inst::AsmOut { .. }) => "an asm statement",
             Some(Inst::AllocaInit(_)) => "an alloca marker",
             Some(Inst::LifetimeEnd(_)) => "an end-of-lifetime marker",
-            Some(Inst::ParamRef { .. }) => "a function parameter",
+            Some(Inst::ParamRef { .. } | Inst::ParamPart { .. }) => "a function parameter",
+            Some(Inst::RetPart { .. }) => "a call result",
+            Some(Inst::AggParts { .. }) => "a returned aggregate",
             Some(Inst::Phi { incoming, .. }) => {
                 return alloc::format!("a join of {} control-flow paths", incoming.len());
             }
@@ -678,6 +678,7 @@ mod tests {
             value,
             kind: StoreKind::I32,
             volatile: false,
+            nsw: false,
         }
     }
 
@@ -696,6 +697,8 @@ mod tests {
             fixed_args: 0,
             fp_return: false,
             fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
+            low_word_args: 0,
+            arg_widths: crate::c5::ir::ArgWidths::default(),
             arg_aggs: alloc::vec::Vec::new(),
             ret_agg: None,
             ret_slot_local: 0,
@@ -715,6 +718,8 @@ mod tests {
                     seg: AsmSeg::None,
                     static_arg: false,
                     value: false,
+                    volatile_object: false,
+                    early_clobber: false,
                 }],
                 clobber_regs: 0,
                 clobber_fp_regs: 0,
@@ -855,6 +860,7 @@ mod tests {
                 value: 1,
                 kind: StoreKind::I64,
                 volatile: false,
+                nsw: false,
             },
             call(),
             Inst::LoadLocal {
@@ -922,6 +928,8 @@ mod tests {
                     seg: AsmSeg::None,
                     static_arg: false,
                     value: false,
+                    volatile_object: false,
+                    early_clobber: false,
                 })
                 .collect()
         };

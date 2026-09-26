@@ -28,8 +28,8 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x180, %rsp            # imm = 0x180
-               	leaq	-0x180(%rbp), %rax
+               	subq	$0x100, %rsp            # imm = 0x100
+               	leaq	-0x100(%rbp), %rax
                	leaq	0x80(%rax), %rcx
                	subq	%rax, %rcx
                	cmpq	$0x80, %rcx

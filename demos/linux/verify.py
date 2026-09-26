@@ -130,9 +130,15 @@ ARCHES = {
         "make_target": "bzImage",
         "image": "arch/x86/boot/bzImage",
         "qemu": "qemu-system-x86_64",
-        "machine": [],
+        # TCG's default `qemu64` is below the x86-64-v3 baseline the kernel
+        # is compiled for; `Haswell-noTSX` carries it without `max`'s LA57,
+        # less the three features TCG does not implement (qemu_efi.py).
+        "machine": ["-cpu", "Haswell-noTSX,-pcid,-invpcid,-tsc-deadline"],
         "console": "ttyS0",
-        "extra_append": [],
+        # Linux 7.1's TSC watchdog can deadlock an emulated boot; the kernel
+        # skips it on a CPU with an invariant TSC, which TCG lacks. TODO: drop
+        # once the pinned release bounds the watchdog's skew-check wait.
+        "extra_append": ["tsc=nowatchdog"],
         # The x86 boot path draws its displacement from RDRAND / the TSC /
         # the i8254 counter and takes no seed from outside; see kaslr.py.
         "kaslr_seed_dtb": False,

@@ -4,7 +4,10 @@
 // natural value, and it is honored by `__alignof__`, `sizeof`, struct /
 // union field layout, and array element alignment. The values match
 // gcc -O2 and clang and are target-independent (`unsigned long long` is
-// 8-byte and `int` 4-byte on every supported data model).
+// 8-byte and `int` 4-byte on every supported data model), but for the MS
+// layout the PE targets take: there a member is placed at no less than its
+// type's natural alignment, which the lowered typedef alignment does not
+// change (clang for the windows-msvc triples).
 
 typedef unsigned long long __attribute__((aligned(4))) u64a4; // reduce 8 -> 4
 typedef int __attribute__((aligned(16))) i16;                 // increase 4 -> 16
@@ -27,17 +30,31 @@ _Static_assert(__alignof__(u64a2) == 2, "attribute after the declarator");
 _Static_assert(__alignof__(u64a4 *) == 8, "a pointer keeps pointer alignment");
 _Static_assert(__alignof__(u64a4[3]) == 4, "an array keeps element alignment");
 
+#if defined(_WIN32)
+_Static_assert(sizeof(struct SR) == 16, "reduced field keeps the struct size");
+_Static_assert(__builtin_offsetof(struct SR, b) == 8, "reduced field offset");
+_Static_assert(__alignof__(struct SR) == 8, "reduced field keeps struct align");
+#else
 _Static_assert(sizeof(struct SR) == 12, "reduced field lowers the struct size");
 _Static_assert(__builtin_offsetof(struct SR, b) == 4, "reduced field offset");
 _Static_assert(__alignof__(struct SR) == 4, "reduced field lowers struct align");
+#endif
 _Static_assert(sizeof(struct SI) == 32, "increased field raises the struct size");
 _Static_assert(__builtin_offsetof(struct SI, b) == 16, "increased field offset");
 _Static_assert(__alignof__(struct SI) == 16, "increased field raises struct align");
+#if defined(_WIN32)
+_Static_assert(sizeof(struct SA) == 16 && __builtin_offsetof(struct SA, b) == 8,
+               "propagated field layout");
+_Static_assert(sizeof(union UR) == 8 && __alignof__(union UR) == 8, "union alignment");
+_Static_assert(sizeof(struct Outer) == 24 && __builtin_offsetof(struct Outer, n) == 8,
+               "nested struct alignment");
+#else
 _Static_assert(sizeof(struct SA) == 12 && __builtin_offsetof(struct SA, b) == 4,
                "propagated field layout");
 _Static_assert(sizeof(union UR) == 8 && __alignof__(union UR) == 4, "union alignment");
 _Static_assert(sizeof(struct Outer) == 16 && __builtin_offsetof(struct Outer, n) == 4,
                "nested struct alignment");
+#endif
 
 int main(void) {
     // The reduced element is 8 bytes but 4-aligned, so an array of it is
@@ -58,8 +75,13 @@ int main(void) {
     struct BR { int a; lu64a4 b; };
     struct After { int a; unsigned long long b; }; // no attribute in sight
     _Static_assert(__alignof__(lu64a4) == 4, "block-scope reduce");
+#if defined(_WIN32)
+    _Static_assert(sizeof(struct BR) == 16, "block-scope struct size");
+    _Static_assert(__builtin_offsetof(struct BR, b) == 8, "block-scope offset");
+#else
     _Static_assert(sizeof(struct BR) == 12, "block-scope struct size");
     _Static_assert(__builtin_offsetof(struct BR, b) == 4, "block-scope offset");
+#endif
     _Static_assert(sizeof(struct After) == 16, "no leak onto the next struct");
     _Static_assert(__builtin_offsetof(struct After, b) == 8, "no leak onto the offset");
     return 0;

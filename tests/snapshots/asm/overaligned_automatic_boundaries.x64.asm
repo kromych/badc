@@ -28,7 +28,6 @@ Disassembly of section .text:
 <type32>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x40, %rsp
                	subq	$0x20, %rsp
                	andq	$-0x20, %rsp
                	leaq	(%rsp), %rcx
@@ -51,8 +50,8 @@ Disassembly of section .text:
                	cmpl	$0xa, %eax
                	sete	%al
                	movzbq	%al, %rax
-               	leaq	-0x40(%rbp), %rsp
-               	leave
+               	leaq	(%rbp), %rsp
+               	popq	%rbp
                	retq
                	movq	%rax, %rdx
                	jmp	<addr>
@@ -60,7 +59,6 @@ Disassembly of section .text:
 <mixed>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0xa0, %rsp
                	subq	$0x80, %rsp
                	andq	$-0x40, %rsp
                	leaq	0x60(%rsp), %rax
@@ -106,8 +104,8 @@ Disassembly of section .text:
                	cmpl	$0x3, %eax
                	sete	%al
                	movzbq	%al, %rax
-               	leaq	-0xa0(%rbp), %rsp
-               	leave
+               	leaq	(%rbp), %rsp
+               	popq	%rbp
                	retq
                	movq	%rcx, %rax
                	jmp	<addr>
@@ -119,9 +117,6 @@ Disassembly of section .text:
 <at_page>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x1000, %rsp           # imm = 0x1000
-               	movq	$0x0, (%rsp)
-               	subq	$0x20, %rsp
                	subq	$0x1000, %rsp           # imm = 0x1000
                	movq	$0x0, (%rsp)
                	movq	$0x0, (%rsp)
@@ -147,8 +142,8 @@ Disassembly of section .text:
                	cmpl	$0x2, %eax
                	sete	%al
                	movzbq	%al, %rax
-               	leaq	-0x1020(%rbp), %rsp
-               	leave
+               	leaq	(%rbp), %rsp
+               	popq	%rbp
                	retq
                	movq	%rax, %rdx
                	jmp	<addr>
@@ -156,11 +151,6 @@ Disassembly of section .text:
 <over_a_page>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x1000, %rsp           # imm = 0x1000
-               	movq	$0x0, (%rsp)
-               	subq	$0x1000, %rsp           # imm = 0x1000
-               	movq	$0x0, (%rsp)
-               	subq	$0x350, %rsp            # imm = 0x350
                	subq	$0x1000, %rsp           # imm = 0x1000
                	movq	$0x0, (%rsp)
                	subq	$0x1000, %rsp           # imm = 0x1000
@@ -200,8 +190,8 @@ Disassembly of section .text:
                	cmpl	$0x3, %eax
                	sete	%al
                	movzbq	%al, %rax
-               	leaq	-0x2350(%rbp), %rsp
-               	leave
+               	leaq	(%rbp), %rsp
+               	popq	%rbp
                	retq
                	movq	%rax, %rcx
                	jmp	<addr>
@@ -211,7 +201,6 @@ Disassembly of section .text:
 <nested>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0xa0, %rsp
                	subq	$0x80, %rsp
                	andq	$-0x20, %rsp
                	leaq	(%rsp), %rax
@@ -224,15 +213,15 @@ Disassembly of section .text:
                	testl	%ecx, %ecx
                	jne	<addr>
                	movl	$0x1, %eax
-               	leaq	-0xa0(%rbp), %rsp
-               	leave
+               	leaq	(%rbp), %rsp
+               	popq	%rbp
                	retq
 
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x140, %rsp            # imm = 0x140
-               	leaq	-0x140(%rbp), %rax
+               	subq	$0xa0, %rsp
+               	leaq	-0xa0(%rbp), %rax
                	leaq	<rip>, %rcx
                	movq	%rax, (%rcx)
                	movl	$0x1, %edx
@@ -244,7 +233,7 @@ Disassembly of section .text:
                	movswq	(%rax), %rax
                	cmpl	$0x1, %eax
                	jne	<addr>
-               	leaq	-0xc0(%rbp), %rax
+               	leaq	-0x20(%rbp), %rax
                	movq	%rax, (%rcx)
                	movq	$0x7, (%rax)
                	movq	$0x8, 0x18(%rax)

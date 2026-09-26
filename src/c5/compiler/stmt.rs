@@ -39,7 +39,7 @@ use super::types::{is_struct_ty, is_struct_value_ty, is_void_ty, struct_ptr_dept
 /// A registered `__attribute__((cleanup(fn)))` variable. The fields the
 /// destructor call bakes into its `Ident` are captured at declaration
 /// time; see `register_cleanup_var`.
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub(super) struct CleanupVar {
     var_sym: usize,
     fn_sym: usize,
@@ -55,11 +55,12 @@ pub(super) struct BlockShadow {
     pub(super) idx: usize,
     class: i64,
     type_: i64,
+    incomplete_enum_tag: Option<u32>,
     val: i64,
     fn_ptr_indirection: i64,
     fn_ptr_ret_indirection: i64,
-    params: Vec<i64>,
-    is_variadic: bool,
+    ret_fn: Option<(alloc::boxed::Box<crate::c5::symbol::FnType>, i64)>,
+    params: crate::c5::symbol::FnParams,
     array_size: i64,
     type_align: i64,
     inner_array_size: i64,
@@ -80,6 +81,16 @@ pub(super) struct BlockShadow {
     is_global_register: bool,
     const_object_value: Option<crate::c5::symbol::ConstObjectValue>,
     static_local_record: Option<u32>,
+    binding: crate::c5::symbol::BindingInfo,
+}
+
+impl BlockShadow {
+    /// Rewrite the saved binding's types an enum definition completes.
+    pub(super) fn complete_enum(&mut self, c: &super::enum_decl::EnumCompletion) {
+        c.ty(&mut self.type_, &mut self.incomplete_enum_tag);
+        c.params(&mut self.params);
+        c.chain(&mut self.ret_fn);
+    }
 }
 
 impl Compiler {
@@ -90,6 +101,7 @@ impl Compiler {
     pub(super) fn capture_block_shadow(&mut self, idx: usize) -> BlockShadow {
         self.scope_bound.push(idx as u32);
         let prior = self.take_prior_shape(idx);
+        let binding = Self::save_binding(&mut self.symbols[idx].binding);
         let s = &self.symbols[idx];
         let (inner_array_size, array_dims) =
             prior.unwrap_or_else(|| (s.inner_array_size, s.array_dims.clone()));
@@ -97,11 +109,12 @@ impl Compiler {
             idx,
             class: s.class,
             type_: s.type_,
+            incomplete_enum_tag: s.incomplete_enum_tag,
             val: s.val,
             fn_ptr_indirection: s.fn_ptr_indirection,
             fn_ptr_ret_indirection: s.fn_ptr_ret_indirection,
-            params: s.params.clone(),
-            is_variadic: s.is_variadic,
+            ret_fn: s.ret_fn.clone(),
+            params: s.fn_params(),
             array_size: s.array_size,
             type_align: s.type_align,
             inner_array_size,
@@ -122,10 +135,12 @@ impl Compiler {
             is_global_register: s.is_global_register,
             const_object_value: s.const_object_value,
             static_local_record: s.static_local_record,
+            binding,
         };
         // The inner binding is not (yet) a block-scope static; its own
-        // promotion re-sets the record.
+        // promotion re-sets the record. Its type records its own enum tag.
         self.symbols[idx].static_local_record = None;
+        self.symbols[idx].incomplete_enum_tag = None;
         shadow
     }
 
@@ -143,13 +158,16 @@ impl Compiler {
             s.static_local_record = b.static_local_record;
             return;
         }
+        let same_function = s.class == Token::Fun as i64 && b.class == Token::Fun as i64;
+        Self::restore_binding(&mut s.binding, b.binding, same_function);
         s.class = b.class;
         s.type_ = b.type_;
+        s.incomplete_enum_tag = b.incomplete_enum_tag;
         s.val = b.val;
         s.fn_ptr_indirection = b.fn_ptr_indirection;
         s.fn_ptr_ret_indirection = b.fn_ptr_ret_indirection;
-        s.params = b.params;
-        s.is_variadic = b.is_variadic;
+        s.ret_fn = b.ret_fn;
+        s.set_fn_params(b.params);
         s.array_size = b.array_size;
         s.type_align = b.type_align;
         s.inner_array_size = b.inner_array_size;
@@ -197,14 +215,14 @@ impl Compiler {
                         type_tag: sym.type_,
                         fp_slot: sym.val,
                         is_parameter: false,
-                        decl_line: sym.decl_line as u32,
+                        decl_line: sym.binding.decl_line as u32,
                         array_size: sym.array_size.max(0) as u32,
-                        decl_file: sym.decl_file,
+                        decl_file: sym.binding.decl_file,
                         fn_ptr_indirection: sym.fn_ptr_indirection,
                         params: sym.params.clone(),
                         is_variadic: sym.is_variadic,
                         array_dims: sym.array_dims.clone(),
-                        decl_spelling: sym.decl_spelling,
+                        decl_spelling: sym.binding.decl_spelling,
                     });
             }
         }
@@ -243,15 +261,18 @@ impl Compiler {
         }
         scope
             .iter()
-            .filter_map(|b| {
-                let sym = &self.symbols[b.idx];
-                let addressed = sym.address_escaped
-                    || sym.array_size != 0
-                    || super::types::is_struct_value_ty(sym.type_);
-                (sym.class == Token::Loc as i64 && sym.val < 0 && !sym.is_vla && addressed)
-                    .then_some(sym.val)
-            })
+            .filter_map(|b| self.lifetime_slot(b.idx))
             .collect()
+    }
+
+    /// The frame slot of symbol `idx` a lifetime marker ends, if any.
+    pub(super) fn lifetime_slot(&self, idx: usize) -> Option<i64> {
+        let sym = &self.symbols[idx];
+        let addressed = sym.binding.address_escaped
+            || sym.array_size != 0
+            || super::types::is_struct_value_ty(sym.type_);
+        (sym.class == Token::Loc as i64 && sym.val < 0 && !sym.is_vla && addressed)
+            .then_some(sym.val)
     }
 
     /// True when statement `s` is an expression statement whose value is
@@ -285,26 +306,7 @@ impl Compiler {
 
     pub(super) fn parse_full_expr_or_void(&mut self) -> Result<(), C5Error> {
         self.expr_or_void(Token::Assign as i64)?;
-        while self.lex.tk == ',' {
-            self.next()?;
-            // C99 6.5.17: comma operator evaluates the lhs for
-            // side effects, discards the value, then evaluates
-            // the rhs. Build `Expr::Comma { lhs, rhs }` so the
-            // walker visits the lhs before producing the rhs's
-            // value as the chain's result.
-            let lhs_ast = self.ast_acc;
-            self.expr_or_void(Token::Assign as i64)?;
-            let rhs_ast = self.ast_acc;
-            if let (Some(lhs), Some(rhs)) = (lhs_ast, rhs_ast) {
-                let pos = self.ast_src_pos();
-                let ty = self.ty;
-                let id = self
-                    .ast
-                    .push_expr(super::super::ast::Expr::Comma { lhs, rhs, ty }, pos);
-                self.ast_acc = Some(id);
-            }
-        }
-        Ok(())
+        self.parse_comma_operators()
     }
 
     /// A controlling expression: scalar for `if` and the loops (C99 6.8.4.1p1,
@@ -324,7 +326,7 @@ impl Compiler {
         // scope is the whole for statement. Push a cleanup scope so the
         // init declaration registers into it; it is run where control
         // leaves the loop (below) rather than at the enclosing block.
-        self.cleanup_scopes.push(alloc::vec::Vec::new());
+        self.open_cleanup_scope(false);
 
         // C99 6.8.5.3 for-init is either an expression or a
         // declaration. The declared identifier's scope is the
@@ -449,27 +451,26 @@ impl Compiler {
         // the scope stack; `continue` keeps the object (it persists
         // across iterations, C99 6.8.5.3). The calls are read while the
         // init binding is still live -- before the restore below.
-        if self.cleanup_scopes.last().is_some_and(|s| !s.is_empty()) {
-            let pending: alloc::vec::Vec<CleanupVar> = self
-                .cleanup_scopes
-                .last()
-                .unwrap()
-                .iter()
-                .rev()
-                .cloned()
-                .collect();
-            for cv in pending {
-                self.push_cleanup_call(&cv);
-            }
-            self.coalesce_exit_since(for_stmt_start);
+        for cv in self.innermost_cleanups() {
+            self.push_cleanup_call(&cv);
         }
         self.cleanup_scopes.pop();
+        // C99 6.8.5p5: the for statement is a block, whose end ends the
+        // lifetimes of the objects its init clause declared.
+        let for_init_symbols = self.block_scopes.pop().unwrap();
+        let slots = self.block_lifetime_slots(&for_init_symbols, &[], None);
+        if !slots.is_empty() {
+            let pos = self.ast_src_pos();
+            self.ast
+                .push_stmt(super::super::ast::Stmt::ScopeEnd(slots), pos);
+        }
+        self.coalesce_exit_since(for_stmt_start);
 
         // Restore symbols shadowed by the for-init declaration so
         // the binding's scope ends with the for statement
         // (C99 6.8.5.3 / 6.8p3). Restore in reverse order to
         // unwind multiple shadows in declaration order.
-        let for_init_symbols = self.block_scopes.pop().unwrap();
+        self.emit_scope_dead_stores(&for_init_symbols);
         self.capture_block_locals(&for_init_symbols);
         for b in for_init_symbols.into_iter().rev() {
             self.restore_block_shadow(b);
@@ -498,10 +499,12 @@ impl Compiler {
         self.switch_cases.push(Vec::new());
         self.switch_defaults.push(false);
         self.enter_switch();
+        self.enter_switch_body();
 
         let body_before = self.ast_stmts_snapshot();
         self.stmt()?;
         let body_s = self.ast_wrap_stmts_since(body_before);
+        self.leave_switch_body();
 
         // Same conservative drop at the body-exit boundary.
         self.flush_pending_stores();
@@ -529,6 +532,7 @@ impl Compiler {
         self.pending.attr_align = 0;
         self.pending.attr_alignas = 0;
         let lbt = self.parse_decl_base_type()?;
+        let base_enum_tag = self.pending.base_enum_tag.take();
         while self.lex.tk != ';' {
             let (id_idx, mut ty, mut td_array) = self.parse_declarator(lbt)?;
             if id_idx == usize::MAX {
@@ -548,6 +552,7 @@ impl Compiler {
             let declarator_transparent = core::mem::take(&mut self.pending.attr_transparent_union);
             let fn_ptr_indirection = self.pending.fn_ptr_indirection.take().unwrap_or(0);
             let fn_ptr_ret_indirection = core::mem::take(&mut self.pending.fn_ptr_ret_indirection);
+            let ret_fn = self.take_decl_ret_fn(self.lex.tk == '(');
             let bare_fn_type = core::mem::take(&mut self.pending.bare_function_type_declarator);
             // C99 function-type typedef: `typedef RET NAME(args);`
             // declared at block scope. Same handling as run_compile's
@@ -594,6 +599,8 @@ impl Compiler {
             self.symbols[id_idx].class = Token::Typedef as i64;
             self.symbols[id_idx].type_ = typedef_ty;
             self.symbols[id_idx].val = 0;
+            self.symbols[id_idx].ret_fn = ret_fn;
+            self.symbols[id_idx].incomplete_enum_tag = base_enum_tag;
             // A declarator-position `transparent_union` binds to the
             // aliased union, as at file scope.
             if declarator_transparent && super::types::is_struct_value_ty(typedef_ty) {
@@ -625,7 +632,7 @@ impl Compiler {
                 typedef_dim,
                 self.pending.type_align,
             )?;
-            if typedef_dim != 0 && td_array == 0 {
+            if typedef_dim != 0 && td_array == 0 && !self.pending.base_array_taken {
                 td_array = typedef_dim;
             }
             self.symbols[id_idx].array_size = td_array;
@@ -641,21 +648,14 @@ impl Compiler {
                 self.symbols[id_idx].fn_ptr_ret_indirection = fn_ptr_ret_indirection;
             }
             if let Some(pp) = typedef_params {
-                self.symbols[id_idx].params = pp.types;
-                self.symbols[id_idx].is_variadic = pp.is_variadic;
-            } else if let Some((proto_fixed, proto_variadic)) = self.pending.typedef_fn_proto.take()
-            {
+                self.symbols[id_idx].set_fn_params(pp.fn_params());
+            } else if let Some(p) = self.pending.fn_ptr_params.take() {
                 // `typedef RET (*NAME)(args)` at block scope: the
-                // declarator captured the pointee prototype. Record it
-                // as the file-scope branch does, so an indirect call
+                // declarator captured the pointee's parameter list. Record
+                // it as the file-scope branch does, so an indirect call
                 // through a variable of this typedef narrows arguments
                 // and routes a variadic tail per the host ABI.
-                self.symbols[id_idx].params = self
-                    .pending
-                    .fn_ptr_param_types
-                    .take()
-                    .unwrap_or_else(|| alloc::vec![0i64; proto_fixed]);
-                self.symbols[id_idx].is_variadic = proto_variadic;
+                self.symbols[id_idx].set_fn_params(p);
             }
             self.accept_declarator_separator()?;
         }
@@ -677,9 +677,9 @@ impl Compiler {
     /// The variable and the function are marked referenced so neither
     /// draws an unused diagnostic.
     pub(super) fn register_cleanup_var(&mut self, var_sym: usize, fn_sym: usize) {
-        self.symbols[var_sym].was_read = true;
-        self.symbols[var_sym].was_referenced = true;
-        self.symbols[fn_sym].was_referenced = true;
+        self.symbols[var_sym].binding.was_read = true;
+        self.symbols[var_sym].binding.was_referenced = true;
+        self.symbols[fn_sym].binding.was_referenced = true;
         let s = &self.symbols[var_sym];
         let cv = CleanupVar {
             var_sym,
@@ -696,8 +696,18 @@ impl Compiler {
             fn_ty: self.symbols[fn_sym].type_,
         };
         if let Some(scope) = self.cleanup_scopes.last_mut() {
-            scope.push(cv);
+            scope.vars.push(cv);
         }
+        self.note_jump_barrier(var_sym, false);
+    }
+
+    /// The innermost scope's cleanup variables, latest declared first.
+    pub(super) fn innermost_cleanups(&self) -> alloc::vec::Vec<CleanupVar> {
+        self.cleanup_scopes
+            .last()
+            .map_or_else(alloc::vec::Vec::new, |s| {
+                s.vars.iter().rev().cloned().collect()
+            })
     }
 
     /// Build the `Stmt::Expr` for one cleanup call `fn(&var)` and push it
@@ -746,7 +756,7 @@ impl Compiler {
     fn emit_cleanups_above(&mut self, from: usize) {
         let mut pending: alloc::vec::Vec<CleanupVar> = alloc::vec::Vec::new();
         for scope in self.cleanup_scopes[from..].iter().rev() {
-            for cv in scope.iter().rev() {
+            for cv in scope.vars.iter().rev() {
                 pending.push(cv.clone());
             }
         }
@@ -759,7 +769,9 @@ impl Compiler {
     /// variable, i.e. a `return` / `break` / `continue` here must run
     /// cleanup functions.
     fn has_cleanups_above(&self, from: usize) -> bool {
-        self.cleanup_scopes[from..].iter().any(|s| !s.is_empty())
+        self.cleanup_scopes[from..]
+            .iter()
+            .any(|s| !s.vars.is_empty())
     }
 
     /// Coalesce the sibling statements pushed since `start` (a spill, the
@@ -876,9 +888,12 @@ impl Compiler {
     /// statement expression takes its value from. The scope-exit
     /// statements this appends (`cleanup` destructor calls, the VLA stack
     /// restore) follow that item, so the block's last item is not it.
-    fn parse_block_stmt(&mut self) -> Result<(super::super::ast::StmtId, Option<usize>), C5Error> {
+    fn parse_block_stmt(
+        &mut self,
+        stmt_expr: bool,
+    ) -> Result<(super::super::ast::StmtId, Option<usize>), C5Error> {
         self.next()?;
-        self.cleanup_scopes.push(alloc::vec::Vec::new());
+        self.open_cleanup_scope(stmt_expr);
         // C99 6.2.1: a block introduces a new scope for struct,
         // union, and enum tags. Tag bindings declared in this block
         // shadow same-named tags in any enclosing scope and go out of
@@ -891,9 +906,9 @@ impl Compiler {
 
         let mut top_level_ids: alloc::vec::Vec<super::super::ast::StmtId> = alloc::vec::Vec::new();
         // C99 6.2.4p2: a VLA declared directly in this block has its
-        // storage reclaimed on block exit. Track whether any appears so
-        // the block is bracketed with the stack save / restore.
-        let mut block_has_vla = false;
+        // storage reclaimed on block exit. The stack pointer is saved at the
+        // first one, which a jump may not pass (C99 6.8.6.1p1).
+        let mut first_vla_item: Option<usize> = None;
         let mut at_block_start = true;
         while self.lex.tk != '}' {
             if self.lex.tk == Token::LocalLabel {
@@ -934,8 +949,8 @@ impl Compiler {
                 let item_before = self.ast_stmts_snapshot();
                 let vla_before = self.func_vla_decls;
                 self.parse_local_decl(leading_maybe_unused)?;
-                if self.func_vla_decls > vla_before {
-                    block_has_vla = true;
+                if self.func_vla_decls > vla_before && first_vla_item.is_none() {
+                    first_vla_item = Some(top_level_ids.len());
                 }
                 let item_after = self.ast.stmts.len();
                 // A local decl pushes one stmt-id-wrapping Decl
@@ -977,28 +992,17 @@ impl Compiler {
         // reclaim below (a cleanup may read VLA storage). When the block
         // ends in a terminator these are emitted after it and the walker
         // never reaches them; the terminator's own path already cleaned.
-        if self.cleanup_scopes.last().is_some_and(|s| !s.is_empty()) {
-            let pending: alloc::vec::Vec<CleanupVar> = self
-                .cleanup_scopes
-                .last()
-                .unwrap()
-                .iter()
-                .rev()
-                .cloned()
-                .collect();
-            for cv in pending {
-                let before = self.ast.stmts.len();
-                self.push_cleanup_call(&cv);
-                for id in before..self.ast.stmts.len() {
-                    top_level_ids.push(id as super::super::ast::StmtId);
-                }
+        for cv in self.innermost_cleanups() {
+            let before = self.ast.stmts.len();
+            self.push_cleanup_call(&cv);
+            for id in before..self.ast.stmts.len() {
+                top_level_ids.push(id as super::super::ast::StmtId);
             }
         }
         self.cleanup_scopes.pop();
-        // C99 6.2.4p2: bracket a VLA-declaring block so the stack
-        // pointer is snapshotted on entry and restored on exit,
-        // reclaiming the VLA storage (per iteration for a loop body).
-        if block_has_vla {
+        // Bracket the VLA scope so the stack pointer is restored on exit,
+        // reclaiming the storage (per iteration for a loop body).
+        if let Some(at) = first_vla_item {
             let save_slot = self.reserve_slots(1);
             let pos = self.ast_src_pos();
             let enter = self
@@ -1007,12 +1011,9 @@ impl Compiler {
             let exit = self
                 .ast
                 .push_stmt(super::super::ast::Stmt::VlaScopeExit { save_slot }, pos);
-            let mut bracketed = alloc::vec::Vec::with_capacity(top_level_ids.len() + 2);
-            bracketed.push(enter);
-            bracketed.extend_from_slice(&top_level_ids);
-            bracketed.push(exit);
-            top_level_ids = bracketed;
-            value_item = value_item.map(|i| i + 1);
+            top_level_ids.insert(at, enter);
+            top_level_ids.push(exit);
+            value_item = value_item.map(|i| if i >= at { i + 1 } else { i });
         }
         let block_symbols = self.block_scopes.pop().unwrap();
         // C99 6.2.4p2: every automatic object this block declared is
@@ -1052,23 +1053,23 @@ impl Compiler {
             let sym = &self.symbols[b.idx];
             if sym.class != Token::Loc as i64
                 || sym.val >= 0
-                || !sym.decl_in_main_source
-                || sym.address_escaped
-                || sym.was_read
-                || sym.maybe_unused
+                || !sym.binding.decl_in_main_source
+                || sym.binding.address_escaped
+                || sym.binding.was_read
+                || sym.binding.maybe_unused
                 || sym.name.starts_with('_')
             {
                 continue;
             }
             let name = sym.name.clone();
-            let line = sym.decl_line;
+            let line = sym.binding.decl_line;
             // `was_referenced` is true when the parser emitted any
             // expression mention (assignment LHS, increment, ...).
             // Without it the only "write" possible is the
             // declaration initializer, which the dead-store
             // diagnostic should treat as "unused" rather than
             // "set but never used".
-            let (code, msg) = if sym.was_referenced && sym.was_written {
+            let (code, msg) = if sym.binding.was_referenced && sym.binding.was_written {
                 (
                     Code::UNUSED_BUT_SET_VARIABLE,
                     alloc::format!("variable `{name}` set but never used"),
@@ -1082,6 +1083,7 @@ impl Compiler {
             self.warn_at(code, line, msg);
         }
 
+        self.emit_scope_dead_stores(&block_symbols);
         self.capture_block_locals(&block_symbols);
 
         // Restore shadowed bindings on block exit. A block-scope `extern`
@@ -1123,9 +1125,12 @@ impl Compiler {
         // specifier carriers, which the block's own declarations reset
         // or consume, and restore them for the enclosing parse.
         let specifiers = self.pending.take_decl_specifiers();
-        let parsed = self.parse_block_stmt();
+        let parsed = self.parse_block_stmt(true);
         self.pending.restore_decl_specifiers(specifiers);
         let (block, value_item) = parsed?;
+        // An enclosing call's staging recycle would lay later objects across
+        // the block's at shifted cells, which the frame passes then merge.
+        self.commit_block_slot(-self.loc_offs);
         self.ast_vstack.truncate(vstack_depth);
         let arena_after = self.ast.stmts.len();
         // The block's statements are sub-statements of this
@@ -1150,13 +1155,26 @@ impl Compiler {
         Ok(())
     }
 
-    /// The value type of a statement expression: the type of the block
-    /// item at `value_item`, labels stripped, or `Ty::Int` when that
-    /// item is not an expression statement.
+    /// The value type of a statement expression: the type of its value
+    /// expression, or `Ty::Int` when it has none.
     fn stmt_expr_result_ty(&self, block: super::super::ast::StmtId, value_item: u32) -> i64 {
+        self.stmt_expr_value(block, value_item)
+            .map_or(super::super::token::Ty::Int as i64, |e| {
+                self.ast.expr_value_ty(e)
+            })
+    }
+
+    /// The value expression of a statement expression: the expression
+    /// statement at block item `value_item`, labels stripped, `None` when
+    /// that item is not one.
+    pub(super) fn stmt_expr_value(
+        &self,
+        block: super::super::ast::StmtId,
+        value_item: u32,
+    ) -> Option<super::super::ast::ExprId> {
         use super::super::ast::{BlockItem, Stmt};
         if value_item == super::super::ast::NO_VALUE_ITEM {
-            return super::super::token::Ty::Int as i64;
+            return None;
         }
         let mut last = match self.ast.stmt(block) {
             // A single-item block yields the bare statement (see
@@ -1165,7 +1183,7 @@ impl Compiler {
             // value.
             Stmt::Compound(items) => match items.get(value_item as usize) {
                 Some(BlockItem::Stmt(s)) => *s,
-                _ => return super::super::token::Ty::Int as i64,
+                _ => return None,
             },
             _ => block,
         };
@@ -1174,10 +1192,10 @@ impl Compiler {
         while let Stmt::Labeled { body, .. } = self.ast.stmt(last) {
             last = *body;
         }
-        if let Stmt::Expr(e) = self.ast.stmt(last) {
-            return self.ast.expr_value_ty(*e);
+        match self.ast.stmt(last) {
+            Stmt::Expr(e) => Some(*e),
+            _ => None,
         }
-        super::super::token::Ty::Int as i64
     }
 
     /// True when statement-arena entry `id` belongs to a statement
@@ -1638,7 +1656,9 @@ impl Compiler {
             // distinguishes that from an ordinary rvalue.
             let saved_decay_bytes = core::mem::take(&mut self.pending.last_array_decay_bytes);
             let saved_decay_dims = core::mem::take(&mut self.pending.last_array_decay_dims);
+            let saved_decay_vla = self.pending.last_array_decay_vla.take();
             self.expr(Token::Assign as i64)?;
+            let vla = core::mem::replace(&mut self.pending.last_array_decay_vla, saved_decay_vla);
             // The dims channel also marks rows the byte channel cannot
             // (an unspecified bound `*(T (*)[])p` has no byte size).
             let decayed_array =
@@ -1647,7 +1667,8 @@ impl Compiler {
                         &mut self.pending.last_array_decay_dims,
                         saved_decay_dims,
                     )
-                    .is_empty();
+                    .is_empty()
+                    || vla.is_some();
             // A SIMD (`w`/`x`) operand records its full size so the emitter
             // can tell a 16-byte vector from a scalar double; other operands
             // live in 8-byte registers and cap there.
@@ -1665,6 +1686,7 @@ impl Compiler {
                 (true, Some(Segment::Fs)) => AsmSeg::Fs,
                 _ => AsmSeg::None,
             };
+            let volatile_object = super::types::is_volatile_object_ty(self.ty);
             // A value wider than a general register needs a register pair,
             // which no constraint here models; a single register would carry
             // only part of the value. Memory, SIMD, and immediate operands
@@ -1839,6 +1861,10 @@ impl Compiler {
             }
             operand_exprs.push(e);
             operand_names.push(op_name);
+            let early_clobber = cstr
+                .chars()
+                .take_while(|c| matches!(c, '=' | '+' | '&' | '%'))
+                .any(|c| c == '&');
             operands.push(AsmOperand {
                 constraint,
                 is_output: stores_back,
@@ -1847,6 +1873,8 @@ impl Compiler {
                 seg: operand_seg,
                 static_arg: false,
                 value: false,
+                volatile_object,
+                early_clobber,
             });
             if is_output {
                 n_outputs += 1;
@@ -1938,10 +1966,12 @@ impl Compiler {
             volatile,
         };
         let idx = self.ast.asm_blocks.len() as u32;
+        let cleanups = alloc::vec![alloc::vec::Vec::new(); label_ids.len()];
         self.ast.asm_blocks.push(AsmBlockAst {
             block,
             operand_exprs,
-            labels: label_ids,
+            labels: label_ids.clone(),
+            cleanups,
         });
         self.mark_emit_other();
         if is_goto {
@@ -1949,8 +1979,13 @@ impl Compiler {
             // walker closes the block with `Terminator::AsmGoto`.
             self.flush_pending_stores();
             let pos = self.ast_src_pos();
-            self.ast
+            let stmt = self
+                .ast
                 .push_stmt(super::super::ast::Stmt::AsmGoto(idx), pos);
+            for (i, label) in label_ids.into_iter().enumerate() {
+                let target = super::jumps::Target::Asm { asm: idx, i, label };
+                self.note_jump(stmt, target, pos.line as usize);
+            }
             return Ok(());
         }
         self.ty = Ty::Int as i64;
@@ -2928,13 +2963,8 @@ impl Compiler {
     }
 
     fn stmt_inner(&mut self) -> Result<(), C5Error> {
-        // Function-pointer callee parameters captured for a postfix
-        // indirect call never span a statement: drop any left set by a
-        // producer whose call did not consume them so they cannot reach an
-        // unrelated call in a later statement.
-        self.pending.indirect_callee_params = None;
-        self.pending.indirect_callee_is_variadic = false;
-        self.pending.indirect_callee_fn_ptr_depth = 0;
+        // The return lineage captured for a postfix indirect call never
+        // spans a statement, so it cannot reach an unrelated call.
         self.pending.indirect_callee_ret_fn_ptr = 0;
         // The function-pointer-decay depth (C99 6.3.2.1p4) is intra-
         // expression state: a function name used as a call argument seeds
@@ -2978,6 +3008,7 @@ impl Compiler {
                 ));
             }
             let label = self.define_label(&name);
+            self.note_label(label);
             self.next()?; // consume Id
             self.next()?; // consume ':'
             // C23 6.9 / GNU: an attribute-specifier may decorate a label
@@ -3089,6 +3120,7 @@ impl Compiler {
         } else if self.lex.tk == Token::Switch {
             self.parse_switch_stmt()?;
         } else if self.lex.tk == Token::Case {
+            let line = self.lex.line;
             self.next()?;
             // Case label is a constant expression: integer literal,
             // negated literal, parenthesised literal, enum / `#define`d
@@ -3106,6 +3138,7 @@ impl Compiler {
                 lo
             };
             self.consume(b':', "expected colon after case")?;
+            self.check_switch_label(line)?;
             if hi < lo {
                 return Err(self.compile_err(
                     Code::INVALID_STATEMENT,
@@ -3155,8 +3188,10 @@ impl Compiler {
             let body_s = self.ast_wrap_stmts_since(body_before);
             self.ast_emit_case(lo, hi, body_s);
         } else if self.lex.tk == Token::Default {
+            let line = self.lex.line;
             self.next()?;
             self.consume(b':', "expected colon after default")?;
+            self.check_switch_label(line)?;
             // C99 6.8.4.2p3: at most one default label per switch
             // (constraint). A second default would resolve to the first's
             // block and re-terminate it in the walker.
@@ -3192,6 +3227,7 @@ impl Compiler {
             let body_s = self.ast_wrap_stmts_since(body_before);
             self.ast_emit_default(body_s);
         } else if self.lex.tk == Token::Goto {
+            let line = self.lex.line;
             self.next()?;
             if self.lex.tk == Token::MulOp {
                 // GCC computed goto: `goto *expr;` branches to the
@@ -3202,7 +3238,8 @@ impl Compiler {
                 self.flush_pending_stores();
                 self.consume(b';', "semicolon expected after computed goto")?;
                 if let Some(t) = target {
-                    self.ast_emit_goto_indirect(t);
+                    let stmt = self.ast_emit_goto_indirect(t);
+                    self.note_jump(stmt, super::jumps::Target::Computed, line);
                 }
             } else {
                 if self.lex.tk != Token::Id {
@@ -3219,7 +3256,8 @@ impl Compiler {
 
                 self.consume(b';', "semicolon expected after goto")?;
                 let label = self.ast_label_by_name(&target_name);
-                self.ast_emit_goto(label);
+                let stmt = self.ast_emit_goto(label);
+                self.note_jump(stmt, super::jumps::Target::Label(label), line);
             }
         } else if self.lex.tk == Token::Break {
             self.next()?;
@@ -3343,7 +3381,13 @@ impl Compiler {
                     // rewrites `self.ty`.
                     let rhs_is_zero = self.last_emit_is_zero();
                     let rhs_is_untyped = self.last_emit_was_indirect_call();
-                    if let Some(m) = Self::type_warning_with_flags(
+                    let ret_fn = self.current_func_ret_fn.clone().map(|(f, d)| (*f, d));
+                    let value_fn = self.value_fn_type(self.ast_acc);
+                    if ret_fn.is_some() && value_fn.is_some() {
+                        let what = ("return", "declared", "returned");
+                        let (from, to) = ((self.ty, &value_fn), (ret_ty, &ret_fn));
+                        self.check_fn_pointer_conversion(to, from, line, what)?;
+                    } else if let Some(m) = Self::type_warning_with_flags(
                         &self.structs,
                         ret_ty,
                         self.ty,
@@ -3403,7 +3447,7 @@ impl Compiler {
             self.coalesce_exit_since(start);
             self.consume(b';', "semicolon expected")?;
         } else if self.lex.tk == '{' {
-            self.parse_block_stmt()?;
+            self.parse_block_stmt(false)?;
         } else if self.lex.tk == ';' {
             self.next()?;
         } else {

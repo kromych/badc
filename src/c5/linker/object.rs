@@ -51,6 +51,7 @@ const SHT_STRTAB: u32 = 3;
 const SHT_RELA: u32 = 4;
 const SHT_NOBITS: u32 = 8;
 const SHT_NOTE: u32 = 7;
+const SHT_X86_64_UNWIND: u32 = 0x7000_0001;
 const SHN_UNDEF: u16 = 0;
 const SHN_ABS: u16 = 0xfff1;
 const SHN_COMMON: u16 = 0xfff2;
@@ -216,6 +217,9 @@ pub struct SharedLibrary {
     /// bytes are code, so reading the "object" through it returns
     /// instructions.
     pub data_exports: alloc::collections::BTreeSet<String>,
+    /// Size and alignment of each data export whose library states
+    /// them, which a copy of the object in the image takes.
+    pub object_sizes: alloc::collections::BTreeMap<String, (u64, u64)>,
     /// For a name in `exports` the library ships under a different
     /// symbol, that symbol: the import records it, since it is what
     /// the loader resolves. A Mach-O image states the spelling with
@@ -259,6 +263,7 @@ pub fn parse_shared_library(bytes: &[u8]) -> Result<SharedLibrary, C5Error> {
     let mut soname = String::new();
     let mut exports = alloc::collections::BTreeSet::new();
     let mut data_exports = alloc::collections::BTreeSet::new();
+    let mut object_sizes = alloc::collections::BTreeMap::new();
     for i in 0..ehdr.e_shnum as usize {
         let sh = shdr(i)?;
         if sh.sh_type == SHT_DYNSYM {
@@ -282,7 +287,11 @@ pub fn parse_shared_library(bytes: &[u8]) -> Result<SharedLibrary, C5Error> {
                 }
                 // STT_OBJECT (1) is a data object; a reference to it must
                 // reach the object's address, not a PLT stub.
+                // Its alignment is the largest the library's placement
+                // shows, capped at the targets' `max_align_t`.
                 if (sym.st_info & 0xf) == 1 {
+                    let align = (1u64 << sym.st_value.trailing_zeros().min(4)).max(1);
+                    object_sizes.insert(name.clone(), (sym.st_size, align));
                     data_exports.insert(name.clone());
                 }
                 exports.insert(name);
@@ -310,6 +319,7 @@ pub fn parse_shared_library(bytes: &[u8]) -> Result<SharedLibrary, C5Error> {
         machine,
         exports,
         data_exports,
+        object_sizes,
         export_symbols: alloc::collections::BTreeMap::new(),
         export_versions: crate::c5::object::so_versions::parse_export_versions(bytes),
         from_image: true,
@@ -907,6 +917,9 @@ pub struct NativeObject {
     /// The merge pass rebases them into `MergedNative::prologue_ends`,
     /// where the merged-image frame writer reads the prologue extent.
     pub prologue_ends: Vec<(u64, u64)>,
+    /// Functions that return ahead of their frame (`NT_BADC_EARLY_RETURN`),
+    /// each `(entry, frame path, early return)` offsets in this unit's `.text`.
+    pub early_returns: Vec<(u64, u64, u64)>,
     /// Names this unit materialises the address of through an undefined
     /// symbol (`NT_BADC_EXTERN_DATA`) -- extern data, and an extern
     /// function whose address is taken, which shares that lowering.
@@ -1048,6 +1061,7 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         macho_tlv_fixups: note.macho_tlv_fixups,
         copy_relocs: note.copy_relocs,
         prologue_ends: note.prologue_ends,
+        early_returns: note.early_returns,
         extern_data_names: note.extern_data_names,
         debug_info: debug.info,
         debug_abbrev: debug.abbrev,
@@ -1135,7 +1149,13 @@ fn read_elf_headers(bytes: &[u8]) -> Result<(NativeMachine, Vec<Elf64Shdr>, &[u8
     let mut shdrs: Vec<Elf64Shdr> = Vec::with_capacity(e_shnum);
     for i in 0..e_shnum {
         let off = e_shoff + i * ELF64_SHDR_SIZE;
-        shdrs.push(read_struct(bytes, off)?);
+        let mut sh: Elf64Shdr = read_struct(bytes, off)?;
+        // The x86-64 psABI types unwind tables SHT_X86_64_UNWIND, which
+        // clang gives `.eh_frame`; GNU ld and lld read it as SHT_PROGBITS.
+        if machine == NativeMachine::X86_64 && sh.sh_type == SHT_X86_64_UNWIND {
+            sh.sh_type = SHT_PROGBITS;
+        }
+        shdrs.push(sh);
     }
     let shstrtab = shdrs.get(e_shstrndx).ok_or_else(|| {
         link_err(
@@ -1450,11 +1470,14 @@ fn concat_families(
                 ),
             ));
         }
-        let base = tls_data.len() as u64;
-        tls_bases.push((sh_i, base));
+        let base = tls_data
+            .len()
+            .next_multiple_of(sh.sh_addralign.max(1) as usize);
+        tls_data.resize(base, 0);
+        tls_bases.push((sh_i, base as u64));
         tls_data.extend_from_slice(section_slice(bytes, sh)?);
     }
-    let mut tls_bss_size: usize = 0;
+    let mut tls_end = tls_data.len();
     for &sh_i in &roles.tbss {
         let sh = &shdrs[sh_i];
         if sh.sh_type != SHT_NOBITS {
@@ -1464,9 +1487,11 @@ fn concat_families(
                 &format!("tbss-family section at index {sh_i} is not SHT_NOBITS",),
             ));
         }
-        tls_bases.push((sh_i, (tls_data.len() + tls_bss_size) as u64));
-        tls_bss_size += sh.sh_size as usize;
+        let base = tls_end.next_multiple_of(sh.sh_addralign.max(1) as usize);
+        tls_bases.push((sh_i, base as u64));
+        tls_end = base + sh.sh_size as usize;
     }
+    let tls_bss_size = tls_end - tls_data.len();
     Ok(FamilyBlobs {
         text: (text_bytes, text_align, text_base_per_shndx),
         rodata,
@@ -1764,6 +1789,9 @@ fn decode_init_arrays(
 ///   type=12 NT_BADC_EXTERN_DATA  -- NUL-separated names this unit
 ///                                  references as data through an
 ///                                  undefined symbol.
+///   type=13 NT_BADC_EARLY_RETURN -- (u64 entry_offset, u64
+///                                  frame_offset, u64 return_offset)
+///                                  `.text` triples.
 /// Records under namesz != "badc\0" are skipped silently so future
 /// vendor extensions can coexist.
 #[derive(Default)]
@@ -1779,6 +1807,7 @@ struct BadcNote {
     macho_tlv_descriptor_syms: Vec<(usize, String)>,
     elf_tpoff_fixups: Vec<(u64, ElfTpoffTarget)>,
     prologue_ends: Vec<(u64, u64)>,
+    early_returns: Vec<(u64, u64, u64)>,
     extern_data_names: Vec<String>,
 }
 
@@ -1942,6 +1971,15 @@ impl BadcNote {
                 }
             }
             12 => self.extern_data_names.extend(nul_separated(desc)),
+            13 => {
+                let word = |at: usize| u64::from_le_bytes(body[at..at + 8].try_into().unwrap());
+                let mut c = cur;
+                while c + 24 <= desc_end {
+                    self.early_returns
+                        .push((word(c), word(c + 8), word(c + 16)));
+                    c += 24;
+                }
+            }
             _ => {}
         }
     }
@@ -2464,6 +2502,7 @@ mod tests {
         /// the file body is empty but the runtime size isn't.
         sh_size_override: Option<u64>,
         sh_addralign: u64,
+        sh_flags: u64,
     }
 
     impl<'a> SecPlan<'a> {
@@ -2477,6 +2516,7 @@ mod tests {
                 sh_entsize: 0,
                 sh_size_override: None,
                 sh_addralign: 0,
+                sh_flags: 0,
             }
         }
         fn nobits(name: &'a str, size: u64) -> Self {
@@ -2489,6 +2529,7 @@ mod tests {
                 sh_entsize: 0,
                 sh_size_override: Some(size),
                 sh_addralign: 0,
+                sh_flags: 0,
             }
         }
         fn symtab(name: &'a str, body: Vec<u8>, link: u32, info: u32) -> Self {
@@ -2501,6 +2542,7 @@ mod tests {
                 sh_entsize: ELF64_SYM_SIZE as u64,
                 sh_size_override: None,
                 sh_addralign: 0,
+                sh_flags: 0,
             }
         }
         fn strtab(name: &'a str, body: Vec<u8>) -> Self {
@@ -2513,10 +2555,16 @@ mod tests {
                 sh_entsize: 0,
                 sh_size_override: None,
                 sh_addralign: 0,
+                sh_flags: 0,
             }
         }
         fn aligned(mut self, align: u64) -> Self {
             self.sh_addralign = align;
+            self
+        }
+        fn typed(mut self, sh_type: u32, sh_flags: u64) -> Self {
+            self.sh_type = sh_type;
+            self.sh_flags = sh_flags;
             self
         }
         fn rela(name: &'a str, body: Vec<u8>, link: u32, info: u32) -> Self {
@@ -2529,6 +2577,7 @@ mod tests {
                 sh_entsize: ELF64_RELA_SIZE as u64,
                 sh_size_override: None,
                 sh_addralign: 0,
+                sh_flags: 0,
             }
         }
     }
@@ -2648,7 +2697,7 @@ mod tests {
                 Elf64Shdr {
                     sh_name: name_offs[idx],
                     sh_type: p.sh_type,
-                    sh_flags: 0,
+                    sh_flags: p.sh_flags,
                     sh_addr: 0,
                     sh_offset: sec_offs[idx] as u64,
                     sh_size: p.sh_size_override.unwrap_or(p.body.len() as u64),
@@ -2806,6 +2855,36 @@ mod tests {
             vec![(".comment".to_string(), 7), (".mysec".to_string(), 3)],
         );
         assert!(obj.source.is_empty(), "source is the caller's to set");
+    }
+
+    /// clang types `.eh_frame` SHT_X86_64_UNWIND, the x86-64 psABI's
+    /// unwind-table type; it reads as SHT_PROGBITS there and joins the
+    /// read-only stream. The value is processor-specific, and on AArch64
+    /// it names nothing the merge models.
+    #[test]
+    fn an_x86_64_unwind_section_reads_as_progbits() {
+        const SHF_ALLOC: u64 = 0x2;
+        let mut symtab = Vec::new();
+        push_test_sym(&mut symtab, 0, 0, 0, 0, 0);
+        let plans = [
+            SecPlan::strtab(".strtab", vec![0]),
+            SecPlan::symtab(".symtab", symtab, 2, 1),
+            SecPlan::progbits(".text", vec![0xc3]),
+            SecPlan::progbits(".eh_frame", vec![0x14, 0, 0, 0, 0, 0, 0, 0])
+                .typed(SHT_X86_64_UNWIND, SHF_ALLOC),
+        ];
+        let obj = parse_native_elf(&build_test_elf(EM_X86_64, &plans)).expect("x86-64 object");
+        let eh = obj.sections.iter().find(|s| s.name == ".eh_frame");
+        assert!(
+            eh.is_some_and(|s| s.family == SectionFamily::RoData && s.size == 8),
+            "{:?}",
+            obj.sections
+        );
+        let err = parse_native_elf(&build_test_elf(EM_AARCH64, &plans)).unwrap_err();
+        assert!(
+            err.to_string().contains("unhandled sh_type 1879048193"),
+            "{err}"
+        );
     }
 
     /// A `.rodata` an `SHT_RELA` targets cannot ride the stream the
@@ -3002,11 +3081,12 @@ mod tests {
     /// variables into `.tdata` and zero-init ones into `.tbss`,
     /// with STT_TLS symbols pointing at those sections. The
     /// parser concatenates `.tdata*` bytes into `tls_data`,
-    /// sums `.tbss*` sizes into `tls_bss_size`, and surfaces
-    /// symbols as `Tls` with the value rebased by the section's
-    /// base in the merged TLS image (`.tdata` first, `.tbss`
-    /// past it), and carries the widest section alignment out as
-    /// the unit's TLS alignment.
+    /// counts the `.tbss*` extent past them into `tls_bss_size`,
+    /// and surfaces symbols as `Tls` with the value rebased by the
+    /// section's base in the unit's TLS block (`.tdata` first,
+    /// `.tbss` past it), each section at its own alignment, and
+    /// carries the widest section alignment out as the unit's TLS
+    /// alignment.
     #[test]
     fn tdata_and_tbss_sections_surface_as_tls() {
         let mut strtab: Vec<u8> = vec![0];
@@ -3032,14 +3112,14 @@ mod tests {
         let bytes = build_test_elf(EM_X86_64, &plans);
         let obj = parse_native_elf(&bytes).expect("parse TLS fixture");
         assert_eq!(obj.tls_data.len(), 4);
-        assert_eq!(obj.tls_bss_size, 8);
+        assert_eq!(obj.tls_bss_size, 12 + 8, "padding to 16, then .tbss");
         assert_eq!(obj.tls_align, 16, "widest TLS sh_addralign is carried out");
         assert!(matches!(obj.symbols[1].section, NativeSymSection::Tls));
         assert_eq!(obj.symbols[1].value, 0, ".tdata symbol lands at TLS start");
         assert!(matches!(obj.symbols[2].section, NativeSymSection::Tls));
         assert_eq!(
-            obj.symbols[2].value, 4,
-            ".tbss symbol lands past the .tdata extent"
+            obj.symbols[2].value, 16,
+            ".tbss symbol lands past the .tdata extent at the section's alignment"
         );
     }
 
@@ -3198,6 +3278,7 @@ mod tests {
                 sh_entsize: ELF64_SYM_SIZE as u64,
                 sh_size_override: None,
                 sh_addralign: 0,
+                sh_flags: 0,
             },
             SecPlan {
                 name: ".dynamic",
@@ -3208,6 +3289,7 @@ mod tests {
                 sh_entsize: core::mem::size_of::<Elf64Dyn>() as u64,
                 sh_size_override: None,
                 sh_addralign: 0,
+                sh_flags: 0,
             },
         ];
         let bytes = build_test_elf(EM_X86_64, &plans);

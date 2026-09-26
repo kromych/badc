@@ -48,6 +48,7 @@ struct AttrFlags {
     weak: bool,
     used: bool,
     no_instrument_function: bool,
+    no_stack_protector: bool,
     uninitialized: bool,
     transparent_union: bool,
     ms_abi: bool,
@@ -71,6 +72,7 @@ impl AttrFlags {
         self.weak |= other.weak;
         self.used |= other.used;
         self.no_instrument_function |= other.no_instrument_function;
+        self.no_stack_protector |= other.no_stack_protector;
         self.uninitialized |= other.uninitialized;
         self.transparent_union |= other.transparent_union;
         self.ms_abi |= other.ms_abi;
@@ -134,24 +136,17 @@ impl IntModifiers {
         }
     }
 
-    /// Pick the `char` tag. `signed char` is always signed and
-    /// `unsigned char` always unsigned; plain `char` follows the
-    /// target's implementation-defined signedness
-    /// ([`Target::plain_char_signed`], C99 6.2.5p15). The signedness
-    /// is encoded as the presence/absence of `UNSIGNED_BIT`, which
-    /// drives the load extension in `load_kind_for`.
+    /// Pick the `char` tag: `signed char`, `unsigned char`, or plain
+    /// `char`, the third character type of C99 6.2.5p15, whose loads
+    /// extend by the target's implementation-defined signedness
+    /// ([`Target::plain_char_signed`]).
     pub fn char_tag(&self, plain_char_signed: bool) -> i64 {
-        let signed = if self.saw_signed {
-            true
-        } else if self.saw_unsigned {
-            false
-        } else {
-            plain_char_signed
-        };
-        if signed {
+        if self.saw_signed {
             Ty::Char as i64
-        } else {
+        } else if self.saw_unsigned {
             Ty::Char as i64 | UNSIGNED_BIT
+        } else {
+            super::types::plain_char_ty(plain_char_signed)
         }
     }
 }
@@ -165,9 +160,8 @@ pub(super) struct DeclStorage {
     pub is_static: bool,
     pub is_extern: bool,
     pub is_thread_local: bool,
-    /// The base type is an `enum`; a typedef of it records that an enum
-    /// bitfield declared through the alias reads unsigned.
-    pub base_is_enum: bool,
+    /// No type specifier was given, so the base type is the implicit `int`.
+    pub implicit_int: bool,
 }
 
 /// The pointer part of an abstract declarator (C99 6.7.6): the type it
@@ -321,10 +315,43 @@ impl Compiler {
         Ok(Some(inner))
     }
 
+    /// Seed the base-type carriers a declarator through `typeof(type-name)`
+    /// reads, as a typedef of the named type would: an array's bounds, the
+    /// function type the name denotes or leads to, the alignment.
+    fn seed_type_name_carriers(&mut self, name: &super::expr::TypeName) -> Result<(), C5Error> {
+        // TODO: a declaration through a variably modified type, whose size
+        // the declaration would store when it is reached.
+        if name.vla.is_some() {
+            return Err(self.compile_err(
+                Code::UNSUPPORTED,
+                "`typeof` of a variably modified type is not supported",
+            ));
+        }
+        let dims = &name.dims;
+        self.pending.typedef_base_array_size = match dims.as_slice() {
+            [] => 0,
+            d if d.iter().all(|&n| n > 0) => d.iter().product(),
+            _ => -1,
+        };
+        self.pending.typedef_base_zero_len = dims.first() == Some(&0);
+        self.pending.typedef_base_array_dims = dims.clone();
+        self.pending.typeof_operand_was_array = !dims.is_empty();
+        self.pending.type_align = name.type_align;
+        if let Some(fn_ty) = &name.fn_ty {
+            let (f, _) = fn_ty.at_depth();
+            self.pending.fn_ptr_indirection = name.fn_ptr_indirection;
+            self.pending.fn_ptr_ret_indirection = f.ret.as_ref().map_or(0, |r| r.1);
+            self.pending.base_is_function_type = name.names_function();
+            self.pending.fn_ptr_params = Some(f.params.clone());
+            self.pending.fn_ptr_ret_fn = f.ret.clone();
+        }
+        Ok(())
+    }
+
     /// `typeof ( type-name )` / `typeof ( expression )` (C23 6.7.2.5,
     /// the GCC `__typeof__` extension). The result is the operand's
-    /// type. A type-name operand parses as a base type plus any abstract
-    /// pointer and array decoration; an expression operand is parsed
+    /// type. A type-name operand takes the type-name grammar (C99 6.7.6),
+    /// its derivations included; an expression operand is parsed
     /// unevaluated and its type recovered, mirroring `sizeof`'s
     /// expression branch. The flat scalar / pointer / aggregate tag is
     /// returned; an array operand (a `T [N]` type name or an array-typed
@@ -364,11 +391,8 @@ impl Compiler {
                 self.pending.fn_ptr_indirection = Some(1);
                 self.pending.fn_ptr_ret_indirection = 0;
                 self.pending.base_is_function_type = true;
-                self.pending.typedef_fn_proto = Some((
-                    self.symbols[idx].params.len(),
-                    self.symbols[idx].is_variadic,
-                ));
-                self.pending.fn_ptr_param_types = Some(self.symbols[idx].params.clone());
+                self.pending.fn_ptr_params = Some(self.symbols[idx].fn_params());
+                self.pending.fn_ptr_ret_fn = self.symbols[idx].ret_fn.clone();
                 self.next()?; // identifier
                 self.next()?; // )
                 return Ok(finish(fty));
@@ -385,79 +409,16 @@ impl Compiler {
                 self.pending.typedef_base_array_size = self.symbols[idx].array_size;
                 self.pending.typedef_base_array_dims = self.symbols[idx].array_dims.clone();
                 self.pending.typeof_operand_was_array = true;
-                self.symbols[idx].was_referenced = true;
+                self.symbols[idx].binding.was_referenced = true;
                 self.next()?; // identifier
                 self.next()?; // )
                 return Ok(finish(ty));
             }
         }
         let ty = if self.lex_is_type_start() {
-            let inner = self.parse_decl_base_type()?;
-            let ptr = self.consume_abstract_pointer(inner)?;
-            let inner = ptr.ty;
-            let had_ptr = ptr.levels > 0;
-            // An array typedef operand keeps its dimension on the carrier
-            // so a declarator through the specifier is an array, exactly
-            // as if the typedef itself were the base type. `typeof(T *)`
-            // names a pointer; the dimension belongs to the pointee.
-            if had_ptr {
-                self.pending.typedef_base_array_size = 0;
-                self.pending.typedef_base_zero_len = false;
-                self.pending.typedef_base_array_dims.clear();
-            }
-            // Abstract array declarator in the type name: `typeof(T [N])`,
-            // `typeof(T [])`, `typeof(T [N][M])` (C99 6.7.6). The bracketed
-            // dimensions are outer; an array-typedef base supplies the inner.
-            if self.lex.tk == Token::Brak {
-                let base_extent = core::mem::take(&mut self.pending.typedef_base_array_size);
-                let base_dims = core::mem::take(&mut self.pending.typedef_base_array_dims);
-                let mut dims: alloc::vec::Vec<i64> = alloc::vec::Vec::new();
-                while self.lex.tk == Token::Brak {
-                    self.next()?;
-                    // An omitted bound (`T []`) is an incomplete array (-1).
-                    let n = if self.lex.tk == ']' {
-                        -1
-                    } else {
-                        let n = self.parse_constant_int()?;
-                        if n < 0 {
-                            return Err(self.compile_err(
-                                Code::INVALID_DECLARATION,
-                                "array dimension in a type name must not be negative",
-                            ));
-                        }
-                        n
-                    };
-                    if self.lex.tk != ']' {
-                        return Err(self.compile_err(
-                            Code::SYNTAX,
-                            "close bracket expected in an array type name",
-                        ));
-                    }
-                    self.next()?;
-                    dims.push(n);
-                }
-                // Fold in an array-typedef base's dimensions, gated on its
-                // size carrier: the dims list alone can be a prior parse's
-                // stale value.
-                if base_extent != 0 {
-                    if base_dims.is_empty() {
-                        dims.push(base_extent);
-                    } else {
-                        dims.extend(base_dims);
-                    }
-                }
-                // The carrier holds the total element count; the dims list
-                // rides alongside with the exact bounds (-1 unspecified,
-                // 0 zero-length) for type-name readers and per-row strides.
-                self.pending.typedef_base_array_size = if dims.iter().all(|&d| d > 0) {
-                    dims.iter().product::<i64>()
-                } else {
-                    -1
-                };
-                self.pending.typedef_base_array_dims = dims;
-            }
-            self.pending.typeof_operand_was_array = self.pending.typedef_base_array_size != 0;
-            inner
+            let name = self.parse_type_name()?;
+            self.seed_type_name_carriers(&name)?;
+            name.ty
         } else {
             // Pointer peels leave the inner-only marker describing a
             // derivation the operand no longer has; drop it so a
@@ -483,12 +444,29 @@ impl Compiler {
             // A 1D array expression operand decayed to a pointer to its
             // element; recover the element type and put the element count
             // on the carrier like an array typedef base, so a declarator
-            // through the specifier is an array. TODO: multi-dim
+            // through the specifier is an array, whose element's function
+            // type lies that many levels closer. TODO: multi-dim
             // expression operands (the dims chain is not recoverable from
             // the decay markers).
             let n = core::mem::take(&mut self.pending.typeof_operand_array_size);
             let bytes = core::mem::take(&mut self.pending.typeof_operand_array_bytes);
             let dims = core::mem::take(&mut self.pending.typeof_operand_array_dims);
+            // TODO: the type of a variable-length array operand, which a
+            // declaration through the specifier would allocate at run time.
+            if n == super::VLA_ARRAY_SIZE {
+                return Err(self.compile_err(
+                    Code::UNSUPPORTED,
+                    "`typeof` of a variable-length array is not supported",
+                ));
+            }
+            let levels = if !dims.is_empty() && inner >= Ty::Ptr as i64 {
+                dims.len() as i64
+            } else {
+                i64::from((n != 0 || bytes > 0) && inner >= Ty::Ptr as i64)
+            };
+            if let Some(fpi) = self.pending.fn_ptr_indirection.as_mut() {
+                *fpi -= levels;
+            }
             if !dims.is_empty() && inner >= Ty::Ptr as i64 {
                 // The decay recorded the row's exact dimensions (a
                 // pointer-to-array deref / row select): the operand is
@@ -554,51 +532,6 @@ impl Compiler {
         (*class == Token::Fun as i64 || *class == Token::Sys as i64).then_some(*sym as usize)
     }
 
-    /// The prototype of the accumulated operand when it is a plain
-    /// function-pointer object reference: `(parameter types, variadic,
-    /// pointer depth)`. An identifier reads its symbol; a non-bitfield
-    /// member access or a subscripted element reads the callee channel,
-    /// which its own parse is what last wrote (the channel is cleared at
-    /// the operand's start and parked across subscript indices), so the
-    /// channel describes the operand's value and not an inner
-    /// subexpression's. Empty parameter types spell a zero-parameter
-    /// prototype: the symbol tables do not record the prototyped-ness
-    /// distinction (see `FnTypeName::params`).
-    fn fn_ptr_object_proto(&mut self) -> Option<(alloc::vec::Vec<i64>, bool, i64)> {
-        use super::super::ast::Expr;
-        let acc = self.ast_acc?;
-        match self.ast.expr(acc) {
-            Expr::Ident {
-                sym,
-                class,
-                array_size,
-                ..
-            } if (*class == Token::Loc as i64 || *class == Token::Glo as i64)
-                && *array_size == 0 =>
-            {
-                let s = &self.symbols[*sym as usize];
-                (s.fn_ptr_indirection >= 1)
-                    .then(|| (s.params.clone(), s.is_variadic, s.fn_ptr_indirection))
-            }
-            Expr::Member {
-                bitfield: None,
-                array_size: 0,
-                ..
-            }
-            | Expr::Index { .. } => {
-                let depth = self.pending.indirect_callee_fn_ptr_depth;
-                if depth < 1 {
-                    return None;
-                }
-                self.pending
-                    .indirect_callee_params
-                    .take()
-                    .map(|p| (p, self.pending.indirect_callee_is_variadic, depth))
-            }
-            _ => None,
-        }
-    }
-
     fn parse_unevaluated_expr_ty(&mut self, comma_operands: bool) -> Result<i64, C5Error> {
         let saved_text_len = self.next_ent_pc;
         let saved_code_reloc_sym_idx = self.code_reloc_sym_idx.len();
@@ -614,31 +547,18 @@ impl Compiler {
         let saved_decay = self.pending.last_array_decay_size;
         let saved_decay_bytes = self.pending.last_array_decay_bytes;
         let saved_decay_dims = core::mem::take(&mut self.pending.last_array_decay_dims);
+        let saved_decay_vla = self.pending.last_array_decay_vla.take();
         self.pending.last_array_decay_size = 0;
         self.pending.last_array_decay_bytes = 0;
-        self.pending.last_fn_ptr_cast = None;
-        // The callee channel must reflect this operand's own producers:
+        // The callee lineage must reflect this operand's own producers:
         // clear it for the parse and restore the surrounding context's
-        // values on exit.
-        let saved_callee_params = self.pending.indirect_callee_params.take();
-        let saved_callee_variadic = core::mem::take(&mut self.pending.indirect_callee_is_variadic);
-        let saved_callee_depth = core::mem::take(&mut self.pending.indirect_callee_fn_ptr_depth);
+        // value on exit.
         let saved_callee_ret = core::mem::take(&mut self.pending.indirect_callee_ret_fn_ptr);
         // Parse at assignment precedence so binary, conditional, and
         // assignment operators are consumed.
         self.expr_or_void(Token::Assign as i64)?;
         if comma_operands {
-            while self.lex.tk == ',' {
-                self.next()?;
-                self.pending.last_array_decay_size = 0;
-                self.pending.last_array_decay_bytes = 0;
-                self.pending.last_array_decay_dims.clear();
-                self.pending.indirect_callee_params = None;
-                self.pending.indirect_callee_is_variadic = false;
-                self.pending.indirect_callee_fn_ptr_depth = 0;
-                self.pending.indirect_callee_ret_fn_ptr = 0;
-                self.expr_or_void(Token::Assign as i64)?;
-            }
+            self.parse_comma_operators()?;
         }
         // `&f` where `f` names a function: the operand is a pointer to
         // `f`'s function type. Route the same pending carriers the
@@ -650,46 +570,21 @@ impl Compiler {
                 self.pending.fn_ptr_indirection = Some(1);
                 self.pending.fn_ptr_ret_indirection = 0;
                 self.pending.base_is_function_type = false;
-                self.pending.typedef_fn_proto = Some((
-                    self.symbols[idx].params.len(),
-                    self.symbols[idx].is_variadic,
-                ));
-                self.pending.fn_ptr_param_types = Some(self.symbols[idx].params.clone());
+                self.pending.fn_ptr_params = Some(self.symbols[idx].fn_params());
+                self.pending.fn_ptr_ret_fn = self.symbols[idx].ret_fn.clone();
                 self.symbols[idx].type_ + Ty::Ptr as i64
             }
             None => {
-                // `(T (*)(params))e` as the whole operand: recover the
-                // cast's prototype the same way, keyed to the cast node
-                // so a larger expression does not inherit it.
-                if let Some((cast_ty, params, variadic, depth)) =
-                    self.pending.last_fn_ptr_cast.take()
-                    && let Some(acc) = self.ast_acc
-                    && matches!(
-                        self.ast.expr(acc),
-                        super::super::ast::Expr::Cast { to_ty, .. } if *to_ty == cast_ty
-                    )
-                {
-                    self.pending.fn_ptr_indirection = Some(depth);
-                    self.pending.fn_ptr_ret_indirection = 0;
+                // The function type the value leads to, whatever the
+                // expression form: the flat tag (return type only) cannot
+                // spell it. A designator (`*fp`) is the function type, whose
+                // tag is pre-decayed as a function-type typedef's is.
+                if let Some((f, depth)) = self.ast_acc.and_then(|a| self.expr_fn(a)) {
+                    self.pending.fn_ptr_indirection = Some(depth.max(1));
+                    self.pending.fn_ptr_ret_indirection = f.ret.as_ref().map_or(0, |r| r.1);
                     self.pending.base_is_function_type = false;
-                    self.pending.typedef_fn_proto = Some((params.len(), variadic));
-                    self.pending.fn_ptr_param_types = Some(params);
-                } else if self.pending.last_array_decay_size == 0
-                    && self.pending.last_array_decay_bytes == 0
-                    && self.pending.last_array_decay_dims.is_empty()
-                    && let Some((params, variadic, depth)) = self.fn_ptr_object_proto()
-                {
-                    // A function-pointer object as the whole operand -- an
-                    // identifier, a member access, or a subscripted
-                    // element: route its prototype through the same
-                    // carriers so a type-name reader compares the
-                    // signature, which the flat tag (return type only)
-                    // cannot spell.
-                    self.pending.fn_ptr_indirection = Some(depth);
-                    self.pending.fn_ptr_ret_indirection = 0;
-                    self.pending.base_is_function_type = false;
-                    self.pending.typedef_fn_proto = Some((params.len(), variadic));
-                    self.pending.fn_ptr_param_types = Some(params);
+                    self.pending.fn_ptr_params = Some(f.params);
+                    self.pending.fn_ptr_ret_fn = f.ret;
                 }
                 self.ty
             }
@@ -700,26 +595,49 @@ impl Compiler {
         // must report it as distinct from a pointer -- including a
         // subscripted row of a multi-dim array (`arr2d[i]`), which
         // sets only the byte marker.
+        let vla = core::mem::replace(&mut self.pending.last_array_decay_vla, saved_decay_vla);
         self.pending.typeof_operand_was_array = self.pending.last_array_decay_size != 0
             || self.pending.last_array_decay_bytes > 0
-            || !self.pending.last_array_decay_dims.is_empty();
-        self.pending.typeof_operand_array_size = self.pending.last_array_decay_size;
+            || !self.pending.last_array_decay_dims.is_empty()
+            || vla.is_some();
+        self.pending.typeof_operand_array_size = if vla.is_some() {
+            super::VLA_ARRAY_SIZE
+        } else {
+            self.pending.last_array_decay_size
+        };
         // Capture the byte-width marker only for a 1D-reducible row: a
         // pending multi-dim stride means the row is itself multi-dim and
         // not expressible as a single element count.
-        self.pending.typeof_operand_array_bytes =
-            if self.pending.index_stride == 0 && self.pending.index_strides_tail.is_empty() {
-                self.pending.last_array_decay_bytes
-            } else {
-                0
-            };
-        self.pending.typeof_operand_array_dims =
-            core::mem::replace(&mut self.pending.last_array_decay_dims, saved_decay_dims);
+        let p = &self.pending;
+        let (head, tail) = if p.index_stride > 0 {
+            (p.index_stride, &p.index_strides_tail)
+        } else {
+            (p.end_of_expr_stride, &p.end_of_expr_strides_tail)
+        };
+        let row_strides: alloc::vec::Vec<i64> = if head > 0 {
+            core::iter::once(head).chain(tail.iter().copied()).collect()
+        } else {
+            alloc::vec::Vec::new()
+        };
+        self.pending.typeof_operand_array_bytes = if row_strides.is_empty() {
+            self.pending.last_array_decay_bytes
+        } else {
+            0
+        };
+        // The bounds the operand decayed from; a multi-dimensional row's come
+        // from the strides it left unconsumed, as `&` rebuilds them.
+        let row = self.pending.last_array_decay_bytes > 0 && !row_strides.is_empty();
+        let dims = if row && self.pending.last_array_decay_dims.is_empty() {
+            let elem = self.ty - Ty::Ptr as i64;
+            self.decayed_array_dims(elem, &row_strides)
+                .unwrap_or_default()
+        } else {
+            core::mem::take(&mut self.pending.last_array_decay_dims)
+        };
+        self.pending.last_array_decay_dims = saved_decay_dims;
+        self.pending.typeof_operand_array_dims = dims;
         self.pending.last_array_decay_size = saved_decay;
         self.pending.last_array_decay_bytes = saved_decay_bytes;
-        self.pending.indirect_callee_params = saved_callee_params;
-        self.pending.indirect_callee_is_variadic = saved_callee_variadic;
-        self.pending.indirect_callee_fn_ptr_depth = saved_callee_depth;
         self.pending.indirect_callee_ret_fn_ptr = saved_callee_ret;
         self.next_ent_pc = saved_text_len;
         self.clear_recent_emits();
@@ -908,11 +826,12 @@ impl Compiler {
         let sym = &mut self.symbols[id_idx];
         sym.class = Token::Loc as i64;
         sym.type_ = ty;
+        sym.incomplete_enum_tag = None;
         sym.val = 0;
         sym.array_size = 0;
         sym.asm_register = Some(reg);
         sym.is_global_register = true;
-        sym.decl_line = self.lex.line;
+        sym.binding.decl_line = self.lex.line;
         // The binding is the outermost scope: make the shadow slots hold
         // the binding itself so the per-function `Loc` cleanup restore
         // (and any block-scope shadowing) round-trips back to it.
@@ -922,6 +841,7 @@ impl Compiler {
         sym.h_array_size = 0;
         sym.h_asm_register = sym.asm_register;
         sym.h_is_global_register = true;
+        sym.h_binding = sym.binding.clone();
         Ok(())
     }
 
@@ -1131,6 +1051,10 @@ impl Compiler {
                 f.used = true;
             } else if n == "no_instrument_function" || n == "__no_instrument_function__" {
                 f.no_instrument_function = true;
+            } else if n == "no_stack_protector" || n == "__no_stack_protector__" {
+                // GNU `no_stack_protector`: no canary whatever
+                // `-fstack-protector*` selects.
+                f.no_stack_protector = true;
             } else if n == "uninitialized" || n == "__uninitialized__" {
                 // GNU `uninitialized`: the automatic object opts out of
                 // `-ftrivial-auto-var-init`.
@@ -1569,6 +1493,9 @@ impl Compiler {
         if attrs.no_instrument_function {
             self.pending.attr_no_instrument = true;
         }
+        if attrs.no_stack_protector {
+            self.pending.attr_no_stack_protector = true;
+        }
         if let Some(p) = init_priority {
             self.pending.attr_init_priority = Some(p);
         }
@@ -1706,8 +1633,8 @@ impl Compiler {
     /// `float` / `double`) given the modifiers already collected in
     /// `m`, consuming the keyword. Returns `None` without consuming
     /// when the current token is not one of these. Sets the
-    /// `base_was_void` / `base_was_long_double` side channels the
-    /// function-declaration path reads. C99 6.7.2.
+    /// `base_was_void` side channel the function-declaration path reads.
+    /// C99 6.7.2.
     pub(super) fn parse_scalar_base_specifier(
         &mut self,
         m: &IntModifiers,
@@ -1730,13 +1657,8 @@ impl Compiler {
             Ty::Float as i64
         } else if self.lex.tk == Token::Double {
             self.next()?;
-            // `long double` collapses to the f64 `double` encoding.
-            // `base_was_long_double` lets the prototype path stamp a libc
-            // binding's return convention (SysV x86_64 returns long double
-            // in x87 st(0), not XMM0); `LONG_DOUBLE_BIT` keeps the spelling
-            // on the tag itself, which the libc-argument ABI diagnostic reads.
+            // `long double` is the `double` band with `LONG_DOUBLE_BIT`.
             if m.saw_long() {
-                self.pending.base_was_long_double = true;
                 Ty::Double as i64 | super::types::LONG_DOUBLE_BIT
             } else {
                 Ty::Double as i64
@@ -1901,6 +1823,7 @@ impl Compiler {
         }
 
         let base_tok = self.lex.tk;
+        let mut enum_tag = None;
         let mut bt = if let Some(inner) = atomic_base {
             inner
         } else if self.lex.tk == Token::Typeof {
@@ -1917,10 +1840,9 @@ impl Compiler {
             // `enum [Tag] [{ ... }]` is `int`, or the packed underlying type
             // for `enum __attribute__((packed))`; the shared parse_enum_decl
             // captures the tag + body for DWARF.
-            if let Some(s) = storage.as_deref_mut() {
-                s.base_is_enum = true;
-            }
-            self.parse_enum_decl()?
+            let (ty, tag) = self.parse_enum_decl()?;
+            enum_tag = tag;
+            ty
         } else if self.lex.tk == Token::Struct || self.lex.tk == Token::Union {
             self.parse_aggregate_base_type()?
         } else if self.is_lex_int128_spelling() {
@@ -1940,12 +1862,15 @@ impl Compiler {
             // `unsigned` / `short` / `long` / `signed`, so once an int
             // modifier is seen the identifier here is the declarator name (a
             // redeclaration), not a second type specifier.
-            self.typedef_name_base_type()?
+            let (ty, tag) = self.typedef_name_base_type()?;
+            enum_tag = tag;
+            ty
         } else if m.saw_int_mod {
             // Bare `unsigned x;` / `long x;` / `long long x;` / `short x;`
             // -- the implicit-int rule for int-modifier-only declarations.
             m.int_base()
-        } else if storage.is_some() {
+        } else if let Some(s) = storage.as_deref_mut() {
+            s.implicit_int = true;
             self.implicit_int_base_type()?
         } else {
             return Err(self.compile_err(Code::SYNTAX, "type expected"));
@@ -1965,7 +1890,6 @@ impl Compiler {
             } else if base_tok == Token::Char {
                 bt = m.char_tag(self.lex.char_signed);
             } else if base_tok == Token::Double && m.saw_long() {
-                self.pending.base_was_long_double = true;
                 bt |= super::types::LONG_DOUBLE_BIT;
             } else if m.saw_unsigned && self.is_int128_ty(bt) {
                 // Trailing modifier form `__int128 unsigned`.
@@ -1982,6 +1906,9 @@ impl Compiler {
         if let Some(m) = self.pending.attr_mode.take() {
             bt = self.apply_mode_to_type(bt, m)?;
         }
+        // Written after the base type is complete, so a nested parse inside
+        // it (a parameter list in an aggregate body) leaves nothing behind.
+        self.pending.base_enum_tag = enum_tag;
 
         Ok(apply_qual_bits(bt, qual_bits))
     }
@@ -1993,12 +1920,12 @@ impl Compiler {
     fn reset_base_type_carriers(&mut self) {
         self.pending.base_was_void = false;
         self.pending.base_is_function_type = false;
-        self.pending.base_was_long_double = false;
+        self.pending.base_enum_tag = None;
         self.pending.typedef_base_array_size = 0;
         self.pending.typedef_base_zero_len = false;
         self.pending.type_align = 0;
-        self.pending.typedef_fn_proto = None;
-        self.pending.fn_ptr_param_types = None;
+        self.pending.fn_ptr_params = None;
+        self.pending.fn_ptr_ret_fn = None;
     }
 
     /// Consume a storage-class or linkage keyword into `storage`. Returns
@@ -2093,9 +2020,12 @@ impl Compiler {
     /// debug info, the calling convention, the fn-pointer lineage and
     /// prototype, the array dimensions (C99 6.7.7p3) and the type alignment.
     /// Consumes the identifier.
-    fn typedef_name_base_type(&mut self) -> Result<i64, C5Error> {
+    pub(super) fn typedef_name_base_type(&mut self) -> Result<(i64, Option<u32>), C5Error> {
         let idx = self.lex.curr_id_idx;
-        let aliased = self.symbols[idx].type_;
+        let (aliased, enum_tag) = (
+            self.symbols[idx].type_,
+            self.symbols[idx].incomplete_enum_tag,
+        );
         // The alias resolves to its underlying type here, so the spelling
         // would otherwise be lost; DWARF 4 5.3 names it with a
         // DW_TAG_typedef DIE.
@@ -2117,11 +2047,8 @@ impl Compiler {
             // declarator so an indirect call through the variable narrows
             // each argument to its declared parameter type and splits fixed
             // from variadic arguments per the host variadic ABI.
-            self.pending.typedef_fn_proto = Some((
-                self.symbols[idx].params.len(),
-                self.symbols[idx].is_variadic,
-            ));
-            self.pending.fn_ptr_param_types = Some(self.symbols[idx].params.clone());
+            self.pending.fn_ptr_params = Some(self.symbols[idx].fn_params());
+            self.pending.fn_ptr_ret_fn = self.symbols[idx].ret_fn.clone();
         }
         // `(VOID)` in parameter position is the no-parameter idiom.
         if self.symbols[idx].is_void_typedef {
@@ -2144,7 +2071,7 @@ impl Compiler {
             self.pending.type_align = typedef_align;
         }
         self.next()?;
-        Ok(aliased)
+        Ok((aliased, enum_tag))
     }
 
     /// Consume the specifiers that may trail the base-type keyword: int

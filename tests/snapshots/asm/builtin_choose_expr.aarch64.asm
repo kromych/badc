@@ -18,7 +18,7 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x10
                	add	x0, x0, #0x38
-               	ldarb	w0, [x0]
+               	ldaprb	w0, [x0]
                	sturb	w0, [x29, #-0x8]
                	ldurb	w0, [x29, #-0x8]
                	add	sp, sp, #0x10

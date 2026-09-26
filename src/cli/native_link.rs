@@ -44,14 +44,19 @@ pub(crate) fn link_image(cli: &Cli, inputs: Inputs, stdin: &StdinSource) {
     let mut native_objs: Vec<badc::NativeObject> =
         Vec::with_capacity(sources.len() + objects.len() + archives.len());
 
-    // These objects are linked into an image below, and every image
-    // this toolchain writes takes its data relocations at load time
-    // (ELF ET_DYN, PE base relocations, Mach-O dyld rebases), so a
-    // relocated `const` cannot ride the read-only prefix and must not
-    // cost the unit's pure `const` objects their place in it.
+    // These objects are linked into an image below. A position-
+    // independent one takes its data relocations at load time (ELF
+    // ET_DYN, PE base relocations, Mach-O dyld rebases), so a relocated
+    // `const` cannot ride the read-only prefix and must not cost the
+    // unit's pure `const` objects their place in it. A placed ELF image
+    // resolves every address at link time, so its sources compile as a
+    // static link's `-fno-pic -c` objects do.
+    let placed = cli.mode == Mode::NativeExecutable
+        && cli.exec_form().placed()
+        && cli.target.binary_format() == badc::BinaryFormat::Elf;
     let reloc_opts = cli
         .codegen
-        .relocatable_options(cli.front.optimize, true, &cli.front.diag);
+        .relocatable_options(cli.front.optimize, !placed, &cli.front.diag);
     // `.c` -> in-memory native ELF64 ET_REL: each source compiles
     // straight to ET_REL bytes that `parse_native_elf` reads back, so no
     // intermediate `.o` is written to disk.
@@ -685,6 +690,26 @@ fn select_archive_members(
                 }
             }
         }
+        // An object from another compiler reads a C library data object
+        // directly, so the image holds a copy of it, defined with the
+        // type the header declares.
+        let wanted = badc::copy_candidates(native_objs, core::slice::from_ref(lib.library()));
+        if let Some(src) = lib.copy_definitions(&wanted) {
+            let label = "<copies>";
+            let object = embedded
+                .compile(label, src, &[], false)
+                .and_then(|bytes| badc::parse_native_elf(&bytes));
+            match object {
+                Ok(mut o) => {
+                    o.source = label.to_string();
+                    native_objs.push(o);
+                }
+                Err(e) => {
+                    eprint_error("", &e);
+                    std::process::exit(1);
+                }
+            }
+        }
         if !lib.library().exports.is_empty() {
             shared_libs.push(lib.library().clone());
         }
@@ -818,7 +843,7 @@ fn emit_image(cli: &Cli, image: ImageInputs, stats: &mut LinkStats) {
         cli.link.export_all,
         cli.link.export_data,
         cli.link.emit_relocs,
-        cli.freestanding,
+        cli.exec_form(),
     );
 
     let bytes = match write_result {

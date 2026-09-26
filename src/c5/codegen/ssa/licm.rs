@@ -43,7 +43,7 @@ use hashbrown::HashMap;
 use super::super::ir::{BinOp, BlockId, FunctionSsa, Inst, NO_VALUE, ValueId};
 use super::mem2reg::{dominators, predecessors};
 use super::reg_alloc::Allocation;
-use super::tape::{Insertion, Undo};
+use super::tape::{At, Insertion, Undo};
 use super::{FixedRegs, Target};
 use crate::c5::codegen::passes::drop_redundant_extend::{
     compute_high_clear, compute_high_observed,
@@ -140,7 +140,7 @@ fn addr_cost(target: Target) -> u32 {
 /// `high_dead` when no consumer reads the result above bit 31.
 /// The copy a hoist places is an integer `Inst::Imm`, so a float op --
 /// which has no immediate form to unfold on either target -- is not one.
-fn binop_imm_materializes(target: Target, op: BinOp, imm: i64, high_dead: bool) -> bool {
+pub(super) fn binop_imm_materializes(target: Target, op: BinOp, imm: i64, high_dead: bool) -> bool {
     if matches!(
         op,
         BinOp::Fadd
@@ -168,9 +168,10 @@ fn binop_imm_materializes(target: Target, op: BinOp, imm: i64, high_dead: bool) 
 /// to. That is ahead of the last instruction, or ahead of the compare a
 /// conditional terminator reads -- the emit may fuse that compare into
 /// the branch, which no unrelated instruction may come between. `None`
-/// when the position that leaves is a phi or a `ParamRef`, neither of
-/// which a copy may precede: a phi belongs to the block's leading run,
-/// and a `ParamRef` reads an incoming argument register live until it.
+/// when the position that leaves is a phi or a register read, neither
+/// of which a copy may precede: a phi belongs to the block's leading run,
+/// a `ParamRef`, a `ParamPart` or a `RetPart` reads an argument or result
+/// register live until it, and an `AsmOut` its statement's output register.
 fn insert_point(func: &FunctionSsa, b: BlockId) -> Option<ValueId> {
     let range = func.blocks[b as usize].inst_range.clone();
     if range.is_empty() {
@@ -187,7 +188,11 @@ fn insert_point(func: &FunctionSsa, b: BlockId) -> Option<ValueId> {
     let blocked = (at..range.end).any(|i| {
         matches!(
             func.insts[i as usize],
-            Inst::Phi { .. } | Inst::ParamRef { .. }
+            Inst::Phi { .. }
+                | Inst::ParamRef { .. }
+                | Inst::ParamPart { .. }
+                | Inst::RetPart { .. }
+                | Inst::AsmOut { .. }
         )
     });
     if blocked { None } else { Some(at) }
@@ -263,7 +268,7 @@ fn dominates(idom: &[BlockId], a: BlockId, b: BlockId) -> bool {
 }
 
 /// Symbol bound to each instruction in one of the extern-ref tables.
-fn sym_of(refs: &[(u32, u32)]) -> HashMap<u32, u32> {
+pub(super) fn sym_of(refs: &[(u32, u32)]) -> HashMap<u32, u32> {
     refs.iter().copied().collect()
 }
 
@@ -412,7 +417,7 @@ fn apply(func: &mut FunctionSsa, hoists: &[Hoist]) -> Undo {
     let ins: Vec<Insertion> = hoists
         .iter()
         .map(|h| Insertion {
-            at: h.at,
+            at: At::Before(h.at),
             inst: h.key.inst(),
             is_f32: h.key.is_f32(),
         })
@@ -588,6 +593,7 @@ mod tests {
             value,
             kind: StoreKind::I64,
             volatile: false,
+            nsw: false,
         }
     }
 
@@ -872,6 +878,7 @@ mod tests {
                     value: BODY,
                     kind,
                     volatile: false,
+                    nsw: false,
                 },
             ])
         };
@@ -966,10 +973,17 @@ mod tests {
         };
         let f = loop_func_pre(vec![param.clone(), local(3), local(4)], body.clone());
         assert_eq!(plan(&f, Target::LinuxAarch64)[0].at, PRE_AT);
-        // Nothing may precede a `ParamRef`, so a destination that ends
-        // in one offers no position and the sites stay where they are.
-        let trailing = loop_func_pre(vec![local(2), local(3), param], body);
-        assert!(plan(&trailing, Target::LinuxAarch64).is_empty());
+        // Nothing may precede a parameter read, so a destination that
+        // ends in one offers no position and the sites stay where they are.
+        let part = Inst::ParamPart {
+            idx: 0,
+            part: 0,
+            kind: LoadKind::I64,
+        };
+        for read in [param, part] {
+            let trailing = loop_func_pre(vec![local(2), local(3), read], body.clone());
+            assert!(plan(&trailing, Target::LinuxAarch64).is_empty());
+        }
     }
 
     #[test]
@@ -1039,6 +1053,8 @@ mod tests {
                 binding_idx: 0,
                 args: vec![BODY + 1],
                 fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
+                low_word_args: 0,
+                arg_widths: crate::c5::ir::ArgWidths::default(),
                 fp_return: false,
                 arg_aggs: Vec::new(),
                 ret_agg: None,

@@ -67,6 +67,7 @@ fn ent_pc=2 n_params=1 variadic=false locals=1
   block 1  start_pc=0
     v16  Extend { value=v13, kind=I32 }                   -> x1
     v17  Extend { value=v13, kind=I32 }                   -> x1
+    v18  LifetimeEnd(-1)                                  -> -
     terminator Return(v13)   (exit_acc=v13)
 ; --- SSA dump (ok=true) ent_pc=3 ---
 ; name=cross_block

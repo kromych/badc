@@ -50,6 +50,15 @@ Disassembly of section .text:
                	leave
                	retq
 
+<block_local_dies>:
+               	movl	$0x1, %eax
+               	retq
+
+<shadowed_outer_is_read>:
+               	leaq	0x1(%rdi), %rax
+               	incq	%rax
+               	retq
+
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
@@ -57,5 +66,7 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	movl	%eax, -0x8(%rbp)
                	addq	$0x9, %rax
+               	incq	%rax
+               	addq	$0x3, %rax
                	leave
                	retq

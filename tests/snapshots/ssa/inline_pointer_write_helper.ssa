@@ -69,7 +69,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     v63  Imm(0)                                           -> x0
     v64  Imm(0)                                           -> x0
     v65  Imm(1)                                           -> x0
-    v66  Imm(0)                                           -> x0
+    v66  Imm(1)                                           -> x0
     v67  Imm(1)                                           -> x0
     v68  Imm(1)                                           -> x0
     v69  Imm(0)                                           -> x0
@@ -86,7 +86,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     v80  Imm(0)                                           -> x0
     v81  Imm(1)                                           -> x0
     v82  Imm(2)                                           -> x0
-    v83  Imm(0)                                           -> x0
+    v83  Imm(2)                                           -> x0
     v84  Imm(2)                                           -> x0
     v85  Imm(1)                                           -> x0
     v86  Imm(0)                                           -> x0
@@ -103,7 +103,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     v97  Imm(0)                                           -> x0
     v98  Imm(2)                                           -> x0
     v99  Imm(3)                                           -> x0
-    v100 Imm(0)                                           -> x0
+    v100 Imm(3)                                           -> x0
     v101 Imm(3)                                           -> x0
     v102 Imm(1)                                           -> x0
     v103 Imm(0)                                           -> x0
@@ -120,7 +120,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     v114 Imm(0)                                           -> x0
     v115 Imm(3)                                           -> x0
     v116 Imm(4)                                           -> x0
-    v117 Imm(0)                                           -> x0
+    v117 Imm(4)                                           -> x0
     v118 Imm(4)                                           -> x0
     v119 Imm(0)                                           -> x0
     v120 Imm(0)                                           -> x0
@@ -159,6 +159,8 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     v153 Imm(0)                                           -> x0
     v154 Imm(0)                                           -> x0
     v155 Imm(0)                                           -> x0
+    v156 LifetimeEnd(0)                                   -> -
+    v157 LifetimeEnd(0)                                   -> -
     terminator Return(v155)   (exit_acc=v155)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit

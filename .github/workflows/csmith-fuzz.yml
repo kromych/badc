@@ -3,8 +3,11 @@ name: csmith-fuzz
 # Differential fuzzing of the compiler against csmith-generated programs, one
 # job per architecture. Five minutes of fuzzing reaches several hundred cases
 # per job, which is where the yield sits: the trial that opened this found one
-# defect per two dozen programs. Findings go to the week's issue and the cases
-# to a release used as a store, so the job's own log is not the record.
+# defect per two dozen programs. A finding the week's issue does not hold yet
+# is then reduced with cvise inside a budget of its own, so the comment carries
+# a program of tens of lines beside the unreduced case. Findings go to the
+# week's issue and the cases to a release used as a store, so the job's own
+# log is not the record.
 #
 # The two lanes run one at a time. Both would otherwise open the week's issue
 # concurrently on the first finding of a week -- GitHub has no create-if-absent
@@ -21,6 +24,10 @@ on:
         description: "fuzzing budget per job"
         type: string
         default: "5"
+      reduce_minutes:
+        description: "reduction budget per job (0: file unreduced)"
+        type: string
+        default: "10"
   schedule:
     # Daily at 03:41 UTC, off the :00/:30 marks the fleet crowds and clear of
     # the nightly asm-fuzz job at 07:17.
@@ -45,9 +52,10 @@ jobs:
           - ubuntu-latest
           - ubuntu-24.04-arm
     runs-on: ${{ matrix.os }}
-    # The build dominates: five minutes of fuzzing on top of a cold
-    # rust-cache build. The cap is a hang backstop, not the budget.
-    timeout-minutes: 30
+    # The build dominates: five minutes of fuzzing and ten of reduction on
+    # top of a cold rust-cache build. The cap is a hang backstop, not the
+    # budget.
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -61,8 +69,9 @@ jobs:
         # Debian and Ubuntu split the generator from its runtime headers:
         # `csmith` carries /usr/bin/csmith, `libcsmith-dev` carries
         # /usr/include/csmith/csmith.h, which every generated program includes.
-        # Both are in universe, 2.3.0 on noble and later.
-        run: ./scripts/apt_resilient_install.sh csmith libcsmith-dev
+        # Both are in universe, 2.3.0 on noble and later, as is `cvise`,
+        # the reducer the harness prefers.
+        run: ./scripts/apt_resilient_install.sh csmith libcsmith-dev cvise
       - name: build badc
         run: cargo build --release --locked --features full --bin badc
       - name: fuzz
@@ -72,12 +81,14 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           MINUTES: ${{ inputs.minutes || '5' }}
+          REDUCE_MINUTES: ${{ inputs.reduce_minutes || '10' }}
           PUBLISH: ${{ github.event_name != 'workflow_dispatch' || inputs.publish }}
         run: |
           publish=
           if [ "$PUBLISH" = "true" ]; then publish=--publish; fi
           python3 scripts/csmith_fuzz.py \
             --minutes "$MINUTES" \
+            --reduce-minutes "$REDUCE_MINUTES" \
             --badc target/release/badc \
             --require-csmith \
             --out-dir fuzz-cases \

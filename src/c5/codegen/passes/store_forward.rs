@@ -294,7 +294,14 @@ fn take(
             true
         }
         Some(Reuse::Extended) => {
-            rewrites.push((i, Inst::Extend { value, kind }));
+            rewrites.push((
+                i,
+                Inst::Extend {
+                    value,
+                    kind,
+                    nsw: false,
+                },
+            ));
             false
         }
         None => false,
@@ -450,6 +457,7 @@ fn run_one(func: &mut FunctionSsa) {
                     value,
                     kind,
                     volatile,
+                    ..
                 } => {
                     let off = *off;
                     let value = *value;
@@ -495,12 +503,17 @@ fn run_one(func: &mut FunctionSsa) {
                 | Inst::Fneg(_)
                 | Inst::Fma { .. }
                 | Inst::MulAdd { .. }
+                | Inst::Udiv128 { .. }
                 | Inst::Extend { .. }
                 | Inst::Bswap { .. }
                 | Inst::BitCount { .. }
                 | Inst::Copy { .. }
                 | Inst::FpCast { .. }
                 | Inst::ParamRef { .. }
+                | Inst::ParamPart { .. }
+                | Inst::RetPart { .. }
+                | Inst::AsmOut { .. }
+                | Inst::AggParts { .. }
                 | Inst::Phi { .. } => {}
                 Inst::LoadIndexed {
                     base,
@@ -508,6 +521,7 @@ fn run_one(func: &mut FunctionSsa) {
                     index_ext,
                     scale,
                     kind,
+                    ..
                 } => {
                     let (base, index, ext, scale, kind) =
                         (*base, *index, *index_ext, *scale, *kind);
@@ -546,6 +560,7 @@ fn run_one(func: &mut FunctionSsa) {
                     scale,
                     value,
                     kind,
+                    ..
                 } => {
                     table.clear();
                     indexed.clear();
@@ -832,6 +847,7 @@ pub(crate) fn fold_const_loads(func: &mut FunctionSsa) -> bool {
                     value,
                     kind,
                     volatile,
+                    ..
                 } => {
                     table.clear();
                     slot_table.retain(|e| e.off != off);
@@ -862,12 +878,17 @@ pub(crate) fn fold_const_loads(func: &mut FunctionSsa) -> bool {
                 | Inst::Fneg(_)
                 | Inst::Fma { .. }
                 | Inst::MulAdd { .. }
+                | Inst::Udiv128 { .. }
                 | Inst::Extend { .. }
                 | Inst::Bswap { .. }
                 | Inst::BitCount { .. }
                 | Inst::Copy { .. }
                 | Inst::FpCast { .. }
                 | Inst::ParamRef { .. }
+                | Inst::ParamPart { .. }
+                | Inst::RetPart { .. }
+                | Inst::AsmOut { .. }
+                | Inst::AggParts { .. }
                 | Inst::Phi { .. } => {}
                 Inst::StoreIndexed { .. }
                 | Inst::Mcpy { .. }
@@ -929,10 +950,12 @@ mod tests {
             is_always_inline: false,
             is_noinline: false,
             is_naked: false,
+            is_noreturn: false,
             conv: crate::c5::codegen::CallConv::Target,
             section: None,
             patchable_entry: None,
             no_instrument: false,
+            no_stack_protector: false,
             is_weak: false,
             is_internal: false,
             const_params: 0,
@@ -941,6 +964,7 @@ mod tests {
             cmp32: Vec::new(),
             low_word_tests: Vec::new(),
             param_fp_mask: crate::c5::ir::FpMask::EMPTY,
+            param_widths: crate::c5::ir::ArgWidths::default(),
             agg_descs: alloc::vec::Vec::new(),
             param_aggs: alloc::vec::Vec::new(),
             param_local_slots: alloc::vec::Vec::new(),
@@ -1053,7 +1077,8 @@ mod tests {
                 f.insts[3],
                 Inst::Extend {
                     value: 1,
-                    kind: LoadKind::I32
+                    kind: LoadKind::I32,
+                    ..
                 }
             ),
             "an I32 reload of an I32 store should become Extend(stored, I32)",
@@ -1320,6 +1345,7 @@ mod tests {
                     value: 0,
                     kind: StoreKind::I64,
                     volatile: false,
+                    nsw: false,
                 },
                 Inst::LoadLocal {
                     off: -1,
@@ -1353,6 +1379,7 @@ mod tests {
                     value: 0,
                     kind: StoreKind::I64,
                     volatile: false,
+                    nsw: false,
                 },
                 Inst::Call {
                     target_pc: 0,
@@ -1360,6 +1387,8 @@ mod tests {
                     fixed_args: 0,
                     fp_return: false,
                     fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
+                    low_word_args: 0,
+                    arg_widths: crate::c5::ir::ArgWidths::default(),
                     arg_aggs: Vec::new(),
                     ret_agg: None,
                     ret_slot_local: 0,
@@ -1397,6 +1426,7 @@ mod tests {
                     value: 0,
                     kind: StoreKind::I64,
                     volatile: false,
+                    nsw: false,
                 },
                 Inst::Store {
                     addr: 1,
@@ -1437,6 +1467,7 @@ mod tests {
                     value: 0,
                     kind: StoreKind::I64,
                     volatile: true,
+                    nsw: false,
                 },
                 Inst::LoadLocal {
                     off: -1,
@@ -1473,12 +1504,14 @@ mod tests {
                     value: 0,
                     kind: StoreKind::I64,
                     volatile: false,
+                    nsw: false,
                 },
                 Inst::StoreLocal {
                     off: -1,
                     value: 1,
                     kind: StoreKind::I64,
                     volatile: false,
+                    nsw: false,
                 },
                 Inst::LoadLocal {
                     off: -1,
@@ -1511,6 +1544,7 @@ mod tests {
                     value: 0,
                     kind: StoreKind::I32,
                     volatile: false,
+                    nsw: false,
                 },
                 Inst::LoadLocal {
                     off: -1,
@@ -1527,7 +1561,8 @@ mod tests {
                 f.insts[2],
                 Inst::Extend {
                     value: 0,
-                    kind: LoadKind::I32
+                    kind: LoadKind::I32,
+                    ..
                 }
             ),
             "an I32 slot reload of an I32 store should become Extend(stored, I32)",
@@ -1549,6 +1584,7 @@ mod tests {
                     value: 0,
                     kind: StoreKind::I64,
                     volatile: false,
+                    nsw: false,
                 },
                 Inst::Call {
                     target_pc: 0,
@@ -1556,6 +1592,8 @@ mod tests {
                     fixed_args: 0,
                     fp_return: false,
                     fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
+                    low_word_args: 0,
+                    arg_widths: crate::c5::ir::ArgWidths::default(),
                     arg_aggs: Vec::new(),
                     ret_agg: Some(0),
                     ret_slot_local: -2,
@@ -1635,6 +1673,7 @@ mod tests {
             index_ext: IndexExt::None,
             scale,
             kind,
+            abs_base: false,
         }
     }
 
@@ -1646,6 +1685,7 @@ mod tests {
             scale,
             value,
             kind,
+            abs_base: false,
         }
     }
 
@@ -1707,7 +1747,8 @@ mod tests {
                 last,
                 Inst::Extend {
                     value: 2,
-                    kind: LoadKind::I8
+                    kind: LoadKind::I8,
+                    ..
                 }
             ),
             "a signed reload sign-extends the stored value: {last:?}"
@@ -1755,6 +1796,7 @@ mod tests {
                 value: 2,
                 kind: StoreKind::I64,
                 volatile: false,
+                nsw: false,
             },
             Inst::Mcpy {
                 dst: 2,
@@ -1771,6 +1813,8 @@ mod tests {
                 binding_idx: 0,
                 args: Vec::new(),
                 fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
+                low_word_args: 0,
+                arg_widths: crate::c5::ir::ArgWidths::default(),
                 fp_return: false,
                 arg_aggs: Vec::new(),
                 ret_agg: None,

@@ -1,8 +1,8 @@
 //! ELF64 image writer for Linux aarch64 and x86_64: a PIE (`ET_DYN`), a
-//! shared object, or a freestanding executable placed at its link address
-//! (`ET_EXEC`). `PT_INTERP` and the dynamic tables are present when the
-//! loader has work in the image: a position-independent placement, or a
-//! shared-library binding.
+//! shared object, or an executable placed at its link address (`ET_EXEC`,
+//! `-no-pie` and `--freestanding`). `PT_INTERP` and the dynamic tables are
+//! present when the loader has work in the image: a position-independent
+//! placement, or a shared-library binding.
 
 use crate::c5::diag::Code;
 use alloc::format;
@@ -15,7 +15,7 @@ use super::elf_reloc_types::{
     R_AARCH64_COPY, R_AARCH64_GLOB_DAT, R_AARCH64_RELATIVE, R_X86_64_COPY, R_X86_64_GLOB_DAT,
     R_X86_64_RELATIVE,
 };
-use super::{Abi, AddrPart, Build, DataRegion, Machine, data_region_addr};
+use super::{Abi, AddrPart, Build, DataRegion, ExecForm, Machine, data_region_addr};
 use super::{aarch64, dwarf, image, x86_64};
 use crate::c5::layout::{round_up, write_struct};
 
@@ -1468,7 +1468,7 @@ impl<'a> ElfImageWriter<'a> {
         // own `_start` when it is not, as on the library emission path.
         let entry = if is_shared {
             Entry::Exports
-        } else if build.freestanding {
+        } else if build.exec_form == ExecForm::Freestanding {
             Entry::Program
         } else if let Some(off) = symbol_text_offset(build, "__c5_entry") {
             Entry::Adapter(off)
@@ -1488,7 +1488,7 @@ impl<'a> ElfImageWriter<'a> {
             program,
             build,
             machine,
-            emit_dyn: is_shared || !build.freestanding,
+            emit_dyn: is_shared || !build.exec_form.placed(),
             loader_tables: false,
             n_imports: build.imports.imports.len(),
             entry,
@@ -1851,7 +1851,10 @@ impl<'a> ElfImageWriter<'a> {
     /// produce: the read-only bytes join the read-execute load, and the
     /// read-write load's address rather than its file offset steps over
     /// a page, so the loads still land on separate pages and the file
-    /// holds no page-sized hole -- 64K per boundary on aarch64.
+    /// holds no page-sized hole -- 64K per boundary on aarch64. Its relro
+    /// region joins the read-execute load too: every slot in it holds a
+    /// link-time address and the loader writes none of them, so nothing
+    /// needs `PT_GNU_RELRO` to re-protect it, which a static image lacks.
     fn layout_data_segments(&mut self) {
         let build = self.build;
         let placed = self.placed();
@@ -1864,8 +1867,13 @@ impl<'a> ElfImageWriter<'a> {
                 seg.segment1_filesize
             };
             seg.rodata_end = seg.rodata_off + seg.ro_total;
-            seg.segment1_filesize = seg.rodata_end;
-            seg.segment2_off = round_up(seg.rodata_end, seg.data_align);
+            seg.relro_off = if seg.relro_size > 0 {
+                round_up(seg.rodata_end, seg.data_align)
+            } else {
+                seg.rodata_end
+            };
+            seg.segment1_filesize = seg.relro_off + seg.relro_size;
+            seg.segment2_off = round_up(seg.segment1_filesize, seg.data_align);
             seg.rw_bias = seg.align;
         } else {
             seg.rodata_off = round_up(seg.segment1_filesize, seg.align);
@@ -1889,19 +1897,26 @@ impl<'a> ElfImageWriter<'a> {
         };
         seg.got_off = seg.dynamic_off + seg.dynamic_size;
         seg.got_size = (self.n_imports as u64) * 8;
-        seg.relro_off = if seg.relro_size > 0 {
-            round_up(seg.got_off + seg.got_size, seg.data_align)
-        } else {
-            seg.got_off + seg.got_size
-        };
+        let got_end = seg.got_off + seg.got_size;
+        // The rw load's relro part: `.dynamic`, `.got` and, in a
+        // position-independent image, the relro region.
+        let rw_relro_size = if placed { 0 } else { seg.relro_size };
+        if !placed {
+            seg.relro_off = if seg.relro_size > 0 {
+                round_up(got_end, seg.data_align)
+            } else {
+                got_end
+            };
+        }
         let relro_end_align = if !self.loader_tables {
             seg.data_align
-        } else if seg.relro_size > 0 {
+        } else if rw_relro_size > 0 {
             seg.align
         } else {
             RELRO_EMPTY_END_ALIGN
         };
-        seg.relro_end = round_up(seg.relro_off + seg.relro_size, relro_end_align);
+        let rw_relro_start = if placed { got_end } else { seg.relro_off };
+        seg.relro_end = round_up(rw_relro_start + rw_relro_size, relro_end_align);
         seg.data_off = round_up(seg.relro_end, seg.data_align);
         seg.data_size = build.data.len() as u64 - seg.relro_total;
         // An object wider than the page needs the RW segment's p_align
@@ -2698,6 +2713,7 @@ impl<'a> ElfImageWriter<'a> {
                 &build.rodata.rel32,
             )?;
         }
+        // A placed image's relro bytes, which `emit_rw_segment` bakes.
         out.resize(seg.segment2_off as usize, 0);
         Ok(())
     }
@@ -2756,12 +2772,20 @@ impl<'a> ElfImageWriter<'a> {
             &build.tls_data[..build.tls_init_size],
             &self.tls_reloc_sites()?,
         )?;
+        let placed = self.placed();
         let out = &mut self.out;
+        let relro = &data[..seg.relro_size as usize];
+        if placed {
+            let at = seg.relro_off as usize;
+            out[at..at + relro.len()].copy_from_slice(relro);
+        }
         out.extend_from_slice(&dynamic);
         out.extend(vec![0u8; seg.got_size as usize]);
-        out.resize(seg.relro_off as usize, 0);
-        debug_assert_eq!(out.len() as u64, seg.relro_off);
-        out.extend_from_slice(&data[..seg.relro_size as usize]);
+        if !placed {
+            out.resize(seg.relro_off as usize, 0);
+            debug_assert_eq!(out.len() as u64, seg.relro_off);
+            out.extend_from_slice(relro);
+        }
         out.resize(seg.data_off as usize, 0);
         debug_assert_eq!(out.len() as u64, seg.data_off);
         out.extend_from_slice(&data[seg.relro_size as usize..]);
@@ -3069,7 +3093,11 @@ impl<'a> ElfImageWriter<'a> {
                 alloc_shdr(
                     ".data.rel.ro",
                     SHT_PROGBITS,
-                    SHF_ALLOC | SHF_WRITE,
+                    if self.placed() {
+                        SHF_ALLOC
+                    } else {
+                        SHF_ALLOC | SHF_WRITE
+                    },
                     seg.relro_off,
                     self.family_size(Sec::RelRo, seg.relro_size, self.va(seg.relro_off)),
                     seg.data_align,
@@ -3507,7 +3535,6 @@ mod tests {
                 is_variadic: false,
                 fixed_args: 1,
                 return_type_tag: 0,
-                returns_long_double: false,
                 param_types: Vec::new(),
             }],
             dylibs: vec![ResolvedDylib {
@@ -3934,7 +3961,7 @@ mod tests {
         ] {
             let mut b = tiny_build();
             b.abi = target.abi();
-            b.freestanding = true;
+            b.exec_form = ExecForm::Freestanding;
             b.imports.imports.clear();
             b.imports.dylibs.clear();
             b.entry_offset = 4;
@@ -4014,7 +4041,7 @@ mod tests {
             assert!(prologue > 0, "{machine:?}: the adapter precedes the code");
             assert_eq!(entry, text_addr, "{machine:?}: entry at the adapter");
 
-            let b = shaped(|b| b.freestanding = true);
+            let b = shaped(|b| b.exec_form = ExecForm::Freestanding);
             let w = ElfImageWriter::new(&program, &b, machine).unwrap();
             assert!(
                 matches!(w.entry, Entry::Program),
@@ -4033,7 +4060,7 @@ mod tests {
     #[test]
     fn freestanding_image_with_an_import_keeps_the_loader_tables() {
         let mut b = tiny_build();
-        b.freestanding = true;
+        b.exec_form = ExecForm::Freestanding;
         b.data = vec![0; 16];
         b.data_relocs.push(crate::c5::program::DataReloc {
             data_offset: 0,
@@ -4055,6 +4082,144 @@ mod tests {
         let (_, _, data_addr, _, _) = find_section(&bytes, ".data").expect(".data");
         let slot = section_file_off(&bytes, ".data").expect(".data") as usize;
         assert_eq!(read_u64(&bytes, slot), data_addr + 8, "baked pointer");
+    }
+
+    /// A `-no-pie` image is placed as a freestanding one is and keeps
+    /// what a hosted one has: the adapter into the startup runtime and
+    /// the loader tables. A data pointer is baked with no `R_*_RELATIVE`
+    /// entry, and an absolute text field takes the address, which the
+    /// PIE of the same build has no value for.
+    #[test]
+    fn a_placed_hosted_image_keeps_the_runtime_entry_and_the_loader_tables() {
+        use super::super::elf_reloc_types::{R_AARCH64_ABS32, R_X86_64_32S};
+        for (machine, target, rtype) in [
+            (
+                Machine::Aarch64,
+                super::super::Target::LinuxAarch64,
+                R_AARCH64_ABS32,
+            ),
+            (
+                Machine::X86_64,
+                super::super::Target::LinuxX64,
+                R_X86_64_32S,
+            ),
+        ] {
+            let program = tiny_program();
+            let mut b = tiny_build();
+            b.abi = target.abi();
+            b.exec_form = ExecForm::Placed;
+            b.func_names = vec![String::from("__c5_entry")];
+            b.func_ent_pcs = vec![0];
+            b.pc_to_native = vec![0];
+            b.data = vec![0; 16];
+            b.data_relocs.push(crate::c5::program::DataReloc {
+                data_offset: 0,
+                target_offset: 8,
+                target_anchor: 8,
+            });
+            b.text_abs_relocs.push(crate::c5::codegen::TextAbsReloc {
+                site_text_offset: 0,
+                target_offset: 8,
+                target_in_text: false,
+                rtype,
+            });
+            let w = ElfImageWriter::new(&program, &b, machine).unwrap();
+            assert!(matches!(w.entry, Entry::Adapter(0)), "{machine:?}: adapter");
+            let bytes = write(&program, &b, machine).unwrap();
+            let eh: Elf64Ehdr = read_struct(&bytes, 0);
+            assert_eq!(eh.e_type, ET_EXEC, "{machine:?}");
+            assert!(
+                find_phdr(&bytes, PT_INTERP).is_some(),
+                "{machine:?}: PT_INTERP"
+            );
+            assert!(
+                dynamic_entries(&bytes)
+                    .iter()
+                    .any(|&(tag, _)| tag == DT_NEEDED),
+                "{machine:?}: DT_NEEDED"
+            );
+            let (_, _, _, rela_size, _) = find_section(&bytes, ".rela.dyn").expect(".rela.dyn");
+            assert_eq!(rela_size, ELF64_RELA_SIZE, "{machine:?}: one GLOB_DAT");
+            let (_, _, text_addr, text_size, _) = find_section(&bytes, ".text").expect(".text");
+            assert_eq!(eh.e_entry, text_addr, "{machine:?}: entry at the adapter");
+            let (_, _, data_addr, _, _) = find_section(&bytes, ".data").expect(".data");
+            let slot = section_file_off(&bytes, ".data").expect(".data") as usize;
+            assert_eq!(read_u64(&bytes, slot), data_addr + 8, "{machine:?}: baked");
+            let field = section_file_off(&bytes, ".text").expect(".text") as usize
+                + text_size as usize
+                - b.text.len();
+            assert_eq!(
+                u64::from(read_u32(&bytes, field)),
+                data_addr + 8,
+                "{machine:?}: the text field holds the address"
+            );
+            b.exec_form = ExecForm::Pie;
+            assert!(write(&program, &b, machine).is_err(), "{machine:?}: PIE");
+        }
+    }
+
+    /// A placed image carries its relro region in the read-execute load,
+    /// not writable: every slot in it holds a link-time address, and a
+    /// static image has no `PT_GNU_RELRO` to re-protect it. A PIE keeps
+    /// the region in the read-write load under `PT_GNU_RELRO`, where the
+    /// loader applies its `R_*_RELATIVE` entries.
+    #[test]
+    fn a_placed_image_maps_its_relro_region_read_only() {
+        let rw_load = |bytes: &[u8]| -> (u64, u64) {
+            let phoff = read_u64(bytes, 32);
+            let phnum = u16::from_le_bytes(bytes[56..58].try_into().unwrap()) as u64;
+            (0..phnum)
+                .map(|i| (phoff + i * PROGRAM_HEADER_SIZE) as usize)
+                .filter(|&ph| read_u32(bytes, ph) == PT_LOAD && read_u32(bytes, ph + 4) & PF_W != 0)
+                .map(|ph| (read_u64(bytes, ph + 16), read_u64(bytes, ph + 40)))
+                .next()
+                .expect("a read-write load")
+        };
+        for (machine, target) in [
+            (Machine::Aarch64, super::super::Target::LinuxAarch64),
+            (Machine::X86_64, super::super::Target::LinuxX64),
+        ] {
+            for form in [ExecForm::Freestanding, ExecForm::Placed, ExecForm::Pie] {
+                let mut b = tiny_build();
+                b.abi = target.abi();
+                b.exec_form = form;
+                if form == ExecForm::Freestanding {
+                    b.imports.imports.clear();
+                    b.imports.dylibs.clear();
+                }
+                // 8 read-only bytes, then a relro slot naming the first.
+                b.data = vec![0; 16];
+                b.data_ro_len = 8;
+                b.data_relro_len = 16;
+                b.data_relocs.push(crate::c5::program::DataReloc {
+                    data_offset: 8,
+                    target_offset: 0,
+                    target_anchor: 0,
+                });
+                let bytes = write(&tiny_program(), &b, machine).unwrap();
+                let (_, flags, addr, _, _) =
+                    find_section(&bytes, ".data.rel.ro").expect(".data.rel.ro");
+                let (_, _, ro_addr, _, _) = find_section(&bytes, ".rodata").expect(".rodata");
+                let slot = section_file_off(&bytes, ".data.rel.ro").unwrap() as usize;
+                let (rw_vaddr, rw_memsz) = rw_load(&bytes);
+                let in_rw = (rw_vaddr..rw_vaddr + rw_memsz).contains(&addr);
+                let what = alloc::format!("{machine:?} {form:?}");
+                if form.placed() {
+                    assert_eq!(flags & SHF_WRITE, 0, "{what}: not writable");
+                    assert!(!in_rw, "{what}: outside the rw load");
+                    assert_eq!(read_u64(&bytes, slot), ro_addr, "{what}: baked");
+                } else {
+                    assert_ne!(flags & SHF_WRITE, 0, "{what}: the loader writes it");
+                    assert!(in_rw, "{what}: in the rw load");
+                    let relro = find_phdr(&bytes, PT_GNU_RELRO).expect("PT_GNU_RELRO");
+                    let (start, len) = (read_u64(&bytes, relro + 16), read_u64(&bytes, relro + 40));
+                    assert!(
+                        (start..start + len).contains(&addr),
+                        "{what}: under PT_GNU_RELRO"
+                    );
+                }
+            }
+        }
     }
 
     /// Compile a `_Thread_local`-using program for Linux/aarch64, confirm a
@@ -4282,8 +4447,9 @@ mod tests {
             let mut build =
                 super::super::lower_for(&program, target, super::super::NativeOptions::default())
                     .expect("lower");
-            for placed in [false, true] {
-                build.freestanding = placed;
+            for form in [ExecForm::Pie, ExecForm::Placed] {
+                let placed = form.placed();
+                build.exec_form = form;
                 let b = write(&tiny_program(), &build, machine).expect("write ELF");
                 let (phoff, phentsize, phnum) = (
                     le64(&b, 0x20) as usize,

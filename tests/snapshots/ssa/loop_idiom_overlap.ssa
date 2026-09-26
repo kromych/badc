@@ -45,7 +45,7 @@ fn ent_pc=4 n_params=3 variadic=false locals=0
     v35  StoreIndexed { base=v1, index=v25, scale=1, value=v34, kind=I8 } -> -
     v36  Extend { value=v25, kind=I32 }                   -> x1
     v37  BinopI { op=add, lhs=v25, rhs_imm=1 }            -> x0
-    v38  Imm(0)                                           -> x1
+    v38  Extend { value=v37, kind=I32, nsw }              -> x1
     terminator Jmp(b5)   (exit_acc=v37)
   block 5  start_pc=0
     v25  Phi { incoming=[b3:v7, b4:v37], kind=I64 }       -> x0
@@ -100,7 +100,7 @@ fn ent_pc=5 n_params=3 variadic=false locals=0
     v35  StoreIndexed { base=v1, index=v25, scale=1, value=v34, kind=I8 } -> -
     v36  Extend { value=v25, kind=I32 }                   -> x1
     v37  BinopI { op=add, lhs=v25, rhs_imm=1 }            -> x0
-    v38  Imm(0)                                           -> x1
+    v38  Extend { value=v37, kind=I32, nsw }              -> x1
     terminator Jmp(b5)   (exit_acc=v37)
   block 5  start_pc=0
     v25  Phi { incoming=[b3:v7, b4:v37], kind=I64 }       -> x0
@@ -176,13 +176,14 @@ fn ent_pc=7 n_params=0 variadic=false locals=0
     v60  ImmData(64)                                      -> x1
     v61  Extend { value=v57, kind=I32 }                   -> x1
     v62  BinopI { op=add, lhs=v57, rhs_imm=2 }            -> x1
-    v63  Extend { value=v62, kind=I32 }                   -> x2
+    v63  Extend { value=v62, kind=I32, nsw }              -> x2
     v64  Binop { op=add, lhs=v41, rhs=v62 }               -> x2
     v65  Binop { op=add, lhs=v41, rhs=v57 }               -> x2
     v66  LoadIndexed { base=v41, index=v57, scale=1, kind=I8 } -> x2
     v67  StoreIndexed { base=v41, index=v62, scale=1, value=v66, kind=I8 } -> -
     v68  Extend { value=v57, kind=I32 }                   -> x1
     v69  BinopI { op=add, lhs=v57, rhs_imm=1 }            -> x0
+    v70  Extend { value=v69, kind=I32, nsw }              -> x1
     terminator Jmp(b6)   (exit_acc=v69)
   block 6  start_pc=0
     v57  Phi { incoming=[b4:v49, b5:v69], kind=I64 }      -> x0

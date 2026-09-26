@@ -16,7 +16,6 @@ Disassembly of section .text:
 <nested_auto>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x10
                	sub	sp, sp, #0x40
                	mov	x16, sp
                	and	sp, x16, #0xffffffffffffffc0
@@ -30,15 +29,13 @@ Disassembly of section .text:
                	eor	x0, x0, #0x7
                	cmp	w0, #0x0
                	cset	x0, eq
-               	sub	sp, x29, #0x10
-               	add	sp, sp, #0x10
+               	sub	sp, x29, #0x0
                	ldp	x29, x30, [sp], #0x10
                	ret
 
 <nested_auto_typed>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x50
                	sub	sp, sp, #0x40
                	mov	x16, sp
                	and	sp, x16, #0xffffffffffffffc0
@@ -53,8 +50,7 @@ Disassembly of section .text:
                	eor	x0, x0, x17
                	cmp	w0, #0x0
                	cset	x0, eq
-               	sub	sp, x29, #0x50
-               	add	sp, sp, #0x50
+               	sub	sp, x29, #0x0
                	ldp	x29, x30, [sp], #0x10
                	ret
 

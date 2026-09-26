@@ -28,17 +28,15 @@ Disassembly of section .text:
 
 <pcpu_base>:
                	movslq	%edi, %rdi
-               	movq	$0x0, %rax
+               	movq	(,%rdi,8), %rax
 		R_X86_64_32S	__per_cpu_offset
-               	movq	(%rax,%rdi,8), %rax
                	retq
 
 <ctype_class>:
-               	movq	$0x0, %rax
+               	movq	%rdi, %rax
+               	andq	$0xff, %rax
+               	movzbq	(,%rax), %rax
 		R_X86_64_32S	_ctype
-               	movq	%rdi, %rcx
-               	andq	$0xff, %rcx
-               	movzbq	(%rax,%rcx), %rax
                	retq
 
 <cmp_fn>:

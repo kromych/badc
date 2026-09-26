@@ -63,13 +63,10 @@ Disassembly of section .text:
                	jmp	<addr>
 
 <search>:
+               	testq	%rdi, %rdi
+               	je	<addr>
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	testq	%rdi, %rdi
-               	jne	<addr>
-               	xorl	%eax, %eax
-               	popq	%rbp
-               	retq
                	movq	(%rdi), %rax
                	cmpq	%rsi, %rax
                	jne	<addr>
@@ -86,6 +83,8 @@ Disassembly of section .text:
                	movq	0x10(%rdi), %rdi
                	callq	<addr>
                	popq	%rbp
+               	retq
+               	xorl	%eax, %eax
                	retq
 
 <main>:

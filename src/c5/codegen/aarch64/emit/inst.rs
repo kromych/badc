@@ -65,10 +65,17 @@ pub(super) fn emit_inst(
     match inst {
         // `Frame::dynamic_sp` carries the alloca fact; no code. A
         // lifetime marker states a fact about storage the frame already
-        // holds, so it emits nothing either.
-        Inst::AllocaInit(_) | Inst::LifetimeEnd(_) => Ok(()),
-        Inst::ParamRef { idx, kind } => {
-            emit_param_ref(code, *idx, *kind, v, dst, param_plan, alloc, frame, scratch)
+        // holds, so it emits nothing either, the return moves the parts
+        // of an `AggParts`, and an inline asm statement places its
+        // `AsmOut`s.
+        Inst::AllocaInit(_)
+        | Inst::LifetimeEnd(_)
+        | Inst::AggParts { .. }
+        | Inst::AsmOut { .. } => Ok(()),
+        Inst::ParamRef { .. } | Inst::ParamPart { .. } | Inst::RetPart { .. } => {
+            let src = super::ssa::reg_alloc::incoming_reg(param_plan, inst)
+                .or_else(|| super::ssa::reg_alloc::ret_part_reg(target, inst));
+            emit_incoming(code, inst, v, dst, src, alloc, frame, scratch)
         }
         Inst::Imm(value) => {
             let Some(rd) = int_or_spill_scratch(dst, scratch) else {
@@ -182,6 +189,7 @@ pub(super) fn emit_inst(
             index_ext,
             scale,
             kind,
+            ..
         } => emit_load_indexed(
             code,
             dst,
@@ -200,6 +208,7 @@ pub(super) fn emit_inst(
             scale,
             value,
             kind,
+            ..
         } => emit_store_indexed(
             code,
             v,
@@ -231,6 +240,7 @@ pub(super) fn emit_inst(
             fixed_args,
             fp_return,
             fp_arg_mask,
+            arg_widths,
             arg_aggs,
             ret_agg,
             ret_slot_local,
@@ -242,6 +252,7 @@ pub(super) fn emit_inst(
             CallOperands {
                 args,
                 fp_arg_mask,
+                arg_widths: *arg_widths,
                 arg_aggs,
                 ret_agg: *ret_agg,
                 ret_slot_off: *ret_slot_local,
@@ -256,6 +267,7 @@ pub(super) fn emit_inst(
             binding_idx,
             args,
             fp_arg_mask,
+            arg_widths,
             arg_aggs,
             ret_agg,
             ret_slot_local,
@@ -268,6 +280,7 @@ pub(super) fn emit_inst(
             CallOperands {
                 args,
                 fp_arg_mask,
+                arg_widths: *arg_widths,
                 arg_aggs,
                 ret_agg: *ret_agg,
                 ret_slot_off: *ret_slot_local,
@@ -282,6 +295,7 @@ pub(super) fn emit_inst(
             fixed_args,
             fp_return,
             fp_arg_mask,
+            arg_widths,
             arg_aggs,
             ret_agg,
             ret_slot_local,
@@ -293,6 +307,7 @@ pub(super) fn emit_inst(
             CallOperands {
                 args,
                 fp_arg_mask,
+                arg_widths: *arg_widths,
                 arg_aggs,
                 ret_agg: *ret_agg,
                 ret_slot_off: *ret_slot_local,
@@ -309,6 +324,7 @@ pub(super) fn emit_inst(
             align,
         } => emit_mcpy(
             code,
+            v,
             dst,
             *d,
             *s,
@@ -338,22 +354,18 @@ pub(super) fn emit_inst(
             addr,
             value,
             width,
-        } => emit_atomic_rmw(code, dst, *op, *addr, *value, *width, alloc, frame, scratch),
+            order,
+        } => emit_atomic_rmw(
+            code, v, dst, *op, *addr, *value, *width, *order, alloc, frame, scratch,
+        ),
         Inst::AtomicCas {
             addr,
-            expected_addr,
+            expected,
             desired,
             width,
+            order,
         } => emit_atomic_cas(
-            code,
-            dst,
-            *addr,
-            *expected_addr,
-            *desired,
-            *width,
-            alloc,
-            frame,
-            scratch,
+            code, v, dst, *addr, *expected, *desired, *width, *order, alloc, frame, scratch,
         ),
         Inst::AtomicLoad { addr, width, order } => {
             emit_atomic_load(code, dst, *addr, *width, *order, alloc, frame, scratch)
@@ -385,7 +397,7 @@ pub(super) fn emit_inst(
             alloc,
             frame,
         ),
-        Inst::Extend { value, kind } => {
+        Inst::Extend { value, kind, .. } => {
             emit_extend(code, dst, v, *value, *kind, alloc, frame, scratch)
         }
         Inst::Bswap { value, width } => {
@@ -456,49 +468,53 @@ pub(super) fn emit_adrp_add(code: &mut Vec<u8>, rd: Reg) {
     emit(code, enc_add_imm(rd, rd, 0));
 }
 
-/// Materialise the i-th argument register into the allocator's `Place`;
-/// the prologue leaves x0..x7 / d0..d7 intact. An integer parameter takes
-/// the conversion [`param_entry_ext`] names. A `float` (C99 6.2.5p10)
-/// occupies the s-view of its d-register.
+/// `Inst::ParamRef` / `Inst::ParamPart` / `Inst::RetPart`: the argument
+/// or result register `src` names into the value's place, an integer one
+/// converted from the low `kind` bytes per C99 6.3.1.3.
 #[allow(clippy::too_many_arguments)]
-fn emit_param_ref(
+fn emit_incoming(
     code: &mut Vec<u8>,
-    idx: u32,
-    kind: LoadKind,
+    inst: &Inst,
     v: super::super::ir::ValueId,
     dst: Place,
-    param_plan: &[super::ArgPlacement],
+    src: Option<(bool, u8)>,
     alloc: &Allocation,
     frame: Frame,
     scratch: &ScratchPool,
 ) -> Emit {
-    let i = idx as usize;
+    let (Inst::ParamRef { kind, .. } | Inst::ParamPart { kind, .. } | Inst::RetPart { kind, .. }) =
+        inst
+    else {
+        return fail("incoming: not a register read");
+    };
+    let name = inst.variant_name();
+    let Some((is_fp, src)) = src else {
+        return fail(alloc::format!("{name}: no incoming register"));
+    };
     if matches!(kind, LoadKind::F32 | LoadKind::F64) {
-        let Some(super::ArgPlacement::FpReg(d)) = param_plan.get(i).copied() else {
-            return fail("ParamRef: FP param not in an FP argument register");
-        };
+        if !is_fp {
+            return fail(alloc::format!("{name}: FP value from an integer register"));
+        }
         match dst {
             Place::FpReg(r) => {
-                if r != d {
-                    emit(code, super::encode::enc_fmov_d_d(r, d));
+                if r != src {
+                    emit(code, super::encode::enc_fmov_d_d(r, src));
                 }
             }
             Place::Spill(slot) => {
                 let sp_off = spill_off(frame, slot);
-                emit_spill_str_d_auto(code, frame, d, sp_off);
+                emit_spill_str_d_auto(code, frame, src, sp_off);
             }
-            _ => {
-                return fail("ParamRef: FP param dst not fp reg / spill");
-            }
+            _ => return fail(alloc::format!("{name}: FP dst not fp reg / spill")),
         }
         return Ok(());
     }
-    let Some(super::ArgPlacement::IntReg(arg_reg)) = param_plan.get(i).copied() else {
-        return fail("ParamRef: int param not in an integer argument register");
-    };
-    let ext = param_entry_ext(kind, v, alloc);
+    if is_fp {
+        return fail(alloc::format!("{name}: integer value from an FP register"));
+    }
+    let ext = param_entry_ext(*kind, v, alloc);
     let sign_extend = |code: &mut Vec<u8>, rd: Reg| {
-        emit_sign_extend(code, rd, Reg(arg_reg), ext.unwrap_or(LoadKind::I64));
+        emit_sign_extend(code, rd, Reg(src), ext.unwrap_or(LoadKind::I64));
     };
     match dst {
         Place::IntReg(r) => sign_extend(code, Reg(r)),
@@ -507,9 +523,7 @@ fn emit_param_ref(
             let sp_off = spill_off(frame, slot);
             emit_spill_str_x(code, frame, scratch.primary, sp_off, scratch.secondary);
         }
-        _ => {
-            return fail("ParamRef: dst not int reg / spill");
-        }
+        _ => return fail(alloc::format!("{name}: dst not int reg / spill")),
     }
     Ok(())
 }

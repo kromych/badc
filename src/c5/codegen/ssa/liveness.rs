@@ -890,11 +890,7 @@ impl Liveness {
             });
             for idx in (blk.inst_range.start..blk.inst_range.end).rev() {
                 let inst = &func.insts[idx as usize];
-                let is_call = matches!(
-                    inst,
-                    Inst::Call { .. } | Inst::CallIndirect { .. } | Inst::CallExt { .. }
-                ) || (tls_addr_is_call && matches!(inst, Inst::TlsAddr(_)))
-                    || super::reg_alloc::is_setjmp_barrier(inst);
+                let is_call = super::reg_alloc::is_call_site(inst, tls_addr_is_call);
                 if super::reg_alloc::produces_value(inst) {
                     live.unset(idx);
                 }
@@ -1270,10 +1266,12 @@ mod tests {
             is_always_inline: false,
             is_noinline: false,
             is_naked: false,
+            is_noreturn: false,
             conv: crate::c5::codegen::CallConv::Target,
             section: None,
             patchable_entry: None,
             no_instrument: false,
+            no_stack_protector: false,
             is_weak: false,
             is_internal: false,
             const_params: 0,
@@ -1282,6 +1280,7 @@ mod tests {
             cmp32: Vec::new(),
             low_word_tests: Vec::new(),
             param_fp_mask: crate::c5::ir::FpMask::EMPTY,
+            param_widths: crate::c5::ir::ArgWidths::default(),
             agg_descs: alloc::vec::Vec::new(),
             param_aggs: alloc::vec::Vec::new(),
             param_local_slots: alloc::vec::Vec::new(),
@@ -1538,6 +1537,8 @@ mod tests {
             binding_idx: 0,
             args: Vec::new(),
             fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
+            low_word_args: 0,
+            arg_widths: crate::c5::ir::ArgWidths::default(),
             fp_return: false,
             arg_aggs: Vec::new(),
             ret_agg: None,
@@ -1666,6 +1667,8 @@ mod tests {
             fixed_args: 0,
             fp_return: false,
             fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
+            low_word_args: 0,
+            arg_widths: crate::c5::ir::ArgWidths::default(),
             arg_aggs: Vec::new(),
             ret_agg: None,
             ret_slot_local: 0,

@@ -208,7 +208,7 @@ pub(crate) fn build_archive(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) {
 /// its relocations after mapping; see [`badc::NativeOptions::pic_link`].
 ///
 /// The default is that it is: this toolchain's own linker is the usual
-/// consumer and every image it writes is `ET_DYN`, so a `const` object
+/// consumer and its default executable is `ET_DYN`, so a `const` object
 /// carrying a relocation cannot ride the read-only prefix and would
 /// otherwise cost its whole `.rodata` that placement. gcc reaches the
 /// same layout wherever it is configured default-PIE.

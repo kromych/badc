@@ -46,7 +46,7 @@ Disassembly of section .text:
                	pushq	%rbx
                	movq	%rdi, %rbx
                	movq	%rsi, %r12
-               	leaq	-0x18(%rbp), %rdi
+               	leaq	-0x10(%rbp), %rdi
                	xorps	%xmm14, %xmm14
                	movups	%xmm14, (%rdi)
                	movb	%bl, (%rdi)
@@ -73,14 +73,14 @@ Disassembly of section .text:
                	popq	%r12
                	leave
                	retq
-               	leaq	-0x8(%rbp), %rax
+               	leaq	-0x18(%rbp), %rax
                	movq	$0x0, (%rax)
                	movb	$0x9, (%rax)
                	movb	$0x8, 0x1(%rax)
                	movb	$0x7, 0x2(%rax)
                	movb	$0x6, 0x3(%rax)
                	movl	%ebx, 0x4(%rax)
-               	leaq	-0x8(%rbp), %rdi
+               	leaq	-0x18(%rbp), %rdi
                	callq	<addr>
                	movzbq	(%rax), %rcx
                	xorq	$0x9, %rcx

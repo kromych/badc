@@ -37,7 +37,8 @@ use alloc::vec::Vec;
 use core::cmp::Reverse;
 
 use super::super::ir::{
-    BinOp, FpCastKind, FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind, Terminator, ValueId,
+    AtomicRmwOp, BinOp, FpCastKind, FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind, Terminator,
+    ValueId,
 };
 use super::{FixedRegs, Target};
 
@@ -150,11 +151,12 @@ pub(crate) struct Allocation {
     pub imm_store: Vec<bool>,
     /// Per value: an `Imm` placed in the FP file ([`fp_constants`]).
     pub fp_const: Vec<bool>,
-    /// Per x86-64 instruction that writes registers besides its result
-    /// ([`x86_implicit_writes`]): those of them that hold a value live
-    /// across it, a shift count left in rcx excepted, which the emitter
-    /// saves around it. Empty elsewhere.
-    pub implicit_live: Vec<u16>,
+    /// Per instruction whose lowering writes registers besides its result,
+    /// the mask of those holding a value live across it: the fixed registers
+    /// of an x86-64 shift or division ([`x86_implicit_writes`]), a count
+    /// left in rcx excepted, which the emitter saves when named; every
+    /// register for a copy, which takes its temporaries among the free ones.
+    pub implicit_live: Vec<u32>,
     /// Per-value coalescing hint: the physical register the
     /// allocator should prefer when one is set and free at the
     /// pick site. The pick-reg path honours the hint only when it
@@ -200,6 +202,26 @@ pub(crate) struct Allocation {
 }
 
 impl Allocation {
+    /// Each value output of the asm statement at `site` with its place;
+    /// `Place::None` for one nothing reads, whose place may be another's.
+    pub(crate) fn asm_output_places(
+        &self,
+        func: &FunctionSsa,
+        site: ValueId,
+    ) -> Vec<(usize, Place)> {
+        func.asm_output_values(site)
+            .into_iter()
+            .map(|(i, v)| {
+                let place = if v == NO_VALUE || self.is_unread(v) {
+                    Place::None
+                } else {
+                    self.places.get(v as usize).copied().unwrap_or(Place::None)
+                };
+                (i, place)
+            })
+            .collect()
+    }
+
     /// True when value `v` holds a single-precision `f32` pattern.
     /// Out-of-range / unmarked values are double-precision.
     pub(crate) fn is_f32(&self, v: ValueId) -> bool {
@@ -238,8 +260,8 @@ impl Allocation {
         self.use_counts.get(v as usize).is_some_and(|&n| n == 0)
     }
 
-    /// Whether register `r`, which the x86-64 lowering of `v` writes, holds
-    /// a value live across `v` (`implicit_live`). Without the record any
+    /// Whether register `r`, which the lowering of `v` may write, holds a
+    /// value live across `v` (`implicit_live`). Without the record any
     /// value placed in `r` counts.
     pub(crate) fn holds_live_across(&self, v: ValueId, r: u8) -> bool {
         match self.implicit_live.get(v as usize) {
@@ -433,12 +455,17 @@ fn operand_files(func: &FunctionSsa, inst: &Inst, f: &mut impl FnMut(ValueId, bo
                 }
             }
         }
+        Inst::AggParts { parts, fp_mask, .. } => {
+            for (k, &p) in parts.iter().enumerate() {
+                f(p, fp_mask.has(k));
+            }
+        }
         _ => for_each_operand(inst, |v| f(v, false)),
     }
 }
 
 /// Take the phi incomes an edge rebuilds from their bits off the use counts.
-fn drop_rebuilt_incomes(func: &FunctionSsa, use_counts: &mut [u32]) {
+pub(crate) fn drop_rebuilt_incomes(func: &FunctionSsa, use_counts: &mut [u32]) {
     for inst in &func.insts {
         let Inst::Phi { incoming, kind } = inst else {
             continue;
@@ -473,7 +500,8 @@ fn is_rdx_rax_op(op: BinOp) -> bool {
 
 /// The registers x86-64's lowering of `inst` writes besides its result, as
 /// a mask: rcx for a shift or rotate by a count no immediate form takes,
-/// rdx:rax for a division, a remainder and a high multiply.
+/// rdx:rax for a division, a remainder, a high multiply and `Udiv128`, rax
+/// for the `CMPXCHG` of a compare-exchange and of a bitwise read-modify-write.
 pub(crate) fn x86_implicit_writes(inst: &Inst) -> u16 {
     match *inst {
         Inst::Binop { op, .. } if is_shift_op(op) => 1 << X86_RCX,
@@ -481,8 +509,147 @@ pub(crate) fn x86_implicit_writes(inst: &Inst) -> u16 {
             1 << X86_RCX
         }
         Inst::Binop { op, .. } if is_rdx_rax_op(op) => (1 << X86_RAX) | (1 << X86_RDX),
+        Inst::Udiv128 { .. } => (1 << X86_RAX) | (1 << X86_RDX),
+        Inst::AtomicCas { .. } => 1 << X86_RAX,
+        Inst::AtomicRmw { op, .. } if cmpxchg_rmw(op) => 1 << X86_RAX,
         _ => 0,
     }
+}
+
+/// Keep an atomic's result off the registers of the operands its lowering
+/// reads after writing the result's register: a compare-exchange puts its
+/// comparand there ahead of reading the address and the desired value,
+/// and on x86-64 a read-modify-write stages its operand there ahead of
+/// reading the address, and a `CMPXCHG` retry rereads the operand.
+fn atomic_apart(
+    func: &FunctionSsa,
+    target: Target,
+    node_of: &[ValueId],
+    apart: &mut Vec<Vec<ValueId>>,
+) {
+    for (v, inst) in func.insts.iter().enumerate() {
+        let (first, second) = match *inst {
+            Inst::AtomicCas { addr, desired, .. } => (addr, desired),
+            Inst::AtomicRmw {
+                op, addr, value, ..
+            } if target.is_x86_64() => (addr, if cmpxchg_rmw(op) { value } else { addr }),
+            _ => continue,
+        };
+        if apart.is_empty() {
+            apart.resize(func.insts.len(), Vec::new());
+        }
+        let a = node_of[v];
+        for o in [first, second] {
+            let b = node_of[o as usize];
+            if a != b && !apart[a as usize].contains(&b) {
+                apart[a as usize].push(b);
+                apart[b as usize].push(a);
+            }
+        }
+    }
+}
+
+/// Each value output of an asm statement, and each input carrying a value
+/// into a register, with its register in `op_reg`.
+pub(crate) fn asm_operand_hints(
+    func: &FunctionSsa,
+    asm: &crate::c5::ir::AsmBlock,
+    args: &[ValueId],
+    site: ValueId,
+    op_reg: &[Option<u8>],
+) -> Vec<(ValueId, u8)> {
+    use crate::c5::ir::AsmConstraint as C;
+    let inputs = asm
+        .operands
+        .iter()
+        .zip(args)
+        .enumerate()
+        .filter(|(_, (op, _))| {
+            !op.is_output
+                && !op.static_arg
+                && matches!(
+                    op.constraint,
+                    C::Reg | C::Fixed(_) | C::Match(_) | C::RegOrImm { .. } | C::Fp
+                )
+        })
+        .map(|(i, (_, &a))| (i, a));
+    func.asm_output_values(site)
+        .into_iter()
+        .chain(inputs)
+        .filter(|&(_, v)| v != NO_VALUE)
+        .filter_map(|(i, v)| op_reg.get(i).copied().flatten().map(|r| (v, r)))
+        .collect()
+}
+
+/// Hint staged asm operands to their registers ([`asm_operand_hints`]).
+fn populate_asm_operand_hints(
+    func: &FunctionSsa,
+    target: Target,
+    fixed: FixedRegs,
+    hints: &mut [Option<u8>],
+) {
+    for (site, inst) in func.insts.iter().enumerate() {
+        let Inst::InlineAsm { asm, args } = inst else {
+            continue;
+        };
+        let site = site as ValueId;
+        let outs = if target.is_aarch64() {
+            super::super::aarch64::emit::asm_staged_hints(func, asm, args, site, fixed)
+        } else {
+            super::super::x86_64::emit::asm_staged_hints(func, asm, args, site, fixed, target)
+        };
+        for (v, r) in outs {
+            hints[v as usize].get_or_insert(r);
+        }
+    }
+}
+
+/// Keep a bound x86-64 inline asm statement's read-write output off its
+/// other inputs' registers, which its input's move would copy aside first.
+fn asm_rw_apart(
+    func: &FunctionSsa,
+    target: Target,
+    fixed: FixedRegs,
+    node_of: &[ValueId],
+    apart: &mut Vec<Vec<ValueId>>,
+) {
+    use crate::c5::ir::AsmConstraint;
+    for (site, inst) in func.insts.iter().enumerate() {
+        let Inst::InlineAsm { asm, args } = inst else {
+            continue;
+        };
+        let Some((k, v)) = func
+            .asm_output_values(site as ValueId)
+            .into_iter()
+            .find(|&(k, v)| asm.operands[k].is_rw && v != NO_VALUE)
+        else {
+            continue;
+        };
+        if !super::super::x86_64::emit::asm_binds_directly(func, asm, args, fixed, target) {
+            continue;
+        }
+        if apart.is_empty() {
+            apart.resize(func.insts.len(), Vec::new());
+        }
+        let (a, tied) = (node_of[v as usize], node_of[args[k] as usize]);
+        for (op, &arg) in asm.operands.iter().zip(args) {
+            if op.is_output || op.static_arg || matches!(op.constraint, AsmConstraint::Imm) {
+                continue;
+            }
+            let b = node_of[arg as usize];
+            if a != b && b != tied && !apart[a as usize].contains(&b) {
+                apart[a as usize].push(b);
+                apart[b as usize].push(a);
+            }
+        }
+    }
+}
+
+/// Whether x86-64 lowers a read-modify-write of `op` whose prior contents
+/// are read as a `CMPXCHG` retry: the bitwise operators, which have no
+/// fetching locked form.
+pub(crate) fn cmpxchg_rmw(op: AtomicRmwOp) -> bool {
+    matches!(op, AtomicRmwOp::And | AtomicRmwOp::Or | AtomicRmwOp::Xor)
 }
 
 /// x86-64 register preferences the colorer honours among free caller-saved
@@ -508,7 +675,26 @@ fn x86_preferences(
         _ => None,
     };
     let mut is_count = vec![false; n];
+    let mut udiv_divisors: Vec<ValueId> = Vec::new();
     for (v, inst) in func.insts.iter().enumerate() {
+        // A `CMPXCHG` leaves the prior contents in rax; `div` reads rdx:rax.
+        match *inst {
+            Inst::AtomicCas { .. } => {
+                hints[v].get_or_insert(X86_RAX);
+            }
+            Inst::Udiv128 { hi, lo, divisor }
+                if [hi, lo, divisor].iter().all(|&o| (o as usize) < n) =>
+            {
+                hints[v].get_or_insert(X86_RAX);
+                hints[lo as usize].get_or_insert(X86_RAX);
+                hints[hi as usize].get_or_insert(X86_RDX);
+                udiv_divisors.push(divisor);
+            }
+            Inst::AtomicRmw { op, .. } if cmpxchg_rmw(op) => {
+                hints[v].get_or_insert(X86_RAX);
+            }
+            _ => {}
+        }
         let Some((op, lhs, rhs)) = binop(inst) else {
             continue;
         };
@@ -535,6 +721,9 @@ fn x86_preferences(
             avoid[u as usize] |= regs;
         }
     };
+    for &d in &udiv_divisors {
+        keep_out(d, rdx_rax);
+    }
     for (v, inst) in func.insts.iter().enumerate() {
         let Some((op, lhs, rhs)) = binop(inst) else {
             continue;
@@ -898,7 +1087,9 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     let fp_const = fp_constants(func, target, &reads);
     populate_return_hints(func, conv_target, &fp_const, &mut hints);
     populate_param_ref_hints(func, conv_target, &mut hints);
+    populate_ret_part_hints(func, target, &mut hints);
     populate_phi_hints(func, &mut hints);
+    populate_asm_operand_hints(func, target, fixed, &mut hints);
     // The allocation banks stay the target's own, not the convention's:
     // a value live across a call has to sit in a register the *callee*
     // preserves, and this function's callees follow the target's
@@ -980,12 +1171,22 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     let node_of: Vec<ValueId> = (0..func.insts.len() as ValueId)
         .map(|v| classes.find(v))
         .collect();
-    let (apart, avoid) = if target.is_x86_64() {
+    let (mut apart, avoid) = if target.is_x86_64() {
         x86_preferences(func, &liveness, &node_of, &mut hints)
     } else {
         (Vec::new(), Vec::new())
     };
-    let param_incoming_forbid = compute_param_incoming_forbid(func, conv_target);
+    atomic_apart(func, target, &node_of, &mut apart);
+    if target.is_x86_64() {
+        asm_rw_apart(func, target, fixed, &node_of, &mut apart);
+    }
+    let value_is_fp: Vec<bool> = func
+        .insts
+        .iter()
+        .enumerate()
+        .map(|(v, inst)| produces_fp_result(inst) || fp_const[v])
+        .collect();
+    let param_incoming_forbid = compute_param_incoming_forbid(func, conv_target, &value_is_fp);
     // Values live across an inline-asm block, and the registers each
     // block's lowering writes. A value kept out of that set survives the
     // block untouched, so the emit needs no save / restore pair for it.
@@ -1033,24 +1234,36 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     );
     places = coloring.places;
     let spill_count = coloring.spill_count;
-    let mut implicit_live: Vec<u16> = Vec::new();
-    if target.is_x86_64() {
-        implicit_live = vec![0; func.insts.len()];
-        let writes = |inst: &Inst| x86_implicit_writes(inst) != 0;
-        for (site, live) in liveness.values_live_after(func, &writes) {
-            let inst = &func.insts[site as usize];
-            // A shift reads its count in cl and leaves it there.
-            let kept = match *inst {
-                Inst::Binop { op, rhs, .. } if is_shift_op(op) => rhs,
-                _ => NO_VALUE,
-            };
-            let regs = x86_implicit_writes(inst);
-            for u in live.into_iter().filter(|&u| u != kept) {
-                if let Place::IntReg(r) = places[u as usize]
-                    && (regs >> r) & 1 != 0
-                {
-                    implicit_live[site as usize] |= 1 << r;
-                }
+    // A copy or an atomic read-modify-write may take any register as a
+    // temporary, so its record covers them all; the x86-64 shift and
+    // division records cover the registers they write.
+    let site_regs = |inst: &Inst| -> u32 {
+        if matches!(
+            inst,
+            Inst::Mcpy { .. } | Inst::AtomicRmw { .. } | Inst::AtomicCas { .. }
+        ) {
+            u32::MAX
+        } else if target.is_x86_64() {
+            u32::from(x86_implicit_writes(inst))
+        } else {
+            0
+        }
+    };
+    let mut implicit_live: Vec<u32> = vec![0; func.insts.len()];
+    let is_site = |inst: &Inst| site_regs(inst) != 0;
+    for (site, live) in liveness.values_live_after(func, &is_site) {
+        let inst = &func.insts[site as usize];
+        // A shift reads its count in cl and leaves it there.
+        let kept = match *inst {
+            Inst::Binop { op, rhs, .. } if is_shift_op(op) && target.is_x86_64() => rhs,
+            _ => NO_VALUE,
+        };
+        let regs = site_regs(inst);
+        for u in live.into_iter().filter(|&u| u != kept) {
+            if let Place::IntReg(r) = places[u as usize]
+                && (regs >> r) & 1 != 0
+            {
+                implicit_live[site as usize] |= 1u32 << r;
             }
         }
     }
@@ -1381,8 +1594,10 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
         }
         let window_ok = ((cond + 1)..block.inst_range.end).all(|p| {
             let inst = &func.insts[p as usize];
-            // A dead pure inst emits no code (`is_dead_pure`).
-            (inst.is_pure() && use_counts[p as usize] == 0) || (sets_flags && flags_survive(inst))
+            // A dead pure inst and a lifetime marker emit no code.
+            inst.is_lifetime_marker()
+                || (inst.is_pure() && use_counts[p as usize] == 0)
+                || (sets_flags && flags_survive(inst))
         });
         if !window_ok {
             continue;
@@ -1399,7 +1614,9 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     // whose defined value is unread. c5 store ops leave the stored value
     // in the accumulator and a copy yields its destination; if nothing
     // downstream reads it, the emit path's mov-to-dst is dead work.
-    // Setting the Place to None makes the propagate skip.
+    // Setting the Place to None makes the propagate skip. An atomic's
+    // unread prior contents take no register either, which lets a bitwise
+    // read-modify-write keep none.
     for (v, inst) in func.insts.iter().enumerate() {
         if use_counts[v] == 0
             && matches!(
@@ -1409,6 +1626,8 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
                     | Inst::StoreIndexed { .. }
                     | Inst::SegStore { .. }
                     | Inst::Mcpy { .. }
+                    | Inst::AtomicRmw { .. }
+                    | Inst::AtomicCas { .. }
             )
         {
             places[v] = Place::None;
@@ -1528,7 +1747,15 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
         }
     }
     #[cfg(feature = "codegen_test")]
-    verify_allocation(func, &places, target, &banks, &liveness, &fp_const);
+    verify_allocation(
+        func,
+        &places,
+        target,
+        &banks,
+        &liveness,
+        &fp_const,
+        &use_counts,
+    );
 
     let asm_preserve = asm_preserve_masks(func, target);
     Allocation {
@@ -1580,14 +1807,33 @@ fn asm_live_values(
     }
     let live = liveness.values_live_after(func, &|inst| matches!(inst, Inst::InlineAsm { .. }));
     live.into_iter()
-        .map(|(site, mut values)| {
-            let (gpr, fpr) = match &func.insts[site as usize] {
-                Inst::InlineAsm { asm, args } => {
-                    late_read_args(asm, args, &mut values);
-                    asm_write_masks(func, asm, args, target, fixed)
-                }
-                _ => (0, 0),
+        .map(|(site, mut live)| {
+            let Inst::InlineAsm { asm, args } = &func.insts[site as usize] else {
+                return AsmSite {
+                    gpr: 0,
+                    fpr: 0,
+                    values: Vec::new(),
+                };
             };
+            late_read_args(asm, args, &mut live);
+            let (gpr, fpr) = asm_write_masks(func, asm, args, target, fixed);
+            let mut values: Vec<(ValueId, u32, u32)> =
+                live.into_iter().map(|v| (v, gpr, fpr)).collect();
+            if target.is_aarch64() {
+                values.extend(
+                    super::super::aarch64::emit::asm_site_bound_values(
+                        func, asm, args, site, fixed,
+                    )
+                    .into_iter()
+                    .map(|v| (v, gpr, fpr)),
+                );
+            } else {
+                values.extend(super::super::x86_64::emit::asm_site_bound_values(
+                    func, asm, args, site, fixed, target,
+                ));
+            }
+            values.sort_unstable();
+            values.dedup();
             AsmSite { gpr, fpr, values }
         })
         .collect()
@@ -1610,12 +1856,13 @@ fn late_read_args(asm: &crate::c5::ir::AsmBlock, args: &[u32], values: &mut Vec<
     values.sort_unstable();
 }
 
-/// One inline-asm site: the registers its lowering writes and the values
-/// live across it.
+/// One inline-asm site: the registers its lowering writes, and each value
+/// kept out of some of them, with its masks: all of them for those live
+/// across it, the target's choice for bound operands.
 struct AsmSite {
     gpr: u32,
     fpr: u32,
-    values: Vec<ValueId>,
+    values: Vec<(ValueId, u32, u32)>,
 }
 
 /// The registers an inline-asm statement's lowering writes on `target`:
@@ -1631,13 +1878,13 @@ fn asm_write_masks(
     if target.is_aarch64() {
         super::super::aarch64::emit::asm_site_write_masks(func, asm, args, fixed)
     } else {
-        super::super::x86_64::emit::asm_site_write_masks(func, asm, args, fixed)
+        super::super::x86_64::emit::asm_site_write_masks(func, asm, args, fixed, target)
     }
 }
 
-/// Union of the register masks of the inline-asm sites a value is live
-/// across, by phi-congruence-class root: the colorer must not place the
-/// class in one, or a block would destroy the value. Indexed by root
+/// Union of the register masks the inline-asm sites give a value
+/// ([`AsmSite`]), by phi-congruence-class root: the colorer must not place
+/// the class in one, or a block would destroy the value. Indexed by root
 /// rather than by value because a class shares one place, and a member
 /// whose own instruction yields no result still reads that place. Empty
 /// when no site writes a register.
@@ -1647,10 +1894,10 @@ fn asm_forbid_masks(func: &FunctionSsa, sites: &[AsmSite], node_of: &[ValueId]) 
     }
     let mut out = alloc::vec![(0u32, 0u32); func.insts.len()];
     for s in sites {
-        for &v in &s.values {
+        for &(v, gpr, fpr) in &s.values {
             let entry = &mut out[node_of[v as usize] as usize];
-            entry.0 |= s.gpr;
-            entry.1 |= s.fpr;
+            entry.0 |= gpr;
+            entry.1 |= fpr;
         }
     }
     out
@@ -1757,6 +2004,7 @@ fn asm_preserve_masks(func: &FunctionSsa, target: Target) -> (u32, u32) {
 ///   apart from the float constant the phi lowering re-materialises.
 /// * Block coverage: no instruction or terminator inside a block reads a
 ///   value covered by no block's `inst_range`.
+/// * Asm outputs: an `AsmOut` follows its statement in its block.
 ///
 /// The placement invariants are checked over the covered values only --
 /// the tape the emit walks. `prune_unreachable` leaves a deleted block's
@@ -1771,6 +2019,7 @@ fn verify_allocation(
     banks: &RegBanks,
     liveness: &super::liveness::Liveness,
     fp_const: &[bool],
+    use_counts: &[u32],
 ) {
     if std::env::var("BADC_VERIFY_ALLOC").is_err() {
         return;
@@ -1914,15 +2163,18 @@ fn verify_allocation(
 
     // Parameter shuffle clobber: the entry placement moves each
     // parameter from its distinct incoming argument register to its home.
-    // When all homes are distinct the emit runs it as a parallel copy
-    // that reads every source before any write, so a home equal to
-    // another parameter's incoming register is harmless. When two
-    // parameters share a home the emit falls back to placing each
-    // ParamRef in program order, and then an earlier parameter whose
-    // home is a later parameter's incoming register overwrites that
-    // register before the later ParamRef reads it. This models that
-    // exact condition (the witness is the four-parameter
-    // `param_incoming_reg_clobber.c` shape).
+    // When the homes of the reads opening the entry block
+    // (`emit_common::entry_read_run`) are distinct the emit runs them as a
+    // parallel copy that reads every source before any write, so a home
+    // equal to another parameter's incoming register is harmless. Every
+    // other read -- all of them when two of those homes coincide -- is
+    // placed at its position, and then any value defined before it -- an
+    // earlier parameter, a constant -- whose register is its incoming
+    // register overwrites it before it is read. This models that exact
+    // condition (the witnesses are the four-parameter
+    // `param_incoming_reg_clobber.c` shape, the constant of
+    // `param_incoming_reg_constant_clobber.c` and the parts of
+    // `struct_multi_byval.c`).
     if !func.is_variadic {
         let mut used = alloc::vec![false; func.insts.len()];
         for (v, inst) in func.insts.iter().enumerate() {
@@ -1953,18 +2205,16 @@ fn verify_allocation(
                 _ => {}
             }
         }
-        let incoming_regs = param_incoming_regs(func, target);
+        let plan = param_incoming_plan(func, target);
         // (value index, home, incoming register) for each used integer
-        // ParamRef placed in a register or spill slot.
+        // `ParamRef` / `ParamPart` placed in a register or spill slot.
         let mut params: Vec<(usize, Place, u8)> = Vec::new();
         for (vid, inst) in func.insts.iter().enumerate() {
-            let Inst::ParamRef { idx, .. } = inst else {
-                continue;
-            };
-            if !used[vid] || !covered(vid) {
+            // An unread read emits nothing.
+            if !used[vid] || !covered(vid) || use_counts.get(vid) == Some(&0) {
                 continue;
             }
-            let Some(Some((false, incoming))) = incoming_regs.get(*idx as usize).copied() else {
+            let Some((false, incoming)) = incoming_reg(&plan, inst) else {
                 continue;
             };
             let home = places.get(vid).copied().unwrap_or(Place::None);
@@ -1972,23 +2222,81 @@ fn verify_allocation(
                 params.push((vid, home, incoming));
             }
         }
-        let homes_distinct = (0..params.len())
-            .all(|a| ((a + 1)..params.len()).all(|b| key(params[a].1) != key(params[b].1)));
-        if !homes_distinct {
-            for a in 0..params.len() {
-                for b in 0..params.len() {
-                    if params[a].0 < params[b].0
-                        && matches!(params[a].1, Place::IntReg(r) if r == params[b].2)
-                    {
-                        report(alloc::format!(
-                            "param-shuffle-clobber: ParamRef v{} home {:?} is the incoming \
-                             register of later ParamRef v{}; per-inst placement clobbers it",
-                            params[a].0,
-                            params[a].1,
-                            params[b].0
-                        ));
-                    }
+        let run = super::emit_common::entry_read_run(func, use_counts);
+        let batch: Vec<Place> = params
+            .iter()
+            .filter(|p| run.contains(&p.0))
+            .map(|p| p.1)
+            .collect();
+        let batched = (0..batch.len())
+            .all(|a| ((a + 1)..batch.len()).all(|b| key(batch[a]) != key(batch[b])));
+        for &(vid, _, incoming) in &params {
+            if batched && run.contains(&vid) {
+                continue;
+            }
+            for v in (0..vid).filter(|&v| covered(v) && produces_value(&func.insts[v])) {
+                let home = places.get(v).copied().unwrap_or(Place::None);
+                if matches!(home, Place::IntReg(r) if r == incoming) {
+                    report(alloc::format!(
+                        "param-shuffle-clobber: v{} home {:?} is the incoming register \
+                         of later ParamRef v{}; per-inst placement clobbers it",
+                        v,
+                        home,
+                        vid
+                    ));
                 }
+            }
+        }
+    }
+
+    // Result-register read: a `RetPart` follows a call in its block, and
+    // nothing between them sits in or implicitly writes its register.
+    let tls_call = tls_addr_is_call(target);
+    for block in &func.blocks {
+        for v in block.inst_range.clone() {
+            let Some((fp, reg)) = ret_part_reg(target, &func.insts[v as usize]) else {
+                continue;
+            };
+            let mut after_call = false;
+            for u in (block.inst_range.start..v).rev() {
+                let inst = &func.insts[u as usize];
+                if is_call_site(inst, tls_call) {
+                    after_call = true;
+                    break;
+                }
+                let held = match places.get(u as usize).copied().unwrap_or(Place::None) {
+                    Place::IntReg(r) => !fp && r == reg,
+                    Place::FpReg(r) => fp && r == reg,
+                    _ => false,
+                };
+                let implicit =
+                    target.is_x86_64() && !fp && x86_implicit_writes(inst) >> reg & 1 != 0;
+                if (held && produces_value(inst)) || implicit {
+                    report(alloc::format!(
+                        "ret-part-clobber: v{u} writes the result register RetPart v{v} reads"
+                    ));
+                }
+            }
+            if !after_call {
+                report(alloc::format!(
+                    "ret-part: v{v} follows no call in its block"
+                ));
+            }
+        }
+    }
+
+    for block in &func.blocks {
+        for v in block.inst_range.clone() {
+            if !matches!(func.insts[v as usize], Inst::AsmOut { .. }) {
+                continue;
+            }
+            let at = (block.inst_range.start..v)
+                .rev()
+                .find(|&u| !matches!(func.insts[u as usize], Inst::AsmOut { .. }));
+            if !at.is_some_and(|u| matches!(func.insts[u as usize], Inst::InlineAsm { .. })) {
+                report(alloc::format!(
+                    "asm-out: v{v} follows no inline asm statement in its block"
+                ));
             }
         }
     }
@@ -2479,27 +2787,52 @@ pub(crate) fn is_setjmp_barrier(inst: &Inst) -> bool {
     )
 }
 
+/// Whether the lowering of `inst` leaves the caller-saved registers
+/// undefined, so a value live across it needs a callee-saved one: a
+/// call, the inline setjmp, and a TLS address where the target's
+/// lowering calls ([`tls_addr_is_call`]).
+pub(crate) fn is_call_site(inst: &Inst, tls_addr_is_call: bool) -> bool {
+    matches!(
+        inst,
+        Inst::Call { .. } | Inst::CallIndirect { .. } | Inst::CallExt { .. }
+    ) || (tls_addr_is_call && matches!(inst, Inst::TlsAddr(_)))
+        || is_setjmp_barrier(inst)
+}
+
 /// Invoke `f` for each operand `ValueId` referenced by `inst`, for the
 /// allocator's use counting.
 ///
-/// The traversal itself is `Inst::for_each_operand`; the one deviation is
+/// The traversal itself is `Inst::for_each_operand`, with two deviations:
 /// the `VaArg` intrinsic's second operand, a compile-time packed type
-/// descriptor (`VaArgDesc`) the per-target emit reads straight
-/// off the constant `Inst::Imm`. It is never a runtime value, so counting
-/// it would force the descriptor into a register instead of letting it
-/// stay dead.
+/// descriptor (`VaArgDesc`) the per-target emit reads straight off the
+/// constant `Inst::Imm`, and the base of an indexed access carrying it as
+/// its displacement (`abs_base`). Neither is a runtime value, so counting
+/// one would force it into a register instead of letting it stay dead.
 pub(crate) fn for_each_operand(inst: &Inst, mut f: impl FnMut(ValueId)) {
-    if let Inst::Intrinsic { kind, args } = inst
-        && *kind == crate::c5::op::Intrinsic::VaArg as i64
-    {
-        for (i, &a) in args.iter().enumerate() {
-            if i != 1 {
-                f(a);
+    match inst {
+        Inst::Intrinsic { kind, args } if *kind == crate::c5::op::Intrinsic::VaArg as i64 => {
+            for (i, &a) in args.iter().enumerate() {
+                if i != 1 {
+                    f(a);
+                }
             }
         }
-        return;
+        Inst::LoadIndexed {
+            index,
+            abs_base: true,
+            ..
+        } => f(*index),
+        Inst::StoreIndexed {
+            index,
+            value,
+            abs_base: true,
+            ..
+        } => {
+            f(*index);
+            f(*value);
+        }
+        _ => inst.for_each_operand(f),
     }
-    inst.for_each_operand(f);
 }
 
 /// Whether an instruction defines an int / FP value or none at all.
@@ -2531,11 +2864,16 @@ pub(crate) fn wide_values(func: &FunctionSsa) -> Vec<bool> {
         .insts
         .iter()
         .map(|inst| match inst {
-            Inst::Load { kind, .. } | Inst::LoadLocal { kind, .. } | Inst::Phi { kind, .. } => {
-                *kind == LoadKind::V128
-            }
+            Inst::Load { kind, .. }
+            | Inst::LoadLocal { kind, .. }
+            | Inst::Phi { kind, .. }
+            | Inst::AsmOut { kind, .. } => *kind == LoadKind::V128,
             Inst::Store { kind, .. } | Inst::StoreLocal { kind, .. } => *kind == StoreKind::V128,
-            Inst::InlineAsm { asm, .. } => asm.operands.iter().any(|o| o.value && o.is_output),
+            Inst::InlineAsm { asm, .. } => asm
+                .operands
+                .iter()
+                .find(|o| o.value && o.is_output)
+                .is_some_and(|o| o.width == 16),
             _ => false,
         })
         .collect();
@@ -2564,12 +2902,16 @@ fn result_kind(inst: &Inst) -> ResultKind {
         // A parameter seeded with an FP load kind arrives in an FP
         // argument register; classify it accordingly so the seed and
         // its consumers share the FP register file.
-        ParamRef { kind, .. } => match kind {
+        ParamRef { kind, .. }
+        | ParamPart { kind, .. }
+        | RetPart { kind, .. }
+        | AsmOut { kind, .. } => match kind {
             LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128 => {
                 ResultKind::Fp
             }
             _ => ResultKind::Int,
         },
+        AggParts { .. } => ResultKind::None,
         Phi { kind, .. } => match kind {
             LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128 => {
                 ResultKind::Fp
@@ -2620,7 +2962,7 @@ fn result_kind(inst: &Inst) -> ResultKind {
         Neg(_) => ResultKind::Int,
         Fneg(_) => ResultKind::Fp,
         Fma { .. } => ResultKind::Fp,
-        MulAdd { .. } => ResultKind::Int,
+        MulAdd { .. } | Udiv128 { .. } => ResultKind::Int,
         Extend { .. } => ResultKind::Int,
         Bswap { .. } | BitCount { .. } => ResultKind::Int,
         FpCast { kind, .. } => match kind {
@@ -2668,13 +3010,11 @@ fn result_kind(inst: &Inst) -> ResultKind {
         }
         AllocaInit(_) | LifetimeEnd(_) => ResultKind::None,
         // A value output is the one register value an asm statement defines.
-        InlineAsm { asm, .. } => {
-            if asm.operands.iter().any(|o| o.value && o.is_output) {
-                ResultKind::Fp
-            } else {
-                ResultKind::None
-            }
-        }
+        InlineAsm { asm, .. } => match asm.operands.iter().find(|o| o.value && o.is_output) {
+            Some(o) if matches!(o.constraint, crate::c5::ir::AsmConstraint::Fp) => ResultKind::Fp,
+            Some(_) => ResultKind::Int,
+            None => ResultKind::None,
+        },
     }
 }
 
@@ -2702,23 +3042,39 @@ fn populate_call_arg_hints(
     hints: &mut [Option<u8>],
 ) {
     use crate::c5::codegen::{ArgPlacement, CallConv};
-    let incoming = param_incoming_regs(func, target);
+    let incoming: Vec<Option<(bool, u8)>> = param_incoming_plan(func, target)
+        .iter()
+        .map(|p| match *p {
+            ArgPlacement::IntReg(r) => Some((false, r)),
+            ArgPlacement::FpReg(r) => Some((true, r)),
+            _ => None,
+        })
+        .collect();
     for (pc, inst) in func.insts.iter().enumerate() {
         // An import's variadic count is unknown here; its arguments plan as fixed.
-        let (args, fixed, fp_arg_mask, arg_aggs, conv) = match inst {
+        let (args, fixed, fp_arg_mask, arg_aggs, widths, conv) = match inst {
             Inst::Call {
                 args,
                 fixed_args,
                 fp_arg_mask,
                 arg_aggs,
+                arg_widths,
                 ..
-            } => (args, *fixed_args, fp_arg_mask, arg_aggs, CallConv::Target),
+            } => (
+                args,
+                *fixed_args,
+                fp_arg_mask,
+                arg_aggs,
+                *arg_widths,
+                CallConv::Target,
+            ),
             Inst::CallIndirect {
                 args,
                 callee_variadic,
                 fixed_args,
                 fp_arg_mask,
                 arg_aggs,
+                arg_widths,
                 callee_conv,
                 ..
             } => {
@@ -2727,14 +3083,29 @@ fn populate_call_arg_hints(
                 } else {
                     args.len()
                 };
-                (args, fixed, fp_arg_mask, arg_aggs, *callee_conv)
+                (
+                    args,
+                    fixed,
+                    fp_arg_mask,
+                    arg_aggs,
+                    *arg_widths,
+                    *callee_conv,
+                )
             }
             Inst::CallExt {
                 args,
                 fp_arg_mask,
                 arg_aggs,
+                arg_widths,
                 ..
-            } => (args, args.len(), fp_arg_mask, arg_aggs, CallConv::Target),
+            } => (
+                args,
+                args.len(),
+                fp_arg_mask,
+                arg_aggs,
+                *arg_widths,
+                CallConv::Target,
+            ),
             _ => continue,
         };
         let abi = target.abi_for(conv);
@@ -2746,6 +3117,7 @@ fn populate_call_arg_hints(
             abi,
             &aggs,
             false,
+            widths,
         );
         // An aggregate address: its first integer slot's register, else a free one.
         let taken = plan
@@ -2856,19 +3228,16 @@ fn populate_return_hints(
     // Hint the value feeding `Terminator::Return` to the ABI return
     // register so the exit move drops out. Two cases are honoured:
     //
-    //   * Leaf functions (no `Inst::Call*` anywhere). Empirically
-    //     safe -- no call can clobber the caller-saved return register.
+    //   * Leaf functions (no call site, `is_call_site`, anywhere).
+    //     Empirically safe -- no call can clobber the caller-saved
+    //     return register.
     //   * Single-block functions where the Return value's def has
     //     no call between it and the terminator. Straight-line
     //     control flow means there is no back-edge / phi-merge gap
     //     that the broader per-value relaxation otherwise surfaces
     //     as a regression, absent in straight-line shapes.
-    let has_call = func.insts.iter().any(|inst| {
-        matches!(
-            inst,
-            Inst::Call { .. } | Inst::CallIndirect { .. } | Inst::CallExt { .. }
-        )
-    });
+    let call = |inst: &Inst| is_call_site(inst, tls_addr_is_call(target));
+    let has_call = func.insts.iter().any(call);
     let single_block = func.blocks.len() == 1;
     if has_call && !single_block {
         return;
@@ -2889,38 +3258,42 @@ fn populate_return_hints(
     }
 
     for block in &func.blocks {
-        if let Terminator::Return(v) = block.terminator
-            && v != NO_VALUE
-            && (v as usize) < func.insts.len()
-        {
-            if has_call {
-                // Single-block branch: require v's def to live in
-                // this block AND no call after the def. Without
-                // these guards the hint clobbers v across the call.
-                let (start, end) = (block.inst_range.start, block.inst_range.end);
-                if v < start || v >= end {
-                    continue;
-                }
-                let intervening_call = (v + 1..end).any(|pc| {
-                    matches!(
-                        func.insts[pc as usize],
-                        Inst::Call { .. } | Inst::CallIndirect { .. } | Inst::CallExt { .. }
-                    )
-                });
-                if intervening_call {
-                    continue;
+        let Terminator::Return(v) = block.terminator else {
+            continue;
+        };
+        if v == NO_VALUE || (v as usize) >= func.insts.len() {
+            continue;
+        }
+        // Single-block branch: require the value's def to live in this
+        // block AND no call after the def. Without these guards the hint
+        // clobbers the value across the call.
+        let (start, end) = (block.inst_range.start, block.inst_range.end);
+        let hintable = |v: ValueId| {
+            !has_call
+                || (v >= start && v < end && !(v + 1..end).any(|pc| call(&func.insts[pc as usize])))
+        };
+        // A return in registers takes each part in its class's register.
+        if let Inst::AggParts { parts, fp_mask, .. } = &func.insts[v as usize] {
+            let regs = agg_part_regs(fp_mask, parts.len(), agg_return_regs(target));
+            for (&p, &(_, r)) in parts.iter().zip(&regs) {
+                if hintable(p) {
+                    try_set(hints, p, r);
                 }
             }
-            let kind = if fp_const[v as usize] {
-                ResultKind::Fp
-            } else {
-                result_kind(&func.insts[v as usize])
-            };
-            match kind {
-                ResultKind::Int => try_set(hints, v, ret_int),
-                ResultKind::Fp => try_set(hints, v, ret_fp),
-                ResultKind::None => {}
-            }
+            continue;
+        }
+        if !hintable(v) {
+            continue;
+        }
+        let kind = if fp_const[v as usize] {
+            ResultKind::Fp
+        } else {
+            result_kind(&func.insts[v as usize])
+        };
+        match kind {
+            ResultKind::Int => try_set(hints, v, ret_int),
+            ResultKind::Fp => try_set(hints, v, ret_fp),
+            ResultKind::None => {}
         }
     }
 }
@@ -2949,40 +3322,103 @@ fn fp_arg_count(inst: &Inst) -> usize {
     }
 }
 
-/// Each parameter's incoming `(is_fp, reg)` from the placement the prologue
-/// and every call site share; `None` on the stack or for an aggregate.
-fn param_incoming_regs(func: &FunctionSsa, target: Target) -> Vec<Option<(bool, u8)>> {
+/// The parameter placements the prologue and every call site share.
+fn param_incoming_plan(
+    func: &FunctionSsa,
+    target: Target,
+) -> Vec<crate::c5::codegen::ArgPlacement> {
     let abi = target.abi_row(func.conv).abi();
     super::emit_common::param_placements_common(func, abi)
-        .iter()
-        .map(|p| match *p {
-            crate::c5::codegen::ArgPlacement::IntReg(r) => Some((false, r)),
-            crate::c5::codegen::ArgPlacement::FpReg(r) => Some((true, r)),
+}
+
+/// The argument register `inst` reads at entry, as `(is_fp, reg)`: a
+/// `ParamRef`'s parameter register or a `ParamPart`'s part register.
+/// `None` for anything else, a stack-passed parameter included.
+pub(crate) fn incoming_reg(
+    plan: &[crate::c5::codegen::ArgPlacement],
+    inst: &Inst,
+) -> Option<(bool, u8)> {
+    use crate::c5::codegen::ArgPlacement as P;
+    match inst {
+        Inst::ParamRef { idx, .. } => match plan.get(*idx as usize)? {
+            P::IntReg(r) => Some((false, *r)),
+            P::FpReg(r) => Some((true, *r)),
             _ => None,
+        },
+        Inst::ParamPart { idx, part, .. } => match plan.get(*idx as usize)? {
+            P::StructRegs { regs, n, .. } if *part < *n => {
+                let c = regs[*part as usize];
+                Some((c.is_fp, c.reg))
+            }
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+/// The result register an `Inst::RetPart` reads, as `(is_fp, reg)`.
+pub(crate) fn ret_part_reg(target: Target, inst: &Inst) -> Option<(bool, u8)> {
+    let Inst::RetPart { slot, kind } = inst else {
+        return None;
+    };
+    let (ints, fps) = agg_return_regs(target);
+    let fp = matches!(kind, LoadKind::F32 | LoadKind::F64);
+    let bank = if fp { fps } else { ints };
+    bank.get(*slot as usize).map(|&r| (fp, r))
+}
+
+/// The registers a return in registers delivers its parts in: the integer
+/// ones and the floating-point ones, each in part order.
+pub(crate) fn agg_return_regs(target: Target) -> (&'static [u8], &'static [u8]) {
+    if target.is_x86_64() {
+        (&[X86_RAX, X86_RDX], &[0, 1])
+    } else {
+        (&[0, 1], &[0, 1, 2, 3])
+    }
+}
+
+/// Per part of an `AggParts` of `n` parts, `(is_fp, reg)` over the
+/// integer and floating-point return registers ([`agg_return_regs`]).
+pub(crate) fn agg_part_regs(
+    fp_mask: &super::super::ir::FpMask,
+    n: usize,
+    (ints, fps): (&[u8], &[u8]),
+) -> Vec<(bool, u8)> {
+    let (mut int_i, mut fp_i) = (0usize, 0usize);
+    (0..n)
+        .map(|k| {
+            if fp_mask.has(k) {
+                fp_i += 1;
+                (true, fps[(fp_i - 1).min(fps.len() - 1)])
+            } else {
+                int_i += 1;
+                (false, ints[(int_i - 1).min(ints.len() - 1)])
+            }
         })
         .collect()
 }
 
 /// Per-value mask of physical registers the colorer must not assign,
-/// to keep each `Inst::ParamRef` off the incoming argument register of a
-/// later same-bank `ParamRef`. A `ParamRef` reads its incoming argument
-/// register, which stays live from function entry until that `ParamRef`
-/// materializes. `ParamRef`s materialize in value-id order; an earlier
-/// one placed in a later one's incoming register overwrites that
-/// register before the later `ParamRef` reads it. The own-incoming-
-/// register hint ([`populate_param_ref_hints`]) avoids this at full
-/// register pressure, but is rejected once the incoming register falls
-/// beyond a truncated bank, so the colorer parks the early `ParamRef` on
-/// a low register that is another parameter's incoming register. Forbid
-/// that placement: the colorer then picks a free register or spills, and
-/// a spilled `ParamRef` stores its incoming register straight to the
-/// slot, which never clobbers.
-fn compute_param_incoming_forbid(func: &FunctionSsa, target: Target) -> Vec<u64> {
+/// to keep every value defined before a `Inst::ParamRef` off that
+/// parameter's incoming argument register. A `ParamRef` reads its
+/// incoming register, which stays live from function entry until the
+/// `ParamRef` materializes, in value-id order; any earlier definition
+/// placed in that register -- an earlier `ParamRef`, a constant, a load
+/// -- overwrites it before the `ParamRef` reads it. The own-incoming-
+/// register hint ([`populate_param_ref_hints`]) keeps a `ParamRef` in
+/// place at full register pressure, but is rejected once the incoming
+/// register falls beyond a truncated bank, and a constant defined between
+/// two `ParamRef`s has no such hint at all. Forbid the placement: the
+/// colorer then picks a free register or spills, and a spilled `ParamRef`
+/// stores its incoming register straight to the slot, which never
+/// clobbers. `value_is_fp[v]` names each value's bank; the mask is set
+/// only for values in the incoming register's bank.
+fn compute_param_incoming_forbid(
+    func: &FunctionSsa,
+    target: Target,
+    value_is_fp: &[bool],
+) -> Vec<u64> {
     let mut forbid = alloc::vec![0u64; func.insts.len()];
-    if func.is_variadic {
-        return forbid;
-    }
-    let incoming = param_incoming_regs(func, target);
     // Only protect parameters that are read: an unused `ParamRef` is not
     // materialized, so its incoming register need not survive.
     let mut used = alloc::vec![false; func.insts.len()];
@@ -3009,25 +3445,47 @@ fn compute_param_incoming_forbid(func: &FunctionSsa, target: Target) -> Vec<u64>
             _ => {}
         }
     }
-    // (value id, is_fp, incoming register) for each used ParamRef, in
-    // value-id (materialization) order.
+    // A `RetPart` reads its call's result register, which stays live from
+    // the call to the part: a value defined between them stays off it.
+    let tls_call = tls_addr_is_call(target);
+    for block in &func.blocks {
+        for v in block.inst_range.clone() {
+            let Some((fp, reg)) = ret_part_reg(target, &func.insts[v as usize]) else {
+                continue;
+            };
+            if !used[v as usize] {
+                continue;
+            }
+            for u in (block.inst_range.start..v).rev() {
+                let inst = &func.insts[u as usize];
+                if is_call_site(inst, tls_call) {
+                    break;
+                }
+                if produces_value(inst) && value_is_fp[u as usize] == fp {
+                    forbid[u as usize] |= 1u64 << reg;
+                }
+            }
+        }
+    }
+    if func.is_variadic {
+        return forbid;
+    }
+    let plan = param_incoming_plan(func, target);
+    // (value id, is_fp, incoming register) for each used `ParamRef` /
+    // `ParamPart`, in value-id (materialization) order.
     let mut params: Vec<(usize, bool, u8)> = Vec::new();
     for (vid, inst) in func.insts.iter().enumerate() {
-        let Inst::ParamRef { idx, .. } = inst else {
-            continue;
-        };
         if !used[vid] {
             continue;
         }
-        if let Some(&Some((is_fp, r))) = incoming.get(*idx as usize) {
+        if let Some((is_fp, r)) = incoming_reg(&plan, inst) {
             params.push((vid, is_fp, r));
         }
     }
-    for a in 0..params.len() {
-        let (vid_a, fp_a, _) = params[a];
-        for &(_, fp_b, reg_b) in &params[a + 1..] {
-            if fp_a == fp_b {
-                forbid[vid_a] |= 1u64 << reg_b;
+    for &(vid, fp, reg) in &params {
+        for v in 0..vid {
+            if produces_value(&func.insts[v]) && value_is_fp[v] == fp {
+                forbid[v] |= 1u64 << reg;
             }
         }
     }
@@ -3063,10 +3521,22 @@ fn populate_param_ref_hints(func: &FunctionSsa, target: Target, hints: &mut [Opt
     // registers are caller-saved and free at entry, so the hint is
     // honoured whenever the parameter is not forced elsewhere (live
     // across a call, or competing for the same register).
-    let incoming = param_incoming_regs(func, target);
+    let plan = param_incoming_plan(func, target);
     for (idx, inst) in func.insts.iter().enumerate() {
-        if let Inst::ParamRef { idx: i, .. } = inst
-            && let Some(&Some((_, r))) = incoming.get(*i as usize)
+        if let Some((_, r)) = incoming_reg(&plan, inst)
+            && idx < hints.len()
+            && hints[idx].is_none()
+        {
+            hints[idx] = Some(r);
+        }
+    }
+}
+
+/// Hint each `Inst::RetPart` to the result register it reads, so the part
+/// stays where the call left it.
+fn populate_ret_part_hints(func: &FunctionSsa, target: Target, hints: &mut [Option<u8>]) {
+    for (idx, inst) in func.insts.iter().enumerate() {
+        if let Some((_, r)) = ret_part_reg(target, inst)
             && idx < hints.len()
             && hints[idx].is_none()
         {
@@ -3853,6 +4323,48 @@ int main(void) { return 0; }
         assert_eq!(spilled, 1);
     }
 
+    /// Over each target's own banks, mutually interfering values spill
+    /// only once their bank is full: as many call-crossing values as the
+    /// callee-saved bank holds take every register of it and one more
+    /// spills one; values crossing no call take the caller-saved bank and
+    /// then the callee-saved one, and spill only past both.
+    #[test]
+    fn a_value_spills_only_once_its_bank_is_full() {
+        for target in [Target::LinuxAarch64, Target::LinuxX64] {
+            let banks = RegBanks::for_target(target);
+            let color = |n: usize, must_callee: bool| {
+                let edges: Vec<(u32, u32)> = (0..n as u32)
+                    .flat_map(|a| (a + 1..n as u32).map(move |b| (a, b)))
+                    .collect();
+                let node_of: Vec<ValueId> = (0..n as ValueId).collect();
+                let cons: Vec<Option<NodeConstraints>> =
+                    (0..n).map(|_| int_node(must_callee, None)).collect();
+                color_graph(
+                    &Interference::from_edges(n, &edges),
+                    &node_of,
+                    &cons,
+                    &banks,
+                    usize::MAX,
+                    usize::MAX,
+                    false,
+                    &[],
+                    &[],
+                )
+            };
+            let callee = banks.callee_gprs.len();
+            let full = color(callee, true);
+            let mut taken: Vec<u8> = full.places.iter().filter_map(|p| p.int_reg_u8()).collect();
+            taken.sort_unstable();
+            let mut bank = banks.callee_gprs.clone();
+            bank.sort_unstable();
+            assert_eq!((full.spill_count, taken), (0, bank), "{target:?}");
+            assert_eq!(color(callee + 1, true).spill_count, 1, "{target:?}");
+            let all = callee + banks.caller_gprs.len();
+            assert_eq!(color(all, false).spill_count, 0, "{target:?}");
+            assert_eq!(color(all + 1, false).spill_count, 1, "{target:?}");
+        }
+    }
+
     #[test]
     fn returns_twice_caller_never_shares_spill_slots() {
         // Nodes 0-3 fill the four registers; 4 and 5 both spill and do
@@ -4415,6 +4927,8 @@ int main(void) { return 0; }
                         | Inst::StoreIndexed { .. }
                         | Inst::SegStore { .. }
                         | Inst::Mcpy { .. }
+                        | Inst::AtomicRmw { .. }
+                        | Inst::AtomicCas { .. }
                 ) && alloc.use_counts.get(i).copied().unwrap_or(0) == 0;
                 match kind {
                     ResultKind::None => assert_eq!(*p, Place::None),
@@ -4758,10 +5272,12 @@ int main(void) { return 0; }
             is_always_inline: false,
             is_noinline: false,
             is_naked: false,
+            is_noreturn: false,
             conv: crate::c5::codegen::CallConv::Target,
             section: None,
             patchable_entry: None,
             no_instrument: false,
+            no_stack_protector: false,
             is_weak: false,
             is_internal: false,
             const_params: 0,
@@ -4770,6 +5286,7 @@ int main(void) { return 0; }
             cmp32: Vec::new(),
             low_word_tests: Vec::new(),
             param_fp_mask: crate::c5::ir::FpMask::EMPTY,
+            param_widths: crate::c5::ir::ArgWidths::default(),
             agg_descs: alloc::vec::Vec::new(),
             param_aggs: alloc::vec::Vec::new(),
             param_local_slots: alloc::vec::Vec::new(),
@@ -4996,10 +5513,12 @@ int main(void) { return 0; }
             is_always_inline: false,
             is_noinline: false,
             is_naked: false,
+            is_noreturn: false,
             conv: crate::c5::codegen::CallConv::Target,
             section: None,
             patchable_entry: None,
             no_instrument: false,
+            no_stack_protector: false,
             is_weak: false,
             is_internal: false,
             const_params: 0,
@@ -5008,6 +5527,7 @@ int main(void) { return 0; }
             cmp32: Vec::new(),
             low_word_tests: Vec::new(),
             param_fp_mask: crate::c5::ir::FpMask::EMPTY,
+            param_widths: crate::c5::ir::ArgWidths::default(),
             agg_descs: Vec::new(),
             param_aggs: Vec::new(),
             param_local_slots: Vec::new(),
@@ -5089,6 +5609,8 @@ int main(void) { return 0; }
             fixed_args: 1,
             fp_return: false,
             fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
+            low_word_args: 0,
+            arg_widths: crate::c5::ir::ArgWidths::default(),
             callee_conv: crate::c5::codegen::CallConv::Target,
             arg_aggs: Vec::new(),
             ret_agg: None,
@@ -5104,6 +5626,7 @@ int main(void) { return 0; }
             value,
             kind: StoreKind::I64,
             volatile: false,
+            nsw: false,
         }
     }
 
@@ -5213,6 +5736,7 @@ int main(void) { return 0; }
                         value: 13,
                         kind: StoreKind::I32,
                         volatile: true,
+                        nsw: false,
                     },
                     store_kind(0, 13, StoreKind::I64),
                 ],
@@ -5409,7 +5933,8 @@ int main(void) { return 0; }
         }
         assert_ne!(x64.places[4], x64.places[3]);
         assert!(!x64.holds_live_across(3, X86_RCX));
-        assert!(full(Target::LinuxAarch64).implicit_live.is_empty());
+        let a64 = full(Target::LinuxAarch64);
+        assert!(a64.implicit_live.iter().all(|&m| m == 0));
     }
 
     /// With two caller-saved registers a value live across the shift ends
@@ -5487,6 +6012,8 @@ int main(void) { return 0; }
                     fixed_args: 0,
                     fp_return: false,
                     fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
+                    low_word_args: 0,
+                    arg_widths: crate::c5::ir::ArgWidths::default(),
                     arg_aggs: Vec::new(),
                     ret_agg: None,
                     ret_slot_local: 0,
@@ -5538,7 +6065,7 @@ int main(void) { return 0; }
             }
             assert!(!x64.holds_live_across(3, X86_RAX) && !x64.holds_live_across(3, X86_RDX));
             let a64 = allocate(&rdx_rax_func(op), Target::LinuxAarch64);
-            assert!(a64.implicit_live.is_empty());
+            assert!(a64.implicit_live.iter().all(|&m| m == 0));
         }
     }
 
@@ -5574,6 +6101,211 @@ int main(void) { return 0; }
         assert!(held(X86_RAX) || held(X86_RDX), "{:?}", x64.places);
         for r in [X86_RAX, X86_RDX] {
             assert_eq!(x64.holds_live_across(4, r), held(r), "{:?}", x64.places);
+        }
+    }
+
+    /// A copy's record names the registers of the values live after it on
+    /// either target -- the destination read again, two values read past
+    /// the copy -- and not the source's, which the copy may take as a
+    /// temporary.
+    #[test]
+    fn registers_held_across_a_copy_are_recorded() {
+        let add = |lhs, rhs| Inst::Binop {
+            op: BinOp::Add,
+            lhs,
+            rhs,
+        };
+        let func = store_func(
+            vec![
+                local_i64(2),
+                local_i64(3),
+                local_i64(4),
+                local_i64(5),
+                Inst::Mcpy {
+                    dst: 0,
+                    src: 1,
+                    size: 16,
+                    align: 8,
+                },
+                add(2, 3),
+                add(5, 0),
+            ],
+            6,
+        );
+        for target in [Target::LinuxX64, Target::LinuxAarch64] {
+            let a = with_pool_size_override(usize::MAX, usize::MAX, || allocate(&func, target));
+            let reg_of = |v: usize| match a.places[v] {
+                Place::IntReg(r) => r,
+                p => panic!("{target:?}: v{v} {p:?}"),
+            };
+            for v in [0, 2, 3] {
+                assert!(a.holds_live_across(4, reg_of(v)), "{target:?}: v{v}");
+            }
+            assert!(!a.holds_live_across(4, reg_of(1)), "{target:?}: the source");
+            assert_eq!(
+                a.implicit_live[4].count_ones(),
+                3,
+                "{target:?}: {:?}",
+                a.places
+            );
+        }
+    }
+
+    /// A `RetPart` names the `slot`-th result register of its bank, and a
+    /// value defined between the call and the part stays off that
+    /// register while one defined ahead of the call does not.
+    #[test]
+    fn a_result_register_stays_free_until_its_part() {
+        for (target, ints, fps) in [
+            (Target::LinuxAarch64, [0u8, 1], [0u8, 1]),
+            (Target::LinuxX64, [X86_RAX, X86_RDX], [0, 1]),
+        ] {
+            let part = |slot, kind| Inst::RetPart { slot, kind };
+            assert_eq!(
+                ret_part_reg(target, &part(1, LoadKind::I64)),
+                Some((false, ints[1]))
+            );
+            assert_eq!(
+                ret_part_reg(target, &part(1, LoadKind::F64)),
+                Some((true, fps[1]))
+            );
+            let call = Inst::Call {
+                target_pc: 0,
+                args: Vec::new(),
+                fixed_args: 0,
+                fp_return: false,
+                fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
+                low_word_args: 0,
+                arg_widths: crate::c5::ir::ArgWidths::default(),
+                arg_aggs: Vec::new(),
+                ret_agg: None,
+                ret_slot_local: 0,
+            };
+            let func = store_func(
+                vec![
+                    local_i64(2),
+                    call,
+                    Inst::Imm(9),
+                    part(0, LoadKind::I64),
+                    part(1, LoadKind::I64),
+                    Inst::Binop {
+                        op: BinOp::Add,
+                        lhs: 3,
+                        rhs: 4,
+                    },
+                    Inst::Binop {
+                        op: BinOp::Add,
+                        lhs: 5,
+                        rhs: 2,
+                    },
+                    Inst::Binop {
+                        op: BinOp::Add,
+                        lhs: 6,
+                        rhs: 0,
+                    },
+                ],
+                7,
+            );
+            let is_fp = vec![false; func.insts.len()];
+            let forbid = compute_param_incoming_forbid(&func, target, &is_fp);
+            let both = (1u64 << ints[0]) | (1u64 << ints[1]);
+            assert_eq!(forbid[2] & both, both, "{target:?}: the constant between");
+            assert_eq!(
+                forbid[3] & (1u64 << ints[1]),
+                1u64 << ints[1],
+                "{target:?}: part 0"
+            );
+            assert_eq!(forbid[0] & both, 0, "{target:?}: a value ahead of the call");
+            let a = with_pool_size_override(usize::MAX, usize::MAX, || allocate(&func, target));
+            assert_eq!(
+                a.places[3],
+                Place::IntReg(ints[0]),
+                "{target:?}: {:?}",
+                a.places
+            );
+            assert_eq!(
+                a.places[4],
+                Place::IntReg(ints[1]),
+                "{target:?}: {:?}",
+                a.places
+            );
+        }
+    }
+
+    /// The parts of a return in registers are hinted to their class's
+    /// registers on both targets, and a `ParamPart` to its incoming
+    /// register, so a function passing a pair straight through moves
+    /// nothing.
+    #[test]
+    fn register_parts_take_their_abi_registers() {
+        use crate::c5::ir::FpMask;
+        let mut fp_mask = FpMask::EMPTY;
+        fp_mask.set(1);
+        assert_eq!(
+            agg_part_regs(&fp_mask, 2, agg_return_regs(Target::LinuxX64)),
+            alloc::vec![(false, X86_RAX), (true, 0)]
+        );
+        assert_eq!(
+            agg_part_regs(&FpMask::EMPTY, 2, agg_return_regs(Target::LinuxAarch64)),
+            alloc::vec![(false, 0), (false, 1)]
+        );
+        let src = "struct P { long a, b; }; struct P id(struct P v) { return v; }\n\
+            struct P swap(struct P v) { struct P r; r.a = v.b; r.b = v.a; return r; }";
+        for target in [Target::LinuxAarch64, Target::LinuxX64] {
+            let program = crate::Compiler::with_target(
+                alloc::format!("{src} int main(void){{ return 0; }}"),
+                target,
+            )
+            .compile()
+            .expect("compile");
+            let mut funcs =
+                crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, true, true)
+                    .expect("ssa");
+            super::super::super::passes::agg_parts::run(
+                &mut funcs,
+                target,
+                &alloc::collections::BTreeMap::new(),
+            );
+            let ints = agg_return_regs(target).0;
+            let args = target.abi().int_arg_regs;
+            for (name, straight) in [("id", true), ("swap", false)] {
+                let f = funcs.iter().find(|f| f.name == name).expect(name);
+                let a = with_pool_size_override(usize::MAX, usize::MAX, || allocate(f, target));
+                let parts: Vec<ValueId> = f
+                    .insts
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, i)| matches!(i, Inst::ParamPart { .. }))
+                    .map(|(v, _)| v as ValueId)
+                    .collect();
+                assert_eq!(parts.len(), 2, "{target:?} {name}");
+                for (k, &p) in parts.iter().enumerate() {
+                    let plan = param_incoming_plan(f, target);
+                    let reg = incoming_reg(&plan, &f.insts[p as usize]).map(|r| r.1);
+                    assert_eq!(reg, Some(args[k]), "{target:?} {name}: part {k}");
+                    assert_eq!(a.hints[p as usize], reg, "{target:?} {name}: part {k} hint");
+                    if straight {
+                        assert_eq!(
+                            a.places[p as usize],
+                            Place::IntReg(args[k]),
+                            "{target:?} {name}"
+                        );
+                    }
+                }
+                let Terminator::Return(r) = f.blocks[0].terminator else {
+                    panic!("{target:?} {name}")
+                };
+                let Inst::AggParts { parts: ret, .. } = &f.insts[r as usize] else {
+                    panic!("{target:?} {name}")
+                };
+                for (k, &p) in ret.iter().enumerate() {
+                    assert_eq!(
+                        a.hints[p as usize],
+                        Some(ints[k]),
+                        "{target:?} {name}: ret {k}"
+                    );
+                }
+            }
         }
     }
 
@@ -5737,6 +6469,26 @@ int main(void) { return 0; }
         };
         assert!(allocate(&build(), Target::LinuxAarch64).branch_fused[2]);
         assert!(allocate(&build(), Target::LinuxX64).branch_fused[2]);
+    }
+
+    /// A lifetime marker between the compare and its branch emits no code.
+    #[test]
+    fn a_lifetime_marker_in_the_window_keeps_the_fusion() {
+        let f = branch_func(
+            vec![
+                load_i64(),
+                Inst::BinopI {
+                    op: BinOp::Lt,
+                    lhs: 0,
+                    rhs_imm: 5,
+                },
+                Inst::LifetimeEnd(-1),
+            ],
+            1,
+        );
+        for target in [Target::LinuxAarch64, Target::LinuxX64] {
+            assert!(allocate(&f, target).branch_fused[1], "{target:?}");
+        }
     }
 
     /// A dead pure inst in the window emits no code, so it cannot

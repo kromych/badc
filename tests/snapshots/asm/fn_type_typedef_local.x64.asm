@@ -26,22 +26,10 @@ Disassembly of section .text:
                	int3
 
 <make>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movslq	%edi, %rdi
-               	leaq	-0x10(%rbp), %rax
-               	xorps	%xmm14, %xmm14
-               	movups	%xmm14, (%rax)
-               	movq	%rdi, (%rax)
-               	movq	%rdi, %rcx
-               	shlq	%rcx
-               	movslq	%ecx, %rcx
-               	movq	%rcx, 0x8(%rax)
+               	movslq	%edi, %rax
                	movq	%rax, %rcx
-               	movq	(%rcx), %rax
-               	movq	0x8(%rcx), %rdx
-               	leave
+               	shlq	%rcx
+               	movslq	%ecx, %rdx
                	retq
 
 <main>:
@@ -53,9 +41,6 @@ Disassembly of section .text:
                	movq	-0x8(%rbp), %rax
                	movl	$0x5, %edi
                	callq	*%rax
-               	movq	%rax, -0x10(%rbp)
-               	movq	%rdx, -0x8(%rbp)
-               	movq	-0x10(%rbp), %rax
                	cmpq	$0x5, %rax
                	je	<addr>
                	movl	$0x4, %eax

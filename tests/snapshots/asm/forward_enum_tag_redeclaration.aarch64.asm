@@ -1,0 +1,35 @@
+
+forward_enum_tag_redeclaration.aarch64:	file format elf64-littleaarch64
+
+Disassembly of section .text:
+
+<.text>:
+               	mov	x29, #0x0               // =0
+               	mov	x0, sp
+               	mov	x1, <entry_off>
+               	movk	x1, #0x0, lsl #16
+               	b	<addr>
+               	brk	#0x1
+               	brk	#0x1
+               	brk	#0x1
+
+<get_subrequest>:
+               	ldrsw	x2, [x0]
+               	and	x1, x1, #0xff
+               	add	x1, x1, #0x1
+               	add	x1, x2, x1
+               	str	w1, [x0]
+               	ret
+
+<trace_size>:
+               	mov	x0, #0x1                // =1
+               	ret
+
+<scale>:
+               	mov	x17, #0x3               // =3
+               	mul	x0, x0, x17
+               	ret
+
+<main>:
+               	mov	x0, #0x0                // =0
+               	ret

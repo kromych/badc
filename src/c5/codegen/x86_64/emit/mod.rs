@@ -30,6 +30,7 @@
 
 mod arith;
 mod call;
+mod early_exit;
 mod frame;
 mod function;
 mod inline_asm;
@@ -75,8 +76,12 @@ use super::*;
 pub(crate) use arith::binop_imm_materializes;
 use arith::*;
 use call::*;
+use early_exit::*;
 use frame::*;
-pub(crate) use frame::{Frame, asm_site_write_masks, compute_frame};
+pub(crate) use frame::{
+    Frame, asm_binds_directly, asm_site_bound_values, asm_site_write_masks, asm_staged_hints,
+    compute_frame,
+};
 pub(crate) use function::emit_function;
 use function::*;
 use inline_asm::*;
@@ -348,8 +353,9 @@ struct FnCtx<'a> {
     frame: Frame,
     abi: super::Abi,
     target: Target,
-    /// The FP register a zero fill may write (`reg_alloc::free_fp_register`).
-    zero_fill_fp: Option<u8>,
+    /// The xmm register a zero fill or a copy moves 16 bytes through
+    /// (`reg_alloc::free_fp_register`).
+    bulk_xmm: Option<u8>,
     imports: &'a super::ResolvedImports,
     variadic_targets: &'a alloc::collections::BTreeSet<usize>,
     /// Callee ent_pc -> the convention that callee declares, for the
@@ -380,6 +386,7 @@ struct Out<'a, 'b> {
     asm_section_text_refs: &'b mut Vec<super::AsmSectionTextRef>,
     asm_text_abs_refs: &'b mut Vec<super::AsmTextAbsRef>,
     asm_text_labels: &'b mut Vec<super::AsmTextLabel>,
+    abs_addr_refs: &'b mut Vec<super::AbsAddrRef>,
 }
 
 /// The length of every output buffer at one point of the emission.
@@ -398,9 +405,11 @@ struct OutputMark {
     asm_sym_fixups: usize,
     text_align: usize,
     mcount_sites: usize,
+    early_returns: usize,
     asm_section_text_refs: usize,
     asm_text_abs_refs: usize,
     asm_text_labels: usize,
+    abs_addr_refs: usize,
 }
 
 impl Out<'_, '_> {
@@ -420,9 +429,11 @@ impl Out<'_, '_> {
             asm_sym_fixups: self.cx.asm_sym_fixups.len(),
             text_align: *self.cx.text_align,
             mcount_sites: self.cx.mcount_sites.len(),
+            early_returns: self.cx.early_returns.len(),
             asm_section_text_refs: self.asm_section_text_refs.len(),
             asm_text_abs_refs: self.asm_text_abs_refs.len(),
             asm_text_labels: self.asm_text_labels.len(),
+            abs_addr_refs: self.abs_addr_refs.len(),
         }
     }
 
@@ -446,8 +457,10 @@ impl Out<'_, '_> {
         self.cx.asm_sym_fixups.truncate(m.asm_sym_fixups);
         *self.cx.text_align = m.text_align;
         self.cx.mcount_sites.truncate(m.mcount_sites);
+        self.cx.early_returns.truncate(m.early_returns);
         self.asm_section_text_refs.truncate(m.asm_section_text_refs);
         self.asm_text_abs_refs.truncate(m.asm_text_abs_refs);
         self.asm_text_labels.truncate(m.asm_text_labels);
+        self.abs_addr_refs.truncate(m.abs_addr_refs);
     }
 }

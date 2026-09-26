@@ -44,22 +44,15 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x18, %rsp
+               	subq	$0x8, %rsp
                	pushq	%rbx
                	callq	<addr>
-               	movl	%eax, -0x10(%rbp)
-               	movslq	-0x10(%rbp), %rbx
+               	movq	%rax, %rbx
                	callq	<addr>
-               	movl	%eax, -0x10(%rbp)
-               	movslq	-0x10(%rbp), %rax
                	addq	%rax, %rbx
                	callq	<addr>
-               	movl	%eax, -0x10(%rbp)
-               	movslq	-0x10(%rbp), %rax
                	addq	%rax, %rbx
                	callq	<addr>
-               	movl	%eax, -0x10(%rbp)
-               	movslq	-0x10(%rbp), %rax
                	addq	%rbx, %rax
                	cmpl	$0xf, %eax
                	je	<addr>

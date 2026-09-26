@@ -62,6 +62,8 @@ pub struct TargetCLibrary {
     lib: SharedLibrary,
     /// Headers already preprocessed for this target.
     scanned: BTreeSet<&'static str>,
+    /// The header whose binding admitted each data export.
+    data_headers: BTreeMap<String, &'static str>,
     /// Names already queried, so a repeated miss costs one lookup.
     queried: BTreeSet<String>,
 }
@@ -76,11 +78,13 @@ impl TargetCLibrary {
                 machine: target_machine(target),
                 exports: BTreeSet::new(),
                 data_exports: BTreeSet::new(),
+                object_sizes: Default::default(),
                 export_symbols: BTreeMap::new(),
                 export_versions: BTreeMap::new(),
                 from_image: false,
             },
             scanned: BTreeSet::new(),
+            data_headers: BTreeMap::new(),
             queried: BTreeSet::new(),
         }
     }
@@ -114,11 +118,38 @@ impl TargetCLibrary {
         &self.lib
     }
 
+    /// A unit defining each of `names` the library exports as data,
+    /// with the type its header declares -- the size and alignment of a
+    /// copy of the library's object, which the header's data binding
+    /// makes the image take. `None` when no name is such an object. The
+    /// type is taken while the name still denotes the declaration, or
+    /// the macro a header puts in its place.
+    pub fn copy_definitions(&self, names: &BTreeSet<String>) -> Option<String> {
+        let names: alloc::vec::Vec<&String> = names
+            .iter()
+            .filter(|n| self.lib.data_exports.contains(*n))
+            .collect();
+        if names.is_empty() {
+            return None;
+        }
+        let headers: BTreeSet<&str> = names.iter().map(|n| self.data_headers[*n]).collect();
+        let mut src = String::from("#define _GNU_SOURCE 1\n");
+        for header in headers {
+            src += &alloc::format!("#include <{header}>\n");
+        }
+        for (k, name) in names.iter().enumerate() {
+            src += &alloc::format!(
+                "typedef __typeof__({name}) __badc_copy_{k};\n#undef {name}\n__badc_copy_{k} {name};\n"
+            );
+        }
+        Some(src)
+    }
+
     /// Preprocess one bundled header for the target and fold its C
     /// library bindings into the export set. A header that does not
     /// stand alone on this target (a Windows header on an ELF target,
     /// say) contributes nothing, the same as one with no bindings.
-    fn scan(&mut self, header: &str) {
+    fn scan(&mut self, header: &'static str) {
         // `_GNU_SOURCE` widens a glibc header to the library's full
         // surface. Where it picks between two entry points the two
         // share one portable name, which is what this set is keyed by.
@@ -150,6 +181,9 @@ impl TargetCLibrary {
                 }
                 if b.is_data {
                     self.lib.data_exports.insert(b.local_name.clone());
+                    self.data_headers
+                        .entry(b.local_name.clone())
+                        .or_insert(header);
                 }
             }
         }
@@ -222,6 +256,64 @@ mod tests {
                 target.id_str()
             );
         }
+    }
+
+    /// The unit defining the copies compiles on both Linux targets and
+    /// defines each object at the size its header declares -- a stream
+    /// the header puts behind a macro included -- bound to the library's
+    /// object; a name the library does not export as data asks for none.
+    #[test]
+    fn copy_definitions_define_each_object_at_its_declared_size() {
+        use crate::c5::codegen::{NativeOptions, OutputKind};
+        for target in [Target::LinuxX64, Target::LinuxAarch64] {
+            let mut lib = TargetCLibrary::new(target);
+            for name in ["optind", "optarg", "stdout", "printf"] {
+                assert!(lib.admit(name), "{}: {name}", target.id_str());
+            }
+            let names: BTreeSet<String> = ["optind", "optarg", "stdout", "printf"]
+                .into_iter()
+                .map(String::from)
+                .collect();
+            let src = lib
+                .copy_definitions(&names)
+                .expect("data objects among the names");
+            assert!(!src.contains("printf"), "a function takes no copy: {src}");
+            let program = crate::Compiler::with_options(
+                src,
+                target,
+                crate::c5::compiler::CompileOptions::default().with_no_entry_point(true),
+            )
+            .compile()
+            .expect("compile the copies");
+            let opts = NativeOptions {
+                output_kind: OutputKind::Relocatable,
+                ..Default::default()
+            };
+            let bytes =
+                crate::c5::object::emit_native_with_options(&program, target, opts).expect("emit");
+            let obj = super::super::object::parse_native_elf(&bytes).expect("parse");
+            for (name, size) in [("optind", 4), ("optarg", 8), ("stdout", 8)] {
+                let sym = obj.symbols.iter().find(|s| s.name == name).expect(name);
+                assert_eq!(
+                    (sym.binding, sym.size),
+                    (1, size),
+                    "{}: {name}",
+                    target.id_str()
+                );
+                assert!(
+                    obj.copy_relocs
+                        .contains(&(name.to_string(), name.to_string())),
+                    "{}: {name} is bound to the library's object",
+                    target.id_str()
+                );
+            }
+        }
+        assert!(
+            TargetCLibrary::new(Target::LinuxX64)
+                .copy_definitions(&["optind".to_string()].into_iter().collect())
+                .is_none(),
+            "a name not admitted is not the library's"
+        );
     }
 
     /// Each target's C library has its own name and its own surface.

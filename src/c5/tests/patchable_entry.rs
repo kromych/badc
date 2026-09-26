@@ -561,6 +561,76 @@ fn the_landing_pad_leads_the_nops_and_the_call() {
     assert_eq!(mcount_entry(&rel, &entries, "one"), Some(one.value + 6));
 }
 
+/// At `-O` the test of a return taken ahead of the frame follows the patch
+/// site, so a patched call runs on both exits; the frame path follows the
+/// test and opens with the prologue, signed on AArch64.
+#[test]
+fn an_early_return_follows_the_patch_site() {
+    const GUARD_SRC: &str = "extern void sink(int);\n\
+        int guard(int x) { if (x < 0) return -1; sink(x); sink(x + 1); return x; }\n";
+    let rel = compile(
+        GUARD_SRC,
+        Target::LinuxX64,
+        NativeOptions {
+            optimize: true,
+            patchable_function_entry: PatchableEntry { nops: 3, before: 1 },
+            profiling: Profiling {
+                enabled: true,
+                fentry: true,
+                record_mcount: true,
+                nop_mcount: false,
+            },
+            hardening: Hardening {
+                cf_protection_branch: true,
+                ..Hardening::NONE
+            },
+            ..NativeOptions::default()
+        },
+    );
+    let f = func(&rel, "guard");
+    let at = f.value as usize;
+    let bytes = &rel.sections[section_of(f)].bytes[at..at + f.size as usize];
+    assert_eq!(&bytes[..6], &[0xf3, 0x0f, 0x1e, 0xfa, X86_NOP, X86_NOP]);
+    plt32_call_at(&rel, f, f.value + 6, "__fentry__");
+    let insns = super::perf_codegen::x64_insns(&bytes[11..]);
+    let test = insns.iter().position(|i| i.is_jcc()).expect("the test");
+    assert_eq!(
+        insns[test + 1].op,
+        0x55,
+        "`push rbp` past the test: {insns:x?}"
+    );
+    let exit = insns.iter().position(|i| i.at == insns[test].target());
+    assert!(exit.is_some_and(|e| e > test + 1), "{insns:x?}");
+
+    let rel = compile(
+        GUARD_SRC,
+        Target::LinuxAarch64,
+        NativeOptions {
+            optimize: true,
+            patchable_function_entry: PatchableEntry { nops: 4, before: 2 },
+            hardening: Hardening {
+                bti: true,
+                pac_ret: true,
+                ..Hardening::NONE
+            },
+            ..NativeOptions::default()
+        },
+    );
+    let words = entry_words(&rel, "guard", 12);
+    assert_eq!(words[..3], [A64_BTI_C, A64_NOP, A64_NOP]);
+    let sign = words
+        .iter()
+        .position(|w| *w == A64_PACIASP)
+        .expect("the frame path signs");
+    // `B.cond`, `CBZ` or `CBNZ` closes the test.
+    let test = u32::from_le_bytes(words[sign - 1]);
+    assert!(
+        test & 0xFF00_0010 == 0x5400_0000 || test & 0x7E00_0000 == 0x3400_0000,
+        "{words:x?}"
+    );
+    assert!(sign > 4, "the test follows the patch site: {words:x?}");
+}
+
 #[test]
 fn the_records_survive_a_relocatable_merge() {
     // The kernel's module link is `ld -r`, and its loader reads the

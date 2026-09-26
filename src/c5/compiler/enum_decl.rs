@@ -17,6 +17,7 @@
 
 use super::super::diag::Code;
 use alloc::string::{String, ToString};
+use alloc::vec::Vec;
 
 use super::super::error::C5Error;
 use super::super::token::{Token, Ty};

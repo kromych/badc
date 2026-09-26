@@ -2573,11 +2573,10 @@ fn a_pointer_initializer_folded_from_a_cast_is_not_read_as_an_integer() {
     let msgs: alloc::vec::Vec<alloc::string::String> =
         p.warnings.iter().map(|w| w.to_string()).collect();
     let struct_row = msgs.iter().any(|s| {
-        s.contains("integer assigned to pointer in global initializer")
-            && s.contains("var=struct S*")
+        s.contains("integer assigned to pointer in initializer") && s.contains("declared=struct S*")
     });
     let scalar_row = msgs.iter().any(|s| {
-        s.contains("integer assigned to pointer in global initializer") && s.contains("var=int*")
+        s.contains("integer assigned to pointer in initializer") && s.contains("declared=int*")
     });
     assert!(struct_row && scalar_row, "got: {msgs:?}");
 }
@@ -2615,7 +2614,7 @@ fn a_pointer_against_a_scalar_reports_the_same_row_whatever_the_pointee() {
     let count = |needle: &str| rows.iter().filter(|(_, s)| s.contains(needle)).count();
     assert_eq!(
         (
-            count("integer assigned to pointer in global initializer"),
+            count("integer assigned to pointer in initializer"),
             count("integer assigned to pointer in assignment"),
             count("pointer assigned to integer in assignment"),
             rows.len(),
@@ -3370,4 +3369,94 @@ fn a_derivation_applies_to_the_whole_array_an_array_typedef_names() {
              return use(v) * 0;\n\
          }\n",
     );
+}
+
+/// C99 6.7.8p11: an initializer converts as if by simple assignment, so it
+/// reports what the assignment reports -- a pointer to an integer, a
+/// non-zero integer to a pointer, a pointer to an incompatible struct --
+/// in a static or automatic scalar, member and element and in a compound
+/// literal. The folded value of a static one carries the expression's
+/// type, so a cast and a null pointer constant stay silent.
+#[test]
+fn an_initializer_reports_the_conversions_an_assignment_reports() {
+    use crate::diag::Code;
+    let pre = "int g, arr[2];\nint f(void) { return 0; }\n\
+               struct A { int x; }; struct B { int y; } b;\n";
+    let int_conv = Some(Code::INT_CONVERSION);
+    let struct_conv = Some(Code::INCOMPATIBLE_STRUCT_TYPES);
+    for (body, want) in [
+        ("long long s = &g;", int_conv),
+        ("long long s = f;", int_conv),
+        ("long long s = \"x\";", int_conv),
+        ("long long s = arr;", int_conv),
+        ("long long s = &g + 1;", int_conv),
+        ("int *p = 5;", int_conv),
+        ("struct { long long v; } t = { &g };", int_conv),
+        ("struct { int *p; } t = { 5 };", int_conv),
+        ("long long a[2] = { 0, &g };", int_conv),
+        ("long long s = (long long){ &g };", int_conv),
+        ("struct A *p = &b;", struct_conv),
+        (
+            "int main(void) { static long long z = &g; return (int)z; }",
+            int_conv,
+        ),
+        (
+            "int main(void) { long long z = &g; return (int)z; }",
+            int_conv,
+        ),
+        ("int main(void) { int *w = 5; return w != 0; }", int_conv),
+        (
+            "int main(void) { struct { long long v; } t = { &g }; return (int)t.v; }",
+            int_conv,
+        ),
+        (
+            "int main(void) { long long a[2] = { 0, &g }; return (int)a[1]; }",
+            int_conv,
+        ),
+        (
+            "int main(void) { long long z = (long long){ &g }; return (int)z; }",
+            int_conv,
+        ),
+        (
+            "int main(void) { struct A *p = &b; return p != 0; }",
+            struct_conv,
+        ),
+        ("long long s = (long long)&g;", None),
+        ("unsigned long long s = (unsigned long long)f;", None),
+        ("struct { long long v; } t = { (long long)&g };", None),
+        (
+            "long long a[2] = { (long long)arr, (long long)\"x\" };",
+            None,
+        ),
+        (
+            "int *p = 0; void *q = &g; char *c = \"x\"; long n = sizeof(int);",
+            None,
+        ),
+        (
+            "int main(void) { long long z = (long long)&g; int *p = 0; return (int)z + (p != 0); }",
+            None,
+        ),
+        (
+            "void *v = (void *)0x300 + 0x10UL; struct { void *n; } t = { (void *)0x300 + 1 };",
+            None,
+        ),
+    ] {
+        let main = if body.contains("main(") {
+            ""
+        } else {
+            "int main(void) { return 0; }\n"
+        };
+        let src = alloc::format!("{pre}{body}\n{main}");
+        let p = compile_str(&src);
+        let got: alloc::vec::Vec<Code> = p.warnings.iter().map(|w| w.code).collect();
+        assert_eq!(
+            got,
+            want.into_iter().collect::<alloc::vec::Vec<_>>(),
+            "{src}"
+        );
+    }
+    let p = compile_str("int g;\nlong long s = &g;\nint main(void) { return 0; }\n");
+    let text = p.warnings[0].to_string();
+    let row = "pointer assigned to integer in initializer (declared=long long, init=int*)";
+    assert!(text.contains(row), "{text}");
 }

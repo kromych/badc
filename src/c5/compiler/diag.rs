@@ -780,6 +780,43 @@ impl Compiler {
         None
     }
 
+    /// C99 6.7.8p11: an initializer converts to its object's type as if by
+    /// simple assignment, so it reports what the assignment reports: an
+    /// error where no conversion exists, a warning where the assignment
+    /// warns. `zero` marks a null pointer constant, `untyped` a value an
+    /// indirect call returned (see [`Self::type_warning_with_flags`]).
+    pub(super) fn check_initializer_conversion(
+        &mut self,
+        declared: i64,
+        actual: i64,
+        (zero, untyped): (bool, bool),
+        line: usize,
+    ) -> Result<(), C5Error> {
+        let structs = &self.structs;
+        let Some(m) = Self::type_warning_with_flags(structs, declared, actual, zero, untyped)
+        else {
+            return Ok(());
+        };
+        let want = super::types::format_type(declared, structs);
+        let got = super::types::format_type(actual, structs);
+        let text = alloc::format!("{} in initializer (declared={want}, init={got})", m.reason);
+        if m.no_conversion {
+            return Err(self.compile_err_at(Code::INVALID_INITIALIZER, line, text));
+        }
+        self.warn_at(m.code, line, text);
+        Ok(())
+    }
+
+    /// [`Self::check_initializer_conversion`] for the expression just parsed.
+    pub(super) fn check_initializer_expr(
+        &mut self,
+        declared: i64,
+        line: usize,
+    ) -> Result<(), C5Error> {
+        let flags = (self.last_emit_is_zero(), self.last_emit_was_indirect_call());
+        self.check_initializer_conversion(declared, self.ty, flags, line)
+    }
+
     /// GNU `transparent_union`: a parameter whose type is a union
     /// honoring the attribute accepts an argument compatible with any
     /// member (a null pointer constant included, for pointer members).

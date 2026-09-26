@@ -516,8 +516,8 @@ const ACCEPTED_ONLY_BY_BADC: &[Case] = &[
     // both forms.
     case!("string_minus_null", "long x = (char *)\"abc\" - (char *)0;", "0000000000000000", 0 => Data("61626300")),
     case!("address_minus_null", "int g; long x = (char *)&g - (char *)0;", "0000000000000000", 0 => Sym("g", 0)),
-    // TODO: the conversion goes undiagnosed; gcc and clang reject it
-    // (-Wint-conversion), and an assignment reports B3001.
+    // badc reports the conversion as the B3001 warning an assignment gives;
+    // gcc and clang make -Wint-conversion an error.
     case!("pointer_to_integer_without_cast", "int g; long x = &g;", "0000000000000000", 0 => Sym("g", 0)),
 ];
 

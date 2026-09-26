@@ -2773,6 +2773,13 @@ fn pointer_constant_arithmetic() {
 }
 
 #[test]
+fn static_initializer_address_casts() {
+    // C99 6.6p9: an address constant cast to an integer or pointer type
+    // initializes a static scalar, member or element as its relocation.
+    assert_eq!(run_fixture("static_initializer_address_casts.c"), 0);
+}
+
+#[test]
 fn indirect_call_prototypes() {
     // A call through a pointer converts or promotes its arguments by the
     // pointed-to type, however the callee is spelled.

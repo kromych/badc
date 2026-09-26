@@ -9,13 +9,12 @@
 //! constant joins, and the type-mismatch warning.
 
 use super::super::diag::Code;
-use alloc::format;
 
 use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
 use super::Compiler;
 use super::const_expr::ConstVal;
-use super::initializer::InitElemReloc;
+use super::initializer::{InitElemReloc, InitLeaf};
 use super::types::{is_pointer_ty, strip_unsigned};
 
 impl Compiler {
@@ -330,10 +329,11 @@ impl Compiler {
         {
             let cp = self.init_checkpoint();
             match self.parse_constant_init_value() {
-                Ok((value, reloc))
+                Ok(InitLeaf { value, reloc, ty })
                     if !matches!(reloc, InitElemReloc::None | InitElemReloc::Float64Bits)
                         && self.at_initializer_end() =>
                 {
+                    self.check_initializer_conversion(var_ty, ty, (false, false), line)?;
                     if is_thread_local {
                         self.write_tls_init_value(line, var_offset, value, reloc, var_ty)?;
                     } else {
@@ -438,14 +438,15 @@ impl Compiler {
         {
             let snap = self.lex.snapshot();
             let data_snap = self.data.len();
-            if let Some((off, sym_idx, is_array)) = self.parse_const_address()?
-                && is_array
+            if let Some(a) = self.parse_const_address()?
+                && a.is_array
                 && (self.lex.tk == ';' || self.lex.tk == ',')
             {
+                self.check_initializer_conversion(var_ty, a.ty, (false, false), line)?;
                 if is_thread_local {
                     self.note_tls_init(var_offset);
                 }
-                self.emit_addr_reloc(var_offset, sym_idx, off, is_thread_local)?;
+                self.emit_addr_reloc(var_offset, a.sym_idx, a.off, is_thread_local)?;
                 return Ok(());
             }
             self.rewind_speculation(snap, data_snap);
@@ -499,7 +500,10 @@ impl Compiler {
             // an incomplete parse rewinds to the arithmetic evaluator below.
             let cp = self.init_checkpoint();
             match self.parse_constant_init_value() {
-                Ok((value, reloc)) if self.at_initializer_end() => {
+                Ok(leaf) if self.at_initializer_end() => {
+                    let InitLeaf { value, reloc, ty } = leaf;
+                    let flags = (leaf.is_zero_int(), false);
+                    self.check_initializer_conversion(var_ty, ty, flags, line)?;
                     if is_thread_local {
                         self.write_tls_init_value(line, var_offset, value, reloc, var_ty)?;
                     } else {
@@ -527,48 +531,9 @@ impl Compiler {
         let pre_paren = self.lex.snapshot();
         self.next()?;
         if self.lex_is_type_start() {
-            // Fold the whole expression with the cast applied first: a
-            // cast participating in arithmetic (`(char *)&s.b -
-            // (char *)&s.a` strides by the cast's pointee, C99 6.5.6)
-            // must not be discarded by the reloc-leaf shortcut below.
-            // An arithmetic result that consumes the whole initializer
-            // routes to the shared evaluator tail, which refolds it.
-            let cp = self.init_checkpoint();
-            let data_before = self.data.len();
-            self.restore_lex(pre_paren);
-            let whole = self.parse_const_expr_cond_val();
-            // A parse that staged data (a string or compound literal)
-            // folded an address needing its relocation; only a
-            // stage-free arithmetic result takes the evaluator tail.
-            let arithmetic = matches!(whole, Ok(ConstVal::Int { .. }) | Ok(ConstVal::Float(_)))
-                && self.at_initializer_end()
-                && self.data.len() == data_before;
-            self.restore_init_checkpoint(cp);
-            if arithmetic {
-                self.restore_lex(pre_paren);
-            } else
-            // A cast over a relocation leaf (`&x`, a string, a
-            // function or global-array name) contributes nothing to the
-            // value, so the cast tokens are skipped. A cast over an
-            // arithmetic operand narrows (C99 6.3.1.3) and goes to the
-            // const-expr evaluator, which applies it.
-            if self.post_cast_is_reloc_leaf()? {
-                let mut depth: i64 = 1;
-                while depth > 0 && self.lex.tk != 0 {
-                    if self.lex.tk == '(' {
-                        depth += 1;
-                    } else if self.lex.tk == ')' {
-                        depth -= 1;
-                        if depth == 0 {
-                            self.next()?;
-                            break;
-                        }
-                    }
-                    self.next()?;
-                }
-                self.parse_global_initializer(var_ty, var_offset, is_thread_local, target_fn)?;
-                return Ok(true);
-            }
+            // A cast over a relocation leaf consumed whole took the leaf
+            // parser in the caller; any other cast goes to the const-expr
+            // evaluator, which applies it (C99 6.3.1.3).
             self.restore_lex(pre_paren);
         } else {
             // A parenthesized expression. An operator past the matching
@@ -621,8 +586,11 @@ impl Compiler {
             let stripped = strip_unsigned(var_ty);
             stripped == Ty::Float as i64 || stripped == Ty::Double as i64
         };
-        // C99 6.6 constant expression.
+        // C99 6.6 constant expression, which converts to the object's type
+        // as if by assignment (6.7.8p11).
         let cv = self.parse_const_expr_cond_val()?;
+        let zero = matches!(cv, ConstVal::Int { val: 0, .. });
+        self.check_initializer_conversion(var_ty, cv.expr_ty(), (zero, false), line)?;
         // C99 6.6 / 6.3.2.3: an address constant in a pointer-width
         // integer slot is a link-time relocation, and takes the one a
         // pointer-typed slot would; gcc and clang accept it. Restricted
@@ -708,36 +676,6 @@ impl Compiler {
             if end > self.tls_init_size {
                 self.tls_init_size = end;
             }
-        }
-
-        // Pointer-vs-integer mismatches warn, as the assignment path
-        // does. The folded constant carries the initializer's own type,
-        // including a cast's target (C99 6.3.2.3p5 permits the
-        // integer-to-pointer conversion an implementation defines), so a
-        // pointer initializer is not read as an integer one. It is still
-        // too coarse for a 6.7.8p11 constraint error; the aggregate path
-        // checks element types against real ones.
-        let init_ty = match cv {
-            _ if value == 0 => 0,
-            ConstVal::Int { ty, .. } => ty,
-            ConstVal::Float(_) => Ty::Double as i64,
-            // An integer cast to a pointer type is a pointer.
-            ConstVal::Addr(a) if a.root == super::const_expr::ConstRoot::None => {
-                a.pointee.map_or(0, super::types::add_ptr_level)
-            }
-            ConstVal::Addr(_) => 0,
-        };
-        if let Some(m) = Self::type_warning(&self.structs, var_ty, init_ty, value == 0) {
-            let var_s = super::types::format_type(var_ty, &self.structs);
-            let init_s = super::types::format_type(init_ty, &self.structs);
-            self.warn_at(
-                m.code,
-                line,
-                format!(
-                    "{} in global initializer (var={var_s}, value={init_s})",
-                    m.reason
-                ),
-            );
         }
         Ok(())
     }

@@ -36,9 +36,9 @@ use super::super::token::{Token, Ty};
 use super::Compiler;
 use super::diag::Category;
 use super::types::{
-    UNSIGNED_BIT, integer_promote, is_floating_ty, is_long_double_ty, is_pointer_ty, is_struct_ty,
-    is_struct_value_ty, is_unsigned_ty, narrow_const_int, pointee_ty, strip_unsigned, struct_id_of,
-    struct_ptr_depth, unqualified_version_ty,
+    UNSIGNED_BIT, add_ptr_level, integer_promote, is_floating_ty, is_long_double_ty, is_pointer_ty,
+    is_struct_ty, is_struct_value_ty, is_unsigned_ty, narrow_const_int, pointee_ty, strip_unsigned,
+    struct_id_of, struct_ptr_depth, unqualified_version_ty,
 };
 
 /// Compile-time arithmetic value of a constant expression. Integer
@@ -166,6 +166,10 @@ pub(super) struct ConstAddr {
     /// the element type of a decayed string or array compound literal, or
     /// a pointer cast's pointee.
     pub pointee: Option<i64>,
+    /// The type of the address as an expression: the pointer a designation,
+    /// a decay or a label gives, or the type a cast converted it to. An
+    /// initializer converts from it as if by assignment (C99 6.7.8p11).
+    pub ty: i64,
 }
 
 /// Operator selector for [`Compiler::const_int_binop`], the single
@@ -225,6 +229,16 @@ impl ConstVal {
             ConstVal::Int { ty, .. } => ty,
             ConstVal::Float(_) => Ty::Int as i64,
             ConstVal::Addr(_) => Ty::Ptr as i64,
+        }
+    }
+
+    /// The type of the folded expression: an integer's own, `double` for a
+    /// floating value, an address constant's (see [`ConstAddr::ty`]).
+    pub(super) fn expr_ty(self) -> i64 {
+        match self {
+            ConstVal::Int { ty, .. } => ty,
+            ConstVal::Float(_) => Ty::Double as i64,
+            ConstVal::Addr(a) => a.ty,
         }
     }
 
@@ -502,6 +516,7 @@ impl Compiler {
                     Some(ConstVal::Addr(ConstAddr {
                         value: a.value.wrapping_sub(b.value),
                         pointee: None,
+                        ty: Ty::LongLong as i64,
                         ..a
                     }))
                 }
@@ -1332,6 +1347,7 @@ impl Compiler {
                 root: ConstRoot::Label(label),
                 elem_size: 1,
                 pointee: None,
+                ty: add_ptr_level(super::types::void_ty()),
             }));
         }
         if self.lex.tk == Token::AndOp {
@@ -1840,6 +1856,7 @@ impl Compiler {
             root: d.root,
             elem_size: (self.size_of_type(d.ty) as i64).max(1),
             pointee: Some(d.ty),
+            ty: add_ptr_level(d.ty),
         })
     }
 
@@ -2349,6 +2366,7 @@ impl Compiler {
             root: ConstRoot::Data(sym),
             elem_size: (self.size_of_type(elem_ty) as i64).max(1),
             pointee: Some(elem_ty),
+            ty: add_ptr_level(elem_ty),
         }
     }
 
@@ -2379,6 +2397,7 @@ impl Compiler {
             root: ConstRoot::None,
             elem_size: (self.size_of_type(pointee) as i64).max(1),
             pointee: Some(pointee),
+            ty,
         })
     }
 
@@ -2504,7 +2523,7 @@ impl Compiler {
     /// `None` for any other read of patched bytes.
     fn read_const_slot(&self, at: usize, size: usize, ty: i64) -> Option<ConstVal> {
         if self.data_range_relocated(at, size) {
-            let mut a = self.relocated_address_at(at, size)?;
+            let mut a = self.relocated_address_at(at, size, ty)?;
             if is_pointer_ty(ty) {
                 let p = pointee_ty(ty);
                 a.elem_size = (self.size_of_type(p) as i64).max(1);
@@ -2550,9 +2569,9 @@ impl Compiler {
     }
 
     /// The address a relocation starting at `data[at]` over a whole
-    /// pointer-wide slot of `size` bytes stores: a data object's or a
-    /// function's, relative to the symbol it was taken from.
-    fn relocated_address_at(&self, at: usize, size: usize) -> Option<ConstAddr> {
+    /// pointer-wide slot of `size` bytes of type `ty` stores: a data
+    /// object's or a function's, relative to the symbol it was taken from.
+    fn relocated_address_at(&self, at: usize, size: usize, ty: i64) -> Option<ConstAddr> {
         if size != self.size_of_type(Ty::Ptr as i64) {
             return None;
         }
@@ -2564,6 +2583,7 @@ impl Compiler {
                 root: ConstRoot::Data(sym),
                 elem_size: 1,
                 pointee: None,
+                ty,
             });
         }
         let i = self.code_relocs.iter().position(|r| r.data_offset == at)?;
@@ -2572,6 +2592,7 @@ impl Compiler {
             root: ConstRoot::Code(*self.code_reloc_sym_idx.get(i)?),
             elem_size: 1,
             pointee: None,
+            ty,
         })
     }
 
@@ -2666,11 +2687,17 @@ impl Compiler {
                     let root = ConstRoot::Data(sym);
                     self.reject_automatic_compound_literal_root(root)?;
                     let span: i64 = dims[level + 1..].iter().product::<i64>().max(1);
+                    let row = if level + 1 == dims.len() {
+                        target_ty
+                    } else {
+                        self.array_agg_type(target_ty, &dims[level + 1..])
+                    };
                     return Ok(ConstVal::Addr(ConstAddr {
                         value: base,
                         root,
                         elem_size: span * elem_size,
                         pointee: (level + 1 == dims.len()).then_some(target_ty),
+                        ty: add_ptr_level(row),
                     }));
                 }
                 // Parenthesized abstract declarator: `(*)(args)` (function
@@ -2746,6 +2773,7 @@ impl Compiler {
                 {
                     let ptr_target = is_pointer_ty(target_ty)
                         || (is_struct_ty(target_ty) && struct_ptr_depth(target_ty) > 0);
+                    a.ty = target_ty;
                     a.pointee = match array_pointee {
                         Some(arr) => Some(arr),
                         None => ptr_target.then(|| pointee_ty(target_ty)),
@@ -2926,11 +2954,14 @@ impl Compiler {
                         }
                     });
                     let elem_size = pointee.map_or(1, |p| (self.size_of_type(p) as i64).max(1));
+                    // A function designator's flat tag is its return type.
+                    let ty = add_ptr_level(pointee.unwrap_or(self.symbols[idx].type_));
                     return Ok(ConstVal::Addr(ConstAddr {
                         value: self.symbols[idx].val,
                         root: ConstRoot::code_or_data(idx, is_fn),
                         elem_size,
                         pointee,
+                        ty,
                     }));
                 }
             }

@@ -2802,6 +2802,13 @@ fn typeof_row_bounds() {
 }
 
 #[test]
+fn variably_modified_type_names() {
+    // C99 6.7.5.2p4, 6.5.3.4p2: a variable-length array type name's size
+    // is computed at run time, and a cast to a pointer to one strides by it.
+    assert_eq!(run_fixture("variably_modified_type_names.c"), 0);
+}
+
+#[test]
 fn indirect_call_prototypes() {
     // A call through a pointer converts or promotes its arguments by the
     // pointed-to type, however the callee is spelled.

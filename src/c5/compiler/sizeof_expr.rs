@@ -70,6 +70,7 @@ impl Compiler {
         // Cleared each call; set only when the operand is a VLA whose
         // size the `sizeof` site must read at runtime (C99 6.5.3.4p2).
         self.pending.sizeof_vla_size_slot = None;
+        self.pending.sizeof_vla_store = None;
         // C99 6.5.3.4 admits `sizeof unary-expression` and
         // `sizeof ( type-name )`: a `(` consumed for a type name is put back
         // when the content is an expression, so a trailing `->` / `.` / `[`
@@ -145,9 +146,12 @@ impl Compiler {
             let lev = Token::Inc as i64;
             self.drop_operand_array_decay();
             self.expr_or_void(lev)?;
-            // C99 6.5.3.4p2: a variable-length array's size is read at run time.
+            // C99 6.5.3.4p2: an operand of variable-length array type is
+            // evaluated -- a cast in it stores the size -- and the size read
+            // at run time.
             if let Some(id) = self.pending.last_array_decay_vla {
                 self.pending.sizeof_vla_size_slot = self.structs[id].vla_size_slot;
+                self.pending.sizeof_vla_store = self.ast_acc;
             }
             let array_count = self.pending.last_array_decay_size;
             let array_bytes = self.pending.last_array_decay_bytes;
@@ -725,6 +729,13 @@ impl Compiler {
     fn sizeof_type_name(&mut self, type_name: &TypeName) -> Result<i64, C5Error> {
         if type_name.names_function() {
             return Ok(self.function_type_layout(true));
+        }
+        // C99 6.5.3.4p2: a variable-length array type name is evaluated,
+        // storing the size its operand reads.
+        if let Some(vm) = type_name.vla.filter(|_| type_name.is_vla) {
+            self.pending.sizeof_vla_size_slot = Some(vm.slot);
+            self.pending.sizeof_vla_store = Some(vm.store);
+            return Ok(0);
         }
         if type_name.ptr_levels == 0 {
             self.require_complete_operand(type_name.ty, "sizeof")?;

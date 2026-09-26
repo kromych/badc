@@ -2791,17 +2791,51 @@ fn multi_dim_compound_literal_dimension_constraints() {
         "array type has an incomplete inner dimension",
     );
     // A const-qualified object is not an integer constant expression
-    // (C99 6.6p6), so the dimension makes the literal variably sized;
-    // gcc rejects that, and the static-initializer path masks its
-    // const-object fold to match.
+    // (C99 6.6p6), so the dimension makes the literal variably sized,
+    // which 6.5.2.5p1 forbids; gcc rejects it, and the static-initializer
+    // path masks its const-object fold to match.
     expect_compile_error(
         "int main(void) { const int h = 2; int *p = (int[h]){ 1, 2 }; return p[0]; }",
-        "constant integer expected",
+        "a compound literal may not have a variably modified type",
     );
     expect_compile_error(
         "int main(void) { const int h = 2; static int *p = (int[h]){ 1, 2 }; return p[0]; }",
         "constant integer expected",
     );
+}
+
+#[test]
+fn a_variably_modified_type_name_is_diagnosed_where_c99_forbids_it() {
+    // C99 6.7.5.2p2 admits a variably modified type only at block scope,
+    // 6.5.2.5p1 no variable-length array compound literal, and C11
+    // 6.5.1.1p2 no variably modified generic association.
+    for (src, needle) in [
+        (
+            "int n = 3;\nint a = sizeof(int[n]);\nint main(void) { return a; }",
+            "a variably modified type is only allowed at block scope",
+        ),
+        (
+            "int main(int c, char **v) { (void)v; int *p = (int[c]){1}; return *p; }",
+            "a compound literal may not have a variably modified type",
+        ),
+        (
+            "int main(int c, char **v) { (void)v; return _Generic(0, int[c]: 1, default: 0); }",
+            "a generic association type may not be variably modified",
+        ),
+        (
+            "int main(int c, char **v) { (void)v; return (int)sizeof(int[3][c]); }",
+            "a non-constant inner array dimension is not supported",
+        ),
+    ] {
+        expect_compile_error(src, needle);
+    }
+    Compiler::new(
+        "int main(int c, char **v) { (void)v; int b[4];\n\
+         return (int)(sizeof(int[c]) + sizeof(int (*)[c])) + ((int (*)[c])b)[0][0] * 0; }"
+            .to_string(),
+    )
+    .compile()
+    .expect("variably modified type names at block scope");
 }
 
 #[test]

@@ -318,7 +318,15 @@ impl Compiler {
     /// Seed the base-type carriers a declarator through `typeof(type-name)`
     /// reads, as a typedef of the named type would: an array's bounds, the
     /// function type the name denotes or leads to, the alignment.
-    fn seed_type_name_carriers(&mut self, name: &super::expr::TypeName) {
+    fn seed_type_name_carriers(&mut self, name: &super::expr::TypeName) -> Result<(), C5Error> {
+        // TODO: a declaration through a variably modified type, whose size
+        // the declaration would store when it is reached.
+        if name.vla.is_some() {
+            return Err(self.compile_err(
+                Code::UNSUPPORTED,
+                "`typeof` of a variably modified type is not supported",
+            ));
+        }
         let dims = &name.dims;
         self.pending.typedef_base_array_size = match dims.as_slice() {
             [] => 0,
@@ -337,6 +345,7 @@ impl Compiler {
             self.pending.fn_ptr_params = Some(f.params.clone());
             self.pending.fn_ptr_ret_fn = f.ret.clone();
         }
+        Ok(())
     }
 
     /// `typeof ( type-name )` / `typeof ( expression )` (C23 6.7.2.5,
@@ -408,7 +417,7 @@ impl Compiler {
         }
         let ty = if self.lex_is_type_start() {
             let name = self.parse_type_name()?;
-            self.seed_type_name_carriers(&name);
+            self.seed_type_name_carriers(&name)?;
             name.ty
         } else {
             // Pointer peels leave the inner-only marker describing a

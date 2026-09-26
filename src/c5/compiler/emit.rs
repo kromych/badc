@@ -1329,6 +1329,14 @@ impl Compiler {
         self.ast_acc = Some(id);
     }
 
+    /// Push `Expr::Comma { lhs, rhs, ty }`: `lhs` evaluated for its effect,
+    /// then `rhs`'s value (C99 6.5.17).
+    pub(super) fn ast_emit_comma(&mut self, lhs: ExprId, rhs: ExprId, ty: i64) {
+        let pos = self.ast_src_pos();
+        let id = self.ast.push_expr(Expr::Comma { lhs, rhs, ty }, pos);
+        self.ast_acc = Some(id);
+    }
+
     /// Push `Expr::CompoundLiteral { slot_off, ty, array_size, init }`
     /// (C99 6.5.2.5). The frame slot is already reserved and the
     /// initializer captured into `init`; the walker emits the init

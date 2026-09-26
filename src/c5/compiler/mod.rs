@@ -1078,6 +1078,9 @@ pub(in crate::c5::compiler) struct Pending {
     /// 6.5.3.4p2); the `sizeof` site then emits a runtime load instead
     /// of a constant. `None` for a constant-size operand.
     pub sizeof_vla_size_slot: Option<i64>,
+    /// The expression storing a variable-length array type name's size in
+    /// that slot, which the `sizeof` evaluates first.
+    pub sizeof_vla_store: Option<super::ast::ExprId>,
     /// Set by the constant-expression evaluator when it fails because it
     /// reached a non-constant operand (a runtime identifier, call, ...),
     /// as opposed to a malformed constant (division by zero, ...). Lets
@@ -1606,6 +1609,7 @@ impl Default for Pending {
             vla_dim_expr: None,
             declarator_zero_len_array: false,
             sizeof_vla_size_slot: None,
+            sizeof_vla_store: None,
             const_expr_nonconst: false,
             const_expr_compound_literal: false,
             fn_ptr_params: None,

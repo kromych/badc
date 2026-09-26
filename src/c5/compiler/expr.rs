@@ -1480,7 +1480,10 @@ impl Compiler {
         // C99 6.5.3.4p2: `sizeof` of a VLA is a runtime value, loaded from
         // the VLA's byte-count slot.
         if let Some(size_slot) = self.pending.sizeof_vla_size_slot.take() {
-            self.ast_emit_vla_sizeof(size_slot);
+            let size = self.ast_emit_vla_sizeof(size_slot);
+            if let Some(store) = self.pending.sizeof_vla_store.take() {
+                self.ast_emit_comma(store, size, self.ty);
+            }
         } else {
             self.ast_emit_int_lit(total_bytes, self.ty);
         }
@@ -2833,6 +2836,14 @@ impl Compiler {
         } else {
             return Err(self.compile_err(Code::INVALID_OPERANDS, "bad cast"));
         }
+        if self.lex.tk == '{' && type_name.vla.is_some() {
+            // C99 6.5.2.5p1: no variable-length array type; a type derived
+            // from one would need its size stored before the literal.
+            return Err(self.compile_err(
+                Code::INVALID_INITIALIZER,
+                "a compound literal may not have a variably modified type",
+            ));
+        }
         if self.lex.tk == '{' {
             // C99 6.5.2.5 compound literal: `(type){ init }`. An array
             // typedef's dimensions complete the type from the inside:
@@ -2909,6 +2920,11 @@ impl Compiler {
         // have no consumer.
         if let Some(child) = cast_child_ast {
             self.ast_emit_cast(child, t);
+        }
+        // C99 6.7.5.2p5: the variable-length array the cast type derives
+        // from takes its size when the cast is evaluated.
+        if let (Some(vm), Some(value)) = (type_name.vla, self.ast_acc) {
+            self.ast_emit_comma(vm.store, value, t);
         }
         // The value's function-pointer lineage is the cast type's, which lets
         // a following `*` chain decay (`(**(finder_type*)p)(...)`); a cast to
@@ -5472,6 +5488,13 @@ impl Compiler {
                 // An array type never matches: the controlling expression's
                 // array decayed. A function type matches by C99 6.7.5.3p15.
                 let assoc = self.parse_type_name()?;
+                // C11 6.5.1.1p2: no variably modified association type.
+                if assoc.vla.is_some() {
+                    return Err(self.compile_err(
+                        Code::INVALID_DECLARATION,
+                        "a generic association type may not be variably modified",
+                    ));
+                }
                 let ctrl = ctrl_fn.as_ref().map(|(f, d)| (f, *d));
                 let is_match = winner.is_none()
                     && assoc.dims.is_empty()
@@ -5773,6 +5796,8 @@ impl Compiler {
             is_function,
             fn_ptr_indirection,
             ptr_levels: 0,
+            vla: None,
+            vla_value: false,
         };
         // The leading pointers are the declarator's last derivations, so
         // they apply to the base type first (C99 6.7.5.1).
@@ -5802,6 +5827,7 @@ impl Compiler {
                 match step {
                     Derivation::Pointer => self.derive_pointer(&mut t),
                     Derivation::Array(n) => self.derive_array(&mut t, n)?,
+                    Derivation::RuntimeArray(dim) => self.derive_runtime_array(&mut t, dim)?,
                     Derivation::Function(pp) => self.derive_function(&mut t, pp)?,
                 }
             }
@@ -5811,18 +5837,7 @@ impl Compiler {
         let mut outer = alloc::vec::Vec::new();
         while self.lex.tk == Token::Brak {
             self.next()?;
-            let n = if self.lex.tk == ']' {
-                -1
-            } else {
-                let n = self.with_const_object_fold_masked(|c| c.parse_constant_int())?;
-                if n < 0 {
-                    return Err(self.compile_err(
-                        Code::INVALID_DECLARATION,
-                        "array dimension in a type name must not be negative",
-                    ));
-                }
-                n
-            };
+            let n = self.parse_type_name_bound()?;
             if self.lex.tk != ']' {
                 return Err(
                     self.compile_err(Code::SYNTAX, "close bracket expected in an array type name")
@@ -5832,7 +5847,10 @@ impl Compiler {
             outer.push(n);
         }
         for n in outer.into_iter().rev() {
-            self.derive_array(&mut t, n)?;
+            match n {
+                TypeNameBound::Fixed(n) => self.derive_array(&mut t, n)?,
+                TypeNameBound::Runtime(dim) => self.derive_runtime_array(&mut t, dim)?,
+            }
         }
         if let Some(f) = t.fn_ty.as_mut() {
             f.ptr_depth -= t.own_bounds;
@@ -5845,13 +5863,47 @@ impl Compiler {
             fn_ty: t.fn_ty,
             fn_ptr_indirection: t.fn_ptr_indirection,
             type_align,
+            vla: t.vla,
+            is_vla: t.vla_value,
         })
+    }
+
+    /// The bound of an array type name at the cursor, `]` not consumed: a
+    /// constant, `-1` when omitted, or the expression of a variable-length
+    /// array's bound, which C99 6.7.5.2p2 admits only at block scope.
+    pub(super) fn parse_type_name_bound(&mut self) -> Result<TypeNameBound, C5Error> {
+        if self.lex.tk == ']' {
+            return Ok(TypeNameBound::Fixed(-1));
+        }
+        if let Some(n) = self.with_const_object_fold_masked(|c| c.try_parse_constant_dim())? {
+            if n < 0 {
+                return Err(self.compile_err(
+                    Code::INVALID_DECLARATION,
+                    "array dimension in a type name must not be negative",
+                ));
+            }
+            return Ok(TypeNameBound::Fixed(n));
+        }
+        if !self.in_function_body() {
+            return Err(self.compile_err(
+                Code::INVALID_DECLARATION,
+                "a variably modified type is only allowed at block scope",
+            ));
+        }
+        let saved_ty = self.ty;
+        self.expr(Token::Assign as i64)?;
+        self.ty = saved_ty;
+        match self.ast_acc.take() {
+            Some(dim) => Ok(TypeNameBound::Runtime(dim)),
+            None => Err(self.compile_err(Code::SYNTAX, "array bound expected in a type name")),
+        }
     }
 
     /// A pointer to the type `t` holds. The first one above a function type
     /// is the level its pre-decayed tag already has; one above an array
     /// folds the bounds into the aggregate-backed pointee (C99 6.7.7p3).
     fn derive_pointer(&mut self, t: &mut DerivedType) {
+        t.vla_value = false;
         if t.is_function {
             t.is_function = false;
         } else {
@@ -5877,6 +5929,12 @@ impl Compiler {
         if t.is_function {
             return Err(self.compile_err(Code::INVALID_DECLARATION, "array of functions"));
         }
+        if t.vla_value {
+            return Err(self.compile_err(
+                Code::UNSUPPORTED,
+                "a non-constant inner array dimension is not supported",
+            ));
+        }
         if t.dims.first().is_some_and(|&d| d < 0) {
             return Err(self.compile_err(
                 Code::INVALID_DECLARATION,
@@ -5891,6 +5949,77 @@ impl Compiler {
         Ok(())
     }
 
+    /// A variable-length array of the type `t` holds, `dim` elements long
+    /// (C99 6.7.5.2p4): its size is stored in a frame slot when the type
+    /// name is evaluated, and the constant inner bounds fold into the
+    /// element. Only the outermost bound may be variable.
+    fn derive_runtime_array(
+        &mut self,
+        t: &mut DerivedType,
+        dim: super::super::ast::ExprId,
+    ) -> Result<(), C5Error> {
+        if t.is_function {
+            return Err(self.compile_err(Code::INVALID_DECLARATION, "array of functions"));
+        }
+        if t.vla_value || t.dims.first().is_some_and(|&d| d < 0) {
+            return Err(self.compile_err(
+                Code::UNSUPPORTED,
+                "a non-constant inner array dimension is not supported",
+            ));
+        }
+        let elem = if t.dims.is_empty() {
+            t.ty
+        } else {
+            self.array_agg_type(t.ty, &t.dims)
+        };
+        let elem_size = self.size_of_type(elem) as i64;
+        let slot = self.reserve_slots(1);
+        let size_t = self.size_t_ty();
+        let pos = self.ast_src_pos();
+        use super::super::ast::Expr;
+        let count = self.ast.push_expr(
+            Expr::Cast {
+                child: dim,
+                to_ty: size_t,
+            },
+            pos,
+        );
+        let scale = self.ast.push_expr(
+            Expr::IntLit {
+                val: elem_size,
+                ty: size_t,
+            },
+            pos,
+        );
+        let size = self.ast.push_expr(
+            Expr::Binary {
+                op: crate::c5::ir::BinOp::Mul,
+                lhs: count,
+                rhs: scale,
+                ty: size_t,
+            },
+            pos,
+        );
+        let store = self.ast.push_expr(
+            Expr::CompoundLiteral {
+                slot_off: slot,
+                ty: size_t,
+                array_size: 0,
+                init: super::super::ast::LocalInit::Scalar(size),
+            },
+            pos,
+        );
+        t.ty = self.vla_array_type(elem, slot);
+        t.dims.clear();
+        t.own_bounds = 0;
+        t.vla_value = true;
+        t.vla = Some(VmBound { slot, store });
+        if let Some(f) = t.fn_ty.as_mut() {
+            f.ptr_depth += 1;
+        }
+        Ok(())
+    }
+
     /// A function returning the type `t` holds, which is spelled as that
     /// type one pointer level up; the function type `t` leads to becomes
     /// the returned pointer's (C99 6.7.5.3p1: no array or function result).
@@ -5899,7 +6028,7 @@ impl Compiler {
         t: &mut DerivedType,
         params: Option<super::function::ParsedParams>,
     ) -> Result<(), C5Error> {
-        if t.is_function || !t.dims.is_empty() {
+        if t.is_function || !t.dims.is_empty() || t.vla_value {
             return Err(self.compile_err(
                 Code::INVALID_DECLARATION,
                 "function returning an array or a function",
@@ -6286,6 +6415,27 @@ pub(super) struct TypeName {
     pub fn_ptr_indirection: Option<i64>,
     /// Explicit alignment a typedef base carries (GNU `aligned(N)`).
     pub type_align: i64,
+    /// The variable-length array the type is or is derived from.
+    pub vla: Option<VmBound>,
+    /// The type is that array itself, whose size is known only when the
+    /// type name is evaluated (C99 6.5.3.4p2).
+    pub is_vla: bool,
+}
+
+/// The bound of an array type name: a constant (`-1` when omitted) or the
+/// expression computing a variable-length array's.
+pub(super) enum TypeNameBound {
+    Fixed(i64),
+    Runtime(super::super::ast::ExprId),
+}
+
+/// A variably modified type's variable-length array (C99 6.7.5.2): the
+/// frame slot holding its byte count and the expression that stores the
+/// count there, which the type name's evaluation runs.
+#[derive(Clone, Copy)]
+pub(super) struct VmBound {
+    pub slot: i64,
+    pub store: super::super::ast::ExprId,
 }
 
 /// The type a type name derives, from its base type outward.
@@ -6301,6 +6451,10 @@ struct DerivedType {
     is_function: bool,
     fn_ptr_indirection: Option<i64>,
     ptr_levels: i64,
+    /// The variable-length array the type is or is derived from.
+    vla: Option<VmBound>,
+    /// The type is that array itself, not derived from it.
+    vla_value: bool,
 }
 
 impl TypeName {

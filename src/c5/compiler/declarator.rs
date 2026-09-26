@@ -38,6 +38,8 @@ pub(super) enum Derivation {
     Pointer,
     /// An array of the bound, `-1` when it is unspecified.
     Array(i64),
+    /// A variable-length array whose bound this expression computes.
+    RuntimeArray(super::super::ast::ExprId),
     /// A function with its parameters, when captured.
     Function(Option<super::function::ParsedParams>),
 }
@@ -255,22 +257,12 @@ impl Compiler {
                 }
             } else if self.lex.tk == Token::Brak {
                 self.next()?;
-                if self.lex.tk == ']' {
-                    self.next()?;
-                    Derivation::Array(-1)
-                } else {
-                    // A type-name bound: the const-object fold stays masked
-                    // (see `with_const_object_fold_masked`).
-                    let n = self.with_const_object_fold_masked(|c| c.parse_constant_int())?;
-                    if n < 0 {
-                        return Err(self.compile_err(
-                            Code::INVALID_DECLARATION,
-                            "array dimension in a type name must not be negative",
-                        ));
-                    }
-                    self.accept(']')?;
-                    Derivation::Array(n)
-                }
+                let step = match self.parse_type_name_bound()? {
+                    super::expr::TypeNameBound::Fixed(n) => Derivation::Array(n),
+                    super::expr::TypeNameBound::Runtime(dim) => Derivation::RuntimeArray(dim),
+                };
+                self.accept(']')?;
+                step
             } else {
                 return Ok(());
             };

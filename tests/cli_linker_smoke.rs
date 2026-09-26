@@ -5963,6 +5963,65 @@ fn packed_members_cross_the_windows_compiler_boundary() {
     );
 }
 
+// An attribute list after a bit-field's width applies to that bit-field, and
+// an alignment request places a named or unnamed one, as the compiler on the
+// other side lays them out. gcc computes in a wide bit-field's own width, so
+// `w` is widened before the arithmetic.
+const BITFIELD_ATTRS_COMMON: &str = "typedef long long ll;\n\
+    struct ba { char c; int b : 4 __attribute__((aligned(8))), e : 4; char d; };\n\
+    struct bu { char c; int : 4 __attribute__((aligned(8))); short s;\n\
+      long long w : 40 __attribute__((aligned(16))); };\n\
+    static ll layout(void)\n\
+    { return sizeof(struct ba) + 100 * (sizeof(struct bu) + 100 * ((ll)__builtin_offsetof(struct ba, d)\n\
+        + 100 * (ll)__builtin_offsetof(struct bu, s))); }\n\
+    static struct ba make_ba(int b, int e) { struct ba v = { 1, b, e, 2 }; return v; }\n\
+    static ll read_bu(const struct bu *p) { return p->c + p->s * 10 + (ll)p->w * 1000; }\n\
+    static void set_bu(struct bu *p, ll w) { p->w = w; }\n\
+    struct fns { ll (*layout)(void); struct ba (*make_ba)(int, int);\n\
+      ll (*read_bu)(const struct bu *); void (*set_bu)(struct bu *, ll); };\n\
+    static int drive(const struct fns *f, int base)\n\
+    { struct ba m = f->make_ba(-3, 5);\n\
+      struct bu p = { 1, -7, 0x123456789LL };\n\
+      if (f->layout() != layout()) return base + 1;\n\
+      if (m.c != 1 || m.b != -3 || m.e != 5 || m.d != 2) return base + 2;\n\
+      if (f->read_bu(&p) != 1 - 70 + 0x123456789LL * 1000) return base + 3;\n\
+      f->set_bu(&p, -0x7654321LL);\n\
+      if (p.c != 1 || p.s != -7 || p.w != -0x7654321LL) return base + 4;\n\
+      return 0; }\n";
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn bitfield_attributes_cross_the_system_compiler_boundary() {
+    let Some(cc) = host_cc() else {
+        eprintln!(
+            "skipping bitfield_attributes_cross_the_system_compiler_boundary: no system C compiler"
+        );
+        return;
+    };
+    drive_across_the_system_compiler(
+        &cc,
+        "bitfield-attrs-interop",
+        BITFIELD_ATTRS_COMMON,
+        "layout, make_ba, read_bu, set_bu",
+    );
+}
+
+#[cfg(windows)]
+#[test]
+fn bitfield_attributes_cross_the_windows_compiler_boundary() {
+    // MSVC has no GNU attributes, so only a clang build is a peer here.
+    let Some(cc @ WindowsCc::Clang(_)) = windows_cc() else {
+        eprintln!("skipping bitfield_attributes_cross_the_windows_compiler_boundary: no clang");
+        return;
+    };
+    drive_across_the_windows_compiler(
+        &cc,
+        "win-bitfield-attrs-interop",
+        BITFIELD_ATTRS_COMMON,
+        "layout, make_ba, read_bu, set_bu",
+    );
+}
+
 /// The platform C compiler on Windows: `$CC` when set, else clang on the path
 /// or in LLVM's default install, provided it runs, else the `cl` of the newest
 /// Visual Studio vswhere reports, for the host architecture.

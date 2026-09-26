@@ -140,10 +140,10 @@ catalog! {
         "control reaches the end of a value-returning function";
     3004, "too-few-arguments", [], Warning, Controllable,
         [DEFAULT], Live,
-        "a call passing fewer arguments than the prototype declares";
+        "a call passing fewer arguments than an old-style definition or a libc binding's prototype declares";
     3005, "too-many-arguments", [], Warning, Controllable,
         [DEFAULT], Live,
-        "a call passing more arguments than the prototype declares";
+        "a call passing more arguments than an old-style definition or a libc binding's prototype declares";
     3006, "long-double-abi", ["psabi"], Warning, Controllable,
         [DEFAULT], Retired,
         "a `long double` argument passed in a format this target's ABI does not use";
@@ -161,7 +161,7 @@ catalog! {
         "an initializer C99 6.7.8 rejects: a mismatched brace form, a designator naming nothing, an index out of range";
     3023, "invalid-arguments", [], Error, Hard,
         [], Live,
-        "a builtin or intrinsic called with arguments it does not take";
+        "a call with arguments its callee does not take: a count other than a prototype's, or a builtin's or intrinsic's operand it rejects";
     3024, "invalid-statement", [], Error, Hard,
         [], Live,
         "a statement outside the construct it needs: `break` outside a loop, `case` outside a switch, a `goto` to no label, a jump into a statement expression or into the scope of a variably modified or cleanup object";

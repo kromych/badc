@@ -62,7 +62,7 @@ impl ParsedParams {
         crate::c5::symbol::FnParams {
             types: self.types.clone(),
             variadic: self.is_variadic,
-            unprototyped: matches!(self.form, ParamForm::Empty | ParamForm::IdentifierList),
+            prototyped: self.form == ParamForm::Prototype,
         }
     }
 
@@ -71,10 +71,10 @@ impl ParsedParams {
     pub(super) fn of_type(p: crate::c5::symbol::FnParams) -> Self {
         ParsedParams {
             indices: Vec::new(),
-            form: if p.unprototyped {
-                ParamForm::Empty
-            } else {
+            form: if p.prototyped {
                 ParamForm::Prototype
+            } else {
+                ParamForm::Empty
             },
             types: p.types,
             is_variadic: p.variadic,

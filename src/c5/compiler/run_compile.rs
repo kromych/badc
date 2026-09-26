@@ -929,9 +929,9 @@ impl Compiler {
             params.types = prior_params.clone();
             params.is_variadic = prior_is_variadic;
         }
-        let unprototyped = !self.has_prototype(id_idx, &params);
+        let prototyped = self.has_prototype(id_idx, &params);
         let fn_params = crate::c5::symbol::FnParams {
-            unprototyped,
+            prototyped,
             ..params.fn_params()
         };
         self.symbols[id_idx].set_fn_params(fn_params);
@@ -1167,9 +1167,9 @@ impl Compiler {
         } else {
             params.types.clone()
         };
-        let unprototyped = !self.has_prototype(id_idx, &params);
-        self.symbols[id_idx].unprototyped_def = unprototyped;
-        self.symbols[id_idx].unprototyped = unprototyped;
+        let prototyped = self.has_prototype(id_idx, &params);
+        self.symbols[id_idx].unprototyped_def = !prototyped;
+        self.symbols[id_idx].prototyped = prototyped;
         self.define_linked_function(id_idx, def, Params::of(&params, true))?;
         self.symbols[id_idx].params = arrival.clone();
 

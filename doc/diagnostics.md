@@ -64,14 +64,14 @@ regenerates.
 | B3001 | `int-conversion` | warning | controllable | default | an integer and a pointer exchanged with no cast |
 | B3002 | `incompatible-struct-types` | warning | controllable | default | an aggregate used where a different aggregate type is expected |
 | B3003 | `return-type` | ignore | controllable | all | control reaches the end of a value-returning function |
-| B3004 | `too-few-arguments` | warning | controllable | default | a call passing fewer arguments than the prototype declares |
-| B3005 | `too-many-arguments` | warning | controllable | default | a call passing more arguments than the prototype declares |
+| B3004 | `too-few-arguments` | warning | controllable | default | a call passing fewer arguments than an old-style definition or a libc binding's prototype declares |
+| B3005 | `too-many-arguments` | warning | controllable | default | a call passing more arguments than an old-style definition or a libc binding's prototype declares |
 | B3006 | `long-double-abi (retired)` | warning | controllable | default | a `long double` argument passed in a format this target's ABI does not use |
 | B3007 | `dead-store` | ignore | controllable | - | a value assigned to a local and replaced before any read |
 | B3020 | `invalid-operands` | error | hard | - | an operator applied to operands its constraints reject, or a non-lvalue where an lvalue is required |
 | B3021 | `constant-expression` | error | hard | - | an expression that must be constant and is not, or one the compiler cannot evaluate at translation time |
 | B3022 | `invalid-initializer` | error | hard | - | an initializer C99 6.7.8 rejects: a mismatched brace form, a designator naming nothing, an index out of range |
-| B3023 | `invalid-arguments` | error | hard | - | a builtin or intrinsic called with arguments it does not take |
+| B3023 | `invalid-arguments` | error | hard | - | a call with arguments its callee does not take: a count other than a prototype's, or a builtin's or intrinsic's operand it rejects |
 | B3024 | `invalid-statement` | error | hard | - | a statement outside the construct it needs: `break` outside a loop, `case` outside a switch, a `goto` to no label, a jump into a statement expression or into the scope of a variably modified or cleanup object |
 | B3025 | `incompatible-types` | error | hard | - | a value of a type no implicit conversion takes to the type required: an aggregate assigned, passed or returned as another |
 | B3026 | `return-mismatch` | error | controllable | default | a `return` with a value in a function returning `void`, or with none in a function returning a value |

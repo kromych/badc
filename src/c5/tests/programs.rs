@@ -2001,12 +2001,6 @@ fn redecl_composite_keeps_prototype() {
 }
 
 #[test]
-fn redecl_composite_arity_warning() {
-    // The same composite keeps call-site argument checking alive.
-    assert_eq!(run_fixture("redecl_composite_arity_warning.c"), 0);
-}
-
-#[test]
 fn float_increment_decrement() {
     // `++` / `--` on a real floating type add / subtract 1 (C99 6.5.3.1 /
     // 6.5.2.4), prefix yielding the new value and postfix the prior.
@@ -5837,10 +5831,11 @@ fn diagnostic_echoes_the_source_line() {
     );
 
     // A warning does the same via `Program.warnings`.
-    let wsrc = "int add(int a, int b);\nint main(void) {\n    return add(1);\n}\n";
+    let wsrc =
+        "int add(a, b) int a, b; { return a + b; }\nint main(void) {\n    return add(1);\n}\n";
     let prog = Compiler::new(wsrc.to_string())
         .compile()
-        .expect("too-few-arguments is a warning, not an error");
+        .expect("too few arguments to an old-style definition is a warning");
     let warns = prog
         .warnings
         .iter()

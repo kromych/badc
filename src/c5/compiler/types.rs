@@ -610,10 +610,10 @@ pub(super) fn format_fn_type(
     let mut decl = alloc::string::String::new();
     let mut level = Some((f, depth));
     while let Some((f, depth)) = level {
-        let params = if f.params.unprototyped {
-            alloc::string::String::new()
-        } else {
+        let params = if f.params.prototyped {
             format_params(&f.params.types, f.params.variadic, structs)
+        } else {
+            alloc::string::String::new()
         };
         decl = if depth == 0 && decl.is_empty() {
             alloc::format!("({params})")

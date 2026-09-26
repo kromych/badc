@@ -1601,7 +1601,7 @@ impl Compiler {
             self.symbols[id_idx].class = Token::Fun as i64;
             self.symbols[id_idx].scoped_fn_decl = true;
             self.symbols[id_idx].type_ = Ty::Int as i64;
-            self.symbols[id_idx].unprototyped = true;
+            self.symbols[id_idx].prototyped = false;
             self.symbols[id_idx].implicit_return_int = true;
             self.symbols[id_idx].linkage = crate::c5::symbol::Linkage::External;
             self.symbols[id_idx].defined_here = false;
@@ -2191,14 +2191,18 @@ impl Compiler {
     }
 
     fn parse_direct_call(&mut self, id_idx: usize) -> Result<(), C5Error> {
+        let s = &self.symbols[id_idx];
+        let is_sys_call = s.class == Token::Sys as i64;
+        let old_style_def = s.class == Token::Fun as i64 && s.unprototyped_def;
         let callee = DirectCallee {
-            params: self.symbols[id_idx].params.clone(),
-            is_variadic: self.symbols[id_idx].is_variadic,
-            name: self.symbols[id_idx].name.clone(),
-            is_sys_call: self.symbols[id_idx].class == Token::Sys as i64,
-            ret_ty: self.symbols[id_idx].type_,
-            returns_struct: self.symbols[id_idx].class == Token::Fun as i64
-                && is_struct_value_ty(self.symbols[id_idx].type_),
+            params: s.params.clone(),
+            is_variadic: s.is_variadic,
+            name: s.name.clone(),
+            is_sys_call,
+            ret_ty: s.type_,
+            returns_struct: s.class == Token::Fun as i64 && is_struct_value_ty(s.type_),
+            count_known: s.prototyped || old_style_def,
+            count_is_constraint: s.prototyped && !is_sys_call,
         };
         // A callee left at the implicit `int` (a `#pragma binding` with no
         // prototype, or a C89 implicit declaration) truncates a wider return
@@ -2272,21 +2276,20 @@ impl Compiler {
         // A compound literal reserved while evaluating the arguments has
         // block lifetime (C99 6.5.2.5p5) and is never reclaimed here.
         self.loc_offs = target_loc_offs.max(self.committed_loc_offs);
-        if !callee.is_variadic
-            && !callee.params.is_empty()
-            && (nargs as usize) < callee.params.len()
-        {
+        if callee.count_known && (nargs as usize) < callee.params.len() {
+            let at_least = if callee.is_variadic { "at least " } else { "" };
+            let text = format!(
+                "too few arguments to `{}` (expected {at_least}{}, got {nargs})",
+                callee.name,
+                callee.params.len(),
+            );
             let line = self.lex.line;
-            self.warn_at(
+            self.report_arity(
+                callee.count_is_constraint,
                 Code::TOO_FEW_ARGUMENTS,
                 line,
-                format!(
-                    "too few arguments to `{}` (expected {}, got {})",
-                    callee.name,
-                    callee.params.len(),
-                    nargs,
-                ),
-            );
+                text,
+            )?;
         }
         self.next()?;
         if self.symbols[id_idx].class == Token::Sys as i64
@@ -2342,17 +2345,15 @@ impl Compiler {
         if (nargs as usize) < callee.params.len() {
             self.convert_declared_argument(callee, nargs, arg_line)?;
         } else {
-            if !callee.params.is_empty() && !callee.is_variadic {
-                self.warn_at(
-                    Code::TOO_MANY_ARGUMENTS,
-                    arg_line,
-                    format!(
-                        "too many arguments to `{}` (expected {}, got at least {})",
-                        callee.name,
-                        callee.params.len(),
-                        nargs + 1,
-                    ),
+            if callee.count_known && !callee.is_variadic {
+                let text = format!(
+                    "too many arguments to `{}` (expected {}, got at least {})",
+                    callee.name,
+                    callee.params.len(),
+                    nargs + 1,
                 );
+                let constraint = callee.count_is_constraint;
+                self.report_arity(constraint, Code::TOO_MANY_ARGUMENTS, arg_line, text)?;
             }
             // C99 6.5.2.2p6: an argument past the declared parameters, or to a
             // callee with no prototype, undergoes the default argument
@@ -2365,6 +2366,22 @@ impl Compiler {
         let arg_ast = self.ast_acc;
         self.ast_assign();
         Ok((temp_off, arg_ast))
+    }
+
+    /// An argument count that does not match the callee's parameters: an
+    /// error when it violates a constraint, else the warning `code`.
+    fn report_arity(
+        &mut self,
+        constraint: bool,
+        code: Code,
+        line: usize,
+        text: String,
+    ) -> Result<(), C5Error> {
+        if constraint {
+            return Err(self.compile_err_at(Code::INVALID_ARGUMENTS, line, text));
+        }
+        self.warn_at(code, line, text);
+        Ok(())
     }
 
     /// C99 6.5.2.2p7: an argument to a declared parameter undergoes the
@@ -3484,6 +3501,7 @@ impl Compiler {
         let callee_params = callee_fn.as_ref().map(|f| f.params.types.clone());
         let callee_ret_fn_ptr = core::mem::take(&mut self.pending.indirect_callee_ret_fn_ptr);
         let mut arg_idx: usize = 0;
+        let call_line = self.lex.line;
         if self.lex.tk != ')' {
             loop {
                 let temp_off = self.reserve_slots(1);
@@ -3504,6 +3522,24 @@ impl Compiler {
                 if !self.list_separator(')', "argument")? {
                     break;
                 }
+            }
+        }
+        if let Some(p) = callee_fn
+            .as_ref()
+            .map(|f| &f.params)
+            .filter(|p| p.prototyped)
+        {
+            let (want, variadic) = (p.types.len(), p.variadic);
+            if arg_idx < want || (arg_idx > want && !variadic) {
+                let (dir, at_least) = if arg_idx < want {
+                    ("few", if variadic { "at least " } else { "" })
+                } else {
+                    ("many", "")
+                };
+                let text = format!(
+                    "too {dir} arguments to function call (expected {at_least}{want}, got {arg_idx})"
+                );
+                return Err(self.compile_err_at(Code::INVALID_ARGUMENTS, call_line, text));
             }
         }
         self.next()?; // consume `)`
@@ -3977,7 +4013,7 @@ impl Compiler {
         let arm_fns = [then_ast, else_ast].map(|a| a.and_then(|a| self.expr_fn(a)));
         let [then_fn, else_fn] = arm_fns;
         let result_fn = match (then_fn, else_fn) {
-            (Some(t), Some(e)) if t.0.params.unprototyped => Some(e),
+            (Some(t), Some(e)) if !t.0.params.prototyped => Some(e),
             (Some(t), _) => Some(t),
             (None, e) => e,
         };
@@ -4962,7 +4998,7 @@ impl Compiler {
                 let params = crate::c5::symbol::FnParams {
                     types: field.params.clone(),
                     variadic: field.is_variadic,
-                    unprototyped: field.unprototyped,
+                    prototyped: field.prototyped,
                 };
                 let f = FnType {
                     params,
@@ -6071,6 +6107,13 @@ struct DirectCallee {
     /// `ret_agg` instead and the emitter gathers the platform-ABI return
     /// registers into that object.
     returns_struct: bool,
+    /// The parameter count is part of the callee's type: a prototype, or an
+    /// old-style definition's identifier list (C99 6.9.1p7).
+    count_known: bool,
+    /// A count mismatch violates C99 6.5.2.2p2: the callee has a prototype
+    /// the unit declared. An old-style definition binds no constraint, and a
+    /// libc binding's prototype approximates the platform's; those warn.
+    count_is_constraint: bool,
 }
 
 /// What a subscript's index parse hands back: the index expression, the
@@ -6160,17 +6203,17 @@ fn fn_type_match(a: &Option<FnTypeName>, b: &Option<FnTypeName>) -> bool {
         return false;
     }
     let (pa, pb) = (&a.params, &b.params);
-    match (pa.unprototyped, pb.unprototyped) {
-        (false, false) => {
+    match (pa.prototyped, pb.prototyped) {
+        (true, true) => {
             pa.variadic == pb.variadic
                 && pa.types.len() == pb.types.len()
                 && pa.types.iter().zip(&pb.types).all(|(x, y)| {
                     generic_type_match(strip_object_const(*x), strip_object_const(*y))
                 })
         }
-        (false, true) => !pa.variadic && pa.types.iter().copied().all(promotes_unchanged),
-        (true, false) => !pb.variadic && pb.types.iter().copied().all(promotes_unchanged),
-        (true, true) => true,
+        (true, false) => !pa.variadic && pa.types.iter().copied().all(promotes_unchanged),
+        (false, true) => !pb.variadic && pb.types.iter().copied().all(promotes_unchanged),
+        (false, false) => true,
     }
 }
 

@@ -492,7 +492,7 @@ fn cast_silences_int_to_pointer_warning() {
 
 #[test]
 fn warn_call_arity_mismatch() {
-    // `int add(int, int);` called with 1 arg and with 4 args.
+    // An old-style definition of `add(a, b)` called with 1 argument and with 4.
     let p = compile_fixture("type_warning_arity.c");
     assert!(
         p.warnings
@@ -510,21 +510,140 @@ fn warn_call_arity_mismatch() {
     );
 }
 
+/// C99 6.5.2.2p2: a call to a function whose type includes a prototype
+/// passes as many arguments as it has parameters, at least as many when it
+/// is variadic, whether the callee is named or reached through a pointer.
+/// An old-style definition's count binds no constraint (6.9.1p7), so a call
+/// past it warns; a declaration without a prototype is not checked.
+#[test]
+fn a_call_with_a_count_other_than_the_prototypes_is_rejected() {
+    use crate::Compiler;
+    let decls = "int i1(int x) { return x; }\n\
+                 int iv(void) { return 0; }\n\
+                 int ivar(int x, ...) { return x; }\n\
+                 int kr(a) int a; { return a; }\n\
+                 int ke() { return 0; }\n\
+                 int iu();\n\
+                 int (*get(void))(int) { return i1; }\n\
+                 struct s { int (*m)(int); int (*v)(void); int (*u)(); } s = { i1, iv, i1 };\n\
+                 int (*arr[2])(int) = { i1, i1 };\n\
+                 int (*fp)(int) = i1, (*vp)(int, ...) = ivar;\n";
+    let compile = |call: &str| {
+        let src = format!("{decls}int main(void) {{ return {call}; }}\nint iu() {{ return 0; }}\n");
+        (Compiler::new(src.clone()).compile(), src)
+    };
+    for (call, text) in [
+        (
+            "i1(1, 2)",
+            "too many arguments to `i1` (expected 1, got at least 2)",
+        ),
+        ("i1()", "too few arguments to `i1` (expected 1, got 0)"),
+        (
+            "iv(1)",
+            "too many arguments to `iv` (expected 0, got at least 1)",
+        ),
+        (
+            "ivar()",
+            "too few arguments to `ivar` (expected at least 1, got 0)",
+        ),
+        (
+            "fp(1, 2)",
+            "too many arguments to `fp` (expected 1, got at least 2)",
+        ),
+        (
+            "(*fp)(1, 2)",
+            "too many arguments to function call (expected 1, got 2)",
+        ),
+        (
+            "(*vp)()",
+            "too few arguments to function call (expected at least 1, got 0)",
+        ),
+        (
+            "s.m()",
+            "too few arguments to function call (expected 1, got 0)",
+        ),
+        (
+            "s.v(1)",
+            "too many arguments to function call (expected 0, got 1)",
+        ),
+        (
+            "arr[1](1, 2)",
+            "too many arguments to function call (expected 1, got 2)",
+        ),
+        (
+            "get()(1, 2)",
+            "too many arguments to function call (expected 1, got 2)",
+        ),
+    ] {
+        let (r, src) = compile(call);
+        let err = r.expect_err(&src).to_string();
+        assert!(err.contains(&format!("{text} [B3023]")), "{src}{err}");
+    }
+    for (call, text) in [
+        (
+            "kr(1, 2)",
+            Some("too many arguments to `kr` (expected 1, got at least 2) [B3005]"),
+        ),
+        (
+            "kr()",
+            Some("too few arguments to `kr` (expected 1, got 0) [B3004]"),
+        ),
+        (
+            "ke(1)",
+            Some("too many arguments to `ke` (expected 0, got at least 1) [B3005]"),
+        ),
+        ("iu(1, 2)", None),
+        ("s.u(1, 2)", None),
+        ("(*vp)(1, 2.0, 3)", None),
+    ] {
+        let (r, src) = compile(call);
+        let program = r.unwrap_or_else(|e| panic!("{src}{e}"));
+        let warnings: alloc::vec::Vec<_> = program.warnings.iter().map(|w| w.to_string()).collect();
+        match text {
+            Some(t) => assert!(warnings.iter().any(|w| w.contains(t)), "{src}{warnings:?}"),
+            None => assert!(
+                !warnings.iter().any(|w| w.contains("arguments")),
+                "{src}{warnings:?}"
+            ),
+        }
+    }
+}
+
 #[test]
 fn redeclaration_without_parameters_keeps_the_prototype() {
     // C99 6.2.7p4: the composite type keeps the parameter type list a
     // prior declaration or definition established, so a call past it is
-    // still checked after a redeclaration through the function's own
-    // type, the empty-list spelling, or a function-type typedef with one.
-    let p = compile_fixture("redecl_composite_arity_warning.c");
-    for name in ["take_wrap", "add2", "add3"] {
+    // still checked (6.5.2.2p2) after a redeclaration through the
+    // function's own type, the empty-list spelling, or a function-type
+    // typedef with one.
+    use crate::Compiler;
+    for (decls, call) in [
+        (
+            "typedef struct { unsigned val; } wrap;\n\
+             unsigned take_wrap(wrap w);\n\
+             unsigned take_wrap(wrap w) { return w.val; }\n\
+             extern typeof(take_wrap) take_wrap;\n",
+            "wrap w = {1u}; return (int)take_wrap(w, 1u, 2u);",
+        ),
+        (
+            "unsigned add2(unsigned a, unsigned b) { return a + b; }\nunsigned add2();\n",
+            "return (int)add2(1u, 2u, 3u);",
+        ),
+        (
+            "typedef unsigned noproto_fn();\n\
+             unsigned add3(unsigned a, unsigned b, unsigned c) { return a + b + c; }\n\
+             extern noproto_fn add3;\n",
+            "return (int)add3(1u, 2u, 3u, 4u);",
+        ),
+    ] {
+        let src = format!("{decls}int main(void) {{ {call} }}\n");
+        let err = Compiler::new(src.clone())
+            .compile()
+            .expect_err(&src)
+            .to_string();
         assert!(
-            p.warnings
-                .iter()
-                .any(|w| w.to_string().contains("too many arguments")
-                    && w.to_string().contains(name)),
-            "expected a too-many warning for `{name}`, got: {:?}",
-            p.warnings
+            err.contains("too many arguments") && err.contains("[B3023]"),
+            "{src}{err}"
         );
     }
 }
@@ -571,14 +690,13 @@ fn typeof_redeclaration_merges_with_the_recorded_prototype() {
         let src = alloc::format!(
             "typedef struct {{ int val; }} kuid_t;\n{body}int main(void) {{ return 0; }}\n"
         );
-        let p = compile_str(&src);
+        let err = crate::Compiler::new(src.clone())
+            .compile()
+            .expect_err(&src)
+            .to_string();
         assert!(
-            p.warnings
-                .iter()
-                .any(|w| w.to_string().contains("too many arguments")
-                    && w.to_string().contains("inner")),
-            "expected an arity warning past the redeclaration, got: {:?}",
-            p.warnings
+            err.contains("too many arguments to `inner`"),
+            "expected the prototype's count past the redeclaration: {src}{err}"
         );
     }
 }

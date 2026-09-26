@@ -71,10 +71,10 @@ pub(crate) struct Symbol {
     /// True if the function accepts trailing varargs (e.g. `printf`).
     /// Type-checking only verifies the fixed parameters.
     pub is_variadic: bool,
-    /// `FnParams::unprototyped` of the function type `params` belongs to.
-    pub unprototyped: bool,
+    /// `FnParams::prototyped` of the function type `params` belongs to.
+    pub prototyped: bool,
 
-    /// Shadow slots for `params` / `is_variadic` / `unprototyped`. See `h_array_size`:
+    /// Shadow slots for `params` / `is_variadic` / `prototyped`. See `h_array_size`:
     /// a function-pointer parameter, block-scope local, or block-scope
     /// typedef that reuses an outer function name writes its own
     /// prototype onto the shared symbol slot; without the save the
@@ -83,7 +83,7 @@ pub(crate) struct Symbol {
     /// ABI.
     pub h_params: Vec<i64>,
     pub h_is_variadic: bool,
-    pub h_unprototyped: bool,
+    pub h_prototyped: bool,
     /// Calling convention of the function this symbol names, or of the
     /// function a function-pointer object points to
     /// (`__attribute__((ms_abi))` / `((sysv_abi))`). Already normalised
@@ -691,10 +691,10 @@ pub(crate) struct FnParams {
     /// Parameter types, empty when the type declares none.
     pub types: Vec<i64>,
     pub variadic: bool,
-    /// The type includes no prototype (C99 6.7.5.3p14, 6.9.1p7); `types`
-    /// still lists what a call converts its arguments to, such as an
-    /// old-style definition's promoted parameter types.
-    pub unprototyped: bool,
+    /// The type includes a prototype (C99 6.7.5.3p14). An old-style
+    /// definition has none (6.9.1p7), yet `types` lists the promoted types
+    /// a call passes; a type no declaration gave a list has none either.
+    pub prototyped: bool,
 }
 
 /// The part of a function type its `i64` tag, the return type's, leaves
@@ -809,14 +809,14 @@ impl Symbol {
         FnParams {
             types: self.params.clone(),
             variadic: self.is_variadic,
-            unprototyped: self.unprototyped,
+            prototyped: self.prototyped,
         }
     }
 
     pub(crate) fn set_fn_params(&mut self, p: FnParams) {
         self.params = p.types;
         self.is_variadic = p.variadic;
-        self.unprototyped = p.unprototyped;
+        self.prototyped = p.prototyped;
     }
 
     /// Assembler symbol name: the GNU asm label when the declaration
@@ -875,10 +875,10 @@ impl crate::c5::layout::DataOffsets for Symbol {
             h_val: _, // scope-restore shadow; every scope is unwound before a `Program` exists
             params: _,
             is_variadic: _,
-            unprototyped: _,
+            prototyped: _,
             h_params: _,
             h_is_variadic: _,
-            h_unprototyped: _,
+            h_prototyped: _,
             conv: _,
             h_conv: _,
             implicit_return_int: _,

@@ -398,8 +398,8 @@ pub struct StructField {
     /// variadic ABI. False for a non-function-pointer field or a
     /// non-variadic prototype.
     pub is_variadic: bool,
-    /// Mirrors `Symbol::unprototyped`.
-    pub unprototyped: bool,
+    /// Mirrors `Symbol::prototyped`.
+    pub prototyped: bool,
     /// Calling convention of the function a function-pointer field
     /// points to (`__attribute__((ms_abi))` / `((sysv_abi))`). Mirrors
     /// `Symbol::conv`; `CallConv::Target` for every other field. The

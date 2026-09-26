@@ -3460,3 +3460,41 @@ fn an_initializer_reports_the_conversions_an_assignment_reports() {
     let row = "pointer assigned to integer in initializer (declared=long long, init=int*)";
     assert!(text.contains(row), "{text}");
 }
+
+/// C23 6.7.2.5: `typeof` of a type name takes every derivation of its
+/// abstract declarator (C99 6.7.6), and `typeof` of an expression carries
+/// the function type the value leads to whatever its form -- an array, a
+/// call, `&`, a member, an element, a conditional -- so each compares by
+/// its parameters.
+#[test]
+fn typeof_carries_the_whole_type_of_its_operand() {
+    compile_str(
+        "static int twice(int x) { return 2 * x; }\n\
+         static double half(double x) { return x / 2; }\n\
+         static double (*getfp(void))(double) { return half; }\n\
+         static int (*arr[3])(int) = {twice, twice, twice};\n\
+         static int (*fp)(int) = twice;\n\
+         struct S { int (*m)(int); double (*t[2])(double); } s;\n\
+         typedef int (*IF)(int);\n\
+         #define SAME(a, b) _Static_assert(__builtin_types_compatible_p(a, b), #a)\n\
+         #define DIFF(a, b) _Static_assert(!__builtin_types_compatible_p(a, b), #a)\n\
+         int main(void) {\n\
+             SAME(__typeof__(int (*)(int)), int (*)(int));\n\
+             DIFF(__typeof__(int (*)(int)), int (*)(double));\n\
+             SAME(__typeof__(int (*[3])(int)), int (*[3])(int));\n\
+             SAME(__typeof__(int (int)), int (int));\n\
+             SAME(__typeof__(IF[2]), int (*[2])(int));\n\
+             SAME(__typeof__(int (*(*)(void))(int)), int (*(*)(void))(int));\n\
+             SAME(__typeof__(arr), int (*[3])(int));\n\
+             DIFF(__typeof__(arr), int (*[3])(double));\n\
+             SAME(__typeof__(getfp()), double (*)(double));\n\
+             DIFF(__typeof__(getfp()), double (*)(int));\n\
+             SAME(__typeof__(&fp), int (**)(int));\n\
+             DIFF(__typeof__(&fp), int (**)(double));\n\
+             SAME(__typeof__(s.t), double (*[2])(double));\n\
+             SAME(__typeof__(&arr[1]), int (**)(int));\n\
+             SAME(__typeof__(1 ? fp : 0), int (*)(int));\n\
+             return 0;\n\
+         }\n",
+    );
+}

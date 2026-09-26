@@ -315,10 +315,34 @@ impl Compiler {
         Ok(Some(inner))
     }
 
+    /// Seed the base-type carriers a declarator through `typeof(type-name)`
+    /// reads, as a typedef of the named type would: an array's bounds, the
+    /// function type the name denotes or leads to, the alignment.
+    fn seed_type_name_carriers(&mut self, name: &super::expr::TypeName) {
+        let dims = &name.dims;
+        self.pending.typedef_base_array_size = match dims.as_slice() {
+            [] => 0,
+            d if d.iter().all(|&n| n > 0) => d.iter().product(),
+            _ => -1,
+        };
+        self.pending.typedef_base_zero_len = dims.first() == Some(&0);
+        self.pending.typedef_base_array_dims = dims.clone();
+        self.pending.typeof_operand_was_array = !dims.is_empty();
+        self.pending.type_align = name.type_align;
+        if let Some(fn_ty) = &name.fn_ty {
+            let (f, _) = fn_ty.at_depth();
+            self.pending.fn_ptr_indirection = name.fn_ptr_indirection;
+            self.pending.fn_ptr_ret_indirection = f.ret.as_ref().map_or(0, |r| r.1);
+            self.pending.base_is_function_type = name.names_function();
+            self.pending.fn_ptr_params = Some(f.params.clone());
+            self.pending.fn_ptr_ret_fn = f.ret.clone();
+        }
+    }
+
     /// `typeof ( type-name )` / `typeof ( expression )` (C23 6.7.2.5,
     /// the GCC `__typeof__` extension). The result is the operand's
-    /// type. A type-name operand parses as a base type plus any abstract
-    /// pointer and array decoration; an expression operand is parsed
+    /// type. A type-name operand takes the type-name grammar (C99 6.7.6),
+    /// its derivations included; an expression operand is parsed
     /// unevaluated and its type recovered, mirroring `sizeof`'s
     /// expression branch. The flat scalar / pointer / aggregate tag is
     /// returned; an array operand (a `T [N]` type name or an array-typed
@@ -383,72 +407,9 @@ impl Compiler {
             }
         }
         let ty = if self.lex_is_type_start() {
-            let inner = self.parse_decl_base_type()?;
-            let ptr = self.consume_abstract_pointer(inner)?;
-            let inner = ptr.ty;
-            let had_ptr = ptr.levels > 0;
-            // An array typedef operand keeps its dimension on the carrier
-            // so a declarator through the specifier is an array, exactly
-            // as if the typedef itself were the base type. `typeof(T *)`
-            // names a pointer; the dimension belongs to the pointee.
-            if had_ptr {
-                self.pending.typedef_base_array_size = 0;
-                self.pending.typedef_base_zero_len = false;
-                self.pending.typedef_base_array_dims.clear();
-            }
-            // Abstract array declarator in the type name: `typeof(T [N])`,
-            // `typeof(T [])`, `typeof(T [N][M])` (C99 6.7.6). The bracketed
-            // dimensions are outer; an array-typedef base supplies the inner.
-            if self.lex.tk == Token::Brak {
-                let base_extent = core::mem::take(&mut self.pending.typedef_base_array_size);
-                let base_dims = core::mem::take(&mut self.pending.typedef_base_array_dims);
-                let mut dims: alloc::vec::Vec<i64> = alloc::vec::Vec::new();
-                while self.lex.tk == Token::Brak {
-                    self.next()?;
-                    // An omitted bound (`T []`) is an incomplete array (-1).
-                    let n = if self.lex.tk == ']' {
-                        -1
-                    } else {
-                        let n = self.parse_constant_int()?;
-                        if n < 0 {
-                            return Err(self.compile_err(
-                                Code::INVALID_DECLARATION,
-                                "array dimension in a type name must not be negative",
-                            ));
-                        }
-                        n
-                    };
-                    if self.lex.tk != ']' {
-                        return Err(self.compile_err(
-                            Code::SYNTAX,
-                            "close bracket expected in an array type name",
-                        ));
-                    }
-                    self.next()?;
-                    dims.push(n);
-                }
-                // Fold in an array-typedef base's dimensions, gated on its
-                // size carrier: the dims list alone can be a prior parse's
-                // stale value.
-                if base_extent != 0 {
-                    if base_dims.is_empty() {
-                        dims.push(base_extent);
-                    } else {
-                        dims.extend(base_dims);
-                    }
-                }
-                // The carrier holds the total element count; the dims list
-                // rides alongside with the exact bounds (-1 unspecified,
-                // 0 zero-length) for type-name readers and per-row strides.
-                self.pending.typedef_base_array_size = if dims.iter().all(|&d| d > 0) {
-                    dims.iter().product::<i64>()
-                } else {
-                    -1
-                };
-                self.pending.typedef_base_array_dims = dims;
-            }
-            self.pending.typeof_operand_was_array = self.pending.typedef_base_array_size != 0;
-            inner
+            let name = self.parse_type_name()?;
+            self.seed_type_name_carriers(&name);
+            name.ty
         } else {
             // Pointer peels leave the inner-only marker describing a
             // derivation the operand no longer has; drop it so a
@@ -474,7 +435,8 @@ impl Compiler {
             // A 1D array expression operand decayed to a pointer to its
             // element; recover the element type and put the element count
             // on the carrier like an array typedef base, so a declarator
-            // through the specifier is an array. TODO: multi-dim
+            // through the specifier is an array, whose element's function
+            // type lies that many levels closer. TODO: multi-dim
             // expression operands (the dims chain is not recoverable from
             // the decay markers).
             let n = core::mem::take(&mut self.pending.typeof_operand_array_size);
@@ -487,6 +449,14 @@ impl Compiler {
                     Code::UNSUPPORTED,
                     "`typeof` of a variable-length array is not supported",
                 ));
+            }
+            let levels = if !dims.is_empty() && inner >= Ty::Ptr as i64 {
+                dims.len() as i64
+            } else {
+                i64::from((n != 0 || bytes > 0) && inner >= Ty::Ptr as i64)
+            };
+            if let Some(fpi) = self.pending.fn_ptr_indirection.as_mut() {
+                *fpi -= levels;
             }
             if !dims.is_empty() && inner >= Ty::Ptr as i64 {
                 // The decay recorded the row's exact dimensions (a
@@ -553,30 +523,6 @@ impl Compiler {
         (*class == Token::Fun as i64 || *class == Token::Sys as i64).then_some(*sym as usize)
     }
 
-    /// The function type of the accumulated operand when it is a plain
-    /// function-pointer object reference -- an identifier, a member, a
-    /// subscripted element or a cast -- and its pointer depth. Empty parameter types
-    /// spell a zero-parameter prototype: the symbol tables do not record
-    /// the prototyped-ness distinction (see `FnTypeName::params`).
-    fn fn_ptr_object_proto(&mut self) -> Option<(super::super::symbol::FnType, i64)> {
-        use super::super::ast::Expr;
-        let acc = self.ast_acc?;
-        let object = match self.ast.expr(acc) {
-            Expr::Ident {
-                class, array_size, ..
-            } => (*class == Token::Loc as i64 || *class == Token::Glo as i64) && *array_size == 0,
-            Expr::Member {
-                bitfield: None,
-                array_size: 0,
-                ..
-            }
-            | Expr::Index { .. }
-            | Expr::Cast { .. } => true,
-            _ => false,
-        };
-        self.expr_fn(acc).filter(|&(_, d)| object && d >= 1)
-    }
-
     fn parse_unevaluated_expr_ty(&mut self, comma_operands: bool) -> Result<i64, C5Error> {
         let saved_text_len = self.next_ent_pc;
         let saved_code_reloc_sym_idx = self.code_reloc_sym_idx.len();
@@ -628,29 +574,14 @@ impl Compiler {
                 self.symbols[idx].type_ + Ty::Ptr as i64
             }
             None => {
-                if self.pending.last_array_decay_size == 0
-                    && self.pending.last_array_decay_bytes == 0
-                    && self.pending.last_array_decay_dims.is_empty()
-                    && let Some((f, depth)) = self.fn_ptr_object_proto()
-                {
-                    // A function-pointer object as the whole operand -- an
-                    // identifier, a member access, a subscripted element or
-                    // a cast: route its function type through the same
-                    // carriers so a type-name reader compares the
-                    // signature, which the flat tag (return type only)
-                    // cannot spell.
-                    self.pending.fn_ptr_indirection = Some(depth);
+                // The function type the value leads to, whatever the
+                // expression form: the flat tag (return type only) cannot
+                // spell it. A designator (`*fp`) is the function type, whose
+                // tag is pre-decayed as a function-type typedef's is.
+                if let Some((f, depth)) = self.ast_acc.and_then(|a| self.expr_fn(a)) {
+                    self.pending.fn_ptr_indirection = Some(depth.max(1));
                     self.pending.fn_ptr_ret_indirection = f.ret.as_ref().map_or(0, |r| r.1);
                     self.pending.base_is_function_type = false;
-                    self.pending.fn_ptr_params = Some(f.params);
-                    self.pending.fn_ptr_ret_fn = f.ret;
-                } else if self.pending.value_is_fn_designator
-                    && let Some((f, 0)) = self.ast_acc.and_then(|a| self.expr_fn(a))
-                {
-                    // A function designator (`*fp`): the function type the
-                    // specifier names, parameters included.
-                    self.pending.fn_ptr_indirection = Some(1);
-                    self.pending.fn_ptr_ret_indirection = f.ret.as_ref().map_or(0, |r| r.1);
                     self.pending.fn_ptr_params = Some(f.params);
                     self.pending.fn_ptr_ret_fn = f.ret;
                 }

@@ -2780,6 +2780,14 @@ fn static_initializer_address_casts() {
 }
 
 #[test]
+fn typeof_function_types() {
+    // C23 6.7.2.5: an object declared through `typeof` of a type name or of
+    // an expression of any form has the function type the operand leads
+    // to, so a call through it converts to the parameter types.
+    assert_eq!(run_fixture("typeof_function_types.c"), 0);
+}
+
+#[test]
 fn indirect_call_prototypes() {
     // A call through a pointer converts or promotes its arguments by the
     // pointed-to type, however the callee is spelled.

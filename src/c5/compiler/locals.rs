@@ -49,7 +49,7 @@ pub(super) struct DeclAlign {
 /// function type its result leads to, and that result's fn-pointer lineage
 /// (`Symbol::fn_ptr_indirection`, `Symbol::fn_ptr_ret_indirection`).
 struct BlockFunction {
-    ret: i64,
+    ret: super::redeclaration::Spelled,
     params: super::function::ParsedParams,
     ret_fn: Option<(alloc::boxed::Box<crate::c5::symbol::FnType>, i64)>,
     lineage: (i64, i64),
@@ -61,6 +61,7 @@ struct BlockFunction {
 struct LocalDeclarator {
     loc_idx: usize,
     ty: i64,
+    enum_tag: Option<u32>,
     array_size: i64,
     is_static: bool,
     is_extern: bool,
@@ -475,8 +476,12 @@ impl Compiler {
             // function, not an object; classifying it as data would make a
             // use of the name load code bytes. Bind it as
             // `try_parse_block_fn_prototype` binds the `name(params)` form.
-            if self.bind_bare_function_declarator(loc_idx, ty, is_static)?
-                || self.bind_grouped_function_declarator(loc_idx, ty, is_static)?
+            let spelled = super::redeclaration::Spelled {
+                ty,
+                enum_tag: base_enum_tag,
+            };
+            if self.bind_bare_function_declarator(loc_idx, spelled, is_static)?
+                || self.bind_grouped_function_declarator(loc_idx, spelled, is_static)?
             {
                 continue;
             }
@@ -581,6 +586,7 @@ impl Compiler {
             self.bind_local_declarator(&LocalDeclarator {
                 loc_idx,
                 ty,
+                enum_tag: base_enum_tag,
                 array_size,
                 is_static,
                 is_extern,
@@ -641,6 +647,7 @@ impl Compiler {
             if d.convert_extern {
                 self.symbols[d.loc_idx].class = Token::Glo as i64;
                 self.symbols[d.loc_idx].type_ = d.ty;
+                self.symbols[d.loc_idx].incomplete_enum_tag = d.enum_tag;
                 self.symbols[d.loc_idx].binding.decl_spelling = self.decl_spelling(d.base_spelling);
                 self.set_decl_site(d.loc_idx);
                 // Record the dimension so a subscript sees an array
@@ -670,6 +677,7 @@ impl Compiler {
         } else if d.is_static {
             self.symbols[d.loc_idx].class = Token::Glo as i64;
             self.symbols[d.loc_idx].type_ = d.ty;
+            self.symbols[d.loc_idx].incomplete_enum_tag = d.enum_tag;
             self.symbols[d.loc_idx].binding.decl_spelling = self.decl_spelling(d.base_spelling);
             self.set_decl_site(d.loc_idx);
             self.symbols[d.loc_idx].is_thread_local = d.is_thread_local;
@@ -716,6 +724,7 @@ impl Compiler {
             }
             self.symbols[d.loc_idx].class = Token::Loc as i64;
             self.symbols[d.loc_idx].type_ = d.ty;
+            self.symbols[d.loc_idx].incomplete_enum_tag = d.enum_tag;
             self.symbols[d.loc_idx].binding.decl_spelling = self.decl_spelling(d.base_spelling);
             self.set_decl_site(d.loc_idx);
             // Unconditional write so a reused symbol slot does not leak
@@ -783,7 +792,7 @@ impl Compiler {
     fn bind_bare_function_declarator(
         &mut self,
         loc_idx: usize,
-        ty: i64,
+        ty: super::redeclaration::Spelled,
         is_static: bool,
     ) -> Result<bool, C5Error> {
         if !core::mem::take(&mut self.pending.bare_function_type_declarator) {
@@ -798,7 +807,10 @@ impl Compiler {
         }
         // Undo the typedef's pre-decay to pointer-to-function.
         let f = BlockFunction {
-            ret: ty - Ty::Ptr as i64,
+            ret: super::redeclaration::Spelled {
+                ty: ty.ty - Ty::Ptr as i64,
+                ..ty
+            },
             params: super::function::ParsedParams::of_type(params),
             ret_fn: None,
             lineage: (0, 0),
@@ -814,7 +826,7 @@ impl Compiler {
     fn bind_grouped_function_declarator(
         &mut self,
         loc_idx: usize,
-        ty: i64,
+        ty: super::redeclaration::Spelled,
         is_static: bool,
     ) -> Result<bool, C5Error> {
         let Some(params) = self.pending.fn_params.take() else {
@@ -846,8 +858,7 @@ impl Compiler {
         is_static: bool,
     ) -> Result<bool, C5Error> {
         let listed = super::redeclaration::Params::of(&f.params, false);
-        let ret = super::redeclaration::Spelled::plain(f.ret);
-        let declared = super::redeclaration::DeclaredType::Function(ret, listed);
+        let declared = super::redeclaration::DeclaredType::Function(f.ret, listed);
         self.declare_linked(loc_idx, declared, self.lex.line)?;
         let c = self.symbols[loc_idx].class;
         let known = c == Token::Sys as i64
@@ -861,7 +872,8 @@ impl Compiler {
             let sym = &mut self.symbols[loc_idx];
             sym.class = Token::Fun as i64;
             sym.scoped_fn_decl = true;
-            sym.type_ = f.ret;
+            sym.type_ = f.ret.ty;
+            sym.incomplete_enum_tag = f.ret.enum_tag;
             sym.set_fn_params(f.params.fn_params());
             sym.ret_fn = f.ret_fn;
             (sym.fn_ptr_indirection, sym.fn_ptr_ret_indirection) = f.lineage;

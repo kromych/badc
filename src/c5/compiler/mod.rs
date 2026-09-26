@@ -345,6 +345,9 @@ pub struct StructField {
     pub offset: usize,
     /// `ty`-encoded type of the field.
     pub ty: i64,
+    /// Mirrors `Symbol::incomplete_enum_tag` for a pointer member; a
+    /// member of the enum type itself has no complete type to take.
+    pub enum_tag: Option<u32>,
     /// Array dimension if the field was declared as `T xs[N]`;
     /// 0 when the field is a scalar / pointer / struct value.
     /// For a 2D field `T xs[N][M]` this stores the total element
@@ -418,6 +421,8 @@ pub struct StructField {
     pub is_variadic: bool,
     /// Mirrors `Symbol::prototyped`.
     pub prototyped: bool,
+    /// Mirrors `Symbol::param_enum_tags`.
+    pub param_enum_tags: Vec<(usize, u32)>,
     /// Calling convention of the function a function-pointer field
     /// points to (`__attribute__((ms_abi))` / `((sysv_abi))`). Mirrors
     /// `Symbol::conv`; `CallConv::Target` for every other field. The
@@ -2090,10 +2095,9 @@ pub struct Compiler {
     /// when the parser sees `enum Tag { ... }`; the (tag, constants)
     /// pairs feed the DWARF emitter's enum DIEs.
     pub(super) enums: Vec<EnumDef>,
-    /// Members whose pointer type names an enum tag used before its
-    /// definition (`struct id`, field index, tag): the placeholder `int`
-    /// the use took is rebased when the definition fixes the type.
-    pub(super) enum_placeholder_fields: Vec<(usize, usize, u32)>,
+    /// Enum tags a use took the `int` placeholder for before their
+    /// definition; the definition rewrites the types holding it.
+    pub(super) enum_placeholder_tags: Vec<u32>,
 
     /// Where every controllable diagnostic the front end reports goes.
     /// The sink resolves each one's level and drops the ignored ones.
@@ -2958,7 +2962,7 @@ impl Compiler {
             structs: Vec::new(),
             tag_scopes: alloc::vec![alloc::vec::Vec::new()],
             enums: Vec::new(),
-            enum_placeholder_fields: Vec::new(),
+            enum_placeholder_tags: Vec::new(),
             sink,
             notes: Vec::new(),
             file_asm: Vec::new(),

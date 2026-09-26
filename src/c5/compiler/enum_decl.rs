@@ -20,9 +20,50 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use super::super::error::C5Error;
+use super::super::symbol::{FnParams, FnType};
 use super::super::token::{Token, Ty};
-use super::types::UNSIGNED_BIT;
+use super::types::{UNSIGNED_BIT, is_pointer_ty, rebase_placeholder_int};
 use super::{Compiler, EnumDef};
+
+/// The definition of an enum tag, applied to the types an earlier use of
+/// the tag gave the `int` placeholder. Each applied tag is cleared, since
+/// the placeholder is gone once rewritten.
+pub(super) struct EnumCompletion {
+    tag: u32,
+    underlying: i64,
+}
+
+impl EnumCompletion {
+    pub(super) fn ty(&self, ty: &mut i64, tag: &mut Option<u32>) {
+        if *tag == Some(self.tag) {
+            *ty = rebase_placeholder_int(*ty, self.underlying);
+            *tag = None;
+        }
+    }
+
+    /// The parameter types `tags` marks with this enum's placeholder.
+    pub(super) fn list(&self, types: &mut [i64], tags: &mut Vec<(usize, u32)>) {
+        tags.retain(|&(pos, t)| {
+            let own = t == self.tag;
+            if own && let Some(ty) = types.get_mut(pos) {
+                *ty = rebase_placeholder_int(*ty, self.underlying);
+            }
+            !own
+        });
+    }
+
+    pub(super) fn params(&self, p: &mut FnParams) {
+        self.list(&mut p.types, &mut p.enum_tags);
+    }
+
+    /// The function types a returned pointer leads to.
+    pub(super) fn chain(&self, ret: &mut Option<(alloc::boxed::Box<FnType>, i64)>) {
+        if let Some((f, _)) = ret {
+            self.params(&mut f.params);
+            self.chain(&mut f.ret);
+        }
+    }
+}
 
 /// `(min, max, constants)` from a parsed enum body: the enumerator value
 /// range that drives the packed underlying-type choice, plus the captured
@@ -133,7 +174,7 @@ impl Compiler {
                 });
             }
             if let Some(tag) = tag_idx {
-                self.rebase_enum_placeholder_fields(tag, underlying);
+                self.complete_enum_placeholders(tag, underlying)?;
             }
             return Ok((underlying, None));
         }
@@ -144,24 +185,71 @@ impl Compiler {
             return Ok((underlying, None));
         }
         // GNU: a use of the tag before its definition. It takes `int` and
-        // carries the tag, which the redeclaration check reads once the
-        // definition fixes the type.
-        // TODO: a pointer to the type keeps `int`'s width past the definition.
+        // carries the tag to the types built on it, which the definition
+        // rewrites.
+        if let Some(tag) = tag_idx
+            && !self.enum_placeholder_tags.contains(&tag)
+        {
+            self.enum_placeholder_tags.push(tag);
+        }
         Ok((Ty::Int as i64, tag_idx))
     }
 
-    /// C99 6.7.2.2p4: the definition of enum tag `tag` fixes the type its
-    /// earlier uses named; the members typed then took the `int`
-    /// placeholder.
-    fn rebase_enum_placeholder_fields(&mut self, tag: u32, underlying: i64) {
-        let (fixed, open) = core::mem::take(&mut self.enum_placeholder_fields)
-            .into_iter()
-            .partition::<Vec<_>, _>(|&(_, _, t)| t == tag);
-        self.enum_placeholder_fields = open;
-        for (sid, fi, _) in fixed {
-            let field = &mut self.structs[sid].fields[fi];
-            field.ty = super::types::rebase_placeholder_int(field.ty, underlying);
+    /// C99 6.7.2.2p4: the definition of enum tag `tag` completes the type
+    /// its earlier uses named with the `int` placeholder. Rewrites the
+    /// objects, functions, parameters and members declared through it,
+    /// and the outer bindings an open scope shadows.
+    fn complete_enum_placeholders(&mut self, tag: u32, underlying: i64) -> Result<(), C5Error> {
+        let Some(at) = self.enum_placeholder_tags.iter().position(|&t| t == tag) else {
+            return Ok(());
+        };
+        self.enum_placeholder_tags.swap_remove(at);
+        self.check_placeholder_storage(tag, underlying)?;
+        let c = EnumCompletion { tag, underlying };
+        for s in &mut self.symbols {
+            c.ty(&mut s.type_, &mut s.incomplete_enum_tag);
+            c.ty(&mut s.h_type, &mut s.h_incomplete_enum_tag);
+            c.list(&mut s.params, &mut s.param_enum_tags);
+            c.list(&mut s.h_params, &mut s.h_param_enum_tags);
+            c.chain(&mut s.ret_fn);
+            c.chain(&mut s.h_ret_fn);
         }
+        for b in self.block_scopes.iter_mut().flatten() {
+            b.complete_enum(&c);
+        }
+        for f in self.structs.iter_mut().flat_map(|s| s.fields.iter_mut()) {
+            c.ty(&mut f.ty, &mut f.enum_tag);
+            c.list(&mut f.params, &mut f.param_enum_tags);
+            c.chain(&mut f.ret_fn);
+        }
+        Ok(())
+    }
+
+    /// An object declared through the placeholder was given `int`'s
+    /// storage, which a definition of another size cannot rewrite.
+    // TODO: a tentative definition of an incomplete type reserves its
+    // storage when the unit ends (C99 6.9.2p2).
+    fn check_placeholder_storage(&self, tag: u32, underlying: i64) -> Result<(), C5Error> {
+        if self.size_of_type(underlying) == self.size_of_type(Ty::Int as i64) {
+            return Ok(());
+        }
+        let laid_out = |s: &&crate::c5::symbol::Symbol| {
+            s.incomplete_enum_tag == Some(tag)
+                && !is_pointer_ty(s.type_)
+                && (s.class == Token::Loc as i64
+                    || (s.class == Token::Glo as i64 && !s.is_extern_decl))
+        };
+        let Some(s) = self.symbols.iter().find(laid_out) else {
+            return Ok(());
+        };
+        Err(self.compile_err(
+            Code::UNSUPPORTED,
+            format!(
+                "`{}` took the storage of `int` before `enum {}` was defined; \
+                 a definition of another size is not supported",
+                s.name, self.symbols[tag as usize].name
+            ),
+        ))
     }
 
     /// The underlying type the definition of enum tag `name` chose. Untagged
@@ -237,6 +325,7 @@ impl Compiler {
             // permanently.
             self.rebind_scoped(idx)?;
             self.symbols[idx].class = Token::Num as i64;
+            self.symbols[idx].incomplete_enum_tag = None;
             // During the body the constant carries its value's own type
             // so a reference from a later enumerator converts correctly;
             // the whole list is restamped below once the range is known.

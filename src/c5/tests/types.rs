@@ -3668,6 +3668,46 @@ fn a_member_typed_before_its_enums_definition_takes_the_enums_type() {
     );
 }
 
+/// C99 6.7.2.2p4: the definition of an enum used before it completes the
+/// type of every earlier use -- objects, results, parameters, function
+/// pointers and the function types typedefs name, members promoted from
+/// an anonymous struct. An object given storage through the use keeps it
+/// only at the size the definition chooses.
+#[test]
+fn uses_before_an_enums_definition_take_the_enums_type() {
+    use crate::{Compiler, Target};
+    let src = "enum E;\nenum E g(void);\nextern enum E v;\nenum E *pv;\n\
+               void (*setter)(enum E);\ntypedef void sink_t(enum E);\n\
+               enum E (*(*maker)(void))(enum E);\nenum E tentative;\n\
+               struct ops { void (*set)(enum E); struct { enum E *inner; }; };\n\
+               enum E { A, B = 0x80000000u };\n\
+               #define SAME(a, b) _Static_assert(__builtin_types_compatible_p(a, b), #a)\n\
+               SAME(__typeof__(g()), unsigned int);\n\
+               SAME(__typeof__(v), unsigned int);\n\
+               SAME(__typeof__(pv), unsigned int *);\n\
+               SAME(__typeof__(setter), void (*)(unsigned int));\n\
+               SAME(sink_t *, void (*)(unsigned int));\n\
+               SAME(__typeof__(maker), unsigned int (*(*)(void))(unsigned int));\n\
+               SAME(__typeof__(tentative), unsigned int);\n\
+               SAME(__typeof__(((struct ops *)0)->set), void (*)(unsigned int));\n\
+               SAME(__typeof__(((struct ops *)0)->inner), unsigned int *);\n\
+               int main(void) { return 0; }\n";
+    Compiler::with_target(src.to_string(), Target::LinuxX64)
+        .compile()
+        .expect("uses before the definition name the completed type");
+    let wide = "enum E;\nenum E w;\nenum E { A = 1, B = 0x100000000 };\n\
+                int main(void) { return 0; }\n";
+    let err = Compiler::with_target(wide.to_string(), Target::LinuxX64)
+        .compile()
+        .map(|_| ())
+        .unwrap_err()
+        .to_string();
+    assert!(
+        err.contains("`w` took the storage of `int` before `enum E` was defined"),
+        "{err}"
+    );
+}
+
 /// The function-pointer conversions three Linux units make convert between
 /// compatible types: a trampoline declared through `typeof(*fp)`, a member
 /// typed before the definition of the enum its result names, and a result

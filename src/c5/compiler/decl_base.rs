@@ -826,6 +826,7 @@ impl Compiler {
         let sym = &mut self.symbols[id_idx];
         sym.class = Token::Loc as i64;
         sym.type_ = ty;
+        sym.incomplete_enum_tag = None;
         sym.val = 0;
         sym.array_size = 0;
         sym.asm_register = Some(reg);
@@ -2021,11 +2022,10 @@ impl Compiler {
     /// Consumes the identifier.
     pub(super) fn typedef_name_base_type(&mut self) -> Result<(i64, Option<u32>), C5Error> {
         let idx = self.lex.curr_id_idx;
-        let spelled = self.resolve_spelling(super::redeclaration::Spelled {
-            ty: self.symbols[idx].type_,
-            enum_tag: self.symbols[idx].incomplete_enum_tag,
-        });
-        let aliased = spelled.ty;
+        let (aliased, enum_tag) = (
+            self.symbols[idx].type_,
+            self.symbols[idx].incomplete_enum_tag,
+        );
         // The alias resolves to its underlying type here, so the spelling
         // would otherwise be lost; DWARF 4 5.3 names it with a
         // DW_TAG_typedef DIE.
@@ -2071,7 +2071,7 @@ impl Compiler {
             self.pending.type_align = typedef_align;
         }
         self.next()?;
-        Ok((aliased, spelled.enum_tag))
+        Ok((aliased, enum_tag))
     }
 
     /// Consume the specifiers that may trail the base-type keyword: int

@@ -157,7 +157,9 @@ impl Compiler {
                 ..
             }) = self.linked_entities.get(&idx)
         {
+            let ret = self.resolve_spelling(*ret);
             self.symbols[idx].type_ = ret.ty;
+            self.symbols[idx].incomplete_enum_tag = ret.enum_tag;
         }
         let at = (def.line, self.intern_source_file());
         let prior = self

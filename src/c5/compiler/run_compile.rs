@@ -64,8 +64,7 @@ struct DeclaratorBinding {
 struct PriorDecl {
     was_sys: bool,
     was_tentative_glo: bool,
-    prior_params: alloc::vec::Vec<i64>,
-    prior_is_variadic: bool,
+    prior_params: crate::c5::symbol::FnParams,
 }
 
 impl Compiler {
@@ -845,9 +844,9 @@ impl Compiler {
             return Err(self.compile_err(Code::INVALID_DECLARATION, "duplicate global definition"));
         }
         // The prior parameter list, which a redeclaration supplying none keeps.
-        let prior_params = self.symbols[id_idx].params.clone();
-        let prior_is_variadic = self.symbols[id_idx].is_variadic;
+        let prior_params = self.symbols[id_idx].fn_params();
         self.symbols[id_idx].type_ = ty;
+        self.symbols[id_idx].incomplete_enum_tag = decl.base_enum_tag;
         // For an object the spelling is the object's; for a function it is
         // the return type's.
         self.symbols[id_idx].binding.decl_spelling = self.decl_spelling(base_spelling);
@@ -859,7 +858,6 @@ impl Compiler {
             was_sys,
             was_tentative_glo,
             prior_params,
-            prior_is_variadic,
         })
     }
 
@@ -887,7 +885,6 @@ impl Compiler {
         let PriorDecl {
             was_sys,
             prior_params,
-            prior_is_variadic,
             ..
         } = prior;
 
@@ -919,10 +916,11 @@ impl Compiler {
         let is_defining_declarator = self.lex.tk != ';' && self.lex.tk != ',';
         let keeps_prior_list = params.form == super::function::ParamForm::Empty
             && !is_defining_declarator
-            && !prior_params.is_empty();
+            && !prior_params.types.is_empty();
         if keeps_prior_list {
-            params.types = prior_params.clone();
-            params.is_variadic = prior_is_variadic;
+            params.types = prior_params.types;
+            params.is_variadic = prior_params.variadic;
+            params.enum_tags = prior_params.enum_tags;
         }
         let prototyped = self.has_prototype(id_idx, &params);
         let fn_params = crate::c5::symbol::FnParams {
@@ -1167,6 +1165,7 @@ impl Compiler {
         self.symbols[id_idx].prototyped = prototyped;
         self.define_linked_function(id_idx, def, Params::of(&params, true))?;
         self.symbols[id_idx].params = arrival.clone();
+        self.symbols[id_idx].param_enum_tags = params.enum_tags.clone();
 
         if self.lex.tk != '{' {
             return Err(self.compile_err(Code::SYNTAX, "bad function definition"));
@@ -1238,6 +1237,7 @@ impl Compiler {
                     }
                     if let Some(pos) = params.indices.iter().position(|&pi| pi == decl_idx) {
                         self.symbols[decl_idx].type_ = decl_ty;
+                        self.symbols[decl_idx].incomplete_enum_tag = base_enum_tag;
                         params.types[pos] = decl_ty;
                         params.note_enum_tag(pos, base_enum_tag);
                     } else {

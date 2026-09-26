@@ -73,8 +73,11 @@ pub(crate) struct Symbol {
     pub is_variadic: bool,
     /// `FnParams::prototyped` of the function type `params` belongs to.
     pub prototyped: bool,
+    /// `FnParams::enum_tags` of the function type `params` belongs to.
+    pub param_enum_tags: Vec<(usize, u32)>,
 
-    /// Shadow slots for `params` / `is_variadic` / `prototyped`. See `h_array_size`:
+    /// Shadow slots for `params` / `is_variadic` / `prototyped` /
+    /// `param_enum_tags`. See `h_array_size`:
     /// a function-pointer parameter, block-scope local, or block-scope
     /// typedef that reuses an outer function name writes its own
     /// prototype onto the shared symbol slot; without the save the
@@ -84,6 +87,7 @@ pub(crate) struct Symbol {
     pub h_params: Vec<i64>,
     pub h_is_variadic: bool,
     pub h_prototyped: bool,
+    pub h_param_enum_tags: Vec<(usize, u32)>,
     /// Calling convention of the function this symbol names, or of the
     /// function a function-pointer object points to
     /// (`__attribute__((ms_abi))` / `((sysv_abi))`). Already normalised
@@ -422,10 +426,12 @@ pub(crate) struct Symbol {
     /// `int f(BYTE)` (one byte-typed parameter).
     pub is_void_typedef: bool,
 
-    /// For a typedef naming an enum tag declared before the tag's
-    /// definition: the tag, whose definition the alias reads once there is
-    /// one.
+    /// The enum tag `type_` was spelled through while the tag had no
+    /// definition: `type_` holds the `int` placeholder, which the
+    /// definition rewrites (C99 6.7.2.2p4).
     pub incomplete_enum_tag: Option<u32>,
+    /// Scope-restore shadow for `incomplete_enum_tag`.
+    pub h_incomplete_enum_tag: Option<u32>,
 
     /// Explicit alignment (bytes) a typedef's type carries from a GNU
     /// `__attribute__((aligned(N)))` type attribute, or 0 for the
@@ -689,6 +695,9 @@ pub(crate) struct FnParams {
     /// definition has none (6.9.1p7), yet `types` lists the promoted types
     /// a call passes; a type no declaration gave a list has none either.
     pub prototyped: bool,
+    /// Positions an enum tag with no definition yet spelled: their types
+    /// hold the `int` placeholder, which the definition rewrites.
+    pub enum_tags: Vec<(usize, u32)>,
 }
 
 /// The part of a function type its `i64` tag, the return type's, leaves
@@ -804,6 +813,7 @@ impl Symbol {
             types: self.params.clone(),
             variadic: self.is_variadic,
             prototyped: self.prototyped,
+            enum_tags: self.param_enum_tags.clone(),
         }
     }
 
@@ -811,6 +821,7 @@ impl Symbol {
         self.params = p.types;
         self.is_variadic = p.variadic;
         self.prototyped = p.prototyped;
+        self.param_enum_tags = p.enum_tags;
     }
 
     /// Assembler symbol name: the GNU asm label when the declaration
@@ -870,9 +881,11 @@ impl crate::c5::layout::DataOffsets for Symbol {
             params: _,
             is_variadic: _,
             prototyped: _,
+            param_enum_tags: _,
             h_params: _,
             h_is_variadic: _,
             h_prototyped: _,
+            h_param_enum_tags: _,
             conv: _,
             h_conv: _,
             implicit_return_int: _,
@@ -933,6 +946,7 @@ impl crate::c5::layout::DataOffsets for Symbol {
             unprototyped_def: _,
             is_void_typedef: _,
             incomplete_enum_tag: _,
+            h_incomplete_enum_tag: _,
             type_align: _,
             h_type_align: _,
             linkage: _,

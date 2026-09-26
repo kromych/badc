@@ -428,17 +428,12 @@ impl Compiler {
                 self.symbols[idx] = *saved;
             }
             let field_spelling = self.decl_spelling(base_spelling);
-            // A pointer keeps its size when the definition fixes the enum.
-            if let Some(tag) = incomplete_enum_tag
-                && super::types::is_pointer_ty(field_ty)
-            {
-                let at = (struct_id, self.structs[struct_id].fields.len(), tag);
-                self.enum_placeholder_fields.push(at);
-            }
+            let enum_tag = incomplete_enum_tag.filter(|_| super::types::is_pointer_ty(field_ty));
             self.structs[struct_id].fields.push(StructField {
                 name: field_name,
                 offset: field_offset,
                 ty: field_ty,
+                enum_tag,
                 array_size: field_array_size,
                 inner_array_size: field_inner_array_size,
                 array_dims: field_array_dims,
@@ -452,6 +447,7 @@ impl Compiler {
                 params: field_fn_params.types,
                 is_variadic: field_fn_params.variadic,
                 prototyped: field_fn_params.prototyped,
+                param_enum_tags: field_fn_params.enum_tags,
                 conv: field_conv,
                 anon_union_group: 0,
                 anon_struct_group: 0,
@@ -1133,6 +1129,7 @@ impl Compiler {
                 name: inner_field.name,
                 offset: base_offset + inner_field.offset,
                 ty: inner_field.ty,
+                enum_tag: inner_field.enum_tag,
                 array_size: inner_field.array_size,
                 inner_array_size: inner_field.inner_array_size,
                 array_dims: inner_field.array_dims,
@@ -1146,6 +1143,7 @@ impl Compiler {
                 params: inner_field.params,
                 is_variadic: inner_field.is_variadic,
                 prototyped: inner_field.prototyped,
+                param_enum_tags: inner_field.param_enum_tags,
                 conv: inner_field.conv,
                 anon_union_group: union_group,
                 anon_struct_group: struct_group,

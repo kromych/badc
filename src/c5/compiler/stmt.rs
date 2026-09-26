@@ -55,6 +55,7 @@ pub(super) struct BlockShadow {
     pub(super) idx: usize,
     class: i64,
     type_: i64,
+    incomplete_enum_tag: Option<u32>,
     val: i64,
     fn_ptr_indirection: i64,
     fn_ptr_ret_indirection: i64,
@@ -83,6 +84,15 @@ pub(super) struct BlockShadow {
     binding: crate::c5::symbol::BindingInfo,
 }
 
+impl BlockShadow {
+    /// Rewrite the saved binding's types an enum definition completes.
+    pub(super) fn complete_enum(&mut self, c: &super::enum_decl::EnumCompletion) {
+        c.ty(&mut self.type_, &mut self.incomplete_enum_tag);
+        c.params(&mut self.params);
+        c.chain(&mut self.ret_fn);
+    }
+}
+
 impl Compiler {
     /// Snapshot the current binding of `idx` for restore at block exit.
     /// Also lists `idx` on `scope_bound`, so that the enclosing scope's
@@ -99,6 +109,7 @@ impl Compiler {
             idx,
             class: s.class,
             type_: s.type_,
+            incomplete_enum_tag: s.incomplete_enum_tag,
             val: s.val,
             fn_ptr_indirection: s.fn_ptr_indirection,
             fn_ptr_ret_indirection: s.fn_ptr_ret_indirection,
@@ -127,8 +138,9 @@ impl Compiler {
             binding,
         };
         // The inner binding is not (yet) a block-scope static; its own
-        // promotion re-sets the record.
+        // promotion re-sets the record. Its type records its own enum tag.
         self.symbols[idx].static_local_record = None;
+        self.symbols[idx].incomplete_enum_tag = None;
         shadow
     }
 
@@ -150,6 +162,7 @@ impl Compiler {
         Self::restore_binding(&mut s.binding, b.binding, same_function);
         s.class = b.class;
         s.type_ = b.type_;
+        s.incomplete_enum_tag = b.incomplete_enum_tag;
         s.val = b.val;
         s.fn_ptr_indirection = b.fn_ptr_indirection;
         s.fn_ptr_ret_indirection = b.fn_ptr_ret_indirection;

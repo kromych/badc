@@ -627,12 +627,13 @@ impl Compiler {
             return idx;
         }
         let link_name = sym.link_name().to_string();
-        let (type_, params) = (sym.type_, sym.fn_params());
+        let (type_, enum_tag, params) = (sym.type_, sym.incomplete_enum_tag, sym.fn_params());
         let slot = self.resolve_symbol_named(&alloc::format!("{link_name}.builtin"));
         let sym = &mut self.symbols[slot];
         if sym.class == 0 {
             sym.class = Token::Fun as i64;
             sym.type_ = type_;
+            sym.incomplete_enum_tag = enum_tag;
             sym.set_fn_params(params);
             sym.asm_name = Some(link_name);
             sym.linkage = crate::c5::symbol::Linkage::External;
@@ -674,6 +675,7 @@ impl Compiler {
                 }
                 self.symbols[i].class = Token::Fun as i64;
                 self.symbols[i].type_ = ty;
+                self.symbols[i].incomplete_enum_tag = None;
                 self.symbols[i].linkage = crate::c5::symbol::Linkage::External;
                 self.symbols[i].defined_here = false;
                 i
@@ -5125,6 +5127,7 @@ impl Compiler {
                     types: field.params.clone(),
                     variadic: field.is_variadic,
                     prototyped: field.prototyped,
+                    enum_tags: field.param_enum_tags.clone(),
                 };
                 let f = FnType {
                     params,

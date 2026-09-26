@@ -2809,6 +2809,13 @@ fn variably_modified_type_names() {
 }
 
 #[test]
+fn enum_used_before_definition() {
+    // C99 6.7.2.2p4: values read through declarations made before an enum's
+    // definition take the enum's type, as those made after it do.
+    assert_eq!(run_fixture("enum_used_before_definition.c"), 0);
+}
+
+#[test]
 fn indirect_call_prototypes() {
     // A call through a pointer converts or promotes its arguments by the
     // pointed-to type, however the callee is spelled.

@@ -63,6 +63,7 @@ impl ParsedParams {
             types: self.types.clone(),
             variadic: self.is_variadic,
             prototyped: self.form == ParamForm::Prototype,
+            enum_tags: self.enum_tags.clone(),
         }
     }
 
@@ -78,7 +79,7 @@ impl ParsedParams {
             },
             types: p.types,
             is_variadic: p.variadic,
-            enum_tags: Vec::new(),
+            enum_tags: p.enum_tags,
         }
     }
 
@@ -435,6 +436,7 @@ impl Compiler {
             self.shadow_symbol(param_idx);
             self.symbols[param_idx].class = Token::Loc as i64;
             self.symbols[param_idx].type_ = full_ty;
+            self.symbols[param_idx].incomplete_enum_tag = base_enum_tag;
             self.symbols[param_idx].binding.decl_spelling = self.decl_spelling(base_spelling);
             self.symbols[param_idx].binding.maybe_unused = param_maybe_unused;
             self.symbols[param_idx].array_size = 0;

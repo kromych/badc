@@ -1317,8 +1317,8 @@ impl Pipeline {
     pub(crate) fn run<R>(
         self,
         label: &str,
-        funcs: &mut Vec<super::super::ir::FunctionSsa>,
-        pass: impl FnOnce(&mut Vec<super::super::ir::FunctionSsa>) -> R,
+        funcs: &mut alloc::vec::Vec<super::super::ir::FunctionSsa>,
+        pass: impl FnOnce(&mut alloc::vec::Vec<super::super::ir::FunctionSsa>) -> R,
     ) -> R {
         let r = time_pass_arch(label, self.arch, || pass(funcs));
         self.check(funcs, label);

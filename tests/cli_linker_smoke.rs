@@ -6880,6 +6880,74 @@ fn homogeneous_aggregates_cross_the_system_compiler_boundary() {
     );
 }
 
+// An eightbyte that only unnamed bit-fields cover has no class and takes no
+// register, as clang classes it (System V AMD64 3.2.3): `struct { int :32;
+// int :32; double d; }` passes `d` in xmm0 and the next integer in rdi, and
+// `struct { float a; int :8; float b; }` two SSE eightbytes. gcc gives such an
+// eightbyte the INTEGER class, a recorded divergence: against gcc on x86_64
+// the integers after the aggregate arrive one register over, which the
+// expected sums state, a gcc callee reading them one register late and a badc
+// callee one early. Every other pairing agrees.
+const UNNAMED_BIT_FIELD_COMMON: &str = "typedef long long ll;\n\
+    struct s1 { int :32; int :32; double d; };\n\
+    struct s2 { float a; int :8; float b; };\n\
+    #if defined(__x86_64__) && defined(__GNUC__) && !defined(__clang__)\n\
+    #define GCC_X64 1\n\
+    #else\n\
+    #define GCC_X64 0\n\
+    #endif\n\
+    static int gcc_x64(void) { return GCC_X64; }\n\
+    static ll take1(struct s1 s, ll n1, ll n2, ll n3, ll n4, ll n5, ll n6)\n\
+    { (void)n1; (void)n6; return (s.d == 1.5) * 100000 + n2 * 1000 + n3 * 100 + n4 * 10 + n5; }\n\
+    static ll take2(struct s2 s, ll n1, ll n2, ll n3, ll n4, ll n5, ll n6)\n\
+    { (void)n1; (void)n6;\n\
+      return (s.a == 1.5f && s.b == 2.5f) * 100000 + n2 * 1000 + n3 * 100 + n4 * 10 + n5; }\n\
+    struct fns { int (*gcc_x64)(void); ll (*take1)(struct s1, ll, ll, ll, ll, ll, ll);\n\
+      ll (*take2)(struct s2, ll, ll, ll, ll, ll, ll); };\n\
+    static int drive(const struct fns *f, int base)\n\
+    { struct s1 x = { .d = 1.5 }; struct s2 y = { .a = 1.5f, .b = 2.5f };\n\
+      ll want = f->gcc_x64() ? 3456 : GCC_X64 ? 1234 : 2345;\n\
+      ll floats = f->gcc_x64() || GCC_X64 ? 0 : 100000;\n\
+      if (f->take1(x, 1, 2, 3, 4, 5, 6) != 100000 + want) return base + 1;\n\
+      if (f->take2(y, 1, 2, 3, 4, 5, 6) != floats + want) return base + 2;\n\
+      return 0; }\n";
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn unnamed_bit_field_eightbytes_cross_the_system_compiler_boundary() {
+    let Some(cc) = host_cc() else {
+        eprintln!(
+            "skipping unnamed_bit_field_eightbytes_cross_the_system_compiler_boundary: \
+             no system C compiler"
+        );
+        return;
+    };
+    drive_across_the_system_compiler(
+        &cc,
+        "unnamed-bitfield-interop",
+        UNNAMED_BIT_FIELD_COMMON,
+        "gcc_x64, take1, take2",
+    );
+}
+
+#[cfg(windows)]
+#[test]
+fn unnamed_bit_field_eightbytes_cross_the_windows_compiler_boundary() {
+    let Some(cc) = windows_cc() else {
+        eprintln!(
+            "skipping unnamed_bit_field_eightbytes_cross_the_windows_compiler_boundary: \
+             no platform C compiler"
+        );
+        return;
+    };
+    drive_across_the_windows_compiler(
+        &cc,
+        "win-unnamed-bitfield-interop",
+        UNNAMED_BIT_FIELD_COMMON,
+        "gcc_x64, take1, take2",
+    );
+}
+
 // Aggregates whose eightbytes merge several fields or none cross the system
 // compiler boundary both ways. System V AMD64 3.2.3 gives an eightbyte no
 // field overlaps no register, a union's 16-byte vector beside a double or

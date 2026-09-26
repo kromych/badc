@@ -596,6 +596,9 @@ sscanf                                   GLIBC_2.2.5
 stat                                     GLIBC_2.33
 statfs                                   GLIBC_2.2.5
 statvfs                                  GLIBC_2.2.5
+stderr                                   GLIBC_2.2.5
+stdin                                    GLIBC_2.2.5
+stdout                                   GLIBC_2.2.5
 strcasecmp                               GLIBC_2.2.5
 strcasestr                               GLIBC_2.2.5
 strcat                                   GLIBC_2.2.5

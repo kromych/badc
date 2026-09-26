@@ -6092,6 +6092,7 @@ fn weak_undef_binds_against_a_shared_library_export() {
         machine: NativeMachine::X86_64,
         exports: core::iter::once("hook".to_string()).collect(),
         data_exports: Default::default(),
+        object_sizes: Default::default(),
         export_symbols: Default::default(),
         export_versions: Default::default(),
         from_image: true,
@@ -12704,6 +12705,7 @@ fn imported_function_called_and_address_taken_links_through_own_linker() {
                 .into_iter()
                 .collect(),
             data_exports: alloc::collections::BTreeSet::new(),
+            object_sizes: Default::default(),
             export_symbols: alloc::collections::BTreeMap::new(),
             export_versions: alloc::collections::BTreeMap::new(),
             from_image: true,

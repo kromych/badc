@@ -686,6 +686,26 @@ fn select_archive_members(
                 }
             }
         }
+        // An object from another compiler reads a C library data object
+        // directly, so the image holds a copy of it, defined with the
+        // type the header declares.
+        let wanted = badc::copy_candidates(native_objs, core::slice::from_ref(lib.library()));
+        if let Some(src) = lib.copy_definitions(&wanted) {
+            let label = "<copies>";
+            let object = embedded
+                .compile(label, src, &[], false)
+                .and_then(|bytes| badc::parse_native_elf(&bytes));
+            match object {
+                Ok(mut o) => {
+                    o.source = label.to_string();
+                    native_objs.push(o);
+                }
+                Err(e) => {
+                    eprint_error("", &e);
+                    std::process::exit(1);
+                }
+            }
+        }
         if !lib.library().exports.is_empty() {
             shared_libs.push(lib.library().clone());
         }

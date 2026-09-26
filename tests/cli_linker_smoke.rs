@@ -6674,6 +6674,131 @@ fn thread_locals_cross_the_system_compiler_boundary() {
     drive_across_the_system_compiler(&cc, "tls-interop", common, "bump, peek, where");
 }
 
+// An object the system compiler built reads C library data directly -- the
+// PC-relative loads of x86-64 `-fPIE` code, the absolute and page-relative
+// forms of `-fno-pie` code -- where badc's own code reaches it through the
+// GOT. The image holds a copy of each object, which the loader fills and
+// binds the library's own references to; the same for a `-l` library's data.
+#[cfg(target_os = "linux")]
+#[test]
+fn a_system_compiled_object_reads_library_data_directly() {
+    let Some(cc) = host_cc() else {
+        eprintln!(
+            "skipping a_system_compiled_object_reads_library_data_directly: no system C compiler"
+        );
+        return;
+    };
+    let dir = tempdir("sys-copy");
+    let reader = write_source(
+        &dir,
+        "reader.c",
+        "#include <stdio.h>\n\
+         #include <unistd.h>\n\
+         int get_optind(void) { return optind; }\n\
+         int *addr_optind(void) { return &optind; }\n\
+         char *get_optarg(void) { return optarg; }\n\
+         FILE *get_stdout(void) { return stdout; }\n\
+         int say(const char *s) { return fputs(s, stderr) + fputs(s, stdout); }\n",
+    );
+    let main = write_source(
+        &dir,
+        "main.c",
+        "#include <stdio.h>\n\
+         #include <unistd.h>\n\
+         int get_optind(void);\n\
+         int *addr_optind(void);\n\
+         char *get_optarg(void);\n\
+         FILE *get_stdout(void);\n\
+         int say(const char *s);\n\
+         int main(int argc, char **argv) {\n\
+           if (getopt(argc, argv, \"x:\") != 'x' || get_optind() != 3) return 1;\n\
+           if (addr_optind() != &optind || get_optarg() != optarg) return 2;\n\
+           if (get_stdout() != stdout || say(\"said\\n\") <= 0) return 3;\n\
+           return 0;\n\
+         }\n",
+    );
+    let obj = dir.join("reader.o");
+    let exe = dir.join("prog");
+    for (cflag, link) in [("-fPIE", &[][..]), ("-fno-pie", &["-no-pie"][..])] {
+        run(
+            Command::new(&cc)
+                .args(["-O2", cflag, "-c"])
+                .arg(&reader)
+                .arg("-o")
+                .arg(&obj),
+            "build the system-compiled object",
+        );
+        run(
+            Command::new(badc())
+                .args(["-q", "-O"])
+                .args(link)
+                .arg(&main)
+                .arg(&obj)
+                .arg("-o")
+                .arg(&exe),
+            "link",
+        );
+        let out = Command::new(&exe).args(["-x", "v"]).output().expect("run");
+        assert_eq!(
+            out.status.code(),
+            Some(0),
+            "{cflag}: a library object read wrong"
+        );
+        assert_eq!(String::from_utf8_lossy(&out.stdout), "said\n", "{cflag}");
+        assert_eq!(String::from_utf8_lossy(&out.stderr), "said\n", "{cflag}");
+    }
+
+    let lib = write_source(
+        &dir,
+        "cnt.c",
+        "int lib_counter = 41;\nlong lib_table[3] = {1, 2, 3};\n",
+    );
+    run(
+        Command::new(&cc)
+            .args(["-O2", "-shared", "-fPIC", "-o"])
+            .arg(dir.join("libcnt.so"))
+            .arg(&lib),
+        "build the shared library",
+    );
+    let user = write_source(
+        &dir,
+        "user.c",
+        "extern int lib_counter;\nextern long lib_table[3];\n\
+         int bump(void) { return ++lib_counter; }\nlong third(void) { return lib_table[2]; }\n",
+    );
+    let user_obj = dir.join("user.o");
+    run(
+        Command::new(&cc)
+            .args(["-O2", "-c"])
+            .arg(&user)
+            .arg("-o")
+            .arg(&user_obj),
+        "build the reading object",
+    );
+    let lmain = write_source(
+        &dir,
+        "lmain.c",
+        "extern int lib_counter;\nint bump(void);\nlong third(void);\n\
+         int main(void) { return bump() == 42 && lib_counter == 42 && third() == 3 ? 0 : 1; }\n",
+    );
+    run(
+        Command::new(badc())
+            .arg("-q")
+            .arg(&lmain)
+            .arg(&user_obj)
+            .arg(format!("-L{}", dir.display()))
+            .arg("-lcnt")
+            .arg("-o")
+            .arg(&exe),
+        "link against the library",
+    );
+    let out = Command::new(&exe)
+        .env("LD_LIBRARY_PATH", &dir)
+        .output()
+        .expect("run");
+    assert_eq!(out.status.code(), Some(0), "the library's data read wrong");
+}
+
 // An object the system compiler built references its thread-locals by
 // local-exec relocations alone, with no note of badc's: a static, a global
 // a badc unit reads, and a zero-filled one past a shorter `.tdata` at its own

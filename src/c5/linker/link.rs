@@ -42,11 +42,12 @@ use crate::c5::object::elf_reloc_types::AbsCheck;
 use crate::c5::object::elf_reloc_types::{
     R_AARCH64_ABS32, R_AARCH64_ABS64, R_AARCH64_ADD_ABS_LO12_NC, R_AARCH64_ADR_GOT_PAGE,
     R_AARCH64_ADR_PREL_LO21, R_AARCH64_ADR_PREL_PG_HI21, R_AARCH64_CALL26, R_AARCH64_JUMP26,
-    R_AARCH64_LD64_GOT_LO12_NC, R_AARCH64_PREL32, R_AARCH64_PREL64, R_AARCH64_TLS_DTPREL64,
-    R_X86_64_32, R_X86_64_64, R_X86_64_DTPOFF64, R_X86_64_GOTPCREL, R_X86_64_PC32, R_X86_64_PC64,
-    R_X86_64_PLT32, R_X86_64_REX_GOTPCRELX, TprelField, aarch64_is_tls, aarch64_ldst_lo12_scale,
-    aarch64_movw_field, aarch64_pcrel_data_field, aarch64_pcrel_imm_field, aarch64_tprel_field,
-    x86_64_abs_field, x86_64_is_tls, x86_64_pcrel_data_field, x86_64_tpoff_field,
+    R_AARCH64_LD_PREL_LO19, R_AARCH64_LD64_GOT_LO12_NC, R_AARCH64_PREL32, R_AARCH64_PREL64,
+    R_AARCH64_TLS_DTPREL64, R_X86_64_32, R_X86_64_64, R_X86_64_DTPOFF64, R_X86_64_GOTPCREL,
+    R_X86_64_PC32, R_X86_64_PC64, R_X86_64_PLT32, R_X86_64_REX_GOTPCRELX, TprelField,
+    aarch64_abs_field, aarch64_is_tls, aarch64_ldst_lo12_scale, aarch64_movw_field,
+    aarch64_pcrel_data_field, aarch64_pcrel_imm_field, aarch64_tprel_field, x86_64_abs_field,
+    x86_64_is_tls, x86_64_pcrel_data_field, x86_64_tpoff_field,
 };
 
 /// The tag this module's diagnostics carry.
@@ -803,12 +804,72 @@ pub fn link_native_objects_with_shared_libs<'a>(
     link.collect_prologue_anchors();
     link.collect_local_functions();
     link.coalesce_commons();
+    link.allocate_copies()?;
     link.define_link_symbols();
     link.collect_import_facts();
     link.resolve_text_relocs()?;
     link.resolve_tls_fixups()?;
     link.resolve_data_relocs()?;
     link.finish()
+}
+
+/// Shared-library data objects an object reads directly: through a
+/// relocation that holds the object's address or reaches it PC-relative,
+/// not through a GOT entry. The object's code then addresses a copy in
+/// the image. badc's own objects reach such an object through the GOT
+/// and state so in their note, so their references ask for none. Names
+/// an object defines are not candidates.
+pub fn copy_candidates(objs: &[NativeObject], shared_libs: &[SharedLibrary]) -> BTreeSet<String> {
+    let direct = |machine: NativeMachine, rtype: u32| match machine {
+        NativeMachine::X86_64 => {
+            rtype == R_X86_64_PC32
+                || x86_64_abs_field(rtype).is_some()
+                || x86_64_pcrel_data_field(rtype).is_some()
+        }
+        NativeMachine::Aarch64 => {
+            matches!(
+                rtype,
+                R_AARCH64_ADR_PREL_PG_HI21
+                    | R_AARCH64_ADD_ABS_LO12_NC
+                    | R_AARCH64_ADR_PREL_LO21
+                    | R_AARCH64_LD_PREL_LO19
+            ) || aarch64_ldst_lo12_scale(rtype).is_some()
+                || aarch64_abs_field(rtype).is_some()
+                || aarch64_movw_field(rtype).is_some()
+                || aarch64_pcrel_data_field(rtype).is_some()
+        }
+    };
+    let defined: BTreeSet<&str> = objs
+        .iter()
+        .flat_map(|o| &o.symbols)
+        .filter(|s| s.binding != 0 && s.section != NativeSymSection::Undef)
+        .map(|s| s.name.as_str())
+        .collect();
+    let mut wanted = BTreeSet::new();
+    for obj in objs {
+        let routed = |name: &str| {
+            obj.extern_data_names.iter().any(|n| n == name)
+                || obj.copy_relocs.iter().any(|(local, _)| local == name)
+        };
+        for reloc in &obj.text_relocs {
+            let Some(sym) = obj.symbols.get(reloc.sym_idx) else {
+                continue;
+            };
+            if sym.section != NativeSymSection::Undef
+                || sym.name.is_empty()
+                || !direct(obj.machine, reloc.rtype)
+                || defined.contains(sym.name.as_str())
+                || routed(&sym.name)
+                || !shared_libs
+                    .iter()
+                    .any(|l| l.data_exports.contains(&sym.name))
+            {
+                continue;
+            }
+            wanted.insert(sym.name.clone());
+        }
+    }
+    wanted
 }
 
 /// The state one native link accumulates. Each pass is a method;
@@ -903,6 +964,9 @@ struct Link<'a> {
     extern_data_names: hashbrown::HashSet<&'a str>,
     /// Names with dylib routing from any unit's binding map.
     routed_import_names: hashbrown::HashSet<&'a str>,
+    /// `(name, host symbol)` of each shared-library data object the
+    /// link gave a copy in `.bss`.
+    copies: Vec<(String, String)>,
     /// Import indices the note channel names as data references, and
     /// those some site branches to; a branch makes the import code.
     object_imports: BTreeSet<usize>,
@@ -991,6 +1055,7 @@ impl<'a> Link<'a> {
             data_binding_locals: hashbrown::HashSet::new(),
             extern_data_names: hashbrown::HashSet::new(),
             routed_import_names: hashbrown::HashSet::new(),
+            copies: Vec::new(),
             object_imports: BTreeSet::new(),
             branch_imports: BTreeSet::new(),
             pending_imports: Vec::new(),
@@ -1623,6 +1688,61 @@ impl<'a> Link<'a> {
                 size: *size,
             });
         }
+    }
+
+    /// A shared-library data object an object reads directly gets a
+    /// copy in `.bss`, which the image exports and binds to the
+    /// library's object by `R_*_COPY`: the loader fills the copy and
+    /// resolves every other reference to the object, the library's own
+    /// included, to it. The copy takes the size and alignment the
+    /// library states.
+    fn allocate_copies(&mut self) -> Result<(), C5Error> {
+        for name in copy_candidates(self.objs, self.shared_libs) {
+            if self.defined.contains_key(name.as_str())
+                || self.absolute_defined.contains_key(name.as_str())
+            {
+                continue;
+            }
+            let lib = self
+                .shared_libs
+                .iter()
+                .find(|l| l.data_exports.contains(&name))
+                .expect("a candidate is a shared-library data object");
+            let Some(&(size, align)) = lib.object_sizes.get(&name) else {
+                return Err(link_err(
+                    Code::RELOCATION,
+                    MODULE,
+                    &format!(
+                        "`{name}` of {} is read directly, which needs a copy of it in the \
+                         image, and the library states no size for it",
+                        lib.soname
+                    ),
+                ));
+            };
+            self.bss_size = align_usize(self.bss_size, align.max(1) as usize);
+            let offset = self.bss_size as u64;
+            self.bss_size += size as usize;
+            let host = lib.export_symbols.get(&name).unwrap_or(&name).clone();
+            self.defined.insert(
+                Cow::Owned(name.clone()),
+                MergedSymbol {
+                    section: NativeSymSection::Bss,
+                    value: offset,
+                    size,
+                    kind: super::object::STT_OBJECT,
+                    visibility: super::object::STV_DEFAULT,
+                    weak: false,
+                },
+            );
+            self.section_map.bss.push(SectionContribution {
+                input: None,
+                name: ".dynbss".to_string(),
+                offset,
+                size,
+            });
+            self.copies.push((name, host));
+        }
+        Ok(())
     }
 
     /// The symbols the link itself defines: the init/fini array bounds
@@ -2701,6 +2821,16 @@ impl<'a> Link<'a> {
                 }
             }
         }
+        // A copy is bound to the library whose object it copies.
+        for (name, _) in &self.copies {
+            let lib = self.shared_libs.iter().zip(&shlib_declared);
+            if let Some(at) = lib
+                .filter(|(l, _)| l.data_exports.contains(name))
+                .find_map(|(_, at)| *at)
+            {
+                bound[at] = true;
+            }
+        }
         let mut merged_idx = alloc::vec![0u32; declared.len()];
         let mut dylibs: Vec<String> = Vec::new();
         for (i, path) in declared.iter().enumerate() {
@@ -2759,11 +2889,10 @@ impl<'a> Link<'a> {
     fn merge_copy_relocs(&self) -> Vec<(String, String)> {
         let mut copy_relocs: Vec<(String, String)> = Vec::new();
         let mut seen: hashbrown::HashSet<(&str, &str)> = hashbrown::HashSet::new();
-        for obj in self.objs {
-            for pair in &obj.copy_relocs {
-                if seen.insert((pair.0.as_str(), pair.1.as_str())) {
-                    copy_relocs.push(pair.clone());
-                }
+        let pairs = self.objs.iter().flat_map(|o| &o.copy_relocs);
+        for pair in pairs.chain(&self.copies) {
+            if seen.insert((pair.0.as_str(), pair.1.as_str())) {
+                copy_relocs.push(pair.clone());
             }
         }
         copy_relocs
@@ -4419,6 +4548,7 @@ mod tests {
             machine: NativeMachine::Aarch64,
             exports: names("tbl"),
             data_exports: names("tbl"),
+            object_sizes: Default::default(),
             export_symbols: alloc::collections::BTreeMap::new(),
             export_versions: alloc::collections::BTreeMap::new(),
             from_image: true,
@@ -4532,6 +4662,7 @@ mod tests {
             machine: NativeMachine::Aarch64,
             exports: core::iter::once(alloc::string::String::from("ext_fn")).collect(),
             data_exports: alloc::collections::BTreeSet::new(),
+            object_sizes: Default::default(),
             export_symbols: alloc::collections::BTreeMap::new(),
             export_versions: alloc::collections::BTreeMap::new(),
             from_image: true,
@@ -4569,6 +4700,7 @@ mod tests {
             machine: NativeMachine::Aarch64,
             exports: core::iter::once(alloc::string::String::from("ext_fn")).collect(),
             data_exports: alloc::collections::BTreeSet::new(),
+            object_sizes: Default::default(),
             export_symbols: alloc::collections::BTreeMap::new(),
             export_versions: alloc::collections::BTreeMap::new(),
             from_image: true,
@@ -5522,5 +5654,94 @@ mod tests {
         );
         let err = link_native_objects(&objs).expect_err("0x2020 overflows the 12 bits");
         assert!(format!("{err}").contains("relocation truncated"), "{err}");
+    }
+
+    /// A shared-library data object an object reads directly, as
+    /// another compiler's code does, gets a copy in `.bss` at the size
+    /// and alignment the library states, bound to the library's object
+    /// by a copy relocation and to the library as a load-time need. A
+    /// reference badc's note routes through the GOT asks for none, and a
+    /// library that states no size cannot give one.
+    #[test]
+    fn a_library_object_read_directly_gets_a_copy() {
+        let lib = |sizes: bool| SharedLibrary {
+            soname: "libcnt.so".to_string(),
+            machine: NativeMachine::X86_64,
+            exports: ["counter".to_string()].into_iter().collect(),
+            data_exports: ["counter".to_string()].into_iter().collect(),
+            object_sizes: if sizes {
+                [("counter".to_string(), (24, 8))].into_iter().collect()
+            } else {
+                Default::default()
+            },
+            export_symbols: Default::default(),
+            export_versions: Default::default(),
+            from_image: true,
+        };
+        let reader = |routed: bool| {
+            let mut o = blank_object(NativeMachine::X86_64);
+            // `movl counter(%rip), %eax`
+            o.text = alloc::vec![0x8b, 0x05, 0, 0, 0, 0];
+            o.bss_size = 4;
+            o.symbols = alloc::vec![
+                NativeSymbol {
+                    name: String::new(),
+                    section: NativeSymSection::Undef,
+                    value: 0,
+                    size: 0,
+                    binding: 0,
+                    kind: 0,
+                    visibility: 0,
+                },
+                NativeSymbol {
+                    name: "counter".to_string(),
+                    section: NativeSymSection::Undef,
+                    value: 0,
+                    size: 0,
+                    binding: 1,
+                    kind: 0,
+                    visibility: 0,
+                },
+            ];
+            o.text_relocs = alloc::vec![NativeReloc {
+                offset: 2,
+                sym_idx: 1,
+                rtype: R_X86_64_PC32,
+                addend: -4,
+            }];
+            if routed {
+                o.extern_data_names = alloc::vec!["counter".to_string()];
+            }
+            o
+        };
+        let merged = link_native_objects_with_shared_libs(&[reader(false)], false, &[lib(true)])
+            .expect("link");
+        let copy = merged.defined.get("counter").expect("the copy is defined");
+        assert_eq!(
+            (copy.section, copy.value, copy.size),
+            (NativeSymSection::Bss, 8, 24),
+            "past the unit's 4 bytes, on the object's alignment"
+        );
+        assert_eq!(
+            merged.copy_relocs,
+            alloc::vec![("counter".to_string(), "counter".to_string())]
+        );
+        assert!(
+            merged.dylibs.iter().any(|d| d == "libcnt.so"),
+            "{:?}",
+            merged.dylibs
+        );
+
+        let merged = link_native_objects_with_shared_libs(&[reader(true)], false, &[lib(true)])
+            .expect("link");
+        assert!(
+            !merged.defined.contains_key("counter"),
+            "the GOT serves a routed read"
+        );
+        assert!(merged.copy_relocs.is_empty());
+
+        let err = link_native_objects_with_shared_libs(&[reader(false)], false, &[lib(false)])
+            .expect_err("no size, no copy");
+        assert!(format!("{err}").contains("states no size"), "{err}");
     }
 }

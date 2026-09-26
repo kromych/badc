@@ -217,6 +217,9 @@ pub struct SharedLibrary {
     /// bytes are code, so reading the "object" through it returns
     /// instructions.
     pub data_exports: alloc::collections::BTreeSet<String>,
+    /// Size and alignment of each data export whose library states
+    /// them, which a copy of the object in the image takes.
+    pub object_sizes: alloc::collections::BTreeMap<String, (u64, u64)>,
     /// For a name in `exports` the library ships under a different
     /// symbol, that symbol: the import records it, since it is what
     /// the loader resolves. A Mach-O image states the spelling with
@@ -260,6 +263,7 @@ pub fn parse_shared_library(bytes: &[u8]) -> Result<SharedLibrary, C5Error> {
     let mut soname = String::new();
     let mut exports = alloc::collections::BTreeSet::new();
     let mut data_exports = alloc::collections::BTreeSet::new();
+    let mut object_sizes = alloc::collections::BTreeMap::new();
     for i in 0..ehdr.e_shnum as usize {
         let sh = shdr(i)?;
         if sh.sh_type == SHT_DYNSYM {
@@ -283,7 +287,11 @@ pub fn parse_shared_library(bytes: &[u8]) -> Result<SharedLibrary, C5Error> {
                 }
                 // STT_OBJECT (1) is a data object; a reference to it must
                 // reach the object's address, not a PLT stub.
+                // Its alignment is the largest the library's placement
+                // shows, capped at the targets' `max_align_t`.
                 if (sym.st_info & 0xf) == 1 {
+                    let align = (1u64 << sym.st_value.trailing_zeros().min(4)).max(1);
+                    object_sizes.insert(name.clone(), (sym.st_size, align));
                     data_exports.insert(name.clone());
                 }
                 exports.insert(name);
@@ -311,6 +319,7 @@ pub fn parse_shared_library(bytes: &[u8]) -> Result<SharedLibrary, C5Error> {
         machine,
         exports,
         data_exports,
+        object_sizes,
         export_symbols: alloc::collections::BTreeMap::new(),
         export_versions: crate::c5::object::so_versions::parse_export_versions(bytes),
         from_image: true,

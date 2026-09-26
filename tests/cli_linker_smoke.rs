@@ -5908,11 +5908,14 @@ fn msvc_cl() -> Option<WindowsCc> {
 #[cfg(windows)]
 fn drive_across_the_windows_compiler(cc: &WindowsCc, test: &str, common: &str, fns: &str) {
     let dir = tempdir(test);
+    // The module links without the C runtime, which defines the `_fltused`
+    // that floating-point code references.
     let module = write_source(
         &dir,
         "module.c",
         &format!(
-            "{common}__declspec(dllexport) struct fns sys_fns = {{ {fns} }};\n\
+            "int _fltused;\n{common}\
+             __declspec(dllexport) struct fns sys_fns = {{ {fns} }};\n\
              __declspec(dllexport) int sys_drive(const struct fns *f) {{ return drive(f, 10); }}\n"
         ),
     );
@@ -6104,6 +6107,98 @@ fn bitfield_structs_cross_the_windows_compiler_boundary() {
         "win-bitfield-interop",
         common,
         "layout, make_cb, read_cb, make_mx, read_mx, set_p1, read_p2, make_zw, make_zb",
+    );
+}
+
+// An aggregate the convention passes by reference crosses the compiler
+// boundary as the address of a copy the callee owns: a callee writing its
+// parameter leaves the caller's object alone, and a callee of the other
+// compiler finds the copy at its alignment, 16 under the Microsoft x64
+// convention. AAPCS64 passes a composite over 16 bytes so, and Windows arm64
+// a variadic one too; System V AMD64 copies the bytes onto the stack.
+const BY_REFERENCE_COMMON: &str = "#include <stdarg.h>\n\
+    #include <stdint.h>\n\
+    typedef long long ll;\n\
+    struct big { ll a, b, c; };\n\
+    struct odd { char c[3]; };\n\
+    struct s16 { ll a, b; };\n\
+    struct hfa4 { double a, b, c, d; };\n\
+    #if defined(_WIN64) && (defined(__x86_64__) || defined(_M_X64))\n\
+    #define COPY_ALIGN 16\n\
+    #else\n\
+    #define COPY_ALIGN 8\n\
+    #endif\n\
+    static void keep(void *p) { (void)p; }\n\
+    static void (*volatile sink)(void *) = keep;\n\
+    static ll wbig(struct big s, ll t, int *off)\n\
+    { ll r = s.a * 100 + s.b * 10 + s.c + t;\n\
+      *off = (int)((uintptr_t)&s % COPY_ALIGN); s.a = s.b = s.c = -1; sink(&s); return r; }\n\
+    static ll wodd(struct odd o, ll t)\n\
+    { ll r = o.c[0] * 100 + o.c[1] * 10 + o.c[2] + t; o.c[0] = o.c[2] = -1; sink(&o); return r; }\n\
+    static ll ws16(struct s16 s, ll t)\n\
+    { ll r = s.a * 10 + s.b + t; s.a = s.b = -1; sink(&s); return r; }\n\
+    static double whfa(struct hfa4 h, double t)\n\
+    { double r = h.a * 1000 + h.b * 100 + h.c * 10 + h.d + t; h.a = h.d = -1; sink(&h); return r; }\n\
+    static double vhfa(int n, ...)\n\
+    { va_list ap; double s = 0; va_start(ap, n);\n\
+      for (int i = 0; i < n; i++) { struct hfa4 h = va_arg(ap, struct hfa4);\n\
+        s = s * 10000 + h.a * 1000 + h.b * 100 + h.c * 10 + h.d; }\n\
+      va_end(ap); return s; }\n\
+    static ll vodd(int n, ...)\n\
+    { va_list ap; ll s = 0; va_start(ap, n);\n\
+      for (int i = 0; i < n; i++) { struct odd o = va_arg(ap, struct odd);\n\
+        s = s * 1000 + o.c[0] * 100 + o.c[1] * 10 + o.c[2]; }\n\
+      va_end(ap); return s; }\n\
+    struct fns { ll (*wbig)(struct big, ll, int *); ll (*wodd)(struct odd, ll);\n\
+      ll (*ws16)(struct s16, ll); double (*whfa)(struct hfa4, double);\n\
+      double (*vhfa)(int, ...); ll (*vodd)(int, ...); };\n\
+    static int drive(const struct fns *f, int base)\n\
+    { struct big b = { 1, 2, 3 };\n\
+      struct odd o = { { 1, 2, 3 } };\n\
+      struct s16 s = { 4, 5 };\n\
+      struct hfa4 h = { 1, 2, 3, 4 };\n\
+      int off = -1;\n\
+      if (f->wbig(b, 4, &off) != 127) return base + 1;\n\
+      if (b.a != 1 || b.b != 2 || b.c != 3) return base + 2;\n\
+      if (base == 20 && off != 0) return base + 3;\n\
+      if (f->wodd(o, 4) != 127 || o.c[0] != 1 || o.c[2] != 3) return base + 4;\n\
+      if (f->ws16(s, 6) != 51 || s.a != 4 || s.b != 5) return base + 5;\n\
+      if (f->whfa(h, 0.5) != 1234.5 || h.a != 1 || h.d != 4) return base + 6;\n\
+      if (f->vhfa(2, h, h) != 12341234) return base + 7;\n\
+      if (f->vodd(2, o, o) != 123123) return base + 8;\n\
+      return 0; }\n";
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn by_reference_arguments_cross_the_system_compiler_boundary() {
+    let Some(cc) = host_cc() else {
+        eprintln!(
+            "skipping by_reference_arguments_cross_the_system_compiler_boundary: no system C compiler"
+        );
+        return;
+    };
+    drive_across_the_system_compiler(
+        &cc,
+        "by-ref-interop",
+        BY_REFERENCE_COMMON,
+        "wbig, wodd, ws16, whfa, vhfa, vodd",
+    );
+}
+
+#[cfg(windows)]
+#[test]
+fn by_reference_arguments_cross_the_windows_compiler_boundary() {
+    let Some(cc) = windows_cc() else {
+        eprintln!(
+            "skipping by_reference_arguments_cross_the_windows_compiler_boundary: no platform C compiler"
+        );
+        return;
+    };
+    drive_across_the_windows_compiler(
+        &cc,
+        "win-by-ref-interop",
+        BY_REFERENCE_COMMON,
+        "wbig, wodd, ws16, whfa, vhfa, vodd",
     );
 }
 

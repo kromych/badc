@@ -1407,7 +1407,7 @@ fn emit_param_homes(
         }
         let home = param_home_off(i, func, frame, abi) as i32;
         match *placement {
-            super::ArgPlacement::IntReg(r) | super::ArgPlacement::StructByRefReg(r) => {
+            super::ArgPlacement::IntReg(r) => {
                 emit_mov_mem_r(code, Reg::RBP, home, Reg(r));
             }
             super::ArgPlacement::FpReg(x) => emit_movsd_mem_xmm(code, Reg::RBP, home, Reg(x)),

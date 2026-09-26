@@ -101,16 +101,22 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	ldp	x16, x17, [x1]
                	stp	x16, x17, [x5]
-               	sub	x3, x29, #0x18
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldp	x16, x17, [x1]
-               	stp	x16, x17, [x3]
-               	ldr	x16, [x1, #0x10]
-               	str	x16, [x3, #0x10]
                	mov	x1, #0x3e8              // =1000
                	mov	x7, #0x7d0              // =2000
                	mov	x6, #0xbb8              // =3000
+               	sub	x3, x29, #0x18
+               	mov	x8, #0x64               // =100
+               	str	w8, [x3]
+               	mov	x8, #0x65               // =101
+               	str	w8, [x3, #0x4]
+               	mov	x8, #0x66               // =102
+               	str	w8, [x3, #0x8]
+               	mov	x8, #0x67               // =103
+               	str	w8, [x3, #0xc]
+               	mov	x8, #0x68               // =104
+               	str	w8, [x3, #0x10]
+               	mov	x8, #0x69               // =105
+               	str	w8, [x3, #0x14]
                	sub	sp, sp, #0x10
                	str	x3, [sp]
                	str	x6, [sp, #0x8]

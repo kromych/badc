@@ -553,7 +553,7 @@ pub(super) fn param_home_off(i: usize, func: &FunctionSsa, frame: Frame) -> i64 
         unreachable!("ICE: parameter {i} has no placement");
     };
     match p {
-        P::Stack(off) | P::StructByRefStack(off) | P::StructStack { off, .. } => 16 + off as i64,
+        P::Stack(off) | P::StructStack { off, .. } => 16 + off as i64,
         _ => {
             let cell = placements[..i]
                 .iter()
@@ -569,9 +569,7 @@ pub(super) fn param_home_off(i: usize, func: &FunctionSsa, frame: Frame) -> i64 
 fn register_carried(p: &super::ArgPlacement) -> bool {
     !matches!(
         p,
-        super::ArgPlacement::Stack(_)
-            | super::ArgPlacement::StructByRefStack(_)
-            | super::ArgPlacement::StructStack { .. }
+        super::ArgPlacement::Stack(_) | super::ArgPlacement::StructStack { .. }
     )
 }
 
@@ -595,11 +593,11 @@ fn va_named_home_off(i: usize, func: &FunctionSsa, abi: super::Abi) -> Option<i6
         } as i64;
     let vector = |r: u8| 16 + AARCH64_GR_SAVE_BYTES as i64 + r as i64 * 16;
     Some(match va_named_plan(func, abi).placements[i] {
-        P::Stack(off) | P::StructByRefStack(off) | P::StructStack { off, .. } => stack + off as i64,
+        P::Stack(off) | P::StructStack { off, .. } => stack + off as i64,
         P::FpReg(r) => vector(r),
         P::StructRegs { regs, .. } if regs[0].is_fp => vector(regs[0].reg),
         P::StructRegs { regs, .. } => 16 + regs[0].reg as i64 * 8,
-        P::IntReg(r) | P::StructByRefReg(r) | P::StructSplit { reg: r, .. } => 16 + r as i64 * 8,
+        P::IntReg(r) | P::StructSplit { reg: r, .. } => 16 + r as i64 * 8,
     })
 }
 
@@ -686,7 +684,7 @@ fn param_home_needed(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi) ->
     let elidable = param_elidable_mask(func, alloc, abi);
     placements.iter().enumerate().any(|(i, p)| match p {
         super::ArgPlacement::IntReg(_) | super::ArgPlacement::FpReg(_) => !elidable[i],
-        super::ArgPlacement::StructRegs { .. } | super::ArgPlacement::StructByRefReg(_) => false,
+        super::ArgPlacement::StructRegs { .. } => false,
         _ => true,
     })
 }

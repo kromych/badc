@@ -556,13 +556,6 @@ pub(crate) enum ArgPlacement {
         n: u8,
         align: u32,
     },
-    /// An aggregate passed by an implicit reference: the caller
-    /// copies it to a temporary and passes the pointer in this
-    /// integer register (one of `Abi::int_arg_regs`).
-    StructByRefReg(u8),
-    /// As `StructByRefReg`, but the implicit-reference pointer
-    /// overflows to the outgoing-args stack at `[sp + offset]`.
-    StructByRefStack(u32),
     /// An aggregate passed wholly on the outgoing-args stack: the
     /// caller copies `size` bytes to `[sp + off]` (System V MEMORY
     /// class, or a register-bank-exhausted small aggregate). `align`
@@ -636,7 +629,7 @@ impl CallPlan {
     pub(crate) fn int_regs(&self) -> impl Iterator<Item = u8> + '_ {
         self.placements.iter().flat_map(|p| {
             let (one, parts): (Option<u8>, &[ClassReg]) = match p {
-                ArgPlacement::IntReg(r) | ArgPlacement::StructByRefReg(r) => (Some(*r), &[]),
+                ArgPlacement::IntReg(r) => (Some(*r), &[]),
                 ArgPlacement::StructSplit { reg, .. } => (Some(*reg), &[]),
                 ArgPlacement::StructRegs { regs, n, .. } => (None, &regs[..*n as usize]),
                 _ => (None, &[]),
@@ -825,19 +818,20 @@ pub(super) fn plan_call_args_aggs(
             // Windows aarch64 variadic convention: an anonymous composite
             // is passed as if all SIMD/FP registers were unavailable -- a
             // <= 16-byte composite (HFA or not) rides the integer bank
-            // x0-x7 then the stack, a larger one goes by reference. The
-            // callee's va_arg walks one 8-byte-stride region, so an FP
-            // bank placement would read garbage on both sides.
+            // x0-x7 then the stack, a larger one goes by reference, its
+            // copy's address an integer argument. The callee's va_arg walks
+            // one 8-byte-stride region, so an FP bank placement would read
+            // garbage on both sides.
             if i >= fixed_args && abi.variadic_int_only && matches!(abi.arch, Arch::Aarch64) {
                 let placement = if agg.size > 16 {
                     if int_idx < int_max {
                         let r = abi.int_arg_regs[int_idx];
                         int_idx += 1;
-                        ArgPlacement::StructByRefReg(r)
+                        ArgPlacement::IntReg(r)
                     } else {
                         let off = stack_used.next_multiple_of(8);
                         stack_used = off + 8;
-                        ArgPlacement::StructByRefStack(off)
+                        ArgPlacement::Stack(off)
                     }
                 } else {
                     let need = (aligned as usize / 8).max(1);
@@ -960,15 +954,16 @@ pub(super) fn plan_call_args_aggs(
                         }
                     }
                 }
+                // The argument is the address of the caller's copy.
                 AggClass::ByRef => {
                     if int_idx < int_max {
                         let r = abi.int_arg_regs[int_idx];
                         int_idx += 1;
-                        ArgPlacement::StructByRefReg(r)
+                        ArgPlacement::IntReg(r)
                     } else {
                         let off = stack_used.next_multiple_of(8);
                         stack_used = off + 8;
-                        ArgPlacement::StructByRefStack(off)
+                        ArgPlacement::Stack(off)
                     }
                 }
                 AggClass::ByStack => {
@@ -1057,7 +1052,6 @@ pub(super) fn plan_call_args_aggs(
         for p in placements.iter_mut() {
             match p {
                 ArgPlacement::Stack(off)
-                | ArgPlacement::StructByRefStack(off)
                 | ArgPlacement::StructStack { off, .. }
                 | ArgPlacement::StructSplit { off, .. } => *off += abi.shadow_space,
                 _ => {}
@@ -4814,15 +4808,20 @@ mod abi_plan_tests {
         }
     }
 
-    /// The integer registers a plan fills: scalar, by-reference and the
-    /// integer slots of a register-passed aggregate, not its FP slots.
+    /// The integer registers a plan fills: scalar, split and the integer
+    /// slots of a register-passed aggregate, not its FP slots.
     #[test]
     fn call_plan_names_the_integer_registers_it_fills() {
         let plan = CallPlan {
             placements: alloc::vec![
                 ArgPlacement::IntReg(7),
                 ArgPlacement::FpReg(0),
-                ArgPlacement::StructByRefReg(6),
+                ArgPlacement::StructSplit {
+                    reg: 6,
+                    off: 0,
+                    size: 16,
+                    align: 8,
+                },
                 ArgPlacement::StructRegs {
                     regs: [
                         ClassReg {

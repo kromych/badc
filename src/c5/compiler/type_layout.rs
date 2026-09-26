@@ -1069,11 +1069,10 @@ pub(crate) fn long_double_agg_desc(
     })
 }
 
-/// Build the host-ABI [`AggDesc`] for a by-value aggregate of `ty`,
-/// or `None` when `ty` is not a by-value struct the current phase
-/// routes through the host ABI. Phase 1 covers AArch64 aggregates of
-/// at most 16 bytes (AAPCS64 register / HFA classes); every other
-/// case keeps the existing c5 by-address convention.
+/// Build the host-ABI [`AggDesc`] for a by-value aggregate of `ty`, or
+/// `None` for a type that takes none: a non-aggregate, a target outside the
+/// host ABIs, and an aggregate the convention passes by reference, which
+/// reaches the call as its copy's address.
 pub(crate) fn host_abi_agg_desc(structs: &[StructDef], target: Target, ty: i64) -> Option<AggDesc> {
     host_abi_agg_desc_conv(structs, target, crate::c5::codegen::CallConv::Target, ty)
 }
@@ -1130,15 +1129,15 @@ pub(crate) fn host_abi_agg_desc_conv(
     if homogeneous.is_none() {
         if matches!(row, Target::WindowsX64) {
             // Win64: only a 1-, 2-, 4-, or 8-byte aggregate is passed by
-            // value in a register; larger ones go by implicit reference,
-            // which keeps the by-address convention.
+            // value in a register; any other goes by reference
+            // (`passes_by_reference`), as its copy's address.
             if !matches!(size, 1 | 2 | 4 | 8) {
                 return None;
             }
         } else if size > 16 && !matches!(row, Target::LinuxX64) {
-            // AArch64 passes a larger non-HFA aggregate by reference; the c5
-            // by-address convention already matches. System V x86_64 passes
-            // it inline on the stack (MEMORY class), handled by the marshal.
+            // AArch64 passes a larger non-HFA aggregate by reference, as its
+            // copy's address. System V x86_64 passes it inline on the stack
+            // (MEMORY class), handled by the marshal.
             return None;
         }
         // System V x86_64 routes FP eightbytes to xmm (<= 16 bytes, in
@@ -1174,20 +1173,28 @@ pub(crate) fn va_arg_align(structs: &[StructDef], target: Target, ty: i64) -> u3
     })
 }
 
-/// Whether a variadic `ty` is passed as the address of a copy: an AArch64
-/// composite over 16 bytes (AAPCS64 B.4), which keeps an HFA by value except
-/// on Windows, whose variadic calls treat every composite alike.
-/// A Win64 argument of any size but 1, 2, 4 or 8 bytes is passed so too.
-pub(crate) fn va_arg_by_ref(structs: &[StructDef], target: Target, ty: i64) -> bool {
+/// Whether an argument of `ty` on `conv` is passed as the address of a copy
+/// the caller makes and the callee owns: under AAPCS64 a composite over 16
+/// bytes other than a homogeneous aggregate (B.4), and on Windows AArch64 any
+/// variadic one over 16 bytes; under the Microsoft x64 convention an
+/// aggregate of any size but 1, 2, 4 or 8 bytes.
+pub(crate) fn passes_by_reference(
+    structs: &[StructDef],
+    target: Target,
+    conv: crate::c5::codegen::CallConv,
+    ty: i64,
+    variadic: bool,
+) -> bool {
     if !is_struct_value_ty(ty) || struct_id_of(ty) >= structs.len() {
         return false;
     }
     let id = struct_id_of(ty);
+    let size = structs[id].size;
     let homogeneous = || homogeneous_aggregate(structs, target, id).is_some();
-    match target {
-        Target::LinuxAarch64 | Target::MacOSAarch64 => structs[id].size > 16 && !homogeneous(),
-        Target::WindowsAarch64 => structs[id].size > 16,
-        Target::WindowsX64 => !matches!(structs[id].size, 1 | 2 | 4 | 8),
+    match target.abi_row(conv) {
+        Target::LinuxAarch64 | Target::MacOSAarch64 => size > 16 && !homogeneous(),
+        Target::WindowsAarch64 => size > 16 && (variadic || !homogeneous()),
+        Target::WindowsX64 => !matches!(size, 1 | 2 | 4 | 8),
         _ => false,
     }
 }

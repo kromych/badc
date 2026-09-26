@@ -42,23 +42,25 @@ Disassembly of section .text:
                	ret
 
 <use_forward>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x30
-               	mov	x2, x0
+               	str	x20, [sp, #-0x50]!
+               	stp	x29, x30, [sp, #0x40]
+               	add	x29, sp, #0x40
                	mov	x1, #0x7                // =7
+               	ldr	x20, [x0]
+               	ldr	x2, [x0, #0x8]
+               	ldr	x3, [x0, #0x10]
+               	ldr	x4, [x0, #0x18]
+               	ldr	x5, [x0, #0x20]
                	sub	x0, x29, #0x28
-               	ldp	x16, x17, [x2]
-               	stp	x16, x17, [x0]
-               	ldp	x16, x17, [x2, #0x10]
-               	stp	x16, x17, [x0, #0x10]
-               	ldr	x16, [x2, #0x20]
-               	str	x16, [x0, #0x20]
+               	str	x20, [x0]
+               	str	x2, [x0, #0x8]
+               	str	x3, [x0, #0x10]
+               	str	x4, [x0, #0x18]
+               	str	x5, [x0, #0x20]
                	bl	<addr>
-               	ldur	x1, [x29, #-0x28]
-               	add	x0, x0, x1
-               	add	sp, sp, #0x30
-               	ldp	x29, x30, [sp], #0x10
+               	add	x0, x0, x20
+               	ldp	x29, x30, [sp, #0x40]
+               	ldr	x20, [sp], #0x50
                	ret
 
 <use_clobber>:

@@ -360,47 +360,57 @@ Disassembly of section .text:
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x50
+               	sub	sp, sp, #0x90
                	bl	<addr>
                	sxtw	x0, w0
                	cbz	x0, <addr>
-               	add	sp, sp, #0x50
+               	add	sp, sp, #0x90
                	ldp	x29, x30, [sp], #0x10
                	ret
                	bl	<addr>
                	sxtw	x0, w0
                	cbz	x0, <addr>
-               	add	sp, sp, #0x50
+               	add	sp, sp, #0x90
                	ldp	x29, x30, [sp], #0x10
                	ret
                	bl	<addr>
                	sxtw	x0, w0
                	cbz	x0, <addr>
-               	add	sp, sp, #0x50
+               	add	sp, sp, #0x90
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x7, x29, #0x50
+               	sub	x7, x29, #0x90
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldp	x16, x17, [x0]
                	stp	x16, x17, [x7]
-               	sub	x1, x29, #0x40
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldp	x16, x17, [x0]
-               	stp	x16, x17, [x1]
-               	ldp	x16, x17, [x0, #0x10]
-               	stp	x16, x17, [x1, #0x10]
-               	sub	x2, x29, #0x20
+               	sub	x2, x29, #0x80
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldp	x16, x17, [x0]
                	stp	x16, x17, [x2]
                	ldp	x16, x17, [x0, #0x10]
                	stp	x16, x17, [x2, #0x10]
+               	sub	x3, x29, #0x60
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldp	x16, x17, [x0]
+               	stp	x16, x17, [x3]
+               	ldp	x16, x17, [x0, #0x10]
+               	stp	x16, x17, [x3, #0x10]
                	mov	x0, #0x1                // =1
+               	sub	x1, x29, #0x40
+               	ldp	x16, x17, [x2]
+               	stp	x16, x17, [x1]
+               	ldp	x16, x17, [x2, #0x10]
+               	stp	x16, x17, [x1, #0x10]
+               	sub	x2, x29, #0x20
+               	ldp	x16, x17, [x3]
+               	stp	x16, x17, [x2]
+               	ldp	x16, x17, [x3, #0x10]
+               	stp	x16, x17, [x2, #0x10]
                	ldr	q0, [x7]
                	bl	<addr>
-               	add	sp, sp, #0x50
+               	add	sp, sp, #0x90
                	ldp	x29, x30, [sp], #0x10
                	ret

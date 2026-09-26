@@ -1204,12 +1204,6 @@ impl CallArgs<'_> {
                         emit_mov_reg(code, Reg(base), self.scratch.primary);
                     }
                 }
-                // Not produced for AAPCS64: >16-byte aggregates keep the
-                // address-passing convention (untagged scalar pointer).
-                super::ArgPlacement::StructByRefReg(_)
-                | super::ArgPlacement::StructByRefStack(_) => {
-                    return fail("aarch64 marshal: by-reference aggregate arg not yet emitted");
-                }
                 _ => {}
             }
         }

@@ -2038,8 +2038,14 @@ impl Compiler {
         // register per argument (System V AMD64 psABI 3.2.3, AAPCS64 6.4.2
         // C.1), which the third class selects.
         use crate::c5::op::VaArgDesc;
-        let by_ref =
-            !is_pointer && super::type_layout::va_arg_by_ref(&self.structs, self.target, arg_ty);
+        let by_ref = !is_pointer
+            && super::type_layout::passes_by_reference(
+                &self.structs,
+                self.target,
+                crate::c5::codegen::CallConv::Target,
+                arg_ty,
+                true,
+            );
         // AAPCS64 B.4 saves a homogeneous aggregate's elements one per
         // 16-byte slot of the `__va_list` vector area; a read composes them in
         // a temporary. A lone vector is read in place.

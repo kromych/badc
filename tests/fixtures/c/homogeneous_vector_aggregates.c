@@ -109,10 +109,6 @@ static double sum_v1(int n, ...) {
     return s;
 }
 
-/* TODO: Windows AArch64 passes a variadic composite over 16 bytes by
-   reference, which the call lowering does not emit yet. */
-#if !(defined(_WIN32) && defined(__aarch64__))
-#define OVER_16 1
 static double sum_s2(int n, ...) {
     va_list ap;
     double s = 0;
@@ -135,7 +131,6 @@ static double sum_d3(int n, ...) {
     va_end(ap);
     return s;
 }
-#endif
 
 int main(void) {
     union v1 u;
@@ -165,9 +160,7 @@ int main(void) {
     if (via_d3(take_d3) != 345.5) return 10;
     if (take_x2(x, 0.5) != 230.5) return 11;
     if (sum_v1(3, u, u, u) != 121212) return 12;
-#ifdef OVER_16
     if (sum_s2(3, s, s, s) != 231231231) return 13;
     if (sum_d3(5, d, d, d, d, d) != 134134134134134.0) return 14;
-#endif
     return 0;
 }

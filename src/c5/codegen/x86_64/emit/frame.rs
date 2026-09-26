@@ -743,9 +743,7 @@ pub(super) fn param_home_placements(
 fn register_carried(p: &super::ArgPlacement) -> bool {
     !matches!(
         p,
-        super::ArgPlacement::Stack(_)
-            | super::ArgPlacement::StructByRefStack(_)
-            | super::ArgPlacement::StructStack { .. }
+        super::ArgPlacement::Stack(_) | super::ArgPlacement::StructStack { .. }
     )
 }
 
@@ -778,16 +776,14 @@ pub(super) fn param_home_off(i: usize, func: &FunctionSsa, frame: Frame, abi: su
     };
     let before = |pred: fn(&P) -> bool| placements[..i].iter().filter(|q| pred(q)).count() as i64;
     match p {
-        P::Stack(off) | P::StructByRefStack(off) | P::StructStack { off, .. } => 16 + off as i64,
-        P::IntReg(r) | P::StructByRefReg(r) if sysv_variadic_callee(func, abi) => {
+        P::Stack(off) | P::StructStack { off, .. } => 16 + off as i64,
+        P::IntReg(r) if sysv_variadic_callee(func, abi) => {
             frame.va_reg_save_off as i64 + int_arg_position(r, abi) * 8
         }
         P::FpReg(x) if sysv_variadic_callee(func, abi) => {
             frame.va_reg_save_off as i64 + SYSV_GP_SAVE_BYTES as i64 + x as i64 * 16
         }
-        P::IntReg(r) | P::StructByRefReg(r) if home_area_callee(abi) => {
-            16 + 8 * int_arg_position(r, abi)
-        }
+        P::IntReg(r) if home_area_callee(abi) => 16 + 8 * int_arg_position(r, abi),
         P::FpReg(x) if home_area_callee(abi) => 16 + 8 * x as i64,
         P::StructRegs { regs, .. } if home_area_callee(abi) => {
             16 + 8 * int_arg_position(regs[0].reg, abi)

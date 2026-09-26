@@ -3590,6 +3590,68 @@ fn an_over_aligned_object_takes_region_storage_alone() {
     );
 }
 
+/// AAPCS64 B.4 and the Microsoft x64 convention pass an aggregate by
+/// reference: the call takes, untagged, the address of a copy the walker
+/// makes -- a region member aligned to 16 under Win64 -- and never the
+/// object's own. Windows AArch64 passes a variadic homogeneous aggregate over
+/// 16 bytes so too; System V AMD64 and the other AArch64 calls take the
+/// aggregate's layout and marshal its bytes.
+#[test]
+fn a_by_reference_argument_is_the_address_of_a_copy() {
+    use crate::Target;
+    use crate::c5::ir::{FunctionSsa, Inst};
+    let src = "struct big { long long a, b, c; };\n\
+        struct hfa4 { double a, b, c, d; };\n\
+        long long h(struct big s) { return s.a; }\n\
+        double v(int n, ...) { return n; }\n\
+        long long f(void) { struct big s = { 1, 2, 3 }; return h(s) + s.b; }\n\
+        double g(void) { struct hfa4 x = { 1, 2, 3, 4 }; return v(1, x); }\n\
+        int main(void) { return (int)f() + (int)g(); }\n";
+    // The copy slot argument `j` of `f`'s first call names, with its region
+    // alignment, or `None` when the argument carries an aggregate layout.
+    let copy = |f: &FunctionSsa, j: usize| -> Option<(i64, i64)> {
+        let (args, aggs) = f.insts.iter().find_map(|i| match i {
+            Inst::Call { args, arg_aggs, .. } => Some((args, arg_aggs)),
+            _ => None,
+        })?;
+        if aggs.get(j).is_some_and(Option::is_some) {
+            return None;
+        }
+        let Inst::LocalAddr(slot) = f.insts[args[j] as usize] else {
+            panic!("argument {j} is no frame address");
+        };
+        assert!(
+            f.insts.iter().any(|i| matches!(i, Inst::Mcpy { dst, .. }
+                if matches!(f.insts[*dst as usize], Inst::LocalAddr(s) if s == slot))),
+            "argument {j} names slot {slot}, which no copy fills"
+        );
+        let align = f
+            .over_aligned
+            .iter()
+            .find(|m| m.slot == slot)
+            .map_or(8, |m| m.align);
+        Some((slot, align))
+    };
+    for (target, big, hfa) in [
+        (Target::LinuxAarch64, Some(8), None),
+        (Target::MacOSAarch64, Some(8), None),
+        (Target::WindowsAarch64, Some(8), Some(8)),
+        (Target::WindowsX64, Some(16), Some(16)),
+        (Target::LinuxX64, None, None),
+    ] {
+        let program = crate::Compiler::with_target(src.into(), target)
+            .compile()
+            .unwrap_or_else(|e| panic!("compile: {e}"));
+        let funcs =
+            crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+                .expect("ssa");
+        let f = funcs.iter().find(|f| f.name == "f").expect("f");
+        assert_eq!(copy(f, 0).map(|c| c.1), big, "{target:?} h(s)");
+        let g = funcs.iter().find(|f| f.name == "g").expect("g");
+        assert_eq!(copy(g, 1).map(|c| c.1), hfa, "{target:?} v(1, x)");
+    }
+}
+
 /// A call's aggregate result aligned above the 8-byte frame slot is a member
 /// of the over-aligned region, as a declared object of its type is, whether
 /// the callee stores it through the result pointer or it returns in

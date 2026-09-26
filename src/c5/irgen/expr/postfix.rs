@@ -1,7 +1,7 @@
 //! Postfix expressions: calls, member access, subscripting,
 //! postfix increment and compound literals (C99 6.5.2).
 
-use super::super::access::{load_kind_for, load_kind_width, load_place};
+use super::super::access::{load_kind_for, load_kind_width, load_place, seg_copy_bytes};
 use super::super::atomic::RmwOpen;
 use super::super::types::{
     arg_value_ty, arg_width, extend_scalar_call_result, is_float_ty, is_floating_scalar,
@@ -298,7 +298,8 @@ impl<'a> Walker<'a> {
     ) -> alloc::vec::Vec<Option<u32>> {
         let mut arg_aggs: alloc::vec::Vec<Option<u32>> = alloc::vec::Vec::new();
         for i in 0..args.vals.len() {
-            let agg_ty = if i < named {
+            let variadic = i >= named;
+            let agg_ty = if !variadic {
                 if !named_by_value {
                     continue;
                 }
@@ -307,23 +308,62 @@ impl<'a> Walker<'a> {
                     None => arg_value_ty(self.ast.expr(args.exprs[i])),
                 }
             } else {
-                match arg_value_ty(self.ast.expr(args.exprs[i])) {
-                    Some(aty)
-                        if is_struct_value_ty(aty)
-                            && self.struct_size(aty) <= 8
-                            && !self.agg_arg_is_simd_classed(args.conv, aty) =>
-                    {
-                        args.vals[i] = b.load(args.vals[i], LoadKind::I64);
-                        None
-                    }
-                    other => other,
-                }
+                arg_value_ty(self.ast.expr(args.exprs[i]))
             };
-            if let Some(ty_tag) = agg_ty {
-                self.record_arg_agg(b, &mut arg_aggs, args, i, ty_tag);
+            let Some(ty_tag) = agg_ty else {
+                continue;
+            };
+            if self.pass_by_reference(b, args, i, ty_tag, variadic) {
+                continue;
             }
+            if variadic
+                && is_struct_value_ty(ty_tag)
+                && self.struct_size(ty_tag) <= 8
+                && !self.agg_arg_is_simd_classed(args.conv, ty_tag)
+            {
+                args.vals[i] = b.load(args.vals[i], LoadKind::I64);
+                continue;
+            }
+            self.record_arg_agg(b, &mut arg_aggs, args, i, ty_tag);
         }
         arg_aggs
+    }
+
+    /// Pass argument `i`, an aggregate of `ty` the call's convention passes
+    /// by reference, as the address of a copy the callee owns (AAPCS64 B.4;
+    /// the Microsoft x64 convention, which aligns the copy to 16). False,
+    /// leaving the argument alone, for any other argument.
+    fn pass_by_reference(
+        &self,
+        b: &mut SsaBuilder,
+        args: &mut CallArgs<'_>,
+        i: usize,
+        ty: i64,
+        variadic: bool,
+    ) -> bool {
+        if !crate::c5::compiler::passes_by_reference(
+            self.structs,
+            self.target,
+            args.conv,
+            ty,
+            variadic,
+        ) {
+            return false;
+        }
+        let size = self.struct_size(ty);
+        let align = self.struct_align(ty);
+        let win64 = matches!(self.target.abi_row(args.conv), crate::Target::WindowsX64);
+        let copy_align = if win64 { align.max(16) } else { align };
+        let slot = b.alloc_synthetic_struct(size, i64::from(copy_align));
+        let dst = b.local_addr(slot);
+        if is_volatile_ty(ty) || self.expr_is_volatile(args.exprs[i]) {
+            let none = AsmSeg::None;
+            seg_copy_bytes(b, dst, none, args.vals[i], none, size, align, true, false);
+        } else {
+            b.mcpy(dst, args.vals[i], size, align);
+        }
+        args.vals[i] = dst;
+        true
     }
 
     /// Whether a by-value aggregate argument of `ty` takes a SIMD
@@ -491,6 +531,9 @@ impl<'a> Walker<'a> {
                     None => continue,
                 }
             };
+            if self.pass_by_reference(b, &mut args, i, arg_ty, i >= nparams) {
+                continue;
+            }
             if (is_struct_value_ty(arg_ty) || is_long_double_scalar(arg_ty))
                 && let Some(desc) =
                     crate::c5::compiler::host_abi_agg_desc(self.structs, self.target, arg_ty)

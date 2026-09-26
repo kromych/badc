@@ -36,10 +36,6 @@ static double sum_f4(int n, ...) {
     return s;
 }
 
-/* TODO: Windows AArch64 passes a variadic composite over 16 bytes by
-   reference, which the call lowering does not emit yet. */
-#if !(defined(_WIN32) && defined(__aarch64__))
-#define OVER_16 1
 /* A double, three three-element aggregates and a double: the third
    aggregate finds one register left and goes to the stack, the double
    after it too. */
@@ -55,7 +51,6 @@ static double straddle(int n, ...) {
     va_end(ap);
     return s;
 }
-#endif
 
 static long double last_ld(int n, ...) {
     va_list ap;
@@ -109,10 +104,8 @@ int main(void) {
     if (sum_d2(5, a, b, c, d, e) != 1234567891) return 3;
     if (sum_f4(1, f) != 1234) return 4;
     if (sum_f4(3, f, g, h) != 123456789876.0) return 5;
-#ifdef OVER_16
     struct d3 p = { 1, 2, 3 }, q = { 4, 5, 6 }, r = { 7, 8, 9 };
     if (straddle(3, 0.5, p, q, r, 2.0) != 6234567892.0) return 6;
-#endif
     if (last_ld(2, l1, l2) != 7.25L) return 7;
     if (last_ld(9, l1, l1, l1, l1, l1, l1, l1, l1, l2) != 7.25L) return 8;
     if (mixed(2, 1, u, 2, v) != 1324) return 9;

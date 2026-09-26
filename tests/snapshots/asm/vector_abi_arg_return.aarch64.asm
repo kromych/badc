@@ -1227,17 +1227,27 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x0                // =0
-               	sub	x2, x29, #0x50
+               	sub	x2, x29, #0x90
                	add	x1, x0, #0x1
                	strb	w1, [x2, x0]
-               	sub	x2, x29, #0x30
+               	sub	x2, x29, #0x70
                	add	x3, x0, #0x46
                	strb	w3, [x2, x0]
                	mov	x0, x1
                	cmp	w0, #0x20
                	b.lt	<addr>
+               	sub	x1, x29, #0x90
+               	sub	x2, x29, #0x70
                	sub	x0, x29, #0x50
+               	ldp	x16, x17, [x1]
+               	stp	x16, x17, [x0]
+               	ldp	x16, x17, [x1, #0x10]
+               	stp	x16, x17, [x0, #0x10]
                	sub	x1, x29, #0x30
+               	ldp	x16, x17, [x2]
+               	stp	x16, x17, [x1]
+               	ldp	x16, x17, [x2, #0x10]
+               	stp	x16, x17, [x1, #0x10]
                	sub	x8, x29, #0x70
                	bl	<addr>
                	sub	x0, x29, #0x70

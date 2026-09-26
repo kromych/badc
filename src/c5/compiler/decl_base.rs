@@ -637,6 +637,15 @@ impl Compiler {
                     self.pending.base_is_function_type = false;
                     self.pending.fn_ptr_params = Some(f.params);
                     self.pending.fn_ptr_ret_fn = f.ret;
+                } else if self.pending.value_is_fn_designator
+                    && let Some((f, 0)) = self.ast_acc.and_then(|a| self.expr_fn(a))
+                {
+                    // A function designator (`*fp`): the function type the
+                    // specifier names, parameters included.
+                    self.pending.fn_ptr_indirection = Some(1);
+                    self.pending.fn_ptr_ret_indirection = f.ret.as_ref().map_or(0, |r| r.1);
+                    self.pending.fn_ptr_params = Some(f.params);
+                    self.pending.fn_ptr_ret_fn = f.ret;
                 }
                 self.ty
             }

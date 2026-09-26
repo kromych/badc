@@ -2966,3 +2966,24 @@ fn a_result_keeps_the_pointer_levels_over_a_function_pointer_base() {
          }\n",
     );
 }
+
+/// C23 6.7.2.5: `typeof` of a function designator (`*fp`) names the
+/// function's type, its parameters included, so an entity declared through
+/// the specifier has the prototype (the kernel's `static_call` trampolines).
+#[test]
+fn typeof_a_function_designator_keeps_its_parameters() {
+    compile_str(
+        "struct ops { void (*run)(void *ctx, _Bool now); int (*get)(char); };\n\
+         struct ops ops;\n\
+         extern __typeof__(*ops.run) tramp;\n\
+         _Static_assert(__builtin_types_compatible_p(__typeof__(*ops.run), void (void *, _Bool)), \"run\");\n\
+         _Static_assert(__builtin_types_compatible_p(__typeof__(&tramp), void (*)(void *, _Bool)), \"tramp\");\n\
+         _Static_assert(!__builtin_types_compatible_p(__typeof__(&tramp), void (*)()), \"tramp\");\n\
+         _Static_assert(__builtin_types_compatible_p(__typeof__(*ops.get), int (char)), \"get\");\n\
+         int main(void) {\n\
+             __typeof__(*ops.get) *g = ops.get;\n\
+             _Static_assert(__builtin_types_compatible_p(__typeof__(g), int (*)(char)), \"g\");\n\
+             return g == ops.get ? 0 : 1;\n\
+         }\n",
+    );
+}

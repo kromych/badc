@@ -165,6 +165,8 @@ impl<'a> Walker<'a> {
         let target_pc = self.live_fun_val(sym, val);
         let named = if variadic {
             self.fun_fixed_args(sym).min(exprs.len())
+        } else if self.win64_unprototyped(sym, conv) {
+            0
         } else {
             exprs.len()
         };
@@ -217,6 +219,8 @@ impl<'a> Walker<'a> {
         // arguments past them are the variadic ones.
         let fixed_args = if callee_variadic {
             self.fun_fixed_args(sym).min(args.exprs.len())
+        } else if self.win64_unprototyped(sym, conv) {
+            0
         } else {
             args.exprs.len()
         };
@@ -245,10 +249,14 @@ impl<'a> Walker<'a> {
             let ret_temp = self.call_ret_temp(b, conv, ty);
             return Ok(self.call_result(b, call, ret_temp, ty, true));
         }
-        // A variadic callee reaching here is on a `variadic_int_only`
-        // host (the Microsoft conventions), where every argument rides
-        // the integer bank.
-        let call_fp_mask = if callee_variadic {
+        // A variadic callee reaching here is on a `variadic_int_only` host
+        // (the Microsoft conventions): Microsoft x64 keeps a floating-point
+        // argument in its FP register and copies it into the integer one at
+        // the call, Windows arm64 passes every argument in the integer bank.
+        let call_fp_mask = if callee_variadic && abi.position_indexed_args {
+            self.widen_variadic_fp(b, &mut args, fixed_args);
+            fp_mask
+        } else if callee_variadic {
             self.widen_fp_through_int(b, &mut args, is_floating_scalar);
             crate::c5::ir::FpMask::EMPTY
         } else {
@@ -504,10 +512,9 @@ impl<'a> Walker<'a> {
     }
 
     /// The FP mask of a call passing the hidden result pointer as argument
-    /// 0, once a variadic callee's protocol has rewritten the arguments from
-    /// `named` on: System V widens a floating-point one to `double` in the FP
-    /// bank (C99 6.5.2.2p6), and the Microsoft convention passes every
-    /// argument in the integer bank.
+    /// 0, once a variadic callee's protocol has widened a floating-point
+    /// argument from `named` on to `double` (C99 6.5.2.2p6), in the FP bank
+    /// on System V and in both banks on Microsoft x64.
     fn hidden_ptr_fp_mask(
         &self,
         b: &mut SsaBuilder,
@@ -515,14 +522,18 @@ impl<'a> Walker<'a> {
         variadic: bool,
         named: usize,
     ) -> crate::c5::ir::FpMask {
-        if variadic && self.target.abi_for(args.conv).variadic_int_only {
-            self.widen_fp_through_int(b, args, is_floating_scalar);
-            return crate::c5::ir::FpMask::EMPTY;
-        }
         if variadic {
             self.widen_variadic_fp(b, args, named);
         }
         args.fp_mask.shifted(1)
+    }
+
+    /// Whether a direct call on `conv` reaches `sym` without a prototype on
+    /// the Microsoft x64 convention, which places such a call's arguments as
+    /// a variadic call's.
+    fn win64_unprototyped(&self, sym: u32, conv: crate::c5::codegen::CallConv) -> bool {
+        self.target.abi_for(conv).position_indexed_args
+            && self.live_fun_sym(sym).is_some_and(|s| !s.prototyped)
     }
 
     /// C99 6.5.2.2p6: widen each variadic floating-point argument to
@@ -671,6 +682,18 @@ impl<'a> Walker<'a> {
         // Every ABI question below is asked of the pointed-to function's
         // own convention, not the target's default.
         let abi = self.target.abi_for(conv);
+        // Microsoft x64 places a call without a prototype as a variadic one.
+        let (callee_variadic, callee_fixed) = if abi.position_indexed_args
+            && self
+                .ast
+                .callee_types
+                .get(&callee)
+                .is_some_and(|f| !f.params.prototyped)
+        {
+            (true, 0)
+        } else {
+            (callee_variadic, callee_fixed)
+        };
         let target = match indirect_target {
             Some(t) => t,
             None => self.walk_expr_rvalue(b, callee)?,
@@ -732,9 +755,14 @@ impl<'a> Walker<'a> {
             }
             return Ok(self.call_result(b, call, ret_temp, ty, true));
         }
-        // A variadic callee on a `variadic_int_only` host takes every
+        // A variadic callee on a `variadic_int_only` host: Microsoft x64
+        // keeps a floating-point argument in its FP register and copies it
+        // into the integer one at the call, Windows arm64 passes every
         // argument in the integer bank.
-        let call_fp_mask = if callee_variadic && abi.variadic_int_only && !fp_mask.is_empty() {
+        let call_fp_mask = if callee_variadic && abi.position_indexed_args {
+            self.widen_variadic_fp(b, &mut args, callee_fixed);
+            fp_mask
+        } else if callee_variadic && abi.variadic_int_only && !fp_mask.is_empty() {
             self.widen_fp_through_int(b, &mut args, is_floating_scalar);
             crate::c5::ir::FpMask::EMPTY
         } else {

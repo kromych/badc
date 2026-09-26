@@ -640,22 +640,62 @@ pub(crate) struct CallPlan {
     /// The bytes each `Stack` placement takes: 8, or under
     /// `Abi::packed_stack_args` a named argument's own width.
     pub stack_widths: crate::c5::ir::ArgWidths,
+    /// `(fp, int)`: an `FpReg(fp)` argument the call also copies into
+    /// integer register `int` (see [`plan_mirrored_call`]).
+    pub fp_mirrors: alloc::vec::Vec<(u8, u8)>,
 }
 
 impl CallPlan {
     /// The integer registers the placements fill.
     pub(crate) fn int_regs(&self) -> impl Iterator<Item = u8> + '_ {
-        self.placements.iter().flat_map(|p| {
-            let (one, parts): (Option<u8>, &[ClassReg]) = match p {
-                ArgPlacement::IntReg(r) => (Some(*r), &[]),
-                ArgPlacement::StructSplit { reg, .. } => (Some(*reg), &[]),
-                ArgPlacement::StructRegs { regs, n, .. } => (None, &regs[..*n as usize]),
-                _ => (None, &[]),
-            };
-            one.into_iter()
-                .chain(parts.iter().filter(|c| !c.is_fp).map(|c| c.reg))
-        })
+        self.placements
+            .iter()
+            .flat_map(|p| {
+                let (one, parts): (Option<u8>, &[ClassReg]) = match p {
+                    ArgPlacement::IntReg(r) => (Some(*r), &[]),
+                    ArgPlacement::StructSplit { reg, .. } => (Some(*reg), &[]),
+                    ArgPlacement::StructRegs { regs, n, .. } => (None, &regs[..*n as usize]),
+                    _ => (None, &[]),
+                };
+                one.into_iter()
+                    .chain(parts.iter().filter(|c| !c.is_fp).map(|c| c.reg))
+            })
+            .chain(self.fp_mirrors.iter().map(|&(_, r)| r))
     }
+}
+
+/// The Microsoft x64 placement of a call to a variadic or unprototyped
+/// callee: each argument by its position, a floating-point one in the xmm
+/// register of its position and copied into the integer register of the
+/// same position, where a callee reading its arguments as integers finds
+/// it. Past the four register positions every argument takes its stack
+/// slot.
+pub(crate) fn plan_mirrored_call(
+    arg_count: usize,
+    fp_arg_mask: &crate::c5::ir::FpMask,
+    abi: Abi,
+    aggs: &[Option<ArgAgg>],
+) -> CallPlan {
+    debug_assert!(abi.position_indexed_args);
+    let mut plan = plan_call_args_aggs(
+        arg_count,
+        arg_count,
+        fp_arg_mask,
+        abi,
+        aggs,
+        false,
+        crate::c5::ir::ArgWidths::default(),
+    );
+    plan.fp_mirrors = plan
+        .placements
+        .iter()
+        .enumerate()
+        .filter_map(|(i, p)| match *p {
+            ArgPlacement::FpReg(x) => abi.int_arg_regs.get(i).map(|&r| (x, r)),
+            _ => None,
+        })
+        .collect();
+    plan
 }
 
 /// The leading arguments a call places as named: none of a Windows arm64 variadic callee's.
@@ -683,10 +723,13 @@ pub(crate) fn named_args(abi: Abi, callee_variadic: bool, fixed_args: usize, arg
 /// * **macOS arm64** (`variadic_on_stack`): fixed args follow
 ///   AAPCS64; variadic args spill to the host stack at 8-byte
 ///   stride, no FP regs used.
-/// * **Win64 / Windows aarch64** (`variadic_int_only`): fixed
-///   args follow the standard placement; variadic args use the
-///   integer reg bank only (FP variadic args ride int regs as
-///   their raw bit pattern), then overflow to the stack.
+/// * **Win64** (`position_indexed_args`): each argument by its
+///   position in either bank, then the stack; a call to a variadic
+///   or unprototyped callee is [`plan_mirrored_call`]'s.
+/// * **Windows aarch64** (`variadic_int_only`): fixed args follow
+///   the standard placement; variadic args use the integer reg bank
+///   only (FP variadic args ride int regs as their raw bit pattern),
+///   then overflow to the stack.
 pub(super) fn plan_call_args(
     arg_count: usize,
     fixed_args: usize,
@@ -1017,10 +1060,11 @@ pub(super) fn plan_call_args_aggs(
             ArgPlacement::Stack(scalar_slot(&mut stack_used, i))
         } else if abi.position_indexed_args {
             // Win64: arg position i picks reg i for both int and
-            // FP. No separate counters; arg 0 burns slot 0 even
-            // if a prior FP arg already used xmm0.
+            // FP, a variadic argument's as a named one's. No separate
+            // counters; arg 0 burns slot 0 even if a prior FP arg
+            // already used xmm0.
             if i < int_max {
-                if is_fp && allow_fp_reg {
+                if is_fp {
                     ArgPlacement::FpReg(i as u8)
                 } else {
                     ArgPlacement::IntReg(abi.int_arg_regs[i])
@@ -1037,8 +1081,8 @@ pub(super) fn plan_call_args_aggs(
             // FP argument registers overflows to the host stack, not the
             // integer bank (System V AMD64 3.2.3 / AAPCS64 6.4.1). The
             // integer-bank fall-through below is reserved for variadic
-            // FP arguments under `variadic_int_only` (Win64), where
-            // `allow_fp_reg` is already false.
+            // FP arguments under `variadic_int_only` (Windows arm64),
+            // where `allow_fp_reg` is already false.
             ArgPlacement::Stack(scalar_slot(&mut stack_used, i))
         } else if int_idx < int_max {
             // Routes both real int args and variadic FP args
@@ -1077,6 +1121,7 @@ pub(super) fn plan_call_args_aggs(
         }
     }
     CallPlan {
+        fp_mirrors: alloc::vec::Vec::new(),
         placements,
         scratch_bytes,
         next_gpr: int_idx,
@@ -4496,7 +4541,9 @@ mod access_bound_tests {
 #[cfg(test)]
 mod abi_plan_tests {
     use super::abi_classify::{AggClass, RegClass};
-    use super::{ArgAgg, ArgPlacement, CallPlan, ClassReg, Target, plan_call_args_aggs};
+    use super::{
+        ArgAgg, ArgPlacement, CallPlan, ClassReg, Target, plan_call_args_aggs, plan_mirrored_call,
+    };
     use crate::c5::ir::{ArgWidths, FpMask};
 
     // A register-passed aggregate that spills must exhaust the correct
@@ -4870,11 +4917,35 @@ mod abi_plan_tests {
         }
     }
 
-    /// The integer registers a plan fills: scalar, split and the integer
-    /// slots of a register-passed aggregate, not its FP slots.
+    /// A Win64 call to a variadic or unprototyped callee places each
+    /// argument by its position and copies each FP register argument into
+    /// the integer register of that position; past the four register
+    /// positions an argument takes its stack slot alone.
+    #[test]
+    fn mirrored_call_copies_fp_register_arguments_into_integer_registers() {
+        let abi = Target::WindowsX64.abi();
+        let plan = plan_mirrored_call(5, &FpMask::from_bits(0b11101), abi, &[]);
+        let regs = abi.int_arg_regs;
+        assert_eq!(
+            plan.placements,
+            [
+                ArgPlacement::FpReg(0),
+                ArgPlacement::IntReg(regs[1]),
+                ArgPlacement::FpReg(2),
+                ArgPlacement::FpReg(3),
+                ArgPlacement::Stack(32),
+            ]
+        );
+        assert_eq!(plan.fp_mirrors, [(0, regs[0]), (2, regs[2]), (3, regs[3])]);
+    }
+
+    /// The integer registers a plan fills: scalar, split, the integer
+    /// slots of a register-passed aggregate, not its FP slots, and the
+    /// integer copy of a mirrored FP argument.
     #[test]
     fn call_plan_names_the_integer_registers_it_fills() {
         let plan = CallPlan {
+            fp_mirrors: alloc::vec![(3, 8)],
             placements: alloc::vec![
                 ArgPlacement::IntReg(7),
                 ArgPlacement::FpReg(0),
@@ -4914,7 +4985,10 @@ mod abi_plan_tests {
             stack_bytes: 0,
             stack_widths: ArgWidths::default(),
         };
-        assert_eq!(plan.int_regs().collect::<alloc::vec::Vec<_>>(), [7, 6, 2]);
+        assert_eq!(
+            plan.int_regs().collect::<alloc::vec::Vec<_>>(),
+            [7, 6, 2, 8]
+        );
     }
 
     #[test]

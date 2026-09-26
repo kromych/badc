@@ -166,6 +166,9 @@ struct ParamEntry<'a> {
     /// True when the definition takes its parameters under the host ABI.
     /// A variadic or all-integer out-pointer definition keeps the c5 cdecl shape.
     host_abi: bool,
+    /// A variadic definition under the Microsoft x64 convention, whose caller
+    /// passes a named `float` in its integer register as the value's own bits.
+    float_bits_in_int: bool,
     /// Positions ahead of the first declared parameter: 1 for a hidden result pointer.
     shift: usize,
     /// Argument cell of the first declared parameter: 2, or 3 when the
@@ -264,6 +267,7 @@ impl<'a> ParamEntry<'a> {
             arrival_tys: &fun.param_arrival_tys,
             param_local_slots: &fun.param_local_slots,
             host_abi,
+            float_bits_in_int: fun.is_variadic && abi_target.abi().position_indexed_args,
             arg_slot_base: if ret_outptr { 3 } else { 2 },
             shift,
             aggs,
@@ -415,10 +419,10 @@ impl<'a> ParamEntry<'a> {
                     b.fp_narrow_to_f32(pr)
                 };
                 b.store_local(local_slot, val, StoreKind::F32);
-            } else if !b.param_fp_mask().is_empty() {
-                // Host-stack-overflow `float` under the FP-register ABI:
-                // the caller pushed it into the c5 cdecl cell at the width
-                // it arrives at.
+            } else if !b.param_fp_mask().is_empty() || self.float_bits_in_int {
+                // The caller left the `float` in the c5 cdecl cell at the
+                // width it arrives at: past the FP argument registers, or in
+                // the integer register of a Microsoft variadic callee.
                 let val = b.load_local(arg_slot, kind);
                 let val = if kind == LoadKind::F32 {
                     val

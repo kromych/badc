@@ -31,6 +31,11 @@ fn marshal_args(
     m.sse_aggs(code)?;
     m.int_args(code)?;
     m.agg_eightbytes(code);
+    // Once every argument register holds its value: no source is read from
+    // an integer register a copy writes.
+    for &(x, r) in &plan.fp_mirrors {
+        super::encode::emit_movq_r_xmm(code, Reg(r), Reg(x));
+    }
     Ok(())
 }
 
@@ -513,22 +518,15 @@ pub(super) fn emit_call(
     // reduces to the scalar placement, so every branch runs the aggregate
     // planner.
     let aggs = build_arg_aggs(arg_aggs, agg_descs, abi);
-    // A variadic callee follows the host ABI: Win64 passes every argument on
-    // the integer side, by position then on the stack at 8-byte stride (the
-    // walker widened the FP arguments to double with `fp_arg_mask` 0); System
-    // V AMD64 uses the standard banks and reports the XMM count in `al`. The
+    // A variadic callee follows the host ABI: Win64 places every argument by
+    // position, a floating-point one in both banks, as it does for a call
+    // without a prototype (fewer named arguments than arguments); System V
+    // AMD64 uses the standard banks and reports the XMM count in `al`. The
     // internal convention uses both banks; `fp_arg_mask` comes from the
     // argument types, since an FP constant rides an integer register.
-    let (plan, site, xmm_count) = if callee_is_variadic && abi.position_indexed_args {
-        let plan = super::plan_call_args_aggs(
-            args.len(),
-            fixed_args,
-            fp_arg_mask,
-            abi,
-            &aggs,
-            false,
-            crate::c5::ir::ArgWidths::default(),
-        );
+    let unnamed = callee_is_variadic || fixed_args < args.len();
+    let (plan, site, xmm_count) = if unnamed && abi.position_indexed_args {
+        let plan = super::plan_mirrored_call(args.len(), fp_arg_mask, abi, &aggs);
         (plan, "Call (Win64 variadic)", None)
     } else if callee_is_variadic && abi.variadic_zero_xmm_count && !abi.position_indexed_args {
         let plan = super::plan_call_args_aggs(
@@ -617,15 +615,19 @@ pub(super) fn emit_call_ext(
     // `plan_call_args` placement; a tagged aggregate rides through the
     // host-ABI argument-register packing instead.
     let aggs = build_arg_aggs(arg_aggs, agg_descs, abi);
-    let plan = super::plan_call_args_aggs(
-        args.len(),
-        fixed,
-        fp_arg_mask,
-        abi,
-        &aggs,
-        false,
-        crate::c5::ir::ArgWidths::default(),
-    );
+    let plan = if imp.is_variadic && abi.position_indexed_args {
+        super::plan_mirrored_call(args.len(), fp_arg_mask, abi, &aggs)
+    } else {
+        super::plan_call_args_aggs(
+            args.len(),
+            fixed,
+            fp_arg_mask,
+            abi,
+            &aggs,
+            false,
+            crate::c5::ir::ArgWidths::default(),
+        )
+    };
     let xmm_used = xmm_arg_count(&plan);
     if plan.scratch_bytes > 0 {
         emit_stack_alloc(code, plan.scratch_bytes, None);
@@ -701,7 +703,6 @@ pub(super) fn emit_call_indirect(
     target: u32,
     args: &[u32],
     callee_variadic: bool,
-    fixed_args: usize,
     alloc: &Allocation,
     frame: Frame,
     abi: super::Abi,
@@ -715,26 +716,24 @@ pub(super) fn emit_call_indirect(
     extern_sites: &mut Vec<super::UserExternCallSite>,
 ) -> Emit {
     let target_place = place_of(alloc, target);
-    // A Win64 variadic indirect call splits the arguments into the named
-    // prefix, placed by position, and the variadic tail at 8-byte stride past
-    // the home area; every other dialect treats all arguments as fixed.
-    let fixed = if callee_variadic && abi.position_indexed_args {
-        fixed_args.min(args.len())
-    } else {
-        args.len()
-    };
-    // A tagged by-value aggregate rides `plan_call_args_aggs`; with none the
-    // plan is the scalar placement.
+    // A Win64 indirect call to a variadic or unprototyped callee places every
+    // argument by position, a floating-point one in both banks; every other
+    // dialect treats all arguments as fixed. A tagged by-value aggregate
+    // rides `plan_call_args_aggs`; with none the plan is the scalar placement.
     let aggs = build_arg_aggs(arg_aggs, agg_descs, abi);
-    let plan = super::plan_call_args_aggs(
-        args.len(),
-        fixed,
-        fp_arg_mask,
-        abi,
-        &aggs,
-        false,
-        crate::c5::ir::ArgWidths::default(),
-    );
+    let plan = if callee_variadic && abi.position_indexed_args {
+        super::plan_mirrored_call(args.len(), fp_arg_mask, abi, &aggs)
+    } else {
+        super::plan_call_args_aggs(
+            args.len(),
+            args.len(),
+            fp_arg_mask,
+            abi,
+            &aggs,
+            false,
+            crate::c5::ir::ArgWidths::default(),
+        )
+    };
     // The staged target must avoid every register the marshal reads (the
     // argument sources) or writes (every integer register the plan fills,
     // and the r10 staging scratch).
@@ -1040,18 +1039,20 @@ pub(super) fn detect_tail_call<'a>(
     {
         return None;
     }
-    let (target_pc, args, arg_aggs, fp_arg_mask) = match &func.insts[v as usize] {
+    let (target_pc, args, arg_aggs, fp_arg_mask, fixed_args) = match &func.insts[v as usize] {
         Inst::Call {
             target_pc,
             args,
             arg_aggs,
             fp_arg_mask,
+            fixed_args,
             ..
         } => (
             *target_pc,
             args.as_slice(),
             arg_aggs.as_slice(),
             fp_arg_mask,
+            *fixed_args,
         ),
         _ => return None,
     };
@@ -1072,8 +1073,9 @@ pub(super) fn detect_tail_call<'a>(
     if func.is_variadic {
         return None;
     }
-    // A variadic callee takes the c5-stack argument convention.
-    if variadic_targets.contains(&target_pc) {
+    // A variadic callee, or one called with fewer named arguments than
+    // arguments (without a prototype on Win64), takes its own placement.
+    if variadic_targets.contains(&target_pc) || fixed_args < args.len() {
         return None;
     }
     // A callee on another convention wants a different argument window,

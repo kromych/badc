@@ -3776,6 +3776,83 @@ fn a_variadic_hidden_pointer_callee_takes_named_arguments_by_class() {
     );
 }
 
+/// Microsoft x64 passes a floating-point argument to a variadic or
+/// unprototyped callee in its FP register, which the call copies into the
+/// integer one: a named `float` keeps its type, a variadic one widens to
+/// `double`, and a call without a prototype names no argument. The variadic
+/// definition reads its named `float` from the integer register's home at
+/// the width it arrives at.
+#[test]
+fn win64_variadic_and_unprototyped_calls_keep_fp_arguments_in_fp_registers() {
+    use crate::Target;
+    use crate::c5::ir::{FpMask, Inst, LoadKind};
+    let src = "double vd(double d, float f, int n, ...) { return d + f + n; }\n\
+        double un();\n\
+        double (*up)();\n\
+        double callv(void) { return vd(2.5, 1.5f, 1, 3.5f); }\n\
+        double callu(void) { return un(2.5, 3); }\n\
+        double callp(void) { return up(2.5, 1.5f); }\n\
+        double un(a, b) double a; int b; { return a + b; }\n";
+    let target = Target::WindowsX64;
+    let program = crate::Compiler::with_options(
+        src.into(),
+        target,
+        crate::CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .unwrap_or_else(|e| panic!("compile: {e}"));
+    let funcs = crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+        .expect("ssa");
+    let func = |name: &str| funcs.iter().find(|f| f.name == name).expect(name);
+    let call = |name: &str| -> (bool, usize, FpMask) {
+        func(name)
+            .insts
+            .iter()
+            .find_map(|i| match i {
+                Inst::Call {
+                    fixed_args,
+                    fp_arg_mask,
+                    ..
+                } => Some((false, *fixed_args, fp_arg_mask.clone())),
+                Inst::CallIndirect {
+                    callee_variadic,
+                    fixed_args,
+                    fp_arg_mask,
+                    ..
+                } => Some((*callee_variadic, *fixed_args, fp_arg_mask.clone())),
+                _ => None,
+            })
+            .expect("call")
+    };
+    let (_, fixed, mask) = call("callv");
+    assert_eq!(fixed, 3, "three named arguments");
+    assert!(
+        mask.has(0) && mask.has(1) && !mask.has(2) && mask.has(3),
+        "callv: {mask:x}"
+    );
+    let (_, fixed, mask) = call("callu");
+    assert_eq!(fixed, 0, "no named argument");
+    assert!(mask.has(0) && !mask.has(1), "callu: {mask:x}");
+    let (variadic, fixed, mask) = call("callp");
+    assert!(
+        variadic && fixed == 0,
+        "callp: variadic {variadic}, {fixed} named"
+    );
+    assert!(mask.has(0) && mask.has(1), "callp: {mask:x}");
+    // A positive offset is an argument cell.
+    let f32_cell = func("vd").insts.iter().any(|i| {
+        matches!(
+            i,
+            Inst::LoadLocal {
+                off,
+                kind: LoadKind::F32,
+                ..
+            } if *off > 0
+        )
+    });
+    assert!(f32_cell, "vd reads its named float's cell at 32 bits");
+}
+
 /// A call's aggregate result aligned above the 8-byte frame slot is a member
 /// of the over-aligned region, as a declared object of its type is, whether
 /// the callee stores it through the result pointer or it returns in

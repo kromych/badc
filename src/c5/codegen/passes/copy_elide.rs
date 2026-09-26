@@ -6,7 +6,12 @@
 //! temporary's whole content is written in the block that copies it,
 //! before the copy, and nothing between the first write and the copy
 //! touches memory at all, the writes can address the destination and the
-//! copy goes with the temporary's storage.
+//! copy goes with the temporary's storage. The writes take the
+//! destination's address value where it is set before the first of them.
+//! A declared object initialized and then copied, `T t = {0}; g = t;`,
+//! has that address set only at the copy; an operand-free address -- a
+//! frame slot's or an object's -- then replaces the temporary's base, and
+//! any other declines.
 //!
 //! The window condition is what keeps the rewrite honest. Moving a write
 //! earlier makes it visible to everything in between, so anything that
@@ -106,7 +111,9 @@ fn run_one(f: &mut FunctionSsa) {
         }
     }
 
-    let mut redirects: Vec<(usize, ValueId)> = Vec::new();
+    let mut redirects: Vec<(usize, ValueId, i64)> = Vec::new();
+    // Temporary bases that take the destination's own address instruction.
+    let mut named_at: Vec<(usize, ValueId)> = Vec::new();
     let mut elided: Vec<(usize, ValueId)> = Vec::new();
     let mut taken: BTreeSet<i64> = BTreeSet::new();
     // Calls pointed at their destination, and the destinations taken;
@@ -148,7 +155,14 @@ fn run_one(f: &mut FunctionSsa) {
             if !covers(&plan.spans, size) {
                 continue;
             }
-            redirects.extend(plan.redirects.iter().map(|&r| (r, dst)));
+            let d = dst as usize;
+            if !(start..i).contains(&d) || plan.redirects.iter().all(|&(r, _)| r > d) {
+                redirects.extend(plan.redirects.iter().map(|&(r, off)| (r, dst, off)));
+            } else if matches!(f.insts[d], Inst::LocalAddr(_) | Inst::ImmData(_)) {
+                named_at.extend(plan.roots.iter().map(|&a| (a, dst)));
+            } else {
+                continue;
+            }
             elided.push((i, dst));
             taken.insert(slot);
         }
@@ -167,14 +181,23 @@ fn run_one(f: &mut FunctionSsa) {
     for (a, d) in renamed {
         f.insts[a] = Inst::LocalAddr(d);
     }
+    for (a, dst) in named_at {
+        f.insts[a] = f.insts[dst as usize].clone();
+        if let Some(&(_, sym)) = f.extern_imm_data_refs.iter().find(|&&(v, _)| v == dst) {
+            f.extern_imm_data_refs.push((a as ValueId, sym));
+            f.extern_imm_data_refs.sort_unstable();
+        }
+    }
     // Each redirected instruction is a writer whose address is the
-    // temporary's base, or the add that formed an interior address from
-    // it; either takes the destination's address in its place.
-    for (r, dst) in redirects {
+    // temporary's base, or an add forming an interior address, which
+    // takes the destination and the offset from the base.
+    for (r, dst, off) in redirects {
         match &mut f.insts[r] {
-            Inst::Store { addr, .. }
-            | Inst::Mzero { dst: addr, .. }
-            | Inst::BinopI { lhs: addr, .. } => *addr = dst,
+            Inst::Store { addr, .. } | Inst::Mzero { dst: addr, .. } => *addr = dst,
+            Inst::BinopI { lhs, rhs_imm, .. } => {
+                *lhs = dst;
+                *rhs_imm = off;
+            }
             _ => unreachable!("only a write or its address is redirected"),
         }
     }
@@ -503,9 +526,12 @@ impl Escapes {
 }
 
 /// What one elision changes: the instructions whose address operand
-/// becomes the destination's, and the byte spans the writes cover.
+/// becomes the destination's, with the offset from the destination they
+/// address; the temporary's bases its writes reach; and the byte spans
+/// the writes cover.
 struct Plan {
-    redirects: Vec<usize>,
+    redirects: Vec<(usize, i64)>,
+    roots: Vec<usize>,
     spans: Vec<(i64, i64)>,
 }
 
@@ -567,7 +593,8 @@ fn plan_one(
             addrs.insert(i, off + rhs_imm);
         }
     }
-    let mut redirects: Vec<usize> = Vec::new();
+    let mut redirects: Vec<(usize, i64)> = Vec::new();
+    let mut roots: Vec<usize> = Vec::new();
     let mut spans: Vec<(i64, i64)> = Vec::new();
     let mut writes: Vec<usize> = Vec::new();
     for (&a, &off) in &addrs {
@@ -601,10 +628,13 @@ fn plan_one(
                 _ => return None,
             }
         }
-        // The base keeps its slot; an interior address takes the
-        // destination in the add that formed it.
+        // An interior address takes the destination at its offset from
+        // the base, also when formed from another interior address.
         if reached && off != 0 {
-            redirects.push(a);
+            redirects.push((a, off));
+        }
+        if reached && matches!(f.insts.get(a), Some(Inst::LocalAddr(_))) {
+            roots.push(a);
         }
     }
     // A write through the base address takes the destination directly.
@@ -614,7 +644,7 @@ fn plan_one(
             _ => return None,
         };
         if addrs.get(&base) == Some(&0) {
-            redirects.push(w);
+            redirects.push((w, 0));
         }
     }
     if writes.is_empty() {
@@ -661,7 +691,11 @@ fn plan_one(
     }
     redirects.sort_unstable();
     redirects.dedup();
-    Some(Plan { redirects, spans })
+    Some(Plan {
+        redirects,
+        roots,
+        spans,
+    })
 }
 
 #[cfg(test)]
@@ -930,5 +964,217 @@ mod tests {
              long f(void) {{ struct S s; if (setjmp(buf)) return 0; s = make(1); return use(&s); }}"
         );
         assert_eq!(in_place(&src, "f"), [false]);
+    }
+
+    /// Whether every operand of a one-block function precedes its use.
+    fn defs_precede_uses(f: &FunctionSsa) -> bool {
+        f.insts.iter().enumerate().all(|(i, inst)| {
+            let mut ok = true;
+            inst.for_each_operand(|v| ok &= (v as usize) < i);
+            ok
+        })
+    }
+
+    /// `T t = {0}; g = t;`: the base v1 is filled before v3, the destination, is set.
+    fn filled_then_copied(dst: Inst) -> FunctionSsa {
+        one_block(
+            alloc::vec![
+                Inst::ParamRef {
+                    idx: 0,
+                    kind: crate::c5::ir::LoadKind::I64
+                },
+                Inst::LocalAddr(-2),
+                Inst::Mzero {
+                    dst: 1,
+                    size: 16,
+                    align: 8,
+                },
+                dst,
+                Inst::LocalAddr(-2),
+                Inst::Mcpy {
+                    dst: 3,
+                    src: 4,
+                    size: 16,
+                    align: 8,
+                },
+            ],
+            2,
+            alloc::vec![(-2, 2)],
+        )
+    }
+
+    /// An object's address set after the writes replaces the base, with its symbol.
+    #[test]
+    fn a_destination_set_after_the_writes_is_named_at_the_base() {
+        let mut f = filled_then_copied(Inst::ImmData(40));
+        f.extern_imm_data_refs = alloc::vec![(3, 5)];
+        run_one(&mut f);
+        assert!(matches!(f.insts[1], Inst::ImmData(40)), "{:?}", shape(&f));
+        assert!(matches!(f.insts[2], Inst::Mzero { dst: 1, .. }));
+        assert!(matches!(f.insts[5], Inst::Copy { value: 3, .. }));
+        assert_eq!(f.extern_imm_data_refs, [(1, 5), (3, 5)]);
+        assert!(defs_precede_uses(&f), "{:?}", shape(&f));
+    }
+
+    /// An address computed after the writes has no earlier value; the copy stays.
+    #[test]
+    fn a_destination_computed_after_the_writes_declines() {
+        let mut f = filled_then_copied(Inst::BinopI {
+            op: BinOp::Add,
+            lhs: 0,
+            rhs_imm: 8,
+        });
+        let before = shape(&f);
+        run_one(&mut f);
+        assert_eq!(shape(&f), before);
+    }
+
+    /// `q = &t.m; q->x = 7;` stores at `dst + 12`: an address formed from an
+    /// interior address keeps the offset from the base.
+    #[test]
+    fn an_address_formed_from_an_interior_address_keeps_its_offset() {
+        let mut f = one_block(
+            alloc::vec![
+                Inst::ParamRef {
+                    idx: 0,
+                    kind: crate::c5::ir::LoadKind::I64
+                },
+                Inst::Imm(7),
+                Inst::LocalAddr(-2),
+                Inst::Mzero {
+                    dst: 2,
+                    size: 16,
+                    align: 8,
+                },
+                Inst::BinopI {
+                    op: BinOp::Add,
+                    lhs: 2,
+                    rhs_imm: 8,
+                },
+                Inst::BinopI {
+                    op: BinOp::Add,
+                    lhs: 4,
+                    rhs_imm: 4,
+                },
+                Inst::Store {
+                    addr: 5,
+                    disp: 0,
+                    value: 1,
+                    kind: StoreKind::I32,
+                    volatile: false,
+                    align: 0,
+                },
+                Inst::LocalAddr(-2),
+                Inst::Mcpy {
+                    dst: 0,
+                    src: 7,
+                    size: 16,
+                    align: 8,
+                },
+            ],
+            2,
+            alloc::vec![(-2, 2)],
+        );
+        run_one(&mut f);
+        assert!(matches!(f.insts[3], Inst::Mzero { dst: 0, .. }));
+        assert!(matches!(
+            f.insts[4],
+            Inst::BinopI {
+                lhs: 0,
+                rhs_imm: 8,
+                ..
+            }
+        ));
+        assert!(matches!(
+            f.insts[5],
+            Inst::BinopI {
+                lhs: 0,
+                rhs_imm: 12,
+                ..
+            }
+        ));
+        assert!(matches!(f.insts[8], Inst::Copy { value: 0, .. }));
+    }
+
+    /// A declared object copied to an object after its initializer, as mem2reg
+    /// leaves it: the copy goes and every operand precedes its use.
+    #[test]
+    fn a_declared_object_copied_to_an_object_is_built_in_place() {
+        let src = "struct T { long a, b, c, d; } g;\n\
+            void to_global(long v) { struct T t[1] = {{ 0, v }}; g = t[0]; }\n";
+        let mut f = walked(src, "to_global");
+        crate::c5::codegen::ssa::mem2reg::run(&mut f);
+        run_one(&mut f);
+        assert!(
+            !f.insts.iter().any(|i| matches!(i, Inst::Mcpy { .. })),
+            "{:?}",
+            shape(&f)
+        );
+        for blk in &f.blocks {
+            for pc in blk.inst_range.clone() {
+                f.insts[pc as usize].for_each_operand(|v| {
+                    assert!(
+                        !blk.inst_range.contains(&v) || v < pc,
+                        "v{pc} reads v{v} before it is set: {:?}",
+                        shape(&f)
+                    );
+                });
+            }
+        }
+    }
+
+    /// A frame destination named after an interior address is formed replaces
+    /// the base, so the add reads a value set before it.
+    #[test]
+    fn a_frame_destination_named_after_an_interior_address_takes_the_base() {
+        let mut f = one_block(
+            alloc::vec![
+                Inst::LocalAddr(-2),
+                Inst::BinopI {
+                    op: BinOp::Add,
+                    lhs: 0,
+                    rhs_imm: 8,
+                },
+                Inst::LocalAddr(-4),
+                Inst::Imm(7),
+                Inst::Store {
+                    addr: 1,
+                    disp: 0,
+                    value: 3,
+                    kind: StoreKind::I64,
+                    volatile: false,
+                    align: 0,
+                },
+                Inst::Store {
+                    addr: 0,
+                    disp: 0,
+                    value: 3,
+                    kind: StoreKind::I64,
+                    volatile: false,
+                    align: 0,
+                },
+                Inst::LocalAddr(-2),
+                Inst::Mcpy {
+                    dst: 2,
+                    src: 6,
+                    size: 16,
+                    align: 8,
+                },
+            ],
+            4,
+            alloc::vec![(-2, 2), (-4, 2)],
+        );
+        run_one(&mut f);
+        assert!(matches!(f.insts[0], Inst::LocalAddr(-4)), "{:?}", shape(&f));
+        assert!(matches!(
+            f.insts[1],
+            Inst::BinopI {
+                lhs: 0,
+                rhs_imm: 8,
+                ..
+            }
+        ));
+        assert!(matches!(f.insts[7], Inst::Copy { value: 2, .. }));
+        assert!(defs_precede_uses(&f), "{:?}", shape(&f));
     }
 }

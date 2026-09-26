@@ -266,6 +266,11 @@ UNSUPPORTED_PREFIX = (
     # (CONFIG_ZERO_CALL_USED_REGS). badc emits no such epilogue.
     # TODO: implement the register-clearing epilogue and forward the flag.
     "-fzero-call-used-regs=",
+    # Rewrites the prefix of the path `__FILE__` and `__builtin_FILE()`
+    # expand to; kbuild's `./=` (6.1 through 6.12) strips a leading `./`.
+    # badc expands the path it was given, so a unit's file-name strings can
+    # differ by that prefix.
+    "-fmacro-prefix-map=",
 )
 
 # Flags measured to leave badc's object unchanged, with the measurement.
@@ -312,6 +317,10 @@ IGNORE_EXACT = {
     # by its call count, so declining that heuristic asks for what it
     # already does; measured to leave the object unchanged.
     "-fno-inline-functions-called-once",
+    # Turns off gcc's hoisting of expressions computed on every path out of
+    # branches (6.18's crypto/aes_generic.c asks for it). badc's passes
+    # perform no such hoisting, so the unit gets what the flag asks for.
+    "-fno-code-hoisting",
     # Instruction-scheduling hints. badc schedules to its own model and
     # exposes no knob either names, so both ask for what a unit gets.
     "-fsched-pressure", "-fno-schedule-insns", "-fno-schedule-insns2",

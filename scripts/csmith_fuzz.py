@@ -86,6 +86,10 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 # SSA interpreter at minutes per case on programs of this size.
 CONFIGS = ("-O0", "-O")
 
+# Every badc build checks the SSA form after each pass: a pass that breaks it
+# stops the build naming itself, where the program's run may not show it.
+BADC_FLAGS = ("--verify-ssa",)
+
 # The reference builds the case twice: once to gate and answer, once to confirm
 # a runtime finding. The gate is unoptimised because the question it settles is
 # whether the program terminates at all, and an optimiser answers a different
@@ -415,8 +419,14 @@ def normalize_message(message: str) -> str:
     does not. Paths are stripped to their file name for the same reason.
     """
     text = re.sub(r"0x[0-9a-fA-F]+", "0xN", message)
+    text = re.sub(r"\bv\d+\b", "vN", text)
     text = re.sub(r"\b\d+\b", "N", text)
-    text = re.sub(r"[`'\"][^`'\"]*[`'\"]", "S", text)
+    # A quoted part varies with the case, except the pass an SSA check names.
+    text = re.sub(
+        r"(SSA check after )?[`'\"][^`'\"]*[`'\"]",
+        lambda m: m.group(0) if m.group(1) else "S",
+        text,
+    )
     text = re.sub(r"\S*/([A-Za-z0-9_.+-]+\.(?:c|h|rs|o))", r"\1", text)
     return " ".join(text.split())[:200]
 
@@ -428,11 +438,17 @@ def signature_of(arch: str, parts: list[str]) -> tuple[str, str]:
 
 
 def compile_argv(
-    compiler: Path, config: str, include: Path, source: str, output: str
+    compiler: Path,
+    config: str,
+    include: Path,
+    source: str,
+    output: str,
+    flags: tuple[str, ...] = (),
 ) -> list[str]:
     return [
         str(compiler),
         config,
+        *flags,
         "-w",
         "-I",
         str(include),
@@ -509,7 +525,7 @@ def run_case(
     outcomes = {}
     for config in CONFIGS:
         outcome = build_and_run(
-            badc, config, workdir, csmith.include, limits, limits.run, env=env
+            badc, config, workdir, csmith.include, limits, limits.run, env=env, flags=BADC_FLAGS
         )
         steps.extend(outcome.steps)
         outcomes[config] = outcome
@@ -554,13 +570,14 @@ def build_and_run(
     run_timeout: float,
     env: dict[str, str] | None = None,
     tag: str = "badc",
+    flags: tuple[str, ...] = (),
 ) -> Outcome:
     # The output name carries the compiler as well as the level: the
     # reference's gate build and badc's are both at `-O0`, and one name for
     # both would leave a stale binary standing in for a build that produced
     # none.
     binary = f"case-{tag}{config}"
-    argv = compile_argv(compiler, config, include, "case.c", binary)
+    argv = compile_argv(compiler, config, include, "case.c", binary, flags)
     (workdir / binary).unlink(missing_ok=True)
     built = run_command(argv, workdir, limits.compile, env)
     if not built.ok or not (workdir / binary).exists():
@@ -797,6 +814,7 @@ SRC = sys.argv[1] if len(sys.argv) > 1 else "candidate.c"
 BADC = @badc@
 REF = @ref@
 INCLUDE = @include@
+BADC_FLAGS = @badc_flags@
 VERDICT = @verdict@
 CONFIGS = @configs@
 SIGNATURE = @signature@
@@ -841,8 +859,8 @@ def run(argv, timeout, threads=CPUS):
 def build(cc, flags, out):
     # `-w` silences the guard's `-Werror=` diagnostics too, so only the
     # compiler under test builds quietly.
-    quiet = ["-w"] if cc == BADC else []
-    return run([cc, *flags, *quiet, "-I", INCLUDE, "-o", out, SRC], COMPILE_TIMEOUT)
+    own = [*BADC_FLAGS, "-w"] if cc == BADC else []
+    return run([cc, *flags, *own, "-I", INCLUDE, "-o", out, SRC], COMPILE_TIMEOUT)
 
 
 def checksum(out, timeout):
@@ -936,6 +954,25 @@ def find_reducer(named: str | None) -> tuple[str, list[str]] | None:
     return "c_reduce", [sys.executable, str(REPO_ROOT / "scripts" / "c_reduce.py")]
 
 
+# What each placeholder of `normalize_message` stands for, in the order a
+# pattern takes them back.
+PLACEHOLDERS = (
+    ("0xN", "0x[0-9a-fA-F]+"),
+    ("vN", r"v\d+"),
+    ("N", r"\d+"),
+    ("S", "[`'\"][^`'\"]*[`'\"]"),
+)
+
+
+def message_pattern(shape: str) -> str:
+    """The pattern matching every message `normalize_message` turns into
+    `shape`."""
+    pattern = re.escape(shape)
+    for placeholder, stands_for in PLACEHOLDERS:
+        pattern = re.sub(rf"\b{placeholder}\b", lambda _, p=stands_for: p, pattern)
+    return pattern
+
+
 def signature_regex(finding: Finding) -> str:
     """What a compile verdict's output must keep matching: the panic site
     and message shape, or the diagnostic code."""
@@ -946,8 +983,7 @@ def signature_regex(finding: Finding) -> str:
         wanted = [re.escape(frame) if frame else re.escape(location)]
         shape = normalize_message(message)
         if shape:
-            # The numbers in the message vary with the candidate.
-            wanted.append(re.sub(r"\bN\b", r"\\d+", re.escape(shape)))
+            wanted.append(message_pattern(shape))
         # Each part anywhere in the output: the message precedes the
         # backtrace that names the frame.
         return "".join(rf"(?=[\s\S]*{part})" for part in wanted)
@@ -970,6 +1006,7 @@ def render_test(
         "badc": repr(str(badc)),
         "ref": repr(str(reference.binary) if reference else None),
         "include": repr(str(include)),
+        "badc_flags": repr(list(BADC_FLAGS)),
         "verdict": repr(finding.verdict),
         "configs": repr(finding.config.split(",")),
         "signature": repr(signature_regex(finding)),
@@ -1638,6 +1675,10 @@ def self_test() -> int:
         location, message = panic_site(text) or ("", "")
         return signature_of("x86_64", ["panic", location, normalize_message(message)])[0]
 
+    def panic_key_text(text: str) -> str:
+        location, message = panic_site(text) or ("", "")
+        return signature_of("x86_64", ["panic", location, normalize_message(message)])[1]
+
     site = panic_site(panic)
     check("panic location", site[0] if site else None, "src/c5/front/init.rs:812:37")
     check(
@@ -1727,6 +1768,42 @@ def self_test() -> int:
     assert callable(build)
     check("the reference build keeps its guard", "-w" in build("clang", ["-O0"], "ref0")[0], False)
     check("badc builds quietly", "-w" in build("/usr/bin/badc", ["-O0"], "out")[0], True)
+    check(
+        "badc builds check the SSA form",
+        "--verify-ssa" in build("/usr/bin/badc", ["-O0"], "out")[0],
+        True,
+    )
+    check("the reference builds as it is", "--verify-ssa" in build("clang", ["-O0"], "ref0")[0], False)
+    ssa_check = (
+        "thread '<unnamed>' (7) panicked at src/c5/codegen/ssa/verify.rs:24:13:\n"
+        "ICE: SSA check after `passes::copy_elide::run`: `func_34`: v213 reads v236, "
+        "defined later in block 8\n"
+    )
+    check("an SSA check keeps its pass", "passes::copy_elide::run" in panic_key_text(ssa_check), True)
+    check(
+        "one broken rule of one pass is one signature",
+        panic_key(ssa_check),
+        panic_key(ssa_check.replace("func_34`: v213 reads v236", "func_2`: v14 reads v16")),
+    )
+    check(
+        "another pass is another signature",
+        panic_key(ssa_check) != panic_key(ssa_check.replace("copy_elide", "sroa")),
+        True,
+    )
+    for name, text in (
+        ("an SSA check", ssa_check),
+        ("a quoting message", panic.replace(
+            "index out of bounds: the len is 3 but the index is 7",
+            "called `Option::unwrap()` on a `None` value",
+        )),
+    ):
+        finding.evidence = text
+        check(
+            f"the test for {name} matches the panic it came from",
+            re.search(signature_regex(finding), text) is not None,
+            True,
+        )
+    finding.evidence = traced
     if os.name == "posix":
         check_test_children(test_text, check)
     with tempfile.TemporaryDirectory() as tmp:
@@ -1966,7 +2043,7 @@ def main(argv: list[str] | None = None) -> int:
         arch=host_arch(),
         started=dt.datetime.now(dt.timezone.utc),
         csmith=csmith.version,
-        badc=tool_version(badc),
+        badc=" ".join([tool_version(badc), *BADC_FLAGS]),
         reference=(
             f"{reference.version} at {REFERENCE_GATE}"
             if reference

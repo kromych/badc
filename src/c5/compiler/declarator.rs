@@ -31,7 +31,7 @@ use alloc::format;
 use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
 use super::Compiler;
-use super::types::{add_ptr_level, apply_qual_bits, is_decl_modifier, strip_unsigned};
+use super::types::{add_ptr_level, apply_qual_bits, is_decl_modifier};
 
 /// One derivation an abstract declarator spells (C99 6.7.6).
 pub(super) enum Derivation {
@@ -292,10 +292,17 @@ impl Compiler {
     /// the decay happened, but for c5 today the equivalence is
     /// sufficient.
     pub(super) fn parse_declarator(&mut self, base: i64) -> Result<(usize, i64, i64), C5Error> {
+        let (idx, ty, array_size, _) = self.parse_declarator_levels(base)?;
+        Ok((idx, ty, array_size))
+    }
+
+    /// `parse_declarator`, and the pointer derivations the declarator
+    /// applied to `base`, a function adjusted to a pointer included.
+    fn parse_declarator_levels(&mut self, base: i64) -> Result<(usize, i64, i64, i64), C5Error> {
         self.with_nesting("declarator", |c| c.parse_declarator_inner(base))
     }
 
-    fn parse_declarator_inner(&mut self, base: i64) -> Result<(usize, i64, i64), C5Error> {
+    fn parse_declarator_inner(&mut self, base: i64) -> Result<(usize, i64, i64, i64), C5Error> {
         // Taken once so it scopes to this parameter's own declarator, not
         // any nested one (a function-pointer parameter's prototype).
         let param_ctx = core::mem::take(&mut self.pending.param_decl_context);
@@ -413,6 +420,7 @@ impl Compiler {
         if absorb_fn_type_ptr {
             ty -= Ty::Ptr as i64;
         }
+        let own_levels = leading_ptr_count - i64::from(absorb_fn_type_ptr);
         if leading_ptr_count > 0
             && let Some(fpi) = self.pending.fn_ptr_indirection
         {
@@ -437,7 +445,7 @@ impl Compiler {
             ty += Ty::Ptr as i64;
             self.pending.fn_ptr_indirection = Some(1);
             // An abstract parameter binds no name.
-            return Ok((usize::MAX, ty, 0));
+            return Ok((usize::MAX, ty, 0, own_levels + 1));
         }
 
         // Function-pointer declarator: `RET (*Name)(args)`, possibly
@@ -459,34 +467,22 @@ impl Compiler {
             // pointer levels describe the return type instead.
             core::mem::take(&mut self.pending.fn_ptr_group_resolved);
             self.pending.declarator_in_group = true;
-            let (idx, mut inner_ty, inner_array_size) = self.parse_declarator(ty)?;
+            let (idx, mut inner_ty, inner_array_size, inner_ptr_levels) =
+                self.parse_declarator_levels(ty)?;
             let inner_resolved = core::mem::take(&mut self.pending.fn_ptr_group_resolved);
             // Pending count right after the inner declarator: a fn-pointer
             // typedef base seeded it and the inner leading `*`s added to
             // it. Captured here because the signature parses below drain
             // the pending carriers per parameter.
             let prior_pending_fpi = self.pending.fn_ptr_indirection.unwrap_or(0);
-            // Function-pointer lineage trace: the inner
-            // declarator's leading `*`s plus the fn-pointer's own
-            // pointer level give the indirection count from the
-            // variable's loaded value down to the fn-pointer
-            // rvalue, plus 1. For `T (*name)(args)` the inner
-            // declarator added one Ptr (the `*`), so depth = 1 -
-            // matching Symbol::fn_ptr_indirection's "value IS fn
-            // ptr" convention. For `T (**name)(args)` the inner
-            // added two Ptrs, depth = 2 (one more deref needed).
-            //
-            // The function-pointer determination happens after the
-            // trailing decorations are scanned -- only then is it known
-            // whether the parenthesised declarator was followed by
-            // `(args)` (fn-ptr) or by `[N]` (pointer-to-array, not a
-            // fn-ptr). Set the indirection unconditionally here and clear
-            // it back to None if the shape resolves to an array.
-            // Band arithmetic: a qualifier bit the inner declarator
-            // added (`T (*volatile name)(args)`) would otherwise land in
-            // the difference and make the quotient garbage.
-            let ty_delta = strip_unsigned(inner_ty) - strip_unsigned(outer_ty_before_inner);
-            let inner_ptr_levels = ty_delta / (Ty::Ptr as i64);
+            // The pointer levels the group spells, nested groups' included,
+            // are the derefs from the variable's value to the function
+            // pointer, plus 1 (`T (*name)(args)`: 1, `T (**name)(args)`: 2).
+            // The nested declarator counts them: a pointer to an array
+            // re-encodes the tag, so its difference from the base does not.
+            // Whether the group is a function pointer is known only after
+            // its suffixes: `(args)` makes one, `[N]` a pointer to an array.
+            let mut group_levels = inner_ptr_levels;
             // The inner declarator may have stopped on `(` if it
             // was a function-returning-fp shape like
             // `void (*foo(args1))(args2)`. In that case `foo` is
@@ -539,7 +535,7 @@ impl Compiler {
                 && idx != usize::MAX
                 && self.lex.tk == '('
             {
-                return Ok((idx, inner_ty, inner_array_size));
+                return Ok((idx, inner_ty, inner_array_size, own_levels + group_levels));
             }
             // Trailing decorations on the parenthesised group.
             // Multiple are legal: `(*pp)[N](args)` etc. Each
@@ -623,6 +619,7 @@ impl Compiler {
                     // per-bracket level bump.
                     if inner_ptr_levels == 0 {
                         inner_ty += Ty::Ptr as i64;
+                        group_levels += 1;
                     }
                 } else {
                     break;
@@ -661,6 +658,7 @@ impl Compiler {
                 // to a pointer to function, the same encoding as
                 // `RET (*name)(args)` (one indirection level).
                 inner_ty += Ty::Ptr as i64;
+                group_levels += 1;
                 self.pending.fn_ptr_indirection = Some(1);
                 self.pending.fn_ptr_group_resolved = true;
             }
@@ -685,7 +683,7 @@ impl Compiler {
                     self.symbols[idx].array_dims = dims;
                 }
             }
-            return Ok((idx, inner_ty, inner_array_size));
+            return Ok((idx, inner_ty, inner_array_size, own_levels + group_levels));
         }
 
         // Abstract declarator: type-only, no identifier. Most
@@ -695,7 +693,7 @@ impl Compiler {
         // recognise "no symbol to bind"; only `parse_function_params`
         // is in a context that should accept this.
         if self.lex.tk == ')' || self.lex.tk == ',' {
-            return Ok((usize::MAX, ty, 0));
+            return Ok((usize::MAX, ty, 0, own_levels));
         }
 
         if self.lex.tk != Token::Id {
@@ -733,7 +731,7 @@ impl Compiler {
             self.pending.fn_ptr_params = Some(pp.fn_params());
             self.pending.fn_ptr_indirection = Some(1);
             self.pending.fn_own_sig = true;
-            return Ok((idx, ty + Ty::Ptr as i64, 0));
+            return Ok((idx, ty + Ty::Ptr as i64, 0, own_levels + 1));
         }
 
         let mut array_size: i64 = 0;
@@ -817,7 +815,7 @@ impl Compiler {
                     }
                     array_size = super::VLA_ARRAY_SIZE;
                     if idx != usize::MAX {
-                        return Ok((idx, ty, array_size));
+                        return Ok((idx, ty, array_size, own_levels));
                     }
                 } else {
                     return Err(self.compile_err(
@@ -988,6 +986,6 @@ impl Compiler {
             self.skip_attribute_specifiers()?;
         }
 
-        Ok((idx, ty, array_size))
+        Ok((idx, ty, array_size, own_levels))
     }
 }

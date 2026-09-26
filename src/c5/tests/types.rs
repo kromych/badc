@@ -2262,6 +2262,38 @@ fn a_member_declared_through_a_typedef_has_its_function_type() {
     }
 }
 
+/// C99 6.7.5.1, 6.7.5.2: an element of the array a declared pointer to an
+/// array of function pointers points to is a function pointer, whatever
+/// the declaration context; the diagnostic names its function type.
+#[test]
+fn an_element_through_a_pointer_to_an_array_of_function_pointers_has_its_type() {
+    use crate::Compiler;
+    let decls = "static double twice(double x) { return x * 2; }\n\
+                 static double (*table[3])(double) = {twice, twice, twice};\n\
+                 static double (*grid[2][3])(double) = {{twice}, {twice}};\n\
+                 typedef double (*(*G)[3])(double);\n\
+                 double (*(*g)[3])(double) = &table;\n\
+                 double (*(*gg)[2][3])(double) = &grid;\n\
+                 struct h { double (*(*m)[3])(double); } h = { &table };\n\
+                 G tg = &table;\n";
+    for elem in [
+        "g[0][1]",
+        "(*g)[1]",
+        "gg[0][1][2]",
+        "(*gg)[1][2]",
+        "h.m[0][1]",
+        "tg[0][2]",
+    ] {
+        let src = format!("{decls}int main(void) {{ return {elem}[0](3) == 6.0; }}\n");
+        let err = Compiler::new(src.clone())
+            .compile()
+            .expect_err(&src)
+            .to_string();
+        let text = "subscripted value has type `double (*)(double)`, a pointer to a function";
+        assert!(err.contains(text), "{src}{err}");
+    }
+}
+
 /// C99 6.5.4: a cast's value has the cast type, so `*` on a function
 /// pointer cast to an object pointer designates the object (6.5.3.2p4):
 /// `sizeof` and `_Generic` read the pointee's type and the value is loaded.

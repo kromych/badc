@@ -2733,6 +2733,14 @@ fn cast_function_pointer_to_object_pointer() {
 }
 
 #[test]
+fn pointer_to_array_of_function_pointers() {
+    // C99 6.7.5.1, 6.7.5.2: an element reached through a declared pointer
+    // to an array of function pointers is a function pointer at file and
+    // block scope, as a member, a parameter and through a typedef.
+    assert_eq!(run_fixture("pointer_to_array_of_function_pointers.c"), 0);
+}
+
+#[test]
 fn indirect_call_prototypes() {
     // A call through a pointer converts or promotes its arguments by the
     // pointed-to type, however the callee is spelled.

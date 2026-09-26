@@ -61,7 +61,13 @@ int main(void) {
     if (s.gg(1)()(3) != 6.0) return 12;
 
     struct e e = {A, 1};
+#if defined(_WIN32)
+    // MSVC's rule, which the PE targets take, keeps an enum `int` under
+    // `packed`.
+    if (sizeof(struct e) != 8 || sizeof e.t != 4) return 13;
+#else
     if (sizeof(struct e) != 2 || sizeof e.t != 1) return 13;
+#endif
     if (e.t != A || e.c != 1) return 14;
     return 0;
 }

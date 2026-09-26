@@ -1767,6 +1767,54 @@ fn layout_rows_hold(prelude: &str, rows: &[&str], targets: &[crate::Target]) {
     }
 }
 
+/// The enumeration types the target's C ABI gives. MSVC, which the PE targets
+/// follow, makes every enum and enumerator `int`: a value outside `int`
+/// converts to it, `packed` leaves the enum alone and its bit-field reads
+/// signed. GCC's rule, which the other targets keep, types a non-negative
+/// enum `unsigned int` and a wider one by its range. Either way a bit-field
+/// of an enum reads with the enum's own type, so one with a negative
+/// enumerator reads signed. The values are clang 21's for both windows-msvc
+/// triples and for x86_64-linux-gnu. A set bit names the failing check.
+#[test]
+fn enums_take_the_type_the_target_abi_gives() {
+    use super::Vm;
+    use crate::{Compiler, Target};
+    const SRC: &str = "enum id { ID0, ID1, ID2, ID3 };\n\
+        enum sig { NEG = -1, POS };\n\
+        enum wide { TOP = 0x80000000u };\n\
+        enum big { BIG = 0x100000000LL };\n\
+        enum pk { PK0, PK1 } __attribute__((packed));\n\
+        struct bf { enum id e : 2; enum sig s : 2; };\n\
+        #define IS_INT(x) _Generic((x), int: 1, default: 0)\n\
+        int main(void) {\n\
+          struct bf b; int r = 0;\n\
+          b.e = ID3; b.s = NEG;\n\
+          if (b.s != NEG || !(b.s < 0)) r |= 1;\n\
+        #ifdef _WIN32\n\
+          if (!IS_INT((enum id)0) || !IS_INT(TOP) || !IS_INT((enum big)0)) r |= 2;\n\
+          if (TOP != -2147483647 - 1 || BIG != 0 || sizeof(enum big) != 4) r |= 4;\n\
+          if (sizeof(enum pk) != 4 || !((enum id)-1 < (enum id)1)) r |= 8;\n\
+          if (b.e != -1) r |= 16;\n\
+        #else\n\
+          if (IS_INT((enum id)0) || IS_INT(TOP) || sizeof(enum big) != 8) r |= 2;\n\
+          if (TOP != 0x80000000u || BIG != 0x100000000LL) r |= 4;\n\
+          if (sizeof(enum pk) != 1 || (enum id)-1 < (enum id)1) r |= 8;\n\
+          if (b.e != ID3) r |= 16;\n\
+        #endif\n\
+          return r; }\n";
+    for t in [
+        Target::WindowsX64,
+        Target::WindowsAarch64,
+        Target::LinuxX64,
+        Target::LinuxAarch64,
+    ] {
+        let program = Compiler::with_target(super::with_prelude(SRC), t)
+            .compile()
+            .unwrap();
+        assert_eq!(Vm::new(program).run().unwrap(), 0, "{t:?}");
+    }
+}
+
 /// The wide storage format round-trips through memory: a value stored
 /// into a `long double` object and read back is unchanged, and the
 /// object's bytes carry the platform's encoding rather than a binary64

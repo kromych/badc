@@ -6292,6 +6292,37 @@ fn aligned_members_cross_the_windows_compiler_boundary() {
     );
 }
 
+// The platform compiler makes every enum `int`, so a bit-field of one reads
+// signed. Structs of enum bit-fields cross the boundary by value and as
+// results, both ways.
+#[cfg(windows)]
+#[test]
+fn enum_bitfields_cross_the_windows_compiler_boundary() {
+    let Some(cc) = windows_cc() else {
+        eprintln!(
+            "skipping enum_bitfields_cross_the_windows_compiler_boundary: no platform C compiler"
+        );
+        return;
+    };
+    let common = "typedef long long ll;\n\
+        enum id { ID0, ID1, ID2, ID3 };\n\
+        struct eb { enum id e : 2; enum id f : 3; int n; };\n\
+        static ll layout(void)\n\
+        { return sizeof(enum id) + 100 * (sizeof(struct eb) + 100 * (ll)((enum id)-1 < ID1)); }\n\
+        static struct eb make_eb(int e, int f, int n)\n\
+        { struct eb v; v.e = e; v.f = f; v.n = n; return v; }\n\
+        static int read_eb(struct eb v) { return v.e * 100 + v.f * 10 + v.n; }\n\
+        struct fns { ll (*layout)(void); struct eb (*make_eb)(int, int, int);\n\
+          int (*read_eb)(struct eb); };\n\
+        static int drive(const struct fns *f, int base)\n\
+        { struct eb x = f->make_eb(ID3, ID3, 7), y = { ID2, ID3, 5 };\n\
+          if (f->layout() != layout() || layout() != 10804) return base + 1;\n\
+          if (x.e != -1 || x.f != 3 || x.n != 7) return base + 2;\n\
+          if (f->read_eb(y) != -165) return base + 3;\n\
+          return 0; }\n";
+    drive_across_the_windows_compiler(&cc, "win-enum-interop", common, "layout, make_eb, read_eb");
+}
+
 // A function returning an aggregate through the hidden result pointer takes that
 // pointer in the first integer register and its other arguments in their own
 // classes (System V AMD64 3.2.3), across the system compiler boundary both ways.

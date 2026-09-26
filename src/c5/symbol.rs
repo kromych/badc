@@ -422,12 +422,6 @@ pub(crate) struct Symbol {
     /// `int f(BYTE)` (one byte-typed parameter).
     pub is_void_typedef: bool,
 
-    /// True for a typedef whose base type is an `enum`. The base
-    /// collapses to `int`, but an enum bitfield reads as unsigned, so
-    /// a field declared with this typedef plus a bitfield width needs
-    /// the unsigned (zero-extending) extraction.
-    pub is_enum_typedef: bool,
-
     /// For a typedef naming an enum tag declared before the tag's
     /// definition: the tag, whose definition the alias reads once there is
     /// one.
@@ -938,7 +932,6 @@ impl crate::c5::layout::DataOffsets for Symbol {
             returns_void: _,
             unprototyped_def: _,
             is_void_typedef: _,
-            is_enum_typedef: _,
             incomplete_enum_tag: _,
             type_align: _,
             h_type_align: _,

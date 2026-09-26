@@ -31,7 +31,6 @@ struct FileScopeDecl {
     static_seen: bool,
     extern_seen: bool,
     thread_local: bool,
-    base_is_enum: bool,
     implicit_int: bool,
     base_spelling: crate::c5::symbol::DeclSpelling,
     /// The base type named an enum tag that had no definition yet.
@@ -432,7 +431,6 @@ impl Compiler {
             static_seen: storage.is_static,
             extern_seen: storage.is_extern,
             thread_local: storage.is_thread_local,
-            base_is_enum: storage.base_is_enum,
             implicit_int: storage.implicit_int,
             base_spelling: self.take_base_spelling(),
             base_enum_tag: self.pending.base_enum_tag.take(),
@@ -674,9 +672,7 @@ impl Compiler {
         preconsumed_params: Option<super::function::ParsedParams>,
     ) -> Result<(), C5Error> {
         let &FileScopeDecl {
-            base_is_enum,
-            base_type_align,
-            ..
+            base_type_align, ..
         } = decl;
         let &DeclaratorBinding {
             id_idx,
@@ -752,7 +748,6 @@ impl Compiler {
             self.mark_transparent_union(super::types::struct_id_of(typedef_ty));
         }
         self.symbols[id_idx].is_void_typedef = declarator_is_bare_void;
-        self.symbols[id_idx].is_enum_typedef = base_is_enum;
         self.symbols[id_idx].incomplete_enum_tag = decl.base_enum_tag;
         self.symbols[id_idx].is_function_type = typedef_is_fn_type;
         // A function-type typedef records the calling

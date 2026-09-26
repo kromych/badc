@@ -21,10 +21,16 @@ struct subrequest *get_subrequest(struct subrequest *subreq, enum sreq_ref_trace
 
 unsigned trace_size(void) { return sizeof(trace_t); }
 
-// C99 6.7.2.2p4: an enum is compatible with the integer type chosen for it.
+// C99 6.7.2.2p4: an enum is compatible with the integer type chosen for it:
+// `unsigned int` for a non-negative enum under GCC's rule, `int` under
+// MSVC's, which the PE targets take.
 enum level { low = 2, high = 7 };
 int scale(enum level);
+#if defined(_WIN32)
+int scale(int l) { return l * 3; }
+#else
 int scale(unsigned int l) { return (int)l * 3; }
+#endif
 
 int main(void)
 {

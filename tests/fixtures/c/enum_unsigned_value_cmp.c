@@ -6,7 +6,9 @@
    BIAS = -1U<<31 converts both sides to unsigned int, so
    x == INT_MIN (bit pattern 0x80000000) compares equal. Typing BIAS
    `int` instead makes the 64-bit compare see a sign-extended lhs
-   against a zero-extended rhs and `!=` is then always true. */
+   against a zero-extended rhs and `!=` is then always true. The PE
+   targets take MSVC's rule instead: every enumerator is an `int`, a value
+   outside int's range converted to it. */
 
 enum { BIAS = -1U << 31 };
 enum Wide { W = 0x123456789LL };
@@ -30,6 +32,15 @@ int main(void) {
     volatile int int_min = -2147483647 - 1;
     volatile int minus1 = -1;
 
+#if defined(_WIN32)
+    if (sizeof BIAS != 4 || BIAS != int_min || ne_bias(int_min)) return 1;
+    if (!(BIAS < 0) || !(BIAS < minus1)) return 2;
+    if (sizeof W != 4 || W != 0x23456789) return 3;
+    if (sizeof M_NEG != 4 || M_NEG != -1 || M_TOP != int_min) return 4;
+    if (sizeof(enum Mixed) != 4 || sizeof(enum Sw) != 4) return 5;
+    if (pick(S_TOP) != 2 || pick(S_LO) != 1 || pick((enum Sw)7) != 0) return 6;
+    return 0;
+#else
     /* Equality at the unsigned int common type. */
     if (ne_bias(int_min)) return 1;
     if (!(int_min == BIAS)) return 2;
@@ -79,4 +90,5 @@ int main(void) {
     }
 
     return 0;
+#endif
 }

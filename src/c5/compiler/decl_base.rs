@@ -160,9 +160,6 @@ pub(super) struct DeclStorage {
     pub is_static: bool,
     pub is_extern: bool,
     pub is_thread_local: bool,
-    /// The base type is an `enum`; a typedef of it records that an enum
-    /// bitfield declared through the alias reads unsigned.
-    pub base_is_enum: bool,
     /// No type specifier was given, so the base type is the implicit `int`.
     pub implicit_int: bool,
 }
@@ -1890,9 +1887,6 @@ impl Compiler {
             // `enum [Tag] [{ ... }]` is `int`, or the packed underlying type
             // for `enum __attribute__((packed))`; the shared parse_enum_decl
             // captures the tag + body for DWARF.
-            if let Some(s) = storage.as_deref_mut() {
-                s.base_is_enum = true;
-            }
             let (ty, tag) = self.parse_enum_decl()?;
             enum_tag = tag;
             ty

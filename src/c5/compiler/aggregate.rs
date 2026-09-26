@@ -14,8 +14,7 @@ use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
 use super::decl_base;
 use super::types::{
-    UNSIGNED_BIT, is_decl_modifier, is_pointer_ty, is_struct_value_ty, round_up, struct_id_of,
-    struct_ty_for,
+    is_decl_modifier, is_pointer_ty, is_struct_value_ty, round_up, struct_id_of, struct_ty_for,
 };
 use super::{AnonBitfield, AnonMember, Compiler, StructDef, StructField};
 
@@ -55,7 +54,6 @@ impl Default for AggregateLayout {
 /// through it reads.
 struct MemberBase {
     field_base: i64,
-    field_base_is_enum: bool,
     /// The enum tag the base names before the tag's definition.
     incomplete_enum_tag: Option<u32>,
     anon_aggregate_inner_id: Option<usize>,
@@ -86,15 +84,12 @@ struct MemberShape {
     decl_align: usize,
     /// Alignment a typedef base carries; it replaces the natural one.
     type_align_override: usize,
-    base_is_enum: bool,
 }
 
 /// Where a member landed: its offset and placement alignment, and for a
 /// bitfield the bit position and the storage unit its extraction reads
-/// (C99 6.7.2.1p11). `ty` is the member's type, which an enum bitfield
-/// takes unsigned.
+/// (C99 6.7.2.1p11).
 struct MemberPlacement {
-    ty: i64,
     offset: usize,
     align: usize,
     /// The alignment attributes on the member ask for; in the MS layout
@@ -229,7 +224,6 @@ impl Compiler {
     ) -> Result<(), C5Error> {
         let &MemberBase {
             field_base,
-            field_base_is_enum,
             incomplete_enum_tag,
             group_align,
             base_spelling,
@@ -393,7 +387,6 @@ impl Compiler {
                 group_align,
                 decl_align,
                 type_align_override,
-                base_is_enum: field_base_is_enum,
             };
             let placement = self.place_member_field(
                 field_ty,
@@ -402,7 +395,6 @@ impl Compiler {
                 &shape,
                 layout,
             )?;
-            field_ty = placement.ty;
             let field_offset = placement.offset;
             let placed_align = placement.align;
             let bit_offset = placement.bit_offset;
@@ -544,9 +536,7 @@ impl Compiler {
             group_align,
             decl_align,
             type_align_override,
-            base_is_enum,
         } = shape;
-        let mut field_ty = field_ty;
         let mut bit_width: u32 = 0;
         let mut bit_offset: u32 = 0;
         let mut bit_unit: usize = 0;
@@ -603,14 +593,6 @@ impl Compiler {
             .max(group_align)
             .max(decl_align);
             required = group_align.max(decl_align);
-            // C99 6.7.2.1: an enum bitfield reads as unsigned (a
-            // non-negative enum's underlying type is unsigned),
-            // so the extraction zero-extends. A full-width enum
-            // field keeps `int`; only the sub-word bitfield case
-            // changes.
-            if base_is_enum {
-                field_ty |= UNSIGNED_BIT;
-            }
             if is_union {
                 // C99 6.7.2.1: a union bitfield occupies one
                 // storage unit of its declared type; size and
@@ -738,7 +720,6 @@ impl Compiler {
             }
         }
         Ok(MemberPlacement {
-            ty: field_ty,
             offset: field_offset,
             align: placed_align,
             required,
@@ -853,11 +834,6 @@ impl Compiler {
             self.pending.spell_base_restrict |= self.lex_is_restrict_qual();
             self.next()?;
         }
-        // Set when the field's base type is an `enum` (directly or
-        // through an enum typedef). An enum bitfield reads as
-        // unsigned, so a value with the field's high bit set
-        // zero-extends rather than sign-extends.
-        let mut field_base_is_enum = false;
         let mut incomplete_enum_tag = None;
         let field_base_tok = self.lex.tk;
         let mut field_base = if let Some(inner) = atomic_field_base {
@@ -894,13 +870,10 @@ impl Compiler {
             anon_aggregate_inner_id = Some(inner_id);
             ty
         } else if self.lex.tk == Token::Enum {
-            // C99 6.7.2.2: an `enum X` field is `int`, or the packed
-            // underlying type for `enum __attribute__((packed))`; the
-            // shared parse_enum_decl captures the tag + body for DWARF.
-            // An enum bitfield reads unsigned, so field_base_is_enum
-            // drives the zero-extend.
+            // C99 6.7.2.2: an `enum X` field takes the enum's type, which
+            // a bit-field of it reads with; the shared parse_enum_decl
+            // captures the tag + body for DWARF.
             let (enum_field_ty, tag) = self.parse_enum_decl()?;
-            field_base_is_enum = true;
             incomplete_enum_tag = tag;
             enum_field_ty
         } else if self.is_lex_int128_spelling() {
@@ -919,7 +892,6 @@ impl Compiler {
             // `short` / `long` / `signed`, so after an int modifier the
             // identifier is the member's declarator name, not a type specifier.
             // A member takes what a variable declared through the alias does.
-            field_base_is_enum = self.symbols[self.lex.curr_id_idx].is_enum_typedef;
             let (ty, tag) = self.typedef_name_base_type()?;
             incomplete_enum_tag = tag;
             ty
@@ -954,7 +926,6 @@ impl Compiler {
 
         Ok(MemberBase {
             field_base,
-            field_base_is_enum,
             incomplete_enum_tag,
             anon_aggregate_inner_id,
             group_align,

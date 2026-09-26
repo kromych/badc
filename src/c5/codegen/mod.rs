@@ -317,6 +317,13 @@ impl Target {
         self.is_windows()
     }
 
+    /// Whether every enumeration and enumerator has type `int`, as MSVC
+    /// gives them on the PE targets: a value converts to `int` and
+    /// `packed` leaves the type alone.
+    pub fn ms_enums(self) -> bool {
+        self.is_windows()
+    }
+
     /// Container format the target's toolchain uses for objects,
     /// shared libraries and images. Drives the `-l` search spellings
     /// and the format reported when an input object does not match.

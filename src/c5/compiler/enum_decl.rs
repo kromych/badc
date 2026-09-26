@@ -95,10 +95,16 @@ impl Compiler {
             // and Clang accept most often.
             packed = self.skip_attribute_specifiers()? || packed;
             self.pending.attr_transparent_union = false;
+            let ms = self.target.ms_enums();
             let underlying = if let Some(m) = self.pending.attr_mode.take() {
                 // `mode(M)` fixes the enum's width outright; the
                 // enumerators must fit, as GCC requires.
-                let ty = self.apply_mode_to_type(enum_compatible_ty(min, max), m)?;
+                let base = if ms {
+                    Ty::Int as i64
+                } else {
+                    enum_compatible_ty(min, max)
+                };
+                let ty = self.apply_mode_to_type(base, m)?;
                 let bits = self.size_of_type(ty) as u32 * 8;
                 let fits = if min < 0 {
                     bits >= 64 || (min >= -(1i64 << (bits - 1)) && max < (1i64 << (bits - 1)))
@@ -112,6 +118,8 @@ impl Compiler {
                     ));
                 }
                 ty
+            } else if ms {
+                Ty::Int as i64
             } else if packed {
                 Self::packed_enum_underlying_ty(min, max)
             } else {
@@ -202,6 +210,7 @@ impl Compiler {
         let mut i: i64 = 0;
         let mut captured: alloc::vec::Vec<(String, i64)> = alloc::vec::Vec::new();
         let mut sym_indexes: alloc::vec::Vec<usize> = alloc::vec::Vec::new();
+        let ms = self.target.ms_enums();
         while self.lex.tk != '}' {
             if self.lex.tk != Token::Id {
                 return Err(self.compile_err(Code::SYNTAX, "bad enum identifier"));
@@ -218,6 +227,9 @@ impl Compiler {
                 // constants.
                 i = self.parse_constant_int()?;
             }
+            if ms {
+                i = i as i32 as i64;
+            }
             // Inside a function the enumerator has block scope (C99
             // 6.2.1p4): a name the current scope already declared is a
             // redeclaration (6.7p3); otherwise the outer binding is
@@ -228,7 +240,11 @@ impl Compiler {
             // During the body the constant carries its value's own type
             // so a reference from a later enumerator converts correctly;
             // the whole list is restamped below once the range is known.
-            self.symbols[idx].type_ = enumerator_constant_ty(i, enum_compatible_ty(i, i));
+            self.symbols[idx].type_ = if ms {
+                Ty::Int as i64
+            } else {
+                enumerator_constant_ty(i, enum_compatible_ty(i, i))
+            };
             self.symbols[idx].val = i;
             captured.push((name, i));
             sym_indexes.push(idx);
@@ -246,7 +262,9 @@ impl Compiler {
         // never the constants.
         let compatible = enum_compatible_ty(min, max);
         for (&idx, &(_, v)) in sym_indexes.iter().zip(&captured) {
-            self.symbols[idx].type_ = enumerator_constant_ty(v, compatible);
+            if !ms {
+                self.symbols[idx].type_ = enumerator_constant_ty(v, compatible);
+            }
         }
         Ok((min, max, captured))
     }

@@ -4,8 +4,10 @@
 use super::{Compiler, Vm};
 use crate::c5::diag::Code;
 
+/// The rows spell GCC's enum types (C99 6.7.2.2p4), which the Linux targets
+/// take and the PE targets do not, so they compile for Linux.
 fn expect_conflict(src: &str, needles: &[&str]) {
-    let msg = match Compiler::new(src.to_string()).compile() {
+    let msg = match Compiler::with_target(src.to_string(), crate::Target::LinuxX64).compile() {
         Err(e) => e.to_string(),
         Ok(_) => panic!("expected a compile error for {src:?}"),
     };
@@ -15,11 +17,39 @@ fn expect_conflict(src: &str, needles: &[&str]) {
 }
 
 fn run_without_warnings(src: &str) -> i64 {
-    let prog = Compiler::new(src.to_string())
+    let prog = Compiler::with_target(src.to_string(), crate::Target::LinuxX64)
         .compile()
         .unwrap_or_else(|e| panic!("{src:?}: {e}"));
     assert!(prog.warnings.is_empty(), "{src:?}: {:?}", prog.warnings);
     Vm::new(prog).run().unwrap()
+}
+
+/// MSVC's rule, which the PE targets take, makes every enum compatible with
+/// `int` (C99 6.7.2.2p4), whatever its values and attributes.
+#[test]
+fn an_enum_is_compatible_with_int_on_the_pe_targets() {
+    let compile =
+        |src: &str| Compiler::with_target(src.to_string(), crate::Target::WindowsX64).compile();
+    let src = "enum E { A = 5 };\nint f(enum E);\nint f(int v) { return v; }\n\
+               int main(void) { return f(A); }\n";
+    assert_eq!(Vm::new(compile(src).unwrap()).run().unwrap(), 5);
+    for (src, needles) in [
+        (
+            "enum E { A = 5 };\nint f(enum E);\nint f(unsigned int v) { return (int)v; }\n",
+            ["previous: int (int)", "now:      int (unsigned int)"],
+        ),
+        (
+            "enum E;\nextern enum E x;\nenum E { A } __attribute__((__mode__(__byte__)));\n\
+             int x;\n",
+            ["previous: signed char", "now:      int"],
+        ),
+    ] {
+        let src = alloc::format!("{src}int main(void) {{ return 0; }}\n");
+        let msg = compile(&src).map(|_| ()).unwrap_err().to_string();
+        for needle in needles {
+            assert!(msg.contains(needle), "{src:?}: no {needle:?} in {msg:?}");
+        }
+    }
 }
 
 #[test]

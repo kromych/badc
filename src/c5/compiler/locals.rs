@@ -45,6 +45,16 @@ pub(super) struct DeclAlign {
     pub gnu_set: bool,
 }
 
+/// A block-scope function declaration: its result type, parameters, the
+/// function type its result leads to, and that result's fn-pointer lineage
+/// (`Symbol::fn_ptr_indirection`, `Symbol::fn_ptr_ret_indirection`).
+struct BlockFunction {
+    ret: i64,
+    params: super::function::ParsedParams,
+    ret_fn: Option<(alloc::boxed::Box<crate::c5::symbol::FnType>, i64)>,
+    lineage: (i64, i64),
+}
+
 /// One block-scope declarator as its binding step sees it: the symbol and
 /// its type, the storage class the specifiers gave it, and the register
 /// binding, spelling and alignment the declarator collected.
@@ -455,6 +465,8 @@ impl Compiler {
             // expression inside the dimension), and that inner declarator
             // must not clear the outer one's flag.
             let saved_vla = core::mem::replace(&mut self.pending.vla_allowed, true);
+            // Filled by a declarator group holding its entity's own list.
+            self.pending.fn_params = None;
             let (loc_idx, ty, mut array_size) = self.parse_declarator(lbt)?;
             self.pending.vla_allowed = saved_vla;
             self.pending.attr_transparent_union = false;
@@ -463,7 +475,9 @@ impl Compiler {
             // function, not an object; classifying it as data would make a
             // use of the name load code bytes. Bind it as
             // `try_parse_block_fn_prototype` binds the `name(params)` form.
-            if self.bind_bare_function_declarator(loc_idx, ty, is_static)? {
+            if self.bind_bare_function_declarator(loc_idx, ty, is_static)?
+                || self.bind_grouped_function_declarator(loc_idx, ty, is_static)?
+            {
                 continue;
             }
             let asm_reg = self.parse_register_asm_binding(loc_idx, is_static, is_extern)?;
@@ -784,9 +798,57 @@ impl Compiler {
             self.accept_declarator_separator()?;
             return Ok(true);
         }
-        let listed = super::function::ParsedParams::of_type(params.clone());
-        let listed = super::redeclaration::Params::of(&listed, false);
-        let ret = super::redeclaration::Spelled::plain(ty - Ty::Ptr as i64);
+        // Undo the typedef's pre-decay to pointer-to-function.
+        let f = BlockFunction {
+            ret: ty - Ty::Ptr as i64,
+            params: super::function::ParsedParams::of_type(params),
+            ret_fn: None,
+            lineage: (0, 0),
+        };
+        self.bind_block_function(loc_idx, f, is_static)
+    }
+
+    /// A declarator whose group holds its entity's own parameter list
+    /// (`int (*f(void))[3];`, `void (*g(int))(int);`) declares a function
+    /// returning the type the group's derivations give (C99 6.7.5.3p1); the
+    /// list has prototype scope (6.2.1p4). Returns true when the declarator
+    /// was one, its separator consumed.
+    fn bind_grouped_function_declarator(
+        &mut self,
+        loc_idx: usize,
+        ty: i64,
+        is_static: bool,
+    ) -> Result<bool, C5Error> {
+        let Some(params) = self.pending.fn_params.take() else {
+            return Ok(false);
+        };
+        for &p in &params.indices {
+            Self::restore_shadowed_symbol(&mut self.symbols[p]);
+        }
+        let ret_fn = self.take_decl_ret_fn(true);
+        let fpi = self.pending.fn_ptr_indirection.take().unwrap_or(0);
+        let fpri = core::mem::take(&mut self.pending.fn_ptr_ret_indirection);
+        self.pending.fn_ptr_params = None;
+        self.pending.fn_ptr_ret_fn = None;
+        let f = BlockFunction {
+            ret: ty,
+            params,
+            ret_fn,
+            lineage: (fpi, fpri),
+        };
+        self.bind_block_function(loc_idx, f, is_static)
+    }
+
+    /// Bind a block-scope function declaration: the name has block scope and
+    /// the entity external linkage, or internal under `static` (C99 6.2.2).
+    fn bind_block_function(
+        &mut self,
+        loc_idx: usize,
+        f: BlockFunction,
+        is_static: bool,
+    ) -> Result<bool, C5Error> {
+        let listed = super::redeclaration::Params::of(&f.params, false);
+        let ret = super::redeclaration::Spelled::plain(f.ret);
         let declared = super::redeclaration::DeclaredType::Function(ret, listed);
         self.declare_linked(loc_idx, declared, self.lex.line)?;
         let c = self.symbols[loc_idx].class;
@@ -801,9 +863,10 @@ impl Compiler {
             let sym = &mut self.symbols[loc_idx];
             sym.class = Token::Fun as i64;
             sym.scoped_fn_decl = true;
-            // Undo the typedef's pre-decay to pointer-to-function.
-            sym.type_ = ty - Ty::Ptr as i64;
-            sym.set_fn_params(params);
+            sym.type_ = f.ret;
+            sym.set_fn_params(f.params.fn_params());
+            sym.ret_fn = f.ret_fn;
+            (sym.fn_ptr_indirection, sym.fn_ptr_ret_indirection) = f.lineage;
             sym.is_extern_decl = true;
             sym.linkage = if is_static {
                 crate::c5::symbol::Linkage::Internal

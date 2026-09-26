@@ -342,7 +342,8 @@ impl Compiler {
         let base = self.pending.fn_decl_base.take();
         let carrier = self.pending.fn_ptr_ret_fn.take();
         self.pending.fn_chain_levels = 0;
-        let levels = core::mem::take(&mut self.pending.fn_base_levels);
+        let levels = core::mem::take(&mut self.pending.fn_base_levels)
+            + core::mem::take(&mut self.pending.fn_chain_array_levels);
         if !core::mem::take(&mut self.pending.fn_own_sig) && !own {
             return carrier;
         }

@@ -2744,6 +2744,14 @@ fn generic_function_types() {
 }
 
 #[test]
+fn function_returning_pointer_to_array() {
+    // C99 6.7.5.3p1: a group holding a function's parameter list derives,
+    // through its suffixes, the array the function's result points to; the
+    // group declares a function at block scope too.
+    assert_eq!(run_fixture("function_returning_pointer_to_array.c"), 0);
+}
+
+#[test]
 fn indirect_call_prototypes() {
     // A call through a pointer converts or promotes its arguments by the
     // pointed-to type, however the callee is spelled.

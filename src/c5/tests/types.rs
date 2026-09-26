@@ -3173,3 +3173,47 @@ fn function_pointer_conversions_of_linux_shapes_are_compatible() {
          }\n",
     );
 }
+
+/// C99 6.7.5.3p1: a group holding a declarator's own parameter list makes
+/// its entity a function, at file and block scope, and the suffixes after
+/// the group derive the type the function's result points to; a result is
+/// never an array and an array element never a function.
+#[test]
+fn a_group_holding_the_parameter_list_derives_the_function_result() {
+    use crate::Compiler;
+    compile_str(
+        "static int arr[3];\n\
+         static double (*fns[3])(double);\n\
+         int (*mki(void))[3] { return &arr; }\n\
+         double (*(*mkf(void))[3])(double) { return &fns; }\n\
+         static int *(*h(void));\n\
+         _Static_assert(__builtin_types_compatible_p(__typeof__(mki), int (*(void))[3]), \"mki\");\n\
+         _Static_assert(!__builtin_types_compatible_p(__typeof__(mki), int *(void)), \"mki\");\n\
+         _Static_assert(sizeof(*mki()) == 3 * sizeof(int), \"mki\");\n\
+         _Static_assert(__builtin_types_compatible_p(__typeof__(mkf),\n\
+             double (*(*(void))[3])(double)), \"mkf\");\n\
+         _Static_assert(!__builtin_types_compatible_p(__typeof__(mkf),\n\
+             double (*(*(void))[3])(int)), \"mkf\");\n\
+         _Static_assert(sizeof(*mkf()) == 3 * sizeof(void *), \"mkf\");\n\
+         _Static_assert(__builtin_types_compatible_p(__typeof__(h), int **(void)), \"h\");\n\
+         int main(void) {\n\
+             int (*mkl(void))[3];\n\
+             int (*sig(int))(int);\n\
+             _Static_assert(__builtin_types_compatible_p(__typeof__(mkl), int (*(void))[3]), \"mkl\");\n\
+             _Static_assert(__builtin_types_compatible_p(__typeof__(sig), int (*(int))(int)), \"sig\");\n\
+             return 0;\n\
+         }\n",
+    );
+    for (decl, text) in [
+        ("int (f(void))[3];", "function returning an array"),
+        ("int (*p)(void)[3];", "function returning an array"),
+        ("int (*a[2])[3](void);", "array of functions"),
+    ] {
+        let src = format!("{decl}\nint main(void) {{ return 0; }}\n");
+        let err = Compiler::new(src.clone())
+            .compile()
+            .expect_err(&src)
+            .to_string();
+        assert!(err.contains(text), "{src}{err}");
+    }
+}

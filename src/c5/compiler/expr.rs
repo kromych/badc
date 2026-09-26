@@ -2498,12 +2498,13 @@ impl Compiler {
         }
         self.ty = result_ty;
         self.drop_operand_array_decay();
-        // A callee returning a function pointer leaves a function-pointer
-        // value, so a following unary `*` is the C99 6.3.2.1p4 no-op.
+        // A callee whose result leads to a function pointer seeds the decay
+        // depth as a loaded variable of the result's type does: at depth 0 a
+        // unary `*` is the C99 6.3.2.1p4 no-op.
         if self.symbols[id_idx].class == Token::Fun as i64
             && self.symbols[id_idx].fn_ptr_indirection > 0
         {
-            self.pending.fn_ptr_chain_depth = 0;
+            self.pending.fn_ptr_chain_depth = self.symbols[id_idx].fn_ptr_indirection - 1;
         } else if is_var_call && self.symbols[id_idx].fn_ptr_ret_indirection > 0 {
             self.pending.fn_ptr_chain_depth = self.symbols[id_idx].fn_ptr_ret_indirection - 1;
         }

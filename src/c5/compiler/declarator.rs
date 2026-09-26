@@ -316,6 +316,7 @@ impl Compiler {
         if entity_start {
             self.pending.fn_ret_chain.clear();
             self.pending.fn_chain_levels = 0;
+            self.pending.fn_chain_array_levels = 0;
             self.pending.fn_own_sig = false;
             self.pending.fn_decl_base = self.carriers_fn_type();
         }
@@ -494,20 +495,13 @@ impl Compiler {
             // Whether the group is a function pointer is known only after
             // its suffixes: `(args)` makes one, `[N]` a pointer to an array.
             let mut group_levels = inner_ptr_levels;
-            // The inner declarator may have stopped on `(` if it
-            // was a function-returning-fp shape like
-            // `void (*foo(args1))(args2)`. In that case `foo` is
-            // the outer function whose params we MUST capture
-            // (the body will reference them); `args2` after the
-            // outer paren close is the function-pointer pointee's
-            // signature, which c5 doesn't track.
-            //
-            // When this branch fires we stash the parsed params
-            // on `self.pending.fn_params` so `run_compile` can
-            // bind `foo` as `Token::Fun` and parse the body even
-            // though the next token will be `{` (not `(` -- the
-            // params are already consumed).
-            let mut saw_fn_signature = false;
+            // The inner declarator stops on `(` when the group holds the
+            // entity's own parameter list: `foo` in `void (*foo(args1))(args2)`
+            // or `int (*foo(args1))[3]` is a function, and the group's
+            // suffixes derive the type its result points to. The params go
+            // to `self.pending.fn_params` so `run_compile` binds `foo` as
+            // `Token::Fun` and parses the body that follows.
+            let mut own_sig = false;
             if self.lex.tk == '(' {
                 self.next()?;
                 // parse_function_params consumes the matching `)`,
@@ -516,8 +510,9 @@ impl Compiler {
                 self.pending.fn_params = Some(params);
                 self.pending.fn_own_sig = true;
                 self.pending.fn_chain_levels = 0;
+                self.pending.fn_chain_array_levels = 0;
                 self.pending.fn_base_levels = path_levels + inner_ptr_levels;
-                saw_fn_signature = true;
+                own_sig = true;
             }
             if self.lex.tk != ')' {
                 return Err(
@@ -542,7 +537,7 @@ impl Compiler {
             // bare identifier for `run_compile` to treat as a function
             // definition.
             if !param_ctx
-                && !saw_fn_signature
+                && !own_sig
                 && inner_ptr_levels == 0
                 && idx != usize::MAX
                 && self.lex.tk == '('
@@ -557,18 +552,22 @@ impl Compiler {
             // `T (*p)[N]` shape (`p[i]` strides by
             // `N * sizeof(T)`, not `sizeof(T*)`).
             let mut pointee_dims: alloc::vec::Vec<i64> = alloc::vec::Vec::new();
+            let mut after_sig = false;
             loop {
                 if self.lex.tk == '(' {
+                    if !pointee_dims.is_empty() {
+                        return Err(
+                            self.compile_err(Code::INVALID_DECLARATION, "array of functions")
+                        );
+                    }
                     self.next()?;
                     // Capture the pointee signature's prototype on the
                     // first function-signature paren so a fn-pointer
                     // declarator records its callee's variadic-ness and
-                    // named-parameter count. Subsequent signatures
-                    // (function-returning-fp shapes) keep skipping, as
-                    // does an enclosing frame when an inner group
-                    // already captured the innermost signature -- the
-                    // prototype a call through the variable uses.
-                    if !saw_fn_signature && !inner_resolved {
+                    // named-parameter count. A later signature -- past
+                    // the entity's own, in this frame or an inner one --
+                    // is the function type a result points to.
+                    if !self.pending.fn_own_sig {
                         // Capture the pointee signature's parameter types (not
                         // just the count) so an indirect call through the
                         // pointer narrows each argument to its declared
@@ -587,6 +586,7 @@ impl Compiler {
                         self.pending.fn_ptr_params = Some(pp.fn_params());
                         self.pending.fn_own_sig = true;
                         self.pending.fn_chain_levels = inner_ptr_levels;
+                        self.pending.fn_chain_array_levels = 0;
                     } else {
                         // A later signature is the function type the
                         // previous one's result points to.
@@ -597,13 +597,22 @@ impl Compiler {
                         for &pidx in &pp.indices {
                             Self::restore_shadowed_symbol(&mut self.symbols[pidx]);
                         }
-                        let depth = inner_ptr_levels - self.pending.fn_chain_levels;
+                        let depth = inner_ptr_levels - self.pending.fn_chain_levels
+                            + core::mem::take(&mut self.pending.fn_chain_array_levels);
                         self.pending.fn_chain_levels = inner_ptr_levels;
                         self.pending.fn_ret_chain.push((pp.fn_params(), depth));
                     }
                     self.pending.fn_base_levels = path_levels;
-                    saw_fn_signature = true;
+                    after_sig = true;
                 } else if self.lex.tk == Token::Brak {
+                    // C99 6.7.5.3p1: a result is no array; the entity's
+                    // own list with `*`s before it returns a pointer.
+                    if after_sig || (own_sig && inner_ptr_levels == 0) {
+                        return Err(self.compile_err(
+                            Code::INVALID_DECLARATION,
+                            "function returning an array",
+                        ));
+                    }
                     self.next()?;
                     if self.lex.tk == ']' {
                         self.next()?;
@@ -645,7 +654,7 @@ impl Compiler {
             // tagged as fn-ptr lineage (otherwise the unary `*`
             // handler treats `*p` on `T (*p)[N]` as the fn-ptr
             // decay no-op and the row deref never fires).
-            if saw_fn_signature && inner_ptr_levels > 0 {
+            if after_sig && inner_ptr_levels > 0 {
                 if inner_resolved {
                     // An inner group already fixed the identifier's
                     // lineage; the levels above it belong to the return
@@ -666,7 +675,7 @@ impl Compiler {
                     self.pending.fn_ptr_indirection = Some(inner_ptr_levels);
                 }
                 self.pending.fn_ptr_group_resolved = true;
-            } else if saw_fn_signature && inner_ptr_levels == 0 && param_ctx {
+            } else if (own_sig || after_sig) && inner_ptr_levels == 0 && param_ctx {
                 // `RET (name)(args)` parameter: the function type decays
                 // to a pointer to function, the same encoding as
                 // `RET (*name)(args)` (one indirection level).
@@ -676,11 +685,13 @@ impl Compiler {
                 self.pending.fn_ptr_group_resolved = true;
             }
             if !pointee_dims.is_empty() {
-                if !saw_fn_signature && inner_ptr_levels > 0 {
+                if !after_sig && inner_ptr_levels > 0 {
                     // Pointer-to-array shape `T (*p)[M1]...[Mn]`: fold
                     // the pointee dimensions into the aggregate-backed
                     // tag, one pointer level per inner `*`. Also covers
-                    // the abstract form `T (*)[N]` (no symbol).
+                    // the abstract form `T (*)[N]` (no symbol) and a
+                    // function's result (`T (*f(void))[N]`).
+                    self.pending.fn_chain_array_levels += pointee_dims.len() as i64;
                     inner_ty = (self.array_agg_type(outer_ty_before_inner, &pointee_dims)
                         + inner_ptr_levels * (Ty::Ptr as i64))
                         | (inner_ty

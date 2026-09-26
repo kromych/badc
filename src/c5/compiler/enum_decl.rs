@@ -123,6 +123,9 @@ impl Compiler {
                     underlying_ty: underlying,
                 });
             }
+            if let Some(tag) = tag_idx {
+                self.rebase_enum_placeholder_fields(tag, underlying);
+            }
             return Ok((underlying, None));
         }
         // A bare `enum Tag` reference reuses the underlying type recorded at
@@ -136,6 +139,20 @@ impl Compiler {
         // definition fixes the type.
         // TODO: a pointer to the type keeps `int`'s width past the definition.
         Ok((Ty::Int as i64, tag_idx))
+    }
+
+    /// C99 6.7.2.2p4: the definition of enum tag `tag` fixes the type its
+    /// earlier uses named; the members typed then took the `int`
+    /// placeholder.
+    fn rebase_enum_placeholder_fields(&mut self, tag: u32, underlying: i64) {
+        let (fixed, open) = core::mem::take(&mut self.enum_placeholder_fields)
+            .into_iter()
+            .partition::<Vec<_>, _>(|&(_, _, t)| t == tag);
+        self.enum_placeholder_fields = open;
+        for (sid, fi, _) in fixed {
+            let field = &mut self.structs[sid].fields[fi];
+            field.ty = super::types::rebase_placeholder_int(field.ty, underlying);
+        }
     }
 
     /// The underlying type the definition of enum tag `name` chose. Untagged

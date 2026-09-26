@@ -2058,6 +2058,10 @@ pub struct Compiler {
     /// when the parser sees `enum Tag { ... }`; the (tag, constants)
     /// pairs feed the DWARF emitter's enum DIEs.
     pub(super) enums: Vec<EnumDef>,
+    /// Members whose pointer type names an enum tag used before its
+    /// definition (`struct id`, field index, tag): the placeholder `int`
+    /// the use took is rebased when the definition fixes the type.
+    pub(super) enum_placeholder_fields: Vec<(usize, usize, u32)>,
 
     /// Where every controllable diagnostic the front end reports goes.
     /// The sink resolves each one's level and drops the ignored ones.
@@ -2919,6 +2923,7 @@ impl Compiler {
             structs: Vec::new(),
             tag_scopes: alloc::vec![alloc::vec::Vec::new()],
             enums: Vec::new(),
+            enum_placeholder_fields: Vec::new(),
             sink,
             notes: Vec::new(),
             file_asm: Vec::new(),

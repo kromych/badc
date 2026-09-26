@@ -56,6 +56,8 @@ impl Default for AggregateLayout {
 struct MemberBase {
     field_base: i64,
     field_base_is_enum: bool,
+    /// The enum tag the base names before the tag's definition.
+    incomplete_enum_tag: Option<u32>,
     anon_aggregate_inner_id: Option<usize>,
     group_align: usize,
     base_spelling: crate::c5::symbol::DeclSpelling,
@@ -225,6 +227,7 @@ impl Compiler {
         let &MemberBase {
             field_base,
             field_base_is_enum,
+            incomplete_enum_tag,
             group_align,
             base_spelling,
             type_align_override,
@@ -414,6 +417,13 @@ impl Compiler {
                 self.symbols[idx] = *saved;
             }
             let field_spelling = self.decl_spelling(base_spelling);
+            // A pointer keeps its size when the definition fixes the enum.
+            if let Some(tag) = incomplete_enum_tag
+                && super::types::is_pointer_ty(field_ty)
+            {
+                let at = (struct_id, self.structs[struct_id].fields.len(), tag);
+                self.enum_placeholder_fields.push(at);
+            }
             self.structs[struct_id].fields.push(StructField {
                 name: field_name,
                 offset: field_offset,
@@ -834,6 +844,7 @@ impl Compiler {
         // unsigned, so a value with the field's high bit set
         // zero-extends rather than sign-extends.
         let mut field_base_is_enum = false;
+        let mut incomplete_enum_tag = None;
         let field_base_tok = self.lex.tk;
         let mut field_base = if let Some(inner) = atomic_field_base {
             inner
@@ -874,8 +885,9 @@ impl Compiler {
             // shared parse_enum_decl captures the tag + body for DWARF.
             // An enum bitfield reads unsigned, so field_base_is_enum
             // drives the zero-extend.
-            let (enum_field_ty, _) = self.parse_enum_decl()?;
+            let (enum_field_ty, tag) = self.parse_enum_decl()?;
             field_base_is_enum = true;
+            incomplete_enum_tag = tag;
             enum_field_ty
         } else if self.is_lex_int128_spelling() {
             // GCC `__int128` / `__uint128_t` field: a 16-byte type.
@@ -894,7 +906,9 @@ impl Compiler {
             // identifier is the member's declarator name, not a type specifier.
             // A member takes what a variable declared through the alias does.
             field_base_is_enum = self.symbols[self.lex.curr_id_idx].is_enum_typedef;
-            self.typedef_name_base_type()?.0
+            let (ty, tag) = self.typedef_name_base_type()?;
+            incomplete_enum_tag = tag;
+            ty
         } else if mods.saw_int_mod {
             mods.int_base()
         } else {
@@ -927,6 +941,7 @@ impl Compiler {
         Ok(MemberBase {
             field_base,
             field_base_is_enum,
+            incomplete_enum_tag,
             anon_aggregate_inner_id,
             group_align,
             base_spelling,

@@ -2987,3 +2987,25 @@ fn typeof_a_function_designator_keeps_its_parameters() {
          }\n",
     );
 }
+
+/// C99 6.7.2.2p4: a member typed through an enum tag used before its
+/// definition -- directly or through a typedef -- has the enum's type once
+/// the definition fixes it, as a declaration after the definition does.
+#[test]
+fn a_member_typed_before_its_enums_definition_takes_the_enums_type() {
+    compile_str(
+        "struct ev;\n\
+         typedef enum line (*print_fn)(struct ev *e, int flags);\n\
+         struct funcs { print_fn trace; enum line (*raw)(int); enum line *last; };\n\
+         enum line { PARTIAL, HANDLED };\n\
+         enum line nop(struct ev *e, int flags);\n\
+         _Static_assert(__builtin_types_compatible_p(__typeof__(((struct funcs *)0)->trace),\n\
+             __typeof__(&nop)), \"trace\");\n\
+         _Static_assert(__builtin_types_compatible_p(__typeof__(((struct funcs *)0)->raw),\n\
+             enum line (*)(int)), \"raw\");\n\
+         _Static_assert(__builtin_types_compatible_p(__typeof__(((struct funcs *)0)->last),\n\
+             enum line *), \"last\");\n\
+         _Static_assert(__builtin_types_compatible_p(print_fn, __typeof__(&nop)), \"typedef\");\n\
+         int main(void) { return 0; }\n",
+    );
+}

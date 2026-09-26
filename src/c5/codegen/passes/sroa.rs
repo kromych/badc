@@ -104,10 +104,11 @@ const FOOTPRINT_ROUNDS: usize = 32;
 /// A parameter is listed only when every use of its value is an access
 /// at a constant offset -- the address expressions [`resolve_base`]
 /// tracks -- or a fixed argument of another same-unit call, whose
-/// footprint it inherits. Any other use, a variadic body, and a body
-/// that keeps a parameter in a frame cell (where the value reaches its
-/// uses through memory this walk does not follow) leave the parameter
-/// out of the map.
+/// footprint it inherits. Any other use, a variadic body, a naked body
+/// (whose asm reads the arguments where the convention left them), and
+/// a body that keeps a parameter in a frame cell (where the value
+/// reaches its uses through memory this walk does not follow) leave the
+/// parameter out of the map.
 /// A caller parameter inheriting a callee parameter's footprint,
 /// shifted by the offset the argument carries.
 type InheritEdge = ((usize, usize), (usize, usize), i64);
@@ -122,8 +123,9 @@ pub(crate) fn param_footprints(funcs: &[FunctionSsa]) -> FootprintMap {
             continue;
         }
         // The va machinery reads a variadic body's arguments off the
-        // stack rather than through a `ParamRef`.
-        if func.is_variadic {
+        // stack rather than through a `ParamRef`, and a naked body's asm
+        // reads them where the convention left them.
+        if func.is_variadic || func.is_naked {
             continue;
         }
         let n = func.insts.len();
@@ -3352,9 +3354,14 @@ mod tests {
             is_variadic: true,
             ..callee(200, alloc::vec![param()], Terminator::Return(0))
         };
-        let fps = param_footprints(&[escaping, variadic]);
+        let naked = FunctionSsa {
+            is_naked: true,
+            ..callee(300, alloc::vec![Inst::Imm(0)], Terminator::Return(0))
+        };
+        let fps = param_footprints(&[escaping, variadic, naked]);
         assert!(!fps.contains_key(&(100, 0)), "a stored pointer is opaque");
         assert!(!fps.contains_key(&(200, 0)), "a variadic body is opaque");
+        assert!(!fps.contains_key(&(300, 0)), "a naked body is opaque");
     }
 
     /// Caller holding a two-cell object at -2: field 0 written then

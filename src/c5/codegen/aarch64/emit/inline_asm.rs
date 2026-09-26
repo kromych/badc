@@ -2366,6 +2366,8 @@ fn concrete_opnd(o: &super::asm::AsmOpndA64) -> Option<super::table::Opnd> {
         AsmOpndA64::SysReg(f) => Opnd::SysReg(f),
         AsmOpndA64::SysOp(b) => Opnd::SysOp(b),
         AsmOpndA64::Cond(c) => Opnd::Cond(c),
+        AsmOpndA64::SvePattern(p) => Opnd::SvePattern(p),
+        AsmOpndA64::SveMul(m) => Opnd::SveMul(m),
         AsmOpndA64::Reg { num, is64, sp } => Opnd::Reg { num, is64, sp },
         AsmOpndA64::RegWb(num) => Opnd::RegWb(num),
         AsmOpndA64::VReg { num, is_d } => Opnd::VReg { num, is_d },

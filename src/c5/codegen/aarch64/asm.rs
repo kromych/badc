@@ -159,6 +159,11 @@ pub(crate) enum AsmOpndA64 {
     /// load reads it PC-relatively. The expression text is resolved when the
     /// pool is assigned, before layout.
     LitPool(String),
+    /// An SVE predicate-constraint pattern, 0..31, written by name (`vl4`,
+    /// `all`) or as `#imm`.
+    SvePattern(u8),
+    /// An SVE element-count multiplier `mul #imm`, as written.
+    SveMul(i64),
 }
 
 /// Which part of a symbol expression's value an operand takes, from the
@@ -835,6 +840,59 @@ fn parse_extend(spec: &str, idx_is64: bool) -> Result<(u8, Option<u8>), String> 
 fn shift_amount(rest: &str) -> Option<i64> {
     let rest = rest.trim();
     parse_int(rest.strip_prefix('#').unwrap_or(rest))
+}
+
+/// Whether `mnem` counts SVE elements: `cnt`, `inc`, `dec` and the saturating
+/// `sqinc`, `sqdec`, `uqinc`, `uqdec`, each by byte, halfword, word or
+/// doubleword.
+fn is_sve_count(mnem: &str) -> bool {
+    ["cnt", "inc", "dec", "sqinc", "sqdec", "uqinc", "uqdec"]
+        .iter()
+        .any(|stem| {
+            mnem.strip_prefix(stem)
+                .is_some_and(|t| matches!(t, "b" | "h" | "w" | "d"))
+        })
+}
+
+/// The pattern or multiplier operand of an SVE element count, `None` for any
+/// other token. A pattern is one of the architecture's names, case-blind, or
+/// `#imm` in 0..=31; the multiplier is `mul #imm` (Arm ARM C8.2 predicate
+/// constraints, as GNU as and LLVM spell them).
+fn sve_count_operand(tok: &str) -> Result<Option<AsmOpndA64>, String> {
+    let lower = tok.trim().to_ascii_lowercase();
+    if let Some(rest) = lower.strip_prefix("mul")
+        && rest.starts_with([' ', '\t', '#'])
+    {
+        let v = shift_amount(rest).ok_or_else(|| format!("inline asm: bad multiplier `{tok}`"))?;
+        return Ok(Some(AsmOpndA64::SveMul(v)));
+    }
+    if let Some(v) = lower.strip_prefix('#').and_then(parse_int) {
+        return match u8::try_from(v).ok().filter(|p| *p < 32) {
+            Some(p) => Ok(Some(AsmOpndA64::SvePattern(p))),
+            None => Err(format!("inline asm: bad SVE pattern `{tok}`")),
+        };
+    }
+    let pattern = match lower.as_str() {
+        "pow2" => 0,
+        "vl1" => 1,
+        "vl2" => 2,
+        "vl3" => 3,
+        "vl4" => 4,
+        "vl5" => 5,
+        "vl6" => 6,
+        "vl7" => 7,
+        "vl8" => 8,
+        "vl16" => 9,
+        "vl32" => 10,
+        "vl64" => 11,
+        "vl128" => 12,
+        "vl256" => 13,
+        "mul4" => 29,
+        "mul3" => 30,
+        "all" => 31,
+        _ => return Ok(None),
+    };
+    Ok(Some(AsmOpndA64::SvePattern(pattern)))
 }
 
 /// Parse one operand token (already trimmed).
@@ -1607,6 +1665,28 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
             insns.push(AsmInsnA64 {
                 mnemonic: String::from(mnem),
                 operands: alloc::vec![AsmOpndA64::Imm(code), mem],
+                bytes: Vec::new(),
+                label_def: None,
+                sym_target: None,
+                layout: None,
+            });
+            continue;
+        }
+        // The SVE element-count family (`cntb`, `incw`, `sqdecd`, ...) ends in
+        // an optional predicate-constraint pattern and an optional `mul #imm`,
+        // which only these mnemonics read, so their operands parse here and a
+        // label named like a pattern elsewhere stays a label.
+        if is_sve_count(mnem) {
+            let mut operands = Vec::new();
+            for tok in split_operands(rest) {
+                operands.push(match sve_count_operand(tok)? {
+                    Some(o) => o,
+                    None => parse_operand(tok)?,
+                });
+            }
+            insns.push(AsmInsnA64 {
+                mnemonic: String::from(mnem),
+                operands,
                 bytes: Vec::new(),
                 label_def: None,
                 sym_target: None,

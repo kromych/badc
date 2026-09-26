@@ -1747,6 +1747,75 @@ fn mvn_alias() {
 }
 
 #[test]
+fn sve_vector_length_and_element_count() {
+    // llvm-mc 22.1.8 (-mattr=+sve) words. The pattern defaults to ALL and the
+    // multiplier to 1; register 31 is xzr except in addvl / addpl, whose
+    // operands read and write sp.
+    let pat = Opnd::SvePattern;
+    let mul = Opnd::SveMul;
+    let imm = Opnd::Imm;
+    assert_eq!(enc("rdvl", &[x(0), imm(1)]), 0x04BF5020);
+    assert_eq!(enc("rdvl", &[x(1), imm(-32)]), 0x04BF5401);
+    assert_eq!(enc("rdvl", &[x(30), imm(31)]), 0x04BF53FE);
+    assert_eq!(enc("rdvl", &[x(31), imm(1)]), 0x04BF503F);
+    assert_eq!(enc("addvl", &[sp(true), sp(true), imm(-2)]), 0x043F57DF);
+    assert_eq!(enc("addvl", &[x(0), x(1), imm(1)]), 0x04215020);
+    assert_eq!(enc("addvl", &[x(2), sp(true), imm(31)]), 0x043F53E2);
+    assert_eq!(enc("addpl", &[x(0), x(1), imm(-32)]), 0x04615400);
+    assert_eq!(enc("addpl", &[sp(true), x(3), imm(7)]), 0x046350FF);
+    assert_eq!(enc("cntb", &[x(0)]), 0x0420E3E0);
+    assert_eq!(enc("cntb", &[x(0), pat(31)]), 0x0420E3E0);
+    assert_eq!(enc("cntb", &[x(0), pat(0)]), 0x0420E000);
+    assert_eq!(enc("cntb", &[x(0), pat(1), mul(16)]), 0x042FE020);
+    assert_eq!(enc("cntb", &[x(0), pat(14)]), 0x0420E1C0);
+    assert_eq!(enc("cntb", &[x(0), pat(31), mul(1)]), 0x0420E3E0);
+    assert_eq!(enc("cnth", &[x(1), pat(13), mul(4)]), 0x0463E1A1);
+    assert_eq!(enc("cntw", &[x(2), pat(30)]), 0x04A0E3C2);
+    assert_eq!(enc("cntd", &[x(3), pat(29), mul(2)]), 0x04E1E3A3);
+    assert_eq!(enc("incb", &[x(0)]), 0x0430E3E0);
+    assert_eq!(enc("incb", &[x(0), pat(31), mul(16)]), 0x043FE3E0);
+    assert_eq!(enc("inch", &[x(1), pat(7)]), 0x0470E0E1);
+    assert_eq!(enc("incw", &[x(2), pat(8), mul(3)]), 0x04B2E102);
+    assert_eq!(enc("incd", &[x(3), pat(9)]), 0x04F0E123);
+    assert_eq!(enc("decb", &[x(4)]), 0x0430E7E4);
+    assert_eq!(enc("dech", &[x(5), pat(10), mul(5)]), 0x0474E545);
+    assert_eq!(enc("decw", &[x(6), pat(11)]), 0x04B0E566);
+    assert_eq!(enc("decd", &[x(7), pat(12), mul(9)]), 0x04F8E587);
+    assert_eq!(enc("sqincb", &[x(0)]), 0x0430F3E0);
+    assert_eq!(enc("sqincb", &[x(0), w(0)]), 0x0420F3E0);
+    assert_eq!(enc("sqincb", &[x(0), w(0), pat(31), mul(3)]), 0x0422F3E0);
+    assert_eq!(enc("sqinch", &[x(1), pat(2)]), 0x0470F041);
+    assert_eq!(enc("sqincw", &[x(2), w(2), pat(3)]), 0x04A0F062);
+    assert_eq!(enc("sqincd", &[x(3), pat(4), mul(16)]), 0x04FFF083);
+    assert_eq!(enc("sqdecb", &[x(4), w(4)]), 0x0420FBE4);
+    assert_eq!(enc("sqdech", &[x(5)]), 0x0470FBE5);
+    assert_eq!(enc("sqdecw", &[x(6), w(6), pat(0), mul(2)]), 0x04A1F806);
+    assert_eq!(enc("sqdecd", &[x(7), pat(5)]), 0x04F0F8A7);
+    assert_eq!(enc("uqincb", &[x(0)]), 0x0430F7E0);
+    assert_eq!(enc("uqincb", &[w(0)]), 0x0420F7E0);
+    assert_eq!(enc("uqincb", &[w(0), pat(31), mul(3)]), 0x0422F7E0);
+    assert_eq!(enc("uqinch", &[x(1), pat(6)]), 0x0470F4C1);
+    assert_eq!(enc("uqincw", &[w(2), pat(3)]), 0x04A0F462);
+    assert_eq!(enc("uqincd", &[x(3), pat(4), mul(16)]), 0x04FFF483);
+    assert_eq!(enc("uqdecb", &[w(4)]), 0x0420FFE4);
+    assert_eq!(enc("uqdech", &[x(5)]), 0x0470FFE5);
+    assert_eq!(enc("uqdecw", &[w(6), pat(0), mul(2)]), 0x04A1FC06);
+    assert_eq!(enc("uqdecd", &[x(7), pat(5)]), 0x04F0FCA7);
+    // What llvm-mc and GNU as reject: the unsigned 32-bit form's register
+    // pair, a pair naming two registers, a W count, an out-of-range
+    // immediate or multiplier, and a multiplier with no pattern before it.
+    assert!(encode("uqincb", &[x(0), w(0)]).is_err());
+    assert!(encode("sqincb", &[x(0), w(1)]).is_err());
+    assert!(encode("cntb", &[w(0)]).is_err());
+    assert!(encode("rdvl", &[x(0), imm(32)]).is_err());
+    assert!(encode("addvl", &[x(0), x(1), imm(-33)]).is_err());
+    assert!(encode("cntb", &[x(0), pat(31), mul(17)]).is_err());
+    assert!(encode("cntb", &[x(0), pat(31), mul(0)]).is_err());
+    assert!(encode("incb", &[x(0), mul(2)]).is_err());
+    assert!(encode("rdvl", &[sp(true), imm(1)]).is_err());
+}
+
+#[test]
 fn ror_immediate_is_the_extr_alias() {
     // ror Rd, Rn, #n is extr Rd, Rn, Rn, #n; the register form stays rorv.
     assert_eq!(enc("ror", &[x(0), x(0), Opnd::Imm(1)]), 0x93C00400);
@@ -2210,7 +2279,9 @@ mod differential {
             | Field::ShrAlias { op }
             | Field::Shift { op, .. }
             | Field::Extend { op, .. }
-            | Field::Cond { op, .. } => op as usize == idx,
+            | Field::Cond { op, .. }
+            | Field::SvePattern { op, .. }
+            | Field::SveMul { op, .. } => op as usize == idx,
             _ => false,
         })
     }
@@ -2354,6 +2425,19 @@ mod differential {
                     .map(|c| Some((String::from(cond_name(c)), Opnd::Cond(c))))
                     .collect()
             }
+            // A written multiplier needs a written pattern ahead of it, so the
+            // pattern is always spelled and the multiplier is optional.
+            Some(Field::SvePattern { .. }) => {
+                [("all", 31u8), ("pow2", 0), ("vl256", 13), ("#14", 14)]
+                    .iter()
+                    .map(|&(t, p)| Some((String::from(t), Opnd::SvePattern(p))))
+                    .collect()
+            }
+            Some(Field::SveMul { .. }) => alloc::vec![
+                None,
+                Some((String::from("mul #16"), Opnd::SveMul(16))),
+                Some((String::from("mul #3"), Opnd::SveMul(3))),
+            ],
             _ => Vec::new(),
         }
     }
@@ -2482,15 +2566,27 @@ mod differential {
                                 _ => ext_is64,
                             };
                             let sp = i == sp_slot;
+                            // A second spelling of an earlier register slot
+                            // repeats its number.
+                            let num = f
+                                .fields
+                                .iter()
+                                .find_map(|fl| match *fl {
+                                    Field::SameReg { op, first } if op as usize == i => {
+                                        Some(regs[first as usize])
+                                    }
+                                    _ => None,
+                                })
+                                .unwrap_or(regs[i]);
                             txt.push(match (sp, is64) {
                                 (true, true) => String::from("sp"),
                                 (true, false) => String::from("wsp"),
                                 (false, _) => {
-                                    alloc::format!("{}{}", if is64 { 'x' } else { 'w' }, regs[i])
+                                    alloc::format!("{}{}", if is64 { 'x' } else { 'w' }, num)
                                 }
                             });
                             ops.push(Opnd::Reg {
-                                num: if sp { 31 } else { regs[i] },
+                                num: if sp { 31 } else { num },
                                 is64,
                                 sp,
                             });

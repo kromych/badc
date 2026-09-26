@@ -93,6 +93,16 @@ pub(crate) enum Field {
     /// UXTX #0 at 64 bits, UXTW #0 at 32). The option also fixes the width of
     /// the extended register at slot `rm`.
     Extend { op: u8, rm: u8, is64: bool },
+    /// The SVE predicate-constraint pattern, 5 bits at `shift`, from an
+    /// optional operand (absent = ALL, 31).
+    SvePattern { op: u8, shift: u8 },
+    /// The SVE element-count multiplier `mul #imm` (1..16), stored as imm - 1
+    /// in 4 bits at `shift`, from an optional operand (absent = 1).
+    SveMul { op: u8, shift: u8 },
+    /// A second spelling of the register at slot `first` -- the `Wdn` of the
+    /// signed saturating `Xdn, Wdn` pair -- which must name the same register
+    /// and encodes nothing of its own.
+    SameReg { op: u8, first: u8 },
 }
 
 /// One catalogue entry: a base word and the fields spliced into it.
@@ -137,6 +147,10 @@ pub(crate) enum A64Op {
     MemPre,
     /// A register-offset memory reference `[Xn|SP, Rm{, <ext> #s}]`.
     MemReg,
+    /// An optional SVE predicate-constraint pattern (`all`, `vl4`, `#imm`).
+    OptPattern,
+    /// An optional SVE element-count multiplier `mul #imm`.
+    OptMul,
 }
 
 /// A resolved operand handed to [`encode`].
@@ -244,6 +258,10 @@ pub(crate) enum Opnd {
     },
     /// A 4-bit condition code for the conditional-select forms.
     Cond(u8),
+    /// An SVE predicate-constraint pattern, 0..31.
+    SvePattern(u8),
+    /// An SVE element-count multiplier `mul #imm`, as written.
+    SveMul(i64),
 }
 
 fn reg(o: Opnd) -> Result<u8, String> {
@@ -295,6 +313,8 @@ fn op_matches(p: A64Op, o: Opnd) -> bool {
         (A64Op::Mem, Opnd::Mem { pre, .. }) => !pre,
         (A64Op::MemPre, Opnd::Mem { pre, .. }) => pre,
         (A64Op::MemReg, Opnd::MemReg { .. }) => true,
+        (A64Op::OptPattern, Opnd::SvePattern(_)) => true,
+        (A64Op::OptMul, Opnd::SveMul(_)) => true,
         _ => false,
     }
 }
@@ -2465,11 +2485,20 @@ fn encode_catalogue(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             if f.ops.contains(&A64Op::OptExt) != extended {
                 continue;
             }
-            // Match, allowing a trailing optional shift/extend slot to be absent.
+            // Match, allowing trailing optional slots to be absent.
             let required = f
                 .ops
                 .iter()
-                .filter(|o| !matches!(o, A64Op::OptLsl | A64Op::OptShift | A64Op::OptExt))
+                .filter(|o| {
+                    !matches!(
+                        o,
+                        A64Op::OptLsl
+                            | A64Op::OptShift
+                            | A64Op::OptExt
+                            | A64Op::OptPattern
+                            | A64Op::OptMul
+                    )
+                })
                 .count();
             if ops.len() < required || ops.len() > f.ops.len() {
                 continue;
@@ -2777,6 +2806,34 @@ fn pack(f: &Form, ops: &[Opnd]) -> Result<u32, String> {
                     _ => return Err(String::from("inline asm: extended register expected")),
                 }
                 word |= ((option as u32) << 13) | ((amount as u32) << 10);
+            }
+            Field::SvePattern { op, shift } => {
+                let p = match ops.get(op as usize) {
+                    None => 31,
+                    Some(Opnd::SvePattern(p)) => *p,
+                    Some(_) => return Err(String::from("inline asm: SVE pattern expected")),
+                };
+                word |= (p as u32 & 31) << shift;
+            }
+            Field::SveMul { op, shift } => {
+                let m = match ops.get(op as usize) {
+                    None => 1,
+                    Some(Opnd::SveMul(m)) => *m,
+                    Some(_) => return Err(String::from("inline asm: `mul #imm` expected")),
+                };
+                if !(1..=16).contains(&m) {
+                    return Err(String::from("inline asm: multiplier out of range 1 to 16"));
+                }
+                word |= ((m - 1) as u32) << shift;
+            }
+            Field::SameReg { op, first } => {
+                if reg(ops[op as usize])? != reg(ops[first as usize])? {
+                    return Err(format!(
+                        "inline asm: operand {} must be the same register as operand {}",
+                        op + 1,
+                        first + 1
+                    ));
+                }
             }
         }
     }

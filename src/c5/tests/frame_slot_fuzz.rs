@@ -229,6 +229,7 @@ impl AggTy {
                 size: l.sc.size(),
                 kind: l.sc.abi_kind(),
                 bit_field: false,
+                single_fp_vector: false,
             })
             .collect()
     }

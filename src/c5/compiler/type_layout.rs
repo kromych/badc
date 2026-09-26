@@ -932,6 +932,9 @@ pub(crate) fn flatten_struct_fields(
     out: &mut Vec<FlatField>,
 ) {
     let sd = &structs[struct_id];
+    let single_fp_vector = sd.is_vector
+        && matches!(sd.fields.as_slice(),
+            [f] if f.array_size == 1 && scalar_kind(f.ty, target).is_fp_scalar());
     // A GCC vector at a width the calling conventions name is one ABI
     // object, not its lanes: both classify it by its whole width (System
     // V AMD64 psABI 3.2.3, AAPCS64 6.4.2 Stage C.1), so the traversal
@@ -943,6 +946,7 @@ pub(crate) fn flatten_struct_fields(
             size: sd.size as u32,
             kind: ScalarKind::Vector,
             bit_field: false,
+            single_fp_vector,
         });
         return;
     }
@@ -976,6 +980,7 @@ pub(crate) fn flatten_struct_fields(
                     size: elem_size,
                     kind: scalar_kind(elem_ty, target),
                     bit_field: f.bit_width > 0,
+                    single_fp_vector,
                 });
             }
         }
@@ -1104,6 +1109,7 @@ pub(crate) fn long_double_agg_desc(
             size: 16,
             kind,
             bit_field: false,
+            single_fp_vector: false,
         }],
         homogeneous: HomogeneousAggregate::new(kind, 16, 1),
     })

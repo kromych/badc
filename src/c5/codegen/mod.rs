@@ -4850,6 +4850,7 @@ mod abi_plan_tests {
             size: 8,
             kind: ScalarKind::Int,
             bit_field: false,
+            single_fp_vector: false,
         };
         let desc = crate::c5::ir::AggDesc {
             size: 16,

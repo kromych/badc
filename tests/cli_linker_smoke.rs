@@ -7664,6 +7664,97 @@ fn unnamed_bit_field_eightbytes_cross_the_windows_compiler_boundary() {
     );
 }
 
+// A floating-point vector of one element has no System V AMD64 class; gcc
+// passes it in memory, bare or as a member, as badc does. clang passes the
+// `float` one in a general-purpose register and returns the bare `double` one
+// in xmm0, a recorded divergence: against clang on x86_64 only the `double`
+// vector's argument and struct cross. AAPCS64 passes the structs holding the
+// `float` vector in general-purpose registers and the `double` vector in d0
+// under either compiler; the bare `float` vector, which gcc and clang place
+// apart there, crosses only against gcc on x86_64.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn single_fp_vectors_cross_the_system_compiler_boundary() {
+    let Some(cc) = host_cc() else {
+        eprintln!(
+            "skipping single_fp_vectors_cross_the_system_compiler_boundary: no system C compiler"
+        );
+        return;
+    };
+    let common = "typedef long long ll;\n\
+        typedef float v1f __attribute__((vector_size(4)));\n\
+        typedef double v1d __attribute__((vector_size(8)));\n\
+        struct d1 { v1d v; };\n\
+        struct f1 { v1f v; };\n\
+        struct ff { v1f v; float f; };\n\
+        struct fd { v1f v; double d; };\n\
+        #if defined(__x86_64__) && defined(__GNUC__) && !defined(__clang__)\n\
+        #define GCC_X64 1\n\
+        #else\n\
+        #define GCC_X64 0\n\
+        #endif\n\
+        #if defined(__x86_64__) && defined(__clang__)\n\
+        #define CLANG_X64 1\n\
+        #else\n\
+        #define CLANG_X64 0\n\
+        #endif\n\
+        static int gcc_x64(void) { return GCC_X64; }\n\
+        static int clang_x64(void) { return CLANG_X64; }\n\
+        static ll take_d1(ll k, struct d1 s, double x, ll n)\n\
+        { return k * 1000 + (ll)(s.v[0] * 100 + x * 10) + n; }\n\
+        static ll take_v1d(ll k, v1d v, double x, ll n)\n\
+        { return k * 1000 + (ll)(v[0] * 100 + x * 10) + n; }\n\
+        static struct d1 make_d1(double x) { struct d1 r = { { x } }; return r; }\n\
+        static ll take_f1(ll k, struct f1 s, double x, ll n)\n\
+        { return k * 1000 + (ll)(s.v[0] * 100 + x * 10) + n; }\n\
+        static ll take_ff(ll k, struct ff s, double x, ll n)\n\
+        { return k * 10000 + (ll)(s.v[0] * 100 + s.f * 1000 + x * 10) + n; }\n\
+        static ll take_fd(struct fd s, ll n) { return (ll)(s.v[0] * 100 + s.d * 10) + n; }\n\
+        static struct f1 make_f1(float x) { struct f1 r = { { x } }; return r; }\n\
+        static struct ff make_ff(float x, float y) { struct ff r = { { x }, y }; return r; }\n\
+        static struct fd make_fd(float x, double y) { struct fd r = { { x }, y }; return r; }\n\
+        static ll take_v1f(ll k, v1f v, double x, ll n)\n\
+        { return k * 1000 + (ll)(v[0] * 100 + x * 10) + n; }\n\
+        static v1f make_v1f(float x) { v1f r = { x }; return r; }\n\
+        static v1d make_v1d(double x) { v1d r = { x }; return r; }\n\
+        struct fns { int (*gcc_x64)(void); int (*clang_x64)(void);\n\
+          ll (*take_d1)(ll, struct d1, double, ll); ll (*take_v1d)(ll, v1d, double, ll);\n\
+          struct d1 (*make_d1)(double); ll (*take_f1)(ll, struct f1, double, ll);\n\
+          ll (*take_ff)(ll, struct ff, double, ll); ll (*take_fd)(struct fd, ll);\n\
+          struct f1 (*make_f1)(float); struct ff (*make_ff)(float, float);\n\
+          struct fd (*make_fd)(float, double); ll (*take_v1f)(ll, v1f, double, ll);\n\
+          v1f (*make_v1f)(float); v1d (*make_v1d)(double); };\n\
+        static int drive(const struct fns *f, int base)\n\
+        { int gcc = f->gcc_x64() || GCC_X64, clang = f->clang_x64() || CLANG_X64;\n\
+          struct d1 d = { { 1.5 } }; v1d vd = { 1.5 }; v1f vf = { 1.5f };\n\
+          struct f1 s = { { 1.5f } }; struct ff t = { { 1.5f }, 3.0f };\n\
+          struct fd u = { { 1.5f }, 4.5 }; struct ff rt; struct fd ru;\n\
+          if (f->take_d1(9, d, 2.5, 7) != 9182) return base + 1;\n\
+          if (f->take_v1d(9, vd, 2.5, 7) != 9182) return base + 2;\n\
+          if (f->make_d1(2.5).v[0] != 2.5) return base + 3;\n\
+          if (clang) return 0;\n\
+          if (f->take_f1(9, s, 2.5, 7) != 9182) return base + 4;\n\
+          if (f->take_ff(9, t, 2.5, 7) != 93182) return base + 5;\n\
+          if (f->take_fd(u, 7) != 202) return base + 6;\n\
+          if (f->make_f1(2.5f).v[0] != 2.5f) return base + 7;\n\
+          rt = f->make_ff(2.5f, 3.5f);\n\
+          if (rt.v[0] != 2.5f || rt.f != 3.5f) return base + 8;\n\
+          ru = f->make_fd(2.5f, 4.5);\n\
+          if (ru.v[0] != 2.5f || ru.d != 4.5) return base + 9;\n\
+          if (!gcc) return 0;\n\
+          if (f->take_v1f(9, vf, 2.5, 7) != 9182) return base + 10;\n\
+          if (f->make_v1f(2.5f)[0] != 2.5f) return base + 11;\n\
+          if (f->make_v1d(2.5)[0] != 2.5) return base + 12;\n\
+          return 0; }\n";
+    drive_across_the_system_compiler(
+        &cc,
+        "single-fp-vector-interop",
+        common,
+        "gcc_x64, clang_x64, take_d1, take_v1d, make_d1, take_f1, take_ff, take_fd, make_f1, \
+         make_ff, make_fd, take_v1f, make_v1f, make_v1d",
+    );
+}
+
 // Aggregates whose eightbytes merge several fields or none cross the system
 // compiler boundary both ways. System V AMD64 3.2.3 gives an eightbyte no
 // field overlaps no register, a union's 16-byte vector beside a double or

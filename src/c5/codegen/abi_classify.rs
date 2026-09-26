@@ -53,6 +53,9 @@ pub(crate) struct FlatField {
     pub kind: ScalarKind,
     /// The bytes a bit-field's bits span, which no alignment binds.
     pub bit_field: bool,
+    /// A floating-point vector of one element: `float` or `double` with a
+    /// `vector_size` of its own width.
+    pub single_fp_vector: bool,
 }
 
 /// A homogeneous aggregate (AAPCS64 5.9.5): one to four elements of one
@@ -255,13 +258,14 @@ fn classify_win64(size: u32, is_return: bool) -> AggClass {
 }
 
 /// System V AMD64 (3.2.3): aggregates larger than 16 bytes, or with a field
-/// off its natural alignment (a bit-field excepted), are MEMORY class.
-/// Otherwise each of the one or two eightbytes starts NO_CLASS and
-/// merges the classes of the fields overlapping it, the high half of a
-/// 16-byte vector being SSEUP and of an x87 value X87UP. SSE followed by
-/// SSEUP is one vector register, X87 followed by X87UP the x87 register
-/// stack's top, which only a return value takes, and an eightbyte left
-/// NO_CLASS takes no register.
+/// off its natural alignment (a bit-field excepted), are MEMORY class, and
+/// so is one holding a floating-point vector of one element, which the
+/// psABI gives no class and gcc passes in memory. Otherwise each of the one
+/// or two eightbytes starts NO_CLASS and merges the classes of the fields
+/// overlapping it, the high half of a 16-byte vector being SSEUP and of an
+/// x87 value X87UP. SSE followed by SSEUP is one vector register, X87
+/// followed by X87UP the x87 register stack's top, which only a return
+/// value takes, and an eightbyte left NO_CLASS takes no register.
 fn classify_sysv(size: u32, fields: &[FlatField], is_return: bool) -> AggClass {
     let memory = if is_return {
         AggClass::ReturnIndirect
@@ -274,7 +278,7 @@ fn classify_sysv(size: u32, fields: &[FlatField], is_return: bool) -> AggClass {
     if size > 16
         || fields
             .iter()
-            .any(|f| !f.bit_field && f.offset % f.size.clamp(1, 16) != 0)
+            .any(|f| f.single_fp_vector || (!f.bit_field && f.offset % f.size.clamp(1, 16) != 0))
     {
         return memory;
     }
@@ -479,6 +483,7 @@ mod tests {
             size,
             kind,
             bit_field: false,
+            single_fp_vector: false,
         }
     }
 
@@ -928,6 +933,37 @@ mod tests {
         for abi in [sysv(), aapcs()] {
             assert_eq!(
                 classify_aggregate(&desc(4, &lanes), abi, false),
+                AggClass::Regs(alloc::vec![RegClass::Integer])
+            );
+        }
+    }
+
+    #[test]
+    fn sysv_single_fp_vector_is_memory_class() {
+        // `float` / `double` with a `vector_size` of its own width, bare or
+        // beside a `float`: System V MEMORY, as gcc places it. AAPCS64 keeps
+        // the 4-byte one a composite in a general-purpose register, and
+        // Win64 goes by size.
+        let single = |kind, size| FlatField {
+            single_fp_vector: true,
+            ..ff(0, size, kind)
+        };
+        let f1 = [single(ScalarKind::F32, 4)];
+        let d1 = [single(ScalarKind::Vector, 8)];
+        let with_float = [single(ScalarKind::F32, 4), ff(4, 4, ScalarKind::F32)];
+        for (size, fields) in [(4, &f1[..]), (8, &d1[..]), (8, &with_float[..])] {
+            assert_eq!(
+                classify_aggregate(&desc(size, fields), sysv(), false),
+                AggClass::ByStack
+            );
+            assert_eq!(
+                classify_aggregate(&desc(size, fields), sysv(), true),
+                AggClass::ReturnIndirect
+            );
+        }
+        for abi in [aapcs(), win64()] {
+            assert_eq!(
+                classify_aggregate(&desc(4, &f1), abi, false),
                 AggClass::Regs(alloc::vec![RegClass::Integer])
             );
         }

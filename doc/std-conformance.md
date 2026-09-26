@@ -277,6 +277,26 @@ The divergence is System V AMD64's alone: AAPCS64 passes both shapes in
 general-purpose registers under either compiler, and the Microsoft x64
 convention passes them by reference.
 
+### A floating-point vector of one element goes to memory, severity 5
+
+The System V AMD64 psABI (3.2.3) classes the `__m64`, `__m128` and wider
+vector types; a `float` or `double` with a `vector_size` of its own width is
+none of them. badc follows gcc: such a vector is MEMORY class, bare or as a
+member of a struct, union or array, so it is passed on the stack and
+returned through the pointer the caller passes in rdi. clang passes the
+`float` vector in a general-purpose register, a struct holding it too, and
+returns a bare `double` vector in xmm0, while passing that one, and a
+struct holding it, in memory as gcc does. A call to or from clang-compiled
+x86-64 code therefore misplaces:
+
+- `float __attribute__((vector_size(4)))`, bare or in an aggregate, as an
+  argument or a result;
+- a bare `double __attribute__((vector_size(8)))` result.
+
+AAPCS64 passes a struct holding the `float` vector in general-purpose
+registers and the `double` vector in d0 under either compiler, and the
+Microsoft x64 convention places both by size.
+
 ## Extensions implemented
 
 ### C11 / C23
@@ -489,13 +509,12 @@ convention passes them by reference.
   same bank, counted in `al` on System V and read back from the vector
   save area. Windows x64 passes a 16-byte vector by an implicit
   reference, as its convention states, and macOS arm64 puts variadic
-  arguments on the stack, as its divergence from AAPCS64 states. Two
-  cases stay off the register path: a vector wider than a register (32
-  bytes and up) goes to memory on System V, as gcc places it without
-  `-mavx`, and by reference on AAPCS64; and a struct of two to four
-  vectors -- an AAPCS64 homogeneous vector aggregate -- takes the
-  composite rules instead of `v0`-`v3`. TODO: homogeneous vector
-  aggregates.
+  arguments on the stack, as its divergence from AAPCS64 states. On
+  System V a vector wider than a register (32 bytes and up) goes to
+  memory, as gcc places it without `-mavx` (by reference on AAPCS64), and
+  so does a floating-point vector of one element, as its divergence
+  states. A struct of two to four vectors of one width -- an AAPCS64
+  homogeneous vector aggregate -- takes one of `v0`-`v7` per vector.
 - GCC named-rest variadic macro (`#define foo(args...)`).
 - The GNU89 inline linkage model, per function via `__attribute__((gnu_inline))`
   and per unit via `-fgnu89-inline`: `extern inline` provides no external

@@ -3776,6 +3776,77 @@ fn a_variadic_hidden_pointer_callee_takes_named_arguments_by_class() {
     );
 }
 
+/// A floating-point vector of one element is System V MEMORY class, as gcc
+/// places it: on linux-x64 a function returning one, bare or as a struct's
+/// member, takes the result pointer in rdi, and one taking one finds it on
+/// the stack with the integers around it in rdi and rsi. A vector of two
+/// floats stays in xmm0, and linux-aarch64 passes the struct in x1 and the
+/// `double` vector in d0.
+#[test]
+fn a_single_fp_vector_is_memory_class_on_system_v() {
+    use crate::Target;
+    use crate::c5::codegen::ssa::emit_common::param_placements_common;
+    use crate::c5::codegen::{ArgPlacement, ClassReg};
+    let src = "typedef float v1f __attribute__((vector_size(4)));\n\
+        typedef double v1d __attribute__((vector_size(8)));\n\
+        typedef float v2f __attribute__((vector_size(8)));\n\
+        struct f1 { v1f v; };\n\
+        struct f1 make_f1(void) { struct f1 r = {{1.5f}}; return r; }\n\
+        v1d make_d1(void) { v1d r = {2.5}; return r; }\n\
+        v2f make_f2(void) { v2f r = {1.5f, 2.5f}; return r; }\n\
+        long take_f1(long k, struct f1 s, long n) { return k + (long)s.v[0] + n; }\n\
+        long take_d1(long k, v1d v, long n) { return k + (long)v[0] + n; }\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let program = crate::Compiler::with_options(
+            src.into(),
+            target,
+            crate::CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .unwrap_or_else(|e| panic!("compile: {e}"));
+        let funcs =
+            crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+                .expect("ssa");
+        let abi = target.abi();
+        let plan = |name: &str| {
+            let f = funcs.iter().find(|f| f.name == name).expect(name);
+            param_placements_common(f, abi)
+        };
+        let int = |i: usize| ArgPlacement::IntReg(abi.int_arg_regs[i]);
+        if target == Target::LinuxX64 {
+            for name in ["make_f1", "make_d1"] {
+                assert_eq!(plan(name), [int(0)], "{name}: the result pointer");
+            }
+            assert!(plan("make_f2").is_empty(), "make_f2 returns in xmm0");
+            for name in ["take_f1", "take_d1"] {
+                let p = plan(name);
+                assert!(
+                    matches!(p[1], ArgPlacement::StructStack { off: 0, .. }),
+                    "{name}: {:?}",
+                    p[1]
+                );
+                assert_eq!((p[0], p[2]), (int(0), int(1)), "{name}");
+            }
+        } else {
+            assert!(plan("make_f1").is_empty() && plan("make_d1").is_empty());
+            let reg = |reg, is_fp| ClassReg { reg, is_fp };
+            let p = plan("take_f1");
+            assert!(
+                matches!(p[1], ArgPlacement::StructRegs { regs, n: 1, .. }
+                    if regs[0] == reg(abi.int_arg_regs[1], false)),
+                "take_f1: {:?}",
+                p[1]
+            );
+            let p = plan("take_d1");
+            assert!(
+                matches!(p[1], ArgPlacement::StructRegs { regs, n: 1, .. } if regs[0] == reg(0, true)),
+                "take_d1: {:?}",
+                p[1]
+            );
+        }
+    }
+}
+
 /// Microsoft x64 passes a floating-point argument to a variadic or
 /// unprototyped callee in its FP register, which the call copies into the
 /// integer one: a named `float` keeps its type, a variadic one widens to

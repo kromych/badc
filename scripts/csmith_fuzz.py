@@ -49,10 +49,13 @@ exist. Without `--publish` nothing is written: the plan, the issue body and
 every comment are printed instead.
 
 `--self-test` checks the pure parts (signatures, dedup, week arithmetic,
-rendering, the `gh` argument vectors) and needs neither csmith nor badc. With
-csmith present it also asserts that a generation leaves the repository
-untouched: csmith writes `platform.info` into its working directory, not beside
-its `-o` output, so every case runs in its own scratch directory.
+rendering, the `gh` argument vectors) and needs neither csmith nor badc. On
+POSIX it also runs the rendered test's children: a timeout stops a child's
+descendants, and a child left behind by a killed test stops at its CPU-time
+limit. With csmith present it also asserts that a generation leaves the
+repository untouched: csmith writes `platform.info` into its working
+directory, not beside its `-o` output, so every case runs in its own scratch
+directory.
 """
 
 from __future__ import annotations
@@ -318,12 +321,30 @@ class CaseResult:
     steps: list[Step] = dataclasses.field(default_factory=list)
 
 
+CPUS = os.cpu_count() or 1
+
+
+def cpu_capped(argv: list[str], timeout: float, threads: int) -> list[str]:
+    """`argv` limited to the CPU time `threads` cores give it within
+    `timeout`, so a process that outlives whoever waits for it still
+    stops. `ulimit -t` rather than `preexec_fn`, which is unsafe in a
+    threaded parent. Outside POSIX, `argv` itself."""
+    if os.name != "posix":
+        return argv
+    seconds = int(timeout * threads) + 1
+    return ["/bin/sh", "-c", 'ulimit -t "$0" 2>/dev/null; exec "$@"', str(seconds), *argv]
+
+
 def run_command(
-    argv: list[str], cwd: Path, timeout: float, env: dict[str, str] | None = None
+    argv: list[str],
+    cwd: Path,
+    timeout: float,
+    env: dict[str, str] | None = None,
+    threads: int = CPUS,
 ) -> Step:
     started = time.monotonic()
     proc = subprocess.Popen(
-        argv,
+        cpu_capped(argv, timeout, threads),
         cwd=str(cwd),
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -545,7 +566,7 @@ def build_and_run(
     if not built.ok or not (workdir / binary).exists():
         reason = "compile timed out" if built.timed_out else "compile failed"
         return Outcome(config, built, None, None, reason, [built])
-    ran = run_command([f"./{binary}"], workdir, run_timeout)
+    ran = run_command([f"./{binary}"], workdir, run_timeout, threads=1)
     checksum = extract_checksum(ran.stdout) if ran.ok else None
     skip = None if ran.ok else ("run timed out" if ran.timed_out else "run failed")
     return Outcome(config, built, ran, checksum, skip, [built, ran])
@@ -768,6 +789,7 @@ TEST_TEMPLATE = r"""#!/usr/bin/env python3
 # while the candidate still shows the finding.
 import os
 import re
+import signal
 import subprocess
 import sys
 
@@ -784,21 +806,36 @@ RUN_TIMEOUT = @run_timeout@
 REF_RUN_TIMEOUT = @ref_run_timeout@
 GUARD = @guard@
 CHECKSUM_RE = re.compile(r"checksum\s*=\s*([0-9A-Fa-f]+)")
+CPUS = os.cpu_count() or 1
+POSIX = os.name == "posix"
 
 
-def run(argv, timeout):
+def run(argv, timeout, threads=CPUS):
+    # Each child leads its own process group, which a timeout kills whole,
+    # and may use the CPU time `threads` cores give it within `timeout`, so
+    # a child this test leaves behind when it is killed still stops.
+    if POSIX:
+        limit = str(int(timeout * threads) + 1)
+        argv = ["/bin/sh", "-c", 'ulimit -t "$0" 2>/dev/null; exec "$@"', limit, *argv]
+    proc = subprocess.Popen(
+        argv,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        errors="replace",
+        env=dict(os.environ, RUST_BACKTRACE="1", ASAN_OPTIONS="detect_leaks=0"),
+        start_new_session=POSIX,
+    )
     try:
-        done = subprocess.run(
-            argv,
-            capture_output=True,
-            text=True,
-            errors="replace",
-            timeout=timeout,
-            env=dict(os.environ, RUST_BACKTRACE="1", ASAN_OPTIONS="detect_leaks=0"),
-        )
+        out, err = proc.communicate(timeout=timeout)
     except subprocess.TimeoutExpired:
+        try:
+            os.killpg(proc.pid, signal.SIGKILL) if POSIX else proc.kill()
+        except ProcessLookupError:
+            pass
+        proc.communicate()
         return None, ""
-    return done.returncode, done.stdout + done.stderr
+    return proc.returncode, out + err
 
 
 def build(cc, flags, out):
@@ -809,7 +846,7 @@ def build(cc, flags, out):
 
 
 def checksum(out, timeout):
-    status, text = run(["./" + out], timeout)
+    status, text = run(["./" + out], timeout, threads=1)
     if status is None:
         return None, None
     found = CHECKSUM_RE.search(text)
@@ -1502,6 +1539,62 @@ def run_location() -> str:
 # self-test
 
 
+def exits_within(pid: int, seconds: float) -> bool:
+    """Whether process `pid` is gone within `seconds`."""
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return True
+        time.sleep(0.05)
+    return False
+
+
+def check_test_children(test_text: str, check) -> None:
+    """The rendered test's `run` on real processes: a timeout stops the
+    child's descendants, and a child that outlives a killed test stops at
+    its CPU-time limit."""
+    with tempfile.TemporaryDirectory() as tmp:
+        work = Path(tmp)
+        rendered: dict[str, object] = {"__name__": "rendered"}
+        exec(compile(test_text, "test.py", "exec"), rendered)
+        run = rendered["run"]
+        assert callable(run)
+        sleeper = work / "sleeper.pid"
+        status, _ = run(["/bin/sh", "-c", f"sleep 60 & echo $! > {sleeper}; wait"], 1)
+        check("a child past its timeout is stopped", status, None)
+        check(
+            "the timeout stops the child's descendants",
+            sleeper.is_file() and exits_within(int(sleeper.read_text()), 5.0),
+            True,
+        )
+        test = work / "test.py"
+        test.write_text(test_text, encoding="utf-8")
+        spinner = work / "spinner.pid"
+        spin = f"import os\nopen({str(spinner)!r}, 'w').write(str(os.getpid()))\nwhile True: pass"
+        # The test runs the spinner under a 2 s timeout, 3 s of CPU time,
+        # and is killed before the timeout can stop it.
+        holder = subprocess.Popen(
+            [
+                sys.executable,
+                "-c",
+                f"import runpy\nrunpy.run_path({str(test)!r}, run_name='held')['run']"
+                f"([{sys.executable!r}, '-c', {spin!r}], 2, 1)",
+            ]
+        )
+        deadline = time.monotonic() + 10.0
+        while time.monotonic() < deadline and not (spinner.is_file() and spinner.read_text()):
+            time.sleep(0.05)
+        holder.kill()
+        holder.wait()
+        check(
+            "a child outliving its test stops at its CPU-time limit",
+            spinner.is_file() and exits_within(int(spinner.read_text()), 20.0),
+            True,
+        )
+
+
 def self_test() -> int:
     failures: list[str] = []
 
@@ -1634,6 +1727,8 @@ def self_test() -> int:
     assert callable(build)
     check("the reference build keeps its guard", "-w" in build("clang", ["-O0"], "ref0")[0], False)
     check("badc builds quietly", "-w" in build("/usr/bin/badc", ["-O0"], "out")[0], True)
+    if os.name == "posix":
+        check_test_children(test_text, check)
     with tempfile.TemporaryDirectory() as tmp:
         kept = Path(tmp) / "case.c"
         kept.write_text("int main(void) { return 0; }\n", encoding="utf-8")

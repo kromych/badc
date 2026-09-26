@@ -830,12 +830,14 @@ pub(super) fn emit_call_indirect(
 }
 
 /// System V AMD64 `va_arg` (ABI 3.5.7). `args[0]` is the `__va_list_tag`
-/// pointer, `args[1]` the packed `(kind << 16) | size` descriptor. Returns
-/// the address of the slot holding the next argument and advances the
-/// matching field: an integer class comes from the register save area at
-/// `gp_offset` (< 48, step 8), a floating-point one at `fp_offset` (< 176,
-/// step 16), else from `overflow_arg_area` (step 8). Layout: gp_offset at
-/// +0, fp_offset at +4, overflow_arg_area at +8, reg_save_area at +16.
+/// pointer, `args[1]` the packed `VaArgDesc`. Returns the address of the
+/// slot holding the next argument and advances the matching field: an
+/// integer class comes from the register save area at `gp_offset` (< 48,
+/// step 8), a floating-point one at `fp_offset` (< 176, step 16), else from
+/// `overflow_arg_area` (step 8). An aggregate whose eightbytes are not all
+/// INTEGER is copied eightbyte by eightbyte from both areas into the
+/// temporary `args[2]` names, whose address is returned. Layout: gp_offset
+/// at +0, fp_offset at +4, overflow_arg_area at +8, reg_save_area at +16.
 pub(super) fn emit_va_arg_sysv(
     code: &mut Vec<u8>,
     args: &[u32],
@@ -844,16 +846,21 @@ pub(super) fn emit_va_arg_sysv(
     alloc: &Allocation,
     frame: Frame,
 ) -> Emit {
-    if args.len() != 2 {
-        return fail("VaArg: expected 2 args (ap, descriptor)");
-    }
+    use crate::c5::op::VaArgDesc;
     // Recover the packed descriptor from the `Inst::Imm` the parser
     // folded for the type operand.
-    let descriptor = match func.insts.get(args[1] as usize) {
+    let descriptor = match func
+        .insts
+        .get(args.get(1).copied().unwrap_or(u32::MAX) as usize)
+    {
         Some(Inst::Imm(d)) => *d,
         _ => return fail("VaArg: descriptor operand is not a constant"),
     };
-    let desc = crate::c5::op::VaArgDesc::unpack(descriptor);
+    let desc = VaArgDesc::unpack(descriptor);
+    let composed = desc.kind == VaArgDesc::EIGHTBYTES;
+    if args.len() != 2 + usize::from(composed) {
+        return fail("VaArg: expected (ap, descriptor) and a composed aggregate's temporary");
+    }
     let memory = desc.kind == crate::c5::op::VaArgDesc::MEMORY;
     let is_fp = desc.kind != crate::c5::op::VaArgDesc::INT && !memory;
     // Cursor pointer (struct address) held in r11, outside the
@@ -877,8 +884,6 @@ pub(super) fn emit_va_arg_sysv(
     // A by-value integer-class aggregate spans `ceil(size/8)` consecutive gp
     // slots and rides the save area only when all of them fit; an FP
     // argument is a single double or a vector, each one 16-byte save slot.
-    // TODO: an HFA's members ride consecutive slots; the descriptor classes
-    // every other aggregate as general-register.
     let aligned = ((desc.size as i32 + 7) & !7).max(8);
     let (off_disp, bound, step): (i32, i32, i32) = if is_fp {
         (4, 176, 16)
@@ -888,8 +893,11 @@ pub(super) fn emit_va_arg_sysv(
     // The sequence touches only r10 / r11 and the in-memory fields, so no
     // allocated value is clobbered.
     let mut jmp_rel32_at = None;
-    // A MEMORY-class argument (3.2.3) is passed on the stack alone.
-    if !memory && (is_fp || desc.size <= 16) {
+    if composed {
+        let temp = args.get(2).map_or(Place::None, |&t| place_of(alloc, t));
+        jmp_rel32_at = Some(emit_va_arg_eightbytes(code, desc, ap, temp, frame)?);
+    } else if !memory && (is_fp || desc.size <= 16) {
+        // A MEMORY-class argument (3.2.3) is passed on the stack alone.
         super::encode::emit_mov_r32_mem(code, SCRATCH_R10, ap, off_disp);
         // cmp r10d, bound ; jae use_overflow
         super::encode::emit_ri(code, Mnem::Cmp, 8, SCRATCH_R10, bound);
@@ -925,6 +933,66 @@ pub(super) fn emit_va_arg_sysv(
     }
     int_result_to_dst(code, dst, SCRATCH_R10, frame);
     Ok(())
+}
+
+/// The register path of a composed System V `va_arg`: branch to the
+/// overflow path (emitted next, at the returned `jmp`'s end) unless every
+/// eightbyte's register fits in its save area, else copy each eightbyte from
+/// its slot into `temp` -- an INTEGER one from `gp_offset`, an SSE one and
+/// the SSEUP after it from one 16-byte slot at `fp_offset` -- advance both
+/// offsets and leave `temp` in r10. rax is borrowed around the copy. Returns
+/// the offset of the rel32 of the `jmp` to the join.
+fn emit_va_arg_eightbytes(
+    code: &mut Vec<u8>,
+    desc: crate::c5::op::VaArgDesc,
+    ap: Reg,
+    temp: Place,
+    frame: Frame,
+) -> Emit<usize> {
+    use crate::c5::op::VaArgDesc;
+    let n = desc.size.div_ceil(8);
+    let count = |class| (0..n).filter(|&k| desc.eightbyte(k) == class).count() as i32;
+    let (num_gp, num_fp) = (count(VaArgDesc::EB_INTEGER), count(VaArgDesc::EB_SSE));
+    let mut to_overflow = Vec::new();
+    for (num, off_disp, limit, slot) in [(num_gp, 0, 48, 8), (num_fp, 4, 176, 16)] {
+        if num > 0 {
+            super::encode::emit_mov_r32_mem(code, SCRATCH_R10, ap, off_disp);
+            super::encode::emit_ri(code, Mnem::Cmp, 8, SCRATCH_R10, limit - slot * num);
+            super::encode::emit_jcc_rel32(code, Cc::A, 0);
+            to_overflow.push(code.len() - 4);
+        }
+    }
+    let borrow = Reg::RAX;
+    super::encode::emit_push_r(code, borrow);
+    let Some(base) = materialize_int_shifted(code, temp, borrow, frame, 8) else {
+        return fail("VaArg: composed aggregate's temporary not in int reg / spill");
+    };
+    for k in 0..n {
+        let (off_disp, step, parts) = match desc.eightbyte(k) {
+            VaArgDesc::EB_INTEGER => (0, 8, 1),
+            VaArgDesc::EB_SSE if k + 1 < n && desc.eightbyte(k + 1) == VaArgDesc::EB_SSEUP => {
+                (4, 16, 2)
+            }
+            VaArgDesc::EB_SSE => (4, 16, 1),
+            _ => continue,
+        };
+        for part in 0..parts {
+            super::encode::emit_mov_r32_mem(code, SCRATCH_R10, ap, off_disp);
+            super::encode::emit_rm(code, Mnem::Add, 8, SCRATCH_R10, ap, 16);
+            emit_mov_r_mem(code, SCRATCH_R10, SCRATCH_R10, 8 * part);
+            emit_mov_mem_r(code, base, (8 * (k + part as u32)) as i32, SCRATCH_R10);
+        }
+        super::encode::emit_mi(code, Mnem::Add, 4, ap, off_disp, step);
+    }
+    emit_mov_rr(code, SCRATCH_R10, base);
+    super::encode::emit_pop_r(code, borrow);
+    super::encode::emit_jmp_rel32(code, 0);
+    let jmp_at = code.len() - 4;
+    for at in to_overflow {
+        let rel = (code.len() - (at + 4)) as i32;
+        code[at..at + 4].copy_from_slice(&rel.to_le_bytes());
+    }
+    Ok(jmp_at)
 }
 
 /// `Some((call_pc, target_pc, args))` when `block` returns the value of

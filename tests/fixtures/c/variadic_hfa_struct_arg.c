@@ -1,9 +1,7 @@
 /* A variadic HFA composite: Windows aarch64 passes it in the integer
-   bank (SIMD/FP registers are unavailable to variadic composites).
-   TODO: the System V register-save va_arg reads every aggregate from the
-   general area; an SSE-class one rides the vector area and needs
-   composition, so this fixture is not yet registered for the
-   native_elf_x64 lane. */
+   bank (SIMD/FP registers are unavailable to variadic composites), the
+   System V and AAPCS64 register-save ABIs in vector registers, whose save
+   slots va_arg reads it from. */
 #include <stdarg.h>
 
 struct P { double x, y; };

@@ -1958,6 +1958,49 @@ impl Compiler {
         }
     }
 
+    /// The `va_arg` class of an aggregate `ty` on a System V `va_list`
+    /// (3.5.7): MEMORY for one passed in memory, FLOAT or VECTOR for one in a
+    /// single SSE or whole vector register, which its save slot holds as it
+    /// lies, EIGHTBYTES with the class of each eightbyte for any other in
+    /// registers whose eightbytes are not all INTEGER, `None` otherwise --
+    /// whole INTEGER eightbytes lie in order in the general-register area.
+    fn sysv_va_arg_eightbytes(&self, ty: i64) -> Option<(u8, u8)> {
+        use crate::c5::codegen::abi_classify::{
+            AggClass, RegClass, classify_aggregate, register_slots,
+        };
+        use crate::c5::op::VaArgDesc;
+        let conv = self.current_func_conv;
+        let abi = self.target.abi_for(conv);
+        if !abi.sysv_host_variadic() || !is_struct_value_ty(ty) || is_vector_ty(&self.structs, ty) {
+            return None;
+        }
+        let desc = super::host_abi_agg_desc_conv(&self.structs, self.target, conv, ty)?;
+        let AggClass::Regs(classes) = classify_aggregate(&desc, abi, false) else {
+            return Some((VaArgDesc::MEMORY, 0));
+        };
+        match classes.as_slice() {
+            [RegClass::Sse] => return Some((VaArgDesc::FLOAT, 0)),
+            [RegClass::Vector] => return Some((VaArgDesc::VECTOR, 0)),
+            c if c.iter().all(|c| *c == RegClass::Integer)
+                && c.len() == desc.size.div_ceil(8) as usize =>
+            {
+                return None;
+            }
+            _ => {}
+        }
+        let codes = register_slots(&classes).fold(0u8, |codes, (class, off)| {
+            let k = 2 * (off / 8);
+            codes
+                | match class {
+                    RegClass::Integer => VaArgDesc::EB_INTEGER << k,
+                    RegClass::Sse => VaArgDesc::EB_SSE << k,
+                    RegClass::Vector => VaArgDesc::EB_SSE << k | VaArgDesc::EB_SSEUP << (k + 2),
+                    _ => 0,
+                }
+        });
+        Some((VaArgDesc::EIGHTBYTES, codes))
+    }
+
     /// The operands of `__builtin_va_arg(ap, T)`: the `va_list` address
     /// and the packed descriptor of `T`. Returns `T`.
     fn parse_va_arg_operands(
@@ -2011,11 +2054,21 @@ impl Compiler {
         } else {
             None
         };
+        let sysv = if is_pointer || by_ref {
+            None
+        } else {
+            self.sysv_va_arg_eightbytes(arg_ty)
+        };
         let (kind, align) = if is_pointer || by_ref {
             (VaArgDesc::INT, 8)
         } else if hfa.is_some() {
             (
                 VaArgDesc::HFA,
+                super::type_layout::va_arg_align(&self.structs, self.target, arg_ty),
+            )
+        } else if let Some((kind, _)) = sysv {
+            (
+                kind,
                 super::type_layout::va_arg_align(&self.structs, self.target, arg_ty),
             )
         } else if let Some(kind) = self.long_double_va_kind(arg_ty) {
@@ -2039,11 +2092,12 @@ impl Compiler {
             align,
             by_ref,
             elements: hfa.map_or(0, |h| h.count() as u8),
+            eightbytes: sysv.map_or(0, |(_, e)| e),
         }
         .pack();
         let desc_id = self.ast_emit_int_lit(descriptor, Ty::Int as i64);
         args.push(desc_id);
-        if hfa.is_some() {
+        if hfa.is_some() || kind == VaArgDesc::EIGHTBYTES {
             let slots = self.slots_of_type(arg_ty);
             let slot = self.reserve_object_slots(arg_ty, slots)?;
             self.record_multi_cell_temp(slot, slots, arg_ty);

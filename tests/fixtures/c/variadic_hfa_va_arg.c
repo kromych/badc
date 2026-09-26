@@ -3,9 +3,7 @@
    aggregate that does not fit the registers left goes to the stack and
    exhausts them. `va_arg` reads each element from its own 16-byte slot of
    the vector save area. macOS and Windows pass it in memory or the integer
-   bank and walk one cursor. The exit code names the first failed check.
-   TODO: System V `va_arg` reads an SSE-class aggregate from the general
-   area, so the x86-64 ELF and JIT lanes do not register this fixture. */
+   bank and walk one cursor. The exit code names the first failed check. */
 #include <stdarg.h>
 
 struct d2 { double x, y; };

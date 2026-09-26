@@ -5754,17 +5754,18 @@ fn variadic_aggregates_cross_the_system_compiler_boundary() {
     );
 }
 
-// `va_arg` of a homogeneous floating-point aggregate crosses the system
-// compiler boundary both ways: AAPCS64 passes one in the SIMD registers, one
-// per element, and on the stack once too few are left, and a Linux callee
-// reads each element from its own 16-byte slot of the vector save area.
-// TODO: System V `va_arg` of an SSE-class aggregate reads the general area.
-#[cfg(all(any(target_os = "linux", target_os = "macos"), target_arch = "aarch64"))]
+// `va_arg` of an aggregate with floating-point members crosses the system
+// compiler boundary both ways. AAPCS64 passes an HFA in the SIMD registers,
+// one per element, and a Linux callee reads each element from its own
+// 16-byte slot of the vector save area; System V AMD64 passes each eightbyte
+// in a register of its class and reads it from that class's save area. Both
+// use the stack once too few registers are left.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 #[test]
-fn variadic_hfas_cross_the_system_compiler_boundary() {
+fn variadic_fp_aggregates_cross_the_system_compiler_boundary() {
     let Some(cc) = host_cc() else {
         eprintln!(
-            "skipping variadic_hfas_cross_the_system_compiler_boundary: no system C compiler"
+            "skipping variadic_fp_aggregates_cross_the_system_compiler_boundary: no system C compiler"
         );
         return;
     };
@@ -5773,6 +5774,8 @@ fn variadic_hfas_cross_the_system_compiler_boundary() {
         struct f3 { float a, b, c; };\n\
         struct ld1 { long double v; };\n\
         union u1 { double a; double b; };\n\
+        struct lx { long long l; double d; };\n\
+        struct xl { double d; long long l; };\n\
         static double d2s(int n, ...)\n\
         { va_list ap; double s = 0; va_start(ap, n);\n\
           for (int i = 0; i < n; i++) { struct d2 p = va_arg(ap, struct d2);\n\
@@ -5793,21 +5796,31 @@ fn variadic_hfas_cross_the_system_compiler_boundary() {
             union u1 u = va_arg(ap, union u1); double d = va_arg(ap, double);\n\
             s = s * 1000 + k * 100 + u.b * 10 + d; }\n\
           va_end(ap); return s; }\n\
+        static double lxs(int n, ...)\n\
+        { va_list ap; double s = 0; va_start(ap, n);\n\
+          for (int i = 0; i < n; i++) { struct lx p = va_arg(ap, struct lx);\n\
+            struct xl q = va_arg(ap, struct xl); s = s * 10000 + p.l * 1000 + p.d * 100\n\
+            + q.d * 10 + q.l; }\n\
+          va_end(ap); return s; }\n\
         struct fns { double (*d2s)(int, ...); double (*f3s)(int, ...);\n\
-          long double (*lds)(int, ...); double (*mix)(int, ...); };\n\
+          long double (*lds)(int, ...); double (*mix)(int, ...); double (*lxs)(int, ...); };\n\
         static int drive(const struct fns *f, int base)\n\
         { struct d2 a = { 1, 2 }, b = { 3, 4 }, c = { 5, 6 }, d = { 7, 8 }, e = { 9, 1 };\n\
           struct f3 g = { 1, 2, 3 }, h = { 4, 5, 6 }, k = { 7, 8, 9 };\n\
           struct ld1 l = { 2 }, m = { 3 };\n\
           union u1 u = { 4 };\n\
+          struct lx p = { 1, 2 }, q = { 5, 6 };\n\
+          struct xl r = { 3, 4 }, t = { 7, 8 };\n\
           if (f->d2s(2, a, b) != 1234) return base + 1;\n\
           if (f->d2s(5, a, b, c, d, e) != 1234567891) return base + 2;\n\
           if (f->f3s(3, g, h, k) != 123456789) return base + 3;\n\
           if (f->lds(2, l, m) != 23) return base + 4;\n\
           if (f->lds(9, l, l, l, l, l, l, l, l, m) != 222222223) return base + 5;\n\
           if (f->mix(2, 1, u, 0.5, 2, u, 0.25) != 140740.25) return base + 6;\n\
+          if (f->lxs(2, p, r, q, t) != 12345678) return base + 7;\n\
+          if (f->lxs(4, p, r, q, t, p, r, q, t) != 1234567812345678.0) return base + 8;\n\
           return 0; }\n";
-    drive_across_the_system_compiler(&cc, "va-hfa-interop", common, "d2s, f3s, lds, mix");
+    drive_across_the_system_compiler(&cc, "va-fp-agg-interop", common, "d2s, f3s, lds, mix, lxs");
 }
 
 /// The platform C compiler on Windows: `$CC` when set, else clang on the path

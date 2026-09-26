@@ -13804,6 +13804,69 @@ fn variadic_hfa_elements_come_from_the_vector_save_area() {
     }
 }
 
+/// System V AMD64 3.5.7: `va_arg` takes each eightbyte of an aggregate from
+/// the save area of its class, checking room for all of them first -- two
+/// SSE eightbytes from the vector area, 16 bytes apart; an INTEGER and an
+/// SSE one from one area each -- and an x87 aggregate only from the
+/// overflow area.
+#[test]
+fn sysv_va_arg_takes_each_eightbyte_from_its_area() {
+    use crate::Target;
+    use crate::c5::codegen::x86_64::encode::{Reg, emit_mi, emit_mov_r32_mem, emit_ri};
+    use crate::c5::codegen::x86_64::table::Mnem;
+    const SRC: &str = "#include <stdarg.h>\n\
+        struct d2 { double x, y; };\n\
+        struct ld { long l; double d; };\n\
+        struct x87 { long double v; };\n\
+        double va_d2(int n, ...) { va_list ap; va_start(ap, n);\n\
+            struct d2 s = va_arg(ap, struct d2); va_end(ap); return s.x + s.y + n; }\n\
+        double va_ld(int n, ...) { va_list ap; va_start(ap, n);\n\
+            struct ld s = va_arg(ap, struct ld); va_end(ap); return s.l + s.d + n; }\n\
+        long double va_x87(int n, ...) { va_list ap; va_start(ap, n);\n\
+            struct x87 s = va_arg(ap, struct x87); va_end(ap); return s.v + n; }\n";
+    let (r10, r11) = (Reg(10), Reg(11));
+    let bytes = |f: &dyn Fn(&mut alloc::vec::Vec<u8>)| {
+        let mut v = alloc::vec::Vec::new();
+        f(&mut v);
+        v
+    };
+    // Load an offset field, check it, advance it.
+    let load_gp = bytes(&|v| emit_mov_r32_mem(v, r10, r11, 0));
+    let load_fp = bytes(&|v| emit_mov_r32_mem(v, r10, r11, 4));
+    let room = |limit| bytes(&|v| emit_ri(v, Mnem::Cmp, 8, r10, limit));
+    let step_gp = bytes(&|v| emit_mi(v, Mnem::Add, 4, r11, 0, 8));
+    let step_fp = bytes(&|v| emit_mi(v, Mnem::Add, 4, r11, 4, 16));
+    let obj = relocatable_object(SRC, Target::LinuxX64);
+    let has = |b: &[u8], seq: &[u8]| b.windows(seq.len()).any(|w| w == seq);
+    let count = |b: &[u8], seq: &[u8]| b.windows(seq.len()).filter(|w| *w == seq).count();
+    let d2 = function_bytes(&obj, "va_d2");
+    assert!(
+        has(&d2, &[load_fp.clone(), room(176 - 32)].concat()),
+        "va_d2: room for two"
+    );
+    assert_eq!(count(&d2, &step_fp), 2, "va_d2: two vector slots");
+    assert!(!has(&d2, &load_gp), "va_d2: reads gp_offset");
+    let ld = function_bytes(&obj, "va_ld");
+    assert!(
+        has(&ld, &[load_gp.clone(), room(48 - 8)].concat()),
+        "va_ld: room in the gp area"
+    );
+    assert!(
+        has(&ld, &[load_fp.clone(), room(176 - 16)].concat()),
+        "va_ld: room in the fp area"
+    );
+    assert_eq!(
+        (count(&ld, &step_gp), count(&ld, &step_fp)),
+        (1, 1),
+        "va_ld"
+    );
+    let x87 = function_bytes(&obj, "va_x87");
+    assert!(
+        !has(&x87, &load_gp) && !has(&x87, &load_fp),
+        "va_x87: reads a register save area"
+    );
+}
+
 /// Win64 passes every argument not of 1, 2, 4 or 8 bytes by reference, so `va_arg` loads it.
 #[test]
 fn win64_va_arg_reads_a_type_passed_by_reference_through_its_slot() {

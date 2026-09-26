@@ -96,6 +96,15 @@ symbol-export control (`--export-all`, `--export-data`). Invoked as `ld`,
 table, which is what lets it stand in for `LD=` in an existing build --
 including [the Linux kernel's](linux-kernel.md).
 
+Inputs enter the link in command-line order, after the startup runtime (where
+gcc puts `crt1.o`), so constructors of one priority run in that order and the
+first of two weak definitions wins. An ELF link takes archives as GNU ld does:
+an archive answers the references made ahead of it, rescanning itself until it
+adds nothing, `--start-group` / `--end-group` (`-(` / `-)`) rescan a span
+together, and a `-l` shared library answers the names it exports from its
+place on. A Mach-O or PE link searches every archive until nothing changes, as
+ld64 and link.exe do.
+
 ## What is supported
 
 c5 covers most of C99, the C11 and C23 features real code gates on, and a wide

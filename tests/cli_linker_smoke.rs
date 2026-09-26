@@ -313,6 +313,171 @@ fn on_demand_runtime_sources_compile_only_when_a_symbol_needs_them() {
     );
 }
 
+// Inputs enter the link in command-line order, as gcc hands them to the
+// linker: constructors of one priority run in that order, whether a unit
+// comes as a source or an object, and a `--whole-archive` member joins the
+// link unreferenced, at its archive's place.
+#[test]
+fn inputs_enter_the_link_in_command_line_order() {
+    let dir = tempdir("link-order");
+    for u in ["a", "b", "w"] {
+        write_source(
+            &dir,
+            &format!("{u}.c"),
+            &format!(
+                "extern char order[8];\nextern int seen;\n\
+                 __attribute__((constructor)) static void ctor_{u}(void) {{ order[seen++] = '{u}'; }}\n"
+            ),
+        );
+    }
+    write_source(
+        &dir,
+        "m.c",
+        "#include <stdio.h>\nchar order[8];\nint seen;\n\
+         int main(void) { fputs(order, stdout); return 0; }\n",
+    );
+    run(
+        Command::new(badc())
+            .args(["-q", "-c", "a.c", "b.c", "w.c"])
+            .current_dir(&dir),
+        "compile the units",
+    );
+    run(
+        Command::new(badc())
+            .args(["--ar", "-o", "libw.a", "w.o"])
+            .current_dir(&dir),
+        "archive w.o",
+    );
+    for (k, (inputs, want)) in [
+        (&["m.c", "a.o", "b.o"][..], "ab"),
+        (&["m.c", "b.o", "a.o"], "ba"),
+        (&["b.c", "m.c", "a.o"], "ba"),
+        (&["a.o", "m.c", "b.c"], "ab"),
+        (&["m.c", "libw.a", "a.o"], "a"),
+        (
+            &[
+                "b.o",
+                "-Wl,--whole-archive",
+                "libw.a",
+                "-Wl,--no-whole-archive",
+                "m.c",
+                "a.o",
+            ],
+            "bwa",
+        ),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        // A program just run may still be mapped by a scanner, so each
+        // link writes a new file.
+        let exe = dir.join(format!("prog{k}{}", std::env::consts::EXE_SUFFIX));
+        run(
+            Command::new(badc())
+                .arg("-q")
+                .args(inputs)
+                .arg("-o")
+                .arg(&exe)
+                .current_dir(&dir),
+            "link",
+        );
+        let out = run(&mut Command::new(&exe), "run the program");
+        assert_eq!(String::from_utf8_lossy(&out.stdout), want, "{inputs:?}");
+    }
+}
+
+// An ELF link takes archives as GNU ld does: an archive answers only the
+// references made ahead of it, a group's archives rescan together, and a
+// shared library answers the names it exports from its place on. A
+// Mach-O link searches every archive, as ld64 does.
+#[test]
+fn an_elf_link_takes_archives_where_the_command_line_puts_them() {
+    let dir = tempdir("archive-order");
+    write_source(&dir, "x.c", "int pick(void) { return 1; }\n");
+    write_source(&dir, "y.c", "int pick(void) { return 2; }\n");
+    write_source(
+        &dir,
+        "s.c",
+        "int pick(void);\nint second(void) { return pick(); }\n",
+    );
+    write_source(
+        &dir,
+        "m.c",
+        "int second(void);\nint main(void) { return second(); }\n",
+    );
+    let badc_in = |args: &[&str]| {
+        Command::new(badc())
+            .arg("-q")
+            .args(args)
+            .current_dir(&dir)
+            .output()
+            .expect("run badc")
+    };
+    // The ELF objects come last: the map checks below read them.
+    for target in ["--target=macos-aarch64", "--target=linux-x64"] {
+        let out = badc_in(&[target, "-c", "x.c", "y.c", "s.c", "m.c"]);
+        assert!(out.status.success(), "{target}: compile");
+        for (lib, obj) in [("libx.a", "x.o"), ("liby.a", "y.o"), ("libs.a", "s.o")] {
+            let out = badc_in(&[target, "--ar", "-o", lib, obj]);
+            assert!(out.status.success(), "{target}: archive {obj}");
+        }
+        let elf = target.ends_with("linux-x64");
+        let out = badc_in(&[target, "libs.a", "liby.a", "m.o", "-o", "z"]);
+        assert_eq!(
+            out.status.success(),
+            !elf,
+            "{target}: archives ahead of m.o"
+        );
+        if elf {
+            let err = String::from_utf8_lossy(&out.stderr);
+            assert!(err.contains("undefined reference to `second`"), "{err}");
+        }
+        let out = badc_in(&[target, "m.o", "liby.a", "libs.a", "-o", "z"]);
+        assert_eq!(out.status.success(), !elf, "{target}: liby.a ahead of s.o");
+        for group in [
+            &["-Wl,--start-group", "-ly", "-ls", "-Wl,--end-group"][..],
+            &["-Wl,-(", "liby.a", "libs.a", "-Wl,-)"],
+        ] {
+            let out = badc_in(&[&[target, "m.o", "-L."][..], group, &["-o", "z"]].concat());
+            assert!(out.status.success(), "{target}: {group:?}");
+        }
+    }
+    // `pick` comes from the archive after its referrer; a shared library
+    // ahead of an archive answers it instead.
+    let out = badc_in(&[
+        "--target=linux-x64",
+        "-shared",
+        "--export-all",
+        "y.c",
+        "-o",
+        "libyy.so",
+    ]);
+    assert!(out.status.success(), "build libyy.so");
+    for (inputs, pulled) in [
+        (&["m.o", "libx.a", "s.o", "liby.a"][..], "liby.a(y.o)"),
+        (&["m.o", "s.o", "libx.a", "liby.a"], "libx.a(x.o)"),
+        (&["m.o", "-L.", "-lyy", "s.o", "libx.a"], ""),
+    ] {
+        let out = badc_in(
+            &[
+                &["--target=linux-x64"][..],
+                inputs,
+                &["-o", "z", "-Map", "z.map"],
+            ]
+            .concat(),
+        );
+        assert!(out.status.success(), "{inputs:?}");
+        let map = std::fs::read_to_string(dir.join("z.map")).expect("read the map");
+        for member in ["libx.a(x.o)", "liby.a(y.o)"] {
+            assert_eq!(
+                map.contains(member),
+                member == pulled,
+                "{inputs:?}: {member}"
+            );
+        }
+    }
+}
+
 // A cross link reads none of the host's libraries. The host's C
 // library exports names the target's does not -- `fnmatch` is one
 // glibc has and msvcrt lacks -- and resolving a reference against the

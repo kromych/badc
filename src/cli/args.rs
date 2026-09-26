@@ -180,10 +180,23 @@ impl Default for Codegen {
     }
 }
 
+/// A link input list entry besides the positional files.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum LinkMarker {
+    /// `-l<name>`.
+    Lib(String),
+    /// `--start-group` / `-(` when true, `--end-group` / `-)` when false.
+    Group(bool),
+    /// `--whole-archive` when true, `--no-whole-archive` when false.
+    WholeArchive(bool),
+}
+
 /// Options that shape a link.
 #[derive(Clone)]
 pub(crate) struct Link {
-    pub(crate) lib_names: Vec<String>,
+    /// The `-l`, group and `--whole-archive` entries in command-line
+    /// order, each with the index of the positional input it precedes.
+    pub(crate) markers: Vec<(usize, LinkMarker)>,
     pub(crate) library_paths: Vec<String>,
     /// `-T` / `--script`: switches to the per-input-section engine.
     pub(crate) script_path: Option<PathBuf>,
@@ -211,18 +224,49 @@ pub(crate) struct Link {
     pub(crate) subsystem: Option<badc::Subsystem>,
     pub(crate) map_path: Option<PathBuf>,
     pub(crate) print_map: bool,
-    /// `--whole-archive` spans, as half-open ranges over the positional
-    /// input indexes.
-    pub(crate) whole_archive: Vec<(usize, usize)>,
     /// The last of `-pie` / `-no-pie`: whether an executable is
     /// position-independent. `None` keeps the link's default.
     pub(crate) pie: Option<bool>,
 }
 
+impl Link {
+    /// The `-l` names, in command-line order.
+    pub(crate) fn lib_names(&self) -> impl Iterator<Item = &str> {
+        self.markers.iter().filter_map(|(_, m)| match m {
+            LinkMarker::Lib(name) => Some(name.as_str()),
+            _ => None,
+        })
+    }
+
+    /// Group bounds pair up without nesting, as GNU ld requires of the
+    /// command line; a group a linker script opens may sit inside one.
+    fn check_groups(&self) -> Result<(), ParseError> {
+        let mut open = false;
+        for (_, m) in &self.markers {
+            let msg = match m {
+                LinkMarker::Group(true) if open => "--start-group may not be nested",
+                LinkMarker::Group(false) if !open => "--end-group without --start-group",
+                LinkMarker::Group(start) => {
+                    open = *start;
+                    continue;
+                }
+                _ => continue,
+            };
+            return Err(ParseError::diag(format!("badc: error: {msg}")));
+        }
+        if open {
+            return Err(ParseError::diag(
+                "badc: error: --start-group without --end-group",
+            ));
+        }
+        Ok(())
+    }
+}
+
 impl Default for Link {
     fn default() -> Self {
         Self {
-            lib_names: Vec::new(),
+            markers: Vec::new(),
             library_paths: Vec::new(),
             script_path: None,
             orphan_handling: badc::OrphanHandling::Place,
@@ -241,7 +285,6 @@ impl Default for Link {
             subsystem: None,
             map_path: None,
             print_map: false,
-            whole_archive: Vec::new(),
             pie: None,
         }
     }
@@ -386,7 +429,6 @@ struct Parser {
     ssp_guard_kind: Option<&'static str>,
     ssp_guard_reg: Option<String>,
     ssp_guard_offset: Option<i32>,
-    whole_archive_open: Option<usize>,
     /// The `-gdwarf` family's request, checked against what the
     /// emitter produces once the whole line is read.
     dwarf: DwarfRequest,
@@ -1460,6 +1502,10 @@ impl Parser {
             // The link records a `-l` shared library only when it
             // satisfies a reference, which is what `--as-needed` asks for.
             "--as-needed" => {}
+            "-(" | "-)" => self
+                .link
+                .markers
+                .push((self.positional.len(), LinkMarker::Group(arg == "-("))),
             _ => return false,
         }
         true
@@ -1486,10 +1532,14 @@ impl Parser {
             "--print-map" => link.print_map = true,
             "-pie" => link.pie = Some(true),
             "-no-pie" => link.pie = Some(false),
-            "-l" => link
-                .lib_names
-                .push(operand(iter, "badc: error: -l requires a library name")?),
-            s if s.starts_with("-l") && s.len() > 2 => link.lib_names.push(s[2..].to_string()),
+            "-l" => {
+                let name = operand(iter, "badc: error: -l requires a library name")?;
+                link.markers
+                    .push((self.positional.len(), LinkMarker::Lib(name)));
+            }
+            s if s.starts_with("-l") && s.len() > 2 => link
+                .markers
+                .push((self.positional.len(), LinkMarker::Lib(s[2..].to_string()))),
             "-L" => link
                 .library_paths
                 .push(operand(iter, "badc: error: -L requires a directory")?),
@@ -1637,15 +1687,14 @@ impl Parser {
                     }
                 }
             }
-            "--whole-archive" => self.whole_archive_open = Some(self.positional.len()),
-            "--no-whole-archive" => {
-                if let Some(start) = self.whole_archive_open.take() {
-                    link.whole_archive.push((start, self.positional.len()));
-                }
-            }
-            // Group markers: the script-link archive loop already
-            // rescans every archive to a fixed point.
-            "--start-group" | "--end-group" => {}
+            "--whole-archive" | "--no-whole-archive" => link.markers.push((
+                self.positional.len(),
+                LinkMarker::WholeArchive(arg == "--whole-archive"),
+            )),
+            "--start-group" | "--end-group" => link.markers.push((
+                self.positional.len(),
+                LinkMarker::Group(arg == "--start-group"),
+            )),
             _ => return Ok(false),
         }
         Ok(true)
@@ -1759,6 +1808,7 @@ impl Parser {
         self.apply_mcpu(target)?;
         self.check_code_model(mode, target)?;
         self.check_exec_form(mode, target)?;
+        self.link.check_groups()?;
         // VM-only flags.
         if (self.track_pointers || self.trace) && mode != Mode::Interp {
             return Err(ParseError::plain(format!(
@@ -1805,9 +1855,6 @@ impl Parser {
             Some(_) => badc::ElfClass::Elf32,
             None => badc::ElfClass::Elf64,
         };
-        if let Some(start) = self.whole_archive_open.take() {
-            self.link.whole_archive.push((start, self.positional.len()));
-        }
         let deps = self.dep.kind.map(|kind| DepOptions {
             kind,
             system: self.dep.system,
@@ -2331,7 +2378,13 @@ mod tests {
             cli.link.library_paths,
             vec!["dir".to_string(), "dir2".to_string()]
         );
-        assert_eq!(cli.link.lib_names, vec!["m".to_string(), "c".to_string()]);
+        assert_eq!(
+            cli.link.markers,
+            [
+                (1, LinkMarker::Lib("m".to_string())),
+                (1, LinkMarker::Lib("c".to_string()))
+            ]
+        );
         assert_eq!(
             reject(&["-L"]),
             ("badc: error: -L requires a directory".to_string(), 1)
@@ -3056,7 +3109,13 @@ mod tests {
         assert_eq!(cli.exec_form(), badc::ExecForm::Placed);
         let cli = parse(&[X64, "-Wl,--whole-archive,libx.a,--no-whole-archive", "a.c"]);
         assert_eq!(cli.positional[1..], ["libx.a", "a.c"]);
-        assert_eq!(cli.link.whole_archive, vec![(1, 2)]);
+        assert_eq!(
+            cli.link.markers,
+            [
+                (1, LinkMarker::WholeArchive(true)),
+                (2, LinkMarker::WholeArchive(false))
+            ]
+        );
         for (args, want) in [
             (
                 &[X64, "-Wl,--version-script=v.map", "a.c"][..],
@@ -3293,14 +3352,43 @@ mod tests {
         );
     }
 
+    /// Each marker stands before the positional input it precedes
+    /// (`positional[0]` is argv[0]), so a `-l` inside a span stays inside.
     #[test]
-    fn whole_archive_spans_the_positionals_it_encloses() {
-        // `positional[0]` is argv[0], so the span covers `b.a` alone.
-        let cli = parse(&["a.o", "--whole-archive", "b.a", "--no-whole-archive", "c.a"]);
-        assert_eq!(cli.link.whole_archive, vec![(2, 3)]);
-        // An unclosed span runs to the end of the command line.
-        let cli = parse(&["a.o", "--whole-archive", "b.a", "c.a"]);
-        assert_eq!(cli.link.whole_archive, vec![(2, 4)]);
+    fn link_markers_keep_their_place_among_the_positionals() {
+        let cli = parse(&[
+            "a.o",
+            "--whole-archive",
+            "b.a",
+            "-lx",
+            "--no-whole-archive",
+            "-Wl,--start-group,-ly,c.a,-)",
+            "-lz",
+        ]);
+        assert_eq!(cli.positional[1..], ["a.o", "b.a", "c.a"]);
+        assert_eq!(
+            cli.link.markers,
+            [
+                (2, LinkMarker::WholeArchive(true)),
+                (3, LinkMarker::Lib("x".to_string())),
+                (3, LinkMarker::WholeArchive(false)),
+                (3, LinkMarker::Group(true)),
+                (3, LinkMarker::Lib("y".to_string())),
+                (4, LinkMarker::Group(false)),
+                (4, LinkMarker::Lib("z".to_string())),
+            ]
+        );
+        for (args, msg) in [
+            (
+                &["--start-group", "--start-group", "a.a"][..],
+                "may not be nested",
+            ),
+            (&["a.a", "--end-group"], "--end-group without --start-group"),
+            (&["-Wl,-(", "a.a"], "--start-group without --end-group"),
+        ] {
+            let (text, code) = reject(args);
+            assert!(text.contains(msg) && code == 1, "{args:?}: {text}");
+        }
     }
 
     #[test]

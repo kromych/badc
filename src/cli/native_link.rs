@@ -7,7 +7,7 @@ use super::compile::{CompileCfg, compile_native_tu, compile_units, worker_count}
 use super::diag::{eprint_diagnostic, eprint_error, rendered};
 
 use super::inputs::{
-    Inputs, StdinSource, fat_slice_for_target, machine_label, target_machine,
+    Inputs, LinkInput, StdinSource, fat_slice_for_target, machine_label, target_machine,
     unreadable_object_reason,
 };
 use super::options::Mode;
@@ -34,15 +34,12 @@ use super::stats::LinkStats;
 pub(crate) fn link_image(cli: &Cli, inputs: Inputs, stdin: &StdinSource) {
     let Inputs {
         sources,
-        objects,
-        archives,
+        ordered,
         mut shared_libs,
         mut target_libc,
         ..
     } = inputs;
     let mut stats = LinkStats::new();
-    let mut native_objs: Vec<badc::NativeObject> =
-        Vec::with_capacity(sources.len() + objects.len() + archives.len());
 
     // These objects are linked into an image below. A position-
     // independent one takes its data relocations at load time (ELF
@@ -96,6 +93,7 @@ pub(crate) fn link_image(cli: &Cli, inputs: Inputs, stdin: &StdinSource) {
     let tus = compile_units(&sources, workers, |_, src| {
         compile_native_tu(src, &[], &cfg)
     });
+    let mut source_objs: Vec<Option<badc::NativeObject>> = Vec::with_capacity(sources.len());
     for (i, mut tu) in tus.into_iter().enumerate() {
         if entry_override.is_none() {
             entry_override = tu.entry;
@@ -105,7 +103,7 @@ pub(crate) fn link_image(cli: &Cli, inputs: Inputs, stdin: &StdinSource) {
         }
         source_auto_includes.push(tu.auto_includes);
         tu.obj.source = sources[i].clone();
-        native_objs.push(tu.obj);
+        source_objs.push(Some(tu.obj));
     }
     stats.mark("compile");
     // `--freestanding` drops the embedded startup runtime: the
@@ -134,29 +132,45 @@ pub(crate) fn link_image(cli: &Cli, inputs: Inputs, stdin: &StdinSource) {
             .unwrap_or("__c5_entry")
             .to_string()
     });
-    embedded.push_runtime(
-        entry_override.as_deref(),
-        subsystem_override,
-        &mut native_objs,
-    );
+    // gcc's order: the startup runtime where crt1.o stands, then the
+    // inputs as the command line gives them.
+    let mut runtime = Vec::new();
+    embedded.push_runtime(entry_override.as_deref(), subsystem_override, &mut runtime);
+    let mut slots = vec![Slot::Fixed(runtime)];
     stats.mark("runtime");
-    native_objs.extend(read_object_inputs(&objects, cli.target));
+    let mut source_slots = vec![0; sources.len()];
+    for input in ordered {
+        slots.push(match input {
+            LinkInput::Source(i) => {
+                source_slots[i] = slots.len();
+                Slot::Fixed(source_objs[i].take().into_iter().collect())
+            }
+            LinkInput::Object(path) => Slot::Fixed(vec![read_object_input(&path, cli.target)]),
+            LinkInput::Archive { path, whole } => {
+                let members = read_archive_members(&path, cli.target);
+                if whole {
+                    Slot::Fixed(members)
+                } else {
+                    Slot::lazy(members)
+                }
+            }
+            LinkInput::Shared(i) => Slot::Shared(i),
+            LinkInput::Group(open) => Slot::Group(open),
+        });
+    }
     stats.mark("parse");
-    let mut pending = read_archive_members(&archives, cli.target);
-    stats.mark("archives");
     rebind_auto_includes(
         &cfg,
         &mut embedded,
-        &mut native_objs,
-        &mut pending,
+        &mut slots,
+        &source_slots,
         &source_auto_includes,
         &sources,
         &mut stats,
     );
-    let archive_inclusions = select_archive_members(
+    let (native_objs, archive_inclusions) = select_archive_members(
         &mut embedded,
-        &mut native_objs,
-        &mut pending,
+        slots,
         &mut shared_libs,
         &mut target_libc,
         freestanding_entry.as_deref(),
@@ -366,8 +380,9 @@ impl EmbeddedSources<'_> {
     /// that references none of them, so it is never pulled. Whether the
     /// selection stalls turns on the link's inputs, the host's C library
     /// among them, so this compile stays out of the `--dump-ssa` output.
-    fn load_pool(&mut self, pending: &mut Vec<Option<badc::NativeObject>>, stats: &mut LinkStats) {
+    fn load_pool(&mut self, stats: &mut LinkStats) -> Slot {
         self.pool_loaded = true;
+        let mut members = Vec::new();
         let on_demand = badc::embedded_compiler_rt()
             .iter()
             .map(|e| ("compiler-rt", e))
@@ -383,7 +398,7 @@ impl EmbeddedSources<'_> {
             match badc::parse_native_elf(&bytes) {
                 Ok(mut o) => {
                     o.source = label;
-                    pending.push(Some(o));
+                    members.push(o);
                 }
                 Err(e) => {
                     eprint_diagnostic(format!("badc: {label}: {e}"));
@@ -392,35 +407,90 @@ impl EmbeddedSources<'_> {
             }
         }
         stats.mark("rtlib");
+        Slot::lazy(members)
     }
 }
 
-/// Read and parse every `.o` input.
-fn read_object_inputs(objects: &[String], target: badc::Target) -> Vec<badc::NativeObject> {
-    let mut out = Vec::with_capacity(objects.len());
-    for obj_path in objects {
-        let bytes = match std::fs::read(obj_path) {
-            Ok(b) => b,
-            Err(e) => {
-                eprint_diagnostic(format!("badc: error: cannot read `{obj_path}`: {e}"));
-                std::process::exit(1);
-            }
-        };
-        let bytes = fat_slice_for_target(bytes, target);
-        if !badc::is_native_object(&bytes) {
+/// Read and parse a `.o` input.
+fn read_object_input(obj_path: &str, target: badc::Target) -> badc::NativeObject {
+    let bytes = match std::fs::read(obj_path) {
+        Ok(b) => b,
+        Err(e) => {
+            eprint_diagnostic(format!("badc: error: cannot read `{obj_path}`: {e}"));
+            std::process::exit(1);
+        }
+    };
+    let bytes = fat_slice_for_target(bytes, target);
+    if !badc::is_native_object(&bytes) {
+        eprint_diagnostic(format!(
+            "badc: error: `{obj_path}`: {}",
+            unreadable_object_reason(&bytes, target)
+        ));
+        std::process::exit(1);
+    }
+    match badc::parse_native_object(&bytes) {
+        Ok(mut o) => {
+            o.source = obj_path.to_string();
+            o
+        }
+        Err(e) => {
+            eprint_diagnostic(format!("badc: {obj_path}: {e}"));
+            std::process::exit(1);
+        }
+    }
+}
+
+/// Read and parse an `.a` input's members.
+fn read_archive_members(a_path: &str, target: badc::Target) -> Vec<badc::NativeObject> {
+    let bytes = match std::fs::read(a_path) {
+        Ok(b) => b,
+        Err(e) => {
+            eprint_diagnostic(format!("badc: error: cannot read `{a_path}`: {e}"));
+            std::process::exit(1);
+        }
+    };
+    // A universal (fat) archive wraps one archive per
+    // architecture; read the slice matching the target.
+    if badc::is_mach_o_fat(&bytes)
+        && badc::mach_o_fat_slice(&bytes, target_machine(target)).is_none()
+    {
+        eprint_diagnostic(format!(
+            "badc: error: `{a_path}` is a universal (fat) container with no {} slice",
+            machine_label(target_machine(target)),
+        ));
+        std::process::exit(1);
+    }
+    let bytes = fat_slice_for_target(bytes, target);
+    // A GNU thin archive stores only member paths; resolve them
+    // against the archive's own directory.
+    let base_dir = std::path::Path::new(a_path).parent();
+    let members = match badc::read_archive_at(&bytes, base_dir) {
+        Ok(m) => m,
+        Err(e) => {
+            eprint_diagnostic(format!("badc: {a_path}: {e}"));
+            std::process::exit(1);
+        }
+    };
+    let mut out = Vec::with_capacity(members.len());
+    for m in members {
+        // A member may itself be a fat object (`lipo` output
+        // archived as-is).
+        let member_bytes = fat_slice_for_target(m.bytes, target);
+        if !badc::is_native_object(&member_bytes) {
             eprint_diagnostic(format!(
-                "badc: error: `{obj_path}`: {}",
-                unreadable_object_reason(&bytes, target)
+                "badc: error: archive `{a_path}` member `{}`: {}",
+                m.name,
+                unreadable_object_reason(&member_bytes, target)
             ));
             std::process::exit(1);
         }
-        match badc::parse_native_object(&bytes) {
+        match badc::parse_native_object(&member_bytes) {
             Ok(mut o) => {
-                o.source = obj_path.clone();
+                o.source = format!("{a_path}({})", m.name);
                 out.push(o);
             }
             Err(e) => {
-                eprint_diagnostic(format!("badc: {obj_path}: {e}"));
+                eprint_diagnostic(format!("badc: {a_path}({}): {e}", m.name));
                 std::process::exit(1);
             }
         }
@@ -428,74 +498,29 @@ fn read_object_inputs(objects: &[String], target: badc::Target) -> Vec<badc::Nat
     out
 }
 
-/// Read every `.a` input into the pool selection draws from.
-fn read_archive_members(
-    archives: &[String],
-    target: badc::Target,
-) -> Vec<Option<badc::NativeObject>> {
-    // Archive members join the link on demand: a member is
-    // included iff it defines a symbol some already-included
-    // object still leaves undefined, iterated to a fixpoint so a
-    // pulled member's own references can pull further members
-    // (from any archive). Unreferenced members stay out, so their
-    // unrelated undefined or duplicate symbols cannot fail a
-    // valid link.
-    let mut pending: Vec<Option<badc::NativeObject>> = Vec::new();
-    for a_path in archives {
-        let bytes = match std::fs::read(a_path) {
-            Ok(b) => b,
-            Err(e) => {
-                eprint_diagnostic(format!("badc: error: cannot read `{a_path}`: {e}"));
-                std::process::exit(1);
-            }
-        };
-        // A universal (fat) archive wraps one archive per
-        // architecture; read the slice matching the target.
-        if badc::is_mach_o_fat(&bytes)
-            && badc::mach_o_fat_slice(&bytes, target_machine(target)).is_none()
-        {
-            eprint_diagnostic(format!(
-                "badc: error: `{a_path}` is a universal (fat) container with no {} slice",
-                machine_label(target_machine(target)),
-            ));
-            std::process::exit(1);
-        }
-        let bytes = fat_slice_for_target(bytes, target);
-        // A GNU thin archive stores only member paths; resolve them
-        // against the archive's own directory.
-        let base_dir = std::path::Path::new(a_path).parent();
-        let members = match badc::read_archive_at(&bytes, base_dir) {
-            Ok(m) => m,
-            Err(e) => {
-                eprint_diagnostic(format!("badc: {a_path}: {e}"));
-                std::process::exit(1);
-            }
-        };
-        for m in members {
-            // A member may itself be a fat object (`lipo` output
-            // archived as-is).
-            let member_bytes = fat_slice_for_target(m.bytes, target);
-            if !badc::is_native_object(&member_bytes) {
-                eprint_diagnostic(format!(
-                    "badc: error: archive `{a_path}` member `{}`: {}",
-                    m.name,
-                    unreadable_object_reason(&member_bytes, target)
-                ));
-                std::process::exit(1);
-            }
-            match badc::parse_native_object(&member_bytes) {
-                Ok(mut o) => {
-                    o.source = format!("{a_path}({})", m.name);
-                    pending.push(Some(o));
-                }
-                Err(e) => {
-                    eprint_diagnostic(format!("badc: {a_path}({}): {e}", m.name));
-                    std::process::exit(1);
-                }
-            }
+/// One link input in command-line order, read.
+enum Slot {
+    /// Objects the link includes whole: the startup runtime, a source's,
+    /// a `.o`, a `--whole-archive` archive's members.
+    Fixed(Vec<badc::NativeObject>),
+    /// An archive's members, each moved to `pulled` when the link needs it.
+    Lazy {
+        members: Vec<Option<badc::NativeObject>>,
+        pulled: Vec<badc::NativeObject>,
+    },
+    /// `shared_libs[i]`.
+    Shared(usize),
+    /// A group opens (true) or closes.
+    Group(bool),
+}
+
+impl Slot {
+    fn lazy(members: Vec<badc::NativeObject>) -> Self {
+        Slot::Lazy {
+            members: members.into_iter().map(Some).collect(),
+            pulled: Vec::new(),
         }
     }
-    pending
 }
 
 /// C89 6.3.2.2 link semantics: a definition anywhere in the link set
@@ -506,25 +531,29 @@ fn read_archive_members(
 fn rebind_auto_includes(
     cfg: &CompileCfg,
     embedded: &mut EmbeddedSources,
-    native_objs: &mut [badc::NativeObject],
-    pending: &mut Vec<Option<badc::NativeObject>>,
+    slots: &mut Vec<Slot>,
+    source_slots: &[usize],
     source_auto_includes: &[Vec<String>],
     sources: &[String],
     stats: &mut LinkStats,
 ) {
-    // C89 6.3.2.2 link semantics: a definition anywhere in the
-    // link set satisfies an implicitly declared call, so a name
-    // the auto-include retry bound to a header's library binding
-    // is recompiled as an implicit extern when an input defines
-    // it -- the user's definition wins over the binding.
-    if source_auto_includes.iter().any(|a| !a.is_empty()) {
-        // The scan folds unpulled pool members into `defined_fns`, so
-        // the on-demand sources must be in the pool here.
-        if !embedded.pool_loaded {
-            embedded.load_pool(pending, stats);
-        }
-        let mut defined_fns = std::collections::HashSet::<String>::new();
-        for o in native_objs.iter().chain(pending.iter().flatten()) {
+    if source_auto_includes.iter().all(|a| a.is_empty()) {
+        return;
+    }
+    // The scan folds unpulled pool members into `defined_fns`, so the
+    // on-demand sources join the link here, as its last archive.
+    if !embedded.pool_loaded {
+        let pool = embedded.load_pool(stats);
+        slots.push(pool);
+    }
+    let mut defined_fns = std::collections::HashSet::<String>::new();
+    for slot in slots.iter() {
+        let objs: Vec<&badc::NativeObject> = match slot {
+            Slot::Fixed(objs) => objs.iter().collect(),
+            Slot::Lazy { members, .. } => members.iter().flatten().collect(),
+            Slot::Shared(_) | Slot::Group(_) => Vec::new(),
+        };
+        for o in objs {
             for s in &o.symbols {
                 // STB_GLOBAL STT_FUNC section-resident definitions.
                 if s.binding == 1
@@ -538,141 +567,199 @@ fn rebind_auto_includes(
                 }
             }
         }
-        for (i, autos) in source_auto_includes.iter().enumerate() {
-            let redirect: Vec<String> = autos
-                .iter()
-                .filter(|n| defined_fns.contains(n.as_str()))
-                .cloned()
-                .collect();
-            if redirect.is_empty() {
-                continue;
+    }
+    for (i, autos) in source_auto_includes.iter().enumerate() {
+        let redirect: Vec<String> = autos
+            .iter()
+            .filter(|n| defined_fns.contains(n.as_str()))
+            .cloned()
+            .collect();
+        if redirect.is_empty() {
+            continue;
+        }
+        if !cfg.quiet {
+            for n in &redirect {
+                eprint_diagnostic(format!(
+                    "info: the link defines `{n}`; rebinding the call in {} to it",
+                    sources[i]
+                ));
             }
-            if !cfg.quiet {
-                for n in &redirect {
-                    eprint_diagnostic(format!(
-                        "info: the link defines `{n}`; rebinding the call in {} to it",
-                        sources[i]
-                    ));
-                }
+        }
+        // The retry is sequential (rare, and only for sources
+        // the link redefines); flush its log inline.
+        let (log, res) = compile_native_tu(&sources[i], &redirect, cfg);
+        log.flush();
+        match res {
+            Ok(mut tu) => {
+                tu.obj.source = sources[i].clone();
+                slots[source_slots[i]] = Slot::Fixed(vec![tu.obj]);
             }
-            // The retry is sequential (rare, and only for sources
-            // the link redefines); flush its log inline.
-            let (log, res) = compile_native_tu(&sources[i], &redirect, cfg);
-            log.flush();
-            match res {
-                Ok(mut tu) => {
-                    tu.obj.source = sources[i].clone();
-                    native_objs[i] = tu.obj;
-                }
-                Err(()) => std::process::exit(1),
-            }
+            Err(()) => std::process::exit(1),
         }
     }
 }
 
-/// Pull the archive members the link needs, to a fixed point, and
-/// materialize the target C library over whatever stays undefined.
-fn select_archive_members(
-    embedded: &mut EmbeddedSources,
-    native_objs: &mut Vec<badc::NativeObject>,
-    pending: &mut Vec<Option<badc::NativeObject>>,
-    shared_libs: &mut Vec<badc::SharedLibrary>,
-    target_libc: &mut Option<badc::TargetCLibrary>,
-    freestanding_entry: Option<&str>,
-    stats: &mut LinkStats,
-) -> Vec<badc::ArchiveInclusion> {
-    let mut archive_inclusions: Vec<badc::ArchiveInclusion> = Vec::new();
-    let mut defined = hashbrown::HashSet::<String>::new();
-    // Unresolved strong references, each keyed to the first
-    // input that made it (the link map's "referenced by" file).
-    let mut undefined = hashbrown::HashMap::<String, String>::new();
-    {
-        // A global or weak definition satisfies references; only a
-        // strong (STB_GLOBAL) undefined reference pulls a member,
-        // matching ELF archive practice (a weak reference left
-        // unresolved does not extract members).
-        let account = |o: &badc::NativeObject,
-                       defined: &mut hashbrown::HashSet<String>,
-                       undefined: &mut hashbrown::HashMap<String, String>| {
-            for s in &o.symbols {
-                if s.binding == 0 {
-                    continue;
-                }
-                if s.section == badc::NativeSymSection::Undef {
-                    if s.binding == 1 && !defined.contains(&s.name) {
-                        undefined
-                            .entry(s.name.clone())
-                            .or_insert_with(|| o.source.clone());
-                    }
-                } else {
-                    defined.insert(s.name.clone());
-                    undefined.remove(&s.name);
-                }
+/// What archive selection knows as it walks the inputs: names defined so
+/// far, strong references still unresolved (each keyed to the first
+/// input that made it, the link map's "referenced by" file), and the
+/// names a shared library earlier on the line exports.
+#[derive(Default)]
+struct Selection {
+    defined: hashbrown::HashSet<String>,
+    undefined: hashbrown::HashMap<String, String>,
+    shared: hashbrown::HashSet<String>,
+    inclusions: Vec<badc::ArchiveInclusion>,
+}
+
+impl Selection {
+    /// A global or weak definition satisfies references; only a strong
+    /// (STB_GLOBAL) undefined reference pulls a member, matching ELF
+    /// archive practice.
+    fn account(&mut self, o: &badc::NativeObject) {
+        for s in &o.symbols {
+            if s.binding == 0 {
+                continue;
             }
-        };
-        for o in native_objs.iter() {
-            account(o, &mut defined, &mut undefined);
+            if s.section != badc::NativeSymSection::Undef {
+                self.defined.insert(s.name.clone());
+                self.undefined.remove(&s.name);
+            } else if s.binding == 1
+                && !self.defined.contains(&s.name)
+                && !self.shared.contains(&s.name)
+            {
+                self.undefined
+                    .entry(s.name.clone())
+                    .or_insert_with(|| o.source.clone());
+            }
         }
-        // A freestanding entry is a link root: seed it as undefined
-        // so an archive member that only defines the entry is pulled.
-        if let Some(entry) = freestanding_entry
-            && !defined.contains(entry)
-        {
-            undefined
-                .entry(entry.to_string())
-                .or_insert_with(|| "<command line>".to_string());
-        }
-        // The archive symbol index lists strong section-resident
-        // definitions; a member is pulled on exactly those. A pulled
-        // member is taken out of its slot rather than removed from
-        // the pool: an object is large, and compacting the pool per
-        // pull would move every later member's record again.
-        let mut progress = true;
+    }
+
+    /// Pull the members of the archives at `span` that define a name
+    /// still undefined, until a pass over all of them pulls none. The
+    /// archive symbol index lists strong section-resident definitions; a
+    /// member is pulled on exactly those.
+    fn pull(&mut self, slots: &mut [Slot], span: &[usize]) {
         loop {
-            while progress {
-                progress = false;
-                for slot in pending.iter_mut() {
-                    let wanted = slot.as_ref().and_then(|o| {
+            let mut progress = false;
+            for &k in span {
+                let Slot::Lazy { members, pulled } = &mut slots[k] else {
+                    continue;
+                };
+                for member in members.iter_mut() {
+                    let wanted = member.as_ref().and_then(|o| {
                         o.symbols.iter().find_map(|s| {
                             (s.binding == 1
                                 && !matches!(
                                     s.section,
                                     badc::NativeSymSection::Undef | badc::NativeSymSection::Abs
                                 )
-                                && undefined.contains_key(&s.name))
+                                && self.undefined.contains_key(&s.name))
                             .then(|| s.name.clone())
                         })
                     });
                     if let Some(symbol) = wanted {
-                        let o = slot.take().expect("a wanted slot is occupied");
-                        archive_inclusions.push(badc::ArchiveInclusion {
+                        let o = member.take().expect("a wanted member is present");
+                        self.inclusions.push(badc::ArchiveInclusion {
                             member: o.source.clone(),
-                            referenced_by: undefined.get(&symbol).cloned().unwrap_or_default(),
+                            referenced_by: self.undefined.get(&symbol).cloned().unwrap_or_default(),
                             symbol,
                         });
-                        account(&o, &mut defined, &mut undefined);
-                        native_objs.push(o);
+                        self.account(&o);
+                        pulled.push(o);
                         progress = true;
                     }
                 }
             }
-            // The real archives stalled; offer the on-demand
-            // sources once and resume. A name a `-l` shared
-            // library or the target's C library exports resolves as
-            // a load-time import, so it does not call for the pool
-            // -- matching a system linker, where the implicit C
-            // library sits after the archives on the line.
-            if embedded.pool_loaded
-                || undefined.keys().all(|n| {
-                    badc::link_resolves_symbol(n)
-                        || shared_libs.iter().any(|l| l.exports.contains(n))
-                        || target_libc.as_mut().is_some_and(|l| l.admit(n))
-                })
-            {
-                break;
+            if !progress {
+                return;
             }
-            embedded.load_pool(pending, stats);
-            progress = true;
+        }
+    }
+}
+
+/// Pull the archive members the link needs and materialize the target C
+/// library over whatever stays undefined; the included objects come back
+/// in link order, each archive's members at its place in pull order. An
+/// ELF link resolves as GNU ld does: an archive answers the references
+/// made before it, rescanning itself (a group, its archives together)
+/// until it pulls nothing, and a shared library the names it exports
+/// from its place on. Mach-O and PE links search every archive until
+/// nothing changes, as ld64 and link.exe do.
+fn select_archive_members(
+    embedded: &mut EmbeddedSources,
+    mut slots: Vec<Slot>,
+    shared_libs: &mut Vec<badc::SharedLibrary>,
+    target_libc: &mut Option<badc::TargetCLibrary>,
+    freestanding_entry: Option<&str>,
+    stats: &mut LinkStats,
+) -> (Vec<badc::NativeObject>, Vec<badc::ArchiveInclusion>) {
+    let in_order = embedded.cli.target.binary_format() == badc::BinaryFormat::Elf;
+    let mut sel = Selection::default();
+    // A freestanding entry is a link root: seed it as undefined so an
+    // archive member that only defines the entry is pulled.
+    if let Some(entry) = freestanding_entry {
+        sel.undefined
+            .insert(entry.to_string(), "<command line>".to_string());
+    }
+    let (mut depth, mut group) = (0usize, Vec::new());
+    for k in 0..slots.len() {
+        match &slots[k] {
+            Slot::Fixed(objs) => objs.iter().for_each(|o| sel.account(o)),
+            Slot::Lazy { .. } if !in_order => {}
+            Slot::Lazy { .. } if depth > 0 => group.push(k),
+            Slot::Lazy { .. } => sel.pull(&mut slots, &[k]),
+            Slot::Shared(i) if in_order => {
+                for name in &shared_libs[*i].exports {
+                    sel.undefined.remove(name);
+                    sel.shared.insert(name.clone());
+                }
+            }
+            Slot::Shared(_) => {}
+            // The bounds pair up; a script's group joins the one it is in.
+            Slot::Group(true) => depth += 1,
+            Slot::Group(false) => {
+                depth -= 1;
+                if depth == 0 {
+                    sel.pull(&mut slots, &core::mem::take(&mut group));
+                }
+            }
+        }
+    }
+    let all_lazy = |slots: &[Slot]| -> Vec<usize> {
+        (0..slots.len())
+            .filter(|&k| matches!(slots[k], Slot::Lazy { .. }))
+            .collect()
+    };
+    if !in_order {
+        let span = all_lazy(&slots);
+        sel.pull(&mut slots, &span);
+    }
+    // The inputs stalled; offer the on-demand sources once, as the last
+    // archive. A name a `-l` shared library or the target's C library
+    // exports resolves as a load-time import, so it does not call for
+    // them -- matching a system linker, where the implicit C library
+    // sits after the archives on the line.
+    if !embedded.pool_loaded
+        && !sel.undefined.keys().all(|n| {
+            badc::link_resolves_symbol(n)
+                || shared_libs.iter().any(|l| l.exports.contains(n))
+                || target_libc.as_mut().is_some_and(|l| l.admit(n))
+        })
+    {
+        slots.push(embedded.load_pool(stats));
+        let span = if in_order {
+            vec![slots.len() - 1]
+        } else {
+            all_lazy(&slots)
+        };
+        sel.pull(&mut slots, &span);
+    }
+    let mut native_objs: Vec<badc::NativeObject> = Vec::new();
+    for slot in slots {
+        match slot {
+            Slot::Fixed(objs) => native_objs.extend(objs),
+            Slot::Lazy { pulled, .. } => native_objs.extend(pulled),
+            Slot::Shared(_) | Slot::Group(_) => {}
         }
     }
     // Whatever the selection left undefined is what the target's C
@@ -684,7 +771,7 @@ fn select_archive_members(
             for s in &o.symbols {
                 if s.binding != 0
                     && s.section == badc::NativeSymSection::Undef
-                    && !defined.contains(&s.name)
+                    && !sel.defined.contains(&s.name)
                 {
                     lib.admit(&s.name);
                 }
@@ -693,7 +780,7 @@ fn select_archive_members(
         // An object from another compiler reads a C library data object
         // directly, so the image holds a copy of it, defined with the
         // type the header declares.
-        let wanted = badc::copy_candidates(native_objs, core::slice::from_ref(lib.library()));
+        let wanted = badc::copy_candidates(&native_objs, core::slice::from_ref(lib.library()));
         if let Some(src) = lib.copy_definitions(&wanted) {
             let label = "<copies>";
             let object = embedded
@@ -714,7 +801,7 @@ fn select_archive_members(
             shared_libs.push(lib.library().clone());
         }
     }
-    archive_inclusions
+    (native_objs, sel.inclusions)
 }
 
 /// What the image writer needs once member selection is done.

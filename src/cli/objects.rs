@@ -12,7 +12,7 @@ pub(crate) fn compile_objects(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) {
     let Inputs {
         sources, archives, ..
     } = inputs;
-    if !archives.is_empty() || !cli.link.lib_names.is_empty() {
+    if !archives.is_empty() || cli.link.lib_names().next().is_some() {
         eprintln!(
             "badc: -c is incompatible with archive inputs / -l flags \
              (object emit doesn't involve linking)"
@@ -109,7 +109,7 @@ pub(crate) fn build_archive(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) {
         archives,
         ..
     } = inputs;
-    if !archives.is_empty() || !cli.link.lib_names.is_empty() {
+    if !archives.is_empty() || cli.link.lib_names().next().is_some() {
         eprintln!(
             "badc: --ar can't be combined with archive inputs / -l flags \
              (the archive is an output, not a link target)"

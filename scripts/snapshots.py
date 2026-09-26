@@ -231,13 +231,14 @@ def emit_ssa(badc: Path, src: Path, dst: Path, tmp_bin: Path, root: Path) -> boo
     return proc.returncode == 0
 
 
-def fixture_text_stop_address(map_path: Path, source: str) -> int | None:
-    """Return the virtual address one past the last `.text` contribution
-    the badc link map attributes to `source`, the path the fixture was
-    compiled from. The caller's `--stop-address` keeps the snapshot to the
-    fixture's own code: the trailing fill and the identical runtime tail
-    every image shares would otherwise churn the whole tree on any runtime
-    edit.
+def fixture_text_ranges(map_path: Path, source: str) -> list[tuple[int, int]] | None:
+    """Return the `.text` address ranges a snapshot shows: the badc link
+    map's rows up to the end of the last contribution it attributes to
+    `source`, the path the fixture was compiled from, less the rows of
+    the other inputs and the fill after each. The snapshot keeps to the
+    writer's entry stub and the fixture's own code: the runtime and the
+    pool every image shares would otherwise churn the whole tree on any
+    runtime edit, wherever the link places them.
 
     The fixture's rows are selected by name rather than the other inputs
     excluded by theirs, so the runtime's and the pool's labels need not be
@@ -249,7 +250,8 @@ def fixture_text_stop_address(map_path: Path, source: str) -> int | None:
     except OSError:
         return None
     in_text = False
-    last_end = None
+    # (start, size, input), the input None for a fill row.
+    rows: list[tuple[int, int, str | None]] = []
     for line in text.splitlines():
         if re.match(r"\.text\s+0x", line):
             in_text = True
@@ -258,23 +260,43 @@ def fixture_text_stop_address(map_path: Path, source: str) -> int | None:
             continue
         if not line.strip() or not line.startswith(" "):
             break
-        # A contribution is `[name] 0xaddr 0xsize input`, with the name
-        # wrapped onto its own line when long; symbol and `*fill*` rows
-        # carry no input token and don't match.
-        m = re.match(r"\s+(?:\S+\s+)?0x([0-9a-fA-F]+)\s+0x([0-9a-fA-F]+)\s+(\S+)\s*$", line)
-        if not m or m.group(3) != source:
+        fill = re.match(r"\s+\*fill\*\s+0x([0-9a-fA-F]+)\s+0x([0-9a-fA-F]+)", line)
+        if fill:
+            rows.append((int(fill.group(1), 16), int(fill.group(2), 16), None))
             continue
-        end = int(m.group(1), 16) + int(m.group(2), 16)
-        last_end = end if last_end is None else max(last_end, end)
-    return last_end
+        # A contribution is `[name] 0xaddr 0xsize input`, with the name
+        # wrapped onto its own line when long; symbol rows carry no size
+        # and don't match.
+        m = re.match(r"\s+(?:\S+\s+)?0x([0-9a-fA-F]+)\s+0x([0-9a-fA-F]+)\s+(\S+)\s*$", line)
+        if m:
+            rows.append((int(m.group(1), 16), int(m.group(2), 16), m.group(3)))
+    ends = [start + size for start, size, who in rows if who == source]
+    if not ends:
+        return None
+    stop = max(ends)
+    ranges: list[tuple[int, int]] = []
+    keep = True
+    for start, size, who in rows:
+        if start >= stop:
+            break
+        if who is not None:
+            keep = who in (source, "<internal>")
+        if not keep:
+            continue
+        end = min(start + size, stop)
+        if ranges and ranges[-1][1] == start:
+            ranges[-1] = (ranges[-1][0], end)
+        else:
+            ranges.append((start, end))
+    return ranges
 
 
 def emit_asm(badc: Path, src: Path, dst: Path, tmp_bin: Path, target: str, root: Path) -> bool:
     # Relative source path + cwd=root: keep `__FILE__` checkout-independent
     # (see emit_ssa).
     flags = fixture_flags(src)
-    # `-Map` records where the embedded runtime's .text begins; `-c`
-    # produces no link and takes no map (an object carries no runtime).
+    # `-Map` records where each input's .text lies; `-c` produces no link
+    # and takes no map (an object carries no runtime).
     map_path = tmp_bin.with_suffix(".map")
     map_flags = [] if "-c" in flags else [f"-Map={map_path}"]
     rel = str(src.relative_to(root))
@@ -287,12 +309,18 @@ def emit_asm(badc: Path, src: Path, dst: Path, tmp_bin: Path, target: str, root:
     )
     if proc.returncode != 0:
         return False
-    stop = None if "-c" in flags else fixture_text_stop_address(map_path, rel)
-    extra: list[str] = []
-    if stop is not None:
-        extra.append(f"--stop-address=0x{stop:x}")
+    ranges = None if "-c" in flags else fixture_text_ranges(map_path, rel)
+    # One disassembly per range; the first runs from the section start, as
+    # a whole-section listing does, and the later ones drop the header.
+    windows: list[list[str]] = [[]]
+    if ranges:
+        windows = [[f"--stop-address=0x{ranges[0][1]:x}"]]
+        windows += [
+            [f"--start-address=0x{start:x}", f"--stop-address=0x{end:x}"]
+            for start, end in ranges[1:]
+        ]
     if "-c" in flags:
-        extra.append("-r")
+        windows[0].append("-r")
     # llvm-objdump's output text differs from GNU objdump's enough that
     # snapshots taken with one cannot match the other (mnemonic spelling,
     # operand syntax, header line shape). Prefer llvm-objdump everywhere
@@ -300,15 +328,20 @@ def emit_asm(badc: Path, src: Path, dst: Path, tmp_bin: Path, target: str, root:
     # the host's binutils choice. Fall back to plain `objdump` for hosts
     # that ship only the GNU form.
     tool = "llvm-objdump" if shutil.which("llvm-objdump") else "objdump"
-    proc = subprocess.run(
-        [tool, *OBJDUMP_FLAGS, *extra, str(tmp_bin)],
-        capture_output=True,
-        check=False,
-    )
+    text = ""
+    for i, extra in enumerate(windows):
+        proc = subprocess.run(
+            [tool, *OBJDUMP_FLAGS, *extra, str(tmp_bin)],
+            capture_output=True,
+            check=False,
+        )
+        out = proc.stdout.decode("utf-8", errors="replace")
+        if i > 0:
+            out = out.split("Disassembly of section .text:\n", 1)[-1]
+        text += out
     # objdump's header line bakes in the binary path, which churns the
     # snapshot every run because the temp dir name varies. Replace the
     # path with the snapshot's stable name.
-    text = proc.stdout.decode("utf-8", errors="replace")
     text = text.replace(str(tmp_bin), dst.stem)
     text = normalise_asm(text)
     dst.write_text(text)

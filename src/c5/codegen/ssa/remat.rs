@@ -94,6 +94,8 @@ struct Layout {
     block_of: Vec<BlockId>,
     /// Per block, its chain: the blocks following it on the tape with their one predecessor in it.
     chain_of: Vec<u32>,
+    /// Per block, its place in tape order: an empty block before the one starting where it stands.
+    rank: Vec<u32>,
 }
 
 impl Layout {
@@ -111,11 +113,16 @@ impl Layout {
         }
         let preds = predecessors(func);
         let mut order: Vec<usize> = (0..func.blocks.len()).collect();
-        order.sort_unstable_by_key(|&b| func.blocks[b].inst_range.start);
+        order.sort_unstable_by_key(|&b| {
+            let r = &func.blocks[b].inst_range;
+            (r.start, r.end, b)
+        });
         let mut chain_of = vec![0; func.blocks.len()];
+        let mut rank = vec![0; func.blocks.len()];
         let mut chain = 0;
         let mut prev: Option<usize> = None;
-        for &b in &order {
+        for (k, &b) in order.iter().enumerate() {
+            rank[b] = k as u32;
             let chains = prev.is_some_and(|p| {
                 func.blocks[p].inst_range.end == func.blocks[b].inst_range.start
                     && preds[b].len() == 1
@@ -132,6 +139,7 @@ impl Layout {
             calls,
             block_of,
             chain_of,
+            rank,
         }
     }
 
@@ -287,6 +295,7 @@ fn collect_uses(func: &FunctionSsa, layout: &Layout, cand: &[bool], reads: &[boo
         (
             u.value,
             layout.chain_of[u.block as usize],
+            layout.rank[u.block as usize],
             layout.pos(func, u),
             u.phi,
         )
@@ -888,6 +897,44 @@ mod tests {
             panic!("{:?}", f.insts[4]);
         };
         assert_eq!(incoming, &[(3, 3), (1, 2)]);
+    }
+
+    /// A branch on `k` and the income through its empty successor read at one index; the branch,
+    /// which runs first, takes the definition.
+    #[test]
+    fn a_branch_ahead_of_an_empty_successor_takes_the_definition() {
+        let mut f = func_with(
+            vec![
+                Inst::ImmData(16),
+                call_of(vec![]),
+                Inst::Imm(3),
+                phi(vec![(1, 2), (2, 0)]),
+            ],
+            vec![
+                block(0..2, Terminator::Jmp(1)),
+                block(
+                    2..3,
+                    Terminator::Bz {
+                        cond: 0,
+                        target: 3,
+                        fall_through: 2,
+                    },
+                ),
+                block(3..3, Terminator::Jmp(3)),
+                block(3..4, Terminator::Return(3)),
+            ],
+        );
+        split_across_calls(&mut f, Target::LinuxAarch64);
+        assert_eq!(super::super::verify::check(&f), Ok(()), "{:?}", f.blocks);
+        let Terminator::Bz { cond, .. } = f.blocks[1].terminator else {
+            panic!("{:?}", f.blocks[1].terminator);
+        };
+        assert!(f.blocks[1].inst_range.contains(&cond), "{:?}", f.blocks);
+        assert!(matches!(f.insts[cond as usize], Inst::ImmData(16)));
+        let Inst::Phi { incoming, .. } = &f.insts[f.blocks[3].inst_range.start as usize] else {
+            panic!("{:?}", f.insts);
+        };
+        assert_eq!(incoming[1], (2, cond));
     }
 
     /// `k; call; return k`: the return reads a definition after the

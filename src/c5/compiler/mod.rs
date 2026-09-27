@@ -1037,10 +1037,10 @@ pub(in crate::c5::compiler) struct Pending {
     pub typedef_base_array_size: i64,
     /// Dimension list (outermost first) accompanying
     /// `typedef_base_array_size` when the typedef alias is a
-    /// multi-dimensional array; empty for a 1-D alias. Written by the
-    /// same three base-type sites that set the element count and only
-    /// meaningful while that count is non-zero, so the count's
-    /// clear-discipline covers this field too.
+    /// multi-dimensional array; empty for a 1-D alias. It, the count and
+    /// `typedef_base_zero_len` describe one array and are written
+    /// together, through [`Pending::set_base_array`] and
+    /// [`Pending::clear_base_array`].
     pub typedef_base_array_dims: alloc::vec::Vec<i64>,
     /// Set alongside `typedef_base_array_size == -1` when the alias is a
     /// zero-length array (`typedef T A[0]`) rather than an incomplete
@@ -1462,6 +1462,31 @@ pub(super) struct DeclSpecifiers {
 }
 
 impl Pending {
+    /// Record the array an array-typedef or `typeof` base names: its element
+    /// count (`-1` for an unspecified bound), its bounds when it has more
+    /// than one, and whether it is a zero-length array.
+    pub(super) fn set_base_array(&mut self, size: i64, dims: alloc::vec::Vec<i64>, zero_len: bool) {
+        self.typedef_base_array_size = size;
+        self.typedef_base_array_dims = dims;
+        self.typedef_base_zero_len = zero_len;
+    }
+
+    /// Record that the base names no array.
+    pub(super) fn clear_base_array(&mut self) {
+        self.set_base_array(0, alloc::vec::Vec::new(), false);
+    }
+
+    /// Detach the base-array carriers, leaving none recorded.
+    pub(super) fn take_base_array(&mut self) -> (i64, alloc::vec::Vec<i64>, bool) {
+        let taken = (
+            self.typedef_base_array_size,
+            core::mem::take(&mut self.typedef_base_array_dims),
+            self.typedef_base_zero_len,
+        );
+        self.clear_base_array();
+        taken
+    }
+
     /// Detach the specifier carriers; the nested block starts clean, as
     /// any declaration does.
     pub(super) fn take_decl_specifiers(&mut self) -> DeclSpecifiers {
@@ -1545,9 +1570,11 @@ impl Pending {
         self.fn_ptr_ret_indirection = s.fn_ptr_ret_indirection;
         self.fn_ptr_params = s.fn_ptr_params;
         self.fn_ptr_ret_fn = s.fn_ptr_ret_fn;
-        self.typedef_base_array_size = s.typedef_base_array_size;
-        self.typedef_base_array_dims = s.typedef_base_array_dims;
-        self.typedef_base_zero_len = s.typedef_base_zero_len;
+        self.set_base_array(
+            s.typedef_base_array_size,
+            s.typedef_base_array_dims,
+            s.typedef_base_zero_len,
+        );
         self.typeof_operand_was_array = s.typeof_operand_was_array;
         self.type_align = s.type_align;
     }

@@ -271,8 +271,7 @@ impl Compiler {
             // pointee, so the declarator's own derivations do not apply to it.
             if leading_ptr_count > 0 && self.pending.typedef_base_array_size > 0 {
                 ty = self.ptr_to_array_typedef_ty(base, ty, leading_ptr_count);
-                self.pending.typedef_base_array_size = 0;
-                self.pending.typedef_base_array_dims.clear();
+                self.pending.clear_base_array();
             }
             // A function-TYPE typedef base pre-decays to a function
             // pointer; the first `*` forms that pointer-to-function (C99
@@ -473,8 +472,7 @@ impl Compiler {
         // carrier set; it describes the parameter, not the enclosing object
         // (a function / function pointer, which cannot be an array), so clear
         // it before the enclosing declarator binds.
-        self.pending.typedef_base_array_size = 0;
-        self.pending.typedef_base_zero_len = false;
+        self.pending.clear_base_array();
         Ok(ParsedParams {
             indices: args,
             types,

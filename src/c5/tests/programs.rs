@@ -2816,6 +2816,16 @@ fn enum_used_before_definition() {
 }
 
 #[test]
+fn typeof_redeclaration_after_multidim_array() {
+    // `extern typeof(x) x;` after a typeof of an array of arrays names x's
+    // own type, and so does a new object declared through typeof.
+    assert_eq!(
+        run_fixture("typeof_redeclaration_after_multidim_array.c"),
+        0
+    );
+}
+
+#[test]
 fn type_name_function_of_function_pointer_typedef() {
     // C99 6.7.6: a function suffix in a type name derives from a
     // function-pointer typedef base as from any other.

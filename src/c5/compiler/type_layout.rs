@@ -315,8 +315,7 @@ impl Compiler {
             ),
             _ => return ptr,
         };
-        self.pending.typedef_base_array_size = 1;
-        self.pending.typedef_base_array_dims.clear();
+        self.pending.set_base_array(1, Vec::new(), false);
         if let Some(id) = self
             .structs
             .iter()

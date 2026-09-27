@@ -328,13 +328,13 @@ impl Compiler {
             ));
         }
         let dims = &name.dims;
-        self.pending.typedef_base_array_size = match dims.as_slice() {
+        let size = match dims.as_slice() {
             [] => 0,
             d if d.iter().all(|&n| n > 0) => d.iter().product(),
             _ => -1,
         };
-        self.pending.typedef_base_zero_len = dims.first() == Some(&0);
-        self.pending.typedef_base_array_dims = dims.clone();
+        self.pending
+            .set_base_array(size, dims.clone(), dims.first() == Some(&0));
         self.pending.typeof_operand_was_array = !dims.is_empty();
         self.pending.type_align = name.type_align;
         if let Some(fn_ty) = &name.fn_ty {
@@ -406,8 +406,10 @@ impl Compiler {
             // inner-dimension stride instead of losing the inner dimensions.
             if class == Token::Glo as i64 && self.symbols[idx].inner_array_size != 0 {
                 let ty = self.symbols[idx].type_;
-                self.pending.typedef_base_array_size = self.symbols[idx].array_size;
-                self.pending.typedef_base_array_dims = self.symbols[idx].array_dims.clone();
+                let s = &self.symbols[idx];
+                let (size, dims, zero_len) =
+                    (s.array_size, s.array_dims.clone(), s.is_zero_len_array);
+                self.pending.set_base_array(size, dims, zero_len);
                 self.pending.typeof_operand_was_array = true;
                 self.symbols[idx].binding.was_referenced = true;
                 self.next()?; // identifier
@@ -475,15 +477,16 @@ impl Compiler {
                 // incomplete/-zero sentinel, and the dims list carries
                 // the exact bounds to a type-name reader.
                 inner -= Ty::Ptr as i64;
-                self.pending.typedef_base_array_size = if dims.iter().all(|&d| d > 0) {
+                let size = if dims.iter().all(|&d| d > 0) {
                     dims.iter().product::<i64>()
                 } else {
                     -1
                 };
-                self.pending.typedef_base_array_dims = dims;
+                self.pending.set_base_array(size, dims, false);
             } else if n != 0 && inner >= Ty::Ptr as i64 {
                 inner -= Ty::Ptr as i64;
-                self.pending.typedef_base_array_size = n;
+                self.pending
+                    .set_base_array(n, alloc::vec::Vec::new(), false);
             } else if bytes > 0 && inner >= Ty::Ptr as i64 {
                 // Row size known by byte width: a pointer-to-array deref
                 // (`typeof(*p)`), a string literal, or a 1D row. Recover
@@ -492,7 +495,8 @@ impl Compiler {
                 let elem = inner - Ty::Ptr as i64;
                 let esize = (self.size_of_type(elem) as i64).max(1);
                 inner = elem;
-                self.pending.typedef_base_array_size = bytes / esize;
+                self.pending
+                    .set_base_array(bytes / esize, alloc::vec::Vec::new(), false);
             }
             inner
         };
@@ -1921,8 +1925,7 @@ impl Compiler {
         self.pending.base_was_void = false;
         self.pending.base_is_function_type = false;
         self.pending.base_enum_tag = None;
-        self.pending.typedef_base_array_size = 0;
-        self.pending.typedef_base_zero_len = false;
+        self.pending.clear_base_array();
         self.pending.type_align = 0;
         self.pending.fn_ptr_params = None;
         self.pending.fn_ptr_ret_fn = None;
@@ -2060,9 +2063,9 @@ impl Compiler {
         // still decays to a pointer to the element (6.7.5.3p7).
         let typedef_array = self.symbols[idx].array_size;
         if typedef_array != 0 {
-            self.pending.typedef_base_array_size = typedef_array;
-            self.pending.typedef_base_array_dims = self.symbols[idx].array_dims.clone();
-            self.pending.typedef_base_zero_len = self.symbols[idx].is_zero_len_array;
+            let dims = self.symbols[idx].array_dims.clone();
+            let zero_len = self.symbols[idx].is_zero_len_array;
+            self.pending.set_base_array(typedef_array, dims, zero_len);
         }
         // A GNU `aligned(N)` on the alias sets the boundary a struct field /
         // object / `__alignof__` through it honors.

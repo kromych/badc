@@ -5755,9 +5755,7 @@ impl Compiler {
     /// are consumed here, so none reaches a following declarator.
     pub(super) fn parse_type_name(&mut self) -> Result<TypeName, C5Error> {
         self.pending.typeof_operand_was_array = false;
-        self.pending.typedef_base_array_size = 0;
-        self.pending.typedef_base_array_dims.clear();
-        self.pending.typedef_base_zero_len = false;
+        self.pending.clear_base_array();
         let base = self.parse_decl_base_type()?;
         let is_function = core::mem::take(&mut self.pending.base_is_function_type);
         let base_params = self.pending.fn_ptr_params.take();

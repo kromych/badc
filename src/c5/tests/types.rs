@@ -3708,6 +3708,33 @@ fn uses_before_an_enums_definition_take_the_enums_type() {
         .expect("a tentative definition takes the definition's size");
 }
 
+/// A typeof of an array of arrays leaves no bounds to the next declaration
+/// through typeof: Linux's `EXPORT_SYMBOL` redeclares `node_to_cpumask_map`,
+/// an array of the array typedef `cpumask_var_t`, and then
+/// `__per_cpu_offset` this way.
+#[test]
+fn a_typeof_of_an_array_of_arrays_leaves_no_bounds_behind() {
+    use crate::{Compiler, Target};
+    let src = "typedef struct cpumask { unsigned long bits[1]; } cpumask_var_t[1];\n\
+               extern unsigned long off[256];\n\
+               cpumask_var_t map[16];\n\
+               extern typeof(map) map;\n\
+               unsigned long off[256] __attribute__((__section__(\".data..read_mostly\")));\n\
+               extern typeof(off) off;\n\
+               static void *__attribute__((__used__)) addr = (void *)&off;\n\
+               typeof(off) copy;\n\
+               #define SAME(a, b) _Static_assert(__builtin_types_compatible_p(a, b), #a)\n\
+               SAME(__typeof__(off), unsigned long [256]);\n\
+               SAME(__typeof__(copy), unsigned long [256]);\n\
+               SAME(__typeof__(map), struct cpumask [16][1]);\n\
+               int main(void) { return 0; }\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        Compiler::with_target(src.to_string(), target)
+            .compile()
+            .expect("each declaration through typeof names its own array type");
+    }
+}
+
 /// The function-pointer conversions three Linux units make convert between
 /// compatible types: a trampoline declared through `typeof(*fp)`, a member
 /// typed before the definition of the enum its result names, and a result

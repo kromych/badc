@@ -171,12 +171,7 @@ impl Compiler {
         // Save the outer typedef-array carrier so a `typedef struct { fe X;
         // ... } ge;` body ending in an array-typedef field does not leak that
         // dimension into the outer declarator binding of `ge`.
-        let saved_typedef_base_array_size = self.pending.typedef_base_array_size;
-        let saved_typedef_base_zero_len = self.pending.typedef_base_zero_len;
-        self.pending.typedef_base_array_size = 0;
-        self.pending.typedef_base_zero_len = false;
-        let saved_typedef_base_array_dims =
-            core::mem::take(&mut self.pending.typedef_base_array_dims);
+        let (saved_size, saved_dims, saved_zero_len) = self.pending.take_base_array();
         let mut layout = AggregateLayout::default();
 
         while self.lex.tk != '}' {
@@ -211,9 +206,8 @@ impl Compiler {
             self.next()?;
         }
         self.next()?; // consume `}`
-        self.pending.typedef_base_array_size = saved_typedef_base_array_size;
-        self.pending.typedef_base_zero_len = saved_typedef_base_zero_len;
-        self.pending.typedef_base_array_dims = saved_typedef_base_array_dims;
+        self.pending
+            .set_base_array(saved_size, saved_dims, saved_zero_len);
         self.finish_aggregate_layout(struct_id, &layout, packed);
         Ok(struct_id)
     }
@@ -840,8 +834,7 @@ impl Compiler {
         // member group left, or `jmp_buf env;` before `int code;` would make
         // the scalar an array. TODO: route the specifiers through
         // `parse_decl_specifiers`, which resets them on entry.
-        self.pending.typedef_base_array_size = 0;
-        self.pending.typedef_base_zero_len = false;
+        self.pending.clear_base_array();
         self.pending.type_align = 0;
         let _ = self.take_base_spelling();
         let mut mods = decl_base::IntModifiers::default();

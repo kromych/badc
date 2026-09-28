@@ -1342,19 +1342,22 @@ impl Parser {
                 };
             }
             // A `+`-joined AArch64 feature list. `standard` is gcc's
-            // alias for `bti+pac-ret`. The `leaf` and `b-key` modifiers
-            // of `pac-ret`, and `gcs`, are rejected: an accepted-but-
-            // ignored spelling would build an object that claims a
-            // protection it does not carry.
+            // alias for `bti+pac-ret`; `leaf` modifies the `pac-ret` before
+            // it, as in gcc's grammar. The `b-key` modifier and `gcs` are
+            // rejected: an accepted-but-ignored spelling would build an
+            // object that claims a protection it does not carry.
             s if s.starts_with("-mbranch-protection=") => {
+                let mut prev = "";
                 for feature in s["-mbranch-protection=".len()..].split('+') {
                     match feature {
                         "none" => {
                             code.hardening.bti = false;
                             code.hardening.pac_ret = false;
+                            code.hardening.pac_ret_leaf = false;
                         }
                         "bti" => code.hardening.bti = true,
                         "pac-ret" => code.hardening.pac_ret = true,
+                        "leaf" if prev == "pac-ret" => code.hardening.pac_ret_leaf = true,
                         "standard" => {
                             code.hardening.bti = true;
                             code.hardening.pac_ret = true;
@@ -1363,10 +1366,11 @@ impl Parser {
                             return Err(ParseError::diag(format!(
                                 "badc: error: unsupported feature `{other}` in \
                                  `-mbranch-protection=` (supported: none, bti, \
-                                 pac-ret, standard)"
+                                 pac-ret, pac-ret+leaf, standard)"
                             )));
                         }
                     }
+                    prev = feature;
                 }
             }
             // gcc `-fstack-protector*`: which functions carry a stack
@@ -3032,8 +3036,27 @@ mod tests {
         assert_eq!(
             reject(&["-mbranch-protection=gcs", "a.c"]).0,
             "badc: error: unsupported feature `gcs` in `-mbranch-protection=` \
-             (supported: none, bti, pac-ret, standard)"
+             (supported: none, bti, pac-ret, pac-ret+leaf, standard)"
         );
+    }
+
+    /// `leaf` modifies the `pac-ret` before it, as in gcc's grammar and in
+    /// Linux 5.10-6.1's `-mbranch-protection=pac-ret+leaf+bti`; alone or
+    /// after another feature it is refused, as `b-key` is.
+    #[test]
+    fn branch_protection_leaf_modifies_pac_ret() {
+        let h = |flag: &str| parse(&[A64, flag, "-c", "a.c"]).codegen.hardening;
+        let k = h("-mbranch-protection=pac-ret+leaf+bti");
+        assert!(k.pac_ret && k.pac_ret_leaf && k.bti);
+        let p = h("-mbranch-protection=pac-ret");
+        assert!(p.pac_ret && !p.pac_ret_leaf);
+        let n = h("-mbranch-protection=pac-ret+leaf+none");
+        assert!(!n.pac_ret && !n.pac_ret_leaf);
+        for bad in ["leaf", "bti+leaf", "standard+leaf", "pac-ret+b-key"] {
+            let flag = format!("-mbranch-protection={bad}");
+            let (msg, _) = reject(&[flag.as_str(), "a.c"]);
+            assert!(msg.contains("unsupported feature"), "{bad}: {msg}");
+        }
     }
 
     #[test]

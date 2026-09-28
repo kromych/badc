@@ -2048,8 +2048,11 @@ pub(super) fn emit_return(
     } else if value != super::super::ir::NO_VALUE {
         emit_scalar_return(code, value, alloc, frame, scratch, func);
     }
-    // A full leaf saved nothing.
+    // A full leaf saved nothing, and moved no sp its signing read.
     if is_full_leaf(frame, alloc) {
+        if signs_return_address(func, frame, alloc, abi) {
+            emit(code, super::encode::AUTIASP);
+        }
         emit(code, enc_ret(Reg(30)));
         return Ok(());
     }

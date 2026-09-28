@@ -2969,6 +2969,9 @@ pub struct Hardening {
     /// A function that spills the link register signs it against sp on
     /// entry (`paciasp`) and authenticates it before `ret` (`autiasp`).
     pub pac_ret: bool,
+    /// `-mbranch-protection=pac-ret+leaf`: a function that keeps its
+    /// return address in the link register signs it as well.
+    pub pac_ret_leaf: bool,
     /// `-fcf-protection=branch`: x86_64 indirect-branch tracking. An
     /// `endbr64` opens every function and every indirect-branch target,
     /// which is the only instruction CET permits an indirect transfer to
@@ -2985,6 +2988,7 @@ impl Hardening {
         sls_indirect_jmp: false,
         bti: false,
         pac_ret: false,
+        pac_ret_leaf: false,
         cf_protection_branch: false,
     };
 }

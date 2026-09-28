@@ -11783,6 +11783,43 @@ fn a64_pac_ret_leaves_a_frameless_leaf_unsigned() {
 }
 
 #[test]
+fn a64_pac_ret_leaf_signs_a_frameless_leaf() {
+    // `-mbranch-protection=pac-ret+leaf`: a full leaf signs the return
+    // address it keeps in x30 as well, with the pair around its body and
+    // `autiasp` directly ahead of the `ret`; under `bti` the signature
+    // stands in for the landing pad.
+    let leaf_too = crate::Hardening {
+        pac_ret: true,
+        pac_ret_leaf: true,
+        ..crate::Hardening::NONE
+    };
+    for hardening in [
+        leaf_too,
+        crate::Hardening {
+            bti: true,
+            ..leaf_too
+        },
+    ] {
+        let w = a64_pac_words(PAC_LEAF_SRC, hardening);
+        assert_eq!(w.first().copied(), Some(PACIASP), "signs at entry");
+        let rets: alloc::vec::Vec<usize> = w
+            .iter()
+            .enumerate()
+            .filter(|&(_, &x)| x == A64_RET)
+            .map(|(i, _)| i)
+            .collect();
+        assert!(!rets.is_empty(), "the leaf returns");
+        for i in rets {
+            assert_eq!(w[i - 1], AUTIASP, "`autiasp` directly precedes the `ret`");
+        }
+        assert_eq!(w.iter().filter(|&&x| x == PACIASP).count(), 1);
+    }
+    // A framed function signs once, as under plain `pac-ret`.
+    let framed = a64_pac_words(PAC_FRAMED_SRC, leaf_too);
+    assert_eq!(framed, a64_pac_words(PAC_FRAMED_SRC, PAC_RET_ONLY));
+}
+
+#[test]
 fn a64_branch_protection_standard_opens_each_function_once() {
     // `standard` is `bti+pac-ret`. `PACIASP` is itself a landing pad for
     // the BTYPEs a function entry is reached with, so a signed function

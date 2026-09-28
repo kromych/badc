@@ -240,10 +240,10 @@ errno_t memset_s(void *s, rsize_t smax, int c, rsize_t n);
 // in the c5 surface. Names match the underscored entries
 // programs reach for directly; the POSIX aliases (stricmp /
 // strnicmp / strlwr / strupr) bind to the same symbols.
-int stricmp(char *a, char *b);
-int _stricmp(char *a, char *b);
-int strnicmp(char *a, char *b, int n);
-int _strnicmp(char *a, char *b, int n);
+int stricmp(const char *a, const char *b);
+int _stricmp(const char *a, const char *b);
+int strnicmp(const char *a, const char *b, size_t n);
+int _strnicmp(const char *a, const char *b, size_t n);
 char *strlwr(char *s);
 char *_strlwr(char *s);
 char *strupr(char *s);

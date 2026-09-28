@@ -348,7 +348,7 @@ void WSASetLastError(int err);
 #define FIONBIO 0x8004667e          // ioctlsocket cmd: set non-blocking
 
 int WSAStartup(int version_word, char *wsadata);
-int WSACleanup();
+int WSACleanup(void);
 int closesocket(int fd);
 int ioctlsocket(int fd, int cmd, int *arg);
 #endif

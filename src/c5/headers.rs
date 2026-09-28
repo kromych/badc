@@ -881,6 +881,66 @@ mod tests {
         }
     }
 
+    /// The Windows CRT block declares its entry points with the SDK's
+    /// prototypes -- a call with one argument too many is diagnosed against
+    /// the declared count -- and msvcrt's `__argc`, `__argv` and `__wargv`
+    /// as the objects they are, which a reference reads through the import.
+    #[test]
+    fn windows_crt_declarations_are_prototypes() {
+        use crate::{CompileOptions, Compiler, Target};
+        const FNS: &[(&str, usize)] = &[
+            ("localtime_s", 2),
+            ("gmtime_s", 2),
+            ("ctime_s", 3),
+            ("asctime_s", 3),
+            ("strerror_s", 3),
+            ("_strdup", 1),
+            ("_strnicmp", 3),
+            ("_stricmp", 2),
+            ("_get_errno", 1),
+            ("_set_errno", 1),
+            ("_errno", 0),
+            ("__getmainargs", 5),
+            ("_getch", 0),
+            ("_kbhit", 0),
+            ("_getpid", 0),
+            ("__iob_func", 0),
+            ("WSACleanup", 0),
+        ];
+        for target in [Target::WindowsX64, Target::WindowsAarch64] {
+            let mut src = alloc::string::String::from(
+                "#include <stdio.h>\n#include <string.h>\n#include <conio.h>\n\
+                 #include <sys/socket.h>\n\
+                 _Static_assert(_Generic(&__argc, int *: 1, default: 0)\n\
+                   && _Generic(&__argv, char ***: 1, default: 0)\n\
+                   && _Generic(&__wargv, wchar_t ***: 1, default: 0), \"data exports\");\n\
+                 void calls(void) {\n",
+            );
+            for (name, n) in FNS {
+                let args = alloc::vec!["0"; n + 1].join(", ");
+                src.push_str(&alloc::format!("    (void){name}({args});\n"));
+            }
+            src.push_str("}\n");
+            let opts = CompileOptions::default().with_no_entry_point(true);
+            let program = Compiler::with_options(src.clone(), target, opts)
+                .compile()
+                .unwrap_or_else(|e| panic!("{}: {e}\n{src}", target.id_str()));
+            let warnings: alloc::vec::Vec<_> =
+                program.warnings.iter().map(|w| w.to_string()).collect();
+            for (name, n) in FNS {
+                let text = alloc::format!(
+                    "too many arguments to `{name}` (expected {n}, got at least {})",
+                    n + 1
+                );
+                assert!(
+                    warnings.iter().any(|w| w.contains(&text)),
+                    "{}: {name}: {warnings:?}",
+                    target.id_str()
+                );
+            }
+        }
+    }
+
     /// A program may repeat the C99 and POSIX prototypes after the bundled
     /// headers on every target with no redeclaration diagnostic.
     #[test]

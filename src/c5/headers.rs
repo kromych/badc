@@ -765,6 +765,47 @@ mod tests {
         }
     }
 
+    /// The POSIX declarations take POSIX's types on the Linux and macOS
+    /// targets, as glibc's and Darwin's headers give them.
+    #[test]
+    fn posix_declarations_take_posix_types() {
+        use crate::{CompileOptions, Compiler, Target};
+        const DECLS: &[(&str, &str)] = &[
+            ("&dlopen", "void *(*)(const char *, int)"),
+            ("&dlsym", "void *(*)(void *, const char *)"),
+            ("&dlclose", "int (*)(void *)"),
+            ("&truncate", "int (*)(const char *, off_t)"),
+            ("&ftruncate", "int (*)(int, off_t)"),
+            ("&umask", "mode_t (*)(mode_t)"),
+            ("&chmod", "int (*)(const char *, mode_t)"),
+            ("&fchmod", "int (*)(int, mode_t)"),
+            ("&mkdir", "int (*)(const char *, mode_t)"),
+            ("&usleep", "int (*)(useconds_t)"),
+            ("(id_t)0", "unsigned int"),
+            ("(useconds_t)0", "unsigned int"),
+            ("(socklen_t)0", "unsigned int"),
+        ];
+        for (target, mode) in [
+            (Target::LinuxX64, "unsigned int"),
+            (Target::LinuxAarch64, "unsigned int"),
+            (Target::MacOSAarch64, "unsigned short"),
+        ] {
+            let mut src = alloc::string::String::from(
+                "#include <dlfcn.h>\n#include <sys/types.h>\n#include <unistd.h>\n",
+            );
+            let mode_row = [("(mode_t)0", mode)];
+            for (expr, ty) in DECLS.iter().chain(&mode_row) {
+                src.push_str(&alloc::format!(
+                    "_Static_assert(_Generic({expr}, {ty}: 1, default: 0), \"{expr}\");\n"
+                ));
+            }
+            let opts = CompileOptions::default().with_no_entry_point(true);
+            if let Err(e) = Compiler::with_options(src, target, opts).compile() {
+                panic!("{}: {e}", target.id_str());
+            }
+        }
+    }
+
     /// The C99 and POSIX functions of no parameters are declared with a
     /// prototype, so a call passing an argument is diagnosed (C99
     /// 6.5.2.2p2), and the POSIX id functions return uid_t, gid_t and pid_t,

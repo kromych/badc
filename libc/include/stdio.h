@@ -799,7 +799,7 @@ struct _wfinddata64_t {
 #define O_TEXT        _O_TEXT
 #define O_BINARY      _O_BINARY
 #endif
-char *dlsym(char *handle, char *name);
+void *dlsym(void *__restrict handle, const char *__restrict name);
 
 // Lazy resolver for `stdin` / `stdout` / `stderr`. Index
 // 0 = stdin, 1 = stdout, 2 = stderr.

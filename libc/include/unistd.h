@@ -395,12 +395,12 @@ int access(const char *path, int mode);
 int getentropy(void *buf, unsigned long buflen);
 // POSIX: lseek returns off_t and takes an off_t offset; ftruncate takes an
 // off_t length. off_t is 64-bit, so `int` truncates offsets/lengths past
-// 2GB. `long` matches off_t on LP64 (the POSIX targets this block serves).
+// 2GB. `long` is off_t on LP64 (the POSIX targets lseek is declared for).
 #ifndef _WIN32
 long lseek(int fd, long offset, int whence);
 #endif
 int fsync(int fd);
-int ftruncate(int fd, long len);
+int ftruncate(int fd, off_t len);
 int fcntl(int fd, int cmd, ...);
 int unlink(const char *path);
 int rmdir(const char *path);
@@ -432,16 +432,16 @@ unsigned int sleep(unsigned int seconds);
 // Schedule a SIGALRM after `seconds`; returns the prior alarm's
 // remaining seconds (POSIX). Both counts are unsigned.
 unsigned int alarm(unsigned int seconds);
-int usleep(int microseconds);
+int usleep(useconds_t microseconds);
 // Suspend until a signal is delivered; always returns -1 with EINTR.
 int pause(void);
 int isatty(int fd);
 ssize_t readlink(const char *path, char *buf, size_t n);
-int mkdir(char *path, int mode);
+int mkdir(const char *path, mode_t mode);
 // POSIX: create a filesystem node. The device argument is unused for
 // regular / FIFO nodes; callers pass 0.
-int mknod(char *path, int mode, int dev);
-int mkfifo(char *path, int mode);
+int mknod(const char *path, mode_t mode, dev_t dev);
+int mkfifo(const char *path, mode_t mode);
 int dup(int fd);
 int dup2(int oldfd, int newfd);
 #ifdef __linux__
@@ -484,25 +484,25 @@ int setuid(uid_t uid);
 // after a failed exec in the child branch of fork+exec to avoid
 // running the parent's exit handlers a second time.
 _Noreturn void _exit(int status);
-int fchmod(int fd, int mode);
+int fchmod(int fd, mode_t mode);
 int fchown(int fd, uid_t uid, gid_t gid);
 int utimes(char *path, char *times);
 int futimes(int fd, char *times);
 int lutimes(char *path, char *times);
-int umask(int mode);
-int chmod(char *path, int mode);
+mode_t umask(mode_t mode);
+int chmod(const char *path, mode_t mode);
 int chown(const char *path, uid_t uid, gid_t gid);
-int truncate(char *path, int len);
+int truncate(const char *path, off_t len);
 int link(const char *from, const char *to);
 int symlink(const char *from, const char *to);
 // The *at family (POSIX): operate relative to a directory descriptor
 // `dirfd` (or AT_FDCWD from <fcntl.h>). The stat / timespec buffers are
 // opaque to c5, matching the plain stat() convention above.
 int fstatat(int dirfd, char *path, char *buf, int flag);
-int mkdirat(int dirfd, char *path, int mode);
-int mknodat(int dirfd, char *path, int mode, int dev);
-int mkfifoat(int dirfd, char *path, int mode);
-int fchmodat(int dirfd, char *path, int mode, int flag);
+int mkdirat(int dirfd, const char *path, mode_t mode);
+int mknodat(int dirfd, const char *path, mode_t mode, dev_t dev);
+int mkfifoat(int dirfd, const char *path, mode_t mode);
+int fchmodat(int dirfd, const char *path, mode_t mode, int flag);
 int fchownat(int dirfd, const char *path, uid_t uid, gid_t gid, int flag);
 int unlinkat(int dirfd, char *path, int flag);
 int linkat(int olddirfd, char *oldpath, int newdirfd, char *newpath, int flag);
@@ -536,7 +536,7 @@ int setegid(gid_t gid);
 int setreuid(uid_t ruid, uid_t euid);
 int setregid(gid_t rgid, gid_t egid);
 int lchown(const char *path, uid_t owner, gid_t group);
-int lchmod(char *path, int mode);
+int lchmod(const char *path, mode_t mode);
 #ifdef __APPLE__
 // BSD per-file flags (macOS).
 int chflags(char *path, unsigned long flags);

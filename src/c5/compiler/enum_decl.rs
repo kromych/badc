@@ -3,12 +3,12 @@
 //! `enum [Tag] [{ A, B = 5, C, ... }]` registers each constant as a
 //! `Token::Num` symbol so subsequent references (in expressions, in
 //! array dimensions via `parse_constant_int`, etc.) resolve to the
-//! enumerated value. A definition also records an `EnumDef` carrying
-//! the underlying integer type -- `int` when every value fits, wider /
-//! unsigned otherwise, a narrower type for `__attribute__((packed))` --
-//! so a later bare `enum Tag` reference resolves the same size and the
-//! DWARF emitters describe the enum. An untagged definition is recorded
-//! under the empty name.
+//! enumerated value. The tag lives in the scoped tag table with the
+//! struct and union tags; its entry records the underlying integer type
+//! the list chooses -- `int` when every value fits, wider / unsigned
+//! otherwise, a narrower type for `__attribute__((packed))` -- which a
+//! later `enum Tag` names. A definition also records an `EnumDef` for the
+//! DWARF emitters; an untagged one is recorded under the empty name.
 //!
 //! Lives next to `compiler/mod.rs` because the cluster is
 //! self-contained and the pair (`parse_enum_decl` -> `parse_enum_body`)
@@ -16,17 +16,17 @@
 //! `parse_constant_int` for explicit values like `B = 1 << 8`.
 
 use super::super::diag::Code;
-use alloc::string::{String, ToString};
+use alloc::string::String;
 use alloc::vec::Vec;
 
 use super::super::error::C5Error;
 use super::super::symbol::{FnParams, FnType};
 use super::super::token::{Token, Ty};
-use super::types::{UNSIGNED_BIT, rebase_placeholder_int};
+use super::types::{UNSIGNED_BIT, rebase_enum_placeholder, struct_ty_for};
 use super::{Compiler, EnumDef};
 
 /// The definition of an enum tag, applied to the types an earlier use of
-/// the tag gave the `int` placeholder. Each applied tag is cleared, since
+/// the tag built on its incomplete entry. Each applied tag is cleared, since
 /// the placeholder is gone once rewritten.
 pub(super) struct EnumCompletion {
     tag: u32,
@@ -36,7 +36,7 @@ pub(super) struct EnumCompletion {
 impl EnumCompletion {
     pub(super) fn ty(&self, ty: &mut i64, tag: &mut Option<u32>) {
         if *tag == Some(self.tag) {
-            *ty = rebase_placeholder_int(*ty, self.underlying);
+            *ty = rebase_enum_placeholder(*ty, self.tag as usize, self.underlying);
             *tag = None;
         }
     }
@@ -46,7 +46,7 @@ impl EnumCompletion {
         tags.retain(|&(pos, t)| {
             let own = t == self.tag;
             if own && let Some(ty) = types.get_mut(pos) {
-                *ty = rebase_placeholder_int(*ty, self.underlying);
+                *ty = rebase_enum_placeholder(*ty, self.tag as usize, self.underlying);
             }
             !own
         });
@@ -120,16 +120,20 @@ impl Compiler {
         let mut packed = self.skip_attribute_specifiers()?;
         // Optional tag name; a definition registers its `EnumDef` under
         // it, empty for an untagged enum.
-        let (tag_name, tag_idx) = if self.lex.tk == Token::Id {
-            let id_idx = self.lex.curr_id_idx;
-            let name = self.symbols[id_idx].name.clone();
+        let tag_name = if self.lex.tk == Token::Id {
+            let name = self.symbols[self.lex.curr_id_idx].name.clone();
             self.next()?;
-            (name, Some(id_idx as u32))
+            Some(name)
         } else {
-            (String::new(), None)
+            None
         };
         packed = self.skip_attribute_specifiers()? || packed;
         if self.lex.tk == '{' {
+            // The tag's scope begins before the list (C99 6.2.1p7).
+            let tag = match &tag_name {
+                Some(name) => Some(self.define_enum_tag(name)?),
+                None => None,
+            };
             let (min, max, captured) = self.parse_enum_body()?;
             // An attribute after the closing brace binds to the enum type
             // (`enum E { ... } __attribute__((packed))`), the position GCC
@@ -168,35 +172,63 @@ impl Compiler {
             };
             if !captured.is_empty() {
                 self.enums.push(EnumDef {
-                    name: tag_name.to_string(),
+                    name: tag_name.unwrap_or_default(),
                     constants: captured,
                     underlying_ty: underlying,
                 });
             }
-            if let Some(tag) = tag_idx {
-                self.complete_enum_placeholders(tag, underlying);
+            if let Some(id) = tag {
+                self.structs[id].enum_underlying = Some(underlying);
+                self.complete_enum_placeholders(id as u32, underlying);
             }
             return Ok((underlying, None));
         }
-        // A bare `enum Tag` reference reuses the underlying type recorded at
-        // the tag's definition, so a packed enum keeps its sub-int width for
-        // sizeof / _Alignof and struct-field layout.
-        if let Some(underlying) = self.enum_tag_underlying(&tag_name) {
+        let Some(name) = tag_name else {
+            return Err(self.compile_err(Code::SYNTAX, "enum name or `{` expected"));
+        };
+        // `enum Tag` names the visible tag's type: the integer type its
+        // definition chose, so a packed enum keeps its sub-int width. With
+        // no tag visible, GNU C declares an incomplete enum here, which C99
+        // 6.7.2.3p2 does not allow.
+        let id = match self.find_tag(&name) {
+            Some(id) => {
+                self.check_tag_kind(id, "enum")?;
+                id
+            }
+            None => self.declare_tag(&name, false, true),
+        };
+        if let Some(underlying) = self.structs[id].enum_underlying {
             return Ok((underlying, None));
         }
-        // GNU: a use of the tag before its definition. It takes `int` and
-        // carries the tag to the types built on it, which the definition
-        // rewrites.
-        if let Some(tag) = tag_idx
-            && !self.enum_placeholder_tags.contains(&tag)
-        {
+        // The incomplete type is the tag's entry, which the checks for an
+        // incomplete struct reject where a complete type is required. The
+        // declarations built on it record the tag, and the definition
+        // rewrites their types.
+        let tag = id as u32;
+        if !self.enum_placeholder_tags.contains(&tag) {
             self.enum_placeholder_tags.push(tag);
         }
-        Ok((Ty::Int as i64, tag_idx))
+        Ok((struct_ty_for(id), Some(tag)))
+    }
+
+    /// The tag entry an enum definition completes: a declaration of the tag
+    /// in the current scope, or a fresh one that hides any outer tag.
+    fn define_enum_tag(&mut self, name: &str) -> Result<usize, C5Error> {
+        let Some(id) = self.find_tag_in_current_scope(name) else {
+            return Ok(self.declare_tag(name, false, true));
+        };
+        self.check_tag_kind(id, "enum")?;
+        if self.structs[id].enum_underlying.is_some() {
+            return Err(self.compile_err(
+                Code::INVALID_DECLARATION,
+                alloc::format!("enum `{name}` already defined"),
+            ));
+        }
+        Ok(id)
     }
 
     /// C99 6.7.2.2p4: the definition of enum tag `tag` completes the type
-    /// its earlier uses named with the `int` placeholder. Rewrites the
+    /// its earlier uses named through the tag's entry. Rewrites the
     /// objects, functions, parameters and members declared through it,
     /// and the outer bindings an open scope shadows. A tentative definition
     /// declared through it is sized when the unit ends.
@@ -222,16 +254,6 @@ impl Compiler {
             c.list(&mut f.params, &mut f.param_enum_tags);
             c.chain(&mut f.ret_fn);
         }
-    }
-
-    /// The underlying type the definition of enum tag `name` chose. Untagged
-    /// definitions are recorded under the empty name and never match.
-    pub(super) fn enum_tag_underlying(&self, name: &str) -> Option<i64> {
-        if name.is_empty() {
-            return None;
-        }
-        let def = self.enums.iter().rev().find(|e| e.name == name);
-        def.map(|e| e.underlying_ty)
     }
 
     /// The 64-bit type an enum widens to: `long` where it is 64 bits wide,

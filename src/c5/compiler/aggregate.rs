@@ -6,7 +6,6 @@
 //! layout state, so the bit-packing rules stay in one place.
 
 use alloc::format;
-use alloc::string::ToString;
 use alloc::vec::Vec;
 
 use super::super::diag::Code;
@@ -16,7 +15,7 @@ use super::decl_base;
 use super::types::{
     is_decl_modifier, is_pointer_ty, is_struct_value_ty, round_up, struct_id_of, struct_ty_for,
 };
-use super::{AnonBitfield, AnonMember, Compiler, StructDef, StructField};
+use super::{AnonBitfield, AnonMember, Compiler, StructField};
 
 /// The running layout of one aggregate body: the next offset, the alignment
 /// maxima its members contribute, and the bit cursor of the current bitfield
@@ -402,13 +401,13 @@ impl Compiler {
             // forward-declared tag is incomplete; size cannot stand in
             // for that, since a complete empty `struct {}` and a struct
             // whose only member is a flexible array both have size 0.
+            let field_name = self.symbols[id_idx].name.clone();
             if is_aggregate_value && !self.structs[struct_id_of(field_ty)].is_complete {
                 return Err(self.compile_err(
                     Code::INVALID_DECLARATION,
-                    "aggregate-value field of incomplete type",
+                    format!("field `{field_name}` has incomplete type"),
                 ));
             }
-            let field_name = self.symbols[id_idx].name.clone();
 
             if bit_width > 0 && field_array_size != 0 {
                 return Err(self.compile_err(
@@ -800,47 +799,19 @@ impl Compiler {
         // mid-definition. C99 6.2.1: only a tag in the SAME scope
         // makes this a redefinition; a tag of the same name in an
         // outer scope is shadowed by a fresh declaration here.
-        let struct_id = match self.find_struct_id_in_current_scope(name) {
-            Some(id) if self.structs[id].fields.is_empty() => {
-                self.structs[id].is_union = is_union;
-                id
-            }
-            Some(_) => {
-                return Err(self.compile_err(
-                    Code::INVALID_DECLARATION,
-                    format!(
-                        "{} `{}` already defined",
-                        if is_union { "union" } else { "struct" },
-                        name
-                    ),
-                ));
-            }
-            None => {
-                self.structs.push(StructDef {
-                    name: name.to_string(),
-                    size: 0,
-                    align: 1,
-                    explicit_align: 0,
-                    natural_align: 0,
-                    member_align: 0,
-                    fields: Vec::new(),
-                    anon_bitfields: Vec::new(),
-                    anon_members: Vec::new(),
-                    is_union,
-                    is_complete: false,
-                    is_vector: false,
-                    is_array: false,
-                    is_anonymous: false,
-                    is_transparent_union: false,
-                    cast_named: false,
-                    vla_size_slot: None,
-                });
-                let id = self.structs.len() - 1;
-                if let Some(scope) = self.tag_scopes.last_mut() {
-                    scope.push((name.to_string(), id));
+        let keyword = if is_union { "union" } else { "struct" };
+        let struct_id = match self.find_tag_in_current_scope(name) {
+            Some(id) => {
+                self.check_tag_kind(id, keyword)?;
+                if !self.structs[id].fields.is_empty() {
+                    return Err(self.compile_err(
+                        Code::INVALID_DECLARATION,
+                        format!("{keyword} `{name}` already defined"),
+                    ));
                 }
                 id
             }
+            None => self.declare_tag(name, is_union, false),
         };
         Ok(struct_id)
     }
@@ -1044,7 +1015,7 @@ impl Compiler {
             self.apply_post_body_attributes(id)?;
             id
         } else {
-            self.find_or_forward_declare_struct(&inner_name, nested_is_union)
+            self.find_or_forward_declare_struct(&inner_name, nested_is_union, false)?
         };
         Ok((struct_ty_for(inner_id), inner_id))
     }

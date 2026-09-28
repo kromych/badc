@@ -2772,6 +2772,117 @@ fn parameter_of_incomplete_type_in_a_definition_is_diagnosed() {
 }
 
 #[test]
+fn tags_share_one_scoped_name_space() {
+    // C99 6.7.2.3p2: a tag's declarations all use the keyword that declared
+    // it, whether they name the tag or define it (6.2.3: one name space).
+    for (src, msg) in [
+        (
+            "struct T { int a; }; union T *p;",
+            "`union T` does not match the earlier `struct T`",
+        ),
+        (
+            "struct T { int a; }; enum T { A };",
+            "`enum T` does not match the earlier `struct T`",
+        ),
+        (
+            "enum T { A }; struct T *p;",
+            "`struct T` does not match the earlier `enum T`",
+        ),
+        (
+            "struct T; union T { int a; };",
+            "`union T` does not match the earlier `struct T`",
+        ),
+        ("enum E { A }; enum E { B };", "enum `E` already defined"),
+        ("enum *p;", "enum name or `{` expected"),
+    ] {
+        expect_compile_error(
+            &alloc::format!("{src}\nint main(void) {{ return 0; }}"),
+            msg,
+        );
+    }
+    // 6.2.1p4: a block's enum definition declares a type of its own, so the
+    // file-scope declaration it shares a name with stays incomplete.
+    expect_compile_error(
+        "enum E;\n\
+         int f(void) { enum E { BIG = 0x100000000 }; return (int)sizeof(enum E); }\n\
+         int main(void) { return (int)sizeof(enum E); }",
+        "`sizeof` applied to an incomplete type",
+    );
+    // 6.7.2.3p7: `struct S;` declares S in its block whatever is outside.
+    expect_compile_error(
+        "struct S { int a; };\n\
+         int main(void) { struct S; return (int)sizeof(struct S); }",
+        "`sizeof` applied to an incomplete type",
+    );
+    // A block's tag hides an outer one of any kind, and the outer one is
+    // back when the block ends.
+    expect_compiles(
+        "struct T { int a; };\n\
+         enum U { U0 };\n\
+         int f(void) { enum T { A = 4 }; struct U; struct U *p = 0; return A + (p != 0); }\n\
+         struct T s;\n\
+         enum U u = U0;\n\
+         int main(void) { return f() - 4 + s.a + (int)u; }",
+        "tags of another kind in a block",
+    );
+}
+
+#[test]
+fn incomplete_enum_is_rejected_where_an_incomplete_struct_is() {
+    // C99 6.7.2.2p4: an enum is incomplete until its list closes. A use of
+    // the tag before then (a GNU extension) names a type that takes the
+    // incomplete-type checks of a struct declared without its body.
+    for (src, msg) in [
+        (
+            "enum E; struct S { enum E m; };",
+            "field `m` has incomplete type",
+        ),
+        (
+            "enum E; struct S { enum E m[2]; };",
+            "field `m` has incomplete type",
+        ),
+        (
+            "enum E; int n = sizeof(enum E);",
+            "`sizeof` applied to an incomplete type",
+        ),
+        (
+            "enum E; int n = _Alignof(enum E);",
+            "`_Alignof` applied to an incomplete type",
+        ),
+        (
+            "enum E; int f(enum E *p) { return (int)sizeof *p; }",
+            "`sizeof` applied to an incomplete type",
+        ),
+        (
+            "enum E; enum E *f(enum E *p) { return p + 1; }",
+            "a pointer to an incomplete type",
+        ),
+        ("enum E; enum E a[3];", "object `a` has incomplete type"),
+        ("enum E; static enum E x;", "object `x` has incomplete type"),
+        ("enum E; enum E x;", "object `x` has incomplete type"),
+    ] {
+        expect_compile_error(
+            &alloc::format!("{src}\nint main(void) {{ return 0; }}"),
+            msg,
+        );
+    }
+    // A declaration that needs no complete type stands, and the definition
+    // completes the objects declared before it.
+    expect_compiles(
+        "enum E;\n\
+         extern enum E x;\n\
+         enum E *px = &x;\n\
+         enum E tentative;\n\
+         typedef enum E T;\n\
+         enum E f(enum E);\n\
+         enum E { A = 3 };\n\
+         enum E x = A;\n\
+         int main(void) { T t = A; return (int)(t + tentative + *px) - 6; }",
+        "declarations of an incomplete enum",
+    );
+}
+
+#[test]
 fn sizeof_of_an_incomplete_type_is_diagnosed() {
     // C99 6.5.3.4p1 / C11 6.5.3.4p1: neither operator applies to an
     // incomplete type, whether the operand is a type name, an identifier,

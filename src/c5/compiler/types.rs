@@ -430,11 +430,17 @@ pub(crate) fn strip_unsigned(ty: i64) -> i64 {
 }
 
 /// `ty`, declared through an enum tag before its definition and so built on
-/// `int`, over the integer type `underlying` the definition chose: the same
-/// derivations and qualifiers.
-pub(crate) fn rebase_placeholder_int(ty: i64, underlying: i64) -> i64 {
+/// the tag's incomplete entry `id`, over the integer type `underlying` the
+/// definition chose: the same derivations and qualifiers. A type built on
+/// anything else is returned unchanged.
+pub(crate) fn rebase_enum_placeholder(ty: i64, id: usize, underlying: i64) -> i64 {
+    if !is_struct_ty(ty) || struct_id_of(ty) != id {
+        return ty;
+    }
     let bare = strip_unsigned(ty);
-    (bare - Ty::Int as i64 + strip_unsigned(underlying)) | (ty ^ bare) | (underlying & UNSIGNED_BIT)
+    (bare - struct_ty_for(id) + strip_unsigned(underlying))
+        | (ty ^ bare)
+        | (underlying & UNSIGNED_BIT)
 }
 
 /// The scalar `void` type tag.
@@ -534,11 +540,7 @@ pub(super) fn format_type(ty: i64, structs: &[super::StructDef]) -> alloc::strin
             .filter(|n| !n.is_empty())
             .map(alloc::string::ToString::to_string)
             .unwrap_or_else(|| format!("@{id}"));
-        let kw = if structs.get(id).is_some_and(|s| s.is_union) {
-            "union"
-        } else {
-            "struct"
-        };
+        let kw = structs.get(id).map_or("struct", |s| s.keyword());
         return format!("{prefix}{kw} {name}{}", ptr_suffix(ty, depth));
     }
     let (base, leaf) = if in_band(bare, Ty::Float as i64) {

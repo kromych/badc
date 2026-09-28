@@ -105,9 +105,10 @@ impl Compiler {
     }
 
     /// Look up a tag in scope, searching from the innermost block
-    /// outward (C99 6.2.1: tags have block scope). An inner `struct T`
-    /// shadows an outer one declared at a wider scope.
-    pub(super) fn find_struct_id(&self, name: &str) -> Option<usize> {
+    /// outward (C99 6.2.1: tags have block scope). Struct, union and
+    /// enum tags share one name space (6.2.3), so an inner tag of any
+    /// kind shadows an outer one declared at a wider scope.
+    pub(super) fn find_tag(&self, name: &str) -> Option<usize> {
         for scope in self.tag_scopes.iter().rev() {
             if let Some((_, id)) = scope.iter().rev().find(|(n, _)| n == name) {
                 return Some(*id);
@@ -116,11 +117,15 @@ impl Compiler {
         None
     }
 
-    /// Look up a tag only in the current (innermost) scope. The body
-    /// of a struct definition uses this to decide whether the tag is
-    /// a redefinition (same scope) or a fresh declaration shadowing
-    /// an outer one.
-    pub(super) fn find_struct_id_in_current_scope(&self, name: &str) -> Option<usize> {
+    /// The visible struct or union tag `name`; an enum tag hides it.
+    pub(super) fn find_struct_id(&self, name: &str) -> Option<usize> {
+        self.find_tag(name).filter(|&id| !self.structs[id].is_enum)
+    }
+
+    /// Look up a tag only in the current (innermost) scope. A definition
+    /// uses this to decide whether the tag is a redefinition (same scope)
+    /// or a fresh declaration shadowing an outer one.
+    pub(super) fn find_tag_in_current_scope(&self, name: &str) -> Option<usize> {
         self.tag_scopes.last().and_then(|scope| {
             scope
                 .iter()
@@ -130,40 +135,58 @@ impl Compiler {
         })
     }
 
-    /// Find an existing struct tag by name or register a fresh
-    /// forward declaration (size 0, no fields) and return that.
-    /// Used by every type-position that mentions `struct Foo`
-    /// before the struct's body has been seen -- common idioms
-    /// like `typedef struct Foo Foo;` and `struct Foo *p;` rely
-    /// on this.
-    pub(super) fn find_or_forward_declare_struct(&mut self, name: &str, is_union: bool) -> usize {
-        if let Some(id) = self.find_struct_id(name) {
-            return id;
+    /// C99 6.7.2.3p2: every declaration of a tag uses the keyword that
+    /// declared it.
+    pub(super) fn check_tag_kind(&self, id: usize, keyword: &str) -> Result<(), C5Error> {
+        let s = &self.structs[id];
+        if s.keyword() == keyword {
+            return Ok(());
         }
-        self.structs.push(StructDef {
-            name: name.to_string(),
-            size: 0,
-            align: 1,
-            explicit_align: 0,
-            natural_align: 0,
-            member_align: 0,
-            fields: Vec::new(),
-            anon_bitfields: Vec::new(),
-            anon_members: Vec::new(),
-            is_union,
-            is_complete: false,
-            is_vector: false,
-            is_array: false,
-            is_anonymous: false,
-            is_transparent_union: false,
-            cast_named: false,
-            vla_size_slot: None,
-        });
+        Err(self.compile_err(
+            Code::INVALID_DECLARATION,
+            alloc::format!(
+                "`{keyword} {}` does not match the earlier `{} {}`",
+                s.name,
+                s.keyword(),
+                s.name
+            ),
+        ))
+    }
+
+    /// A fresh incomplete tag declared in the current scope.
+    pub(super) fn declare_tag(&mut self, name: &str, is_union: bool, is_enum: bool) -> usize {
+        self.structs
+            .push(StructDef::incomplete_tag(name, is_union, is_enum));
         let id = self.structs.len() - 1;
         if let Some(scope) = self.tag_scopes.last_mut() {
             scope.push((name.to_string(), id));
         }
         id
+    }
+
+    /// The visible struct or union tag `name`, or a fresh forward
+    /// declaration of it. Used by every type-position that mentions
+    /// `struct Foo` before the struct's body has been seen -- common
+    /// idioms like `typedef struct Foo Foo;` and `struct Foo *p;` rely
+    /// on this. `standalone` is the `struct Foo;` declaration, which
+    /// declares the tag in the current scope whatever an outer scope
+    /// holds (C99 6.7.2.3p7).
+    pub(super) fn find_or_forward_declare_struct(
+        &mut self,
+        name: &str,
+        is_union: bool,
+        standalone: bool,
+    ) -> Result<usize, C5Error> {
+        let found = if standalone {
+            self.find_tag_in_current_scope(name)
+        } else {
+            self.find_tag(name)
+        };
+        if let Some(id) = found {
+            self.check_tag_kind(id, if is_union { "union" } else { "struct" })?;
+            return Ok(id);
+        }
+        Ok(self.declare_tag(name, is_union, false))
     }
 
     /// Rewrite `ty` into the type named by a `__attribute__((mode(M)))`
@@ -267,6 +290,8 @@ impl Compiler {
             is_transparent_union: false,
             cast_named: false,
             vla_size_slot: None,
+            is_enum: false,
+            enum_underlying: None,
         });
         struct_ty_for(self.structs.len() - 1)
     }
@@ -368,6 +393,8 @@ impl Compiler {
             is_transparent_union: false,
             cast_named: false,
             vla_size_slot: None,
+            is_enum: false,
+            enum_underlying: None,
         });
         struct_ty_for(self.structs.len() - 1)
     }
@@ -479,6 +506,8 @@ impl Compiler {
             is_transparent_union: false,
             cast_named: false,
             vla_size_slot: None,
+            is_enum: false,
+            enum_underlying: None,
         });
         struct_ty_for(self.structs.len() - 1)
     }
@@ -563,6 +592,8 @@ impl Compiler {
             is_transparent_union: false,
             cast_named: false,
             vla_size_slot: None,
+            is_enum: false,
+            enum_underlying: None,
         });
         struct_ty_for(self.structs.len() - 1)
     }

@@ -2839,6 +2839,13 @@ fn enum_used_before_definition() {
 }
 
 #[test]
+fn tag_scopes() {
+    // C99 6.2.1p4, 6.2.3: a block's tag of any kind hides an outer one and
+    // goes out of scope with the block.
+    assert_eq!(run_fixture("tag_scopes.c"), 0);
+}
+
+#[test]
 fn typeof_redeclaration_after_multidim_array() {
     // `extern typeof(x) x;` after a typeof of an array of arrays names x's
     // own type, and so does a new object declared through typeof.

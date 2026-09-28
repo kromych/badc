@@ -57,6 +57,7 @@ const DW_AT_UPPER_BOUND: u32 = 0x2f;
 const DW_AT_CALLING_CONVENTION: u32 = 0x36;
 const DW_CC_NORMAL: u8 = 0x01;
 const DW_AT_CONST_VALUE: u32 = 0x1c;
+const DW_AT_DECLARATION: u32 = 0x3c;
 
 const DW_ATE_ADDRESS: u8 = 0x01;
 const DW_ATE_BOOLEAN: u8 = 0x02;
@@ -680,6 +681,9 @@ impl CatalogEntry {
         match self {
             CatalogEntry::Base(_) | CatalogEntry::VoidStar => 7,
             CatalogEntry::Pointer { .. } | CatalogEntry::StructPointer { .. } => 6,
+            CatalogEntry::Struct { id } if structs.get(*id as usize).is_some_and(|s| s.is_enum) => {
+                1 + 4
+            }
             CatalogEntry::Struct { id } => {
                 let mut size: u32 = 1 + 4 + 4;
                 if let Some(s) = structs.get(*id as usize) {
@@ -1035,6 +1039,7 @@ const ABBREV_ENUMERATION_TYPE: u64 = 17;
 const ABBREV_ENUMERATOR: u64 = 18;
 const ABBREV_SUBPROGRAM_INTERNAL: u64 = 19;
 const ABBREV_ENUMERATION_TYPE_ANON: u64 = 20;
+const ABBREV_ENUMERATION_TYPE_DECL: u64 = 21;
 
 /// One `.debug_abbrev` declaration: the abbreviation code, its DWARF tag,
 /// whether the DIE has children, and the ordered (attribute, form) pairs.
@@ -1228,6 +1233,17 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
         tag: DW_TAG_ENUMERATION_TYPE,
         has_children: true,
         attrs: &[(DW_AT_BYTE_SIZE, DW_FORM_DATA1)],
+    },
+    // An enum the unit declares but never defines: DW_AT_declaration and
+    // no size, as for a forward-declared aggregate (DWARF 4 5.7).
+    AbbrevDecl {
+        code: ABBREV_ENUMERATION_TYPE_DECL,
+        tag: DW_TAG_ENUMERATION_TYPE,
+        has_children: false,
+        attrs: &[
+            (DW_AT_NAME, DW_FORM_STRP),
+            (DW_AT_DECLARATION, DW_FORM_FLAG_PRESENT),
+        ],
     },
     // enumerator -- one (name, value) pair. DW_AT_const_value is signed
     // since C99 enum constants can be negative.
@@ -1713,6 +1729,11 @@ fn emit_type_die(
                 .get(id)
                 .copied()
                 .expect("collect() interned every struct name");
+            if s.is_enum {
+                write_uleb128(body, ABBREV_ENUMERATION_TYPE_DECL);
+                body.extend_from_slice(&name_off.to_le_bytes());
+                return;
+            }
             write_uleb128(body, abbrev);
             body.extend_from_slice(&name_off.to_le_bytes());
             body.extend_from_slice(&(s.size as u32).to_le_bytes());
@@ -2378,7 +2399,7 @@ mod tests {
              130000071301030e0b060000081701030e0b060000090d00030e4913380600000a0d\
              00030e49136b0f0d0f00000b2e01030e110112073f19491300000c0500030e491300\
              000d180000000e0500030e4913021800000f0101491300001021002f0f0000110401\
-             03080b0b00001404010b0b000012280003081c0d000000"
+             03080b0b00001404010b0b0000150400030e3c19000012280003081c0d000000"
         );
     }
 
@@ -2970,6 +2991,33 @@ mod tests {
 #[cfg(test)]
 mod info_golden {
     use super::*;
+
+    /// A tag declared as an enum and never defined is an enumeration
+    /// declaration, and its DIE is the size the layout pass reserves.
+    #[test]
+    fn an_undefined_enum_tag_is_an_enumeration_declaration() {
+        let mut strs = StrTable::new();
+        let mut tag = StructDef::incomplete_tag("never", false, true);
+        tag.cast_named = true;
+        let structs = alloc::vec![tag];
+        let catalog = TypeCatalog::collect(&[], &[], &mut strs, Target::LinuxX64, &structs);
+        let entry = CatalogEntry::Struct { id: 0 };
+        let mut body = Vec::new();
+        let none = BTreeMap::new();
+        emit_type_die(
+            &entry,
+            &mut body,
+            &catalog,
+            &structs,
+            &none,
+            &BTreeMap::new(),
+            Target::LinuxX64,
+        );
+        let mut want = alloc::vec![ABBREV_ENUMERATION_TYPE_DECL as u8];
+        want.extend_from_slice(&catalog.struct_names[&0].to_le_bytes());
+        assert_eq!(body, want);
+        assert_eq!(entry.die_size(&structs) as usize, body.len());
+    }
 
     /// Byte-stability lock for the amalg `.debug_info` CU.
     #[test]

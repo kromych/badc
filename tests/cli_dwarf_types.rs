@@ -688,12 +688,14 @@ fn forward_declared_aggregate_is_a_declaration() {
         "declaration",
         "struct opaque;\n\
          union uopaque;\n\
-         struct wrap { struct opaque *p; union uopaque *q; int x; };\n\
+         enum eopaque;\n\
+         struct wrap { struct opaque *p; union uopaque *q; enum eopaque *e; int x; };\n\
          int use(void) { struct wrap w; return w.x; }\n",
     );
     for (tag, name) in [
         (DW_TAG_STRUCTURE_TYPE, "opaque"),
         (DW_TAG_UNION_TYPE, "uopaque"),
+        (DW_TAG_ENUMERATION_TYPE, "eopaque"),
     ] {
         let d = u.named(tag, name);
         assert!(
@@ -709,7 +711,7 @@ fn forward_declared_aggregate_is_a_declaration() {
     // A complete empty aggregate keeps a size and no declaration flag.
     let wrap = u.named(DW_TAG_STRUCTURE_TYPE, "wrap");
     assert!(wrap.at(DW_AT_DECLARATION).is_none());
-    assert_eq!(wrap.at(DW_AT_BYTE_SIZE).unwrap().as_uint(), 24);
+    assert_eq!(wrap.at(DW_AT_BYTE_SIZE).unwrap().as_uint(), 32);
 }
 
 /// A function-pointer member points at a subroutine type carrying the

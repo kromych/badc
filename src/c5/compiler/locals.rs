@@ -547,8 +547,7 @@ impl Compiler {
             // complete type by the end of its declarator; an enum used
             // before its definition is incomplete (6.7.2.3p2). A block-scope
             // `extern` has linkage and declares no object, so it is exempt.
-            let incomplete_enum = base_enum_tag.is_some() && !is_pointer_ty(ty);
-            if !is_extern && (self.incomplete_aggregate_tag(ty).is_some() || incomplete_enum) {
+            if !is_extern && self.incomplete_aggregate_tag(ty).is_some() {
                 let name = self.symbols[loc_idx].name.clone();
                 return Err(self.compile_err(
                     Code::INVALID_DECLARATION,

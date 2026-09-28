@@ -1200,10 +1200,8 @@ impl Compiler {
         params: &super::function::ParsedParams,
         line: usize,
     ) -> Result<(), C5Error> {
-        for (pos, (&idx, &ty)) in params.indices.iter().zip(&params.types).enumerate() {
-            let incomplete_enum =
-                params.enum_tags.iter().any(|&(p, _)| p == pos) && !is_pointer_ty(ty);
-            if self.incomplete_aggregate_tag(ty).is_some() || incomplete_enum {
+        for (&idx, &ty) in params.indices.iter().zip(&params.types) {
+            if self.incomplete_aggregate_tag(ty).is_some() {
                 let name = &self.symbols[idx].name;
                 return Err(self.compile_err_at(
                     Code::INVALID_DECLARATION,
@@ -1980,8 +1978,7 @@ impl Compiler {
             // further on in the unit -- a tag defined later, or an enum
             // used before its definition -- so its storage is sized, and
             // an aggregate left incomplete rejected, once the unit is parsed.
-            let tag = self.incomplete_aggregate_tag(ty);
-            if tag.is_some() || (decl.base_enum_tag.is_some() && !is_pointer_ty(ty)) {
+            if let Some(tag) = self.incomplete_aggregate_tag(ty) {
                 self.pending_incomplete_objects
                     .push((id_idx, tag, signature_line));
             }
@@ -2751,9 +2748,8 @@ impl Compiler {
     /// declarator's own line.
     fn complete_tentative_definitions(&mut self) -> Result<(), C5Error> {
         for (id_idx, sid, line) in core::mem::take(&mut self.pending_incomplete_objects) {
-            if let Some(sid) = sid
-                && !self.structs[sid].is_complete
-            {
+            let tag = &self.structs[sid];
+            if !tag.is_complete && tag.enum_underlying.is_none() {
                 let name = self.symbols[id_idx].name.clone();
                 return Err(self.compile_err_at(
                     Code::INVALID_DECLARATION,

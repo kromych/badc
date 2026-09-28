@@ -159,7 +159,7 @@ pub use c5::{
 };
 
 #[cfg(feature = "std")]
-pub use c5::StdHost;
+pub use c5::{StdHost, write_output_file};
 
 #[cfg(feature = "full")]
 pub use c5::{

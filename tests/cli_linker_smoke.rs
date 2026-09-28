@@ -313,6 +313,50 @@ fn on_demand_runtime_sources_compile_only_when_a_symbol_needs_them() {
     );
 }
 
+// A link replaces its output rather than rewriting it, so a program that is
+// still running does not block its own relink (ETXTBSY on Linux) and keeps
+// running the image it started with.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn a_link_replaces_a_running_executable() {
+    use std::process::Stdio;
+    let dir = tempdir("busy-output");
+    let src = |code: i32| {
+        format!(
+            "#include <stdio.h>\nint main(void) {{ while (getchar() != EOF) ; return {code}; }}\n"
+        )
+    };
+    let link = |what: &str| {
+        run(
+            Command::new(badc())
+                .args(["-q", "p.c", "-o", "p"])
+                .current_dir(&dir),
+            what,
+        );
+    };
+    write_source(&dir, "p.c", &src(3));
+    link("link p");
+    let mut old = Command::new(dir.join("p"))
+        .stdin(Stdio::piped())
+        .spawn()
+        .expect("start p");
+    write_source(&dir, "p.c", &src(4));
+    link("link over the running p");
+    drop(old.stdin.take());
+    assert_eq!(old.wait().expect("wait for p").code(), Some(3));
+    let new = Command::new(dir.join("p"))
+        .stdin(Stdio::null())
+        .status()
+        .expect("run the new p");
+    assert_eq!(new.code(), Some(4));
+    let mut names: Vec<_> = std::fs::read_dir(&dir)
+        .expect("list")
+        .map(|e| e.expect("entry").file_name())
+        .collect();
+    names.sort();
+    assert_eq!(names, ["p", "p.c"]);
+}
+
 // Inputs enter the link in command-line order, as gcc hands them to the
 // linker: constructors of one priority run in that order, whether a unit
 // comes as a source or an object, and a `--whole-archive` member joins the

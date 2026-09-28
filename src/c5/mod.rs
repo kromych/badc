@@ -16,6 +16,8 @@ mod lexer;
 mod linker;
 mod object;
 mod op;
+#[cfg(feature = "std")]
+mod output_file;
 mod preprocessor;
 mod program;
 #[cfg(feature = "full")]
@@ -63,6 +65,8 @@ pub use {
 
 #[cfg(feature = "std")]
 pub use host::StdHost;
+#[cfg(feature = "std")]
+pub use output_file::write_output_file;
 
 #[cfg(all(feature = "full", feature = "std"))]
 #[allow(unused_imports)]

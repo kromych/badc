@@ -593,7 +593,7 @@ fn run_relocatable_link(a: &LdArgs, machine: Option<u16>) -> i32 {
             Err(e) => return ld_err(e),
         }
     };
-    if let Err(e) = std::fs::write(&a.output, &bytes) {
+    if let Err(e) = crate::c5::write_output_file(&a.output, &bytes, false) {
         return ld_err(format!("cannot write `{}`: {e}", a.output.display()));
     }
     if let Some(p) = &a.map_path
@@ -1128,10 +1128,9 @@ fn run_final_link(a: &LdArgs, machine: Option<u16>) -> i32 {
             res.warnings.len()
         ));
     }
-    if let Err(e) = std::fs::write(&a.output, &res.image) {
+    if let Err(e) = crate::c5::write_output_file(&a.output, &res.image, true) {
         return ld_err(format!("cannot write `{}`: {e}", a.output.display()));
     }
-    set_executable(&a.output);
     if let Some(p) = &a.map_path
         && let Err(e) = std::fs::write(p, &res.map)
     {
@@ -1142,19 +1141,6 @@ fn run_final_link(a: &LdArgs, machine: Option<u16>) -> i32 {
     }
     0
 }
-
-#[cfg(unix)]
-fn set_executable(path: &Path) {
-    use std::os::unix::fs::PermissionsExt;
-    if let Ok(md) = std::fs::metadata(path) {
-        let mut perms = md.permissions();
-        perms.set_mode(perms.mode() | 0o111);
-        let _ = std::fs::set_permissions(path, perms);
-    }
-}
-
-#[cfg(not(unix))]
-fn set_executable(_path: &Path) {}
 
 /// Sections no script rule names. `--orphan-handling` reporting and
 /// `discard` both derive from this list.

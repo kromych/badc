@@ -49,7 +49,7 @@ pub(crate) fn compile_objects(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) {
             Ok(b) => b,
             Err(()) => std::process::exit(1),
         };
-        write_output(out, &bytes, cli.target, cli.quiet);
+        write_output(out, &bytes, cli.target, cli.quiet, false);
     } else {
         // Each worker writes its own `<stem>.o`, so write I/O runs in
         // the pool and each `info: wrote file` line stays grouped
@@ -69,7 +69,7 @@ pub(crate) fn compile_objects(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) {
                 .file_name()
                 .map(std::path::PathBuf::from)
                 .unwrap_or_else(|| std::path::Path::new(src).with_extension("o"));
-            match std::fs::write(&out, &bytes) {
+            match badc::write_output_file(&out, &bytes, false) {
                 Ok(()) => {
                     if !cfg.quiet {
                         log.diag(
@@ -201,7 +201,7 @@ pub(crate) fn build_archive(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) {
         });
     }
     let blob = badc::write_archive(&members, &sym_index);
-    write_output(&out_path, &blob, cli.target, cli.quiet);
+    write_output(&out_path, &blob, cli.target, cli.quiet, false);
 }
 
 /// Whether a `-c` / `--ar` object is laid out for a link that applies

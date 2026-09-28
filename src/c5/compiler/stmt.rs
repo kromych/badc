@@ -1055,7 +1055,7 @@ impl Compiler {
             let sym = &self.symbols[b.idx];
             if sym.class != Token::Loc as i64
                 || sym.val >= 0
-                || !sym.binding.decl_in_main_source
+                || !sym.binding.decl_in_user_source
                 || sym.binding.address_escaped
                 || sym.binding.was_read
                 || sym.binding.maybe_unused

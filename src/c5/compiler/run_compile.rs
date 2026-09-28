@@ -1003,7 +1003,7 @@ impl Compiler {
         self.symbols[id_idx].class = Token::Fun as i64;
         if self.symbols[id_idx].binding.decl_line == 0 {
             self.symbols[id_idx].binding.decl_line = self.lex.line;
-            self.symbols[id_idx].binding.decl_in_main_source = self.in_main_source();
+            self.symbols[id_idx].binding.decl_in_user_source = self.in_user_source();
         }
         // Census one file-scope declaration of this name for
         // the inline linkage models (C99 6.7.4p6-p7 and
@@ -1145,7 +1145,7 @@ impl Compiler {
         // report about the function points at its body.
         self.symbols[id_idx].binding.decl_line = def.line;
         self.symbols[id_idx].binding.decl_file = self.intern_source_file() as u32;
-        self.symbols[id_idx].binding.decl_in_main_source = self.in_main_source();
+        self.symbols[id_idx].binding.decl_in_user_source = self.in_user_source();
         // C99 6.9.1p5: a definition names every parameter it declares.
         if params.indices.len() != params.types.len() {
             return Err(self.compile_err_at(
@@ -1853,7 +1853,7 @@ impl Compiler {
             let i = bi as usize;
             let sym = &self.symbols[i];
             if sym.class != Token::Loc as i64
-                || !sym.binding.decl_in_main_source
+                || !sym.binding.decl_in_user_source
                 || sym.binding.address_escaped
                 || sym.binding.was_read
                 || sym.binding.maybe_unused
@@ -2042,7 +2042,7 @@ impl Compiler {
         if self.symbols[id_idx].binding.decl_line == 0 {
             self.symbols[id_idx].binding.decl_line = self.lex.line;
             self.symbols[id_idx].binding.decl_file = self.intern_source_file() as u32;
-            self.symbols[id_idx].binding.decl_in_main_source = self.in_main_source();
+            self.symbols[id_idx].binding.decl_in_user_source = self.in_user_source();
         }
         if !was_tentative_glo {
             self.symbols[id_idx].is_thread_local = thread_local;
@@ -2975,16 +2975,20 @@ impl Compiler {
         // not unused (matching gcc / clang, which never warn on it).
         let init_names: alloc::collections::BTreeSet<&str> =
             self.init_funcs.iter().map(|f| f.name.as_str()).collect();
-        let mut unused: Vec<(usize, String)> = Vec::new();
+        let mut unused: Vec<(u32, usize, String)> = Vec::new();
         for sym in self.symbols.iter() {
             if sym.class != Token::Fun as i64
                 || !sym.defined_here
                 || sym.linkage != Linkage::Internal
                 // An inline definition is internal but externally
-                // declared; another unit may still call the name.
+                // declared; another unit may still call the name. gcc
+                // reports no `inline` function, which headers define
+                // for their includers to call or not.
                 || sym.is_inline_definition
+                || sym.saw_plain_inline_decl
+                || sym.saw_extern_inline_decl
                 || sym.binding.was_referenced
-                || !sym.binding.decl_in_main_source
+                || !sym.binding.decl_in_user_source
                 || sym.name.is_empty()
                 || sym.name.starts_with('_')
                 || sym.name == "main"
@@ -2993,14 +2997,14 @@ impl Compiler {
             {
                 continue;
             }
-            unused.push((sym.binding.decl_line, sym.name.clone()));
+            let b = &sym.binding;
+            unused.push((b.decl_file, b.decl_line, sym.name.clone()));
         }
-        for (line, name) in unused {
-            self.warn_at(
-                Code::UNUSED_FUNCTION,
-                line,
-                alloc::format!("unused function `{name}`"),
-            );
+        // The unit is parsed, so each report names its declaration's file.
+        for (file, line, name) in unused {
+            let file = self.source_files[file as usize].clone();
+            let msg = alloc::format!("unused function `{name}`");
+            self.warn_at_file(Code::UNUSED_FUNCTION, &file, line, msg);
         }
     }
 

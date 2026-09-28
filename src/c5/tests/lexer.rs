@@ -313,12 +313,12 @@ fn line_text_by_number_honours_line_markers() {
     let src = "# 1 \"a.h\"\nint alpha;\nint beta;\n# 7 \"b.h\"\nint gamma;\n# 2 \"a.h\"\nint alpha_again;\n";
     let mut lex = Lexer::new(src.into());
     lex.file = "a.h".into();
-    assert_eq!(lex.line_text_by_number(2), Some("int beta;"));
+    assert_eq!(lex.line_text_by_number(&lex.file, 2), Some("int beta;"));
     // First occurrence wins: a.h line 2 was already indexed above.
-    assert_eq!(lex.line_text_by_number(1), Some("int alpha;"));
+    assert_eq!(lex.line_text_by_number(&lex.file, 1), Some("int alpha;"));
     lex.file = "b.h".into();
-    assert_eq!(lex.line_text_by_number(7), Some("int gamma;"));
-    assert_eq!(lex.line_text_by_number(99), None);
+    assert_eq!(lex.line_text_by_number(&lex.file, 7), Some("int gamma;"));
+    assert_eq!(lex.line_text_by_number(&lex.file, 99), None);
     // One entry per marker, not per line.
     assert_eq!(lex.line_index_entries(), 3);
 }
@@ -336,16 +336,16 @@ fn line_index_is_sized_by_markers_and_the_runs_it_answers_from() {
     src.push_str("# 1 \"main.c\"\nint last;\n");
     let mut lex = Lexer::new(src);
     lex.file = "main.c".into();
-    assert_eq!(lex.line_text_by_number(1), Some("int last;"));
+    assert_eq!(lex.line_text_by_number(&lex.file, 1), Some("int last;"));
     assert_eq!((lex.line_index_entries(), lex.line_tables()), (2, 1));
     lex.file = "big.h".into();
     for i in (1..=20000).rev().step_by(97) {
         assert_eq!(
-            lex.line_text_by_number(i),
+            lex.line_text_by_number(&lex.file, i),
             Some(format!("int v{i};").as_str())
         );
     }
-    assert_eq!(lex.line_text_by_number(20001), None);
+    assert_eq!(lex.line_text_by_number(&lex.file, 20001), None);
     assert_eq!((lex.line_index_entries(), lex.line_tables()), (2, 2));
 }
 

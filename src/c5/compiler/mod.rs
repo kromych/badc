@@ -2209,6 +2209,9 @@ pub struct Compiler {
     /// [`CompileOptions::track_includes`] was set. Empty otherwise.
     /// Renders the `-H` trace and the `-M` family's prerequisites.
     include_records: Vec<IncludeRecord>,
+    /// The preprocessor's `system_headers`: files whose declarations the
+    /// unused-binding diagnostics skip.
+    system_headers: alloc::collections::BTreeSet<String>,
 
     /// `#pragma entrypoint(<name>)` value drained from the
     /// preprocessor. Default `None` means "use `main`".
@@ -2923,6 +2926,7 @@ impl Compiler {
         let pp_diagnostics = pp.sink.take();
         let pp_control = pp.sink.into_control();
         let pp_include_records = pp.include_records;
+        let pp_system_headers = pp.system_headers;
         let pp_entrypoint = pp.entrypoint;
         let pp_subsystem = pp.subsystem;
         let pp_intrinsics = pp.intrinsics;
@@ -3049,6 +3053,7 @@ impl Compiler {
             asm_idents: Vec::new(),
             asm_validate_sink: Default::default(),
             include_records: pp_include_records,
+            system_headers: pp_system_headers,
             pp_entrypoint,
             pp_subsystem,
             pp_intrinsics,

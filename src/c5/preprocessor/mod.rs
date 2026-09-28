@@ -248,6 +248,9 @@ pub(crate) struct Preprocessor {
     /// (via [`IncludeRecord::trace_line`]) and supplies the `-M`
     /// family's prerequisite list, so both read one list.
     pub include_records: Vec<IncludeRecord>,
+    /// The headers the bundled set or a system directory supplied, named
+    /// as their line markers name them.
+    pub system_headers: BTreeSet<String>,
     /// `true` when the build driver asked for include tracking (`-H`
     /// or a `-M`-family flag). Defaults to `false`; flipping it on
     /// costs one push to `include_records` per `#include` resolve
@@ -1096,6 +1099,7 @@ impl Preprocessor {
             source_label: "<source>".to_string(),
             sink: Sink::default(),
             include_records: Vec::new(),
+            system_headers: BTreeSet::new(),
             track_includes: false,
             asm_source: false,
             entrypoint: None,

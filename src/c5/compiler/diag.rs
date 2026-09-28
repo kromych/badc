@@ -322,7 +322,20 @@ impl Compiler {
     /// `Program.warnings`. Raising one to an error does not unwind --
     /// the driver fails the unit at the phase boundary.
     pub(super) fn warn_at(&mut self, code: Code, line: usize, message: alloc::string::String) {
-        let (loc, source) = self.locate(line);
+        let (loc, source) = self.locate(&self.lex.file, line);
+        self.sink.emit_with_source(code, Some(loc), message, source);
+    }
+
+    /// [`Self::warn_at`] for `line` of `file`, a declaration the lexer has
+    /// since left.
+    pub(super) fn warn_at_file(
+        &mut self,
+        code: Code,
+        file: &str,
+        line: usize,
+        message: alloc::string::String,
+    ) {
+        let (loc, source) = self.locate(file, line);
         self.sink.emit_with_source(code, Some(loc), message, source);
     }
 
@@ -336,41 +349,33 @@ impl Compiler {
         line: usize,
         message: alloc::string::String,
     ) -> Result<(), C5Error> {
-        let (loc, source) = self.locate(line);
+        let (loc, source) = self.locate(&self.lex.file, line);
         self.sink
             .report_with_source(code, Some(loc), message, source)
     }
 
-    /// The position `line` reports at -- with the unit offset the
-    /// diagnostic pragmas resolve on -- and the source text it echoes.
-    fn locate(&self, line: usize) -> (Loc, Option<alloc::string::String>) {
-        let loc = match self.lex.line_offset(line) {
-            Some(offset) => Loc::in_unit(self.lex.file.clone(), line as u32, offset),
-            None => Loc::new(self.lex.file.clone(), line as u32),
+    /// The position `line` of `file` reports at -- with the unit offset
+    /// the diagnostic pragmas resolve on -- and the source text it echoes.
+    fn locate(&self, file: &str, line: usize) -> (Loc, Option<alloc::string::String>) {
+        let loc = match self.lex.line_offset(file, line) {
+            Some(offset) => Loc::in_unit(alloc::string::String::from(file), line as u32, offset),
+            None => Loc::new(alloc::string::String::from(file), line as u32),
         };
         let source = self
             .lex
-            .line_text_by_number(line)
+            .line_text_by_number(file, line)
             .filter(|s| !s.is_empty())
             .map(alloc::string::ToString::to_string);
         (loc, source)
     }
 
-    /// Whether the lexer's current file matches the primary
-    /// translation-unit source. Used at declaration sites to set
-    /// `Symbol::decl_in_main_source` so the unused-symbol
-    /// diagnostics emitted at block / TU exit can skip
-    /// declarations that landed via `#include`d headers. When the
-    /// caller (`CompileOptions::source_label`) didn't supply a
-    /// label, the preprocessor's `"<source>"` placeholder stands
-    /// in for the primary file.
-    pub(super) fn in_main_source(&self) -> bool {
-        let main = if self.source_label.is_empty() {
-            "<source>"
-        } else {
-            self.source_label.as_str()
-        };
-        self.lex.file == main
+    /// Whether the lexer's current file is the unit's own: the primary
+    /// source or a header its directory, `-iquote` or `-I` supplied. Sets
+    /// `Binding::decl_in_user_source`, so the unused-binding diagnostics
+    /// report declarations there and skip the bundled and system headers,
+    /// as gcc and clang skip system headers.
+    pub(super) fn in_user_source(&self) -> bool {
+        !self.system_headers.contains(&self.lex.file)
     }
 
     /// Record that the parser just emitted a store to local
@@ -383,7 +388,7 @@ impl Compiler {
     /// diagnostic before the new entry is pushed.
     pub(super) fn record_local_store(&mut self, idx: usize, line: usize) {
         if !self.warn_dead_store
-            || !self.symbols[idx].binding.decl_in_main_source
+            || !self.symbols[idx].binding.decl_in_user_source
             || self.symbols[idx].binding.address_escaped
             || self.symbols[idx].name.is_empty()
             || self.symbols[idx].name.starts_with('_')
@@ -516,7 +521,7 @@ impl Compiler {
     }
 
     fn compile_err_line(&self, code: Code, line: usize, message: &str) -> C5Error {
-        let (loc, source) = self.locate(line);
+        let (loc, source) = self.locate(&self.lex.file, line);
         let diagnostic = super::super::diag::Diagnostic::new(
             code,
             super::super::diag::Level::Error,

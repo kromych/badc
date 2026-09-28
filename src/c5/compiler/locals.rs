@@ -630,13 +630,13 @@ impl Compiler {
     }
 
     pub(super) fn set_decl_site(&mut self, idx: usize) {
-        let (line, file, in_main) = (
+        let (line, file, in_user) = (
             self.lex.line,
             self.intern_source_file() as u32,
-            self.in_main_source(),
+            self.in_user_source(),
         );
         let b = &mut self.symbols[idx].binding;
-        (b.decl_line, b.decl_file, b.decl_in_main_source) = (line, file, in_main);
+        (b.decl_line, b.decl_file, b.decl_in_user_source) = (line, file, in_user);
     }
 
     /// Bind one block-scope declarator to storage: a block-scope `extern`
@@ -1002,7 +1002,7 @@ impl Compiler {
                 decl_spelling: src.binding.decl_spelling,
                 decl_line: src.binding.decl_line,
                 decl_file: src.binding.decl_file,
-                decl_in_main_source: src.binding.decl_in_main_source,
+                decl_in_user_source: src.binding.decl_in_user_source,
                 ..Default::default()
             },
             ..Default::default()

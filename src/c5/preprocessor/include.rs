@@ -290,6 +290,9 @@ impl Preprocessor {
             return Ok(());
         }
         self.record_include(name, found.path.clone(), origin, IncludeStatus::Opened);
+        if origin != IncludeOrigin::User {
+            self.system_headers.insert(found.key.clone());
+        }
         // A header may legitimately appear more than once on the active
         // include path: a guard-protected re-include where an inner header
         // pulls a guarded outer one back in. The include guard skips the body

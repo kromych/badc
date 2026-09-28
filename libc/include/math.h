@@ -93,6 +93,18 @@
 #pragma binding(libc::asinhf, "_asinhf")
 #pragma binding(libc::acoshf, "_acoshf")
 #pragma binding(libc::atanhf, "_atanhf")
+#pragma binding(libc::sinhf, "_sinhf")
+#pragma binding(libc::coshf, "_coshf")
+#pragma binding(libc::tanhf, "_tanhf")
+#pragma binding(libc::log2f, "_log2f")
+#pragma binding(libc::exp2f, "_exp2f")
+#pragma binding(libc::frexpf, "_frexpf")
+#pragma binding(libc::ldexpf, "_ldexpf")
+#pragma binding(libc::modff, "_modff")
+#pragma binding(libc::lrintf, "_lrintf")
+#pragma binding(libc::llrintf, "_llrintf")
+#pragma binding(libc::lroundf, "_lroundf")
+#pragma binding(libc::llroundf, "_llroundf")
 #pragma binding(libc::tgammaf, "_tgammaf")
 #pragma binding(libc::erff,    "_erff")
 #pragma binding(libc::erfcf,   "_erfcf")
@@ -233,6 +245,18 @@
 #pragma binding(libm::asinhf, "asinhf")
 #pragma binding(libm::acoshf, "acoshf")
 #pragma binding(libm::atanhf, "atanhf")
+#pragma binding(libm::sinhf, "sinhf")
+#pragma binding(libm::coshf, "coshf")
+#pragma binding(libm::tanhf, "tanhf")
+#pragma binding(libm::log2f, "log2f")
+#pragma binding(libm::exp2f, "exp2f")
+#pragma binding(libm::frexpf, "frexpf")
+#pragma binding(libm::ldexpf, "ldexpf")
+#pragma binding(libm::modff, "modff")
+#pragma binding(libm::lrintf, "lrintf")
+#pragma binding(libm::llrintf, "llrintf")
+#pragma binding(libm::lroundf, "lroundf")
+#pragma binding(libm::llroundf, "llroundf")
 #pragma binding(libm::tgammaf, "tgammaf")
 #pragma binding(libm::erff,    "erff")
 #pragma binding(libm::erfcf,   "erfcf")
@@ -361,7 +385,6 @@
 // C99 log2 / round only landed in the Universal CRT.
 #pragma binding(ucrtbase::log2,  "log2")
 #pragma binding(ucrtbase::round, "round")
-float exp2f(float x);
 #pragma binding(ucrtbase::pow,   "pow")
 #pragma binding(ucrtbase::fmin,  "fmin")
 #pragma binding(ucrtbase::fmax,  "fmax")
@@ -384,6 +407,15 @@ float exp2f(float x);
 #pragma binding(ucrtbase::asinhf, "asinhf")
 #pragma binding(ucrtbase::acoshf, "acoshf")
 #pragma binding(ucrtbase::atanhf, "atanhf")
+#pragma binding(ucrtbase::sinhf, "sinhf")
+#pragma binding(ucrtbase::coshf, "coshf")
+#pragma binding(ucrtbase::tanhf, "tanhf")
+#pragma binding(ucrtbase::log2f, "log2f")
+#pragma binding(ucrtbase::modff, "modff")
+#pragma binding(ucrtbase::lrintf, "lrintf")
+#pragma binding(ucrtbase::llrintf, "llrintf")
+#pragma binding(ucrtbase::lroundf, "lroundf")
+#pragma binding(ucrtbase::llroundf, "llroundf")
 #pragma binding(ucrtbase::tgammaf, "tgammaf")
 #pragma binding(ucrtbase::erff,    "erff")
 #pragma binding(ucrtbase::erfcf,   "erfcf")
@@ -698,6 +730,25 @@ float acosf(float x);
 float asinhf(float x);
 float acoshf(float x);
 float atanhf(float x);
+float sinhf(float x);
+float coshf(float x);
+float tanhf(float x);
+float log2f(float x);
+float exp2f(float x);
+float modff(float x, float *iptr);
+long lrintf(float x);
+long long llrintf(float x);
+long lroundf(float x);
+long long llroundf(float x);
+#ifdef _WIN32
+// The Universal CRT defines these in its header over the double forms
+// and exports neither.
+static inline float frexpf(float x, int *exp) { return (float)frexp(x, exp); }
+static inline float ldexpf(float x, int exp) { return (float)ldexp(x, exp); }
+#else
+float frexpf(float x, int *exp);
+float ldexpf(float x, int exp);
+#endif
 float tgammaf(float x);
 float erff(float x);
 float erfcf(float x);

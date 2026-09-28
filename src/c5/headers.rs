@@ -729,6 +729,42 @@ mod tests {
         assert!(failures.is_empty(), "{}", failures.join("\n"));
     }
 
+    /// The C99 library functions a target lacked a declaration for are
+    /// declared on every target with the standard type (C99 7.12, 7.19.6.14).
+    #[test]
+    fn c99_functions_are_declared_on_every_target() {
+        use crate::{CompileOptions, Compiler, Target};
+        const DECLS: &[(&str, &str)] = &[
+            ("sinhf", "float (*)(float)"),
+            ("coshf", "float (*)(float)"),
+            ("tanhf", "float (*)(float)"),
+            ("log2f", "float (*)(float)"),
+            ("exp2f", "float (*)(float)"),
+            ("frexpf", "float (*)(float, int *)"),
+            ("ldexpf", "float (*)(float, int)"),
+            ("modff", "float (*)(float, float *)"),
+            ("lrintf", "long (*)(float)"),
+            ("llrintf", "long long (*)(float)"),
+            ("lroundf", "long (*)(float)"),
+            ("llroundf", "long long (*)(float)"),
+            ("vsscanf", "int (*)(const char *, const char *, va_list)"),
+        ];
+        let mut src = alloc::string::String::from(
+            "#include <math.h>\n#include <stdarg.h>\n#include <stdio.h>\n",
+        );
+        for (name, ty) in DECLS {
+            src.push_str(&alloc::format!(
+                "_Static_assert(_Generic(&{name}, {ty}: 1, default: 0), \"{name}\");\n"
+            ));
+        }
+        for target in Target::ALL {
+            let opts = CompileOptions::default().with_no_entry_point(true);
+            if let Err(e) = Compiler::with_options(src.clone(), target, opts).compile() {
+                panic!("{}: {e}", target.id_str());
+            }
+        }
+    }
+
     /// The C99 and POSIX functions of no parameters are declared with a
     /// prototype, so a call passing an argument is diagnosed (C99
     /// 6.5.2.2p2), and the POSIX id functions return uid_t, gid_t and pid_t,

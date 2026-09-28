@@ -74,6 +74,15 @@ libm.so.6 remainderf
 libm.so.6 sqrtf
 libm.so.6 tgammaf
 
+[-] exp2f and log2f, the same SVID wrappers dropped at GLIBC_2.27.
+    Measured on glibc 2.39, x86_64 and aarch64, over 27 edge values and
+    -160 to 160 in steps of 0.37: identical errno and identical results,
+    except that log2f of a negative argument returns a NaN with the sign
+    bit clear at the floor's definition and set at GLIBC_2.27. C99 F.9.3
+    asks only for a NaN there.
+libm.so.6 exp2f
+libm.so.6 log2f
+
 [-] GLIBC_2.27 changed the struct dirent the GLOB_ALTDIRFUNC callbacks
     exchange. <glob.h> declares neither GLOB_ALTDIRFUNC nor the
     callback fields, so no interface it states distinguishes the two.

@@ -95,6 +95,8 @@ pub(crate) struct FrontEnd {
     pub(crate) wrapv: bool,
     pub(crate) auto_var_init: badc::AutoVarInit,
     pub(crate) nostdinc: bool,
+    /// gcc `-P`: `-E` output without its line markers.
+    pub(crate) no_line_markers: bool,
     pub(crate) no_builtin: bool,
     pub(crate) no_builtin_fns: Vec<String>,
     pub(crate) defines: Vec<(String, String)>,
@@ -1063,6 +1065,10 @@ impl Parser {
             // carries is an error rather than a bind to badc's bundled
             // libc.
             "-nostdinc" => front.nostdinc = true,
+            // gcc / clang `-P`: `-E` prints no line markers, for inputs
+            // that are not C (linker scripts, generated headers). Without
+            // `-E` it has no effect, as under gcc.
+            "-P" => front.no_line_markers = true,
             // gcc / clang `-std=<dialect>`: badc compiles C99 with the
             // GNU extensions always available, so the dialect selects
             // only whether `__STRICT_ANSI__` is defined.

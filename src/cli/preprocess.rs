@@ -83,6 +83,21 @@ pub(crate) fn dump_dependencies(
 /// stdout stay parseable, and takes no `-o`: one output stream
 /// cannot hold several expansions, which is why gcc and clang refuse
 /// the combination too.
+/// `text` without its GNU line markers (`# N "file" [flags]`), as gcc's
+/// `-E -P` prints it.
+fn without_line_markers(text: &str) -> String {
+    let is_marker = |line: &str| {
+        let Some(rest) = line.strip_prefix("# ") else {
+            return false;
+        };
+        let digits = rest.bytes().take_while(u8::is_ascii_digit).count();
+        digits > 0 && rest[digits..].starts_with(" \"")
+    };
+    text.split_inclusive('\n')
+        .filter(|l| !is_marker(l))
+        .collect()
+}
+
 pub(crate) fn preprocess(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) {
     let sources = &inputs.sources;
     let multi_tu = sources.len() > 1;
@@ -125,6 +140,11 @@ pub(crate) fn preprocess(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) {
                 if multi_tu {
                     eprintln!("--- {label} ---");
                 }
+                let s = if cli.front.no_line_markers {
+                    without_line_markers(&s)
+                } else {
+                    s
+                };
                 match pp_output {
                     Some(p) => {
                         if let Err(e) = std::fs::write(p, &s) {

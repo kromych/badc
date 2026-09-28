@@ -1539,6 +1539,25 @@ fn the_code_model_macro_follows_mcmodel() {
     );
 }
 
+/// `-P` leaves the line markers out of `-E` output and nothing else, as
+/// gcc does; without `-E` it has no effect.
+#[test]
+fn dash_p_drops_the_line_markers() {
+    let d = dir("pp-no-markers");
+    write(&d, "inc.h", "#define WIDTH 8\n");
+    write(&d, "t.c", "#include \"inc.h\"\nint w = WIDTH;\n");
+    let marked = run_ok(&d, &["-q", "-E", "t.c"]);
+    assert!(marked.lines().any(|l| l.starts_with("# 1 \"")), "{marked}");
+    let plain = run_ok(&d, &["-q", "-E", "-P", "t.c"]);
+    let unmarked: String = marked
+        .split_inclusive('\n')
+        .filter(|l| !l.starts_with("# "))
+        .collect();
+    assert_eq!(plain, unmarked);
+    assert!(plain.contains("int w = 8;"), "{plain}");
+    run_ok(&d, &["-q", "-P", "-c", "t.c"]);
+}
+
 /// Which headers a unit opens depends on the predefine set, so the
 /// preprocess-only modes take the code model too, as gcc does. Refusing
 /// them would leave `-MM` describing a unit nobody builds.

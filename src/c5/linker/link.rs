@@ -1984,7 +1984,12 @@ impl<'a> Link<'a> {
                 };
                 if tls {
                     if !noted.contains(&reloc.offset) {
-                        let site = origin.at(self.machine, reloc.rtype, &sym.name, reloc.offset);
+                        let site = origin.at(
+                            self.machine,
+                            reloc.rtype,
+                            origin.symbol_name(sym),
+                            reloc.offset,
+                        );
                         self.apply_tls_reloc(i, sym, reloc, patch_offset, &site, &resolver)?;
                     }
                     continue;
@@ -2003,7 +2008,12 @@ impl<'a> Link<'a> {
                     || self.defined.contains_key(sym.name.as_str());
                 let relaxed = self.relax_got_reference(reloc, patch_offset, resolved_here);
                 let reloc = relaxed.as_ref().unwrap_or(reloc);
-                let site = origin.at(self.machine, reloc.rtype, &sym.name, reloc.offset);
+                let site = origin.at(
+                    self.machine,
+                    reloc.rtype,
+                    origin.symbol_name(sym),
+                    reloc.offset,
+                );
                 self.resolve_text_reloc(i, sym, sym_section, reloc, patch_offset, &site)?;
             }
         }
@@ -2527,8 +2537,14 @@ impl<'a> Link<'a> {
             (NativeMachine::X86_64, R_X86_64_64) | (NativeMachine::Aarch64, R_AARCH64_ABS64)
         );
         if !is_abs64 {
-            return Err(RelocOrigin::in_object(obj, SectionFamily::Data)
-                .at(self.machine, reloc.rtype, &sym.name, reloc.offset)
+            let origin = RelocOrigin::in_object(obj, SectionFamily::Data);
+            return Err(origin
+                .at(
+                    self.machine,
+                    reloc.rtype,
+                    origin.symbol_name(sym),
+                    reloc.offset,
+                )
                 .unsupported());
         }
         // A slot naming an `SHN_ABS` symbol takes `S + A` directly: the
@@ -3202,7 +3218,7 @@ impl<'a> Link<'a> {
                 .wrapping_add(sym.value)
                 .wrapping_add(reloc.addend as u64);
             if width == 4 && value > u32::MAX as u64 {
-                let site = origin.at(machine, reloc.rtype, &sym.name, reloc.offset);
+                let site = origin.at(machine, reloc.rtype, origin.symbol_name(sym), reloc.offset);
                 return Err(site.truncated(value as i64));
             }
             section_bytes[patch_off..end].copy_from_slice(&value.to_le_bytes()[..width]);
@@ -3268,7 +3284,7 @@ impl<'a> Link<'a> {
             (NativeMachine::X86_64, R_X86_64_32) | (NativeMachine::Aarch64, R_AARCH64_ABS32) => 4u8,
             _ => {
                 return Err(origin
-                    .at(machine, reloc.rtype, &sym.name, reloc.offset)
+                    .at(machine, reloc.rtype, origin.symbol_name(sym), reloc.offset)
                     .unsupported());
             }
         };
@@ -4475,6 +4491,64 @@ mod tests {
             alloc::format!("{e}"),
             "error: vmlinux.o(.init.text+0x30): unsupported R_AARCH64_MOVW_PREL_G0 (287) \
              against symbol `primary_entry` [B6012] [relocation]"
+        );
+    }
+
+    /// A section symbol has no name of its own; a diagnostic names the
+    /// input section it stands for, as GNU ld does.
+    #[test]
+    fn a_section_symbol_is_named_by_its_section_in_a_diagnostic() {
+        use crate::c5::linker::object::{InputSection, NativeSymbol, STT_FUNC, STT_SECTION};
+        let sec = |name: &str, family, offset, size| InputSection {
+            name: name.to_string(),
+            family,
+            offset,
+            size,
+            align: 8,
+        };
+        let sections = alloc::vec![
+            sec(".text", SectionFamily::Text, 0, 0x40),
+            sec(".rodata", SectionFamily::RoData, 0, 0),
+            sec(".rodata.jump_tables", SectionFamily::RoData, 0, 0x40),
+            sec(".rodata.str1.1", SectionFamily::RoData, 0x40, 0x10),
+            sec(".tbss", SectionFamily::Tbss, 0, 8),
+        ];
+        let sym = |name: &str, section, value, kind| NativeSymbol {
+            name: name.to_string(),
+            section,
+            value,
+            size: 0,
+            binding: 0,
+            kind,
+            visibility: 0,
+        };
+        let origin = RelocOrigin::in_input("t.o", &sections, SectionFamily::Text);
+        for (s, want) in [
+            (
+                sym("", NativeSymSection::RoData, 0, STT_SECTION),
+                ".rodata.jump_tables",
+            ),
+            (
+                sym("", NativeSymSection::RoData, 0x40, STT_SECTION),
+                ".rodata.str1.1",
+            ),
+            (sym("", NativeSymSection::Tls, 0, STT_SECTION), ".tbss"),
+            (sym("f", NativeSymSection::Text, 0, STT_FUNC), "f"),
+        ] {
+            assert_eq!(origin.symbol_name(&s), want);
+        }
+        let s = sym("", NativeSymSection::RoData, 0, STT_SECTION);
+        let site = origin.at(
+            NativeMachine::X86_64,
+            R_X86_64_32S,
+            origin.symbol_name(&s),
+            0xd,
+        );
+        assert_eq!(
+            alloc::format!("{}", site.absolute_in_pie(false)),
+            "error: t.o(.text+0xd): R_X86_64_32S (11) against symbol `.rodata.jump_tables` can \
+             not be used when making a position-independent executable: the reference needs an \
+             absolute address, which no load address supplies [B6012] [relocation]"
         );
     }
 

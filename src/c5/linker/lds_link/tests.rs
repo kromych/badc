@@ -1058,6 +1058,30 @@ fn aarch64_movw_sabs_overflow_fails_the_link() {
     assert!(e.contains("overflow against `tgt'"), "{e}");
 }
 
+/// A diagnostic names a section symbol, which has no name of its own,
+/// by its section, as GNU ld does.
+#[test]
+fn a_section_symbol_is_named_by_its_section_in_a_diagnostic() {
+    // Symtab: null(0), .text(1), .data(2).
+    let o = TestObj::new()
+        .sec(".text", SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 4, &[0; 4])
+        .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8, &[0; 8])
+        .reloc(0, 0, 2, rt::R_X86_64_32, 0);
+    let objs = alloc::vec![parse_lds_object("a.o", o.build(EM_X86_64)).expect("a.o parses")];
+    let script = parse_linker_script(
+        "SECTIONS { . = 0x1000; .text : { *(.text) } . = 0x100000000; .data : { *(.data) } }",
+    )
+    .expect("script parses");
+    let opts = LdsOptions {
+        emit: LdsEmit::Exec,
+        max_page_size: 0x1000,
+        ..Default::default()
+    };
+    let e = link_with_script(&script, objs, &opts).expect_err("the field cannot hold the address");
+    let e = format!("{e}");
+    assert!(e.contains("R_X86_64_32 against `.data'"), "{e}");
+}
+
 // ---- Cortex-A53 erratum 843419 (`--fix-cortex-a53-843419`) ----
 // The expectations mirror GNU ld's workaround: the ADRP becomes an
 // ADR where the addressed page is within a megabyte, otherwise the

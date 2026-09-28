@@ -467,6 +467,33 @@ impl<'a> RelocOrigin<'a> {
         }
     }
 
+    /// The name a diagnostic gives `sym`: its own, or for a section
+    /// symbol, which has none, its input section's, as GNU ld reports it.
+    pub(crate) fn symbol_name<'s>(&self, sym: &'s NativeSymbol) -> &'s str
+    where
+        'a: 's,
+    {
+        if !sym.name.is_empty() || sym.kind != STT_SECTION {
+            return &sym.name;
+        }
+        let families: &[SectionFamily] = match sym.section {
+            NativeSymSection::Text => &[SectionFamily::Text],
+            NativeSymSection::RoData => &[SectionFamily::RoData],
+            NativeSymSection::RelRo => &[SectionFamily::RelRo],
+            NativeSymSection::Data => &[SectionFamily::Data],
+            NativeSymSection::Bss => &[SectionFamily::Bss],
+            NativeSymSection::Tls => &[SectionFamily::Tdata, SectionFamily::Tbss],
+            _ => &[],
+        };
+        // A section symbol's value is its section's offset in the family
+        // blob; an empty section may share that offset with the next one.
+        self.sections
+            .iter()
+            .filter(|s| families.contains(&s.family) && s.offset == sym.value)
+            .max_by_key(|s| s.size)
+            .map_or(&sym.name, |s| s.name.as_str())
+    }
+
     pub(crate) fn at(
         &self,
         machine: NativeMachine,
@@ -691,6 +718,7 @@ pub enum NativeSymSection {
 pub const STT_NOTYPE: u8 = 0;
 pub const STT_OBJECT: u8 = 1;
 pub const STT_FUNC: u8 = 2;
+pub const STT_SECTION: u8 = 3;
 /// `st_other & 0x3` -- the only visibility that reaches the dynamic
 /// symbol table.
 pub const STV_DEFAULT: u8 = 0;

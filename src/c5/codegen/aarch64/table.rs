@@ -564,11 +564,17 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
     }
     // fmov between a SIMD/FP register and a GP register (bridging the two
     // register files), or an FP-to-FP move. The GP<->FP forms require matching
-    // widths (Xd<->Dn, Wd<->Sn); Rn/Rd sit at their usual positions.
+    // widths (Xd<->Dn, Wd<->Sn), or name the top half of a vector
+    // (Vd.D[1]<->Xn); Rn/Rd sit at their usual positions. Register 31 there
+    // is the zero register, so `sp` is refused.
     if mnemonic == "fmov" {
         return match ops {
             [
-                Opnd::Reg { num: rd, is64, .. },
+                Opnd::Reg {
+                    num: rd,
+                    is64,
+                    sp: false,
+                },
                 Opnd::VReg { num: vn, is_d },
             ] if is64 == is_d => {
                 let base = if *is64 { 0x9E66_0000u32 } else { 0x1E26_0000 };
@@ -576,11 +582,39 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             }
             [
                 Opnd::VReg { num: vd, is_d },
-                Opnd::Reg { num: rn, is64, .. },
+                Opnd::Reg {
+                    num: rn,
+                    is64,
+                    sp: false,
+                },
             ] if is64 == is_d => {
                 let base = if *is_d { 0x9E67_0000u32 } else { 0x1E27_0000 };
                 Ok(base | ((*rn as u32) << 5) | (*vd as u32))
             }
+            [
+                Opnd::Reg {
+                    num: rd,
+                    is64: true,
+                    sp: false,
+                },
+                Opnd::VecElem {
+                    num: vn,
+                    size: 3,
+                    index: 1,
+                },
+            ] => Ok(0x9EAE_0000 | ((*vn as u32) << 5) | (*rd as u32)),
+            [
+                Opnd::VecElem {
+                    num: vd,
+                    size: 3,
+                    index: 1,
+                },
+                Opnd::Reg {
+                    num: rn,
+                    is64: true,
+                    sp: false,
+                },
+            ] => Ok(0x9EAF_0000 | ((*rn as u32) << 5) | (*vd as u32)),
             [
                 Opnd::VReg { num: vd, is_d: d1 },
                 Opnd::VReg { num: vn, is_d: d2 },
@@ -615,7 +649,7 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
                     | (*rd as u32))
             }
             _ => Err(String::from(
-                "inline asm: bad fmov operands (D<->X, S<->W, D<->D, S<->S, or #imm)",
+                "inline asm: bad fmov operands (D<->X, S<->W, V.D[1]<->X, D<->D, S<->S, or #imm)",
             )),
         };
     }

@@ -110,6 +110,8 @@ pub(super) const BUILTINS: &[Builtin] = &[
     direct("__builtin_choose_expr"),
     direct("__builtin_types_compatible_p"),
     direct("__builtin_object_size"),
+    direct("__builtin_offsetof"),
+    direct("__builtin_has_attribute"),
     direct("__builtin_add_overflow"),
     direct("__builtin_sub_overflow"),
     direct("__builtin_mul_overflow"),
@@ -149,6 +151,57 @@ pub(super) const BUILTINS: &[Builtin] = &[
     direct("__builtin_isdigit"),
     direct("__builtin_isascii"),
     direct("__builtin_toascii"),
+    // The infinity and NaN constants and the return-address conversions:
+    // macros in <_builtins.h>.
+    direct("__builtin_inf"),
+    direct("__builtin_inff"),
+    direct("__builtin_infl"),
+    direct("__builtin_huge_val"),
+    direct("__builtin_huge_valf"),
+    direct("__builtin_huge_vall"),
+    direct("__builtin_nan"),
+    direct("__builtin_nanf"),
+    direct("__builtin_extract_return_addr"),
+    direct("__builtin_frob_return_addr"),
+    // GCC's `__atomic` and `__sync` builtins, lowered at the call site onto
+    // the C11 7.17 operations.
+    direct("__atomic_load_n"),
+    direct("__atomic_load"),
+    direct("__atomic_store_n"),
+    direct("__atomic_store"),
+    direct("__atomic_exchange_n"),
+    direct("__atomic_compare_exchange_n"),
+    direct("__atomic_fetch_add"),
+    direct("__atomic_fetch_sub"),
+    direct("__atomic_fetch_and"),
+    direct("__atomic_fetch_or"),
+    direct("__atomic_fetch_xor"),
+    direct("__atomic_add_fetch"),
+    direct("__atomic_sub_fetch"),
+    direct("__atomic_and_fetch"),
+    direct("__atomic_or_fetch"),
+    direct("__atomic_xor_fetch"),
+    direct("__atomic_test_and_set"),
+    direct("__atomic_clear"),
+    direct("__atomic_thread_fence"),
+    direct("__atomic_signal_fence"),
+    direct("__atomic_is_lock_free"),
+    direct("__atomic_always_lock_free"),
+    direct("__sync_fetch_and_add"),
+    direct("__sync_fetch_and_sub"),
+    direct("__sync_fetch_and_and"),
+    direct("__sync_fetch_and_or"),
+    direct("__sync_fetch_and_xor"),
+    direct("__sync_add_and_fetch"),
+    direct("__sync_sub_and_fetch"),
+    direct("__sync_and_and_fetch"),
+    direct("__sync_or_and_fetch"),
+    direct("__sync_xor_and_fetch"),
+    direct("__sync_val_compare_and_swap"),
+    direct("__sync_bool_compare_and_swap"),
+    direct("__sync_lock_test_and_set"),
+    direct("__sync_lock_release"),
+    direct("__sync_synchronize"),
     // Library names a bundled header binds; a unit that has not included
     // the header may define its own function under the same name.
     library("alloca", Intrinsic::Alloca),
@@ -276,11 +329,15 @@ pub(super) fn is_builtin(name: &str) -> bool {
 }
 
 /// `__has_builtin(name)` (C23 6.10.1, clang/gcc practice): 1 when a
-/// translation unit can use `name` with no `#include`.
-pub(super) fn has_builtin(name: &str) -> bool {
+/// translation unit for `target` can use `name` with no `#include`. The
+/// x86 vector builtins are the x86 targets' only.
+pub(super) fn has_builtin(name: &str, target: Target) -> bool {
     match lookup(name) {
         Some(b) => !matches!(b.supply, Supply::Library(_)),
-        None => library_alias(name).is_some(),
+        None => {
+            library_alias(name).is_some()
+                || (target.is_x86_64() && crate::c5::x86_simd::lookup(name).is_some())
+        }
     }
 }
 

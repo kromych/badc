@@ -3289,7 +3289,7 @@ fn builtin_table_answers_all_three_roles() {
     ] {
         assert!(pp.intrinsics.contains_key(name), "`{name}` must be seeded");
         assert!(
-            builtins::has_builtin(name),
+            builtins::has_builtin(name, Target::MacOSAarch64),
             "__has_builtin({name}) must be 1"
         );
         assert!(
@@ -3309,7 +3309,7 @@ fn builtin_table_answers_all_three_roles() {
         "__builtin_prefetch",
     ] {
         assert!(
-            builtins::has_builtin(name),
+            builtins::has_builtin(name, Target::MacOSAarch64),
             "__has_builtin({name}) must be 1"
         );
         assert!(
@@ -3340,7 +3340,7 @@ fn builtin_table_answers_all_three_roles() {
         ("__builtin___clear_cache", "__clear_cache"),
     ] {
         assert!(
-            builtins::has_builtin(name),
+            builtins::has_builtin(name, Target::MacOSAarch64),
             "__has_builtin({name}) must be 1"
         );
         assert_eq!(
@@ -3378,7 +3378,7 @@ fn builtin_table_answers_all_three_roles() {
     ] {
         assert_eq!(builtins::library_alias(name), None, "`{name}`");
         assert!(
-            builtins::has_builtin(name),
+            builtins::has_builtin(name, Target::MacOSAarch64),
             "__has_builtin({name}) must be 1"
         );
     }
@@ -3405,7 +3405,7 @@ fn builtin_table_answers_all_three_roles() {
             "`{name}` must need its header"
         );
         assert!(
-            !builtins::has_builtin(name),
+            !builtins::has_builtin(name, Target::MacOSAarch64),
             "__has_builtin({name}) must be 0"
         );
         assert!(
@@ -3414,7 +3414,140 @@ fn builtin_table_answers_all_three_roles() {
         );
     }
     assert!(!builtins::is_builtin("__builtin_bitreverse32"));
-    assert!(!builtins::has_builtin("__builtin_bswap128"));
+    assert!(!builtins::has_builtin(
+        "__builtin_bswap128",
+        Target::MacOSAarch64
+    ));
+}
+
+/// `__has_builtin` answers 1 for every builtin badc accepts, however it is
+/// supplied: each row of the table, each library alias, each `__builtin_`
+/// macro <_builtins.h> or the predefines define, and on the x86 targets
+/// each vector builtin, which the other targets refuse.
+#[test]
+fn has_builtin_reports_every_accepted_builtin() {
+    use super::builtins;
+    let thunks = crate::c5::headers::embedded_headers()
+        .iter()
+        .find(|(n, _)| *n == "_builtins.h")
+        .expect("_builtins.h is bundled")
+        .1;
+    let macros: Vec<&str> = thunks
+        .lines()
+        .filter_map(|l| l.trim_start().strip_prefix("#define "))
+        .map(|d| d.split(['(', ' ']).next().unwrap_or(d))
+        .chain(PREDEFINED_FN_MACROS.iter().map(|m| m.0))
+        .filter(|n| n.starts_with("__builtin_"))
+        .collect();
+    assert!(macros.len() >= 16, "macros found: {macros:?}");
+    for m in &macros {
+        assert!(
+            builtins::is_builtin(m),
+            "`{m}` is a macro with no table row"
+        );
+    }
+    let mut names: Vec<String> = builtins::BUILTINS
+        .iter()
+        .filter(|b| !matches!(b.supply, builtins::Supply::Library(_)))
+        .map(|b| b.name.to_string())
+        .collect();
+    names.extend(
+        builtins::LIBRARY_BUILTINS
+            .iter()
+            .map(|f| format!("__builtin_{f}")),
+    );
+    let simd: Vec<&str> = crate::c5::x86_simd::OPS.iter().map(|o| o.name).collect();
+    let mut src = String::new();
+    for n in names.iter().map(String::as_str).chain(simd.iter().copied()) {
+        src.push_str(&format!(
+            "#if __has_builtin({n})\nY {n}\n#else\nN {n}\n#endif\n"
+        ));
+    }
+    for target in [
+        Target::LinuxX64,
+        Target::WindowsX64,
+        Target::LinuxAarch64,
+        Target::WindowsAarch64,
+        Target::MacOSAarch64,
+    ] {
+        let out = Preprocessor::new(target.id_str(), target, "0.1.0")
+            .process(&src)
+            .expect("preprocess");
+        for n in &names {
+            assert!(
+                out.contains(&format!("Y {n}\n")),
+                "{target:?}: __has_builtin({n})"
+            );
+        }
+        let want = if target.is_x86_64() { 'Y' } else { 'N' };
+        for n in &simd {
+            assert!(
+                out.contains(&format!("{want} {n}\n")),
+                "{target:?}: __has_builtin({n})"
+            );
+        }
+    }
+}
+
+/// Every GCC atomic builtin the table reports is one the parser lowers.
+#[test]
+fn every_gcc_atomic_builtin_in_the_table_compiles() {
+    use super::builtins;
+    let call = |n: &str| -> String {
+        let rmw = ["add", "sub", "and", "or", "xor"];
+        let fetch_first = n
+            .strip_prefix("__atomic_fetch_")
+            .or(n.strip_prefix("__sync_fetch_and_"));
+        let op_first = n
+            .strip_prefix("__atomic_")
+            .and_then(|r| r.strip_suffix("_fetch"))
+            .or(n
+                .strip_prefix("__sync_")
+                .and_then(|r| r.strip_suffix("_and_fetch")));
+        match n {
+            _ if fetch_first.or(op_first).is_some_and(|o| rmw.contains(&o)) => {
+                if n.starts_with("__sync_") {
+                    format!("r = {n}(p, v);")
+                } else {
+                    format!("r = {n}(p, v, 5);")
+                }
+            }
+            "__atomic_load_n" => format!("r = {n}(p, 5);"),
+            "__atomic_load" => format!("{n}(p, &r, 5);"),
+            "__atomic_store_n" => format!("{n}(p, v, 5);"),
+            "__atomic_store" => format!("{n}(p, &v, 5);"),
+            "__atomic_exchange_n" => format!("r = {n}(p, v, 5);"),
+            "__atomic_compare_exchange_n" => format!("r = {n}(p, &e, v, 0, 5, 5);"),
+            "__atomic_test_and_set" | "__atomic_clear" => format!("{n}(b, 5);"),
+            "__atomic_thread_fence" | "__atomic_signal_fence" => format!("{n}(5);"),
+            "__atomic_is_lock_free" | "__atomic_always_lock_free" => format!("r = {n}(4, 0);"),
+            "__sync_val_compare_and_swap" | "__sync_bool_compare_and_swap" => {
+                format!("r = {n}(p, e, v);")
+            }
+            "__sync_lock_test_and_set" => format!("r = {n}(p, v);"),
+            "__sync_lock_release" => format!("{n}(p);"),
+            "__sync_synchronize" => format!("{n}();"),
+            _ => panic!("`{n}`: give the test a call of it"),
+        }
+    };
+    let atomics: Vec<&str> = builtins::BUILTINS
+        .iter()
+        .map(|b| b.name)
+        .filter(|n| n.starts_with("__atomic_") || n.starts_with("__sync_"))
+        .collect();
+    assert!(atomics.len() >= 30, "{atomics:?}");
+    for n in atomics {
+        let src = format!(
+            "int f(int *p, unsigned char *b, int v, int e) {{ int r = 0; {} return r; }}\n",
+            call(n)
+        );
+        for target in [Target::LinuxX64, Target::LinuxAarch64] {
+            let opts = crate::CompileOptions::default().with_no_entry_point(true);
+            if let Err(e) = crate::Compiler::with_options(src.clone(), target, opts).compile() {
+                panic!("{target:?}: `{n}` does not compile: {e}");
+            }
+        }
+    }
 }
 
 /// The `l`-suffixed bit builtins follow the target's `long` width, and

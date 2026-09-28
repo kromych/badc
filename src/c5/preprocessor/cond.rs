@@ -3,6 +3,7 @@ use super::builtins;
 use super::directive::header_name;
 use super::include::IncludeForm;
 use super::text::{literal_prefix_len, pp_number_len, skip_literal, strip_c_comments};
+use crate::c5::codegen::Target;
 use crate::c5::diag::Code;
 use crate::c5::error::C5Error;
 use crate::c5::ident;
@@ -28,7 +29,7 @@ impl Preprocessor {
                 out.push_str(if self.is_defined_name(name) { "1" } else { "0" });
                 return Some(next);
             }
-            resolve_has_operator(s, i, out)
+            resolve_has_operator(s, i, self.target, out)
                 .or_else(|| self.resolve_has_include(s, i, filename, line_no, out))
         });
         // Expand the remaining identifiers, then strip comments from the
@@ -38,7 +39,7 @@ impl Preprocessor {
         let substituted = self.substitute(&out, "<#if>", line_no);
         // Resolve any `__has_builtin` / `__has_attribute` that a macro
         // alias expanded into; the pre-pass above handled the literal ones.
-        replace_has_operators(&strip_c_comments(&substituted))
+        replace_has_operators(&strip_c_comments(&substituted), self.target)
     }
 
     /// Resolve a `__has_include` / `__has_include_next` at `i`,
@@ -1127,8 +1128,8 @@ impl<'a> IfExprParser<'a> {
 /// with `1` or `0`. Run after macro substitution as well as before, so a
 /// header that reaches the operator through a macro alias
 /// (`#define ALIAS __has_attribute`) still resolves.
-pub(super) fn replace_has_operators(s: &str) -> String {
-    scan_operators(s, resolve_has_operator)
+pub(super) fn replace_has_operators(s: &str, target: Target) -> String {
+    scan_operators(s, |s, i, out| resolve_has_operator(s, i, target, out))
 }
 
 /// Walk `s`, offering each byte position to `resolve`, which appends its
@@ -1258,20 +1259,20 @@ fn balanced_operand<'a>(s: &'a str, at: usize, kw: &str) -> Option<(&'a str, usi
 
 /// The `#if` operators whose identifier operand is resolved textually,
 /// before and after macro substitution.
-type HasOperator = (&'static str, fn(&str) -> bool);
+type HasOperator = (&'static str, fn(&str, Target) -> bool);
 
 const HAS_OPERATORS: [HasOperator; 2] = [
     ("__has_builtin", builtins::has_builtin),
-    ("__has_attribute", is_known_attribute),
+    ("__has_attribute", |name, _| is_known_attribute(name)),
 ];
 
 /// Resolve a `__has_*` operator at `i`, appending `1` or `0` to `out`.
 /// Returns the index just past the call, or `None` when no operator
 /// starts there.
-fn resolve_has_operator(s: &str, i: usize, out: &mut String) -> Option<usize> {
+fn resolve_has_operator(s: &str, i: usize, target: Target, out: &mut String) -> Option<usize> {
     for (op, is_known) in HAS_OPERATORS {
         if let Some((name, next)) = operator_operand(s, i, op, Parens::Required) {
-            out.push_str(if is_known(name) { "1" } else { "0" });
+            out.push_str(if is_known(name, target) { "1" } else { "0" });
             return Some(next);
         }
     }

@@ -172,6 +172,10 @@ Compile knobs:
   -iquote path             Add a search path for #include \"...\" only,
                            probed after the including file's directory
                            and before the -I paths. Repeatable.
+  -isystem path            Add a directory of system headers, probed
+                           after the -I paths and before the bundled
+                           headers; its headers are left out of -MM and
+                           of the unused-binding warnings. Repeatable.
   -fno-builtin[-<name>]    Treat a call spelled with a library
   -ffreestanding           function's own name as an ordinary call the
                            compiler may not fold, and drop the C99

@@ -604,8 +604,10 @@ Microsoft x64 convention places both by size.
 - The gcc `-M` dependency-output family: `-M`, `-MM`, `-MD`, `-MMD`,
   `-MF`, `-MT`, `-MQ`, `-MP`, and the `-Wp,-MD,<file>` / `-Wp,-MMD,<file>`
   spellings. `-MM` / `-MMD` omit system headers, which here means the
-  compiler's own header set and the system fallback directories; a header
-  from `-I`, `-iquote` or the including file's directory is a user header.
+  compiler's own header set, the `-isystem` directories and the system
+  fallback directories; a header from `-I`, `-iquote` or the including
+  file's directory is a user header. The unused-binding warnings draw the
+  same line.
   A header served from the in-binary set has no filesystem path and is
   omitted from the prerequisite list.
 - The `__has_include`, `__has_include_next`, `__has_builtin` and

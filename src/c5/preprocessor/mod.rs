@@ -211,6 +211,10 @@ pub(crate) struct Preprocessor {
     /// scope), after the including file's directory and before
     /// `search_paths`. An angle include never reads them.
     quote_search_paths: SearchPaths,
+    /// `-isystem` directories: probed after `search_paths` and before the
+    /// bundled headers, as gcc probes them ahead of its standard
+    /// directories, and their headers are system headers.
+    isystem_paths: SearchPaths,
     /// System header directories, probed only after the bundled headers:
     /// a third-party header the embedded set lacks (`zlib.h`,
     /// `libfdt.h`) resolves there, while a standard header keeps the
@@ -1092,6 +1096,7 @@ impl Preprocessor {
             search_paths: SearchPaths::default(),
             own_header_roots: SearchPaths::default(),
             quote_search_paths: SearchPaths::default(),
+            isystem_paths: SearchPaths::default(),
             system_fallback_paths: SearchPaths::default(),
             nostdinc: false,
             no_builtin: false,
@@ -1283,6 +1288,11 @@ impl Preprocessor {
     /// the `-I` paths; angle includes never read it.
     pub fn add_quote_path(&mut self, path: &str) {
         self.quote_search_paths.add(path);
+    }
+
+    /// Append an `-isystem` directory (see `isystem_paths`).
+    pub fn add_isystem_path(&mut self, path: &str) {
+        self.isystem_paths.add(path);
     }
 
     /// Append a system header directory probed only after the bundled

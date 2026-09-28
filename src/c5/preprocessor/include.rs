@@ -39,8 +39,8 @@ pub enum IncludeOrigin {
     /// The compiler's own header set: an `own_header_roots` file, or
     /// an in-binary body with no filesystem path.
     Own,
-    /// A host system directory probed after the own set
-    /// (`system_fallback_paths`).
+    /// An `-isystem` directory, or a host system directory probed after
+    /// the own set (`system_fallback_paths`).
     System,
 }
 
@@ -53,6 +53,7 @@ pub(super) enum SearchStep {
     SourceDir,
     Quote(usize),
     Path(usize),
+    Isystem(usize),
     /// The compiler's own header set.
     Own,
     System(usize),
@@ -68,7 +69,7 @@ impl SearchStep {
             | SearchStep::Quote(_)
             | SearchStep::Path(_) => IncludeOrigin::User,
             SearchStep::Own | SearchStep::OwnFolded => IncludeOrigin::Own,
-            SearchStep::System(_) => IncludeOrigin::System,
+            SearchStep::Isystem(_) | SearchStep::System(_) => IncludeOrigin::System,
         }
     }
 
@@ -466,6 +467,11 @@ impl Preprocessor {
             }
             for (i, dir) in self.search_paths.iter().enumerate() {
                 if let Some(found) = probe(SearchStep::Path(i), dir) {
+                    return Some(found);
+                }
+            }
+            for (i, dir) in self.isystem_paths.iter().enumerate() {
+                if let Some(found) = probe(SearchStep::Isystem(i), dir) {
                     return Some(found);
                 }
             }

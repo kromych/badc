@@ -103,6 +103,7 @@ pub(crate) struct FrontEnd {
     pub(crate) undefines: Vec<String>,
     pub(crate) include_paths: Vec<String>,
     pub(crate) quote_include_paths: Vec<String>,
+    pub(crate) isystem_paths: Vec<String>,
     pub(crate) force_includes: Vec<String>,
     /// `-H` / `--show-includes`: print the resolved path of every
     /// `#include`, with leading dots marking nesting depth.
@@ -905,6 +906,15 @@ impl Parser {
             )?),
             s if s.starts_with("-iquote") && s.len() > 7 => {
                 front.quote_include_paths.push(s[7..].to_string());
+            }
+            // gcc / clang -isystem DIR: a directory of system headers,
+            // probed after the -I paths and before the bundled headers.
+            "-isystem" => front.isystem_paths.push(operand(
+                iter,
+                "badc: error: -isystem requires a path argument",
+            )?),
+            s if s.starts_with("-isystem") && s.len() > 8 => {
+                front.isystem_paths.push(s[8..].to_string());
             }
             // gcc / clang -include FILE: splice the named header in front
             // of the source. Repeatable; later flags expand top-to-bottom.
@@ -2228,6 +2238,7 @@ impl FrontEnd {
             .with_undefines(self.undefines.clone())
             .with_include_paths(self.include_paths.clone())
             .with_quote_include_paths(self.quote_include_paths.clone())
+            .with_isystem_paths(self.isystem_paths.clone())
             .with_system_include_paths(self.system_include_paths.clone())
             .with_own_header_roots(self.own_header_roots.clone())
             .with_force_includes(self.force_includes.clone())
@@ -2366,7 +2377,22 @@ mod tests {
 
     #[test]
     fn include_paths_keep_the_two_scopes_apart() {
-        let cli = parse(&["-Iinc", "-I", "inc2", "-iquoteq", "-iquote", "q2", "a.c"]);
+        let cli = parse(&[
+            "-Iinc",
+            "-I",
+            "inc2",
+            "-iquoteq",
+            "-iquote",
+            "q2",
+            "-isystems",
+            "-isystem",
+            "s2",
+            "a.c",
+        ]);
+        assert_eq!(
+            cli.front.isystem_paths,
+            vec!["s".to_string(), "s2".to_string()]
+        );
         assert_eq!(
             cli.front.include_paths,
             vec!["inc".to_string(), "inc2".to_string()]
@@ -2383,6 +2409,13 @@ mod tests {
             reject(&["-iquote"]),
             (
                 "badc: error: -iquote requires a path argument".to_string(),
+                1
+            )
+        );
+        assert_eq!(
+            reject(&["-isystem"]),
+            (
+                "badc: error: -isystem requires a path argument".to_string(),
                 1
             )
         );

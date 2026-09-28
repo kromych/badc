@@ -2121,6 +2121,50 @@ fn iquote_paths_apply_to_quoted_includes_only() {
 }
 
 #[test]
+fn isystem_paths_follow_the_i_paths_and_precede_the_bundled_headers() {
+    // gcc `-isystem` scope: probed after `-I` for both include forms and
+    // ahead of the standard headers, which an `#include_next` there
+    // reaches; the headers found there are system headers.
+    let base = std::env::temp_dir().join(format!("badc-isystem-{}", std::process::id()));
+    let (idir, sdir) = (base.join("i"), base.join("s"));
+    std::fs::create_dir_all(&idir).unwrap();
+    std::fs::create_dir_all(&sdir).unwrap();
+    std::fs::write(idir.join("pick.h"), "int from_i;\n").unwrap();
+    std::fs::write(sdir.join("pick.h"), "int from_isystem;\n").unwrap();
+    std::fs::write(sdir.join("only.h"), "int only_isystem;\n").unwrap();
+    std::fs::write(
+        sdir.join("stdint.h"),
+        "int wrapped;\n#include_next <stdint.h>\n",
+    )
+    .unwrap();
+    let mut pp = Preprocessor::new("linux-x64", Target::LinuxX64, "0.1.0");
+    pp.add_search_path(idir.to_str().unwrap());
+    pp.add_isystem_path(sdir.to_str().unwrap());
+    let out = pp
+        .process("#include \"pick.h\"\n#include \"only.h\"\n#include <stdint.h>\n")
+        .unwrap();
+    std::fs::remove_dir_all(&base).ok();
+    assert!(
+        out.contains("from_i") && !out.contains("from_isystem"),
+        "{out}"
+    );
+    assert!(
+        out.contains("only_isystem") && out.contains("wrapped"),
+        "{out}"
+    );
+    assert!(
+        out.contains("uint64_t"),
+        "the bundled <stdint.h> follows: {out}"
+    );
+    let only = sdir.join("only.h");
+    assert!(
+        pp.system_headers.contains(only.to_str().unwrap()),
+        "{:?}",
+        pp.system_headers
+    );
+}
+
+#[test]
 fn pp_number_is_one_token_in_substitution() {
     // C99 6.4.8: `2op` is a single pp-number; the `op` tail is not
     // a parameter reference, so pasting forms `T_2op`.

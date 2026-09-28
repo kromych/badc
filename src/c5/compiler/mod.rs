@@ -531,6 +531,9 @@ pub struct CompileOptions {
     /// probed after the including file's directory and before the
     /// `-I` paths (gcc scope).
     pub quote_include_paths: Vec<String>,
+    /// `-isystem path` -- system header directories probed after the `-I`
+    /// paths and before the bundled headers (gcc scope).
+    pub isystem_paths: Vec<String>,
     /// System header directories probed only after the bundled headers
     /// (the driver fills them from the declared sysroot). A third-party
     /// header the embedded set lacks (`zlib.h`) resolves here without
@@ -818,6 +821,11 @@ impl CompileOptions {
     /// Replace the `-iquote` (quoted-include-only) search-path list.
     pub fn with_quote_include_paths(mut self, paths: Vec<String>) -> Self {
         self.quote_include_paths = paths;
+        self
+    }
+    /// Replace the `-isystem` directory list.
+    pub fn with_isystem_paths(mut self, paths: Vec<String>) -> Self {
+        self.isystem_paths = paths;
         self
     }
     /// Replace the system header directories (probed after the bundled
@@ -2763,6 +2771,9 @@ impl Compiler {
         }
         for path in &opts.quote_include_paths {
             pp.add_quote_path(path);
+        }
+        for path in &opts.isystem_paths {
+            pp.add_isystem_path(path);
         }
         for path in &opts.system_include_paths {
             pp.add_system_fallback_path(path);

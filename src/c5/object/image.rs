@@ -215,6 +215,19 @@ pub(crate) fn image_dwarf(
         for r in &md.debug_line_text_relocs {
             super::apply_merged_dwarf_text_reloc(&mut debug_line, r, text_vmaddr)?;
         }
+        let mut other = Vec::with_capacity(md.other.len());
+        for s in &md.other {
+            let mut bytes = s.bytes.clone();
+            for r in &s.text_relocs {
+                super::apply_merged_dwarf_text_reloc(&mut bytes, r, text_vmaddr)?;
+            }
+            if let Some(data) = data {
+                for r in &s.data_relocs {
+                    super::apply_merged_dwarf_data_reloc(&mut bytes, r, data)?;
+                }
+            }
+            other.push((s.name.clone(), bytes));
+        }
         if let Some(data) = data {
             for r in &md.debug_info_data_relocs {
                 super::apply_merged_dwarf_data_reloc(&mut debug_info, r, data)?;
@@ -226,6 +239,7 @@ pub(crate) fn image_dwarf(
             debug_line,
             debug_str: md.debug_str.clone(),
             debug_frame: fresh().debug_frame,
+            other,
         });
     }
     Ok(if build.debug_info {

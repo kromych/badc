@@ -1338,6 +1338,8 @@ struct Tail<'a> {
     dwarf_line_off: u64,
     dwarf_str_off: u64,
     dwarf_frame_off: u64,
+    /// File offset of each of `dwarf.other`, after `.debug_frame`.
+    dwarf_other_offs: Vec<u64>,
     emit_symtab: bool,
     er_text: Vec<&'a crate::c5::codegen::EmittedFinalReloc>,
     er_data: Vec<&'a crate::c5::codegen::EmittedFinalReloc>,
@@ -2021,6 +2023,14 @@ impl<'a> ElfImageWriter<'a> {
         tail.dwarf_line_off = tail.dwarf_abbrev_off + dwarf.debug_abbrev.len() as u64;
         tail.dwarf_str_off = tail.dwarf_line_off + dwarf.debug_line.len() as u64;
         tail.dwarf_frame_off = tail.dwarf_str_off + dwarf.debug_str.len() as u64;
+        let mut at = tail.dwarf_frame_off + dwarf.debug_frame.len() as u64;
+        tail.dwarf_other_offs = (dwarf.other.iter())
+            .map(|(_, bytes)| {
+                let off = at;
+                at += bytes.len() as u64;
+                off
+            })
+            .collect();
         tail.dwarf = dwarf;
         Ok(())
     }
@@ -2089,7 +2099,11 @@ impl<'a> ElfImageWriter<'a> {
             data: tail.has_data,
             tbss: tail.has_tbss,
             bss: tail.has_bss,
-            dwarf: if tail.emit_dwarf { 5 } else { 0 },
+            dwarf: if tail.emit_dwarf {
+                5 + tail.dwarf.other.len()
+            } else {
+                0
+            },
             rela_text: has_rela_text,
             rela_data: has_rela_data,
             plt_symtab: tail.emit_symtab,
@@ -2267,8 +2281,12 @@ impl<'a> ElfImageWriter<'a> {
 
     /// File offsets of everything past the DWARF, and `.shstrtab`.
     fn layout_tail(&mut self) {
+        let build = self.build;
         let tail = &mut self.tail;
-        let post_dwarf_off = tail.dwarf_frame_off + tail.dwarf.debug_frame.len() as u64;
+        let post_dwarf_off = match (tail.dwarf_other_offs.last(), tail.dwarf.other.last()) {
+            (Some(&off), Some((_, bytes))) => off + bytes.len() as u64,
+            _ => tail.dwarf_frame_off + tail.dwarf.debug_frame.len() as u64,
+        };
         let has_rela = !tail.rela_text.is_empty() || !tail.rela_data.is_empty();
         let post_rela_off = if has_rela {
             tail.rela_text_off = round_up(post_dwarf_off, 8);
@@ -2325,6 +2343,10 @@ impl<'a> ElfImageWriter<'a> {
                 ".debug_str",
                 ".debug_frame",
             ]);
+            // `image_dwarf` keeps the merged sections' order and names.
+            if let Some(md) = &build.merged_dwarf {
+                names.extend(md.other.iter().map(|s| s.name.as_str()));
+            }
         }
         if !tail.rela_text.is_empty() {
             names.push(".rela.text");
@@ -2824,6 +2846,9 @@ impl<'a> ElfImageWriter<'a> {
         out.extend_from_slice(&tail.dwarf.debug_line);
         out.extend_from_slice(&tail.dwarf.debug_str);
         out.extend_from_slice(&tail.dwarf.debug_frame);
+        for (_, bytes) in &tail.dwarf.other {
+            out.extend_from_slice(bytes);
+        }
         if !tail.rela_text.is_empty() || !tail.rela_data.is_empty() {
             out.resize(tail.rela_text_off as usize, 0);
             out.extend_from_slice(&tail.rela_text);
@@ -3198,7 +3223,13 @@ impl<'a> ElfImageWriter<'a> {
                 (".debug_line", tail.dwarf_line_off, &d.debug_line),
                 (".debug_str", tail.dwarf_str_off, &d.debug_str),
                 (".debug_frame", tail.dwarf_frame_off, &d.debug_frame),
-            ] {
+            ]
+            .into_iter()
+            .chain(
+                (d.other.iter())
+                    .zip(&tail.dwarf_other_offs)
+                    .map(|((name, bytes), &off)| (name.as_str(), off, bytes)),
+            ) {
                 headers.push((
                     Sec::Debug,
                     unloaded(

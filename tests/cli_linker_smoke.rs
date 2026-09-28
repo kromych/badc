@@ -7636,6 +7636,187 @@ fn fno_plt_objects_reach_functions_through_the_got() {
     }
 }
 
+/// gcc's DWARF 5 names each unit's files in `.debug_line_str`
+/// (`DW_FORM_line_strp`), and at -O2 describes ranges and locations in
+/// `.debug_rnglists` and `.debug_loclists`. The link carries every
+/// `.debug_*` section, folds the string ones by content and rebases each
+/// reference, so every unit's line table names its own sources beside a
+/// badc unit's DWARF 4, and gdb reads the image.
+#[cfg(target_os = "linux")]
+#[test]
+fn dwarf5_sections_survive_the_link() {
+    let Some(cc) = host_cc() else {
+        eprintln!("skipping dwarf5_sections_survive_the_link: no system C compiler");
+        return;
+    };
+    let dir = tempdir("dwarf5-sections");
+    let one = write_source(
+        &dir,
+        "one.c",
+        "int counter = 41;\n\
+         static int sum(const int *p, int n)\n\
+         { int s = 0; for (int i = 0; i < n; i++) s += p[i] * i; return s; }\n\
+         int one(int x) { int a[8]; for (int i = 0; i < 8; i++) a[i] = x + i;\n\
+           return sum(a, x & 7); }\n",
+    );
+    let two = write_source(
+        &dir,
+        "two.c",
+        "int one(int);\nint three(void);\nextern int counter;\n\
+         int main(void) {\n\
+           counter = one(counter) + three();\n\
+           return counter > 0 ? 0 : 1;\n\
+         }\n",
+    );
+    let three = write_source(&dir, "three.c", "int three(void) { return 3; }\n");
+    let mut objs = Vec::new();
+    for (src, opt) in [(&one, "-O2"), (&two, "-O0")] {
+        let obj = src.with_extension("o");
+        let built = Command::new(&cc)
+            .args(["-g", "-gdwarf-5", opt, "-c"])
+            .arg(src)
+            .arg("-o")
+            .arg(&obj)
+            .output()
+            .expect("run the system compiler");
+        if !built.status.success() {
+            eprintln!("skipping dwarf5_sections_survive_the_link: no -gdwarf-5");
+            return;
+        }
+        objs.push(obj);
+    }
+    let badc_obj = dir.join("three.o");
+    run(
+        Command::new(badc())
+            .args(["-q", "-g", "-c"])
+            .arg(&three)
+            .arg("-o")
+            .arg(&badc_obj),
+        "compile the badc unit",
+    );
+    objs.push(badc_obj);
+    let exe = dir.join("prog");
+    run(
+        Command::new(badc())
+            .args(["-q", "-g"])
+            .args(&objs)
+            .arg("-o")
+            .arg(&exe),
+        "link",
+    );
+    assert_eq!(Command::new(&exe).status().expect("run").code(), Some(0));
+    let image = std::fs::read(&exe).expect("read the image");
+    let names: Vec<String> = elf_section_spans(&image).into_iter().map(|h| h.0).collect();
+    for want in [".debug_line_str", ".debug_rnglists", ".debug_loclists"] {
+        assert!(names.iter().any(|n| n == want), "no {want} in {names:?}");
+    }
+    let files = dwarf5_line_file_names(&image);
+    for want in ["one.c", "two.c"] {
+        assert!(
+            (files.iter()).any(|f| Path::new(f).file_name().is_some_and(|n| n == want)),
+            "no line table names {want}: {files:?}"
+        );
+    }
+    let Ok(out) = Command::new("gdb")
+        .args(["-nx", "-batch", "-ex", "info line two.c:5"])
+        .args(["-ex", "print 'one.c'::counter", "-ex", "info scope sum"])
+        .arg(&exe)
+        .output()
+    else {
+        return;
+    };
+    let text = String::from_utf8_lossy(&out.stdout);
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(!err.contains("Dwarf Error"), "{err}");
+    assert!(text.contains("two.c\" starts at address"), "{text}");
+    assert!(text.contains("$1 = 41"), "{text}");
+    assert!(text.contains("Symbol s is"), "{text}");
+}
+
+/// The file names the DWARF 5 line tables in `.debug_line` give through
+/// `.debug_line_str`, in order. Version 4 tables name theirs inline.
+fn dwarf5_line_file_names(image: &[u8]) -> Vec<String> {
+    let headers = elf_section_spans(image);
+    let section = |name: &str| {
+        let h = headers.iter().find(|h| h.0 == name)?;
+        Some(&image[h.3..h.3 + h.4])
+    };
+    let (Some(line), Some(strs)) = (section(".debug_line"), section(".debug_line_str")) else {
+        return Vec::new();
+    };
+    let cstr = |b: &[u8], at: usize| {
+        let s = &b[at..];
+        String::from_utf8_lossy(&s[..s.iter().position(|&c| c == 0).unwrap()]).into_owned()
+    };
+    let uleb = |b: &[u8], at: &mut usize| {
+        let (mut v, mut shift) = (0u64, 0);
+        loop {
+            let byte = b[*at];
+            *at += 1;
+            v |= u64::from(byte & 0x7f) << shift;
+            shift += 7;
+            if byte & 0x80 == 0 {
+                return v;
+            }
+        }
+    };
+    let mut names = Vec::new();
+    let mut unit = 0;
+    while unit + 4 <= line.len() {
+        let len = u32::from_le_bytes(line[unit..unit + 4].try_into().unwrap()) as usize;
+        let b = &line[unit + 4..unit + 4 + len];
+        unit += 4 + len;
+        if u16::from_le_bytes([b[0], b[1]]) != 5 {
+            continue;
+        }
+        let mut at = 14 + b[13] as usize - 1;
+        // Directories, then files: an entry format, a count, the entries.
+        for table in 0..2 {
+            let formats: Vec<(u64, u64)> = (0..b[at])
+                .map({
+                    at += 1;
+                    |_| (uleb(b, &mut at), uleb(b, &mut at))
+                })
+                .collect();
+            for _ in 0..uleb(b, &mut at) {
+                for &(content, form) in &formats {
+                    let path = match form {
+                        0x1f | 0x0e => {
+                            let off = u32::from_le_bytes(b[at..at + 4].try_into().unwrap());
+                            at += 4;
+                            (form == 0x1f).then(|| cstr(strs, off as usize))
+                        }
+                        0x08 => {
+                            let s = cstr(b, at);
+                            at += s.len() + 1;
+                            Some(s)
+                        }
+                        0x0f => {
+                            uleb(b, &mut at);
+                            None
+                        }
+                        0x0b | 0x05 | 0x06 | 0x07 | 0x1e => {
+                            at += match form {
+                                0x0b => 1,
+                                0x05 => 2,
+                                0x06 => 4,
+                                0x07 => 8,
+                                _ => 16,
+                            };
+                            None
+                        }
+                        other => panic!("line table entry form {other:#x}"),
+                    };
+                    if table == 1 && content == 1 {
+                        names.extend(path);
+                    }
+                }
+            }
+        }
+    }
+    names
+}
+
 /// `r_offset` of the image's `R_X86_64_GLOB_DAT` against `name`.
 fn glob_dat_slot(image: &[u8], name: &str) -> Option<u64> {
     let rd32 = |o: usize| u32::from_le_bytes(image[o..o + 4].try_into().unwrap());

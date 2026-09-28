@@ -1336,6 +1336,18 @@ pub(crate) struct MergedDwarf {
     /// offset follows the linker's data convention, with the zero-fill
     /// tail continuing past the image length.
     pub debug_info_data_relocs: Vec<DwarfDataReloc>,
+    /// Every other `.debug_*` section the link merged.
+    pub other: Vec<MergedDwarfSection>,
+}
+
+/// A merged `.debug_*` section outside the four [`MergedDwarf`] names,
+/// with its placeholders.
+#[derive(Debug, Clone, Default)]
+pub(crate) struct MergedDwarfSection {
+    pub name: String,
+    pub bytes: Vec<u8>,
+    pub text_relocs: Vec<DwarfTextReloc>,
+    pub data_relocs: Vec<DwarfDataReloc>,
 }
 
 /// One text-targeting DWARF reloc surfaced through

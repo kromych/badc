@@ -687,12 +687,18 @@ fn synth_merged_dwarf(merged: &MergedNative) -> Option<crate::c5::codegen::Merge
         && merged.debug_abbrev.is_empty()
         && merged.debug_line.is_empty()
         && merged.debug_str.is_empty()
+        && merged.debug_other.is_empty()
     {
         return None;
     }
     let text_reloc = |r: &DebugTextReloc| crate::c5::codegen::DwarfTextReloc {
         byte_offset: r.byte_offset,
         merged_text_offset: r.merged_text_offset,
+        width: r.width,
+    };
+    let data_reloc = |r: &super::link::DebugDataReloc| crate::c5::codegen::DwarfDataReloc {
+        byte_offset: r.byte_offset,
+        merged_data_offset: r.merged_data_offset,
         width: r.width,
     };
     Some(crate::c5::codegen::MergedDwarf {
@@ -713,10 +719,14 @@ fn synth_merged_dwarf(merged: &MergedNative) -> Option<crate::c5::codegen::Merge
         debug_info_data_relocs: merged
             .debug_info_data_relocs
             .iter()
-            .map(|r| crate::c5::codegen::DwarfDataReloc {
-                byte_offset: r.byte_offset,
-                merged_data_offset: r.merged_data_offset,
-                width: r.width,
+            .map(data_reloc)
+            .collect(),
+        other: (merged.debug_other.iter())
+            .map(|s| crate::c5::codegen::MergedDwarfSection {
+                name: s.name.clone(),
+                bytes: s.bytes.clone(),
+                text_relocs: s.text_relocs.iter().map(text_reloc).collect(),
+                data_relocs: s.data_relocs.iter().map(data_reloc).collect(),
             })
             .collect(),
     })
@@ -1471,6 +1481,7 @@ mod tests {
             debug_line_bases: alloc::vec![],
             debug_info_relocs: alloc::vec![],
             debug_line_relocs: alloc::vec![],
+            debug_other: alloc::vec![],
             unit_for_debug_info_reloc: alloc::vec![],
             unit_for_debug_line_reloc: alloc::vec![],
             debug_info_text_relocs: alloc::vec![],

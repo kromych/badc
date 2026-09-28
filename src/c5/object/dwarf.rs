@@ -203,6 +203,9 @@ pub(crate) struct DwarfSections {
     pub debug_line: Vec<u8>,
     pub debug_str: Vec<u8>,
     pub debug_frame: Vec<u8>,
+    /// A linked image's other `.debug_*` sections, by name. The ELF and
+    /// PE writers emit them; no Mach-O input carries one.
+    pub other: Vec<(String, Vec<u8>)>,
 }
 
 /// Produce DWARF for `program` / `build`.
@@ -283,6 +286,7 @@ pub(crate) fn emit(
         debug_line,
         debug_str,
         debug_frame,
+        other: Vec::new(),
     }
 }
 

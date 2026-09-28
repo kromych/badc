@@ -260,6 +260,9 @@ pub struct MergedNative {
     /// Data-image-targeting `.debug_info` placeholders: the
     /// `DW_OP_addr` of an object with static storage duration.
     pub debug_info_data_relocs: Vec<DebugDataReloc>,
+    /// Every other `.debug_*` section, merged by name, with the
+    /// placeholders its writer fills.
+    pub debug_other: Vec<MergedDebugSection>,
     pub debug_line_text_relocs: Vec<DebugTextReloc>,
     /// Post-prologue byte offset in [`Self::text`], keyed by the
     /// function's merged entry offset. Sourced from each unit's
@@ -441,7 +444,9 @@ fn merged_target(
         | NativeSymSection::Tls
         | NativeSymSection::DebugAbbrev
         | NativeSymSection::DebugLine
-        | NativeSymSection::DebugStr => Err(internal_err(
+        | NativeSymSection::DebugStr
+        | NativeSymSection::DebugInfo
+        | NativeSymSection::DebugOther(_) => Err(internal_err(
             MODULE,
             &format!(
                 "link_native_objects: reference resolves to {section:?}, which has no merged \
@@ -2270,6 +2275,8 @@ impl<'a> Link<'a> {
             NativeSymSection::DebugAbbrev
             | NativeSymSection::DebugLine
             | NativeSymSection::DebugStr
+            | NativeSymSection::DebugInfo
+            | NativeSymSection::DebugOther(_)
             | NativeSymSection::Got
             | NativeSymSection::Text
             | NativeSymSection::RoData
@@ -2826,7 +2833,9 @@ impl<'a> Link<'a> {
             }
             NativeSymSection::DebugAbbrev
             | NativeSymSection::DebugLine
-            | NativeSymSection::DebugStr => {
+            | NativeSymSection::DebugStr
+            | NativeSymSection::DebugInfo
+            | NativeSymSection::DebugOther(_) => {
                 return Err(internal_err(
                     MODULE,
                     &format!(
@@ -3230,7 +3239,11 @@ impl<'a> Link<'a> {
             line_relocs: Vec::new(),
             unit_for_info_reloc: Vec::new(),
             unit_for_line_reloc: Vec::new(),
+            other: Vec::new(),
+            other_relocs: Vec::new(),
+            other_map: OtherDebugMap::default(),
         };
+        self.merge_other_debug_sections(&mut dbg);
         for (unit_idx, obj) in self.objs.iter().enumerate() {
             dbg.info_bases.push(dbg.info.bytes.len());
             dbg.abbrev_bases.push(dbg.abbrev.len());
@@ -3256,6 +3269,64 @@ impl<'a> Link<'a> {
         dbg
     }
 
+    /// Lay out every `debug_other` section by name; see [`OtherDebugMap`].
+    fn merge_other_debug_sections(&self, dbg: &mut DebugMerge) {
+        let map = &mut dbg.other_map;
+        // Per merged section, per unit: the unit's contribution.
+        let mut blobs: Vec<Vec<Vec<u8>>> = Vec::new();
+        let mut foldable: Vec<bool> = Vec::new();
+        for (unit, obj) in self.objs.iter().enumerate() {
+            let mut slots = Vec::with_capacity(obj.debug_other.len());
+            for d in &obj.debug_other {
+                let m = match map.names.iter().position(|n| *n == d.name) {
+                    Some(m) => m,
+                    None => {
+                        map.names.push(d.name.clone());
+                        blobs.push(alloc::vec![Vec::new(); self.objs.len()]);
+                        foldable.push(true);
+                        map.names.len() - 1
+                    }
+                };
+                foldable[m] &= d.strings && d.relocs.is_empty();
+                slots.push((m, blobs[m][unit].len() as u64));
+                blobs[m][unit].extend_from_slice(&d.bytes);
+            }
+            map.slots.push(slots);
+        }
+        for (m, units) in blobs.into_iter().enumerate() {
+            let mut merged = DebugSectionMerge::default();
+            let mut bases = Vec::with_capacity(units.len());
+            if foldable[m] {
+                let fold = DebugStrFold::from_blobs(units.iter().map(|b| &b[..]));
+                merged.bytes = fold.bytes.clone();
+                bases.resize(units.len(), 0);
+                map.folds.push(Some(fold));
+            } else {
+                for blob in &units {
+                    bases.push(merged.bytes.len() as u64);
+                    merged.bytes.extend_from_slice(blob);
+                }
+                map.folds.push(None);
+            }
+            map.unit_bases.push(bases);
+            dbg.other.push(merged);
+            dbg.other_relocs.push((Vec::new(), Vec::new()));
+        }
+        for (unit, obj) in self.objs.iter().enumerate() {
+            for (d, &(m, base)) in obj.debug_other.iter().zip(&map.slots[unit]) {
+                let shift = map.unit_bases[m][unit] + base;
+                let (relocs, units) = &mut dbg.other_relocs[m];
+                for r in &d.relocs {
+                    relocs.push(NativeReloc {
+                        offset: r.offset.wrapping_add(shift),
+                        ..*r
+                    });
+                    units.push(unit);
+                }
+            }
+        }
+    }
+
     /// The per-unit DWARF streams reference offsets into other DWARF
     /// sections (CU header debug_abbrev_offset, DW_AT_stmt_list ->
     /// debug_line, line-program addresses -> .text). Once each unit's
@@ -3266,9 +3337,11 @@ impl<'a> Link<'a> {
     /// placeholder and the merged-text offset of the target.
     fn resolve_debug_relocs(&self, dbg: &mut DebugMerge) -> Result<(), C5Error> {
         let bases = DebugBases {
+            info: &dbg.info_bases,
             abbrev: &dbg.abbrev_bases,
             line: &dbg.line_bases,
             str_fold: &dbg.str_fold,
+            other: &dbg.other_map,
         };
         self.resolve_debug_section(
             &mut dbg.info,
@@ -3283,7 +3356,13 @@ impl<'a> Link<'a> {
             &dbg.unit_for_line_reloc,
             ".debug_line",
             &bases,
-        )
+        )?;
+        for (m, section) in dbg.other.iter_mut().enumerate() {
+            let (relocs, units) = &dbg.other_relocs[m];
+            let name = &dbg.other_map.names[m];
+            self.resolve_debug_section(section, relocs, units, name, &bases)?;
+        }
+        Ok(())
     }
 
     fn resolve_debug_section(
@@ -3390,6 +3469,8 @@ impl<'a> Link<'a> {
                 | NativeSymSection::Data
                 | NativeSymSection::Bss
         );
+        // A string-folded target consumes the addend in its lookup.
+        let mut addend_applied = false;
         let (merged_value, in_text, resolvable) = match sym.section {
             NativeSymSection::Text => (self.text_bases[unit_idx] as u64 + sym.value, true, true),
             NativeSymSection::RoData => (self.ro_map[unit_idx].at(sym.value), false, true),
@@ -3400,19 +3481,32 @@ impl<'a> Link<'a> {
                 false,
                 true,
             ),
+            NativeSymSection::DebugInfo => (bases.info[unit_idx] as u64 + sym.value, false, true),
             NativeSymSection::DebugAbbrev => {
                 (bases.abbrev[unit_idx] as u64 + sym.value, false, true)
+            }
+            NativeSymSection::DebugOther(k) => {
+                match bases.other.at(unit_idx, k, sym.value, reloc.addend) {
+                    Some((at, folded)) => {
+                        addend_applied = folded;
+                        (at, false, true)
+                    }
+                    None => (0, false, false),
+                }
             }
             NativeSymSection::DebugLine => (bases.line[unit_idx] as u64 + sym.value, false, true),
             // The addend selects the string, so it is part of the lookup
             // into the folded table, not an offset from a per-unit base.
-            NativeSymSection::DebugStr => (
-                bases
-                    .str_fold
-                    .at(unit_idx, sym.value.wrapping_add(reloc.addend as u64)),
-                false,
-                true,
-            ),
+            NativeSymSection::DebugStr => {
+                addend_applied = true;
+                (
+                    bases
+                        .str_fold
+                        .at(unit_idx, sym.value.wrapping_add(reloc.addend as u64)),
+                    false,
+                    true,
+                )
+            }
             NativeSymSection::Undef => match self.defined.get(sym.name.as_str()) {
                 Some(m) if m.section == NativeSymSection::Text => (m.value, true, true),
                 _ => (0, false, false),
@@ -3423,8 +3517,7 @@ impl<'a> Link<'a> {
             // debug info.
             _ => (0, false, false),
         };
-        // The `.debug_str` lookup above consumed the addend.
-        let resolved = if sym.section == NativeSymSection::DebugStr {
+        let resolved = if addend_applied {
             merged_value
         } else {
             merged_value.wrapping_add(reloc.addend as u64)
@@ -3554,6 +3647,15 @@ impl<'a> Link<'a> {
             debug_info_text_relocs: dbg.info.text_relocs,
             debug_line_text_relocs: dbg.line.text_relocs,
             debug_info_data_relocs: dbg.info.data_relocs,
+            debug_other: (dbg.other.into_iter())
+                .zip(dbg.other_map.names)
+                .map(|(m, name)| MergedDebugSection {
+                    name,
+                    bytes: m.bytes,
+                    text_relocs: m.text_relocs,
+                    data_relocs: m.data_relocs,
+                })
+                .collect(),
             prologue_ends: self.prologue_ends,
             early_returns: self.early_returns,
             local_funcs: self.local_funcs,
@@ -3603,13 +3705,46 @@ struct DebugMerge {
     line_relocs: Vec<NativeReloc>,
     unit_for_info_reloc: Vec<usize>,
     unit_for_line_reloc: Vec<usize>,
+    /// The other `.debug_*` sections, parallel to `other_map.names`.
+    other: Vec<DebugSectionMerge>,
+    other_relocs: Vec<(Vec<NativeReloc>, Vec<usize>)>,
+    other_map: OtherDebugMap,
 }
 
 /// The per-unit bases a DWARF cross-reference resolves against.
 struct DebugBases<'m> {
+    info: &'m [usize],
     abbrev: &'m [usize],
     line: &'m [usize],
     str_fold: &'m DebugStrFold,
+    other: &'m OtherDebugMap,
+}
+
+/// Where each unit's `debug_other` sections landed. A section is merged
+/// by name: concatenated in unit order, or, when every contribution is
+/// `SHF_STRINGS` and unrelocated, folded by content like `.debug_str`.
+#[derive(Default)]
+struct OtherDebugMap {
+    names: Vec<String>,
+    folds: Vec<Option<DebugStrFold>>,
+    /// Per merged section, per unit: the unit's base in it.
+    unit_bases: Vec<Vec<u64>>,
+    /// Per unit, per `debug_other` entry: the merged section and the
+    /// entry's offset within the unit's contribution.
+    slots: Vec<Vec<(usize, u64)>>,
+}
+
+impl OtherDebugMap {
+    /// The merged offset of `local` in unit `unit`'s entry `k`; for a
+    /// folded section `addend` selects the string, and is consumed.
+    fn at(&self, unit: usize, k: u16, local: u64, addend: i64) -> Option<(u64, bool)> {
+        let &(m, base) = self.slots.get(unit)?.get(k as usize)?;
+        let at = base.wrapping_add(local);
+        Some(match &self.folds[m] {
+            Some(fold) => (fold.at(unit, at.wrapping_add(addend as u64)), true),
+            None => (self.unit_bases[m][unit].wrapping_add(at), false),
+        })
+    }
 }
 
 /// One text-targeting DWARF reloc that survives the link pass.
@@ -3624,6 +3759,15 @@ pub struct DebugTextReloc {
     pub byte_offset: u64,
     pub merged_text_offset: u64,
     pub width: u8,
+}
+
+/// A merged `.debug_*` section outside the four `MergedNative` names.
+#[derive(Debug, Clone, Default)]
+pub struct MergedDebugSection {
+    pub name: String,
+    pub bytes: Vec<u8>,
+    pub text_relocs: Vec<DebugTextReloc>,
+    pub data_relocs: Vec<DebugDataReloc>,
 }
 
 /// A DWARF placeholder naming a byte of the merged data image: the
@@ -4474,6 +4618,7 @@ mod tests {
             debug_str: Vec::new(),
             debug_info_relocs: Vec::new(),
             debug_line_relocs: Vec::new(),
+            debug_other: Vec::new(),
         }
     }
 
@@ -5590,6 +5735,7 @@ mod tests {
                 debug_str: alloc::vec::Vec::new(),
                 debug_info_relocs: alloc::vec::Vec::new(),
                 debug_line_relocs: alloc::vec::Vec::new(),
+                debug_other: alloc::vec::Vec::new(),
             }
         };
         // Weak definition of `weak_target` in `.text`.
@@ -5799,6 +5945,86 @@ mod tests {
             .expect("compile");
         let bytes = emit_native_with_options(&program, target, opts).expect("emit");
         parse_native_elf(&bytes).expect("parse")
+    }
+
+    /// A `.debug_*` section outside the four `NativeObject` names merges
+    /// by name: `.debug_line_str` folds by content, `.debug_rnglists`
+    /// concatenates with its text address deferred to the writer, and a
+    /// `.debug_info` reference to either lands on the unit's contribution.
+    #[test]
+    fn other_debug_sections_merge_by_name() {
+        use super::super::object::DebugInput;
+        let sym = |name: &str, section| NativeSymbol {
+            name: name.to_string(),
+            section,
+            value: 0,
+            size: 0,
+            binding: 0,
+            kind: 3,
+            visibility: 0,
+        };
+        let reloc = |offset, sym_idx, rtype, addend| NativeReloc {
+            offset,
+            sym_idx,
+            rtype,
+            addend,
+        };
+        let unit = |strs: &[u8], text: usize| {
+            let mut o = blank_object(NativeMachine::X86_64);
+            o.text = alloc::vec![0xc3; text];
+            o.symbols = alloc::vec![
+                sym("", NativeSymSection::Undef),
+                sym("", NativeSymSection::Text),
+                sym("", NativeSymSection::DebugOther(0)),
+                sym("", NativeSymSection::DebugOther(1)),
+            ];
+            o.debug_other = alloc::vec![
+                DebugInput {
+                    name: ".debug_line_str".to_string(),
+                    bytes: strs.to_vec(),
+                    strings: true,
+                    relocs: Vec::new(),
+                },
+                DebugInput {
+                    name: ".debug_rnglists".to_string(),
+                    bytes: alloc::vec![0xee; 12],
+                    strings: false,
+                    relocs: alloc::vec![reloc(4, 1, R_X86_64_64, 1)],
+                },
+            ];
+            // The unit's last string and its range list.
+            o.debug_info = alloc::vec![0; 8];
+            let last = strs[..strs.len() - 1]
+                .iter()
+                .rposition(|&b| b == 0)
+                .unwrap()
+                + 1;
+            o.debug_info_relocs = alloc::vec![
+                reloc(0, 2, R_X86_64_32, last as i64),
+                reloc(4, 3, R_X86_64_32, 4),
+            ];
+            o
+        };
+        let a = unit(b"/src\0a.c\0", 16);
+        let b = unit(b"/src\0b.c\0", 8);
+        let merged = link_native_objects(&[a, b]).expect("link");
+        let named = |n: &str| merged.debug_other.iter().find(|s| s.name == n).unwrap();
+        let strs = named(".debug_line_str");
+        assert_eq!(strs.bytes, b"/src\0a.c\0b.c\0", "`/src` is kept once");
+        let rng = named(".debug_rnglists");
+        assert_eq!(rng.bytes.len(), 24);
+        let deferred: Vec<_> = (rng.text_relocs.iter())
+            .map(|r| (r.byte_offset, r.merged_text_offset))
+            .collect();
+        assert_eq!(deferred, [(4, 1), (16, 17)], "each unit's .text base + 1");
+        let word =
+            |at: usize| u32::from_le_bytes(merged.debug_info[at..at + 4].try_into().unwrap());
+        assert_eq!([word(0), word(4)], [5, 4], "unit A: `a.c`, its list at 4");
+        assert_eq!(
+            [word(8), word(12)],
+            [9, 16],
+            "unit B: `b.c`, its list at 12 + 4"
+        );
     }
 
     #[test]

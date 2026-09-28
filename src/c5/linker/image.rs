@@ -1029,7 +1029,9 @@ fn patch_data_refs(
             | NativeSymSection::Tls
             | NativeSymSection::DebugAbbrev
             | NativeSymSection::DebugLine
-            | NativeSymSection::DebugStr => {
+            | NativeSymSection::DebugStr
+            | NativeSymSection::DebugInfo
+            | NativeSymSection::DebugOther(_) => {
                 return Err(internal_err(
                     MODULE,
                     &format!(
@@ -1371,6 +1373,7 @@ mod tests {
             debug_line_bases: alloc::vec![],
             debug_info_relocs: alloc::vec![],
             debug_line_relocs: alloc::vec![],
+            debug_other: alloc::vec![],
             unit_for_debug_info_reloc: alloc::vec![],
             unit_for_debug_line_reloc: alloc::vec![],
             debug_info_text_relocs: alloc::vec![],

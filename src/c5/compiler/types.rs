@@ -531,7 +531,7 @@ pub(super) fn format_type(ty: i64, structs: &[super::StructDef]) -> alloc::strin
             return format!(
                 "{} ({}){dims}",
                 format_type(f.ty, structs),
-                "*".repeat(depth)
+                ptr_suffix(ty, depth)
             );
         }
         let name = structs

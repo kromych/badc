@@ -5625,7 +5625,9 @@ impl Compiler {
         let (Some(ia), Some(ib)) = (self.ptr_array_id(a), self.ptr_array_id(b)) else {
             return false;
         };
-        if struct_ptr_depth(a) != struct_ptr_depth(b) {
+        // The pointer levels' qualifiers, as `generic_type_match` compares them.
+        let quals = |t: i64| (t ^ super::types::strip_unsigned(t)) & !super::types::VOLATILE_MASK;
+        if struct_ptr_depth(a) != struct_ptr_depth(b) || quals(a) != quals(b) {
             return false;
         }
         let dims_of = |id: usize| -> alloc::vec::Vec<i64> {
@@ -5847,7 +5849,10 @@ impl Compiler {
             };
             for step in abs.derivations.into_iter().rev() {
                 match step {
-                    Derivation::Pointer => self.derive_pointer(&mut t),
+                    Derivation::Pointer(quals) => {
+                        self.derive_pointer(&mut t);
+                        t.ty = apply_qual_bits(t.ty, quals);
+                    }
                     Derivation::Array(n) => self.derive_array(&mut t, n)?,
                     Derivation::RuntimeArray(dim) => self.derive_runtime_array(&mut t, dim)?,
                     Derivation::Function(pp) => self.derive_function(&mut t, pp)?,

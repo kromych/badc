@@ -4438,6 +4438,16 @@ fn block_declarators_are_separated_by_commas() {
 }
 
 #[test]
+fn a_qualifier_inside_an_abstract_declarator_group_is_kept() {
+    // C99 6.7.5.1p1: the `const` after a `*` qualifies that pointer inside
+    // the parentheses of an abstract declarator too; the type prints it.
+    expect_compile_error(
+        "int main(void) { return (int)((int (*const *)[3])0 * 2); }",
+        "`int (* const *)[3]`",
+    );
+}
+
+#[test]
 fn generic_associations_are_separated_by_commas() {
     // C11 6.5.1.1p1: a generic-assoc-list is comma-separated. The check holds
     // whichever association is selected and whether the selection is folded

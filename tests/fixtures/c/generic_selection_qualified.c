@@ -111,5 +111,14 @@ int main(void) {
     int (*const fz)(void) = zero;
     if (_Generic(**pp0, struct St: 1, default: 2) != 1) return 30;
     if (_Generic(fz(), int: 1, default: 2) != 1) return 31;
+
+    // 6.7.5.1p1: a `const` after a `*` inside an abstract declarator's
+    // parentheses qualifies that pointer, as it does outside them.
+    if (_Generic((int (*const *)[3])0, int (**)[3]: 1, int (*const *)[3]: 2) != 2) return 32;
+    if (_Generic((void (*const *)(void))0, void (**)(void): 1, void (*const *)(void): 2) != 2)
+        return 33;
+    if (_Generic((_Bool (*const *(*)(void))(int))0, _Bool (**(*)(void))(int): 1, default: 2) != 2)
+        return 34;
+    if (_Generic((int (**const *)[3])0, int (***)[3]: 1, int (**const *)[3]: 2) != 2) return 35;
     return 0;
 }

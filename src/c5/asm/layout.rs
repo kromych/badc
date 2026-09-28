@@ -2227,7 +2227,7 @@ pub(crate) fn materialize_asm_sections(
                                 idx,
                                 goto,
                                 addend,
-                                pcrel,
+                                minus,
                             } => {
                                 if !matches!(width, 1 | 2 | 4 | 8) {
                                     return Err(alloc::string::String::from(
@@ -2262,15 +2262,59 @@ pub(crate) fn materialize_asm_sections(
                                             },
                                         )?
                                     };
+                                // The operand's address minus a location: PC-relative
+                                // when the location is in this section, as GNU as has it.
+                                let key = section_key(b);
+                                let here = sec.bytes.len() as i64;
+                                let mut val = AsmExprValue::from_term(AsmExprTerm {
+                                    space: None,
+                                    target,
+                                })
+                                .combine(AsmExprValue::abs(add), false)
+                                .map_err(|e| alloc::format!("inline asm: {e}"))?;
+                                if let Some(loc) = minus {
+                                    let leaf = match section_expr_leaf(
+                                        loc,
+                                        &key,
+                                        here,
+                                        &measured,
+                                        sink_labels,
+                                        &num_unique,
+                                        label_off,
+                                    ) {
+                                        Some(AsmExprLeaf::Loc(t)) => AsmExprValue::from_term(t),
+                                        _ => {
+                                            return Err(alloc::format!(
+                                                "inline asm: `{loc}` is no location of the section \
+                                                 being assembled"
+                                            ));
+                                        }
+                                    };
+                                    val = val
+                                        .combine(leaf, true)
+                                        .map_err(|e| alloc::format!("inline asm: {e}"))?;
+                                }
+                                let space = AsmSpace::Section(key.clone());
+                                let AsmResolved::Reloc {
+                                    target,
+                                    addend,
+                                    pcrel,
+                                } = resolve_asm_value(val, Some((&space, here)))
+                                    .map_err(|e| alloc::format!("inline asm: {e}"))?
+                                else {
+                                    return Err(alloc::format!(
+                                        "inline asm: operand `%{idx}` folded to a constant"
+                                    ));
+                                };
                                 sec.relocs.push(AsmSectionReloc {
                                     offset: sec.bytes.len() as u32,
                                     width: *width,
                                     kind: AsmRelocKind::Data,
-                                    pcrel: *pcrel,
+                                    pcrel,
                                     branch: false,
                                     signed: false,
                                     target,
-                                    addend: add,
+                                    addend,
                                 });
                                 sec.bytes.extend_from_slice(&[0u8; 8][..*width as usize]);
                             }

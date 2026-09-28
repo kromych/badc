@@ -10040,6 +10040,67 @@ int main(void) { int x = 0; return f(&x, 1); }
 }
 
 #[test]
+fn inline_asm_symbol_minus_label_is_pc_relative() {
+    // `.long %c0 - 2b` four bytes past `2:` in the section being assembled
+    // (Linux 5.15's bug table): PC-relative against the operand's symbol,
+    // the field's distance from the label its addend, as GNU as emits it.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = r#"
+void f(void) {
+    __asm__ volatile("1:\tnop\n"
+        ".pushsection __bug_table,\"aw\"\n"
+        "2:\t.long 1b - 2b\n"
+        "\t.long %c0 - 2b\n"
+        "\t.short %c1\n"
+        "\t.short %c2\n"
+        "\t.org 2b+%c3\n"
+        ".popsection"
+        : : "i"("bug file"), "i"(11), "i"(1), "i"(12));
+}
+int main(void) { f(); return 0; }
+"#;
+    for (target, prel32) in [(Target::LinuxX64, 2u32), (Target::LinuxAarch64, 261)] {
+        let program = Compiler::with_target(String::from(src), target)
+            .compile()
+            .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+        let sections = elf_sections(&bytes);
+        let symbols = elf_symbols(&bytes);
+        let sec = |n: &str| &sections.iter().find(|s| s.0 == n).expect(n).3;
+        let relas: alloc::vec::Vec<(u64, u32, usize, i64)> = sec(".rela__bug_table")
+            .as_chunks::<24>()
+            .0
+            .iter()
+            .map(|r| {
+                let info = u64::from_le_bytes(r[8..16].try_into().unwrap());
+                (
+                    u64::from_le_bytes(r[..8].try_into().unwrap()),
+                    info as u32,
+                    (info >> 32) as usize,
+                    i64::from_le_bytes(r[16..].try_into().unwrap()),
+                )
+            })
+            .collect();
+        assert_eq!(relas.len(), 2, "{target:?}: {relas:?}");
+        let (off, ty, sym, addend) = relas[1];
+        assert_eq!((off, ty), (4, prel32), "{target:?}");
+        // The field holds `sym - 2b`: the symbol plus the addend, less the
+        // field's own four bytes past the label.
+        let (_, _, shndx, value, _) = &symbols[sym];
+        let at = (*value as i64 + addend - 4) as usize;
+        assert!(
+            sections[*shndx as usize].3[at..].starts_with(b"bug file\0"),
+            "{target:?}: addend {addend}"
+        );
+        assert_eq!(sec("__bug_table")[8..12], [11, 0, 1, 0], "{target:?}");
+    }
+}
+
+#[test]
 fn asm_string_operand_data_is_emitted() {
     // A string-literal `i`-class operand is interned into the data buffer
     // while lexing the operand list, and the walk lowers its `Expr::StrLit`

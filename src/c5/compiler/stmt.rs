@@ -1734,19 +1734,29 @@ impl Compiler {
                     ),
                 ));
             }
-            // The x86 `x` operand path moves a full 128-bit value (movups), so
-            // it requires a 16-byte operand (a __m128i / vector). A scalar
-            // float / double `x` operand is not yet supported and is rejected
-            // rather than over-reading / over-writing its storage. AArch64 `w`
-            // has its own (scalar-double) width check in the emitter.
-            if matches!(constraint, AsmConstraint::Fp)
+            // An x86 `x` operand is a 16-byte vector, moved whole, or a
+            // `float` / `double` in the low lane, as the SysV ABI passes one;
+            // a matching input takes the class of the output it names.
+            // AArch64 `w` has its own (scalar-double) width check in the
+            // emitter.
+            let class = match constraint {
+                AsmConstraint::Match(n) => operands
+                    .get(n as usize)
+                    .map_or(constraint, |o: &AsmOperand| o.constraint),
+                c => c,
+            };
+            let scalar_fp = matches!(class, AsmConstraint::Fp)
+                && !self.target.is_aarch64()
+                && super::types::is_floating_scalar(self.ty);
+            if matches!(class, AsmConstraint::Fp)
                 && !self.target.is_aarch64()
                 && self.size_of_type(self.ty) != 16
+                && !scalar_fp
             {
                 self.truncate_data(data_base);
                 return Err(self.compile_err(
                     Code::UNSUPPORTED,
-                    "inline asm: only 16-byte (__m128i) `x` operands are supported",
+                    "inline asm: an `x` operand is a 16-byte vector, a `float` or a `double`",
                 ));
             }
             // A `register T v asm("reg")` variable used as a plain
@@ -1896,7 +1906,8 @@ impl Compiler {
                 width,
                 seg: operand_seg,
                 static_arg: false,
-                value: false,
+                // A scalar `x` input is its value; a vector one its address.
+                value: scalar_fp && !stores_back,
                 volatile_object,
                 early_clobber,
             });

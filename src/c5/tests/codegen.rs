@@ -2799,24 +2799,27 @@ fn builtin_overflow_on_128bit_operand_lowers_inline() {
     }
 }
 
-/// The x86 `x` (xmm) inline-asm operand path moves a full 128-bit value
-/// (movups), so it requires a 16-byte `__m128i`. A scalar float / double `x`
-/// operand must be rejected at parse rather than over-reading / over-writing
-/// its 4/8-byte storage. TODO: scalar `x` via movss / movsd.
+/// An x86 `x` (xmm) inline-asm operand is a 16-byte vector or a `float` /
+/// `double` in the low lane; one of another type, such as `int`, is rejected
+/// at parse rather than moved at a width its storage does not have.
 #[test]
-fn scalar_x_inline_asm_operand_is_rejected() {
+fn x_inline_asm_operand_is_a_vector_or_a_floating_scalar() {
     use crate::{Compiler, Target};
-    let err = Compiler::with_target(
+    let compile = |src: &str| Compiler::with_target(src.to_string(), Target::LinuxX64).compile();
+    compile(
         "double f(double a){ double r; __asm__(\"movsd %1, %0\" : \"=x\"(r) : \"x\"(a)); \
-             return r; } int main(void){ return (int) f(1.0); }"
-            .to_string(),
-        Target::LinuxX64,
+             return r; } int main(void){ return (int) f(1.0); }",
     )
-    .compile()
-    .expect_err("a scalar `x` operand must be rejected, not over-moved");
+    .expect("a double `x` operand");
+    let err = compile(
+        "int f(int a){ int r; __asm__(\"movd %1, %0\" : \"=x\"(r) : \"x\"(a)); \
+             return r; } int main(void){ return f(1); }",
+    )
+    .expect_err("an int `x` operand");
     assert!(
-        err.to_string().contains("16-byte (__m128i) `x` operands"),
-        "expected the scalar-`x` rejection, got: {err}",
+        err.to_string()
+            .contains("an `x` operand is a 16-byte vector, a `float` or a `double`"),
+        "{err}"
     );
 }
 

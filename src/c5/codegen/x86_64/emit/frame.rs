@@ -316,7 +316,7 @@ pub(super) fn asm_save_masks_and_stage(
     let mut operand_gp = 0u32;
     for (i, op) in asm.operands.iter().enumerate() {
         let Some(r) = op_reg[i] else { continue };
-        if matches!(op.constraint, AsmConstraint::Fp) {
+        if asm.operand_class(i) == AsmConstraint::Fp {
             fp_used |= 1 << r;
             continue;
         }

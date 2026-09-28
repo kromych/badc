@@ -807,7 +807,12 @@ impl SectionInsn<'_> {
         let width = refs.operands.get(idx as usize)?.width;
         let size = modifier.unwrap_or(AsmRegSize::from_width(width));
         match refs.op_reg.get(idx as usize).copied().flatten() {
-            Some(r) if matches!(refs.operands[idx as usize].constraint, AsmConstraint::Fp) => {
+            Some(r)
+                if matches!(
+                    super::super::ir::asm_operand_class(refs.operands, idx as usize),
+                    AsmConstraint::Fp
+                ) =>
+            {
                 Some(Concrete::Reg {
                     reg: super::asm::XMM_BASE + r,
                     size,
@@ -832,10 +837,9 @@ impl SectionInsn<'_> {
                     .copied()
                     .flatten()
                     .filter(|_| {
-                        !matches!(
-                            self.refs.operands.get(i as usize).map(|o| o.constraint),
-                            Some(AsmConstraint::Fp)
-                        )
+                        (i as usize) < self.refs.operands.len()
+                            && super::super::ir::asm_operand_class(self.refs.operands, i as usize)
+                                != AsmConstraint::Fp
                     })
             }
         }
@@ -1823,8 +1827,8 @@ struct AsmScratch {
 struct BoundOperands {
     op_reg: alloc::vec::Vec<Option<u8>>,
     moves: alloc::vec::Vec<Transfer>,
-    /// `(register, place, vector)` of each value output held in a scratch.
-    out_stores: alloc::vec::Vec<(u8, Place, bool)>,
+    /// `(register, place, xmm width)` of each value output held in a scratch.
+    out_stores: alloc::vec::Vec<(u8, Place, Option<u8>)>,
 }
 
 /// Bind each input to the register its value occupies, or to a scratch it
@@ -1842,7 +1846,8 @@ fn bind_operands(stmt: &AsmStmt) -> Emit<BoundOperands> {
         return fail("inline asm: the operands do not bind directly");
     };
     let short = "inline asm: no scratch register for a bound operand";
-    let vector = |i: usize| matches!(asm.operands[i].constraint, C::Fp);
+    let vector = |i: usize| matches!(asm.operand_class(i), C::Fp);
+    let xmm = |i: usize| vector(i).then_some(asm.operands[i].width);
     let bank = |i: usize| usize::from(vector(i));
     // Scratch by bank; `taken` loses what no other operand may share.
     let pools = [
@@ -1868,7 +1873,7 @@ fn bind_operands(stmt: &AsmStmt) -> Emit<BoundOperands> {
     }
     let mut op_reg: alloc::vec::Vec<Option<u8>> = alloc::vec![None; asm.operands.len()];
     let mut moves: alloc::vec::Vec<Transfer> = alloc::vec::Vec::new();
-    let mut out_stores: alloc::vec::Vec<(u8, Place, bool)> = alloc::vec::Vec::new();
+    let mut out_stores: alloc::vec::Vec<(u8, Place, Option<u8>)> = alloc::vec::Vec::new();
     let rw = outs.iter().copied().find(|&(i, _)| asm.operands[i].is_rw);
     let mut rw_scratch = None;
     if let Some((i, place)) = rw {
@@ -1876,7 +1881,7 @@ fn bind_operands(stmt: &AsmStmt) -> Emit<BoundOperands> {
             Some(x) => x,
             None => {
                 let s = take(&mut taken[bank(i)])?;
-                out_stores.push((s, place, vector(i)));
+                out_stores.push((s, place, xmm(i)));
                 held[bank(i)].push(s);
                 rw_scratch = Some(s);
                 s
@@ -1906,7 +1911,7 @@ fn bind_operands(stmt: &AsmStmt) -> Emit<BoundOperands> {
                 moves.push(Transfer {
                     dst: XMM_UNIFIED + s,
                     src,
-                    kind: TransferKind::V128,
+                    kind: TransferKind::Xmm(asm.operands[i].width),
                 });
                 s
             }
@@ -1926,7 +1931,7 @@ fn bind_operands(stmt: &AsmStmt) -> Emit<BoundOperands> {
     {
         let src = arg_source(stmt, i)?;
         let (dst, kind) = if vector(i) {
-            (XMM_UNIFIED + r, TransferKind::V128)
+            (XMM_UNIFIED + r, TransferKind::Xmm(asm.operands[i].width))
         } else {
             (r, TransferKind::Value)
         };
@@ -1965,7 +1970,7 @@ fn bind_operands(stmt: &AsmStmt) -> Emit<BoundOperands> {
                     return fail(short);
                 };
                 held[b].push(s);
-                out_stores.push((s, place, vector(i)));
+                out_stores.push((s, place, xmm(i)));
                 s
             }
         });
@@ -1975,6 +1980,24 @@ fn bind_operands(stmt: &AsmStmt) -> Emit<BoundOperands> {
         moves,
         out_stores,
     })
+}
+
+/// Load an `x` operand of `width` bytes into `xmm`: a scalar into the low lane.
+fn emit_xmm_load(code: &mut Vec<u8>, xmm: Reg, base: Reg, disp: i32, width: u8) {
+    match width {
+        4 => super::encode::emit_movss_xmm_mem(code, xmm, base, disp),
+        8 => super::encode::emit_movsd_xmm_mem(code, xmm, base, disp),
+        _ => super::encode::emit_movups_xmm_mem(code, xmm, base, disp),
+    }
+}
+
+/// Store the `width` bytes of an `x` operand held in `xmm`.
+fn emit_xmm_store(code: &mut Vec<u8>, base: Reg, disp: i32, xmm: Reg, width: u8) {
+    match width {
+        4 => super::encode::emit_movss_mem_xmm(code, base, disp, xmm),
+        8 => super::encode::emit_movsd_mem_xmm(code, base, disp, xmm),
+        _ => super::encode::emit_movups_mem_xmm(code, base, disp, xmm),
+    }
 }
 
 /// Where operand `i`'s argument comes from: its place or its static form.
@@ -2043,8 +2066,7 @@ impl ArgSrc {
 }
 
 /// One move into an operand register ahead of the template: the source's
-/// value, all 128 bits for `V128`, or the `Load` width or `FpLoad` 128 bits at
-/// the address it holds.
+/// value, or the `Load` / `FpLoad` width at the address it holds.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct Transfer {
     dst: u8,
@@ -2052,12 +2074,14 @@ struct Transfer {
     kind: TransferKind,
 }
 
+/// How a transfer moves its source. `Xmm` and `FpLoad` carry the `x`
+/// operand's width: a 16-byte vector moves whole, a scalar into the low lane.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum TransferKind {
     Value,
-    V128,
+    Xmm(u8),
     Load(u8),
-    FpLoad,
+    FpLoad(u8),
 }
 
 /// One step of the moves into the operand registers: a transfer, a GPR
@@ -2094,7 +2118,7 @@ fn order_transfers(
             }
         } else {
             let t = pending.remove(0);
-            let (TransferKind::V128, ArgSrc::Xmm(s)) = (t.kind, t.src) else {
+            let (TransferKind::Xmm(_), ArgSrc::Xmm(s)) = (t.kind, t.src) else {
                 return fail("inline asm: an operand move cycle has no register to park in");
             };
             let d = t.dst - XMM_UNIFIED;
@@ -2106,7 +2130,9 @@ fn order_transfers(
                     u.src = ArgSrc::Xmm(d);
                 }
             }
-            pending.retain(|u| !(u.kind == TransferKind::V128 && u.src.reads() == Some(u.dst)));
+            pending.retain(|u| {
+                !(matches!(u.kind, TransferKind::Xmm(_)) && u.src.reads() == Some(u.dst))
+            });
         }
     }
     Ok(steps)
@@ -2311,12 +2337,13 @@ impl AsmScratch {
         let mut out = alloc::vec::Vec::new();
         for (i, op) in stmt.asm.operands.iter().enumerate() {
             let Some(r) = op_reg[i] else { continue };
+            let class = stmt.asm.operand_class(i);
             let (dst, kind) = match op.constraint {
-                AsmConstraint::Fp if !op.is_output || op.is_rw => {
+                _ if class == AsmConstraint::Fp && (!op.is_output || op.is_rw) => {
                     let kind = if op.value {
-                        TransferKind::V128
+                        TransferKind::Xmm(op.width)
                     } else {
-                        TransferKind::FpLoad
+                        TransferKind::FpLoad(op.width)
                     };
                     (XMM_UNIFIED + r, kind)
                 }
@@ -2327,7 +2354,8 @@ impl AsmScratch {
                 _ => continue,
             };
             let src = self.arg_src(stmt, i)?;
-            if matches!(kind, TransferKind::Value | TransferKind::V128) && src.reads() == Some(dst)
+            if matches!(kind, TransferKind::Value | TransferKind::Xmm(_))
+                && src.reads() == Some(dst)
             {
                 continue;
             }
@@ -2365,13 +2393,11 @@ impl AsmScratch {
     fn emit_transfer(&self, out: &mut Out, stmt: &AsmStmt, t: Transfer) -> Emit {
         match t.kind {
             TransferKind::Value => self.emit_value(out, stmt, t.src, Reg(t.dst)),
-            TransferKind::V128 => {
+            TransferKind::Xmm(width) => {
                 let (dst, code) = (Reg(t.dst - XMM_UNIFIED), &mut *out.cx.code);
                 match t.src {
                     ArgSrc::Xmm(x) => super::encode::emit_movapd_xmm_xmm(code, dst, Reg(x)),
-                    ArgSrc::Mem(base, disp) => {
-                        super::encode::emit_movups_xmm_mem(code, dst, base, disp)
-                    }
+                    ArgSrc::Mem(base, disp) => emit_xmm_load(code, dst, base, disp, width),
                     // A fill's zero; `movq` clears the upper half.
                     ArgSrc::Gpr(r) => super::encode::emit_movq_xmm_r(code, dst, Reg(r)),
                     _ => return fail("inline asm: `x` value operand not a vector place"),
@@ -2383,14 +2409,9 @@ impl AsmScratch {
                 emit_asm_load_width(out.cx.code, Reg(t.dst), base, disp, width);
                 Ok(())
             }
-            TransferKind::FpLoad => {
+            TransferKind::FpLoad(width) => {
                 let (base, disp) = self.emit_address(out, stmt, t.src)?;
-                super::encode::emit_movups_xmm_mem(
-                    out.cx.code,
-                    Reg(t.dst - XMM_UNIFIED),
-                    base,
-                    disp,
-                );
+                emit_xmm_load(out.cx.code, Reg(t.dst - XMM_UNIFIED), base, disp, width);
                 Ok(())
             }
         }
@@ -2401,9 +2422,9 @@ impl AsmScratch {
     fn emit_outputs(&self, out: &mut Out, stmt: &AsmStmt, op_reg: &[Option<u8>]) -> Emit {
         use super::super::ir::AsmConstraint;
         if let Some(b) = &self.bound {
-            for &(s, place, vector) in &b.out_stores {
+            for &(s, place, xmm) in &b.out_stores {
                 if let Place::Spill(slot) = place {
-                    self.store_spilled(out.cx.code, stmt, s, slot, vector);
+                    self.store_spilled(out.cx.code, stmt, s, slot, xmm);
                 }
             }
             return Ok(());
@@ -2422,7 +2443,7 @@ impl AsmScratch {
             let src = self.late_src(stmt, i)?;
             let (base, disp) = self.emit_address(out, stmt, src)?;
             if matches!(op.constraint, AsmConstraint::Fp) {
-                super::encode::emit_movups_mem_xmm(out.cx.code, base, disp, Reg(r));
+                emit_xmm_store(out.cx.code, base, disp, Reg(r), op.width);
             } else {
                 emit_asm_store_width(out.cx.code, base, disp, Reg(r), op.width);
             }
@@ -2433,9 +2454,10 @@ impl AsmScratch {
         let mut fp_moves: alloc::vec::Vec<(Place, Place, bool)> = alloc::vec::Vec::new();
         for (i, place) in stmt.alloc.asm_output_places(stmt.func, stmt.site) {
             let Some(r) = op_reg[i] else { continue };
-            let vector = matches!(stmt.asm.operands[i].constraint, AsmConstraint::Fp);
+            let op = &stmt.asm.operands[i];
+            let xmm = matches!(op.constraint, AsmConstraint::Fp).then_some(op.width);
             match place {
-                Place::Spill(slot) => self.store_spilled(out.cx.code, stmt, r, slot, vector),
+                Place::Spill(slot) => self.store_spilled(out.cx.code, stmt, r, slot, xmm),
                 place @ Place::FpReg(_) => fp_moves.push((Place::FpReg(r), place, true)),
                 place @ Place::IntReg(_) => {
                     int_moves.push(PlaceMove::copy(Place::IntReg(r), place))
@@ -2463,18 +2485,18 @@ impl AsmScratch {
         )
     }
 
-    /// Store output register `r` to spill slot `slot` after the template.
-    fn store_spilled(&self, code: &mut Vec<u8>, stmt: &AsmStmt, r: u8, slot: u32, vector: bool) {
-        let (base, disp) = if vector {
+    /// Store output register `r` to spill slot `slot` after the template:
+    /// an `x` output of `xmm` bytes, a vector's in the 16-byte area.
+    fn store_spilled(&self, code: &mut Vec<u8>, stmt: &AsmStmt, r: u8, slot: u32, xmm: Option<u8>) {
+        let (base, disp) = if xmm == Some(16) {
             v128_spill_addr(stmt.frame, slot)
         } else {
             spill_slot_addr(stmt.frame, slot)
         };
         let (base, disp) = self.late_base(stmt, base, disp);
-        if vector {
-            super::encode::emit_movups_mem_xmm(code, base, disp, Reg(r));
-        } else {
-            super::encode::emit_mov_mem_r(code, base, disp, Reg(r));
+        match xmm {
+            Some(width) => emit_xmm_store(code, base, disp, Reg(r), width),
+            None => super::encode::emit_mov_mem_r(code, base, disp, Reg(r)),
         }
     }
 
@@ -3336,10 +3358,12 @@ impl AsmPass<'_> {
                 r.riprel_reloc = Some((sym, 0));
                 Concrete::RipRel { disp: 0, size }
             }
-            Some(reg) if matches!(op.constraint, AsmConstraint::Fp) => Concrete::Reg {
-                reg: super::asm::XMM_BASE + reg,
-                size: size.unwrap_or(AsmRegSize::from_width(width)),
-            },
+            Some(reg) if stmt.asm.operand_class(idx as usize) == AsmConstraint::Fp => {
+                Concrete::Reg {
+                    reg: super::asm::XMM_BASE + reg,
+                    size: size.unwrap_or(AsmRegSize::from_width(width)),
+                }
+            }
             Some(reg) => Concrete::Reg {
                 reg,
                 size: size.unwrap_or(AsmRegSize::from_width(width)),
@@ -4190,7 +4214,7 @@ mod transfer_order_tests {
         let xmm = |d: u8, s: u8| Transfer {
             dst: XMM_UNIFIED + d,
             src: ArgSrc::Xmm(s),
-            kind: TransferKind::V128,
+            kind: TransferKind::Xmm(16),
         };
         let gpr = |d: u8, s: u8| Transfer {
             dst: d,

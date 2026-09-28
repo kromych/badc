@@ -26,7 +26,8 @@ BASELINE_CPU = {"x64": "Haswell-noTSX,-pcid,-invpcid,-tsc-deadline", "aarch64": 
 
 # OVMF firmware locations, in priority order. `$OVMF_CODE`/`$OVMF_VARS` (x64)
 # and `$AAVMF_CODE`/`$AAVMF_VARS` (aarch64) override; then the common macOS
-# (Homebrew) and Linux distro install paths. An empty env value never matches
+# (Homebrew) and Linux distro install paths, where Ubuntu 24.04's ovmf ships
+# only the 4 MiB images. An empty env value never matches
 # (`os.path.exists("")` is false).
 FIRMWARE = {
     "x64": {
@@ -34,6 +35,7 @@ FIRMWARE = {
             os.environ.get("OVMF_CODE", ""),
             "/opt/homebrew/share/qemu/edk2-x86_64-code.fd",
             "/usr/share/OVMF/OVMF_CODE.fd",
+            "/usr/share/OVMF/OVMF_CODE_4M.fd",
             "/usr/share/edk2/x64/OVMF_CODE.fd",
             "/usr/share/edk2-ovmf/OVMF_CODE.fd",
             "/usr/share/qemu/edk2-x86_64-code.fd",
@@ -42,6 +44,7 @@ FIRMWARE = {
             os.environ.get("OVMF_VARS", ""),
             "/opt/homebrew/share/qemu/edk2-i386-vars.fd",
             "/usr/share/OVMF/OVMF_VARS.fd",
+            "/usr/share/OVMF/OVMF_VARS_4M.fd",
             "/usr/share/edk2/x64/OVMF_VARS.fd",
             "/usr/share/edk2-ovmf/OVMF_VARS.fd",
             "/usr/share/qemu/edk2-i386-vars.fd",

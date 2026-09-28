@@ -290,6 +290,8 @@ struct Die {
     cu_base: u32,
     tag: u64,
     depth: usize,
+    /// The abbreviation's `DW_CHILDREN_yes`.
+    has_children: bool,
     attrs: Vec<(u64, Val)>,
 }
 
@@ -476,6 +478,7 @@ fn parse_object(path: &Path) -> Unit {
                 cu_base: cu_base as u32,
                 tag: ab.tag,
                 depth,
+                has_children: ab.has_children,
                 attrs,
             });
             if ab.has_children {
@@ -1221,9 +1224,10 @@ fn unprototyped_function_pointers_are_not_marked_prototyped() {
         assert_eq!(kinds, [DW_TAG_UNSPECIFIED_PARAMETERS], "{what}");
     }
     assert!(pointee(child("cb")).at(DW_AT_TYPE).is_none(), "void return");
+    // A `(void)` prototype has no children, as gcc and clang state it.
     for d in [u.member(ops, "mv"), child("lv")] {
         assert_eq!(pointee(d).at(DW_AT_PROTOTYPED).unwrap().as_uint(), 1);
-        assert!(u.children(pointee(d)).is_empty());
+        assert!(!pointee(d).has_children);
     }
     assert_ne!(
         u.type_of(child("lp")).offset,

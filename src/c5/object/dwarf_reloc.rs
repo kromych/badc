@@ -226,6 +226,8 @@ const ABBREV_RESTRICT_TYPE_VOID: u64 = 45;
 const ABBREV_ENUMERATION_TYPE_ANON: u64 = 46;
 const ABBREV_SUBROUTINE_TYPE_UNPROTOTYPED: u64 = 47;
 const ABBREV_SUBROUTINE_TYPE_VOID_UNPROTOTYPED: u64 = 48;
+const ABBREV_SUBROUTINE_TYPE_NO_PARAMS: u64 = 49;
+const ABBREV_SUBROUTINE_TYPE_VOID_NO_PARAMS: u64 = 50;
 
 /// Compilation-unit header for `.debug_info` (DWARF 4, 32-bit form).
 #[repr(C, packed)]
@@ -568,6 +570,19 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
         tag: DW_TAG_SUBROUTINE_TYPE,
         has_children: true,
         attrs: &[],
+    },
+    // A `(void)` prototype has no child.
+    AbbrevDecl {
+        code: ABBREV_SUBROUTINE_TYPE_NO_PARAMS,
+        tag: DW_TAG_SUBROUTINE_TYPE,
+        has_children: false,
+        attrs: &[(DW_AT_PROTOTYPED, DW_FORM_FLAG), (DW_AT_TYPE, DW_FORM_REF4)],
+    },
+    AbbrevDecl {
+        code: ABBREV_SUBROUTINE_TYPE_VOID_NO_PARAMS,
+        tag: DW_TAG_SUBROUTINE_TYPE,
+        has_children: false,
+        attrs: &[(DW_AT_PROTOTYPED, DW_FORM_FLAG)],
     },
     // formal_parameter of a subroutine_type: a type with no name and no
     // location, since a function type has no storage.
@@ -1965,11 +1980,14 @@ fn build_type_die(catalog: &mut TypeCatalog, node: &TypeNode, strs: &mut StrPool
             variadic,
             prototyped,
         } => {
-            let abbrev = match (ret.is_some(), *prototyped) {
-                (true, true) => ABBREV_SUBROUTINE_TYPE,
-                (false, true) => ABBREV_SUBROUTINE_TYPE_VOID,
-                (true, false) => ABBREV_SUBROUTINE_TYPE_UNPROTOTYPED,
-                (false, false) => ABBREV_SUBROUTINE_TYPE_VOID_UNPROTOTYPED,
+            let childless = *prototyped && params.is_empty() && !*variadic;
+            let abbrev = match (ret.is_some(), *prototyped, childless) {
+                (true, true, false) => ABBREV_SUBROUTINE_TYPE,
+                (false, true, false) => ABBREV_SUBROUTINE_TYPE_VOID,
+                (true, true, true) => ABBREV_SUBROUTINE_TYPE_NO_PARAMS,
+                (false, true, true) => ABBREV_SUBROUTINE_TYPE_VOID_NO_PARAMS,
+                (true, false, _) => ABBREV_SUBROUTINE_TYPE_UNPROTOTYPED,
+                (false, false, _) => ABBREV_SUBROUTINE_TYPE_VOID_UNPROTOTYPED,
             };
             write_uleb128(&mut die.bytes, abbrev);
             if *prototyped {
@@ -1978,14 +1996,16 @@ fn build_type_die(catalog: &mut TypeCatalog, node: &TypeNode, strs: &mut StrPool
             if let Some(r) = ret {
                 die.push_ref(*r);
             }
-            for p in params {
-                write_uleb128(&mut die.bytes, ABBREV_FORMAL_PARAMETER_TYPE);
-                die.push_ref(*p);
+            if !childless {
+                for p in params {
+                    write_uleb128(&mut die.bytes, ABBREV_FORMAL_PARAMETER_TYPE);
+                    die.push_ref(*p);
+                }
+                if *variadic || !*prototyped {
+                    write_uleb128(&mut die.bytes, ABBREV_UNSPECIFIED_PARAMETERS);
+                }
+                die.bytes.push(0);
             }
-            if *variadic || !*prototyped {
-                write_uleb128(&mut die.bytes, ABBREV_UNSPECIFIED_PARAMETERS);
-            }
-            die.bytes.push(0);
         }
         TypeNode::Typedef { name, inner } => {
             let abbrev = match inner {
@@ -2150,13 +2170,14 @@ mod abbrev_golden {
              380f00001d0d004913380f00000b0d00030e49136b0f0d0f00000c180000000d0101\
              491300000e21002f0f00000f0401030e0b0b00002e04010b0b0000102800030e1c0d\
              00001113010b0f00001217010b0f0000131300030e3c190000141700030e3c190000\
-             151501270c49130000161501270c00002f1501491300003015010000170500491300\
-             001821000000190f000b0b00001a3b0000001b3400030e49133f1902183a0f3b0f00\
-             001c3400030e491302183a0f3b0f0000203400030e49133f193a0f3b0f0000213400\
-             030e49133a0f3b0f0000222e00030e110112073f19270c360b0000232e01030e1101\
-             12073f19270c360b40180000242e00030e11011207270c360b0000252e01030e1101\
-             1207270c360b40180000261600030e49130000271600030e00002826004913000029\
-             260000002a3500491300002b350000002c3700491300002d3700000000"
+             151501270c49130000161501270c00002f1501491300003015010000311500270c49\
+             130000321500270c0000170500491300001821000000190f000b0b00001a3b000000\
+             1b3400030e49133f1902183a0f3b0f00001c3400030e491302183a0f3b0f00002034\
+             00030e49133f193a0f3b0f0000213400030e49133a0f3b0f0000222e00030e110112\
+             073f19270c360b0000232e01030e110112073f19270c360b40180000242e00030e11\
+             011207270c360b0000252e01030e11011207270c360b40180000261600030e491300\
+             00271600030e00002826004913000029260000002a3500491300002b350000002c37\
+             00491300002d3700000000"
         );
     }
 }

@@ -2820,7 +2820,9 @@ impl Compiler {
     /// negative base offset, bumping the high-water mark. Callers
     /// own any `multi_cell_temps` push and any `loc_offs` recycle.
     pub(super) fn reserve_slots(&mut self, n_slots: i64) -> i64 {
-        self.loc_offs += n_slots;
+        // A zero-size object (GNU C's empty aggregate) takes a cell too, so
+        // its address is its own and inside the frame.
+        self.loc_offs += n_slots.max(1);
         if self.loc_offs > self.max_loc_offs {
             self.max_loc_offs = self.loc_offs;
         }

@@ -2846,6 +2846,23 @@ fn tag_scopes() {
 }
 
 #[test]
+fn a_zero_size_object_takes_a_frame_cell() {
+    // GNU C's empty aggregate is an object: a local, a by-value argument's
+    // copy and a returned temporary each take a cell of their own, so the
+    // interpreter reads their addresses and no neighbour shares one.
+    let src = "struct E {};\n\
+        static int f(struct E e, int y) { (void)e; return y; }\n\
+        static struct E mk(void) { struct E e; return e; }\n\
+        int main(void) {\n\
+          int before = 1; struct E a, b; int after = 2;\n\
+          struct E c = mk(); (void)c;\n\
+          if ((void *)&a == (void *)&b || (void *)&a == (void *)&before) return 1;\n\
+          return f(a, 42) == 42 && before + after == 3 ? 0 : 2;\n\
+        }\n";
+    assert_eq!(run_str(src), 0);
+}
+
+#[test]
 fn typeof_redeclaration_after_multidim_array() {
     // `extern typeof(x) x;` after a typeof of an array of arrays names x's
     // own type, and so does a new object declared through typeof.

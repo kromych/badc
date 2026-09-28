@@ -343,6 +343,7 @@ impl Compiler {
     /// aggregate parameter. A type alignment above the 8-byte slot places
     /// it in the over-aligned frame region as a named declarator's object.
     pub(super) fn reserve_object_slots(&mut self, ty: i64, slots: i64) -> Result<i64, C5Error> {
+        let slots = slots.max(1);
         let slot = self.reserve_slots(slots);
         let align = self.align_of_type(ty) as i64;
         if align > 8 {
